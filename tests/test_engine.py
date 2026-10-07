@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
+import time
+from types import SimpleNamespace
 
 import pytest
 
@@ -514,6 +516,63 @@ def test_failed_sibling_cancel_is_retried(tmp_path):
     run(eng.clock_tick())
     assert ad.cancelled.count(st.lower_id) == 2        # retried
     assert "sibling_cancel_retry" in journal_events(tmp_path)
+
+
+def _later(monkeypatch, seconds):
+    """`seconds` later on the engine's wall clock."""
+    now = time.time() + seconds
+    monkeypatch.setattr("homebase.engine.time", SimpleNamespace(
+        time=lambda: now, perf_counter=time.perf_counter, monotonic=time.monotonic))
+
+
+def test_an_accepted_cancel_that_did_not_take_is_sent_again_within_a_second(tmp_path, monkeypatch):
+    """gc_nfp, 2026-10-02 08:30:00: the buy stop filled, the broker ACCEPTED the sell stop's cancel
+    and the sell stop kept working until it was cancelled by hand a couple of seconds later. An
+    accepted request is not a cancelled order: the fast check asks again and re-sends."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 1, 24510.0)                  # the first contract of three, as on the day
+    assert ad.cancelled.count(st.lower_id) == 1        # sent, and accepted
+    ad.order_status[st.lower_id] = "Working"           # ... but the order is still there
+    run(eng.sibling_tick())
+    assert ad.cancelled.count(st.lower_id) == 1        # too soon to call it refused
+    _later(monkeypatch, 0.6)
+    run(eng.sibling_tick())
+    assert ad.cancelled.count(st.lower_id) == 2        # sent again, well inside the old 2 s wait
+    assert "sibling_cancel_retry" in journal_events(tmp_path)
+    ad.order_status[st.lower_id] = "Canceled"
+    run(eng.sibling_tick())
+    assert "sibling_cancel_confirmed" in journal_events(tmp_path)
+    run(eng.sibling_tick())                            # confirmed: nothing left to watch
+    assert journal_events(tmp_path).count("sibling_cancel_confirmed") == 1
+    assert ad.cancelled.count(st.lower_id) == 2
+
+
+def test_a_cancel_that_never_takes_is_reported_and_left_to_the_clock(tmp_path, monkeypatch):
+    """Three seconds of re-sending and the sell stop still works: say so once, in the journal; the
+    clock's own check (every 2 s) carries on from there."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.0)
+    ad.order_status[st.lower_id] = "Working"
+    _later(monkeypatch, 3.5)
+    run(eng.sibling_tick())
+    run(eng.sibling_tick())
+    assert journal_events(tmp_path).count("sibling_cancel_unconfirmed") == 1
+    _later(monkeypatch, 6.0)
+    run(eng.clock_tick())                              # the slow backstop is still on it
+    assert ad.cancelled.count(st.lower_id) >= 3
+
+
+def test_the_fast_check_closes_a_sibling_that_filled(tmp_path):
+    """The sell stop filled before its cancel landed: found at once, not at the next clock second."""
+    eng, ad, _ = mkengine(tmp_path)
+    st = _place(eng, ad)
+    _fill(eng, st, "Buy", 3, 24510.0)
+    ad.order_status[st.lower_id] = "Filled"
+    run(eng.sibling_tick())
+    assert st.status == "error" and st.exit_reason == "both_filled"
+    assert "both_filled_emergency" in journal_events(tmp_path)
 
 
 def test_sibling_that_fills_after_the_exit_is_flattened(tmp_path):

@@ -60,6 +60,9 @@ EXIT_CONCURRENCY = 4
 MARKET_OUT_FAILED = "check it — market-out reported failure; verify the position"
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"
 SIBLING_RETRY_S = 2.0
+# Right after an entry fill the other entry is watched closely (sibling_tick): for SIBLING_WATCH_S its
+# cancel is sent again every SIBLING_FAST_S while the broker still reads it as working.
+SIBLING_FAST_S, SIBLING_WATCH_S = 0.5, 3.0
 TAKE_GRACE_S = 2.0      # a day_take touch the resting limit has not filled for this long is market-flattened
 
 
@@ -130,6 +133,7 @@ class Engine:
         self.states: dict[str, DayState] = {}   # "strategy@account" -> state
         self._early: list[FillEvent] = []   # fills that beat the placement acks
         self._retry_at: dict[str, float] = {}   # last sibling-cancel attempt
+        self._sib_watch: dict[str, float] = {}  # "strategy@account" -> its entry fill, while sibling_tick watches
         # (date, strategy) -> accounts the 9:30 bot skips today: they held a
         # manual position or working order in its symbol at the prestage
         # (timer.STAGE_T)
@@ -837,6 +841,8 @@ class Engine:
                     r = OrderResult(ok=False, error=str(r))
                 if r.ok and sibling:   # let the broker confirm before the backstop re-checks
                     self._retry_at[f"sib:{st.strategy}@{st.account}"] = time.time()
+                if sibling:            # accepted is not cancelled: sibling_tick asks until it is
+                    self._sib_watch[f"{st.strategy}@{st.account}"] = time.time()
                 self.journal("entry_fill", strategy=st.strategy, account=st.account,
                              side=st.entry_side, fill=ev.price, anchor=st.entry_anchor,
                              fill_vs_anchor=(None if ev.price is None or st.entry_anchor is None
@@ -1536,14 +1542,14 @@ class Engine:
         return True, acts
 
     async def _guard_sibling(self, st: DayState, cfg: StrategyCfg,
-                             ad: BrokerAdapter) -> None:
+                             ad: BrokerAdapter, gap: float = SIBLING_RETRY_S) -> Optional[str]:
         """After the entry the OTHER stop must be gone. Still working -> the
-        cancel was refused or raced: cancel again (every 2 s at most). Filled
+        cancel was refused or raced: cancel again (every `gap` s at most). Filled
         -> it opened a second, unmanaged position (even after the trade
-        ended): close it and every bracket."""
+        ended): close it and every bracket. Returns the sibling's status."""
         sib = st.lower_id if st.entry_side == "Buy" else st.upper_id
         if not sib:
-            return
+            return None
         status = await ad.get_order_status(sib)
         if status == "Filled":
             st.status, st.exit_reason = "error", "both_filled"
@@ -1552,15 +1558,45 @@ class Engine:
             self.journal("both_filled_emergency", strategy=st.strategy,
                          account=st.account, order_id=sib,
                          found_by="sibling_check", actions=acts)
-            return
+            return status
         if status in WORKING:
             key = f"sib:{st.strategy}@{st.account}"
-            if time.time() - self._retry_at.get(key, 0.0) < SIBLING_RETRY_S:
-                return
+            if time.time() - self._retry_at.get(key, 0.0) < gap:
+                return status
             self._retry_at[key] = time.time()
             r = await ad.cancel_order_by_id(sib)
             self.journal("sibling_cancel_retry", strategy=st.strategy,
                          account=st.account, order_id=sib, ok=r.ok, error=r.error)
+        return status
+
+    async def sibling_tick(self) -> None:
+        """The fast half of the sibling backstop (the server calls it 4 times a second; the clock's
+        own check runs once a second and re-sends every 2 s). For SIBLING_WATCH_S after an entry
+        fill: is the other entry really gone? Still working -> its cancel goes out again every
+        SIBLING_FAST_S. One journal line says how it ended. 2026-10-02 gc_nfp: the broker accepted
+        the sell stop's cancel and the order kept working until it was cancelled by hand."""
+        for key, t0 in list(self._sib_watch.items()):
+            st = self.states.get(key)
+            cfg = self.cfg.strategies.get(st.strategy) if st is not None else None
+            ad = self.adapters.get(st.account) if st is not None else None
+            if cfg is None or ad is None or not st.entry_side:
+                del self._sib_watch[key]
+                continue
+            if not ad.connected:       # a dead socket's cache is stale; reconnect reconciles
+                continue
+            status, error = None, None
+            try:
+                status = await self._guard_sibling(st, cfg, ad, gap=SIBLING_FAST_S)
+            except Exception as e:  # noqa: BLE001 — one account's read never stops the others
+                error = str(e)[:200]
+            waited = time.time() - t0
+            if status in TERMINAL or waited >= SIBLING_WATCH_S:
+                del self._sib_watch[key]
+                if status != "Filled":             # a fill is told by both_filled_emergency
+                    self.journal("sibling_cancel_confirmed" if status in TERMINAL
+                                 else "sibling_cancel_unconfirmed", strategy=st.strategy,
+                                 account=st.account, status=status, error=error,
+                                 after_ms=round(waited * 1000))
 
     async def _guard_placed(self, st: DayState, cfg: StrategyCfg,
                             ad: BrokerAdapter, *, check_position: bool,
