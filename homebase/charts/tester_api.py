@@ -24,6 +24,7 @@
     POST /api/tester/groups/delete       {name} -> its strategies go back to no group (none is deleted)
     POST /api/tester/groups/move         {strategy, group} -> that strategy (a built-in or a draft id) is in that
                                           one group, made when it is new; group null or "" = in no group
+    GET  /api/tester/blueprint/blocks    the toolkit's blocks, each with its code: {groups, sources, counts} (bp.py blockcode)
     GET  /api/tester/blueprint           the blueprint toolkit as the Lab lists it: {tools: [{name, phase, description,
                                           inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
@@ -384,6 +385,23 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             head, _, text = s["description"].partition(": ")
             tools.append({"name": s["name"], "phase": head, "description": text or head, "inputs": s["inputSchema"]})
         return {"tools": tools, "ideas": ideastore.list_ideas(), "wait_s": LAB_WAIT_S}
+
+    code_cache: dict = {"stamp": None, "body": None}
+    code_lock = threading.Lock()
+
+    @r.get("/blueprint/blocks")
+    def blueprint_blocks_code():
+        """The toolkit's blocks, each with the code that implements it: {groups, sources, counts}. Read by the toolkit itself
+        (bp.py blockcode: the source of every block is found in the engine's code, never listed by hand) and kept until a
+        file of the toolkit changes."""
+        with code_lock:
+            stamp = blueprint_tools.toolkit_stamp()
+            if code_cache["body"] is None or code_cache["stamp"] != stamp:
+                try:
+                    code_cache.update(body=box.block_code(), stamp=stamp)
+                except ToolError as e:
+                    raise HTTPException(503, str(e)) from None
+            return code_cache["body"]
 
     @r.post("/blueprint/run")
     def blueprint_run(request: Request, body: dict):
