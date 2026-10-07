@@ -132,7 +132,7 @@ import l2sim as S
 import zones as Z
 from l2sim import NS, SESS, _hms
 
-from . import fvg, liq, port1, port2, port3, round1, timed
+from . import fvg, liq, port1, port2, port3, retrace, round1, timed
 
 OPEN = 34200                                        # 09:30 ET, seconds after 00:00
 VOL_DAYS = 20                                       # volatility and volume blocks: the 20 trade dates before today
@@ -877,7 +877,7 @@ def _bar_based(entry) -> bool:
     return len(entry) == 5 and tuple(cls.FEATURES) == () and "shift_seed" not in cls.defaults()
 
 
-BASES = {n: e for m in (port1, port2, port3, round1, timed, fvg, liq) for n, e in m.FAMILIES.items() if _bar_based(e)}
+BASES = {n: e for m in (port1, port2, port3, round1, timed, fvg, liq, retrace) for n, e in m.FAMILIES.items() if _bar_based(e)}
 BASES.update(FAMILIES)
 
 
