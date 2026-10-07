@@ -199,7 +199,7 @@ def code(family=None) -> dict:
     family's own module (a unit). Kept in run.json; the fingerprint of the INPUTS is another thing (fingerprint)."""
     files = ["l2sim.py", "l2ref.py"] + ([] if family is None else ["families/blocks.py", f"families/{RM.registry().MODULE_OF[family]}.py"])
     if family is not None:
-        files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels and the zone blocks readers
+        files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py", "indicators.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels, the zone blocks and the batch 4 indicators readers
     return {f: _sha(str(S.L / f)) for f in dict.fromkeys(files)}
 
 

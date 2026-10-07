@@ -78,7 +78,7 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
 
 def test_the_filters_the_limits_and_the_exit_table():
     blocks = RUN._blocks()
-    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 69
+    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 87
     assert all(f["words"] == blocks.PLAIN[(f["block"], f["side"])] for f in B["filters"])
     assert all(f["runs"] and f["why_not"] is None for f in B["filters"])
     l2 = [f for f in B["filters"] if f["block"] in blocks.L2_BLOCKS]                                   # Level 2: NQ only, built but not yet locked or tested
@@ -164,7 +164,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 28, "families_not_yet": 1, "filters": 69, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 28, "families_not_yet": 1, "filters": 87, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]
