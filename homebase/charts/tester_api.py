@@ -24,6 +24,7 @@
     POST /api/tester/groups/delete       {name} -> its strategies go back to no group (none is deleted)
     POST /api/tester/groups/move         {strategy, group} -> that strategy (a built-in or a draft id) is in that
                                           one group, made when it is new; group null or "" = in no group
+    GET  /api/tester/arsenal             every tool we have (blocks, chat tools, skills, scripts), each with its code: {groups, sources, counts} (homebase/arsenal.py)
     GET  /api/tester/blueprint           the blueprint toolkit as the Lab lists it: {tools: [{name, phase, description,
                                           inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
                                           definitions every chat has (claude_mcp.blueprint_tools.SPECS)
@@ -105,7 +106,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import draftstore, ideastore, netguard, strategies
+from .. import arsenal, draftstore, ideastore, netguard, strategies
 from ..backtest import drafthost
 from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
@@ -384,6 +385,23 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             head, _, text = s["description"].partition(": ")
             tools.append({"name": s["name"], "phase": head, "description": text or head, "inputs": s["inputSchema"]})
         return {"tools": tools, "ideas": ideastore.list_ideas(), "wait_s": LAB_WAIT_S}
+
+    code_cache: dict = {"stamp": None, "body": None}
+    code_lock = threading.Lock()
+
+    @r.get("/arsenal")
+    def arsenal_catalog():
+        """Every tool we have, with its code: {groups, sources, counts, built, notes} (homebase/arsenal.py). Saved in the app
+        (~/.homebase/arsenal.json) and built again only when a file it is made from changes."""
+        with code_lock:
+            rs = arsenal.research_stamp()
+            now = arsenal.stamp(rs)
+            if code_cache["body"] is None or code_cache["stamp"] != now:
+                try:
+                    code_cache.update(body=arsenal.get(arsenal.research, rs), stamp=now)
+                except Exception as e:      # noqa: BLE001 -- the page says why, whatever broke
+                    raise HTTPException(503, str(e)) from None
+            return code_cache["body"]
 
     @r.post("/blueprint/run")
     def blueprint_run(request: Request, body: dict):

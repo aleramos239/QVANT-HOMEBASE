@@ -150,3 +150,59 @@ test('a job that is still going is read off the answer, and an idea has one line
   assert.equal(L.bpIdeaLine({ status: 'proven_on_history', phase: 4, round: 1 }), 'PROVEN ON HISTORY · phase 4 · round 1');
   assert.equal(L.bpIdeaLine({ status: 'idea', phase: 0, round: null }), 'IDEA · phase 0');
 });
+
+/* ---- the toolkit's blocks ---- */
+const TK = [
+  { id: 'families', title: 'Entry triggers', words: '', items: [
+    { id: 'family:orb', name: 'orb', sub: 'bars 5, 15', words: 'at session start + or_min, OCO stop entries beyond the opening range', markets: ['NQ', 'ES', 'GC'], runs: true, parts: [{ label: 'The family', src: 'a:1-3' }, { label: 'Gone', src: 'zz:1-1' }] }] },
+  { id: 'filters', title: 'Filters', words: '', items: [
+    { id: 'filter:pdz_move', name: 'pdz_move', sub: 'with | against', words: 'only when the close is cheap for the trade inside the move in progress', sides: [{ side: 'with', words: 'cheap' }, { side: 'against', words: 'dear' }], markets: ['NQ'], runs: true, parts: [] },
+    { id: 'filter:book', name: 'book', sub: 'agree | disagree', words: 'Level 2 book agrees', markets: ['NQ'], runs: false, why_not: 'NQ only', parts: [] }] },
+];
+
+test('the toolkit list is searched by every word, in a name, its plain words, a side or a market; no search keeps it whole', () => {
+  assert.equal(L.tkFilter(TK, ''), TK);
+  assert.equal(L.tkFilter(TK, '   '), TK);
+  assert.deepEqual(L.tkFilter(TK, 'pdz').map((g) => [g.id, g.items.map((i) => i.name)]), [['filters', ['pdz_move']]], 'a group with no match is dropped');
+  assert.deepEqual(L.tkFilter(TK, 'DEAR move').map((g) => g.items.map((i) => i.name)), [['pdz_move']], 'a side\'s words count, case does not');
+  assert.deepEqual(L.tkFilter(TK, 'es gc').map((g) => g.id), ['families']);
+  assert.deepEqual(L.tkFilter(TK, 'nothing like this'), []);
+  assert.equal(TK[1].items.length, 2, 'the input is not changed');
+});
+
+test('a block is found by its id; its status and markets read as plain words', () => {
+  assert.equal(L.tkFind(TK, 'filter:book').name, 'book');
+  assert.equal(L.tkFind(TK, 'filter:nope'), null);
+  assert.equal(L.tkFind(null, 'x'), null);
+  assert.deepEqual(L.tkStatus(TK[0].items[0]), { tone: 'ok', text: 'runs' });
+  assert.deepEqual(L.tkStatus(TK[1].items[1]), { tone: 'no', text: 'not yet: NQ only' });
+  assert.deepEqual(L.tkStatus({ runs: false }), { tone: 'no', text: 'not yet' });
+  assert.equal(L.tkStatus({ runs: null }), null, 'a skill, a script or a chat tool has no run status');
+  assert.equal(L.tkMarkets(TK[0].items[0]), 'NQ ES GC');
+  assert.equal(L.tkMarkets({}), '');
+});
+
+test('the parts of a block are its sources in order, numbered, with their span; a source that did not come is left out', () => {
+  const sources = { 'a:1-3': { file: 'research/edge-library/engine/zones.py', start: 190, end: 192, code: '        def f():\n            return 1\n' } };
+  const parts = L.tkParts(TK[0].items[0], sources);
+  assert.equal(parts.length, 1);
+  assert.deepEqual({ n: parts[0].n, label: parts[0].label, span: parts[0].span, lines: parts[0].lines }, { n: 1, label: 'The family', span: 'engine/zones.py:190–192', lines: 3 });
+  assert.equal(parts[0].code, 'def f():\n    return 1\n', 'the indentation every line shares is taken off');
+  assert.equal(L.tkSpan({ file: 'homebase/x.py', start: 5, end: 5 }), 'homebase/x.py:5');
+  assert.deepEqual(L.tkParts({ parts: [] }, sources), []);
+  const md = L.tkParts({ parts: [{ label: 'skill', src: 'm' }] }, { m: { file: '~/.claude/skills/x/SKILL.md', start: 1, end: 2, code: '  # not code\n  text', plain: true, note: 'The first 500 of 900 lines.' } })[0];
+  assert.deepEqual([md.plain, md.note, md.code], [true, 'The first 500 of 900 lines.', '  # not code\n  text'], 'text keeps its indentation and is not coloured as Python');
+  assert.deepEqual(L.tkParts({}, null), []);
+});
+
+test('line numbers, dedent and the one-line clip', () => {
+  assert.equal(L.tkGutter(277, 281), '277\n278\n279\n280\n281');
+  assert.equal(L.tkGutter(5, 5), '5');
+  assert.equal(L.tkGutter(6, 5), '');
+  assert.equal(L.tkDedent('    a\n\n      b\n    c'), 'a\n\n  b\nc');
+  assert.equal(L.tkDedent('x\n  y'), 'x\n  y');
+  assert.equal(L.tkDedent(''), '');
+  assert.equal(L.tkClip('only when the close is cheap'), 'the close is cheap');
+  const long = L.tkClip('word '.repeat(60), 40);
+  assert.ok(long.endsWith('…') && long.length <= 41 && !/ …$/.test(long), long);
+});

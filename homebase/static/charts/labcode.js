@@ -223,8 +223,49 @@ function bpIdeaLine(i) {
   return [String(i.status || 'idea').replace(/_/g, ' ').toUpperCase(), i.phase == null ? null : `phase ${i.phase}`, i.round ? `round ${i.round}` : null].filter(Boolean).join(' · ');
 }
 
+/* ---- the arsenal: every tool we have, with the code that implements it (blocks, chat tools, skills, scripts) ----
+   The server (homebase/arsenal.py) sends {groups: [{id, title, words, items}], sources: {id: {file, start, end, code}}}; an item is
+   {id, name, sub, words, sides?: [{side, words}], markets, runs, why_not, parts: [{label, src}]}. */
+const tkText = (it) => [it.name, it.sub, it.words, ...(it.sides || []).map((x) => `${x.side} ${x.words}`), ...(it.markets || [])].join(' ').toLowerCase();
+/* The groups that have a block matching every word of the search; with no search, all of them. */
+function tkFilter(groups, q) {
+  const words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return groups;
+  return groups.map((g) => ({ ...g, items: g.items.filter((it) => { const t = tkText(it); return words.every((w) => t.includes(w)); }) })).filter((g) => g.items.length);
+}
+const tkFind = (groups, id) => { for (const g of groups || []) { const it = g.items.find((x) => x.id === id); if (it) return it; } return null; };
+/* "runs" or "not yet: why"; null for a tool that is not a thing that runs on the build days (a skill, a script, a chat tool) */
+const tkStatus = (it) => (it.runs == null ? null : it.runs ? { tone: 'ok', text: 'runs' } : { tone: 'no', text: it.why_not ? `not yet: ${it.why_not}` : 'not yet' });
+/* The markets a block is for; '' when it is for none in particular (a limit, a session). */
+const tkMarkets = (it) => (it.markets || []).join(' ');
+/* "engine/zones.py:190–198" (the repository's research folder left out) */
+const tkSpan = (s) => `${String(s.file).replace(/^research\/edge-library\//, '')}:${s.start}${s.end > s.start ? `–${s.end}` : ''}`;
+/* A source cut out of the middle of a file starts deep in its indentation: take off what every line shares. */
+function tkDedent(code) {
+  const lines = String(code || '').split('\n'), live = lines.filter((l) => l.trim());
+  const k = live.length ? Math.min(...live.map((l) => /^[ \t]*/.exec(l)[0].length)) : 0;
+  return k ? lines.map((l) => l.slice(Math.min(k, /^[ \t]*/.exec(l)[0].length))).join('\n') : lines.join('\n');
+}
+/* An item's code, part by part, in the order the server gave them; a part whose source did not come is left out. */
+function tkParts(it, sources) {
+  return (it.parts || []).filter((p) => sources && sources[p.src]).map((p, i) => {
+    const s = sources[p.src];
+    return { n: i + 1, label: p.label, span: tkSpan(s), file: s.file, start: s.start, end: s.end, lines: s.end - s.start + 1, plain: !!s.plain, note: s.note || '', code: s.plain ? s.code : tkDedent(s.code) };
+  });
+}
+/* The line numbers beside a source, one a line: start .. end. */
+const tkGutter = (start, end) => Array.from({ length: Math.max(0, end - start + 1) }, (_, i) => start + i).join('\n');
+/* One line for the list under a block's name: its plain words, cut at a word. */
+function tkClip(text, n = 150) {
+  const t = String(text || '').replace(/^only when /, '').replace(/\s+/g, ' ').trim();
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n), sp = cut.lastIndexOf(' ');
+  return `${cut.slice(0, sp > n * 0.6 ? sp : n)}…`;
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
-  bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine };
+  bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
+  tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
