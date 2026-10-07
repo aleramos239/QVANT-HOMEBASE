@@ -351,8 +351,11 @@ Still to build:
    held to 15:58 of the trade date) and the family `va_reclaim` run under the blueprint since 2026-10-07 (owner's request).
    Two filters at once are built (owner's request, 2026-10-07; line 0.2 keeps its limit of 2): a card that names two filters runs the plain table,
    each filter alone and BOTH on; line 2.7 then asks each filter to beat the plain table AND the pair to beat the plain table and each filter alone
-   (the course's lesson: a pair that wins while one of its two fails alone is rejected). Level 2 filters (NQ only) can be BUILT but not locked or tested (added 2026-10-06; the vendor's
-   Level 2 history ends 2026-07-08 and the test days' table is not built: the owner decides how their test range ends).
+   (the course's lesson: a pair that wins while one of its two fails alone is rejected).
+   Level 2 filters (NQ only) are built, locked and tested like any other filter (added 2026-10-06): the test days'
+   Level 2 table is built (`engine/btfeat.py`, 2025-07-01 .. 2026-07-07: the vendor's Level 2 history ends there) and a Level 2 idea's
+   frozen test range ends at that table's last day, as a delta idea's ends where the flow file ends. From 2026-06-01 the vendor's file holds
+   the 09:30-15:59 ET minutes only (no evening or overnight book), so a Level 2 idea that trades before 09:30 has no signal on those days.
    Added 2026-10-06 at the owner's request (`bp.py blocks` lists them): the entry trigger `fvg` (fair value gap), the four DELTA
    filter blocks (`delta`, `cumdelta`, `sweep`, `bigorder`: NQ, ES and GC, from the tick order flow; their test range ends where the
    flow file ends), the Level 2 filter blocks (`book`, `depth`, `ahead`, `wall`, `stack`) and, batch 1 of the price-and-trend blocks

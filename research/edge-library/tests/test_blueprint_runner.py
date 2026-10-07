@@ -517,7 +517,7 @@ def test_nothing_on_or_after_2025_07_01_is_read():
 def test_specs_the_build_range_cannot_run_are_refused():
     with no_engine():
         refused(lambda: RUN.checked({**SPEC, "exits": "extended"}), "standard")
-        RUN.checked({**SPEC, "filters": [{"block": "book", "side": "agree"}]})                          # Level 2 on NQ is taken (built, not locked or tested)
+        RUN.checked({**SPEC, "filters": [{"block": "book", "side": "agree"}]})                          # Level 2 on NQ is taken (built, locked and tested)
         refused(lambda: RUN.checked({**SPEC, "markets": ["NQ", "ES"], "filters": [{"block": "book", "side": "agree"}]}), "NQ only")
         assert RUN.checked({**SPEC, "family": "va_reclaim", "params": {"d_atr": [0.25, 0.5]}})["family"] == "va_reclaim"          # taken: its cache is built per range
         refused(lambda: RUN.checked({**SPEC, "end": "2025-07-01"}), "unknown fields")
