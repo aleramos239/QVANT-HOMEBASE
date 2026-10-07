@@ -31,6 +31,9 @@ from typing import Callable
 from . import paths
 
 ENV = "HOMEBASE_ARSENAL"
+ENV_SRC = "HOMEBASE_ARSENAL_SRC"                    # a checkout whose research toolkit is cataloged, when it is not this one's
+SRC_WORKTREE = ".worktrees/arsenal-src"             # ... or this clean worktree of `main`, when it is there (see research_bp)
+RESEARCH_S = 300.0                                  # the longest the toolkit may take to list its blocks
 MAX_LINES = 500                                     # a longer file is cut here, and says so
 MAX_CALLED = 4                                      # methods / functions a chat tool's method calls, listed after it
 SCRIPT_DIRS = ("tools", "research/edge-library")    # where the repository's own scripts live (top-level .py files only)
@@ -40,6 +43,53 @@ PLAIN_SUFFIX = {".md": 1, ".json": 1, ".txt": 1, ".sh": 1, ".yaml": 1, ".yml": 1
 def arsenal_path() -> Path:
     v = os.environ.get(ENV)
     return Path(v).expanduser() if v else Path.home() / ".homebase" / "arsenal.json"
+
+
+def research_bp() -> Path:
+    """The bp.py whose blocks and library are cataloged: HOMEBASE_ARSENAL_SRC/research/edge-library/bp.py, else the same file of a clean
+    worktree of `main` at .worktrees/arsenal-src when one is there (not when HOMEBASE_BP names a toolkit), else this checkout's own toolkit.
+    WHY a second place: the checkout the app runs from can be behind `main` while other work is unfinished in it; the arsenal only READS code, so it
+    reads the complete code and never touches that work. Remove the worktree and it reads the app's own checkout again."""
+    from .claude_mcp import blueprint_tools as BT
+    v = os.environ.get(ENV_SRC)
+    named = bool(os.environ.get(BT.ENV_BP))             # a toolkit named outright (a test, another install) is the one to read
+    for root in ([Path(v).expanduser()] if v else []) + ([] if named else [paths.repo_root() / SRC_WORKTREE]):
+        f = root / "research" / "edge-library" / "bp.py"
+        if f.is_file():
+            return f
+    return Path(BT.toolkit()[1])
+
+
+def research_stamp() -> tuple:
+    """What changes when the research toolkit's code or templates do: the bp.py in use, its newest file time and its file count."""
+    bp = research_bp()
+    files = [f for pat in ("*.py", "engine/*.py", "engine/families/*.py", "blueprint/*.py", "blueprint/templates/*.json") for f in bp.parent.glob(pat)]
+    return (str(bp), max((f.stat().st_mtime_ns for f in files), default=0), len(files))
+
+
+def research() -> dict:
+    """The blocks and library with their code, as the research toolkit lists them (`bp.py blockcode --json`): {groups, sources, counts}."""
+    import shutil
+    import subprocess
+    from .claude_mcp import blueprint_tools as BT
+    python, bp = BT.toolkit()[0], research_bp()
+    if not bp.is_file():
+        raise RuntimeError(f"the research toolkit is not installed: {bp} is missing")
+    if shutil.which(python) is None:
+        raise RuntimeError(f"the research toolkit is not installed: its Python, {python}, is missing")
+    try:
+        p = subprocess.run([python, str(bp), "blockcode", "--json"], capture_output=True, encoding="utf-8", errors="replace", timeout=RESEARCH_S,
+                           stdin=subprocess.DEVNULL, cwd=str(bp.parent), env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+    except subprocess.TimeoutExpired:
+        raise RuntimeError(f"the research toolkit did not list its blocks within {RESEARCH_S:g} s") from None
+    try:
+        r = json.loads(p.stdout)
+    except ValueError:
+        r = None
+    if p.returncode != 0 or not isinstance(r, dict) or not r.get("ok") or "groups" not in r:
+        why = (r or {}).get("error") if isinstance(r, dict) else None
+        raise RuntimeError(f"the research toolkit could not list its blocks: {why or (p.stderr.strip().splitlines() or ['no answer'])[-1]}")
+    return {k: r[k] for k in ("groups", "sources", "counts") if k in r}
 
 
 def skill_dirs() -> list:
@@ -227,15 +277,15 @@ def _newest(files) -> tuple:
     return (max((f.stat().st_mtime_ns for f in fs), default=0), len(fs))
 
 
-def stamp(research_stamp=None) -> list:
+def stamp(rstamp=None) -> list:
     """What changes when a file the catalog is built from does (newest file time and file count, for each kind): the saved catalog stands until then."""
     root = paths.repo_root()
     sk = [f for d in skill_dirs() if d.is_dir() for f in d.rglob("*") if f.is_file() and "node_modules" not in f.parts]
-    return [list(research_stamp) if research_stamp else None, list(_newest((root / "homebase" / "claude_mcp").glob("*.py"))), list(_newest(sk)),
+    return [list(rstamp) if rstamp else None, list(_newest((root / "homebase" / "claude_mcp").glob("*.py"))), list(_newest(sk)),
             list(_newest(f for rel in SCRIPT_DIRS for f in (root / rel).glob("*.py")))]
 
 
-def build(research: Callable[[], dict], research_stamp=None) -> dict:
+def build(research: Callable[[], dict] = research, rstamp=None) -> dict:
     """The catalog. `research()` -> {groups, sources, counts} of the research toolkit (`bp.py blockcode`); when it fails, everything else is still here
     and `notes` says what is missing."""
     src, notes, groups = Sources(), [], []
@@ -253,7 +303,7 @@ def build(research: Callable[[], dict], research_stamp=None) -> dict:
         except Exception as e:                  # noqa: BLE001
             notes.append(f"A part of the arsenal could not be read: {e}")
     return {"groups": groups, "sources": src.by_id, "counts": {g["id"]: len(g["items"]) for g in groups}, "built": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
-            "stamp": stamp(research_stamp), "notes": notes}
+            "stamp": stamp(rstamp), "notes": notes}
 
 
 def _chat_groups(src: Sources) -> list:
@@ -278,21 +328,19 @@ def load(path=None):
         return None
 
 
-def get(research: Callable[[], dict], research_stamp=None, path=None) -> dict:
+def get(research: Callable[[], dict] = research, rstamp=None, path=None) -> dict:
     """The saved catalog while its stamp is today's; else a new one, built and saved (not saved when a part of it could not be read)."""
-    now = stamp(research_stamp)
+    now = stamp(rstamp)
     saved = load(path)
     if saved and saved.get("stamp") == now and not saved.get("notes"):
         return saved
-    cat = build(research, research_stamp)
+    cat = build(research, rstamp)
     if not cat["notes"]:
         save(cat, path)
     return cat
 
 
 if __name__ == "__main__":
-    from .claude_mcp import blueprint_tools as _BT
-    box = _BT.BlueprintMixin()
-    cat = get(box.block_code, _BT.toolkit_stamp())
-    print(json.dumps({"saved": str(arsenal_path()), "counts": cat["counts"], "notes": cat["notes"]}, indent=1))
+    cat = get(research, research_stamp())
+    print(json.dumps({"saved": str(arsenal_path()), "blocks_from": str(research_bp()), "counts": cat["counts"], "notes": cat["notes"]}, indent=1))
     sys.exit(1 if cat["notes"] else 0)
