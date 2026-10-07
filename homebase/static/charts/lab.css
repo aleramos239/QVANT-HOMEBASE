@@ -372,7 +372,8 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 .bp-out:focus-visible { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 
 /* ---- the toolkit's blocks: the sidebar's third list, and a block's code ---- */
-.lb-seg button { padding: 0 9px; }
+.lb-seg button { padding: 0 6px; }
+@media (max-width: 1180px) { .lb-seg button { font-size: 12px; } }
 .tk-find { padding: 0 4px 6px; }
 .tk-find input { width: 100%; height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-ui); outline: none; }
 .tk-find input:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
@@ -414,3 +415,6 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 .tk-src .f { color: var(--hb-accent); }
 .tk-src .b, .tk-src .d { color: var(--hb-fg2); }
 :root[data-theme="dark"] .tk-src .s, :root[data-theme="dark"] .tk-src .n { color: #d9b99b; }
+.tk-note { display: block; margin: 5px 2px 0; font-size: var(--hb-fs-sm); color: var(--hb-fg2); }
+.lb-empty.err { color: var(--down); }
+.tk-src.plain { font-family: var(--hb-mono); }

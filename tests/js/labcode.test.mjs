@@ -177,6 +177,7 @@ test('a block is found by its id; its status and markets read as plain words', (
   assert.deepEqual(L.tkStatus(TK[0].items[0]), { tone: 'ok', text: 'runs' });
   assert.deepEqual(L.tkStatus(TK[1].items[1]), { tone: 'no', text: 'not yet: NQ only' });
   assert.deepEqual(L.tkStatus({ runs: false }), { tone: 'no', text: 'not yet' });
+  assert.equal(L.tkStatus({ runs: null }), null, 'a skill, a script or a chat tool has no run status');
   assert.equal(L.tkMarkets(TK[0].items[0]), 'NQ ES GC');
   assert.equal(L.tkMarkets({}), '');
 });
@@ -189,6 +190,8 @@ test('the parts of a block are its sources in order, numbered, with their span; 
   assert.equal(parts[0].code, 'def f():\n    return 1\n', 'the indentation every line shares is taken off');
   assert.equal(L.tkSpan({ file: 'homebase/x.py', start: 5, end: 5 }), 'homebase/x.py:5');
   assert.deepEqual(L.tkParts({ parts: [] }, sources), []);
+  const md = L.tkParts({ parts: [{ label: 'skill', src: 'm' }] }, { m: { file: '~/.claude/skills/x/SKILL.md', start: 1, end: 2, code: '  # not code\n  text', plain: true, note: 'The first 500 of 900 lines.' } })[0];
+  assert.deepEqual([md.plain, md.note, md.code], [true, 'The first 500 of 900 lines.', '  # not code\n  text'], 'text keeps its indentation and is not coloured as Python');
   assert.deepEqual(L.tkParts({}, null), []);
 });
 
