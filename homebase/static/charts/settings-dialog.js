@@ -116,6 +116,9 @@ const TABS = [
     ]],
   ] },
   { id: 'data', label: 'Data', icon: 'download', sections: [
+    ['REFRESH', [
+      { refresh: true },
+    ]],
     ['EXPORT', [
       { data: true },
     ]],
@@ -161,6 +164,65 @@ function mount(box, host) {
     start: '', end: '', hours: 'full', tz: 'et', ts_format: 'iso', format: 'csv', levels: 10 };
   const dataState = { meta: null, coverage: null, job: null, status: null, error: '' };
   function stopDataPoll() { if (dataPollId) { clearInterval(dataPollId); dataPollId = 0; } }
+
+  /* ---- the Data tab's Refresh button: fetch what is missing from the broker, then fill the older holes ---- */
+  let refreshBox = null, refreshPollId = 0;
+  function stopRefreshPoll() { if (refreshPollId) { clearInterval(refreshPollId); refreshPollId = 0; } }
+  function refreshPaint(st, err) {
+    if (!refreshBox) return;
+    const v = DX.refreshView(st);
+    refreshBox.btn.disabled = v.busy;
+    refreshBox.btn.textContent = v.busy ? 'Refreshing…' : 'Refresh data';
+    refreshBox.cancel.hidden = !v.busy;
+    refreshBox.line.className = v.tone === 'err' || err ? 'set-acct-err' : 'set-note';
+    refreshBox.line.textContent = err || v.text;
+    refreshBox.line.hidden = !(err || v.text);
+  }
+  async function refreshPoll() {
+    const st = await host.refresh.status();
+    refreshPaint(st);
+    if (!st || DX.refreshView(st).busy === false) stopRefreshPoll();
+  }
+  function refreshRow() {
+    const el = mk('div', 'set-data');
+    if (!host.refresh) return el;
+    const btn = button('btn btn-primary', 'Refresh data'), cancel = button('btn btn-ghost', 'Cancel');
+    const line = mk('div', 'set-note');
+    const note = mk('div', 'set-note',
+      'Fetches the ticks the archive is missing from the broker, then fills the older holes from Massive when it is set up. '
+      + 'By day it takes a limited number of pages; the hourly and nightly runs finish the rest.');
+    cancel.hidden = true;
+    line.hidden = true;
+    refreshBox = { btn, cancel, line };
+    btn.onclick = async () => {
+      btn.disabled = true;
+      const { status, data } = await host.refresh.start();
+      if (status !== 200 || !data) {
+        refreshPaint(null, (data && data.detail) || 'Could not start the refresh');
+        btn.disabled = false;
+        return;
+      }
+      refreshPaint(data);
+      stopRefreshPoll();
+      refreshPollId = setInterval(refreshPoll, 2000);
+    };
+    cancel.onclick = async () => {
+      cancel.disabled = true;
+      const { data } = await host.refresh.cancel();
+      cancel.disabled = false;
+      if (data) refreshPaint(data);
+    };
+    const bar = mk('div', 'set-row'), ctl = mk('div', 'set-ctl');
+    ctl.append(btn, cancel);
+    bar.append(mk('label', 'set-name', ''), ctl);
+    el.append(bar, line, note);
+    // reattach: closing and reopening Settings must not lose a run in progress, nor the last result
+    host.refresh.status().then((st) => {
+      refreshPaint(st);
+      if (st && DX.refreshView(st).busy && !refreshPollId) refreshPollId = setInterval(refreshPoll, 2000);
+    });
+    return el;
+  }
 
   function dataUpdatePreview() {
     if (dataPreview) dataPreview.textContent = dataForm.start && dataForm.end ? `File: ${DX.previewName({ ...dataForm })}` : '';
@@ -639,6 +701,7 @@ function mount(box, host) {
       return el;
     }
     if (r.data) return dataTab();
+    if (r.refresh) return refreshRow();
     if (r.caption) return mk('div', 'set-note', r.caption);
     const el = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
     if (r.check) {
@@ -888,6 +951,7 @@ function mount(box, host) {
     flush();
     stopWatching();
     stopDataPoll();
+    stopRefreshPoll();
     cell.setSettings(S.overrides(work));
     done = true;
     host.commit(host.cells().some((c) => {
@@ -928,6 +992,7 @@ function mount(box, host) {
     revert() {
       stopWatching();
       stopDataPoll();
+      stopRefreshPoll();
       if (done) return;
       done = true;
       flush();
