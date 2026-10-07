@@ -53,6 +53,7 @@ from .trading import ChartDesk
 
 STATIC = Path(__file__).resolve().parent / "static"
 CLOCK_INTERVAL_S = 1       # also paces the sibling-cancel backstop (cache reads)
+SIBLING_INTERVAL_S = 0.25  # engine.sibling_tick: the close watch on the other entry after a fill
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
                            # successful sync at least this much later still misses it
@@ -1004,6 +1005,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("feed_loop_error", error=str(e)[:200])
             await asyncio.sleep(1.0)
 
+    async def _sibling_loop():
+        while True:
+            try:
+                await engine.sibling_tick()
+            except Exception as e:  # noqa: BLE001 — the sibling watch must never die
+                engine.journal("sibling_loop_error", error=str(e)[:200])
+            await asyncio.sleep(SIBLING_INTERVAL_S)
+
     async def _inactive_loop():
         while True:
             try:
@@ -1043,6 +1052,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(timer.loop()),
                      asyncio.create_task(level_timer.loop()),
                      asyncio.create_task(_inactive_loop()),
+                     asyncio.create_task(_sibling_loop()),
                      asyncio.create_task(_feed_loop()),
                      asyncio.create_task(desk.run())]
         try:
