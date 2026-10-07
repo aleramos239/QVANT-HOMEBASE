@@ -358,6 +358,36 @@ def family_item(src: Sources, eng, f: dict) -> dict:
             "runs": f["runs"], "why_not": f["why_not"], "parts": _dedupe(parts)}
 
 
+def other_family_item(src: Sources, eng, fam, name: str) -> dict:
+    """A family of the registry that is no blueprint block (time-fired, Level 2, straddles): listed with its code, marked not yet."""
+    cls, _inputs, _both, notes = fam.REGISTRY[name][:4]
+    head, sep, rest = str(notes).partition(": ")
+    words = rest if sep and len(head) <= 30 else str(notes)
+    l2 = bool(tuple(getattr(cls, "FEATURES", ())))
+    parts = [{"label": f"The family: class {cls.__name__}", "src": src.add(*fn_range(cls))}]
+    mod = inspect.getmodule(cls)
+    mp = Path(inspect.getsourcefile(mod))
+    hit = table_lines(_parse(mp).body, "FAMILIES", mod.__dict__, lambda k: k == name)
+    if hit:
+        parts.append({"label": "Registered: its name, class and notes (FAMILIES)", "src": src.add(mp, *hit[0])})
+    return {"id": f"other:{name}", "name": name, "sub": "Level 2" if l2 else "fires at a clock time or on an event", "words": words, "markets": ["NQ"] if l2 else [],
+            "runs": False, "why_not": "not a bar-based block: a clock-time or Level 2 idea comes later", "parts": _dedupe(parts)}
+
+
+def helper_items(src: Sources) -> list:
+    """The engine's indicator and zone functions the filters call: every public function of their modules, with its first docstring line."""
+    import importlib
+    out = []
+    for mod_name in ("indicators", "zones", "ranges", "levels", "flowtab"):
+        m = importlib.import_module(f"engine.{mod_name}")
+        for n, f in vars(m).items():
+            if inspect.isfunction(f) and f.__module__ == m.__name__ and not n.startswith("_"):
+                doc = (inspect.getdoc(f) or "").strip().splitlines()
+                out.append({"id": f"helper:{mod_name}.{n}", "name": f"{mod_name}.{n}", "sub": "", "words": doc[0] if doc else f"{n}({', '.join(inspect.signature(f).parameters)})",
+                            "markets": [], "runs": True, "why_not": None, "parts": [{"label": f"{mod_name}.{n}", "src": src.add(*fn_range(f))}]})
+    return out
+
+
 def _json(src: Sources, name: str, label: str) -> dict:
     p = TEMPLATES / name
     return {"label": label, "src": src.add(p, 1, len(_lines(p)))}
@@ -407,10 +437,10 @@ def plain_items(src: Sources, eng, B: dict) -> list:
     return out
 
 
-GROUPS = (("families", "Entry triggers", "What starts a trade. One per idea."), ("filters", "Filters", "Switch an entry on or off. Two sides each; at most two per idea."),
+GROUPS = (("families", "Entry triggers", "What starts a trade. One per idea."), ("other", "Other families", "In the library, not blueprint blocks yet: clock-time and Level 2 ideas."), ("filters", "Filters", "Switch an entry on or off. Two sides each; at most two per idea."),
           ("limits", "Limits", "How many entries, one side or both."), ("exits", "Exits", "One table for every idea."), ("sessions", "Sessions", "When an idea trades (New York time)."),
           ("bars", "Bar sizes", "The minutes in a bar."), ("markets", "Markets", "What an idea trades, with its cost floor."), ("days", "Days", "Build days and test days."),
-          ("tables", "Tests", "The random tables, the Monte Carlo and the size steps."))
+          ("tables", "Tests", "The random tables, the Monte Carlo and the size steps."), ("helpers", "Indicators and helpers", "The engine functions the filters call."))
 
 
 def toolkit() -> dict:
@@ -423,6 +453,9 @@ def toolkit() -> dict:
         by_block.setdefault(f["block"], []).append(f)
     items = {"families": [family_item(src, eng, f) for f in B["families"]],
              "filters": [filter_item(src, eng, fs[0], [x["side"] for x in fs]) for fs in by_block.values()]}
+    fam = RM.registry()
+    items["other"] = [other_family_item(src, eng, fam, n) for n in B["other_families"]]
+    items["helpers"] = helper_items(src)
     items.update(plain_items(src, eng, B))
     groups = [{"id": g, "title": title, "words": words, "items": items[g]} for g, title, words in GROUPS]
     n = sum(len(g["items"]) for g in groups)

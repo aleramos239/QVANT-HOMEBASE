@@ -80,6 +80,17 @@ def test_a_family_shows_its_class_its_registration_and_the_other_parts_have_thei
     assert "ranges.json" in files(ITEMS["days:test"]) and "costs.json" in files(ITEMS["market:NQ"])
 
 
+def test_the_library_families_that_are_no_blueprint_blocks_and_the_engines_helpers_are_listed_too():
+    import run_menus as RM
+    reg = RM.registry()
+    assert sorted(i["name"] for i in G["other"]["items"]) == B["other_families"]
+    assert len(G["families"]["items"]) + len(G["other"]["items"]) == len(reg.REGISTRY), "every family of the library is in the list"
+    for i in G["other"]["items"]:
+        assert i["runs"] is False and i["why_not"] and labels(i)[0].startswith("The family: class"), i["id"]
+    helpers = {i["name"] for i in G["helpers"]["items"]}
+    assert {"zones.pdz_range", "ranges.leg", "indicators.macd_dir", "levels.nearest", "flowtab.window"} <= helpers
+
+
 def test_a_source_is_the_files_own_lines():
     assert R["sources"]
     for sid, s in R["sources"].items():
