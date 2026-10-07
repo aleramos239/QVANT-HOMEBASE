@@ -23,7 +23,7 @@ SPEC = {"name": NAME, "version": 1,
                  "not_here": "asia", "main_setting": "or_min", "sides": "both", "sides_why": "a burst runs either way"},
         "run": {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {}, "filters": [],
                 "exits": "standard", "limits": {"max_tr": 1}}}
-COUNT = {1: 6, 2: 9, 4: 7, 5: 4, 6: 8}       # the law's lines per phase: 1.1-1.6, 2.1-2.9, 4.1-4.7, 5.1-5.4, 6.1-6.8
+COUNT = {1: 6, 2: 9, 4: 9, 5: 4, 6: 9}       # the law's lines per phase: 1.1-1.6, 2.1-2.9, 4.1-4.9, 5.1-5.4, 6.1-6.9
 ACCOUNT = "lucid-pro-50k@2026-09-27b"
 LOCK = "9f2c41aa"
 RANGE = {"start": "2025-07-01", "end": "2026-09-30"}

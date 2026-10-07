@@ -3,6 +3,8 @@ touched": what the idea is gets saved, with one hash over all of it, and from he
 
     3.1  Saved: the rule, the variant list, the default variant (the middle survivor, never the best), the control and the costs
     3.2  From here nothing changes. A change is a new version: back to phase 2, and its earlier unseen read is marked as used
+    3.3-3.7  the default variant ON ITS OWN on the build days: profit factor, net / worst drawdown, Sharpe, its drawdown at 1
+         micro under the account's limit, Monte Carlo (lines.BOX on tables.box). One of them not met = refused: nothing is frozen
 
 REFUSED unless, for the idea on file:
   * its LATEST build round has every line 2.1-2.9 in its result and none failed (null = the line does not apply) -- a round
@@ -21,6 +23,8 @@ THEN (start() refuses, run() works):
        home          market, session, bar, table, the unit's store key and folder, its one filter, its uid
        variants      THE VARIANT LIST: the variants judged on build (dead and duplicate ones out), in table order
        default, survivors, default_rule
+       box           lines 3.3-3.7 as they were read on the default variant (each line's number, need and words)
+       build         avg_trade: line 2.2's number of the frozen variants on the build days (line 4.8 holds the test against it)
        costs         normal (the engine's defaults) and worse (as run: with or without the late cancel)
        control       c1: the pool's store, its 10 seeds, 4,000 draws, the draw seeds (build as it was drawn, test as it WILL be)
        montecarlo    the runs and the fixed seed of lines 2.8 and 4.7
@@ -34,7 +38,11 @@ shows the lock on file and says whether its hashes still match the files on disk
 THE WORSE-FILLS PASS IS A TAPE PASS over 45 months. The connector stops a command that is not a job after 300 s, so the
 command line waits LOCK_WAIT seconds by itself and then answers job.state = running (jobs.py); `bp.py lock <name>` again
 picks that job's wait back up (cli.py).
-TEST ONLY: BP_TEST_RUN (records.TEST_RUN) hands the pass its named build days, exit cells, store folder and ledger.
+TEST ONLY: BP_TEST_RUN (records.TEST_RUN) hands the pass its named build days, exit cells, store folder and ledger; with
+`box: "said"` lines 3.3-3.7 are read and kept but do not refuse (the default of a 3-day table cannot pass on its own), and
+`build_avg_trade` is kept as the build's average trade (a hand-made test table is held against it: line 4.8).
+NOT A FREEZE: early() = the lock of the owner's EARLY LOOK at the test days (oos.py), for an idea that is not frozen: what is
+there, marked early_look, with the build lines that failed. It is never the idea's lock.json, and the idea stays unfrozen.
 """
 from __future__ import annotations
 
@@ -43,6 +51,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import flowtab
 import judge as J
 
 from . import api
@@ -112,11 +121,13 @@ def verify(lock: dict, spec=None) -> list:
     return bad
 
 
-def _range(market: str, home: bool) -> dict:
+def _range(market: str, home: bool, flow: bool = False) -> dict:
     """The test range of a market as it is frozen (runner.test_range). The home's must be there: it is what the test reads.
-    A neighbor's market without one is said in its place (no line of the test reads a neighbor)."""
+    A neighbor's market without one is said in its place (no line of the test reads a neighbor). flow = the idea's filter is a
+    delta block: the range ends where the flow file ends (flowtab.last_date): a later session has no flow row, so every entry of
+    it would be blocked, and a test of those days would read an idea that was never run there."""
     try:
-        return RUN.test_range(market)
+        return RUN.test_range(market, flowtab.last_date(market) if flow else None)
     except J.Refuse as e:
         if home:
             raise
@@ -192,6 +203,9 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     plan, store = rspec["plan"], rspec["store"]
     if len(plan["filters"]) > 1:
         raise J.Refuse(f"{name}'s rule has {len(plan['filters'])} filters: version 1 freezes a rule with one filter at most")
+    if plan["filters"] and plan["filters"][0].split("_")[0] in RUN._blocks().L2_BLOCKS:
+        raise J.Refuse(f"{name}: filter {plan['filters'][0]} reads Level 2, which can be built but not locked or tested yet: the vendor's Level 2 history ends "
+                       "2026-07-08 and the test days' table is not built (the owner decides how the test range of such an idea ends)")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers")
     days = None if days is None else RUN.seal(days)
@@ -202,14 +216,20 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     if not (folder / key / "run.json").exists():
         raise J.Refuse(f"the home store of round {n}, {_where(folder, key)}, is not on disk: there is nothing to freeze")
     _checked(d, folder, key, sp["family"])
+    held = {RUN.S.cell_id(c["exit"]) for c in (REC._json(folder / key / "run.json") or {}).get("cells") or []}
+    lack = [x for x in (RUN.S.cell_id(x) for x in R.exit_menu(h["market"])) if x not in held and (cells is None or x in set(cells))]
+    if lack:                                        # (a store of the 32 old cells: built before the small targets joined the table)
+        raise J.Refuse(f"the home store of round {n}, {_where(folder, key)}, does not hold the whole exit table of the law: {len(lack)} of its "
+                       f"{len(R.exit_menu(h['market']))} exit cells are missing (first {lack[0]}; the small targets joined the table with BLUEPRINT.md version 1.1) "
+                       f"-- build it again, the missing cells are run and joined to its stores: bp.py build {name} --reason=\"...\"")
     rows = RUN.run_worse(sp, key, h["session"], workers, out, ledger=ledger, days=days, cells=cells, block=block, dry=True)
     return {"idea": name, "root": None if root is None else str(root), "frozen": False, "round_": n, "heavy": not rows[0]["skipped"], "workers": workers,
             "out": None if out is None else str(out), "ledger": None if ledger is None else str(ledger), "days": days, "cells": cells, "block": block,
-            "draws": test.get("draws")}
+            "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade")}
 
 
 def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, draws=None,
-        progress=None) -> dict:
+        progress=None, box=None, build_avg_trade=None) -> dict:
     """THE FREEZE ITSELF, with what start() returned: the worse-fills table of the home on the build days (when it is not
     stored), the default variant, lock.json (module docstring), the Lab's copies -> the result: lines 3.1 and 3.2, the
     lock's hash, the default and the test range. Beyond the agreed keys: lock (lock.json as it is on file), hash, default,
@@ -248,6 +268,11 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
     if default is None:
         raise J.Refuse(f"no variant of {u['addr']} makes money on build AND on build with worse fills ({RUN.worse_words(wst['meta']['worse'])}): there is "
                        "no default variant, so there is nothing to freeze (line 3.1)")
+    said, box = box == "said", [fn(T.box(st, u, default, days)) for fn in L.BOX]      # lines 3.3-3.7: the default variant on its own
+    if not said and not all(x["passed"] for x in box):          # (said: TEST ONLY, module docstring)
+        raise J.Refuse(f"the default variant {default} of {u['addr']} does not meet every line read on it before the freeze -- "
+                       + "; ".join(x["text"] for x in box if not x["passed"])
+                       + " -- nothing is frozen: back to the build (a new round when one is left, it counts; otherwise the idea is shelved)")
     pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
     keys = [key, worse[0]["key"], pool] + ([T.bp_unit(sp, h["market"], h["bar"], sess)["key"]] if f else [])     # (with a filter: the plain table 2.7 was held against)
     markets = list(dict.fromkeys([h["market"], *(s["market"] for s in plan["stores"])]))
@@ -256,12 +281,15 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "home": {**{k: h[k] for k in ("market", "session", "bar", "table")}, "unit": u["addr"], "uid": u["uid"], "key": key, "folder": str(folder),
                      "filter": filt, "worse": worse[0]["key"]},
             "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": J.TIE_RULE,
+            "box": [{k: (None if isinstance(x[k], float) and x[k] in (float("inf"), float("-inf")) else x[k]) for k in ("line", "passed", "number", "need", "text")}
+                    for x in box],
+            "build": {"avg_trade": T.avg_trade(st, u, ids) if build_avg_trade is None else float(build_avg_trade)},
             "costs": {"normal": costs["normal"], "worse": {**wst["meta"]["worse"], "two_sided": bool(wst["meta"].get("both_sides_declared"))}},
             "control": {"kind": ctl["kind"], "pool": pool, "seeds": list(range(1, ctl["seeds"] + 1)), "draws": int(draws or ctl["draws"]),
                         "draw_seed": {"build": J.seed_of(u["uid"], f"{RUN.PERIOD}-c1"), "test": J.seed_of(u["uid"], "test-c1")}},
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
-            "test_range": {m: _range(m, m == h["market"]) for m in markets}}
+            "test_range": {m: _range(m, m == h["market"], bool(filt) and filt.split("_")[0] in RUN._blocks().FLOW_SERIES) for m in markets}}
     lock = json.loads(json.dumps(lock))               # as it will read from disk (plain JSON: a number that is not is refused here)
     lock["hash"] = digest(lock)
     path = IS.write_lock(name, lock, root)
@@ -284,7 +312,8 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
                    f"{lock['default']} (the middle of {who} on build and on build with worse fills; never the best), the control "
                    f"({len(c['seeds'])} seeds, {c['draws']:,} draws, pool {c['pool']}) and the costs (worse fills: {RUN.worse_words(w)})", variants=nv, survivors=ns),
             L._row("3.2", True, None, None, f"from here nothing changes: lock {lock['hash']} of {lock['locked_utc']} holds version {lock['version']} -- a change "
-                   "is a new version, back to the build, and its earlier read of the test days is marked as used")]
+                   "is a new version, back to the build, and its earlier read of the test days is marked as used"),
+            *[L._row(x["line"], x["passed"], x["number"], x["need"], x["text"].split(" ", 2)[2]) for x in lock.get("box") or []]]
     lab, said, idea = REC._lab(name, root)
     notes = ([f"{h['market']}: {rng['no_tape']} of its {rng['sessions']} test sessions had no tape when the idea was frozen: the read builds what is missing "
               "from the archive before its pass"] if rng.get("no_tape") else [])
@@ -315,3 +344,90 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
 def lock(name, root=None, **kw) -> dict:
     """`bp.py lock <name>` in the foreground: start(), then run()."""
     return run(**start(name, root, **kw))
+
+
+# ================================================================ the lock of an EARLY LOOK (oos.py: `bp.py test <name> --confirm --early-look`)
+
+def early(name, root=None, out=None, draws=None) -> dict:
+    """WHAT IS THERE, FROZEN AS IT IS, for the owner's early look at the test days (his decision of 2026-10-06: "warn, then
+    run if I say yes") -> a lock in the shape of the freeze's, MARKED: early_look true, build_failed (the lines 2.x of its
+    round that did not pass), code_check {missing, why: the freeze's own word when no code check stands for the home
+    store}. For an idea that is NOT frozen; nothing is checked off and NOTHING IS RUN OR WRITTEN here (oos.start writes
+    it beside the idea's files, just before the read is claimed -- never as the idea's lock.json: the idea stays unfrozen).
+      the round          the latest one with a result (its card and settings as that round ran them)
+      default, survivors the middle of the variants that made money on BUILD -- never the best; the worse-fills table of the
+                         build days is the freeze's and is not run for a look -- or, when none made money, of all of them
+      costs.worse        the worse fills the read itself runs (runner.worse_kw)      home.worse   None: no such build table
+      test_range         the home market's, as the freeze reads it
+    THE SAME IDEA, THE SAME EARLY LOOK: while nothing of it changed, the lock on file is the lock (its hash, its time), so a
+    read that was claimed for it stays THE read. Refused: a frozen idea (its proper test is the one read); no build on
+    file (run the build first); a round whose card was changed since; two filters; no home store; no judged variant."""
+    IS, d, test = api.ideastore(), REC._carded(name, root), REC._test_run(root)
+    if (d / "lock.json").exists():
+        raise J.Refuse(f"{name} is frozen (lock.json): an early look is for an idea that is NOT frozen -- a frozen idea has its proper test, the one read "
+                       f"(bp.py test {name} --confirm)")
+    done = [n for n in IS.rounds(name, root) if (d / "rounds" / str(n) / "build.json").is_file()]
+    if not done:
+        raise J.Refuse(f"{name} has no build on file: there is nothing to look at early -- run the build first (bp.py build {name} --reason=\"why round 1 is run\")")
+    n = done[-1]
+    b, rspec = REC._json(d / "rounds" / str(n) / "build.json"), REC._json(d / "rounds" / str(n) / "spec.json")
+    if b is None or rspec is None or b.get("ok") is False or b.get("dry_run"):
+        raise J.Refuse(f"round {n} of {name} is no build that counts (its result or its settings do not read): there is nothing to look at early")
+    spec = REC._spec(name, REC._json(d / "spec.json"))
+    if {k: spec[k] for k in ("card", "run")} != {k: rspec.get(k) for k in ("card", "run")}:
+        raise J.Refuse(f"the card of {name} was changed after round {n}: what is on file is not the rule its stores hold -- build it (a new round) or write "
+                       "the card of that round again")
+    plan, store = rspec["plan"], rspec["store"]
+    if len(plan["filters"]) > 1:
+        raise J.Refuse(f"{name}'s rule has {len(plan['filters'])} filters: version 1 reads a rule with one filter at most")
+    if plan["filters"] and plan["filters"][0].split("_")[0] in RUN._blocks().L2_BLOCKS:     # as the freeze refuses it (start)
+        raise J.Refuse(f"{name}: filter {plan['filters'][0]} reads Level 2, which can be built but not locked or tested yet: the vendor's Level 2 history ends "
+                       "2026-07-08 and the test days' table is not built -- so there is no early look at its test days either")
+    sp = RUN.checked(REC.engine(rspec, plan, store)[0])
+    h, filt, folder = plan["home"], (plan["filters"][0] if plan["filters"] else None), _folder(out)
+    f = T.filter_of(sp, filt)
+    u = T.bp_unit(sp, h["market"], h["bar"], h["session"], "", f)
+    key = u["key"]
+    st, _ = T._open(folder, key)
+    T._labels(st, u)
+    rows = J.table(st, u)
+    ids = J.table_stats(rows)["ids"]
+    if not ids:
+        raise J.Refuse(f"{u['addr']}: no judged variant on the build days: there is nothing to look at")
+    default, surv = REC.middle(rows, ids)
+    rule = "the middle of the variants that made money on BUILD (an early look runs no worse-fills table of the build days): " + J.TIE_RULE
+    if default is None:
+        by = {r["id"]: r for r in rows}
+        order = sorted(ids, key=lambda c: (round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
+        default, rule = order[(len(order) - 1) // 2], "no variant made money on build: the middle of ALL its variants, by build net and variant order"
+    marks = {x.get("line"): x.get("passed") for x in b.get("lines") or [] if isinstance(x, dict)}
+    try:
+        _checked(d, folder, key, sp["family"])
+        why = None
+    except J.Refuse as e:
+        why = str(e)
+    two = bool(RUN._blocks().BASES[sp["family"]][2])
+    flow = bool(filt) and filt.split("_")[0] in getattr(RUN._blocks(), "FLOW_SERIES", ())      # a delta block: the range ends where its data ends (_range, as in run())
+    pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
+    keys = [key, pool] + ([T.bp_unit(sp, h["market"], h["bar"], h["session"])["key"]] if f else [])
+    lock = {"name": name, "version": rspec.get("version", 1), "locked_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "round": n,
+            "store": store, "spec": {k: rspec[k] for k in ("name", "version", "card", "run") if k in rspec}, "plan": plan,
+            "home": {**{k: h[k] for k in ("market", "session", "bar", "table")}, "unit": u["addr"], "uid": u["uid"], "key": key, "folder": str(folder),
+                     "filter": filt, "worse": None},
+            "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": rule,
+            "box": [{k: (None if isinstance(x[k], float) and x[k] in (float("inf"), float("-inf")) else x[k]) for k in ("line", "passed", "number", "need", "text")}
+                    for x in (fn(T.box(st, u, default, st["meta"].get("days") or None)) for fn in L.BOX)],      # read, never enforced: a look checks nothing off
+            "build": {"avg_trade": T.avg_trade(st, u, ids) if test.get("build_avg_trade") is None else float(test["build_avg_trade"])},
+            "costs": {"normal": costs["normal"], "worse": {**RUN.worse_kw(two), "two_sided": two}},
+            "control": {"kind": ctl["kind"], "pool": pool, "seeds": list(range(1, ctl["seeds"] + 1)), "draws": int(draws or ctl["draws"]),
+                        "draw_seed": {"build": J.seed_of(u["uid"], f"{RUN.PERIOD}-c1"), "test": J.seed_of(u["uid"], "test-c1")}},
+            "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
+            "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
+            "test_range": {h["market"]: _range(h["market"], True, *([True] if flow else ()))},
+            api.EARLY_LOOK: True, "build_failed": [k for k in IS.LINES[2] if marks.get(k, False) not in (True, None)],      # failed, or not in the result at all
+            "code_check": {"missing": why is not None, "why": why}}
+    lock = json.loads(json.dumps(lock))               # as it will read from disk
+    lock["hash"] = digest(lock)
+    was = REC._json(d / api.EARLY_LOOK / "lock.json")
+    same = lambda x: {k: v for k, v in x.items() if k not in ("locked_utc", "hash")}  # noqa: E731
+    return was if was is not None and same(was) == same(lock) else lock

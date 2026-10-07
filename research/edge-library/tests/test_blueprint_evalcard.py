@@ -3,7 +3,7 @@
 (a) THE DRAWDOWN TABLE: whole days of the variant's own test-period trades, drawn with replacement (montecarlo.json: 1,000
     runs, the fixed seed), read after 10, 20, 30 and 40 trades at the 50th, 75th, 90th, 95th and 99th percentile -- drawdown,
     and P&L from the bad side. On hand-made lists every number is known.
-(b) THE CARD BEFORE THE FIRST LIVE TRADE: refused until the simulator's result is on file; every line 6.1-6.8 is there as the
+(b) THE CARD BEFORE THE FIRST LIVE TRADE: refused until the simulator's result is on file; every line 6.1-6.9 is there as the
     rule to follow, none judged; the attempts and the fee budget of line 5.4 are on it; saved through the app's idea store.
 (c) THE LINES ON LIVE FILLS, each at its threshold: 6.1 same entry time (within 5 s) and same exit reason, mismatches listed;
     6.2 average entry slip 2 ticks or less, no missed or rejected order; 6.3 stage A passed after 5 clean trades; 6.4 the
@@ -50,7 +50,7 @@ PS = PO.app()
 IS = A.ideastore()
 FREE, FLEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")      # plan section 8
-SIX = [f"6.{i}" for i in range(1, 9)]
+SIX = [f"6.{i}" for i in range(1, 10)]
 HOME = Path.home() / ".homebase"
 APP_PYTHON = S.REPO / ".venv" / "bin" / "python"
 _T = {"keep": tempfile.TemporaryDirectory(prefix="bp_card_")}
@@ -169,9 +169,9 @@ def test_the_runs_are_whole_days_drawn_with_replacement_with_the_fixed_seed():
 
 def test_where_a_live_drawdown_sits_on_the_table():
     row = {"after": 10, "drawdown": [200.0, 300.0, 400.0, 500.0, 600.0], "pnl": [0.0] * 5}       # the 75th = $300, the 95th = $500
-    assert [EC.zone(v, row) for v in (0.0, 299.99, 300.0, 499.99, 500.0, 9000.0)] == ["carry on", "carry on", "cut size", "cut size", "pause and review", "pause and review"]
+    assert [EC.zone(v, row) for v in (0.0, 299.99, 300.0, 499.99, 500.0, 9000.0)] == ["carry on", "carry on", "cut size", "cut size", "the hard alarm", "the hard alarm"]
     none = {"after": 10, "drawdown": [0.0] * 5, "pnl": [0.0] * 5}                 # a history that never drew down inside 10 trades:
-    assert EC.zone(0.0, none) == "carry on" and EC.zone(0.01, none) == "pause and review"            # no drawdown is never a pause; any is
+    assert EC.zone(0.0, none) == "carry on" and EC.zone(0.01, none) == "the hard alarm"            # no drawdown is never a pause; any is
 
 
 # ================================================================ the hand-made idea of (b), (c), (e)
@@ -215,15 +215,15 @@ def test_the_card_before_the_first_live_trade_is_the_rules_and_the_tables():
         r = RESULTS["card"] = card("ec_card")
     assert tuple(r)[:len(CONTRACT)] == CONTRACT and (r["ok"], r["command"], r["name"], r["phase"], r["status"]) == (True, "eval-card", "ec_card", 6, "proven_on_history")
     json.dumps(r)
-    assert [x["line"] for x in r["lines"]] == SIX and marks(r) == [None] * 8, "every line is there; none is judged before a live trade"
+    assert [x["line"] for x in r["lines"]] == SIX and marks(r) == [None] * 9, "every line is there; none is judged before a live trade"
     L = by(r)
     for k in SIX[:5]:
         assert L[k]["text"].startswith(f"{k} n/a  not judged yet"), L[k]["text"]
     for k in SIX[5:]:
         assert L[k]["text"].startswith(f"{k} n/a  a rule to follow"), L[k]["text"]
     for k, words in (("6.1", ("same entry time", "within 5 s", "same exit reason", "bug")), ("6.2", ("1 micro", "2 ticks or less", "missed or rejected")),
-                     ("6.3", ("5 clean trades", f"{size} micros")), ("6.4", ("10, 20, 30 and 40", "75th", "cut size", "95th", "pause and review")),
-                     ("6.5", ("40 trades", "half", "$40 a micro", "$20 a micro")), ("6.6", ("review, not a deletion", "three yes")),
+                     ("6.3", ("5 clean trades", f"{size} micros")), ("6.4", ("10, 20, 30 and 40", "75th", "cut size", "95th", "the hard alarm")),
+                     ("6.5", ("40 trades", "half", "$40 a micro", "$20 a micro")), ("6.6", ("the soft alarm is a review", "three yes", "carry on")), ("6.9", ("hard alarm", "not a deletion", "last 5 months positive", "last 12 months positive", "last 3 months above")),
                      ("6.7", ("only the size may change", "never the rule")),
                      ("6.8", ("3 attempts", "$345", "does not retire"))):
         assert all(w in L[k]["text"] for w in words), (k, L[k]["text"])
@@ -241,7 +241,7 @@ def test_the_card_before_the_first_live_trade_is_the_rules_and_the_tables():
     assert text[0].startswith("EVAL CARD of ec_card") and sim["account"]["label"] in text[0] and all(x["text"] in text for x in r["lines"])
     assert any(ln.startswith("DRAWDOWN TABLE") for ln in text) and any(ln.startswith("P&L") for ln in text) and sum(ln.startswith("after ") for ln in text) == 8
     assert "3 attempts" in r["text"] and "Stage A: 1 micro" in r["text"] and f"Stage B: {size} micros" in r["text"] and r["notes"] == [] and "NOTE" not in r["text"]
-    assert by(sim)["5.3"]["passed"] is True
+    assert by(sim)["5.5"]["passed"] is True and by(sim)["5.3"]["passed"] is None
     f = ROOT / "ec_card" / "eval.json"
     assert r["saved"] == [str(f)] and read(f)["lines"] == r["lines"] and read(f)["table"] == t and r["fills"] == [] == read(f)["fills"]
     idea = IS.read_idea("ec_card", ROOT)
@@ -260,9 +260,9 @@ def test_the_card_stands_on_one_account():
     ready("ec_fresh", FREE)
     ready("ec_fresh", FLEX)
     assert card("ec_fresh")["account"]["id"] == FLEX, "no card yet: the simulator result saved last"
-    assert by(ready("ec_weak", weak=True))["5.3"]["passed"] is False
+    assert by(ready("ec_weak", weak=True))["5.5"]["passed"] is False
     r = card("ec_weak")                              # on file is what the card asks for; odds under the bar are said on it, in so many words
-    assert any(ln.startswith("NOTE: ") and "5.3" in ln and "under the owner's bar" in ln for ln in r["text"].splitlines()) and r["notes"]
+    assert any(ln.startswith("NOTE: ") and "5.5" in ln and "under one strategy's bar" in ln for ln in r["text"].splitlines()) and r["notes"]
 
 
 # ================================================================ (c) the lines on live fills
@@ -320,7 +320,7 @@ def test_line_6_3_stage_a_is_passed_after_five_clean_trades():
     size = ready("ec_63")["chosen"]["eval"]["size"]
     assert R.need("6.3")["clean_trades"] == 5
     four = card("ec_63", stage_a(4))
-    assert marks(four) == [True, True, None, None, None, None, None, None] and by(four)["6.3"]["number"] == 4 and "4 of 5" in by(four)["6.3"]["text"]
+    assert marks(four) == [True, True, None, None, None, None, None, None, None] and by(four)["6.3"]["number"] == 4 and "4 of 5" in by(four)["6.3"]["text"]
     assert four["live"]["stage_a"] == {"trades": 4, "clean": 4, "passed": False, "slip": 1.0} and "1 micro" in four["next"]
     five = card("ec_63", stage_a(5))
     assert marks(five)[:3] == [True, True, True] and by(five)["6.3"]["number"] == 5 and f"{size} micros" in by(five)["6.3"]["text"]
@@ -343,12 +343,12 @@ def test_line_6_4_the_live_drawdown_on_the_table():
     assert by(nine)["6.4"]["passed"] is None and "9 of 10" in by(nine)["6.4"]["text"] and nine["live"]["stage_b"]["reads"] == []
     reads = lambda first: card("ec_64", stage_a() + at_size([first] + [1.0] * 9, size))  # noqa: E731
     under, at, over, most = reads(-(cut - 0.01)), reads(-cut), reads(-(pause - 0.01)), reads(-pause)
-    for r, zone, passed in ((under, "carry on", None), (at, "cut size", None), (over, "cut size", None), (most, "pause and review", False)):
+    for r, zone, passed in ((under, "carry on", None), (at, "cut size", None), (over, "cut size", None), (most, "the hard alarm", False)):
         got = r["live"]["stage_b"]["reads"]
         assert [(x["after"], x["zone"], x["cut"], x["pause"]) for x in got] == [(10, zone, cut, pause)] and by(r)["6.4"]["passed"] is passed, (zone, got)
         assert zone in by(r)["6.4"]["text"] and r["live"]["stage_b"]["trades"] == 10
     assert under["live"]["stage_b"]["reads"][0]["drawdown"] == cut - 0.01 and at["live"]["stage_b"]["reads"][0]["drawdown"] == cut
-    assert by(most)["6.4"]["text"].startswith("6.4 FAIL ") and "6.6" in most["next"] and "review" in most["next"] and "cut" in at["next"].lower()
+    assert by(most)["6.4"]["text"].startswith("6.4 FAIL ") and "6.9" in most["next"] and "SWITCH THE STRATEGY OFF" in most["next"] and "cut" in at["next"].lower()
     # a cut size reads on the same table: the live trades are scaled to the table's size
     small, between = max(1, size // 3), (cut + pause) / 2
     less = card("ec_64", stage_a() + at_size([-between * small / size] + [0.01] * 9, small))["live"]["stage_b"]
@@ -357,12 +357,51 @@ def test_line_6_4_the_live_drawdown_on_the_table():
     deep = t[40]["drawdown"][3]
     slow = card("ec_64", stage_a() + at_size([0.0] * 25 + [-deep] + [1.0] * 14, size))
     got = slow["live"]["stage_b"]["reads"]
-    assert [x["after"] for x in got] == [10, 20, 30, 40] and [x["zone"] for x in got[:2]] == ["carry on", "carry on"] and got[3]["zone"] == "pause and review"
+    assert [x["after"] for x in got] == [10, 20, 30, 40] and [x["zone"] for x in got[:2]] == ["carry on", "carry on"] and got[3]["zone"] == "the hard alarm"
     assert got[2]["drawdown"] == deep == got[3]["drawdown"] and by(slow)["6.4"]["passed"] is False
     fine = card("ec_64", stage_a() + at_size([-(cut - 0.01)] + [1.0] * 39, size))
     assert by(fine)["6.4"]["passed"] is True and [x["zone"] for x in fine["live"]["stage_b"]["reads"]] == ["carry on"] * 4
     trimmed = card("ec_64", stage_a() + at_size([-cut] + [cut + 1.0] + [1.0] * 38, size))
     assert by(trimmed)["6.4"]["passed"] is True and trimmed["live"]["stage_b"]["reads"][0]["zone"] == "cut size", "a cut is an order followed, not a failed line"
+
+
+def test_line_6_9_the_recovery_after_a_hard_alarm_is_read_on_the_testers_replay():
+    day = lambda y, m, d=15: dt.date(y, m, d)  # noqa: E731
+    hist = [(day(2025, 7 + i) if i < 6 else day(2026, i - 5), 10.0) for i in range(15)]         # Jul 2025 .. Sep 2026: $10 a micro a month
+    # recovered: the last 5 and the last 12 months above $0, and the last 3 months a month above the pace of the whole record
+    r = EC.recovery(hist, [(day(2026, 10), 20.0), (day(2026, 11), 20.0), (day(2026, 12), 20.0)])
+    assert r["passed"] is True and (r["end"], r["start"]) == ("2026-12-15", "2025-07-15") and r["positive"] == {"5": 80.0, "12": 150.0}
+    assert r["pace"]["recent"] == 20.0 and 12.0 < r["pace"]["long_run"] < 13.0 and R.need("6.9") == {"positive_months": [5, 12], "above_pace_months": 3}
+    # not recovered: a replay that loses (the last 5 months under $0), or one that only matches its old pace
+    assert EC.recovery(hist, [(day(2026, 10), -30.0), (day(2026, 11), -30.0), (day(2026, 12), -10.0)])["passed"] is False
+    slow = EC.recovery(hist, [(day(2026, 10), 5.0), (day(2026, 11), 5.0), (day(2026, 12), 5.0)])
+    assert slow["passed"] is False and slow["positive"]["5"] > 0 and slow["pace"]["recent"] < slow["pace"]["long_run"]
+    # a record shorter than the 12 months the line looks back over: not judged
+    assert EC.recovery(hist[10:], [(day(2026, 10), 20.0)])["passed"] is None
+    assert EC._back(dt.date(2026, 3, 31), 1) == dt.date(2026, 2, 28) and EC._back(dt.date(2026, 1, 15), 5) == dt.date(2025, 8, 15)
+    # the replay as it is sent: beside the fills; a trade's New York date, its net a micro
+    assert EC.since_stop([{"exit_time": "2026-10-06T15:30:00-04:00", "net": 60.0, "size": 3}, {"exit_time": "2026-10-05T23:30:00+00:00", "net": -8.0, "size": 2}]) == [
+        (dt.date(2026, 10, 5), -4.0), (dt.date(2026, 10, 6), 20.0)]
+    for bad in ([], [{"exit_time": "2026-10-06T15:30:00-04:00", "net": 1.0}], [{"exit_time": "2026-10-06T15:30:00", "net": 1.0, "size": 1}],
+                [{"exit_time": "2026-10-06T15:30:00-04:00", "net": 1.0, "size": 0}], "none"):
+        refused(lambda bad=bad: EC.since_stop(bad), "replay_since_stop")
+    # on the card: a hard alarm stands (6.4), and line 6.9 is read on the replay sent with the fills
+    sim = ready("ec_69")
+    size = sim["chosen"]["eval"]["size"]
+    t = {x["after"]: x for x in card("ec_69")["table"]["rows"]}
+    stopped = stage_a() + at_size([-t[10]["drawdown"][3]] + [1.0] * 9, size)
+    plain = card("ec_69", stopped)
+    assert by(plain)["6.4"]["passed"] is False and by(plain)["6.9"]["passed"] is None and by(plain)["6.9"]["text"].startswith("6.9 n/a  a rule to follow")
+    early = EC.card("ec_69", {"fills": stopped, "replay_since_stop": [{"exit_time": "2025-12-15T10:00:00-05:00", "net": 5.0 * size, "size": size}]}, ROOT)
+    L = by(early)["6.9"]                                                           # the hand-made test range starts 2025-07-01: under 12 months on record
+    assert L["passed"] is None and "not judged: the record is" in L["text"] and (L["recovery"]["end"], L["recovery"]["start"]) == ("2025-12-15", SY.SPAN[0])
+    assert "SWITCH THE STRATEGY OFF" in early["next"] and "does not show it yet" in early["next"]
+    sent = EC.card("ec_69", {"fills": stopped, "replay_since_stop": [{"exit_time": "2026-12-15T10:00:00-05:00", "net": -5.0 * size, "size": size}]}, ROOT)
+    L = by(sent)["6.9"]
+    assert L["passed"] is False and L["text"].startswith("6.9 FAIL the tester's replay since the stop, to 2026-12-15") and L["recovery"]["positive"] == {"5": -5.0, "12": -5.0}
+    assert "does not show it yet" in sent["next"] and sent["status"] != "proven_live"
+    back = EC.card("ec_69", {"fills": stopped, "replay_since_stop": [{"exit_time": f"2026-{m}-15T10:00:00-05:00", "net": 900.0 * size, "size": size} for m in (10, 11, 12)]}, ROOT)
+    assert by(back)["6.9"]["passed"] is True and by(back)["6.4"]["passed"] is False and "may come back" in back["next"] and "new attempt" in back["next"]
 
 
 def test_line_6_5_the_average_trade_against_half_of_the_tests():
@@ -380,7 +419,7 @@ def test_line_6_5_the_average_trade_against_half_of_the_tests():
     more = card("ec_65", stage_a() + at_size([20.0 * size] * 40 + [-900.0 * size] * 3, size))
     assert by(more)["6.5"]["passed"] is True and by(more)["6.4"]["passed"] is True, "the lines are read on the first 40 trades at size"
     # every line that is read on live trades TRUE = PROVEN LIVE, as the app's idea store reads the saved card
-    assert marks(half) == [True, True, True, True, True, None, None, None] and half["status"] == "proven_live" == IS.status("ec_65", ROOT)
+    assert marks(half) == [True, True, True, True, True, None, None, None, None] and half["status"] == "proven_live" == IS.status("ec_65", ROOT)
     assert half["fills"] == stage_a() + at_size([20.0 * size] * 40, size) and read(ROOT / "ec_65" / "eval.json")["fills"] == more["fills"], "the orders read stay with the card"
     assert IS.read_idea("ec_65", ROOT)["phase"] == 6 and "PROVEN LIVE" in half["next"]
     assert (DRAFTS / "ec_65.py").read_text().splitlines()[1].startswith("# ec_65 · PROVEN LIVE · phase 6")
@@ -410,7 +449,7 @@ def test_the_fills_format_is_one_text_and_what_does_not_read_is_refused():
     zulu = {**fill(1, 3.0, side="Sell"), "entry_time": dt.datetime.fromtimestamp(b / 1000, dt.timezone.utc).isoformat().replace("+00:00", "Z")}
     r = EC.card("ec_fmt", {"fills": [desk, zulu, {"status": "missed"}, {**fill(3, 3.0), "note": "a free word"}]}, ROOT)
     assert r["live"] == {**r["live"], "trades": 3, "orders": 1} and [m["trade"] for m in r["mismatches"]] == [3], "Buy / Sell, milliseconds, a Z and a bare missed order are read"
-    assert EC.card("ec_fmt", {"fills": []}, ROOT)["live"]["trades"] == 0 and marks(EC.card("ec_fmt", {"fills": []}, ROOT)) == [None] * 8
+    assert EC.card("ec_fmt", {"fills": []}, ROOT)["live"]["trades"] == 0 and marks(EC.card("ec_fmt", {"fills": []}, ROOT)) == [None] * 9
 
 
 # ================================================================ (e) the command
@@ -433,13 +472,13 @@ def test_the_command_line_as_the_connector_writes_it():
                        stdin=subprocess.DEVNULL, env={**os.environ})
     assert q.returncode == 0 and q.stdout.count("\n") == 1, (q.stdout[-400:], q.stderr[-1500:])
     r = json.loads(q.stdout)
-    assert tuple(r)[:len(CONTRACT)] == CONTRACT and [x["line"] for x in r["lines"]] == SIX and marks(r) == [None] * 8 and r["size"]["stage_b"] == size
+    assert tuple(r)[:len(CONTRACT)] == CONTRACT and [x["line"] for x in r["lines"]] == SIX and marks(r) == [None] * 9 and r["size"]["stage_b"] == size
     fills = stage_a() + at_size([20.0 * size] * 40, size)
     q = subprocess.run([sys.executable, str(W / "bp.py"), "eval-card", "ec_cli", "--fills=-", *tail], capture_output=True, text=True, timeout=280, cwd=str(W),
                        input=json.dumps({"fills": fills}), env={**os.environ})
     assert q.returncode == 0 and q.stdout.count("\n") == 1, (q.stdout[-400:], q.stderr[-1500:])
     r = RESULTS["cli"] = json.loads(q.stdout)
-    assert marks(r) == [True] * 5 + [None] * 3 and r["status"] == "proven_live" and r["live"]["trades"] == 45
+    assert marks(r) == [True] * 5 + [None] * 4 and r["status"] == "proven_live" and r["live"]["trades"] == 45
     f = TMP / "fills.json"
     f.write_text(json.dumps({"fills": stage_a(2)}))
     rc, out = _run(["eval-card", "ec_cli", f"--fills={f}", f"--account={FREE}", *tail])
@@ -490,9 +529,9 @@ def test_the_apps_connector_against_this_toolkit():
     (ok, text), (ok2, live), (bad, why), (bad2, why2) = RESULTS["connector"] = json.loads(q.stdout)
     out = text.splitlines()
     assert ok == "ok" and out[0] == "Blueprint eval-card · ec_conn · PROVEN ON HISTORY · phase 6" and "DRAWDOWN TABLE" in text
-    assert "Lines: 0 passed · 0 FAILED · 8 not judged or do not apply (6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8)" in out      # (the connector's word for a line that is not judged yet)
+    assert "Lines: 0 passed · 0 FAILED · 9 not judged or do not apply (6.1, 6.2, 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9)" in out      # (the connector's word for a line that is not judged yet)
     assert all(text.count(f"\n{k} n/a ") == 1 for k in SIX) and any(ln.startswith("Saved: ") and "eval.json" in ln for ln in out)
-    assert ok2 == "ok" and "Lines: 3 passed · 0 FAILED · 5 not judged or do not apply (6.4, 6.5, 6.6, 6.7, 6.8)" in live.splitlines() and "carry on" in live
+    assert ok2 == "ok" and "Lines: 3 passed · 0 FAILED · 6 not judged or do not apply (6.4, 6.5, 6.6, 6.7, 6.8, 6.9)" in live.splitlines() and "carry on" in live
     assert bad == "error" and why.startswith("Refused (blueprint eval-card): ") and "bp.py sim ec_bare" in why
     assert bad2 == "error" and "#1" in why2 and "entry_time" in why2, "a fill that is not in the format is refused with the field named"
 

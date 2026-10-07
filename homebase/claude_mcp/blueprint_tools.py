@@ -63,7 +63,7 @@ from .client import ToolError
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
 DEFAULT_WAIT_S, MAX_WAIT_S = 120, 3600   # tools.py's own, repeated (it imports this module); a test holds them equal
 GRACE_S = 60.0                           # past --wait: the toolkit's own start-up and saving
-SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, eval card, status, views
+SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, portfolio, eval card, status, views
 RUNNING = ("queued", "running")
 _JOB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,119}$")
 _PLACE_RE = re.compile(r"^(home|not_here|[1-9][0-9]?)$")   # the table a heat map is of, in the toolkit's words
@@ -91,7 +91,7 @@ _WAIT = {"type": "integer", "minimum": 0, "maximum": MAX_WAIT_S,
 _JOB = {"type": "string", "description": "A job id an earlier call returned: keep waiting on that job instead of "
                                          "starting again."}
 _CARD = {
-    "type": "object", "description": "The idea card, lines 0.1 to 0.6, in plain words.",
+    "type": "object", "description": "The idea card, lines 0.1 to 0.7, in plain words.",
     "properties": {
         "why": {"type": "string", "description": "0.1 The reason in one sentence: why it should make money."},
         "loser": {"type": "string", "description": "0.1 Who is on the losing side."},
@@ -110,8 +110,10 @@ _CARD = {
         "main_setting": {"type": "string", "description": "0.5 The main setting: the key of settings.params that "
                                                           "carries its 3-4 values."},
         "sides": {"type": "string", "enum": ["both", "long", "short"], "description": "0.6 Both sides, or one."},
-        "sides_why": {"type": "string", "description": "0.6 Why."}},
-    "required": ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why"],
+        "sides_why": {"type": "string", "description": "0.6 Why."},
+        "loses_when": {"type": "string", "description": "0.7 When it should lose: one stretch or kind of market in which "
+                                                         "the idea must lose money. No filter is added only to erase it."}},
+    "required": ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when"],
     "additionalProperties": False}
 _SETTINGS = {
     "type": "object", "description": "How the research engine runs it (line 0.2: one entry trigger, at most 2 filters, "
@@ -126,7 +128,7 @@ _SETTINGS = {
         "filters": {"type": "array", "maxItems": 2, "items": {"type": "object"},
                     "description": "At most 2, each {block, side}. A filter is kept only if it wins alone (line 2.7)."},
         "exits": {"type": "string", "enum": ["standard"],
-                  "description": "Always \"standard\": the table of 8 stops x 4 targets."},
+                  "description": "Always \"standard\": the table of 8 stops x 6 targets (none, 0.5, 0.75, 1, 2, 3 x the stop)."},
         "limits": {"type": "object", "additionalProperties": True,
                    "description": "Optional: max_tr (entries per session), dir."}},
     "required": ["family", "params", "exits"], "additionalProperties": True}
@@ -216,12 +218,15 @@ SPECS = [
            "wait_s": _WAIT, "job_id": _JOB}, ["name"]),
     _spec("blueprint_lock", "Blueprint phase 3, the freeze: saves the rule, the variant list, the default variant (the "
           "middle survivor, never the best), the random control and the costs, and returns the lock's hash, the "
-          "default and the test range. From here nothing may change: a change is a new version, back to the build. "
+          "default and the test range. BEFORE the freeze the default variant is read on its own on the build days "
+          "(lines 3.3 to 3.7: profit factor 1.2, net / worst drawdown 3, Sharpe 1, its drawdown at 1 micro under "
+          "$2,000, money in 90% of 1,000 reshuffled runs): one not met = no freeze, back to the build. From here "
+          "nothing may change: a change is a new version, back to the build. "
           "Refused while any build line fails.", {"name": _NAME}, ["name"]),
     _spec("blueprint_test", "Blueprint phase 4, the out-of-sample test (2025-07-01 on). THE TEST DAYS ARE READ ONCE: "
           "the read is logged before it starts and is never repeated -- not for this idea, not for a relative of it, "
           "not after a failure (a strategy that fails is not re-tuned and re-tested). Run it only for a locked idea "
-          "and only when the owner has said to: confirm must be true. Reads lines 4.1 to 4.7; all pass = PROVEN ON "
+          "and only when the owner has said to: confirm must be true. Reads lines 4.1 to 4.9; all pass = PROVEN ON "
           "HISTORY, approved for a real eval. Long: after wait_s it returns a job id -- call it again with that "
           "job_id to keep waiting (nothing is read again). Refused when the idea is not locked, its lock no longer "
           "matches, or a read is already on file. The one exception is AN EARLY LOOK (early_look: true): it reads "
@@ -238,8 +243,10 @@ SPECS = [
                                                             "prove it, said a clear yes in chat. Default false."},
            "wait_s": _WAIT, "job_id": _JOB}, ["name", "confirm"]),
     _spec("blueprint_sim", "Blueprint phase 5, before the eval is bought: the prop simulator on the test-period trades "
-          "for one account -- the odds of passing the eval within 10 trading days and of the maximum payout within "
-          "20, per size, on the plain row and on the \"live is worse\" row (win rate -5 points, winners -15%). Open "
+          "of ONE strategy for one account -- per size, the odds of a pass before a bust and of a first payout before "
+          "a bust (no day limit), on the plain row and on the \"live is worse\" row (win rate -5 points, winners "
+          "-15%). One strategy's bar is line 5.5: 50% or more on each. The 60% within 10 days / 75% within 20 days "
+          "bar (line 5.3) is the PORTFOLIO's (blueprint_portfolio); for one strategy it is said, not judged. Open "
           "losses count against the drawdown here, which the tester's own prop tile does not do. attempts and "
           "fee_budget are the owner's numbers (line 5.4): ask him, never guess. Refused until the test is passed.",
           {"name": _NAME,
@@ -248,21 +255,43 @@ SPECS = [
            "attempts": {"type": "integer", "minimum": 1, "description": "How many evals the owner will buy at most."},
            "fee_budget": {"type": "number", "minimum": 0, "description": "The owner's total fee budget, in dollars."}},
           ["name", "account", "attempts", "fee_budget"]),
-    _spec("blueprint_eval_card", "Blueprint phase 6, the eval: the eval card -- lines 6.1 to 6.8 read on the live "
+    _spec("blueprint_portfolio", "Blueprint phase 5 for SEVERAL strategies on one account: two or more ideas that are "
+          "each proven on history, each at its default variant, every member at the same size, their test-period "
+          "days drawn together. Lines 5.2 (the \"live is worse\" row), 5.3 (eval pass within 10 trading days 60% or "
+          "more; maximum payout within 20 trading days 75% or more), 5.6 (no two members are the same idea on the "
+          "same market) and 5.7 (every member raises the portfolio's eval odds; one that lowers them stays out). "
+          "Open losses count. Refused when a member's out-of-sample test is not passed.",
+          {"names": {"type": "array", "items": {"type": "string"}, "minItems": 2,
+                     "description": "The ideas of the portfolio: two or more names, each proven on history."},
+           "account": {"type": "string", "description": "The account in question: a rule set id from list_prop_rules, "
+                                                        "e.g. lucid-pro-50k@2026-09-27b."}},
+          ["names", "account"]),
+    _spec("blueprint_eval_card", "Blueprint phase 6, the eval: the eval card -- lines 6.1 to 6.9 read on the live "
           "fills so far, and the drawdown table after 10, 20, 30 and 40 trades. Without fills it is the card as it "
           "stands before the first live trade. THE FILLS: one object per live order of the eval, oldest first. A "
           "TRADE (an order that filled and is flat again) must say entry_time, exit_time, side, size, entry_price, "
           "exit_price, net and exit_reason; entry_slip_ticks (or trigger_price), replay, fixed and note are optional. "
           "AN ORDER THAT DID NOT TRADE where the test did is {\"status\": \"missed\" | \"rejected\"}, with "
           "entry_time, side and replay when they are known. A field that is not listed is refused. Refused until the "
-          "sim is done.",
+          "sim is done. AFTER A HARD ALARM (the drawdown at the 95th percentile: the strategy is switched off), "
+          "replay_since_stop = the tester's replay of the days since, and line 6.9 is read on it: the last 5 and 12 "
+          "months above $0 and the last 3 months above the long-run pace.",
           {"name": _NAME,
            "fills": {"type": "array", "items": {"anyOf": [_TRADE, _NO_TRADE]},
                      "description": "The live orders of the eval so far, oldest first, as the desk recorded them "
                                     "(desk_journal): one object per order. Left out: no live trade yet."},
            "account": {"type": "string", "description": "The account the card stands on: a rule set id, as given to "
                                                         "blueprint_sim. Left out: the card's own, else the one of "
-                                                        "the simulator result saved last."}}, ["name"]),
+                                                        "the simulator result saved last."},
+           "replay_since_stop": {"type": "array",
+                                 "items": {"type": "object", "additionalProperties": False,
+                                           "properties": {"exit_time": {"type": ["string", "number"]},
+                                                          "net": {"type": "number"}, "size": {"type": "integer", "minimum": 1}},
+                                           "required": ["exit_time", "net", "size"]},
+                                 "description": "After a hard alarm only: the tester's replay of the strategy on the "
+                                                "days since it was switched off, one object a trade (exit_time, net in "
+                                                "dollars, size in micros). Needs fills (the eval's live orders)."}},
+          ["name"]),
     _spec("blueprint_status", "Blueprint, any phase: where things stand -- every idea with its status (idea, lead, "
           "proven on history, proven live, shelved), phase, round and next step; or one idea (name); or one job "
           "(job_id). Runs nothing.",
@@ -554,17 +583,32 @@ class BlueprintMixin:
         return self._finish(self._bp(["sim", name, f"--account={account}", f"--attempts={attempts}",
                                       f"--fee-budget={fee_budget}"]))
 
+    def t_blueprint_portfolio(self, names: list, account: str) -> str:
+        if not isinstance(names, list) or len(names) < 2 or len(set(names)) != len(names):
+            raise ToolError("names: two or more DIFFERENT ideas, each proven on history (one strategy alone: "
+                            "blueprint_sim)")
+        for n in names:
+            _name(n)
+        _text(account, "account")
+        return self._finish(self._bp(["portfolio", *names, f"--account={account}"]))
+
     # ---- phase 6: the eval
 
-    def t_blueprint_eval_card(self, name: str, fills=None, account=None) -> str:
+    def t_blueprint_eval_card(self, name: str, fills=None, account=None, replay_since_stop=None) -> str:
         args = ["eval-card", _name(name)]
         if account is not None:
             args.append(f"--account={_text(account, 'account')}")
         if fills is None:
+            if replay_since_stop is not None:
+                raise ToolError("replay_since_stop goes with fills: the eval's live orders, on which the hard alarm stands")
             return self._finish(self._bp(args))
         if not isinstance(fills, list) or not all(isinstance(f, dict) for f in fills):
             raise ToolError("fills: the live trades so far, a list of objects")
-        return self._finish(self._bp([*args, "--fills=-"], stdin={"fills": fills}))
+        if replay_since_stop is not None and (not isinstance(replay_since_stop, list)
+                                              or not all(isinstance(t, dict) for t in replay_since_stop)):
+            raise ToolError("replay_since_stop: the tester's replay of the days since the stop, a list of objects")
+        body = {"fills": fills, **({} if replay_since_stop is None else {"replay_since_stop": replay_since_stop})}
+        return self._finish(self._bp([*args, "--fills=-"], stdin=body))
 
     # ---- any phase
 

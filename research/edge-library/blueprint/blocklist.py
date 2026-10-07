@@ -36,9 +36,11 @@ REFUSED = (                                         # (what, why) -- what versio
     ('a home "all"', "version 1 judges ONE home table: name the market, session and bar size the reason fits best, and list the others as neighbors (line 2.5 reads them)"),
     ("the evening session", "home, neighbor or the place it should not work: the evening session comes later (toolkit plan, section 7)"),
     ("two filters at once", "a card may name two (line 0.2), but a build runs a rule with one filter at most: each filter first wins alone, one a round (line 2.7)"),
-    ("limits.trail_atr / limits.exit_bars", "exits of their own: the exits come from the standard table only (the random tables hold its 32 cells and no other)"),
+    ("limits.trail_atr / limits.exit_bars", "exits of their own: the exits come from the standard table only (the random tables hold its 48 cells and no other)"),
     ('exits "extended"', "the standard exit table only (line 0.2)"),
-    ("a Level 2 filter (book agree / disagree)", "it reads Level 2, which the engine does not open for the build range"),
+    ("a Level 2 filter on ES or GC", "Level 2 exists for NQ only: every place of a card with a Level 2 filter (home, neighbors, the place it should not work) must be NQ"),
+    ("locking or testing an idea with a Level 2 filter", "the vendor's Level 2 history ends 2026-07-08 and the test days' feature table is not built: such an idea can be built "
+                                                          "(phase 2) but not locked or tested; the owner decides how the test range of one ends"),
     ("more than one varied setting", "an idea varies ONE setting, its main setting with 3-4 values (line 0.5); the others are held at one value under `fixed` -- and "
                                      "values that are opposite ideas (ib break / fade, gap fill / go, a side) are each an idea of their own"),
     ("a family that cannot run on the build days yet (va_reclaim)", "it builds its own cache for the old build days only: the engine has to open it first"),
@@ -91,12 +93,12 @@ def blocks() -> dict:
     fam, eng = RM.registry(), RUN._blocks()
     m, c, mc, ctl, sz, rg = (R.template(n) for n in ("exit_menu", "costs", "montecarlo", "control", "sizes", "ranges"))
     F = families()
-    filters = [{"block": b, "side": s, "words": eng.PLAIN[(b, s)], "runs": b not in eng.L2_BLOCKS,
-                "why_not": "it reads Level 2, which the engine does not open for the build range" if b in eng.L2_BLOCKS else None}
+    filters = [{"block": b, "side": s, "words": eng.PLAIN[(b, s)], "runs": True, "why_not": None,
+                "markets": ["NQ"] if b in eng.L2_BLOCKS else list(eng.BLOCK_MARKETS.get(b, ("NQ", "ES", "GC"))), "tested": b not in eng.L2_BLOCKS}
                for b, sides in eng.FILTERS.items() for s in sides]
     B = {"families": F, "other_families": sorted(set(fam.REGISTRY) - set(eng.WRAPPED)), "filters": filters,
          "limits": [{"name": k, "words": LIMITS[k], "runs": k not in REC.OWN_EXITS} for k in RI.LIMIT_KEYS],
-         "exits": {"cells": m["cells"], "stops": m["stops"], "targets_r": m["targets_r"], "flat_et": m["flat_et"], "flat_et_half_day": m["flat_et_half_day"],
+         "exits": {"cells": m["cells"], "stops": m["stops"], "targets_r": sorted(m["targets_r"] + m["small_targets_r"]), "flat_et": m["flat_et"], "flat_et_half_day": m["flat_et_half_day"],
                    "by_market": {root: [S.cell_id(x) for x in R.exit_menu(root)] for root in m["stops"]["pts"]}},
          "sessions": [{"name": s, "words": J.SESS_PLAIN[s], "runs": s != "eve"} for s in RM.DAY_PASSES], "bars": list(fam.TFS),
          "markets": [{"market": k, "floor": R.need("2.2", k), "point_value": v["point_value"], "tick": v["tick"]} for k, v in c["contract"].items()],
@@ -131,14 +133,15 @@ def blocks() -> dict:
             f"ENTRY TRIGGERS (settings.family; ONE an idea): {sum(f['runs'] for f in F)} run on the build days, {sum(not f['runs'] for f in F)} cannot yet",
             *[ln for f in F for ln in family(f)],
             "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7)",
-            *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"] for f in filters],
+            *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"]
+              + ("" if f["tested"] else " [NQ only; can be built, not yet locked or tested]") for f in filters],
             "LIMITS (settings.limits)",
             *[f"  {x['name']:<18s}  " + ("" if x["runs"] else "NOT IN VERSION 1 (an exit of its own) -- ") + x["words"] for x in B["limits"]],
-            f"EXITS: the standard table, the same for every idea -- {m['cells'] // len(m['targets_r'])} stops x {len(m['targets_r'])} targets = {m['cells']} cells; "
+            f"EXITS: the standard table, the same for every idea -- {m['cells'] // len(B['exits']['targets_r'])} stops x {len(B['exits']['targets_r'])} targets = {m['cells']} cells; "
             "nobody adds or changes a cell",
             f"  stops    {nums(m['stops']['atr'])} x ATR(14) of the idea's bars · fixed points: " + " · ".join(f"{k} {nums(v)}" for k, v in m["stops"]["pts"].items())
             + f" · {nums(m['stops']['pct'])} percent of the entry price",
-            f"  targets  {nums(m['targets_r'][1:])} x the stop distance, or none (the trade runs to its stop or to the flat time)",
+            f"  targets  {nums(B['exits']['targets_r'][1:])} x the stop distance, or none (the trade runs to its stop or to the flat time)",
             f"  flat     every trade is flat by {m['flat_et']} ET ({m['flat_et_half_day']} on half days)",
             "SESSIONS (card.home.session; New York time)",
             *[f"  {s['name']:<7s}  " + ("" if s["runs"] else "NOT IN VERSION 1 -- ") + s["words"] for s in B["sessions"]],
@@ -147,8 +150,8 @@ def blocks() -> dict:
             *[f"  {x['market']:<3s}  the average trade must reach ${x['floor']:g} after costs at 1 contract (lines 2.2, 4.3) · ${x['point_value']:g} a point, tick {x['tick']:g}"
               for x in B["markets"]],
             f"RANDOM TABLES (lines 2.3, 4.4): {ctl['draws']:,} draws from {ctl['seeds']} seeds of random entries with the same exits, session and days",
-            f"MONTE CARLO (lines 2.8, 4.7): {mc['runs']:,} reshuffled runs of whole days drawn with replacement, the same days for every variant, fixed seed {mc['seed']}; "
-            f"2.8 asks {100 * mc['build']['need']:g} % of the runs, 4.7 asks {100 * mc['test']['need']:g} %; the eval card reads the "
+            f"MONTE CARLO (lines 2.8, 3.7, 4.7): {mc['runs']:,} reshuffled runs of whole days drawn with replacement, the same days for every variant, fixed seed {mc['seed']}; "
+            f"2.8 asks {100 * mc['build']['need']:g} % of the runs, 3.7 (the default variant alone) and 4.7 ask {100 * mc['test']['need']:g} %; the eval card reads the "
             f"{', '.join(str(p) + 'th' for p in mc['eval_card']['percentiles'])} percentile after {nums(R.need('6.4')['after_trades'])} trades",
             f"SIZE STEPS (phase 5, in micros): {nums(sz['steps'])}; stage A of an eval is {sz['stage_a']} micro",
             f"RANGES: build {rg['build']['start']} .. {rg['build']['end']} (all tuning) · the out-of-sample test {rg['test']['start']} on, read ONCE",

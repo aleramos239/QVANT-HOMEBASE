@@ -24,6 +24,12 @@
     POST /api/tester/groups/delete       {name} -> its strategies go back to no group (none is deleted)
     POST /api/tester/groups/move         {strategy, group} -> that strategy (a built-in or a draft id) is in that
                                           one group, made when it is new; group null or "" = in no group
+    GET  /api/tester/blueprint           the blueprint toolkit as the Lab lists it: {tools: [{name, phase, description,
+                                          inputs: its JSON schema}], ideas: [each idea's idea.json]} -- THE SAME tool
+                                          definitions every chat has (claude_mcp.blueprint_tools.SPECS)
+    POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
+                                          toolkit bp.py as a child process; it saves in the app itself). A long job
+                                          answers after LAB_WAIT_S at most with its job id: send it again with job_id
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -99,7 +105,7 @@ from typing import Callable
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from .. import draftstore, netguard, strategies
+from .. import draftstore, ideastore, netguard, strategies
 from ..backtest import drafthost
 from ..backtest import propsim
 from ..backtest.grid import GridManager, LooksCorrupt
@@ -109,9 +115,17 @@ from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
+from ..claude_mcp import blueprint_tools
+from ..claude_mcp.client import ToolError
 from . import lab_templates, reviewpack
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
+LAB_WAIT_S = 20          # the longest a blueprint tool started from the Lab waits for a job before it hands back its id
+
+
+class _Blueprint(blueprint_tools.BlueprintMixin):
+    """The blueprint tools as the connector has them (one per phase, each a command of the research toolkit), for
+    the Lab's own panel: the same code path, so the page and a chat can never disagree about a tool."""
 PROP_CACHE = 64          # prop-eval re-scores kept per service
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
@@ -358,6 +372,40 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         if not isinstance(sid, str) or sid not in known_ids:
             raise HTTPException(404, f"no strategy {sid!r}")
         return grouped(draftstore.set_group, sid, group)
+
+    # ---- the blueprint toolkit in the Lab: the tools every chat has, listed and run from the page ------------
+    box = _Blueprint()
+    bp_specs = {s["name"]: s for s in blueprint_tools.SPECS}
+
+    @r.get("/blueprint")
+    def blueprint_toolkit():
+        tools = []
+        for s in blueprint_tools.SPECS:
+            head, _, text = s["description"].partition(": ")
+            tools.append({"name": s["name"], "phase": head, "description": text or head, "inputs": s["inputSchema"]})
+        return {"tools": tools, "ideas": ideastore.list_ideas(), "wait_s": LAB_WAIT_S}
+
+    @r.post("/blueprint/run")
+    def blueprint_run(request: Request, body: dict):
+        write_ok(request)
+        json_body(request)
+        tool, args = body.get("tool"), body.get("args", {})
+        if set(body) - {"tool", "args"} or not isinstance(tool, str) or tool not in bp_specs or not isinstance(args, dict):
+            raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
+        if Slots().quiet():       # the desk's 9:30 window: nothing is started from the page then
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): run it after 09:35")
+        if "wait_s" in bp_specs[tool]["inputSchema"]["properties"]:      # a page never holds a request for an hour
+            w = args.get("wait_s", LAB_WAIT_S)
+            args = {**args, "wait_s": LAB_WAIT_S if isinstance(w, bool) or not isinstance(w, int) else max(0, min(w, LAB_WAIT_S))}
+        fn = getattr(box, f"t_{tool}")
+        try:
+            inspect.signature(fn).bind(**args)
+        except TypeError as e:
+            raise HTTPException(400, f"{tool}: {e}") from None
+        try:
+            return {"ok": True, "tool": tool, "text": fn(**args)}
+        except ToolError as e:    # a refusal of the toolkit (or a bad input): the tool's own words, nothing was changed
+            return {"ok": False, "tool": tool, "text": str(e)}
 
     @r.post("/show")
     async def show(request: Request):

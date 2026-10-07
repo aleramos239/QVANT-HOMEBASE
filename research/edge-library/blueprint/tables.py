@@ -258,15 +258,29 @@ def against_random(st: dict, u: dict, ts: dict, seeds: dict, what: str) -> dict:
     return {**v, "seeds": sorted(seeds), "stores": stores}
 
 
-def place(name: str, root: str, tf, sess: str, filt=None, out_dir=None) -> dict:
+def sigs(name: str, root: str, tf, sess: str, filt=None, out_dir=None) -> dict:
+    """{variant id: the fingerprint of its trade list} of one table of an idea (library.trade_sig): what place() holds a
+    neighbor against to tell a table of its own from the home table's trades under another name."""
+    out = RUN.RUNS if out_dir is None else Path(out_dir)
+    st, _ = _open(out, RI.unit_key({"name": name}, root, tf, filt))
+    return {r["id"]: r.get("sig") for r in LB.plateau_units(st, sess)[""] if r.get("sig") is not None}
+
+
+def place(name: str, root: str, tf, sess: str, filt=None, out_dir=None, like=None) -> dict:
     """ONE table of an idea by its place -- a market, bar size and session the idea's card names (a neighbor of line 2.5, or
     the place it should NOT work) -- from the store `<name>[__<filter>]-<ROOT>-tf<tf>` the build wrote: its judged variants,
-    the net of its average variant (None: no variant traded there), how many are profitable. The seal is _open's."""
+    the net of its average variant (None: no variant traded there), how many are profitable. The seal is _open's.
+    `like` = the home table's sigs(): `same` then counts the variants whose trade list IS the home table's (an opening range
+    in minutes trades alike on 5-, 15- and 30-minute bars), and `copy` says the table is the home table again -- the law
+    counts tables that are the same trades once (rules.json 2.5 also.copy_share of its variants or more)."""
     out = RUN.RUNS if out_dir is None else Path(out_dir)
     st, where = _open(out, RI.unit_key({"name": name}, root, tf, filt))
-    ts = J.table_stats(LB.plateau_units(st, sess)[""])
+    rows = LB.plateau_units(st, sess)[""]
+    ts = J.table_stats(rows)
+    same = sum(1 for r in rows if r.get("sig") is not None and (like or {}).get(r["id"]) == r["sig"])
     return {"table": f"{root}-tf{tf}-{sess}", "store": where, "variants": ts["cells"], "avg_net": ts["avg_net"], "positive": ts["positive"],
-            "profitable": bool(ts["cells"] and ts["avg_net"] > R.rule("2.1")["also"]["profitable_above"])}
+            "profitable": bool(ts["cells"] and ts["avg_net"] > R.rule("2.1")["also"]["profitable_above"]),
+            "same": same, "copy": bool(like and rows and same >= R.rule("2.5")["also"]["copy_share"] * len(rows))}
 
 
 def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1) -> dict:
@@ -317,6 +331,24 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
     return t
 
 
+def box(st: dict, u: dict, cell: str, days=None) -> dict:
+    """THE BOX DATA of lines 3.3-3.7: ONE variant of a build store alone -- the net of each of its trades, and its net and
+    trades on every session day of the build range (days = the named days of a smoke run, as in built())."""
+    named = None if days is None else RUN.seal(days)
+    cal = named if named is not None else [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), u["root"], allow_holdout=RUN.PERIOD)]
+    t = _data(st, u, {"ids": [cell], "dead": 0, "dup": 0}, LB._ordinals(cal), "")
+    return {"trades": np.asarray(J.cellx(st, cell, u["sess"], u)["net"], np.float64), "day": t["net"][0], "n": t["n"][0]}
+
+
+def avg_trade(st: dict, u: dict, ids: list):
+    """Line 2.2's number of a table: the net of the listed variants / their trades (None: no trade)."""
+    net = n = 0.0
+    for cid in ids:
+        x = J.cellx(st, cid, u["sess"], u)["net"]
+        net, n = net + float(np.sum(x)), n + len(x)
+    return net / n if n else None
+
+
 # ================================================================ the test days: the stores of the ONE read (runner.run_test)
 
 def tested(spec: dict, lock: dict, out_dir=None) -> dict:
@@ -327,6 +359,8 @@ def tested(spec: dict, lock: dict, out_dir=None) -> dict:
       controls {c1}     the judge's random tables (judge.c1_table, verdict) from the idea's own 10-seed pool of the test
                         days, with the draws and the draw seed THE LOCK holds                                      line 4.4
       worse, worse_fills    each locked variant's net with worse fills, and those fills in words                   line 4.5
+      build_avg_trade   the average trade of the frozen table on the build days, as the lock holds it              line 4.8
+      box {trades}      the lock's default variant alone on the test days                                          line 4.9
     READ-ONLY, and no engine call: the days are the stores'. runner.guard_test is the seal -- a store that is not of the
     frozen range, or not of this lock's read, is refused; so is a trade dated outside the range, a locked variant a store
     does not hold, a pool with fewer seeds than the lock froze. spec = the engine's settings of the home's store."""
@@ -374,4 +408,6 @@ def tested(spec: dict, lock: dict, out_dir=None) -> dict:
     t["controls"] = {"c1": {**v, "seeds": sorted(seeds), "stores": {pwhere: sorted(seeds)}}}
     t["worse"] = np.array([float(J.cellx(wst, x, sess, u)["net"].sum()) for x in ids])
     t["worse_fills"] = RUN.worse_words(wst["meta"]["worse"])
+    t["build_avg_trade"] = (lock.get("build") or {}).get("avg_trade")
+    t["box"] = {"trades": np.asarray(J.cellx(st, lock["default"], sess, u)["net"], np.float64)}
     return t

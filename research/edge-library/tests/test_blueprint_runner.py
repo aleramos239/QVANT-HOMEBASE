@@ -272,10 +272,15 @@ def test_one_tape_pass_per_market_and_bar_size_and_a_ledger_row_per_store():
     assert [c["id"] for c in unit["cells"]] == [f"or_min{v}_{x}" for v in ("5", "15", "30") for x in CELLS] == [c["id"] for c in filt["cells"]]
     assert filt["filter"]["block"] == "momentum" and "code" in filt and "families/blocks.py" in unit["code"]
     assert pool["inputs_hash"] != unit["inputs_hash"] != filt["inputs_hash"]
-    # the pool's cells are the 10-seed grid of the 2025 controls (out/check2025/run_check.py: seeded(RM.c1_grid, ...)), all 32 exits
+    # the pool's cells: FIRST the 10-seed grid of the 2025 controls (out/check2025/run_check.py: seeded(RM.c1_grid, ...)), its 32 exits a seed,
+    # THEN the 16 small-target cells of every seed (BLUEPRINT.md version 1.1): 48 exits a seed
     full = RUN.pool_part("NQ", "15")
     ref = _rc().seeded(RM.c1_grid, range(1, 11), "NQ", "15")
-    assert [(c["id"], c["spec"]) for c in full["grid"]] == [(c["id"], c["spec"]) for c in ref] and full["cells"] == 320 and full["key"] == KEYS[0]
+    assert [(c["id"], c["spec"]) for c in full["grid"][:320]] == [(c["id"], c["spec"]) for c in ref] and full["cells"] == 480 and full["key"] == KEYS[0]
+    small = full["grid"][320:]
+    assert {c["exit"]["tgt_r"] for c in small} == {0.5, 0.75} and [c["variant"]["seed"] for c in small] == [s for s in range(1, 11) for _ in range(16)]
+    assert all(c["spec"][1]["seed"] == c["variant"]["seed"] and c["id"] == f"s{c['variant']['seed']}_{S.cell_id(c['exit'])}" for c in small)
+    assert [c["exit"] for c in small[:16]] == R.exit_menu("NQ")[32:] and [c["xi"] for c in small[:16]] == list(range(32, 48))
     RESULTS["test_one_tape_pass_per_market_and_bar_size_and_a_ledger_row_per_store"] = (3, 3, "stores of one pass, each with its ledger row")
 
 
@@ -361,6 +366,48 @@ def test_a_rerun_does_no_work_and_other_inputs_are_never_written_over():
         refused(lambda: RUN.run_build(SPEC, days=DAYS, cells=CELLS), "named days")
         refused(lambda: RUN.run_build(SPEC, out_dir=o, days=DAYS), "named days")
         refused(lambda: RUN.run_build(SPEC, out_dir=o, ledger=led, cells=CELLS), "named days")
+
+
+def test_a_store_whose_table_grew_keeps_its_cells_and_gets_the_new_ones():
+    """BLUEPRINT.md version 1.1: the exit table got the small targets. A store that holds the cells of the table as it was
+    is not another store: its missing cells are run, in one pass, and joined to it; what it held stays byte for byte."""
+    o, led, small = tmp() / "runs_grow", tmp() / "ledger_grow.csv", ["atr3-r0p5", "pts20-r0p75"]      # 2 of the 16 small-target cells
+    with at(SAT):
+        first = RUN.run_build(SPEC, out_dir=o, ledger=led, days=DAYS, cells=CELLS, workers=1)          # the table as it was
+    was = {k: LB.load_unit(k, o) for k in KEYS}
+    with watch() as seen, at(SAT):
+        grown = RUN.run_build(SPEC, out_dir=o, ledger=led, days=DAYS, cells=CELLS + small, workers=1)
+    assert len(seen["passes"]) == 1 and [(r["key"], r["skipped"], r["ok"]) for r in grown] == [(k, False, True) for k in KEYS]
+    assert [r["grown"] for r in grown] == [20, 6, 6] and [r["cells"] for r in grown] == [40, 12, 12]   # 10 seeds x 2 · 3 values x 2 · the same with the filter
+    assert seen["calls"][0]["specs"] < sum(len(x) for p in RUN.parts(RUN.checked(SPEC), CELLS + small) for x in p["runs"])     # the missing cells only
+    with at(SAT):
+        whole = RUN.run_build(SPEC, out_dir=tmp() / "runs_grow_whole", ledger=tmp() / "ledger_grow_whole.csv", days=DAYS, cells=CELLS + small, workers=1)
+    assert [r["inputs_hash"] for r in grown] == [r["inputs_hash"] for r in whole] != [r["inputs_hash"] for r in first]
+    for k, a in zip(KEYS, first):
+        u, w, doc = LB.load_unit(k, o), LB.load_unit(k, tmp() / "runs_grow_whole"), F_read(o / k / "run.json")
+        n = len(was[k]["meta"]["cells"])
+        assert [c["id"] for c in u["meta"]["cells"]][:n] == [c["id"] for c in was[k]["meta"]["cells"]] and u["meta"]["cells"][:n] == was[k]["meta"]["cells"]
+        assert all(np.array_equal(u[f][:len(was[k][f])], was[k][f]) for f in LB.FIELDS) and np.array_equal(u["off"][:n + 1], was[k]["off"])      # what it held: untouched
+        assert {c["id"] for c in u["meta"]["cells"]} == {c["id"] for c in w["meta"]["cells"]} and len(u["off"]) == len(u["meta"]["cells"]) + 1
+        for c in w["meta"]["cells"]:                                                # every cell, old and new: the trades of a store run whole
+            x, y = LB.unit_cell(u, c["id"]), LB.unit_cell(w, c["id"])
+            assert all(np.array_equal(x[f], y[f], equal_nan=f in ("mae", "risk")) for f in LB.FIELDS), (k, c["id"])
+        assert {c["id"]: (c["vi"], c["xi"], c["exit"], c["trades"]) for c in u["meta"]["cells"]} == {c["id"]: (c["vi"], c["xi"], c["exit"], c["trades"]) for c in w["meta"]["cells"]}
+        assert doc["inputs_hash"] == grown[KEYS.index(k)]["inputs_hash"] and [(g["cells"], g["from"], g["was"]) for g in doc["grown"]] == [(len(u["meta"]["cells"]) - n, n, a["inputs_hash"])]
+        assert (o / k / "table.csv").exists() and not (o / (k + ".tmp")).exists()
+    rows = LB.read_ledger(led)
+    assert [(r["stage"], r["key"]) for r in rows] == [("null_bp", KEYS[0]), ("bp_build", KEYS[1]), ("bp_build", KEYS[2]),
+                                                     ("null_bp_more", KEYS[0]), ("bp_build_more", KEYS[1]), ("bp_build_more", KEYS[2])]
+    assert [int(r["cells"]) + int(r["null_cells"]) for r in rows[3:]] == [20, 6, 6]              # only the new cells are booked, the pool's as null cells
+    with watch() as seen, at(SAT), no_engine():                                    # grown: now it is the store asked for
+        assert all(r["skipped"] for r in RUN.run_build(SPEC, out_dir=o, ledger=led, days=DAYS, cells=CELLS + small)) and seen["passes"] == []
+    with at(SAT), no_engine():                                                     # fewer cells than it holds, or other days: still another store
+        refused(lambda: RUN.run_build(SPEC, out_dir=o, ledger=led, days=DAYS, cells=CELLS), "other inputs")
+        refused(lambda: RUN.run_build(SPEC, out_dir=o, ledger=led, days=DAYS[:3], cells=CELLS + small + ["pct0p1-r0p5"]), "other inputs")
+
+
+def F_read(path) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
 def test_what_stops_a_run_and_what_a_failed_pass_leaves():
@@ -470,7 +517,8 @@ def test_nothing_on_or_after_2025_07_01_is_read():
 def test_specs_the_build_range_cannot_run_are_refused():
     with no_engine():
         refused(lambda: RUN.checked({**SPEC, "exits": "extended"}), "standard")
-        refused(lambda: RUN.checked({**SPEC, "filters": [{"block": "book", "side": "agree"}]}), "Level 2")
+        RUN.checked({**SPEC, "filters": [{"block": "book", "side": "agree"}]})                          # Level 2 on NQ is taken (built, not locked or tested)
+        refused(lambda: RUN.checked({**SPEC, "markets": ["NQ", "ES"], "filters": [{"block": "book", "side": "agree"}]}), "NQ only")
         refused(lambda: RUN.checked({**SPEC, "family": "va_reclaim", "params": {"d_atr": [0.25, 0.5]}}), "va_reclaim")
         refused(lambda: RUN.checked({**SPEC, "end": "2025-07-01"}), "unknown fields")
         refused(lambda: RUN.checked({**SPEC, "family": "no_such_family"}), "family")
@@ -479,6 +527,7 @@ def test_specs_the_build_range_cannot_run_are_refused():
     sp = RUN.checked(SPEC)
     assert sp["name"] == "bpt_orb" and sp["filters"] == [("momentum", "with")] and len(sp["variants"]) == 3
     assert RUN.checked(sp) is sp                                                # run_idea's check is not run twice ...
+    assert (sp["exits"], sp["filter_exits"]) == ("blueprint", "blueprint") and SPEC["exits"] == "standard"      # the card's "standard" is the blueprint's 48-cell table; the caller's spec stays
     refused(lambda: RUN.checked({**sp, "exits": "extended"}), "standard")       # ... but what the build range cannot run is refused however the spec came
     path = tmp() / "any_name.json"                                              # a spec file may have any name (the idea's record names it)
     path.write_text(json.dumps(SPEC))
@@ -603,8 +652,8 @@ def test_build_prints_the_lines_on_the_new_range():
 def test_the_control_pools_command():
     keys = [f"c1-{r}-tf{tf}" for r in ("NQ", "ES", "GC") for tf in ("1", "5", "15", "30")]
     parts = [RUN.pool_part(r, tf) for r in ("NQ", "ES", "GC") for tf in ("1", "5", "15", "30")]
-    assert [p["key"] for p in parts] == keys and all(p["cells"] == 320 and p["kind"] == "pool" and p["sessions"] == list(RM.DAY_PASSES) for p in parts)
-    assert all([c["exit"] for c in p["grid"][:32]] == R.exit_menu(p["root"]) for p in parts)
+    assert [p["key"] for p in parts] == keys and all(p["cells"] == 480 and p["kind"] == "pool" and p["sessions"] == list(RM.DAY_PASSES) for p in parts)
+    assert all([c["exit"] for c in p["grid"][:32]] + [c["exit"] for c in p["grid"][320:336]] == R.exit_menu(p["root"]) for p in parts)
     o, led, _, _ = built("a", workers=1)
     with watch() as seen, at(SAT), no_engine():             # the pool the tiny build wrote is the one later ideas reuse: nothing runs
         r = A.pools(["NQ"], ["15"], out=o, ledger=led, days=DAYS, cells=CELLS)

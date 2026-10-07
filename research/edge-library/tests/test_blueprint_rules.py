@@ -130,13 +130,20 @@ def test_the_lines_the_build_reads():
 def test_exit_menu_is_the_engines():
     import l2sim as S
     import run_menus as RM
+    from blueprint import runner as RUNNER
+    RM.registry()
     m = R.template("exit_menu")
     for root in MARKETS:
         mine = R.exit_menu(root)
-        assert mine == S.menu(root), f"{root}: exit_menu.json is not l2sim.menu"
-        assert len(mine) == m["cells"] == 32 and len({S.cell_id(x) for x in mine}) == 32
-        pool = RM.c1_grid(root, "5")                            # run_menus: the random-entry pool runs the same 32 cells per seed
-        assert [c["exit"] for c in pool if c["variant"]["seed"] == 1] == mine
+        from families import blocks
+        assert mine == blocks.menu_blueprint(root) == blocks.exits("blueprint", root, "orb"), f"{root}: exit_menu.json is not the engine's blueprint table"
+        assert mine[:32] == S.menu(root), f"{root}: the first 32 cells are not l2sim.menu (a store of the old table keeps its cells and their order)"
+        assert len(mine) == m["cells"] == 48 and len({S.cell_id(x) for x in mine}) == 48
+        assert [x["tgt_r"] for x in mine[32:34]] == m["small_targets_r"] == list(blocks.BP_TGT_R) == [0.5, 0.75] and {x["tgt_r"] for x in mine[32:]} == {0.5, 0.75}
+        assert [(x["stop_mode"], x["stop_val"]) for x in mine[32::2]] == [(x["stop_mode"], x["stop_val"]) for x in S.menu_stops(root)]
+        pool = RUNNER.c1_grid(root, "5")                        # the random-entry pool runs the same 48 cells per seed, run_menus' 32 first
+        assert [c["exit"] for c in pool if c["variant"]["seed"] == 1] == mine and pool[:len(RM.c1_grid(root, "5"))] == RM.c1_grid(root, "5")
+        assert [c["xi"] for c in pool if c["variant"]["seed"] == 1] == list(range(48)) and len({c["id"] for c in pool}) == len(pool)
     assert set(m["stops"]["pts"]) == set(S.MENU_STOP_PTS) == set(MARKETS)
     assert (m["stops"]["atr"], m["stops"]["pct"], m["targets_r"]) == (list(S.MENU_STOP_ATR), list(S.MENU_STOP_PCT), list(S.MENU_TGT_R))
     assert (m["hold"], m["flat_et"], m["flat_et_half_day"]) == (S.LIBRARY_HOLD, S.DAY_FLAT, S.HALF_DAY_FLAT) and RM.HOLD == m["hold"]
@@ -183,9 +190,9 @@ def test_control_montecarlo_ranges_sizes_idea():
     assert R.need("2.4") * rg["stored_build"]["months"] / rg["build"]["months"] == 120                  # "on pace" on the stored days
     assert sz["steps"] == sorted(set(sz["steps"])) and all(isinstance(s, int) and s > 0 for s in sz["steps"])
     assert sz["stage_a"] == sz["steps"][0] == R.need("6.2")["micros"] and sz["micros_per_contract"] == LB.MICRO_DIV and sz["unit"] == "micros"
-    assert set(idea["card"]) == {"why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why"}     # plan section 3
+    assert set(idea["card"]) == {"why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when"}     # plan section 3 + line 0.7
     assert set(idea["card"]["home"]) == {"market", "session", "bar"} and set(idea["_card_lines"]) == set(idea["card"])
-    assert set(idea["_card_lines"].values()) == {"0.1", "0.3", "0.4", "0.5", "0.6"} <= set(R.lines())                    # 0.2 = `run`
+    assert set(idea["_card_lines"].values()) == {"0.1", "0.3", "0.4", "0.5", "0.6", "0.7"} <= set(R.lines())             # 0.2 = `run`
     assert set(idea["run"]) == {"family", "params", "fixed", "filters", "exits", "limits"} <= set(RI.KEYS)
     assert idea["run"]["exits"] == R.need("0.2")["exits"] == "standard" and (idea["name"], idea["version"]) == ("", 1)
     assert not any(leaves(idea["card"])) and not any(leaves({k: v for k, v in idea["run"].items() if k != "exits"})), "idea.json is not empty"

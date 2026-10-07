@@ -4,7 +4,7 @@ sim/<account>.json -- the variant read for the account, the eval's size, the own
 and is refused until one is on file. Which account: the one named; else the one of the card on file; else the simulator
 result saved last. A later look at another account does not move a card.
 
-WITHOUT FILLS it is the card as it stands before the first live trade: lines 6.1-6.8 as the rules to follow (none judged),
+WITHOUT FILLS it is the card as it stands before the first live trade: lines 6.1-6.9 as the rules to follow (none judged),
 and THE TABLES of the variant's own test-period trades at the simulator's size -- a Monte Carlo of whole days drawn with
 replacement (montecarlo.json: its runs, its fixed seed; a run is drawn until the last read, 40 trades), read after 10, 20,
 30 and 40 trades at the 50th, 75th, 90th, 95th and 99th percentile:
@@ -25,20 +25,24 @@ PROVEN LIVE only when 6.1-6.5 are each TRUE.
   6.3  stage A is passed after 5 CLEAN trades (filled, at 1 micro, equal to the test) with 6.2 true. From the next trade
        on the eval is at size: STAGE B, at the simulator's size.
   6.4  stage B, read after 10, 20, 30 and 40 trades at size: the live drawdown on its row of the table -- under the 75th
-       percentile: carry on · at the 75th: cut size · at the 95th: pause and review. Live trades are scaled to the
+       percentile: carry on · at the 75th: cut size · at the 95th: THE HARD ALARM (line 6.9). Live trades are scaled to the
        table's size (net x table size / live size), so a cut size is read on the same table.
-       false = a read at the 95th (pause and review: line 6.6); true = all four reads done, none at the 95th (a cut is
+       false = a read at the 95th (the hard alarm: switched off, line 6.9); true = all four reads done, none at the 95th (a cut is
        an order that was followed, not a failed line); null = fewer than 40 trades at size, the reads so far in the text
-  6.5  after 40 trades at size: the live average trade (per micro) is at least half of the test's; otherwise pause and
-       review
-  6.6 - 6.8  stated, never judged here: a pause is a review, not a deletion · only the size may change, never the rule ·
-       a bust inside the drawdown table does not retire the strategy, running out of the attempts of line 5.4 does.
-       (So a pause the owner's review ends with "resume" stays on the card as the read it was: version 1 keeps no review.)
+  6.5  after 40 trades at size: the live average trade (per micro) is at least half of the test's; otherwise THE SOFT
+       ALARM: the review of line 6.6
+  6.6 - 6.9  stated, never judged here: the soft alarm is a review (three questions), not a switch-off by itself · only the
+       size may change, never the rule · a bust inside the drawdown table does not retire the strategy, running out of the
+       attempts of line 5.4 does · the hard alarm switches the strategy off and no review turns it back on: it comes back
+       when the tester's replay shows the recovery of line 6.9 (the course's rule; the owner, 2026-10-06).
+       (So a review the owner ends with "carry on" stays on the card as the read it was: version 1 keeps no review.)
 The card is saved as the idea's eval.json through the app's idea store, which reads the status off it.
 """
 from __future__ import annotations
 
+import calendar
 import datetime as dt
+from zoneinfo import ZoneInfo
 
 import numpy as np
 
@@ -72,6 +76,10 @@ A TRADE (an order that filled and is flat again). The first eight fields are req
 AN ORDER THAT DID NOT TRADE where the test did: {"status": "missed" | "rejected"}, with entry_time, side and replay when
 they are known. It is a mismatch (6.1) and, in stage A, the end of that stage A (6.2).
 A field that is not listed is refused: a misspelt field would otherwise be a line that is silently not read.
+AFTER A HARD ALARM (line 6.9), beside "fills": "replay_since_stop": [ {"exit_time": ..., "net": dollars, "size": micros}, ... ]
+= the tester's replay of the strategy on the days since it was switched off, one object a trade. With it line 6.9 is READ:
+the variant's own test-period trades and this replay, a micro, counted back from the replay's last day -- the last 5 and
+the last 12 months each above $0, and the last 3 months a month above the long-run pace of the whole record.
 """
 __doc__ += "\n" + FILLS
 
@@ -81,7 +89,7 @@ NEEDED = KEYS[1:9]                                  # what a trade must say
 STATUS = ("filled", "missed", "rejected")
 SIDES = {"long": 1, "buy": 1, "short": -1, "sell": -1}
 ENDS = {"tp": "its target", "sl": "its stop", "time": "the clock", "eod": "the clock", "flat": "the clock"}      # one exit reason in the engine's words and the desk's
-ZONES = ("carry on", "cut size", "pause and review")
+ZONES = ("carry on", "cut size", "the hard alarm")
 
 
 def _usd(v) -> str:
@@ -103,14 +111,21 @@ def runs(rows: list, rng=None) -> np.ndarray:
     return np.array([[v for i in run for v in pool[i]][:most] for run in idx], np.float64)
 
 
+def falls(paths) -> tuple:
+    """(runs x steps) the net of each step of each run -> (the run's P&L so far, its DRAWDOWN so far): the largest fall of
+    the P&L from its highest point so far, the start counting as a point. The last column = the worst drawdown of the
+    whole run. (The table below reads it trade by trade; `bp.py mc` day by day: quick.py.)"""
+    cum = np.cumsum(np.asarray(paths, np.float64), axis=1)
+    return cum, np.maximum.accumulate(np.maximum.accumulate(np.maximum(cum, 0.0), axis=1) - cum, axis=1)
+
+
 def table(paths: np.ndarray) -> dict:
     """THE TABLES off the runs -> {percentiles, runs, rows [{after, drawdown [...], pnl [...]}]}: after each read of line
     6.4 (10, 20, 30, 40 trades), the percentiles of montecarlo.json `eval_card` of the DRAWDOWN so far (the largest fall
     of a run's P&L from its highest point, the start included) and of the P&L FROM THE BAD SIDE (the P&L that this share
     of the runs beat: the 75th column is the 25th percentile of the P&L). Linear between ranks, as the app's own."""
     after, pct = R.need("6.4")["after_trades"], R.template("montecarlo")["eval_card"]["percentiles"]
-    cum = np.cumsum(np.asarray(paths, np.float64), axis=1)
-    dd = np.maximum.accumulate(np.maximum.accumulate(np.maximum(cum, 0.0), axis=1) - cum, axis=1)
+    cum, dd = falls(paths)
     return {"percentiles": list(pct), "runs": int(len(cum)),
             "rows": [{"after": n, "drawdown": [float(v) for v in np.percentile(dd[:, n - 1], pct)],
                       "pnl": [float(v) for v in np.percentile(cum[:, n - 1], [100 - p for p in pct])]} for n in after]}
@@ -118,7 +133,7 @@ def table(paths: np.ndarray) -> dict:
 
 def zone(dd: float, row: dict) -> str:
     """LINE 6.4 for ONE read: where a live drawdown sits on its row of the table -- under the 75th percentile: carry on ·
-    at the 75th: cut size · at the 95th: pause and review. No drawdown at all is never "at" a percentile."""
+    at the 75th: cut size · at the 95th: the hard alarm. No drawdown at all is never "at" a percentile."""
     need, pct = R.need("6.4"), R.template("montecarlo")["eval_card"]["percentiles"]
     cut, pause = (row["drawdown"][pct.index(need[k])] for k in ("cut_percentile", "pause_percentile"))
     return ZONES[0] if dd <= 0 or dd < cut else ZONES[1] if dd < pause else ZONES[2]
@@ -247,6 +262,44 @@ def stages(fills: list) -> dict:
 
 # ================================================================ the card
 
+def _back(d: dt.date, months: int) -> dt.date:
+    """The same day `months` calendar months earlier (the month's last day when it has no such day)."""
+    y, m = divmod(d.year * 12 + d.month - 1 - months, 12)
+    return dt.date(y, m + 1, min(d.day, calendar.monthrange(y, m + 1)[1]))
+
+
+def since_stop(raw) -> list:
+    """`replay_since_stop` of the fills object -> [(the trade's New York date, its net A MICRO)], oldest first. Refused:
+    what is not a list of {exit_time, net, size}."""
+    if not isinstance(raw, list) or not raw or not all(isinstance(t, dict) and set(t) == {"exit_time", "net", "size"} for t in raw):
+        raise J.Refuse("replay_since_stop: the tester's replay of the days since the strategy was switched off, a list of {\"exit_time\": ..., \"net\": dollars, "
+                       "\"size\": micros}, one object a trade (bp.py eval-card --help)")
+    out = []
+    for i, t in enumerate(raw, 1):
+        if not PO._num(t["net"]) or type(t["size"]) is not int or t["size"] < 1:
+            raise J.Refuse(f"replay_since_stop, trade {i}: net is dollars and size is micros, a whole number from 1")
+        day = dt.datetime.fromtimestamp(_ms(t["exit_time"], f"replay_since_stop, trade {i}, exit_time") / 1000, ZoneInfo("America/New_York")).date()
+        out.append((day, float(t["net"]) / t["size"]))
+    return sorted(out)
+
+
+def recovery(history: list, since: list) -> dict:
+    """LINE 6.9 READ: has the strategy recovered since its hard alarm? history = [(date, net a micro)] of the variant's own
+    test-period trades, since = the same of the tester's replay since the stop. Counted back from the replay's last day,
+    in calendar months: the last 5 months and the last 12 months each above $0, and the last 3 months a month above the
+    long-run pace = the whole record a month. -> {passed (None: the record is shorter than the longest window), end,
+    start, months, positive {months: net a micro}, pace {recent, long_run: a micro a month}}"""
+    need = R.need("6.9")
+    rows = sorted([*history, *since])
+    end, start = max(d for d, _ in since), rows[0][0]
+    net = lambda k: float(sum(v for d, v in rows if d > _back(end, k)))  # noqa: E731
+    months = (end - start).days / 30.4375
+    got = {"end": end.isoformat(), "start": start.isoformat(), "months": months, "positive": {str(k): net(k) for k in need["positive_months"]},
+           "pace": {"recent": net(need["above_pace_months"]) / need["above_pace_months"], "long_run": float(sum(v for _, v in rows)) / months if months > 0 else 0.0}}
+    whole = start <= _back(end, max(need["positive_months"]))
+    return {**got, "passed": (all(v > 0 for v in got["positive"].values()) and got["pace"]["recent"] > got["pace"]["long_run"]) if whole else None}
+
+
 def simmed(name, root=None, account=None) -> dict:
     """THE SIMULATOR'S RESULT THE CARD STANDS ON (sim/<account>.json of an idea whose test passed). account None = the
     account of the card on file, else the simulator result saved last. Refused: none on file (for that account)."""
@@ -323,7 +376,7 @@ def card(name, fills=None, root=None, account=None) -> dict:
     reads = [{"after": n, "drawdown": float(dd[n - 1]), "cut": by[n]["drawdown"][pct.index(n4["cut_percentile"])],
               "pause": by[n]["drawdown"][pct.index(n4["pause_percentile"])], "zone": zone(float(dd[n - 1]), by[n])} for n in after if len(B) >= n]
     rule4 = (f"stage B, read after {', '.join(str(n) for n in after[:-1])} and {after[-1]} trades at size against the drawdown table -- under the {n4['cut_percentile']}th "
-             f"percentile: carry on · at the {n4['cut_percentile']}th: cut size · at the {n4['pause_percentile']}th: pause and review")
+             f"percentile: carry on · at the {n4['cut_percentile']}th: cut size · at the {n4['pause_percentile']}th: the hard alarm (line 6.9)")
     said4 = "; ".join(f"after {x['after']} trades {_usd(x['drawdown'])} ({n4['cut_percentile']}th {_usd(x['cut'])}, {n4['pause_percentile']}th {_usd(x['pause'])}): "
                       f"{x['zone']}" for x in reads)
     paused = any(x["zone"] == ZONES[2] for x in reads)
@@ -333,23 +386,38 @@ def card(name, fills=None, root=None, account=None) -> dict:
     live5 = float(np.mean([f["net"] / f["size"] for f in B[:n5["after_trades"]]])) if len(B) >= n5["after_trades"] else None
     rule5 = f"at least half of the test's ({_usd(hist['avg_trade_micro'])} a micro a trade; half = {_usd(half)} a micro, {_usd(half * size)} at {size} micros)"
     rows.append(L._row("6.5", None, None, half, f"not judged yet ({len(B)} of {n5['after_trades']} trades at size): after {n5['after_trades']} trades the average trade "
-                                                f"is {rule5}; otherwise pause and review") if live5 is None else
+                                                f"is {rule5}; otherwise the soft alarm (line 6.6)") if live5 is None else
                 L._row("6.5", bool(R.OPS[R.rule("6.5")["op"]](live5, half)), live5, half,
                        f"after {n5['after_trades']} trades at size the average trade is {L._n(live5, half, '$')} a micro (need {rule5})"))
-    # ---- 6.6 - 6.8 stated
-    rows += [L._row("6.6", None, None, R.need("6.6"), "a rule to follow: a pause is a review, not a deletion -- has this happened in the test history, can it be explained, is "
-                                                      "it inside normal behaviour; three yes: resume · otherwise: retire"),
+    # ---- 6.6 - 6.9 stated
+    n9 = R.need("6.9")
+    rule9 = (f"last {n9['positive_months'][0]} months positive · last {n9['positive_months'][1]} months positive · last {n9['above_pace_months']} months above "
+             "its long-run pace")
+    rows += [L._row("6.6", None, None, R.need("6.6"), "a rule to follow: the soft alarm is a review, not a switch-off by itself -- has this happened in the test history, "
+                                                      "can it be explained, is it inside normal behaviour; three yes: carry on · otherwise: stop until it recovers (line 6.9)"),
              L._row("6.7", None, None, None, "a rule to follow: during the eval only the size may change, never the rule"),
              L._row("6.8", None, None, None, f"a rule to follow: a bust inside the drawdown table does not retire the strategy; running out of the {sim['attempts']} "
-                                             f"attempt{'s' * (sim['attempts'] != 1)} of line 5.4 (total fee budget {PO.usd(sim['fee_budget'])}) does")]
+                                             f"attempt{'s' * (sim['attempts'] != 1)} of line 5.4 (total fee budget {PO.usd(sim['fee_budget'])}) does"),
+             L._row("6.9", None, None, n9, "a rule to follow: the hard alarm switches the strategy off and no review turns it back on; a stop is not a deletion -- it "
+                                           f"comes back when the tester's replay of the days since shows it has recovered: {rule9}")]
+    rec = None
+    if isinstance(fills, dict) and fills.get("replay_since_stop") is not None:      # line 6.9 READ on the tester's replay since the stop
+        rec = recovery([(dt.date.fromisoformat(t["date"]), t["net"] / size) for t in led], since_stop(fills["replay_since_stop"]))
+        a, b = (rec["positive"][str(k)] for k in n9["positive_months"])
+        said9 = (f"the tester's replay since the stop, to {rec['end']} (with the variant's test-period trades: {rec['months']:.1f} months on record): last "
+                 f"{n9['positive_months'][0]} months {_usd(a)} a micro, last {n9['positive_months'][1]} months {_usd(b)} a micro (need both above $0); last "
+                 f"{n9['above_pace_months']} months {_usd(rec['pace']['recent'])} a micro a month against a long-run pace of {_usd(rec['pace']['long_run'])} (need above it)")
+        rows[-1] = L._row("6.9", rec["passed"], rec["pace"]["recent"], n9, said9 if rec["passed"] is not None else
+                          f"not judged: the record is {rec['months']:.1f} months long, shorter than the {max(n9['positive_months'])} months the line looks back over -- "
+                          + said9, recovery=rec)
     live = {"trades": len(trades), "orders": len(orders) - len(trades), "net": float(sum(f["net"] for f in trades)),
             "stage_a": {"trades": len(a_trades), "clean": st["clean"], "passed": st["passed"], "slip": avg},
             "stage_b": {"trades": len(B), "drawdown": float(dd[-1]) if len(B) else 0.0, "pnl": float(cum[-1]) if len(B) else 0.0,
                         "avg_trade_micro": float(np.mean([f["net"] / f["size"] for f in B])) if B else None, "reads": reads}}
     mark = {x["line"]: x["passed"] for x in rows}
     failed5 = [x["line"] for x in sim.get("lines") or [] if x.get("passed") is False]
-    notes = ([f"the simulator's line{'s' * (len(failed5) != 1)} {', '.join(failed5)} did not pass for this account: its odds are under the owner's bar, and the law buys "
-              "no eval on them (line 5.3)"] if failed5 else [])
+    notes = ([f"the simulator's line{'s' * (len(failed5) != 1)} {', '.join(failed5)} did not pass for this account: its odds are under one strategy's bar, and the law buys "
+              "no eval on them (line 5.5)"] if failed5 else [])
     d = IS.idea_dir(name, root)
     col = lambda v: f"{_usd(v):>9s}"  # noqa: E731
     head = f"{'':<16s}" + "".join(f"{str(p) + 'th':>9s}" for p in pct)
@@ -373,8 +441,13 @@ def card(name, fills=None, root=None, account=None) -> dict:
     send = f"bp.py eval-card {name} --fills=- (the format: bp.py eval-card --help)"
     res["next"] = (
         f"Buy the first eval and trade stage A at {micro} micro; after each trading day send the live fills with the tester's replay of that day: {send}" if not orders else
-        "PAUSE AND REVIEW (line 6.6: a pause is a review, not a deletion): has this happened in the test history, can it be explained, is it inside normal behaviour "
-        "-- three yes: resume · otherwise: retire" if False in (mark["6.4"], mark["6.5"]) else
+        "THE HARD ALARM stands on this card (line 6.4), and the tester's replay since shows the recovery of line 6.9: the strategy may come back -- as a new "
+        "attempt of its eval, with its own card" if mark["6.4"] is False and rec is not None and rec["passed"] is True else
+        f"THE HARD ALARM (line 6.4: the drawdown is at the {n4['pause_percentile']}th percentile): SWITCH THE STRATEGY OFF. No review turns it back on; it comes "
+        f"back when the tester's replay of the days since shows it has recovered (line 6.9: {rule9}"
+        + (")" if rec is None else "; the replay sent does not show it yet)") if mark["6.4"] is False else
+        "THE SOFT ALARM (line 6.5: the average trade is under half of the test's): a review, not a switch-off by itself (line 6.6) -- has this happened in the test "
+        "history, can it be explained, is it inside normal behaviour; three yes: carry on · otherwise: stop until it recovers (line 6.9)" if mark["6.5"] is False else
         f"The fills are not close to the test (line 6.2): stay at {micro} micro, find out why, and start stage A again -- send the fills from the restart on"
         if mark["6.2"] is False else
         "A mismatch is a bug: fix it before the count goes on, then send that fill with `fixed` (what the bug was)" if mark["6.1"] is False else

@@ -6,6 +6,7 @@ gives every variant's net and the table's trades in each run; the lines read the
   2.8   lines 2.1 and 2.2 are read again in every run: both must hold in 75 % of the runs or more
   4.7   the average variant makes money in 90 % of the runs or more
 The math and the seed are those of out/blueprint/funnel.py and mc_gates.py (the evidence the lines rest on).
+histories() gives the same runs day by day, for the view `bp.py mc` (quick.py: a run's worst drawdown); no line reads it.
 
 THE SEED. Every table is reshuffled from a FRESH generator with the fixed seed: its number does not depend on what was judged
 before it, and tables with the same number of days get the same draws (two rounds of one idea are read on the same histories).
@@ -48,3 +49,25 @@ def reshuffle(net: np.ndarray, n: np.ndarray, rng: np.random.Generator | None = 
     w = _fixed(net.shape[1], mc["runs"], mc["seed"]) if rng is None else draw(net.shape[1], rng, mc["runs"])
     with np.errstate(all="ignore"):                         # numpy 2.0 on macOS warns in matmul (funnel.py: checked against einsum)
         return net @ w, (n @ w).sum(0)
+
+
+@lru_cache(maxsize=8)
+def _order(days: int, runs: int, seed: int) -> np.ndarray:
+    """(runs x days): THE SAME RUNS of the fixed seed AS HISTORIES -- the days of each run in an order. _fixed says how many
+    times a run drew each day, and a drawdown also asks in which order. Of a draw with replacement every order is as likely
+    as any other, so each run's days are put in a random order by a second generator of the same seed ([seed, 1]): the
+    days, and so every total, stay those of the law's lines. Kept, read-only."""
+    w = _fixed(days, runs, seed)
+    seq = np.repeat(np.tile(np.arange(days), runs), w.T.astype(np.int64).ravel()).reshape(runs, days)
+    seq = np.random.default_rng([seed, 1]).permuted(seq, axis=1)
+    seq.setflags(write=False)
+    return seq
+
+
+def histories(net: np.ndarray) -> np.ndarray:
+    """net = (variants x days) -> (variants x runs x days): each variant's net day by day through every reshuffled run of
+    the fixed seed -- the runs of reshuffle(), the same days for every variant, in the order of _order. What `bp.py mc`
+    reads a run's worst drawdown on (quick.py); a run's last total is reshuffle()'s."""
+    mc = R.template("montecarlo")
+    net = np.asarray(net, np.float64)
+    return net[:, _order(net.shape[1], mc["runs"], mc["seed"])]

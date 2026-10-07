@@ -2,14 +2,14 @@
 `bp.py test <name> --confirm [--wait=S] [--second-look]`, `bp.py seed-reads [--dry-run]`) -- toolkit plan, step 8;
 BLUEPRINT.md phase 4.
 
-(a) THE LINES 4.1-4.7 on hand-made trade tables, each with its edge cases: "above $0" is strict, the floor is "or more",
+(a) THE LINES 4.1-4.9 on hand-made trade tables, each with its edge cases: "above $0" is strict, the floor is "or more",
     95 % of the random tables is strict, the 3 best days are the average variant's, 90 % of the reshuffles is "or more".
 (b) WHAT THE TEST REFUSES (exit 2; nothing run, no read used): not frozen; a lock that no longer matches the files on disk;
     --confirm missing; a job of the idea at work; stores of a read without its line in the log; --second-look without a
     used read.
 (c) THE READ IS CLAIMED BEFORE THE RUN: the line is in the one-read log when the pass starts; a pass that fails (a refusal,
     a crash) leaves it there, no verdict is written, and a second `test` is refused.
-(d) A WHOLE READ: every line 4.1-4.7 in test.json, the read judged with its verdict, PROVEN ON HISTORY or shelved in the
+(d) A WHOLE READ: every line 4.1-4.9 in test.json, the read judged with its verdict, PROVEN ON HISTORY or shelved in the
     app (idea.json, the Lab block, the Lab group), the default variant's test trades as a tester run. A fail is final.
 (e) ONE READ FOR AN IDEA AND ITS RELATIVES: a read on file for a same-idea relative, or for one of the old saved strategies,
     refuses the test; --second-look is the only way past, and the verdict is then labelled SECOND LOOK everywhere.
@@ -81,7 +81,7 @@ def group(name: str):
     return F.read(F.DRAFTS / "groups.json")["members"].get(f"draft_{name}")
 
 
-# ================================================================ (a) lines 4.1-4.7 on hand-made tables
+# ================================================================ (a) lines 4.1-4.9 on hand-made tables
 
 def table(net, n=None, root: str = "NQ", split: int = None, **more) -> dict:
     """Table data by hand: net (variants x days); n = trades (default: 1 where a day has a net); the first `split` days are
@@ -212,6 +212,30 @@ def test_line_4_7_monte_carlo_on_the_test_days():
 
 # ================================================================ (b) what the test refuses
 
+def test_line_4_8_the_test_looks_like_the_build():
+    # the test's average trade (4.3's reading) against HALF of the build's own: $300 on build -> $150 or more on the test days
+    r = L.like_build(table([[150.0, 150.0], [150.0, 150.0]], build_avg_trade=300.0))
+    assert r["line"] == "4.8" and r["passed"] is True and (r["number"], r["need"], r["build"]) == (150.0, 150.0, 300.0)       # "at least": half itself passes
+    assert r["text"] == "4.8 PASS average trade $150 on the test days, $300 on build (need at least $150, half of the build's)"
+    r = L.like_build(table([[149.0, 150.0], [150.0, 150.0]], build_avg_trade=300.0))
+    assert r["passed"] is False and r["text"].startswith("4.8 FAIL average trade $149.75 on the test days, $300 on build")
+    assert L.floor(table([[75.0, 75.0]]), "4.3")["passed"] is True and L.like_build(table([[75.0, 75.0]], build_avg_trade=300.0))["passed"] is False      # over the floor, a quarter of the build
+    # nothing to hold it against = not met: no figure with the lock, a build that made none, a test without a trade
+    assert L.like_build(table([[150.0, 150.0]]))["passed"] is False and "not on file" in L.like_build(table([[150.0, 150.0]]))["text"]
+    assert L.like_build(table([[150.0, 150.0]], build_avg_trade=-20.0))["passed"] is False and L.like_build(table([[0.0, 0.0]], build_avg_trade=300.0))["passed"] is False
+    assert R.rule("4.8")["op"] == ">=" and R.need("4.8") == 0.5
+
+
+def test_line_4_9_the_default_variant_keeps_its_profit_factor():
+    r = L.box_test(table([[10.0, 10.0]], box={"trades": [120.0, -100.0]}))        # $120 won, $100 lost: 1.2, "or more"
+    assert r["line"] == "4.9" and r["passed"] is True and (r["number"], r["need"], r["trades"]) == (1.2, 1.2, 2)
+    assert r["text"] == "4.9 PASS default variant: profit factor 1.20 over 2 trades (need 1.2 or more)"
+    assert L.box_test(table([[10.0, 10.0]], box={"trades": [119.0, -100.0]}))["passed"] is False
+    assert L.box_test(table([[10.0, 10.0]], box={"trades": [5.0, 7.0]}))["passed"] is True                 # no losing trade
+    for none in (table([[10.0, 10.0]]), table([[10.0, 10.0]], box={"trades": []})):                         # no default variant handed over, or it did not trade
+        assert L.box_test(none)["passed"] is False and "no trade" in L.box_test(none)["text"]
+
+
 def test_what_the_test_refuses():
     root, n = F.fresh(NAME, "ref"), 0
     d, out = root / NAME, F.read_out("ref")
@@ -324,7 +348,7 @@ def test_a_read_that_passes_is_proven_on_history_and_everything_is_saved():
     assert [r[k] for k in ("ok", "command", "name", "status", "phase", "round", "job", "error")] == [True, "test", NAME, "proven_on_history", 4, 1, None, None]
     assert (r["verdict"], r["passed"], r["failed"], r["second_look"], r["label"], r["dry_run"], r["lock"], r["range"]) == (
         "PROVEN ON HISTORY", True, [], False, None, False, lock["hash"], rng)
-    # every line of the law, 4.1 to 4.7, read on the hand-made tables: each variant $150 a day on 8 days, $60 with worse fills, random entries -$5
+    # every line of the law, 4.1 to 4.9, read on the hand-made tables: each variant $150 a day on 8 days, $60 with worse fills, random entries -$5
     b = F.by(r)
     assert [x["line"] for x in r["lines"]] == F.TEST_LINES and all(x["passed"] is True and x["text"].startswith(x["line"] + " PASS ") for x in r["lines"])
     assert b["4.1"]["text"] == "4.1 PASS Jul-Dec 2025 $600 · Jan-Sep 2026 $600, average variant (need each above $0)"
@@ -365,8 +389,8 @@ def test_a_read_that_passes_is_proven_on_history_and_everything_is_saved():
     text = r["text"].split("\n")
     assert text[0].startswith("TEST RUN on") or text[0].startswith("OUT-OF-SAMPLE TEST 2025-07-01")
     assert text[1].startswith(f"{NAME} · lock {lock['hash']} · version 1 · home NQ New York morning 15-minute bars · {len(lock['variants'])} locked variants")
-    assert text[2:9] == [x["text"] for x in r["lines"]] and text[9] == "RESULT: PROVEN ON HISTORY: every line 4.1-4.7 is true -- approved for a real eval."
-    assert text[10] == "STATUS: PROVEN ON HISTORY · phase 4" and "bp.py sim" in r["next"] and "\n" not in r["next"] and "SECOND LOOK" not in json.dumps(r)
+    assert text[2:11] == [x["text"] for x in r["lines"]] and text[11] == "RESULT: PROVEN ON HISTORY: every line 4.1-4.9 is true -- approved for a real eval."
+    assert text[12] == "STATUS: PROVEN ON HISTORY · phase 4" and "bp.py sim" in r["next"] and "\n" not in r["next"] and "SECOND LOOK" not in json.dumps(r)
     # the test days are read once: a second test is refused, whatever it says
     for kw in ({}, {"second_look": True}):
         with F.reading("pass"), F.no_engine():
@@ -454,7 +478,7 @@ def test_a_read_of_a_relative_stands_in_the_way_and_a_second_look_is_labelled_ev
     assert [x["line"] for x in r["lines"]] == F.TEST_LINES and all(x["text"].endswith(" [SECOND LOOK]") and x["second_look"] is True for x in r["lines"])
     text = r["text"].split("\n")
     assert text[0] == "SECOND LOOK: not a first read of the test days -- a read was on file for bpl_orb. It says less than a first read."
-    assert "RESULT: SECOND LOOK: PROVEN ON HISTORY: every line 4.1-4.7 is true -- approved for a real eval." in text and "STATUS: PROVEN ON HISTORY (SECOND LOOK) · phase 4" in text
+    assert "RESULT: SECOND LOOK: PROVEN ON HISTORY: every line 4.1-4.9 is true -- approved for a real eval." in text and "STATUS: PROVEN ON HISTORY (SECOND LOOK) · phase 4" in text
     assert r["next"].startswith("SECOND LOOK: ")
     log = [x for x in reads(root) if x["name"] == "bpl_two"]
     assert [(x["state"], x["verdict"]) for x in log] == [("claimed", None), ("judged", "SECOND LOOK: PROVEN ON HISTORY")] and log[0]["second_look"] is True
@@ -462,7 +486,7 @@ def test_a_read_of_a_relative_stands_in_the_way_and_a_second_look_is_labelled_ev
     assert (saved["second_look"], saved["label"], saved["verdict"]) == (True, "SECOND LOOK", "SECOND LOOK: PROVEN ON HISTORY")
     got = IS.read_idea("bpl_two", root)                                           # the app's own copies carry the label in every line and in the next step
     assert all(x["text"].endswith("[SECOND LOOK]") for x in got["lines"]) and got["next"].startswith("SECOND LOOK: ")
-    assert sum("[SECOND LOOK]" in ln for ln in draft("bpl_two")) == 7 and any(ln.startswith("# NEXT: SECOND LOOK: ") for ln in draft("bpl_two"))
+    assert sum("[SECOND LOOK]" in ln for ln in draft("bpl_two")) == 9 and any(ln.startswith("# NEXT: SECOND LOOK: ") for ln in draft("bpl_two"))
     if F.APP_PYTHON.exists() and r["default"]["run_id"]:
         meta = F.read(F.TESTER / "runs" / r["default"]["run_id"] / "run.json")
         assert "TEST (SECOND LOOK)" in meta["strategy"]["name"] and "SECOND LOOK" in meta["imported"]["note"]
@@ -734,7 +758,7 @@ def test_the_runner_opens_nothing_without_a_claimed_read():
         K = RUN.test_keys(KEY, NAME, "NQ", "15", "nyam")
         assert [(s["key"], s["kind"], s["stage"], s["skipped"], s["ok"]) for s in pre["stores"]] == [
             (K["pool"], "pool", "null_bp_test", False, None), (K["table"], "unit", "bp_test", False, None), (K["worse"], "worse", "bp_test_worse", False, None)]
-        assert (pre["calendar"], pre["trades"]) == (None, {}) and [s["cells"] for s in pre["stores"]] == [320, len(lock["variants"]), len(lock["variants"])]
+        assert (pre["calendar"], pre["trades"]) == (None, {}) and [s["cells"] for s in pre["stores"]] == [480, len(lock["variants"]), len(lock["variants"])]
         assert K == {"table": "bpl_orb-NQ-tf15-nyam-test", "worse": "bpl_orb-NQ-tf15-nyam-test-worse", "pool": "bpl_orb__c1-NQ-tf15-nyam-test"} and RUN.TESTS == LB.W / "runs_bp_test"
         # ---- the dates are the frozen range's, and a read of named days is a test of the plumbing with its own folder and ledger
         for bad in (["2025-06-30"], ["2025-08-20", "2024-03-15"], ["2026-09-23"], ["2027-01-04"], []):
@@ -833,7 +857,7 @@ def test_the_one_real_read_replays_cells_that_are_already_on_disk():
     runs, lists = [c for c in calls if c["fn"] == "run_many"], [c for c in calls if c["fn"] == "sessions"]
     assert len(runs) == 2 and all(c["args"] == ["2025-07-01", end] and c["days"] == F.REAL_DAYS and c["allow_holdout"] == S.ALLOW_BT == "bp_test" and c["root"] == "NQ"
                                   and c["period"] is None and not c["allow_exam"] and not c["allow_check"] and c["costs"] is None for c in runs), runs
-    assert [(c["slip_ticks"], c["latency_ms"], c["specs"]) for c in runs] == [(None, None, 320 + len(lock["variants"])), (2.0, 250, len(lock["variants"]))]
+    assert [(c["slip_ticks"], c["latency_ms"], c["specs"]) for c in runs] == [(None, None, 480 + len(lock["variants"])), (2.0, 250, len(lock["variants"]))]
     assert {"fn": "sessions", "args": ["2025-07-01", end, "NQ"], "allow_holdout": "bp_test"} in lists                 # the session list of the frozen range
     assert not [c for c in calls if c.get("allow_exam") or c.get("allow_check") or c.get("allow_holdout") is True or "True" in c["args"]]      # never the EXAM key
     # ---- the three stores: of the frozen range, of this lock's read, of the days that were replayed -- and booked
@@ -846,7 +870,7 @@ def test_the_one_real_read_replays_cells_that_are_already_on_disk():
         assert RUN.guard_test(m, K[which], "2025-07-01", end, lock["hash"]) is m
     led = [(x["stage"], x["key"], x["kind"], x["period"]) for x in LB.read_ledger(F.tmp() / "ledger_fbm.csv") if "test" in x["key"]]
     assert led == [("null_bp_test", K["pool"], "null", "bp_test"), ("bp_test", K["table"], "grid", "bp_test"), ("bp_test_worse", K["worse"], "grid", "bp_test")]
-    assert F.read(out / K["worse"] / "run.json")["run_kw"] == {"slip_ticks": 2.0, "latency_ms": 250} and len(F.read(out / K["pool"] / "run.json")["cells"]) == 320
+    assert F.read(out / K["worse"] / "run.json")["run_kw"] == {"slip_ticks": 2.0, "latency_ms": 250} and len(F.read(out / K["pool"] / "run.json")["cells"]) == 480
     # ---- TRADE FOR TRADE what the old 2025 and 2026 stores hold: nothing new was produced on the test days
     counts = {which: _same(out, K[which], olds) for which, olds in OLD_STORES.items()}
     for which, (cells, n, diff) in counts.items():
@@ -889,7 +913,7 @@ def test_the_command_line_of_the_test():
             assert rc == 2 and txt.startswith("REFUSED: the test days are read ONCE")
         rc, txt = F.run_cli(["test", NAME, "--confirm", f"--root={root}"])       # a person: the read in words, the seven lines, the next step
         lines = txt.rstrip("\n").split("\n")
-        assert rc == 0 and lines[0].startswith("OUT-OF-SAMPLE TEST 2025-07-01 .. ") and [ln[:8] for ln in lines[2:9]] == [f"{k} PASS" for k in F.TEST_LINES]
+        assert rc == 0 and lines[0].startswith("OUT-OF-SAMPLE TEST 2025-07-01 .. ") and [ln[:8] for ln in lines[2:11]] == [f"{k} PASS" for k in F.TEST_LINES]
         assert "RESULT: PROVEN ON HISTORY" in txt and lines[-1].startswith("NEXT: Proven on history") and len(reads(root)) == 2
         with F.no_engine():
             rc, js = F.run_cli(["test", NAME, "--confirm", *last])               # the test days are read once: exit 2 from here on
@@ -985,7 +1009,7 @@ def test_the_apps_connector_against_this_toolkit():
     assert "before the freeze" in before or "freeze is next" in before
     head = lock.split("\n")
     assert head[0] == f"Blueprint lock · {name} · LEAD · phase 3 · round 1" and head[1].startswith(f"FROZEN now: {name} · lock {saved['hash']} · version 1 · round 1 · home NQ midday")
-    assert lock.count("\n3.1 PASS ") == 1 and lock.count("\n3.2 PASS ") == 1 and f"DEFAULT VARIANT {saved['default']}" in lock and "Lines: 2 passed · 0 FAILED" in lock
+    assert lock.count("\n3.1 PASS ") == 1 and lock.count("\n3.2 PASS ") == 1 and f"DEFAULT VARIANT {saved['default']}" in lock and all(lock.count(f"\n3.{i} ") == 1 for i in range(3, 8))
     assert f"TEST RANGE NQ 2025-07-01 .. {saved['test_range']['NQ']['end']}" in lock and lock.count("Next: ") == 1 and "--confirm" in lock and "Saved: " in lock
     assert again.split("\n")[1].startswith(f"FROZEN already: {name} · lock {saved['hash']}") and "The lock matches the files on disk" in again and "Saved: " not in again
     assert nobody.startswith("ToolError: Refused (blueprint lock): ") and "no card" in nobody and "Nothing was run." in nobody
@@ -993,8 +1017,8 @@ def test_the_apps_connector_against_this_toolkit():
     assert refused.startswith("ToolError: Refused (blueprint test): ") and "old saved strategies whose history is used" in refused and "--second-look" in refused
     assert "Nothing was run." in refused and reads(root) == [] and not (root / name / "test.json").exists() and not (F.tmp() / "runs_test_app").exists()
     assert after.split("\n")[0] == f"Blueprint status · {name} · LEAD · phase 3 · round 1" and "FROZEN" in after
-    assert worded.split("\n")[0] == "Blueprint test · bpl_orb · PROVEN ON HISTORY · phase 4 · round 1" and all(worded.count(f"\n4.{i} PASS ") == 1 for i in range(1, 8))
-    assert "Lines: 7 passed · 0 FAILED" in worded and worded.count("Next: ") == 1 and "RESULT: PROVEN ON HISTORY" in worded
+    assert worded.split("\n")[0] == "Blueprint test · bpl_orb · PROVEN ON HISTORY · phase 4 · round 1" and all(worded.count(f"\n4.{i} PASS ") == 1 for i in range(1, 10))
+    assert "Lines: 9 passed · 0 FAILED" in worded and worded.count("Next: ") == 1 and "RESULT: PROVEN ON HISTORY" in worded
 
 
 # ================================================================ nothing outside the temp folder

@@ -2,15 +2,15 @@
 (phase 2) and the status. Everything is saved in the app's idea folder through homebase/ideastore.py (one folder per idea;
 its status is READ OFF the saved results there, never set here), with the idea's record draft in the Lab.
 
-    card(name, spec)       `bp.py card <name> --spec=-`          lines 0.1-0.6 off the card -> card.md, spec.json, the Lab draft
+    card(name, spec)       `bp.py card <name> --spec=-`          lines 0.1-0.7 off the card -> card.md, spec.json, the Lab draft
     build(name, reason)    `bp.py build <name> --reason=TEXT`    ONE ROUND: the reason first, the run, lines 2.1-2.9, the status
     status([name])         `bp.py status [<name>]`               one line an idea, or the full record of one
 
 THE SPEC (plan section 3)   {"name", "version", "card": {why, loser, home {market, session, bar}, neighbors [...], not_here,
-main_setting, sides, sides_why}, "run": {family, params, fixed, filters, exits: "standard", limits}}.
+main_setting, sides, sides_why, loses_when}, "run": {family, params, fixed, filters, exits: "standard", limits}}.
 
 FROM A CARD TO WHAT IS RUN (decided 2026-10-06 for the owner; each line is easy to change)
-  THE HOME TABLE   = the card's market, session and bar size: the 32 exit cells of the standard table x the 3-4 values of
+  THE HOME TABLE   = the card's market, session and bar size: the 48 exit cells of the standard table x the 3-4 values of
                    the main setting. Lines 2.1-2.4, 2.6 and 2.8 are read on it; 2.3 against the random-entry pool of its
                    market and bar size (10 seeds).
   ITS NEIGHBORS    (line 2.5) = the places the card names under "where else it should work", and no other. An entry names
@@ -46,7 +46,7 @@ and written as a finished tester run by homebase/backtest/importrun.py; the run 
 3.1) picks the default again among the variants that also make money with worse fills -- that table is the lock's.
 
 A RUN ON NAMED DAYS (--days) is a smoke run: its lines are printed, nothing is saved, no round is used.
-TEST ONLY: BP_TEST_RUN = a JSON object {days, cells, out, ledger, workers, tester, draws} hands a build its days, exit
+TEST ONLY: BP_TEST_RUN = a JSON object {days, cells, out, ledger, workers, tester, draws, box, build_avg_trade} hands a build its days, exit
 cells, store folder and ledger and lets that small run COUNT as a real one, so that the tests (and the app's own tests of
 its connector) can save rounds without 45 months of tape. It is refused for the app's own idea folder.
 """
@@ -72,7 +72,7 @@ from . import runner as RUN
 from . import tables as T
 
 TEST_RUN = "BP_TEST_RUN"                            # TEST ONLY (module docstring)
-CARD_KEYS = ("why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why")
+CARD_KEYS = ("why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when")
 RUN_KEYS = ("family", "params", "fixed", "filters", "exits", "filter_exits", "limits")
 SIDES = ("both", "long", "short")
 OWN_EXITS = ("trail_atr", "exit_bars")              # limits that are exits of their own: not of the standard table (line 0.2)
@@ -162,9 +162,7 @@ def _filters(run: dict) -> tuple:
     if not isinstance(F, list) or not all(isinstance(f, dict) and set(f) == {"block", "side"} and f["side"] in blocks.FILTERS.get(f["block"], {}) for f in F):
         return None, "filters: a list of {block, side}; blocks and sides are " + ", ".join(f"{b} {' | '.join(s)}" for b, s in blocks.FILTERS.items())
     F = [(f["block"], f["side"]) for f in F]
-    l2 = [f for f in F if f[0] in blocks.L2_BLOCKS]
     return (None, f"{len(F)} filters (at most {need['max_filters']})") if len(F) > need["max_filters"] else \
-        (None, f"filter {' '.join(l2[0])} reads Level 2, which the engine does not open for the build range") if l2 else \
         (None, f"filters {' '.join(F[0])} and {' '.join(F[1])} are the two sides of one block: a rule holds one of them") if len({b for b, _ in F}) < len(F) else (F, "")
 
 
@@ -225,7 +223,7 @@ def _places(card: dict, home, known, run: dict) -> tuple:
 
 
 def card_lines(spec: dict) -> tuple:
-    """LINES 0.1-0.6 read off an idea's spec -> (the six rows, the plan of its tables). The plan is None while a line
+    """LINES 0.1-0.7 read off an idea's spec -> (the seven rows, the plan of its tables). The plan is None while a line
     fails. plan = {home, neighbors, not_here (each {market, session, bar, table, said}), sides, filters ['<block>_<side>'],
     main_setting, values, variants (a table), stores [{market, bar, sessions}]}: module docstring."""
     card, run = spec["card"], spec["run"]
@@ -264,6 +262,17 @@ def card_lines(spec: dict) -> tuple:
     nbs, nh, bad = _places(card, home, known, run)
     rows.append(L._row("0.4", not bad, len(nbs or []), R.need("0.4"), bad or f"{len(nbs)} place{'s' * (len(nbs) > 1)} it should also work "
                        f"({' · '.join(p['said'] for p in nbs)}) and one where it should NOT ({nh['said']})"))
+    l2 = [f for f in (F or []) if f[0] in RUN._blocks().L2_BLOCKS]          # Level 2 exists for NQ only: every place of the card is NQ
+    away = [p for p in (home, *(nbs or []), nh) if l2 and p and p["market"] != "NQ"]
+    if away and rows[1]["passed"]:
+        rows[1] = L._row("0.2", False, rows[1]["number"], rows[1]["need"], f"filter {' '.join(l2[0])} reads Level 2, which exists for NQ only: "
+                                                                          f"{away[0]['said']!r} is {away[0]['market']}")
+    for f in (F or []):                                                      # SMT compares NQ with ES: its places are NQ or ES
+        ok = RUN._blocks().BLOCK_MARKETS.get(f[0])
+        away = [p for p in (home, *(nbs or []), nh) if ok and p and p["market"] not in ok]
+        if away and rows[1]["passed"]:
+            rows[1] = L._row("0.2", False, rows[1]["number"], rows[1]["need"], f"filter {f[0]} runs on {' and '.join(ok)} only: "
+                                                                              f"{away[0]['said']!r} is {away[0]['market']}")
     # 0.5 the main setting and its 3-4 values
     ms, params, (lo, hi) = _text(card.get("main_setting")), run.get("params"), R.need("0.5")["values"]
     keys = list(params) if isinstance(params, dict) else []
@@ -281,6 +290,10 @@ def card_lines(spec: dict) -> tuple:
     bad = (f"sides {sides!r}: both, long or short (card.sides)" if sides not in SIDES else "it does not say why (card.sides_why)" if not sw else
            f"the card says {sides}, settings.limits.dir says {d}" if d not in (None, sides) else "")
     rows.append(L._row("0.6", not bad, None, R.rule("0.6").get("need"), bad or f"{'both sides' if sides == 'both' else sides + ' only'}: {sw}"))
+    # 0.7 when it should lose (law v1.1): said in words before any run; nobody checks a motive by machine
+    lw = _text(card.get("loses_when"))
+    rows.append(L._row("0.7", bool(lw), None, R.need("0.7"), f"when it should lose: {lw}" if lw else
+                       "it does not say when it should lose: one stretch or kind of market in which the idea must lose money (card.loses_when)"))
     if not all(x["passed"] for x in rows):
         return rows, None
     pairs: dict = {}
@@ -353,7 +366,7 @@ def _trigger(family: str) -> str:
 
 
 def _card_md(spec: dict, plan: dict) -> str:
-    """card.md: the card in plain words, its six lines by their numbers."""
+    """card.md: the card in plain words, its seven lines by their numbers."""
     c, run, blocks = spec["card"], spec["run"], RUN._blocks()
     F = [tuple(f.split("_", 1)) for f in plan["filters"]]
     limits, fixed = run.get("limits") or {}, run.get("fixed") or {}
@@ -363,20 +376,21 @@ def _card_md(spec: dict, plan: dict) -> str:
         f"0.1 Why it should make money: {_text(c['why'])}",
         f"    Who is on the losing side: {_text(c['loser'])}",
         f"0.2 The rule: entry trigger {run['family']} ({_trigger(run['family'])}); "
-        + ("no filter" if not F else "filters: " + "; ".join(f"{b} {s} ({blocks.PLAIN[(b, s)]})" for b, s in F)) + "; exits from the standard table (8 stops x 4 targets)"
+        + ("no filter" if not F else "filters: " + "; ".join(f"{b} {s} ({blocks.PLAIN[(b, s)]})" for b, s in F)) + "; exits from the standard table (8 stops x 6 targets)"
         + (f"; limits: {said(limits)}" if limits else ""),
         f"0.3 Home: {plan['home']['market']}, {J.SESS_PLAIN[plan['home']['session']]}, {plan['home']['bar']}-minute bars",
         "0.4 Where else it should work: " + "; ".join(f"{p['said']} ({_nice(p)})" for p in plan["neighbors"]),
         f"    Where it should NOT work: {plan['not_here']['said']} ({_nice(plan['not_here'])})",
         f"0.5 Main setting: {plan['main_setting']} = {', '.join(str(x) for x in plan['values'])}" + (f"; held fixed: {said(fixed)}" if fixed else ""),
-        f"0.6 Sides: {'both' if plan['sides'] == 'both' else plan['sides'] + ' only'} -- {_text(c['sides_why'])}"]) + "\n"
+        f"0.6 Sides: {'both' if plan['sides'] == 'both' else plan['sides'] + ' only'} -- {_text(c['sides_why'])}",
+        f"0.7 When it should lose: {_text(c.get('loses_when'))}"]) + "\n"
 
 
 def _plan_text(name: str, plan: dict) -> list:
     """What a build of the card runs and which line reads what, in plain words."""
     rg, h, key = R.template("ranges")["build"], plan["home"], lambda s: RI.unit_key({"name": name}, s["market"], s["bar"])  # noqa: E731
     F = [f.replace("_", " ", 1) for f in plan["filters"]]
-    return [f"WHAT A BUILD RUNS ({rg['start']} .. {rg['end']}; a table = the 32 exit cells of the standard table x the {len(plan['values'])} values of "
+    return [f"WHAT A BUILD RUNS ({rg['start']} .. {rg['end']}; a table = the {len(R.exit_menu(plan['home']['market']))} exit cells of the standard table x the {len(plan['values'])} values of "
             f"{plan['main_setting']} = {plan['variants']} variants):",
             f"  HOME      {_nice(h)}: lines 2.1-2.4, 2.6 and 2.8 are read on this table, 2.3 against the random-entry pool {RUN.pool_key(h['market'], h['bar'])} "
             f"({R.template('control')['seeds']} seeds)",
@@ -402,7 +416,7 @@ def _lab(name: str, root) -> tuple:
 
 
 def card(name, spec, root=None) -> dict:
-    """`bp.py card <name> --spec=-`: PHASE 0. Reads lines 0.1-0.6 off the card. A card with a line missing is REFUSED (the
+    """`bp.py card <name> --spec=-`: PHASE 0. Reads lines 0.1-0.7 off the card. A card with a line missing is REFUSED (the
     result has `ok` false, every line as pass or fail, the missing ones named in `error`) and nothing is written. A whole
     card is saved in the app: the idea's folder (card.md in plain words, spec.json) and its record draft in the Lab with
     the card on top, filed under Ideas. Beyond the agreed keys: plan (what a build runs), lab.
@@ -455,7 +469,7 @@ def _test_run(root) -> dict:
     except ValueError:
         got = None
     if not isinstance(got, dict):
-        raise J.Refuse(f"{TEST_RUN}: a JSON object {{days, cells, out, ledger, workers, tester, draws}}")
+        raise J.Refuse(f"{TEST_RUN}: a JSON object {{days, cells, out, ledger, workers, tester, draws, box, build_avg_trade}}")
     return got
 
 
@@ -642,7 +656,11 @@ def _step(name: str, status: str, last, root, checked=None) -> str:
             read = api.ideastore().read_on_file(name, root=root)
         except ValueError:                                                      # (the app's word for a log with a line that does not read)
             read = {"state": "not readable", "utc": "the one-read log has a line that does not read"}
-        return (f"{name} is FROZEN and its read of the test days is on file ({read.get('state')}, {read.get('utc')}): the test days are read once -- "
+        other = read and read.get("lock") not in (None, (_json(d / "lock.json") or {}).get("hash"))      # a read of ANOTHER lock: an early look, an earlier version
+        return (f"{name} is FROZEN and its test days are USED (a read of another lock is on file: {read.get('state')}, {read.get('utc')} -- an early look, or "
+                f"an earlier version): its out-of-sample test can only be a SECOND LOOK -- bp.py test {name} --confirm --second-look, only when the owner has "
+                "said to" if other else
+                f"{name} is FROZEN and its read of the test days is on file ({read.get('state')}, {read.get('utc')}): the test days are read once -- "
                 f"bp.py status {name} shows a job that is still running" if read else
                 f"{name} is FROZEN: the out-of-sample test is next and it is ONE read of the test days, never repeated -- bp.py test {name} --confirm, "
                 "only when the owner has said to")
@@ -682,9 +700,11 @@ def run(idea, round_, reason, rspec, counted, test=False, root=None, workers=Non
         h, filt = plan["home"], (plan["filters"][0] if plan["filters"] else None)
         f = T.filter_of(specs[0], filt)
         t = T.built(specs[0], h["table"], filt, out, days, n)
-        nbs = [{**p, **T.place(store, p["market"], p["bar"], p["session"], f, out)} for p in plan["neighbors"]]
+        like = T.sigs(store, plan["home"]["market"], plan["home"]["bar"], plan["home"]["session"], f, out)
+        nbs = [{**p, **T.place(store, p["market"], p["bar"], p["session"], f, out, like)} for p in plan["neighbors"]]
         nh = {**plan["not_here"], **T.place(store, plan["not_here"]["market"], plan["not_here"]["bar"], plan["not_here"]["session"], f, out)}
-        t.update(neighbors=[x["avg_net"] if x["variants"] else 0.0 for x in nbs], sides=plan["sides"], reason=reason)
+        t.update(neighbors=[x["avg_net"] if x["variants"] else 0.0 for x in nbs if not x["copy"]],      # a table that is the home
+                 copies=[x["said"] for x in nbs if x["copy"]], sides=plan["sides"], reason=reason)        # table's trades counts once
         rows = [fn(t) for fn in LINES]
     finally:
         J.RULE["draws"] = keep
@@ -784,6 +804,7 @@ def status(name=None, root=None) -> dict:
         read = {"state": "unreadable", "utc": None, "verdict": str(e)}
     home = (lock or {}).get("home") or {}
     rng = ((lock or {}).get("test_range") or {}).get(home.get("market")) or {}
+    early = _json(d / api.EARLY_LOOK / "test.json")     # an early look at the test days (oos.py): shown, and never part of the status
     text = [f"{name} · {head(i)}" + (f" · Lab group {i['group']}" if i["group"] else "")
             + (f" · {len(i['runs'])} tester run{'s' * (len(i['runs']) != 1)}" if i["runs"] else "") + (f" · job {job} is running" if job else ""),
             *(["CARD", *["  " + ln for ln in card_md.splitlines() if ln.strip()]] if card_md else ["NO CARD on file"]),
@@ -793,6 +814,8 @@ def status(name=None, root=None) -> dict:
             *([f"FROZEN · lock {lock.get('hash')} of {lock.get('locked_utc')} · round {lock.get('round')} · default variant {lock.get('default')} · test range "
                f"{home.get('market')} {rng.get('start')} .. {rng.get('end')}"] if lock else []),
             *([f"TEST DAYS READ · {read.get('state')} {read.get('utc') or ''}".rstrip() + (f" · {read['verdict']}" if read.get("verdict") else "")] if read else []),
+            *(["EARLY LOOK (no verdict of the law: the status does not read it)", *["  " + str(x.get("text")) for x in early.get("lines") or [] if isinstance(x, dict)]]
+              if early else []),
             *(["LATEST VERDICT", *["  " + x["text"] for x in rows]] if rows else []),
             *([f"TESTER RUNS: {', '.join(i['runs'])}"] if i["runs"] else [])]
     return api.result("status", name, status=i["status"], phase=i["phase"], round=i["round"], lines=rows, text="\n".join(text),
@@ -800,4 +823,5 @@ def status(name=None, root=None) -> dict:
                       record={"idea": i, "card": card_md, "spec": _json(d / "spec.json"), "check": _json(d / "check.json"), "rounds": rounds, "job": job,
                               "lock": None if lock is None else {k: lock.get(k) for k in ("hash", "version", "round", "locked_utc", "default", "test_range")},
                               "read": read,
+                              "early_look": None if early is None else {k: early.get(k) for k in ("verdict", "label", "held", "failed", "lock", "range", "build_failed")},
                               "log": [json.loads(x) for x in (d / "log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()] if (d / "log.jsonl").is_file() else []})

@@ -1,7 +1,7 @@
 """LOCK of the idea's record (blueprint/records.py; `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`) -- toolkit
 plan, steps 5 and 6: the idea card (phase 0), the build with its counted rounds (phase 2), every result saved in the app.
 
-(a) THE CARD: a whole card passes lines 0.1-0.6 and is saved through the app's idea store (card.md, spec.json, the record
+(a) THE CARD: a whole card passes lines 0.1-0.7 and is saved through the app's idea store (card.md, spec.json, the record
     draft in the Lab, filed under Ideas). Every missing line is refused with its number; so are exits that are not the
     standard table, more than 2 filters, a field the card does not have. A refused card writes nothing.
 (b) FROM A CARD TO THE TABLES: the home table = the card's market, session and bar size; its neighbors (line 2.5) = the places
@@ -64,7 +64,7 @@ CARD = {"why": "The first minutes of the New York morning set a range, and a bre
         "home": {"market": "NQ", "session": "nyam", "bar": "15"},
         "neighbors": ["midday", "5-minute bars"],             # the next session on the same bars; the next bar size
         "not_here": "the Asian session",
-        "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way"}
+        "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way", "loses_when": "a week without a clear direction"}
 SETTINGS = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
 DAYS = ["2022-03-15", "2023-03-22", "2025-06-30"]            # two plain days and the last build day
 CELLS = ["atr3-r1", "pts20-r0"]                              # 2 of the 32 exit cells
@@ -261,7 +261,7 @@ def test_a_whole_card_passes_and_is_saved_in_the_app():
     d = ROOT / NAME
     assert list(r)[:len(CONTRACT)] == list(CONTRACT)
     assert [r[k] for k in ("ok", "command", "name", "status", "phase", "round", "job", "error")] == [True, "card", NAME, "idea", 0, None, None, None]
-    assert [x["line"] for x in r["lines"]] == [f"0.{i}" for i in range(1, 7)] and all(x["passed"] is True for x in r["lines"])
+    assert [x["line"] for x in r["lines"]] == [f"0.{i}" for i in range(1, 8)] and all(x["passed"] is True for x in r["lines"])
     assert all(set(x) >= {"line", "passed", "number", "need", "text"} and x["text"].startswith(f"{x['line']} PASS ") for x in r["lines"])
     b = by(r)
     assert (b["0.1"]["number"], b["0.1"]["need"]) == (1, R.need("0.1")) and CARD["why"] in b["0.1"]["text"] and CARD["loser"] in b["0.1"]["text"]
@@ -272,7 +272,7 @@ def test_a_whole_card_passes_and_is_saved_in_the_app():
     # the folder: the card in plain words (its six lines), the spec as the plan has it, the first idea.json
     assert snap["tree"] == sorted([".lock", "idea.json", "card.md", "spec.json", "log.jsonl"])
     card = (d / "card.md").read_text(encoding="utf-8")
-    assert [ln[:3] for ln in card.splitlines() if ln[:2] == "0."] == [f"0.{i}" for i in range(1, 7)]
+    assert [ln[:3] for ln in card.splitlines() if ln[:2] == "0."] == [f"0.{i}" for i in range(1, 8)]
     assert CARD["why"] in card and CARD["loser"] in card and "or_min" in card and "the Asian session" in card and "standard" in card
     spec = read(d / "spec.json")
     assert list(spec) == ["name", "version", "card", "run"] and (spec["name"], spec["version"]) == (NAME, 1)
@@ -287,7 +287,7 @@ def test_a_whole_card_passes_and_is_saved_in_the_app():
     assert r["lab"] == {"filed": "Ideas", "notes": []} and "Lab: draft_bpi_orb is filed under Ideas." in r["text"].split("\n")
     # the text: each line as pass or fail, then what a build will run, in plain words
     lines = r["text"].split("\n")
-    assert lines[1:7] == [x["text"] for x in r["lines"]] and "\n" not in r["next"] and "bp.py build" in r["next"]
+    assert lines[1:8] == [x["text"] for x in r["lines"]] and "\n" not in r["next"] and "bp.py build" in r["next"]
     for word in ("HOME", "NEIGHBOR", "NOT HERE", "2.5", "2.6", "no line reads it", "bpi_orb-NQ-tf15", "bpi_orb-NQ-tf5"):
         assert word in r["text"], word
     assert json.loads(json.dumps(r, default=lambda x: 1 / 0)) == json.loads(json.dumps(r))      # JSON-ready as it is
@@ -298,7 +298,7 @@ BAD = [  # (what the card says, the line that fails, a word of the reason)
     ({"card": {"why": "A range breaks. Then the trapped side has to cover."}}, "0.1", "2 sentences"),
     ({"run": {"family": "no_such_family"}}, "0.2", "entry trigger"), ({"run": {"exits": "extended"}}, "0.2", "standard"),
     ({"run": {"filters": [{"block": "momentum", "side": "with"}, {"block": "news", "side": "no"}, {"block": "volume", "side": "high"}]}}, "0.2", "at most 2"),
-    ({"run": {"filters": [{"block": "book", "side": "agree"}]}}, "0.2", "Level 2"),
+    ({"run": {"filters": [{"block": "book", "side": "agree"}]}, "card": {"neighbors": ["ES"]}}, "0.2", "Level 2"),
     ({"run": {"filters": [{"block": "momentum", "side": "with"}, {"block": "momentum", "side": "against"}]}}, "0.2", "one block"),
     ({"run": {"limits": {"trail_atr": 2.0}}}, "0.2", "standard"), ({"run": {"limits": {"exit_bars": 6}}}, "0.2", "standard"),
     ({"run": {"fixed": {"no_such_input": 1}}}, "0.2", "no_such_input"),
@@ -313,7 +313,7 @@ BAD = [  # (what the card says, the line that fails, a word of the reason)
     ({"card": {"main_setting": "n"}}, "0.5", "or_min"), ({"run": {"params": {"or_min": ["5", "15"]}}}, "0.5", "2 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30", "45", "60"]}}}, "0.5", "5 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30"], "max_tr": [1, 2]}}}, "0.5", "ONE setting"),
-    ({"card": {"sides": "up"}}, "0.6", "both"), ({"card": {"sides_why": ""}}, "0.6", "why"),
+    ({"card": {"sides": "up"}}, "0.6", "both"), ({"card": {"sides_why": ""}}, "0.6", "why"), ({"card": {"loses_when": " "}}, "0.7", "when it should lose"),
     ({"card": {"sides": "long"}, "run": {"limits": {"dir": "short"}}}, "0.6", "dir")]
 
 
@@ -323,14 +323,14 @@ def test_every_missing_line_is_refused_and_named():
         r = REC.card("bpi_bad", idea("bpi_bad", **changes), root)
         b = by(r)
         assert r["ok"] is False and list(r) == list(CONTRACT), changes                     # a refusal: the agreed keys and no other
-        assert [x["line"] for x in r["lines"]] == [f"0.{i}" for i in range(1, 7)], changes
+        assert [x["line"] for x in r["lines"]] == [f"0.{i}" for i in range(1, 8)], changes
         assert b[line]["passed"] is False and word in b[line]["text"] and b[line]["text"].startswith(f"{line} FAIL "), (changes, b[line]["text"])
         assert [k for k, x in b.items() if x["passed"] is False] == [line], (changes, [x["text"] for x in r["lines"]])      # its own line, no other
         assert line in r["error"] and word in r["error"] and r["text"].split("\n")[-1] == "REFUSED: " + r["error"], r["error"]
         assert r["status"] is None and r["saved"] == [] and JOBS.code(r) == 2
     # two lines missing: both are named
     r = REC.card("bpi_bad", idea("bpi_bad", card={"why": "", "sides_why": ""}), root)
-    assert "0.1" in r["error"] and "0.6" in r["error"] and [x["passed"] for x in r["lines"]] == [False, True, True, True, True, False]
+    assert "0.1" in r["error"] and "0.6" in r["error"] and [x["passed"] for x in r["lines"]] == [False, True, True, True, True, False, True]
     # what is no card at all is refused too: a field the card does not have (a date least of all), another idea's name
     for bad, word in ((idea("bpi_bad", run={"end": "2025-07-01"}), "end"), (idea("bpi_bad", card={"start": "2021-01-01"}), "start"),
                       (idea("bpi_bad", when="2026"), "when"), (idea("bpi_other"), "bpi_other"), ({"name": "bpi_bad"}, "card"),
@@ -370,7 +370,7 @@ def test_the_card_names_the_tables():
     assert [(x["table"], x["said"]) for x in p["neighbors"]] == [("NQ-tf15-mid", "midday"), ("NQ-tf5-nyam", "5-minute bars")]
     assert (p["not_here"]["table"], p["not_here"]["said"]) == ("NQ-tf15-asia", "the Asian session")
     assert p["stores"] == [{"market": "NQ", "bar": "15", "sessions": ["asia", "nyam", "mid"]}, {"market": "NQ", "bar": "5", "sessions": ["nyam"]}]
-    assert (p["sides"], p["filters"], p["main_setting"], p["values"], p["variants"]) == ("both", [], "or_min", ["5", "15", "30"], 96)
+    assert (p["sides"], p["filters"], p["main_setting"], p["values"], p["variants"]) == ("both", [], "or_min", ["5", "15", "30"], 144)
     # the engine's settings of each store: run_idea's format, checked by run_idea and by the runner of the build range
     specs = REC.engine(idea(), p, NAME)
     assert [(s["name"], s["markets"], s["bar_sizes"], s["sessions"]) for s in specs] == [(NAME, ["NQ"], ["15"], ["asia", "nyam", "mid"]), (NAME, ["NQ"], ["5"], ["nyam"])]
@@ -521,8 +521,10 @@ def test_round_one_runs_what_is_missing_and_saves_everything():
     for n, (key, sess) in zip(r["neighbors"] + [r["not_here"]], (("bpi_orb-NQ-tf15", "mid"), ("bpi_orb-NQ-tf5", "nyam"), ("bpi_orb-NQ-tf15", "asia"))):
         ts = avg(key, sess)
         assert (n["variants"], n["avg_net"], n["profitable"]) == (ts["cells"], ts["avg_net"], bool(ts["avg_net"] is not None and ts["avg_net"] > 0)), n
-    k = sum(n["profitable"] for n in r["neighbors"])
-    assert (b["2.5"]["tables"], b["2.5"]["profitable"], b["2.5"]["number"]) == (2, k, k / 2)
+    own = [n for n in r["neighbors"] if not n["copy"]]             # a neighbor that is the home table's trades again counts once: not at all
+    k = sum(n["profitable"] for n in own)
+    assert (b["2.5"]["tables"], b["2.5"]["profitable"], b["2.5"]["number"]) == (len(own), k, k / len(own) if own else 0.0)
+    assert b["2.5"]["copies"] == [n["said"] for n in r["neighbors"] if n["copy"]] and len(own) + len(b["2.5"]["copies"]) == 2
     assert (b["2.6"]["n_long"] + b["2.6"]["n_short"]) > 0 and r["sides"] == "both" and r["table"]["variants"] == 6 and r["notes"] == []
     # the folder: the reason, the round's settings (the card as it stood, the store name, the tables), the result
     assert snap["tree"] == sorted([".lock", "idea.json", "card.md", "spec.json", "log.jsonl", "rounds/1/reason.txt", "rounds/1/spec.json", "rounds/1/build.json"])
@@ -771,7 +773,7 @@ def test_the_commands_in_this_process():
     # refusals: exit 2, the one object, the missing line named; a person reads every line as pass or fail
     rc, js = _run(["card", name, "--spec=-", *last], json.dumps(idea(name, card={"not_here": ""})))
     d = json.loads(js)
-    assert rc == 2 and d["ok"] is False and "0.4" in d["error"] and [x["passed"] for x in d["lines"]] == [True, True, True, False, True, True]
+    assert rc == 2 and d["ok"] is False and "0.4" in d["error"] and [x["passed"] for x in d["lines"]] == [True, True, True, False, True, True, True]
     rc, txt = _run(["card", name, "--spec=-", f"--root={root}"], json.dumps(idea(name, card={"not_here": ""})))
     assert rc == 2 and [ln[:8] for ln in txt.split("\n")[1:7]] == ["0.1 PASS", "0.2 PASS", "0.3 PASS", "0.4 FAIL", "0.5 PASS", "0.6 PASS"] and "REFUSED: " in txt
     n = 0
@@ -870,7 +872,7 @@ def test_the_apps_connector_against_this_toolkit():
     assert q.returncode == 0, q.stderr[-2000:]
     card, bad, build, every, one, nobody = json.loads(q.stdout)
     _T["connector"] = {"blueprint_card": card, "blueprint_build": build, "blueprint_status": every, "blueprint_status(name)": one}
-    assert card.split("\n")[0] == f"Blueprint card · {name} · IDEA · phase 0" and "0.6 PASS" in card and "Lines: 6 passed · 0 FAILED" in card
+    assert card.split("\n")[0] == f"Blueprint card · {name} · IDEA · phase 0" and "0.6 PASS" in card and "0.7 PASS" in card and "Lines: 7 passed · 0 FAILED" in card
     assert "Lab: draft_bpi_orb is filed under Ideas." in card.split("\n") and card.count("Next: ") == 1 and "Saved: " in card
     assert bad.startswith("ToolError: Refused (blueprint card): ") and "0.4" in bad and "Nothing was run." in bad
     status = IS.status(name, root)
@@ -925,7 +927,7 @@ def test_a_choice_setting_written_as_a_number_is_the_same_choice():
     spec = {"name": "bpi_numbers", "version": 1,
             "card": {"why": "A break of the opening range shows which side holds the larger orders.", "loser": "Traders who fade the first break.",
                      "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["5-minute bars"], "not_here": "the afternoon session (pm)",
-                     "main_setting": "ib_min", "sides": "both", "sides_why": "A range can break either way."},
+                     "main_setting": "ib_min", "sides": "both", "sides_why": "A range can break either way.", "loses_when": "a week without a clear direction"},
             "run": {"family": "ib_n", "params": {"ib_min": [5, 15, 30, 60]}, "fixed": {"mode": "break"}, "filters": [], "exits": "standard", "limits": {}}}
     rows, plan = REC.card_lines(spec)
     assert all(r["passed"] for r in rows), [r["text"] for r in rows if not r["passed"]]

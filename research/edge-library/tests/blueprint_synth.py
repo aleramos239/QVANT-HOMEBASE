@@ -23,13 +23,13 @@ from blueprint import rules as R  # noqa: E402
 import l2sim as S  # noqa: E402
 import library as LB  # noqa: E402
 
-COUNT = {2: 9, 4: 7}                                 # the law's lines of the build and of the test
+COUNT = {2: 9, 4: 9}                                 # the law's lines of the build and of the test
 SPAN = ("2025-07-01", "2025-08-29")                  # a short hand-made "test range": 44 weekdays, each a session day here
 LOCK = "feedc0de00000001"                            # the hash of a hand-made lock
 PERIOD = "bp_test"                                   # what a store of the test days says its period is (any name but the build's)
 CARD = {"why": "A hand-made idea for the tests of phases 5 and 6.", "loser": "nobody: its trades are typed by hand",
         "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["midday"], "not_here": "the Asian session",
-        "main_setting": "or_min", "sides": "both", "sides_why": "hand-made"}
+        "main_setting": "or_min", "sides": "both", "sides_why": "hand-made", "loses_when": "a week without a clear direction"}
 RUN = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
 
 
@@ -108,7 +108,8 @@ def proven(IS, root, name: str, folder=None, cells=None, worse=None, survivors=N
       test.json                       every 4.x line passed (test_fail = the ones that failed), the lock's hash, the stores
     cells None = a LEAD: built, never frozen, never tested. `odd` makes it wrong on purpose: stores=False (the test result
     names no store), written=False (the stores are not on disk), store_lock / store_span (the stores are another lock's, or
-    of another range), test_lock (the test result is of another lock), locked (the lock's variant list)."""
+    of another range), test_lock (the test result is of another lock), locked (the lock's variant list); lock_more = more
+    fields of the lock (a portfolio's members say their entry trigger: {"spec": {"run": {"family": ...}}})."""
     IS.create(name, root, exist_ok=True)
     IS.write_card(name, f"# {name} -- idea card (hand-made)\n", root)
     IS.write_spec(name, {"name": name, "version": 1, "card": CARD, "run": RUN}, root)
@@ -126,7 +127,7 @@ def proven(IS, root, name: str, folder=None, cells=None, worse=None, survivors=N
     IS.write_lock(name, {"name": name, "version": 1, "round": 1, "store": name, "variants": list(odd.get("locked", cells)), "default": next(iter(cells)),
                          "survivors": list(cells if survivors is None else survivors), "test_range": {"NQ": {"start": span[0], "end": span[1]}},
                          "home": {**CARD["home"], "table": "NQ-tf15-nyam", "key": key, "folder": str(folder), "filter": None, "worse": f"{key}-nyam-worse"},
-                         "hash": LOCK}, root)
+                         "hash": LOCK, **odd.get("lock_more", {})}, root)
     rows = [{"key": keys[which], "kind": kind, "root": "NQ", "tf": "15", "path": str(Path(folder) / keys[which]), "skipped": False, "ok": True}
             for which, kind in (("table", "unit"), ("worse", "worse"))]
     IS.write_test(name, result("test", 4, name, fail=test_fail, lock=odd.get("test_lock", LOCK), range={"start": span[0], "end": span[1]},

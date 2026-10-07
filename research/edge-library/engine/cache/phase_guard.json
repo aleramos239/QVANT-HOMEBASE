@@ -321,8 +321,56 @@
    "sess_max_s": 59.98,
    "on_phase_s": 59.96,
    "overnight": true
+  },
+  "2025-01": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.02,
+   "sess_max_s": 59.06,
+   "on_phase_s": 59.02,
+   "overnight": true
+  },
+  "2025-02": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.46,
+   "sess_max_s": 59.5,
+   "on_phase_s": 59.46,
+   "overnight": true
+  },
+  "2025-03": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.2,
+   "sess_max_s": 59.22,
+   "on_phase_s": 59.2,
+   "overnight": true
+  },
+  "2025-04": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.18,
+   "sess_max_s": 59.2,
+   "on_phase_s": 59.18,
+   "overnight": true
+  },
+  "2025-05": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.26,
+   "sess_max_s": 59.32,
+   "on_phase_s": 59.26,
+   "overnight": true
+  },
+  "2025-06": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.7,
+   "sess_max_s": 59.74,
+   "on_phase_s": 59.7,
+   "overnight": true
   }
  },
  "failed": [],
- "updated_et": "2026-10-01T23:01:54-04:00"
+ "updated_et": "2026-10-06T08:29:40-04:00"
 }

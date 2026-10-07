@@ -29,7 +29,7 @@
  "period": "bp_build",
  "run_kw": {},
  "hold_to": "day",
- "inputs_hash": "7ab14979221db11b",
+ "inputs_hash": "dcc360563ec37b3b",
  "code": {
   "l2sim.py": "653e964f1fd3adb0",
   "l2ref.py": "51f18fb1b8c84bc1"
@@ -11968,6 +11968,5939 @@
    "both_sides_sessions": 0,
    "skipped_by_error": 0,
    "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_atr1p5-r0p5",
+   "vi": 0,
+   "xi": 32,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19731,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_atr1p5-r0p75",
+   "vi": 0,
+   "xi": 33,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19715,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_atr3-r0p5",
+   "vi": 0,
+   "xi": 34,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19566,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_atr3-r0p75",
+   "vi": 0,
+   "xi": 35,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19397,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts10-r0p5",
+   "vi": 0,
+   "xi": 36,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19723,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts10-r0p75",
+   "vi": 0,
+   "xi": 37,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19698,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts20-r0p5",
+   "vi": 0,
+   "xi": 38,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19270,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts20-r0p75",
+   "vi": 0,
+   "xi": 39,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 18917,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts30-r0p5",
+   "vi": 0,
+   "xi": 40,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 18304,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts30-r0p75",
+   "vi": 0,
+   "xi": 41,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 17488,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts45-r0p5",
+   "vi": 0,
+   "xi": 42,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 16507,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pts45-r0p75",
+   "vi": 0,
+   "xi": 43,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 15275,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pct0p1-r0p5",
+   "vi": 0,
+   "xi": 44,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19516,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pct0p1-r0p75",
+   "vi": 0,
+   "xi": 45,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 19274,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pct0p2-r0p5",
+   "vi": 0,
+   "xi": 46,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 18015,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s1_pct0p2-r0p75",
+   "vi": 0,
+   "xi": 47,
+   "variant": {
+    "seed": 1
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 1
+   },
+   "trades": 17158,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_atr1p5-r0p5",
+   "vi": 1,
+   "xi": 32,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19734,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_atr1p5-r0p75",
+   "vi": 1,
+   "xi": 33,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19720,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_atr3-r0p5",
+   "vi": 1,
+   "xi": 34,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19577,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_atr3-r0p75",
+   "vi": 1,
+   "xi": 35,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19383,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts10-r0p5",
+   "vi": 1,
+   "xi": 36,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19727,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts10-r0p75",
+   "vi": 1,
+   "xi": 37,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19694,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts20-r0p5",
+   "vi": 1,
+   "xi": 38,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19281,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts20-r0p75",
+   "vi": 1,
+   "xi": 39,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 18924,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts30-r0p5",
+   "vi": 1,
+   "xi": 40,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 18353,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts30-r0p75",
+   "vi": 1,
+   "xi": 41,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 17515,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts45-r0p5",
+   "vi": 1,
+   "xi": 42,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 16552,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pts45-r0p75",
+   "vi": 1,
+   "xi": 43,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 15284,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pct0p1-r0p5",
+   "vi": 1,
+   "xi": 44,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19500,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pct0p1-r0p75",
+   "vi": 1,
+   "xi": 45,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 19290,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pct0p2-r0p5",
+   "vi": 1,
+   "xi": 46,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 18072,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s2_pct0p2-r0p75",
+   "vi": 1,
+   "xi": 47,
+   "variant": {
+    "seed": 2
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 2
+   },
+   "trades": 17185,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_atr1p5-r0p5",
+   "vi": 2,
+   "xi": 32,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19727,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_atr1p5-r0p75",
+   "vi": 2,
+   "xi": 33,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19721,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_atr3-r0p5",
+   "vi": 2,
+   "xi": 34,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19566,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_atr3-r0p75",
+   "vi": 2,
+   "xi": 35,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19412,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts10-r0p5",
+   "vi": 2,
+   "xi": 36,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19726,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts10-r0p75",
+   "vi": 2,
+   "xi": 37,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19703,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts20-r0p5",
+   "vi": 2,
+   "xi": 38,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19287,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts20-r0p75",
+   "vi": 2,
+   "xi": 39,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 18928,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts30-r0p5",
+   "vi": 2,
+   "xi": 40,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 18325,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts30-r0p75",
+   "vi": 2,
+   "xi": 41,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 17491,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts45-r0p5",
+   "vi": 2,
+   "xi": 42,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 16514,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pts45-r0p75",
+   "vi": 2,
+   "xi": 43,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 15274,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pct0p1-r0p5",
+   "vi": 2,
+   "xi": 44,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19527,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pct0p1-r0p75",
+   "vi": 2,
+   "xi": 45,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 19286,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pct0p2-r0p5",
+   "vi": 2,
+   "xi": 46,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 18032,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s3_pct0p2-r0p75",
+   "vi": 2,
+   "xi": 47,
+   "variant": {
+    "seed": 3
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 3
+   },
+   "trades": 17151,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_atr1p5-r0p5",
+   "vi": 3,
+   "xi": 32,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19725,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_atr1p5-r0p75",
+   "vi": 3,
+   "xi": 33,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19710,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_atr3-r0p5",
+   "vi": 3,
+   "xi": 34,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19563,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_atr3-r0p75",
+   "vi": 3,
+   "xi": 35,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19368,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts10-r0p5",
+   "vi": 3,
+   "xi": 36,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19725,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts10-r0p75",
+   "vi": 3,
+   "xi": 37,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19695,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts20-r0p5",
+   "vi": 3,
+   "xi": 38,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19265,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts20-r0p75",
+   "vi": 3,
+   "xi": 39,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 18900,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts30-r0p5",
+   "vi": 3,
+   "xi": 40,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 18312,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts30-r0p75",
+   "vi": 3,
+   "xi": 41,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 17543,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts45-r0p5",
+   "vi": 3,
+   "xi": 42,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 16589,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pts45-r0p75",
+   "vi": 3,
+   "xi": 43,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 15316,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pct0p1-r0p5",
+   "vi": 3,
+   "xi": 44,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19511,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pct0p1-r0p75",
+   "vi": 3,
+   "xi": 45,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 19273,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pct0p2-r0p5",
+   "vi": 3,
+   "xi": 46,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 18066,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s4_pct0p2-r0p75",
+   "vi": 3,
+   "xi": 47,
+   "variant": {
+    "seed": 4
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 4
+   },
+   "trades": 17189,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_atr1p5-r0p5",
+   "vi": 4,
+   "xi": 32,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19717,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_atr1p5-r0p75",
+   "vi": 4,
+   "xi": 33,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19711,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_atr3-r0p5",
+   "vi": 4,
+   "xi": 34,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19586,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_atr3-r0p75",
+   "vi": 4,
+   "xi": 35,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19367,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts10-r0p5",
+   "vi": 4,
+   "xi": 36,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19727,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts10-r0p75",
+   "vi": 4,
+   "xi": 37,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19698,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts20-r0p5",
+   "vi": 4,
+   "xi": 38,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19275,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts20-r0p75",
+   "vi": 4,
+   "xi": 39,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 18906,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts30-r0p5",
+   "vi": 4,
+   "xi": 40,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 18288,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts30-r0p75",
+   "vi": 4,
+   "xi": 41,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 17496,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts45-r0p5",
+   "vi": 4,
+   "xi": 42,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 16492,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pts45-r0p75",
+   "vi": 4,
+   "xi": 43,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 15276,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pct0p1-r0p5",
+   "vi": 4,
+   "xi": 44,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19512,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pct0p1-r0p75",
+   "vi": 4,
+   "xi": 45,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 19278,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pct0p2-r0p5",
+   "vi": 4,
+   "xi": 46,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 18053,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s5_pct0p2-r0p75",
+   "vi": 4,
+   "xi": 47,
+   "variant": {
+    "seed": 5
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 5
+   },
+   "trades": 17178,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_atr1p5-r0p5",
+   "vi": 5,
+   "xi": 32,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19733,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_atr1p5-r0p75",
+   "vi": 5,
+   "xi": 33,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19726,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_atr3-r0p5",
+   "vi": 5,
+   "xi": 34,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19590,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_atr3-r0p75",
+   "vi": 5,
+   "xi": 35,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19425,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts10-r0p5",
+   "vi": 5,
+   "xi": 36,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19725,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts10-r0p75",
+   "vi": 5,
+   "xi": 37,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19694,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts20-r0p5",
+   "vi": 5,
+   "xi": 38,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19268,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts20-r0p75",
+   "vi": 5,
+   "xi": 39,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 18917,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts30-r0p5",
+   "vi": 5,
+   "xi": 40,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 18323,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts30-r0p75",
+   "vi": 5,
+   "xi": 41,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 17537,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts45-r0p5",
+   "vi": 5,
+   "xi": 42,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 16582,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pts45-r0p75",
+   "vi": 5,
+   "xi": 43,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 15354,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pct0p1-r0p5",
+   "vi": 5,
+   "xi": 44,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19496,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pct0p1-r0p75",
+   "vi": 5,
+   "xi": 45,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 19272,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pct0p2-r0p5",
+   "vi": 5,
+   "xi": 46,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 18098,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s6_pct0p2-r0p75",
+   "vi": 5,
+   "xi": 47,
+   "variant": {
+    "seed": 6
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 6
+   },
+   "trades": 17207,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_atr1p5-r0p5",
+   "vi": 6,
+   "xi": 32,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19723,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_atr1p5-r0p75",
+   "vi": 6,
+   "xi": 33,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19719,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_atr3-r0p5",
+   "vi": 6,
+   "xi": 34,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19585,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_atr3-r0p75",
+   "vi": 6,
+   "xi": 35,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19394,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts10-r0p5",
+   "vi": 6,
+   "xi": 36,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19728,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts10-r0p75",
+   "vi": 6,
+   "xi": 37,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19698,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts20-r0p5",
+   "vi": 6,
+   "xi": 38,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19274,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts20-r0p75",
+   "vi": 6,
+   "xi": 39,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 18912,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts30-r0p5",
+   "vi": 6,
+   "xi": 40,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 18330,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts30-r0p75",
+   "vi": 6,
+   "xi": 41,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 17532,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts45-r0p5",
+   "vi": 6,
+   "xi": 42,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 16578,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pts45-r0p75",
+   "vi": 6,
+   "xi": 43,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 15296,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pct0p1-r0p5",
+   "vi": 6,
+   "xi": 44,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19506,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pct0p1-r0p75",
+   "vi": 6,
+   "xi": 45,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 19295,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pct0p2-r0p5",
+   "vi": 6,
+   "xi": 46,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 18088,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s7_pct0p2-r0p75",
+   "vi": 6,
+   "xi": 47,
+   "variant": {
+    "seed": 7
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 7
+   },
+   "trades": 17189,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_atr1p5-r0p5",
+   "vi": 7,
+   "xi": 32,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19729,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_atr1p5-r0p75",
+   "vi": 7,
+   "xi": 33,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19719,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_atr3-r0p5",
+   "vi": 7,
+   "xi": 34,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19577,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_atr3-r0p75",
+   "vi": 7,
+   "xi": 35,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19394,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts10-r0p5",
+   "vi": 7,
+   "xi": 36,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19724,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts10-r0p75",
+   "vi": 7,
+   "xi": 37,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19687,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts20-r0p5",
+   "vi": 7,
+   "xi": 38,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19256,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts20-r0p75",
+   "vi": 7,
+   "xi": 39,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 18926,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts30-r0p5",
+   "vi": 7,
+   "xi": 40,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 18313,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts30-r0p75",
+   "vi": 7,
+   "xi": 41,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 17543,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts45-r0p5",
+   "vi": 7,
+   "xi": 42,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 16519,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pts45-r0p75",
+   "vi": 7,
+   "xi": 43,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 15230,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pct0p1-r0p5",
+   "vi": 7,
+   "xi": 44,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19493,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pct0p1-r0p75",
+   "vi": 7,
+   "xi": 45,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 19264,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pct0p2-r0p5",
+   "vi": 7,
+   "xi": 46,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 18032,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s8_pct0p2-r0p75",
+   "vi": 7,
+   "xi": 47,
+   "variant": {
+    "seed": 8
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 8
+   },
+   "trades": 17177,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_atr1p5-r0p5",
+   "vi": 8,
+   "xi": 32,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19723,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_atr1p5-r0p75",
+   "vi": 8,
+   "xi": 33,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19713,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_atr3-r0p5",
+   "vi": 8,
+   "xi": 34,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19596,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_atr3-r0p75",
+   "vi": 8,
+   "xi": 35,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19401,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts10-r0p5",
+   "vi": 8,
+   "xi": 36,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19725,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts10-r0p75",
+   "vi": 8,
+   "xi": 37,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19688,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts20-r0p5",
+   "vi": 8,
+   "xi": 38,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19286,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts20-r0p75",
+   "vi": 8,
+   "xi": 39,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 18931,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts30-r0p5",
+   "vi": 8,
+   "xi": 40,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 18295,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts30-r0p75",
+   "vi": 8,
+   "xi": 41,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 17488,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts45-r0p5",
+   "vi": 8,
+   "xi": 42,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 16518,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pts45-r0p75",
+   "vi": 8,
+   "xi": 43,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 15257,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pct0p1-r0p5",
+   "vi": 8,
+   "xi": 44,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19523,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pct0p1-r0p75",
+   "vi": 8,
+   "xi": 45,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 19291,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pct0p2-r0p5",
+   "vi": 8,
+   "xi": 46,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 18055,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s9_pct0p2-r0p75",
+   "vi": 8,
+   "xi": 47,
+   "variant": {
+    "seed": 9
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 9
+   },
+   "trades": 17179,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_atr1p5-r0p5",
+   "vi": 9,
+   "xi": 32,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19721,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_atr1p5-r0p75",
+   "vi": 9,
+   "xi": 33,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 1.5,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19710,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_atr3-r0p5",
+   "vi": 9,
+   "xi": 34,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19584,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_atr3-r0p75",
+   "vi": 9,
+   "xi": 35,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "atr",
+    "stop_val": 3.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19396,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts10-r0p5",
+   "vi": 9,
+   "xi": 36,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19727,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts10-r0p75",
+   "vi": 9,
+   "xi": 37,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 10.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19697,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts20-r0p5",
+   "vi": 9,
+   "xi": 38,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19268,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts20-r0p75",
+   "vi": 9,
+   "xi": 39,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 20.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 18902,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts30-r0p5",
+   "vi": 9,
+   "xi": 40,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 18323,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts30-r0p75",
+   "vi": 9,
+   "xi": 41,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 30.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 17545,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts45-r0p5",
+   "vi": 9,
+   "xi": 42,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 16606,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pts45-r0p75",
+   "vi": 9,
+   "xi": 43,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pts",
+    "stop_val": 45.0,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 15309,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pct0p1-r0p5",
+   "vi": 9,
+   "xi": 44,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19529,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pct0p1-r0p75",
+   "vi": 9,
+   "xi": 45,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.1,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 19288,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pct0p2-r0p5",
+   "vi": 9,
+   "xi": 46,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.5,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 18111,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  },
+  {
+   "id": "s10_pct0p2-r0p75",
+   "vi": 9,
+   "xi": 47,
+   "variant": {
+    "seed": 10
+   },
+   "exit": {
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75
+   },
+   "inputs": {
+    "tf": "1",
+    "sess": "asia+london+pre+nyam+mid+pm+eve",
+    "dir": "both",
+    "stop_mode": "pct",
+    "stop_val": 0.2,
+    "tgt_r": 0.75,
+    "trail_atr": 0.0,
+    "exit_bars": 0,
+    "max_tr": 3,
+    "f_trend": "off",
+    "f_vwap": "off",
+    "f_depth": "off",
+    "f_book": "off",
+    "x_book": "off",
+    "f_thin": "off",
+    "hold_to": "day",
+    "p_entry": 0.5,
+    "seed": 10
+   },
+   "trades": 17175,
+   "both_sides_sessions": 0,
+   "skipped_by_error": 0,
+   "unrealistic_winners": 0
+  }
+ ],
+ "grown": [
+  {
+   "utc": "2026-10-06T23:53:34+00:00",
+   "cells": 160,
+   "from": 320,
+   "was": "7ab14979221db11b",
+   "code": {
+    "l2sim.py": "dd4b6df044c16c12",
+    "l2ref.py": "51f18fb1b8c84bc1"
+   },
+   "elapsed_s": 809.28
   }
  ]
 }

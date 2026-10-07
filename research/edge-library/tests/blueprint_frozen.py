@@ -42,13 +42,13 @@ CARD = {"why": "The first minutes of the New York morning set a range, and a bre
         "loser": "traders who faded the opening range",
         "home": {"market": "NQ", "session": "nyam", "bar": "15"},
         "neighbors": ["midday"], "not_here": "the Asian session",          # both in the home's store: ONE tape pass an idea
-        "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way"}
+        "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way", "loses_when": "a week without a clear direction"}
 SETTINGS = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
 DAYS = ["2022-03-15", "2023-03-22", "2025-06-30"]            # two plain build days and the last build day
 CELLS = ["atr3-r1", "pts20-r0"]                              # 2 of the 32 exit cells
 SAT = dt.datetime(2026, 10, 3, 11, 0, tzinfo=S.ET)           # a Saturday: no desk hours, no window
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")     # plan section 8
-TEST_LINES = [f"4.{i}" for i in range(1, 8)]
+TEST_LINES = [f"4.{i}" for i in range(1, 10)]
 HOME = Path.home() / ".homebase"
 APP_RUNS = S.REPO / "homebase" / ".state" / "tester" / "runs"
 APP_PYTHON = S.REPO / ".venv" / "bin" / "python"
@@ -61,7 +61,8 @@ def tmp() -> Path:
 
 
 OUT, TOUT, LEDGER, TESTER, DRAFTS = tmp() / "runs", tmp() / "runs_test", tmp() / "ledger.csv", tmp() / "tester", tmp() / "drafts"
-TINY = {"days": DAYS, "cells": CELLS, "out": str(OUT), "ledger": str(LEDGER), "workers": 1, "draws": 200, "tester": str(TESTER), "test_out": str(TOUT)}
+TINY = {"days": DAYS, "cells": CELLS, "out": str(OUT), "ledger": str(LEDGER), "workers": 1, "draws": 200, "tester": str(TESTER), "test_out": str(TOUT),
+        "box": "said", "build_avg_trade": 100.0}      # lines 3.3-3.7 are read, not enforced, on 3 days; the build's average trade a hand-made test is held against
 ENV = {"HOMEBASE_IDEAS_ROOT": str(tmp() / "ideas_env"),      # never the real ~/.homebase: every test names its own root ...
        "HOMEBASE_DRAFTS_DIR": str(DRAFTS)}                   # ... and the Lab drafts of all of them go here
 IS = A.ideastore()
@@ -223,7 +224,7 @@ def lead(name: str = "bpl_orb", card=None, run=None, check: bool = True, **own) 
 FBM = "bpl_fbm"
 FBM_CARD = {"why": "A session's first bar that is much larger than usual is momentum ignition, and the traders who fade it are run over.",
             "loser": "traders who fade the first bar of the midday session", "home": {"market": "NQ", "session": "mid", "bar": "15"},
-            "neighbors": ["New York morning"], "not_here": "the Asian session", "main_setting": "k", "sides": "both", "sides_why": "the first bar can run either way"}
+            "neighbors": ["New York morning"], "not_here": "the Asian session", "main_setting": "k", "sides": "both", "sides_why": "the first bar can run either way", "loses_when": "a week without a clear direction"}
 FBM_RUN = {"family": "first_bar_mom", "params": {"k": [1.0, 1.5, 2.0]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
 FBM_DAYS = ["2021-10-18", "2021-10-22", "2021-10-25"]        # build days on which a variant makes money with normal and with worse fills (so: a default)
 REAL_DAYS = ["2025-08-20", "2025-12-17", "2026-03-18", "2026-09-22"]      # 2 test days of each part: the old 2025 and 2026 stores hold every cell of them

@@ -5,7 +5,7 @@ strategy code plus new look-ahead tests. Nothing in l2sim.py or in another famil
 IN FRONT of a family class. With every block off a wrapped family is trade-for-trade the original (tests/test_blocks.py).
 
     WRAPPED[name]    = class B_<name>(Blocks, <the family's registered class>)   every bar-based library family without
-                       Level-2 features of port1 / port2 / port3 / round1 / timed, and ib_n (time-fired families are left out)
+                       Level-2 features of port1 / port2 / port3 / round1 / timed / fvg, and ib_n (time-fired families are left out)
     CONTROLS[name]   = class R_<name>(Blocks, l2ref.Random)   the random-entry control of a range stop: a random entry that
                        carries the family's own structure height (same stop rule, random time and side)
 
@@ -36,6 +36,8 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   momentum    with | against  f_rsi              Wilder RSI(14) of the tf closes since the indicator restart (00:00 ET; 18:00
         for a held evening), closed bars only, at the signal bar's close. with: long needs RSI > 50, short < 50; against: the
         mirror. Fewer than 15 closes, or RSI exactly 50 -> no entry.
+  momentum (more)  strong_with | extreme_against   f_rsi    strong_with: long needs RSI >= 60, short <= 40 (RSI_STRONG = 10 points
+        beyond 50); extreme_against: long needs RSI <= 30, short >= 70 (RSI_EXTREME = 20 points beyond 50, a fade of an extreme).
   volume      high | low    f_cvol = hi | lo     the volume traded from the SESSION'S ANCHOR to the decision (completed
         1-minute bars only) above / below the median, over the 20 trade dates before today, of the volume of the same clock
         window. Anchor = the Template's anchored-VWAP anchor: asia 00:00, london 03:00, pre 08:25, nyam / mid / pm 09:30 (the
@@ -48,6 +50,71 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
         imbalance imb10 does not oppose the side: long needs mean >= 0); disagree = f_bookopp = "on": the same signal
         (l2sim.book_mean5) OPPOSES the side (long needs mean < 0). No signal -> no entry. Needs features (BOOK_COLS).
 
+  PRICE-AND-TREND BLOCKS (NQ, ES and GC; every one reads the idea's own tf bars, closed bars only, at the signal bar's close; a line that
+        cannot be computed yet, or a close exactly on it, has no signal and blocks the entry on both sides)
+  ema20, ema50  with | against      f_ema20 / f_ema50   the close above (with: a long) / below (a short) the EMA(20) / EMA(50) of the tf closes since
+        the indicator restart; the EMA is seeded with the first close, as the Template's own EMAs. 20 / 50 closes needed.
+  trend         with | against      f_trend             the Template's own option: the slope of that EMA(50) (long needs it rising).
+  vwap          with | against      f_vwap              the Template's own option: the close against the SESSION'S volume-weighted
+        average price (the session instance's own VWAP: it restarts at each session).
+  avwap         with | against      f_avwap             the close against the volume-weighted average price ANCHORED at the day's anchor
+        (VOL_ANCHOR: asia 00:00, london 03:00, pre 08:25, nyam / mid / pm 09:30 -- a midday trade reads the VWAP since the cash open).
+  vwma          with | against      f_vwma              the close against the volume-weighted moving average of the last VWMA_N = 20 tf
+        closes (weights = the tf bars' volume). 20 bars needed.
+  channel       with | against      f_channel           where the close sits in the channel of the CH_N = 20 tf bars before the signal bar:
+        position = (close - channel low) / (channel high - channel low). with: long needs the top third (>= 2/3, a break above
+        counts), short the bottom third (<= 1/3); against: the other way round (a dip bought, a rally sold). 21 bars needed.
+  adx           strong | weak       f_adx               Wilder's ADX(14) of the tf bars since the restart: strong = at least ADX_STRONG =
+        25, weak = below ADX_WEAK = 20; between them no signal (both sides). 28 bars needed. A filter of the regime, not of a side.
+  rvol          high | low | spike  f_rvol              the volume of the tf bar that just closed against the SAME clock bar on the RVOL_DAYS
+        = 14 trade dates before today (a 09:30 bar against fourteen 09:30 bars): high = above their median, low = below it, spike =
+        at least RVOL_SPIKE = 2 times it. 10 of the 14 dates needed (cache/minvol_<ROOT>.npz, as the volume block).
+
+  LIQUIDITY-LEVEL BLOCKS (NQ, ES and GC; the levels are engine/levels.py: prior day, overnight, Asia 00:00-03:00, early London 02:00-05:00,
+        London 03:00-08:25, the evening before 20:00-24:00, the last 5 days, the swing high / low of the last 5 sessions (50 5-minute bars
+        each side, still untraded), and the equal highs / lows (NQ only: two such swings within 10 points, the second not beyond the first); each is a high and a low that has ENDED; the swing needs cache/bars5m_<ROOT>.npz, as the volume block)
+  level         near | clear        f_level             the distance of the last close to the closest level price (any level, high or low):
+        near = within NEAR_ATR = 0.5 x ATR of it, clear = farther than CLEAR_ATR = 1.0 x ATR from every level. No level known: no signal.
+  swept         with | against      f_swept             since 00:00 ET a bar traded beyond a level (levels.track): with = the liquidity on
+        the OTHER side of the trade was taken (a long needs a LOW swept, a short a HIGH swept); against = the liquidity on the trade's own
+        side was taken (a long needs a HIGH swept). Nothing swept: both sides blocked.
+
+  ZONE BLOCKS (NQ, ES and GC; SMT NQ and ES; first-guess definitions, written in engine/zones.py before any result)
+  pdz           with | against      f_pdz               premium / discount: the close against the midpoint of the day's range since 00:00 ET
+  ote           in | out            f_ote               the 62-79 % retracement zone of that range's leg
+  htf15, htf60  with | against      f_htf15 / f_htf60   the close of the last closed 15- / 60-minute bar against its EMA(20) / EMA(8)
+  smt           agree | disagree    f_smt               NQ and ES diverge at a new 3-hour extreme (the last 6 5-minute bars against the 36 before)
+
+  LEVEL-2 BLOCKS (the vendor's order book, NQ only, the feature table of l2data: one row per minute, usable at the minute's end;
+        a minute without a valid book -- a roll day, a crossed book, another contract -- is NaN and has no signal: both sides blocked)
+  book        agree | disagree      (above)  the 5-minute mean of the top-10 imbalance leans the trade's way / against it
+  depth       thin | thick          the top-10 depth against its median at the same minute over the 20 sessions before (the Template's
+                                    f_depth): thin = at most 0.8 of it, thick = at least 1.2 of it (the SPEC's B6)
+  ahead       thin | thick          the depth the trade must push through (a long: the offers; a short: the bids) against its own
+                                    median of the last 15 minutes: thin = at most 0.8 of it (the Template's f_thin, SPEC D4), thick = above that
+  wall        clear | blocked       blocked = a level of the opposing side's top 10 holds at least WALL_X = 5 times the median level
+                                    and stands within WALL_TICKS = 8 ticks of the touch (SPEC B4's wall); clear = there is none
+  stack       with | against        the minute's change of the top-10 size on the trade's side minus the other side's, as a share of the
+                                    depth: at least +STACK_FRAC = 5 % (with: size was added behind the trade / pulled in front of it)
+                                    or at most -5 % (against). A smaller change has no signal.
+  Level 2 history: the build days (to 2025-06-30) are covered; the vendor's history ends 2026-07-08 and the test days' table is not
+  built, so a Level 2 filter can be BUILT but not locked or tested (blueprint/freeze.py refuses it, with the reason).
+
+  DELTA BLOCKS (order flow of the desk's own tick archive, flowtab.py; NQ, ES and GC; the aggressor side is an estimate)
+        One rule for the four: SHARE = (the series summed over a clock window) / (the volume of that window), completed
+        minutes only (a decision at T reads the minutes before T). The window of delta / sweep / bigorder is the last FLOW_WIN
+        = 5 minutes; of cumdelta it is the session's anchor (VOL_ANCHOR) to the decision. The SIZE bar is the same window's
+        |share| on the 20 trade dates before today (at least 15 of them with volume): a share at or above their median
+        (with / against) or above their 80th percentile (with_big / against_big). `with` = the share points the trade's way
+        (long needs buyers ahead), `against` = the other way (a fade). No signal (a date without flow rows, fewer than 15
+        reference dates, an empty window, a share of exactly 0) blocks the entry on both sides.
+  delta       f_delta = with | against | with_big | against_big    series: delta = buy volume - sell volume of the aggressors
+  cumdelta    f_cumdelta = ...                                      the same, summed since the session's anchor
+  sweep       f_sweep = ...                                         series: buy - sell volume of aggressor orders that walked
+                                                                    two price levels or more (their side is certain)
+  bigorder    f_bigorder = ...                                      series: the largest aggressor order of each minute, signed
+                                                                    by its side (big buys minus big sells)
+
 ib_n = port1.Ib with the range length as an input: ib_min 5 | 15 | 30 | 60 minutes from 09:30 (60 = ib, trade for trade).
 """
 from __future__ import annotations
@@ -58,20 +125,37 @@ from multiprocessing import get_context
 
 import numpy as np
 
+import flowtab
 import l2ref
+import levels as LV
 import l2sim as S
+import zones as Z
 from l2sim import NS, SESS, _hms
 
-from . import port1, port2, port3, round1, timed
+from . import fvg, liq, port1, port2, port3, round1, timed
 
 OPEN = 34200                                        # 09:30 ET, seconds after 00:00
 VOL_DAYS = 20                                       # volatility and volume blocks: the 20 trade dates before today
 RSI_N = 14
 NEWS_TIMES = ("08:30", "10:00")                     # the release groups of cache/events.csv that make a "release day"
-BOOK_COLS = ("imb10", "t_utc")                      # what the book block reads through ctx.feat (l2sim.L2_OPTION_COLS["f_book"])
+BOOK_COLS = ("imb10", "t_utc", "depth10_rel20d", "bid10_rel15", "ask10_rel15", "bid10_chg", "ask10_chg", "depth10",
+             "bid_wall_sz", "ask_wall_sz", "bid_wall_dist", "ask_wall_dist", "bid_med_sz", "ask_med_sz")      # what the Level-2 blocks read through ctx.feat
+WALL_X, WALL_TICKS = 5.0, 8                         # wall block: a level >= WALL_X x the median level, within WALL_TICKS of the touch
+STACK_FRAC = 0.05                                   # stack block: the change of (own side - other side) top-10 size, as a share of the depth
 MIN0, NMIN = -360, 1380                             # minute volume: index 0 = 18:00 ET of the evening before .. 17:00 ET
 # volume block: where "the session so far" starts -- the Template's anchored-VWAP anchors (asia 00:00, london 03:00, pre 08:25,
 # the three NY sessions 09:30, eve 18:00); a family's own session window starts at its own start
+NEAR_ATR, CLEAR_ATR = 0.5, 1.0                      # level block: "near" / "clear" in ATRs of the idea's bars
+RSI_STRONG, RSI_EXTREME = 10.0, 20.0                 # momentum block: points beyond 50 for strong_with (60 / 40) and extreme_against (30 / 70)
+VWMA_N, CH_N, ADX_N = 20, 20, 14                    # vwma length, channel length, ADX length (tf bars)
+CH_EDGE = 2.0 / 3.0                                 # channel block: the top third / the bottom third of the channel
+ADX_STRONG, ADX_WEAK = 25.0, 20.0                   # adx block
+RVOL_DAYS, RVOL_MIN, RVOL_SPIKE = 14, 10, 2.0       # rvol block: the dates compared, the fewest with a tape, the spike multiple
+LINE_BLOCKS = ("ema20", "ema50", "vwma", "avwap")   # blocks that compare the close with a line
+FLOW_WIN = 5                                        # delta blocks: the minutes of the short window
+FLOW_REF, FLOW_REF_MIN = 20, 15                     # ... the trade dates of the size bar, and the fewest of them with volume
+FLOW_Q = {"": 0.5, "_big": 0.8}                     # ... the size bar: the median / the 80th percentile of the reference |share|
+FLOW_SERIES = {"delta": 1, "cumdelta": 1, "sweep": 2, "bigorder": 3}      # block -> row of flowtab's prefix sums
 VOL_ANCHOR = {"asia": 0, "london": 10800, "pre": 30300, "nyam": OPEN, "mid": OPEN, "pm": OPEN, "eve": -21600}
 
 X_STOP_ATR = (1.0, 2.0)                             # the extended menu's new stops and targets
@@ -79,11 +163,34 @@ X_STOP_RNG = (0.25, 0.5, 1.0)
 X_TGT_R = (1.5, 4.0)
 
 FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
-           "momentum": {"with": {"f_rsi": "with"}, "against": {"f_rsi": "against"}},
+           "momentum": {"with": {"f_rsi": "with"}, "against": {"f_rsi": "against"}, "strong_with": {"f_rsi": "strong_with"},
+                        "extreme_against": {"f_rsi": "extreme_against"}},
+           "ema20": {"with": {"f_ema20": "with"}, "against": {"f_ema20": "against"}},
+           "ema50": {"with": {"f_ema50": "with"}, "against": {"f_ema50": "against"}},
+           "trend": {"with": {"f_trend": "with"}, "against": {"f_trend": "against"}},
+           "vwap": {"with": {"f_vwap": "with"}, "against": {"f_vwap": "against"}},
+           "avwap": {"with": {"f_avwap": "with"}, "against": {"f_avwap": "against"}},
+           "vwma": {"with": {"f_vwma": "with"}, "against": {"f_vwma": "against"}},
+           "channel": {"with": {"f_channel": "with"}, "against": {"f_channel": "against"}},
+           "adx": {"strong": {"f_adx": "strong"}, "weak": {"f_adx": "weak"}},
+           "level": {"near": {"f_level": "near"}, "clear": {"f_level": "clear"}},
+           "swept": {"with": {"f_swept": "with"}, "against": {"f_swept": "against"}},
+           "pdz": {"with": {"f_pdz": "with"}, "against": {"f_pdz": "against"}},
+           "ote": {"in": {"f_ote": "in"}, "out": {"f_ote": "out"}},
+           "htf15": {"with": {"f_htf15": "with"}, "against": {"f_htf15": "against"}},
+           "htf60": {"with": {"f_htf60": "with"}, "against": {"f_htf60": "against"}},
+           "smt": {"agree": {"f_smt": "agree"}, "disagree": {"f_smt": "disagree"}},
+           "rvol": {"high": {"f_rvol": "high"}, "low": {"f_rvol": "low"}, "spike": {"f_rvol": "spike"}},
            "volume": {"high": {"f_cvol": "hi"}, "low": {"f_cvol": "lo"}},
            "news": {"yes": {"f_news": "yes"}, "no": {"f_news": "no"}},
-           "book": {"agree": {"f_book": "on"}, "disagree": {"f_bookopp": "on"}}}
-L2_BLOCKS = ("book",)                               # NQ only: they read the Level-2 feature table
+           "book": {"agree": {"f_book": "on"}, "disagree": {"f_bookopp": "on"}},
+           "depth": {"thin": {"f_depth": "thin"}, "thick": {"f_depth": "thick"}},
+           "ahead": {"thin": {"f_ahead": "thin"}, "thick": {"f_ahead": "thick"}},
+           "wall": {"clear": {"f_wall": "clear"}, "blocked": {"f_wall": "blocked"}},
+           "stack": {"with": {"f_stack": "with"}, "against": {"f_stack": "against"}},
+           **{blk: {side: {f"f_{blk}": side} for side in ("with", "against", "with_big", "against_big")} for blk in FLOW_SERIES}}
+L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack")      # NQ only: they read the Level-2 feature table
+BLOCK_MARKETS = {"smt": ("NQ", "ES")}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
 PLAIN = {("volatility", "high"): "only after a day whose range was above its own 20-day median",
          ("volatility", "low"): "only after a day whose range was at or below its own 20-day median",
          ("momentum", "with"): "only when RSI(14) on the idea's bars points the trade's way (long above 50, short below 50)",
@@ -94,6 +201,56 @@ PLAIN = {("volatility", "high"): "only after a day whose range was above its own
          ("news", "no"): "never on days with an 08:30 or 10:00 ET US data release",
          ("book", "agree"): "only when the top-10 order book leans the trade's way (5-minute mean imbalance)",
          ("book", "disagree"): "only when the top-10 order book leans against the trade (5-minute mean imbalance)"}
+PLAIN.update({("level", "near"): "only when the close is within half an ATR of a liquidity level (prior day, overnight, Asia, London, the evening before, 5 days, the swing high / low, equal highs / lows on NQ)",
+              ("level", "clear"): "only when the close is more than one ATR from every liquidity level",
+              ("swept", "with"): "only when liquidity on the other side was taken today (a long after a level low was swept, a short after a level high)",
+              ("swept", "against"): "only when liquidity on the trade's own side was taken today (a long after a level high was swept, a short after a level low)"})
+PLAIN.update({("momentum", "strong_with"): "only when RSI(14) is strongly with the trade (a long needs RSI at least 60, a short at most 40)",
+              ("momentum", "extreme_against"): "only when RSI(14) is at an extreme against the trade (a long needs RSI at most 30, a short at least 70)",
+              ("adx", "strong"): "only when the trend is strong: Wilder's ADX(14) on the idea's bars is at least 25",
+              ("adx", "weak"): "only when there is no trend: Wilder's ADX(14) on the idea's bars is below 20",
+              ("rvol", "high"): "only when the bar that just closed has more volume than the median of the same clock bar over the 14 days before",
+              ("rvol", "low"): "only when the bar that just closed has less volume than the median of the same clock bar over the 14 days before",
+              ("rvol", "spike"): "only when the bar that just closed has at least twice the median volume of the same clock bar over the 14 days before",
+              ("trend", "with"): "only when the slope of the EMA(50) of the idea's bars points the trade's way (a long needs it rising)",
+              ("trend", "against"): "only when the slope of the EMA(50) of the idea's bars points against the trade",
+              ("vwap", "with"): "only when the close is on the trade's side of the session's volume-weighted average price (a long needs it above)",
+              ("vwap", "against"): "only when the close is on the other side of the session's volume-weighted average price",
+              ("avwap", "with"): "only when the close is on the trade's side of the VWAP anchored at the day's anchor (09:30 for the New York sessions)",
+              ("avwap", "against"): "only when the close is on the other side of the VWAP anchored at the day's anchor (09:30 for the New York sessions)",
+              ("vwma", "with"): "only when the close is on the trade's side of the 20-bar volume-weighted moving average (a long needs it above)",
+              ("vwma", "against"): "only when the close is on the other side of the 20-bar volume-weighted moving average",
+              ("channel", "with"): "only when the close sits in the trade's third of the 20-bar channel (a long in the top third, a short in the bottom third)",
+              ("channel", "against"): "only when the close sits in the opposite third of the 20-bar channel (a dip bought, a rally sold)"})
+PLAIN.update({("pdz", "with"): "only when the close is cheap for the trade inside the day's range so far (a long in the lower half, a short in the upper half)",
+              ("pdz", "against"): "only when the close is dear for the trade inside the day's range so far (a long in the upper half, a short in the lower half)",
+              ("ote", "in"): "only when the close is in the 62-79 % retracement zone of the day's range leg that points the trade's way",
+              ("ote", "out"): "only when the day's range leg points the trade's way and the close is NOT in its 62-79 % retracement zone",
+              ("htf15", "with"): "only when the 15-minute trend points the trade's way (the last 15-minute close above its EMA(20) for a long)",
+              ("htf15", "against"): "only when the 15-minute trend points against the trade (EMA(20) of 15-minute closes)",
+              ("htf60", "with"): "only when the 60-minute trend points the trade's way (the last 60-minute close above its EMA(8) for a long)",
+              ("htf60", "against"): "only when the 60-minute trend points against the trade (EMA(8) of 60-minute closes)",
+              ("smt", "agree"): "only when NQ and ES diverge at a new extreme in the trade's favour (a long after exactly one made a new 3-hour low, a short after one made a new high)",
+              ("smt", "disagree"): "only when NQ and ES diverge at a new extreme against the trade (a long after exactly one made a new high)"})
+for _n in (20, 50):
+    PLAIN[(f"ema{_n}", "with")] = f"only when the close is on the trade's side of the EMA({_n}) of the idea's bars (a long needs it above)"
+    PLAIN[(f"ema{_n}", "against")] = f"only when the close is on the other side of the EMA({_n}) of the idea's bars"
+PLAIN.update({("depth", "thin"): "only when the top-10 book is thin: its depth is at most 80 % of its median at that minute over the 20 sessions before",
+              ("depth", "thick"): "only when the top-10 book is thick: its depth is at least 120 % of its median at that minute over the 20 sessions before",
+              ("ahead", "thin"): "only when the resting size the trade must push through (offers for a long, bids for a short) is at most 80 % of its own 15-minute median",
+              ("ahead", "thick"): "only when the resting size the trade must push through is above 80 % of its own 15-minute median",
+              ("wall", "clear"): "only when no wall stands ahead: no level of the opposing top 10 holds 5 times the median level within 8 ticks of the touch",
+              ("wall", "blocked"): "only when a wall stands ahead: a level of the opposing top 10 holds 5 times the median level within 8 ticks of the touch",
+              ("stack", "with"): "only when, in the last minute, top-10 size was added on the trade's side (or pulled on the other) by at least 5 % of the depth",
+              ("stack", "against"): "only when, in the last minute, top-10 size was added on the other side (or pulled on the trade's) by at least 5 % of the depth"})
+_WHAT = {"delta": ("net buying volume of the last 5 minutes", "buy volume minus sell volume of the aggressors"),
+         "cumdelta": ("net buying volume since the session's anchor", "buy minus sell volume of the aggressors since 09:30 (the session's anchor)"),
+         "sweep": ("net sweep volume of the last 5 minutes", "buy minus sell volume of orders that walked two price levels or more"),
+         "bigorder": ("the biggest orders of the last 5 minutes", "the largest aggressor order of each minute, big buys minus big sells")}
+for _b, (_nm, _how) in _WHAT.items():
+    for _side, _dir in (("with", "points the trade's way (long needs buyers ahead, short sellers)"), ("against", "points against the trade (a fade)")):
+        for _sfx, _bar in (("", "at least its 20-day median for that window"), ("_big", "above the 80th percentile of its 20 days for that window")):
+            PLAIN[(_b, _side + _sfx)] = f"only when {_nm} {_dir} and its share of volume is {_bar}"
 
 
 # ---- the menu ---------------------------------------------------------------------------------------------------------------
@@ -108,14 +265,26 @@ def menu_extended(root: str, rng: bool = True) -> list:
             + [{**st, "tgt_r": r} for st in new for r in S.MENU_TGT_R + X_TGT_R])
 
 
+BP_TGT_R = (0.5, 0.75)                              # the blueprint's small targets (BLUEPRINT.md version 1.1, the owner 2026-10-06)
+
+
+def menu_blueprint(root: str) -> list:
+    """THE EXIT TABLE OF THE BLUEPRINT (BLUEPRINT.md section 2; blueprint/templates/exit_menu.json): the 32 standard cells
+    first (same order, same ids: a store of the 32 keeps its cells), then the 8 standard stops x the targets 0.5 and 0.75 x
+    the stop = 48 cells, every one judged like the others."""
+    return S.menu(root) + [{**st, "tgt_r": r} for st in S.menu_stops(root) for r in BP_TGT_R]
+
+
 def exits(kind: str, root: str, family: str) -> list:
     """The exit cells of an idea: 'standard' = l2sim.menu(root); 'extended' = menu_extended (range stops only when the
-    family has a structure)."""
+    family has a structure); 'blueprint' = menu_blueprint (what a blueprint build runs: blueprint/runner.py)."""
     if kind == "standard":
         return S.menu(root)
     if kind == "extended":
         return menu_extended(root, rng=family in HEIGHTS)
-    raise ValueError(f"exits {kind!r}: 'standard' or 'extended'")
+    if kind == "blueprint":
+        return menu_blueprint(root)
+    raise ValueError(f"exits {kind!r}: 'standard', 'extended' or 'blueprint'")
 
 
 def filter_inputs(block: str, side: str, root: str = "NQ") -> dict:
@@ -161,6 +330,57 @@ def rsi(closes, n: int = RSI_N):
         g = (g * (n - 1) + (d if d > 0 else 0.0)) / n
         l = (l * (n - 1) + (-d if d < 0 else 0.0)) / n
     return 50.0 if g + l == 0 else 100.0 * g / (g + l)
+
+
+# ---- price-and-trend lines ---------------------------------------------------------------------------------------------------
+def ema_last(closes, n: int):
+    """The EMA(n) of `closes` at the last one, seeded with the first close (the Template's own EMA rule), or None before n closes."""
+    if len(closes) < n:
+        return None
+    e, k = None, 2.0 / (n + 1)
+    for c in closes:
+        e = c if e is None else e + k * (c - e)
+    return e
+
+
+def vwma_last(closes, vols, n: int = VWMA_N):
+    """sum(close x volume) / sum(volume) over the last n bars, or None (fewer than n bars, or no volume)."""
+    if len(closes) < n:
+        return None
+    v = sum(vols[-n:])
+    return None if v <= 0 else sum(c * w for c, w in zip(closes[-n:], vols[-n:])) / v
+
+
+def _dx(tr: float, p: float, m: float) -> float:
+    if tr <= 0:
+        return 0.0
+    pi, mi = 100.0 * p / tr, 100.0 * m / tr
+    return 0.0 if pi + mi == 0 else 100.0 * abs(pi - mi) / (pi + mi)
+
+
+def adx_last(H, L, C, n: int = ADX_N):
+    """Wilder's ADX(n) at the last bar (+DM / -DM / TR summed over n and then smoothed s - s / n + x; ADX = the mean of the first n
+    DX, then (ADX x (n - 1) + DX) / n), or None with fewer than 2 n bars."""
+    N = len(C)
+    if N < 2 * n:
+        return None
+    tr, pdm, mdm = [], [], []
+    for i in range(1, N):
+        up, dn = H[i] - H[i - 1], L[i - 1] - L[i]
+        pdm.append(up if up > dn and up > 0 else 0.0)
+        mdm.append(dn if dn > up and dn > 0 else 0.0)
+        tr.append(max(H[i] - L[i], abs(H[i] - C[i - 1]), abs(L[i] - C[i - 1])))
+    s_tr, s_p, s_m = sum(tr[:n]), sum(pdm[:n]), sum(mdm[:n])
+    dxs = [_dx(s_tr, s_p, s_m)]
+    for i in range(n, len(tr)):
+        s_tr += tr[i] - s_tr / n
+        s_p += pdm[i] - s_p / n
+        s_m += mdm[i] - s_m / n
+        dxs.append(_dx(s_tr, s_p, s_m))
+    a = sum(dxs[:n]) / n
+    for x in dxs[n:]:
+        a = (a * (n - 1) + x) / n
+    return a
 
 
 # ---- volume: the minute-volume profile of the prior days -----------------------------------------------------------------------
@@ -338,11 +558,23 @@ HEIGHTS = {"orb": ("the opening range: the first or_min minutes of the session",
 # ---- the mixin ------------------------------------------------------------------------------------------------------------------
 class Blocks:
     """The blocks, in front of a family class (module docstring). All default off: the family is then unchanged."""
-    DEFAULTS = {"f_dvol": "off", "f_rsi": "off", "f_cvol": "off", "f_news": "off", "f_bookopp": "off"}
+    DEFAULTS = {"f_dvol": "off", "f_rsi": "off", "f_cvol": "off", "f_news": "off", "f_bookopp": "off",
+                "f_ahead": "off", "f_wall": "off", "f_stack": "off",
+                "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
+                "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
+                **{f"f_{b}": "off" for b in FLOW_SERIES}}
     SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng")),
-              "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against")),
+              "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
               "f_cvol": ("choice", ("off", "hi", "lo")), "f_news": ("choice", ("off", "yes", "no")),
-              "f_bookopp": ("choice", ("off", "on"))}
+              "f_bookopp": ("choice", ("off", "on")), "f_ahead": ("choice", ("off", "thin", "thick")),
+              "f_wall": ("choice", ("off", "clear", "blocked")), "f_stack": ("choice", ("off", "with", "against")),
+              **{f"f_{b}": ("choice", ("off", "with", "against")) for b in ("ema20", "ema50", "vwma", "avwap", "channel")},
+              "f_level": ("choice", ("off", "near", "clear")), "f_swept": ("choice", ("off", "with", "against")),
+              "f_adx": ("choice", ("off", "strong", "weak")), "f_rvol": ("choice", ("off", "high", "low", "spike")),
+              "f_pdz": ("choice", ("off", "with", "against")), "f_ote": ("choice", ("off", "in", "out")),
+              "f_htf15": ("choice", ("off", "with", "against")), "f_htf60": ("choice", ("off", "with", "against")),
+              "f_smt": ("choice", ("off", "agree", "disagree")),
+              **{f"f_{b}": ("choice", ("off", "with", "against", "with_big", "against_big")) for b in FLOW_SERIES}}
     BASE = None                                     # the family name the class was built for
     STRUCT = None                                   # its structure in plain words; None = it has none
 
@@ -381,6 +613,98 @@ class Blocks:
             return None
         return "hi" if today > ref else "lo"
 
+    def blk_flow(self, block: str):
+        """The delta blocks' signal at this decision: (share today, the 50th and the 80th percentile of |share| on the 20 dates
+        before today) or None = no signal (module docstring, DELTA BLOCKS). share = the series over its window / the volume of
+        the same window; delta / sweep / bigorder read the last FLOW_WIN minutes, cumdelta the minutes since the session's anchor."""
+        if self.sid is None:
+            return None
+        b = _now_s(self) // 60 * 60                                 # completed minutes only
+        a = VOL_ANCHOR.get(self.sid, self.S[self.sid][0]) if block == "cumdelta" else b - FLOW_WIN * 60
+        row, root = FLOW_SERIES[block], self._cx.root
+
+        def share(iso):
+            w = flowtab.window(root, iso, a, b)
+            return None if w is None or w[0] <= 0 else w[row] / w[0]
+        x = share(self.day)
+        if x is None:
+            return None
+        ref = [abs(v) for v in (share(r["date"]) for r in self.dl[-FLOW_REF:]) if v is not None]
+        if len(ref) < FLOW_REF_MIN:
+            return None
+        return x, float(np.quantile(ref, FLOW_Q[""])), float(np.quantile(ref, FLOW_Q["_big"]))
+
+    def on_session(self, ctx):
+        super().on_session(ctx)
+        self._swept = {"hi": False, "lo": False}                     # swept block: liquidity taken since 00:00 ET of this trade date
+
+    def fam_update(self, ctx):
+        super().fam_update(ctx)
+        if self.p["f_swept"] != "off":
+            LV.track(self)
+
+    def blk_line(self, block: str):
+        """The line a LINE_BLOCKS block compares the close with, or None."""
+        if block == "ema20":
+            return ema_last(self.C, 20)
+        if block == "ema50":
+            return ema_last(self.C, 50)
+        if block == "vwma":
+            return vwma_last(self.C, self.V)
+        w = self.vwr()                                              # avwap: anchored at the day's anchor (the Template's rth VWAP)
+        return None if w is None else w[0]
+
+    def blk_channel(self):
+        """The close's position in the channel of the CH_N bars before the signal bar ((close - low) / (high - low); it may lie
+        outside 0..1), or None."""
+        if self.nb < CH_N + 1:
+            return None
+        hi, lo = max(self.H[-CH_N - 1:-1]), min(self.L[-CH_N - 1:-1])
+        return None if hi <= lo else (self.C[-1] - lo) / (hi - lo)
+
+    def blk_rvol(self):
+        """(the volume of the tf bar that just closed, the median volume of the same clock bar on the RVOL_DAYS dates before today)
+        or None: outside a session, fewer than RVOL_MIN dates with a tape, or a median of 0."""
+        if self.sid is None:
+            return None
+        b = _now_s(self) // 60 * 60
+        a = b - self.tf * 60
+        i, j = a // 60 - MIN0, b // 60 - MIN0
+        if not 0 <= i < j <= NMIN:
+            return None
+        today = sum(m[5] for m in self.M if a <= m[0] and m[0] + 60 <= b)
+        ref = []
+        for r in self.dl[-RVOL_DAYS:]:
+            c = cum_volume(self._cx.root, r["date"])
+            if c is not None:
+                ref.append(int(c[j] - c[i]))
+        if len(ref) < RVOL_MIN:
+            return None
+        med = float(np.median(ref))
+        return None if med <= 0 else (float(today), med)
+
+    def blk_wall(self, sd: int):
+        """True = a wall stands ahead (the opposing top 10 holds a level >= WALL_X x its median level within WALL_TICKS of the
+        touch), False = none, None = no signal (no fresh valid book)."""
+        cx = self._cx
+        if not S.feat_fresh(cx):
+            return None
+        side = "ask" if sd > 0 else "bid"
+        sz, med, dist = (cx.feat(f"{side}_{c}") for c in ("wall_sz", "med_sz", "wall_dist"))
+        if any(v is None or v != v for v in (sz, med, dist)) or med <= 0:
+            return None
+        return bool(sz >= WALL_X * med and dist <= WALL_TICKS)
+
+    def blk_stack(self, sd: int):
+        """The last minute's change of (the trade's side minus the other side's) top-10 size, as a share of the depth, or None."""
+        cx = self._cx
+        if not S.feat_fresh(cx):
+            return None
+        bc, ac, d = (cx.feat(c) for c in ("bid10_chg", "ask10_chg", "depth10"))
+        if any(v is None or v != v for v in (bc, ac, d)) or d <= 0:
+            return None
+        return (bc - ac) * sd / d
+
     def allowed(self, side):
         if not super().allowed(side):
             return False
@@ -394,13 +718,89 @@ class Blocks:
             return False
         if p["f_rsi"] != "off":
             r = rsi(self.C)
-            if r is None or (r - 50.0) * sd * (1 if p["f_rsi"] == "with" else -1) <= 0:
+            if r is None:
+                return False
+            d, mode = (r - 50.0) * sd, p["f_rsi"]                    # + = RSI on the trade's side of 50
+            if not (d > 0 if mode == "with" else d < 0 if mode == "against" else d >= RSI_STRONG if mode == "strong_with" else d <= -RSI_EXTREME):
                 return False
         if p["f_cvol"] != "off" and self.blk_cvol() != p["f_cvol"]:
             return False
         if p["f_bookopp"] != "off":
             m = S.book_mean5(self._cx)
             if m is None or m * sd >= 0:
+                return False
+        for blk in LINE_BLOCKS:
+            mode = p[f"f_{blk}"]
+            if mode != "off":
+                ln = self.blk_line(blk)
+                if ln is None or self.C[-1] == ln or ((self.C[-1] - ln) * sd > 0) != (mode == "with"):
+                    return False
+        if p["f_channel"] != "off":
+            pos = self.blk_channel()
+            if pos is None:
+                return False
+            top, bot = pos >= CH_EDGE, pos <= 1.0 - CH_EDGE
+            if not ((top if sd > 0 else bot) if p["f_channel"] == "with" else (bot if sd > 0 else top)):
+                return False
+        if p["f_adx"] != "off":
+            a = adx_last(self.H, self.L, self.C)
+            if a is None or not (a >= ADX_STRONG if p["f_adx"] == "strong" else a < ADX_WEAK):
+                return False
+        if p["f_rvol"] != "off":
+            sig = self.blk_rvol()
+            if sig is None:
+                return False
+            today, med = sig
+            if not (today > med if p["f_rvol"] == "high" else today < med if p["f_rvol"] == "low" else today >= RVOL_SPIKE * med):
+                return False
+        if p["f_level"] != "off":
+            dist = LV.nearest(self)
+            if dist is None or self.atr is None or not (dist <= NEAR_ATR * self.atr if p["f_level"] == "near" else dist > CLEAR_ATR * self.atr):
+                return False
+        if p["f_swept"] != "off":
+            need = ("lo" if sd > 0 else "hi") if p["f_swept"] == "with" else ("hi" if sd > 0 else "lo")
+            if not self._swept[need]:
+                return False
+        if p["f_pdz"] != "off":
+            z = Z.pdz(self)
+            if z is None or (z == "discount") != ((sd > 0) == (p["f_pdz"] == "with")):
+                return False
+        if p["f_ote"] != "off":
+            o = Z.ote(self, sd)
+            if o is None or o != (p["f_ote"] == "in"):
+                return False
+        for blk in Z.HTF:
+            mode = p[f"f_{blk}"]
+            if mode != "off":
+                t = Z.htf(self, blk)
+                if t is None or (t == sd) != (mode == "with"):
+                    return False
+        if p["f_smt"] != "off":
+            x = Z.smt(self)
+            if x is None or (x == "bull") != ((sd > 0) == (p["f_smt"] == "agree")):
+                return False
+        if p["f_ahead"] != "off":
+            t = S.thin_ahead(self._cx, sd)
+            if t is None or t != (p["f_ahead"] == "thin"):
+                return False
+        if p["f_wall"] != "off":
+            w = self.blk_wall(sd)
+            if w is None or w != (p["f_wall"] == "blocked"):
+                return False
+        if p["f_stack"] != "off":
+            x = self.blk_stack(sd)
+            if x is None or not (x >= STACK_FRAC if p["f_stack"] == "with" else x <= -STACK_FRAC):
+                return False
+        for blk in FLOW_SERIES:
+            mode = p[f"f_{blk}"]
+            if mode == "off":
+                continue
+            sig = self.blk_flow(blk)
+            if sig is None or sig[0] == 0:
+                return False
+            x, med, big = sig
+            way = mode.split("_")[0]
+            if abs(x) < (big if mode.endswith("_big") else med) or (x * sd > 0) != (way == "with"):
                 return False
         return True
 
@@ -477,7 +877,7 @@ def _bar_based(entry) -> bool:
     return len(entry) == 5 and tuple(cls.FEATURES) == () and "shift_seed" not in cls.defaults()
 
 
-BASES = {n: e for m in (port1, port2, port3, round1, timed) for n, e in m.FAMILIES.items() if _bar_based(e)}
+BASES = {n: e for m in (port1, port2, port3, round1, timed, fvg, liq) for n, e in m.FAMILIES.items() if _bar_based(e)}
 BASES.update(FAMILIES)
 
 

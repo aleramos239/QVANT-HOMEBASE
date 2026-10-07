@@ -923,3 +923,21 @@ bp_build,demo_range_break_nq-NQ-tf15,grid,ib_n,NQ,15,bp_build,,,0,128,0,0,145632
 bp_build,demo_range_break_nq-NQ-tf5,grid,ib_n,NQ,5,bp_build,,,0,128,0,0,106080,50.6,runs_bp/demo_range_break_nq-NQ-tf5: idea demo_range_break_nq,2026-10-06T10:25:42+00:00
 bp_build,demo_range_break_nq-NQ-tf30,grid,ib_n,NQ,30,bp_build,,,0,128,0,0,106080,48.27,runs_bp/demo_range_break_nq-NQ-tf30: idea demo_range_break_nq,2026-10-06T10:26:31+00:00
 bp_build,demo_range_break_nq-ES-tf15,grid,ib_n,ES,15,bp_build,,,0,128,0,0,107744,49.32,runs_bp/demo_range_break_nq-ES-tf15: idea demo_range_break_nq,2026-10-06T10:27:21+00:00
+bp_build,fvg_delta_nq-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,96,0,0,318642,299.0,runs_bp/fvg_delta_nq-NQ-tf5: idea fvg_delta_nq,2026-10-06T12:32:55+00:00
+bp_build,fvg_delta_nq__delta_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,96,0,0,111347,299.0,runs_bp/fvg_delta_nq__delta_with-NQ-tf5: idea fvg_delta_nq: filter delta with,2026-10-06T12:32:55+00:00
+bp_build,fvg_delta_nq-NQ-tf15,grid,fvg,NQ,15,bp_build,,,0,96,0,0,19784,106.01,runs_bp/fvg_delta_nq-NQ-tf15: idea fvg_delta_nq,2026-10-06T12:34:41+00:00
+bp_build,fvg_delta_nq__delta_with-NQ-tf15,grid,fvg,NQ,15,bp_build,,,0,96,0,0,1664,106.01,runs_bp/fvg_delta_nq__delta_with-NQ-tf15: idea fvg_delta_nq: filter delta with,2026-10-06T12:34:41+00:00
+bp_build,fvg_delta_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,96,0,0,79428,115.86,runs_bp/fvg_delta_nq-ES-tf5: idea fvg_delta_nq,2026-10-06T12:36:37+00:00
+bp_build,fvg_delta_nq__delta_with-ES-tf5,grid,fvg,ES,5,bp_build,,,0,96,0,0,22307,115.86,runs_bp/fvg_delta_nq__delta_with-ES-tf5: idea fvg_delta_nq: filter delta with,2026-10-06T12:36:37+00:00
+null_bp_more,c1-NQ-tf1,null,random,NQ,1,bp_build,c1,1-10,0,0,160,0,2977262,809.28,runs_bp/c1-NQ-tf1: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-06T23:53:49+00:00
+null_bp_more,c1-NQ-tf5,null,random,NQ,5,bp_build,c1,1-10,0,0,160,0,2832284,628.63,runs_bp/c1-NQ-tf5: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:04:40+00:00
+null_bp_more,c1-NQ-tf15,null,random,NQ,15,bp_build,c1,1-10,0,0,160,0,2379381,566.23,runs_bp/c1-NQ-tf15: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:14:26+00:00
+null_bp_more,c1-NQ-tf30,null,random,NQ,30,bp_build,c1,1-10,0,0,160,0,1649097,541.87,runs_bp/c1-NQ-tf30: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:23:41+00:00
+null_bp_more,c1-ES-tf1,null,random,ES,1,bp_build,c1,1-10,0,0,160,0,2886680,890.89,runs_bp/c1-ES-tf1: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:38:51+00:00
+null_bp_more,c1-ES-tf5,null,random,ES,5,bp_build,c1,1-10,0,0,160,0,2731591,473.64,runs_bp/c1-ES-tf5: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:47:00+00:00
+null_bp_more,c1-ES-tf15,null,random,ES,15,bp_build,c1,1-10,0,0,160,0,2283151,467.09,runs_bp/c1-ES-tf15: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T00:55:00+00:00
+null_bp_more,c1-ES-tf30,null,random,ES,30,bp_build,c1,1-10,0,0,160,0,1592494,407.59,runs_bp/c1-ES-tf30: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:01:57+00:00
+null_bp_more,c1-GC-tf1,null,random,GC,1,bp_build,c1,1-10,0,0,160,0,2835044,566.62,runs_bp/c1-GC-tf1: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:11:39+00:00
+null_bp_more,c1-GC-tf5,null,random,GC,5,bp_build,c1,1-10,0,0,160,0,2650862,420.3,runs_bp/c1-GC-tf5: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:18:54+00:00
+null_bp_more,c1-GC-tf15,null,random,GC,15,bp_build,c1,1-10,0,0,160,0,2175214,442.94,runs_bp/c1-GC-tf15: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:26:29+00:00
+null_bp_more,c1-GC-tf30,null,random,GC,30,bp_build,c1,1-10,0,0,160,0,1543166,467.02,runs_bp/c1-GC-tf30: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:34:26+00:00

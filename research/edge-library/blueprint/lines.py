@@ -18,6 +18,9 @@ TABLE DATA = a dict. tables.py fills it from a store; a test fills it by hand. A
   filters              [{"name", "avg_trade", "plain_avg_trade", "p_beat": [...]}]: each filter of the unit against the
                        same strategy without it (or {"name", "why"} when that cannot be read); empty = no filter      2.7
   reason               the reason of this round, as it was written before the run (2.9 also reads `round`)            2.9
+BOX DATA = the default variant ALONE (lines 3.3-3.7 before the freeze, 4.9 on the test days; tables.box fills it):
+  trades               (its trades,) the net of each of its trades, after costs at 1 contract                  3.3 4.9
+  day, n               (session days,) its net and its trades on every session day of the range (no trade = 0) 3.4-3.7
 """
 from __future__ import annotations
 
@@ -124,12 +127,14 @@ def trades(t: dict) -> dict:
 def neighbors(t: dict) -> dict:
     """2.5 Its neighbors agree: half or more of the idea's other tables have a profitable average variant. No neighbor table
     = not met (the card names them: line 0.4)."""
-    nb, need = list(t.get("neighbors") or []), R.need("2.5")
+    nb, need, copies = list(t.get("neighbors") or []), R.need("2.5"), list(t.get("copies") or [])
     k = sum(bool(_profitable(a)) for a in nb)
     share = k / len(nb) if nb else 0.0
+    out = (f"; not counted, the same trades as the home table: {', '.join(copies)}" if copies else "")
     return _row("2.5", bool(nb) and R.meets("2.5", share), share, need,
-                f"{k} of {len(nb)} neighbor tables profitable, {_pc(share)} (need {_pc(need)} or more)" if nb else
-                f"no neighbor table (need {_pc(need)} or more of them profitable)", profitable=k, tables=len(nb))
+                (f"{k} of {len(nb)} neighbor tables profitable, {_pc(share)} (need {_pc(need)} or more)" if nb else
+                 f"no neighbor table of its own (need {_pc(need)} or more of them profitable)") + out, profitable=k, tables=len(nb),
+                copies=copies)
 
 
 def sides(t: dict) -> dict:
@@ -199,12 +204,86 @@ def rounds(t: dict) -> dict:
                 reason=why or None)
 
 
+# ================================================================ phase 3: the default variant on its own, before the freeze
+
+def _pf(trades):
+    """Profit factor of a trade list: its winning trades / its losing trades, in dollars. No losing trade = inf; no trade = None."""
+    x = np.asarray(trades, np.float64)
+    if not len(x):
+        return None
+    lost = float(-x[x < 0].sum())
+    return float(x[x > 0].sum() / lost) if lost > 0 else float("inf")
+
+
+def _drawdown(day) -> float:
+    """The worst drawdown of a list of day results: the largest fall of the end-of-day running total from its high (from $0)."""
+    c = np.cumsum(np.asarray(day, np.float64))
+    return float(np.max(np.maximum.accumulate(np.maximum(c, 0.0)) - c)) if len(c) else 0.0
+
+
+def box_pf(b: dict, line: str = "3.3") -> dict:
+    """3.3 The default variant has a healthy profit factor: its winning trades / its losing trades, 1.2 or more. No losing
+    trade = met; no trade = not met. (line "4.9": the same reading on the test days.)"""
+    need, pf = R.need(line), _pf(b.get("trades", ()))
+    if pf is None:
+        return _row(line, False, None, need, f"the default variant has no trade (need a profit factor of {need:g} or more)", trades=0)
+    said = "no losing trade" if pf == float("inf") else f"profit factor {pf:.2f}"
+    return _row(line, R.meets(line, pf), pf, need, f"default variant: {said} over {len(b['trades']):,} trades (need {need:g} or more)", trades=len(b["trades"]))
+
+
+def box_ratio(b: dict) -> dict:
+    """3.4 Its profit is large against its worst drawdown: its net / its worst drawdown on closed days, 3 or more. A profit
+    without any drawdown = met; no profit = not met."""
+    need, net, dd = R.need("3.4"), float(np.sum(b["day"])), _drawdown(b["day"])
+    ratio = net / dd if dd > 0 else (float("inf") if net > 0 else 0.0)
+    return _row("3.4", R.meets("3.4", ratio), ratio, need,
+                f"default variant: net {_n(net, unit='$')} / worst drawdown {_n(dd, unit='$')} = " + ("no drawdown" if ratio == float("inf") else f"{ratio:.2f}")
+                + f" (need {need:g} or more)", net=net, drawdown=dd)
+
+
+def box_sharpe(b: dict) -> dict:
+    """3.5 Its Sharpe is high enough: mean / standard deviation of its net on every session day (no trade = 0), per year,
+    1 or more. Fewer than two days, or days that are all alike = not met."""
+    need, d = R.need("3.5"), np.asarray(b["day"], np.float64)
+    sd = float(d.std(ddof=1)) if len(d) > 1 else 0.0
+    if not sd > 0:
+        return _row("3.5", False, None, need, f"default variant: no Sharpe can be read on {len(d)} session days (need {need:g} or more)", days=len(d))
+    sh = float(d.mean() / sd * np.sqrt(R.rule("3.5")["also"]["days_per_year"]))
+    return _row("3.5", R.meets("3.5", sh), sh, need, f"default variant: Sharpe {sh:.2f} on {len(d):,} session days (need {need:g} or more)", days=len(d))
+
+
+def box_fits(b: dict) -> dict:
+    """3.6 Its worst drawdown fits the account at the smallest size: the worst drawdown of 3.4 at 1 micro, UNDER the account's
+    drawdown limit (strict: at the limit the account is bust)."""
+    need, per = R.need("3.6"), R.template("sizes")["micros_per_contract"]
+    dd = _drawdown(b["day"]) * need["micros"] / per
+    return _row("3.6", bool(dd < need["limit"]), dd, need["limit"],
+                f"default variant: worst drawdown {_n(dd, need['limit'], '$')} at {need['micros']} micro (need under {_n(need['limit'], unit='$')}, "
+                f"the limit of {need['account']})", account=need["account"])
+
+
+def box_monte(b: dict, rng=None) -> dict:
+    """3.7 Monte Carlo on the default variant alone: it makes money in 90 % of the reshuffled runs of the build days or more
+    (mc.py: the runs of line 2.8, on its own days). rng None = the fixed seed of montecarlo.json."""
+    day = np.asarray(b["day"], np.float64)[None, :]
+    tot, _ = MC.reshuffle(day, np.asarray(b.get("n", np.zeros(day.shape[1])), np.float64)[None, :], rng)
+    ok = tot[0] > R.rule("3.7")["also"]["above"]
+    share, need = float(ok.mean()), R.need("3.7")
+    return _row("3.7", R.meets("3.7", share), share, need,
+                f"default variant: makes money in {_pc(share)} of {len(ok):,} reshuffled runs (need {_pc(need)} or more)", runs=len(ok))
+
+
+BOX = (box_pf, box_ratio, box_sharpe, box_fits, box_monte)                                # lines 3.3 .. 3.7, in the law's order
+
+
 # ================================================================ phase 4: the out-of-sample test
 # TABLE DATA of the test (tables.tested fills it from the stores of the ONE read; a test fills it by hand): root, net, n and
 # controls as on build -- the LOCKED variants on the session days of the test range -- and
 #   parts        [{"name", "days": a boolean mask over the day axis}]: the two parts of the test (ranges.json)            4.1
 #   worse        (variants,) the net of each locked variant on the test days with worse fills (not given = not run)      4.5
 #   worse_fills  those fills in words: "2 ticks + 250 ms + a 100 ms late cancel"                                         4.5
+#   build_avg_trade  the average trade of the frozen table on the build days (line 2.2's number; the lock keeps it)        4.8
+#   box          the default variant alone on the test days: {trades} (BOX DATA, module docstring)                       4.9
 # A variant is one of the lock's list (the variants judged on build: no second look at which ones count).
 
 def parts(t: dict) -> dict:
@@ -278,4 +357,25 @@ def monte_test(t: dict, rng=None) -> dict:
                 f"the average variant makes money in {_pc(share)} of {len(ok):,} reshuffled runs (need {_pc(need)} or more)", runs=len(ok))
 
 
-TEST = (parts, whole, floor_test, random_test, worse_fills, best_days, monte_test)        # lines 4.1 .. 4.7, in the law's order
+def like_build(t: dict) -> dict:
+    """4.8 The test looks like the build: the average trade of the test days (line 4.3's reading) is at least half of the
+    build's own average trade (line 2.2 of the frozen table). No build figure on file, or a build that made none = not met."""
+    share, was = R.need("4.8"), t.get("build_avg_trade")
+    net, n = float(np.asarray(t["net"]).sum()), float(np.asarray(t["n"]).sum())
+    if was is None or not was > 0:
+        return _row("4.8", False, None, None, "the build's average trade is not on file with the lock" if was is None else
+                    f"the build's average trade was {_n(was, unit='$')}: there is nothing to hold the test against", build=was)
+    need = share * was
+    if not n:
+        return _row("4.8", False, None, need, f"no trade on the test days (need an average trade of {_n(need, unit='$')}, half of the build's {_n(was, unit='$')})", build=was)
+    at = net / n
+    return _row("4.8", bool(R.OPS[R.rule("4.8")["op"]](at, need)), at, need,
+                f"average trade {_n(at, need, '$')} on the test days, {_n(was, unit='$')} on build (need at least {_n(need, unit='$')}, half of the build's)", build=was)
+
+
+def box_test(t: dict) -> dict:
+    """4.9 The default variant still has a healthy profit factor on the test days: line 3.3's reading there."""
+    return box_pf(t.get("box") or {}, "4.9")
+
+
+TEST = (parts, whole, floor_test, random_test, worse_fills, best_days, monte_test, like_build, box_test)        # lines 4.1 .. 4.9, in the law's order

@@ -52,11 +52,11 @@ def test_a_frozen_and_tested_idea_hands_its_test_period_trades_to_the_simulator_
     assert h["survivors"] and set(h["survivors"]) <= set(lock["survivors"]), "a variant the freeze did not keep never reaches phase 5"
     with F.no_engine():                              # phases 5 and 6 read what is on disk: nothing is run, no tape is opened
         r, c = PO.sim(NAME, PRO, 3, 345.0, root, paths=400), EC.card(NAME, None, root)
-    assert [x["line"] for x in r["lines"]] == ["5.1", "5.2", "5.3", "5.4"]
+    assert [x["line"] for x in r["lines"]] == ["5.1", "5.2", "5.3", "5.4", "5.5"]
     assert (r["lock"], r["locked"], r["survivors"]) == (lock["hash"], len(lock["variants"]), len(h["survivors"]))
     assert r["pool"] == {"days": 8, "traded": 8} and r["chosen"]["variant"] in h["survivors"] and r["status"] == "proven_on_history"
     assert (root / NAME / "sim" / f"{PRO}.json").is_file()
-    assert [x["line"] for x in c["lines"]] == [f"6.{i}" for i in range(1, 9)] and c["variant"] == r["chosen"]["variant"] and c["history"]["trades"] == 8
+    assert [x["line"] for x in c["lines"]] == [f"6.{i}" for i in range(1, 10)] and c["variant"] == r["chosen"]["variant"] and c["history"]["trades"] == 8
     assert c["size"]["stage_b"] == r["chosen"]["eval"]["size"] and IS.read_idea(NAME, root)["phase"] == 6
     # the command line, as the connector writes it, on the same files
     q = subprocess.run([sys.executable, str(W / "bp.py"), "sim", NAME, f"--account={PRO}", "--attempts=2", "--fee-budget=230", f"--root={root}", "--json"],

@@ -204,7 +204,7 @@ def test_blocks_registers_ib_n_and_wraps_every_bar_based_library_family():
     assert [v["ib_min"] for v in lib["variants"]] == ["5", "15", "30", "60"] and lib["roots"] == ("NQ", "ES", "GC")
     assert B.IbN.SCREEN_TFS == ("5", "15", "30") and B.IbN.defaults()["mode"] == "break" and B.IbN.defaults()["ib_min"] == "60"
     want = {n for n, e in families.REGISTRY.items() if n in families.LIBRARY and not e[0].FEATURES
-            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks")}
+            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks", "fvg", "liq")}
     assert set(B.WRAPPED) == want and {"orb", "ib", "ib_n", "donchian", "first_bar_mom", "vwap_trend_pull", "vol_spike_break"} <= want
     for name, cls in B.WRAPPED.items():
         base = families.REGISTRY[name][0]
@@ -834,7 +834,7 @@ def test_the_r3_spec_files_load_and_ask_for_the_extended_menu_and_every_filter_o
     paths = RI.spec_paths(["r3_*"])
     specs = [RI.load_spec(p) for p in paths]
     assert {s["family"] for s in specs} == {"ib_n", "orb", "donchian", "first_bar_mom", "vwap_trend_pull", "vol_spike_break"}
-    every = [(b, s) for b, sides in B.FILTERS.items() for s in sides]
+    every = [(b, s) for b, sides in B.FILTERS.items() for s in sides if b in ("volatility", "momentum", "volume", "news", "book") and s in ("high", "low", "with", "against", "yes", "no", "agree", "disagree")]    # the r3 files predate the newer blocks and sides
     for s in specs:
         assert s["name"].startswith("r3_") and s["markets"] == ["NQ", "ES", "GC"] and s["exits"] == s["filter_exits"] == "extended"
         assert sorted(s["filters"]) == sorted(every) and {"5", "15"} <= set(s["bar_sizes"]) and len(s["reason"].split()) >= 8

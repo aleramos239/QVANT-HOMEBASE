@@ -15,6 +15,11 @@ Level-2 feature columns: `prop-portfolio/2026-10-01-l2/FEATURES.md`.
 | `library.py` | ledger with the HARD caps, unit stores, `plateau`, `best_of_nulls`, `c1_draws`, `admission`, member folders, `run_member` |
 | `run_menus.py` | BUILD menus: one tape pass per unit over every menu cell + its nulls; `smoke` |
 | `engine/edge_validate.py` | the tester-match gates (re-run after ANY engine change) |
+| `engine/families/fvg.py` | the `fvg` entry trigger (fair value gap: touch / mid / go entry, min_gap x ATR), 2026-10-06 |
+| `engine/flowtab.py` | per-minute tick order flow (volume, delta, sweeps, biggest order) for the DELTA filter blocks, NQ / ES / GC |
+| `engine/levels.py`, `engine/families/liq.py` | the liquidity levels and the `liq` trigger (sweep / break), the `level` and `swept` filters, 2026-10-06 |
+| `engine/tests/test_blocks_batch1.py` | the price-and-trend filter blocks (ema, vwma, avwap, channel, adx, rvol, rsi) against independent calculations |
+| `engine/bpfeat.py` | the Level-2 feature table of the blueprint build range (2025 first half) and its loader with the build seal |
 
 ## 0a. ORCHESTRATOR DECISIONS 2026-10-03 in the engine (applied P&L-blind by the engine owner; read this first)
 EDGE_SPEC's last section binds every stage. What it changed here (tests: `tests/test_edge_hold.py`, `tests/test_edge_decisions.py`):

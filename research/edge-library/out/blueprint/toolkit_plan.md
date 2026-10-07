@@ -100,8 +100,11 @@ A line reads like `2.2 FAIL average trade $41 (need $70)`. Each command also ret
 8. Workers: 8 outside desk hours, 4 inside; nothing heavy 09:18-09:36 ET.
 
 ## 7. Known limits of version 1
-The "first look" (entry alone with a time exit) needs a no-stop exit cell: not in version 1. Clock-time ideas, Level 2 filters and
-evening sessions come later. The page's own Monte Carlo and prop tile use the end-of-day rule; `sim` counts open losses: label both.
+The "first look" (entry alone with a time exit) needs a no-stop exit cell: not in version 1. Clock-time ideas and evening sessions come
+later. Level 2 filters (NQ only) are built on the build days (engine/bpfeat.py holds the 2025 first half of the table and the loader that
+carries the build seal) but are refused by `lock` and `test`: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not
+built. The delta filters read the tick order flow (engine/flowtab.py) for NQ, ES and GC; a locked idea with one tests only up to the last
+session the flow file holds (`test_range(..., cap)`). The page's own Monte Carlo and prop tile use the end-of-day rule; `sim` counts open losses: label both.
 
 ## 8. The contract between the toolkit and the connector (fixed 2026-10-06 so both sides can be built at once)
 Every command takes `--json` and then prints exactly ONE JSON object on stdout (logs go to stderr):

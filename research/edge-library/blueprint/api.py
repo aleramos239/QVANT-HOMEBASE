@@ -15,7 +15,9 @@ steps 5 and 6): `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`.
 `name` is the IDEA's name, as the connector passes it and as the app files it. A result marked `dry_run` (a dry run on
 stored units, a smoke run on named days) never counts as a verdict: the idea store reads that field.
 The later phases are modules of their own: the freeze and the one read (plan step 8), propodds.py = `bp.py sim` (phase 5,
-step 9), evalcard.py = `bp.py eval-card` (phase 6, step 10); blocklist.py = `bp.py blocks`.
+step 9), evalcard.py = `bp.py eval-card` (phase 6, step 10); blocklist.py = `bp.py blocks`. quick.py = `bp.py heatmap` and
+`bp.py mc`, two read-only views of a built idea. An EARLY LOOK at the test days (`bp.py test <name> --confirm --early-look`:
+oos.py) is kept in the idea's folder EARLY_LOOK, beside its own files and never as one of them.
 """
 from __future__ import annotations
 
@@ -32,7 +34,9 @@ from . import runner as RUN
 from . import tables as T
 
 DRY = "DRY RUN on the old build days"
-PHASE = {"card": 0, "code-check": 1, "build": 2, "pools": 2, "lock": 3, "test": 4, "sim": 5, "eval-card": 6}      # plan section 4
+PHASE = {"card": 0, "code-check": 1, "build": 2, "pools": 2, "lock": 3, "test": 4, "sim": 5, "portfolio": 5, "eval-card": 6,      # plan section 4
+         "heatmap": 2, "mc": 2}                     # the two views read a build (mc --on=test: a test, and says phase 4)
+EARLY_LOOK = "early_look"                           # <idea>/early_look/{lock.json, test.json}: an early look's files, and the field that marks them
 REFUSALS = (J.Refuse, R.RuleError, LB.CapExceeded, S.HoldoutSealed)       # what a command answers with `ok` false, exit 2
 
 

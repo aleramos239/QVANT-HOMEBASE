@@ -434,3 +434,9 @@ the 12 control pools with 10 seeds), runs_bp_test/ (test). AMENDS "write only un
 ~/.homebase/ideas/<name>/ (the owner: "saves everything in the app"). judge.py still implements v2 for the old stores: a v2 verdict is
 NOT a blueprint verdict. The 15 saved strategies have used their history under the old periods: they stay NOT PROVEN.
 Evidence behind the lines: out/blueprint/ (gate_backtest.md, protocol_gates.md, mc_gates.md, funnel.md, course_review.md).
+BLUEPRINT VERSION 1.1 (owner, 2026-10-06, after the law was held against the course line by line): + 0.7 (when it should lose) ·
+3.3-3.7 (the default variant on its own before the freeze: profit factor 1.2, net / worst drawdown 3, Sharpe 1, drawdown at 1 micro
+under $2,000, money in 90 % of reshuffled runs) · 4.8 (test average trade at least half of the build's) · 4.9 (default's profit
+factor 1.2 on the test) · 5.5-5.7 (one strategy: 50 % / 50 %; the 60 % / 75 % bar of 5.3 is the PORTFOLIO's) · 6.9 (the hard alarm:
+off until the recovery; 6.5-6.6 = the soft alarm). THE BLUEPRINT'S EXIT MENU = the 32 cells above, then the 8 stops x targets 0.5 and
+0.75 x the stop: 48 cells (families/blocks.menu_blueprint; the old library's menu() stays 32). Built 2026-10-06: BLUEPRINT.md section 11.

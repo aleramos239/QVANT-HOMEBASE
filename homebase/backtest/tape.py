@@ -339,10 +339,48 @@ def _warm_one(args) -> str:
     return d.isoformat()
 
 
+WARM_FROM = dt.date(2021, 9, 22)      # the build days' first session: nothing older is ever asked for
+# Markets the owner does not work on (2026-10-06: the FX pairs, ZN, NG, RTY, YM, CL): warm-all leaves them
+# alone. Their ticks stay in the archive; a run on one still builds its own days on first use.
+WARM_SKIP = frozenset({"6B", "6E", "6J", "ZN", "NG", "RTY", "YM", "CL"})
+
+
+def warm_all(jobs: int = 2) -> None:
+    """Keep the SHARED tape cache whole for every market in the archive, 2021-09-22 to today.
+
+    A sandboxed DRAFT run reads the shared cache but never writes it (OverlayTapeStore), so every cell
+    of a heat map re-reads the raw ticks of each day the shared cache lacks: ES with 120 days missing
+    took 2 minutes a cell instead of 12 seconds, GC with 850 missing far longer. Run nightly by launchd
+    (com.ramosquant.homebase-tapewarm): a day that is cached and fresh costs one header read, a new or
+    changed day (the tick repair pass refilled it) is rebuilt here, so a draft never meets a gap."""
+    from concurrent.futures import ProcessPoolExecutor
+    store = TapeStore()
+    today = dt.date.today()
+    roots = sorted(p.name for p in store.archive.iterdir() if p.is_dir() and p.name not in WARM_SKIP)
+    for root in roots:
+        days = store.sessions(root, WARM_FROM, today)
+        todo = [d for d in days if not store.cached(root, d)]
+        print(f"[tapewarm] {root}: {len(days)} sessions, {len(todo)} to build", flush=True)
+        if not todo:
+            continue
+        work = [(str(store.archive), str(store.cache), root, d) for d in todo]
+        with ProcessPoolExecutor(max_workers=max(1, jobs)) as ex:
+            for _ in ex.map(_warm_one, work):
+                pass
+        print(f"[tapewarm] {root}: built {len(todo)}", flush=True)
+
+
 def main(argv: list[str] | None = None) -> None:
-    """python -m homebase.backtest.tape warm NQ 2021-01-01 2024-12-31 [--jobs 4]"""
+    """python -m homebase.backtest.tape warm NQ 2021-01-01 2024-12-31 [--jobs 4]
+    python -m homebase.backtest.tape warm-all [--jobs 2]     (every market, 2021-09-22 to today)"""
     import argparse
     from concurrent.futures import ProcessPoolExecutor
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] == "warm-all":
+        ap = argparse.ArgumentParser(prog="python -m homebase.backtest.tape warm-all")
+        ap.add_argument("--jobs", type=int, default=2)
+        warm_all(ap.parse_args(argv[1:]).jobs)
+        return
     ap = argparse.ArgumentParser(prog="python -m homebase.backtest.tape")
     ap.add_argument("cmd", choices=["warm"])
     ap.add_argument("root")

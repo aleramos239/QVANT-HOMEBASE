@@ -37,6 +37,8 @@ import blueprint_frozen as F  # noqa: E402
 import judge as J  # noqa: E402
 from blueprint import freeze as FRZ  # noqa: E402
 from blueprint import jobs as JOBS  # noqa: E402
+from blueprint import lines as L  # noqa: E402
+from blueprint import mc as MC  # noqa: E402
 from blueprint import records as REC  # noqa: E402
 from blueprint import rules as R  # noqa: E402
 from blueprint import runner as RUN  # noqa: E402
@@ -44,6 +46,7 @@ from blueprint import tables as T  # noqa: E402
 
 import l2sim as S  # noqa: E402
 import library as LB  # noqa: E402
+import numpy as np  # noqa: E402
 
 NAME, KEY, WORSE = "bpl_lok", "bpl_lok-NQ-tf15", "bpl_lok-NQ-tf15-nyam-worse"
 IS = F.IS
@@ -75,6 +78,61 @@ def _job_file(root: Path, name: str, state: str) -> Path:
 
 
 # ================================================================ (a) what it refuses
+
+def box(day, trades=None) -> dict:
+    """Box data by hand: the default variant's net per session day (its trades: one a day with a net, or as listed)."""
+    day = np.asarray(day, float)
+    return {"trades": day[day != 0] if trades is None else np.asarray(trades, float), "day": day, "n": (day != 0).astype(float)}
+
+
+def test_lines_3_3_to_3_7_on_the_default_variant_alone():
+    assert [f(box([100.0, -50.0, 80.0]))["line"] for f in L.BOX] == [f"3.{i}" for i in range(3, 8)] == [k for k in R.lines() if k.startswith("3.")][2:]
+    # 3.3 profit factor: winning trades / losing trades, 1.2 or more
+    r = L.box_pf(box([120.0, -100.0]))
+    assert r["passed"] is True and (r["number"], r["need"]) == (1.2, 1.2) and r["text"] == "3.3 PASS default variant: profit factor 1.20 over 2 trades (need 1.2 or more)"
+    assert L.box_pf(box([119.0, -100.0]))["passed"] is False and L.box_pf(box([5.0, 7.0]))["passed"] is True and L.box_pf(box([0.0, 0.0]))["passed"] is False
+    assert L.box_pf(box([0.0], trades=[300.0, -200.0, -40.0]))["number"] == 1.25             # read on the TRADES, not on the days
+    # 3.4 net / worst drawdown on closed days, 3 or more: +400, then -100 (the drawdown), then +0 = 300 / 100
+    r = L.box_ratio(box([400.0, -100.0, 0.0]))
+    assert r["passed"] is True and (r["number"], r["net"], r["drawdown"]) == (3.0, 300.0, 100.0) and "net $300 / worst drawdown $100 = 3.00" in r["text"]
+    assert L.box_ratio(box([400.0, -101.0, 0.0]))["passed"] is False
+    assert L.box_ratio(box([-100.0, 500.0]))["drawdown"] == 100.0                             # a loss from the start counts: the high it falls from is $0
+    assert L.box_ratio(box([50.0, 60.0]))["passed"] is True and "no drawdown" in L.box_ratio(box([50.0, 60.0]))["text"] and L.box_ratio(box([-5.0, -6.0]))["passed"] is False
+    # 3.5 Sharpe on EVERY session day (a day without a trade is $0), per year, 1 or more
+    d = np.array([100.0, -50.0, 80.0, 0.0, 60.0, -40.0])
+    r = L.box_sharpe(box(d))
+    assert r["number"] == float(d.mean() / d.std(ddof=1) * np.sqrt(252)) and r["passed"] is True and r["days"] == 6 and R.rule("3.5")["also"]["days_per_year"] == 252
+    assert L.box_sharpe(box([10.0, -10.0, 10.0, -10.0, 1.0]))["passed"] is False and L.box_sharpe(box([5.0]))["passed"] is False and L.box_sharpe(box([5.0, 5.0]))["passed"] is False
+    # 3.6 the worst drawdown at 1 micro (a tenth of the contract) UNDER the account's limit: $20,000 at one contract is AT the limit
+    need = R.need("3.6")
+    assert need == {"micros": 1, "limit": 2000, "account": "LucidPro 50K"} and R.template("sizes")["micros_per_contract"] == 10
+    r = L.box_fits(box([30000.0, -19999.0, 5.0]))
+    assert r["passed"] is True and r["number"] == 1999.9 and r["text"] == "3.6 PASS default variant: worst drawdown $1,999.90 at 1 micro (need under $2,000, the limit of LucidPro 50K)"
+    assert L.box_fits(box([30000.0, -20000.0, 5.0]))["passed"] is False and L.box_fits(box([10.0, 20.0]))["number"] == 0.0
+    # 3.7 Monte Carlo on its own days: money in 90 % of the reshuffled runs or more (the draws of line 2.8)
+    r = L.box_monte(box([60.0, 10.0, 5.0, 20.0, 30.0, 15.0]))
+    assert r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.9, 1000) and "100 % of 1,000 reshuffled runs" in r["text"]
+    r = L.box_monte(box([400.0, -100.0, -100.0, -100.0, -100.0, 50.0]))                       # a profit that hangs on one day
+    assert r["passed"] is False and 0.3 < r["number"] < 0.9
+    one = np.array([400.0, -100.0, -100.0, -100.0, -100.0, 50.0])
+    assert r["number"] == float((MC.reshuffle(one[None, :], np.ones((1, 6)))[0][0] > 0).mean())      # the same runs as the table's (mc.py: the fixed seed)
+
+
+def test_the_freeze_is_refused_when_the_default_variant_fails_a_line_of_its_own():
+    """The law, as it stands outside a test run: one of the lines 3.3-3.7 not met = nothing is frozen. (The fixtures' tiny
+    runs say `box: "said"`: the lines are read and kept and do not refuse -- a 3-day table cannot pass them on its own.)"""
+    F.fbm()
+    root = F.fresh(F.FBM, "boxno")
+    with F.tiny(**{**F.settings(F.FBM), "box": None, "build_avg_trade": None}):
+        why = F.refused(lambda: FRZ.lock(F.FBM, root), "does not meet every line read on it before the freeze")
+    assert "3.7 FAIL default variant: makes money in " in why and "nothing is frozen" in why and "a new round when one is left" in why
+    assert not (root / F.FBM / "lock.json").exists()
+    with F.tiny(**F.settings(F.FBM)):                                                          # the same idea, said: frozen, with the lines as they read
+        lock = FRZ.lock(F.FBM, root)["lock"]
+    b = {x["line"]: x for x in lock["box"]}
+    assert list(b) == [f"3.{i}" for i in range(3, 8)] and b["3.7"]["passed"] is False and b["3.7"]["text"].startswith("3.7 FAIL ")
+    assert lock["build"] == {"avg_trade": 100.0}                                               # (the fixture's figure; without one: line 2.2's number, below)
+
 
 def test_what_a_freeze_refuses():
     root = F.fresh(NAME, "refuse")
@@ -217,7 +275,7 @@ def test_the_default_is_the_middle_of_the_variants_that_also_survive_worse_fills
 
 # ================================================================ (d) the lock
 
-KEYS = ["name", "version", "locked_utc", "round", "store", "spec", "plan", "home", "variants", "default", "survivors", "default_rule", "costs", "control",
+KEYS = ["name", "version", "locked_utc", "round", "store", "spec", "plan", "home", "variants", "default", "survivors", "default_rule", "box", "build", "costs", "control",
         "montecarlo", "code", "stores", "test_range", "hash"]
 
 
@@ -260,7 +318,7 @@ def test_the_freeze_saves_everything_under_one_hash():
     assert c["draw_seed"] == {"build": J.seed_of(u["uid"], "bp_build-c1"), "test": J.seed_of(u["uid"], "test-c1")} and c["draw_seed"]["build"] != c["draw_seed"]["test"]
     assert lock["montecarlo"] == {"runs": 1000, "seed": R.template("montecarlo")["seed"]}
     # ... the code, the stores, the test range, one hash over all of it
-    assert lock["code"] == RUN.code("orb") and set(lock["code"]) == {"l2sim.py", "l2ref.py", "families/blocks.py", "families/port1.py"}
+    assert lock["code"] == RUN.code("orb") and set(lock["code"]) == {"l2sim.py", "l2ref.py", "families/blocks.py", "families/port1.py", "flowtab.py", "bpfeat.py", "levels.py", "zones.py"}
     assert list(lock["stores"]) == [KEY, WORSE, "c1-NQ-tf15"] and all(v == FRZ.store_hash(F.OUT, k) for k, v in lock["stores"].items())
     assert all(set(v) == {"folder", "inputs_hash", "run", "cells"} and len(v["run"]) == len(v["cells"]) == 16 for v in lock["stores"].values())
     assert lock["test_range"] == {"NQ": RUN.test_range("NQ")} == r["test_range"] and lock["test_range"]["NQ"]["start"] == R.template("ranges")["test"]["start"] == "2025-07-01"
@@ -274,7 +332,7 @@ def test_the_freeze_saves_everything_under_one_hash():
     assert log[-1]["event"] == "locked" and (log[-1]["hash"], log[-1]["default"], log[-1]["round"]) == (lock["hash"], lock["default"], 1)
     # the answer: lines 3.1 and 3.2, the hash, the default and the test range in words, the next step
     b = F.by(r)
-    assert [x["line"] for x in r["lines"]] == ["3.1", "3.2"] and all(x["passed"] is True and x["text"].startswith(x["line"] + " PASS ") for x in r["lines"])
+    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 8)] and all(x["passed"] is True and x["text"].startswith(x["line"] + " PASS ") for x in r["lines"])
     assert lock["default"] in b["3.1"]["text"] and "never the best" in b["3.1"]["text"] and "2 ticks + 250 ms + a 100 ms late cancel" in b["3.1"]["text"]
     assert lock["hash"] in b["3.2"]["text"] and "new version" in b["3.2"]["text"]
     text = r["text"].split("\n")
@@ -448,7 +506,7 @@ def test_the_command_line_runs_the_pass_as_a_job_and_shows_a_frozen_idea_again()
         assert rc == 0 and d["job"] == {"id": jid, "state": "done", "progress": d["job"]["progress"]} and len(list((root / "_jobs").iterdir())) == 1, d
         lock = F.read(root / name / "lock.json")
         assert (d["hash"], d["default"], d["already"], d["status"], d["phase"]) == (lock["hash"], lock["default"], False, "lead", 3)
-        assert [x["line"] for x in d["lines"]] == ["3.1", "3.2"] and d["range"]["start"] == "2025-07-01" and (F.OUT / f"{name}-NQ-tf15-nyam-worse" / "run.json").exists()
+        assert [x["line"] for x in d["lines"]] == [f"3.{i}" for i in range(1, 8)] and d["range"]["start"] == "2025-07-01" and (F.OUT / f"{name}-NQ-tf15-nyam-worse" / "run.json").exists()
         rc, js = F.run_cli(["job", jid, "--wait=0", *last])                      # the job by its id: the freeze's own answer
         assert rc == 0 and json.loads(js)["hash"] == lock["hash"]
         with F.no_engine():                                                      # a frozen idea: shown again at once, as the connector asks for it and for a person
@@ -467,6 +525,22 @@ def test_the_command_line_runs_the_pass_as_a_job_and_shows_a_frozen_idea_again()
 
 
 # ================================================================ nothing of the test days, nothing outside the temp folder
+
+def test_the_lock_keeps_the_builds_average_trade_and_the_lines_of_the_default():
+    root = F.fresh(NAME, "boxkeep")
+    with F.tiny(build_avg_trade=None):
+        r = FRZ.lock(NAME, root)
+    lock = r["lock"]
+    sp = RUN.checked(REC.engine(lock["spec"], lock["plan"], lock["store"])[0])
+    u, st = T.bp_unit(sp, "NQ", "15", "nyam"), J.store({"dir": F.OUT, "key": KEY})
+    nets = [np.asarray(J.cellx(st, c, "nyam", u)["net"], float) for c in lock["variants"]]
+    assert lock["build"]["avg_trade"] == sum(float(x.sum()) for x in nets) / sum(len(x) for x in nets) == T.avg_trade(st, u, lock["variants"])
+    data = T.box(st, u, lock["default"], F.DAYS)
+    assert len(data["day"]) == len(F.DAYS) and float(data["day"].sum()) == float(data["trades"].sum()) and int(data["n"].sum()) == len(data["trades"])
+    mine = [f(data) for f in L.BOX]
+    assert [(x["line"], x["passed"], x["text"]) for x in lock["box"]] == [(x["line"], x["passed"], x["text"]) for x in mine]
+    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 8)] and [x["text"] for x in r["lines"]][2:] == [x["text"] for x in mine]
+
 
 def test_no_test_day_was_opened_and_nothing_was_written_outside_the_temp_folder():
     assert CALLS, "the module ran no engine call at all"

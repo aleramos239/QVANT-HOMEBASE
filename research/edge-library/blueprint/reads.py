@@ -158,7 +158,8 @@ def seed(dry_run: bool = False, root=None, **logs) -> dict:
 def _holders(root) -> dict:
     """Every unit with a read of the test days -> {name: {name, kind 'old' | 'idea', utc, verdict, state, family, market,
     session, (unit | lock)}}: the latest line of each name in the one-read log, and the units of the old read logs whether
-    they were brought into the log or not (their reads were made either way)."""
+    they were brought into the log or not (their reads were made either way). An idea is known by its lock -- or, when it
+    was never frozen, by the lock of its early look: a look at the test days is a read of them, for its relatives too."""
     IS, out = api.ideastore(), {}
     for u in old().values():
         out[u["name"]] = {**{k: u[k] for k in ("name", "unit", "family", "market", "session", "utc", "verdict")}, "kind": "old", "state": "judged", "in_log": False}
@@ -174,11 +175,13 @@ def _holders(root) -> dict:
                 h.update(kind="old", unit=lock[len(OLD):])
         else:
             h.update(kind="idea", lock=lock)
-            try:
-                frozen = json.loads((IS.idea_dir(name, root) / "lock.json").read_text(encoding="utf-8"))
-                h.update(family=frozen["spec"]["run"]["family"], market=frozen["home"]["market"], session=frozen["home"]["session"], frozen=frozen)
-            except (OSError, ValueError, KeyError, TypeError):
-                pass                                # a read without its idea folder: it is found by its name only
+            for rel in ("lock.json", f"{api.EARLY_LOOK}/lock.json"):      # the idea's lock -- or the lock of its EARLY LOOK (oos.py): that read uses the days up for its relatives too
+                try:
+                    frozen = json.loads((IS.idea_dir(name, root) / rel).read_text(encoding="utf-8"))
+                    h.update(family=frozen["spec"]["run"]["family"], market=frozen["home"]["market"], session=frozen["home"]["session"], frozen=frozen)
+                    break
+                except (OSError, ValueError, KeyError, TypeError):
+                    pass                            # a read without its idea folder: it is found by its name only
         out[name] = {**out.get(name, {}), **h}
     return out
 

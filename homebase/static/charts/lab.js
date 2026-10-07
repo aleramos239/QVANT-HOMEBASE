@@ -15,7 +15,9 @@ const MINUS = '−';
 const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
 /* ---- state ---- */
-const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false };
+const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
+  view: 'lib', bp: null, bpIdea: '' };      // view: what the sidebar lists -- 'lib' (strategies) or 'bp' (the blueprint toolkit)
+try { if (localStorage.getItem('hb_lab_view') === 'bp') S.view = 'bp'; } catch (_) { /* private mode: strategies */ }
 const buf = () => (S.cur ? S.bufs.get(S.cur) : null);
 const isDirty = (b) => b.kind !== 'builtin' && (b.kind === 'new' ? !!b.code.trim() : b.code !== b.saved);
 const takenNames = () => [...S.drafts.map((d) => d.name), ...[...S.bufs.values()].filter((b) => b.kind === 'new' && b.name).map((b) => b.name)];
@@ -49,6 +51,13 @@ async function loadLists() {
     const why = `<span class="err">No groups: ${esc(g.error)}</span>`;
     if (g.status === 409 && !S.log.some((l) => l.html === why)) log(why);
   }
+  paintLib();
+  if (S.view === 'bp') loadBlueprint();
+}
+/* The blueprint toolkit: the tools every chat has and the ideas on file, as the chart service lists them. */
+async function loadBlueprint() {
+  const r = await send('GET', '/api/tester/blueprint');
+  S.bp = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit: restart it once to see the tools here.' : r.error };
   paintLib();
 }
 async function openKey(key) {
@@ -596,11 +605,80 @@ function paintLib() {
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
-  el.innerHTML = `<div class="lb-top"><b>Strategies</b><button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
+  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint']].map(([v, t]) =>
+    `<button role="tab" data-act="view" data-v="${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
+  if (S.view === 'bp') { el.innerHTML = `<div class="lb-top">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
+  el.innerHTML = `<div class="lb-top">${seg}<button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
     ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
   el.scrollTop = top;
+}
+
+/* ---- the blueprint toolkit in the sidebar ----
+   The ideas on file and every tool of the blueprint, in the order of its phases. A tool opens as a sheet: its inputs
+   as a form, Run, and the tool's own answer in plain words -- the same answer a chat gets, because the chart service
+   runs the same tool. Nothing here judges anything, and nothing here can reach the desk. */
+function blueprintList() {
+  const B = S.bp;
+  if (!B) return '<div class="lb-empty">Loading the toolkit…</div>';
+  if (B.error) return `<div class="lb-empty">${esc(B.error)}</div>`;
+  const idea = (i) => `<button class="lb-item bp-row${S.bpIdea === i.name ? ' sel' : ''}" data-act="bpidea" data-name="${esc(i.name)}" title="Where it stands and what is next">
+      ${ICON_DOC}<span class="it"><b>${esc(i.name)}</b><small>${esc(C.bpIdeaLine(i))}</small></span><span></span></button>`;
+  const tool = (t) => `<button class="lb-item bp-row" data-act="bptool" data-tool="${esc(t.name)}" title="${esc(t.description.slice(0, 180))}">
+      ${ICON_PLAY}<span class="it"><b>${esc(C.bpTitle(t.name))}</b><small>${esc(C.bpPhase(t.phase))}</small></span><span></span></button>`;
+  return `<div class="lb-sh">Ideas</div>${B.ideas.length ? B.ideas.map(idea).join('') : '<div class="lb-empty">No idea yet. Start with Blocks, then write an Idea card.</div>'}
+    <div class="lb-sh">Tools, in order</div>${B.tools.map(tool).join('')}
+    <div class="lb-empty bp-note">Every tool follows BLUEPRINT.md and saves in the app. The same tools run in any chat.</div>`;
+}
+function bpField(f, v) {
+  const id = `bpF_${f.key}`, lab = `<label for="${id}">${esc(f.key.replace(/_/g, ' '))}${f.required ? '' : ' <i>optional</i>'}</label>`;
+  const help = f.help ? `<small>${esc(f.help)}</small>` : '';
+  if (f.kind === 'bool') return `<div class="bp-f bp-check"><input type="checkbox" id="${id}" data-bp="${esc(f.key)}"${v ? ' checked' : ''}>${lab}${help}</div>`;
+  if (f.kind === 'choice') return `<div class="bp-f">${lab}<select id="${id}" data-bp="${esc(f.key)}"><option value="">Default</option>${f.options.map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${help}</div>`;
+  if (f.kind === 'json') return `<div class="bp-f">${lab}<textarea id="${id}" data-bp="${esc(f.key)}" spellcheck="false" rows="7">${esc(v == null ? f.starter : v)}</textarea>${help}</div>`;
+  const list = f.key === 'name' && S.bp && S.bp.ideas.length ? ' list="bpIdeas"' : '';
+  return `<div class="bp-f">${lab}<input id="${id}" data-bp="${esc(f.key)}" value="${esc(v == null ? '' : v)}"${f.kind === 'int' || f.kind === 'number' ? ' inputmode="decimal"' : ''}${list} spellcheck="false" autocomplete="off"${f.kind === 'list' ? ' placeholder="name, name"' : ''}>${help}</div>`;
+}
+function toolSheet(name, preset = {}, runNow = false) {
+  const t = S.bp && S.bp.tools && S.bp.tools.find((x) => x.name === name);
+  if (!t) return;
+  const fields = C.bpFields(t.inputs), start = { ...(S.bpIdea && fields.some((f) => f.key === 'name') ? { name: S.bpIdea } : {}), ...preset };
+  const once = name === 'blueprint_test' ? '<p class="err bp-once">The test days are read ONCE for an idea. A read cannot be taken back, and a fail is final.</p>' : '';
+  const d = dialog(`<h2>${esc(C.bpTitle(name))}</h2><p><b>${esc(C.bpPhase(t.phase))}.</b> ${esc(t.description.charAt(0).toUpperCase() + t.description.slice(1))}</p>${once}
+    <div class="bp-form">${fields.map((f) => bpField(f, start[f.key])).join('')}</div>
+    <datalist id="bpIdeas">${S.bp.ideas.map((i) => `<option value="${esc(i.name)}">`).join('')}</datalist>
+    <p class="err" id="bpErr" role="alert" hidden></p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button><button class="btn btn-default" data-x="go">Run</button></div>
+    <pre class="bp-out" id="bpOut" tabindex="0" aria-live="polite" hidden></pre>`);
+  d.classList.add('wide');
+  const err = $('#bpErr', d), out = $('#bpOut', d), goBtn = $('[data-x="go"]', d);
+  let busy = false;
+  const go = async () => {
+    if (busy) return;
+    const values = {};
+    for (const x of d.querySelectorAll('[data-bp]')) values[x.dataset.bp] = x.type === 'checkbox' ? x.checked : x.value;
+    const got = C.bpArgs(fields, values);
+    for (const x of d.querySelectorAll('[data-bp]')) x.classList.toggle('bad', !!got.error && x.dataset.bp === got.key);
+    err.hidden = !got.error;
+    if (got.error) { err.textContent = got.error; const x = d.querySelector(`[data-bp="${got.key}"]`); if (x) x.focus(); return; }
+    busy = true; goBtn.disabled = true; goBtn.textContent = 'Running…';
+    out.hidden = false; out.textContent = 'Running…'; out.classList.remove('bad');
+    const r = await send('POST', '/api/tester/blueprint/run', { tool: name, args: got.args });
+    busy = false; goBtn.disabled = false;
+    if (!d.isConnected) return;                       // the sheet was closed while the tool ran: its answer is saved in the app
+    const text = r.ok ? r.json.text : r.error;
+    out.textContent = text; out.classList.toggle('bad', !r.ok || r.json.ok === false);
+    const job = r.ok ? C.bpJob(text) : '', jf = d.querySelector('[data-bp="job_id"]');
+    if (job && jf) jf.value = job;                    // a job that is still going: Run again keeps waiting on it
+    goBtn.textContent = job && jf ? 'Keep waiting' : 'Run again';
+    if (got.args.name) S.bpIdea = got.args.name;
+    loadBlueprint();
+  };
+  d.addEventListener('click', (e) => { const x = e.target.closest('[data-x]'); if (x) { if (x.dataset.x === 'go') go(); else closeDialog(); } });
+  d.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.repeat) { e.preventDefault(); go(); } });
+  const first = d.querySelector('[data-bp]');
+  if (runNow) go(); else if (first) first.focus();
 }
 
 function paintEditor() {
@@ -817,6 +895,9 @@ function act(name, el) {
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);
   else if (name === 'group') groupMenu(el);
+  else if (name === 'view') { S.view = el.dataset.v === 'bp' ? 'bp' : 'lib'; try { localStorage.setItem('hb_lab_view', S.view); } catch (_) { /* private mode */ } paintLib(); if (S.view === 'bp') loadBlueprint(); }
+  else if (name === 'bptool') toolSheet(el.dataset.tool);
+  else if (name === 'bpidea') { S.bpIdea = el.dataset.name; paintLib(); toolSheet('blueprint_status', { name: el.dataset.name }, true); }
 }
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;

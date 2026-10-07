@@ -40,10 +40,12 @@ build's seal, as before; test_range() reads file names and manifests only.
 from __future__ import annotations
 
 import contextlib
+import csv
 import datetime as dt
 import fcntl
 import hashlib
 import json
+import shutil
 import sys
 import time
 from functools import lru_cache
@@ -126,8 +128,9 @@ def _blocks():
 def checked(spec) -> dict:
     """An idea spec -- a dict, or the path of its JSON file (any file name: the idea's record names it) -> the spec as
     run_idea.check_spec fills it in. Refused: what run_idea refuses, and what the build range cannot run:
-      exits other than the standard table (line 0.2; the control pool holds its 32 cells and no other)
-      a Level 2 filter (the engine does not open its feature table for the build range)
+      exits other than the standard table (line 0.2; the control pool holds its 48 cells and no other). The card says
+      "standard"; the engine is handed the blueprint's table (EXITS: the 32 cells of the old library, then the small targets)
+      a Level 2 filter on another market than NQ (Level 2 exists for NQ only)
       a family with a `prepare` step of its own (va_reclaim: its value-area cache and its tape reads know the old build
       days only, so 2025 would raise inside a worker; the engine has to open it first)."""
     if isinstance(spec, (str, Path)):
@@ -136,19 +139,54 @@ def checked(spec) -> dict:
         except (OSError, ValueError) as e:
             raise J.Refuse(f"spec file {spec}: {e}") from None
     try:
-        sp = spec if isinstance(spec, dict) and "variants" in spec else RI.check_spec(spec)      # (run_idea's own check is not run twice)
+        done = isinstance(spec, dict) and "variants" in spec
+        sp = spec if done else RI.check_spec(spec)   # (run_idea's own check is not run twice)
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) != ("standard", "standard"):
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS)):
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table only (BLUEPRINT.md line 0.2), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
+    if (sp["exits"], sp["filter_exits"]) != (EXITS, EXITS):       # the blueprint's standard table (a copy: the caller's spec stays as it was)
+        sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for b, s in sp["filters"] if b in blocks.L2_BLOCKS]
-    if l2:
-        raise J.Refuse(f"{sp['name']}: filter {l2[0]} reads Level 2, which the engine does not open for the build range")
+    if l2 and any(m != "NQ" for m in sp["markets"]):
+        raise J.Refuse(f"{sp['name']}: filter {l2[0]} reads Level 2, which exists for NQ only, not for {next(m for m in sp['markets'] if m != 'NQ')}")
+    for b, _ in sp["filters"]:
+        ok = blocks.BLOCK_MARKETS.get(b)
+        if ok and any(m not in ok for m in sp["markets"]):
+            raise J.Refuse(f"{sp['name']}: filter {b} compares {ok[0]} with {ok[1]}: it runs on {' and '.join(ok)} only, not on "
+                           f"{next(m for m in sp['markets'] if m not in ok)}")
     if getattr(blocks.WRAPPED[sp["family"]], "prepare", None) is not None:
         raise J.Refuse(f"{sp['name']}: family {sp['family']} builds its own cache for the old build days only and reads tapes without the "
                        "build switch: it cannot run on the build range until the engine opens it")
     return sp
+
+
+EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
+L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
+
+
+def _kw(family: str, filt=None) -> dict:
+    """The run options of a store of `family`: the family's own (SCREEN_RUN) and, for a unit whose filter reads Level 2, the
+    marker of the build range's Level-2 table (`_engine` turns it into the loader: a store's run.json stays plain JSON)."""
+    blocks = _blocks()
+    kw = dict(getattr(blocks.WRAPPED[family], "SCREEN_RUN", {}))
+    if filt and filt[0] in blocks.L2_BLOCKS:
+        kw["features"] = L2
+    return kw
+
+
+def _levels():
+    RM.registry()
+    import levels
+    return levels
+
+
+def bar_roots(root, family, filt) -> list:
+    """The markets whose 5-minute bar cache a unit reads: the `liq` trigger and the level / swept filters (the swing level) read their own, SMT both."""
+    RM.registry()
+    import zones
+    return zones.prep_roots(root, family, filt)
 
 
 @lru_cache(maxsize=None)
@@ -160,6 +198,8 @@ def code(family=None) -> dict:
     """sha256/16 of the code that makes a store's trades: the engine and the random entries (a pool), + the blocks and the
     family's own module (a unit). Kept in run.json; the fingerprint of the INPUTS is another thing (fingerprint)."""
     files = ["l2sim.py", "l2ref.py"] + ([] if family is None else ["families/blocks.py", f"families/{RM.registry().MODULE_OF[family]}.py"])
+    if family is not None:
+        files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels and the zone blocks readers
     return {f: _sha(str(S.L / f)) for f in dict.fromkeys(files)}
 
 
@@ -188,28 +228,39 @@ def pool_key(root: str, tf) -> str:
     return f"c1-{root}-tf{tf}"
 
 
+def c1_grid(root: str, tf: str) -> list:
+    """run_menus.c1_grid ON THE BLUEPRINT'S TABLE: the 32 standard cells of every seed (run_menus' own rows), then the
+    small-target cells of every seed, with the pool's ids (s<seed>_<exit id>) and the cell's place in the table as `xi`.
+    Read with run_menus.NULL_SEEDS as it is when called, so _seeded() hands it the 10 seeds like the function it extends."""
+    import l2ref
+    old, menu = RM.c1_grid(root, tf), _blocks().menu_blueprint(root)
+    n = len(S.menu(root))
+    return old + [{"id": f"s{sd}_{S.cell_id(x)}", "variant": {"seed": sd}, "exit": x, "vi": sd - 1, "xi": n + k,
+                   "spec": (l2ref.Random, {"tf": str(tf), "sess": "all", "p_entry": RM.C1_P_ENTRY, "seed": sd, **x})}
+                  for sd in RM.NULL_SEEDS for k, x in enumerate(menu[n:])]
+
+
 def pool_part(root: str, tf, cells=None) -> dict:
-    """THE CONTROL POOL of a market and bar size: l2ref.Random (p_entry 0.5) x the seeds of control.json x the 32 exit cells
-    (run_menus.c1_grid, seeded), every cell in all seven sessions."""
+    """THE CONTROL POOL of a market and bar size: l2ref.Random (p_entry 0.5) x the seeds of control.json x the 48 exit cells
+    of the blueprint's table (c1_grid, seeded), every cell in all seven sessions."""
     import l2ref
     if root not in S.MENU_STOP_PTS or str(tf) not in l2ref.Random.SCREEN_TFS:
         raise J.Refuse(f"no control pool for market {root!r} and bar size {tf!r}: markets {sorted(S.MENU_STOP_PTS)}, bar sizes {l2ref.Random.SCREEN_TFS}")
     seeds = list(range(1, R.template("control")["seeds"] + 1))
     meta = {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": list(RM.DAY_PASSES),
             "note": f"{len(seeds)}-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size"}
-    return _part(pool_key(root, tf), "pool", root, tf, _seeded(RM.c1_grid, seeds, root, str(tf)), RM.DAY_PASSES, cells, meta)
+    return _part(pool_key(root, tf), "pool", root, tf, _seeded(c1_grid, seeds, root, str(tf)), RM.DAY_PASSES, cells, meta)
 
 
 def parts(spec: dict, cells=None) -> list:
     """Every store an idea needs, in run order: per market and bar size its control pool, its unit, its filter units."""
-    kw = dict(getattr(_blocks().WRAPPED[spec["family"]], "SCREEN_RUN", {}))
     out = []
     for root in spec["markets"]:
         for tf in spec["bar_sizes"]:
             out.append(pool_part(root, tf, cells))
             for u in RI.spec_units(spec, [root], [tf]):
                 out.append(_part(u["key"], "filter" if u["filter"] else "unit", root, tf, u["grid"], spec["sessions"], cells, RI.unit_meta(spec, u),
-                                 spec["family"], kw, u["filter"]))
+                                 spec["family"], _kw(spec["family"], u["filter"]), u["filter"]))
     return out
 
 
@@ -229,6 +280,9 @@ def worse_words(kw: dict) -> str:
 def _engine(kw: dict) -> dict:
     """A store's run options as the engine takes them: the late cancel is a field of its Costs, not a keyword of a run."""
     kw = dict(kw)
+    if kw.get("features") == L2:
+        import bpfeat
+        kw["features"] = bpfeat.BpL2Features(_blocks().BOOK_COLS)
     oco = kw.pop("oco_cancel_ms", 0)
     return {**kw, "costs": S.Costs(oco_cancel_ms=int(oco))} if oco else kw
 
@@ -251,7 +305,7 @@ def worse_part(spec: dict, key: str, sess: str, cells=None) -> dict:
         raise J.Refuse(f"{key} in session {sess}: not a table of {spec['name']}")
     blocks = _blocks()
     two = bool(blocks.BASES[spec["family"]][2])
-    kw = {**dict(getattr(blocks.WRAPPED[spec["family"]], "SCREEN_RUN", {})), **worse_kw(two)}
+    kw = {**_kw(spec["family"], u["filter"]), **worse_kw(two)}
     meta = {**RI.unit_meta(spec, u), "sessions": [sess], "sess_instance": sess, "worse_of": key, "worse": worse_kw(two),
             "note": f"idea {spec['name']}: {key} in session {sess} with worse fills ({worse_words(worse_kw(two))})"}
     return {**_part(worse_key(key, sess), "worse", u["root"], u["tf"], u["grid"], [sess], cells, meta, spec["family"], kw, u["filter"]), "stage": WORSE}
@@ -305,7 +359,7 @@ def cell_trades(spec, key: str, cell: str, sess: str, days=None, workers: int = 
         raise J.Refuse(f"{key} cell {cell}: not a cell of {sp['name']}")
     days = seal([d.isoformat() for d in S.sessions(*S.period(PERIOD), u["root"], allow_holdout=PERIOD)] if days is None else days)
     res = RM.merge(S.run_many(RI.cell_specs(c, [sess]), period=PERIOD, days=days, root=u["root"], workers=max(1, min(int(workers), S.MAX_WORKERS)),
-                              **dict(getattr(_blocks().WRAPPED[sp["family"]], "SCREEN_RUN", {}))))
+                              **_engine(_kw(sp["family"], u["filter"]))))
     if res["skipped_by_error"]:
         raise J.Refuse(f"{key} cell {cell}: sessions were dropped by a strategy error")
     return [t for t in res["trades"] if S.session_of(t["entry_ms"]) == sess]
@@ -320,13 +374,33 @@ def _where(out: Path, key: str) -> str:
     return f"{out.name}/{key}"
 
 
-def _stored(p: dict, out: Path) -> bool:
+def _grown(p: dict, m: dict, days) -> bool:
+    """THE EXIT TABLE GREW WITH THE LAW (BLUEPRINT.md version 1.1: the small targets): is the store on disk, run.json `m`,
+    this very store with FEWER CELLS -- the same class, inputs, sessions, days and run options for every cell it holds, and
+    nothing in it that is not asked for now? Then p["more"] = the cells still to run and p["stored"] = m: the pass runs
+    those only and _record joins them to the store (its trades stay as they are). Anything else is another store."""
+    have = [c["id"] for c in m.get("cells") or []]
+    by = {c["id"]: i for i, c in enumerate(p["grid"])}
+    if not have or len(have) >= len(p["grid"]) or any(c not in by for c in have):
+        return False
+    sub = {**p, "grid": [p["grid"][by[c]] for c in have], "runs": [p["runs"][by[c]] for c in have]}
+    if fingerprint(sub, days) != m.get("inputs_hash"):
+        return False
+    held = set(have)
+    p["stored"], p["more"] = m, [i for i, c in enumerate(p["grid"]) if c["id"] not in held]
+    return True
+
+
+def _stored(p: dict, out: Path, days=None) -> bool:
     """Is this store on disk with the same inputs? A store of other inputs, or one that is not inside the build days, is
-    refused: it is never skipped as if it were the one asked for, and never written over."""
+    refused: it is never skipped as if it were the one asked for, and never written over. (A store of the same inputs that
+    holds only part of the cells asked for is not "on disk": _grown.)"""
     f = out / p["key"] / "run.json"
     if not f.exists() or not (f.parent / "cells.npz").exists():
         return False
     m = guard(json.loads(f.read_text()), _where(out, p["key"]))
+    if m.get("inputs_hash") != p["hash"] and _grown(p, m, days):
+        return False                                # the table grew with the law: the store's cells stay, the missing ones are run (p["more"])
     if m.get("inputs_hash") != p["hash"]:
         raise J.Refuse(f"store {_where(out, p['key'])} was written from other inputs ({m.get('inputs_hash') or 'no fingerprint'}; asked now: {p['hash']}) "
                        "and is never written over: a changed idea is a new round with its own name (for example <name>_r2), and a control pool "
@@ -365,7 +439,7 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
     out = RUNS if out_dir is None else Path(out_dir)
     for p in todo:
         p["hash"] = fingerprint(p, days)
-        p["have"] = _stored(p, out)
+        p["have"] = _stored(p, out, days)
     pend = [p for p in todo if not p["have"]]
     if pend:
         may_start()
@@ -373,7 +447,7 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
             miss = [d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD) if S.hb_tape_path(d, root) is None]
             if miss:
                 raise J.Refuse(f"{len(miss)} sessions of {root} on the build range have no tape yet (first {miss[0]}): build them first (engine/l2sim.py build_tapes)")
-        cand = sum(p["cells"] for p in pend if p["kind"] != "pool")
+        cand = sum(p["cells"] if p.get("more") is None else len(p["more"]) for p in pend if p["kind"] != "pool")
         try:
             if cand:
                 LB.ledger_check(cells=cand + RM.PAPER_CELLS, path=ledger, caps=RI.CAPS)      # refused as a whole, before any pass
@@ -393,9 +467,12 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
             _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out)
         if pend:
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
-            for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] == "volume" and days is None):
+            for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] in ("volume", "rvol") and days is None):
                 S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
                 say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
+            for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
+                S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
+                say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
             groups: dict = {}
             for p in pend:
                 groups.setdefault((p["root"], p["tf"], json.dumps(p["kw"], sort_keys=True)), []).append(p)
@@ -473,7 +550,7 @@ def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say) -> 
     packed. Instances that carry state from day to day would not stand a cut: such a pass is one block."""
     specs, cut = [], [0]
     for p in parts_:
-        for one in p["runs"]:
+        for one in (p["runs"] if p.get("more") is None else [p["runs"][i] for i in p["more"]]):      # (a store that grew: its missing cells only)
             specs += one
             cut.append(len(specs))
     days = seal([d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD)] if days is None else days)     # the law's range, again
@@ -486,8 +563,9 @@ def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say) -> 
             a.add(RM.merge(res[i:j]))
     out, k = [], 0
     for p in parts_:
-        out.append([a.result() for a in acc[k:k + p["cells"]]])
-        k += p["cells"]
+        n = p["cells"] if p.get("more") is None else len(p["more"])
+        out.append([a.result() for a in acc[k:k + n]])
+        k += n
     return out
 
 
@@ -523,6 +601,12 @@ def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall
         _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, _stage(p) + "_error", why[:200])
         return _row(p, out, skipped=False, ok=False, trades=n, error=why)
     stage = _stage(p)
+    if p.get("more") is not None:                   # the table grew with the law: the store keeps its cells and gets the new ones
+        was = _join(p, res, out)
+        _book({**p, "key": p["key"]}, len(p["more"]), n, res[0]["elapsed_s"], ledger, out, f"{stage}_more",
+              f"{_where(out, p['key'])}: + {len(p['more'])} cells of the grown exit table (BLUEPRINT.md version 1.1); it held {was}")
+        say(f"{stage} {p['key']}: + {len(p['more'])} cells ({was} -> {p['cells']}), {n:,} trades more, {res[0]['elapsed_s']} s of tape (wall {wall:.0f} s, {workers} workers)")
+        return _row(p, out, skipped=False, ok=True, trades=n, code_same=p["stored"].get("code") == code(p["family"]), grown=len(p["more"]))
     _write(p["key"], {**p["meta"], "stage": stage, "period": PERIOD, "run_kw": p["kw"], "hold_to": RM.HOLD, "inputs_hash": p["hash"],
                       "code": code(p["family"]), **({"days": days} if days else {})}, p["grid"], res, out)
     _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out)
@@ -530,10 +614,46 @@ def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall
     return _row(p, out, skipped=False, ok=True, trades=n, code_same=True)
 
 
+def _join(p: dict, res: list, out: Path) -> int:
+    """A STORE WHOSE TABLE GREW (_grown): its cells and trades stay byte for byte, the cells just run are put behind them
+    (library.write_unit's format: cells.npz = `off` + one flat array per field, run.json `cells`, table.csv), and run.json
+    takes the fingerprint of the whole table and says what was added and when. Written beside the store and moved over
+    it in one step, as the library writes a store. -> how many cells it held before."""
+    key, m = p["key"], p["stored"]
+    u = LB.load_unit(key, out)
+    if [c["id"] for c in u["meta"]["cells"]] != [c["id"] for c in m["cells"]] or len(u["off"]) != len(m["cells"]) + 1:
+        raise RuntimeError(f"{_where(out, key)} changed on disk during the pass: nothing is joined")
+    new = [p["grid"][i] for i in p["more"]]
+    packs = [r["trades"].x for r in res]
+    off = np.concatenate([u["off"], int(u["off"][-1]) + np.cumsum([len(x["net"]) for x in packs], dtype=np.int64)])
+    arrays = {k: np.concatenate([u[k], *[x[k] for x in packs]]).astype(LB.DTYPES[k], copy=False) for k in LB.FIELDS}
+    cells = [{"id": c["id"], "vi": c["vi"], "xi": c["xi"], "variant": c["variant"], "exit": c["exit"], "inputs": r["meta"]["inputs"], "trades": len(r["trades"]),
+              "both_sides_sessions": r.get("both_sides_sessions"), "skipped_by_error": r.get("skipped_by_error", 0),
+              "unrealistic_winners": r.get("unrealistic_winners", 0)} for c, r in zip(new, res)]
+    doc = {**m, "cells": [*m["cells"], *cells], "inputs_hash": p["hash"], "exits": EXITS if "exits" in m else m.get("exits"),
+           "grown": [*(m.get("grown") or []), {"utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "cells": len(cells), "from": len(m["cells"]),
+                                                 "was": m.get("inputs_hash"), "code": code(p["family"]), "elapsed_s": res[0]["elapsed_s"] if res else 0.0}]}
+    if "exits" not in m:
+        doc.pop("exits")
+    d = out / key
+    tmp = d.with_name(d.name + ".tmp")
+    tmp.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(tmp / "cells.npz", off=off, **arrays)
+    (tmp / "run.json").write_text(json.dumps(doc, indent=1, default=str))
+    rows = LB.unit_table({"meta": doc, "off": off, **arrays})
+    with (tmp / "table.csv").open("w", newline="") as fh:
+        w = csv.DictWriter(fh, list(rows[0]) if rows else ["cell"])
+        w.writeheader()
+        w.writerows(rows)
+    shutil.rmtree(d)
+    tmp.rename(d)
+    return len(m["cells"])
+
+
 # ================================================================ the test days (BLUEPRINT.md phase 4): what a lock freezes, and THE ONE READ
 #
 # The out-of-sample test reads 2025-07-01 .. a market's last complete session ONCE, for a frozen idea. What is run on those
-# days, for the idea's home table and nothing else (lines 4.1-4.7 read no other table):
+# days, for the idea's home table and nothing else (lines 4.1-4.9 read no other table):
 #     <unit key>-<session>-test          the LOCKED variants (the lock's variant list), the home session's instance
 #     <unit key>-<session>-test-worse    the same cells with worse fills (line 4.5)
 #     <store>__c1-<ROOT>-tf<tf>-<session>-test    the idea's own random-entry pool: 10 seeds x the 32 exit cells, that session
@@ -566,7 +686,7 @@ def _front(root: str, start: dt.date) -> dict:
     return {d: ok for d, (_, ok) in best.items()}
 
 
-def test_range(root: str) -> dict:
+def test_range(root: str, cap=None) -> dict:
     """THE TEST RANGE OF A MARKET as a lock freezes it: the first test day (ranges.json) .. the market's LAST COMPLETE
     SESSION ON DISK = the last session of the unbroken run of complete sessions from that day on. A session is complete
     when the archive says so (the `complete` flag of its front-contract manifest) and -- NQ, which the engine replays from
@@ -577,6 +697,7 @@ def test_range(root: str) -> dict:
     rg = R.template("ranges")["test"]
     start = S._date(rg["start"])
     done = _front(root, start)
+    cap = None if cap is None else S._date(cap)       # the last date a FILTER's data reaches (delta blocks: the flow file's end)
     tapes = None
     if root == "NQ":
         tapes = set()
@@ -594,6 +715,10 @@ def test_range(root: str) -> dict:
     if not good:
         raise J.Refuse(f"{root} has no complete session on disk from {start} on" + (f" (the first one, {stops}, is not complete)" if stops else "")
                        + ": there is no test range to freeze")
+    cut = [d for d in good if cap is not None and d > cap]
+    good = [d for d in good if cap is None or d <= cap]
+    if not good:
+        raise J.Refuse(f"{root}: the data of the idea's filter ends {cap}, before the first test day {start}: there is no test range to freeze")
     end, parts = good[-1], []
     for p in rg["parts"]:
         a, b = S._date(p["start"]), (end if p["end"] == "latest" else min(end, S._date(p["end"])))
@@ -603,7 +728,8 @@ def test_range(root: str) -> dict:
         raise J.Refuse(f"the complete sessions of {root} on disk end {end}: {empty[0]} would have no session, and line 4.1 reads both parts of the test"
                        + (f" (the first session that is not complete: {stops})" if stops else ""))
     return {"start": start.isoformat(), "end": end.isoformat(), "sessions": len(good), "parts": parts,
-            "no_tape": 0 if root == "NQ" else sum(S.hb_tape_path(d, root) is None for d in good), "stops": None if stops is None else stops.isoformat()}
+            "no_tape": 0 if root == "NQ" else sum(S.hb_tape_path(d, root) is None for d in good), "stops": None if stops is None else stops.isoformat(),
+            **({"capped_by_filter": {"data_ends": cap.isoformat(), "sessions_left_out": len(cut)}} if cut else {})}
 
 
 def guard_test(meta: dict, where: str, start: str, end: str, lock=None) -> dict:
@@ -643,6 +769,8 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
     if u is None or sess not in sp["sessions"]:
         raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
+    if u["filter"] and u["filter"][0] in _blocks().L2_BLOCKS:
+        raise J.Refuse(f"{key}: a Level 2 filter cannot be tested yet: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not built")
     root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
     try:
         a, b = S._date(first), S._date(end)
@@ -666,7 +794,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     base, worse = dict(getattr(blocks.WRAPPED[sp["family"]], "SCREEN_RUN", {})), worse_kw(bool(blocks.BASES[sp["family"]][2]))
     seeds, um = list(range(1, R.template("control")["seeds"] + 1)), {**RI.unit_meta(sp, u), "sessions": [sess], "sess_instance": sess}
     stage = {"table": sw, "worse": f"{sw}_worse", "pool": f"null_{sw}"}      # the ledger stages of the read
-    todo = [{**_part(K["pool"], "pool", root, tf, _seeded(RM.c1_grid, seeds, root, str(tf)), [sess], None,
+    todo = [{**_part(K["pool"], "pool", root, tf, _seeded(c1_grid, seeds, root, str(tf)), [sess], None,
                      {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": [sess], "sess_instance": sess,
                       "idea": name, "note": f"idea {name}: its {len(seeds)}-seed random-entry pool of the test days, session {sess}"}), "stage": stage["pool"]},
             {**_part(K["table"], "filter" if u["filter"] else "unit", root, tf, grid, [sess], None,
@@ -721,9 +849,13 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
         for p in todo:                              # a store without its ledger row (a run that died between the two): booked, not run again
             if p["have"]:
                 _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out, period=sw)
-        if pend and u["filter"] and u["filter"][0] == "volume":
+        if pend and u["filter"] and u["filter"][0] in ("volume", "rvol"):
             S.wait_compute_window()                 # the volume block's minute-volume cache, opened for the frozen range
             say(f"volume block {root}: {blocks.build_minvol(root, (a, b), n, allow_holdout=sw)}")
+        if pend:
+            for rt in bar_roots(root, sp["family"], u["filter"]):
+                S.wait_compute_window()             # the 5-minute bars (swing level, SMT), opened for the frozen range
+                say(f"swing bars {rt}: {_levels().build_bars_cache(rt, (a, b), n, allow_holdout=sw)}")
         groups: dict = {}
         for p in pend:
             groups.setdefault(json.dumps(p["kw"], sort_keys=True), []).append(p)

@@ -5,7 +5,7 @@ runner.py = the one store runner of the build range, checks.py = the code check,
 its rounds, its status; jobs.py = long commands as jobs).
 Python: "$HOME/ONYX TRADING/.venv/bin/python". The command line is the connector's: <command> <the idea's name> --opt=value.
 
-  bp.py card <name> --spec=- | --spec=FILE                           PHASE 0: lines 0.1-0.6 off the idea card ({"name", "card",
+  bp.py card <name> --spec=- | --spec=FILE                           PHASE 0: lines 0.1-0.7 off the idea card ({"name", "card",
                                                                      "run"} as JSON); saved in the app, with its Lab draft
   bp.py code-check <name> --store=KEY | --trades=FILE [--looked]     PHASE 1: lines 1.1-1.6 on a store or a trades file
   bp.py build <name> --reason=TEXT [--wait=S]                        PHASE 2, ONE ROUND of the idea on file, on the build range
@@ -27,15 +27,26 @@ Python: "$HOME/ONYX TRADING/.venv/bin/python". The command line is the connector
                                                                      worse fills; lock.json under one hash, the test range frozen
   bp.py test <name> --confirm [--wait=S] [--second-look]             PHASE 4, THE ONE READ of the test days, 2025-07-01 on
                                                                      (blueprint/oos.py): the read is written to the one-read
-                                                                     log FIRST, then lines 4.1-4.7. Refused when a read is on
+                                                                     log FIRST, then lines 4.1-4.9. Refused when a read is on
                                                                      file for the idea or a same-idea relative; a fail is final
+  bp.py test <name> --confirm --early-look                           AN EARLY LOOK at the test days, the owner's own ("warn,
+                                                                     then run if I say yes"), for an idea that is NOT frozen:
+                                                                     the same read, claimed the same way, labelled EARLY LOOK
+                                                                     everywhere. It uses the test days up for the idea and can
+                                                                     never prove it (kept in early_look/, not as its test.json)
+  bp.py heatmap <name> [--place=home|1|2|..|not_here] [--round=N]    the HEAT MAP of a build round (blueprint/quick.py): every
+                                                                     variant's net on the build days, value by exit cell, and
+                                                                     what line 2.1 reads of it. Read-only: no round is counted
+  bp.py mc <name> [--on=build|test]                                  the MONTE CARLO of an idea (blueprint/quick.py): line 2.8
+                                                                     (or 4.7 on a test that is on file), then final net and
+                                                                     worst drawdown of the 1,000 reshuffled runs. Read-only
   bp.py seed-reads [--dry-run]             the one-read log filled from the OLD read logs, once (blueprint/reads.py)
   bp.py sim <name> --account=ID --attempts=N --fee-budget=USD        PHASE 5, before the eval is bought (blueprint/propodds.py):
                                                                      the app's prop simulator on the test-period trades,
                                                                      OPEN LOSSES COUNTED; per pre-set size the odds of the
                                                                      eval within 10 trading days and of the maximum payout
                                                                      within 20, plain and "live is worse"; lines 5.1-5.4
-  bp.py eval-card <name> [--fills=-|FILE]                            PHASE 6, the eval (blueprint/evalcard.py): lines 6.1-6.8
+  bp.py eval-card <name> [--fills=-|FILE]                            PHASE 6, the eval (blueprint/evalcard.py): lines 6.1-6.9
                                                                      and the drawdown table of its own test history; with
                                                                      the live fills, 6.1-6.5 are read (--help: the format)
   bp.py blocks                             everything an idea can be built from without writing code, and what version 1 refuses

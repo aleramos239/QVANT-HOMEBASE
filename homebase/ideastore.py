@@ -62,8 +62,8 @@ STATUSES = ("idea", "lead", "proven_on_history", "proven_live", "shelved")
 GROUPS = {"idea": "Ideas", "lead": "Leads", "proven_on_history": "Proven on history",
           "proven_live": "Proven live", "shelved": "Shelved"}        # the Lab group of an idea's draft, by status
 MAX_ROUNDS = 5                                                        # line 2.9
-LINES = {2: tuple(f"2.{i}" for i in range(1, 10)), 4: tuple(f"4.{i}" for i in range(1, 8)),
-         6: tuple(f"6.{i}" for i in range(1, 9))}                     # the law's lines of the phases a status hangs on
+LINES = {2: tuple(f"2.{i}" for i in range(1, 10)), 4: tuple(f"4.{i}" for i in range(1, 10)),
+         6: tuple(f"6.{i}" for i in range(1, 10))}                    # the law's lines of the phases a status hangs on (law v1.1: 4.8, 4.9, 6.9)
 LIVE_LINES = ("6.1", "6.2", "6.3", "6.4", "6.5")                      # read on live trades: each must be TRUE
 READ_STATES = ("claimed", "judged")
 EARLY_LOOK = "early_look"                                             # an early look's folder, and its result's mark
@@ -248,7 +248,7 @@ def write_lock(name, lock, root=None) -> Path:
 
 
 def write_test(name, result, root=None) -> Path:
-    """test.json: the out-of-sample test's result (lines 4.1-4.7). An early look's is not the idea's test (the
+    """test.json: the out-of-sample test's result (lines 4.1-4.9). An early look's is not the idea's test (the
     toolkit keeps it in early_look/): a result that says "early_look": true never counts, here either."""
     return _put(name, "test.json", _object(result, "test"), root)
 
@@ -261,7 +261,7 @@ def write_sim(name, account, result, root=None) -> Path:
 
 
 def write_eval(name, result, root=None) -> Path:
-    """eval.json: the eval card's result (lines 6.1-6.8)."""
+    """eval.json: the eval card's result (lines 6.1-6.9)."""
     return _put(name, "eval.json", _object(result, "eval"), root)
 
 

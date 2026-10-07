@@ -157,7 +157,74 @@ function sections(rows, groups) {
   return [...out, rest];
 }
 
-const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT };
+/* ---- the blueprint toolkit: the tools every chat has, as the Lab lists them and fills them in ---- */
+const BP_TITLES = { blueprint_blocks: 'Blocks', blueprint_card: 'Idea card', blueprint_code_check: 'Code check', blueprint_build: 'Build',
+  blueprint_lock: 'Pick and lock', blueprint_test: 'Out-of-sample test', blueprint_sim: 'Simulator: one strategy',
+  blueprint_portfolio: 'Simulator: portfolio', blueprint_eval_card: 'Eval card', blueprint_status: 'Status',
+  blueprint_heatmap: 'Heat map', blueprint_mc: 'Monte Carlo' };
+const bpTitle = (name) => BP_TITLES[name] || String(name).replace(/^blueprint_/, '').replace(/_/g, ' ');
+/* "Blueprint phase 2, the build" -> "Phase 2"; "Blueprint, before the card" -> "Before the card" */
+function bpPhase(head) {
+  const m = /phase (\d)/.exec(String(head || ''));
+  if (m) return `Phase ${m[1]}`;
+  const rest = String(head || '').replace(/^Blueprint,?\s*/, '').replace(/:.*$/, '');
+  return rest ? rest[0].toUpperCase() + rest.slice(1) : '';
+}
+/* An empty value of the shape a schema asks for: what a JSON field starts as. */
+function bpStarter(prop) {
+  const t = Array.isArray(prop.type) ? prop.type[0] : prop.type;
+  if (t === 'object') return Object.fromEntries(Object.entries(prop.properties || {}).map(([k, v]) => [k, bpStarter(v)]));
+  if (t === 'array') return [];
+  if (t === 'integer' || t === 'number') return 0;
+  if (t === 'boolean') return false;
+  return '';
+}
+/* A tool's inputs as form fields, in the schema's own order: [{key, kind, required, help, options?, starter?}].
+   kind: text | choice | int | number | bool | list (several names) | json (a card, settings, fills). */
+function bpFields(schema) {
+  const req = new Set((schema && schema.required) || []);
+  return Object.entries((schema && schema.properties) || {}).map(([key, p]) => {
+    const t = Array.isArray(p.type) ? p.type[0] : p.type, f = { key, required: req.has(key), help: p.description || '' };
+    if (t === 'string') return p.enum ? { ...f, kind: 'choice', options: p.enum } : { ...f, kind: 'text' };
+    if (t === 'integer') return { ...f, kind: 'int' };
+    if (t === 'number') return { ...f, kind: 'number' };
+    if (t === 'boolean') return { ...f, kind: 'bool' };
+    if (t === 'array' && p.items && p.items.type === 'string') return { ...f, kind: 'list' };
+    return { ...f, kind: 'json', starter: JSON.stringify(bpStarter(p), null, 1) };
+  });
+}
+/* What the form holds -> the tool's arguments: {args} or {error, key}. An empty optional field is left out, so the
+   tool's own default applies; a required one that is empty is named. values: {key: string | boolean}. */
+function bpArgs(fields, values) {
+  const args = {};
+  for (const f of fields) {
+    const v = values[f.key], miss = () => ({ error: `${f.key} is needed`, key: f.key });
+    if (f.kind === 'bool') { if (v || f.required) args[f.key] = !!v; continue; }
+    const t = String(v == null ? '' : v).trim();
+    if (!t) { if (f.required) return miss(); continue; }
+    if (f.kind === 'int' || f.kind === 'number') {
+      const n = Number(t);
+      if (!Number.isFinite(n) || (f.kind === 'int' && !Number.isInteger(n))) return { error: `${f.key}: a ${f.kind === 'int' ? 'whole ' : ''}number`, key: f.key };
+      args[f.key] = n;
+    } else if (f.kind === 'list') {
+      const xs = t.split(/[\s,]+/).filter(Boolean);
+      if (!xs.length) { if (f.required) return miss(); continue; }
+      args[f.key] = xs;
+    } else if (f.kind === 'json') {
+      try { args[f.key] = JSON.parse(t); } catch (e) { return { error: `${f.key} does not read as JSON (${e.message})`, key: f.key }; }
+    } else args[f.key] = t;
+  }
+  return { args };
+}
+/* The job a tool's answer says is still going ("... job_id='b3f1' ..."), or '' */
+const bpJob = (text) => { const m = /is still going[\s\S]*?job_id=['"]?([A-Za-z0-9_.-]+)/.exec(String(text || '')); return m ? m[1] : ''; };
+/* An idea's one line under its name: "LEAD · phase 2 · round 1" */
+function bpIdeaLine(i) {
+  return [String(i.status || 'idea').replace(/_/g, ' ').toUpperCase(), i.phase == null ? null : `phase ${i.phase}`, i.round ? `round ${i.round}` : null].filter(Boolean).join(' · ');
+}
+
+const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
+  bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

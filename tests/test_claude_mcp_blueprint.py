@@ -28,7 +28,7 @@ NAME = "nq_orb_pre"
 CARD = {"why": "the 08:30 burst carries into the open", "loser": "late faders",
         "home": {"market": "GC", "session": "pre", "bar": "15"}, "neighbors": ["GC pre 5", "NQ pre 15"],
         "not_here": "the Asian session", "main_setting": "or_min", "sides": "both",
-        "sides_why": "a burst runs either way"}
+        "sides_why": "a burst runs either way", "loses_when": "a week without direction"}
 SETTINGS = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {"mode": "break"}, "filters": [],
             "exits": "standard", "limits": {"max_tr": 1}}
 ACCOUNT = "lucid-pro-50k@2026-09-27b"
@@ -155,7 +155,7 @@ if cmd == "test":
         on_file = ideastore.exists(name, root)
         r = result(cmd, status=ideastore.status(name, root) if on_file else "idea", phase=4, early_look=True,
                    label="EARLY LOOK", lines=[dict(x, text=x["text"] + " [EARLY LOOK]") for x in lines(4, 7)],
-                   text="EARLY LOOK: every line 4.1-4.7 is true. It proves nothing.",
+                   text="EARLY LOOK: every line 4.1-4.9 is true. It proves nothing.",
                    next="The test days are used up for this idea.")
         if on_file:                                    # beside the idea's own files, never as its lock or its test
             d = ideastore.idea_dir(name, root) / "early_look"
@@ -242,20 +242,22 @@ def tail(ideas_root) -> list[str]:
 
 REQUIRED = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"], "blueprint_code_check": ["name"],
             "blueprint_build": ["name"], "blueprint_lock": ["name"], "blueprint_test": ["name", "confirm"],
-            "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_eval_card": ["name"],
+            "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_portfolio": ["names", "account"],
+            "blueprint_eval_card": ["name"],
             "blueprint_status": [], "blueprint_heatmap": ["name"], "blueprint_mc": ["name"]}
 INPUTS = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"],
           "blueprint_code_check": ["name", "store", "trades_file", "run_id", "looked"],
           "blueprint_build": ["name", "reason", "wait_s", "job_id"], "blueprint_lock": ["name"],
           "blueprint_test": ["name", "confirm", "early_look", "wait_s", "job_id"],
-          "blueprint_sim": ["name", "account", "attempts", "fee_budget"],
-          "blueprint_eval_card": ["name", "fills", "account"], "blueprint_status": ["name", "job_id"],
+          "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_portfolio": ["names", "account"],
+          "blueprint_eval_card": ["name", "fills", "account", "replay_since_stop"], "blueprint_status": ["name", "job_id"],
           "blueprint_heatmap": ["name", "place", "round"], "blueprint_mc": ["name", "on"]}
 PHASE = {"blueprint_blocks": "Blueprint, before the card",
          "blueprint_card": "Blueprint phase 0, the idea card", "blueprint_code_check": "Blueprint phase 1, the code check",
          "blueprint_build": "Blueprint phase 2, the build", "blueprint_lock": "Blueprint phase 3, the freeze",
          "blueprint_test": "Blueprint phase 4, the out-of-sample test",
-         "blueprint_sim": "Blueprint phase 5, before the eval is bought", "blueprint_eval_card": "Blueprint phase 6, the eval",
+         "blueprint_sim": "Blueprint phase 5, before the eval is bought",
+         "blueprint_portfolio": "Blueprint phase 5 for SEVERAL strategies on one account", "blueprint_eval_card": "Blueprint phase 6, the eval",
          "blueprint_status": "Blueprint, any phase", "blueprint_heatmap": "Blueprint, a view of what is saved: the heat map",
          "blueprint_mc": "Blueprint, a view of what is saved: the Monte Carlo tables"}
 
@@ -269,7 +271,7 @@ def texts(o) -> list[str]:
 
 def test_the_eleven_tools_their_inputs_and_what_each_requires():
     specs = {s["name"]: s for s in blueprint_tools.SPECS}
-    assert list(specs) == list(REQUIRED) and len(specs) == 11
+    assert list(specs) == list(REQUIRED) and len(specs) == 12
     listed = {s["name"]: s for s in tools.Toolbox().specs()}
     for name, spec in specs.items():
         schema = spec["inputSchema"]
@@ -280,7 +282,7 @@ def test_the_eleven_tools_their_inputs_and_what_each_requires():
         assert spec["description"].startswith(PHASE[name]), name               # each says which phase it is
         json.dumps(spec)
     card = specs["blueprint_card"]["inputSchema"]["properties"]["card"]
-    assert card["required"] == ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why"]
+    assert card["required"] == ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when"]
     assert card["properties"]["home"]["required"] == ["market", "session", "bar"]
     settings = specs["blueprint_card"]["inputSchema"]["properties"]["settings"]
     assert settings["properties"]["exits"]["enum"] == ["standard"] and settings["properties"]["filters"]["maxItems"] == 2
@@ -401,12 +403,13 @@ def test_every_chat_is_told_to_use_them():
 def test_every_chat_is_told_their_order_and_that_the_lab_groups_fill_themselves():
     text = rpc(protocol.Server(box()), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
     assert ("Their order: blueprint_blocks (what an idea can be built from), blueprint_card, blueprint_code_check, "
-            "blueprint_build, blueprint_lock, blueprint_test (once; early look needs the owner's yes), blueprint_sim, "
+            "blueprint_build, blueprint_lock, blueprint_test (once; early look needs the owner's yes), blueprint_sim "
+            "(one strategy; blueprint_portfolio reads several proven ones on one account), "
             "blueprint_eval_card, with blueprint_status at any time and blueprint_heatmap and blueprint_mc as "
             "read-only views of what is saved; they file each idea under its Lab group themselves, so set_group is "
             "not needed for it.") in text
     at = [text.index(name) for name in REQUIRED]                        # the order the tools are listed in
-    assert at == sorted(at) and len(set(at)) == 11
+    assert at == sorted(at) and len(set(at)) == 12
 
 
 # ---------------------------------------------------------------- where the toolkit is
@@ -766,7 +769,7 @@ def test_an_early_look_needs_the_yes_is_labelled_and_never_proves_the_idea(fake,
     out = b.call("blueprint_test", {"name": "good_idea", "confirm": True, "early_look": True}).splitlines()
     assert fake.argv() == ["test", "good_idea", "--confirm", "--early-look", "--wait=120", *tail(ideas_root)]
     assert out[0] == "Blueprint test · good_idea · LEAD · phase 4"
-    assert "EARLY LOOK: every line 4.1-4.7 is true. It proves nothing." in out
+    assert "EARLY LOOK: every line 4.1-4.9 is true. It proves nothing." in out
     assert "4.1 PASS words about 4.1 [EARLY LOOK]" in out and "Lines: 7 passed · 0 FAILED" in out
     assert not any(ln.startswith("Lab:") for ln in out)                       # the status stayed: nothing is filed anew
     assert json.loads((ideas_root / "good_idea" / "early_look" / "test.json").read_text())["early_look"] is True

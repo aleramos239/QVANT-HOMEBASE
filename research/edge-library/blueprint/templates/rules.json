@@ -1,5 +1,5 @@
 {
- "_about": "Every numbered line of BLUEPRINT.md section 2 (house law since 2026-10-05), keyed by its line number. `text` and `number` are that line's two cells, quoted exactly. `need` = the line's numbers as the code reads them (shares as fractions), `op` = how a value is held against `need` (\"above\" / \"more than\" = >, \"or more\" = >=, \"at most\" / \"or less\" = <=). `also` = a number that comes from a reading of the line, not from its words; `note` says which. A change here is a change of the law: it needs the owner's word. Locked by tests/test_blueprint_rules.py.",
+ "_about": "Every numbered line of BLUEPRINT.md section 2 (house law since 2026-10-05; version 1.1 of 2026-10-06), keyed by its line number. `text` and `number` are that line's two cells, quoted exactly. `need` = the line's numbers as the code reads them (shares as fractions), `op` = how a value is held against `need` (\"above\" / \"more than\" = >, \"or more\" = >=, \"at most\" / \"or less\" = <=). `also` = a number that comes from a reading of the line, not from its words; `note` says which. A change here is a change of the law: it needs the owner's word. Locked by tests/test_blueprint_rules.py.",
  "0.1": {
   "text": "The reason, in one sentence: why it should make money and who is on the losing side",
   "need": {
@@ -34,6 +34,13 @@
  },
  "0.6": {
   "text": "Whether it trades both sides or one side only, and why"
+ },
+ "0.7": {
+  "text": "When it should lose: one stretch or kind of market in which the idea must lose money. A build without that loss is a red flag, and no filter is added only to erase it",
+  "need": {
+   "stretches": 1
+  },
+  "note": "owner 2026-10-06, the course's extra lesson (the drawdown is the premium). The card says it in words; nobody can check a filter's motive by machine: the round's reason (2.9) is read against it by the owner"
  },
  "1.1": {
   "text": "Every trade is entered inside the stated session window"
@@ -120,7 +127,10 @@
   "text": "Its neighbors agree: the same idea on the next bar sizes and in the other sessions it should fit",
   "number": "half or more of those tables profitable",
   "need": 0.5,
-  "op": ">="
+  "op": ">=",
+  "also": {
+   "copy_share": 0.5
+  }
  },
  "2.6": {
   "text": "Long and short each make money on their own (an idea that is one-sided by its card is judged on that side)",
@@ -162,6 +172,50 @@
  },
  "3.2": {
   "text": "From here nothing changes. A change is a new version: back to phase 2, and its earlier unseen read is marked as used"
+ },
+ "3.3": {
+  "text": "The default variant has a healthy profit factor (its winning trades ÷ its losing trades, in dollars)",
+  "number": "1.2 or more",
+  "need": 1.2,
+  "op": ">=",
+  "note": "lines 3.3-3.7: the default variant of 3.1 alone, on the build days, after costs at 1 contract (owner 2026-10-06; the course reads its numbers on the one setting it trades). No losing trade = met; no trade = not met"
+ },
+ "3.4": {
+  "text": "Its profit is large against its worst drawdown (its net ÷ its worst drawdown on closed days)",
+  "number": "3 or more",
+  "need": 3,
+  "op": ">=",
+  "note": "the drawdown is read on the end-of-day running total of every session day of the build range (the course's first screen: return on max drawdown above 3). No drawdown at all and a profit = met"
+ },
+ "3.5": {
+  "text": "Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)*",
+  "number": "1 or more",
+  "need": 1,
+  "op": ">=",
+  "also": {
+   "days_per_year": 252
+  },
+  "note": "mean ÷ standard deviation of the net of every session day of the build range (a day without a trade = 0), times the square root of 252"
+ },
+ "3.6": {
+  "text": "Its worst drawdown fits the account at the smallest size: at 1 micro it stays under the drawdown limit of LucidPro 50K",
+  "number": "under 2000 dollars",
+  "need": {
+   "micros": 1,
+   "limit": 2000,
+   "account": "LucidPro 50K"
+  },
+  "note": "the worst drawdown of 3.4 ÷ the micros of a contract (sizes.json), strictly under the account's trailing limit: at the limit the account is bust. The owner's account of 2026-10-06 (the course, lesson 10: a strategy must fit the account at one micro)"
+ },
+ "3.7": {
+  "text": "Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days",
+  "number": "90 % of the runs or more (the course's line)",
+  "need": 0.9,
+  "op": ">=",
+  "also": {
+   "above": 0
+  },
+  "note": "the runs of montecarlo.json (the same draws as line 2.8) on the default variant's own days"
  },
  "4.1": {
   "text": "Both parts make money on their own: Jul-Dec 2025 and Jan-Sep 2026",
@@ -225,6 +279,20 @@
   },
   "note": "makes money = the average variant above $0 in a run; the runs are montecarlo.json"
  },
+ "4.8": {
+  "text": "The test looks like the build: the average trade (the reading of 4.3) holds against the build's own average trade of line 2.2",
+  "number": "at least half of the build's",
+  "need": 0.5,
+  "op": ">=",
+  "note": "the build's average trade = line 2.2 of the frozen table (the lock's variants on the build days), kept in the lock. \"half\" is the toolkit author's number; the course says the two should look alike and gives none"
+ },
+ "4.9": {
+  "text": "The default variant still has a healthy profit factor on the test days",
+  "number": "1.2 or more",
+  "need": 1.2,
+  "op": ">=",
+  "note": "line 3.3's reading on the test days"
+ },
  "5.1": {
   "text": "Both phases are run: passing the eval, and getting paid on the funded account, each at its own best size from the pre-set size steps",
   "number": "–"
@@ -238,7 +306,7 @@
   }
  },
  "5.3": {
-  "text": "The odds are good enough to buy",
+  "text": "Portfolio: the odds are good enough to buy",
   "number": "The owner's bar of 2026-10-03, until he changes it: eval pass within 10 trading days 60 % or more; maximum payout within 20 trading days 75 % or more",
   "need": {
    "eval": {
@@ -250,11 +318,38 @@
     "odds": 0.75
    }
   },
-  "op": ">="
+  "op": ">=",
+  "note": "the PORTFOLIO's bar since version 1.1 (bp.py portfolio); bp.py sim says how one strategy reads on it and does not judge it. The owner's numbers of 2026-10-03"
  },
  "5.4": {
   "text": "Written on the eval card before the first eval: how many attempts, and the total fee budget",
   "number": "set by the owner for each strategy"
+ },
+ "5.5": {
+  "text": "One strategy: it is more likely to pass its eval than to bust it, and more likely to be paid than to bust the funded account *(my numbers)*",
+  "number": "eval: a pass before a bust 50 % or more; funded: a first payout before a bust 50 % or more",
+  "need": {
+   "eval": 0.5,
+   "payout": 0.5
+  },
+  "op": ">=",
+  "note": "bp.py sim: ONE strategy at each phase's best size, on the \"live is worse\" row. No day limit: a walk goes on for the app's own horizon (propsim.HORIZON = 250 trading days, or the account's maximum days); a path still open then is neither. The numbers are the toolkit author's (the owner: \"yeah i like it\"); a strategy with no edge passes a $3,000 target against a $2,000 drawdown about 4 times in 10",
+  "also": {
+   "horizon": "the app's (propsim.HORIZON)"
+  }
+ },
+ "5.6": {
+  "text": "Portfolio: every strategy in it has passed the out-of-sample test on its own, and no two of them are the same idea on the same market",
+  "number": "–",
+  "need": {
+   "doubles": 0
+  },
+  "note": "bp.py portfolio. A member that is not proven on history has no test-period trades and is refused. The same idea on the same market = the same entry trigger there, or default variants that take the same side on judge.SAME_SIDE or more of judge.SAME_DAYS or more shared build days"
+ },
+ "5.7": {
+  "text": "Portfolio: a strategy is added only when it raises the portfolio's eval odds; one that lowers them stays out",
+  "number": "–",
+  "note": "bp.py portfolio: the portfolio's eval odds (line 5.3's, within its days, at its best size) against the same without that member -- the others alone, at their own best size of the whole account. Raises = strictly higher"
  },
  "6.1": {
   "text": "Live equals the test, every day of the eval: each live trade matches the tester's replay of that day. A mismatch is a bug: it is fixed before the count goes on",
@@ -283,7 +378,7 @@
  },
  "6.4": {
   "text": "Stage B, at size, read after 10, 20, 30 and 40 trades: drawdown against the Monte Carlo table of its own history",
-  "number": "under the 75th percentile: carry on · at the 75th: cut size · at the 95th: pause and review",
+  "number": "under the 75th percentile: carry on · at the 75th: cut size · at the 95th: the hard alarm (line 6.9)",
   "need": {
    "after_trades": [
     10,
@@ -297,7 +392,7 @@
  },
  "6.5": {
   "text": "Stage B: after 40 trades the average trade holds up",
-  "number": "at least half of history; otherwise pause and review",
+  "number": "at least half of history; otherwise the soft alarm (line 6.6)",
   "need": {
    "after_trades": 40,
    "share_of_history": 0.5
@@ -305,8 +400,8 @@
   "op": ">="
  },
  "6.6": {
-  "text": "A pause is a review, not a deletion: has this happened in the test history, can it be explained, is it inside normal behaviour",
-  "number": "three yes: resume · otherwise: retire",
+  "text": "The soft alarm is a review, not a switch-off by itself: has this happened in the test history, can it be explained, is it inside normal behaviour",
+  "number": "three yes: carry on · otherwise: stop until it recovers (line 6.9)",
   "need": {
    "yes": 3
   }
@@ -318,5 +413,17 @@
  "6.8": {
   "text": "A bust inside the drawdown table does not retire the strategy; running out of the attempts in 5.4 does",
   "number": "–"
+ },
+ "6.9": {
+  "text": "The hard alarm: the strategy is switched off, and no review turns it back on. A stop is not a deletion: it comes back when the tester's replay of the days since shows it has recovered",
+  "number": "last 5 months positive · last 12 months positive · last 3 months above its long-run pace",
+  "need": {
+   "positive_months": [
+    5,
+    12
+   ],
+   "above_pace_months": 3
+  },
+  "note": "the course, lesson 3 (owner 2026-10-06: \"lets use his rule\"). Read by the eval card when the tester's replay since the stop is sent with the fills (replay_since_stop): calendar months back from the replay's last day, a micro, on the variant's test-period trades and the replay; the long-run pace = the whole record a month. Not sent: a rule to follow"
  }
 }

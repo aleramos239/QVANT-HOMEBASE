@@ -289,7 +289,8 @@ def test_open_losses_change_the_answer_and_the_end_of_day_rule_would_not_see_it(
     r = PS.load_rules(PRO_FREE)
     x = steady(40.0, 250.0)                          # the same winner, but every trade is $250 a micro under water first
     t = {row["size"]: row for row in PO.table(x, r, SY.weekdays(), paths=400)}
-    assert t[10]["eval"]["plain"] == {"p": 0.0, "ci": list(E.wilson_ci(0, 400)), "bust": 1.0}          # $2,510 open on day 1: bust
+    assert {k: t[10]["eval"]["plain"][k] for k in ("p", "ci", "bust")} == {"p": 0.0, "ci": list(E.wilson_ci(0, 400)), "bust": 1.0}          # $2,510 open on day 1: bust
+    assert t[10]["eval"]["plain"]["free"] == {"p": 0.0, "ci": list(E.wilson_ci(0, 400)), "bust": 1.0}                               # ... and no day limit helps a bust on day 1
     assert t[7]["eval"]["plain"]["bust"] == 0.0 and t[7]["eval"]["plain"]["p"] == 0.0                   # $1,757 open: alive, but 10 x $280 is not $3,000
     assert all(t[s]["eval"]["plain"]["p"] == 0.0 for s in t), "no size passes once open losses count"
     net, traded, opn, _ = PO.days(PO.ledger(x, 10, r), r, SY.weekdays())
@@ -375,14 +376,15 @@ def test_what_the_freeze_and_the_read_hand_over():
     refused(lambda: PO.cell(h, "v_nobody"), "v_nobody")
 
 
-def test_the_command_reads_lines_5_1_to_5_4_and_saves_them_in_the_app():
+def test_the_command_reads_one_strategy_on_lines_5_1_to_5_5_and_saves_them_in_the_app():
     proven("syn_ok")
     with SY.no_engine():                             # the trades are read where the read left them: nothing is run, no tape is opened
         r = RESULTS["sim"] = PO.sim("syn_ok", PRO, 3, 345.0, ROOT, paths=2000)
     assert tuple(r)[:len(CONTRACT)] == CONTRACT and (r["ok"], r["command"], r["name"], r["phase"], r["status"]) == (True, "sim", "syn_ok", 5, "proven_on_history")
     json.dumps(r)                                    # plain JSON as it is: the command line prints it
-    assert [x["line"] for x in r["lines"]] == ["5.1", "5.2", "5.3", "5.4"] and all(x["passed"] is True for x in r["lines"]), [x["text"] for x in r["lines"]]
-    assert all(x["text"].startswith(f"{x['line']} PASS ") for x in r["lines"])
+    assert [x["line"] for x in r["lines"]] == ["5.1", "5.2", "5.3", "5.4", "5.5"], [x["text"] for x in r["lines"]]
+    assert [x["passed"] for x in r["lines"]] == [True, True, None, True, True]      # 5.3 is the PORTFOLIO's bar: said, not judged, for one strategy
+    assert all(x["text"].startswith(f"{x['line']} PASS ") for x in r["lines"] if x["line"] != "5.3") and by(r)["5.3"]["text"].startswith("5.3 n/a  the PORTFOLIO's bar")
     assert r["account"]["id"] == PRO and r["account"]["name"] == "LucidPro 50K · $1,200 daily limit" and r["account"]["confirmed"] is True
     assert (r["attempts"], r["fee_budget"], r["rule"], r["paths"], r["seed"]) == (3, 345.0, "open losses count", 2000, PS.SEED)
     # the surviving variants: profitable on build, on the test and with worse fills -- 2 of the 5
@@ -392,15 +394,20 @@ def test_the_command_reads_lines_5_1_to_5_4_and_saves_them_in_the_app():
     assert ch["variant"] == "v_good" and ch["margin"] == max(v["margin"] for v in r["variants"]) >= 1.0
     sizes = [x["size"] for x in r["table"]]
     assert sizes == [1, 2, 3, 5, 7, 10, 15, 20, 30, 40] and [x["size"] for x in r["table"] if x["payout"]] == [1, 2, 3, 5, 7, 10, 15, 20]
-    top = max(r["table"], key=lambda x: x["eval"]["worse"]["p"])
+    free = lambda x: x["eval"]["worse"]["free"]  # noqa: E731                     (one strategy is read on line 5.5's odds: no day limit)
+    top = max(r["table"], key=lambda x: free(x)["p"])
     mine = next(x for x in r["table"] if x["size"] == ch["eval"]["size"])
-    assert mine["size"] <= top["size"] and mine["eval"]["worse"]["ci"][1] >= top["eval"]["worse"]["ci"][0]             # the smaller of two that overlap
-    assert not any(x["eval"]["worse"]["ci"][1] >= top["eval"]["worse"]["ci"][0] for x in r["table"] if x["size"] < mine["size"])
-    assert (ch["eval"]["p"], ch["eval"]["ci"]) == (mine["eval"]["worse"]["p"], mine["eval"]["worse"]["ci"]) and ch["eval"]["plain"] == mine["eval"]["plain"]["p"] == 1.0
-    assert ch["payout"]["size"] <= 20 and ch["payout"]["p"] >= 0.75 and ch["eval"]["p"] >= 0.60
+    assert mine["size"] <= top["size"] and free(mine)["ci"][1] >= free(top)["ci"][0]                                   # the smaller of two that overlap
+    assert not any(free(x)["ci"][1] >= free(top)["ci"][0] for x in r["table"] if x["size"] < mine["size"])
+    assert (ch["eval"]["p"], ch["eval"]["ci"]) == (free(mine)["p"], free(mine)["ci"]) and ch["eval"]["plain"] == mine["eval"]["plain"]["free"]["p"] == 1.0
+    assert ch["eval"]["fast"] == mine["eval"]["worse"]["p"] and ch["payout"]["size"] <= 20 and ch["payout"]["p"] >= 0.50 and ch["eval"]["p"] >= 0.50
+    assert all(free(x)["p"] >= x["eval"]["worse"]["p"] - 0.05 for x in r["table"]), "without a day limit a pass is not rarer than inside 10 days (other paths: Monte Carlo noise aside)"
+    assert r["horizon"] == PS.HORIZON == 250 and r["days"] == {"eval": 10, "payout": 20}
     L = by(r)
     assert L["5.3"]["need"] == {"eval": {"days": 10, "odds": 0.6}, "payout": {"days": 20, "odds": 0.75}} == R.need("5.3")
-    assert L["5.3"]["number"] == {"eval": ch["eval"]["p"], "payout": ch["payout"]["p"]} and "need 60 % or more" in L["5.3"]["text"] and "need 75 % or more" in L["5.3"]["text"]
+    assert L["5.3"]["number"] == {"eval": ch["eval"]["fast"], "payout": ch["payout"]["fast"]} and "a portfolio needs 60 %" in L["5.3"]["text"] and "a portfolio needs 75 %" in L["5.3"]["text"]
+    assert L["5.5"]["need"] == {"eval": 0.5, "payout": 0.5} == R.need("5.5") and L["5.5"]["number"] == {"eval": ch["eval"]["p"], "payout": ch["payout"]["p"]}
+    assert L["5.5"]["text"].count("need 50 % or more") == 2 and "no day limit" in L["5.5"]["text"] and "250 trading days" in L["5.5"]["text"]
     assert L["5.2"]["need"] == {"win_rate": -0.05, "winners": -0.15} and "win rate -5 points" in L["5.2"]["text"] and "winners -15 %" in L["5.2"]["text"]
     assert L["5.4"]["number"] == {"attempts": 3, "fee_budget": 345.0} and "3 attempts" in L["5.4"]["text"] and "$345" in L["5.4"]["text"]
     assert f"{ch['eval']['size']} micros" in L["5.1"]["text"] and f"{ch['payout']['size']} micros" in L["5.1"]["text"]
@@ -412,25 +419,112 @@ def test_the_command_reads_lines_5_1_to_5_4_and_saves_them_in_the_app():
     f = ROOT / "syn_ok" / "sim" / f"{PRO}.json"
     assert r["saved"] == [str(f)] and read(f)["chosen"] == ch and read(f)["lines"] == r["lines"]
     idea = IS.read_idea("syn_ok", ROOT)
-    assert (idea["status"], idea["phase"]) == ("proven_on_history", 5) and [x["line"] for x in idea["lines"]] == ["5.1", "5.2", "5.3", "5.4"] and idea["next"] == r["next"]
+    assert (idea["status"], idea["phase"]) == ("proven_on_history", 5) and [x["line"] for x in idea["lines"]] == ["5.1", "5.2", "5.3", "5.4", "5.5"] and idea["next"] == r["next"]
     assert "eval-card syn_ok" in r["next"]
     assert (DRAFTS / "syn_ok.py").read_text().splitlines()[1].startswith("# syn_ok · PROVEN ON HISTORY · phase 5")       # its record in the Lab follows
     assert PO.sim("syn_ok", PRO, 3, 345.0, ROOT, paths=2000)["table"] == r["table"], "the same seed, the same answer"
 
 
-def test_odds_under_the_owners_bar_fail_line_5_3():
+def test_odds_under_one_strategys_bar_fail_line_5_5():
     proven("syn_thin", survivors=["v_thin"])                                      # only the thin variant survives
     r = PO.sim("syn_thin", FLEX, 2, 280.0, ROOT, paths=2000)
     L = by(r)
     assert r["chosen"]["variant"] == "v_thin" and r["chosen"]["margin"] < 1.0 and r["survivors"] == 1
-    assert (L["5.1"]["passed"], L["5.2"]["passed"], L["5.3"]["passed"], L["5.4"]["passed"]) == (True, True, False, True) and L["5.3"]["text"].startswith("5.3 FAIL ")
+    assert (L["5.1"]["passed"], L["5.2"]["passed"], L["5.3"]["passed"], L["5.4"]["passed"], L["5.5"]["passed"]) == (True, True, None, True, False) and L["5.5"]["text"].startswith("5.5 FAIL ")
     assert r["ok"] is True and r["status"] == "proven_on_history" and (ROOT / "syn_thin" / "sim" / f"{FLEX}.json").is_file()      # a fail is a result, and it is saved
     assert "do not meet" in r["next"] and "eval-card" not in r["next"]
     # the bar is read with the line's own comparison ("or more"), each phase against its own number
     met = lambda e, p: PO.bar({"eval": {"p": e}, "payout": {"p": p}})  # noqa: E731
-    assert met(0.60, 0.75) and not met(0.5999, 0.75) and not met(0.60, 0.7499) and met(1.0, 1.0)
+    assert met(0.60, 0.75) and not met(0.5999, 0.75) and not met(0.60, 0.7499) and met(1.0, 1.0)             # line 5.3: the portfolio's numbers
+    one = lambda e, p: PO.bar({"eval": {"p": e}, "payout": {"p": p}}, "5.5")  # noqa: E731
+    assert one(0.50, 0.50) and not one(0.4999, 0.50) and not one(0.50, 0.4999) and not PO.bar({"eval": {"p": 0.55}, "payout": {"p": 0.55}})      # ... and line 5.5: one strategy's
     unconfirmed = PO.sim("syn_thin", "apex-eod-50k@2026-09-27b", 2, 280.0, ROOT, paths=200)
     assert unconfirmed["account"]["confirmed"] is False and "unconfirmed rules" in unconfirmed["text"]
+
+
+# ================================================================ (g) the portfolio: several proven strategies on one account
+
+UP = [SY.trade(d, 60.0 if i % 2 else -20.0, 10.0) for i, d in enumerate(SY.weekdays())]                # $20 a micro a day on average, a losing day every other day
+DOWN = [SY.trade(d, -20.0 if i % 2 else 60.0, 10.0, at="10:15") for i, d in enumerate(SY.weekdays())]  # the same, on the OTHER days: together $40 a micro-pair every day
+DRAG = [SY.trade(d, 6.0 if i % 2 else -5.0, 120.0, at="10:40") for i, d in enumerate(SY.weekdays())]    # next to nothing a day, far under water first
+
+
+def member(name: str, trades: list, family: str) -> None:
+    proven(name, cells={"v": trades}, worse={"v": trades}, survivors=["v"], lock_more={"spec": {"run": {"family": family}}})
+
+
+def test_a_portfolio_is_read_on_lines_5_2_5_3_5_6_and_5_7():
+    member("pf_up", UP, "orb")
+    member("pf_down", DOWN, "ib")
+    with SY.no_engine():
+        r = RESULTS["portfolio"] = PO.portfolio(["pf_up", "pf_down"], PRO_FREE, ROOT, paths=2000)
+    assert tuple(r)[:len(CONTRACT)] == CONTRACT and (r["ok"], r["command"], r["name"], r["phase"]) == (True, "portfolio", "pf_up+pf_down", 5)
+    json.dumps(r)
+    assert [x["line"] for x in r["lines"]] == ["5.2", "5.3", "5.6", "5.7"] and all(x["passed"] is True for x in r["lines"]), [x["text"] for x in r["lines"]]
+    assert r["passed"] is True and "meets its bar" in r["next"]
+    # the members: each one's DEFAULT variant (its lock's), on the days they share
+    assert [(m["name"], m["variant"], m["survivor"], m["market"], m["trades"]) for m in r["members"]] == [("pf_up", "v", True, "NQ", 44), ("pf_down", "v", True, "NQ", 44)]
+    assert r["range"] == {"start": SY.SPAN[0], "end": SY.SPAN[1]} and r["pool"] == {"days": 44, "traded": 44} and r["days"] == {"eval": 10, "payout": 20}
+    # every member at the same size step, inside the account's maximum FOR ALL OF THEM: 40 micros in the eval, 20 from the funded account's start
+    assert [x["size"] for x in r["table"]] == [1, 2, 3, 5, 7, 10, 15, 20] and [x["size"] for x in r["table"] if x["payout"]] == [1, 2, 3, 5, 7, 10]
+    # ONE ledger: a day of the portfolio is the members' day together (no daily limit on this account: the plain sum)
+    rules, cal = PS.load_rules(PRO_FREE), SY.weekdays()
+    hu, hd = PO.handed("pf_up", ROOT), PO.handed("pf_down", ROOT)
+    cu, cd = PO.cell(hu, "v"), PO.cell(hd, "v")
+    both = PO.days(PO.together([cu, cd], 5, rules, cal), rules, cal)
+    one = [PO.days(PO.ledger(c, 5, rules), rules, cal) for c in (cu, cd)]
+    assert np.allclose(both[0], one[0][0] + one[1][0]) and both[0].min() > 0 and one[0][0].min() < 0 and both[3] == cal        # together: no losing day; alone: every other
+    assert PO.table([cu, cd], rules, cal, paths=2000) == r["table"], "the same seed, the same answer"
+    assert PO.together([cu, cd], 5, rules, cal[:10])[-1]["date"] == cal[9], "a day the members do not share is not in the ledger"
+    # 5.3 the portfolio's bar, at its best sizes (line 5.3's odds: within its days)
+    ch, L = r["chosen"], by(r)
+    assert L["5.3"]["need"] == R.need("5.3") and L["5.3"]["number"] == {"eval": ch["eval"]["p"], "payout": ch["payout"]["p"]} and ch["margin"] >= 1.0
+    assert ch["eval"]["p"] >= 0.60 and ch["payout"]["p"] >= 0.75 and PO.bar(ch) and "micros each" in L["5.3"]["text"]
+    # 5.7 every member raises the portfolio's eval odds: without it the rest reads lower (alone, at its own best size of the whole account)
+    assert all(m["helps"] and m["without"]["eval"] < ch["eval"]["p"] for m in r["members"])
+    alone = PO.read("pf_down", PO.table(cd, rules, cal, paths=2000), "5.3")["eval"]["p"]
+    assert r["members"][0]["without"]["eval"] == alone and "without pf_up" in L["5.7"]["text"] and "with all" in L["5.7"]["text"]
+    assert L["5.6"]["number"] == 0 and "no two are the same idea on the same market" in L["5.6"]["text"] and r["doubles"] == []
+    # saved in the ideas folder, beside the ideas
+    f = ROOT / "_portfolios" / f"{PRO_FREE}__pf_up+pf_down.json"
+    assert r["saved"] == [str(f)] and read(f)["lines"] == r["lines"] and read(f)["table"] == r["table"]
+    text = r["text"].splitlines()
+    assert text[0].startswith("PORTFOLIO of pf_up + pf_down (phase 5)") and PO.LABEL in r["text"] and all(x["text"] in text for x in r["lines"]) and text[-1] == r["next"]
+
+
+def test_a_double_and_a_member_that_drags_fail_their_lines():
+    member("pf_up", UP, "orb")
+    member("pf_down", DOWN, "ib")
+    member("pf_twin", DOWN, "orb")                                                # the same entry trigger as pf_up, on the same market
+    member("pf_drag", DRAG, "vwap")
+    r = PO.portfolio(["pf_up", "pf_twin"], PRO_FREE, ROOT, paths=2000)
+    L = by(r)
+    assert L["5.6"]["passed"] is False and L["5.6"]["number"] == 1 and "pf_up and pf_twin" in L["5.6"]["text"] and "the same entry trigger on the same market (orb, NQ)" in L["5.6"]["text"]
+    assert r["passed"] is False and r["doubles"] == [{"a": "pf_up", "b": "pf_twin", "why": "the same entry trigger on the same market (orb, NQ)"}] and "5.6" in r["next"]
+    r = PO.portfolio(["pf_up", "pf_down", "pf_drag"], PRO_FREE, ROOT, paths=2000)
+    L, m = by(r), {x["name"]: x for x in r["members"]}
+    assert m["pf_drag"]["helps"] is False and m["pf_drag"]["without"]["eval"] >= r["chosen"]["eval"]["p"]      # without it the other two read as well or better
+    assert L["5.7"]["passed"] is False and "pf_drag" in L["5.7"]["text"].split(" -- ")[-1] and "stay" in L["5.7"]["text"] and r["passed"] is False and "5.7" in r["next"]
+    assert [x["size"] for x in r["table"]] == [1, 2, 3, 5, 7, 10], "three members: 13 micros each would be 39, 15 each is past the account's 40"
+
+
+def test_what_a_portfolio_refuses():
+    member("pf_up", UP, "orb")
+    member("pf_down", DOWN, "ib")
+    proven("pf_failed", test_fail=("4.5",))
+    before = sorted(p.name for p in (ROOT / "_portfolios").glob("*")) if (ROOT / "_portfolios").exists() else []
+    refused(lambda: PO.portfolio(["pf_up"], PRO_FREE, ROOT), "two or more DIFFERENT ideas")
+    refused(lambda: PO.portfolio(["pf_up", "pf_up"], PRO_FREE, ROOT), "two or more DIFFERENT ideas")
+    refused(lambda: PO.portfolio(["pf_up", "pf_down"], "", ROOT), "--account=ID")
+    refused(lambda: PO.portfolio(["pf_up", "pf_down"], "nobody@1", ROOT), "nobody@1", PRO)
+    refused(lambda: PO.portfolio(["pf_up", "pf_failed"], PRO_FREE, ROOT), "pf_failed", "SHELVED", "did not pass")      # line 5.6: every member proven on its own
+    refused(lambda: PO.portfolio(["pf_up", "pf_nobody"], PRO_FREE, ROOT), "no idea pf_nobody")
+    assert before == (sorted(p.name for p in (ROOT / "_portfolios").glob("*")) if (ROOT / "_portfolios").exists() else [])
+    rc, txt = _run(["portfolio", "pf_up", "pf_down", f"--account={PRO_FREE}", f"--root={ROOT}", "--json"])
+    r = json.loads(txt)
+    assert rc == 0 and r["command"] == "portfolio" and r["name"] == "pf_up+pf_down" and r["paths"] == PS.N_PATHS and [x["line"] for x in r["lines"]] == ["5.2", "5.3", "5.6", "5.7"]
+    rc, txt = _run(["portfolio", "pf_up", f"--account={PRO_FREE}", f"--root={ROOT}", "--json"])
+    assert rc == 2 and json.loads(txt)["ok"] is False and "two or more" in json.loads(txt)["error"]
 
 
 def _run(argv: list, stdin: str = "") -> tuple:
@@ -451,7 +545,7 @@ def test_the_command_line_as_the_connector_writes_it():
                        text=True, timeout=280, cwd=str(W), stdin=subprocess.DEVNULL, env={**os.environ})
     assert q.returncode == 0 and q.stdout.count("\n") == 1, (q.stdout[-400:], q.stderr[-1500:])
     r = RESULTS["cli"] = json.loads(q.stdout)
-    assert tuple(r)[:len(CONTRACT)] == CONTRACT and r["paths"] == PS.N_PATHS == 20_000 and [x["passed"] for x in r["lines"]] == [True] * 4
+    assert tuple(r)[:len(CONTRACT)] == CONTRACT and r["paths"] == PS.N_PATHS == 20_000 and [x["passed"] for x in r["lines"]] == [True, True, None, True, True]
     assert r["chosen"]["variant"] == "v_good" and r["fee_budget"] == 345.0 and (ROOT / "syn_cli" / "sim" / f"{PRO}.json").is_file()
     for argv, word in ((["sim", "syn_cli", f"--account={PRO}", "--attempts=3"], "fee budget"), (["sim", "syn_cli", f"--account={PRO}", "--fee-budget=345"], "attempts"),
                        (["sim", "syn_cli", "--attempts=3", "--fee-budget=345"], "--account"),
@@ -500,8 +594,8 @@ def test_the_apps_connector_against_this_toolkit():
         ["blueprint_sim", {"name": "syn_conn", "account": "nobody@1", "attempts": 3, "fee_budget": 345}]])
     out = text.splitlines()
     assert ok == "ok" and out[0] == "Blueprint sim · syn_conn · PROVEN ON HISTORY · phase 5" and PO.LABEL in text
-    assert "Lines: 4 passed · 0 FAILED" in out and any(ln.startswith("Next: ") for ln in out) and any(ln.startswith("Saved: ") and f"{PRO}.json" in ln for ln in out)
-    assert all(text.count(f"\n{k} PASS ") == 1 for k in ("5.1", "5.2", "5.3", "5.4")), "each line once"
+    assert "Lines: 4 passed · 0 FAILED · 1 not judged or does not apply (5.3)" in out and any(ln.startswith("Next: ") for ln in out) and any(ln.startswith("Saved: ") and f"{PRO}.json" in ln for ln in out)
+    assert all(text.count(f"\n{k} PASS ") == 1 for k in ("5.1", "5.2", "5.4", "5.5")), "each line once"
     assert bad == "error" and why.startswith("Refused (blueprint sim): ") and "out-of-sample test is not on file" in why and "Nothing was run." in why
     assert bad2 == "error" and "nobody@1" in why2 and PRO in why2
 

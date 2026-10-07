@@ -4,7 +4,7 @@ templates/*.json; none is typed in code. A change of a number is a change of the
   rules.json       every numbered line 0.1 .. 6.8: its quoted text, its numbers (`need`) and how a value is held against
                    them (`op`: "above" / "more than" = >, "or more" = >=, "at most" / "or less" = <=)   rule() need() meets()
   ranges.json      build 2021-09-22 .. 2025-06-30 · test 2025-07-01 .. latest in two parts · the stored (old) build days
-  exit_menu.json   the standard exit table, 8 stops x 4 targets                                           exit_menu(root)
+  exit_menu.json   the standard exit table, 8 stops x 6 targets (the 32 old cells, then the small targets)  exit_menu(root)
   control.json     the random tables: 10 seeds, 4,000 draws      montecarlo.json   1,000 runs of whole days, a fixed seed
   costs.json       the cost floor per market, normal and worse fills      sizes.json · idea.json   size steps · the empty spec
   compute.json     the workers of a run inside and outside desk hours, the day blocks of a tape pass (not a line of the law)
@@ -100,10 +100,11 @@ def meets(line: str, value, key=None) -> bool:
 
 
 def exit_menu(root: str) -> list:
-    """THE 32 exit cells of the standard table for a market, in menu order (stops outer, targets inner):
-    [{'stop_mode', 'stop_val', 'tgt_r'}] -- the same cells, in the same order, as engine l2sim.menu(root)."""
+    """THE 48 exit cells of the standard table for a market, in table order: the 32 of the old library's menu (stops outer,
+    targets inner: engine l2sim.menu(root)), then the same stops x the small targets:
+    [{'stop_mode', 'stop_val', 'tgt_r'}] -- the same cells, in the same order, as engine families/blocks.menu_blueprint(root)."""
     m = template("exit_menu")
     if root not in m["stops"]["pts"]:
         raise RuleError(f"no standard exit table for market {root!r} (it has {', '.join(m['stops']['pts'])})")
     stops = [(k, v) for k in m["stop_order"] for v in (m["stops"][k][root] if isinstance(m["stops"][k], dict) else m["stops"][k])]
-    return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for k, v in stops for r in m["targets_r"]]
+    return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for part in ("targets_r", "small_targets_r") for k, v in stops for r in m[part]]

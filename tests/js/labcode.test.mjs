@@ -99,3 +99,54 @@ test('the library in sections: each group in its saved order with its rows, then
   assert.deepEqual(L.sections(rows, { groups: [], members: {} }), [{ name: '', rows }]);
   assert.deepEqual(L.sections([], { groups: ['Gold'], members: {} }), [{ name: 'Gold', rows: [] }, { name: '', rows: [] }]);
 });
+
+/* ---- the blueprint toolkit in the Lab: a tool's inputs as a form, and the form as the tool's arguments ---- */
+const SCHEMA = { type: 'object', required: ['name', 'confirm'], properties: {
+  name: { type: 'string', description: "The idea's name" }, confirm: { type: 'boolean' }, wait_s: { type: 'integer' }, fee_budget: { type: 'number' },
+  on: { type: 'string', enum: ['build', 'test'] }, names: { type: 'array', items: { type: 'string' } },
+  card: { type: 'object', properties: { why: { type: 'string' }, home: { type: 'object', properties: { market: { type: 'string' }, bar: { type: 'string' } } }, neighbors: { type: 'array', items: { type: 'string' } } } },
+  fills: { type: 'array', items: { type: 'object' } }, exit_time: { type: ['string', 'number'] } } };
+
+test('a blueprint tool has a plain title and its phase', () => {
+  assert.equal(L.bpTitle('blueprint_card'), 'Idea card');
+  assert.equal(L.bpTitle('blueprint_portfolio'), 'Simulator: portfolio');
+  assert.equal(L.bpTitle('blueprint_new_thing'), 'new thing');          // a tool the page has no name for yet is still listed
+  assert.equal(L.bpPhase('Blueprint phase 2, the build (2021-09-22 to 2025-06-30)'), 'Phase 2');
+  assert.equal(L.bpPhase('Blueprint, before the card'), 'Before the card');
+  assert.equal(L.bpPhase('Blueprint, a view of what is saved: the heat map'), 'A view of what is saved');
+  assert.equal(L.bpPhase(''), '');
+});
+
+test("a tool's inputs become form fields in the schema's order, each of the kind its type asks for", () => {
+  const f = L.bpFields(SCHEMA);
+  assert.deepEqual(f.map((x) => [x.key, x.kind, x.required]), [['name', 'text', true], ['confirm', 'bool', true], ['wait_s', 'int', false],
+    ['fee_budget', 'number', false], ['on', 'choice', false], ['names', 'list', false], ['card', 'json', false], ['fills', 'json', false], ['exit_time', 'text', false]]);
+  assert.deepEqual(f[4].options, ['build', 'test']);
+  assert.equal(f[0].help, "The idea's name");
+  assert.deepEqual(JSON.parse(f[6].starter), { why: '', home: { market: '', bar: '' }, neighbors: [] });   // an empty card of the right shape to fill in
+  assert.equal(f[7].starter, '[]');
+  assert.deepEqual(L.bpFields({ type: 'object', properties: {} }), []);
+  assert.deepEqual(L.bpFields(null), []);
+});
+
+test('the form becomes the arguments: an empty optional field is left out, a missing required one is named', () => {
+  const f = L.bpFields(SCHEMA);
+  assert.deepEqual(L.bpArgs(f, { name: ' nq_orb ', confirm: false, wait_s: '', fee_budget: '345.5', on: 'test', names: 'a, b  c', card: '{"why": "x"}', fills: ' ' }),
+    { args: { name: 'nq_orb', confirm: false, fee_budget: 345.5, on: 'test', names: ['a', 'b', 'c'], card: { why: 'x' } } });
+  assert.deepEqual(L.bpArgs(f, { name: '', confirm: true }), { error: 'name is needed', key: 'name' });
+  assert.deepEqual(L.bpArgs(f, { name: 'x', wait_s: '1.5' }), { error: 'wait_s: a whole number', key: 'wait_s' });
+  assert.deepEqual(L.bpArgs(f, { name: 'x', fee_budget: 'a lot' }), { error: 'fee_budget: a number', key: 'fee_budget' });
+  const bad = L.bpArgs(f, { name: 'x', card: '{why: 1}' });
+  assert.equal(bad.key, 'card');
+  assert.match(bad.error, /^card does not read as JSON/);
+  assert.deepEqual(L.bpArgs(f, { name: 'x' }).args, { name: 'x', confirm: false }, 'a required checkbox is sent as it stands: false is an answer');
+  assert.deepEqual(L.bpArgs(L.bpFields({ type: 'object', properties: { looked: { type: 'boolean' } } }), { looked: false }), { args: {} });
+});
+
+test('a job that is still going is read off the answer, and an idea has one line', () => {
+  assert.equal(L.bpJob("Blueprint build: job j1 is still going (running · pass 1 of 2). Call blueprint_build(name='nq_orb', job_id='j1') to keep waiting."), 'j1');
+  assert.equal(L.bpJob('Blueprint build · nq_orb · LEAD · phase 2 · round 1'), '');
+  assert.equal(L.bpJob("a finished answer that names job_id='j9' in passing"), '', 'only an answer that says it is still going');
+  assert.equal(L.bpIdeaLine({ status: 'proven_on_history', phase: 4, round: 1 }), 'PROVEN ON HISTORY · phase 4 · round 1');
+  assert.equal(L.bpIdeaLine({ status: 'idea', phase: 0, round: null }), 'IDEA · phase 0');
+});

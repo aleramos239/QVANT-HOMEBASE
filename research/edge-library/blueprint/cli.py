@@ -4,7 +4,7 @@ The connector (homebase/claude_mcp/blueprint_tools.py) writes every command as
 in this folder; the card comes on stdin (`--spec=-`), and so do an eval's live fills (`--fills=-`). A person may leave --root
 and --json out.
 
-  bp.py card <name> --spec=- | --spec=FILE                                PHASE 0: lines 0.1-0.6 off the card ({"name", "card",
+  bp.py card <name> --spec=- | --spec=FILE                                PHASE 0: lines 0.1-0.7 off the card ({"name", "card",
                                                                              "run"} as JSON); a whole card is saved in the app
                                                                              (card.md, spec.json, the Lab draft), a card with a
                                                                              line missing is refused with the line named
@@ -41,11 +41,31 @@ and --json out.
   bp.py test <name> --confirm [--wait=S] [--second-look]                  PHASE 4, THE ONE READ of the test days (oos.py): the
         [--tester=DIR]                                                       read is written to the one-read log FIRST, then
                                                                              the locked variants, their control and the worse
-                                                                             fills are run, lines 4.1-4.7 are read and saved.
+                                                                             fills are run, lines 4.1-4.9 are read and saved.
                                                                              Refused: not frozen, a lock that no longer matches,
                                                                              no --confirm, a read on file for the idea or for a
                                                                              same-idea relative (--second-look: the only way
                                                                              past, labelled so everywhere). A fail is final
+  bp.py test <name> --confirm --early-look [--wait=S] [--second-look]     AN EARLY LOOK at the test days, the owner's own (2026-
+                                                                             10-06: "warn, then run if I say yes"), for an idea
+                                                                             that is NOT frozen -- its build lines may fail, its
+                                                                             code check may be missing. What is there is frozen
+                                                                             under a lock marked early_look, the read is claimed
+                                                                             like any other, lines 4.1-4.9 are read, and all of it
+                                                                             says EARLY LOOK. It uses the test days up for the
+                                                                             idea and can never prove it: it is kept beside the
+                                                                             idea's files (early_look/), never as its test.json
+  bp.py heatmap <name> [--place=home|1|2|..|not_here] [--round=N]         THE HEAT MAP of a build round (quick.py; read-only):
+                                                                             a row per value of the main setting, a column per
+                                                                             exit cell, each cell that variant's net on the build
+                                                                             days; what line 2.1 reads, the middle variant, the
+                                                                             best and the worst cell (information), and one line
+                                                                             for every other place of the card. Counts no round
+  bp.py mc <name> [--on=build|test]                                       THE MONTE CARLO of an idea (quick.py; read-only): line
+                                                                             2.8 on build -- or 4.7 on a test that is on file --
+                                                                             then final net and worst drawdown of the same 1,000
+                                                                             runs at the 5th .. 95th percentile, for the average
+                                                                             and for the default variant
   bp.py seed-reads [--dry-run]                                            the one-read log filled from the OLD read logs, once
                                                                              (reads.py): the units whose test days were read
                                                                              before the blueprint. A second run adds nothing
@@ -54,10 +74,19 @@ and --json out.
                                                                              an idea that passed its test, OPEN LOSSES COUNTED --
                                                                              per pre-set size the odds of the eval within 10
                                                                              trading days and of the maximum payout within 20,
-                                                                             plain and "live is worse"; lines 5.1-5.4. The
+                                                                             plain and "live is worse"; lines 5.1-5.5 (ONE
+                                                                             strategy is judged on 5.5: a pass before a bust and
+                                                                             a first payout before a bust, 50 % each). The
                                                                              attempts and the fee budget are the owner's numbers
+  bp.py portfolio <name> <name> [...] --account=ID                        PHASE 5 FOR SEVERAL PROVEN IDEAS ON ONE ACCOUNT
+                                                                             (propodds.portfolio): each member's default variant,
+                                                                             every member at the same size, their days drawn
+                                                                             together; lines 5.2, 5.3 (eval 60 % within 10
+                                                                             trading days, maximum payout 75 % within 20), 5.6
+                                                                             (no two the same idea on one market) and 5.7 (every
+                                                                             member raises the eval odds)
   bp.py eval-card <name> [--fills=-|FILE] [--account=ID]                  PHASE 6, THE EVAL (evalcard.py): refused until a sim
-                                                                             is on file. Without fills: lines 6.1-6.8 as the
+                                                                             is on file. Without fills: lines 6.1-6.9 as the
                                                                              rules, and the drawdown table of its own test
                                                                              history. With the live fills ({"fills": [...]};
                                                                              the format: bp.py eval-card --help): 6.1-6.5 read
@@ -110,7 +139,7 @@ def _parser() -> _Parser:
     ap = _Parser(prog="bp.py", description="The blueprint toolkit (BLUEPRINT.md section 2).", allow_abbrev=False)
     sub = ap.add_subparsers(dest="cmd", required=True)
     add = lambda name, text: sub.add_parser(name, help=text, allow_abbrev=False)  # noqa: E731 - an option is spelled out: --store is never --stored
-    k = add("card", "phase 0: the idea card, lines 0.1-0.6")
+    k = add("card", "phase 0: the idea card, lines 0.1-0.7")
     k.add_argument("name", help="the idea's name")
     k.add_argument("--spec", metavar="-|FILE", help="the idea's spec as JSON {name, card, run}: - = on stdin, else a file")
     b = add("build", "phase 2: lines 2.1-2.9, each as pass or fail with its number")
@@ -145,11 +174,20 @@ def _parser() -> _Parser:
     p.add_argument("--tf", default="1,5,15,30")
     lk = add("lock", "phase 3: the freeze -- the rule, the variant list, the default variant, the control and the costs under one hash")
     lk.add_argument("name", help="the idea's name")
-    t = add("test", "phase 4: the ONE read of the test days (2025-07-01 on), lines 4.1-4.7")
+    t = add("test", "phase 4: the ONE read of the test days (2025-07-01 on), lines 4.1-4.9")
     t.add_argument("name", help="the idea's name")
     t.add_argument("--confirm", action="store_true", help="the owner has said to run the one read: it cannot be taken back")
     t.add_argument("--second-look", action="store_true", help="go past a USED read of a relative: the verdict is labelled SECOND LOOK everywhere")
+    t.add_argument("--early-look", action="store_true", help="the owner's EARLY LOOK at the test days for an idea that is NOT frozen: it uses them up for the "
+                                                              "idea, is labelled EARLY LOOK everywhere and can never prove it")
     t.add_argument("--tester", metavar="DIR", help="the tester's base folder the default variant's test trades go to (default: the app's own)")
+    hm = add("heatmap", "the heat map of an idea's build round: every variant's net on the build days (read-only)")
+    hm.add_argument("name", help="the idea's name")
+    hm.add_argument("--place", metavar="home|1|2|..|not_here", help="the table shown: home (default), a neighbor by its number in the card's order, or the place it should NOT work")
+    hm.add_argument("--round", type=int, metavar="N", help="the build round (default: the latest one with a result)")
+    q = add("mc", "the Monte Carlo of an idea: the law's line and the reshuffled runs as two small tables (read-only)")
+    q.add_argument("name", help="the idea's name")
+    q.add_argument("--on", choices=("build", "test"), help="build (default): line 2.8 on the latest build round · test: line 4.7 on a test that is on file")
     sr = add("seed-reads", "the one-read log of the test days filled from the old read logs, once")
     sr.add_argument("--dry-run", action="store_true", help="write nothing: say what would be added")
     m = add("sim", "phase 5: the prop simulator on the test-period trades, for one account (open losses count)")
@@ -157,8 +195,11 @@ def _parser() -> _Parser:
     m.add_argument("--account", metavar="ID", help="the account in question: a rule file of the app's prop simulator, e.g. lucid-pro-50k@2026-09-27b (bp.py blocks lists them)")
     m.add_argument("--attempts", type=int, metavar="N", help="how many evals the owner will buy at most (line 5.4: his number, never a guess)")
     m.add_argument("--fee-budget", type=float, metavar="USD", help="the owner's total fee budget in dollars (line 5.4: his number, never a guess)")
+    pf = add("portfolio", "phase 5 for several proven ideas on one account: lines 5.2, 5.3, 5.6, 5.7 (open losses count)")
+    pf.add_argument("names", nargs="+", metavar="name", help="two or more ideas that are each proven on history")
+    pf.add_argument("--account", metavar="ID", help="the account in question: a rule file of the app's prop simulator, e.g. lucid-pro-50k@2026-09-27b")
     from . import evalcard                          # phases 5 and 6 are loaded when a command line is read, never with this module: a tape pass's workers import it
-    e = sub.add_parser("eval-card", help="phase 6: the eval card -- lines 6.1-6.8 and the drawdown table of its own test history", allow_abbrev=False,
+    e = sub.add_parser("eval-card", help="phase 6: the eval card -- lines 6.1-6.9 and the drawdown table of its own test history", allow_abbrev=False,
                        epilog=evalcard.FILLS, formatter_class=argparse.RawDescriptionHelpFormatter)
     e.add_argument("name", help="the idea's name")
     e.add_argument("--fills", metavar="-|FILE", help="the live trades of the eval so far, ONE JSON object: - = on stdin, else a file (THE FILLS FORMAT, below)")
@@ -167,7 +208,7 @@ def _parser() -> _Parser:
     for x in (lk, t):
         x.add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
         x.add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
-    for x in (lk, t, sr, m, e, bl):
+    for x in (lk, t, sr, m, pf, e, bl, hm, q):
         x.add_argument("--root", metavar="DIR", help="the app's idea folder (default HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas)")
         x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in (b, p):
@@ -204,9 +245,9 @@ def _lock(a) -> dict:
 
 
 def _test(a) -> dict:
-    """`test <name> --confirm [--wait=S] [--second-look]`: every refusal, then the read is claimed in the one-read log, then
-    the run -- in the foreground, or as a job (`job <id>` picks its wait back up: nothing is read again)."""
-    kw = OOS.start(a.name, a.confirm, a.second_look, a.root, workers=a.workers, tester=a.tester)
+    """`test <name> --confirm [--wait=S] [--second-look] [--early-look]`: every refusal, then the read is claimed in the
+    one-read log, then the run -- in the foreground, or as a job (`job <id>` picks its wait back up: nothing is read again)."""
+    kw = OOS.start(a.name, a.confirm, a.second_look, a.root, workers=a.workers, tester=a.tester, early_look=a.early_look)
     return OOS.run(**kw) if a.wait is None else _job(kw, a, "test")
 
 
@@ -266,7 +307,7 @@ def _fills(a):
 
 def _said(r: dict) -> str:
     """A result for a person: its text -- and the next step, for the commands of an idea's record."""
-    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (r.get("command") in ("card", "status", "lock", "test", "seed-reads") or "idea" in r) else "")
+    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (r.get("command") in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or "idea" in r) else "")
 
 
 def main(argv=None) -> int:
@@ -295,12 +336,18 @@ def main(argv=None) -> int:
         elif a.cmd == "sim":
             from . import propodds
             r = propodds.sim(a.name, a.account, a.attempts, a.fee_budget, a.root)
+        elif a.cmd == "portfolio":
+            from . import propodds
+            r = propodds.portfolio(a.names, a.account, a.root)
         elif a.cmd == "eval-card":
             from . import evalcard
             r = evalcard.card(a.name, _fills(a), a.root, a.account)
         elif a.cmd == "blocks":
             from . import blocklist
             r = blocklist.blocks()
+        elif a.cmd in ("heatmap", "mc"):
+            from . import quick                      # the two views: they read, and run nothing
+            r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:

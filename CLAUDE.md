@@ -9,7 +9,7 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
 - Build days: 2021-09-22 → 2025-06-30. All tuning happens here.
 - Test days: 2025-07-01 → latest. One read, only for a locked strategy. Never for a quick look or "all data".
 - Judge the average of all variants, never the best cell.
-- Use the connector's `blueprint_*` tools for every phase (blocks, card, build, code check, lock, test, sim, eval card, status).
+- Use the connector's `blueprint_*` tools for every phase (blocks, card, build, code check, lock, test, sim, portfolio, eval card, status).
   They run `research/edge-library/bp.py` and save each idea in the app (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group).
   Never write one-off test code for a strategy.
 - `research/edge-library/judge.py` still scores the old rules (v2). A v2 verdict is not a blueprint verdict.

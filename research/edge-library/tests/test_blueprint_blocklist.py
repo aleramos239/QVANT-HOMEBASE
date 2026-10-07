@@ -35,7 +35,7 @@ import run_menus as RM  # noqa: E402
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")      # plan section 8
 CARD = {"why": "The first minutes of the New York morning set a range, and a break of it traps the traders who leaned on it.",
         "loser": "traders who faded the opening range", "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["midday"],
-        "not_here": "the Asian session", "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way"}
+        "not_here": "the Asian session", "main_setting": "or_min", "sides": "both", "sides_why": "a range can break either way", "loses_when": "a week without a clear direction"}
 SETTINGS = {"family": "orb", "params": {"or_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
 B = BL.blocks()["blocks"]
 
@@ -54,7 +54,7 @@ def test_the_plain_card_passes_so_a_refusal_below_is_the_change():
 def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
-    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 27
+    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 29
     assert [n for n, f in F.items() if not f["runs"]] == ["va_reclaim"] and "old build days" in F["va_reclaim"]["why_not"]
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -78,17 +78,20 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
 
 def test_the_filters_the_limits_and_the_exit_table():
     blocks = RUN._blocks()
-    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 10
+    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 69
     assert all(f["words"] == blocks.PLAIN[(f["block"], f["side"])] for f in B["filters"])
-    assert [(f["block"], f["runs"]) for f in B["filters"] if not f["runs"]] == [("book", False)] * 2 and all("Level 2" in f["why_not"] for f in B["filters"] if not f["runs"])
+    assert all(f["runs"] and f["why_not"] is None for f in B["filters"])
+    l2 = [f for f in B["filters"] if f["block"] in blocks.L2_BLOCKS]                                   # Level 2: NQ only, built but not yet locked or tested
+    assert l2 and all(f["markets"] == ["NQ"] and not f["tested"] for f in l2) and all(f["markets"] == list(blocks.BLOCK_MARKETS.get(f["block"], ("NQ", "ES", "GC"))) and f["tested"] for f in B["filters"] if f not in l2)
+    assert {f["block"] for f in l2} == {"book", "depth", "ahead", "wall", "stack"}
     assert {x["name"]: x["runs"] for x in B["limits"]} == {"max_tr": True, "dir": True, "exit_bars": False, "trail_atr": False} == {
         k: k not in REC.OWN_EXITS for k in ("max_tr", "dir", "exit_bars", "trail_atr")}
     import run_idea as RI
     assert set(RI.LIMIT_KEYS) == {x["name"] for x in B["limits"]}
     ex, m = B["exits"], R.template("exit_menu")
-    assert (ex["cells"], ex["stops"], ex["targets_r"], ex["flat_et"], ex["flat_et_half_day"]) == (32, m["stops"], m["targets_r"], "15:58", "13:13")
+    assert (ex["cells"], ex["stops"], ex["targets_r"], ex["flat_et"], ex["flat_et_half_day"]) == (48, m["stops"], [0.0, 0.5, 0.75, 1.0, 2.0, 3.0], "15:58", "13:13")
     for root in ("NQ", "ES", "GC"):
-        assert ex["by_market"][root] == [S.cell_id(c) for c in R.exit_menu(root)] == [S.cell_id(c) for c in S.menu(root)] and len(ex["by_market"][root]) == 32
+        assert ex["by_market"][root] == [S.cell_id(c) for c in R.exit_menu(root)] and ex["by_market"][root][:32] == [S.cell_id(c) for c in S.menu(root)] and len(ex["by_market"][root]) == 48
 
 
 def test_the_sessions_bars_markets_and_the_numbers_of_the_templates():
@@ -119,7 +122,19 @@ def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     assert failing(card={"home": {"market": "NQ", "session": "eve", "bar": "15"}}) == ["0.3"] and failing(card={"neighbors": ["the evening session"]}) == ["0.4"]
     for own in ("trail_atr", "exit_bars"):
         assert failing(run={"limits": {own: 2}}) == ["0.2"]
-    assert failing(run={"filters": [{"block": "book", "side": "agree"}]}) == ["0.2"] and failing(run={"exits": "extended"}) == ["0.2"]
+    book = {"filters": [{"block": "book", "side": "agree"}]}
+    assert failing(run=book) == [] and failing(run={"exits": "extended"}) == ["0.2"]           # Level 2 is allowed on a card whose places are all NQ ...
+    assert failing(card={"neighbors": ["ES"]}, run=book) == ["0.2"] and failing(card={"not_here": "GC"}, run=book) == ["0.2"]       # ... and nowhere else
+    assert failing(card={"neighbors": ["ES"]}, run={"filters": [{"block": "delta", "side": "with"}]}) == []             # a delta block runs on every market
+    import inspect
+    from blueprint import freeze as FZ
+    assert "can be built but not locked or tested" in inspect.getsource(FZ.start) and "cannot be tested yet" in inspect.getsource(RUN.run_test)
+    try:
+        RUN.checked({"name": "bl_probe", "reason": CARD["why"], "family": "orb", "markets": ["NQ", "ES"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {},
+                     "exits": "standard", "filters": [{"block": "wall", "side": "clear"}]})
+        raise AssertionError("a Level 2 filter on ES was taken")
+    except J.Refuse as e:
+        assert "NQ only" in str(e)
     assert failing(run={"params": {"or_min": ["5", "15", "30"], "max_tr": [1, 2, 3]}}) == ["0.5"]
     assert failing(card={"main_setting": "mode", "not_here": "the afternoon"}, run={"family": "ib", "params": {"mode": ["break", "fade", "x"]}}) == ["0.5"]      # opposite ideas
     assert failing(run={"filters": [{"block": "news", "side": "no"}, {"block": "momentum", "side": "with"}, {"block": "volume", "side": "high"}]}) == ["0.2"]
@@ -149,7 +164,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 26, "families_not_yet": 1, "filters": 8, "filters_not_yet": 2, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 28, "families_not_yet": 1, "filters": 69, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]
@@ -158,7 +173,7 @@ def test_the_command():
         assert sum(ln.startswith(head) for ln in lines) == 1, head
     for f in B["families"]:
         assert sum(ln.split()[:1] == [f["name"]] for ln in lines) == 1, f["name"]            # one line a family
-    assert sum(ln.strip().startswith(("volatility ", "momentum ", "volume ", "news ", "book ")) for ln in lines) == 10
+    assert sum(ln.strip().startswith(("volatility ", "momentum ", "volume ", "news ", "book ")) for ln in lines) == 12
     assert all(any(x["what"] in ln for ln in lines) for x in B["refused"]) and max(len(ln) for ln in lines) < 330, max(lines, key=len)
     assert sum(ln.strip().startswith("settings: ") for ln in lines) == len(B["families"])
     assert sum(ln.split()[:1] == [a["id"]] for a in B["accounts"] for ln in lines) == len(B["accounts"])

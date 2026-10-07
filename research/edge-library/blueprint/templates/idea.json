@@ -8,7 +8,8 @@
   "not_here": "0.4",
   "main_setting": "0.5",
   "sides": "0.6",
-  "sides_why": "0.6"
+  "sides_why": "0.6",
+  "loses_when": "0.7"
  },
  "name": "",
  "version": 1,
@@ -24,7 +25,8 @@
   "not_here": "",
   "main_setting": "",
   "sides": "",
-  "sides_why": ""
+  "sides_why": "",
+  "loses_when": ""
  },
  "run": {
   "family": "",

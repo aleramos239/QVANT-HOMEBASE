@@ -164,7 +164,7 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
     if bad:
         raise SpecError(f"limits {bad}: one of {LIMIT_KEYS}")
     for key in ("exits", "filter_exits"):
-        if sp.get(key, "standard") not in ("standard", "extended"):
+        if sp.get(key, "standard") not in ("standard", "extended", "blueprint"):      # 'blueprint': set by blueprint/runner.py only (its 48-cell table)
             raise SpecError(f"{key} {sp.get(key)!r}: 'standard' or 'extended'")
     filters = []
     for f in sp.get("filters", []):
@@ -420,17 +420,23 @@ def build(spec: dict, workers: int | None = None, runs_dir=None, ledger=None, lo
         out.append(_record(c["key"], c["grid"], res, c["root"], meta, "null", ckw, rd, ledger, log, workers, time.monotonic() - t0))
     cls = blocks.WRAPPED[spec["family"]]
     kw = dict(getattr(cls, "SCREEN_RUN", {}))
-    volume_ready = set()
+    import levels as LV
+    import zones as Z
+    volume_ready, swing_ready = set(), set()
     prep = getattr(cls, "prepare", None)               # a family's own one-off cache (va_reclaim), as run_menus.run_unit
     if prep is not None and days is None:
         for root in dict.fromkeys(u["root"] for u in todo):
             S.wait_compute_window()
             RM._log(f"prepare {spec['family']} {root}: {prep(root, workers=workers)}", log)
     for u in todo:
-        if u["filter"] and u["filter"][0] == "volume" and u["root"] not in volume_ready and days is None:
+        if u["filter"] and u["filter"][0] in ("volume", "rvol") and u["root"] not in volume_ready and days is None:
             S.wait_compute_window()
             RM._log(f"prepare volume block {u['root']}: {blocks.build_minvol(u['root'], PERIOD, workers)}", log)
             volume_ready.add(u["root"])
+        for rt in (x for x in Z.prep_roots(u["root"], spec["family"], u["filter"]) if x not in swing_ready):
+            S.wait_compute_window()
+            RM._log(f"prepare 5-minute bars {rt}: {LV.build_bars_cache(rt, PERIOD, workers)}", log)
+            swing_ready.add(rt)
         S.wait_compute_window()
         t0 = time.monotonic()
         res = run_grid(u["grid"], spec["sessions"], u["root"], features=_features(u), workers=workers, days=days, kw=kw)
