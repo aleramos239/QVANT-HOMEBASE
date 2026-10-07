@@ -38,6 +38,7 @@ from .depthgrid import (MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPA
                         paused_reason)
 from .desk import Fanout, Quotes, register as register_desk
 from .export import export_router
+from .refresh import refresh_router
 from .history import History
 from .hub import Hub, Stream
 from .known import Known
@@ -993,6 +994,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tester.grids.shutdown()     # ... nor a heat-map cell's
             tester.wfs.shutdown()       # ... nor a walk-forward cell's
             export_rt.manager.shutdown()  # nor a data-export child
+            refresh_rt.manager.cancel()   # nor a data refresh's (its writes are atomic: stopping it loses nothing)
             for job in paper_job:       # nor the paper comparison's (terminated and reaped)
                 job.stop()
 
@@ -1132,6 +1134,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     export_rt = export_router(browser_write_ok, base, depth_base or DEPTH_ARCHIVE,
                               Path(state) / "export" if state else None)
     app.include_router(export_rt)
+
+    refresh_rt = refresh_router(browser_write_ok, Path(state) if state else None)
+    app.include_router(refresh_rt)
 
     @app.get("/api/settings")
     async def get_settings(request: Request, response: Response):

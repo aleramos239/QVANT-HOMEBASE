@@ -370,12 +370,9 @@ test('custom interval text becomes a bar spec', () => {
 
 test('root names', () => {
   assert.equal(C.rootName('NQ'), 'E-mini Nasdaq-100');
-  assert.equal(C.rootName('HG'), 'Copper');
+  assert.equal(C.rootName('SI'), 'Silver');
+  assert.equal(C.rootName('HG'), '');            // cut from the app 2026-10-07
   assert.equal(C.rootName('ZZ'), '');
-});
-
-test('Bitcoin has a name', () => {
-  assert.equal(C.rootName('BTC'), 'Bitcoin');
 });
 
 test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; crypto never closes', () => {
@@ -646,8 +643,8 @@ test('every ROOT_NAMES key has its own badge', () => {
     assert.ok(b.text || b.icon, `${root} badge has neither text nor icon`);
   }
   assert.deepEqual(C.rootBadge('NQ'), { text: '100', bg: '#0b1f4d', fg: '#fff' });
-  assert.deepEqual(C.rootBadge('CL'), { icon: 'droplet', bg: '#1b1b1b', fg: '#fff' });
-  assert.deepEqual(C.rootBadge('NG'), { icon: 'flame', bg: '#1565c0', fg: '#fff' });
+  assert.deepEqual(C.rootBadge('GC'), { text: 'Au', bg: '#c9a227', fg: '#1b1b1b' });
+  assert.deepEqual(C.rootBadge('SI'), { text: 'Ag', bg: '#9ea7ad', fg: '#1b1b1b' });
 });
 
 test('an unknown root falls back to its own first two letters', () => {

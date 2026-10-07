@@ -1017,6 +1017,14 @@ const dataExport = {
   cancel: (id) => postExport(`/api/export/${encodeURIComponent(id)}/cancel`),
   reveal: (id) => postExport(`/api/export/${encodeURIComponent(id)}/reveal`),
 };
+/* The Data tab's "Refresh data" button (charts/refresh.py): the status, a start, a cancel. */
+const dataRefresh = {
+  async status() {
+    try { const r = await fetch('/api/refresh'); return r.ok ? await r.json() : null; } catch (_) { return null; }
+  },
+  start: () => postExport('/api/refresh'),
+  cancel: () => postExport('/api/refresh/cancel'),
+};
 async function postExport(path, body) {
   let status = 0, data = null;
   try {
@@ -1534,6 +1542,7 @@ function chartSettings(c = cur(), tab = null) {
     cells: () => cells,
     templates,
     export: dataExport,   // 2026-09-28 data-export plan: the Data tab (Charts and Backtest both)
+    refresh: dataRefresh, // the Data tab's Refresh data button
     ...tradeCapabilities,
     countries: () => [...new Set(calendar.map((e) => e.country))].sort(),
     toggleMenu(anchor, cls, fill) {   // menus and popovers open inside the dialog (above its backdrop)

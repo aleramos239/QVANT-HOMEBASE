@@ -160,3 +160,25 @@ test('TYPES: level3 is disabled with a reason; level2 needs levels and is depth-
   assert.equal(DE.TYPE_OF.level2.depthOnly, true);
   assert.equal(DE.TYPE_OF.candles.needsTimeframe, true);
 });
+
+test('refreshView: idle says nothing; running names the step; done reads the coverage; failures show red', () => {
+  const steps = [{ key: 'broker', label: 'Fetch missing ticks from the broker', state: 'running', note: '' },
+    { key: 'massive', label: 'Fill the older holes from Massive', state: 'waiting', note: '' }];
+  assert.deepEqual(DE.refreshView(null), { text: '', busy: false, tone: '' });
+  assert.deepEqual(DE.refreshView({ status: 'idle' }), { text: '', busy: false, tone: '' });
+  assert.deepEqual(DE.refreshView({ status: 'running', step: 'massive', steps }),
+    { text: 'Step 2 of 2: Fill the older holes from Massive…', busy: true, tone: '' });
+  // a skipped step is not counted: the run is one step long
+  const one = [{ ...steps[0], state: 'done' }, { ...steps[1], state: 'skipped', note: 'Massive credentials are not set for this service' }];
+  assert.equal(DE.refreshView({ status: 'running', step: 'broker', steps: one }).text,
+    'Step 1 of 1: Fetch missing ticks from the broker…');
+  const done = DE.refreshView({ status: 'done', steps: one, coverage: { sessions: 180, complete: 170, missing: 2, partial: 3 } });
+  assert.equal(done.text, '170 of 180 recent sessions complete, 2 missing, 3 with holes · Fill the older holes from Massive skipped (Massive credentials are not set for this service)');
+  assert.equal(DE.refreshView({ status: 'done', steps: [] }).text, 'Done');
+  assert.deepEqual(DE.refreshView({ status: 'error', note: 'Fetch failed (exit 1)' }), { text: 'Failed: Fetch failed (exit 1)', busy: false, tone: 'err' });
+  assert.equal(DE.refreshView({ status: 'cancelled' }).text, 'Cancelled');
+});
+
+test('the Data tab offers exactly the six roots', () => {
+  assert.deepEqual(DE.ROOTS, ['NQ', 'ES', 'YM', 'RTY', 'GC', 'SI']);
+});

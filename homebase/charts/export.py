@@ -64,7 +64,7 @@ from .store import ARCHIVE, TickStore, read_table, ticks_from_table
 from .tester_api import host_ok
 
 # The full archive: futures_ticks/README.md's "Roots: NQ ES YM RTY GC SI HG ZN CL NG 6E 6J 6B BTC MBT."
-ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "HG", "ZN", "CL", "NG", "6E", "6J", "6B", "BTC", "MBT")
+ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI")
 DEPTH_ROOTS = ("NQ", "ES")             # level 2 is recorded for these only (charts-depth design)
 TYPES = ("candles", "ticks", "level1", "level2")   # level3 is validated and refused, never listed as choosable
 # label -> BarSpec key. The export's own list (the task spec), independent of the live chart's

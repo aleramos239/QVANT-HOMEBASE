@@ -40,7 +40,7 @@ def poll(c, jid, timeout=20.0):
 def test_schema_lists_roots_types_and_timeframes(tmp_path, monkeypatch):
     with client(tmp_path, monkeypatch) as c:
         got = c.get("/api/export/schema").json()
-        assert "NQ" in got["roots"] and "6E" in got["roots"] and "BTC" in got["roots"]
+        assert got["roots"] == ["NQ", "ES", "YM", "RTY", "GC", "SI"]
         assert got["depth_roots"] == ["NQ", "ES"]
         assert "1s" in got["timeframes"] and "1D" in got["timeframes"]
         assert "level3" in got["types"]

@@ -7,17 +7,14 @@
 
 const LINE_COLORS = ['#2962FF', '#FF6D00', '#9C27B0', '#00897B', '#E91E63'];
 const ROOT_NAMES = { NQ: 'E-mini Nasdaq-100', ES: 'E-mini S&P 500', YM: 'E-mini Dow', RTY: 'E-mini Russell 2000',
-  GC: 'Gold', SI: 'Silver', CL: 'Crude Oil', ZN: '10-Year T-Note', NG: 'Natural Gas', HG: 'Copper', BTC: 'Bitcoin' };
+  GC: 'Gold', SI: 'Silver' };
 const ALWAYS_OPEN = new Set(['BTC', 'MBT', 'ETH', 'MET']);   // CME crypto: 24/7 since 2026-05-30
 // The instrument badge (Task 1: legend + symbol search). No exchange or brand logos — these are our own
-// text/shape designs; `icon` names a Lucide icon (icons.js) instead of text where one reads better (CL, NG).
+// text/shape designs; `icon` names a Lucide icon (icons.js) instead of text where one reads better.
 const ROOT_BADGES = {
   NQ: { text: '100', bg: '#0b1f4d', fg: '#fff' }, ES: { text: '500', bg: '#b3261e', fg: '#fff' },
   YM: { text: '30', bg: '#1f3a93', fg: '#fff' }, RTY: { text: '2K', bg: '#6a1b9a', fg: '#fff' },
   GC: { text: 'Au', bg: '#c9a227', fg: '#1b1b1b' }, SI: { text: 'Ag', bg: '#9ea7ad', fg: '#1b1b1b' },
-  HG: { text: 'Cu', bg: '#b87333', fg: '#fff' }, CL: { icon: 'droplet', bg: '#1b1b1b', fg: '#fff' },
-  NG: { icon: 'flame', bg: '#1565c0', fg: '#fff' }, ZN: { text: '10Y', bg: '#2e7d32', fg: '#fff' },
-  BTC: { text: '₿', bg: '#f7931a', fg: '#fff' },
 };
 const BADGE_FALLBACK = { bg: '#5d6b7a', fg: '#fff' };
 

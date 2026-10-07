@@ -9,7 +9,7 @@
 
 /* The full archive (futures_ticks/README.md's own list) -- a fallback for the first paint,
    before GET /api/export/schema answers; the reply is the source of truth after that. */
-const ROOTS = ['NQ', 'ES', 'YM', 'RTY', 'GC', 'SI', 'HG', 'ZN', 'CL', 'NG', '6E', '6J', '6B', 'BTC', 'MBT'];
+const ROOTS = ['NQ', 'ES', 'YM', 'RTY', 'GC', 'SI'];
 const TIMEFRAMES = ['1s', '5s', '15s', '30s', '1m', '3m', '5m', '15m', '30m', '1h', '4h', '1D'];
 
 /* One entry per Data Type option, in the order the select shows them. `columns` is the small
@@ -156,8 +156,33 @@ function gapsSummary(cov) {
   return `${n} known gap${n === 1 ? '' : 's'} within ${dates.length} session${dates.length === 1 ? '' : 's'} on disk`;
 }
 
+/* The "Refresh data" button's status (RefreshManager.status's shape, GET /api/refresh) -> {text, busy, tone}:
+   the one line under the button, whether a run is going (the button is disabled and Cancel shows), and
+   'err' for a failure. Pure; settings-dialog.js only paints it. */
+function refreshView(st) {
+  const s = st && st.status;
+  if (!s || s === 'idle') return { text: '', busy: false, tone: '' };
+  const steps = (st.steps || []).filter((x) => x.state !== 'skipped');
+  if (s === 'running') {
+    const at = Math.max(0, steps.findIndex((x) => x.key === st.step));
+    const label = (steps[at] || {}).label || 'Starting';
+    return { text: `Step ${at + 1} of ${steps.length || 1}: ${label}…`, busy: true, tone: '' };
+  }
+  if (s === 'cancelled') return { text: 'Cancelled', busy: false, tone: '' };
+  if (s === 'error') return { text: `Failed: ${st.note || 'unknown error'}`, busy: false, tone: 'err' };
+  const bits = [];
+  const c = st.coverage;
+  if (c && c.sessions) {
+    bits.push(`${fmtInt(c.complete || 0)} of ${fmtInt(c.sessions)} recent sessions complete`);
+    if (c.missing) bits.push(`${fmtInt(c.missing)} missing`);
+    if (c.partial) bits.push(`${fmtInt(c.partial)} with holes`);
+  } else bits.push('Done');
+  const skipped = (st.steps || []).find((x) => x.state === 'skipped');
+  return { text: bits.join(', ') + (skipped ? ` · ${skipped.label} skipped (${skipped.note})` : ''), busy: false, tone: '' };
+}
+
 const api = { ROOTS, TIMEFRAMES, TYPES, TYPE_OF, QUICK_PICKS, quickRange, backSessions, is247,
-  buildRequest, previewName, fmtInt, fmtBytes, progress, missingSummary, gapsSummary };
+  buildRequest, previewName, fmtInt, fmtBytes, progress, missingSummary, gapsSummary, refreshView };
 if (typeof window !== 'undefined') window.HBDataExport = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

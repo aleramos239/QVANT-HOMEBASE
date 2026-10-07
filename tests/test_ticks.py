@@ -641,10 +641,14 @@ def test_fetch_page_on_a_shared_socket_keeps_only_its_own_chart():
     assert ws.sent[-1] == ("md/cancelChart", {"subscriptionId": 12})
 
 
-# ------------------------------------------------------------------ all 15 archive roots (item D)
-def test_the_archive_records_all_fifteen_roots_in_priority_order():
-    assert T.ROOTS == ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG",
-                       "6E", "6J", "6B", "BTC", "MBT")
+# ------------------------------------------------------------------ the app's six roots (cut from 15 on 2026-10-07)
+# The code still handles every root it ever did (FX, crypto, energy, ...): these tests plan with ALL_ROOTS
+# so those paths keep their coverage, while T.ROOTS -- what the job really records -- is the six.
+ALL_ROOTS = ("NQ", "ES", "YM", "RTY", "GC", "SI", "CL", "ZN", "NG", "HG", "6E", "6J", "6B", "BTC", "MBT")
+
+
+def test_the_archive_records_the_six_roots_in_priority_order():
+    assert T.ROOTS == ("NQ", "ES", "YM", "RTY", "GC", "SI")
 
 
 def test_fx_is_quarterly_and_crypto_monthly():
@@ -675,7 +679,7 @@ def test_crypto_sessions_run_18_to_18_every_day_like_the_live_recorder():
 
 def test_a_weekend_run_fetches_crypto_only(tmp_path):
     now = dt.datetime(2026, 9, 27, 5, 30, tzinfo=ET)                   # Sunday morning
-    _, jobs = T.plan(T.ROOTS, T.candidate_dates(now), tmp_path, now)
+    _, jobs = T.plan(ALL_ROOTS, T.candidate_dates(now), tmp_path, now)
     got = sorted({(key[0], key[1].isoformat()) for *_, key, s, e, r in jobs})
     # Friday's session ended at 18:00 Fri, Saturday's at 18:00 Sat; Sunday's first
     # hours (18:00-20:00 Sat) are over: all still in the broker's two UTC days
@@ -684,15 +688,15 @@ def test_a_weekend_run_fetches_crypto_only(tmp_path):
 
 def test_a_weekday_evening_fetches_every_roots_first_hours_first(tmp_path):
     now = dt.datetime(2026, 9, 29, 17, 20, tzinfo=ET)
-    _, jobs = T.plan(T.ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)
+    _, jobs = T.plan(ALL_ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)
     heads = [key[0] for *_, key, s, e, r in jobs[:15]]
-    assert heads == list(T.ROOTS)                                     # every root's 18:00-20:00 ET first
+    assert heads == list(ALL_ROOTS)                                     # every root's 18:00-20:00 ET first
     assert all(s == T.session_bounds(dt.date(2026, 9, 29), key[0])[0] for *_, key, s, e, r in jobs[:15])
     tails = [key[0] for *_, key, s, e, r in jobs[15:]]
-    assert tails == list(T.ROOTS)          # then the rest, every root's up to the last hour the broker has published
+    assert tails == list(ALL_ROOTS)          # then the rest, every root's up to the last hour the broker has published
     assert {e.astimezone(ET).strftime("%H:%M") for *_, key, s, e, r in jobs[15:]} == {"16:00"}
     now = dt.datetime(2026, 9, 29, 17, 50, tzinfo=ET)                 # 17:00 is published: the classic roots' close;
-    _, jobs = T.plan(T.ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)  # BTC/MBT's session runs on to 18:00
+    _, jobs = T.plan(ALL_ROOTS, [dt.date(2026, 9, 29)], tmp_path, now)  # BTC/MBT's session runs on to 18:00
     assert {e.astimezone(ET).strftime("%H:%M") for *_, key, s, e, r in jobs[15:]} == {"17:00"}
 
 
@@ -770,10 +774,12 @@ def test_the_recorder_files_a_bare_root_under_the_sessions_front_month(monkeypat
     assert session_contract("NQZ6", eve) == "NQZ6"
 
 
-def test_the_fx_roots_are_roots_not_contracts():
+def test_the_fx_roots_are_roots_not_contracts(monkeypatch):
     """6E / 6J / 6B hold a digit, so "a digit means it already names a contract" sent the bare
-    root to the broker ("Symbol is inaccessible"): the chart service never recorded them live."""
+    root to the broker ("Symbol is inaccessible"): the chart service never recorded them live.
+    (They are out of the app's six roots since 2026-10-07; the rule still reads T.ROOTS.)"""
     from homebase.charts.tickfeed import session_contract
+    monkeypatch.setattr(T, "ROOTS", ALL_ROOTS)
     t = dt.datetime(2026, 10, 2, 10, 0, tzinfo=ET).timestamp()
     for root in ("6E", "6J", "6B"):
         assert session_contract(root, t) == front_month(root, dt.date(2026, 10, 2)) != root
