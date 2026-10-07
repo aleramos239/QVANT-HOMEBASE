@@ -240,9 +240,9 @@ trading app. Orders from the chart page go to the desk, which checks and places 
 - Records live ticks for the app's six symbols (NQ ES YM RTY GC SI; the other nine were cut 2026-10-07 -- what the
   archive already holds of them stays on disk); `--roots` narrows it. The tick job merges this recording into the
   archive and fills what it missed.
-- Settings > Data > **Refresh data** runs that tick job on demand (`homebase/charts/refresh.py`, `/api/refresh`): fetch
-  what the broker still has, then fill the older holes from Massive when `MASSIVE_S3_KEY`/`MASSIVE_S3_SECRET` are in the
-  service's environment (skipped, and said so, when they are not). One run at a time, never 09:20-09:35 ET.
+- Settings > Data > **Refresh data** runs that tick job on demand (`homebase/charts/refresh.py`, `/api/refresh`) for all six
+  roots: it fetches from Tradovate's tick history what the archive is missing, and nothing else (no Massive). One run at a
+  time, never 09:20-09:35 ET. What has left Tradovate's history window stays "lost" in the coverage report.
 - Records Level 2 depth for NQ and ES to `~/futures_depth` (`HOMEBASE_DEPTH_ROOTS` changes the list).
 - BTC and MBT (CME crypto) trade 24/7: a session every day, 18:00 → 18:00 ET, weekends included -- in the chart
   service and the tick job alike. Never run `research/massive_ticks.py convert` over dates the desk recorded (from

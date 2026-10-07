@@ -162,7 +162,7 @@ function gapsSummary(cov) {
 function refreshView(st) {
   const s = st && st.status;
   if (!s || s === 'idle') return { text: '', busy: false, tone: '' };
-  const steps = (st.steps || []).filter((x) => x.state !== 'skipped');
+  const steps = st.steps || [];
   if (s === 'running') {
     const at = Math.max(0, steps.findIndex((x) => x.key === st.step));
     const label = (steps[at] || {}).label || 'Starting';
@@ -177,8 +177,7 @@ function refreshView(st) {
     if (c.missing) bits.push(`${fmtInt(c.missing)} missing`);
     if (c.partial) bits.push(`${fmtInt(c.partial)} with holes`);
   } else bits.push('Done');
-  const skipped = (st.steps || []).find((x) => x.state === 'skipped');
-  return { text: bits.join(', ') + (skipped ? ` · ${skipped.label} skipped (${skipped.note})` : ''), busy: false, tone: '' };
+  return { text: bits.join(', '), busy: false, tone: '' };
 }
 
 const api = { ROOTS, TIMEFRAMES, TYPES, TYPE_OF, QUICK_PICKS, quickRange, backSessions, is247,
