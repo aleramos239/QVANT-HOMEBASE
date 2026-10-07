@@ -287,8 +287,40 @@ def exits(kind: str, root: str, family: str) -> list:
     raise ValueError(f"exits {kind!r}: 'standard', 'extended' or 'blueprint'")
 
 
+COMBO, MAX_FILTERS = "+", 2                         # a unit may hold several filters at once: ("ote+pdz", "in+with"); at most 2 (BLUEPRINT.md 0.2)
+
+
+def parts(filt) -> list:
+    """The (block, side) pairs of a filter given as a pair, a combined pair or the string "block_side" (None / "" -> [])."""
+    if not filt:
+        return []
+    b, s = filt.split("_", 1) if isinstance(filt, str) else filt
+    return list(zip(b.split(COMBO), s.split(COMBO)))
+
+
+def reads(filt, which) -> bool:
+    """Does any filter of the unit belong to `which` (a collection of block names)?"""
+    return any(b in which for b, _ in parts(filt))
+
+
+def combine(filters) -> tuple:
+    """Several (block, side) pairs -> ONE combined pair, blocks sorted by name so the same two filters always give the same unit."""
+    fs = sorted(filters)
+    return (COMBO.join(b for b, _ in fs), COMBO.join(s for _, s in fs)) if len(fs) > 1 else tuple(fs[0])
+
+
+def plain(filt) -> str:
+    """The plain words of a (combined) filter: each part's sentence, joined with ' AND '."""
+    return " AND ".join(PLAIN[p] for p in parts(filt))
+
+
 def filter_inputs(block: str, side: str, root: str = "NQ") -> dict:
-    """The inputs that switch ONE filter block on, on one of its two sides."""
+    """The inputs that switch ONE filter block on, on one of its two sides -- or, for a combined pair, every part's inputs together."""
+    if COMBO in block or COMBO in side:
+        ps = parts((block, side))
+        if len(ps) > MAX_FILTERS or len({b for b, _ in ps}) < len(ps) or len(block.split(COMBO)) != len(side.split(COMBO)):
+            raise ValueError(f"filter {block!r} / {side!r}: at most {MAX_FILTERS} different blocks, one side each")
+        return {k: v for b, sd in ps for k, v in filter_inputs(b, sd, root).items()}
     if block not in FILTERS or side not in FILTERS[block]:
         raise ValueError(f"filter {block!r} / {side!r}: blocks and sides are {({b: tuple(s) for b, s in FILTERS.items()})}")
     if block in L2_BLOCKS and root not in S.L2_ROOTS:

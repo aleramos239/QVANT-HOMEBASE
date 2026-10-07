@@ -43,12 +43,20 @@ PARTNER = {"NQ": "ES", "ES": "NQ"}
 def prep_roots(root: str, family, filt) -> list:
     """The markets whose 5-minute bar cache (levels.build_bars_cache) a unit reads: its own for the liquidity levels (the swing level),
     both for SMT."""
+    names = [b for b, _ in (filt if (filt and isinstance(filt[0], tuple)) else _pairs(filt))]
     out = []
-    if family == "liq" or (filt and filt[0] in ("level", "swept", "smt")):
+    if family == "liq" or any(b in ("level", "swept", "smt") for b in names):
         out.append(root)
-    if filt and filt[0] == "smt" and root in PARTNER:
+    if "smt" in names and root in PARTNER:
         out.append(PARTNER[root])
     return out
+
+
+def _pairs(filt) -> list:
+    """The (block, side) pairs of a filter pair, possibly combined ("ote+smt", "in+agree")."""
+    if not filt:
+        return []
+    return list(zip(filt[0].split("+"), filt[1].split("+")))
 
 
 def _now_s(st) -> int:

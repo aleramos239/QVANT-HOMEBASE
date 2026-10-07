@@ -347,8 +347,11 @@ Still to build:
    the chart service.)
 2. Runnable tester drafts: version 1 saves an idea as a RECORD in the Lab (card, settings, verdict), not as code the tester runs.
    Needed before line 6.1 can be checked against a tester replay.
-3. What version 1 refuses: a home of "all", the evening session, two filters at once, exits of its own, clock-time ideas,
-   and the family `va_reclaim`. Level 2 filters (NQ only) can be BUILT but not locked or tested (added 2026-10-06; the vendor's
+3. What version 1 refuses: a home of "all", exits of its own and clock-time ideas. The evening session (18:00 the evening before the trade date,
+   held to 15:58 of the trade date) and the family `va_reclaim` run under the blueprint since 2026-10-07 (owner's request).
+   Two filters at once are built (owner's request, 2026-10-07; line 0.2 keeps its limit of 2): a card that names two filters runs the plain table,
+   each filter alone and BOTH on; line 2.7 then asks each filter to beat the plain table AND the pair to beat the plain table and each filter alone
+   (the course's lesson: a pair that wins while one of its two fails alone is rejected). Level 2 filters (NQ only) can be BUILT but not locked or tested (added 2026-10-06; the vendor's
    Level 2 history ends 2026-07-08 and the test days' table is not built: the owner decides how their test range ends).
    Added 2026-10-06 at the owner's request (`bp.py blocks` lists them): the entry trigger `fvg` (fair value gap), the four DELTA
    filter blocks (`delta`, `cumdelta`, `sweep`, `bigorder`: NQ, ES and GC, from the tick order flow; their test range ends where the

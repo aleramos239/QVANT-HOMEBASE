@@ -55,7 +55,7 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
     assert list(F) == sorted(blocks.WRAPPED) and len(F) == 29
-    assert [n for n, f in F.items() if not f["runs"]] == ["va_reclaim"] and "old build days" in F["va_reclaim"]["why_not"]
+    assert [n for n, f in F.items() if not f["runs"]] == []                                       # va_reclaim runs too: its cache is built for the range (runner.prepare_family)
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
         assert f["does"] and f["does"][0] != " " and not f["does"].startswith(("C ", "N", "B ", "blocks ")), (name, f["does"])     # the trigger, without the registry's label
@@ -96,7 +96,7 @@ def test_the_filters_the_limits_and_the_exit_table():
 
 def test_the_sessions_bars_markets_and_the_numbers_of_the_templates():
     assert [(s["name"], s["words"]) for s in B["sessions"]] == [(s, J.SESS_PLAIN[s]) for s in RM.DAY_PASSES]
-    assert [s["name"] for s in B["sessions"] if not s["runs"]] == ["eve"] and B["bars"] == list(RM.registry().TFS) == ["1", "5", "15", "30"]
+    assert [s["name"] for s in B["sessions"] if not s["runs"]] == [] and B["bars"] == list(RM.registry().TFS) == ["1", "5", "15", "30"]
     c = R.template("costs")
     assert B["markets"] == [{"market": k, "floor": R.need("2.2", k), "point_value": c["contract"][k]["point_value"], "tick": c["contract"][k]["tick"]}
                             for k in ("NQ", "ES", "GC")]
@@ -115,11 +115,11 @@ def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     what = {x["what"]: x for x in B["refused"]}
     assert all(x["why"] for x in B["refused"]) and len(what) == len(B["refused"]) >= 9
     said = " | ".join(what)
-    for word in ('home "all"', "evening session", "two filters", "trail_atr", "exit_bars", "Level 2", "va_reclaim", "more than one", "extended"):
+    for word in ('home "all"', "trail_atr", "exit_bars", "Level 2", "more than one", "extended"):
         assert word in said, word
     # ... each put to the toolkit: the card's own lines, the runner's own check, the build's own refusal
     assert failing(card={"home": {"market": "all", "session": "nyam", "bar": "15"}}) == ["0.3"] == failing(card={"home": {"market": "NQ", "session": "all", "bar": "all"}})
-    assert failing(card={"home": {"market": "NQ", "session": "eve", "bar": "15"}}) == ["0.3"] and failing(card={"neighbors": ["the evening session"]}) == ["0.4"]
+    assert failing(card={"home": {"market": "NQ", "session": "eve", "bar": "15"}}) in ([], ["0.3"]) and failing(card={"neighbors": ["the evening session"]}) in ([], ["0.4"])      # the evening runs (when the trigger trades there)
     for own in ("trail_atr", "exit_bars"):
         assert failing(run={"limits": {own: 2}}) == ["0.2"]
     book = {"filters": [{"block": "book", "side": "agree"}]}
@@ -139,16 +139,11 @@ def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     assert failing(card={"main_setting": "mode", "not_here": "the afternoon"}, run={"family": "ib", "params": {"mode": ["break", "fade", "x"]}}) == ["0.5"]      # opposite ideas
     assert failing(run={"filters": [{"block": "news", "side": "no"}, {"block": "momentum", "side": "with"}, {"block": "volume", "side": "high"}]}) == ["0.2"]
     two = {"filters": [{"block": "news", "side": "no"}, {"block": "momentum", "side": "with"}]}
-    assert failing(run=two) == [], "a card may NAME two filters (line 0.2) ..."
-    assert "one filter" in what[next(k for k in what if "two filters" in k)]["why"]                 # ... a build runs one: records.start refuses the two together
-    import inspect
-    assert "version 1 reads a rule with one filter at most" in inspect.getsource(REC.start)
-    try:
-        RUN.checked({"name": "bl_probe", "reason": CARD["why"], "family": "va_reclaim", "markets": ["NQ"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {},
-                     "exits": "standard"})
-        raise AssertionError("va_reclaim was taken")
-    except J.Refuse as e:
-        assert "cannot run on the build range" in str(e)
+    assert failing(run=two) == [], "a card may NAME two filters (line 0.2), and a build now runs both"
+    assert not [k for k in what if "two filters" in k]                                              # no longer a refusal
+    sp = RUN.checked({"name": "bl_probe", "reason": CARD["why"], "family": "va_reclaim", "markets": ["NQ"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {},
+                      "exits": "standard"})
+    assert sp["family"] == "va_reclaim" and callable(RUN.prepare_family)                              # taken: the value-area cache is built for the range first
     assert failing(run={"family": "straddle_t_0830", "params": {}}, card={"main_setting": ""}) == ["0.2", "0.5"], "a family that is not bar-based is no entry trigger"
 
 
@@ -164,7 +159,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 28, "families_not_yet": 1, "filters": 69, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 29, "families_not_yet": 0, "filters": 69, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]
@@ -177,7 +172,7 @@ def test_the_command():
     assert all(any(x["what"] in ln for ln in lines) for x in B["refused"]) and max(len(ln) for ln in lines) < 330, max(lines, key=len)
     assert sum(ln.strip().startswith("settings: ") for ln in lines) == len(B["families"])
     assert sum(ln.split()[:1] == [a["id"]] for a in B["accounts"] for ln in lines) == len(B["accounts"])
-    assert "NOT YET" in next(ln for ln in lines if ln.split()[:1] == ["va_reclaim"]) and "$70" in text and "15:58" in text
+    assert "NOT YET" not in next(ln for ln in lines if ln.split()[:1] == ["va_reclaim"]) and "$70" in text and "15:58" in text
     assert not Path("/nowhere").exists()
 
 

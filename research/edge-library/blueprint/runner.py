@@ -131,8 +131,7 @@ def checked(spec) -> dict:
       exits other than the standard table (line 0.2; the control pool holds its 48 cells and no other). The card says
       "standard"; the engine is handed the blueprint's table (EXITS: the 32 cells of the old library, then the small targets)
       a Level 2 filter on another market than NQ (Level 2 exists for NQ only)
-      a family with a `prepare` step of its own (va_reclaim: its value-area cache and its tape reads know the old build
-      days only, so 2025 would raise inside a worker; the engine has to open it first)."""
+      (a family with a `prepare` step of its own, va_reclaim, is built for the range by `prepare_family` before its pass)."""
     if isinstance(spec, (str, Path)):
         try:
             spec = json.loads(Path(spec).read_text())
@@ -148,17 +147,14 @@ def checked(spec) -> dict:
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table only (BLUEPRINT.md line 0.2), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
     if (sp["exits"], sp["filter_exits"]) != (EXITS, EXITS):       # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
-    l2 = [f"{b} {s}" for b, s in sp["filters"] if b in blocks.L2_BLOCKS]
+    l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
         raise J.Refuse(f"{sp['name']}: filter {l2[0]} reads Level 2, which exists for NQ only, not for {next(m for m in sp['markets'] if m != 'NQ')}")
-    for b, _ in sp["filters"]:
+    for b in (b for fl in sp["filters"] for b, _ in blocks.parts(fl)):
         ok = blocks.BLOCK_MARKETS.get(b)
         if ok and any(m not in ok for m in sp["markets"]):
             raise J.Refuse(f"{sp['name']}: filter {b} compares {ok[0]} with {ok[1]}: it runs on {' and '.join(ok)} only, not on "
                            f"{next(m for m in sp['markets'] if m not in ok)}")
-    if getattr(blocks.WRAPPED[sp["family"]], "prepare", None) is not None:
-        raise J.Refuse(f"{sp['name']}: family {sp['family']} builds its own cache for the old build days only and reads tapes without the "
-                       "build switch: it cannot run on the build range until the engine opens it")
     return sp
 
 
@@ -171,7 +167,7 @@ def _kw(family: str, filt=None) -> dict:
     marker of the build range's Level-2 table (`_engine` turns it into the loader: a store's run.json stays plain JSON)."""
     blocks = _blocks()
     kw = dict(getattr(blocks.WRAPPED[family], "SCREEN_RUN", {}))
-    if filt and filt[0] in blocks.L2_BLOCKS:
+    if filt and blocks.reads(filt, blocks.L2_BLOCKS):
         kw["features"] = L2
     return kw
 
@@ -180,6 +176,16 @@ def _levels():
     RM.registry()
     import levels
     return levels
+
+
+def prepare_family(family, root, period, workers, allow=None):
+    """A family's own one-off cache (va_reclaim: the value area of each session), built for THIS stage's range under THIS stage's seal switch
+    (the build's, or the test's): the engine's own switch, handed through unchanged, so a worker never has to read a sealed tape."""
+    prep = getattr(_blocks().WRAPPED[family], "prepare", None)
+    if prep is None:
+        return None
+    S.wait_compute_window()
+    return prep(root, workers=workers, period=period, **({"allow_holdout": allow} if allow else {}))
 
 
 def bar_roots(root, family, filt) -> list:
@@ -467,9 +473,12 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
             _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out)
         if pend:
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
-            for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] in ("volume", "rvol") and days is None):
+            for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol")) and days is None):
                 S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
                 say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
+            for fam, root in dict.fromkeys((p["family"], p["root"]) for p in pend if p["family"] and getattr(_blocks().WRAPPED.get(p["family"]), "prepare", None)):
+                for lo, hi in ([(None, None)] if days is None else [(dt.date.fromisoformat(d) - dt.timedelta(days=7), d) for d in days]):     # named days: each and the week before
+                    say(f"{fam} cache {root}: {prepare_family(fam, root, PERIOD if lo is None else (lo, hi), n, PERIOD)}")
             for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
                 S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
                 say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
@@ -769,7 +778,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
     if u is None or sess not in sp["sessions"]:
         raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
-    if u["filter"] and u["filter"][0] in _blocks().L2_BLOCKS:
+    if u["filter"] and _blocks().reads(u["filter"], _blocks().L2_BLOCKS):
         raise J.Refuse(f"{key}: a Level 2 filter cannot be tested yet: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not built")
     root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
     try:
@@ -849,9 +858,12 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
         for p in todo:                              # a store without its ledger row (a run that died between the two): booked, not run again
             if p["have"]:
                 _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out, period=sw)
-        if pend and u["filter"] and u["filter"][0] in ("volume", "rvol"):
+        if pend and u["filter"] and blocks.reads(u["filter"], ("volume", "rvol")):
             S.wait_compute_window()                 # the volume block's minute-volume cache, opened for the frozen range
             say(f"volume block {root}: {blocks.build_minvol(root, (a, b), n, allow_holdout=sw)}")
+        if pend and getattr(blocks.WRAPPED[sp["family"]], "prepare", None):
+            for x, y in ([(a, b)] if named is None else [(d, d) for d in named]):          # (the day before the first test day is a build day: the build's file holds it)
+                say(f"{sp['family']} cache {root}: {prepare_family(sp['family'], root, (x, y), n, sw)}")
         if pend:
             for rt in bar_roots(root, sp["family"], u["filter"]):
                 S.wait_compute_window()             # the 5-minute bars (swing level, SMT), opened for the frozen range

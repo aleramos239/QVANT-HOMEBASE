@@ -519,7 +519,7 @@ def test_specs_the_build_range_cannot_run_are_refused():
         refused(lambda: RUN.checked({**SPEC, "exits": "extended"}), "standard")
         RUN.checked({**SPEC, "filters": [{"block": "book", "side": "agree"}]})                          # Level 2 on NQ is taken (built, not locked or tested)
         refused(lambda: RUN.checked({**SPEC, "markets": ["NQ", "ES"], "filters": [{"block": "book", "side": "agree"}]}), "NQ only")
-        refused(lambda: RUN.checked({**SPEC, "family": "va_reclaim", "params": {"d_atr": [0.25, 0.5]}}), "va_reclaim")
+        assert RUN.checked({**SPEC, "family": "va_reclaim", "params": {"d_atr": [0.25, 0.5]}})["family"] == "va_reclaim"          # taken: its cache is built per range
         refused(lambda: RUN.checked({**SPEC, "end": "2025-07-01"}), "unknown fields")
         refused(lambda: RUN.checked({**SPEC, "family": "no_such_family"}), "family")
         refused(lambda: RUN.checked({k: v for k, v in SPEC.items() if k != "reason"}), "reason")
@@ -766,6 +766,45 @@ def test_the_job_folder_and_its_state():
     for bad in ("20990101T000000-abcdef", "nope", "", "../_jobs/" + d.name):
         refused(lambda bad=bad: JOBS.wait(bad, root, 0), "no job")
     assert JOBS.code({"ok": True}) == 0 and JOBS.code({"ok": False}) == 2 and JOBS.code({"ok": False, "crashed": True}) == 1
+
+
+# ================================================================ two filters at once
+
+SPEC2 = {**SPEC, "name": "bpt_two", "filters": [{"all": [{"block": "momentum", "side": "with"}, {"block": "news", "side": "no"}]}]}
+
+
+def test_two_filters_run_alone_and_together_and_line_27_holds_the_pair_against_each():
+    """A card that names two filters runs the plain table, each filter alone and both on (one tape pass); line 2.7 compares the pair with
+    the plain table and with each filter alone, and each filter alone with the plain table: five comparisons, the pair's name says so."""
+    sp = RUN.checked(SPEC2)
+    assert sp["filters"] == [("momentum", "with"), ("news", "no"), ("momentum+news", "with+no")]        # the singles are added before the pair
+    o, led = tmp() / "runs_two", tmp() / "ledger_two.csv"
+    keep = RM.auto_workers
+    RM.auto_workers = lambda n=None: n
+    try:
+        with watch() as seen, at(SAT):
+            rows = RUN.run_build(SPEC2, out_dir=o, ledger=led, days=DAYS, cells=CELLS, workers=1)
+    finally:
+        RM.auto_workers = keep
+    keys = sorted(r["key"] for r in rows)
+    assert keys == ["bpt_two-NQ-tf15", "bpt_two__momentum+news_with+no-NQ-tf15", "bpt_two__momentum_with-NQ-tf15", "bpt_two__news_no-NQ-tf15", "c1-NQ-tf15"], keys
+    assert len(seen["passes"]) == 1 and sorted(seen["passes"][0]) == keys                                # ONE tape pass for all five stores
+    with rule(draws=200), at(SAT), no_engine():
+        t = T.built(sp, out_dir=o, days=DAYS, filt="momentum+news_with+no")
+    names = [f["name"] for f in t["filters"]]
+    assert len(names) == 5 and names[0].startswith("both filters momentum with and news no against the plain version"), names
+    assert sum("alone against the plain version" in n for n in names) == 2 and sum(n.startswith("both filters against") for n in names) == 2
+    from blueprint import lines as L
+    row = L.filter_alone({**t, "reason": REASON})
+    assert row["line"] == "2.7" and len(row["filters"]) == 5 and row["passed"] in (True, False)
+    # the pair's blocks must differ, and at most two
+    for bad in ([{"block": "news", "side": "no"}, {"block": "news", "side": "yes"}], [{"block": "news", "side": "no"}, {"block": "momentum", "side": "with"}, {"block": "volume", "side": "high"}]):
+        try:
+            RUN.checked({**SPEC, "filters": [{"all": bad}]})
+            raise AssertionError("a pair of one block, or three filters, must be refused")
+        except J.Refuse as e:
+            assert "different blocks" in str(e) or "filters of" in str(e), e
+    RESULTS["test_two_filters_run_alone_and_together_and_line_27_holds_the_pair_against_each"] = (5, 5, "stores of a two-filter rule, one pass; line 2.7 reads five comparisons")
 
 
 # ================================================================ nothing outside the temp folder

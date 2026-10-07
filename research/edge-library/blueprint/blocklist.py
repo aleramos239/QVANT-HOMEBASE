@@ -34,8 +34,6 @@ LIMITS = {"max_tr": "the most entries a session: a whole number from 1", "dir": 
           "exit_bars": "leave after N bars", "trail_atr": "a trailing stop of N x ATR"}
 REFUSED = (                                         # (what, why) -- what version 1 refuses, in the toolkit's own reasons
     ('a home "all"', "version 1 judges ONE home table: name the market, session and bar size the reason fits best, and list the others as neighbors (line 2.5 reads them)"),
-    ("the evening session", "home, neighbor or the place it should not work: the evening session comes later (toolkit plan, section 7)"),
-    ("two filters at once", "a card may name two (line 0.2), but a build runs a rule with one filter at most: each filter first wins alone, one a round (line 2.7)"),
     ("limits.trail_atr / limits.exit_bars", "exits of their own: the exits come from the standard table only (the random tables hold its 48 cells and no other)"),
     ('exits "extended"', "the standard exit table only (line 0.2)"),
     ("a Level 2 filter on ES or GC", "Level 2 exists for NQ only: every place of a card with a Level 2 filter (home, neighbors, the place it should not work) must be NQ"),
@@ -43,7 +41,6 @@ REFUSED = (                                         # (what, why) -- what versio
                                                           "(phase 2) but not locked or tested; the owner decides how the test range of one ends"),
     ("more than one varied setting", "an idea varies ONE setting, its main setting with 3-4 values (line 0.5); the others are held at one value under `fixed` -- and "
                                      "values that are opposite ideas (ib break / fade, gap fill / go, a side) are each an idea of their own"),
-    ("a family that cannot run on the build days yet (va_reclaim)", "it builds its own cache for the old build days only: the engine has to open it first"),
     ("an entry trigger that is not bar-based", "the registry's time-fired and Level 2 families are no blocks: a clock-time idea comes later (toolkit plan, section 7)"),
     ("the first look (the entry alone with a plain time exit)", "it needs a no-stop exit cell: not in version 1 (line 2.3 decides anyway)"),
     ("a tester run as the code check's source (--run-id)", "tester runs are not read yet: give a store or a trades file"),
@@ -76,13 +73,11 @@ def families() -> list:
     for name in sorted(blocks.WRAPPED):
         cls, lib = blocks.WRAPPED[name], fam.library(name)
         sc, d = cls.schema(), cls.defaults()
-        stuck = getattr(cls, "prepare", None) is not None
         out.append({"name": name, "does": _does(name), "why": lib["rationale"],
                     "settings": [{"name": k, "default": d[k], "values": _values(sc[k])} for k in sorted(d) if k not in skip and k in sc],
                     "tried": lib["variants"], "markets": list(lib["roots"]), "bars": list(cls.SCREEN_TFS),
                     "sessions": [s for s in RM.DAY_PASSES if cls({**lib["variants"][0], "tf": cls.SCREEN_TFS[0], "sess": s}).sessions()],
-                    "bracket": bool(blocks.BASES[name][2]), "mirror": lib.get("mirror"), "runs": not stuck,
-                    "why_not": "it builds its own cache for the old build days only: it cannot run on the build range until the engine opens it" if stuck else None})
+                    "bracket": bool(blocks.BASES[name][2]), "mirror": lib.get("mirror"), "runs": True, "why_not": None})
     return out
 
 
@@ -100,7 +95,7 @@ def blocks() -> dict:
          "limits": [{"name": k, "words": LIMITS[k], "runs": k not in REC.OWN_EXITS} for k in RI.LIMIT_KEYS],
          "exits": {"cells": m["cells"], "stops": m["stops"], "targets_r": sorted(m["targets_r"] + m["small_targets_r"]), "flat_et": m["flat_et"], "flat_et_half_day": m["flat_et_half_day"],
                    "by_market": {root: [S.cell_id(x) for x in R.exit_menu(root)] for root in m["stops"]["pts"]}},
-         "sessions": [{"name": s, "words": J.SESS_PLAIN[s], "runs": s != "eve"} for s in RM.DAY_PASSES], "bars": list(fam.TFS),
+         "sessions": [{"name": s, "words": J.SESS_PLAIN[s], "runs": True} for s in RM.DAY_PASSES], "bars": list(fam.TFS),
          "markets": [{"market": k, "floor": R.need("2.2", k), "point_value": v["point_value"], "tick": v["tick"]} for k, v in c["contract"].items()],
          "random_tables": {"seeds": ctl["seeds"], "draws": ctl["draws"]},
          "montecarlo": {"runs": mc["runs"], "seed": mc["seed"], "draw": "whole days, with replacement, the same days for every variant", "build": mc["build"], "test": mc["test"],
@@ -132,7 +127,7 @@ def blocks() -> dict:
             "the toolkit's own.",
             f"ENTRY TRIGGERS (settings.family; ONE an idea): {sum(f['runs'] for f in F)} run on the build days, {sum(not f['runs'] for f in F)} cannot yet",
             *[ln for f in F for ln in family(f)],
-            "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7)",
+            "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7; a card may name two, line 0.2: each runs alone and both together, and the pair is kept only if each wins alone AND the pair beats each one)",
             *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"]
               + ("" if f["tested"] else " [NQ only; can be built, not yet locked or tested]") for f in filters],
             "LIMITS (settings.limits)",
