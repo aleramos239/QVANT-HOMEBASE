@@ -15,7 +15,7 @@ level), so nothing here looks ahead. A level that cannot be had (a roll day, no 
     sw        the SWING high / low (owner's definition, 2026-10-06): a 5-minute bar whose high is above the 50 bars before it AND the 50 bars
               after it (strict; a low mirrors it). Known only once the 50th bar after it has closed. The level is the most recent swing
               high and the most recent swing low that no bar has traded beyond since, over the last 5 sessions of ONE contract (bars from
-              18:00 ET the evening before to 16:00). Read ONCE per session, at the session's first decision, and then fixed: a swing that
+              18:00 ET the evening before to 17:00: the whole Globex day, so the 16:00-17:00 hour is in and no session boundary hides a move). Read ONCE per session, at the session's first decision, and then fixed: a swing that
               confirms later in the session is not used that day. A side with no such swing is +inf (high) / -inf (low): nothing can reach it;
               with neither side the level is left out.
     eq        EQUAL highs / lows (owner, 2026-10-06; NQ only): two CONSECUTIVE swings (the `sw` swings: 50 five-minute bars each side) whose
@@ -46,7 +46,7 @@ EV_START, EV_END, EV_MIN = "20:00", "00:00", 30                                 
 D5 = 5
 SW_TF, SW_N, SW_SESS = 5, 50, 5                                                         # swing bars (minutes), bars each side, sessions looked back
 EQ_TOL = {"NQ": 10.0}                                                                   # equal highs / lows: the gap in points, per market (NQ only for now)
-SW_OPEN, SW_CLOSE = "18:00", "16:00"                                                     # a session's swing bars: the evening before 18:00 .. 16:00 ET
+SW_OPEN, SW_CLOSE = "18:00", "17:00"                                                     # a session's swing bars: the evening before 18:00 .. 17:00 ET (the whole Globex day)
 
 
 def _now_s(st) -> int:
