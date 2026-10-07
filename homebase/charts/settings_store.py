@@ -58,6 +58,15 @@ class SettingsStore:
             md = MD_ENV
         return {"md": md}
 
+    def other_roots(self) -> list[str]:
+        """"md_other_roots": the markets that ride the OTHER login's md socket (the one `md` does
+        not name), e.g. ["YM", "GC", "SI"] when only the eval logins carry CBOT / COMEX. Read at
+        start-up; [] (one socket for everything) unless the file holds a list of names."""
+        v = self._read().get("md_other_roots")
+        if not isinstance(v, list):
+            return []
+        return list(dict.fromkeys(x.upper() for x in v if isinstance(x, str) and x.strip()))
+
     def set_md(self, md: str) -> dict:
         if md not in MD_CHOICES:
             raise ValueError(f"md must be one of {MD_CHOICES}")
