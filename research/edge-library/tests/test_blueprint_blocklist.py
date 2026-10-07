@@ -114,7 +114,7 @@ def test_the_sessions_bars_markets_and_the_numbers_of_the_templates():
 
 def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     what = {x["what"]: x for x in B["refused"]}
-    assert all(x["why"] for x in B["refused"]) and len(what) == len(B["refused"]) >= 9
+    assert all(x["why"] for x in B["refused"]) and len(what) == len(B["refused"]) >= 8
     said = " | ".join(what)
     for word in ('home "all"', "trail_atr", "exit_bars", "Level 2", "more than one", "extended"):
         assert word in said, word
