@@ -121,13 +121,30 @@ def verify(lock: dict, spec=None) -> list:
     return bad
 
 
-def _range(market: str, home: bool, flow: bool = False) -> dict:
+def _l2_end():
+    """The last session of the test days' Level 2 table (engine/btfeat.py), or a refusal that says it is not built."""
+    import btfeat
+    try:
+        return btfeat.last_date()
+    except FileNotFoundError as e:
+        raise J.Refuse(str(e)) from None
+
+
+def _reads(filt) -> dict:
+    """What the one filter of a rule reads, as `_range` takes it: flow (a delta block) / l2 (a Level 2 block)."""
+    b = filt.split("_")[0] if filt else None
+    return {"flow": b in RUN._blocks().FLOW_SERIES, "l2": b in RUN._blocks().L2_BLOCKS}
+
+
+def _range(market: str, home: bool, flow: bool = False, l2: bool = False) -> dict:
     """The test range of a market as it is frozen (runner.test_range). The home's must be there: it is what the test reads.
     A neighbor's market without one is said in its place (no line of the test reads a neighbor). flow = the idea's filter is a
     delta block: the range ends where the flow file ends (flowtab.last_date): a later session has no flow row, so every entry of
-    it would be blocked, and a test of those days would read an idea that was never run there."""
+    it would be blocked, and a test of those days would read an idea that was never run there. l2 = a Level 2 block: it ends
+    where the test days' Level 2 table ends (btfeat.last_date: the vendor's depth history), for the same reason."""
     try:
-        return RUN.test_range(market, flowtab.last_date(market) if flow else None)
+        caps = ([flowtab.last_date(market)] if flow else []) + ([_l2_end()] if l2 else [])
+        return RUN.test_range(market, min(caps) if caps else None)
     except J.Refuse as e:
         if home:
             raise
@@ -203,9 +220,6 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     plan, store = rspec["plan"], rspec["store"]
     if len(plan["filters"]) > 1:
         raise J.Refuse(f"{name}'s rule has {len(plan['filters'])} filters: version 1 freezes a rule with one filter at most")
-    if plan["filters"] and plan["filters"][0].split("_")[0] in RUN._blocks().L2_BLOCKS:
-        raise J.Refuse(f"{name}: filter {plan['filters'][0]} reads Level 2, which can be built but not locked or tested yet: the vendor's Level 2 history ends "
-                       "2026-07-08 and the test days' table is not built (the owner decides how the test range of such an idea ends)")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers")
     days = None if days is None else RUN.seal(days)
@@ -289,7 +303,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
                         "draw_seed": {"build": J.seed_of(u["uid"], f"{RUN.PERIOD}-c1"), "test": J.seed_of(u["uid"], "test-c1")}},
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
-            "test_range": {m: _range(m, m == h["market"], bool(filt) and filt.split("_")[0] in RUN._blocks().FLOW_SERIES) for m in markets}}
+            "test_range": {m: _range(m, m == h["market"], **_reads(filt)) for m in markets}}
     lock = json.loads(json.dumps(lock))               # as it will read from disk (plain JSON: a number that is not is refused here)
     lock["hash"] = digest(lock)
     path = IS.write_lock(name, lock, root)
@@ -380,9 +394,6 @@ def early(name, root=None, out=None, draws=None) -> dict:
     plan, store = rspec["plan"], rspec["store"]
     if len(plan["filters"]) > 1:
         raise J.Refuse(f"{name}'s rule has {len(plan['filters'])} filters: version 1 reads a rule with one filter at most")
-    if plan["filters"] and plan["filters"][0].split("_")[0] in RUN._blocks().L2_BLOCKS:     # as the freeze refuses it (start)
-        raise J.Refuse(f"{name}: filter {plan['filters'][0]} reads Level 2, which can be built but not locked or tested yet: the vendor's Level 2 history ends "
-                       "2026-07-08 and the test days' table is not built -- so there is no early look at its test days either")
     sp = RUN.checked(REC.engine(rspec, plan, store)[0])
     h, filt, folder = plan["home"], (plan["filters"][0] if plan["filters"] else None), _folder(out)
     f = T.filter_of(sp, filt)
@@ -407,7 +418,6 @@ def early(name, root=None, out=None, draws=None) -> dict:
     except J.Refuse as e:
         why = str(e)
     two = bool(RUN._blocks().BASES[sp["family"]][2])
-    flow = bool(filt) and filt.split("_")[0] in getattr(RUN._blocks(), "FLOW_SERIES", ())      # a delta block: the range ends where its data ends (_range, as in run())
     pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
     keys = [key, pool] + ([T.bp_unit(sp, h["market"], h["bar"], h["session"])["key"]] if f else [])
     lock = {"name": name, "version": rspec.get("version", 1), "locked_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "round": n,
@@ -423,7 +433,7 @@ def early(name, root=None, out=None, draws=None) -> dict:
                         "draw_seed": {"build": J.seed_of(u["uid"], f"{RUN.PERIOD}-c1"), "test": J.seed_of(u["uid"], "test-c1")}},
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
-            "test_range": {h["market"]: _range(h["market"], True, *([True] if flow else ()))},
+            "test_range": {h["market"]: _range(h["market"], True, **_reads(filt))},
             api.EARLY_LOOK: True, "build_failed": [k for k in IS.LINES[2] if marks.get(k, False) not in (True, None)],      # failed, or not in the result at all
             "code_check": {"missing": why is not None, "why": why}}
     lock = json.loads(json.dumps(lock))               # as it will read from disk

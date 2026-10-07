@@ -97,8 +97,8 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   stack       with | against        the minute's change of the top-10 size on the trade's side minus the other side's, as a share of the
                                     depth: at least +STACK_FRAC = 5 % (with: size was added behind the trade / pulled in front of it)
                                     or at most -5 % (against). A smaller change has no signal.
-  Level 2 history: the build days (to 2025-06-30) are covered; the vendor's history ends 2026-07-08 and the test days' table is not
-  built, so a Level 2 filter can be BUILT but not locked or tested (blueprint/freeze.py refuses it, with the reason).
+  Level 2 history: the build days (to 2025-06-30) are bpfeat's table, the test days (2025-07-01 .. 2026-07-07: the vendor's depth history
+  ends 2026-07-07 15:59) are btfeat's; a Level 2 idea's frozen test range ends at that table's last day (blueprint/freeze.py).
 
   DELTA BLOCKS (order flow of the desk's own tick archive, flowtab.py; NQ, ES and GC; the aggressor side is an estimate)
         One rule for the four: SHARE = (the series summed over a clock window) / (the volume of that window), completed

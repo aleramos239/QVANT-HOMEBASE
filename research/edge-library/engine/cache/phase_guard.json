@@ -369,8 +369,116 @@
    "sess_max_s": 59.74,
    "on_phase_s": 59.7,
    "overnight": true
+  },
+  "2025-07": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.4,
+   "sess_max_s": 59.44,
+   "on_phase_s": 59.4,
+   "overnight": true
+  },
+  "2025-08": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.24,
+   "sess_max_s": 59.28,
+   "on_phase_s": 59.24,
+   "overnight": true
+  },
+  "2025-09": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.38,
+   "sess_max_s": 59.42,
+   "on_phase_s": 59.36,
+   "overnight": true
+  },
+  "2025-10": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.7,
+   "sess_max_s": 59.74,
+   "on_phase_s": 59.7,
+   "overnight": true
+  },
+  "2025-11": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.66,
+   "sess_max_s": 59.7,
+   "on_phase_s": 59.68,
+   "overnight": true
+  },
+  "2025-12": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.64,
+   "sess_max_s": 59.68,
+   "on_phase_s": 59.66,
+   "overnight": true
+  },
+  "2026-01": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.78,
+   "sess_max_s": 59.86,
+   "on_phase_s": 59.82,
+   "overnight": true
+  },
+  "2026-02": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.14,
+   "sess_max_s": 59.18,
+   "on_phase_s": 59.18,
+   "overnight": true
+  },
+  "2026-03": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.42,
+   "sess_max_s": 59.48,
+   "on_phase_s": 59.42,
+   "overnight": true
+  },
+  "2026-04": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.28,
+   "sess_max_s": 59.32,
+   "on_phase_s": 59.28,
+   "overnight": true
+  },
+  "2026-05": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.14,
+   "sess_max_s": 59.18,
+   "on_phase_s": 59.16,
+   "overnight": true
+  },
+  "2026-06": {
+   "ok": false,
+   "failed_parts": [
+    "overnight"
+   ],
+   "phase_s": 59.14,
+   "sess_max_s": 59.16,
+   "on_phase_s": null,
+   "overnight": true
+  },
+  "2026-07": {
+   "ok": true,
+   "failed_parts": [],
+   "phase_s": 59.98,
+   "sess_max_s": 59.98,
+   "on_phase_s": null,
+   "overnight": true
   }
  },
- "failed": [],
- "updated_et": "2026-10-06T08:29:40-04:00"
+ "failed": [
+  "2026-06"
+ ],
+ "updated_et": "2026-10-06T23:11:33-04:00"
 }

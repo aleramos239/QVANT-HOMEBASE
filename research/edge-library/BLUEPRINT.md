@@ -348,8 +348,10 @@ Still to build:
 2. Runnable tester drafts: version 1 saves an idea as a RECORD in the Lab (card, settings, verdict), not as code the tester runs.
    Needed before line 6.1 can be checked against a tester replay.
 3. What version 1 refuses: a home of "all", the evening session, two filters at once, exits of its own, clock-time ideas,
-   and the family `va_reclaim`. Level 2 filters (NQ only) can be BUILT but not locked or tested (added 2026-10-06; the vendor's
-   Level 2 history ends 2026-07-08 and the test days' table is not built: the owner decides how their test range ends).
+   and the family `va_reclaim`. Level 2 filters (NQ only) are built, locked and tested like any other filter (added 2026-10-06): the test days'
+   Level 2 table is built (`engine/btfeat.py`, 2025-07-01 .. 2026-07-07: the vendor's Level 2 history ends there) and a Level 2 idea's
+   frozen test range ends at that table's last day, as a delta idea's ends where the flow file ends. From 2026-06-01 the vendor's file holds
+   the 09:30-15:59 ET minutes only (no evening or overnight book), so a Level 2 idea that trades before 09:30 has no signal on those days.
    Added 2026-10-06 at the owner's request (`bp.py blocks` lists them): the entry trigger `fvg` (fair value gap), the four DELTA
    filter blocks (`delta`, `cumdelta`, `sweep`, `bigorder`: NQ, ES and GC, from the tick order flow; their test range ends where the
    flow file ends), the Level 2 filter blocks (`book`, `depth`, `ahead`, `wall`, `stack`) and, batch 1 of the price-and-trend blocks

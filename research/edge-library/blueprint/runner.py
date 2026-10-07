@@ -164,6 +164,7 @@ def checked(spec) -> dict:
 
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
+L2T = "bt_l2"                                       # ... and of the test days (btfeat.BtL2Features: run_test turns the marker into the loader)
 
 
 def _kw(family: str, filt=None) -> dict:
@@ -769,8 +770,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
     if u is None or sess not in sp["sessions"]:
         raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
-    if u["filter"] and u["filter"][0] in _blocks().L2_BLOCKS:
-        raise J.Refuse(f"{key}: a Level 2 filter cannot be tested yet: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not built")
+    l2 = bool(u["filter"]) and u["filter"][0] in _blocks().L2_BLOCKS       # a Level 2 filter reads the test days' table (engine/btfeat.py)
     root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
     try:
         a, b = S._date(first), S._date(end)
@@ -780,6 +780,15 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     off = [end] if b < a else ["no day"] if named == [] else [d for d in named or [] if not a.isoformat() <= d <= b.isoformat()]
     if off:
         raise J.Refuse(f"{off[0]}: the test of {name} reads {a} .. {end} only (the range its lock froze)")
+    if l2:
+        import btfeat
+        try:
+            table_end = btfeat.last_date()
+        except FileNotFoundError as e:
+            raise J.Refuse(f"{key}: {e}") from None
+        if root not in S.L2_ROOTS or b > table_end:
+            raise J.Refuse(f"{key}: a Level 2 filter is tested on NQ only, and no later than the last day of the test days' Level 2 table "
+                           f"({table_end}): the range ending {end} is not that")
     if named is not None and (out_dir is None or ledger is None):
         raise J.Refuse("a read of named test days is a test of the plumbing: it takes its own store folder and its own ledger file, and never writes "
                        f"into {TESTS.name}/ or ledger.csv")
@@ -792,6 +801,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
                        + ": the lock's variant list names the cells of the read")
     blocks, K = _blocks(), test_keys(key, store, root, tf, sess)
     base, worse = dict(getattr(blocks.WRAPPED[sp["family"]], "SCREEN_RUN", {})), worse_kw(bool(blocks.BASES[sp["family"]][2]))
+    base.update({"features": L2T} if l2 else {})     # (a store's run.json keeps the plain marker; the loader is made at the pass)
     seeds, um = list(range(1, R.template("control")["seeds"] + 1)), {**RI.unit_meta(sp, u), "sessions": [sess], "sess_instance": sess}
     stage = {"table": sw, "worse": f"{sw}_worse", "pool": f"null_{sw}"}      # the ledger stages of the read
     todo = [{**_part(K["pool"], "pool", root, tf, _seeded(c1_grid, seeds, root, str(tf)), [sess], None,
@@ -868,11 +878,15 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
                     who.append((p["key"], c["id"]))
             step = max(1, int(block or R.template("compute")["block_days"])) if all(getattr(c, "session_independent", False) for c, _ in specs) else len(run_days)
             acc = [_Cell(a.toordinal(), b.toordinal()) for _ in who]
+            eng = _engine(group[0]["kw"])
+            if eng.get("features") == L2T:          # the test days' Level 2 table under the test seal (btfeat names the switch itself)
+                import btfeat
+                eng["features"] = btfeat.BtL2Features(blocks.BOOK_COLS)
             head = f"test of {name}: pass {i} of {len(groups)}, {root} {tf}-minute bars ({' + '.join(p['key'] for p in group)}; {n} workers)"
             say(head)
             for k in range(0, len(run_days), step):
                 say(f"{head}: days {k + 1}-{min(k + step, len(run_days))} of {len(run_days)} ({len(specs)} instances)")
-                res = S.run_many(specs, a, b, days=run_days[k:k + step], root=root, workers=n, allow_holdout=sw, **_engine(group[0]["kw"]))
+                res = S.run_many(specs, a, b, days=run_days[k:k + step], root=root, workers=n, allow_holdout=sw, **eng)
                 for cell, (pk, cid), x, y in zip(acc, who, cut, cut[1:]):
                     r = RM.merge(res[x:y])
                     if pk == K["table"] and cid in kept:

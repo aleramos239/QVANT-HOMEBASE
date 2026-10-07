@@ -81,8 +81,9 @@ def test_the_filters_the_limits_and_the_exit_table():
     assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 69
     assert all(f["words"] == blocks.PLAIN[(f["block"], f["side"])] for f in B["filters"])
     assert all(f["runs"] and f["why_not"] is None for f in B["filters"])
-    l2 = [f for f in B["filters"] if f["block"] in blocks.L2_BLOCKS]                                   # Level 2: NQ only, built but not yet locked or tested
-    assert l2 and all(f["markets"] == ["NQ"] and not f["tested"] for f in l2) and all(f["markets"] == list(blocks.BLOCK_MARKETS.get(f["block"], ("NQ", "ES", "GC"))) and f["tested"] for f in B["filters"] if f not in l2)
+    l2 = [f for f in B["filters"] if f["block"] in blocks.L2_BLOCKS]                                   # Level 2: NQ only (built, locked and tested like the others)
+    assert l2 and all(f["markets"] == ["NQ"] for f in l2) and all(f["markets"] == list(blocks.BLOCK_MARKETS.get(f["block"], ("NQ", "ES", "GC"))) for f in B["filters"] if f not in l2)
+    assert not any("tested" in f for f in B["filters"])                                               # the flag is gone: every filter is built, locked and tested
     assert {f["block"] for f in l2} == {"book", "depth", "ahead", "wall", "stack"}
     assert {x["name"]: x["runs"] for x in B["limits"]} == {"max_tr": True, "dir": True, "exit_bars": False, "trail_atr": False} == {
         k: k not in REC.OWN_EXITS for k in ("max_tr", "dir", "exit_bars", "trail_atr")}
@@ -128,7 +129,8 @@ def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     assert failing(card={"neighbors": ["ES"]}, run={"filters": [{"block": "delta", "side": "with"}]}) == []             # a delta block runs on every market
     import inspect
     from blueprint import freeze as FZ
-    assert "can be built but not locked or tested" in inspect.getsource(FZ.start) and "cannot be tested yet" in inspect.getsource(RUN.run_test)
+    assert not [w for w in what if "locking or testing" in w]                                    # a Level 2 idea is locked and tested: neither list nor code refuses it
+    assert "not locked or tested" not in inspect.getsource(FZ.start) and "cannot be tested yet" not in inspect.getsource(RUN.run_test)
     try:
         RUN.checked({"name": "bl_probe", "reason": CARD["why"], "family": "orb", "markets": ["NQ", "ES"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {},
                      "exits": "standard", "filters": [{"block": "wall", "side": "clear"}]})

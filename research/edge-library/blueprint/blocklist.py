@@ -39,8 +39,6 @@ REFUSED = (                                         # (what, why) -- what versio
     ("limits.trail_atr / limits.exit_bars", "exits of their own: the exits come from the standard table only (the random tables hold its 48 cells and no other)"),
     ('exits "extended"', "the standard exit table only (line 0.2)"),
     ("a Level 2 filter on ES or GC", "Level 2 exists for NQ only: every place of a card with a Level 2 filter (home, neighbors, the place it should not work) must be NQ"),
-    ("locking or testing an idea with a Level 2 filter", "the vendor's Level 2 history ends 2026-07-08 and the test days' feature table is not built: such an idea can be built "
-                                                          "(phase 2) but not locked or tested; the owner decides how the test range of one ends"),
     ("more than one varied setting", "an idea varies ONE setting, its main setting with 3-4 values (line 0.5); the others are held at one value under `fixed` -- and "
                                      "values that are opposite ideas (ib break / fade, gap fill / go, a side) are each an idea of their own"),
     ("a family that cannot run on the build days yet (va_reclaim)", "it builds its own cache for the old build days only: the engine has to open it first"),
@@ -94,7 +92,7 @@ def blocks() -> dict:
     m, c, mc, ctl, sz, rg = (R.template(n) for n in ("exit_menu", "costs", "montecarlo", "control", "sizes", "ranges"))
     F = families()
     filters = [{"block": b, "side": s, "words": eng.PLAIN[(b, s)], "runs": True, "why_not": None,
-                "markets": ["NQ"] if b in eng.L2_BLOCKS else list(eng.BLOCK_MARKETS.get(b, ("NQ", "ES", "GC"))), "tested": b not in eng.L2_BLOCKS}
+                "markets": ["NQ"] if b in eng.L2_BLOCKS else list(eng.BLOCK_MARKETS.get(b, ("NQ", "ES", "GC")))}
                for b, sides in eng.FILTERS.items() for s in sides]
     B = {"families": F, "other_families": sorted(set(fam.REGISTRY) - set(eng.WRAPPED)), "filters": filters,
          "limits": [{"name": k, "words": LIMITS[k], "runs": k not in REC.OWN_EXITS} for k in RI.LIMIT_KEYS],
@@ -134,7 +132,7 @@ def blocks() -> dict:
             *[ln for f in F for ln in family(f)],
             "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7)",
             *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"]
-              + ("" if f["tested"] else " [NQ only; can be built, not yet locked or tested]") for f in filters],
+              + (" [NQ only; its test days end 2026-07-07, where the vendor's Level 2 history ends]" if f["block"] in eng.L2_BLOCKS else "") for f in filters],
             "LIMITS (settings.limits)",
             *[f"  {x['name']:<18s}  " + ("" if x["runs"] else "NOT IN VERSION 1 (an exit of its own) -- ") + x["words"] for x in B["limits"]],
             f"EXITS: the standard table, the same for every idea -- {m['cells'] // len(B['exits']['targets_r'])} stops x {len(B['exits']['targets_r'])} targets = {m['cells']} cells; "
