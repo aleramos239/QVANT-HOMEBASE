@@ -23,6 +23,14 @@ exactly on the line) has NO SIGNAL and blocks the entry on both sides. NQ, ES an
           BEARISH SMT = exactly one of the two markets made a new high; BULLISH SMT = exactly one made a new low. Both at once, or neither,
           has no signal. agree: a long needs a bullish SMT, a short a bearish one (a reversal against the stretched index); disagree: the mirror.
           Needs the 5-minute bar cache of both markets (levels.build_bars_cache); the partner's bars are read up to the decision only.
+
+  pdz_move | pdz_swing | pdz_leg    with | against      and      ote_move | ote_swing | ote_leg    in | out      (NQ only; the owner, 2026-10-07)
+          The same two ideas as pdz and ote, on a range of the owner's choice instead of the day's range: the MOVE IN PROGRESS (a 200-point
+          zigzag), the SWING PAIR (latest untouched 50-bar swing high and low) or the LEG RULE (the biggest, fastest leg between 180-bar swings).
+          Definitions in engine/ranges.py; the range is read from the closed 5-minute bars of the last RANGE_SESS = 12 sessions of the contract and
+          today, at least RANGE_MIN_PTS = 40 points tall. pdz_*: the close must be INSIDE the range (outside: no signal), above the midpoint
+          = premium; with / against as pdz. ote_*: the range's leg must point the trade's way (a long needs an UP leg), in / out as ote.
+          Each needs the 5-minute bar cache of the market (levels.build_bars_cache).
 """
 from __future__ import annotations
 
@@ -32,11 +40,14 @@ import numpy as np
 
 import l2sim as S
 import levels as LV
+import ranges as RG
 
 PDZ_MIN_ATR = 1.0
 OTE_LO, OTE_HI = 0.62, 0.79
 HTF = {"htf15": (15, 20), "htf60": (60, 8)}           # block -> (minutes per big bar, EMA length)
 SMT_L, SMT_W = 36, 6
+RANGE_SESS, RANGE_MIN_PTS = 12, 40.0                   # the range blocks read the last 12 prior sessions and want a range of at least 40 points
+RANGE_BLOCKS = tuple(f"{b}_{k}" for b in ("pdz", "ote") for k in RG.KINDS)
 PARTNER = {"NQ": "ES", "ES": "NQ"}
 
 
@@ -45,7 +56,7 @@ def prep_roots(root: str, family, filt) -> list:
     both for SMT."""
     names = [b for b, _ in (filt if (filt and isinstance(filt[0], tuple)) else _pairs(filt))]
     out = []
-    if family == "liq" or any(b in ("level", "swept", "smt") for b in names):
+    if family == "liq" or any(b in ("level", "swept", "smt") or b in RANGE_BLOCKS for b in names):
         out.append(root)
     if "smt" in names and root in PARTNER:
         out.append(PARTNER[root])
@@ -148,3 +159,52 @@ def smt(st):
     bear = bool(ha[w].max() > ha[r].max()) != bool(hb[w].max() > hb[r].max())
     bull = bool(la[w].min() < la[r].min()) != bool(lb[w].min() < lb[r].min())
     return None if bear == bull else "bear" if bear else "bull"
+
+
+# ---- the three ranges for premium / discount and OTE (engine/ranges.py) ----------------------------------------------------------------
+def _prior_hl(st):
+    """(high, low) of the last RANGE_SESS prior sessions' 5-minute bars of this contract, oldest first, read once per session."""
+    c = st.__dict__.get("_rgp")
+    if c is None or c[0] != st.day:
+        prior = LV._prior_bars(st, RANGE_SESS)
+        cat = lambda i: np.concatenate([g[i] for g in reversed(prior)]) if prior else np.zeros(0)       # noqa: E731
+        c = st.__dict__["_rgp"] = (st.day, cat(1), cat(2))
+    return c[1], c[2]
+
+
+def range_of(st, kind: str):
+    """(low, high, d) of the range `kind` ('move' | 'swing' | 'leg', engine/ranges.py) at this decision, or None: no such range, or one under
+    RANGE_MIN_PTS points. Read from the closed 5-minute bars up to now; remembered for the bars that have closed."""
+    today = LV._today_bars(st)
+    key = (st.day, len(today[0]))
+    c = st.__dict__.get("_rgv")
+    if c is None or c[0] != key:
+        c = st.__dict__["_rgv"] = (key, {})
+    if kind not in c[1]:
+        ph, pl = _prior_hl(st)
+        r = RG.KINDS[kind](np.concatenate((ph, today[1])), np.concatenate((pl, today[2])))
+        c[1][kind] = None if r is None or r[1] - r[0] < RANGE_MIN_PTS else r
+    return c[1][kind]
+
+
+def pdz_range(st, kind: str):
+    """'premium' | 'discount' | None: the close against the midpoint of range `kind`. None: no range, the close outside it or on the midpoint."""
+    r = range_of(st, kind)
+    if r is None or not st.nb:
+        return None
+    lo, hi, _ = r
+    c = st.C[-1]
+    mid = (lo + hi) / 2.0
+    return None if not (lo <= c <= hi) or c == mid else "premium" if c > mid else "discount"
+
+
+def ote_range(st, sd: int, kind: str):
+    """True / False: the close is inside / outside the 62-79 % retracement zone of range `kind`, a leg that points the trade's way; None: no
+    such range or a leg the other way."""
+    r = range_of(st, kind)
+    if r is None or not st.nb or (r[2] > 0) != (sd > 0):
+        return None
+    lo, hi, up = r[0], r[1], r[2] > 0
+    R = hi - lo
+    a, b = (hi - OTE_HI * R, hi - OTE_LO * R) if up else (lo + OTE_LO * R, lo + OTE_HI * R)
+    return a <= st.C[-1] <= b

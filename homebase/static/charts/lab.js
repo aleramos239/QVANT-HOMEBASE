@@ -16,8 +16,8 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '' };      // view: what the sidebar lists -- 'lib' (strategies) or 'bp' (the blueprint toolkit)
-try { if (localStorage.getItem('hb_lab_view') === 'bp') S.view = 'bp'; } catch (_) { /* private mode: strategies */ }
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '' };      // view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools) or 'tk' (its blocks, with their code)
+try { const v = localStorage.getItem('hb_lab_view'); if (v === 'bp' || v === 'tk') S.view = v; } catch (_) { /* private mode: strategies */ }
 const buf = () => (S.cur ? S.bufs.get(S.cur) : null);
 const isDirty = (b) => b.kind !== 'builtin' && (b.kind === 'new' ? !!b.code.trim() : b.code !== b.saved);
 const takenNames = () => [...S.drafts.map((d) => d.name), ...[...S.bufs.values()].filter((b) => b.kind === 'new' && b.name).map((b) => b.name)];
@@ -53,11 +53,19 @@ async function loadLists() {
   }
   paintLib();
   if (S.view === 'bp') loadBlueprint();
+  else if (S.view === 'tk') loadToolkit();
 }
 /* The blueprint toolkit: the tools every chat has and the ideas on file, as the chart service lists them. */
 async function loadBlueprint() {
   const r = await send('GET', '/api/tester/blueprint');
   S.bp = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit: restart it once to see the tools here.' : r.error };
+  paintLib();
+}
+/* The toolkit's blocks with their code: read from the engine's source by the toolkit itself (bp.py blockcode), so a new block is here with its code. */
+async function loadToolkit() {
+  if (S.tk && !S.tk.error) return;
+  const r = await send('GET', '/api/tester/blueprint/blocks');
+  S.tk = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit list: restart it once to see the blocks here.' : r.error };
   paintLib();
 }
 async function openKey(key) {
@@ -605,14 +613,65 @@ function paintLib() {
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
-  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint']].map(([v, t]) =>
+  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Toolkit']].map(([v, t]) =>
     `<button role="tab" data-act="view" data-v="${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
   if (S.view === 'bp') { el.innerHTML = `<div class="lb-top">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
+  if (S.view === 'tk') {
+    el.innerHTML = `<div class="lb-top">${seg}</div>${toolkitHead()}<div id="tkList">${toolkitList()}</div>`;
+    el.scrollTop = top;
+    return;
+  }
   el.innerHTML = `<div class="lb-top">${seg}<button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
     ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
   el.scrollTop = top;
+}
+
+/* ---- the toolkit's blocks in the sidebar ----
+   Every block an idea can be built from, in groups that fold; a click opens its code (read-only). Nothing here runs anything. */
+function toolkitHead() {
+  const T = S.tk;
+  if (!T || T.error) return '';
+  const n = T.groups.reduce((a, g) => a + g.items.length, 0);
+  return `<div class="tk-find"><input id="tkQ" type="search" placeholder="Find a block: ${n} in all" value="${esc(S.tkQ)}" spellcheck="false" autocomplete="off" aria-label="Find a block"></div>`;
+}
+function toolkitList() {
+  const T = S.tk;
+  if (!T) return '<div class="lb-empty">Loading the blocks…</div>';
+  if (T.error) return `<div class="lb-empty">${esc(T.error)}</div>`;
+  const groups = C.tkFilter(T.groups, S.tkQ), searching = !!S.tkQ.trim();
+  if (!groups.length) return '<div class="lb-empty">No block matches.</div>';
+  const row = (it) => {
+    const st = C.tkStatus(it), mk = C.tkMarkets(it);
+    return `<button class="tk-row" data-act="tkblock" data-id="${esc(it.id)}" title="Open its code"><span class="tk-nm"><b>${esc(it.name)}</b></span>
+      <span class="tk-wd">${esc(C.tkClip(it.words))}</span><span class="tk-mt">${it.sub ? `<i>${esc(it.sub)}</i>` : ''}${mk ? `<i>${esc(mk)}</i>` : ''}<i class="${st.tone}">${esc(st.text.length > 40 ? st.text.slice(0, 38) + '…' : st.text)}</i></span></button>`;
+  };
+  return groups.map((g) => {
+    const key = `tk:${g.id}`, shut = !searching && folded.has(key);
+    return `<div class="lb-g${shut ? ' folded' : ''}"><div class="lb-gh"><button class="lb-sh" data-act="fold" data-g="${esc(key)}" aria-expanded="${!shut}" title="${esc(g.words)}">${ICON_CHEV}<span>${esc(g.title)}</span><i>${g.items.length}</i></button></div>
+      <div class="lb-gb">${g.items.map(row).join('')}</div></div>`;
+  }).join('');
+}
+/* A block's code: its parts in the order the server gave them, each a source with its line numbers. */
+function codeSheet(id) {
+  const it = C.tkFind(S.tk && S.tk.groups, id);
+  if (!it) return;
+  const parts = C.tkParts(it, S.tk.sources), st = C.tkStatus(it), mk = C.tkMarkets(it);
+  const sides = (it.sides || []).map((x) => `<li><b>${esc(x.side)}</b> ${esc(x.words)}</li>`).join('');
+  const d = dialog(`<div class="tk-head"><h2>${esc(it.name)}</h2><span class="tk-mt">${mk ? `<i>${esc(mk)}</i>` : ''}<i class="${st.tone}">${esc(st.text)}</i></span></div>
+    ${sides ? `<ul class="tk-sides">${sides}</ul>` : `<p>${esc(it.words)}</p>`}
+    ${parts.length > 1 ? `<div class="tk-jump" role="tablist" aria-label="Parts of its code">${parts.map((p) => `<button data-jump="${p.n}" title="${esc(p.label)}">${p.n}. ${esc(p.label.replace(/\s*\(.*$/, '').replace(/^The check.*/, 'The check'))}</button>`).join('')}</div>` : ''}
+    <div class="tk-body">${parts.length ? parts.map((p) => `<section class="tk-part" id="tkp${p.n}"><header><b>${p.n}. ${esc(p.label)}</b><code>${esc(p.span)}</code></header>
+      <div class="tk-code"><pre class="tk-gut" aria-hidden="true">${C.tkGutter(p.start, p.end)}</pre><pre class="tk-src" tabindex="0" aria-label="${esc(p.label)}"><code>${C.highlight(p.code)}</code></pre></div></section>`).join('')
+      : '<p>No code was found for this block.</p>'}</div>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
+  d.classList.add('wide', 'tk-dlg');
+  d.addEventListener('click', (e) => {
+    const j = e.target.closest('[data-jump]');
+    if (j) { const t = d.querySelector(`#tkp${j.dataset.jump}`); if (t) t.scrollIntoView({ block: 'start', behavior: 'smooth' }); return; }
+    if (e.target.closest('[data-x]')) closeDialog();
+  });
 }
 
 /* ---- the blueprint toolkit in the sidebar ----
@@ -895,7 +954,8 @@ function act(name, el) {
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);
   else if (name === 'group') groupMenu(el);
-  else if (name === 'view') { S.view = el.dataset.v === 'bp' ? 'bp' : 'lib'; try { localStorage.setItem('hb_lab_view', S.view); } catch (_) { /* private mode */ } paintLib(); if (S.view === 'bp') loadBlueprint(); }
+  else if (name === 'view') { S.view = ['bp', 'tk'].includes(el.dataset.v) ? el.dataset.v : 'lib'; try { localStorage.setItem('hb_lab_view', S.view); } catch (_) { /* private mode */ } paintLib(); if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit(); }
+  else if (name === 'tkblock') codeSheet(el.dataset.id);
   else if (name === 'bptool') toolSheet(el.dataset.tool);
   else if (name === 'bpidea') { S.bpIdea = el.dataset.name; paintLib(); toolSheet('blueprint_status', { name: el.dataset.name }, true); }
 }
@@ -916,6 +976,7 @@ root.addEventListener('toggle', (e) => { if (e.target.classList && e.target.clas
 root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
+  if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
   if (t.id === 'edTa' && b && b.kind !== 'builtin') {
     const wasEmpty = !b.code.trim();
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
