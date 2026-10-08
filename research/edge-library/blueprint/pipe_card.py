@@ -2,8 +2,9 @@
 and everything the pipeline will try for it: up to 3 ways to enter, each a family with ONE main setting of 3 values, and up
 to 5 indicators, each with its reason. This module reads the card and turns it into ordinary toolkit ideas; it runs nothing.
 
-    {"name", "why", "loser", "source": owner | video | claude | wiki, "market", "session", "sides": both | long | short, "sides_why",
-     "ways": [{"family", "main_setting", "values": [3], "fixed": {}, "limits": {}}], "indicators": [{"block", "side", "why"}]}
+    {"name", "why", "loser", "source": owner | video | claude | wiki | paper | book | course, "market", "session",
+     "sides": both | long | short, "sides_why", "ways": [{"family", "main_setting", "values": [3], "fixed": {}, "limits": {}}],
+     "indicators": [{"block", "side", "why"}], "ref": optional, which paper / book / video / course it came from (300 characters at most)}
 
   check(card)       -> (rows, subs). rows = the four lines of stage 0, each a row of lines._row (line, passed, number, need, text):
                         P0.1  why it should make money and who loses: one sentence each, 8 words or more together
@@ -63,7 +64,9 @@ from . import runner as RUN
 KEYS = ("name", "why", "loser", "source", "market", "session", "sides", "sides_why", "ways", "indicators")
 WAY_KEYS = ("family", "main_setting", "values", "fixed", "limits")
 IND_KEYS = ("block", "side", "why")
-SOURCES = ("owner", "video", "claude", "wiki")
+SOURCES = ("owner", "video", "claude", "wiki", "paper", "book", "course")
+OPTIONAL = ("ref",)                 # ref: which paper / book / video / course (the owner, 2026-10-08); no part of the signature
+REF_MAX = 300
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,33}$")        # 34 characters: + "_a1" + a later round's "_r5" = the app's 40 (draftstore.NAME_RE)
 LETTERS = string.ascii_lowercase                    # a way's letter in its heat maps' names
 WORDS = 8                                           # the engine's own floor for a reason (run_idea.check_spec), held here on why + loser
@@ -99,7 +102,7 @@ def _whole(card) -> dict:
     """The card, or judge.Refuse for what is no card (module docstring)."""
     if not isinstance(card, dict):
         raise J.Refuse(f"a pipeline card: a JSON object {{{', '.join(KEYS)}}}")
-    extra = sorted(str(k) for k in set(card) - set(KEYS))
+    extra = sorted(str(k) for k in set(card) - set(KEYS) - set(OPTIONAL))
     if extra:
         raise J.Refuse(f"unknown fields {extra}: a pipeline card is {{{', '.join(KEYS)}}}")
     name, lim = card.get("name"), P.need("card")
@@ -112,6 +115,9 @@ def _whole(card) -> dict:
             raise J.Refuse(f"name {name!r}: its heat maps are named like {sub}, which the toolkit does not take -- {e}") from None
     if card.get("source") not in SOURCES:
         raise J.Refuse(f"source {card.get('source')!r}: one of {', '.join(SOURCES)}")
+    ref = card.get("ref")
+    if ref is not None and not (isinstance(ref, str) and ref.strip() and len(ref) <= REF_MAX):
+        raise J.Refuse(f"ref: one line that names the paper, book, video or course ({REF_MAX} characters at most), or leave it out")
     return card
 
 

@@ -211,7 +211,7 @@ _CARD = {
                                                   "e.g. fvg_open."},
         "why": {"type": "string", "description": "Why it should make money: ONE sentence."},
         "loser": {"type": "string", "description": "Who is on the losing side: ONE sentence. With why, 8 words or more."},
-        "source": {"type": "string", "enum": ["owner", "video", "claude", "wiki"],
+        "source": {"type": "string", "enum": ["owner", "video", "claude", "wiki", "paper", "book", "course"],
                    "description": "Where the idea came from. claude = you thought of it."},
         "market": {"type": "string", "enum": ["NQ", "ES", "GC"], "description": "ONE market."},
         "session": {"type": "string", "enum": ["asia", "london", "pre", "nyam", "mid", "pm"],
@@ -223,7 +223,9 @@ _CARD = {
                  "description": "1 to 3 ways to enter. Each is run on 1-minute and on 5-minute bars."},
         "indicators": {"type": "array", "maxItems": 5, "items": _INDICATOR,
                        "description": "0 to 5 indicators, in the order they are tried; no block twice. They are tried "
-                                      "only when the plain idea passes the lower bar and misses the full one."}},
+                                      "only when the plain idea passes the lower bar and misses the full one."},
+        "ref": {"type": "string", "description": "Optional: WHICH paper, book, video or course (one line, 300 characters "
+                                                 "at most), e.g. 'Zarattini & Aziz 2023 (SSRN 4416622)'."}},
     "required": ["name", "why", "loser", "source", "market", "session", "sides", "ways"],
     "additionalProperties": False}
 

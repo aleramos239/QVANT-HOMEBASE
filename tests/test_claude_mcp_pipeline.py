@@ -352,9 +352,9 @@ def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
         assert what in said, what
     assert c["required"] == ["name", "why", "loser", "source", "market", "session", "sides", "ways"] and c["additionalProperties"] is False
     p = c["properties"]
-    assert list(p) == list(CARD), "the card's fields, as the toolkit names them and in its order"
+    assert list(p) == [*CARD, "ref"], "the card's fields, as the toolkit names them and in its order; ref (which paper / book / course) is optional, last"
     assert p["market"]["enum"] == ["NQ", "ES", "GC"] and p["session"]["enum"] == ["asia", "london", "pre", "nyam", "mid", "pm"]
-    assert p["sides"]["enum"] == ["both", "long", "short"] and p["source"]["enum"] == ["owner", "video", "claude", "wiki"]
+    assert p["sides"]["enum"] == ["both", "long", "short"] and p["source"]["enum"] == ["owner", "video", "claude", "wiki", "paper", "book", "course"]
     way, ind = p["ways"]["items"], p["indicators"]["items"]
     assert (p["ways"]["minItems"], p["ways"]["maxItems"]) == (1, 3) and (way["properties"]["values"]["minItems"], way["properties"]["values"]["maxItems"]) == (3, 3)
     assert p["indicators"]["maxItems"] == 5 and "minItems" not in p["indicators"]
@@ -377,7 +377,7 @@ def test_the_cards_limits_and_names_are_the_toolkits_own():
     assert [0, p["indicators"]["maxItems"]] == lim["indicators"] and lim["bars"] == ["1", "5"]
     assert p["market"]["enum"] == lim["markets"] and p["session"]["enum"] == lim["sessions"]
     lit = lambda rel, name: ast.literal_eval(toolkits(rel, name))  # noqa: E731
-    assert list(p) == list(lit("blueprint/pipe_card.py", "KEYS")) and p["source"]["enum"] == list(lit("blueprint/pipe_card.py", "SOURCES"))
+    assert list(p) == [*lit("blueprint/pipe_card.py", "KEYS"), *lit("blueprint/pipe_card.py", "OPTIONAL")] and p["source"]["enum"] == list(lit("blueprint/pipe_card.py", "SOURCES"))
     assert list(p["ways"]["items"]["properties"]) == list(lit("blueprint/pipe_card.py", "WAY_KEYS"))
     assert list(p["indicators"]["items"]["properties"]) == list(lit("blueprint/pipe_card.py", "IND_KEYS"))
     assert toolkits("blueprint/pipe_store.py", "NAME").args[0].value == pipeline_tools.NAME_RE.pattern

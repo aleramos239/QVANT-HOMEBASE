@@ -621,7 +621,7 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     c = TS.whole(PS.stages(N7, ROOT7)[7], 7)
     assert (c["passed"], c["result"], c["lines"], c["picked"], c["tries"]) == (None, "awaiting owner", [], PICK7, 4) and f"bp.py pipe approve {N7}" in c["text"]
     b = c["book"]
-    assert list(b) == ["name", "sub", "family", "source", "why", "market", "session", "bar", "filter", "rule", "label", "prop", "hours", "trades", "days_traded",
+    assert list(b) == ["name", "sub", "family", "source", "ref", "why", "market", "session", "bar", "filter", "rule", "label", "prop", "hours", "trades", "days_traded",
                        "win_days_month", "winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor",
                        "net", "tries", "relatives_read", "stages", "utc"]
     assert (b["name"], b["sub"], b["family"], b["source"], b["why"]) == (N7, SUB7, "orb", "owner", CARD7["why"])

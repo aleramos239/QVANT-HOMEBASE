@@ -686,7 +686,7 @@ def stage7(name: str, ctx: dict, progress=None) -> dict:
     x, prop = PO.cell(got, was["default"]), six["prop"]
     facts = _facts(x, got["calendar"], box["fast_seconds"])
     usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
-    book = {"name": name, "sub": sub, "family": card["ways"][picked["way"]]["family"], "source": card.get("source"), "why": card.get("why"),
+    book = {"name": name, "sub": sub, "family": card["ways"][picked["way"]]["family"], "source": card.get("source"), "ref": card.get("ref"), "why": card.get("why"),
             "market": card["market"], "session": card["session"], "bar": picked["bar"], "filter": picked["filter"],
             "rule": {"spec": lock.get("spec"), "default": was["default"], "lock": was["lock"]},
             "label": prop[own]["label"], "prop": {a: {k: p.get(k) for k in BOOK_PROP} for a, p in prop.items()},

@@ -230,9 +230,13 @@ def test_what_is_no_card_is_refused_outright():
     passes(card(name="fvg"))                                                              # fvg_a1 is no family's name
     passes(card(name="gap_r2"))                                                           # gap_r2_a1 does not end like a later round
     for bad in ("me", "", None, "Owner"):
-        refused(lambda: PC.check(card(source=bad)), "owner, video, claude, wiki")
-    for good in ("owner", "video", "claude", "wiki"):
+        refused(lambda: PC.check(card(source=bad)), "owner, video, claude, wiki, paper, book, course")
+    for good in ("owner", "video", "claude", "wiki", "paper", "book", "course"):
         passes(card(source=good))
+    passes(card(source="paper", ref="Zarattini & Aziz 2023 (SSRN 4416622)"))               # ref: which one, optional
+    for bad in ("", "   ", 7, "x" * 301):
+        refused(lambda: PC.check(card(ref=bad)), "ref: one line")
+    assert PC.signature(card(ref="a book")) == PC.signature(card())                        # where it came from is no part of the idea
 
 
 # ================================================================ 4. each line refuses what it holds
