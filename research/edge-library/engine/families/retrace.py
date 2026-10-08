@@ -98,14 +98,19 @@ class Judas(Template):
     It rests only for `cap_min` minutes after the bar that set the extreme (a new extreme re-places it and restarts the clock): a slow
     drift back is a trend, not a Judas. Nothing rests while price is already through the level.
     THE EXITS ARE IN UNITS OF THE MOVE (the owner's grid): stop = `stop_m` x M beyond the entry (0.5 = the extreme itself), target =
-    `tgt_m` x M back from the entry (0.5 = the open; 0 = none). One trade a day, 09:30-11:00, flat by 15:58 ET."""
-    DEFAULTS = {"thrust": 0.25, "stop_m": 0.5, "tgt_m": 0.5, "cap_min": 15, "stop_mode": "struct", "tgt_r": 0.0, "max_tr": 1}      # tgt_r 0: only tgt_m sets a target
-    SCHEMA = {"thrust": ("float", 0.02, 1.0), "stop_m": ("float", 0.05, 5.0), "tgt_m": ("float", 0.0, 5.0), "cap_min": ("int", 1, 120)}
+    `tgt_m` x M back from the entry (0.5 = the open; 0 = none). One trade a day, entries from 09:30 until `until` minus 5 minutes (default 11:00: 10:55), flat by 15:58 ET."""
+    DEFAULTS = {"thrust": 0.25, "stop_m": 0.5, "tgt_m": 0.5, "cap_min": 15, "until": "11:00", "stop_mode": "struct", "tgt_r": 0.0, "max_tr": 1}      # tgt_r 0: only tgt_m sets a target
+    SCHEMA = {"thrust": ("float", 0.02, 1.0), "stop_m": ("float", 0.05, 5.0), "tgt_m": ("float", 0.0, 5.0), "cap_min": ("int", 1, 120),
+              "until": ("choice", ("11:00", "12:00", "13:30", "15:55"))}      # the morning session's end: entries stop 5 minutes before it (default 11:00 = 10:55)
     SCREEN_TFS = ("1",)
     FEATURES = ()
 
     def fam_filter(self, ids):
         return [s for s in ids if s == "nyam"]
+
+    def fam_sessions(self) -> dict:
+        h, m = str(self.p["until"]).split(":")
+        return {"nyam": (OPEN_S, int(h) * 3600 + int(m) * 60)}      # the window of the entries: from the open to `until`
 
     def fam_session(self, ctx, s):
         self.plan = self.armed = None

@@ -169,6 +169,15 @@ def test_both_sides_in_one_bar_no_daily_atr_and_one_trade_a_day_leave_nothing_or
     assert len(play({}, day(again))[0]) == 1
 
 
+def test_the_last_entry_time_is_a_setting():
+    quiet = flatbars(15000.0, 90)                                                # 09:30-11:00 nothing happens
+    late = quiet + ramp(15100.0, 10) + fall(15100.0, 15049.75) + fall(15049.75, 15000.0)       # the move starts at 11:00, half back at 11:10
+    assert play({}, day(late)) == ([], [])                                       # the default window ended at 10:55
+    tr, _ = play({"until": "12:00"}, day(late))
+    assert len(tr) == 1 and abs(tr[0]["entry_price"] - 15050.0) <= 0.5 and hms(tr[0]["entry_ms"] * 10**6) == "11:10:30"
+    assert play({"until": "11:00"}, day(UP))[0][0]["entry_price"] == play({}, day(UP))[0][0]["entry_price"]
+
+
 def walk(seed=3, n=390):
     rng = np.random.default_rng(seed)
     bars, c = [], 15000.0
