@@ -99,7 +99,7 @@ def with_file(**prop):
 def test_the_answer_and_where_its_numbers_come_from():
     r, got = PS.load_rules(PRO_FREE), odds(STRONG)
     assert set(got) == KEYS
-    assert P.need("prop") == {"account": PRO_FREE, "days": 30, "eval": 0.5, "payout": 0.5}
+    assert {k: P.need("prop", k) for k in ("account", "days", "eval", "payout")} == {"account": PRO_FREE, "days": 30, "eval": 0.5, "payout": 0.5}
     assert got["account"] == {"id": PRO_FREE, "name": r["name"], "confirmed": True} and got["days"] == 30 and got["need"] == {"eval": 0.5, "payout": 0.5}
     ev, fu = PO.steps(r)
     assert [x["size"] for x in got["table"]] == ev and all(set(x) == {"size", "eval", "payout"} for x in got["table"])

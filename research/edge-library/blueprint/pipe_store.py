@@ -6,6 +6,7 @@ every card ever added. It stores what it is given and reads it back: it checks n
         ideas/<sub-idea>/...         the toolkit's ideas (ideas_root: the root= of every toolkit call, so the Lab is not flooded)
         runs/                        the stores (runs: the out= of every toolkit call); the control pools c1-* / c1o-* are
                                      LINKS to the toolkit's own (research/edge-library/runs_bp): read there, never copied
+        runs_test/                   the stores of the ONE read of the unseen days (runs_test: the out= of the toolkit's test)
         p/<name>/card.json           the pipeline card as it was added, + "subs" (its sub-ideas: name, way, bar, toolkit spec)
         p/<name>/state.json          {name, status, stage, stopped_at, why, tries, picked, added_utc, updated_utc, source, family}
         p/<name>/stages/<n>.json     the stage card of stage n, as the stage returned it
@@ -36,6 +37,8 @@ every card ever added. It stores what it is given and reads it back: it checks n
     runs(root=None, pools=None) -> Path                 <root>/runs, made, with a link for every control pool of `pools`
                                                         (default: pools()) that has nothing under its name there yet
     pools() -> Path                                     the toolkit's stores folder (runner.RUNS)
+    runs_test(root=None) -> Path                        <root>/runs_test, made: where an idea's read of the unseen days is
+                                                        written (never the toolkit's own runs_bp_test)
     ledger(name, root=None) -> Path                     p/<name>/ledger.csv
     book(root=None) -> [book cards]                     by name
     write_book(name, card, root=None) -> Path           book/<name>.json
@@ -317,6 +320,14 @@ def runs(root=None, pools=None) -> Path:
                 os.symlink(pool.resolve(), link, target_is_directory=True)
             except FileExistsError:                 # another process linked it between the look and the link
                 pass
+    return out
+
+
+def runs_test(root=None) -> Path:
+    """The stores folder of the ONE read of the unseen days (the out= of the toolkit's test): the pipeline's own, never the
+    toolkit's runs_bp_test. No pool is linked there: a read writes its own random-entry pool beside its two tables."""
+    out = _at(root) / "runs_test"
+    out.mkdir(parents=True, exist_ok=True)
     return out
 
 

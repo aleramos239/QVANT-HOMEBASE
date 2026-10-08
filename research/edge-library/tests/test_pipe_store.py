@@ -7,6 +7,7 @@
 4. The queue order: the cards of the inbox first, then by the time they were added; only what is queued or running.
 5. Stage cards and the book round-trip; the ledger's path; the pause file.
 6. The control pools are LINKED into the pipeline's stores folder, never copied, and nothing there is ever replaced.
+   The stores of the one read of the unseen days have a folder of their own (runs_test), with no pool linked in.
 7. A write that dies half-way leaves the file as it was.
 A temp folder each test: nothing is written under ~/.homebase or in the repo. No engine, no tape. Under a second.
 
@@ -337,6 +338,15 @@ def test_no_pools_folder_is_an_empty_stores_folder_and_the_real_one_is_the_runne
     out = PS.runs(root(), pools=TMP["d"] / "not_there")
     assert out.is_dir() and list(out.iterdir()) == []
     assert PS.pools() == W / "runs_bp"                                         # the toolkit's own stores folder (runner.RUNS): named, not touched
+
+
+def test_the_stores_of_the_one_read_have_a_folder_of_their_own_under_the_root():
+    out = PS.runs_test(root())
+    assert out == root() / "runs_test" and out.is_dir() and list(out.iterdir()) == []         # made, empty: no pool is linked into it
+    (out / "fvg_open_a5-NQ-tf5-nyam-test").mkdir()
+    assert PS.runs_test(root()) == out and [p.name for p in out.iterdir()] == ["fvg_open_a5-NQ-tf5-nyam-test"]      # again: what is there stays
+    assert out != PS.runs(root(), pools=TMP["d"] / "not_there") and out.parent == PS.runs(root(), pools=TMP["d"] / "not_there").parent
+    assert out.name != (W / "runs_bp_test").name                                               # never the toolkit's own folder of the reads
 
 
 # ================================================================ 7. a write that dies leaves the old file

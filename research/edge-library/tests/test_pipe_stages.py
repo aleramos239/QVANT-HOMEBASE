@@ -195,7 +195,7 @@ def test_every_toolkit_call_gets_the_pipelines_folders_and_the_tiny_runs_days():
     full = ST._kw(NAME, {"root": ROOT, "tiny": None})
     assert (full["root"], full["out"], full["ledger"]) == (kw["root"], kw["out"], kw["ledger"])
     assert [full[k] for k in ("days", "cells", "workers", "draws")] == [None] * 4                # the whole build range, the machine's workers
-    assert set(ST.STAGES) == {0, 1, 2, 3, 4} and all(ST.STAGES[n].__name__ == f"stage{n}" for n in ST.STAGES)
+    assert set(ST.STAGES) == set(range(8)) and all(ST.STAGES[n].__name__ == f"stage{n}" and getattr(ST, f"stage{n}") is ST.STAGES[n] for n in ST.STAGES)
 
 
 def test_a_heat_map_without_another_market_runs_nothing_at_stage_3_and_its_line_does_not_apply(world):
@@ -578,8 +578,8 @@ def test_stage_4_proves_the_heat_map_with_its_indicator_at_the_bar_of_three_trie
 def test_no_gate_number_is_typed_in_the_module():
     src = (W / "blueprint" / "pipe_stages.py").read_text(encoding="utf-8")
     typed = {t.string for t in tokenize.generate_tokens(io.StringIO(src).readline) if t.type == tokenize.NUMBER}
-    # 0-4 the stages, counts and indexes · 20 rows listed · 1000 and 1_000_000 ms / ns · 1e-6 a float's slack · 0.01 a cent (records.show's) · 0.0 an empty table
-    assert typed <= {"0", "1", "2", "3", "4", "20", "1000", "1_000_000", "1e-6", "0.01", "0.0"}, sorted(typed)
+    # 0-7 the stages, counts and indexes · 20 rows listed · 1000 and 1_000_000 ms / ns · 1e-6 a float's slack · 0.01 a cent (records.show's) · 0.0 an empty table
+    assert typed <= {"0", "1", "2", "3", "4", "5", "6", "7", "20", "1000", "1_000_000", "1e-6", "0.01", "0.0"}, sorted(typed)
 
 
 if __name__ == "__main__":
