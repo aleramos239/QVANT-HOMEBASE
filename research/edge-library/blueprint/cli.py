@@ -96,6 +96,19 @@ and --json out.
   bp.py blockcode                                                         the same blocks as a browsable list, each with the code
                                                                              that implements it, found in the engine's source
                                                                              (blockcode.py; the Lab's Toolkit view). Runs nothing
+  bp.py pipe add --spec=-|FILE [--inbox]                                  THE STRATEGY PIPELINE (pipe_runner.py): a pipeline card
+  bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
+  bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
+  bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
+                                                                             refused with its rows; `start` = the runner, detached,
+                                                                             that takes every queued idea through stages 0-7 by
+                                                                             itself; `pause` stops it after the stage in hand;
+                                                                             `list` = one row an idea, `show` = one idea's stage
+                                                                             cards; `approve` / `refuse` = the owner's word on an
+                                                                             idea that passed every stage; `book` = the approved.
+                                                                             For `pipe`, --root is the PIPELINE's own folder
+                                                                             (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
+                                                                             never the app's idea folder
   build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
@@ -209,6 +222,23 @@ def _parser() -> _Parser:
     e.add_argument("--account", metavar="ID", help="the account the card stands on (default: the card's own, else the simulator result saved last)")
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
+    pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book}")
+    pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
+        ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
+        ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
+        ("pause", "the runner stops after the stage in hand"), ("resume", "the runner carries on"), ("approve", "the owner's yes: the idea goes in the book"),
+        ("refuse", "the owner's no, with his reason"), ("book", "one row a book card"), ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
+    pipes["add"].add_argument("--spec", metavar="-|FILE", help="the pipeline card as JSON: - = on stdin, else a file")
+    pipes["add"].add_argument("--inbox", action="store_true", help="the card goes before the queued ones")
+    for name in ("show", "approve", "refuse"):
+        pipes[name].add_argument("name", help="the pipeline card's name")
+    pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
+    pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
+    for x in pipes.values():
+        x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
+                                                     "the pipeline keeps its heat maps' ideas inside its own")
+        x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in (lk, t):
         x.add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
         x.add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
@@ -309,9 +339,31 @@ def _fills(a):
     return got
 
 
+def _pipe(a) -> dict:
+    """`pipe <sub>`: the strategy pipeline's commands (pipe_runner.command). --root is the PIPELINE's folder here; `add` reads
+    its card from --spec (- = stdin)."""
+    from . import pipe_runner                       # loaded when a pipe command is read, never with this module
+    card = None
+    if a.sub == "add":
+        if not a.spec:
+            raise J.Refuse("pipe add needs the pipeline card as JSON: --spec=- (on stdin) or --spec=FILE (bp.py pipe add --spec=-)")
+        where = "on stdin" if a.spec == "-" else a.spec
+        try:
+            raw = sys.stdin.read() if a.spec == "-" else Path(a.spec).read_text(encoding="utf-8")
+            card = json.loads(raw) if raw.strip() else None
+        except (OSError, ValueError) as e:
+            raise J.Refuse(f"the card {where} {'is not there' if isinstance(e, OSError) else 'does not read as JSON'}: {e}") from None
+        if card is None:
+            raise J.Refuse(f"no card {where}: the pipeline card as JSON")
+    return pipe_runner.command(a.sub, getattr(a, "name", None), a.root, card=card, inbox=getattr(a, "inbox", False), why=getattr(a, "why", None),
+                               once=getattr(a, "once", False))
+
+
 def _said(r: dict) -> str:
-    """A result for a person: its text -- and the next step, for the commands of an idea's record."""
-    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (r.get("command") in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or "idea" in r) else "")
+    """A result for a person: its text -- and the next step, for the commands of an idea's record and of the pipeline."""
+    cmd = r.get("command")
+    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith("pipe ")
+                                                                    or "idea" in r) else "")
 
 
 def main(argv=None) -> int:
@@ -352,13 +404,15 @@ def main(argv=None) -> int:
         elif a.cmd == "blockcode":
             from . import blockcode
             r = blockcode.toolkit()
+        elif a.cmd == "pipe":
+            r = _pipe(a)
         elif a.cmd in ("heatmap", "mc"):
             from . import quick                      # the two views: they read, and run nothing
             r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:
-        cmd = a.cmd if a else next((x for x in argv if not x.startswith("-")), None)
+        cmd = (f"pipe {a.sub}" if a.cmd == "pipe" else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
         why = f"{cmd} is not built yet: it is a later step of the toolkit plan ({e})" if a is None and cmd in NOT_BUILT else str(e)
         r = api.refused(cmd, why, getattr(a, "name", None) or getattr(a, "stored", None) if a else None)
     print(json.dumps(r) if "--json" in argv else _said(r))     # one object on one ASCII line: safe for any reader of stdout
