@@ -2,7 +2,9 @@
 
 **HOUSE LAW since 2026-10-05 (owner: "lets lock this into the app … i want all strategies or strategy buildings to go off this").**
 Version 1.1 (2026-10-06: the owner's changes after the blueprint was held against the course line by line; section 11 lists
-them and what was built for them). Every strategy that is built, tested, optimized or judged — in the research engine or in the Homebase tester, by a
+them and what was built for them). Changed on 2026-10-07 with the strategy pipeline (owner): lines 3.7 and 4.7 ask 80 % of the
+reshuffled runs, line 4.6 and the new line 3.8 take out the best 1 % of days ("The pipeline (2026-10-07)", near the end).
+Every strategy that is built, tested, optimized or judged — in the research engine or in the Homebase tester, by a
 person or by an assistant in any chat — follows section 2. It replaces the admission rules, the periods and the round count of
 `EDGE_SPEC.md` (see its "ADMISSION v3"). Changing a line here needs the owner's word.
 Built on 2026-10-06 (night): the toolkit `bp.py` runs every phase (`bp.py --help`; plan and decisions in
@@ -34,7 +36,7 @@ Reshuffled runs = 1,000 Monte Carlo histories: whole days drawn with replacement
 The 6 targets: none, and 0.5, 0.75, 1, 2 and 3 × the stop: 48 cells, every cell counted like the others. The two small targets are
 the owner's decision of 2026-10-06 (the course's prop lesson); in a table they sit behind the 32 cells of the old library.
 Two levels (owner, 2026-10-06; the course reads its numbers on the one setting it trades): the lines of phase 2 are read on the
-WHOLE TABLE (the heat map: is the idea real?), the lines 3.3 to 3.7 and 4.9 on the ONE variant that would be traded, the default
+WHOLE TABLE (the heat map: is the idea real?), the lines 3.3 to 3.8 and 4.9 on the ONE variant that would be traded, the default
 variant of line 3.1 (is this strategy good enough?).
 
 ### Phase 0 — Idea card (written before any run)
@@ -100,7 +102,8 @@ written. The freeze is refused unless every one of these is true:
 | 3.4 | Its profit is large against its worst drawdown (its net ÷ its worst drawdown, open losses counted) | 3 or more |
 | 3.5 | Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)* | 1 or more |
 | 3.6 | Its worst drawdown fits the account at the smallest size: at 1 micro, open losses counted, it stays under the drawdown limit of LucidPro 50K | under 2000 dollars |
-| 3.7 | Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days | 90 % of the runs or more (the course's line) |
+| 3.7 | Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days | 80 % of the runs or more |
+| 3.8 | The default variant still makes money without its best 1 % of days | above $0 |
 
 The drawdown of lines 3.4 and 3.6 counts OPEN LOSSES (owner, 2026-10-07: the course is written for a live account, ours is a
 prop account, and the firm's drawdown is breached by an open loss, not only by a closed day): the largest fall from the high of
@@ -119,8 +122,8 @@ Not passed → back to phase 2 as a new round when one is left (it counts), othe
 | 4.3 | The average trade is still big enough | NQ $70 · ES $75 · gold $140 or more |
 | 4.4 | It still beats random entries | above 95 % of random tables |
 | 4.5 | It still makes money with worse fills | 2 ticks + 250 ms (+ 100 ms late cancel for two-sided brackets) |
-| 4.6 | It still makes money without its 3 best days | above $0 |
-| 4.7 | Monte Carlo: it makes money in almost all reshuffled runs of the test period | 90 % of the runs or more (the course's line) |
+| 4.6 | It still makes money without its best 1 % of days | above $0 |
+| 4.7 | Monte Carlo: it makes money in almost all reshuffled runs of the test period | 80 % of the runs or more |
 | 4.8 | The test looks like the build: the average trade (the reading of 4.3) holds against the build's own average trade of line 2.2 | at least half of the build's |
 | 4.9 | The default variant still has a healthy profit factor on the test days | 1.2 or more |
 
@@ -425,3 +428,31 @@ Only new unseen days or real fills on paper can change that.
   strategy reads lower, so the line is harder than it was. How much was not measured on the stored tables.
 - The lines of version 1.1 were dry-run on the stored middle variant of 27 months, without worse fills. They removed nothing
   after the old lines, so nothing says they pick better. More lines mean fewer survivors, not better ones.
+
+## 13. The pipeline (2026-10-07)
+
+The pipeline is one program that takes idea cards and runs each one through fixed stages (0 to 7) by itself. An idea stops at the
+first gate it fails, and the program writes why. The few that pass every stage wait for the owner's look, then go in the book.
+
+Its design is `docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md`. Its gate numbers are
+`blueprint/templates/pipeline.json`; a number this law also carries must be the same in both, or the pipeline does not load.
+The commands: `bp.py pipe add / list / show / start / pause / resume / approve / refuse / book`.
+
+What changed in the law with it (owner, 2026-10-07):
+
+| Line | Before | Now |
+|---|---|---|
+| 3.7 and 4.7, the reshuffled runs | 90 % of the runs or more | 80 % of the runs or more |
+| 4.6, the test without its best days | its 3 best days | its best 1 % of days (1 % of the session days, rounded up: 4 of 315) |
+| 3.8, new | – | the default variant without its best 1 % of days, read before the freeze |
+
+What it does differently from a round-by-round idea:
+
+| A round-by-round idea | The pipeline |
+|---|---|
+| One entry rule on one home table | Up to 3 ways to enter, each on 1-minute and on 5-minute bars |
+| At most 5 rounds, one filter a round | No rounds: up to 5 indicators on the card, each tried alone, one kept |
+| The random bar rises by round (line 2.3) | It rises by tries: (100 − 5 ÷ tries) %. One try 95 %, two 97.5 %, five 99 % |
+
+Not built yet: the Lab screens (Queue, Book, Guide), the luck rate, the score since the lock, the portfolio builder and the
+hunter. Until then the pipeline is run from the command line only.

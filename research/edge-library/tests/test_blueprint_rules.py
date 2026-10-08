@@ -2,9 +2,10 @@
 
 1. rules.json IS BLUEPRINT.md section 2: every numbered line of its tables (0.1 .. 6.8) has an entry, no entry is extra, the
    order is the law's, and each entry's `text` / `number` are that line's cells word for word. The prose quotes of the other
-   templates occur in BLUEPRINT.md too (line wrapping aside). AHEAD = the four lines the strategy pipeline changed
-   (owner 2026-10-07): in force in rules.json, not yet in BLUEPRINT.md's text. Exactly these four may differ, and each MUST
-   still differ: when the law's text is updated the list is emptied, and the word-for-word lock holds for every line again.
+   templates occur in BLUEPRINT.md too (line wrapping aside). AHEAD = the lines that are in force in rules.json and not
+   yet in BLUEPRINT.md's text: exactly those may differ, and each MUST still differ (or be new). EMPTY since 2026-10-07: the
+   four lines the strategy pipeline changed (3.7, 3.8, 4.6, 4.7) are in the law's text, and the word-for-word lock holds for
+   every line again.
 2. The machine numbers say what the quoted words say: every number under `need` is found in the entry's own quote, and `op`
    follows the wording ("above" / "more than" = >, "or more" / "at least" = >=, "at most" / "or less" = <=).
 3. The exit menu and the costs ARE the engine's: rules.exit_menu(root) == l2sim.menu(root) cell for cell (and the cells of
@@ -32,7 +33,8 @@ FLAT = " ".join(MD.split())                                  # the law without i
 MARKETS = ("NQ", "ES", "GC")
 WORDS = {0: ("no ",), 1: ("one ",), 3: ("three ",), 0.5: ("half",)}      # numbers the law writes as words
 OP_WORDS = {">": ("above", "more than"), ">=": ("or more", "at least"), "<=": ("at most", "or less")}
-AHEAD = ("3.7", "3.8", "4.6", "4.7")      # rules.json is ahead of BLUEPRINT.md's text on these (module docstring, 1): 80 % of the runs, the best 1 % of days
+AHEAD = ()                                # the lines rules.json is ahead of BLUEPRINT.md's text on (module docstring, 1): none
+PIPELINE = ("3.7", "3.8", "4.6", "4.7")   # the lines the strategy pipeline changed (80 % of the runs, the best 1 % of days): the law's text since 2026-10-07
 
 
 def law_lines() -> dict:
@@ -77,7 +79,8 @@ def test_every_numbered_line_of_section_2_has_its_entry_and_its_quote():
         assert e["text"] == cells[0] and e["text"] in MD, f"{k}: text is not the law's: {e['text']!r}"
         assert e.get("number") == (cells[1] if len(cells) > 1 else None), f"{k}: number is not the law's: {e.get('number')!r}"
         assert "number" not in e or e["number"] in MD
-    assert [k for k in AHEAD if k not in law] == ["3.8"] and all(R.rule(k)["text"] == law[k][0] for k in ("3.7", "4.7"))     # the new line; 3.7 and 4.7 changed their number only
+    assert not set(PIPELINE) & set(AHEAD) and all(law[k] == [R.rule(k)["text"], R.rule(k)["number"]] for k in PIPELINE)     # the pipeline's four lines: cell for cell
+    assert [law[k][1] for k in PIPELINE] == ["80 % of the runs or more", "above $0", "above $0", "80 % of the runs or more"] and "best 1 % of days" in law["3.8"][0]
     for bad in ("9.9", "_about", "2"):
         try:
             R.rule(bad)
