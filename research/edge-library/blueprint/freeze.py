@@ -187,7 +187,7 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
                        f"exactly before anything counts (line 1.6: bp.py code-check {name} --store=<a fresh run> --same-as={key}, then --looked)")
 
 
-def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None) -> dict:
+def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=()) -> dict:
     """EVERYTHING OF THE FREEZE THAT NEEDS NO RUN -> the arguments of run() (JSON: a job keeps them). An idea that is frozen
     already comes back as {"idea", "root", "frozen": True}: run() then only shows its lock. Refused here: module docstring,
     and what the runner refuses before a pass (the no-start window, the ledger's cap, another run in the store folder)."""
@@ -211,8 +211,9 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     if b.get("ok") is False or b.get("dry_run") or (isinstance(b.get("job"), dict) and b["job"].get("state") != "done"):
         raise J.Refuse(f"round {n} of {name} is no build that counts (a smoke run, or one that did not finish)")
     marks = {x.get("line"): x.get("passed") for x in b.get("lines") or [] if isinstance(x, dict)}
-    gone, failed = [k for k in IS.LINES[2] if k not in marks], [k for k in IS.LINES[2] if marks.get(k) is False]
-    if gone or failed or IS.status(name, root) != "lead":
+    waived = [k for k in IS.LINES[2] if marks.get(k) is False and k in set(waive or ())]     # `waive`: a keyword of the code (the pipeline's, for 2.5), never of bp.py lock
+    gone, failed = [k for k in IS.LINES[2] if k not in marks], [k for k in IS.LINES[2] if marks.get(k) is False and k not in waived]
+    if gone or failed or (IS.status(name, root) != "lead" and not waived):
         raise J.Refuse(f"round {n} of {name} " + (f"fails {', '.join(failed)}" if failed else f"has no line {', '.join(gone)}" if gone else "is not a pass")
                        + ": every build line 2.1-2.9 has to pass before the freeze (null = it does not apply)")
     spec = REC._spec(name, REC._json(d / "spec.json"))
@@ -242,11 +243,11 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     rows = RUN.run_worse(sp, key, h["session"], workers, out, ledger=ledger, days=days, cells=cells, block=block, dry=True)
     return {"idea": name, "root": None if root is None else str(root), "frozen": False, "round_": n, "heavy": not rows[0]["skipped"], "workers": workers,
             "out": None if out is None else str(out), "ledger": None if ledger is None else str(ledger), "days": days, "cells": cells, "block": block,
-            "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade")}
+            "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade"), **({"waived": waived} if waived else {})}
 
 
 def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, draws=None,
-        progress=None, box=None, build_avg_trade=None) -> dict:
+        progress=None, box=None, build_avg_trade=None, waived=None) -> dict:
     """THE FREEZE ITSELF, with what start() returned: the worse-fills table of the home on the build days (when it is not
     stored), the default variant, lock.json (module docstring), the Lab's copies -> the result: lines 3.1 and 3.2, the
     lock's hash, the default and the test range. Beyond the agreed keys: lock (lock.json as it is on file), hash, default,
@@ -310,6 +311,8 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
             "test_range": {m: _range(m, m == h["market"], **_reads(filt)) for m in markets}}
+    if waived:                                        # build lines that failed and were not asked (start(waive=): the pipeline's 2.5): written down, in the hash
+        lock["waived"] = list(waived)
     lock = json.loads(json.dumps(lock))               # as it will read from disk (plain JSON: a number that is not is refused here)
     lock["hash"] = digest(lock)
     path = IS.write_lock(name, lock, root)

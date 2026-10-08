@@ -334,3 +334,20 @@ The toolkit lets only ONE idea of a family, market and time of day be read on th
 The related ideas read before it are written on the read's line in the log, in `test.json` and on the stage-6 card, and counted on the book card (`relatives_read`).
 By hand (`bp.py test`, the chat tool) the rule still holds, and an idea's own read is never repeated.
 
+## 15. As built: the other markets ask nothing (decided 2026-10-08)
+
+The owner, after `nq_value_reclaim` (90 % of boxes profitable, $75 a trade, both sides profitable) was stopped only because
+the same rule loses on ES and on gold: "remove the rule that it must work on another market ... the same idea could work
+on another market, but not the exact same, so a different execution."
+
+- `pipeline.json` `indicator.other_markets` is `null`: line P3.6 is still computed and SHOWN (the other-market heat maps
+  are still run at stage 3), but it is never False.
+- Stage 5: the toolkit's build line 2.5 (the same reading) is shown and stops nothing; the lock is called with
+  `waive=("2.5",)` (a keyword of the code, as `relatives_ok` is; `bp.py lock` and the chat tools keep the rule) and
+  writes `"waived": ["2.5"]` in lock.json.
+- Outside the pipeline the blueprint's line 2.5 stands.
+- Evidence when it was dropped (my 2026-10-05 gate study, 1,875 tables): a 60 % heat map alone was profitable the next
+  period 47-48 % of the time; with "half of the idea's other tables pass" 52 % / 62 %. A mild guard, not a strong one.
+- A side effect: the toolkit's own status of such a heat-map idea stays "idea" (its build has a failed line); the
+  pipeline's verdict at stage 6 reads lines 4.1-4.9 and is not touched by it.
+

@@ -460,3 +460,8 @@ bar and, not built yet, the luck rate and the score since the lock.
 
 Not built yet: the Lab screens (Queue, Book, Guide), the luck rate, the score since the lock, the portfolio builder and the
 hunter. Until then the pipeline is run from the command line only.
+
+**2026-10-08, the owner:** in the pipeline the other markets ask nothing of an idea. Line P3.6 and the build's line 2.5 are
+shown and never stop a pipeline idea (pipeline.json `indicator.other_markets: null`; the lock writes `waived: ["2.5"]`).
+Outside the pipeline line 2.5 stands.
+

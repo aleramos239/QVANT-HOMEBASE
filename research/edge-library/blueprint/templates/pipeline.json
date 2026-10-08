@@ -44,7 +44,7 @@
   "share": 0.6,
   "floor_part": 1.0,
   "trades": 200,
-  "other_markets": 0.5
+  "other_markets": null
  },
  "proof": {
   "reshuffle": 0.75,

@@ -27,6 +27,8 @@ import numpy as np
 
 W = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(W))
+import pytest  # noqa: E402
+
 from blueprint import lines as L  # noqa: E402
 from blueprint import mc as MC  # noqa: E402
 from blueprint import pipe_gates as G  # noqa: E402
@@ -34,6 +36,11 @@ from blueprint import pipe_rules as P  # noqa: E402
 from blueprint import rules as R  # noqa: E402
 
 FILE = P.FILE
+
+@pytest.fixture
+def asked(monkeypatch):
+    """The other markets with a bar again (pipeline.json holds none since 2026-10-08: they are shown and ask nothing)."""
+    monkeypatch.setattr(G, "others_bar", lambda: 0.5)
 
 
 def teardown_function(_=None):
@@ -216,7 +223,7 @@ def with_it(good=14, avg=80.0, trades=200, **side) -> dict:
     return sided(boxes(good, 20, avg, trades), **side)
 
 
-def test_indicator_all_six_rows():
+def test_indicator_all_six_rows(asked):
     rows = G.indicator(with_it(), RAW, OTHERS)
     assert [r["line"] for r in rows] == ["P3.1", "P3.2", "P3.3", "P3.4", "P3.5", "P3.6"] and marks(rows) == [True] * 6
     assert [r["text"] for r in rows] == [
@@ -230,7 +237,7 @@ def test_indicator_all_six_rows():
     assert (rows[4]["share"], rows[4]["raw_share"], rows[4]["raw_avg_trade"]) == (0.7, 0.55, 40.0)
 
 
-def test_indicator_each_row_failing_alone():
+def test_indicator_each_row_failing_alone(asked):
     def failed(tf, traw=RAW, others=OTHERS):
         return [r["line"] for r in G.indicator(tf, traw, others) if r["passed"] is not True]
 
@@ -259,7 +266,7 @@ def test_indicator_each_row_failing_alone():
     assert r["text"] == "P3.6 FAIL 1 of 3 other-market heat maps profitable, 33.33 % (need 50 % or more)" and (r["profitable"], r["tables"]) == (1, 3)
 
 
-def test_indicator_one_sided_no_other_market_and_no_trade():
+def test_indicator_one_sided_no_other_market_and_no_trade(asked):
     rows = by(G.indicator(with_it(sides="long", short=0.0, n_short=0), RAW, OTHERS))      # a one-sided idea: its side
     assert rows["P3.4"]["passed"] is True and rows["P3.4"]["text"] == "P3.4 PASS long only by its card: $100, all variants together (need above $0)"
     assert by(G.indicator(with_it(sides="long", long=-1.0, n_short=0), RAW, OTHERS))["P3.4"]["passed"] is False
@@ -278,7 +285,7 @@ def test_indicator_one_sided_no_other_market_and_no_trade():
     assert gc["passed"] is False and gc["text"] == "P3.2 FAIL average trade $139 (need $140)"
 
 
-def test_strict_extra_is_rows_4_and_6():
+def test_strict_extra_is_rows_4_and_6(asked):
     for t, others in ((with_it(), OTHERS), (with_it(short=-1.0), OTHERS), (with_it(), [-1.0, -1.0]), (with_it(sides="short", n_long=0), []), (with_it(short=0.0), [])):
         full = by(G.indicator(t, RAW, others))
         assert G.strict_extra(t, others) == [full["P3.4"], full["P3.6"]]
@@ -376,3 +383,15 @@ if __name__ == "__main__":
         finally:
             teardown_function()
     sys.exit(rc)
+
+
+def test_the_other_markets_are_shown_and_ask_nothing_when_the_file_holds_no_bar():
+    """The owner, 2026-10-08: "the same idea could work on another market, but not the exact same" -- no bar in pipeline.json."""
+    assert G.others_bar() is None
+    t = with_it()
+    for others, said in (([-1.0, -1.0], "P3.6 n/a  0 of 2 other-market heat maps profitable, 0 % (shown: the other markets ask nothing of an idea)"),
+                         ([5.0, -1.0], "P3.6 n/a  1 of 2 other-market heat maps profitable, 50 % (shown: the other markets ask nothing of an idea)"),
+                         ([], "P3.6 n/a  no other market runs this idea (shown: the other markets ask nothing of an idea)")):
+        r = G.strict_extra(t, others)[1]
+        assert (r["line"], r["passed"], r["need"], r["text"]) == ("P3.6", None, None, said), r
+        assert [x for x in G.indicator(t, RAW, others) if x["line"] == "P3.6"][0]["passed"] is None

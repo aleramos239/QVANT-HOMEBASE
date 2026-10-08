@@ -124,16 +124,24 @@ def rank(results: list):
 
 # ================================================================ stage 3: one indicator on the heat map
 
+def others_bar():
+    """The share of the other-market heat maps that must be profitable (pipeline.json indicator.other_markets), or None: the
+    other markets are SHOWN and ask nothing of an idea (the owner, 2026-10-08: "the same idea could work on another market,
+    but not the exact same")."""
+    return PR.need("indicator", "other_markets")
+
+
 def strict_extra(t: dict, others: list) -> list:
     """Rows P3.4 (each side makes money: line 2.6's reading of `t`) and P3.6 (the other markets agree: `others` = the net of
-    the average box of each other-market table; none = the row does not apply)."""
-    side, nb, need = L.sides(t), [float(a) for a in others or ()], PR.need("indicator", "other_markets")
+    the average box of each other-market table; none = the row does not apply; no bar in pipeline.json = shown, never False)."""
+    side, nb, need = L.sides(t), [float(a) for a in others or ()], others_bar()
     k = sum(bool(L._profitable(a)) for a in nb)
     share = k / len(nb) if nb else None
+    asked = "shown: the other markets ask nothing of an idea" if need is None else f"need {L._pc(need)} or more"
     return [{**side, "line": "P3.4", "text": "P3.4" + side["text"][len(side["line"]):]},
-            L._row("P3.6", None if not nb else bool(share >= need), share, need,
-                   f"{k} of {len(nb)} other-market heat maps profitable, {L._pc(share)} (need {L._pc(need)} or more)" if nb else
-                   f"no other market runs this idea (need {L._pc(need)} or more of them profitable)", profitable=k, tables=len(nb))]
+            L._row("P3.6", None if not nb or need is None else bool(share >= need), share, need,
+                   f"{k} of {len(nb)} other-market heat maps profitable, {L._pc(share)} ({asked})" if nb else
+                   f"no other market runs this idea ({asked}{'' if need is None else ' of them profitable'})", profitable=k, tables=len(nb))]
 
 
 def indicator(tf: dict, traw: dict, others: list) -> list:

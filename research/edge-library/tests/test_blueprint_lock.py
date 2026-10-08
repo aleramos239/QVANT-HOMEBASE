@@ -199,6 +199,12 @@ def test_what_a_freeze_refuses():
     bad = dict(good, lines=[{**x, "passed": False} if x["line"] == "2.4" else x for x in good["lines"]])
     build.write_text(json.dumps(bad))
     assert "2.4" in no("fails 2.4")
+    with F.tiny(), F.no_engine():                                                # waive=: a keyword of the code (the pipeline's, for the other markets' 2.5)
+        F.refused(lambda: FRZ.start(NAME, root, waive=("2.5",)), "fails 2.4")   # ... it waives the lines it names and no other
+        got = FRZ.start(NAME, root, waive=("2.4",))
+        assert got["waived"] == ["2.4"] and got["frozen"] is False
+        build.write_text(json.dumps(good))
+        assert "waived" not in FRZ.start(NAME, root, waive=("2.4",))             # a line that passed is not waived: nothing is written down
     build.write_text(json.dumps(dict(good, lines=[x for x in good["lines"] if x["line"] != "2.8"])))
     no("no line 2.8")
     build.write_text(json.dumps(dict(good, dry_run=True)))

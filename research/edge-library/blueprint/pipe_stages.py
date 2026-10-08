@@ -575,7 +575,8 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
             return _card(5, t0, False, "fail", rows, f"CODE PROBLEM ({sub}, its home store {u['key']}): {bad[0]['text']}", picked, tries, rules,
                          code_problem=True, check=chk["saved"])
         rows = (_built(sub, kw) or REC.build(sub, REASON, **_cmd(kw)))["lines"]
-        bad = [x for x in rows if x["passed"] is False]
+        shown = G.others_bar() is None              # the other markets ask nothing (pipeline.json): the build's 2.5 is shown, and the lock is told so
+        bad = [x for x in rows if x["passed"] is False and not (shown and x["line"] == OTHERS)]
         odd = [x for x in bad if not (picked["filter"] and x["line"] == OTHERS)]
         if odd:                                     # the toolkit reads a line otherwise than the pipeline's gate did: neither number is believed
             said = "; ".join(f"the toolkit: {x['text']} -- the pipeline: {(_gate(name, ctx, picked, x['line']) or {}).get('text') or 'no gate of its own reads this line'}"
@@ -586,7 +587,7 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
             return _card(5, t0, False, "other markets", rows, f"{sub}{with_} does not hold on its other markets, which the build is the first to run with the "
                          f"indicator on: {bad[0]['text']}", picked, tries, needs(rows))
         try:
-            r = FRZ.lock(sub, **_cmd(kw))
+            r = FRZ.lock(sub, **_cmd(kw), **({"waive": (OTHERS,)} if shown else {}))
         except J.Refuse:
             got = _box(u, kw)
             if got is None or (got[0] is not None and all(x["passed"] for x in got[1])):

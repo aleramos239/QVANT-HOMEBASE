@@ -53,6 +53,7 @@ import test_pipe_stages as TS  # noqa: E402
 from blueprint import api  # noqa: E402
 from blueprint import checks as CH  # noqa: E402
 from blueprint import freeze as FRZ  # noqa: E402
+from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import lines as L  # noqa: E402
 from blueprint import oos as OOS  # noqa: E402
 from blueprint import pipe_card as PC  # noqa: E402
@@ -274,7 +275,27 @@ def test_stage_5_asks_the_code_check_on_the_heat_maps_own_home_store_and_a_false
     assert c["code_problem"] is True and c["picked"] == four["picked"] and c["tries"] == 3 and "1.4 FAIL" in c["text"]
 
 
+def test_stage_5_a_false_2_5_is_shown_and_the_lock_is_told_when_the_other_markets_ask_nothing(world):
+    """pipeline.json holds no bar for the other markets (the owner, 2026-10-08): the build's 2.5 stops nothing after a low
+    pass or a strict one, it stays among the lines, and the lock is called with waive=("2.5",)."""
+    assert G.others_bar() is None
+    stop = J.Refuse("a job of the idea is still running")                                      # the lock's own word goes up: all that is asked here is how it was called
+    for low in (True, False):
+        base(world, low=low)
+        calls = fakes(world, build=("2.5",), lock=stop)
+        with pytest.raises(J.Refuse, match="still running"):
+            ST.stage5(C, CTX)
+        assert len(calls["lock"]) == 1 and calls["lock"][0]["waive"] == ("2.5",), low
+    world.setattr(G, "others_bar", lambda: 0.5)                                                # with a bar the lock is not told anything
+    base(world)
+    calls = fakes(world, lock=stop)
+    with pytest.raises(J.Refuse, match="still running"):
+        ST.stage5(C, CTX)
+    assert "waive" not in calls["lock"][0]
+
+
 def test_stage_5_a_false_2_5_after_a_low_pass_stops_the_idea_and_is_no_code_problem(world):
+    world.setattr(G, "others_bar", lambda: 0.5)                                                # the other markets with a bar again
     base(world, low=True)
     calls = fakes(world, build=("2.5",))
     c = TS.whole(ST.stage5(C, CTX), 5)

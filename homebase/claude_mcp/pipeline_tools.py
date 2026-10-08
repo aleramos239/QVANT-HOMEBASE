@@ -54,8 +54,8 @@ STAGES = [
     {"n": 0, "name": "Idea card", "words": "Is the card complete, and does it use only parts that exist?"},
     {"n": 1, "name": "Raw heat map", "words": "Does it make money across many stops and targets, with no indicators?"},
     {"n": 2, "name": "Machine check", "words": "Does every trade do exactly what the rule says?"},
-    {"n": 3, "name": "Indicators", "words": "Does it work long and short and on the other markets, and after a weaker "
-                                            "result does one indicator make it good enough?"},
+    {"n": 3, "name": "Indicators", "words": "Does it work long and short, and after a weaker result does one indicator "
+                                            "make it good enough? How it does on the other markets is shown, not asked."},
     {"n": 4, "name": "Proof", "words": "Is it better than luck: does it hold when the days are reshuffled, and does it "
                                        "beat random entries?"},
     {"n": 5, "name": "Pick one box and lock", "words": "Does the one stop and target in the middle hold up on its own, "
