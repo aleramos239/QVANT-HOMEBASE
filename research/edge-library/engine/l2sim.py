@@ -56,8 +56,9 @@ a named day outside the named range. It has no range by name (period("bp_test") 
 lock froze) and ONE caller, blueprint/runner.run_test, which uses it only for a read that is claimed in the app's
 one-read log. Everything above is untouched.
 
-COMPUTE WINDOWS: every worker checks the ET clock before each session-day and sleeps through
-09:18-09:36 ET on weekdays and Fri 2026-10-02 08:15-08:50 ET. <= 8 worker processes.
+COMPUTE WINDOWS: every worker checks the ET clock before each session-day and sleeps through the windows of
+compute_window_end: Fri 2026-10-02 08:15-08:50 ET, and -- unless OPEN_WINDOW is None, as it is since the owner's order of
+2026-10-07 -- the weekday open 09:18-09:36 ET. <= 8 worker processes.
 
 USE
     import l2sim as S
@@ -294,12 +295,16 @@ check_exam = check_holdout
 
 
 # ---- compute windows --------------------------------------------------------------------------------------
+OPEN_WINDOW = None          # the weekday open's no-heavy-compute window: REMOVED at the owner's order (2026-10-07). To bring it back:
+#                             OPEN_WINDOW = (dt.time(9, 18), dt.time(9, 36))  -- the tests that check the window set it themselves
+
+
 def compute_window_end(now: dt.datetime | None = None) -> dt.datetime | None:
     """The end of the no-heavy-compute window `now` (ET) falls in, or None."""
     now = (now or dt.datetime.now(ET)).astimezone(ET)
     wins = []
-    if now.weekday() < 5:
-        wins.append((dt.time(9, 18), dt.time(9, 36)))
+    if now.weekday() < 5 and OPEN_WINDOW is not None:
+        wins.append(OPEN_WINDOW)
     if now.date() == dt.date(2026, 10, 2):
         wins.append((dt.time(8, 15), dt.time(8, 50)))
     for a, b in wins:

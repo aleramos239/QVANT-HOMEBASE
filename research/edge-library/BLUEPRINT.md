@@ -43,7 +43,7 @@ variant of line 3.1 (is this strategy good enough?).
 | 0.1 | The reason, in one sentence: why it should make money and who is on the losing side |
 | 0.2 | The rule: one entry trigger, at most 2 filters, exits from the standard table only |
 | 0.3 | Its home: market, session and bar size (or "all" when the reason does not single one out) |
-| 0.4 | Where else it should work (its neighbors), and one place it should NOT work |
+| 0.4 | Where else it should work (its neighbors). A place it should NOT work is no longer asked for (owner, 2026-10-07: "remove the test when it should not"): a card that names one still has it run and shown, no line reads it |
 | 0.5 | The main setting and its 3-4 values |
 | 0.6 | Whether it trades both sides or one side only, and why |
 | 0.7 | When it should lose: one stretch or kind of market in which the idea must lose money. A build without that loss is a red flag, and no filter is added only to erase it |
@@ -74,6 +74,15 @@ variant of line 3.1 (is this strategy good enough?).
 First look, not a pass line: the entry alone with a plain time exit (no stop, no target) against random entries. It is the same
 question as 2.3 without the exits, so it is shown on the card and 2.3 decides.
 Not passed after round 5 → shelved, with notes on what was tried.
+**The order inside a round (owner, 2026-10-07: "only run the seeds once a strategy is already reaching the requirements; running
+it on a strategy that is bad or already failed is a waste" · "also with the Monte Carlo").** A round runs in three stages, the
+cheap first. Stage 1: the idea's own tables (home, neighbors, the place it should not work) and the cheap lines (2.1, 2.2, 2.4-2.7,
+2.9). Stage 2, ONLY when stage 1 left no failed line: the Monte Carlo (line 2.8, the reshuffled runs). Stage 3, ONLY when stages 1
+and 2 left no failed line: the random-entry control pools (10 seeds × every exit cell × all sessions, the slow part) and line 2.3
+(and the random bar of 2.7 for a rule with a filter). A round with a failed line is a failed round and is saved so, with the lines
+that were never asked written "not run" (2.3, 2.8; it is not "n/a"); a round that passes every stage reads every line as before,
+so nothing that used to pass or fail changes. A pool already on disk is reused. The default variant, the lock and the test are unchanged. (Toolkit: `blueprint/records.py` `run`, `STAGED`;
+`BP_STAGED=0` runs the pools always.)
 Shown on the card, never a pass line: Sharpe of the table, the win rate next to the break-even win rate of its stop and target,
 the equity curve (the course gives no number for the last two).
 
@@ -88,10 +97,17 @@ written. The freeze is refused unless every one of these is true:
 | # | Requirement | The number |
 |---|---|---|
 | 3.3 | The default variant has a healthy profit factor (its winning trades ÷ its losing trades, in dollars) | 1.2 or more |
-| 3.4 | Its profit is large against its worst drawdown (its net ÷ its worst drawdown on closed days) | 3 or more |
+| 3.4 | Its profit is large against its worst drawdown (its net ÷ its worst drawdown, open losses counted) | 3 or more |
 | 3.5 | Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)* | 1 or more |
-| 3.6 | Its worst drawdown fits the account at the smallest size: at 1 micro it stays under the drawdown limit of LucidPro 50K | under 2000 dollars |
+| 3.6 | Its worst drawdown fits the account at the smallest size: at 1 micro, open losses counted, it stays under the drawdown limit of LucidPro 50K | under 2000 dollars |
 | 3.7 | Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days | 90 % of the runs or more (the course's line) |
+
+The drawdown of lines 3.4 and 3.6 counts OPEN LOSSES (owner, 2026-10-07: the course is written for a live account, ours is a
+prop account, and the firm's drawdown is breached by an open loss, not only by a closed day): the largest fall from the high of
+the end-of-day running total to the lowest point reached, a day's close or its worst open point. The bar of 3.4 stays 3.
+Shown at the lock, never a pass line (owner, 2026-10-07): the default variant's prop odds on the BUILD days for the account of
+line 3.6, read as line 5.5 reads them (open losses count, the "live is worse" row, each phase at its best size, no day limit).
+It says early whether the idea fits the account. It proves nothing: line 5.5 is judged on the test days, in phase 5.
 
 Not passed → back to phase 2 as a new round when one is left (it counts), otherwise shelved.
 
@@ -231,7 +247,7 @@ one strategy, and the owner's.
 | 2.7 Filter wins alone | Course, extra lesson: two-of-three filters gave the best number and was still rejected, because two of the three failed alone |
 | 2.8 and 4.7 Monte Carlo | Owner, 2026-10-05, and the course. On the stored tables it did not raise the hit rate; it is kept as the owner's choice |
 | 2.9 Five rounds, rising bar | Owner, 2026-10-05. The bar rises to pay for the extra tries |
-| 3.3-3.7 The one variant | Owner, 2026-10-06. The course reads profit factor, drawdown and Monte Carlo on the one setting it trades; the heat map only says the idea is real. Sharpe (3.5) is the owner's own line |
+| 3.3-3.7 The one variant | Owner, 2026-10-06. The course reads profit factor, drawdown and Monte Carlo on the one setting it trades; the heat map only says the idea is real. Sharpe (3.5) is the owner's own line. The drawdown of 3.4 and 3.6 counts open losses (owner, 2026-10-07): the course is written for a live account, a prop account is bust on an open loss |
 | The 75 / 25 split | Owner: 75 / 25, "so we have at least one full year for OOS" (2026-10-06). The course says 80 / 20, and not as a hard rule. Anything tuned on a day can no longer be tested on it |
 | 4.1 Both parts | Owner: both must make money. It stops one good stretch from hiding a dead one |
 | 4.8 Half of the build | Owner, 2026-10-06. Course, lesson 9: build and test are put side by side, and a large fall is the sign of overfitting. "Half" is my number |
@@ -322,6 +338,9 @@ c. **Older history — parked (owner: not now).** Every archive on this Mac star
 | A look at the test days before the lock? | 2026-10-06: "Warn, then run if I say yes" | The EARLY LOOK: `bp.py test <name> --confirm --early-look` (`/test <name> oos`). It is labelled EARLY LOOK, uses the test days up for that idea and its relatives, and can never prove it |
 | Quick commands | 2026-10-06: one command, "IS" for in-sample | The skill `test`: `/test <name> <is, oos, heatmap, mc, odds, status, all>` |
 
+| When the Monte Carlo and the random-entry control run (2026-10-07) | "only do the seeds after we get something approved, but not on every run" · "only runs the seeds at the end of the phase or once a strategy is already reaching the requirements" · "also with the Monte Carlo" | Section 2, phase 2: stage 1 (the tables and the cheap lines), stage 2 (the Monte Carlo, 2.8) only when stage 1 passes, stage 3 (the pools and 2.3) only when stages 1 and 2 pass |
+| Several chats at once (2026-10-07) | "i need it higher, so i can run multiple chats and test multiple strategies in separate chats simultaneously" | Builds lock one store at a time, not the folder: different ideas run side by side, a shared pool is built by one run while the other waits; the tester's own backtest cap is 6 at any hour (`~/.homebase/tester_slots.json`) |
+| An exit table of an idea's own (2026-10-07) | "stops based on atr from 9:30 to the current candle ... and the total volatility since 9:30" | Card `exits: "open"`: 5 stops of the mean true range and 5 of the range since the session started × the 6 targets = 60 cells (`blocks.menu_open`). It can be built (phase 2) but not locked or tested yet. Used by `fvg_first_nq` |
 | The blueprint held against the course, line by line (2026-10-06) | "lets update the blueprint" | Version 1.1: lines 0.7, 3.3-3.7, 4.8, 4.9, 5.5-5.7, 6.9; 5.3, 6.4-6.6 reworded |
 | The 95th percentile | "yeah lets use his rule" | 6.4, 6.9: the hard alarm; "sounds good add the soft alarm": 6.5, 6.6 |
 | Small targets | "lets add 1:0.5, 0.75 for the RR heatmap" · counted "like every other box" | Section 2: the table is 8 stops × 6 targets |
@@ -334,6 +353,7 @@ c. **Older history — parked (owner: not now).** Every archive on this Mac star
 | Sharpe | "i really like sharpe … maybe just like a sharpe on just 1" | 3.5, his line |
 | Eval and payout bars | the 60 % / 75 % bars are the portfolio's; one strategy: 50 % and 50 % ("yeah i like it") | 5.3, 5.5-5.7 |
 | Where the numbers are read | the heat map stays; "we pick the box which is the median" | Section 2, the two levels |
+| The course is for live trading, ours is prop: what changes (2026-10-07) | "read it with open losses. Keep the bar at 3" · "do it also the extra" | Lines 3.4 and 3.6 count open losses; the lock shows the default variant's prop odds on the build days (a number, never a pass line). Nothing else changed: phases 0-4 ask whether the edge is real, which is the same question for both |
 
 Never confirmed by the owner, so they stand as defaults: 5.4 (set per strategy). Not answered: the data step of the course.
 
@@ -392,5 +412,7 @@ Only new unseen days or real fills on paper can change that.
 - 2026 results were not used to set any line here.
 - For a new idea Jul 2025 - Sep 2026 is unseen. For a close relative of the 15 saved strategies it is a second look and says less.
 - The numbers marked "my number" or "my pick" (1.5, 4.8, 5.2, 5.5, 6.3) have no evidence behind them yet.
+- Line 3.4's bar of 3 is the course's. This file read it on closed days until 2026-10-07; with open losses counted the same
+  strategy reads lower, so the line is harder than it was. How much was not measured on the stored tables.
 - The lines of version 1.1 were dry-run on the stored middle variant of 27 months, without worse fills. They removed nothing
   after the old lines, so nothing says they pick better. More lines mean fewer survivors, not better ones.

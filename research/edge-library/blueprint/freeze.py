@@ -5,6 +5,7 @@ touched": what the idea is gets saved, with one hash over all of it, and from he
     3.2  From here nothing changes. A change is a new version: back to phase 2, and its earlier unseen read is marked as used
     3.3-3.7  the default variant ON ITS OWN on the build days: profit factor, net / worst drawdown, Sharpe, its drawdown at 1
          micro under the account's limit, Monte Carlo (lines.BOX on tables.box). One of them not met = refused: nothing is frozen
+    SHOWN, never a pass line: the default variant's prop odds on the build days for the account of line 3.6 (propodds.look)
 
 REFUSED unless, for the idea on file:
   * its LATEST build round has every line 2.1-2.9 in its result and none failed (null = the line does not apply) -- a round
@@ -24,6 +25,7 @@ THEN (start() refuses, run() works):
        variants      THE VARIANT LIST: the variants judged on build (dead and duplicate ones out), in table order
        default, survivors, default_rule
        box           lines 3.3-3.7 as they were read on the default variant (each line's number, need and words)
+       prop          its prop odds on the build days as they were shown (propodds.look): a number on the card, no line reads it
        build         avg_trade: line 2.2's number of the frozen variants on the build days (line 4.8 holds the test against it)
        costs         normal (the engine's defaults) and worse (as run: with or without the late cancel)
        control       c1: the pool's store, its 10 seeds, 4,000 draws, the draw seeds (build as it was drawn, test as it WILL be)
@@ -206,6 +208,9 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     if plan["filters"] and plan["filters"][0].split("_")[0] in RUN._blocks().L2_BLOCKS:
         raise J.Refuse(f"{name}: filter {plan['filters'][0]} reads Level 2, which can be built but not locked or tested yet: the vendor's Level 2 history ends "
                        "2026-07-08 and the test days' table is not built (the owner decides how the test range of such an idea ends)")
+    if plan.get("exits", "standard") != "standard":
+        raise J.Refuse(f"{name}: its exits are the session-anchored table ({plan['exits']!r}), which can be built (phase 2) but not locked or tested yet: the worse-fills "
+                       "pool, the freeze and the test days' tables are not wired to it -- the owner decides when it is (it is not done by hand)")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers")
     days = None if days is None else RUN.seal(days)
@@ -273,6 +278,8 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
         raise J.Refuse(f"the default variant {default} of {u['addr']} does not meet every line read on it before the freeze -- "
                        + "; ".join(x["text"] for x in box if not x["passed"])
                        + " -- nothing is frozen: back to the build (a new round when one is left, it counts; otherwise the idea is shelved)")
+    from . import propodds                          # (phase 5's module: loaded here, never with this one -- cli.py)
+    prop = propodds.look(J.cellx(st, default, sess, u), T.build_days(u, days))       # shown, never a pass line
     pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
     keys = [key, worse[0]["key"], pool] + ([T.bp_unit(sp, h["market"], h["bar"], sess)["key"]] if f else [])     # (with a filter: the plain table 2.7 was held against)
     markets = list(dict.fromkeys([h["market"], *(s["market"] for s in plan["stores"])]))
@@ -283,6 +290,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": J.TIE_RULE,
             "box": [{k: (None if isinstance(x[k], float) and x[k] in (float("inf"), float("-inf")) else x[k]) for k in ("line", "passed", "number", "need", "text")}
                     for x in box],
+            "prop": prop,
             "build": {"avg_trade": T.avg_trade(st, u, ids) if build_avg_trade is None else float(build_avg_trade)},
             "costs": {"normal": costs["normal"], "worse": {**wst["meta"]["worse"], "two_sided": bool(wst["meta"].get("both_sides_declared"))}},
             "control": {"kind": ctl["kind"], "pool": pool, "seeds": list(range(1, ctl["seeds"] + 1)), "draws": int(draws or ctl["draws"]),
@@ -326,6 +334,7 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
     text = [f"FROZEN {'already' if already else 'now'}: {name} · lock {lock['hash']} · version {lock['version']} · round {lock['round']} · home {REC._nice(h)} · "
             f"store {Path(h['folder']).name}/{h['key']}", *[x["text"] for x in rows],
             f"DEFAULT VARIANT {lock['default']}: the middle, by build net, of {who} on build and on build with worse fills ({ns} of {nv})",
+            *([lock["prop"]["text"]] if lock.get("prop") else []),
             f"TEST RANGE {h['market']} {rng['start']} .. {rng['end']} ({rng['sessions']} sessions: "
             + ", ".join(f"{p['name']} {p['sessions']}" for p in rng["parts"]) + "), frozen: read ONCE, only by bp.py test",
             *[f"TEST RANGE {m} {r['start']} .. {r['end']} ({r['sessions']} sessions; a neighbor's market: the test reads the home table only)"
@@ -408,6 +417,7 @@ def early(name, root=None, out=None, draws=None) -> dict:
         why = str(e)
     two = bool(RUN._blocks().BASES[sp["family"]][2])
     flow = bool(filt) and filt.split("_")[0] in getattr(RUN._blocks(), "FLOW_SERIES", ())      # a delta block: the range ends where its data ends (_range, as in run())
+    from . import propodds                          # (phase 5's module: loaded here, never with this one -- cli.py)
     pool, ctl, mc, costs = RUN.pool_key(h["market"], h["bar"]), R.template("control"), R.template("montecarlo"), R.template("costs")
     keys = [key, pool] + ([T.bp_unit(sp, h["market"], h["bar"], h["session"])["key"]] if f else [])
     lock = {"name": name, "version": rspec.get("version", 1), "locked_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "round": n,
@@ -417,6 +427,7 @@ def early(name, root=None, out=None, draws=None) -> dict:
             "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": rule,
             "box": [{k: (None if isinstance(x[k], float) and x[k] in (float("inf"), float("-inf")) else x[k]) for k in ("line", "passed", "number", "need", "text")}
                     for x in (fn(T.box(st, u, default, st["meta"].get("days") or None)) for fn in L.BOX)],      # read, never enforced: a look checks nothing off
+            "prop": propodds.look(J.cellx(st, default, h["session"], u), T.build_days(u, st["meta"].get("days") or None)),      # shown, as at the freeze
             "build": {"avg_trade": T.avg_trade(st, u, ids) if test.get("build_avg_trade") is None else float(test["build_avg_trade"])},
             "costs": {"normal": costs["normal"], "worse": {**RUN.worse_kw(two), "two_sided": two}},
             "control": {"kind": ctl["kind"], "pool": pool, "seeds": list(range(1, ctl["seeds"] + 1)), "draws": int(draws or ctl["draws"]),

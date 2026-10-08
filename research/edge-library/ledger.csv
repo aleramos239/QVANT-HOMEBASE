@@ -941,3 +941,18 @@ null_bp_more,c1-GC-tf1,null,random,GC,1,bp_build,c1,1-10,0,0,160,0,2835044,566.6
 null_bp_more,c1-GC-tf5,null,random,GC,5,bp_build,c1,1-10,0,0,160,0,2650862,420.3,runs_bp/c1-GC-tf5: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:18:54+00:00
 null_bp_more,c1-GC-tf15,null,random,GC,15,bp_build,c1,1-10,0,0,160,0,2175214,442.94,runs_bp/c1-GC-tf15: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:26:29+00:00
 null_bp_more,c1-GC-tf30,null,random,GC,30,bp_build,c1,1-10,0,0,160,0,1543166,467.02,runs_bp/c1-GC-tf30: + 160 cells of the grown exit table (BLUEPRINT.md version 1.1); it held 320,2026-10-07T01:34:26+00:00
+null_bp,c1o-NQ-tf5,null,random,NQ,5,bp_build,c1,1-10,0,0,600,0,9413061,2567.91,"runs_bp/c1o-NQ-tf5: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-07T04:21:44+00:00
+bp_build,fvg_first_nq-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,240,0,0,392520,322.46,runs_bp/fvg_first_nq-NQ-tf5: idea fvg_first_nq,2026-10-07T04:27:08+00:00
+null_bp,c1o-NQ-tf1,null,random,NQ,1,bp_build,c1,1-10,0,0,600,0,10957096,3208.78,"runs_bp/c1o-NQ-tf1: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-07T05:21:39+00:00
+bp_build,fvg_first_nq-NQ-tf1,grid,fvg,NQ,1,bp_build,,,0,240,0,0,224820,186.88,runs_bp/fvg_first_nq-NQ-tf1: idea fvg_first_nq,2026-10-07T05:24:47+00:00
+null_bp,c1o-ES-tf5,null,random,ES,5,bp_build,c1,1-10,0,0,600,0,9546196,3332.84,"runs_bp/c1o-ES-tf5: 10-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size",2026-10-07T14:24:06+00:00
+bp_build,fvg_first_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,188820,153.1,runs_bp/fvg_first_nq-ES-tf5: idea fvg_first_nq,2026-10-07T14:26:40+00:00
+bp_build,fvg_cancel_nq-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,240,0,0,113760,298.89,runs_bp/fvg_cancel_nq-NQ-tf5: idea fvg_cancel_nq,2026-10-07T17:56:35+00:00
+bp_build,fvg_latest_nq-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,240,0,0,171660,322.41,runs_bp/fvg_latest_nq-NQ-tf5: idea fvg_latest_nq,2026-10-07T17:57:02+00:00
+bp_build,fvg_cancel_nq-NQ-tf1,grid,fvg,NQ,1,bp_build,,,0,240,0,0,141420,363.62,runs_bp/fvg_cancel_nq-NQ-tf1: idea fvg_cancel_nq,2026-10-07T18:02:40+00:00
+bp_build,fvg_latest_nq-NQ-tf1,grid,fvg,NQ,1,bp_build,,,0,240,0,0,224460,379.97,runs_bp/fvg_latest_nq-NQ-tf1: idea fvg_latest_nq,2026-10-07T18:03:23+00:00
+bp_build,fvg_cancel_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,109560,268.87,runs_bp/fvg_cancel_nq-ES-tf5: idea fvg_cancel_nq,2026-10-07T18:07:09+00:00
+bp_build,fvg_latest_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,160620,272.62,runs_bp/fvg_latest_nq-ES-tf5: idea fvg_latest_nq,2026-10-07T18:07:56+00:00
+bp_build,fvg_first_nq-ES-tf1,grid,fvg,ES,1,bp_build,,,0,240,0,0,225480,285.83,runs_bp/fvg_first_nq-ES-tf1: idea fvg_first_nq,2026-10-07T18:26:15+00:00
+bp_build,fvg_cancel_nq-ES-tf1,grid,fvg,ES,1,bp_build,,,0,240,0,0,133680,257.43,runs_bp/fvg_cancel_nq-ES-tf1: idea fvg_cancel_nq,2026-10-07T18:30:33+00:00
+bp_build,fvg_latest_nq-ES-tf1,grid,fvg,ES,1,bp_build,,,0,240,0,0,225000,276.27,runs_bp/fvg_latest_nq-ES-tf1: idea fvg_latest_nq,2026-10-07T18:35:11+00:00

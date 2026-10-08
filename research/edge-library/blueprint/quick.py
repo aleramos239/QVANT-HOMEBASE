@@ -101,7 +101,7 @@ def built(name, root=None, round_=None) -> dict:
 
 def places(plan: dict) -> dict:
     """{its name on the command line: the place}: home · 1, 2, .. = the card's neighbors, in the card's order · not_here."""
-    return {HOME: plan["home"], **{str(i): p for i, p in enumerate(plan["neighbors"], 1)}, NOT_HERE: plan["not_here"]}
+    return {HOME: plan["home"], **{str(i): p for i, p in enumerate(plan["neighbors"], 1)}, **({NOT_HERE: plan["not_here"]} if plan.get("not_here") else {})}
 
 
 def _table(B: dict, p: dict) -> tuple:

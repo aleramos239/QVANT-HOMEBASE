@@ -18,10 +18,7 @@
   "text": "Its home: market, session and bar size (or \"all\" when the reason does not single one out)"
  },
  "0.4": {
-  "text": "Where else it should work (its neighbors), and one place it should NOT work",
-  "need": {
-   "not_here": 1
-  }
+  "text": "Where else it should work (its neighbors). A place it should NOT work is no longer asked for (owner, 2026-10-07: \"remove the test when it should not\"): a card that names one still has it run and shown, no line reads it"
  },
  "0.5": {
   "text": "The main setting and its 3-4 values",
@@ -181,11 +178,11 @@
   "note": "lines 3.3-3.7: the default variant of 3.1 alone, on the build days, after costs at 1 contract (owner 2026-10-06; the course reads its numbers on the one setting it trades). No losing trade = met; no trade = not met"
  },
  "3.4": {
-  "text": "Its profit is large against its worst drawdown (its net ÷ its worst drawdown on closed days)",
+  "text": "Its profit is large against its worst drawdown (its net ÷ its worst drawdown, open losses counted)",
   "number": "3 or more",
   "need": 3,
   "op": ">=",
-  "note": "the drawdown is read on the end-of-day running total of every session day of the build range (the course's first screen: return on max drawdown above 3). No drawdown at all and a profit = met"
+  "note": "the drawdown counts OPEN LOSSES (owner 2026-10-07: the course is read for a prop account, and the firm's drawdown is breached by an open loss): the largest fall from the high of the end-of-day running total to the lowest point reached, a day's close or its worst open point (where the day started minus the day's worst open loss: each trade's MAE and commission), on every session day of the build range. The bar is the course's first screen (return on max drawdown above 3); this line read closed days until 2026-10-07, and with open losses the same strategy reads lower. No drawdown at all and a profit = met"
  },
  "3.5": {
   "text": "Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)*",
@@ -198,14 +195,17 @@
   "note": "mean ÷ standard deviation of the net of every session day of the build range (a day without a trade = 0), times the square root of 252"
  },
  "3.6": {
-  "text": "Its worst drawdown fits the account at the smallest size: at 1 micro it stays under the drawdown limit of LucidPro 50K",
+  "text": "Its worst drawdown fits the account at the smallest size: at 1 micro, open losses counted, it stays under the drawdown limit of LucidPro 50K",
   "number": "under 2000 dollars",
   "need": {
    "micros": 1,
    "limit": 2000,
    "account": "LucidPro 50K"
   },
-  "note": "the worst drawdown of 3.4 ÷ the micros of a contract (sizes.json), strictly under the account's trailing limit: at the limit the account is bust. The owner's account of 2026-10-06 (the course, lesson 10: a strategy must fit the account at one micro)"
+  "also": {
+   "rule_file": "lucid-pro-50k@2026-09-27b"
+  },
+  "note": "the worst drawdown of 3.4 (open losses counted) ÷ the micros of a contract (sizes.json), strictly under the account's trailing limit: at the limit the account is bust. The owner's account of 2026-10-06 (the course, lesson 10: a strategy must fit the account at one micro). `rule_file` = that account in the app's prop simulator: the lock SHOWS the default variant's prop odds on the build days for it (owner 2026-10-07; a number on the card, never a pass line)"
  },
  "3.7": {
   "text": "Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days",

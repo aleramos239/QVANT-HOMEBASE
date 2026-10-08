@@ -47,6 +47,38 @@
   0.75
  ],
  "cells": 48,
+ "open": {
+  "_about": "The owner's session-anchored exit table (2026-10-06, for the idea fvg_first_nq; exits \"open\" on a card): 10 stops x the 6 standard targets = 60 cells, stops outer and targets inner, the same for every market. A stop is a multiple of the mean true range (atropen) or of the range (rngopen) of the bars closed since the session started (nyam: since 09:30). Locked to the engine by tests/test_blueprint_rules.py (blocks.menu_open).",
+  "stop_order": [
+   "atropen",
+   "rngopen"
+  ],
+  "stops": {
+   "atropen": [
+    0.5,
+    1.0,
+    1.5,
+    2.0,
+    3.0
+   ],
+   "rngopen": [
+    0.25,
+    0.5,
+    0.75,
+    1.0,
+    1.5
+   ]
+  },
+  "targets_r": [
+   0.0,
+   0.5,
+   0.75,
+   1.0,
+   2.0,
+   3.0
+  ],
+  "cells": 60
+ },
  "hold": "day",
  "flat_et": "15:58",
  "flat_et_half_day": "13:13"

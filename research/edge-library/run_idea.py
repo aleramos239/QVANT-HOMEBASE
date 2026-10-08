@@ -164,7 +164,7 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
     if bad:
         raise SpecError(f"limits {bad}: one of {LIMIT_KEYS}")
     for key in ("exits", "filter_exits"):
-        if sp.get(key, "standard") not in ("standard", "extended", "blueprint"):      # 'blueprint': set by blueprint/runner.py only (its 48-cell table)
+        if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open"):      # 'blueprint' / 'open': set by blueprint/runner.py only (its 48-cell table; the session-anchored 60-cell table)
             raise SpecError(f"{key} {sp.get(key)!r}: 'standard' or 'extended'")
     filters = []
     for f in sp.get("filters", []):

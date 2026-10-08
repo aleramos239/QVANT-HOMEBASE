@@ -55,7 +55,14 @@ def et(y, m, d, hh, mm, ss=0):
     return dt.datetime(y, m, d, hh, mm, ss, tzinfo=ET)
 
 
-def test_compute_window_bounds():
+def test_the_weekday_open_window_is_off_by_the_owners_order():
+    assert S.OPEN_WINDOW is None
+    assert S.compute_window_end(et(2026, 10, 1, 9, 20)) is None and S.compute_window_end(et(2026, 10, 1, 9, 35)) is None
+    assert S.compute_window_end(et(2026, 10, 2, 8, 20)) == et(2026, 10, 2, 8, 50)      # the one-off NFP window stays
+
+
+def test_compute_window_bounds(monkeypatch):
+    monkeypatch.setattr(S, "OPEN_WINDOW", (dt.time(9, 18), dt.time(9, 36)))             # the window, put back for this test
     w = S.compute_window_end
     assert w(et(2026, 10, 1, 9, 17, 59)) is None                         # Thursday
     assert w(et(2026, 10, 1, 9, 18)) == et(2026, 10, 1, 9, 36)

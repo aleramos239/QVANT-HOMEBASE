@@ -440,3 +440,5 @@ under $2,000, money in 90 % of reshuffled runs) · 4.8 (test average trade at le
 factor 1.2 on the test) · 5.5-5.7 (one strategy: 50 % / 50 %; the 60 % / 75 % bar of 5.3 is the PORTFOLIO's) · 6.9 (the hard alarm:
 off until the recovery; 6.5-6.6 = the soft alarm). THE BLUEPRINT'S EXIT MENU = the 32 cells above, then the 8 stops x targets 0.5 and
 0.75 x the stop: 48 cells (families/blocks.menu_blueprint; the old library's menu() stays 32). Built 2026-10-06: BLUEPRINT.md section 11.
+2026-10-07 (owner: the course is for a live account, ours is prop): the drawdown of 3.4 and 3.6 counts OPEN LOSSES (lines._drawdown on
+tables.box `open`); the lock SHOWS the default variant's prop odds on the build days (propodds.look; no line reads it).

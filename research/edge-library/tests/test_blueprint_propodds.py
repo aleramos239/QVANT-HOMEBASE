@@ -299,6 +299,33 @@ def test_open_losses_change_the_answer_and_the_end_of_day_rule_would_not_see_it(
     assert "COUNTS OPEN LOSSES" in PO.LABEL and "END-OF-DAY" in PO.LABEL and "tester page" in PO.LABEL
 
 
+def test_the_prop_odds_shown_at_the_lock_are_line_5_5s_reading_and_refuse_nothing():
+    """propodds.look (BLUEPRINT.md phase 3, owner 2026-10-07): one variant's trades for the account of line 3.6, read as line
+    5.5 reads a strategy. A number that is only shown: an account the app does not have, or no trade, is said and nothing is raised."""
+    rid = R.rule("3.6")["also"]["rule_file"]
+    assert rid == PRO and PS.load_rules(rid)["name"].startswith(R.need("3.6")["account"]) and PS.load_rules(rid)["trailing_mll"] == R.need("3.6")["limit"]
+    x, cal = steady(40.0), SY.weekdays()
+    got, want = PO.look(x, cal, paths=400), PO.read("", PO.table(x, PS.load_rules(rid), cal, paths=400), "5.5")
+    assert got["account"] == {"id": rid, "name": PS.load_rules(rid)["name"]} and (got["rule"], got["days"]) == (PO.RULE, 44)
+    assert got["eval"] == want["eval"] and got["payout"] == want["payout"] and set(got) == {"account", "rule", "days", "eval", "payout", "text"}
+    e, p = got["eval"], got["payout"]
+    mic = lambda n: f"{n} micro{'s' * (n != 1)}"  # noqa: E731
+    assert (e["size"], p["size"]) == (1, 5), "no day limit: $40 a day reaches $3,000 at 1 micro; the first payout needs 5 days of $150"
+    assert got["text"] == (f"PROP ODDS ON THE BUILD DAYS (shown, never a pass line): {PS.load_rules(rid)['name']}, open losses count, the \"live is worse\" row -- eval, a pass "
+                           f"before a bust {100 * e['p']:.1f} % at {mic(e['size'])} (plain {100 * e['plain']:.1f} %); funded, a first payout before a bust "
+                           f"{100 * p['p']:.1f} % at {mic(p['size'])} (plain {100 * p['plain']:.1f} %). Line 5.5 asks 50 % and 50 % of them on the TEST days (phase 5).")
+    assert e["plain"] == 1.0 and PO.look(steady(40.0, 2100.0), cal, paths=400)["eval"]["p"] == 0.0, "every trade $2,100 a micro under water first: no size survives"
+    json.dumps(got)                                 # plain JSON: it is kept with the lock
+    assert PO.look({"net": np.zeros(0)}, cal)["text"].endswith("not shown, the variant has no trade")
+    also = R.rule("3.6")["also"]
+    try:
+        also["rule_file"] = "no-such-account@2026-01-01"
+        gone = PO.look(x, cal, paths=400)
+    finally:
+        also["rule_file"] = rid
+    assert set(gone) == {"account", "text"} and "not shown, the app's prop simulator has no rule file no-such-account@2026-01-01" in gone["text"]
+
+
 def test_between_two_sizes_whose_intervals_overlap_the_smaller_is_taken():
     row = lambda size, p, lo, hi, pay=True: {"size": size, "eval": {"worse": {"p": p, "ci": [lo, hi]}},  # noqa: E731
                                              "payout": {"worse": {"p": p / 2, "ci": [lo / 2, hi / 2]}} if pay else None}

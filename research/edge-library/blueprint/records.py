@@ -75,6 +75,7 @@ TEST_RUN = "BP_TEST_RUN"                            # TEST ONLY (module docstrin
 CARD_KEYS = ("why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when")
 RUN_KEYS = ("family", "params", "fixed", "filters", "exits", "filter_exits", "limits")
 SIDES = ("both", "long", "short")
+STAGED = os.environ.get("BP_STAGED", "1") != "0"    # a round runs the control pools only when every other line passes (the owner, 2026-10-07); BP_STAGED=0 = always (the old flow)
 OWN_EXITS = ("trail_atr", "exit_bars")              # limits that are exits of their own: not of the standard table (line 0.2)
 LINES = (*L.BUILD, L.rounds)                        # lines 2.1 .. 2.9, in the law's order (a test puts its own in)
 LATER = re.compile(r"_r\d[a-h]?$")                  # how the stores of an idea's later rounds end: no idea is named so
@@ -193,16 +194,14 @@ def _places(card: dict, home, known, run: dict) -> tuple:
     nb, nh = card.get("neighbors"), card.get("not_here")
     if not isinstance(nb, list) or not nb or not all(_text(x) for x in nb):
         return None, None, "it does not say where else it should work (card.neighbors: the next bar sizes, the other sessions or markets it should fit)"
-    if not _text(nh):
-        return None, None, "it does not name the one place where it should NOT work (card.not_here)"
     base = home or {"market": "?", "session": "?", "bar": "?"}
     P = []
-    for i, said in enumerate([*nb, nh]):
+    for i, said in enumerate([*nb, *([nh] if _text(nh) else [])]):          # (the place it should NOT work is optional since 2026-10-07: none named = none run)
         try:
             P.append(place(said, base))
         except ValueError as e:
             return None, None, (f"the place it should NOT work, {said!r}, {e}" if i == len(nb) else f"neighbor {said!r} {e}")
-    nbs, nh = P[:-1], P[-1]
+    nbs, nh = (P[:-1], P[-1]) if _text(nh) else (P, None)
     if home is None:
         return nbs, nh, ""
     seen = {home["table"]: "the home itself"}
@@ -210,7 +209,7 @@ def _places(card: dict, home, known, run: dict) -> tuple:
         if p["table"] in seen:
             return None, None, f"neighbor {p['said']!r} is {seen[p['table']]}" + ("" if p["table"] == home["table"] else ": named twice")
         seen[p["table"]] = f"the same place as {p['said']!r}"
-    if nh["table"] in seen:
+    if nh and nh["table"] in seen:
         return None, None, f"the place it should NOT work, {nh['said']!r}, is " + ("the home itself" if nh["table"] == home["table"] else "also listed as a place it should work")
     for p in P if known else []:
         cls, lib = known
@@ -247,23 +246,24 @@ def card_lines(spec: dict) -> tuple:
     rows.append(L._row("0.1", not bad, n, need, bad or f"the reason in one sentence, and who loses: {why} Losing side: {loser}"))
     # 0.2 one entry trigger, at most 2 filters, exits from the standard table only
     need, (F, bad), limits = R.need("0.2"), _filters(run), run.get("limits") or {}
+    kind = run.get("exits") if run.get("exits") in R.EXIT_KINDS else need["exits"]       # "standard", or the owner's session-anchored table ("open")
     own = [k for k in OWN_EXITS if isinstance(limits, dict) and limits.get(k)]
     bad = (f"no entry trigger: settings.family names ONE of the engine's bar-based families ({', '.join(sorted(RUN._blocks().WRAPPED))})" if not known else bad or (
            "settings.fixed and settings.limits are objects {input: value}" if not (isinstance(limits, dict) and isinstance(run.get("fixed") or {}, dict)) else
-           f"exits {run.get('exits')!r}: the exits come from the standard table only" if (run.get("exits"), run.get("filter_exits", need["exits"])) != (need["exits"],) * 2 else
+           f"exits {run.get('exits')!r}: the exits come from the standard table (or the session-anchored one, \"open\")" if (run.get("exits"), run.get("filter_exits", run.get("exits"))) != (kind, kind) else
            f"limits.{own[0]} is an exit of its own: the exits come from the standard table only (the random tables hold its cells and no other)" if own else ""))
     rows.append(L._row("0.2", not bad, len(F or []), need, bad or f"one entry trigger ({run['family']}), "
                        + ("no filter" if not F else f"{len(F)} filter{'s' * (len(F) > 1)}: {', '.join(' '.join(f) for f in F)}") + f" (at most {need['max_filters']}), "
-                       "exits from the standard table"))
+                       + ("exits from the standard table" if kind == "standard" else "exits from the owner's session-anchored table (10 stops x 6 targets)")))
     # 0.3 its home
     home, bad = _home(card, known)
     rows.append(L._row("0.3", not bad, None, R.rule("0.3").get("need"), bad or f"home: {home['market']}, {J.SESS_PLAIN[home['session']]}, {home['bar']}-minute bars"))
     # 0.4 where else it should work, and one place it should not
     nbs, nh, bad = _places(card, home, known, run)
-    rows.append(L._row("0.4", not bad, len(nbs or []), R.need("0.4"), bad or f"{len(nbs)} place{'s' * (len(nbs) > 1)} it should also work "
-                       f"({' · '.join(p['said'] for p in nbs)}) and one where it should NOT ({nh['said']})"))
+    rows.append(L._row("0.4", not bad, len(nbs or []), R.rule("0.4").get("need"), bad or f"{len(nbs)} place{'s' * (len(nbs) > 1)} it should also work "
+                       f"({' · '.join(p['said'] for p in nbs)})" + (f" and one where it should NOT ({nh['said']})" if nh else "")))
     l2 = [f for f in (F or []) if f[0] in RUN._blocks().L2_BLOCKS]          # Level 2 exists for NQ only: every place of the card is NQ
-    away = [p for p in (home, *(nbs or []), nh) if l2 and p and p["market"] != "NQ"]
+    away = [p for p in (home, *(nbs or []), nh) if l2 and p and p["market"] != "NQ"]       # (nh may be None)
     if away and rows[1]["passed"]:
         rows[1] = L._row("0.2", False, rows[1]["number"], rows[1]["need"], f"filter {' '.join(l2[0])} reads Level 2, which exists for NQ only: "
                                                                           f"{away[0]['said']!r} is {away[0]['market']}")
@@ -297,10 +297,10 @@ def card_lines(spec: dict) -> tuple:
     if not all(x["passed"] for x in rows):
         return rows, None
     pairs: dict = {}
-    for p in (home, *nbs, nh):
+    for p in (home, *nbs, *([nh] if nh else [])):
         pairs.setdefault((p["market"], p["bar"]), set()).add(p["session"])
     plan = {"home": home, "neighbors": nbs, "not_here": nh, "sides": sides, "filters": ["_".join(f) for f in F], "main_setting": ms, "values": list(v),
-            "variants": len(v) * len(R.exit_menu(home["market"])),
+            "exits": kind, "variants": len(v) * len(R.exit_cells(kind, home["market"])),
             "stores": [{"market": mk, "bar": b, "sessions": [s for s in RM.DAY_PASSES if s in ss]} for (mk, b), ss in pairs.items()]}
     try:                                            # the engine's own check of every store's settings (run_idea, the build range)
         for e in engine(spec, plan, spec["name"]):
@@ -320,7 +320,7 @@ def engine(spec: dict, plan: dict, store: str) -> list:
     limits = {**(run.get("limits") or {}), **({} if plan["sides"] == "both" else {"dir": plan["sides"]})}
     return [{"name": store, "reason": f"{_text(card['why'])} Losing side: {_text(card['loser'])}", "family": run["family"], "markets": [s["market"]],
              "bar_sizes": [s["bar"]], "sessions": list(s["sessions"]), "params": run["params"], "fixed": run.get("fixed") or {}, "filters": run.get("filters") or [],
-             "exits": "standard", "limits": limits} for s in plan["stores"]]
+             "exits": plan.get("exits", "standard"), "limits": limits} for s in plan["stores"]]
 
 
 def _name(name) -> str:
@@ -376,11 +376,12 @@ def _card_md(spec: dict, plan: dict) -> str:
         f"0.1 Why it should make money: {_text(c['why'])}",
         f"    Who is on the losing side: {_text(c['loser'])}",
         f"0.2 The rule: entry trigger {run['family']} ({_trigger(run['family'])}); "
-        + ("no filter" if not F else "filters: " + "; ".join(f"{b} {s} ({blocks.PLAIN[(b, s)]})" for b, s in F)) + "; exits from the standard table (8 stops x 6 targets)"
+        + ("no filter" if not F else "filters: " + "; ".join(f"{b} {s} ({blocks.PLAIN[(b, s)]})" for b, s in F)) + ("; exits from the standard table (8 stops x 6 targets)" if plan.get("exits", "standard") == "standard" else
+           "; exits from the owner's session-anchored table (5 stops of the mean true range since the session started and 5 of its range, x 6 targets)")
         + (f"; limits: {said(limits)}" if limits else ""),
         f"0.3 Home: {plan['home']['market']}, {J.SESS_PLAIN[plan['home']['session']]}, {plan['home']['bar']}-minute bars",
         "0.4 Where else it should work: " + "; ".join(f"{p['said']} ({_nice(p)})" for p in plan["neighbors"]),
-        f"    Where it should NOT work: {plan['not_here']['said']} ({_nice(plan['not_here'])})",
+        *([f"    Where it should NOT work: {plan['not_here']['said']} ({_nice(plan['not_here'])})"] if plan.get("not_here") else []),
         f"0.5 Main setting: {plan['main_setting']} = {', '.join(str(x) for x in plan['values'])}" + (f"; held fixed: {said(fixed)}" if fixed else ""),
         f"0.6 Sides: {'both' if plan['sides'] == 'both' else plan['sides'] + ' only'} -- {_text(c['sides_why'])}",
         f"0.7 When it should lose: {_text(c.get('loses_when'))}"]) + "\n"
@@ -390,12 +391,12 @@ def _plan_text(name: str, plan: dict) -> list:
     """What a build of the card runs and which line reads what, in plain words."""
     rg, h, key = R.template("ranges")["build"], plan["home"], lambda s: RI.unit_key({"name": name}, s["market"], s["bar"])  # noqa: E731
     F = [f.replace("_", " ", 1) for f in plan["filters"]]
-    return [f"WHAT A BUILD RUNS ({rg['start']} .. {rg['end']}; a table = the {len(R.exit_menu(plan['home']['market']))} exit cells of the standard table x the {len(plan['values'])} values of "
+    return [f"WHAT A BUILD RUNS ({rg['start']} .. {rg['end']}; a table = the {len(R.exit_cells(plan.get('exits', 'standard'), plan['home']['market']))} exit cells of the {'standard' if plan.get('exits', 'standard') == 'standard' else 'session-anchored'} table x the {len(plan['values'])} values of "
             f"{plan['main_setting']} = {plan['variants']} variants):",
-            f"  HOME      {_nice(h)}: lines 2.1-2.4, 2.6 and 2.8 are read on this table, 2.3 against the random-entry pool {RUN.pool_key(h['market'], h['bar'])} "
-            f"({R.template('control')['seeds']} seeds)",
+            f"  HOME      {_nice(h)}: lines 2.1-2.4, 2.6 and 2.8 are read on this table, 2.3 against the random-entry pool {RUN.pool_key(h['market'], h['bar'], plan.get('exits', 'standard') == 'open' and RUN.OPEN or RUN.EXITS)} "
+            f"({R.template('control')['seeds']} seeds; the Monte Carlo and the control are run only when every cheaper line passes: first the tables, then the Monte Carlo, then the pool)",
             *[f"  NEIGHBOR  {_nice(p)} (\"{p['said']}\"): a table of its own; line 2.5 asks half of the neighbors or more to be profitable" for p in plan["neighbors"]],
-            f"  NOT HERE  {_nice(plan['not_here'])} (\"{plan['not_here']['said']}\"): run and shown; no line reads it",
+            *([f"  NOT HERE  {_nice(plan['not_here'])} (\"{plan['not_here']['said']}\"): run and shown; no line reads it"] if plan.get("not_here") else []),
             "  SIDES     " + ("both: line 2.6 asks long and short each above $0" if plan["sides"] == "both" else f"{plan['sides']} only: line 2.6 is read on that side"),
             "  FILTER    " + ("none: line 2.7 does not apply" if not F else
                               f"{F[0]}: every table is read with it on; line 2.7 holds the home table against the same table without it" if len(F) == 1 else
@@ -505,10 +506,10 @@ def _store(name: str, n: int, spec: dict, plan: dict, earlier: list, out, days, 
     raise J.Refuse(f"{name}: no free store name for round {n} in {folder} (every one up to {name}_r{n}h holds other inputs)")
 
 
-def _seeds(market: str, bar: str, out) -> None:
+def _seeds(market: str, bar: str, out, exits: str = "standard") -> None:
     """Refused: the control pool of the home's market and bar size is on disk with fewer seeds than the law asks for
     (control.json). A pool that is not there yet is run by the build, with all of them."""
-    key, want, folder = RUN.pool_key(market, bar), R.template("control")["seeds"], RUN.RUNS if out is None else Path(out)
+    key, want, folder = RUN.pool_key(market, bar, RUN.OPEN if exits == "open" else RUN.EXITS), R.template("control")["seeds"], RUN.RUNS if out is None else Path(out)
     meta = _json(folder / key / "run.json")
     if meta is None:
         return
@@ -550,7 +551,7 @@ def start(name, reason, root=None, workers=None, out=None, ledger=None, days=Non
     days = None if days is None else RUN.seal(days)
     earlier = [s["store"] for s in (_json(d / "rounds" / str(k) / "spec.json") for k in reversed(IS.rounds(name, root))) if s and s.get("store")]
     store = _store(name, n, spec, plan, earlier, out, days, cells)
-    _seeds(plan["home"]["market"], plan["home"]["bar"], out)
+    _seeds(plan["home"]["market"], plan["home"]["bar"], out, plan.get("exits", "standard"))
     job = JOBS.running(name, root)
     if job:
         raise J.Refuse(f"a build of {name} is still running (job {job}): one build of an idea at a time -- bp.py job {job} picks its wait back up")
@@ -693,19 +694,38 @@ def run(idea, round_, reason, rspec, counted, test=False, root=None, workers=Non
     try:
         if draws:
             J.RULE["draws"] = int(draws)            # (a test run only)
-        stores = RUN.run_build(specs, workers, out, ledger=ledger, days=days, cells=cells, progress=progress, block=block)
-        bad = [s for s in stores if not s["ok"]]
-        if bad:
-            raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0]['error']}): no store was written; the family has to be fixed first")
+        def dropped(stores):
+            bad = [s for s in stores if not s["ok"]]
+            if bad:
+                raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0]['error']}): no store was written; the family has to be fixed first")
+
+        # STAGE 1: the idea's own tables and the cheap lines (2.1, 2.2, 2.4-2.7, 2.9). STAGE 2, only when those pass: the Monte Carlo
+        # (line 2.8). STAGE 3, only when all of those pass: the control pools (10 seeds x every exit cell x 7 sessions: the slow
+        # part) and line 2.3 (the owner, 2026-10-07: a control or a Monte Carlo run for an idea that has failed already is a waste --
+        # a round with a failed line is a failed round either way).
+        stores = RUN.run_build(specs, workers, out, ledger=ledger, days=days, cells=cells, progress=progress, block=block, stage="units" if STAGED else "all")
+        dropped(stores)
         h, filt = plan["home"], (plan["filters"][0] if plan["filters"] else None)
         f = T.filter_of(specs[0], filt)
-        t = T.built(specs[0], h["table"], filt, out, days, n)
         like = T.sigs(store, plan["home"]["market"], plan["home"]["bar"], plan["home"]["session"], f, out)
         nbs = [{**p, **T.place(store, p["market"], p["bar"], p["session"], f, out, like)} for p in plan["neighbors"]]
-        nh = {**plan["not_here"], **T.place(store, plan["not_here"]["market"], plan["not_here"]["bar"], plan["not_here"]["session"], f, out)}
-        t.update(neighbors=[x["avg_net"] if x["variants"] else 0.0 for x in nbs if not x["copy"]],      # a table that is the home
-                 copies=[x["said"] for x in nbs if x["copy"]], sides=plan["sides"], reason=reason)        # table's trades counts once
-        rows = [fn(t) for fn in LINES]
+        nh = ({**plan["not_here"], **T.place(store, plan["not_here"]["market"], plan["not_here"]["bar"], plan["not_here"]["session"], f, out)}
+              if plan.get("not_here") else None)          # (none named, none run)
+
+        def read(control, mc):
+            t = T.built(specs[0], h["table"], filt, out, days, n, control=control)
+            t.update(neighbors=[x["avg_net"] if x["variants"] else 0.0 for x in nbs if not x["copy"]],      # a table that is the home
+                     copies=[x["said"] for x in nbs if x["copy"]], sides=plan["sides"], reason=reason, mc_skipped=not mc)        # table's trades counts once
+            return t, [fn(t) for fn in LINES]
+        clean = lambda rows: not [x for x in rows if x["passed"] is False]  # noqa: E731
+        t, rows = read(not STAGED, not STAGED)
+        if STAGED and clean(rows):                  # stage 2: the Monte Carlo (reshuffled runs: line 2.8) ...
+            t, rows = read(False, True)
+            if clean(rows):                         # ... stage 3: the control pools and line 2.3, only when everything before them passes
+                more = RUN.run_build(specs, workers, out, ledger=ledger, days=days, cells=cells, progress=progress, block=block, stage="pools")
+                dropped(more)
+                stores = stores + more
+                t, rows = read(True, True)
     finally:
         J.RULE["draws"] = keep
     failed, most, rg, d = [x["line"] for x in rows if x["passed"] is False], R.need("2.9"), R.template("ranges")["build"], IS.idea_dir(name, root)
@@ -718,7 +738,8 @@ def run(idea, round_, reason, rspec, counted, test=False, root=None, workers=Non
                    home=h["table"], unit=t["unit"], home_store=t["_u"]["key"], filter=filt, reason=reason,
                    days={"start": rg["start"], "end": rg["end"], "months": rg["months"], "sessions": len(t["days"]), "named": list(days) if days else None},
                    table={"store": t["store"], "variants": len(t["ids"]), "dead": t["dead"], "duplicates": t["dup"]}, neighbors=nbs, not_here=nh, sides=plan["sides"],
-                   stores=stores, failed=failed, not_applicable=[x["line"] for x in rows if x["passed"] is None], thin=[x["line"] for x in rows if x.get("thin")],
+                   stores=stores, failed=failed, not_applicable=[x["line"] for x in rows if x["passed"] is None and not x.get("skipped")],
+                   skipped=[x["line"] for x in rows if x.get("skipped")], thin=[x["line"] for x in rows if x.get("thin")],
                    passed=not failed, default=default, code_check={"on_file": (d / "check.json").is_file(), "passed": (_json(d / "check.json") or {}).get("passed")})
     if test:
         r["test_run"] = True
@@ -736,7 +757,7 @@ def run(idea, round_, reason, rspec, counted, test=False, root=None, workers=Non
             f"store {t['store']}",
             *[x["text"] for x in rows],
             *[f"NEIGHBOR  {x['said']} ({x['table']}): {table(x)} -> {'profitable' if x['profitable'] else 'not profitable'}" for x in nbs],
-            f"NOT HERE  {nh['said']} ({nh['table']}): {table(nh)} (shown; no line reads it)",
+            *([f"NOT HERE  {nh['said']} ({nh['table']}): {table(nh)} (shown; no line reads it)"] if nh else []),
             f"RESULT{' of the smoke run' if not counted else ''}: " + (("fails " + ", ".join(failed)) if failed else "every line that applies passes") + ".",
             *[f"NOTE: {x}." for x in r["notes"]]]
     if not counted:

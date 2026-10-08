@@ -364,6 +364,32 @@ def read(vid: str, rows: list, line: str = "5.5") -> dict:
     return {**out, "margin": min(out[p]["p"] / need[p] for p, _ in PHASES)}
 
 
+# ================================================================ shown at the lock: the build days, never a pass line
+
+def look(x: dict, calendar, paths=None, seed=None) -> dict:
+    """SHOWN AT THE LOCK, NEVER A PASS LINE (owner, 2026-10-07; BLUEPRINT.md phase 3): how ONE variant's BUILD-DAY trades read
+    for the account of line 3.6 (rules.json 3.6 `rule_file`), the way line 5.5 reads a strategy -- open losses count, the
+    "live is worse" row, each phase at its best size of the pre-set steps, no day limit. x = the variant's cell of a build
+    store (judge.cellx), calendar = the session days of the build (ISO dates). It says early whether the idea fits the
+    account; line 5.5 itself is judged on the test days, in phase 5.
+    -> {account {id, name}, rule, days, eval, payout (read(): size, p, ci, bust, plain), text}; an account the app has no
+    rule file for, or a variant without a trade: {account, text} that says so -- a number that is only shown refuses nothing."""
+    rid, need = R.rule("3.6")["also"]["rule_file"], bars("5.5")
+    head = "PROP ODDS ON THE BUILD DAYS (shown, never a pass line)"
+    try:
+        r = app().load_rules(rid)
+    except ValueError:
+        return {"account": {"id": rid, "name": None}, "text": f"{head}: not shown, the app's prop simulator has no rule file {rid} (rules.json 3.6 `rule_file`)"}
+    who = {"id": rid, "name": r.get("name")}
+    if not len(x["net"]):
+        return {"account": who, "text": f"{head}: not shown, the variant has no trade"}
+    got = read("", table(x, r, list(calendar), paths, seed))
+    said = {p: f"{_pc(got[p]['p'])} at {got[p]['size']} micro{'s' * (got[p]['size'] != 1)} (plain {_pc(got[p]['plain'])})" for p, _ in PHASES}
+    return {"account": who, "rule": RULE, "days": len(calendar), **{p: got[p] for p, _ in PHASES},
+            "text": f"{head}: {r.get('name')}, open losses count, the \"live is worse\" row -- eval, a pass before a bust {said['eval']}; funded, a first payout "
+                    f"before a bust {said['payout']}. Line 5.5 asks {L._pc(need['eval'])} and {L._pc(need['payout'])} of them on the TEST days (phase 5)."}
+
+
 # ================================================================ what the test hands over
 
 def proven(name, root=None) -> Path:

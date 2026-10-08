@@ -20,6 +20,11 @@ HOW THE RULE IS READ (fixed here, before any run; nothing below was chosen after
   * THE NEWEST GAP COUNTS. While the instance is flat, a new gap (either side) cancels the entry still resting from an
     older one and takes its place. An entry rests until it fills, a newer gap replaces it, or the session's entries end.
     A gap that forms while a trade is open is not traded.
+  * new_gap (the owner, 2026-10-07; default "replace" = the rule above, nothing changes):
+        replace   the newest gap takes over the resting entry (above)
+        stop      a SECOND big-enough gap, before any trade was taken that session, cancels the resting entry and ends the day: no
+                  trade is taken after it. A trade that was already taken is left alone (the gap that forms while it is open is
+                  not traded). Meant for max_tr 1 and the limit modes touch / mid (a market entry has nothing to cancel).
   * The stop and the target are the exit table's. With stop_mode 'struct' the stop is the gap's far edge.
 
 COMPLEXITY 6 = the gap + inside the session + the newest replaces the older + the entry at the edge + min_gap + mode.
@@ -34,14 +39,14 @@ MODES = ("touch", "mid", "go")
 class Fvg(Template):
     """fvg (module docstring). The gap of the three newest tf bars of the session, at least min_gap x ATR high -> an entry
     WITH the gap: a limit at its near edge (touch) or its middle (mid), or a market order (go)."""
-    DEFAULTS = {"min_gap": 0.25, "mode": "touch"}
-    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES)}
+    DEFAULTS = {"min_gap": 0.25, "mode": "touch", "new_gap": "replace"}
+    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES), "new_gap": ("choice", ("replace", "stop"))}
     SCREEN_TFS = ("1", "5", "15")
     SCREEN_RUN = {"strict_limit": True}
     FEATURES = ()
 
     def fam_session(self, ctx, s):
-        self.gap, self.seen = None, 0
+        self.gap, self.seen, self.gaps, self.dead = None, 0, 0, False
 
     def fam_update(self, ctx):
         """The gap this close shows, if any: (side, near edge, far edge). A new one cancels an older gap's resting entry."""
@@ -55,11 +60,16 @@ class Fvg(Template):
             return
         self.gap = g
         self._sync(ctx)
+        self.gaps += 1
+        if self.p["new_gap"] == "stop" and self.gaps > 1 and self.n_ent == 0 and ctx.flat:
+            self._cancel(ctx)                                           # a second gap before any trade: no trade today
+            self.dead, self.gap = True, None
+            return
         if ctx.flat and self.orders:
             self._cancel(ctx)
 
     def fam_signal(self, ctx):
-        if self.gap is None:
+        if self.gap is None or self.dead:
             return
         side, near, far = self.gap
         mode = self.p["mode"]

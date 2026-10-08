@@ -21,6 +21,8 @@ TABLE DATA = a dict. tables.py fills it from a store; a test fills it by hand. A
 BOX DATA = the default variant ALONE (lines 3.3-3.7 before the freeze, 4.9 on the test days; tables.box fills it):
   trades               (its trades,) the net of each of its trades, after costs at 1 contract                  3.3 4.9
   day, n               (session days,) its net and its trades on every session day of the range (no trade = 0) 3.4-3.7
+  open                 (session days,) the day's WORST OPEN LOSS in dollars, 0 or more: how far the day stood under its
+                       start at its worst point, open losses counted (library._worst_open; no trade = 0)       3.4 3.6
 """
 from __future__ import annotations
 
@@ -96,6 +98,9 @@ def beats_random(t: dict, line: str = "2.3") -> dict:
     (line "4.4": the same reading on the test days, against the one bar of that line -- a test has no round.)"""
     rd, want = (t.get("round", 1) if line == "2.3" else None), R.template("control")["seeds"]
     bar, more = R.need(line, rd), ({} if rd is None else {"round": rd})
+    if t.get("control_skipped"):                    # the random tables were not run: a line before this one failed (records.run)
+        return _row(line, None, None, bar, "not run: another line failed, and the random-entry control is run only for an idea that passes the others "
+                                           f"(need above {_pc(bar)} when it is)", **more, seeds=0, thin=False, controls={}, skipped=True)
     C = {k: v for k, v in (t.get("controls") or {}).items() if k in RANDOM}
     gone = [f"{k}: {v.get('why') or 'not drawn'}" for k, v in C.items() if "p_beat" not in v]
     if not C or gone:
@@ -174,6 +179,11 @@ def filter_alone(t: dict) -> dict:
         return _row("2.7", False, None, None, f"{gone[0]['name']}: no plain version to hold it against ({gone[0].get('why')})", filters=F)
     f = min(F, key=lambda x: x["avg_trade"] - x["plain_avg_trade"])
     higher = all(x["avg_trade"] > x["plain_avg_trade"] for x in F)
+    if t.get("control_skipped"):                    # the random tables are not read yet (records.run, stage 1): a filter that is not higher has failed already
+        words = f"{f['name']}: average trade {_n(f['avg_trade'], f['plain_avg_trade'], '$')} with it, {_n(f['plain_avg_trade'], unit='$')} without (need higher)"
+        return (_row("2.7", False, f["avg_trade"], f["plain_avg_trade"], words, higher=False, random_bar=None, filters=F) if not higher else
+                _row("2.7", None, f["avg_trade"], f["plain_avg_trade"], words + "; its random bar is read when the control is (not run yet)", higher=True, random_bar=None,
+                     filters=F, skipped=True))
     bar = bool(beats_random(t)["passed"]) and all(R.meets("2.3", p, rd) for x in F for p in x.get("p_beat", ()))
     return _row("2.7", bool(higher and bar), f["avg_trade"], f["plain_avg_trade"],
                 f"{f['name']}: average trade {_n(f['avg_trade'], f['plain_avg_trade'], '$')} with it, {_n(f['plain_avg_trade'], unit='$')} "
@@ -183,6 +193,9 @@ def filter_alone(t: dict) -> dict:
 def monte(t: dict, rng=None) -> dict:
     """2.8 Monte Carlo: lines 2.1 and 2.2 are read again in every reshuffled run of the table (mc.py); both must hold in
     75 % of the runs or more. rng None = the fixed seed of montecarlo.json."""
+    if t.get("mc_skipped"):                         # records.run: the reshuffled runs are made only for a round whose other lines pass
+        return _row("2.8", None, None, R.need("2.8"), "not run: another line failed, and the Monte Carlo is run only for an idea that passes the cheaper lines "
+                                                     f"(need {_pc(R.need('2.8'))} of the runs or more when it is)", skipped=True)
     tot, cnt = MC.reshuffle(t["net"], t["n"], rng)
     ok = _heat(tot)[2] & _floor(tot.sum(0), cnt, t["root"])[1]
     share, need = float(ok.mean()), R.need("2.8")
@@ -215,10 +228,17 @@ def _pf(trades):
     return float(x[x > 0].sum() / lost) if lost > 0 else float("inf")
 
 
-def _drawdown(day) -> float:
-    """The worst drawdown of a list of day results: the largest fall of the end-of-day running total from its high (from $0)."""
+def _drawdown(day, open_) -> float:
+    """The worst drawdown of a list of day results, OPEN LOSSES COUNTED (owner, 2026-10-07: the firm's drawdown is breached
+    by an open loss): the largest fall from the high of the end-of-day running total (from $0) to the lowest point reached
+    -- a day's close, or its WORST OPEN POINT = where the day started minus `open_`, its worst open loss. The high trails
+    the end-of-day total, as the prop simulator's floor does (propodds.eval_walk)."""
     c = np.cumsum(np.asarray(day, np.float64))
-    return float(np.max(np.maximum.accumulate(np.maximum(c, 0.0)) - c)) if len(c) else 0.0
+    if not len(c):
+        return 0.0
+    high = np.maximum.accumulate(np.maximum(c, 0.0))
+    start, top = np.concatenate(([0.0], c[:-1])), np.concatenate(([0.0], high[:-1]))      # where each day started, and the high before it
+    return float(max(np.max(high - c), np.max(top - start + np.asarray(open_, np.float64))))
 
 
 def box_pf(b: dict, line: str = "3.3") -> dict:
@@ -232,13 +252,13 @@ def box_pf(b: dict, line: str = "3.3") -> dict:
 
 
 def box_ratio(b: dict) -> dict:
-    """3.4 Its profit is large against its worst drawdown: its net / its worst drawdown on closed days, 3 or more. A profit
-    without any drawdown = met; no profit = not met."""
-    need, net, dd = R.need("3.4"), float(np.sum(b["day"])), _drawdown(b["day"])
+    """3.4 Its profit is large against its worst drawdown: its net / its worst drawdown with open losses counted
+    (_drawdown), 3 or more. A profit without any drawdown = met; no profit = not met."""
+    need, net, dd = R.need("3.4"), float(np.sum(b["day"])), _drawdown(b["day"], b["open"])
     ratio = net / dd if dd > 0 else (float("inf") if net > 0 else 0.0)
     return _row("3.4", R.meets("3.4", ratio), ratio, need,
                 f"default variant: net {_n(net, unit='$')} / worst drawdown {_n(dd, unit='$')} = " + ("no drawdown" if ratio == float("inf") else f"{ratio:.2f}")
-                + f" (need {need:g} or more)", net=net, drawdown=dd)
+                + f", open losses counted (need {need:g} or more)", net=net, drawdown=dd)
 
 
 def box_sharpe(b: dict) -> dict:
@@ -256,9 +276,9 @@ def box_fits(b: dict) -> dict:
     """3.6 Its worst drawdown fits the account at the smallest size: the worst drawdown of 3.4 at 1 micro, UNDER the account's
     drawdown limit (strict: at the limit the account is bust)."""
     need, per = R.need("3.6"), R.template("sizes")["micros_per_contract"]
-    dd = _drawdown(b["day"]) * need["micros"] / per
+    dd = _drawdown(b["day"], b["open"]) * need["micros"] / per
     return _row("3.6", bool(dd < need["limit"]), dd, need["limit"],
-                f"default variant: worst drawdown {_n(dd, need['limit'], '$')} at {need['micros']} micro (need under {_n(need['limit'], unit='$')}, "
+                f"default variant: worst drawdown {_n(dd, need['limit'], '$')} at {need['micros']} micro, open losses counted (need under {_n(need['limit'], unit='$')}, "
                 f"the limit of {need['account']})", account=need["account"])
 
 

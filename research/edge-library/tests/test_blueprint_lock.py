@@ -39,6 +39,7 @@ from blueprint import freeze as FRZ  # noqa: E402
 from blueprint import jobs as JOBS  # noqa: E402
 from blueprint import lines as L  # noqa: E402
 from blueprint import mc as MC  # noqa: E402
+from blueprint import propodds as PO  # noqa: E402
 from blueprint import records as REC  # noqa: E402
 from blueprint import rules as R  # noqa: E402
 from blueprint import runner as RUN  # noqa: E402
@@ -79,10 +80,12 @@ def _job_file(root: Path, name: str, state: str) -> Path:
 
 # ================================================================ (a) what it refuses
 
-def box(day, trades=None) -> dict:
-    """Box data by hand: the default variant's net per session day (its trades: one a day with a net, or as listed)."""
+def box(day, trades=None, open_=None) -> dict:
+    """Box data by hand: the default variant's net per session day (its trades: one a day with a net, or as listed) and each
+    day's worst open loss (not given: none, the day never stood under its start)."""
     day = np.asarray(day, float)
-    return {"trades": day[day != 0] if trades is None else np.asarray(trades, float), "day": day, "n": (day != 0).astype(float)}
+    return {"trades": day[day != 0] if trades is None else np.asarray(trades, float), "day": day, "n": (day != 0).astype(float),
+            "open": np.zeros(len(day)) if open_ is None else np.asarray(open_, float)}
 
 
 def test_lines_3_3_to_3_7_on_the_default_variant_alone():
@@ -92,9 +95,17 @@ def test_lines_3_3_to_3_7_on_the_default_variant_alone():
     assert r["passed"] is True and (r["number"], r["need"]) == (1.2, 1.2) and r["text"] == "3.3 PASS default variant: profit factor 1.20 over 2 trades (need 1.2 or more)"
     assert L.box_pf(box([119.0, -100.0]))["passed"] is False and L.box_pf(box([5.0, 7.0]))["passed"] is True and L.box_pf(box([0.0, 0.0]))["passed"] is False
     assert L.box_pf(box([0.0], trades=[300.0, -200.0, -40.0]))["number"] == 1.25             # read on the TRADES, not on the days
-    # 3.4 net / worst drawdown on closed days, 3 or more: +400, then -100 (the drawdown), then +0 = 300 / 100
+    # 3.4 net / worst drawdown, 3 or more: +400, then -100 (the drawdown), then +0 = 300 / 100
     r = L.box_ratio(box([400.0, -100.0, 0.0]))
-    assert r["passed"] is True and (r["number"], r["net"], r["drawdown"]) == (3.0, 300.0, 100.0) and "net $300 / worst drawdown $100 = 3.00" in r["text"]
+    assert r["passed"] is True and (r["number"], r["net"], r["drawdown"]) == (3.0, 300.0, 100.0)
+    assert r["text"] == "3.4 PASS default variant: net $300 / worst drawdown $100 = 3.00, open losses counted (need 3 or more)"
+    # ... OPEN LOSSES COUNTED: the same three closes, but day 3 stood $150 under its start (300 - 150 = 150, $250 under the high of 400)
+    r = L.box_ratio(box([400.0, -100.0, 0.0], open_=[0.0, 0.0, 150.0]))
+    assert r["passed"] is False and (r["net"], r["drawdown"], r["number"]) == (300.0, 250.0, 1.2)
+    assert L.box_ratio(box([400.0, -100.0, 0.0], open_=[0.0, 90.0, 0.0]))["drawdown"] == 100.0    # an open loss the close went under anyway adds nothing
+    assert L.box_ratio(box([400.0, 50.0], open_=[30.0, 0.0]))["drawdown"] == 30.0                  # day 1: from the $0 it starts at, whatever it closes at
+    assert L.box_ratio(box([400.0, 50.0], open_=[0.0, 30.0]))["drawdown"] == 30.0                  # the high trails the CLOSES: day 2 starts at its high
+    assert L._drawdown([], []) == 0.0
     assert L.box_ratio(box([400.0, -101.0, 0.0]))["passed"] is False
     assert L.box_ratio(box([-100.0, 500.0]))["drawdown"] == 100.0                             # a loss from the start counts: the high it falls from is $0
     assert L.box_ratio(box([50.0, 60.0]))["passed"] is True and "no drawdown" in L.box_ratio(box([50.0, 60.0]))["text"] and L.box_ratio(box([-5.0, -6.0]))["passed"] is False
@@ -107,8 +118,11 @@ def test_lines_3_3_to_3_7_on_the_default_variant_alone():
     need = R.need("3.6")
     assert need == {"micros": 1, "limit": 2000, "account": "LucidPro 50K"} and R.template("sizes")["micros_per_contract"] == 10
     r = L.box_fits(box([30000.0, -19999.0, 5.0]))
-    assert r["passed"] is True and r["number"] == 1999.9 and r["text"] == "3.6 PASS default variant: worst drawdown $1,999.90 at 1 micro (need under $2,000, the limit of LucidPro 50K)"
+    assert r["passed"] is True and r["number"] == 1999.9
+    assert r["text"] == "3.6 PASS default variant: worst drawdown $1,999.90 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)"
     assert L.box_fits(box([30000.0, -20000.0, 5.0]))["passed"] is False and L.box_fits(box([10.0, 20.0]))["number"] == 0.0
+    assert L.box_fits(box([30000.0, 5.0, 5.0], open_=[0.0, 20000.0, 0.0]))["passed"] is False      # three winning days: only the open loss says it
+    assert "open losses counted" in R.rule("3.4")["text"] and "open losses counted" in R.rule("3.6")["text"]
     # 3.7 Monte Carlo on its own days: money in 90 % of the reshuffled runs or more (the draws of line 2.8)
     r = L.box_monte(box([60.0, 10.0, 5.0, 20.0, 30.0, 15.0]))
     assert r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.9, 1000) and "100 % of 1,000 reshuffled runs" in r["text"]
@@ -275,7 +289,7 @@ def test_the_default_is_the_middle_of_the_variants_that_also_survive_worse_fills
 
 # ================================================================ (d) the lock
 
-KEYS = ["name", "version", "locked_utc", "round", "store", "spec", "plan", "home", "variants", "default", "survivors", "default_rule", "box", "build", "costs", "control",
+KEYS = ["name", "version", "locked_utc", "round", "store", "spec", "plan", "home", "variants", "default", "survivors", "default_rule", "box", "prop", "build", "costs", "control",
         "montecarlo", "code", "stores", "test_range", "hash"]
 
 
@@ -537,6 +551,16 @@ def test_the_lock_keeps_the_builds_average_trade_and_the_lines_of_the_default():
     assert lock["build"]["avg_trade"] == sum(float(x.sum()) for x in nets) / sum(len(x) for x in nets) == T.avg_trade(st, u, lock["variants"])
     data = T.box(st, u, lock["default"], F.DAYS)
     assert len(data["day"]) == len(F.DAYS) and float(data["day"].sum()) == float(data["trades"].sum()) and int(data["n"].sum()) == len(data["trades"])
+    # each day's worst open loss: the library's own reading of the default variant's trades (MAE + the round-turn commission), a day without a trade = 0
+    c, cal = J.cellx(st, lock["default"], "nyam", u), T.build_days(u, F.DAYS)
+    assert len(data["open"]) == len(F.DAYS) and (data["open"] >= 0).all() and not data["open"][data["n"] == 0].any()
+    assert round(float(data["open"].max()), 2) == LB.metrics(c, cal)["worst_open_loss"] > 0
+    # SHOWN, never a pass line: the default variant's prop odds on the build days for the account of line 3.6, kept with the lock
+    prop = PO.look(c, cal)
+    assert lock["prop"] == json.loads(json.dumps(prop)) and prop["account"] == {"id": R.rule("3.6")["also"]["rule_file"], "name": "LucidPro 50K · $1,200 daily limit"}
+    assert prop["text"].startswith("PROP ODDS ON THE BUILD DAYS (shown, never a pass line): LucidPro 50K") and "TEST days" in prop["text"] and prop["text"] in r["text"]
+    assert prop["rule"] == PO.RULE and prop["days"] == len(F.DAYS) and all(0.0 <= prop[p]["p"] <= 1.0 and prop[p]["size"] in R.template("sizes")["steps"] for p in ("eval", "payout"))
+    assert not any(x["line"].startswith("5.") for x in r["lines"]), "the shown odds are no line of the lock"
     mine = [f(data) for f in L.BOX]
     assert [(x["line"], x["passed"], x["text"]) for x in lock["box"]] == [(x["line"], x["passed"], x["text"]) for x in mine]
     assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 8)] and [x["text"] for x in r["lines"]][2:] == [x["text"] for x in mine]

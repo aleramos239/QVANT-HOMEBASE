@@ -106,14 +106,14 @@ _CARD = {
         "neighbors": {"type": "array", "items": {"type": "string"},
                       "description": "0.4 Where else it should work: the next bar sizes, the other sessions or markets "
                                      "it should fit."},
-        "not_here": {"type": "string", "description": "0.4 One place it should NOT work."},
+        "not_here": {"type": "string", "description": "0.4 Optional since 2026-10-07 (leave it out: no such table is run). A place it should NOT work; when named it is run and shown, no line reads it."},
         "main_setting": {"type": "string", "description": "0.5 The main setting: the key of settings.params that "
                                                           "carries its 3-4 values."},
         "sides": {"type": "string", "enum": ["both", "long", "short"], "description": "0.6 Both sides, or one."},
         "sides_why": {"type": "string", "description": "0.6 Why."},
         "loses_when": {"type": "string", "description": "0.7 When it should lose: one stretch or kind of market in which "
                                                          "the idea must lose money. No filter is added only to erase it."}},
-    "required": ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when"],
+    "required": ["why", "loser", "home", "neighbors", "main_setting", "sides", "sides_why", "loses_when"],
     "additionalProperties": False}
 _SETTINGS = {
     "type": "object", "description": "How the research engine runs it (line 0.2: one entry trigger, at most 2 filters, "
@@ -220,7 +220,9 @@ SPECS = [
           "middle survivor, never the best), the random control and the costs, and returns the lock's hash, the "
           "default and the test range. BEFORE the freeze the default variant is read on its own on the build days "
           "(lines 3.3 to 3.7: profit factor 1.2, net / worst drawdown 3, Sharpe 1, its drawdown at 1 micro under "
-          "$2,000, money in 90% of 1,000 reshuffled runs): one not met = no freeze, back to the build. From here "
+          "$2,000, money in 90% of 1,000 reshuffled runs; the drawdown counts open losses): one not met = no "
+          "freeze, back to the build. It also SHOWS the default variant's prop odds on the build days (LucidPro "
+          "50K; a number, never a pass line). From here "
           "nothing may change: a change is a new version, back to the build. "
           "Refused while any build line fails.", {"name": _NAME}, ["name"]),
     _spec("blueprint_test", "Blueprint phase 4, the out-of-sample test (2025-07-01 on). THE TEST DAYS ARE READ ONCE: "

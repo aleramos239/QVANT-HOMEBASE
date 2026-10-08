@@ -190,6 +190,34 @@ def test_a_gap_that_forms_while_a_trade_is_open_is_not_traded():
     assert len(log) == 1 and len(tr) == 1 and tr[0]["entry_price"] == 15006.0
 
 
+def test_new_gap_stop_a_second_gap_before_the_fill_cancels_the_entry_and_the_day():
+    # (the owner, 2026-10-07: "if a new gap was made, then cancel and we don't trade that day")
+    bars = up_gap(up_gap(flat(), 41), 51, base=15011.0)       # a second up gap ten minutes later; price then falls through BOTH
+    bars[60] = (15022.0, 15022.0, 15002.0, 15012.0)
+    tape = minute_tape(bars)
+    tr, log = play({"mode": "touch", "new_gap": "stop", "max_tr": 1}, tape)
+    assert [(hms(t), px) for _, t, _, px, _ in log] == [("09:43:00", 15006.0)] and tr == []      # the second gap placed nothing and killed the first
+    tr2, log2 = play({"mode": "touch", "new_gap": "replace", "max_tr": 1}, tape)                # the default: the newest replaces (as before)
+    assert len(log2) == 2 and len(tr2) == 1 and tr2[0]["entry_price"] == 15017.0
+    assert play({"mode": "touch", "max_tr": 1}, tape)[0] == tr2                                  # no input at all = replace
+
+
+def test_new_gap_stop_a_fill_before_the_second_gap_keeps_the_trade():
+    bars = up_gap(flat(), 41)
+    bars[44] = (15011.0, 15011.0, 15004.0, 15011.0)           # fills the entry at 15006 before any second gap
+    bars = bars[:46] + up_gap(bars, 51, base=15011.0)[46:]
+    tr, log = play({"mode": "touch", "new_gap": "stop", "max_tr": 1}, minute_tape(bars))
+    assert len(log) == 1 and len(tr) == 1 and tr[0]["entry_price"] == 15006.0
+
+
+def test_new_gap_stop_a_gap_too_small_for_min_gap_does_not_cancel():
+    bars = up_gap(flat(), 41)
+    bars = up_gap(bars, 51, base=15011.0, jump=2.0, low3=1.5)  # a small second gap (0.5 points), under the 0.5 x ATR floor; the first gap (5 points) is over it
+    bars[60] = (15014.0, 15014.0, 15002.0, 15004.0)           # price falls back through the first gap: it fills
+    tr, log = play({"mode": "touch", "new_gap": "stop", "max_tr": 1, "min_gap": 0.5}, minute_tape(bars))
+    assert len(log) == 1 and len(tr) == 1 and tr[0]["entry_price"] == 15006.0
+
+
 # ---- (iii) no look-ahead --------------------------------------------------------------------------------------------------------
 
 def walk_tape(seed=3, n=390):

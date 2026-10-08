@@ -283,7 +283,7 @@ def place(name: str, root: str, tf, sess: str, filt=None, out_dir=None, like=Non
             "same": same, "copy": bool(like and rows and same >= R.rule("2.5")["also"]["copy_share"] * len(rows))}
 
 
-def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1) -> dict:
+def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1, control: bool = True) -> dict:
     """THE TABLE DATA of one table of an idea on the build range, from the stores runner.run_build wrote (module docstring):
       net, n, the sides     its judged variants on the engine's session calendar of the range        lines 2.1 2.2 2.4 2.6 2.8
       controls {c1}         the judge's random tables from the pool's 10 seeds (pool_seeds, against_random)        line 2.3
@@ -291,6 +291,8 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
                             sessions (and mirror values), plain or with the same filter                             line 2.5
       filters               with a filter: its table against the plain table of the same spec (judge.base_test)     line 2.7
       round, months         the round whose bar 2.3 is held against; the build's months (no "on pace" reading)
+    control False = the random tables are NOT read (the idea's own tables were run, its control pool was not: the 10-seed control
+    runs only for an idea that passes every other line): `controls` is empty and `control_skipped` says so, line 2.3 reads that.
     days = the named days of a smoke run (the store must have been run on exactly those): the calendar is then those days
     and `months` is None. Refused: a missing store, the seal (runner.guard), a store that is not of the build range or of
     other days, no judged variant, a pool with fewer seeds than the law asks."""
@@ -311,8 +313,12 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
     cal = named if named is not None else [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), root, allow_holdout=RUN.PERIOD)]
     t = _data(st, u, ts, LB._ordinals(cal), where)
     need = sorted({i.rsplit("_", 1)[-1] for i in ts["ids"]})
-    pool = pool_seeds(out, RUN.pool_key(root, tf), need, R.template("control")["seeds"])
-    t["controls"], t["filters"], t["neighbors"] = {"c1": against_random(st, u, ts, pool, f"{RUN.PERIOD}-c1")}, [], []
+    if control:
+        pool = pool_seeds(out, RUN.pool_key(root, tf, spec["exits"]), need, R.template("control")["seeds"])
+        t["controls"] = {"c1": against_random(st, u, ts, pool, f"{RUN.PERIOD}-c1")}
+    else:
+        t["controls"], t["control_skipped"] = {}, True
+    t["filters"], t["neighbors"] = [], []
     for r2 in spec["markets"]:
         for tf2 in spec["bar_sizes"]:
             key2 = RI.unit_key(spec, r2, tf2, f)
@@ -331,13 +337,23 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
     return t
 
 
-def box(st: dict, u: dict, cell: str, days=None) -> dict:
-    """THE BOX DATA of lines 3.3-3.7: ONE variant of a build store alone -- the net of each of its trades, and its net and
-    trades on every session day of the build range (days = the named days of a smoke run, as in built())."""
+def build_days(u: dict, days=None) -> list:
+    """The session days of the build range for a unit's market, as ISO dates (days = the named days of a smoke run, sealed)."""
     named = None if days is None else RUN.seal(days)
-    cal = named if named is not None else [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), u["root"], allow_holdout=RUN.PERIOD)]
+    return named if named is not None else [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), u["root"], allow_holdout=RUN.PERIOD)]
+
+
+def box(st: dict, u: dict, cell: str, days=None) -> dict:
+    """THE BOX DATA of lines 3.3-3.7: ONE variant of a build store alone -- the net of each of its trades, and its net, its
+    trades and its worst open loss (library._worst_open on each trade's MAE + the round-turn commission, as library.metrics
+    reads it) on every session day of the build range (days = the named days of a smoke run, as in built())."""
+    cal = build_days(u, days)
     t = _data(st, u, {"ids": [cell], "dead": 0, "dup": 0}, LB._ordinals(cal), "")
-    return {"trades": np.asarray(J.cellx(st, cell, u["sess"], u)["net"], np.float64), "day": t["net"][0], "n": t["n"][0]}
+    c, by = J.cellx(st, cell, u["sess"], u), {}
+    for d, ent, dur, net, mae in zip(c["date"], c["entry_ms"], c["dur_s"], c["net"], c["mae"]):
+        by.setdefault(int(d), []).append((int(ent), int(ent) + int(dur) * 1000, float(net), abs(float(mae)) + LB.COMM_RT))
+    return {"trades": np.asarray(c["net"], np.float64), "day": t["net"][0], "n": t["n"][0],
+            "open": np.array([LB._worst_open(by.get(int(d), [])) + 0.0 for d in t["days"]])}
 
 
 def avg_trade(st: dict, u: dict, ids: list):

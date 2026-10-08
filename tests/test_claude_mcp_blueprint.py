@@ -282,7 +282,7 @@ def test_the_eleven_tools_their_inputs_and_what_each_requires():
         assert spec["description"].startswith(PHASE[name]), name               # each says which phase it is
         json.dumps(spec)
     card = specs["blueprint_card"]["inputSchema"]["properties"]["card"]
-    assert card["required"] == ["why", "loser", "home", "neighbors", "not_here", "main_setting", "sides", "sides_why", "loses_when"]
+    assert card["required"] == ["why", "loser", "home", "neighbors", "main_setting", "sides", "sides_why", "loses_when"]      # (not_here: optional since 2026-10-07)
     assert card["properties"]["home"]["required"] == ["market", "session", "bar"]
     settings = specs["blueprint_card"]["inputSchema"]["properties"]["settings"]
     assert settings["properties"]["exits"]["enum"] == ["standard"] and settings["properties"]["filters"]["maxItems"] == 2

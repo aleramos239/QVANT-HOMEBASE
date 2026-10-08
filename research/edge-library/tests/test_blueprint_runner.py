@@ -204,7 +204,8 @@ def ledger(path) -> list:
 
 # ================================================================ (a) the clock
 
-def test_workers_and_the_no_start_window():
+def test_workers_and_the_no_start_window(monkeypatch):
+    monkeypatch.setattr(S, "OPEN_WINDOW", (dt.time(9, 18), dt.time(9, 36)))            # off since 2026-10-07 (l2sim.OPEN_WINDOW): put back here
     c = R.template("compute")
     assert c["workers"] == {"desk_hours": 4, "other": 8} and c["desk_hours_et"] == ["08:00", "16:15"] and c["workers"]["other"] <= 8
     assert c["no_start_et"] == ["09:18", "09:36"] and c["block_days"] >= 1
@@ -416,9 +417,10 @@ def test_what_stops_a_run_and_what_a_failed_pass_leaves():
     a, led_a, _, _ = built("a", workers=1)
     o, led = tmp() / "runs_stop", tmp() / "ledger_stop.csv"
     kw = dict(out_dir=o, ledger=led, days=DAYS, cells=CELLS)
-    # ONE run at a time per store folder; a reader of what is stored never waits for it
+    # ONE run at a time per STORE (since 2026-10-07: runs of other ideas go side by side); a reader of what is stored never waits for it
     o.mkdir()
-    with open(o / RUN.LOCK, "w") as held, open(a / RUN.LOCK, "w") as held_a:
+    units = [q["key"] for q in RUN.parts(RUN.checked(SPEC), CELLS) if q["kind"] != "pool"]
+    with open(o / f"{units[0]}.lock", "w") as held, open(a / f"{units[0]}.lock", "w") as held_a:
         fcntl.flock(held, fcntl.LOCK_EX)
         fcntl.flock(held_a, fcntl.LOCK_EX)
         with at(SAT), no_engine():

@@ -144,9 +144,10 @@ def checked(spec) -> dict:
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS)):
-        raise J.Refuse(f"{sp['name']}: a build runs the standard exit table only (BLUEPRINT.md line 0.2), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
-    if (sp["exits"], sp["filter_exits"]) != (EXITS, EXITS):       # the blueprint's standard table (a copy: the caller's spec stays as it was)
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN)):
+        raise J.Refuse(f"{sp['name']}: a build runs the standard exit table (BLUEPRINT.md line 0.2) or the owner's session-anchored table "
+                       f"(exits {OPEN!r}), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
+    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for b, s in sp["filters"] if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
@@ -163,6 +164,7 @@ def checked(spec) -> dict:
 
 
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
+OPEN = "open"                                       # the owner's session-anchored table (families/blocks.menu_open: 60 cells; fvg_first_nq, 2026-10-06)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
 
 
@@ -224,8 +226,10 @@ def _part(key, kind, root, tf, grid, sessions, cells, meta, family=None, kw=None
             "family": family, "kw": dict(kw or {}), "filter": filt, "runs": [RI.cell_specs(c, list(sessions)) for c in grid]}
 
 
-def pool_key(root: str, tf) -> str:
-    return f"c1-{root}-tf{tf}"
+def pool_key(root: str, tf, exits: str = EXITS) -> str:
+    """The store of a control pool: c1-NQ-tf5 for the standard table, c1o-NQ-tf5 for the session-anchored one (the same random
+    entries, the other exit cells)."""
+    return f"c1o-{root}-tf{tf}" if exits == OPEN else f"c1-{root}-tf{tf}"
 
 
 def c1_grid(root: str, tf: str) -> list:
@@ -240,25 +244,45 @@ def c1_grid(root: str, tf: str) -> list:
                   for sd in RM.NULL_SEEDS for k, x in enumerate(menu[n:])]
 
 
-def pool_part(root: str, tf, cells=None) -> dict:
+def c1_grid_open(root: str, tf: str) -> list:
+    """The control pool on the SESSION-ANCHORED table: the random entries of every seed (run_menus.NULL_SEEDS as it is when
+    called, so _seeded() hands it the 10 seeds) x the 60 cells of blocks.menu_open, with the pool's ids (s<seed>_<exit id>)
+    and the cell's place in the table as `xi`. The class is blocks.CONTROL_OPEN: l2ref.Random that takes the anchored stops."""
+    blocks = _blocks()
+    return [{"id": f"s{sd}_{S.cell_id(x)}", "variant": {"seed": sd}, "exit": x, "vi": sd - 1, "xi": k,
+             "spec": (blocks.CONTROL_OPEN, {"tf": str(tf), "sess": "all", "p_entry": RM.C1_P_ENTRY, "seed": sd, **x})}
+            for sd in RM.NULL_SEEDS for k, x in enumerate(blocks.menu_open(root))]
+
+
+def pool_part(root: str, tf, cells=None, exits: str = EXITS) -> dict:
     """THE CONTROL POOL of a market and bar size: l2ref.Random (p_entry 0.5) x the seeds of control.json x the 48 exit cells
-    of the blueprint's table (c1_grid, seeded), every cell in all seven sessions."""
+    of the blueprint's table (c1_grid, seeded) -- or, for an idea on the session-anchored table, its 60 cells (c1_grid_open),
+    in the store c1o-<market>-tf<bar> -- every cell in all seven sessions."""
     import l2ref
     if root not in S.MENU_STOP_PTS or str(tf) not in l2ref.Random.SCREEN_TFS:
         raise J.Refuse(f"no control pool for market {root!r} and bar size {tf!r}: markets {sorted(S.MENU_STOP_PTS)}, bar sizes {l2ref.Random.SCREEN_TFS}")
     seeds = list(range(1, R.template("control")["seeds"] + 1))
     meta = {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": list(RM.DAY_PASSES),
             "note": f"{len(seeds)}-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size"}
-    return _part(pool_key(root, tf), "pool", root, tf, _seeded(c1_grid, seeds, root, str(tf)), RM.DAY_PASSES, cells, meta)
+    grid = _seeded(c1_grid_open if exits == OPEN else c1_grid, seeds, root, str(tf))
+    return _part(pool_key(root, tf, exits), "pool", root, tf, grid, RM.DAY_PASSES, cells, meta)
 
 
-def parts(spec: dict, cells=None) -> list:
-    """Every store an idea needs, in run order: per market and bar size its control pool, its unit, its filter units."""
+STAGES = ("all", "units", "pools")                  # what a build runs: everything · the idea's own tables only · the control pools only
+
+
+def parts(spec: dict, cells=None, stage: str = "all") -> list:
+    """Every store an idea needs, in run order: per market and bar size its control pool, its unit, its filter units.
+    stage "units" leaves the control pools out (the owner, 2026-10-07: the 10-seed control is run only for an idea that passes
+    every other line, never for one that has failed already); "pools" holds the control pools only."""
+    if stage not in STAGES:
+        raise J.Refuse(f"stage {stage!r}: one of {', '.join(STAGES)}")
     out = []
     for root in spec["markets"]:
         for tf in spec["bar_sizes"]:
-            out.append(pool_part(root, tf, cells))
-            for u in RI.spec_units(spec, [root], [tf]):
+            if stage != "units":
+                out.append(pool_part(root, tf, cells, spec["exits"]))
+            for u in ([] if stage == "pools" else RI.spec_units(spec, [root], [tf])):
                 out.append(_part(u["key"], "filter" if u["filter"] else "unit", root, tf, u["grid"], spec["sessions"], cells, RI.unit_meta(spec, u),
                                  spec["family"], _kw(spec["family"], u["filter"]), u["filter"]))
     return out
@@ -330,7 +354,7 @@ def fingerprint(part: dict, days=None, period: str = PERIOD, span=None) -> str:
 
 # ================================================================ the run
 
-def run_build(spec, workers=None, out_dir=None, *, ledger=None, days=None, cells=None, progress=None, block=None, dry=False) -> list:
+def run_build(spec, workers=None, out_dir=None, *, ledger=None, days=None, cells=None, progress=None, block=None, dry=False, stage: str = "all") -> list:
     """Run what is missing of an idea on the build range: its control pools, its units and its filter units, ONE tape pass
     per market and bar size. -> one row per store, in run order:
       {key, kind 'pool' | 'unit' | 'filter', root, tf, cells, stage, path, inputs_hash, skipped, ok, trades, code_same}
@@ -342,7 +366,7 @@ def run_build(spec, workers=None, out_dir=None, *, ledger=None, days=None, cells
     named build days and a few exit cells (the tests): it needs its own out_dir and ledger. progress = a callable told what
     the run is doing. dry = every check, no run: the rows of what is there and what would run (ok None)."""
     sps = [checked(s) for s in (spec if isinstance(spec, list) else [spec])]
-    todo = list({p["key"]: p for sp in sps for p in parts(sp, cells)}.values())      # (a pool two specs share is one store)
+    todo = list({p["key"]: p for sp in sps for p in parts(sp, cells, stage)}.values())      # (a pool two specs share is one store)
     return _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, f"idea {sps[0]['name']}")
 
 
@@ -424,6 +448,50 @@ def _alone(out: Path):
             fcntl.flock(fh, fcntl.LOCK_UN)
 
 
+@contextlib.contextmanager
+def _stores(out: Path, keys, wait=(), say=None, poll: float = 5.0):
+    """Exclusive locks on the named stores of a folder, taken in sorted order (two runs cannot wait on each other), held to the
+    end of the block. Runs of DIFFERENT ideas go side by side (the owner, 2026-10-07: several chats test several ideas at once);
+    only a store two runs both want is one at a time. A store in `wait` (a control pool, which runs of every idea at a market
+    and bar size share) is waited for: when the run that holds it is done it is on disk, and this one skips it. Any other store
+    that is held is another run of the same idea: refused."""
+    out.mkdir(parents=True, exist_ok=True)
+    fhs, told = [], set()
+    try:
+        for key in sorted(dict.fromkeys(keys)):
+            fh = open(out / f"{key}.lock", "w")
+            fhs.append(fh)
+            while True:
+                try:
+                    fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except OSError:
+                    if key not in wait:
+                        raise J.Refuse(f"another run is writing {out.name}/{key}: one run of a store at a time (bp.py job <id> shows a job)") from None
+                    if say is not None and key not in told:
+                        told.add(key)
+                        say(f"waiting for {key}: another run is writing it (when it is done this run reads it from disk)")
+                    time.sleep(poll)
+        yield
+    finally:
+        for fh in fhs:
+            try:
+                fcntl.flock(fh, fcntl.LOCK_UN)
+            finally:
+                fh.close()
+
+
+@contextlib.contextmanager
+def _prep(out: Path):
+    """The shared cache files of a build (minute volume, 5-minute bars) are built by one run at a time: the others wait here."""
+    with open(out / "prep.lock", "w") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def _row(p: dict, out: Path, **more) -> dict:
     return {"key": p["key"], "kind": p["kind"], "root": p["root"], "tf": p["tf"], "cells": p["cells"], "stage": _stage(p),
             "path": str(out / p["key"]), "inputs_hash": p["hash"], **more}
@@ -458,21 +526,27 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
     unbooked = [p for p in todo if p["have"] and not LB.ledger_has(p["key"], _stage(p), ledger)]
     if dry or not (pend or unbooked):               # nothing to write: no lock is taken (a reader never waits for a run)
         if dry and pend and out.exists():
-            with _alone(out):                       # ... but a job is not started into a folder another run is writing to
+            with _stores(out, [p["key"] for p in pend if p["kind"] != "pool"]):      # ... but a job is not started on a store another run is writing
                 pass
         return [rows.get(p["key"]) or _row(p, out, skipped=False, ok=None, trades=None) for p in todo]
-    with _alone(out):
-        say = _talk(out, progress)
+    out.mkdir(parents=True, exist_ok=True)
+    say = _talk(out, progress)
+    with _stores(out, [p["key"] for p in pend + unbooked], wait={p["key"] for p in pend + unbooked if p["kind"] == "pool"}, say=say):
+        for p in [p for p in pend if _stored(p, out, days)]:            # a pool another run wrote while this one waited for it
+            p["have"] = True
+            rows[p["key"]] = _row(p, out, skipped=True, ok=True, trades=_trades(p["stored"]), code_same=p["stored"].get("code") == code(p["family"]))
+        pend = [p for p in pend if not p["have"]]
         for p in unbooked:                          # a store without its ledger row (a run that died between the two): booked, not run again
             _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out)
         if pend:
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
-            for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] in ("volume", "rvol") and days is None):
-                S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
-                say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
-            for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
-                S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
-                say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
+            with _prep(out):                                            # the caches below are shared files: one run builds them at a time
+                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] in ("volume", "rvol") and days is None):
+                    S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
+                    say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
+                for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
+                    S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
+                    say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
             groups: dict = {}
             for p in pend:
                 groups.setdefault((p["root"], p["tf"], json.dumps(p["kw"], sort_keys=True)), []).append(p)

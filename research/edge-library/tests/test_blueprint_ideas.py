@@ -89,9 +89,12 @@ def setup_function(_=None):
     _KEPT.update({k: os.environ.get(k) for k in (*ENV, REC.TEST_RUN)})
     os.environ.update(ENV)
     os.environ.pop(REC.TEST_RUN, None)
+    _KEPT["staged"] = REC.STAGED
+    REC.STAGED = False                  # these tests are of the flow that always runs the control pools; tests/test_blueprint_staged.py is of the staged one
 
 
 def teardown_function(_=None):
+    REC.STAGED = _KEPT.pop("staged", True)
     for k, v in _KEPT.items():
         os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
 
@@ -306,7 +309,7 @@ BAD = [  # (what the card says, the line that fails, a word of the reason)
     ({"card": {"home": {"market": "NQ", "session": "nyam", "bar": "7"}}}, "0.3", "7"),
     ({"card": {"home": {"market": "NQ", "session": "all", "bar": "15"}}}, "0.3", "ONE home table"),
     ({"card": {"home": {"market": "NQ", "session": "eve", "bar": "15"}}}, "0.3", "evening"),
-    ({"card": {"neighbors": []}}, "0.4", "where else"), ({"card": {"not_here": ""}}, "0.4", "NOT"),
+    ({"card": {"neighbors": []}}, "0.4", "where else"),
     ({"card": {"neighbors": ["somewhere nice"]}}, "0.4", "somewhere"), ({"card": {"neighbors": ["NQ nyam 15"]}}, "0.4", "home"),
     ({"card": {"neighbors": ["midday", "mid"]}}, "0.4", "twice"), ({"card": {"not_here": "asia and london"}}, "0.4", "ONE place"),
     ({"card": {"not_here": "midday"}}, "0.4", "also"), ({"card": {"neighbors": ["the evening"]}}, "0.4", "evening"),
@@ -771,10 +774,10 @@ def test_the_commands_in_this_process():
     path.write_text(json.dumps(idea(name)))
     assert _run(["card", name, f"--spec={path}", *last])[0] == 0                                              # ... or from a file
     # refusals: exit 2, the one object, the missing line named; a person reads every line as pass or fail
-    rc, js = _run(["card", name, "--spec=-", *last], json.dumps(idea(name, card={"not_here": ""})))
+    rc, js = _run(["card", name, "--spec=-", *last], json.dumps(idea(name, card={"neighbors": []})))
     d = json.loads(js)
     assert rc == 2 and d["ok"] is False and "0.4" in d["error"] and [x["passed"] for x in d["lines"]] == [True, True, True, False, True, True, True]
-    rc, txt = _run(["card", name, "--spec=-", f"--root={root}"], json.dumps(idea(name, card={"not_here": ""})))
+    rc, txt = _run(["card", name, "--spec=-", f"--root={root}"], json.dumps(idea(name, card={"neighbors": []})))
     assert rc == 2 and [ln[:8] for ln in txt.split("\n")[1:7]] == ["0.1 PASS", "0.2 PASS", "0.3 PASS", "0.4 FAIL", "0.5 PASS", "0.6 PASS"] and "REFUSED: " in txt
     n = 0
     for argv, stdin, word in ((["card", name, "--spec=-"], "", "stdin"), (["card", name, "--spec=-"], "{not json", "JSON"), (["card", name], "", "--spec"),
@@ -806,7 +809,7 @@ def test_the_command_lines_of_the_connector():
     life(1)                                                                      # idea A's stores: this idea has its name and settings, so nothing runs twice
     root, name = tmp() / "ideas_conn", NAME
     last = [f"--root={root}", "--json"]
-    env = {REC.TEST_RUN: json.dumps({**TINY, "tester": str(tmp() / "tester_conn")})}
+    env = {REC.TEST_RUN: json.dumps({**TINY, "tester": str(tmp() / "tester_conn")}), "BP_STAGED": "0"}      # (the flow that always runs the control pools)
     rc, d = bp(["card", name, "--spec=-", *last], json.dumps(idea(name)))
     assert rc == 0 and list(d)[:len(CONTRACT)] == list(CONTRACT) and (d["ok"], d["command"], d["status"], d["phase"]) == (True, "card", "idea", 0)
     rc, e = bp(["card", name, "--spec=-", *last], json.dumps(idea(name, run={"exits": "extended"})))
@@ -863,7 +866,7 @@ def test_the_apps_connector_against_this_toolkit():
         pytest.skip("no heavy run starts 09:18-09:36 ET on weekdays")
     life(1)
     root, name = tmp() / "ideas_app", NAME
-    calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "not_here": ""}, "settings": SETTINGS}),
+    calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "neighbors": []}, "settings": SETTINGS}),
              ("blueprint_build", {"name": name, "reason": "the plain idea, as carded", "wait_s": 600}), ("blueprint_status", {}), ("blueprint_status", {"name": name}),
              ("blueprint_build", {"name": "bpi_nobody", "reason": "x"})]
     env = {**os.environ, "HOMEBASE_IDEAS_ROOT": str(root), "HOMEBASE_DRAFTS_DIR": str(tmp() / "drafts_app"), "HOMEBASE_BP": str(W / "bp.py"),

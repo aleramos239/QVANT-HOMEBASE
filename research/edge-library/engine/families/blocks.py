@@ -25,6 +25,11 @@ EXIT BLOCKS
         first_bar_mom  high - low of the signal bar
       floored at 2 ticks like every stop; no structure yet (or height 0) -> no entry. A family that is not in HEIGHTS has no
       structure and REFUSES the mode (ValueError at construction).
+  stop_mode = "atropen" | "rngopen"   (the owner, 2026-10-06; for the idea fvg_first_nq -- its own exit table, menu_open)
+        stop distance = stop_val x the MEAN TRUE RANGE ("atropen") or x the RANGE, highest high - lowest low ("rngopen") of the
+        tf bars closed SINCE THE SESSION STARTED (nyam: since 09:30), read at the order, the signal bar included. The true range
+        of the first bar reads the close before it, like the Template's own ATR. Any family and the random control take it;
+        floored at 2 ticks. NOT a cell of the standard table: only menu_open carries it.
   more ATR stops / targets: the Template takes any stop_val / tgt_r; they are only menu cells: menu_extended(root).
   MENU "extended" = the 32 standard cells first (same order, same ids), then the 8 standard stops x targets {1.5, 4}, then the
       new stops (ATR x 1 and x 2, then range x 0.25 / 0.5 / 1) x targets {0, 1, 2, 3, 1.5, 4}: 78 cells, 60 without a structure.
@@ -268,6 +273,22 @@ def menu_extended(root: str, rng: bool = True) -> list:
 BP_TGT_R = (0.5, 0.75)                              # the blueprint's small targets (BLUEPRINT.md version 1.1, the owner 2026-10-06)
 
 
+OPEN_MODES = ("atropen", "rngopen")
+OPEN_STOP_ATR = (0.5, 1.0, 1.5, 2.0, 3.0)           # x the mean true range since the session started
+OPEN_STOP_RNG = (0.25, 0.5, 0.75, 1.0, 1.5)         # x the range since the session started
+OPEN_TGT_R = (0.0, 0.5, 0.75, 1.0, 2.0, 3.0)        # the standard targets: none, then x the stop
+
+
+def menu_open(root: str) -> list:
+    """THE EXIT TABLE OF AN IDEA BUILT ON THE SESSION-ANCHORED STOPS (fvg_first_nq): 5 stops of the mean true range since the
+    session started, then 5 of its range, x the six standard targets = 60 cells, stops outer and targets inner. The same
+    for every market (the stops are multiples of the session's own size, not points). `root` is checked, not used."""
+    if root not in S.MENU_STOP_PTS:
+        raise KeyError(f"no menu for root {root!r}: {sorted(S.MENU_STOP_PTS)}")
+    stops = [{"stop_mode": "atropen", "stop_val": v} for v in OPEN_STOP_ATR] + [{"stop_mode": "rngopen", "stop_val": v} for v in OPEN_STOP_RNG]
+    return [{**st, "tgt_r": r} for st in stops for r in OPEN_TGT_R]
+
+
 def menu_blueprint(root: str) -> list:
     """THE EXIT TABLE OF THE BLUEPRINT (BLUEPRINT.md section 2; blueprint/templates/exit_menu.json): the 32 standard cells
     first (same order, same ids: a store of the 32 keeps its cells), then the 8 standard stops x the targets 0.5 and 0.75 x
@@ -277,14 +298,17 @@ def menu_blueprint(root: str) -> list:
 
 def exits(kind: str, root: str, family: str) -> list:
     """The exit cells of an idea: 'standard' = l2sim.menu(root); 'extended' = menu_extended (range stops only when the
-    family has a structure); 'blueprint' = menu_blueprint (what a blueprint build runs: blueprint/runner.py)."""
+    family has a structure); 'blueprint' = menu_blueprint (what a blueprint build runs: blueprint/runner.py); 'open' = menu_open
+    (the session-anchored stops)."""
     if kind == "standard":
         return S.menu(root)
     if kind == "extended":
         return menu_extended(root, rng=family in HEIGHTS)
     if kind == "blueprint":
         return menu_blueprint(root)
-    raise ValueError(f"exits {kind!r}: 'standard', 'extended' or 'blueprint'")
+    if kind == "open":
+        return menu_open(root)
+    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint' or 'open'")
 
 
 def filter_inputs(block: str, side: str, root: str = "NQ") -> dict:
@@ -563,7 +587,7 @@ class Blocks:
                 "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
                 "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
                 **{f"f_{b}": "off" for b in FLOW_SERIES}}
-    SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng")),
+    SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen")),
               "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
               "f_cvol": ("choice", ("off", "hi", "lo")), "f_news": ("choice", ("off", "yes", "no")),
               "f_bookopp": ("choice", ("off", "on")), "f_ahead": ("choice", ("off", "thin", "thick")),
@@ -593,6 +617,16 @@ class Blocks:
     def blk_height(self):
         h = self.height()
         return h if h is not None and h > 0 else None
+
+    def blk_open(self):
+        """(mean true range, range) of the tf bars closed since the session started (OPEN_MODES), or None before the first one.
+        self.sn counts the bars that closed inside the session, the signal bar included; the Template appends every closed bar
+        to TR / H / L, so the last sn entries are exactly those bars."""
+        n = self.sn
+        if self.sid is None or n < 1 or n > self.nb:
+            return None
+        hi, lo = max(self.H[-n:]), min(self.L[-n:])
+        return sum(self.TR[-n:]) / n, hi - lo
 
     def blk_session_volume(self):
         """(a, b, volume): the session's ANCHOR second (VOL_ANCHOR), this decision's second (both after 00:00 ET of the
@@ -712,6 +746,8 @@ class Blocks:
         sd = 1 if side == "long" else -1
         if p["stop_mode"] == "rng" and self.blk_height() is None:
             return False                            # no structure yet: nothing to size the stop with
+        if p["stop_mode"] in OPEN_MODES and self.blk_open() is None:
+            return False                            # no bar of the session yet: nothing to size the stop with
         if p["f_dvol"] != "off" and day_vol(self.dl, self.day) != p["f_dvol"]:
             return False
         if p["f_news"] != "off" and (self.day in release_days()) != (p["f_news"] == "yes"):
@@ -805,6 +841,11 @@ class Blocks:
         return True
 
     def _dist(self, ctx, ref, struct):
+        if self.p["stop_mode"] in OPEN_MODES:
+            x = self.blk_open()
+            if x is None:
+                raise RuntimeError(f"stop_mode={self.p['stop_mode']!r}: an order was priced before the session's first bar closed")
+            return max(self.p["stop_val"] * x[0 if self.p["stop_mode"] == "atropen" else 1], 2 * ctx.tick)
         if self.p["stop_mode"] != "rng":
             return super()._dist(ctx, ref, struct)
         h = self.blk_height()
@@ -900,6 +941,9 @@ def _control(name: str):
     return type(f"R_{name}", (Blocks, l2ref.Random), body)
 
 
+CONTROL_OPEN = type("R_open", (Blocks, l2ref.Random), {"__module__": __name__, "__qualname__": "R_open", "BASE": "random",
+                     "__doc__": "l2ref.Random (a market entry at a tf close with probability p_entry, random side) that takes the "
+                                "session-anchored stops (atropen, rngopen): the random-entry control of an idea on menu_open."})
 WRAPPED = {n: _wrap(n, e[0]) for n, e in BASES.items()}     # family name -> the class an idea spec runs
 CONTROLS = {n: _control(n) for n in HEIGHTS}                # family name -> its range-stop random-entry control
-globals().update({c.__name__: c for c in list(WRAPPED.values()) + list(CONTROLS.values())})      # workers import them by name
+globals().update({c.__name__: c for c in list(WRAPPED.values()) + list(CONTROLS.values()) + [CONTROL_OPEN]})      # workers import them by name
