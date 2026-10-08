@@ -450,6 +450,7 @@ def stage3(name: str, ctx: dict, progress=None) -> dict:
         rows = G.strict_extra(traw, list(others.values()))
         bad = [x for x in rows if x["passed"] is False]
         return _card(3, t0, not bad, "fail" if bad else "skipped", rows, f"a strict pass does not also meet {' and '.join(x['line'] for x in bad)}: {bad[0]['text']}" if bad else
+                     "skipped: a strict pass takes no indicator, and its sides hold (the other markets are shown, not asked)" if G.others_bar() is None else
                      "skipped: a strict pass takes no indicator, and its sides and its other markets hold", picked, tries, rules, indicators=[])
     rows, tried, best = [], [], None
     for k, ind in enumerate(card.get("indicators") or [], 1):
