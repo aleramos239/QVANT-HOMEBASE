@@ -173,9 +173,10 @@ def period_of(start, end) -> str:
 SPECS = {"NQ": (20.0, 0.25), "ES": (50.0, 0.25), "GC": (100.0, 0.10)}
 EQUITY_INDEX_ROOTS = frozenset({"ES", "MES", "NQ", "MNQ", "YM", "MYM", "RTY", "M2K", "NKD"})     # CME half days (tester table)
 L2_ROOTS = frozenset({"NQ"})                   # Level-2 features exist for NQ only (EDGE_SPEC user rule 4)
-# <= 8 worker processes for this project, machine-wide. EDGE_MAX_WORKERS=<n> lowers the cap of every run of a process
-# (an agent that shares the machine with a batch); it can never raise it.
-MAX_WORKERS = max(1, min(8, int(os.environ.get("EDGE_MAX_WORKERS", "8") or 8)))
+# <= 12 worker processes for this project, machine-wide (8 until 2026-10-08: measured on this 15-core machine, 12 workers
+# take a stage-1 pair of heat maps in 106 s against 131 s, at about 2 GB in all). EDGE_MAX_WORKERS=<n> lowers the cap of
+# every run of a process (an agent that shares the machine with a batch); it can never raise it.
+MAX_WORKERS = max(1, min(12, int(os.environ.get("EDGE_MAX_WORKERS", "12") or 12)))
 NS = 1_000_000_000
 MIN_NS = 60 * NS
 SIDE = {"long": 1, "short": -1}

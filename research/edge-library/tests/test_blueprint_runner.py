@@ -207,12 +207,12 @@ def ledger(path) -> list:
 def test_workers_and_the_no_start_window(monkeypatch):
     monkeypatch.setattr(S, "OPEN_WINDOW", (dt.time(9, 18), dt.time(9, 36)))            # off since 2026-10-07 (l2sim.OPEN_WINDOW): put back here
     c = R.template("compute")
-    assert c["workers"] == {"desk_hours": 4, "other": 8} and c["desk_hours_et"] == ["08:00", "16:15"] and c["workers"]["other"] <= 8
+    assert c["workers"] == {"desk_hours": 4, "other": 12} and c["desk_hours_et"] == ["08:00", "16:15"] and c["workers"]["other"] <= 12
     assert c["no_start_et"] == ["09:18", "09:36"] and c["block_days"] >= 1
     assert " ".join(c["text"].split()) in " ".join((W / "out" / "blueprint" / "toolkit_plan.md").read_text().split())
     tue = lambda h, m: dt.datetime(2026, 10, 6, h, m, tzinfo=S.ET)  # noqa: E731
     got = [RUN.default_workers(t) for t in (tue(7, 59), tue(8, 0), tue(12, 0), tue(16, 14), tue(16, 15), tue(23, 0), SAT)]
-    assert got == [min(n, S.MAX_WORKERS) for n in (8, 4, 4, 4, 8, 8, 8)], got
+    assert got == [min(n, S.MAX_WORKERS) for n in (12, 4, 4, 4, 12, 12, 12)], got
     with at(tue(12, 0)):
         assert RUN.default_workers() == min(4, S.MAX_WORKERS)
     for t in (tue(9, 17), tue(9, 36), tue(15, 0), dt.datetime(2026, 10, 3, 9, 20, tzinfo=S.ET)):       # outside the window; a Saturday
@@ -236,7 +236,7 @@ def test_workers_and_the_no_start_window(monkeypatch):
     keep, asked = (RM.auto_workers, RUN._pass), []
     RM.auto_workers, RUN._pass = (lambda n=None: asked.append(n) or 3), stop
     try:
-        for when, workers, want in ((tue(12, 0), None, 4), (SAT, None, 8), (tue(12, 0), 8, 8), (SAT, 2, 2)):
+        for when, workers, want in ((tue(12, 0), None, 4), (SAT, None, 12), (tue(12, 0), 8, 8), (SAT, 2, 2)):
             with at(when), no_engine():
                 try:
                     RUN.run_build(SPEC, workers=workers, out_dir=o, ledger=led, days=DAYS, cells=CELLS)

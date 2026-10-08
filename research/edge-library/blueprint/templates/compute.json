@@ -1,9 +1,9 @@
 {
- "_about": "How hard a blueprint run may lean on this machine (the trading desk runs on it). `text` is quoted from out/blueprint/toolkit_plan.md section 6, decision 8 (taken for the owner, easy to change: change it here). `workers` = the DEFAULT number of worker processes of a run: inside desk hours and at any other time; a run may be given another number, never more than the engine's own cap (l2sim.MAX_WORKERS = 8, machine-wide for this project). `desk_hours_et` = when the desk is trading: weekdays, from the first time up to (not including) the second, New York time. `no_start_et` = the weekday window in which no heavy run is STARTED; it repeats the engine's own no-compute window (l2sim.compute_window_end, which every worker waits out): the engine decides, this is the text of the refusal, and tests/test_blueprint_runner.py holds the two together. `block_days` = a tape pass is cut into blocks of this many session days so that the trades held in memory stay small (about 5,000 random-entry trades a day in a 10-seed pool); the stores are the same for any block size (same test).",
- "text": "Workers: 8 outside desk hours, 4 inside; nothing heavy 09:18-09:36 ET.",
+ "_about": "How hard a blueprint run may lean on this machine (the trading desk runs on it). `text` is quoted from out/blueprint/toolkit_plan.md section 6, decision 8 (taken for the owner, easy to change: change it here). `workers` = the DEFAULT number of worker processes of a run: inside desk hours and at any other time; a run may be given another number, never more than the engine's own cap (l2sim.MAX_WORKERS = 12, machine-wide for this project). `desk_hours_et` = when the desk is trading: weekdays, from the first time up to (not including) the second, New York time. `no_start_et` = the weekday window in which no heavy run is STARTED; it repeats the engine's own no-compute window (l2sim.compute_window_end, which every worker waits out): the engine decides, this is the text of the refusal, and tests/test_blueprint_runner.py holds the two together. `block_days` = a tape pass is cut into blocks of this many session days so that the trades held in memory stay small (about 5,000 random-entry trades a day in a 10-seed pool); the stores are the same for any block size (same test).",
+ "text": "Workers: 12 outside desk hours, 4 inside; nothing heavy 09:18-09:36 ET.",
  "workers": {
   "desk_hours": 4,
-  "other": 8
+  "other": 12
  },
  "desk_hours_et": [
   "08:00",

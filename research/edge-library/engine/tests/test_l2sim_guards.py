@@ -88,7 +88,7 @@ def test_wait_compute_window_sleeps_to_the_end_and_not_outside():
     assert now[0] >= et(2026, 10, 2, 8, 50) and len(slept) == 1
     now[0] = et(2026, 10, 2, 12, 0)
     assert S.wait_compute_window(sleep=sleep, clock=lambda: now[0]) == 0.0 and len(slept) == 1
-    assert 1 <= S.MAX_WORKERS <= 8                  # EDGE_MAX_WORKERS may lower the cap, never raise it
+    assert 1 <= S.MAX_WORKERS <= 12                 # EDGE_MAX_WORKERS may lower the cap, never raise it
 
 
 # ---- parity with the tester's calendar / coverage / tape ---------------------------------------------------

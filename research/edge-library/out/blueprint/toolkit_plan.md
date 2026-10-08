@@ -97,7 +97,7 @@ A line reads like `2.2 FAIL average trade $41 (need $70)`. Each command also ret
 5. The tester page keeps "records, never refuses" (the owner's instruction of 27 Sep). The toolkit and the connector refuse.
 6. No idea batch is run tonight. The r3 specs wait for the owner.
 7. Idea records may be written to `~/.homebase/ideas` (the owner: "saves everything in the app").
-8. Workers: 8 outside desk hours, 4 inside; nothing heavy 09:18-09:36 ET.
+8. Workers: 12 outside desk hours, 4 inside; nothing heavy 09:18-09:36 ET.
 
 ## 7. Known limits of version 1
 The "first look" (entry alone with a time exit) needs a no-stop exit cell: not in version 1. Clock-time ideas and evening sessions come

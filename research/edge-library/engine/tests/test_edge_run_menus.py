@@ -203,9 +203,9 @@ def test_smoke_prints_counts_only(reg):
     assert all(d < "2024-01-01" for d in RM.SMOKE_DAYS) and len(RM.SMOKE_DAYS) == 10 and RM.PERIOD == "build"
 
 
-def test_workers_never_exceed_eight_and_tapes_are_checked(monkeypatch):
+def test_workers_never_exceed_the_cap_and_tapes_are_checked(monkeypatch):
     monkeypatch.setattr(RM, "busy_workers", lambda: 0)
-    assert RM.auto_workers(64) <= 8 and RM.auto_workers(1) == 1
+    assert RM.auto_workers(64) <= 12 and RM.auto_workers(1) == 1
     monkeypatch.setattr(RM, "busy_workers", lambda: 999)
     assert RM.auto_workers(8) == 1
     assert RM.tapes_ready("NQ") == [] and RM.tapes_ready("ES") == []
