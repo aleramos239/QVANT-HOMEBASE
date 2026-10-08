@@ -128,6 +128,19 @@ def test_a_whole_card_passes_its_four_lines_and_gives_two_heat_maps_a_way():
     assert subs[1]["spec"]["card"]["home"] == {"market": "NQ", "session": "nyam", "bar": "5"} and subs[1]["spec"]["name"] == "fvg_open_a5"
 
 
+def test_a_noise_band_card_passes_stage_0_with_one_side_a_held_anchor_and_a_cap():
+    nb = {"family": "noise_band", "main_setting": "k", "values": ["0.2", "0.3", "0.4"], "fixed": {}, "limits": {}}
+    c = card(name="noise_mid", session="mid", sides="long", sides_why="The index drifts up, and the vault break is long only.", ways=[nb],
+             indicators=[{"block": "htf60", "side": "with", "why": "A break with the hourly trend has more room."}])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("noise_mid_a1", "1"), ("noise_mid_a5", "5")] and subs[0]["spec"]["run"]["params"] == {"k": [0.2, 0.3, 0.4]}
+    held = {**nb, "fixed": {"anchor": "globex"}, "limits": {"max_tr": 2}}                       # the anchor is ONE value an idea; max_tr is a limit
+    passes({**c, "ways": [held]})
+    passes({**c, "sides": "both", "sides_why": "The rule is symmetric.", "ways": [nb]})
+    fails({**c, "ways": [{**nb, "main_setting": "anchor", "values": ["rth", "globex", "rth"]}]}, "P0.2")
+    fails({**c, "ways": [{**nb, "fixed": {"anchor": "asia"}}]}, "P0.2")
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))

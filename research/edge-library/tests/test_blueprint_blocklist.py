@@ -54,7 +54,7 @@ def test_the_plain_card_passes_so_a_refusal_below_is_the_change():
 def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
-    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 29
+    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 30
     assert [n for n, f in F.items() if not f["runs"]] == []                                       # va_reclaim runs too: its cache is built for the range (runner.prepare_family)
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -72,6 +72,8 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     assert F["donchian"]["settings"] == [{"name": "n", "default": 20, "values": "a whole number 2 .. 200"}]
     assert F["donchian"]["tried"] == [{"n": 10}, {"n": 20}, {"n": 40}, {"n": 60}]
     assert F["ib"]["sessions"] == ["nyam", "mid", "pm"] and F["ib"]["mirror"] == "mode" and F["gap"]["sessions"] == ["nyam"]
+    assert {x["name"]: x["values"] for x in F["noise_band"]["settings"]} == {"anchor": "rth | globex", "k": "a number 0.05 .. 3"}      # (max_tr and dir are limits)
+    assert F["noise_band"]["mirror"] == "dir" and F["noise_band"]["sessions"] == ["nyam", "mid", "pm"] and F["noise_band"]["tried"][0] == {"k": 0.2, "dir": "long"}
     assert {x["name"]: x["values"] for x in F["rsi2"]["settings"]} == {"th": "a number 1 .. 40", "trend_f": "true | false"}
     assert sorted(B["other_families"]) == sorted(set(fam.REGISTRY) - set(blocks.WRAPPED)) and len(B["other_families"]) == 33
 
@@ -162,7 +164,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 29, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 30, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]

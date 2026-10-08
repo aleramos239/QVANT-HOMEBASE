@@ -51,7 +51,7 @@ def test_the_plan_counts_candidate_cells_and_null_cells_apart():
     l2 = RM.plan_totals(RM.units(only=["bimb_follow_d1"]))
     assert (l2["candidate_cells"], l2["unit_null_cells"]) == (96, 192)
     mirror = {u["family"] for u in us if u["mirror"]}
-    assert mirror == {"tod_drift", "ib", "gap", "liq", "orb_confirm"} and t["mirror_run_units"] == sum(1 for u in us if u["mirror"])
+    assert mirror == {"tod_drift", "ib", "gap", "liq", "orb_confirm", "noise_band"} and t["mirror_run_units"] == sum(1 for u in us if u["mirror"])
 
 
 # ---- decision 2 + 3: judged cells, the central cell ---------------------------------------------------------------------------
@@ -194,7 +194,7 @@ def test_the_orchestrator_flags_are_laid_over_the_registry():
                                     "ema_pullback", "supertrend"} <= weak
     assert weak - set(F.WEAK_FAMILIES) == {"bimb_follow_d1", "flow_exhaust"}           # their author's own flag: kept (stricter)
     assert {n: lb["mirror"] for n, lb in F.LIBRARY.items() if lb["mirror"]} == {"tod_drift": "dir", "ib": "mode", "gap": "mode", "liq": "mode",
-                                                                                    "orb_confirm": "dir"}      # + STAGE 2b N3
+                                                                                    "orb_confirm": "dir", "noise_band": "dir"}      # + STAGE 2b N3, + noise_band (2026-10-08)
     for n, axis in F.MIRROR.items():
         assert len({v[axis] for v in F.LIBRARY[n]["variants"]}) == 2
     # the failure penalty: first_bar_mom (every session) and donchian in the pm session only

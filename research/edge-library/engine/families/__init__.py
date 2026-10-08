@@ -60,7 +60,8 @@ WEAK_FAMILIES = ("straddle_t_0000", "straddle_t_1105",                       # n
                  "tod_drift", "vwap_ema_x",                                  # no counterparty / a weak prior
                  "ema_ribbon", "tema_slope", "ema_pullback", "supertrend")   # the rationale only restates the trigger
 MIRROR = {"tod_drift": "dir", "ib": "mode", "gap": "mode", "liq": "mode",   # long vs short . break vs fade . fill vs go . sweep vs break
-          "orb_confirm": "dir"}                                             # STAGE 2b N3: long-only vs short-only units
+          "orb_confirm": "dir",                                             # STAGE 2b N3: long-only vs short-only units
+          "noise_band": "dir"}                                              # 2026-10-08: the Template's own dir; long-only vs short-only units
 PENALTY_SESS = {"donchian": ("pm",)}                                         # donchian: its pm favourite failed; first_bar_mom: all
 CARD_NOTES = {"straddle_t_2000": "ORCHESTRATOR DECISION 5: 20:00 ET stays 20:00 ET all year (the user's time); the Tokyo cash "
                                  "open is 19:00 ET in the US winter, so the fire is one hour after it then."}

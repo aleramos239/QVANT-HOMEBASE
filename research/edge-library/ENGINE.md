@@ -18,6 +18,7 @@ Level-2 feature columns: `prop-portfolio/2026-10-01-l2/FEATURES.md`.
 | `engine/families/fvg.py` | the `fvg` entry trigger (fair value gap: touch / mid / go entry, min_gap x ATR), 2026-10-06 |
 | `engine/flowtab.py` | per-minute tick order flow (volume, delta, sweeps, biggest order) for the DELTA filter blocks, NQ / ES / GC |
 | `engine/levels.py`, `engine/families/liq.py` | the liquidity levels and the `liq` trigger (sweep / break), the `level` and `swept` filters, 2026-10-06 |
+| `engine/families/noise.py` | the `noise_band` entry trigger (a close beyond open +/- k x daily ATR(14) and the anchored VWAP; anchor rth or globex), 2026-10-08. It joins `blocks.WRAPPED` itself (`join_blocks()`), so `families/blocks.py` and every earlier store's code hash stay as they were |
 | `engine/tests/test_blocks_batch1.py` | the price-and-trend filter blocks (ema, vwma, avwap, channel, adx, rvol, rsi) against independent calculations |
 | `engine/bpfeat.py` | the Level-2 feature table of the blueprint build range (2025 first half) and its loader with the build seal |
 
