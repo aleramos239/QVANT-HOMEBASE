@@ -263,9 +263,211 @@ function tkClip(text, n = 150) {
   return `${cut.slice(0, sp > n * 0.6 ? sp : n)}…`;
 }
 
+/* ---- the strategy pipeline: the Lab's Queue, Book and Guide ----
+   The server (GET /api/tester/pipeline) sends {runner: {running, paused}, counts: {label: n}, ideas: [an idea's state: name, family, label,
+   stage (the last one it finished), stopped_at, why], book: [book cards], stages: [{n, name, words}]}. Nothing here judges anything: a
+   verdict, a reason and a number are the server's. These only choose the words, the marks and what a button may do. */
+const PL_LAST = 7;                                  // the last stage (the owner's look)
+const PL_MARKETS = ['NQ', 'ES', 'GC'];
+const PL_SESSIONS = [['asia', 'Asia'], ['london', 'London'], ['pre', 'Pre-market'], ['nyam', 'New York morning'], ['mid', 'Midday'], ['pm', 'Afternoon']];
+const PL_SIDES = [['both', 'Both'], ['long', 'Long only'], ['short', 'Short only']];
+const PL_NAME = /^[a-z][a-z0-9_]{1,33}$/;           // a card's name, as the toolkit takes it
+const PL_WAYS = 3, PL_INDS = 5, PL_WORDS = 8;       // the card's limits (the server checks them again: these only save a round trip)
+const PL_COUNT = { Problem: 'with a problem' };     // a label inside the count sentence, when its lower case does not read
+const PL_TONE = { Running: 'run', Stopped: 'err', Problem: 'warn', Passed: 'ok', 'In the book': 'ok' };
+const DASH = '—';
+const plInt = (v) => (Number.isInteger(v) ? v : null);
+const plNum = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+const plOf = (pairs, id) => { const hit = pairs.find(([k]) => k === id); return hit ? hit[1] : id == null || id === '' ? DASH : String(id); };
+const plSession = (id) => plOf(PL_SESSIONS, id);
+const plSide = (id) => plOf(PL_SIDES, id);
+/* The colour a status chip takes ('' = plain). The chip always carries its word: the colour is never the only sign. */
+const plTone = (label) => PL_TONE[label] || '';
+/* "12 ideas: 3 waiting, 1 running, 8 stopped" -- only what is there, in the server's order. */
+function plCount(counts) {
+  const parts = Object.entries(counts || {}).filter(([, n]) => n > 0), total = parts.reduce((a, [, n]) => a + n, 0);
+  if (!total) return 'No ideas yet';
+  return `${total} idea${total === 1 ? '' : 's'}: ${parts.map(([k, n]) => `${n} ${PL_COUNT[k] || String(k).toLowerCase()}`).join(', ')}`;
+}
+/* The ideas the runner still has work on. */
+const plLive = (P) => { const c = (P && P.counts) || {}; return (c.Waiting || 0) + (c.Running || 0); };
+/* The Queue's ONE button: what it says is what it does. -> {label, actions: what is posted, in order, enabled, line: which it is}.
+   Resume with no runner working also starts one, or "Resume" would resume nothing. */
+function plControl(P) {
+  const r = (P && P.runner) || {}, live = plLive(P);
+  if (r.paused) return { label: 'Resume', actions: !r.running && live ? ['resume', 'start'] : ['resume'], enabled: true, line: r.running ? 'Paused. It stops after the stage it is on.' : 'Paused. Nothing is being tested.' };
+  if (r.running) return { label: 'Pause', actions: ['pause'], enabled: true, line: live ? 'Testing is on.' : 'Testing is on. Nothing is waiting.' };
+  return { label: 'Start testing', actions: ['start'], enabled: live > 0, line: live ? 'Testing is off.' : 'Nothing to test. Add an idea first.' };
+}
+/* The eight dots of an idea, stage 0 to 7: 'done' (finished), 'stop' (the one that stopped it), 'now' (being tested), '' (not reached)
+   -- and the same in words, for someone who cannot see them. */
+function plDots(row) {
+  const r = row || {}, stage = plInt(r.stage), stop = plInt(r.stopped_at), on = r.label === 'Running', next = stage == null ? 0 : stage + 1;
+  const dots = Array.from({ length: PL_LAST + 1 }, (_, i) => (stop != null ? (i < stop ? 'done' : i === stop ? 'stop' : '') : stage != null && i <= stage ? 'done' : on && i === next ? 'now' : ''));
+  const label = stop != null ? `Reached stage ${stop} of ${PL_LAST}, stopped at stage ${stop}`
+    : stage != null && stage >= PL_LAST ? `Passed every stage, 0 to ${PL_LAST}`
+      : on ? (stage == null ? `Testing stage 0 of ${PL_LAST}` : `Reached stage ${stage} of ${PL_LAST}, testing stage ${Math.min(PL_LAST, next)}`)
+        : stage == null ? 'No stage run yet' : `Reached stage ${stage} of ${PL_LAST}`;
+  return { dots, label };
+}
+/* What is being tested now, in one line. An idea is only being tested while the runner works. */
+function plRunning(P) {
+  const it = P && P.runner && P.runner.running ? (P.ideas || []).find((x) => x.label === 'Running') : null;
+  if (!it) return 'Nothing is running';
+  const stage = plInt(it.stage);
+  return `Testing ${it.name} ${DASH} stage ${Math.min(PL_LAST, stage == null ? 0 : stage + 1)} of ${PL_LAST}`;
+}
+/* The Guide's six steps (the design's section 6). Each: {n, title, words, button: its label or null, enabled, reason: why it is grey,
+   primary: the one to press next, status: step 3's line, actions: step 2's, name: step 5's idea}. */
+function plGuide(P) {
+  const ideas = (P && P.ideas) || [], r = (P && P.runner) || {}, live = plLive(P), c = plControl(P), green = ideas.find((x) => x.label === 'Passed');
+  const start = !live ? { enabled: false, reason: 'Add an idea first.' } : r.paused ? { enabled: true, reason: '' } : r.running ? { enabled: false, reason: 'Testing is already on.' } : { enabled: true, reason: '' };
+  const steps = [
+    { n: 1, title: 'Write the idea', words: 'Fill the card, or tell Claude the idea and it fills the card.', button: 'Write an idea', enabled: true, reason: '' },
+    { n: 2, title: 'Press Start', words: 'The computer starts testing your ideas.', button: r.paused && live ? 'Resume' : 'Start testing', ...start, actions: start.enabled ? c.actions : [] },
+    { n: 3, title: 'Wait', words: 'The computer tests it. This can take a night.', button: null, enabled: false, reason: '', status: plRunning(P) },
+    { n: 4, title: 'Read the Queue', words: 'Red = stopped, and it says why in one line. Green = it passed everything.', button: 'Open the Queue', enabled: ideas.length > 0, reason: ideas.length ? '' : 'No ideas yet.' },
+    { n: 5, title: 'Look at a green one', words: 'Read its card. Press Approve to put it in the Book, or Refuse.', button: green ? `Look at ${green.name}` : 'Look at a green one', enabled: !!green, reason: green ? '' : 'No idea has passed everything yet.', name: green ? green.name : '' },
+    { n: 6, title: 'Build a portfolio', words: 'Mix strategies from the Book. This comes later.', button: 'Build a portfolio', enabled: false, reason: 'Not built yet' },
+  ];
+  const next = green ? 5 : steps[1].enabled ? 2 : !ideas.length ? 1 : 4;
+  return steps.map((s) => ({ ...s, primary: s.n === next }));
+}
+/* The stage an idea is AT now: where it stopped; else, while it waits or runs, the next one; a finisher sits at the owner's look.
+   An idea that is in the book or was refused is at none (null). */
+function plAt(row) {
+  const stage = plInt(row.stage), stop = plInt(row.stopped_at);
+  if (row.label === 'In the book' || row.label === 'Refused') return null;
+  if (stop != null) return stop;
+  if (row.label === 'Waiting' || row.label === 'Running') return Math.min(PL_LAST, stage == null ? 0 : stage + 1);
+  return stage == null ? 0 : Math.min(PL_LAST, stage);
+}
+/* The ladder under the Guide: the server's stages, each with how many ideas are at it now. */
+function plLadder(P) {
+  const at = ((P && P.ideas) || []).map(plAt);
+  return ((P && P.stages) || []).map((s) => { const n = at.filter((a) => a === s.n).length; return { n: s.n, name: s.name, words: s.words, ideas: n, count: n ? `${n} idea${n === 1 ? '' : 's'}` : 'None' }; });
+}
+/* PASS / FAIL / — for a stage or one of its lines, as the server judged it. */
+const plMark = (passed) => (passed === true ? { text: 'PASS', tone: 'ok' } : passed === false ? { text: 'FAIL', tone: 'err' } : { text: DASH, tone: '' });
+/* The toolkit's words without its own command line ("(bp.py pipe approve x ...)"), which no page has. */
+const plPlain = (text) => String(text == null ? '' : text).replace(/\s*\(bp\.py[^)]*\)/g, '').trim();
+/* A way and an indicator of a card, in words. */
+function plWayLine(w) {
+  const fixed = Object.entries((w && w.fixed) || {}).map(([k, v]) => `${k} ${v}`).join(', ');
+  return `${w.family}: ${w.main_setting} ${(w.values || []).join(' / ')}${fixed ? ` (${fixed})` : ''}`;
+}
+const plIndLine = (x) => `${x.block} ${x.side}: ${x.why}`;
+
+/* -- the add-idea form -- */
+const plT = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+const plWay = () => ({ family: '', main_setting: '', values: ['', '', ''] });
+const plInd = () => ({ block: '', side: '', why: '' });
+/* An empty form. Market and time of day start unchosen: a guess there would cost a night of testing. */
+const plForm = () => ({ name: '', why: '', loser: '', market: '', session: '', sides: 'both', sides_why: '', ways: [plWay()], indicators: [] });
+const plWayEmpty = (w) => !plT(w.family) && !plT(w.main_setting) && !(w.values || []).some(plT);
+const plIndEmpty = (x) => !plT(x.block) && !plT(x.why);          // a side alone is the list's first choice, not an indicator
+/* The form's values -> the card that is posted: trimmed, every value as text (the server types it), an empty way or indicator left
+   out, the owner as its source. */
+function plCard(F) {
+  const card = { name: plT(F.name), why: plT(F.why), loser: plT(F.loser), source: 'owner', market: plT(F.market), session: plT(F.session), sides: plT(F.sides) || 'both' };
+  if (card.sides !== 'both') card.sides_why = plT(F.sides_why);
+  card.ways = (F.ways || []).filter((w) => !plWayEmpty(w)).map((w) => ({ family: plT(w.family), main_setting: plT(w.main_setting), values: (w.values || []).map(plT) }));
+  const inds = (F.indicators || []).filter((x) => !plIndEmpty(x)).map((x) => ({ block: plT(x.block), side: plT(x.side), why: plT(x.why) }));
+  if (inds.length) card.indicators = inds;
+  return card;
+}
+/* May the form be sent? -> {ok, needs: what is still missing, in plain words}. The server checks the card in full; this only keeps
+   a card that cannot pass from being sent. */
+function plCanSend(F) {
+  const c = plCard(F), needs = [];
+  if (!c.name) needs.push('a name');
+  else if (!PL_NAME.test(c.name)) needs.push('a name of small letters, numbers and _ (2 to 34, a letter first)');
+  if (!c.why) needs.push('why it should make money');
+  if (!c.loser) needs.push('who loses');
+  if (c.why && c.loser && `${c.why} ${c.loser}`.split(' ').length < PL_WORDS) needs.push(`${PL_WORDS} words or more in those two sentences together`);
+  if (!PL_MARKETS.includes(c.market)) needs.push('a market');
+  if (!PL_SESSIONS.some(([k]) => k === c.session)) needs.push('a time of day');
+  if (!PL_SIDES.some(([k]) => k === c.sides)) needs.push('the sides');
+  else if (c.sides !== 'both' && !c.sides_why) needs.push('why one side only');
+  if (!c.ways.length) needs.push('an entry rule');
+  if (c.ways.length > PL_WAYS) needs.push(`${PL_WAYS} ways at most`);
+  (F.ways || []).forEach((w, i) => {
+    if (plWayEmpty(w)) return;
+    const n = `way ${i + 1}`, vs = (w.values || []).map(plT).filter(Boolean);
+    if (!plT(w.family)) needs.push(`${n}: an entry rule`);
+    if (!plT(w.main_setting)) needs.push(`${n}: its main setting`);
+    if (vs.length < 3) needs.push(`${n}: three values`);
+    else if (new Set(vs).size < 3) needs.push(`${n}: three different values`);
+  });
+  const inds = c.indicators || [];
+  if (inds.length > PL_INDS) needs.push(`${PL_INDS} indicators at most`);
+  (F.indicators || []).forEach((x, i) => {
+    if (plIndEmpty(x)) return;
+    const n = `indicator ${i + 1}`;
+    if (!plT(x.block)) needs.push(`${n}: which one`);
+    if (!plT(x.side)) needs.push(`${n}: its side`);
+    if (!plT(x.why)) needs.push(`${n}: why it should help`);
+  });
+  if (new Set(inds.map((x) => x.block).filter(Boolean)).size < inds.filter((x) => x.block).length) needs.push('each indicator once');
+  return { ok: !needs.length, needs };
+}
+/* What the form's lists offer, from the arsenal's catalog (homebase/arsenal.py): the entry rules and the indicators that run, on the
+   chosen market when one is chosen. A rule's `settings` is a list only when the catalog gives one (it does not yet: the form then
+   takes the setting's name as text). hours: a session's own words ("Asia (00:00-03:00 ET)"). */
+function plCatalog(groups, market) {
+  const items = (id) => (((groups || []).find((g) => g.id === id) || {}).items || []);
+  const fits = (it) => it.runs !== false && (!market || !(it.markets || []).length || it.markets.includes(market));
+  const settings = (it) => { const xs = (Array.isArray(it.settings) ? it.settings : []).map((s) => (typeof s === 'string' ? s : s && (s.name || s.key))).filter(Boolean); return xs.length ? xs : null; };
+  return { rules: items('families').filter(fits).map((it) => ({ name: it.name, words: it.words || '', settings: settings(it) })),
+    blocks: items('filters').filter((it) => fits(it) && (it.sides || []).length).map((it) => ({ name: it.name, sides: it.sides.map((s) => ({ side: s.side, words: s.words || '' })) })),
+    hours: Object.fromEntries(items('sessions').map((it) => [it.name, it.words || ''])) };
+}
+
+/* -- the book -- */
+const plPct = (v) => (plNum(v) == null ? DASH : `${Math.round(v * 100)} %`);                 // a share 0 .. 1 -> "58 %"
+const plMoney = (v) => (plNum(v) == null ? DASH : `${v < 0 ? '−' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`);
+const plText = (v) => (v == null || v === '' ? DASH : String(v));
+const plCap = (v) => { const t = plText(v); return t.charAt(0).toUpperCase() + t.slice(1); };
+const plFixed = (v, d) => (plNum(v) == null ? DASH : v.toFixed(d));
+const plWhole = (v) => (plNum(v) == null ? DASH : Math.round(v).toLocaleString('en-US'));
+const plPair = (v, join) => (Array.isArray(v) && v.length === 2 && v.every((x) => x != null && x !== '') ? `${v[0]} ${join} ${v[1]}` : DASH);
+const plBar = (v) => (v == null || v === '' ? DASH : `${v}-minute bars`);
+const plMicros = (v) => (plNum(v) == null ? '' : ` at ${v} micro${v === 1 ? '' : 's'}`);
+/* The accounts of a book card, the pipeline's own first (the order the card keeps them in). */
+const plAccounts = (card) => Object.values((card && card.prop && typeof card.prop === 'object' && card.prop) || {}).filter((p) => p && typeof p === 'object');
+const plAccountName = (p) => `${plText(p.name)}${p.confirmed === false ? ' (rules not confirmed)' : ''}`;
+/* A book card as the Book lists it: {name, label, tone, sub, account, rows: [[what, value]]}. A value that is missing shows "—". */
+function plBookCard(card) {
+  const c = card || {}, own = plAccounts(c)[0] || {};
+  return { name: plText(c.name), label: plCap(c.label), tone: c.label === 'stands alone' ? 'ok' : '',
+    sub: [plText(c.market), plSession(c.session), plBar(c.bar)].join(' · '), account: own.name ? plAccountName(own) : '',
+    rows: [['Pass the eval in 30 days', plPct(own.eval)], ['Full payout in 30 days', plPct(own.payout)], ['Hours it trades', plPair(c.hours, '–')],
+      ['Winning months', plPair(c.winning_months, 'of')], ['Biggest day, share of profit', plPct(c.biggest_day_share)],
+      ['Trades under 5 seconds, share of profit', plPct(c.fast_profit_share)]] };
+}
+/* The whole book card, for its sheet: {why, facts: [[what, value]], accounts: [{name, rows}], stages: [{n, name, mark, text}]}.
+   stages: the server's (their names). Every money fact is at one contract, after costs. */
+function plBookFull(card, stages) {
+  const c = card || {}, names = Object.fromEntries((stages || []).map((s) => [String(s.n), s.name]));
+  return { why: plText(c.why),
+    facts: [['Entry rule', plText(c.family)], ['Indicator', c.filter ? String(c.filter) : 'None'], ['Market', plText(c.market)], ['Time of day', plSession(c.session)],
+      ['Bars', plBar(c.bar)], ['Stop and target', plText(c.rule && c.rule.default)], ['Hours it trades', plPair(c.hours, '–')], ['Trades', plWhole(c.trades)],
+      ['Days it traded', plWhole(c.days_traded)], ['Winning days a month', plFixed(c.win_days_month, 1)], ['Winning months', plPair(c.winning_months, 'of')],
+      ['Average trade', plMoney(c.avg_trade)], ['Profit factor', plFixed(c.profit_factor, 2)], ['Net profit', plMoney(c.net)], ['Worst day', plMoney(c.worst_day)],
+      ['Worst drawdown', plMoney(c.worst_drawdown)], ['Biggest day, share of profit', plPct(c.biggest_day_share)],
+      ['Trades under 5 seconds, share of profit', plPct(c.fast_profit_share)], ['Heat maps tried', plWhole(c.tries)], ['Came from', plText(c.source)]],
+    accounts: plAccounts(c).map((p) => ({ name: plAccountName(p), rows: [['Pass the eval in 30 days', `${plPct(p.eval)}${plNum(p.eval) == null ? '' : plMicros(p.size)}`],
+      ['Full payout in 30 days', `${plPct(p.payout)}${plNum(p.payout) == null ? '' : plMicros(p.payout_size)}`], ['Label', plCap(p.label)]] })),
+    stages: Object.entries((c.stages && typeof c.stages === 'object' && c.stages) || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([n, s]) => ({ n: Number(n), name: names[n] || '', mark: plMark(s && s.passed), text: plPlain(s && s.text) })) };
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
-  tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent };
+  tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
+  PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
+  plAt, plLadder, plMark, plPlain, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend, plCatalog,
+  plPct, plMoney, plBookCard, plBookFull };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

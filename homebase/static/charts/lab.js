@@ -16,8 +16,12 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '' };      // view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools) or 'tk' (its blocks, with their code)
-try { const v = localStorage.getItem('hb_lab_view'); if (v === 'bp' || v === 'tk') S.view = v; } catch (_) { /* private mode: strategies */ }
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '' };
+/* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
+   pipeline's three: 'pq' (its Queue), 'pb' (its Book), 'pg' (its Guide). */
+const VIEWS = [['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pg', 'Guide']];
+const PIPE_VIEWS = PIPE_TABS.map(([v]) => v), VIEW_IDS = [...VIEWS, ...PIPE_TABS].map(([v]) => v);
+try { const v = localStorage.getItem('hb_lab_view'); if (VIEW_IDS.includes(v)) S.view = v; } catch (_) { /* private mode: strategies */ }
 const buf = () => (S.cur ? S.bufs.get(S.cur) : null);
 const isDirty = (b) => b.kind !== 'builtin' && (b.kind === 'new' ? !!b.code.trim() : b.code !== b.saved);
 const takenNames = () => [...S.drafts.map((d) => d.name), ...[...S.bufs.values()].filter((b) => b.kind === 'new' && b.name).map((b) => b.name)];
@@ -240,6 +244,7 @@ function applyPanels(save = true) {
   if (save) { try { localStorage.setItem('hb_lab_panels', JSON.stringify(P)); localStorage.setItem('hb_lab_split', String(Math.round(split))); } catch (_) { /* private mode */ } }
   refit();
   setTimeout(refit, 340);
+  plSync();                 // the pipeline is asked only while its list is on screen
 }
 /* Show or hide one panel. The middle is never empty: hiding the last of Code / Chart brings the other back. */
 function setPanel(k, on) {
@@ -374,16 +379,38 @@ function syncChart() { if (P.chart && S.run && S.run.bundle && shownRid !== S.ru
 })();
 
 /* ---- dialogs and menus ---- */
-let overlay = null, menuEl = null;
-function closeDialog() { if (overlay) { overlay.remove(); overlay = null; } }
+let overlay = null, menuEl = null, dlgFrom = null;
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
+/* Closing a sheet gives the keyboard back to what opened it (or, when the list was painted again meanwhile, to the same row of it). */
+function closeDialog(back = true) {
+  if (!overlay) return;
+  overlay.remove(); overlay = null;
+  const from = dlgFrom; dlgFrom = null;
+  if (!back || !from) return;
+  const el = from.el.isConnected ? from.el : from.fk ? [...root.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === from.fk) : null;
+  if (el) el.focus({ preventScroll: true });
+}
 function dialog(html) {
-  closeDialog();
+  const a = document.activeElement, from = overlay ? dlgFrom : a && a !== document.body ? { el: a, fk: (a.dataset && a.dataset.fk) || '' } : null;
+  closeDialog(false);       // a sheet that opens from a sheet remembers what opened the first one
+  dlgFrom = from;
   overlay = document.createElement('div');
   overlay.className = 'lab-ov';
-  overlay.innerHTML = `<div class="lab-dlg" role="dialog" aria-modal="true">${html}</div>`;
+  overlay.innerHTML = `<div class="lab-dlg" role="dialog" aria-modal="true" tabindex="-1">${html}</div>`;
   overlay.addEventListener('pointerdown', (e) => { if (e.target === overlay) closeDialog(); });
+  /* Tab stays inside the sheet: from its last control to its first, and back */
+  overlay.addEventListener('keydown', (e) => {
+    if (e.key !== 'Tab') return;
+    const f = [...overlay.querySelectorAll(FOCUSABLE)].filter((x) => !x.disabled && x.getClientRects().length), at = document.activeElement;
+    if (!f.length) { e.preventDefault(); return; }
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey ? at === first || at === overlay.firstElementChild : at === last) { e.preventDefault(); (e.shiftKey ? last : first).focus(); }
+  });
   document.body.appendChild(overlay);
-  return overlay.firstElementChild;
+  const d = overlay.firstElementChild, h = d.querySelector('h2');
+  if (h) { h.id = h.id || 'labDlgTitle'; d.setAttribute('aria-labelledby', h.id); }
+  d.focus({ preventScroll: true });      // the sheet has the keyboard from the start; a sheet then moves it to its first field
+  return d;
 }
 function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
 function menu(anchor, html, onPick) {
@@ -613,8 +640,17 @@ function paintLib() {
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
-  const seg = `<div class="lb-seg" role="tablist" aria-label="What this list shows">${[['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']].map(([v, t]) =>
-    `<button role="tab" data-act="view" data-v="${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
+  const tabs = (row) => `<div class="lb-seg" role="presentation">${row.map(([v, t]) => `<button role="tab" data-act="view" data-v="${v}" data-fk="view:${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
+  const seg = `<div class="lb-segs" role="tablist" aria-label="What this list shows">${tabs(VIEWS)}${tabs(PIPE_TABS)}</div>`;
+  if (PIPE_VIEWS.includes(S.view)) {      // painted again every time the pipeline's answer changes: the keyboard stays where it was
+    const at = document.activeElement, fk = (at && el.contains(at) ? at.dataset.fk : at === document.body ? S.plFk : '') || '';
+    el.innerHTML = `<div class="lb-top">${seg}</div>${pipelineView()}`;
+    el.scrollTop = top;
+    const back = fk ? [...el.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === fk && !x.disabled) : null;
+    if (back) back.focus({ preventScroll: true });
+    S.plFk = back ? '' : fk;        // a button that is grey while its action runs gets the keyboard back when it is done
+    return;
+  }
   if (S.view === 'bp') { el.innerHTML = `<div class="lb-top">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
   if (S.view === 'tk') {
     el.innerHTML = `<div class="lb-top">${seg}</div>${toolkitHead()}<div id="tkList">${toolkitList()}</div>`;
@@ -739,6 +775,334 @@ function toolSheet(name, preset = {}, runNow = false) {
   d.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.repeat) { e.preventDefault(); go(); } });
   const first = d.querySelector('[data-bp]');
   if (runNow) go(); else if (first) first.focus();
+}
+
+/* ---- the strategy pipeline in the sidebar ----
+   Three lists: the Queue (every idea and where it stands), the Book (the finishers) and the Guide (six steps and the ladder of stages).
+   ONE answer of the chart service feeds all three (GET /api/tester/pipeline), asked again every 5 s while one of them is on screen.
+   The page judges nothing: a status, a reason and a number are shown as they came (the pure half, C.pl*, only picks words and marks).
+   What it can post: an idea card, start / pause / resume, and the owner's yes or no for an idea that passed every stage. Nothing here
+   can skip a stage or change a pass line, and nothing here can reach the desk. */
+let plTimer = 0, plLoading = false, plAgain = false;
+const plOpen = () => PIPE_VIEWS.includes(S.view) && !document.hidden && P.lib;
+async function loadPipeline(force = false) {
+  if (plLoading) { plAgain = plAgain || force; return; }      // never two at once: the one in hand is followed by one more
+  plLoading = true;
+  const r = await send('GET', '/api/tester/pipeline');
+  plLoading = false;
+  const was = S.pl;
+  let changed = force === true;
+  if (r.ok && r.json) {
+    const text = JSON.stringify(r.json);
+    if (!was || !was.data || was.stale || was.text !== text) { S.pl = { data: r.json, text, stale: false, error: '' }; changed = true; }
+  } else if (was && was.data) {        // the app cannot be reached: the last answer stays, and the list says so
+    if (!was.stale) { was.stale = true; changed = true; }
+  } else {
+    const error = r.status === 404 ? 'The chart service is from before the pipeline: restart it once to see it here.' : String(r.error || 'No answer');
+    if (!was || was.error !== error) { S.pl = { data: null, text: '', stale: false, error }; changed = true; }
+  }
+  if (changed && plOpen()) paintLib();      // only when the answer changed: the scroll and the keyboard stay where they were
+  if (plAgain) { plAgain = false; loadPipeline(true); }
+}
+/* The one timer: it runs while a pipeline list is on screen and the window is visible, and at no other time. */
+function plSync() {
+  const on = plOpen();
+  if (on === !!plTimer) return;
+  clearInterval(plTimer); plTimer = 0;
+  if (on) { loadPipeline(); plTimer = setInterval(loadPipeline, 5000); }
+}
+function setView(v) {
+  S.view = VIEW_IDS.includes(v) ? v : 'lib';
+  try { localStorage.setItem('hb_lab_view', S.view); } catch (_) { /* private mode */ }
+  if (!PIPE_VIEWS.includes(S.view)) S.plSaid = null;
+  paintLib();
+  if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit();
+  plSync();
+}
+const plKv = (rows) => `<div class="rs-group pl-grp">${rows.map(([k, v]) => `<div class="pl-kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;
+const plChip = (label, tone) => `<span class="rs-chip pl-chip ${tone}">${esc(label)}</span>`;
+function pipelineView() {
+  const L = S.pl;
+  if (!L) return '<div class="lb-empty" role="status">Loading…</div>';
+  if (!L.data) return `<div class="lb-empty" role="status">${esc(L.error)}</div>`;
+  const stale = L.stale ? '<div class="lb-empty pl-stale" role="status">Can’t reach the app. Showing the last known state.</div>' : '';
+  const said = S.plSaid ? `<div class="pl-said${S.plSaid.bad ? ' bad' : ''}" role="status"><pre>${esc(S.plSaid.text)}</pre><button class="hb-ib" data-act="plhide" data-fk="hide" aria-label="Hide this message" title="Hide">×</button></div>` : '';
+  return stale + said + (S.view === 'pq' ? queueView(L.data) : S.view === 'pb' ? bookView(L.data) : guideView(L.data));
+}
+/* The Queue: the count, the one button, then one row an idea, in the server's order (what can run first). */
+function queueView(A) {
+  const c = C.plControl(A), ideas = A.ideas || [], names = Object.fromEntries((A.stages || []).map((s) => [s.n, s.name]));
+  const row = (it) => {
+    const d = C.plDots(it), why = String(it.why || '').trim();
+    return `<button class="tk-row pl-row" data-act="plidea" data-name="${esc(it.name)}" data-fk="idea:${esc(it.name)}">
+      <span class="tk-nm"><b title="${esc(it.name)}">${esc(it.name)}</b>${plChip(it.label, C.plTone(it.label))}</span>
+      <span class="pl-meta"><span class="pl-fam">${esc(it.family || '—')}</span><span class="pl-dots" role="img" aria-label="${esc(d.label)}">${d.dots.map((k, i) => `<i class="${k}" title="${esc(`Stage ${i}: ${names[i] || ''}`)}"></i>`).join('')}</span></span>
+      ${why ? `<span class="tk-wd pl-why" title="${esc(why)}">${esc(why)}</span>` : ''}</button>`;
+  };
+  const empty = '<div class="lb-empty">No ideas yet. Add one from the Guide, or tell Claude your idea in any chat.</div>';
+  if (!ideas.length && !(A.runner && (A.runner.running || A.runner.paused))) return empty;      // nothing to count and nothing to start: the one line says it
+  return `<div class="pl-head"><p class="pl-count">${esc(C.plCount(A.counts)).replace(/(\d) /g, '$1\u00a0')}</p>
+      <div class="pl-ctl"><button class="btn btn-default btn-sm" data-act="plctl" data-fk="ctl"${c.enabled && !S.plBusy ? '' : ' disabled'}>${esc(c.label)}</button><span class="pl-quiet">${esc(c.line)}</span></div></div>
+    ${ideas.length ? `<div class="pl-list">${ideas.map(row).join('')}</div>` : empty}`;
+}
+/* The Book: one card a strategy the owner approved. */
+function bookView(A) {
+  const book = A.book || [];
+  if (!book.length) return '<div class="lb-empty">The book is empty. A strategy lands here after it passes every stage and you approve it.</div>';
+  return `<div class="pl-list">${book.map((card, i) => {
+    const b = C.plBookCard(card);
+    return `<button class="pl-card" data-act="plbook" data-i="${i}" data-fk="book:${esc(b.name)}" title="Open the whole card">
+      <span class="tk-nm"><b>${esc(b.name)}</b>${plChip(b.label, b.tone)}</span><span class="pl-sub">${esc(b.sub)}</span>
+      ${b.account ? `<span class="pl-acct">${esc(b.account)}</span>` : ''}${b.rows.map(([k, v]) => `<span class="pl-kv"><span>${esc(k)}</span><b>${esc(v)}</b></span>`).join('')}</button>`;
+  }).join('')}</div>`;
+}
+/* The Guide: six steps, each one sentence and one button that is grey until its step makes sense (the reason is written under it),
+   then the ladder of the eight stages with the ideas that are at each one now. */
+function guideView(A) {
+  const step = (s) => `<li class="pl-step"><span class="pl-num" aria-hidden="true">${s.n}</span><div><b>${esc(s.title)}</b><p>${esc(s.words)}</p>
+      ${s.button ? `<button class="btn btn-sm ${s.primary && s.enabled ? 'btn-default' : 'btn-outline'}" data-act="plstep" data-n="${s.n}" data-fk="step:${s.n}"${s.enabled && !(s.n === 2 && S.plBusy) ? '' : ' disabled'}${s.reason ? ` aria-describedby="plWhy${s.n}"` : ''}>${esc(s.button)}</button>` : `<p class="pl-now" role="status">${esc(s.status)}</p>`}
+      ${s.reason ? `<small class="pl-help" id="plWhy${s.n}">${esc(s.reason)}</small>` : ''}</div></li>`;
+  const rung = (s) => `<li><span class="pl-num" aria-hidden="true">${s.n}</span><div><div class="pl-rt"><b>${esc(s.name)}</b><i class="${s.ideas ? 'on' : ''}">${esc(s.count)}</i></div><p>${esc(s.words)}</p></div></li>`;
+  return `<ol class="pl-steps">${C.plGuide(A).map(step).join('')}</ol>
+    <div class="lb-sh">The eight stages, and the ideas at each one now</div><ol class="pl-ladder" start="0">${C.plLadder(A).map(rung).join('')}</ol>`;
+}
+function guideStep(n) {
+  const A = S.pl && S.pl.data, s = A && C.plGuide(A).find((x) => x.n === n);
+  if (!s || !s.enabled) return;
+  if (n === 1) addSheet();
+  else if (n === 2) pipeActions(s.actions);
+  else if (n === 4) setView('pq');
+  else if (n === 5) ideaSheet(s.name);
+}
+
+/* One post to the pipeline -> {ok, text}: the server's own words either way (a refusal is ok false with its reason). */
+async function pipeRun(body) {
+  const r = await send('POST', '/api/tester/pipeline/run', body);
+  return { ok: r.ok && !!r.json && r.json.ok !== false, text: r.ok ? String((r.json && r.json.text) || '') : String(r.error || '') };
+}
+/* After any action: what the server said, on top of the list, then the list again. */
+function pipeSaid(text, bad) {
+  S.plSaid = { text: text || (bad ? 'It did not work.' : 'Done.'), bad };
+  paintLib();
+  S.plFk = '';
+  loadPipeline(true);
+}
+/* Start, pause, resume: the actions the button's label stands for, in order; the first one refused ends it. */
+async function pipeActions(actions) {
+  if (S.plBusy || !actions.length) return;
+  S.plBusy = true; paintLib();
+  const said = [];
+  let bad = false;
+  for (const a of actions) {
+    const r = await pipeRun({ action: a });
+    said.push(r.text);
+    if (!r.ok) { bad = true; break; }
+  }
+  S.plBusy = false;
+  pipeSaid(said.filter(Boolean).join('\n'), bad);
+}
+
+/* An idea in full: why it stopped (the ONE line), its card in words, then every stage that ran with PASS / FAIL / — and its lines as
+   the server wrote them. An idea that passed every stage carries the owner's two buttons. */
+async function ideaSheet(name) {
+  if (!name) return;
+  const d = dialog(`<div class="tk-head"><h2>${esc(name)}</h2></div><p id="plLoad" role="status">Loading…</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
+  d.classList.add('wide', 'pl-dlg');
+  let armed = false, busy = false;
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x || busy) return;
+    if (x.dataset.x === 'cancel') return closeDialog();
+    if (x.dataset.x === 'refuse') return refuseSheet(name);
+    if (x.dataset.x !== 'approve') return;
+    if (!armed) { armed = true; x.textContent = 'Yes, put it in the Book'; $('#plSure', d).hidden = false; return; }      // two presses: the Book is never edited afterwards
+    busy = true; x.disabled = true; x.textContent = 'Approving…';
+    const r = await pipeRun({ action: 'approve', name });
+    busy = false;
+    if (r.ok) { if (d.isConnected) closeDialog(); return pipeSaid(r.text, false); }
+    if (!d.isConnected) return pipeSaid(r.text, true);
+    x.disabled = false; x.textContent = 'Yes, put it in the Book';
+    const err = $('#plErr', d); err.textContent = r.text; err.hidden = false;
+  });
+  const r = await send('GET', `/api/tester/pipeline/idea/${encodeURIComponent(name)}`);
+  if (!d.isConnected) return;
+  if (!r.ok || !r.json) { $('#plLoad', d).textContent = `Could not load it: ${String(r.error || 'no answer')}`; return; }      // (as text, not as HTML)
+  const I = r.json, st = I.state || {}, card = I.card || {}, why = String(st.why || '').trim(), passed = st.label === 'Passed';
+  const list = (xs, line) => (xs || []).filter((x) => x && typeof x === 'object').map((x) => `<li>${esc(line(x))}</li>`).join('') || '<li>None</li>';
+  const stage = (s) => {
+    const m = C.plMark(s.passed), text = C.plPlain(s.text);
+    return `<section class="pl-stage"><header><b><span>Stage ${s.n}</span> ${esc(s.name)}</b><span class="pl-mark ${m.tone}">${esc(m.text)}</span></header>
+      ${text ? `<p>${esc(text)}</p>` : ''}
+      ${(s.lines || []).length ? `<ul class="pl-lines">${s.lines.map((x) => { const k = C.plMark(x.passed); return `<li class="${k.tone}"><i>${esc(k.text)}</i><span>${esc(x.text)}</span></li>`; }).join('')}</ul>` : ''}</section>`;
+  };
+  d.innerHTML = `<div class="tk-head"><h2 id="labDlgTitle">${esc(name)}</h2>${plChip(st.label, C.plTone(st.label))}</div>
+    <div class="pl-body" tabindex="0" aria-label="The idea, and every stage it went through">
+      ${why ? `<p class="pl-stop"><b>${st.label === 'Refused' ? 'Refused' : st.label === 'Problem' ? 'Problem' : 'Stopped'}:</b> ${esc(why)}</p>` : ''}
+      <p class="pl-say">${esc([card.why, card.loser].filter(Boolean).join(' '))}</p>
+      ${plKv([['Market', card.market || '—'], ['Time of day', C.plSession(card.session)], ['Sides', `${C.plSide(card.sides)}${card.sides_why ? `: ${card.sides_why}` : ''}`], ['Entry rule', st.family || '—']])}
+      <h3 class="rs-gh">Ways to enter</h3><ul class="pl-ul">${list(card.ways, C.plWayLine)}</ul>
+      <h3 class="rs-gh">Indicators to try</h3><ul class="pl-ul">${list(card.indicators, C.plIndLine)}</ul>
+      <h3 class="rs-gh">Stages</h3>${(I.stages || []).map(stage).join('') || '<p>No stage has run yet.</p>'}
+    </div>
+    <p class="err pl-pre" id="plErr" role="alert" hidden></p>
+    ${passed ? '<p class="pl-sure" id="plSure" hidden>It goes in the Book. This cannot be undone.</p>' : ''}
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button>${passed ? '<button class="btn btn-outline" data-x="refuse">Refuse</button><button class="btn btn-default" data-x="approve">Approve</button>' : ''}</div>`;
+}
+/* The owner's no: it needs his reason, and cannot be sent without one. */
+function refuseSheet(name) {
+  const d = dialog(`<h2>Refuse ${esc(name)}?</h2><p>It stays out of the Book. Say why in a sentence: the reason is kept with the idea.</p>
+    <div class="bp-f pl-f"><label for="plWhy">Your reason</label><textarea id="plWhy" maxlength="400"></textarea></div>
+    <p class="err pl-pre" id="plErr" role="alert" hidden></p>
+    <div class="acts"><button class="btn btn-outline" data-x="back">Back</button><button class="btn btn-default" data-x="go" disabled>Refuse</button></div>`);
+  const ta = $('#plWhy', d), go = $('[data-x="go"]', d), err = $('#plErr', d);
+  let busy = false;
+  ta.focus();
+  ta.addEventListener('input', () => { go.disabled = busy || !ta.value.trim(); });
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]'), why = ta.value.trim();
+    if (!x || busy) return;
+    if (x.dataset.x === 'back') return ideaSheet(name);
+    if (!why) return;
+    busy = true; go.disabled = true; go.textContent = 'Refusing…';
+    const r = await pipeRun({ action: 'refuse', name, why });
+    busy = false;
+    if (r.ok) { if (d.isConnected) closeDialog(); return pipeSaid(r.text, false); }
+    if (!d.isConnected) return pipeSaid(r.text, true);
+    go.disabled = false; go.textContent = 'Refuse'; err.textContent = r.text; err.hidden = false;
+  });
+}
+/* A book card in full: every fact, every account (one whose rules are not confirmed says so), each stage's first line. */
+function bookSheet(i) {
+  const A = S.pl && S.pl.data, card = A && (A.book || [])[i];
+  if (!card) return;
+  const b = C.plBookCard(card), full = C.plBookFull(card, A.stages);
+  const stage = (s) => `<section class="pl-stage"><header><b><span>Stage ${s.n}</span> ${esc(s.name)}</b><span class="pl-mark ${s.mark.tone}">${esc(s.mark.text)}</span></header>${s.text ? `<p>${esc(s.text)}</p>` : ''}</section>`;
+  const d = dialog(`<div class="tk-head"><h2>${esc(b.name)}</h2>${plChip(b.label, b.tone)}</div>
+    <div class="pl-body" tabindex="0" aria-label="The whole card">
+      <p class="pl-say">${esc(full.why)}</p>${plKv(full.facts)}
+      <p class="pl-note">Money is for one contract, after costs, on the days it had never seen.</p>
+      <h3 class="rs-gh">Accounts</h3>${full.accounts.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('') || '<p>None on this card.</p>'}
+      <h3 class="rs-gh">Stages</h3>${full.stages.map(stage).join('') || '<p>None on this card.</p>'}
+    </div>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button></div>`);
+  d.classList.add('wide', 'pl-dlg');
+  d.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) closeDialog(); });
+}
+
+/* The add-idea form (the Guide's step 1). Its lists come from the arsenal's catalog; what the catalog does not give (a rule's settings)
+   is typed. The button is grey until the card could pass, with what is missing written under it. A refusal shows the server's own
+   words in the sheet and keeps everything typed; what was typed also survives a sheet closed by mistake (S.plForm). */
+async function addSheet() {
+  const d = dialog('<h2>Write an idea</h2><p role="status">Loading the entry rules…</p><div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button></div>');
+  d.classList.add('wide', 'pl-dlg');
+  const F = S.plForm || (S.plForm = C.plForm());
+  let busy = false, refused = '', groups = null;
+  const put = (path, v) => { const ks = path.split('.'), last = ks.pop(); let o = F; for (const k of ks) o = o[k]; o[last] = v; };
+  const opt = (v, t, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`;
+  const pick = (path, opts, cur, first = true) => `<select id="pf_${path}" data-pf="${path}">${first ? opt('', 'Choose…', cur) : ''}${opts.map(([v, t]) => opt(v, t, cur)).join('')}</select>`;
+  const text = (path, v, prose = false) => `<input id="pf_${path}" data-pf="${path}" value="${esc(v)}" spellcheck="${prose}" autocomplete="off"${prose ? '' : ' autocapitalize="off"'}>`;
+  const field = (path, label, control, help = '') => `<div class="bp-f pl-f"><label for="pf_${path}">${esc(label)}</label>${control}${help ? `<small>${esc(help)}</small>` : ''}</div>`;
+  const sync = () => {
+    const can = C.plCanSend(F), go = $('[data-x="go"]', d);
+    if (!go) return;
+    go.disabled = busy || !can.ok;
+    $('#plNeed', d).textContent = can.ok ? '' : `Still needed: ${can.needs.join('; ')}.`;
+    $('[data-x="clear"]', d).hidden = JSON.stringify(F) === JSON.stringify(C.plForm());      // nothing typed: nothing to start over
+  };
+  const paint = (focus) => {
+    const cat = C.plCatalog(groups, F.market), was = $('.pl-body', d), top = was ? was.scrollTop : 0;
+    for (const w of F.ways) if (cat.rules.length && w.family && !cat.rules.some((r) => r.name === w.family)) { w.family = ''; w.main_setting = ''; }      // a rule that does not run on the market now chosen
+    for (const x of F.indicators) {
+      const b = cat.blocks.find((k) => k.name === x.block);
+      if (cat.blocks.length && x.block && !b) { x.block = ''; x.side = ''; } else if (b && !b.sides.some((k) => k.side === x.side)) x.side = b.sides[0].side;
+    }
+    const way = (w, i) => {
+      const rule = cat.rules.find((r) => r.name === w.family), p = `ways.${i}`;
+      return `<div class="pl-set" role="group" aria-labelledby="pw${i}"><div class="pl-leg"><b id="pw${i}">Way ${i + 1}</b>${F.ways.length > 1 ? `<button type="button" class="btn btn-ghost btn-sm" data-x="rmway" data-i="${i}" aria-label="Remove way ${i + 1}">Remove</button>` : ''}</div>
+        ${field(`${p}.family`, 'Entry rule', cat.rules.length ? pick(`${p}.family`, cat.rules.map((r) => [r.name, r.name]), w.family) : text(`${p}.family`, w.family), rule ? rule.words : cat.rules.length ? 'What starts a trade.' : 'The list could not be loaded. Type the rule’s name.')}
+        ${field(`${p}.main_setting`, 'Its main setting', rule && rule.settings ? pick(`${p}.main_setting`, rule.settings.map((k) => [k, k]), w.main_setting) : text(`${p}.main_setting`, w.main_setting), 'The one setting of this rule to try three values of. Not sure of its name? Ask Claude.')}
+        <div class="bp-f pl-f"><span class="pl-lab" id="pv${i}">Three values to try</span><div class="pl-vals" role="group" aria-labelledby="pv${i}">${[0, 1, 2].map((k) => `<input data-pf="${p}.values.${k}" value="${esc(w.values[k])}" aria-label="Value ${k + 1} of way ${i + 1}" spellcheck="false" autocomplete="off" autocapitalize="off">`).join('')}</div></div></div>`;
+    };
+    const ind = (x, i) => {
+      const b = cat.blocks.find((k) => k.name === x.block), side = b && b.sides.find((k) => k.side === x.side), p = `indicators.${i}`;
+      return `<div class="pl-set" role="group" aria-labelledby="pi${i}"><div class="pl-leg"><b id="pi${i}">Indicator ${i + 1}</b><button type="button" class="btn btn-ghost btn-sm" data-x="rmind" data-i="${i}" aria-label="Remove indicator ${i + 1}">Remove</button></div>
+        <div class="pl-two">${field(`${p}.block`, 'Indicator', cat.blocks.length ? pick(`${p}.block`, cat.blocks.map((k) => [k.name, k.name]), x.block) : text(`${p}.block`, x.block))}
+          ${field(`${p}.side`, 'Side', b ? pick(`${p}.side`, b.sides.map((k) => [k.side, k.side]), x.side, false) : text(`${p}.side`, x.side))}</div>
+        ${side ? `<small class="pl-help">${esc(side.words)}</small>` : ''}
+        ${field(`${p}.why`, 'Why it should help', text(`${p}.why`, x.why, true), 'One sentence.')}</div>`;
+    };
+    const fullW = F.ways.length >= C.PL_WAYS, fullI = F.indicators.length >= C.PL_INDS;
+    d.innerHTML = `<h2 id="labDlgTitle">Write an idea</h2>
+      <div class="pl-body" tabindex="-1"><div class="bp-form">
+        ${field('name', 'Name', text('name', F.name), 'Small letters, numbers and _ , a letter first. For example: fvg_open')}
+        ${field('why', 'Why should it make money?', text('why', F.why, true), 'One sentence.')}
+        ${field('loser', 'Who loses?', text('loser', F.loser, true), 'One sentence. The two together: 8 words or more.')}
+        <div class="pl-two">${field('market', 'Market', pick('market', C.PL_MARKETS.map((m) => [m, m]), F.market))}
+          ${field('session', 'Time of day', pick('session', C.PL_SESSIONS, F.session), cat.hours[F.session] || 'New York time.')}</div>
+        ${field('sides', 'Sides', pick('sides', C.PL_SIDES, F.sides, false), 'Both = it may buy and it may sell.')}
+        ${F.sides !== 'both' ? field('sides_why', 'Why one side only?', text('sides_why', F.sides_why, true), 'One sentence.') : ''}
+        ${F.ways.map(way).join('')}
+        <div class="pl-more"><button type="button" class="btn btn-outline btn-sm" data-x="addway"${fullW ? ' disabled' : ''}>Add another way</button><small class="pl-help">${fullW ? `${C.PL_WAYS} ways at most.` : `Up to ${C.PL_WAYS} ways to enter. Each is tested on 1-minute and on 5-minute bars.`}</small></div>
+        ${F.indicators.map(ind).join('')}
+        <div class="pl-more"><button type="button" class="btn btn-outline btn-sm" data-x="addind"${fullI ? ' disabled' : ''}>Add an indicator</button><small class="pl-help">${fullI ? `${C.PL_INDS} indicators at most.` : `You can leave this out. Up to ${C.PL_INDS}, each tried alone.`}</small></div>
+      </div></div>
+      <div class="pl-foot"><p class="pl-tip">Not sure how? Tell Claude your idea in any chat and it fills this in.</p>
+        <p class="err pl-pre" id="plErr" role="alert"${refused ? '' : ' hidden'}>${esc(refused)}</p>
+        <small class="pl-help pl-need" id="plNeed"></small>
+        <div class="acts"><button class="btn btn-ghost pl-clear" data-x="clear">Start over</button><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go" aria-describedby="plNeed">Add to the Queue</button></div></div>`;
+    $('.pl-body', d).scrollTop = top;
+    const at = focus ? [...d.querySelectorAll('[data-pf], [data-x]')].find((x) => x.dataset.pf === focus || x.dataset.x === focus) : null;
+    (at && !at.disabled ? at : d).focus({ preventScroll: true });      // the keyboard never falls out of the sheet
+    sync();
+  };
+  const go = async () => {
+    if (busy || !groups || !C.plCanSend(F).ok) return;
+    busy = true; refused = '';
+    const btn = $('[data-x="go"]', d);
+    btn.disabled = true; btn.textContent = 'Adding…'; $('#plErr', d).hidden = true;
+    const r = await pipeRun({ action: 'add', card: C.plCard(F) });
+    busy = false;
+    if (r.ok) {         // it is in the Queue: the sheet goes, the server's words show, and the Queue opens
+      S.plForm = null;
+      if (d.isConnected) closeDialog(false);
+      S.plSaid = { text: r.text || 'Added.', bad: false };
+      setView('pq'); loadPipeline(true);
+      const tab = root.querySelector('[data-v="pq"]'); if (tab) tab.focus({ preventScroll: true });
+      return;
+    }
+    if (!d.isConnected) return pipeSaid(r.text, true);
+    refused = r.text || 'It was not added.';
+    paint('go');        // the server's own words, and everything typed is still here
+  };
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]'), k = x && x.dataset.x, i = x ? Number(x.dataset.i) : 0;
+    if (!x || busy) return;
+    if (k === 'cancel') closeDialog();
+    else if (k === 'addway' && F.ways.length < C.PL_WAYS) { F.ways.push(C.plWay()); paint(`ways.${F.ways.length - 1}.family`); }
+    else if (k === 'rmway') { F.ways.splice(i, 1); paint('addway'); }
+    else if (k === 'addind' && F.indicators.length < C.PL_INDS) { F.indicators.push(C.plInd()); paint(`indicators.${F.indicators.length - 1}.block`); }
+    else if (k === 'rmind') { F.indicators.splice(i, 1); paint('addind'); }
+    else if (k === 'clear') { Object.assign(F, C.plForm()); refused = ''; paint('name'); }
+    else if (k === 'go') go();
+  });
+  /* a list that other fields hang on (the market, the rule, the indicator, the sides) paints the form again; typing never does */
+  const edit = (e) => {
+    const t = e.target, path = t.dataset && t.dataset.pf, list = t.tagName === 'SELECT';
+    if (!path || list !== (e.type === 'change')) return;
+    put(path, t.value);
+    if (!list) return sync();
+    if (/\.family$/.test(path)) put(path.replace(/family$/, 'main_setting'), '');
+    if (/\.block$/.test(path)) put(path.replace(/block$/, 'side'), '');
+    paint(path);
+  };
+  d.addEventListener('input', edit);
+  d.addEventListener('change', edit);
+  d.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.repeat) { e.preventDefault(); go(); } });
+  await loadToolkit();
+  if (!d.isConnected) return;
+  groups = S.tk && !S.tk.error ? S.tk.groups : [];
+  paint('name');
 }
 
 function paintEditor() {
@@ -955,7 +1319,12 @@ function act(name, el) {
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);
   else if (name === 'group') groupMenu(el);
-  else if (name === 'view') { S.view = ['bp', 'tk'].includes(el.dataset.v) ? el.dataset.v : 'lib'; try { localStorage.setItem('hb_lab_view', S.view); } catch (_) { /* private mode */ } paintLib(); if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit(); }
+  else if (name === 'view') setView(el.dataset.v);
+  else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
+  else if (name === 'plidea') ideaSheet(el.dataset.name);
+  else if (name === 'plbook') bookSheet(Number(el.dataset.i));
+  else if (name === 'plstep') guideStep(Number(el.dataset.n));
+  else if (name === 'plhide') { S.plSaid = null; paintLib(); }
   else if (name === 'tkblock') codeSheet(el.dataset.id);
   else if (name === 'bptool') toolSheet(el.dataset.tool);
   else if (name === 'bpidea') { S.bpIdea = el.dataset.name; paintLib(); toolSheet('blueprint_status', { name: el.dataset.name }, true); }
@@ -1022,6 +1391,7 @@ setInterval(() => { const b = buf(); if (b && b.savedAt && !isDirty(b)) paintHea
 
 /* ---- go ---- */
 root.dataset.report = '0';
+document.addEventListener('visibilitychange', plSync);
 applyPanels(false);
 paintAll();
 paintNav();
