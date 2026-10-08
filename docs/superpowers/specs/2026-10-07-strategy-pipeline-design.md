@@ -289,6 +289,37 @@ going, to replace weaker members, until the owner pauses it.
 - Portfolios prefer strategies that hold up since their lock. One whose drawdown since the lock passes
   the 95th percentile of its own reshuffled runs is flagged and left out of new mixes until reviewed.
 
-**Open:** the app's Apex 300K rules are marked unconfirmed. The Apex portfolios wait until the owner
-confirms that rule table, as he did for Lucid.
+## 13. Apex Legacy 300K — the rules as Apex states them (read 2026-10-07)
+
+Source: the Legacy pages of Apex's help center the owner sent (PA trading rules, evaluation rules,
+trailing drawdown rule, PA payout parameters, safety net rule). The app's rule file
+`apex-legacy-300k@2026-09-28` is unconfirmed and differs; a new version is written from these in the
+build. Not read: the detail pages for contract scaling, the 30 % open-loss rule, the 5:1 rule, hedging
+and one direction, and the end of the long evaluation page.
+
+| Rule | Apex says | The app's file has |
+|---|---|---|
+| Legacy evals | cannot be bought since 2026-03-01; passed ones still become Legacy PA accounts | an eval with a $20,000 target |
+| Drawdown | $7,500, trailing the highest LIVE balance during trades (open profit counts) | end of day |
+| Where it stops (PA) | fixed at $300,100 once the live peak reaches $307,600 | the same level, reached at end of day |
+| Size | 35 minis; only half until the end-of-day balance is above $307,600 | 35 minis |
+| Daily loss limit | none | none |
+| Open loss | at most 30 % of the profit balance at the start of the day (50 % later) | not there |
+| Stop against target | the stop at most 5 times the target | not there |
+| One direction | no orders resting on both sides, no long and short together | not there |
+| Payout: days | 8 trading days, 5 of them with $50 or more | 5 days of $150 (copied from Lucid) |
+| Payout: balance | at least $307,600 for the first three payouts | not there |
+| Payout: size | $500 minimum, $3,500 maximum for the first five | half the profit, $2,000 at most (copied from Lucid) |
+| Payout: one big day | no day above 30 % of the profit, until the sixth payout | not there |
+| Flat by | 16:59 ET | 16:10 ET |
+
+What it means for the pipeline:
+
+- Apex is **funded accounts only**: the owner's five PA accounts. There is no Apex eval to pass, so
+  the Apex portfolios are judged on the payout odds alone.
+- Two-sided entries (a buy stop and a sell stop resting together: straddle, range-break and the other
+  blocks marked "rests orders on both sides") cannot go in an Apex portfolio.
+- A box whose stop is more than 5 times its target cannot go in an Apex portfolio.
+- The Apex mix must keep its biggest day at or under 30 % of the profit.
+- The book card's Apex odds use the live-peak drawdown, not the end-of-day one.
 
