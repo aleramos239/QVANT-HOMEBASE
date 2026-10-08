@@ -23,12 +23,12 @@ FROM A CARD TO WHAT IS RUN (decided 2026-10-06 for the owner; each line is easy 
                    two-sided card needs each side above $0, and a side without a trade made none. The random tables of
                    2.3 stay two-sided (the pool holds no one-sided table): for a one-sided idea the result says so.
   A FILTER         (line 2.7): a rule with a filter is read on its tables WITH the filter on (home and neighbors), and
-                   held against the same home table without it. Filters come one a round, each with its reason.
+                   held against the same home table without it. A rule with TWO filters (line 0.2's limit) runs the plain table, each filter
+                   alone and both on; line 2.7 asks each to beat the plain table and the pair to beat each one alone.
   THE STORES       one engine spec (run_idea's format) per market and bar size the card names, each with the sessions it
                    names there: `<store>-<ROOT>-tf<tf>`, + `<store>__<block>_<side>-...` with a filter on.
 What version 1 refuses, in words: a home that says "all" (it judges ONE home table: name it, list the others as neighbors);
-the evening session (plan section 7); a rule with two filters at once (the table with both on is not run yet: each filter
-first wins alone, one a round); an exit of its own (limits.trail_atr / exit_bars: the random tables hold the standard cells
+an exit of its own (limits.trail_atr / exit_bars: the random tables hold the standard cells
 and no other); more than one varied setting.
 
 THE ROUNDS (line 2.9). Round n = the builds on file + 1; a round whose run fails leaves no result and is not used up.
@@ -84,7 +84,6 @@ MARKETS = {"gold": "GC", "nasdaq": "NQ"}            # a market in words (besides
 SESSIONS = {"asia": "asia", "asian": "asia", "london": "london", "pre": "pre", "premarket": "pre", "pre-market": "pre", "nyam": "nyam",
             "morning": "nyam", "mid": "mid", "midday": "mid", "pm": "pm", "afternoon": "pm", "eve": "eve", "evening": "eve"}
 FILLER = frozenset("the a an and on in at of to its same session sessions bar bars min mins minute minutes market markets new york ny".split())
-EVENING = "the evening session comes later (toolkit plan, section 7)"
 
 
 def _json(path):
@@ -136,13 +135,11 @@ def place(said, home: dict) -> dict:
         kind, v = (("market", w.upper()) if w.upper() in S.SPECS else ("market", MARKETS[w]) if w in MARKETS else ("session", SESSIONS[w]) if w in SESSIONS
                    else ("bar", str(int(m[1]))) if m else (None, None))
         if kind is None:
-            raise ValueError(f"{tok!r} is no market ({', '.join(S.SPECS)}), session ({', '.join(RM.DAY_PASSES[:-1])}) or bar size (5, 15m, 30-minute)")
+            raise ValueError(f"{tok!r} is no market ({', '.join(S.SPECS)}), session ({', '.join(RM.DAY_PASSES)}) or bar size (5, 15m, 30-minute)")
         if got.setdefault(kind, v) != v:
             raise ValueError(f"names two {kind}s ({got[kind]} and {v}): ONE place an entry")
     if not got:
         raise ValueError("names no place: a market, a session or a bar size")
-    if got.get("session") == "eve":
-        raise ValueError(EVENING)
     p = {**{k: home[k] for k in ("market", "session", "bar")}, **got}
     return {**p, "table": f"{p['market']}-tf{p['bar']}-{p['session']}", "said": said.strip()}
 
@@ -183,7 +180,7 @@ def _home(card: dict, known) -> tuple:
     ss, m = SESSIONS.get(said["session"].lower()), BAR.fullmatch(said["bar"].lower())
     bar = str(int(m[1])) if m else said["bar"]
     why = (f"market {said['market']}: {'the entry trigger runs on' if known else 'one of'} {', '.join(roots)}" if mk not in roots else
-           f"session {said['session']}: one of {', '.join(RM.DAY_PASSES[:-1])}" if ss is None else EVENING if ss == "eve" else
+           f"session {said['session']}: one of {', '.join(RM.DAY_PASSES)}" if ss is None else
            f"bar size {said['bar']}: {'the entry trigger runs on' if known else 'one of'} {', '.join(tfs)} minutes" if bar not in tfs else "")
     return (None, why) if why else ({"market": mk, "session": ss, "bar": bar, "table": f"{mk}-tf{bar}-{ss}", "said": "home"}, "")
 
@@ -312,6 +309,15 @@ def card_lines(spec: dict) -> tuple:
     return rows, plan
 
 
+def rule_filter(plan: dict):
+    """The filter of the rule's table, as the string block_side: none, the one filter, or -- two filters -- the unit with BOTH on (blocks.combine)."""
+    F = [tuple(f.split("_", 1)) for f in plan["filters"]]
+    if not F:
+        return None
+    b, s = RUN._blocks().combine(F)
+    return f"{b}_{s}"
+
+
 def engine(spec: dict, plan: dict, store: str) -> list:
     """THE ENGINE'S SETTINGS of an idea's stores, in run_idea's format: ONE spec per market and bar size the card names,
     each with the sessions it names there, all under the store name of the round. The reason is the card's; a one-sided
@@ -319,7 +325,8 @@ def engine(spec: dict, plan: dict, store: str) -> list:
     card, run = spec["card"], spec["run"]
     limits = {**(run.get("limits") or {}), **({} if plan["sides"] == "both" else {"dir": plan["sides"]})}
     return [{"name": store, "reason": f"{_text(card['why'])} Losing side: {_text(card['loser'])}", "family": run["family"], "markets": [s["market"]],
-             "bar_sizes": [s["bar"]], "sessions": list(s["sessions"]), "params": run["params"], "fixed": run.get("fixed") or {}, "filters": run.get("filters") or [],
+             "bar_sizes": [s["bar"]], "sessions": list(s["sessions"]), "params": run["params"], "fixed": run.get("fixed") or {},
+             "filters": (run.get("filters") or []) + ([{"all": run["filters"]}] if len(run.get("filters") or []) > 1 else []),   # two filters: each alone AND both on
              "exits": plan.get("exits", "standard"), "limits": limits} for s in plan["stores"]]
 
 
@@ -400,10 +407,11 @@ def _plan_text(name: str, plan: dict) -> list:
             "  SIDES     " + ("both: line 2.6 asks long and short each above $0" if plan["sides"] == "both" else f"{plan['sides']} only: line 2.6 is read on that side"),
             "  FILTER    " + ("none: line 2.7 does not apply" if not F else
                               f"{F[0]}: every table is read with it on; line 2.7 holds the home table against the same table without it" if len(F) == 1 else
-                              f"{', '.join(F)}: version 1 builds a rule with ONE filter -- each wins alone first, one a round (line 2.7); the build refuses "
-                              "the two together"),
+                              f"{' AND '.join(F)}: every table is read with BOTH on; line 2.7 holds the home table against the plain table AND against each filter "
+                              "alone, and each filter alone against the plain table (each must win alone, and the pair must add to it)"),
             "  STORES    " + ", ".join(f"{key(s)} (sessions {', '.join(s['sessions'])})" for s in plan["stores"])
-            + (f", each also with the filter on ({name}__{plan['filters'][0]}-...)" if len(F) == 1 else "")
+            + (f", each also with the filter on ({name}__{plan['filters'][0]}-...)" if len(F) == 1 else
+               f", each also with each filter alone and with both on ({name}__<filter>-... and {name}__{rule_filter(plan)}-...)" if len(F) == 2 else "")
             + f": one tape pass each; a later round that changes a base setting gets stores of its own ({name}_r2 ...), a filter does not"]
 
 
@@ -543,9 +551,6 @@ def start(name, reason, root=None, workers=None, out=None, ledger=None, days=Non
     rows, plan = card_lines(spec)
     if plan is None:
         raise J.Refuse(f"the card of {name} on file is no longer whole ({next(x['text'] for x in rows if x['passed'] is False)}): write it again (bp.py card)")
-    if len(plan["filters"]) > 1:
-        raise J.Refuse(f"{name}'s rule has {len(plan['filters'])} filters: version 1 reads a rule with one filter at most -- the table with both on is not run "
-                       "yet. A filter is kept only if it wins alone (line 2.7): bring them one a round")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers, tester = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers"), tester or test.get("tester")
     days = None if days is None else RUN.seal(days)
@@ -705,7 +710,7 @@ def run(idea, round_, reason, rspec, counted, test=False, root=None, workers=Non
         # a round with a failed line is a failed round either way).
         stores = RUN.run_build(specs, workers, out, ledger=ledger, days=days, cells=cells, progress=progress, block=block, stage="units" if STAGED else "all")
         dropped(stores)
-        h, filt = plan["home"], (plan["filters"][0] if plan["filters"] else None)
+        h, filt = plan["home"], rule_filter(plan)
         f = T.filter_of(specs[0], filt)
         like = T.sigs(store, plan["home"]["market"], plan["home"]["bar"], plan["home"]["session"], f, out)
         nbs = [{**p, **T.place(store, p["market"], p["bar"], p["session"], f, out, like)} for p in plan["neighbors"]]

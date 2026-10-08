@@ -332,7 +332,7 @@ def test_the_freeze_saves_everything_under_one_hash():
     assert c["draw_seed"] == {"build": J.seed_of(u["uid"], "bp_build-c1"), "test": J.seed_of(u["uid"], "test-c1")} and c["draw_seed"]["build"] != c["draw_seed"]["test"]
     assert lock["montecarlo"] == {"runs": 1000, "seed": R.template("montecarlo")["seed"]}
     # ... the code, the stores, the test range, one hash over all of it
-    assert lock["code"] == RUN.code("orb") and set(lock["code"]) == {"l2sim.py", "l2ref.py", "families/blocks.py", "families/port1.py", "flowtab.py", "bpfeat.py", "levels.py", "zones.py"}
+    assert lock["code"] == RUN.code("orb") and set(lock["code"]) == {"l2sim.py", "l2ref.py", "families/blocks.py", "families/port1.py", "flowtab.py", "bpfeat.py", "levels.py", "zones.py", "indicators.py"}
     assert list(lock["stores"]) == [KEY, WORSE, "c1-NQ-tf15"] and all(v == FRZ.store_hash(F.OUT, k) for k, v in lock["stores"].items())
     assert all(set(v) == {"folder", "inputs_hash", "run", "cells"} and len(v["run"]) == len(v["cells"]) == 16 for v in lock["stores"].values())
     assert lock["test_range"] == {"NQ": RUN.test_range("NQ")} == r["test_range"] and lock["test_range"]["NQ"]["start"] == R.template("ranges")["test"]["start"] == "2025-07-01"

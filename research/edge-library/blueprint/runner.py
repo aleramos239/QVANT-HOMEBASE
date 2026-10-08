@@ -131,8 +131,7 @@ def checked(spec) -> dict:
       exits other than the standard table (line 0.2; the control pool holds its 48 cells and no other). The card says
       "standard"; the engine is handed the blueprint's table (EXITS: the 32 cells of the old library, then the small targets)
       a Level 2 filter on another market than NQ (Level 2 exists for NQ only)
-      a family with a `prepare` step of its own (va_reclaim: its value-area cache and its tape reads know the old build
-      days only, so 2025 would raise inside a worker; the engine has to open it first)."""
+      (a family with a `prepare` step of its own, va_reclaim, is built for the range by `prepare_family` before its pass)."""
     if isinstance(spec, (str, Path)):
         try:
             spec = json.loads(Path(spec).read_text())
@@ -149,23 +148,21 @@ def checked(spec) -> dict:
                        f"(exits {OPEN!r}), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
     if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
-    l2 = [f"{b} {s}" for b, s in sp["filters"] if b in blocks.L2_BLOCKS]
+    l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
         raise J.Refuse(f"{sp['name']}: filter {l2[0]} reads Level 2, which exists for NQ only, not for {next(m for m in sp['markets'] if m != 'NQ')}")
-    for b, _ in sp["filters"]:
+    for b in (b for fl in sp["filters"] for b, _ in blocks.parts(fl)):
         ok = blocks.BLOCK_MARKETS.get(b)
         if ok and any(m not in ok for m in sp["markets"]):
             raise J.Refuse(f"{sp['name']}: filter {b} compares {ok[0]} with {ok[1]}: it runs on {' and '.join(ok)} only, not on "
                            f"{next(m for m in sp['markets'] if m not in ok)}")
-    if getattr(blocks.WRAPPED[sp["family"]], "prepare", None) is not None:
-        raise J.Refuse(f"{sp['name']}: family {sp['family']} builds its own cache for the old build days only and reads tapes without the "
-                       "build switch: it cannot run on the build range until the engine opens it")
     return sp
 
 
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
 OPEN = "open"                                       # the owner's session-anchored table (families/blocks.menu_open: 60 cells; fvg_first_nq, 2026-10-06)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
+L2T = "bt_l2"                                       # ... and of the test days (btfeat.BtL2Features: run_test turns the marker into the loader)
 
 
 def _kw(family: str, filt=None) -> dict:
@@ -173,7 +170,7 @@ def _kw(family: str, filt=None) -> dict:
     marker of the build range's Level-2 table (`_engine` turns it into the loader: a store's run.json stays plain JSON)."""
     blocks = _blocks()
     kw = dict(getattr(blocks.WRAPPED[family], "SCREEN_RUN", {}))
-    if filt and filt[0] in blocks.L2_BLOCKS:
+    if filt and blocks.reads(filt, blocks.L2_BLOCKS):
         kw["features"] = L2
     return kw
 
@@ -182,6 +179,16 @@ def _levels():
     RM.registry()
     import levels
     return levels
+
+
+def prepare_family(family, root, period, workers, allow=None):
+    """A family's own one-off cache (va_reclaim: the value area of each session), built for THIS stage's range under THIS stage's seal switch
+    (the build's, or the test's): the engine's own switch, handed through unchanged, so a worker never has to read a sealed tape."""
+    prep = getattr(_blocks().WRAPPED[family], "prepare", None)
+    if prep is None:
+        return None
+    S.wait_compute_window()
+    return prep(root, workers=workers, period=period, **({"allow_holdout": allow} if allow else {}))
 
 
 def bar_roots(root, family, filt) -> list:
@@ -201,7 +208,7 @@ def code(family=None) -> dict:
     family's own module (a unit). Kept in run.json; the fingerprint of the INPUTS is another thing (fingerprint)."""
     files = ["l2sim.py", "l2ref.py"] + ([] if family is None else ["families/blocks.py", f"families/{RM.registry().MODULE_OF[family]}.py"])
     if family is not None:
-        files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels and the zone blocks readers
+        files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py", "indicators.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels, the zone blocks and the batch 4 indicators readers
     return {f: _sha(str(S.L / f)) for f in dict.fromkeys(files)}
 
 
@@ -541,9 +548,12 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
         if pend:
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
             with _prep(out):                                            # the caches below are shared files: one run builds them at a time
-                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and p["filter"][0] in ("volume", "rvol") and days is None):
+                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol")) and days is None):
                     S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
                     say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
+                for fam, root in dict.fromkeys((p["family"], p["root"]) for p in pend if p["family"] and getattr(_blocks().WRAPPED.get(p["family"]), "prepare", None)):
+                    for lo, hi in ([(None, None)] if days is None else [(dt.date.fromisoformat(d) - dt.timedelta(days=7), d) for d in days]):     # named days: each and the week before
+                        say(f"{fam} cache {root}: {prepare_family(fam, root, PERIOD if lo is None else (lo, hi), n, PERIOD)}")
                 for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
                     S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
                     say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
@@ -843,8 +853,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     u = next((x for x in RI.spec_units(sp) if x["key"] == key), None)
     if u is None or sess not in sp["sessions"]:
         raise J.Refuse(f"{key} in session {sess}: not a table of {sp['name']}")
-    if u["filter"] and u["filter"][0] in _blocks().L2_BLOCKS:
-        raise J.Refuse(f"{key}: a Level 2 filter cannot be tested yet: the vendor's Level 2 history ends 2026-07-08 and the test days' table is not built")
+    l2 = _blocks().reads(u["filter"], _blocks().L2_BLOCKS)       # a Level 2 filter reads the test days' table (engine/btfeat.py)
     root, tf, first = u["root"], u["tf"], R.template("ranges")["test"]["start"]
     try:
         a, b = S._date(first), S._date(end)
@@ -854,6 +863,15 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     off = [end] if b < a else ["no day"] if named == [] else [d for d in named or [] if not a.isoformat() <= d <= b.isoformat()]
     if off:
         raise J.Refuse(f"{off[0]}: the test of {name} reads {a} .. {end} only (the range its lock froze)")
+    if l2:
+        import btfeat
+        try:
+            table_end = btfeat.last_date()
+        except FileNotFoundError as e:
+            raise J.Refuse(f"{key}: {e}") from None
+        if root not in S.L2_ROOTS or b > table_end:
+            raise J.Refuse(f"{key}: a Level 2 filter is tested on NQ only, and no later than the last day of the test days' Level 2 table "
+                           f"({table_end}): the range ending {end} is not that")
     if named is not None and (out_dir is None or ledger is None):
         raise J.Refuse("a read of named test days is a test of the plumbing: it takes its own store folder and its own ledger file, and never writes "
                        f"into {TESTS.name}/ or ledger.csv")
@@ -866,6 +884,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
                        + ": the lock's variant list names the cells of the read")
     blocks, K = _blocks(), test_keys(key, store, root, tf, sess)
     base, worse = dict(getattr(blocks.WRAPPED[sp["family"]], "SCREEN_RUN", {})), worse_kw(bool(blocks.BASES[sp["family"]][2]))
+    base.update({"features": L2T} if l2 else {})     # (a store's run.json keeps the plain marker; the loader is made at the pass)
     seeds, um = list(range(1, R.template("control")["seeds"] + 1)), {**RI.unit_meta(sp, u), "sessions": [sess], "sess_instance": sess}
     stage = {"table": sw, "worse": f"{sw}_worse", "pool": f"null_{sw}"}      # the ledger stages of the read
     todo = [{**_part(K["pool"], "pool", root, tf, _seeded(c1_grid, seeds, root, str(tf)), [sess], None,
@@ -923,9 +942,12 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
         for p in todo:                              # a store without its ledger row (a run that died between the two): booked, not run again
             if p["have"]:
                 _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out, period=sw)
-        if pend and u["filter"] and u["filter"][0] in ("volume", "rvol"):
+        if pend and u["filter"] and blocks.reads(u["filter"], ("volume", "rvol")):
             S.wait_compute_window()                 # the volume block's minute-volume cache, opened for the frozen range
             say(f"volume block {root}: {blocks.build_minvol(root, (a, b), n, allow_holdout=sw)}")
+        if pend and getattr(blocks.WRAPPED[sp["family"]], "prepare", None):
+            for x, y in ([(a, b)] if named is None else [(d, d) for d in named]):          # (the day before the first test day is a build day: the build's file holds it)
+                say(f"{sp['family']} cache {root}: {prepare_family(sp['family'], root, (x, y), n, sw)}")
         if pend:
             for rt in bar_roots(root, sp["family"], u["filter"]):
                 S.wait_compute_window()             # the 5-minute bars (swing level, SMT), opened for the frozen range
@@ -942,11 +964,15 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
                     who.append((p["key"], c["id"]))
             step = max(1, int(block or R.template("compute")["block_days"])) if all(getattr(c, "session_independent", False) for c, _ in specs) else len(run_days)
             acc = [_Cell(a.toordinal(), b.toordinal()) for _ in who]
+            eng = _engine(group[0]["kw"])
+            if eng.get("features") == L2T:          # the test days' Level 2 table under the test seal (btfeat names the switch itself)
+                import btfeat
+                eng["features"] = btfeat.BtL2Features(blocks.BOOK_COLS)
             head = f"test of {name}: pass {i} of {len(groups)}, {root} {tf}-minute bars ({' + '.join(p['key'] for p in group)}; {n} workers)"
             say(head)
             for k in range(0, len(run_days), step):
                 say(f"{head}: days {k + 1}-{min(k + step, len(run_days))} of {len(run_days)} ({len(specs)} instances)")
-                res = S.run_many(specs, a, b, days=run_days[k:k + step], root=root, workers=n, allow_holdout=sw, **_engine(group[0]["kw"]))
+                res = S.run_many(specs, a, b, days=run_days[k:k + step], root=root, workers=n, allow_holdout=sw, **eng)
                 for cell, (pk, cid), x, y in zip(acc, who, cut, cut[1:]):
                     r = RM.merge(res[x:y])
                     if pk == K["table"] and cid in kept:

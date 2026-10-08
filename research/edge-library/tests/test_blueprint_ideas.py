@@ -308,11 +308,10 @@ BAD = [  # (what the card says, the line that fails, a word of the reason)
     ({"card": {"home": {"market": "NQ", "session": "nyam"}}}, "0.3", "bar"), ({"card": {"home": {"market": "CL", "session": "nyam", "bar": "15"}}}, "0.3", "CL"),
     ({"card": {"home": {"market": "NQ", "session": "nyam", "bar": "7"}}}, "0.3", "7"),
     ({"card": {"home": {"market": "NQ", "session": "all", "bar": "15"}}}, "0.3", "ONE home table"),
-    ({"card": {"home": {"market": "NQ", "session": "eve", "bar": "15"}}}, "0.3", "evening"),
     ({"card": {"neighbors": []}}, "0.4", "where else"),
     ({"card": {"neighbors": ["somewhere nice"]}}, "0.4", "somewhere"), ({"card": {"neighbors": ["NQ nyam 15"]}}, "0.4", "home"),
     ({"card": {"neighbors": ["midday", "mid"]}}, "0.4", "twice"), ({"card": {"not_here": "asia and london"}}, "0.4", "ONE place"),
-    ({"card": {"not_here": "midday"}}, "0.4", "also"), ({"card": {"neighbors": ["the evening"]}}, "0.4", "evening"),
+    ({"card": {"not_here": "midday"}}, "0.4", "also"), 
     ({"card": {"main_setting": "n"}}, "0.5", "or_min"), ({"run": {"params": {"or_min": ["5", "15"]}}}, "0.5", "2 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30", "45", "60"]}}}, "0.5", "5 values"),
     ({"run": {"params": {"or_min": ["5", "15", "30"], "max_tr": [1, 2]}}}, "0.5", "ONE setting"),
@@ -386,7 +385,7 @@ def test_the_card_names_the_tables():
                         ("New York morning", "GC-tf15-nyam"), ("the afternoon on 5 min bars", "GC-tf5-pm"), ("ES midday 30 minutes", "ES-tf30-mid")):
         assert REC.place(said, home)["table"] == table, said
     for said, word in (("somewhere nice", "somewhere"), ("", "names no place"), ("asia and london", "ONE place"), ("NQ ES", "ONE place"), ("5 15", "ONE place"),
-                       ("the evening", "evening"), ("NQ 08:30", "08:30")):
+                       ("NQ 08:30", "08:30")):
         try:
             REC.place(said, home)
             raise AssertionError(f"read as a place: {said!r}")
@@ -577,12 +576,17 @@ def test_a_filter_keeps_the_stores_and_a_changed_base_setting_gets_its_own():
     assert IS.rounds(NAME, ROOT) == [1, 2, 3] and [read(d / f"rounds/{n}/build.json")["bar"] for n in (1, 2, 3)] == BARS[:3]
     assert [(d / f"rounds/{n}/reason.txt").read_text() for n in (1, 2, 3)] == [REASONS[n] + "\n" for n in (1, 2, 3)]
     assert read(d / "rounds/1/spec.json")["run"] == SETTINGS                     # what round 1 ran with stays on file as it was
-    # a rule with two filters: each must first win alone, one a round; the table with both on is not run by version 1
+    # a rule with two filters: the plain table, each filter alone and BOTH on are run (the card's engine spec lists all three)
     root = tmp() / "ideas_two"
     two = idea("bpi_two", run={"filters": [{"block": "momentum", "side": "with"}, {"block": "news", "side": "no"}]})
     assert REC.card("bpi_two", two, root)["ok"] is True
-    with tiny(), no_engine():
-        refused(lambda: REC.build("bpi_two", "both filters at once", root=root), "one filter")
+    sp = REC._spec("bpi_two", two)
+    plan = REC.card_lines(sp)[1]
+    assert REC.rule_filter(plan) == "momentum+news_with+no" and plan["filters"] == ["momentum_with", "news_no"]
+    es = REC.engine(sp, plan, "bpi_two")[0]
+    assert es["filters"][-1] == {"all": sp["run"]["filters"]} and len(es["filters"]) == 3
+    checked = RUN.checked(es)
+    assert [f for f in checked["filters"]] == [("momentum", "with"), ("news", "no"), ("momentum+news", "with+no")]
     RESULTS["test_a_filter_keeps_the_stores_and_a_changed_base_setting_gets_its_own"] = (3, 3, "rounds of one idea: plain, + a filter, a changed base setting")
 
 

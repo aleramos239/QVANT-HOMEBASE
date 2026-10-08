@@ -167,14 +167,28 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
         if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open"):      # 'blueprint' / 'open': set by blueprint/runner.py only (its 48-cell table; the session-anchored 60-cell table)
             raise SpecError(f"{key} {sp.get(key)!r}: 'standard' or 'extended'")
     filters = []
-    for f in sp.get("filters", []):
+
+    def one(f):
         if not (isinstance(f, dict) and set(f) == {"block", "side"}):
             raise SpecError(f"filter {f!r}: an object {{'block': ..., 'side': ...}}")
         if f["block"] not in blocks.FILTERS or f["side"] not in blocks.FILTERS[f["block"]]:
             raise SpecError(f"filter {f!r}: blocks and sides are { {b: tuple(s) for b, s in blocks.FILTERS.items()} }")
-        if (f["block"], f["side"]) in filters:
+        return (f["block"], f["side"])
+    for f in sp.get("filters", []):
+        if isinstance(f, dict) and set(f) == {"all"}:             # two filters ON TOGETHER: {"all": [{block, side}, {block, side}]} (a unit of its own)
+            ps = [one(x) for x in f["all"]] if isinstance(f["all"], list) else None
+            if not ps or not 2 <= len(ps) <= blocks.MAX_FILTERS or len({b for b, _ in ps}) < len(ps):
+                raise SpecError(f"filter {f!r}: 2 to {blocks.MAX_FILTERS} filters of different blocks")
+            fl = blocks.combine(ps)
+        else:
+            fl = one(f)
+        if fl in filters:
             raise SpecError(f"filter {f!r} is listed twice")
-        filters.append((f["block"], f["side"]))
+        filters.append(fl)
+    for fl in [x for x in filters if blocks.COMBO in x[0]]:      # a combined unit needs each of its filters alone to hold it against
+        for single in blocks.parts(fl):
+            if single not in filters:
+                filters.insert(filters.index(fl), single)
     variants = [dict(zip(params, combo)) for combo in itertools.product(*params.values())]
     out = {"name": name, "reason": reason.strip(), "family": family, "markets": markets, "bar_sizes": tfs, "sessions": sessions,
            "params": params, "fixed": dict(fixed), "filters": filters, "exits": sp["exits"],
@@ -196,7 +210,7 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
 
 
 def unit_key(spec: dict, root: str, tf: str, filt=None) -> str:
-    return f"{spec['name']}{'__' + '_'.join(filt) if filt else ''}-{root}-tf{tf}"
+    return f"{spec['name']}{'__' + '_'.join(filt) if filt else ''}-{root}-tf{tf}"           # a combined filter: name__ote+pdz_in+with-NQ-tf5
 
 
 def spec_units(spec: dict, roots=None, tfs=None) -> list:
@@ -208,14 +222,14 @@ def spec_units(spec: dict, roots=None, tfs=None) -> list:
     for root in (roots or spec["markets"]):
         for tf in (tfs or spec["bar_sizes"]):
             for filt in [None] + list(spec["filters"]):
-                if filt and filt[0] in blocks.L2_BLOCKS and root not in S.L2_ROOTS:
+                if filt and blocks.reads(filt, blocks.L2_BLOCKS) and root not in S.L2_ROOTS:
                     continue                             # Level 2 is NQ only: no such unit on the other markets
                 kind = spec["filter_exits"] if filt else spec["exits"]
                 base = {**spec["fixed"], **spec["limits"], **(blocks.filter_inputs(*filt, root) if filt else {}),
                         "tf": str(tf), "sess": "all"}
                 grid = S.menu_grid(cls, base, root, spec["variants"], blocks.exits(kind, root, family))
                 out.append({"key": unit_key(spec, root, tf, filt), "root": root, "tf": str(tf), "filter": filt, "exits": kind,
-                            "grid": grid, "cells": len(grid), "book": bool(filt and filt[0] in blocks.L2_BLOCKS)})
+                            "grid": grid, "cells": len(grid), "book": bool(filt and blocks.reads(filt, blocks.L2_BLOCKS))})
     return out
 
 
@@ -322,7 +336,7 @@ def unit_meta(spec: dict, unit: dict) -> dict:
     axis = lib.get("mirror") if lib.get("mirror") in spec["params"] else None
     f = unit["filter"]
     return {"family": spec["family"], "idea": spec["name"], "tf": unit["tf"], "rationale": spec["reason"],
-            "filter": None if f is None else {"block": f[0], "side": f[1], "plain": blocks.PLAIN[f]},
+            "filter": None if f is None else {"block": f[0], "side": f[1], "plain": blocks.plain(f)},
             "exits": unit["exits"], "sessions": spec["sessions"], "variants": spec["variants"], "fixed": spec["fixed"],
             "limits": spec["limits"], "both_sides_declared": entry[2], "notes": lib.get("notes") or entry[3],
             "complexity": lib["complexity"] + (1 if f else 0), "weak": lib["weak"], "penalty": lib["penalty"],
@@ -429,7 +443,7 @@ def build(spec: dict, workers: int | None = None, runs_dir=None, ledger=None, lo
             S.wait_compute_window()
             RM._log(f"prepare {spec['family']} {root}: {prep(root, workers=workers)}", log)
     for u in todo:
-        if u["filter"] and u["filter"][0] in ("volume", "rvol") and u["root"] not in volume_ready and days is None:
+        if u["filter"] and blocks.reads(u["filter"], ("volume", "rvol")) and u["root"] not in volume_ready and days is None:
             S.wait_compute_window()
             RM._log(f"prepare volume block {u['root']}: {blocks.build_minvol(u['root'], PERIOD, workers)}", log)
             volume_ready.add(u["root"])

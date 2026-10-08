@@ -76,6 +76,14 @@ def toolkit() -> tuple[str, str]:
             os.environ.get(ENV_BP) or str(paths.repo_root() / "research" / "edge-library" / "bp.py"))
 
 
+def toolkit_stamp() -> tuple:
+    """What changes when the toolkit's code or templates do (the newest file time and the file count): the Lab keeps the block
+    list with its code until this changes."""
+    root = Path(toolkit()[1]).parent
+    files = [f for pat in ("*.py", "engine/*.py", "engine/families/*.py", "blueprint/*.py", "blueprint/templates/*.json") for f in root.glob(pat)]
+    return (max((f.stat().st_mtime_ns for f in files), default=0), len(files))
+
+
 # ---------------------------------------------------------------- schemas
 
 def _spec(name, description, props=None, required=()):
@@ -512,6 +520,12 @@ class BlueprintMixin:
 
     def t_blueprint_blocks(self) -> str:
         return self._finish(self._bp(["blocks"]))
+
+    def block_code(self) -> dict:
+        """Not a tool: the Lab's Toolkit view. The same blocks as `blueprint_blocks`, each with the code that implements it
+        (bp.py blockcode): {groups: [{id, title, words, items}], sources: {id: {file, start, end, code}}, counts}."""
+        r = self._bp(["blockcode"])
+        return {k: r[k] for k in ("groups", "sources", "counts") if k in r}
 
     # ---- phase 0: the card
 

@@ -89,6 +89,30 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   ote           in | out            f_ote               the 62-79 % retracement zone of that range's leg
   htf15, htf60  with | against      f_htf15 / f_htf60   the close of the last closed 15- / 60-minute bar against its EMA(20) / EMA(8)
   smt           agree | disagree    f_smt               NQ and ES diverge at a new 3-hour extreme (the last 6 5-minute bars against the 36 before)
+  pdz_move, pdz_swing, pdz_leg   with | against     f_pdz_<range>   premium / discount on the owner's three ranges (NQ only; engine/ranges.py): the move in progress,
+                                    the swing pair, the leg rule; the close must be inside the range
+  ote_move, ote_swing, ote_leg   in | out           f_ote_<range>   the 62-79 % zone of the same three ranges (a leg that points the trade's way)
+
+  BATCH 4 BLOCKS (NQ, ES and GC; first-guess definitions written in engine/indicators.py before any result, the owner reviews each; the
+        idea's own tf bars, closed bars, at the signal bar's close, since the indicator restart; no signal = both sides blocked)
+  bbw           tight | wide        f_bbw       the Bollinger bandwidth ((upper - lower) / middle, 20 bars, 2 sigma) ranked among the 120
+        before it: tight = rank at most BBW_TIGHT = 20 %, wide = at least BBW_WIDE = 80 %, between: no signal. 140 closes needed. Direction-free.
+  atrp          high | low          f_atrp      Wilder's ATR(14) ranked among the 100 ATR values before it: high = at least ATRP_HIGH = 70 %,
+        low = at most ATRP_LOW = 30 %. 114 bars needed. Direction-free.
+  er            trend | chop        f_er        Kaufman's efficiency ratio of 14 bars (|net change| / the path): trend = at least ER_TREND =
+        0.5, chop = at most ER_CHOP = 0.25, between: no signal. Direction-free.
+  macd          with | against      f_macd      the MACD(12, 26, 9) histogram: with = a long needs it above 0 and not below the bar before's
+        (a short the mirror); against = the opposite pairing. A fading histogram, or exactly 0: no signal. 35 closes needed.
+  rsidiv        with | against      f_rsidiv    RSI(14) divergence against the lowest low / highest high of the bars [-20:-3]: bullish = a new
+        low with a HIGHER RSI than at that earlier low, bearish = the mirror. with = a long needs bullish (a short bearish); against = the reverse.
+  mfi           with | against | extreme_against   f_mfi   Money Flow Index of 14 bars (typical price x volume): with = a long needs MFI above 50
+        (a short below); against = the mirror; extreme_against = a long needs MFI at most 50 - MFI_EXTREME = 20, a short at least 80.
+  deltadiv      with | against      f_deltadiv  price against the net delta of the last 20 tf bars (the delta blocks' flow table, whole minutes
+        before the decision): bullish = the close fell over them and the net delta is positive, bearish = it rose and the delta is negative.
+        with = a long needs bullish (a short bearish); against = the reverse. A delta block for the data cap (FLOW_BLOCKS).
+  candle        displace | engulf | reject   f_candle   the signal bar's shape: displace = body at least 1.5 ATR and the close in the top 25 %
+        of the range (a long) / bottom 25 % (a short); engulf = the body covers the previous bar's body, opposite colours, the new bar points
+        the trade's way; reject = a wick of at least 2 x the body on the trade's side (a long: the lower wick), body above 0.
 
   LEVEL-2 BLOCKS (the vendor's order book, NQ only, the feature table of l2data: one row per minute, usable at the minute's end;
         a minute without a valid book -- a roll day, a crossed book, another contract -- is NaN and has no signal: both sides blocked)
@@ -102,8 +126,8 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   stack       with | against        the minute's change of the top-10 size on the trade's side minus the other side's, as a share of the
                                     depth: at least +STACK_FRAC = 5 % (with: size was added behind the trade / pulled in front of it)
                                     or at most -5 % (against). A smaller change has no signal.
-  Level 2 history: the build days (to 2025-06-30) are covered; the vendor's history ends 2026-07-08 and the test days' table is not
-  built, so a Level 2 filter can be BUILT but not locked or tested (blueprint/freeze.py refuses it, with the reason).
+  Level 2 history: the build days (to 2025-06-30) are bpfeat's table, the test days (2025-07-01 .. 2026-07-07: the vendor's depth history
+  ends 2026-07-07 15:59) are btfeat's; a Level 2 idea's frozen test range ends at that table's last day (blueprint/freeze.py).
 
   DELTA BLOCKS (order flow of the desk's own tick archive, flowtab.py; NQ, ES and GC; the aggressor side is an estimate)
         One rule for the four: SHARE = (the series summed over a clock window) / (the volume of that window), completed
@@ -131,9 +155,11 @@ from multiprocessing import get_context
 import numpy as np
 
 import flowtab
+import indicators as IND
 import l2ref
 import levels as LV
 import l2sim as S
+import ranges as RG
 import zones as Z
 from l2sim import NS, SESS, _hms
 
@@ -161,6 +187,12 @@ FLOW_WIN = 5                                        # delta blocks: the minutes 
 FLOW_REF, FLOW_REF_MIN = 20, 15                     # ... the trade dates of the size bar, and the fewest of them with volume
 FLOW_Q = {"": 0.5, "_big": 0.8}                     # ... the size bar: the median / the 80th percentile of the reference |share|
 FLOW_SERIES = {"delta": 1, "cumdelta": 1, "sweep": 2, "bigorder": 3}      # block -> row of flowtab's prefix sums
+FLOW_BLOCKS = (*FLOW_SERIES, "deltadiv")            # every block that reads the flow table: its test range ends where the flow file ends
+BBW_TIGHT, BBW_WIDE = 0.20, 0.80                    # bbw block: the rank at most / at least
+ATRP_HIGH, ATRP_LOW = 0.70, 0.30                    # atrp block
+ER_TREND, ER_CHOP = 0.5, 0.25                       # er block
+MFI_EXTREME = 30.0                                  # mfi block: points beyond 50 for extreme_against (20 / 80)
+DIR_BLOCKS = ("macd", "rsidiv", "deltadiv")         # blocks whose signal is a direction (+1 bullish, -1 bearish): with / against
 VOL_ANCHOR = {"asia": 0, "london": 10800, "pre": 30300, "nyam": OPEN, "mid": OPEN, "pm": OPEN, "eve": -21600}
 
 X_STOP_ATR = (1.0, 2.0)                             # the extended menu's new stops and targets
@@ -185,6 +217,8 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "htf15": {"with": {"f_htf15": "with"}, "against": {"f_htf15": "against"}},
            "htf60": {"with": {"f_htf60": "with"}, "against": {"f_htf60": "against"}},
            "smt": {"agree": {"f_smt": "agree"}, "disagree": {"f_smt": "disagree"}},
+           **{f"pdz_{k}": {"with": {f"f_pdz_{k}": "with"}, "against": {f"f_pdz_{k}": "against"}} for k in RG.KINDS},
+           **{f"ote_{k}": {"in": {f"f_ote_{k}": "in"}, "out": {f"f_ote_{k}": "out"}} for k in RG.KINDS},
            "rvol": {"high": {"f_rvol": "high"}, "low": {"f_rvol": "low"}, "spike": {"f_rvol": "spike"}},
            "volume": {"high": {"f_cvol": "hi"}, "low": {"f_cvol": "lo"}},
            "news": {"yes": {"f_news": "yes"}, "no": {"f_news": "no"}},
@@ -193,9 +227,17 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "ahead": {"thin": {"f_ahead": "thin"}, "thick": {"f_ahead": "thick"}},
            "wall": {"clear": {"f_wall": "clear"}, "blocked": {"f_wall": "blocked"}},
            "stack": {"with": {"f_stack": "with"}, "against": {"f_stack": "against"}},
+           "bbw": {"tight": {"f_bbw": "tight"}, "wide": {"f_bbw": "wide"}},
+           "atrp": {"high": {"f_atrp": "high"}, "low": {"f_atrp": "low"}},
+           "er": {"trend": {"f_er": "trend"}, "chop": {"f_er": "chop"}},
+           "macd": {"with": {"f_macd": "with"}, "against": {"f_macd": "against"}},
+           "rsidiv": {"with": {"f_rsidiv": "with"}, "against": {"f_rsidiv": "against"}},
+           "mfi": {"with": {"f_mfi": "with"}, "against": {"f_mfi": "against"}, "extreme_against": {"f_mfi": "extreme_against"}},
+           "deltadiv": {"with": {"f_deltadiv": "with"}, "against": {"f_deltadiv": "against"}},
+           "candle": {"displace": {"f_candle": "displace"}, "engulf": {"f_candle": "engulf"}, "reject": {"f_candle": "reject"}},
            **{blk: {side: {f"f_{blk}": side} for side in ("with", "against", "with_big", "against_big")} for blk in FLOW_SERIES}}
 L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack")      # NQ only: they read the Level-2 feature table
-BLOCK_MARKETS = {"smt": ("NQ", "ES")}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
+BLOCK_MARKETS = {"smt": ("NQ", "ES"), **{b: ("NQ",) for b in Z.RANGE_BLOCKS}}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
 PLAIN = {("volatility", "high"): "only after a day whose range was above its own 20-day median",
          ("volatility", "low"): "only after a day whose range was at or below its own 20-day median",
          ("momentum", "with"): "only when RSI(14) on the idea's bars points the trade's way (long above 50, short below 50)",
@@ -237,6 +279,11 @@ PLAIN.update({("pdz", "with"): "only when the close is cheap for the trade insid
               ("htf60", "against"): "only when the 60-minute trend points against the trade (EMA(8) of 60-minute closes)",
               ("smt", "agree"): "only when NQ and ES diverge at a new extreme in the trade's favour (a long after exactly one made a new 3-hour low, a short after one made a new high)",
               ("smt", "disagree"): "only when NQ and ES diverge at a new extreme against the trade (a long after exactly one made a new high)"})
+for _k, _w in RG.WORDS.items():
+    PLAIN.update({(f"pdz_{_k}", "with"): f"only when the close is cheap for the trade inside {_w} (a long in the lower half, a short in the upper half)",
+                  (f"pdz_{_k}", "against"): f"only when the close is dear for the trade inside {_w} (a long in the upper half, a short in the lower half)",
+                  (f"ote_{_k}", "in"): f"only when the close is in the 62-79 % retracement zone of {_w}, a leg that points the trade's way",
+                  (f"ote_{_k}", "out"): f"only when {_w} points the trade's way and the close is NOT in its 62-79 % retracement zone"})
 for _n in (20, 50):
     PLAIN[(f"ema{_n}", "with")] = f"only when the close is on the trade's side of the EMA({_n}) of the idea's bars (a long needs it above)"
     PLAIN[(f"ema{_n}", "against")] = f"only when the close is on the other side of the EMA({_n}) of the idea's bars"
@@ -248,6 +295,24 @@ PLAIN.update({("depth", "thin"): "only when the top-10 book is thin: its depth i
               ("wall", "blocked"): "only when a wall stands ahead: a level of the opposing top 10 holds 5 times the median level within 8 ticks of the touch",
               ("stack", "with"): "only when, in the last minute, top-10 size was added on the trade's side (or pulled on the other) by at least 5 % of the depth",
               ("stack", "against"): "only when, in the last minute, top-10 size was added on the other side (or pulled on the trade's) by at least 5 % of the depth"})
+PLAIN.update({("bbw", "tight"): "only when the Bollinger bands (20 bars, 2 sigma) are tight: their width is in the lowest fifth of its last 120 values",
+              ("bbw", "wide"): "only when the Bollinger bands (20 bars, 2 sigma) are wide: their width is in the highest fifth of its last 120 values",
+              ("atrp", "high"): "only when volatility is high: the ATR(14) of the idea's bars is in the top 30 % of its last 100 values",
+              ("atrp", "low"): "only when volatility is low: the ATR(14) of the idea's bars is in the bottom 30 % of its last 100 values",
+              ("er", "trend"): "only when price moves in a line: the efficiency ratio of the last 14 bars (net change / path travelled) is at least 0.5",
+              ("er", "chop"): "only when price chops: the efficiency ratio of the last 14 bars (net change / path travelled) is at most 0.25",
+              ("macd", "with"): "only when the MACD(12, 26, 9) histogram points the trade's way and is not weakening (a long needs it above 0 and not below the bar before)",
+              ("macd", "against"): "only when the MACD(12, 26, 9) histogram points against the trade and is not weakening (a long needs it below 0 and not above the bar before)",
+              ("rsidiv", "with"): "only when RSI(14) diverges in the trade's favour (a long: a new 20-bar low with a higher RSI than at the earlier low; a short the mirror)",
+              ("rsidiv", "against"): "only when RSI(14) diverges against the trade (a long: a new 20-bar high with a lower RSI than at the earlier high)",
+              ("mfi", "with"): "only when the Money Flow Index (14 bars) is on the trade's side of 50 (a long needs it above 50)",
+              ("mfi", "against"): "only when the Money Flow Index (14 bars) is on the other side of 50 (a long needs it below 50)",
+              ("mfi", "extreme_against"): "only when the Money Flow Index (14 bars) is at an extreme against the trade (a long needs it at most 20, a short at least 80)",
+              ("deltadiv", "with"): "only when price and net buying volume disagree in the trade's favour over the last 20 bars (a long: price fell while net delta is positive)",
+              ("deltadiv", "against"): "only when price and net buying volume disagree against the trade over the last 20 bars (a long: price rose while net delta is negative)",
+              ("candle", "displace"): "only when the signal bar is a strong push the trade's way: body at least 1.5 ATR and the close in the outer quarter of its range",
+              ("candle", "engulf"): "only when the signal bar's body engulfs the previous bar's body, in the opposite colour and the trade's direction",
+              ("candle", "reject"): "only when the signal bar shows a rejection wick on the trade's side: at least twice its body (a long: the lower wick)"})
 _WHAT = {"delta": ("net buying volume of the last 5 minutes", "buy volume minus sell volume of the aggressors"),
          "cumdelta": ("net buying volume since the session's anchor", "buy minus sell volume of the aggressors since 09:30 (the session's anchor)"),
          "sweep": ("net sweep volume of the last 5 minutes", "buy minus sell volume of orders that walked two price levels or more"),
@@ -311,8 +376,40 @@ def exits(kind: str, root: str, family: str) -> list:
     raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint' or 'open'")
 
 
+COMBO, MAX_FILTERS = "+", 2                         # a unit may hold several filters at once: ("ote+pdz", "in+with"); at most 2 (BLUEPRINT.md 0.2)
+
+
+def parts(filt) -> list:
+    """The (block, side) pairs of a filter given as a pair, a combined pair or the string "block_side" (None / "" -> [])."""
+    if not filt:
+        return []
+    b, s = filt.split("_", 1) if isinstance(filt, str) else filt
+    return list(zip(b.split(COMBO), s.split(COMBO)))
+
+
+def reads(filt, which) -> bool:
+    """Does any filter of the unit belong to `which` (a collection of block names)?"""
+    return any(b in which for b, _ in parts(filt))
+
+
+def combine(filters) -> tuple:
+    """Several (block, side) pairs -> ONE combined pair, blocks sorted by name so the same two filters always give the same unit."""
+    fs = sorted(filters)
+    return (COMBO.join(b for b, _ in fs), COMBO.join(s for _, s in fs)) if len(fs) > 1 else tuple(fs[0])
+
+
+def plain(filt) -> str:
+    """The plain words of a (combined) filter: each part's sentence, joined with ' AND '."""
+    return " AND ".join(PLAIN[p] for p in parts(filt))
+
+
 def filter_inputs(block: str, side: str, root: str = "NQ") -> dict:
-    """The inputs that switch ONE filter block on, on one of its two sides."""
+    """The inputs that switch ONE filter block on, on one of its two sides -- or, for a combined pair, every part's inputs together."""
+    if COMBO in block or COMBO in side:
+        ps = parts((block, side))
+        if len(ps) > MAX_FILTERS or len({b for b, _ in ps}) < len(ps) or len(block.split(COMBO)) != len(side.split(COMBO)):
+            raise ValueError(f"filter {block!r} / {side!r}: at most {MAX_FILTERS} different blocks, one side each")
+        return {k: v for b, sd in ps for k, v in filter_inputs(b, sd, root).items()}
     if block not in FILTERS or side not in FILTERS[block]:
         raise ValueError(f"filter {block!r} / {side!r}: blocks and sides are {({b: tuple(s) for b, s in FILTERS.items()})}")
     if block in L2_BLOCKS and root not in S.L2_ROOTS:
@@ -586,6 +683,8 @@ class Blocks:
                 "f_ahead": "off", "f_wall": "off", "f_stack": "off",
                 "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
                 "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
+                **{f"f_pdz_{k}": "off" for k in RG.KINDS}, **{f"f_ote_{k}": "off" for k in RG.KINDS},
+                "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off",
                 **{f"f_{b}": "off" for b in FLOW_SERIES}}
     SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen")),
               "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
@@ -598,6 +697,10 @@ class Blocks:
               "f_pdz": ("choice", ("off", "with", "against")), "f_ote": ("choice", ("off", "in", "out")),
               "f_htf15": ("choice", ("off", "with", "against")), "f_htf60": ("choice", ("off", "with", "against")),
               "f_smt": ("choice", ("off", "agree", "disagree")),
+              **{f"f_pdz_{k}": ("choice", ("off", "with", "against")) for k in RG.KINDS}, **{f"f_ote_{k}": ("choice", ("off", "in", "out")) for k in RG.KINDS},
+              "f_bbw": ("choice", ("off", "tight", "wide")), "f_atrp": ("choice", ("off", "high", "low")), "f_er": ("choice", ("off", "trend", "chop")),
+              "f_mfi": ("choice", ("off", "with", "against", "extreme_against")), "f_candle": ("choice", ("off", "displace", "engulf", "reject")),
+              **{f"f_{b}": ("choice", ("off", "with", "against")) for b in DIR_BLOCKS},
               **{f"f_{b}": ("choice", ("off", "with", "against", "with_big", "against_big")) for b in FLOW_SERIES}}
     BASE = None                                     # the family name the class was built for
     STRUCT = None                                   # its structure in plain words; None = it has none
@@ -667,6 +770,23 @@ class Blocks:
         if len(ref) < FLOW_REF_MIN:
             return None
         return x, float(np.quantile(ref, FLOW_Q[""])), float(np.quantile(ref, FLOW_Q["_big"]))
+
+    def blk_deltadiv(self):
+        """+1 | -1 | None: the close of the last IND.DIV_N tf bars against the net delta of the same clock window (whole minutes before
+        the decision, from the flow table); None outside a session, with too few bars, no flow row for today, or no volume in the window."""
+        if self.sid is None or self.nb < IND.DIV_N + 1:
+            return None
+        b = _now_s(self) // 60 * 60
+        w = flowtab.window(self._cx.root, self.day, b - IND.DIV_N * self.tf * 60, b)
+        return None if w is None or w[0] <= 0 else IND.delta_div(self.C[-1] - self.C[-IND.DIV_N - 1], w[1])
+
+    def blk_dir(self, block: str):
+        """The direction signal (+1 bullish, -1 bearish, None) of a DIR_BLOCKS block."""
+        if block == "macd":
+            return IND.macd_dir(self.C)
+        if block == "rsidiv":
+            return IND.rsidiv(self.H, self.L, lambda i: rsi(self.C[:i + 1]))
+        return self.blk_deltadiv()
 
     def on_session(self, ctx):
         super().on_session(ctx)
@@ -782,6 +902,33 @@ class Blocks:
             a = adx_last(self.H, self.L, self.C)
             if a is None or not (a >= ADX_STRONG if p["f_adx"] == "strong" else a < ADX_WEAK):
                 return False
+        if p["f_bbw"] != "off":
+            r = IND.bbw_rank(self.C)
+            if r is None or not (r <= BBW_TIGHT if p["f_bbw"] == "tight" else r >= BBW_WIDE):
+                return False
+        if p["f_atrp"] != "off":
+            r = IND.atr_rank(self.H, self.L, self.C)
+            if r is None or not (r >= ATRP_HIGH if p["f_atrp"] == "high" else r <= ATRP_LOW):
+                return False
+        if p["f_er"] != "off":
+            e = IND.efficiency(self.C)
+            if e is None or not (e >= ER_TREND if p["f_er"] == "trend" else e <= ER_CHOP):
+                return False
+        if p["f_mfi"] != "off":
+            m = IND.mfi_last(self.H, self.L, self.C, self.V)
+            if m is None:
+                return False
+            d, mode = (m - 50.0) * sd, p["f_mfi"]                    # + = MFI on the trade's side of 50
+            if not (d > 0 if mode == "with" else d < 0 if mode == "against" else d <= -MFI_EXTREME):
+                return False
+        for blk in DIR_BLOCKS:
+            mode = p[f"f_{blk}"]
+            if mode != "off":
+                d = self.blk_dir(blk)
+                if d is None or (d == sd) != (mode == "with"):
+                    return False
+        if p["f_candle"] != "off" and not IND.candle(p["f_candle"], sd, self.O, self.H, self.L, self.C, self.atr):
+            return False
         if p["f_rvol"] != "off":
             sig = self.blk_rvol()
             if sig is None:
@@ -805,6 +952,15 @@ class Blocks:
             o = Z.ote(self, sd)
             if o is None or o != (p["f_ote"] == "in"):
                 return False
+        for k in RG.KINDS:
+            if p[f"f_pdz_{k}"] != "off":
+                z = Z.pdz_range(self, k)
+                if z is None or (z == "discount") != ((sd > 0) == (p[f"f_pdz_{k}"] == "with")):
+                    return False
+            if p[f"f_ote_{k}"] != "off":
+                o = Z.ote_range(self, sd, k)
+                if o is None or o != (p[f"f_ote_{k}"] == "in"):
+                    return False
         for blk in Z.HTF:
             mode = p[f"f_{blk}"]
             if mode != "off":

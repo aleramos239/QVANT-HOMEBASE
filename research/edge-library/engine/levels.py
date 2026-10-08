@@ -218,23 +218,32 @@ def live_equal(h, l, n: int = SW_N, tol: float = 10.0):
     return out[0], out[1]
 
 
-def _sw_bars(st):
-    """The session's one-contract bar history up to this decision: the last SW_SESS prior sessions (cache file / tape; the roll day is
-    the first session of its contract) and today's prints before now -> (high, low) arrays, oldest first."""
-    s, root = st._cx._s, st._cx.root
-    now = st._cx.now_ns
-    prior = []
+def _prior_bars(st, sessions: int = SW_SESS) -> list:
+    """The one-contract history before today: the last `sessions` prior sessions' (end, high, low), newest first (cache file / tape; the roll
+    day is the first session of its contract, so nothing older than it is read)."""
+    root, prior = st._cx.root, []
     if st.day not in st.ROLLS:
-        for r in reversed(st.dl[-SW_SESS:]):
+        for r in reversed(st.dl[-sessions:]):
             got = session_bars(root, r["date"])
             if got is None:
                 break
             prior.append(got)
             if r["date"] in st.ROLLS:
                 break
-    d = st._cx.date
+    return prior
+
+
+def _today_bars(st):
+    """Today's (end, high, low) 5-minute bars from the evening before, closed by this decision (prints before now)."""
+    s, now, d = st._cx._s, st._cx.now_ns, st._cx.date
     hi = int(np.searchsorted(s.ts, now, side="left"))
-    today = hl_bars(s.ts, s.px, hi, S.et_ns(d - dt.timedelta(days=1), SW_OPEN), now, SW_TF)
+    return hl_bars(s.ts, s.px, hi, S.et_ns(d - dt.timedelta(days=1), SW_OPEN), now, SW_TF)
+
+
+def _sw_bars(st):
+    """The session's one-contract bar history up to this decision: the last SW_SESS prior sessions (cache file / tape; the roll day is
+    the first session of its contract) and today's prints before now -> (high, low) arrays, oldest first."""
+    prior, today = _prior_bars(st), _today_bars(st)
     hs = [g[1] for g in reversed(prior)] + [today[1]]
     ls = [g[2] for g in reversed(prior)] + [today[2]]
     return np.concatenate(hs), np.concatenate(ls)

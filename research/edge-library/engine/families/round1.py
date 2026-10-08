@@ -212,20 +212,22 @@ def value_area(root: str, iso: str) -> tuple | None:
 
 
 def _va_one(args):
-    iso, root = args
+    iso, root, *rest = args
     S.wait_compute_window()
-    t = S.load_tape(iso, root)
+    t = S.load_tape(iso, root, **(rest[0] if rest else {}))
     return iso, (None if t is None or not len(t.ts) else value_area_of(t))
 
 
-def build_va(root: str, period: str = "build", workers: int = 1) -> dict:
+def build_va(root: str, period="build", workers: int = 1, **allow) -> dict:
     """Fill cache/va70_<root>.json with the value area of every session of `period` (default BUILD: nothing else is read)
     that the file does not hold yet. -> {'path', 'dates', 'added'}. Run in the main process before a va_reclaim pass
-    (run_menus calls VaReclaim.prepare); a worker that misses a date computes it itself, with the same function."""
+    (run_menus calls VaReclaim.prepare); a worker that misses a date computes it itself, with the same function.
+    `period` may be a (start, end) pair and `allow` the engine's own seal switch of the stage that opens it (the blueprint's build: allow_holdout=
+    "bp_build"; its test: the test switch), handed to the session list and the tape loads unchanged -- never set by anything but a stage."""
     p = _va_path(root)
     have = json.loads(p.read_text()) if p.exists() else {}
     a, b = S.period(period)
-    todo = [(d.isoformat(), root) for d in S.sessions(a, b, root)
+    todo = [(d.isoformat(), root, allow) for d in S.sessions(a, b, root, **allow)
             if d.isoformat() not in have and (root == "NQ" or S.hb_tape_path(d, root) is not None)]
     if todo:
         workers = max(1, min(int(workers), S.MAX_WORKERS))
@@ -254,8 +256,8 @@ class VaReclaim(Template):
     FEATURES = ()
 
     @classmethod
-    def prepare(cls, root, workers=1):
-        return build_va(root, "build", workers)
+    def prepare(cls, root, workers=1, period="build", **allow):
+        return build_va(root, period, workers, **allow)
 
     def fam_day(self, ctx):
         self.poke = {1: False, -1: False}           # +1: traded below VAL (long setup), -1: traded above VAH
