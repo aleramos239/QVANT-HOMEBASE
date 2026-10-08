@@ -206,6 +206,7 @@ with many different stops and targets?") and how many ideas are at it now.
 4. Stages 4 to 6 and the full machine check.
 5. The Book and the Guide.
 6. The portfolio.
+7. The hunter (section 12).
 
 ## 8. Not in this version
 
@@ -251,3 +252,43 @@ rewritten to match, so every chat follows the same law.
   about 42 % in 5 days on the days it was built on and 37 % on unseen days, under the open-loss rule; no edge at all
   passes about 40 % of evals with no day limit. The bar stays
   as the owner set it; the program shows how close the best mix is.
+
+## 12. The hunter (added the same day)
+
+The owner wants it always running: Claude hunts for strategies until the portfolios are built.
+
+**Goal:** 2 portfolios for each account type — LucidPro 50K, LucidFlex 50K, Apex 300K — 6 in all,
+LucidPro first. No strategy is shared between two portfolios at the same firm (Pro and Flex are one
+firm); a strategy may sit in a Lucid portfolio and an Apex one. After the goal is met the hunter keeps
+going, to replace weaker members, until the owner pauses it.
+
+**The loop, every night (a scheduled Claude job on this Mac):**
+
+1. Claude reads the Queue's summary: what was tried, where each idea stopped and why, by family.
+2. Claude writes the next batch of idea cards (at most 25 a night: what the runner can test) and adds
+   them. Ideas the owner dropped in the **ideas inbox** go first. Other sources: the block list, the
+   video and wiki notes, and what the results so far point to.
+3. The runner tests them. No Claude, no tokens.
+4. Finishers wait for the owner's look (stage 7). The hunter does not wait for it.
+5. When the Book changes, the program tries new mixes (stage 8).
+
+**Limits:**
+
+- The hunter only adds idea cards. It cannot touch the desk, an account, a setting or the code.
+- Existing blocks only. A block it wants goes on the "needs a block" list; blocks are built with the owner.
+- The owner can pause it at any time. A nightly cap on cards and on Claude's time.
+
+**Guards against luck (a hunt that never stops finds winners by chance):**
+
+- **The luck rate, measured.** Random-entry strategies that happened to look good on the build days
+  are read on the unseen days through the same stage 6 lines. The share that passes is what luck
+  alone gives. The Book shows it beside the real pass share.
+- **The score since the lock.** Every day adds unseen data. Each book strategy is run on paper on the
+  days after its lock, by the program, every day; its card shows "since lock: +$X in N days". This is
+  the one proof luck cannot fake.
+- Portfolios prefer strategies that hold up since their lock. One whose drawdown since the lock passes
+  the 95th percentile of its own reshuffled runs is flagged and left out of new mixes until reviewed.
+
+**Open:** the app's Apex 300K rules are marked unconfirmed. The Apex portfolios wait until the owner
+confirms that rule table, as he did for Lucid.
+
