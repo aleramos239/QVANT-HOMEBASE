@@ -129,8 +129,9 @@ def test_what_version_1_refuses_is_what_the_toolkit_refuses():
     assert failing(card={"neighbors": ["ES"]}, run={"filters": [{"block": "delta", "side": "with"}]}) == []             # a delta block runs on every market
     import inspect
     from blueprint import freeze as FZ
-    assert not [w for w in what if "locking or testing" in w]                                    # a Level 2 idea is locked and tested: neither list nor code refuses it
-    assert "not locked or tested" not in inspect.getsource(FZ.start) and "cannot be tested yet" not in inspect.getsource(RUN.run_test)
+    assert not [w for w in what if "locking or testing" in w and "Level 2" in w]                 # a Level 2 idea is locked and tested: neither list nor code refuses it
+    assert [w for w in what if "locking or testing" in w] == ['locking or testing an idea on the session-anchored table (exits "open")']      # the open table still is
+    assert "reads Level 2" not in inspect.getsource(FZ.start) and "cannot be tested yet" not in inspect.getsource(RUN.run_test)
     try:
         RUN.checked({"name": "bl_probe", "reason": CARD["why"], "family": "orb", "markets": ["NQ", "ES"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {},
                      "exits": "standard", "filters": [{"block": "wall", "side": "clear"}]})
