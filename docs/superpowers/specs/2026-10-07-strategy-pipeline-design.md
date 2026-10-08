@@ -71,10 +71,13 @@ Up to 6 heat maps an idea (3 ways x 2 bar sizes).
 
 ### Stage 2 — machine check
 
-Every trade of the heat map that moved on is re-checked from the raw bars by separate code:
-the entry signal was really there · every entry is inside the session · one position at a time ·
-flat by the cut-off (15:58 ET, 13:13 on half days) · the trade count fits the rule · winners end
-near the target, losers near the stop.
+Every trade of the heat map that moved on is checked: every entry is inside the session · one position
+at a time · flat by the cut-off (15:58 ET, 13:13 on half days) · the trade count fits the rule · winners
+end near the target, losers near the stop. The middle box is run again and every entry and exit price
+of it must sit inside its 1-minute bar.
+
+**As built (2026-10-08):** the entry signal is NOT re-derived by a second implementation of each entry
+rule (28 of them): that was not realistic. Each block keeps its own unit tests.
 
 One wrong trade → the idea stops as a **code problem** (not a bad idea) and is flagged for repair.
 Nobody looks at a chart here. The unseen days are never touched by an idea that failed this check.
@@ -121,6 +124,8 @@ The reshuffle runs first (minutes). The random check (hours) runs only if the re
   - chance to pass the eval within 30 trading days: over 50 %
   - chance to reach the maximum payout within 30 trading days: over 50 %
   Both yes = **stands alone**. Otherwise = **helper**. This is a label, not a gate.
+  (As built: the eval number is read at the size that is best for the eval, the payout number at the
+  size that is best for the funded account; the two sizes can differ.)
 - Then the rule, settings, box and costs are frozen. Any change = a new idea from stage 0.
 
 ### Stage 6 — unseen days (one read, never repeated)
@@ -132,7 +137,7 @@ Every line must hold:
 - average trade at the full floor, and at least half of what it was on the build days
 - beats 95 % of random heat maps
 - still makes money with worse fills (2 ticks and 250 ms late)
-- still makes money without its best 1 % of days (3 days on this stretch)
+- still makes money without its best 1 % of days (4 of the about 315 days of this stretch)
 - makes money in 80 % of 1,000 reshuffled runs
 - the picked box keeps profit factor 1.2 or more
 
@@ -322,4 +327,11 @@ What it means for the pipeline:
 - A box whose stop is more than 5 times its target cannot go in an Apex portfolio.
 - The Apex mix must keep its biggest day at or under 30 % of the profit.
 - The book card's Apex odds use the live-peak drawdown, not the end-of-day one.
+
+## 14. As built: the one-read rule (open, the owner decides)
+
+The toolkit lets only ONE idea of a family, market and time of day be read on the unseen days (a
+relative's read uses the days up for the others). The pipeline inherits it: a second idea in the same
+slot is refused at stage 6. Asked of the owner 2026-10-08: A refuse such a card when it is added
+(Claude's pick) · B let ideas of one slot wait at stage 5 and read only the strongest · C drop the rule.
 
