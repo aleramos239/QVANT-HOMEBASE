@@ -215,6 +215,14 @@ def test_workers_and_the_no_start_window(monkeypatch):
     assert got == [min(n, S.MAX_WORKERS) for n in (12, 4, 4, 4, 12, 12, 12)], got
     with at(tue(12, 0)):
         assert RUN.default_workers() == min(4, S.MAX_WORKERS)
+    monkeypatch.setenv("BP_WORKERS_TODAY", "2026-10-06:12")                            # the owner's word for ONE day ("no strategies running"): that New York date only
+    assert [RUN.default_workers(t) for t in (tue(12, 0), dt.datetime(2026, 10, 7, 12, 0, tzinfo=S.ET))] == [min(12, S.MAX_WORKERS), min(4, S.MAX_WORKERS)]
+    monkeypatch.setenv("BP_WORKERS_TODAY", "2026-10-06:99")                            # never more than the engine's cap
+    assert RUN.default_workers(tue(12, 0)) == S.MAX_WORKERS
+    for bad in ("2026-10-06:", "2026-10-06:x", "2026-10-06:0", "12"):                  # not understood = not there
+        monkeypatch.setenv("BP_WORKERS_TODAY", bad)
+        assert RUN.default_workers(tue(12, 0)) == min(4, S.MAX_WORKERS), bad
+    monkeypatch.delenv("BP_WORKERS_TODAY")
     for t in (tue(9, 17), tue(9, 36), tue(15, 0), dt.datetime(2026, 10, 3, 9, 20, tzinfo=S.ET)):       # outside the window; a Saturday
         RUN.may_start(t)
     for t in (tue(9, 18), tue(9, 25), tue(9, 35)):

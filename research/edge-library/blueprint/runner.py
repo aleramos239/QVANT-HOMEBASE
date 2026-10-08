@@ -45,6 +45,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import json
+import os
 import shutil
 import sys
 import time
@@ -75,8 +76,13 @@ def clock() -> dt.datetime:
 
 
 def default_workers(at=None) -> int:
-    """The workers of a run that names none: compute.json -- fewer while the desk trades -- and never more than the engine's cap."""
+    """The workers of a run that names none: compute.json -- fewer while the desk trades -- and never more than the engine's cap.
+    BP_WORKERS_TODAY="<New York date>:<n>" in the environment is the owner's word for ONE day (no strategy is trading): n
+    workers at any hour of that date, the cap still holds, and the next day the table is back."""
     c, at = R.template("compute"), (at or clock()).astimezone(S.ET)
+    day, _, n = os.environ.get("BP_WORKERS_TODAY", "").partition(":")
+    if day == at.date().isoformat() and n.isdigit() and int(n) >= 1:
+        return min(int(n), S.MAX_WORKERS)
     a, b = (dt.time.fromisoformat(x) for x in c["desk_hours_et"])
     desk = at.weekday() < 5 and a <= at.time() < b
     return max(1, min(c["workers"]["desk_hours" if desk else "other"], S.MAX_WORKERS))
