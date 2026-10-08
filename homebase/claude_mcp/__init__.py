@@ -9,7 +9,8 @@ POST /api/accounts/reconnect and /api/accounts/remove). Besides that it reads/wr
 through homebase.draftstore (~/.homebase/strategies/<name>.py) and reads local state for data_coverage and
 services_health (see desk_tools.py). The blueprint_* tools ask neither service: each starts the research
 toolkit (research/edge-library/bp.py) as a child process, and the ideas it saves are kept through
-homebase.ideastore (~/.homebase/ideas/<name>/).
+homebase.ideastore (~/.homebase/ideas/<name>/). The pipeline_* tools start the same toolkit (`bp.py pipe ...`), which
+keeps the strategy pipeline in a folder of its own (~/.homebase/pipeline).
 
 There are deliberately NO tools for orders, arming, killing, flattening, booking, chart trading,
 market-data settings or paper accounts: tests/test_claude_mcp.py pins the tool names and that no /api
@@ -21,4 +22,5 @@ path outside the routes above ever appears in this package.
     desk_client.py  the desk's HTTP client (an exact route allowlist)
     desk_tools.py   the desk-bridge and export tools
     blueprint_tools.py  the blueprint tools: one per phase, each a command of the research toolkit
+    pipeline_tools.py   the pipeline tools: add an idea card, the runner, the queue, the owner's yes or no, the book
 """

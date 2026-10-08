@@ -3,7 +3,7 @@
     blocks and library   what an idea is built from: entry triggers, filters, exits, sessions ..., the other families of the library,
                          the engine's indicator helpers -- each with its code (the research toolkit, `bp.py blockcode`)
     chat tools           every tool a chat has through the connector (claude_mcp.tools.SPECS): the strategy tester's, the blueprint's,
-                         the desk's views -- each with its definition and the method that runs it
+                         the pipeline's, the desk's views -- each with its definition and the method that runs it
     skills               the Claude skills on this machine (~/.claude/skills, the repository's .claude/skills): the skill file and its scripts
     scripts              the repository's own scripts (tools/, the research toolkit's command line files)
 
@@ -196,13 +196,14 @@ def chat_tools(src: Sources) -> tuple:
     """Groups of the connector's tools: each with its definition (the `_spec` call) and the method that runs it (`Toolbox.t_<name>`)."""
     from .claude_mcp import blueprint_tools as BT
     from .claude_mcp import desk_tools as DT
+    from .claude_mcp import pipeline_tools as PT
     from .claude_mcp import tools as T
-    bp, desk = {s["name"] for s in BT.SPECS}, {s["name"] for s in DT.SPECS}
-    mods = [Path(inspect.getsourcefile(m)) for m in (T, BT, DT)]
-    out = {"tester": [], "blueprint": [], "desk": []}
+    bp, pipe, desk = ({s["name"] for s in m.SPECS} for m in (BT, PT, DT))
+    mods = [Path(inspect.getsourcefile(m)) for m in (T, BT, PT, DT)]
+    out = {"tester": [], "blueprint": [], "pipeline": [], "desk": []}
     for s in T.SPECS:
         name = s["name"]
-        kind = "blueprint" if name in bp else "desk" if name in desk else "tester"
+        kind = "blueprint" if name in bp else "pipeline" if name in pipe else "desk" if name in desk else "tester"
         parts = []
         for mp in mods:
             hit = _spec_lines(mp, name)
@@ -217,10 +218,12 @@ def chat_tools(src: Sources) -> tuple:
                 gp, ga, gb = _fn_lines(g)
                 parts.append({"label": f"It calls {g.__qualname__}", "src": src.add(gp, ga, gb)})
         head, _, text = s["description"].partition(": ")
-        words = _first_sentence(text if kind == "blueprint" and text else s["description"])
-        out[kind].append(_item(f"tool:{name}", name, words, parts, sub=head if kind == "blueprint" and text else ""))
+        headed = kind in ("blueprint", "pipeline") and bool(text)      # "Blueprint phase 2, the build: ..." -- what it is of, then its words
+        words = _first_sentence(text if headed else s["description"])
+        out[kind].append(_item(f"tool:{name}", name, words, parts, sub=head if headed else ""))
     return [("tester", "Chat tools: strategy tester", "What a chat runs in the Strategy Tester: backtests, heat maps, walk-forwards, Monte Carlo, drafts."),
             ("blueprint", "Chat tools: blueprint", "One tool for each phase of the blueprint, saved in the app."),
+            ("pipeline", "Chat tools: pipeline", "The strategy pipeline: add an idea card, run the queue, read it, the owner's yes or no, the book."),
             ("desk", "Chat tools: desk views", "Read-only views of the live desk, and two safe actions. No tool can trade.")], out
 
 

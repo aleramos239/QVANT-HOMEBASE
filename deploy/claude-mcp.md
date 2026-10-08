@@ -8,7 +8,8 @@ It also gives Claude a read of the live desk (`desk_status`, `desk_journal`, `de
 `account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the eleven
 `blueprint_*` tools that run a strategy idea through the house blueprint: one per phase, the list of
 blocks before them, and three that only read what is saved (the status, the heat map, the Monte Carlo
-tables). **It has no
+tables), and the five `pipeline_*` tools of the strategy pipeline (add an idea card, the runner, the queue, the
+owner's yes or no, the book). **It has no
 trading tool of any kind** — nothing here can place or cancel an order, flatten, kill, arm/disarm,
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
@@ -27,7 +28,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 36 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 42 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -52,6 +53,9 @@ claude mcp add --scope user \
   `HOMEBASE_BP` and `HOMEBASE_BP_PYTHON` move them. The ideas it saves live in `~/.homebase/ideas/<name>/`
   (`HOMEBASE_IDEAS_ROOT` overrides), kept through `homebase/ideastore.py`. An idea folder that was moved
   writes no Lab draft and no group unless `HOMEBASE_DRAFTS_DIR` says where: it can never write the real Lab.
+- The strategy pipeline, through the same toolkit (`bp.py pipe ...`, started by each `pipeline_*` tool). It lives
+  in a folder of its own, `~/.homebase/pipeline/` (`HOMEBASE_PIPELINE_ROOT` overrides): its cards, the state of
+  each idea, the stage results, its own runs, the book. Never the idea folder above.
 
 ## What the tools need from the running services
 
@@ -122,6 +126,31 @@ Each runs one command of the toolkit
 - No chart-service route is involved, so nothing needs a restart: a new session has the tools
   (`blueprint_blocks` and the eval card's `account` came with connector 1.4.0; `blueprint_heatmap`,
   `blueprint_mc` and the early look with 1.5.0).
+
+## The pipeline tools
+
+The strategy pipeline (`docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md`) takes an idea card through
+eight fixed stages by itself and stops it at the first one it fails. Five tools, each one command of the toolkit
+(`<python> bp.py pipe <sub> ... --root=<pipeline folder> --json`), each answering with the toolkit's own text:
+
+- **`pipeline_add`** (`card`, `inbox`) puts ONE idea card in the queue (`pipe add --spec=-`, the card on stdin). Its
+  description is the card's manual: 1 to 3 ways to enter, exactly 3 values of one main setting a way, 0 to 5
+  indicators each with its reason, one market of NQ / ES / GC, one session, the sides; the bars are always 1 and
+  5 minutes. `blueprint_blocks` lists the entry rules and indicators that exist. A card with a line missing is
+  refused with the lines that fail; the same idea is refused under any name.
+- **`pipeline_status`** (`name`) is the queue, one row an idea (`pipe list`) -- or one idea in full (`pipe show`):
+  its card, and every stage it went through with its lines and numbers.
+- **`pipeline_control`** (`action`: `start` | `pause` | `resume`) is the runner: a detached process of its own
+  (never a child the connector or the chart service keeps), which carries on where it was after any stop.
+- **`pipeline_decide`** (`name`, `decision`: `approve` | `refuse`, `why`) is the owner's yes or no on an idea that
+  passed every stage. **Only on the owner's word**: leave it on "ask". A refusal needs his reason.
+- **`pipeline_book`** lists the approved strategies.
+- **No tool can skip a stage or change a pass line**, and none touches the desk. The toolkit's refusals come back
+  as "Refused (pipeline <sub>): ..." (the tool's error).
+- **In the Lab**: `GET /api/tester/pipeline` (runner, counts, the ideas with the page's label, the book, the eight
+  stages with a plain sentence each), `GET /api/tester/pipeline/idea/{name}` and `POST /api/tester/pipeline/run`
+  run the same code. Those three routes need a chart service started with this version; the chat tools do not
+  (they came with connector 1.6.0: a new session has them).
 
 ## Draft strategies: where their code runs
 

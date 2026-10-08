@@ -32,8 +32,9 @@ def test_every_chat_tool_is_in_it_with_its_definition_and_the_method_that_runs_i
         for p in it["parts"]:
             s = cat["sources"][p["src"]]
             assert s["code"] and p["src"] == f"{s['file']}:{s['start']}-{s['end']}"
-    assert {g["id"] for g in cat["groups"] if g["id"] in ("tester", "blueprint", "desk")} == {"tester", "blueprint", "desk"}
+    assert {g["id"] for g in cat["groups"] if g["id"] in ("tester", "blueprint", "pipeline", "desk")} == {"tester", "blueprint", "pipeline", "desk"}
     assert "blueprint_blocks" in {i["name"] for g in cat["groups"] if g["id"] == "blueprint" for i in g["items"]}
+    assert {i["name"] for g in cat["groups"] if g["id"] == "pipeline" for i in g["items"]} == {s["name"] for s in tools.SPECS if s["name"].startswith("pipeline_")}
 
 
 def test_skills_and_scripts_are_read_from_their_folders(tmp_path, monkeypatch):

@@ -31,6 +31,20 @@
     POST /api/tester/blueprint/run       {tool, args} -> {ok, text}: that tool run as a chat runs it (the research
                                           toolkit bp.py as a child process; it saves in the app itself). A long job
                                           answers after LAB_WAIT_S at most with its job id: send it again with job_id
+    GET  /api/tester/pipeline            the strategy pipeline as the Lab shows it (its Queue, Book and Guide):
+                                          {runner: {running, paused}, counts: {label: n}, ideas: [the toolkit's state
+                                          rows, each with the page's `label`], book: [the book cards], stages: [{n,
+                                          name, words}]} -- two commands of the research toolkit (bp.py pipe list,
+                                          pipe book), kept for PIPE_CACHE_S; the labels and the stages' words are
+                                          claude_mcp.pipeline_tools' own, typed nowhere else
+    GET  /api/tester/pipeline/idea/{name}   one idea: {card, state, stages: [{n, name, passed, result, lines: [{line,
+                                          passed, text}], text}]} (bp.py pipe show); 404 for a name not on file
+    POST /api/tester/pipeline/run        {action: add, card, inbox?} | {action: start | pause | resume} |
+                                          {action: approve, name} | {action: refuse, name, why} -> {ok, text}: the
+                                          pipeline tool every chat has, run as a chat runs it; the toolkit's refusal
+                                          is ok false with its words. add / start / resume are refused 09:20-09:35
+                                          ET on weekdays (they can start heavy work); pause and the owner's yes or no
+                                          never are
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -100,6 +114,7 @@ import datetime as dt
 import inspect
 import re
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Callable
@@ -116,17 +131,23 @@ from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
-from ..claude_mcp import blueprint_tools
+from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from . import lab_templates, reviewpack
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
 LAB_WAIT_S = 20          # the longest a blueprint tool started from the Lab waits for a job before it hands back its id
+PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long: a page asks every 5 s, and several may be open
+pipe_clock = time.monotonic      # ... by this clock (a test moves it)
+PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
+PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in the desk's 9:30 window
+PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
+              "{action: approve, name} | {action: refuse, name, why}")
 
 
-class _Blueprint(blueprint_tools.BlueprintMixin):
-    """The blueprint tools as the connector has them (one per phase, each a command of the research toolkit), for
-    the Lab's own panel: the same code path, so the page and a chat can never disagree about a tool."""
+class _Blueprint(pipeline_tools.PipelineMixin, blueprint_tools.BlueprintMixin):
+    """The blueprint tools as the connector has them (one per phase, each a command of the research toolkit), and the
+    pipeline's, for the Lab's own panels: the same code path, so the page and a chat can never disagree about a tool."""
 PROP_CACHE = 64          # prop-eval re-scores kept per service
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
@@ -424,6 +445,62 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return {"ok": True, "tool": tool, "text": fn(**args)}
         except ToolError as e:    # a refusal of the toolkit (or a bad input): the tool's own words, nothing was changed
             return {"ok": False, "tool": tool, "text": str(e)}
+
+    # ---- the strategy pipeline in the Lab: its Queue, its Book and its Guide (claude_mcp.pipeline_tools) -----------
+    pipe_cache: dict = {"at": None, "body": None, "error": None}
+    pipe_lock = threading.Lock()
+
+    @r.get("/pipeline")
+    def pipeline_state():
+        """Where the pipeline stands, in one answer. Two commands of the toolkit at most, and the answer is kept for
+        PIPE_CACHE_S: pages that ask together wait for the one who asked first and read what it got. A toolkit that
+        is not installed (or does not answer a look in time) is a 503 with its own words -- kept as long, so that
+        the pages behind a slow toolkit never each start it again and use this service's threads up."""
+        with pipe_lock:
+            if pipe_cache["at"] is None or pipe_clock() - pipe_cache["at"] >= PIPE_CACHE_S:
+                try:
+                    got = {"body": box.pipeline_state(), "error": None}
+                except ToolError as e:
+                    got = {"body": None, "error": str(e)}
+                pipe_cache.update(got, at=pipe_clock())
+            if pipe_cache["error"] is not None:
+                raise HTTPException(503, pipe_cache["error"])
+            return pipe_cache["body"]
+
+    @r.get("/pipeline/idea/{name}")
+    def pipeline_idea(name: str):
+        if not pipeline_tools.NAME_RE.fullmatch(name):
+            raise HTTPException(404, f"no idea {name!r}")
+        try:
+            return box.pipeline_idea(name)
+        except blueprint_tools.Refused as e:      # the toolkit has no such idea on file
+            raise HTTPException(404, str(e)) from None
+        except ToolError as e:
+            raise HTTPException(503, str(e)) from None
+
+    @r.post("/pipeline/run")
+    def pipeline_run(request: Request, body: dict):
+        write_ok(request)
+        json_body(request)
+        action = body.get("action")
+        keys = PIPE_KEYS.get(action) if isinstance(action, str) else None
+        card, inbox, name, why = (body.get(k) for k in ("card", "inbox", "name", "why"))
+        if (keys is None or set(body) - {"action", *keys}
+                or (action == "add" and not (isinstance(card, dict) and isinstance(body.get("inbox", False), bool)))
+                or ("name" in keys and not isinstance(name, str))
+                or ("why" in keys and not (isinstance(why, str) and why.strip()))):
+            raise HTTPException(400, PIPE_SHAPE)
+        if action in PIPE_QUIET and Slots().quiet():     # the desk's 9:30 window: nothing is started from the page then
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        try:
+            text = (box.t_pipeline_add(card, bool(inbox)) if action == "add" else
+                    box.t_pipeline_decide(name, action, why) if "name" in keys else box.t_pipeline_control(action))
+            return {"ok": True, "text": text}
+        except ToolError as e:    # a refusal of the toolkit (or a bad input): its own words, nothing was changed
+            return {"ok": False, "text": str(e)}
+        finally:
+            with pipe_lock:       # whatever it did, the next look is a new one
+                pipe_cache["at"] = None
 
     @r.post("/show")
     async def show(request: Request):

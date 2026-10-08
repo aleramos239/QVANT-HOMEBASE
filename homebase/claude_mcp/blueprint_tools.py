@@ -19,6 +19,8 @@ the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.m
       heatmap <name> [--place=home|1|2|...|not_here] [--round=N]     a build round's heat map, as saved
       mc <name> [--on=build|test]              the Monte Carlo tables of the build or the test, as saved
       job <id> --wait=S                        keep waiting on a build or a test
+      pipe <sub> ...                           the strategy pipeline's commands (pipeline_tools.py): the ONE command
+                                               of two words, and --root is the PIPELINE's own folder there
 
     stdout: ONE JSON object {ok, command, name, status, phase, round, lines: [{line, passed, number, need,
     text}], text, next, job: {id, state, progress} | null, saved, error}; logs go to stderr.
@@ -68,6 +70,11 @@ RUNNING = ("queued", "running")
 _JOB_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:@-]{0,119}$")
 _PLACE_RE = re.compile(r"^(home|not_here|[1-9][0-9]?)$")   # the table a heat map is of, in the toolkit's words
 MC_ON = ("build", "test")                                  # the saved result the Monte Carlo tables are of
+PIPE = "pipe"                            # the pipeline's commands: their sub-command is a second word (`pipe list`)
+
+
+class Refused(ToolError):
+    """The toolkit said no (exit 2, or ok false): nothing was run. Its own words are the error's."""
 
 
 def toolkit() -> tuple[str, str]:
@@ -388,15 +395,21 @@ def _json_object(text):
     return None
 
 
+def _command(args: list) -> str:
+    """A command as the toolkit names it: its first word -- and the second, for the pipeline's (`pipe list`)."""
+    return " ".join(args[:2]) if args[0] == PIPE else args[0]
+
+
 def _answer(command: str, p) -> dict:
-    """The toolkit's result, or a ToolError that says what happened: refused (exit 2 or ok false), crashed
-    (any other exit code), or an answer that is not the contract's."""
+    """The toolkit's result, or a ToolError that says what happened: refused (exit 2 or ok false: `Refused`),
+    crashed (any other exit code), or an answer that is not the contract's."""
     r = _json_object(p.stdout)
     if p.returncode == 2 or (r is not None and r.get("ok") is False):
         r = r or {}
         why = r.get("error") or _last_line(r.get("text")) or _last_line(p.stderr) or "no reason given"
-        raise ToolError(f"Refused (blueprint {command}): {why}\nNothing was run."
-                        + (f"\nNext: {r['next']}" if r.get("next") else ""))
+        what = f"pipeline{command[len(PIPE):]}" if command.startswith(PIPE + " ") else f"blueprint {command}"
+        raise Refused(f"Refused ({what}): {why}\nNothing was run."
+                      + (f"\nNext: {r['next']}" if r.get("next") else ""))
     if p.returncode != 0:
         raise ToolError(f"The blueprint toolkit crashed (exit {p.returncode}) on `{command}`: "
                         f"{(p.stderr or p.stdout or 'no output').strip()[-600:]}")
@@ -462,8 +475,9 @@ class BlueprintMixin:
 
     _bp_grace_s: float = GRACE_S
 
-    def _bp(self, args: list, *, stdin=None, timeout: float = SHORT_S) -> dict:
-        """Run one toolkit command and return its result (the module docstring has the command line)."""
+    def _bp(self, args: list, *, stdin=None, timeout: float = SHORT_S, root=None) -> dict:
+        """Run one toolkit command and return its result (the module docstring has the command line). `root` = the
+        folder the command works in when it is not the app's idea folder (the pipeline's own: pipeline_tools.py)."""
         python, script = toolkit()
         if not Path(script).is_file():
             raise ToolError(f"The blueprint toolkit is not installed yet: {script} is missing "
@@ -471,18 +485,18 @@ class BlueprintMixin:
         if shutil.which(python) is None:
             raise ToolError(f"The blueprint toolkit is not installed yet: its Python, {python}, is missing "
                             f"({ENV_PYTHON} names another one).")
-        argv = [python, script, *args, f"--root={ideastore.ideas_root()}", "--json"]
+        argv, cmd = [python, script, *args, f"--root={ideastore.ideas_root() if root is None else root}", "--json"], _command(args)
         # never this server's own stdin: that is the JSON-RPC stream
         feed = {"stdin": subprocess.DEVNULL} if stdin is None else {"input": json.dumps(stdin)}
         try:
             p = subprocess.run(argv, capture_output=True, encoding="utf-8", errors="replace", timeout=timeout,
                                cwd=str(Path(script).parent), env={**os.environ, "PYTHONIOENCODING": "utf-8"}, **feed)
         except subprocess.TimeoutExpired:
-            raise ToolError(f"The blueprint toolkit did not answer `{args[0]}` within {timeout:g} s and was stopped. "
-                            "blueprint_status shows whether a job is still running.") from None
+            raise ToolError(f"The blueprint toolkit did not answer `{cmd}` within {timeout:g} s and was stopped."
+                            + ("" if args[0] == PIPE else " blueprint_status shows whether a job is still running.")) from None
         except OSError as e:
             raise ToolError(f"The blueprint toolkit could not be started: {e}") from None
-        return _answer(args[0], p)
+        return _answer(cmd, p)
 
     def _lab(self, r: dict) -> list[str]:
         """After a command: the app's own copies of the idea, brought up to date (ideastore.sync). Lines for

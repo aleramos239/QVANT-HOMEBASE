@@ -14,7 +14,7 @@ from . import tools
 from .client import ToolError
 
 SERVER_NAME = "homebase"
-SERVER_VERSION = "1.5.0"
+SERVER_VERSION = "1.6.0"
 PROTOCOLS = ("2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = (
     "Homebase Strategy Tester: backtest strategies on real tick data (tick replay, pessimistic fills), "
@@ -30,6 +30,9 @@ INSTRUCTIONS = (
     "blueprint_eval_card, with blueprint_status at any time and blueprint_heatmap and blueprint_mc as "
     "read-only views of what is saved; they file each idea under its Lab group themselves, so set_group is "
     "not needed for it. "
+    "The strategy pipeline tests idea cards by itself, stage by stage: pipeline_add (one card; blueprint_blocks "
+    "first), pipeline_control (start / pause / resume its runner), pipeline_status (the queue, or one idea in "
+    "full), pipeline_book, and pipeline_decide (approve / refuse an idea that passed, only on the owner's word). "
     "The default range is the build days (2021-09-22 to "
     "2025-06-30), where all tuning happens. "
     "The test days (2025-07-01 on) are read once and only for a locked strategy, never for a quick look or "

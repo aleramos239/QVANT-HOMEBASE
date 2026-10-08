@@ -448,10 +448,13 @@ def test_no_tool_can_trade():
                      "prop_eval", "list_prop_rules", "list_runs", "get_run", "trades", "show_on_chart",
                      "cancel", "write_strategy", "delete_draft", "set_group", "blueprint_blocks", "blueprint_card",
                      "blueprint_code_check", "blueprint_build", "blueprint_lock", "blueprint_test", "blueprint_sim", "blueprint_portfolio",
-                     "blueprint_eval_card", "blueprint_status", "blueprint_heatmap", "blueprint_mc", "desk_status",
+                     "blueprint_eval_card", "blueprint_status", "blueprint_heatmap", "blueprint_mc", "pipeline_add",
+                     "pipeline_status", "pipeline_control", "pipeline_decide", "pipeline_book", "desk_status",
                      "desk_journal", "desk_readiness", "data_coverage", "services_health", "account_reconnect",
                      "account_remove", "export_start", "export_status"]
     for n in names:
+        if n == "pipeline_book":            # THE BOOK of the strategy pipeline: the strategies the owner approved, a read.
+            continue                        # Nothing of an account is booked by it (the route-level pin below holds that)
         assert not any(w in n for w in FORBIDDEN_TOOL_WORDS), n
 
 

@@ -395,7 +395,7 @@ def test_every_chat_is_told_to_use_them():
     init = rpc(srv, "initialize", {"protocolVersion": "2025-06-18"})["result"]
     assert ("For a strategy idea use the blueprint_* tools (card, code check, build, lock, test, sim, eval card): "
             "they save everything in the app.") in init["instructions"]
-    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.5.0"
+    assert init["serverInfo"]["version"] == protocol.SERVER_VERSION == "1.6.0"
     listed = [t["name"] for t in rpc(srv, "tools/list")["result"]["tools"]]
     assert listed[listed.index("blueprint_blocks"):listed.index("blueprint_mc") + 1] == list(REQUIRED)
 
