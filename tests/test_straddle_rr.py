@@ -83,7 +83,7 @@ def test_rr_is_a_known_key_so_the_chart_service_does_not_name_it(cfg_path, caplo
 
 
 def test_only_a_straddle_takes_its_target_from_rr():
-    lv = levels_cfg("nq_nyam_flex", rr=3.0, sl_pts=5.0, tp_pts=1.0)
+    lv = levels_cfg("lv_atr_take", rr=3.0, sl_pts=5.0, tp_pts=1.0)
     assert desk_config.apply_rr(lv).tp_pts == 1.0
     st = StrategyCfg(symbol="NQ", qty=1, offset_pts=1.0, sl_pts=4.0, tp_pts=1.0, rr=1.5)
     assert desk_config.apply_rr(st).tp_pts == 6.0
@@ -123,7 +123,7 @@ def test_an_unknown_strategy_is_404(client):                                    
 
 def test_only_a_straddle_with_a_stop_can_be_changed(client):                         # noqa: F811
     cfg = client.app.state.cfg
-    cfg.strategies["lv"] = levels_cfg("nq_nyam_flex")
+    cfg.strategies["lv"] = levels_cfg("lv_atr_take")
     cfg.strategies["nostop"] = dataclasses.replace(cfg.strategies["nq930"], sl_pts=0.0)
     assert post(client, strategy="lv", rr=2).status_code == 400
     assert post(client, strategy="nostop", rr=2).status_code == 400
@@ -162,3 +162,15 @@ def test_yesterdays_position_does_not_block_it(client):                         
     st = client.app.state.engine._state("nq930", "main")
     st.status, st.date = "live", "2026-09-29"
     assert post(client, strategy="nq930", rr=2).status_code == 200
+
+
+# ---- the display label ------------------------------------------------------------------------------------
+def test_status_and_readiness_show_the_label_while_ids_stay_ids(client):            # noqa: F811
+    cfg = client.app.state.cfg
+    cfg.strategies["nq930"].label = "NQ nine-thirty"
+    d = client.get("/api/status").json()
+    assert d["strategies"]["nq930"]["cfg"]["label"] == "NQ nine-thirty" and "nq930" in d["strategies"]
+    assert cfg.book["nq930"] == [{"account": "main", "qty": 3}]                    # the book keeps the id
+    cfg.book["nq930"] = []
+    labels = [c["label"] for c in client.get("/api/status").json()["readiness"]["checks"]]
+    assert "NQ nine-thirty" in labels and "nq930" not in labels

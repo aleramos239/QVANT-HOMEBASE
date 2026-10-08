@@ -1,7 +1,6 @@
 """The day's geometry for the "levels" strategies, and what each booked account gets of it.
 
-One definition, used by the desk (homebase/leveltimer.py) and by the tester strategies
-(homebase/strategies/prop_nq.py), so a backtest and a live fire cannot drift apart.
+One definition, used by the desk (homebase/leveltimer.py); no strategy ships on it since 2026-10-08.
 
   atr_straddle   anchor = the last print before the fire; buy stop anchor + off_atr x ATR, sell stop
                  anchor - off_atr x ATR.            (nyam 09:30 / pm 13:30 straddles)

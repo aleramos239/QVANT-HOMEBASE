@@ -255,6 +255,9 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                            "detail": f"on battery ({power.get('pct')}%) — plug in"})
         else:
             checks.append({"level": "ok", "label": "Power", "detail": "on power"})
+    def shown(n):                       # a strategy as the page names it: its label, else its id
+        return cfg.strategies[n].label or n
+
     # an event-day strategy (only_dates) is not part of a day it does not trade
     enabled = {n: s for n, s in cfg.strategies.items()
                if s.enabled and s.trades_on(now_et.date())}
@@ -263,7 +266,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             # a SHADOW strategy with no account is a normal resting state —
             # it must not hold the bulb amber forever
             checks.append({"level": "info" if getattr(s, "shadow", False) else "warn",
-                           "label": name,
+                           "label": shown(name),
                            "detail": "enabled but no accounts assigned"})
     weekday = now_et.weekday() < 5
     if weekday:                          # a booked strategy that will not trade today says why (inactive.py)
@@ -274,7 +277,7 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 why.setdefault(*got)
             why.pop("not_scheduled_today", None)    # an event-day strategy off its day: expected, journaled only
             if why and s.enabled and config_mod.assignments(cfg, name):
-                checks.append({"level": "warn", "label": name,
+                checks.append({"level": "warn", "label": shown(name),
                                "detail": "inactive today — " + "; ".join(why.values())})
     live_strats = [n for n, s in enabled.items()
                    if not getattr(s, "shadow", False)
@@ -293,11 +296,11 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 continue
             stage = (tstat.get(name) or {}).get("stage")
             if stage in (None, "idle"):
-                checks.append({"level": "bad", "label": name,
+                checks.append({"level": "bad", "label": shown(name),
                                "detail": f"timer has not gated — the {fire_t.hour}:{fire_t.minute:02d} fire "
                                          "is not armed"})
             elif stage == "error":
-                checks.append({"level": "bad", "label": name,
+                checks.append({"level": "bad", "label": shown(name),
                                "detail": "timer error: " +
                                          str((tstat.get(name) or {}).get("error"))[:80]})
     for name, tst in ((timer_status or {}).get("strategies") or {}).items():
@@ -309,19 +312,19 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         for aid, net in (tst.get("skipped_accounts") or {}).items():
             a = cfg.accounts.get(aid)
             if aid in unsynced:
-                detail = (f"{name} skipped today — its positions and orders were not synced "
+                detail = (f"{shown(name)} skipped today — its positions and orders were not synced "
                           f"at {checked_at}: unknown, never taken as flat")
             elif net:
-                detail = (f"{name} skipped today — holds {int(net):+d} {sym} "
+                detail = (f"{shown(name)} skipped today — holds {int(net):+d} {sym} "
                           f"(manual position at {checked_at})")
             elif aid in unreadable:
                 # the broker read failed and no cached position confirms one
                 # either way — say so, rather than implying a known flat book
-                detail = (f"{name} skipped today — position unknown, "
+                detail = (f"{shown(name)} skipped today — position unknown, "
                           f"{len(orders.get(aid) or ())} working {sym} order(s) "
                           f"(manual, at {checked_at})")
             else:
-                detail = (f"{name} skipped today — {len(orders.get(aid) or ())} "
+                detail = (f"{shown(name)} skipped today — {len(orders.get(aid) or ())} "
                           f"working {sym} order(s) (manual, at {checked_at})")
             checks.append({"level": "bad",
                            "label": (a.label or a.account_name or aid) if a else aid,
@@ -358,11 +361,11 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
         after_window = now_et.time() > dt.time(int(h), int(m))
         if getattr(s, "kind", "straddle") == "bars":
             if status != "idle":
-                checks.append({"level": "ok", "label": name, "detail": status})
+                checks.append({"level": "ok", "label": shown(name), "detail": status})
             continue                     # a rule with no setup today is normal
         if getattr(s, "kind", "straddle") == "levels":
             if status != "idle":
-                checks.append({"level": "ok", "label": name, "detail": status})
+                checks.append({"level": "ok", "label": shown(name), "detail": status})
             continue                     # leveltimer journals every fire / skip / miss with its why
         # from the open, a self-fire straddle's own timer says what its day was
         # (09:21-09:30 has its own check above)
@@ -370,18 +373,18 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 if weekday and getattr(s, "self_fire", False) and now_et.time() >= fire_time(s)
                 else None)
         if told is not None:
-            checks.append({"level": told[0], "label": name, "detail": told[1]})
+            checks.append({"level": told[0], "label": shown(name), "detail": told[1]})
         elif weekday and after_window and status == "idle":
             if s.gated:
-                checks.append({"level": "warn", "label": name,
+                checks.append({"level": "warn", "label": shown(name),
                                "detail": "no signal today — gated day (expected) "
                                          "or the pipe is broken"})
             else:
-                checks.append({"level": "bad", "label": name,
+                checks.append({"level": "bad", "label": shown(name),
                                "detail": "no signal arrived — this strategy "
                                          "trades every day"})
         elif status != "idle":
-            checks.append({"level": "ok", "label": name, "detail": status})
+            checks.append({"level": "ok", "label": shown(name), "detail": status})
     if cfg.armed:
         checks.append({"level": "info", "label": "Mode",
                        "detail": "ARMED — signals place real orders"})
@@ -1145,7 +1148,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 name: {
                     "cfg": {"symbol": s.symbol, "qty": s.qty,
                             "offset_pts": s.offset_pts, "sl_pts": s.sl_pts,
-                            "tp_pts": s.tp_pts, "rr": s.rr, "cancel_et": s.cancel_et,
+                            "tp_pts": s.tp_pts, "rr": s.rr, "label": s.label, "cancel_et": s.cancel_et,
                             "flat_et": s.flat_et, "fire_et": s.fire_et,
                             "only_dates": list(s.only_dates), "enabled": s.enabled,
                             "gated": s.gated, "self_fire": s.self_fire,

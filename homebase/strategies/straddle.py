@@ -21,11 +21,9 @@ MINUS = "\u2212"          # U+2212 MINUS SIGN: "Short entry -2" reads as a level
 
 def desk_cfg(name: str):
     """The desk's StrategyCfg as the desk would load it (config.json over the
-    frozen defaults). Read at call time, so the tester follows the desk file. The four NQ "levels"
-    algos are not on the desk any more: they come from config.levels_reference."""
-    from ..config import levels_reference, load
-    strategies = load().strategies
-    return strategies[name] if name in strategies else levels_reference()[name]
+    frozen defaults). Read at call time, so the tester follows the desk file."""
+    from ..config import load
+    return load().strategies[name]
 
 
 @dataclass(frozen=True)

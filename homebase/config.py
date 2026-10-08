@@ -49,6 +49,7 @@ class StrategyCfg:
                                  # The timer's gate / prestage / done times hang off it (-10 min,
                                  # -90 s, +1 min); 09:30:00 is the original schedule, unchanged.
     only_dates: list = field(default_factory=list)   # ISO ET dates it trades; empty = every weekday
+    label: str = ""              # display name only ("" = show the id); APIs, the book and the journal use the id
     rr: float = 0.0              # straddle: target as a multiple of the stop; 0 = tp_pts is used as written.
                                  # rr > 0: load() sets tp_pts = round(sl_pts * rr, 4) (the owner edits it in the app)
 
@@ -178,7 +179,9 @@ def _defaults() -> AppCfg:
             # (+$3,080 gross, +$3,061.60 after $2.30 a side), unfilled cancelled 08:45, flat 09:55.
             # Fires 08:29:59 (the user's choice 2026-10-01): the stops rest at the exchange before the release;
             # tested on 57 NFPs: 08:29:59 passes 22/38 + 13/19, one second later (08:30:00) 23/38 + 14/19.
-            # Trades ONLY the days in only_dates (the BLS Employment Situation dates 2026-10-02, 11-06, 12-04; extend it by hand).
+            # Trades ONLY the days in only_dates: the BLS NFP days (2026-10-02, 11-06, 12-04) and CPI days (10-14, 11-10, 12-10),
+            # 08:30 ET, checked on bls.gov 2026-10-08, one setup for both releases (owner 2026-10-08; extend by hand).
+            # The id stays gc_nfp (book, journal, history); the desk shows it as label GC_NFP/CPI.
             # accept_until 08:31: a fire more than a minute late is refused, not re-anchored on a
             # post-release price. Ships off and unbooked: the user books the evals and enables it.
             "gc_nfp": StrategyCfg(
@@ -186,118 +189,25 @@ def _defaults() -> AppCfg:
                 cancel_et="08:45", flat_et="09:55",
                 accept_from_et="08:29", accept_until_et="08:31",
                 enabled=False, gated=False, self_fire=True,
-                fire_et="08:29:59", only_dates=["2026-10-02", "2026-11-06", "2026-12-04"],
+                fire_et="08:29:59", only_dates=["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04", "2026-12-10"],
+                label="GC_NFP/CPI",
                 metrics={
-                    "source": "NFP-only tick replay · 57 events 2021-10..2026-09 · the 2025-26 part was "
-                              "already spent on this family: a consistency check, not a clean exam",
-                    "rows": {"entry": "OCO stops anchor ±2.0 (anchor = last print before 08:29:59; orders rest before the 08:30 release)",
-                             "SL": "5.0 pts · $500/ct · $2,000 at 4 ct (a stop-out ends the eval)",
-                             "TP": "7.7 pts · $770/ct · $3,080 at 4 ct",
-                             "pass / bust": "58% (2021-24) · 68% (2025-26) / 32-42% (fired 08:30:00: 61% · 74% / 26-37%)",
-                             "day": "2026-10-02, 11-06, 12-04 (BLS Employment Situation)"},
-                    "rev": 2,
-                    "caveat": "evals bought together win or lose together; 20 of 35 sim wins were held "
-                              "5 s or less (Lucid micro-scalping rule)",
-                    "equity_file": "gc_nfp_equity.json",
-                }),
-            # GC 08:30 CPI straddle (owner 2026-10-08): the gc_nfp geometry on the BLS CPI release days
-            # (08:30 ET, checked on bls.gov 2026-10-08): 4 gold contracts, OCO stops anchor +/- 2.0, SL 5.0
-            # (-$2,000: a stop-out ends the eval), TP 7.7 (+$3,080 gross, +$3,061.60 after $2.30 a side: clears the
-            # $3,000 eval target, 7.5 would not), fired 08:29:59, cancel 08:45, flat 09:55.
-            # Ships off and unbooked, like gc_nfp: the owner books the evals and enables it.
-            "gc_cpi": StrategyCfg(
-                symbol="GC", qty=4, offset_pts=2.0, sl_pts=5.0, tp_pts=7.7,
-                cancel_et="08:45", flat_et="09:55",
-                accept_from_et="08:29", accept_until_et="08:31",
-                enabled=False, gated=False, self_fire=True,
-                fire_et="08:29:59", only_dates=["2026-10-14", "2026-11-10", "2026-12-10"],
-                metrics={
-                    "source": "GC 08:30 CPI straddle, 45 CPIs 2021-10..2025-06 build days, tick replay, "
-                              "1 tick slip, $4 RT per contract, 2026-10-08",
+                    "source": "GC 08:30 NFP + CPI straddle, one setup for both releases (2026-10-08)",
                     "rows": {"entry": "OCO stops anchor +/-2.0",
                              "SL": "5.0 pts, $500/ct, $2,000 at 4 ct (a stop-out ends the eval)",
                              "TP": "7.7 pts, $770/ct, $3,080 at 4 ct",
-                             "pass / bust": "54% / 45% on the LucidFlex 50K sim at TP 7.5 (build days); "
-                                            "7.7 re-check pending",
-                             "day": "2026-10-14, 11-10, 12-10"},
-                    "caveat": "45 events, best of 30 settings, 2025-26 not read; CPI win rate fell from 83% "
-                              "(2022) to 58% (2024); 4 ct is the 4-mini cap",
+                             "2025-01..2026-09 tick replay, 4 ct": "NFP 19 trades 74% win +$32.1k eval pass 68% / "
+                                                                  "CPI 20 trades 60% win +$19.6k eval pass 48%",
+                             "events": "NFP and CPI days"},
+                    "rev": 3,
+                    "caveat": "19-20 trades per event; the 2025-26 days were already spent on this family; CPI is "
+                              "the weaker of the two and its win rate fell 64% -> 56% from 2025 to 2026; most "
+                              "winners last under 5 s (Lucid micro-scalp: over 50% of profit from trades held 5 s "
+                              "or less)",
+                    "equity_file": "gc_nfp_equity.json",
                 }),
         },
     )
-
-
-def levels_reference() -> dict[str, StrategyCfg]:
-    """The four NQ "levels" algos. NOT shipped on the desk (2026-10-08: the desk ships nq930 and gc_nfp
-    only): the tester / Lab strategies (strategies/prop_nq.py) and the metrics build still read them here,
-    through strategies.straddle.desk_cfg. A fresh copy every call."""
-    return {
-        # The 3 NQ prop strategies (research 2026-09-29/30, desk review 2026-10-01). Kind "levels":
-        # a NEW geometry every day from ATR(14) of bars built from the tape since 00:00 ET, OCO stop
-        # entries, NQ minis, one entry a day, stop 3 x ATR from the trigger, a take sized in dollars
-        # (day_take / target_take). They ship OFF and unbooked: build on paper first. Flex and Pro need
-        # separate names: one signal gives one geometry and the take differs per rule set.
-        "nq_nyam_flex": StrategyCfg(
-            symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
-            cancel_et="10:55", flat_et="11:00", accept_from_et="09:29", accept_until_et="09:31",
-            enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
-            fire_et="09:30:00", atr_tf=30, off_atr=0.25, sl_atr=3.0, fee_rt=4.0,
-            day_take=1500.0, target_take=True,
-            metrics={
-                "source": "hm2-straddle-tf30#10 · NYAM · LucidFlex 50K eval · 2025-01→2026-09 holdout",
-                "rows": {"entry": "09:30:00, anchor ± 0.25 ATR30", "stop": "3 ATR from the trigger",
-                         "take": "day_take $1,500 net (4 NQ: 19.0 pts) + target_take",
-                         "cancel / flat": "10:55 / 11:00"},
-                "caveat": "entry edge is thin (lift +0.125); the 3 ATR stop is ~5x the $2,000 max loss: "
-                          "every Lucid number assumes only CLOSED balance counts",
-                "equity_file": "nq_nyam_flex_equity.json",
-            }),
-        "nq_nyam_pro": StrategyCfg(
-            symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
-            cancel_et="10:55", flat_et="11:00", accept_from_et="09:29", accept_until_et="09:31",
-            enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
-            fire_et="09:30:00", atr_tf=30, off_atr=0.25, sl_atr=3.0, fee_rt=4.0,
-            day_take=0.0, target_take=True,
-            metrics={
-                "source": "hm2-straddle-tf30#10 · NYAM · LucidPro 50K no-DLL eval · 2025-01→2026-09 holdout",
-                "rows": {"entry": "09:30:00, anchor ± 0.25 ATR30", "stop": "3 ATR from the trigger",
-                         "take": "target_take only: day 1 = $3,000 net (4 NQ: 37.75 pts)",
-                         "cancel / flat": "10:55 / 11:00"},
-                "caveat": "the account must be bought with the daily-loss limit OFF; same open-loss "
-                          "caveat as nq_nyam_flex",
-                "equity_file": "nq_nyam_pro_equity.json",
-            }),
-        "nq_orb_pro": StrategyCfg(
-            symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
-            cancel_et="13:25", flat_et="13:30", accept_from_et="11:04", accept_until_et="11:06",
-            enabled=False, self_fire=True, kind="levels", shape="orb",
-            fire_et="11:05:00", atr_tf=5, or_min=5, sl_atr=3.0, fee_rt=4.0, day_take=1000.0,
-            skip_early_close=True,
-            metrics={
-                "source": "hm-orb-tf5#10 · MID · funded LucidPro no-DLL · 2025-01→2026-09 holdout",
-                "rows": {"entry": "11:05:00, 11:00-11:05 high + 1 tick / low - 1 tick",
-                         "stop": "3 ATR5 from the trigger", "take": "day_take $1,000 net (4 NQ: 12.75 pts)",
-                         "cancel / flat": "13:25 / 13:30"},
-                "caveat": "no entry edge over random entries (lift -0.044 eval): the take rule carries it; "
-                          "request the payout at $1,000",
-                "equity_file": "nq_orb_pro_equity.json",
-            }),
-        "nq_pm_flex": StrategyCfg(
-            symbol="NQ", qty=4, offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,
-            cancel_et="15:53", flat_et="15:58", accept_from_et="13:29", accept_until_et="13:31",
-            enabled=False, self_fire=True, kind="levels", shape="atr_straddle",
-            fire_et="13:30:00", atr_tf=30, off_atr=1.0, sl_atr=3.0, fee_rt=4.0, day_take=600.0,
-            size_tiers=[[0, 2], [1000, 3], [2000, 4]], skip_early_close=True,
-            metrics={
-                "source": "hm2-straddle-tf30#32 · PM · funded LucidFlex · 2025-01→2026-09 holdout",
-                "rows": {"entry": "13:30:00, anchor ± 1.0 ATR30", "stop": "3 ATR from the trigger",
-                         "take": "day_take $600 net (2/3/4 NQ: 15.25 / 10.25 / 7.75 pts)",
-                         "size": "2 NQ under $1,000 profit, 3 under $2,000, 4 above",
-                         "cancel / flat": "15:53 / 15:58"},
-                "caveat": "small edge (funded lift +$441); skipped on half days (11-27, 12-24)",
-                "equity_file": "nq_pm_flex_equity.json",
-            }),
-    }
 
 
 _said: set = set()      # (where, key) of the unknown keys a reader already named in the log

@@ -100,12 +100,12 @@ class FakeMD:
         self.last_px = px
 
 
-def strat(name="nq_nyam_flex", **over):
+def strat(name="lv_atr_take", **over):
     return strategy_cfg(name, **{"enabled": True, **over})
 
 
 class Rig:
-    def __init__(self, tmp_path, monkeypatch, name="nq_nyam_flex", fire_s=FIRE_NYAM, until=None, date=DAY,
+    def __init__(self, tmp_path, monkeypatch, name="lv_atr_take", fire_s=FIRE_NYAM, until=None, date=DAY,
                  view=None, **over):
         monkeypatch.setattr(leveltimer.symbols, "resolve_contract", lambda s: self.front)
         self.front = "NQZ6"
@@ -164,7 +164,7 @@ def rig(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------------------------- the fire
 def test_nyam_fires_at_0930_with_the_research_geometry(rig):
     rig.day_to_the_fire()
-    st = rig.lt.status()["strategies"]["nq_nyam_flex"]
+    st = rig.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "fired" and st["result"] is True and st["late"] is False
     atr, n = ref_atr(rig.mins, 30, FIRE_NYAM)
     anchor = rig.mins[-1][4]
@@ -192,9 +192,9 @@ def test_it_fires_once(rig):
 
 
 def test_the_orb_fires_at_1105_from_the_five_minute_range(tmp_path, monkeypatch):
-    r = Rig(tmp_path, monkeypatch, "nq_orb_pro", fire_s=FIRE_ORB)
+    r = Rig(tmp_path, monkeypatch, "lv_orb", fire_s=FIRE_ORB)
     r.day_to_the_fire()
-    st = r.lt.status()["strategies"]["nq_orb_pro"]
+    st = r.lt.status()["strategies"]["lv_orb"]
     assert st["stage"] == "fired" and st["result"] is True
     hi = max(m[2] for m in r.mins if FIRE_ORB - 300 <= m[0] < FIRE_ORB)
     lo = min(m[3] for m in r.mins if FIRE_ORB - 300 <= m[0] < FIRE_ORB)
@@ -206,9 +206,9 @@ def test_the_orb_fires_at_1105_from_the_five_minute_range(tmp_path, monkeypatch)
 
 
 def test_the_pm_straddle_fires_at_1330_with_its_tier_size(tmp_path, monkeypatch):
-    r = Rig(tmp_path, monkeypatch, "nq_pm_flex", fire_s=FIRE_PM)
+    r = Rig(tmp_path, monkeypatch, "lv_atr_tiers", fire_s=FIRE_PM)
     r.day_to_the_fire()
-    assert r.lt.status()["strategies"]["nq_pm_flex"]["stage"] == "fired"
+    assert r.lt.status()["strategies"]["lv_atr_tiers"]["stage"] == "fired"
     buy, sell = r.ad.brackets
     assert buy.qty == 2 and buy.tp_price - buy.price == 15.25         # no standing: the smallest size, $600 net
     atr, _ = ref_atr(r.mins, 30, FIRE_PM)
@@ -219,10 +219,10 @@ def test_the_pm_straddle_fires_at_1330_with_its_tier_size(tmp_path, monkeypatch)
 def test_no_history_means_no_fire_and_a_missed_day(rig):
     rig.md.fail_history = True
     rig.day_to_the_fire()
-    assert rig.lt.status()["strategies"]["nq_nyam_flex"]["stage"] == "waiting"
+    assert rig.lt.status()["strategies"]["lv_atr_take"]["stage"] == "waiting"
     assert rig.ad.brackets == [] and rig.events("level_history_error")
     rig.tick(9, 31, 1)                                          # the accept window (09:29-09:31) is over
-    st = rig.lt.status()["strategies"]["nq_nyam_flex"]
+    st = rig.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "missed" and "no coverage" in st["reason"]
     assert rig.events("level_missed")
 
@@ -236,7 +236,7 @@ def test_a_feed_that_dropped_reads_history_again_and_closes_the_hole(tmp_path, m
     r.feed(9 * 3600 + 12 * 60, FIRE_NYAM)                        # (the history read a minute later closes 09:10-09:12)
     r.clock.s = FIRE_NYAM + 0.05
     run(r.lt.tick())
-    st = r.lt.status()["strategies"]["nq_nyam_flex"]
+    st = r.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "fired" and len(r.md.subs) == 2        # subscribed again on the new socket
     atr, _ = ref_atr(r.mins, 30, FIRE_NYAM)
     assert st["geometry"]["atr"] == pytest.approx(atr, rel=1e-12)    # the missed minutes are in it, from the history
@@ -249,7 +249,7 @@ def test_a_live_feed_that_went_silent_reads_history_again_and_fires(tmp_path, mo
     r.feed(9 * 3600 + 14 * 60, FIRE_NYAM)                        # connected, but nothing printed 09:10-09:14
     r.clock.s = FIRE_NYAM + 0.05
     run(r.lt.tick())
-    st = r.lt.status()["strategies"]["nq_nyam_flex"]
+    st = r.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "fired" and r.md.history_calls >= 2        # the 08:58 read, and another after the silence
     assert r.lt._bars["NQ"].live_gaps                             # the silence was seen ...
     atr, _ = ref_atr(r.mins, 30, FIRE_NYAM)
@@ -266,7 +266,7 @@ def test_a_hole_the_history_cannot_close_is_refused(tmp_path, monkeypatch):
     r.feed(9 * 3600 + 12 * 60, FIRE_NYAM)
     r.clock.s = FIRE_NYAM + 0.05
     run(r.lt.tick())
-    st = r.lt.status()["strategies"]["nq_nyam_flex"]
+    st = r.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "waiting" and "hole" in st["wait"] and r.ad.brackets == []
 
 
@@ -276,12 +276,12 @@ def test_a_stale_feed_waits_and_a_fresh_print_inside_the_window_fires_late(rig):
     rig.feed(s0 + 5, FIRE_NYAM, end_print=False)                 # the last print is 20 s before the fire
     rig.clock.s = FIRE_NYAM + 0.05
     run(rig.lt.tick())
-    st = rig.lt.status()["strategies"]["nq_nyam_flex"]
+    st = rig.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "waiting" and st["wait"] == "no fresh print" and rig.ad.brackets == []
     rig.clock.s = FIRE_NYAM + 12
     rig.md.push(rig.mins[-1][4] + 1.0)
     run(rig.lt.tick())
-    st = rig.lt.status()["strategies"]["nq_nyam_flex"]
+    st = rig.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "fired" and st["late"] is True and st["late_s"] == 12.0
     assert st["geometry"]["anchor"] == rig.mins[-1][4] + 1.0       # a late fire sits around the market as it is
 
@@ -292,29 +292,29 @@ def test_a_roll_between_the_stage_and_the_fire_skips(rig):
     rig.front = "NQH7"                                           # the front month moved: orders would be on another contract
     rig.clock.s = FIRE_NYAM + 0.05
     run(rig.lt.tick())
-    assert rig.lt.status()["strategies"]["nq_nyam_flex"]["reason"] == "contract_changed"
+    assert rig.lt.status()["strategies"]["lv_atr_take"]["reason"] == "contract_changed"
     assert rig.ad.brackets == []
 
 
 def test_a_half_day_never_stages(tmp_path, monkeypatch):
-    r = Rig(tmp_path, monkeypatch, "nq_pm_flex", fire_s=FIRE_PM, date=dt.date(2026, 11, 27))
+    r = Rig(tmp_path, monkeypatch, "lv_atr_tiers", fire_s=FIRE_PM, date=dt.date(2026, 11, 27))
     r.tick(12, 55, 5)
-    st = r.lt.status()["strategies"]["nq_pm_flex"]
+    st = r.lt.status()["strategies"]["lv_atr_tiers"]
     assert st["stage"] == "skipped" and st["reason"] == "early_close"
     assert r.md.subs == [] and r.md.connects == []
     assert r.events("level_skipped")[0]["date"] == "2026-11-27"
 
 
 def test_a_killed_strategy_is_not_fired(rig):
-    run(rig.eng.kill_strategy("nq_nyam_flex"))
+    run(rig.eng.kill_strategy("lv_atr_take"))
     rig.day_to_the_fire()
-    assert rig.lt.status()["strategies"]["nq_nyam_flex"]["reason"] == "killed" and rig.ad.brackets == []
+    assert rig.lt.status()["strategies"]["lv_atr_take"]["reason"] == "killed" and rig.ad.brackets == []
 
 
 def test_a_day_that_already_acted_is_deferred(rig):
-    rig.eng._state("nq_nyam_flex", "a").status = "done"
+    rig.eng._state("lv_atr_take", "a").status = "done"
     rig.tick(8, 55, 5)
-    assert rig.lt.status()["strategies"]["nq_nyam_flex"]["stage"] == "done" and rig.md.subs == []
+    assert rig.lt.status()["strategies"]["lv_atr_take"]["stage"] == "done" and rig.md.subs == []
 
 
 def test_a_restart_after_the_fire_does_not_fire_again(rig, tmp_path, monkeypatch):
@@ -324,13 +324,13 @@ def test_a_restart_after_the_fire_does_not_fire_again(rig, tmp_path, monkeypatch
                        md_factory=lambda: rig.md, now_fn=rig.clock)
     rig.clock.at(9, 30, 20)
     run(again.tick())
-    assert again.status()["strategies"]["nq_nyam_flex"]["stage"] == "done"
+    assert again.status()["strategies"]["lv_atr_take"]["stage"] == "done"
     assert len(rig.ad.brackets) == n
 
 
 def test_a_desk_that_starts_after_the_window_misses_the_day_once(rig):
     rig.tick(10, 0, 0)
-    st = rig.lt.status()["strategies"]["nq_nyam_flex"]
+    st = rig.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "missed"
     assert len(rig.events("level_missed")) == 1
     rig.tick(10, 0, 5)
@@ -361,7 +361,7 @@ def test_a_manual_position_skips_the_account(tmp_path, monkeypatch):
     r.day_to_the_fire()
     assert r.ad.brackets == []
     assert r.events("timer_skipped")[0]["reason"] == "manual_position"
-    assert r.lt.status()["strategies"]["nq_nyam_flex"]["result"] is False
+    assert r.lt.status()["strategies"]["lv_atr_take"]["result"] is False
 
 
 def test_an_unsynced_view_is_unknown_never_flat(tmp_path, monkeypatch):
@@ -376,14 +376,14 @@ def test_the_desks_own_orders_are_not_a_manual_order(tmp_path, monkeypatch):
     r = Rig(tmp_path, monkeypatch, view=view)
     st = r.eng._state("other", "a")
     st.upper_id = "a-101"
-    r.lt._manual_skips("nq_nyam_flex", r.eng.cfg.strategies["nq_nyam_flex"])
-    assert r.eng.skipped_today("nq_nyam_flex") == set()
+    r.lt._manual_skips("lv_atr_take", r.eng.cfg.strategies["lv_atr_take"])
+    assert r.eng.skipped_today("lv_atr_take") == set()
 
 
 # -------------------------------------------------------------------------- the price watcher + the audit
 def test_the_watcher_market_flattens_a_take_the_limit_missed_and_the_quote_is_kept_for_it(rig):
     rig.day_to_the_fire()
-    st = rig.eng._state("nq_nyam_flex", "a")
+    st = rig.eng._state("lv_atr_take", "a")
     up = st.upper_px
     run(rig.eng.on_fill(FillEvent(account_id="a", symbol="NQZ6", side="Buy", qty=4, price=up + 0.25,
                                   raw={"orderId": st.upper_id})))
@@ -405,7 +405,7 @@ def test_the_watcher_market_flattens_a_take_the_limit_missed_and_the_quote_is_ke
 
 def test_a_desk_restarted_mid_trade_watches_the_take_again(rig, tmp_path):
     rig.day_to_the_fire()
-    st = rig.eng._state("nq_nyam_flex", "a")
+    st = rig.eng._state("lv_atr_take", "a")
     run(rig.eng.on_fill(FillEvent(account_id="a", symbol="NQZ6", side="Buy", qty=4, price=st.upper_px + 0.25,
                                   raw={"orderId": st.upper_id})))
     take = st.take_px
@@ -416,11 +416,11 @@ def test_a_desk_restarted_mid_trade_watches_the_take_again(rig, tmp_path):
     eng2._mono = lambda: mono["t"]
     md2 = FakeMD(rig.clock, rig.mins)
     lt2 = LevelTimer(eng2.cfg, eng2, md_factory=lambda: md2, now_fn=rig.clock)
-    assert eng2._state("nq_nyam_flex", "a").status == "live"
+    assert eng2._state("lv_atr_take", "a").status == "live"
     rig.clock.at(9, 40, 0)
     md2.last_px = take
     run(lt2.tick())                                              # stage "done" (it already fired) -- but a trade is open
-    assert md2.subs == ["NQ"] and lt2.status()["strategies"]["nq_nyam_flex"]["stage"] == "done"
+    assert md2.subs == ["NQ"] and lt2.status()["strategies"]["lv_atr_take"]["stage"] == "done"
     mono["t"] += 3
     run(lt2.tick())
     assert [o.order_type for o in ad2.orders] == ["Market"] and eng2.account_locked("a") == "day_take"
@@ -428,7 +428,7 @@ def test_a_desk_restarted_mid_trade_watches_the_take_again(rig, tmp_path):
 
 def test_a_stale_price_is_no_price(rig):
     rig.day_to_the_fire()
-    st = rig.eng._state("nq_nyam_flex", "a")
+    st = rig.eng._state("lv_atr_take", "a")
     run(rig.eng.on_fill(FillEvent(account_id="a", symbol="NQZ6", side="Buy", qty=4, price=st.upper_px,
                                   raw={"orderId": st.upper_id})))
     rig.ad.net = 4
@@ -465,7 +465,7 @@ def test_the_audit_says_when_a_quote_feed_coalesced_a_print(tmp_path, monkeypatc
     r.feed(8 * 3600 + 55 * 60 + 5, FIRE_NYAM)
     r.clock.s = FIRE_NYAM + 0.05
     run(r.lt.tick())
-    st = r.lt.status()["strategies"]["nq_nyam_flex"]
+    st = r.lt.status()["strategies"]["lv_atr_take"]
     assert st["stage"] == "fired"
     r.clock.at(9, 36, 0)
     run(r.lt.tick())
@@ -485,10 +485,10 @@ def test_a_stage_that_fails_is_tried_again_not_ended(tmp_path, monkeypatch):
 
     r.md.subscribe_quote = flaky
     r.tick(8, 55, 5)
-    assert r.lt.status()["strategies"]["nq_nyam_flex"]["stage"] == "idle"          # not "error": no day lost to one refusal
+    assert r.lt.status()["strategies"]["lv_atr_take"]["stage"] == "idle"          # not "error": no day lost to one refusal
     r.tick(8, 55, 6)
     r.tick(8, 55, 7)
-    assert r.lt.status()["strategies"]["nq_nyam_flex"]["stage"] == "live" and r.md.subs == ["NQ"]
+    assert r.lt.status()["strategies"]["lv_atr_take"]["stage"] == "live" and r.md.subs == ["NQ"]
     assert len(r.events("level_error")) == 1                                       # said once, not on every 0.2 s tick
 
 

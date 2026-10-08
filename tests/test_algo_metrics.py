@@ -1,7 +1,6 @@
 """The "Backtest metrics" popup's research artifacts (homebase/research/<name>_equity.json).
 
-Every strategy whose metrics name an equity_file (the desk's two, and the four NQ levels algos' reference
-configs: the desk no longer ships those, their artifacts stay committed) must ship a well-formed artifact, /api/research-equity must
+Every strategy whose metrics name an equity_file must ship a well-formed artifact, /api/research-equity must
 return it, and the pointer must reach the running config even when a config.json written before the pointer
 existed carries its own (older) copy of the metrics.  The artifacts are built by
 homebase/research/build_algo_metrics.py from the research files; these tests read what is committed."""
@@ -19,11 +18,9 @@ from homebase.server import create_app
 from tests.levels_util import strategy_cfg
 
 RESEARCH = Path(config_mod.__file__).resolve().parent / "research"
-EVALS = ("nq_nyam_flex", "nq_nyam_pro")
-FUNDED = ("nq_orb_pro", "nq_pm_flex")
-ALGOS = EVALS + FUNDED + ("gc_nfp",)
+ALGOS = ("gc_nfp",)
 SHIPPED_WITH_FILE = sorted(n for n, s in config_mod._defaults().strategies.items() if s.metrics.get("equity_file"))
-WITH_FILE = sorted({*SHIPPED_WITH_FILE, *(n for n, s in config_mod.levels_reference().items() if s.metrics.get("equity_file"))})
+WITH_FILE = SHIPPED_WITH_FILE
 
 
 def artifact(name: str) -> dict:
@@ -37,6 +34,7 @@ def row(art: dict, key: str) -> str:
 def test_every_algo_names_its_artifact():
     assert set(ALGOS) | {"nq930"} <= set(WITH_FILE)
     assert SHIPPED_WITH_FILE == ["gc_nfp", "nq930"]                        # the desk ships these two
+    assert not list(RESEARCH.glob("nq_*_equity.json"))                     # the four NQ levels algos' artifacts are gone
     for n in ALGOS:
         m = strategy_cfg(n).metrics
         assert m["equity_file"] == f"{n}_equity.json"
@@ -77,25 +75,6 @@ def test_the_table_describes_the_curve_it_sits_under(name):
     cfg = strategy_cfg(name)
     assert cfg.metrics["caveat"] in a["table_note"]                        # the caveat on file travels with the numbers
     assert "mc_table" not in a                                             # no resample is claimed for these ledgers
-
-
-@pytest.mark.parametrize("name", EVALS + FUNDED)
-def test_the_nq_artifacts_are_the_holdout_and_say_what_the_lucid_numbers_assume(name):
-    a = artifact(name)
-    assert a["points"][0][0] >= "2025-01-01" and a["points"][-1][0] <= "2026-09-30"
-    assert "holdout" in a["label"] and "NQ" in a["label"]
-    assert "CLOSED balance" in a["table_note"] and "If open losses count" in a["table_note"]
-    assert ["numbers shown", "holdout / in-sample"] in a["prop_table"]
-    assert "prop table below is the number that matters" in a["note"]
-    keys = [k for k, _ in a["prop_table"]]
-    if name in EVALS:
-        assert "NOT how an eval is used" in a["note"]
-        assert {"pass within 5 days", "bust within 5 days", "median days to pass"} <= set(keys)
-    else:
-        assert {"payout within 20 days", "payout within 40 days", "median days to 1st payout",
-                "$ to trader in 40 days", "bust before 1st payout"} <= set(keys)
-    for k, v in a["prop_table"][2:]:
-        assert " / " in v, (k, v)                                          # holdout next to in-sample on every row
 
 
 def test_the_gc_artifact_covers_every_nfp_and_marks_2025():
@@ -166,7 +145,7 @@ def test_a_config_saved_before_the_pointer_still_gets_it(cfg_path):
 def test_a_saved_pointer_wins_over_the_default(cfg_path):
     cfg_path.write_text(json.dumps({"strategies": {
         "nq930": {"metrics": {"equity_file": "ym930_equity.json"}},
-        "gc_nfp": {"metrics": {"rev": 2, "equity_file": ""}}}}))
+        "gc_nfp": {"metrics": {"rev": 3, "equity_file": ""}}}}))
     cfg = config_mod.load()
     assert cfg.strategies["nq930"].metrics["equity_file"] == "ym930_equity.json"
     assert cfg.strategies["gc_nfp"].metrics["equity_file"] == ""           # switched off by hand: stays off
@@ -181,11 +160,12 @@ def test_a_saved_strategy_without_metrics_keeps_the_defaults(cfg_path):
 
 
 def test_a_corrected_record_replaces_the_copy_saved_before_the_correction(cfg_path):
-    """gc_nfp's pass/bust row was wrong (the 08:30:00 numbers on an 08:29:59 fire).  The shipped record carries
-    "rev"; a saved copy with a lower rev is the stale text and must not shadow the correction."""
+    """gc_nfp's record was corrected (rev 2: the 08:30:00 numbers on an 08:29:59 fire; rev 3: one setup for NFP
+    and CPI). The shipped record carries "rev"; a saved copy with a lower rev is the stale text and must not
+    shadow the correction."""
     d = config_mod._defaults().strategies["gc_nfp"].metrics
-    assert d["rev"] == 2 and d["rows"]["pass / bust"].startswith("58% (2021-24) · 68% (2025-26)")
-    stale = {**d, "rows": {**d["rows"], "pass / bust": "61% (2021-24) · 74% (2025-26) / 26-36%"}, "caveat": "old"}
+    assert d["rev"] == 3 and d["source"].startswith("GC 08:30 NFP + CPI straddle")
+    stale = {**d, "rows": {**d["rows"], "TP": "7.7 pts old"}, "caveat": "old"}
     stale.pop("rev")
     cfg_path.write_text(json.dumps({"strategies": {"gc_nfp": {"qty": 4, "enabled": True, "metrics": stale}}}))
     cfg = config_mod.load()

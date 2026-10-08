@@ -1026,6 +1026,7 @@
     "flat_et": "15:55",
     "gated": true,
     "kind": "straddle",
+    "label": "",
     "metrics": {
      "caveat": "does not cover live fill quality \u2014 the edge is 2\u20134 ticks deep",
      "equity_file": "nq930_equity.json",

@@ -32,7 +32,7 @@ const STATE = {
     nq930: { symbol: 'NQ', kind: 'straddle', enabled: true, shadow: false, book: { sim041: 1 },
       timer: { stage: 'done', gate: true, adx: 23.44, anchor: 30900 }, day_status: 'placed',
       accounts: { sim041: { status: 'placed', qty: 10, upper: 30910, lower: 30890, entry_side: null, sl: null, tp: null, pnl: null } } },
-    nq_pm_flex: { symbol: 'NQ', kind: 'bars', enabled: true, shadow: true, book: {}, timer: null, day_status: 'idle', accounts: {} },
+    bars_test: { symbol: 'NQ', kind: 'bars', enabled: true, shadow: true, book: {}, timer: null, day_status: 'idle', accounts: {} },
     ym_test: { symbol: 'YM', kind: 'straddle', enabled: false, shadow: false, book: {}, timer: null, day_status: 'idle', accounts: {} } } },
 };
 const TICKED = { ticked: ['sim041', 'sim047'], oneClick: false, qty: 2, slTicks: 0, tpTicks: 0 };
@@ -395,9 +395,9 @@ test('algo names: the desk strategy, its booked accounts, the choices for a char
   assert.equal(T.algoLabel('nq930', NQ930, STATE), 'NQ 9:30 Straddle · …041');
   assert.equal(T.algoLabel('nq930', { ...NQ930, book: { sim041: 1, sim047: 2 } }, STATE), 'NQ 9:30 Straddle · …041, …047');
   assert.equal(T.algoLabel('nq930', { ...NQ930, book: { acct123456: 1 } }, STATE), 'NQ 9:30 Straddle · …456');   // not listed: its id
-  assert.equal(T.algoLabel('nq_pm_flex', STATE.bot.strategies.nq_pm_flex, STATE), 'nq_pm_flex');         // no book: the name alone
+  assert.equal(T.algoLabel('bars_test', STATE.bot.strategies.bars_test, STATE), 'bars_test');         // no book: the name alone
   assert.deepEqual(T.algoChoices(STATE, 'NQ'), [{ value: '', text: 'None' },
-    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq_pm_flex', text: 'nq_pm_flex' }]);
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'bars_test', text: 'bars_test' }]);
   assert.deepEqual(T.algoChoices(STATE, 'YM'), [{ value: '', text: 'None' }, { value: 'ym_test', text: 'ym_test' }]);
   assert.deepEqual(T.algoChoices(STATE, 'ES'), [{ value: '', text: 'None' }]);
   // the chart's current algo stays pickable while the desk hasn't listed it (no state yet)
@@ -405,7 +405,7 @@ test('algo names: the desk strategy, its booked accounts, the choices for a char
   assert.deepEqual(T.algoChoices(STATE, 'NQ', 'nq930').length, 3);   // listed already: not twice
   assert.deepEqual(T.algoChoices(STATE, 'ES', 'nq930'), [{ value: '', text: 'None' }]);   // the desk CONFIRMS it trades NQ: not offered on ES
   assert.deepEqual(T.algoChoices(STATE, 'NQ', 'gone'), [{ value: '', text: 'None' },
-    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq_pm_flex', text: 'nq_pm_flex' }, { value: 'gone', text: 'gone' }]);   // not listed: kept
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'bars_test', text: 'bars_test' }, { value: 'gone', text: 'gone' }]);   // not listed: kept
 });
 
 test('algo badge: the state pill from the bot view', () => {
@@ -703,14 +703,14 @@ test('paper: the Settings dialog\'s Algo choices include the paper strategies fo
   assert.deepEqual(T.algoChoices(STATE, 'GC', null, PAPER_STRATS), [{ value: '', text: 'None' },
     { value: 'paper:gc_nfpcpi', text: 'GC NFP/CPI (paper)' }]);
   assert.deepEqual(T.algoChoices(STATE, 'NQ', null, PAPER_STRATS), [{ value: '', text: 'None' },
-    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq_pm_flex', text: 'nq_pm_flex' }]);   // GC paper: not on NQ
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'bars_test', text: 'bars_test' }]);   // GC paper: not on NQ
   // the chart's current paper algo stays pickable while the list hasn't loaded yet (null / [])
   assert.deepEqual(T.algoChoices(STATE, 'GC', 'paper:gc_nfpcpi', null), [{ value: '', text: 'None' },
     { value: 'paper:gc_nfpcpi', text: 'GC NFP/CPI (paper)' }]);   // ALGO_NAMES fallback text, not listed twice
   assert.deepEqual(T.algoChoices(STATE, 'GC', 'paper:gc_nfpcpi', PAPER_STRATS).length, 2);   // listed already: not twice
   // the list CONFIRMS it trades GC: not offered as a fallback on another root
   assert.deepEqual(T.algoChoices(STATE, 'NQ', 'paper:gc_nfpcpi', PAPER_STRATS), [{ value: '', text: 'None' },
-    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'nq_pm_flex', text: 'nq_pm_flex' }]);
+    { value: 'nq930', text: 'NQ 9:30 Straddle · …041' }, { value: 'bars_test', text: 'bars_test' }]);
 });
 
 test('paper: the badge state pill from the latest /ws message', () => {
@@ -1337,7 +1337,7 @@ test('envChip: LIVE / DEMO / PAPER, and "?" for an account the desk does not lis
 test('algoBookings: which desk strategies on THIS root book which accounts', () => {
   assert.deepEqual(T.algoBookings(STATE, 'NQ'), [
     { key: 'nq930', name: 'NQ 9:30 Straddle', accounts: ['sim041'] },
-    { key: 'nq_pm_flex', name: 'nq_pm_flex', accounts: [] }]);
+    { key: 'bars_test', name: 'bars_test', accounts: [] }]);
   assert.deepEqual(T.algoBookings(STATE, 'YM'), [{ key: 'ym_test', name: 'ym_test', accounts: [] }]);
   assert.deepEqual(T.algoBookings(STATE, 'GC'), []);
   assert.deepEqual(T.algoBookings(null, 'NQ'), []);
@@ -1349,7 +1349,7 @@ test('algoForAccount / accountsForAlgo: the two-way binding between the ACCOUNTS
   assert.equal(T.algoForAccount(STATE, 'YM', 'sim041'), null);      // its algo trades NQ, this chart is YM
   assert.equal(T.algoForAccount(null, 'NQ', 'sim041'), null);
   assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'nq930'), ['sim041']);   // picking it ticks its accounts
-  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'nq_pm_flex'), []);
+  assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'bars_test'), []);
   assert.deepEqual(T.accountsForAlgo(STATE, 'YM', 'nq930'), []);           // not on this chart's root
   assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', 'paper:gc_nfpcpi'), []); // a paper algo books no desk account
   assert.deepEqual(T.accountsForAlgo(STATE, 'NQ', null), []);

@@ -56,17 +56,16 @@ It runs as launchd services on one Mac, from this folder
 
 ## Strategies
 
-These three ship in `config.py` defaults. All times are ET. Each trades at most once a day.
+These ship in `config.py` defaults. All times are ET. Each trades at most once a day.
 
 | Name | Market | Kind | What triggers it | Default |
 |---|---|---|---|---|
 | `nq930` | NQ | straddle | Every weekday at 09:30:00, if the daily TREND gate passes (ADX 14 on completed daily bars, read at 09:20). A chop day is skipped. Target = `rr` × stop (default 1:3, edited in the app). | on |
-| `gc_nfp` | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (NFP days, added by hand). | off |
-| `gc_cpi` | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (BLS CPI release days). Same geometry as `gc_nfp`. | off |
+| `gc_nfp` (shown as GC_NFP/CPI) | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (NFP and CPI release days, added by hand). | off |
 
 - A **straddle** uses fixed distances from the config.
-- A **levels** strategy (no longer shipped on the desk; the engine and the tester still run
-  the kind) builds new distances every day from ATR. Its stop is `sl_atr` × ATR from the trigger. Its take is a dollar rule (`day_take`,
+- The **levels** kind (`levels.py`, `leveltimer.py`) is engine code only: no strategy ships on it since
+  2026-10-08. It builds new distances every day from ATR. Its stop is `sl_atr` × ATR from the trigger. Its take is a dollar rule (`day_take`,
   `target_take`) turned into points for each account.
 - A strategy that is off, or has no booked account, places nothing. A booked
   strategy that will not trade today says why once (`inactive_today` in the
