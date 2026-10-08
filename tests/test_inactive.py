@@ -1,13 +1,13 @@
 """A booked strategy never silently does nothing: `inactive_today`, once per day, with why -- and readiness."""
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import json
 from zoneinfo import ZoneInfo
 
 from homebase import inactive
-from homebase.config import AccountCfg, AppCfg, StrategyCfg, _defaults
+from homebase.config import AccountCfg, AppCfg, StrategyCfg
+from tests.levels_util import strategy_cfg
 from homebase.engine import Engine
 from homebase.levels import Geometry
 from homebase.rules import RULES
@@ -22,7 +22,7 @@ PROP = {"rules": "lucidflex50k", "start_balance": 50000.0, "mode": "eval"}
 
 
 def cfg_with(name, *, paper=True, prop=None, book=True, **over):
-    s = dataclasses.replace(_defaults().strategies[name], **{"enabled": True, **over})
+    s = strategy_cfg(name, **{"enabled": True, **over})
     acct = AccountCfg(keyring_key="k", account_name="A", paper=paper, prop=prop or {})
     return AppCfg(armed=True, accounts={"a": acct}, strategies={name: s},
                   book={name: [{"account": "a", "qty": 4}]} if book else {})
@@ -55,33 +55,33 @@ def test_unbooked_or_disabled_strategies_are_not_asked(tmp_path):
 
 
 def test_levels_real_account_without_the_ack_sits_out(tmp_path):
-    cfg = cfg_with("nq_nyam_flex", paper=False)
+    cfg = cfg_with("lv_atr_take", paper=False)
     e = eng(tmp_path, cfg)
-    code, why = inactive.static_reason(cfg, e, "nq_nyam_flex", cfg.strategies["nq_nyam_flex"], MON)
+    code, why = inactive.static_reason(cfg, e, "lv_atr_take", cfg.strategies["lv_atr_take"], MON)
     assert code == "every_account_sits_out" and "ack_open_loss" in why
-    cfg = cfg_with("nq_nyam_flex", paper=False, ack_open_loss=True)
-    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_nyam_flex", cfg.strategies["nq_nyam_flex"], MON) is None
+    cfg = cfg_with("lv_atr_take", paper=False, ack_open_loss=True)
+    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_atr_take", cfg.strategies["lv_atr_take"], MON) is None
 
 
 def test_target_take_without_a_prop_block_sits_out(tmp_path):
-    cfg = cfg_with("nq_nyam_pro")                  # day_take 0, target_take: the take IS the account's distance
-    code, why = inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_nyam_pro", cfg.strategies["nq_nyam_pro"], MON)
+    cfg = cfg_with("lv_atr_target")                  # day_take 0, target_take: the take IS the account's distance
+    code, why = inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_atr_target", cfg.strategies["lv_atr_target"], MON)
     assert code == "every_account_sits_out" and "no prop block" in why
-    cfg = cfg_with("nq_nyam_pro", prop=PROP)
-    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_nyam_pro", cfg.strategies["nq_nyam_pro"], MON) is None
+    cfg = cfg_with("lv_atr_target", prop=PROP)
+    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_atr_target", cfg.strategies["lv_atr_target"], MON) is None
 
 
 def test_a_half_day_and_a_missing_rule_and_a_bad_shape(tmp_path):
-    cfg = cfg_with("nq_pm_flex")
-    s = cfg.strategies["nq_pm_flex"]
-    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_pm_flex", s, dt.date(2026, 11, 27))[0] == "early_close"
-    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_pm_flex", s, MON) is None
+    cfg = cfg_with("lv_atr_tiers")
+    s = cfg.strategies["lv_atr_tiers"]
+    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_atr_tiers", s, dt.date(2026, 11, 27))[0] == "early_close"
+    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_atr_tiers", s, MON) is None
     bad = StrategyCfg(symbol="NQ", qty=1, offset_pts=0, sl_pts=0, tp_pts=0, enabled=True, self_fire=True, kind="bars", rule="nope")
     cfg = AppCfg(armed=True, accounts={"a": AccountCfg(keyring_key="k", account_name="A")},
                  strategies={"b": bad}, book={"b": [{"account": "a", "qty": 1}]})
     assert inactive.static_reason(cfg, eng(tmp_path, cfg), "b", bad, MON)[0] == "unknown_rule"
-    cfg = cfg_with("nq_orb_pro", shape="nope")
-    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "nq_orb_pro", cfg.strategies["nq_orb_pro"], MON)[0] == "bad_shape"
+    cfg = cfg_with("lv_orb", shape="nope")
+    assert inactive.static_reason(cfg, eng(tmp_path, cfg), "lv_orb", cfg.strategies["lv_orb"], MON)[0] == "bad_shape"
 
 
 # ---- once a day, restarts included -----------------------------------------------------------------
@@ -134,9 +134,9 @@ def test_readiness_shows_a_booked_strategy_that_will_not_trade(tmp_path):
     e = eng(tmp_path, cfg)
     for day in (THU, FRI):                         # off its day: expected, journaled only; on it: fine
         assert not [c for c in readiness(cfg, e, day) if c["label"] == "gc_nfp" and "inactive" in c["detail"]]
-    cfg = cfg_with("nq_nyam_flex", paper=False)
+    cfg = cfg_with("lv_atr_take", paper=False)
     e = eng(tmp_path, cfg)
-    c, = [c for c in readiness(cfg, e, MON) if c["label"] == "nq_nyam_flex"]
+    c, = [c for c in readiness(cfg, e, MON) if c["label"] == "lv_atr_take"]
     assert c["level"] == "warn" and "ack_open_loss" in c["detail"]
 
 
@@ -151,8 +151,8 @@ def test_a_roll_and_a_missed_day_and_a_half_day_each_say_inactive_once(tmp_path,
     run(r.lt.tick())
     run(r.lt.tick())
     ev, = r.events("inactive_today")
-    assert (ev["strategy"], ev["code"]) == ("nq_nyam_flex", "contract_changed")
-    assert r.eng.inactive_today("nq_nyam_flex")
+    assert (ev["strategy"], ev["code"]) == ("lv_atr_take", "contract_changed")
+    assert r.eng.inactive_today("lv_atr_take")
 
     (tmp_path / "miss").mkdir()
     m = Rig(tmp_path / "miss", monkeypatch)
@@ -164,17 +164,17 @@ def test_a_roll_and_a_missed_day_and_a_half_day_each_say_inactive_once(tmp_path,
 
     (tmp_path / "half").mkdir()
     from tests.test_atrbars import FIRE_PM
-    h = Rig(tmp_path / "half", monkeypatch, "nq_pm_flex", fire_s=FIRE_PM, date=dt.date(2026, 11, 27))
+    h = Rig(tmp_path / "half", monkeypatch, "lv_atr_tiers", fire_s=FIRE_PM, date=dt.date(2026, 11, 27))
     h.tick(12, 55, 5)
     assert [e["code"] for e in h.events("inactive_today")] == ["early_close"]
 
 
 def test_the_engine_says_why_when_every_account_sat_out_at_the_fire(tmp_path):
-    cfg = cfg_with("nq_nyam_pro")                   # a paper account with no prop block: target_take has no level
+    cfg = cfg_with("lv_atr_target")                   # a paper account with no prop block: target_take has no level
     e = Engine(cfg, {"a": FakeAdapter("a")}, now_fn=Clock(13, 30), root=tmp_path)   # 09:30 ET
     geo = Geometry("atr_straddle", 30010.0, 29990.0, 60.0, 20.0, 30, anchor=30000.0, last_px=30000.0)
-    res = run(e.handle_levels("nq_nyam_pro", geo))
+    res = run(e.handle_levels("lv_atr_target", geo))
     assert res["ok"] is False and res["reason"] == "every account sat out"
     ev, = events(tmp_path)
     assert ev["code"] == "every_account_sat_out" and "target_take" in ev["reason"]
-    assert e.inactive_today("nq_nyam_pro") and events(tmp_path, "levels_refused")
+    assert e.inactive_today("lv_atr_target") and events(tmp_path, "levels_refused")

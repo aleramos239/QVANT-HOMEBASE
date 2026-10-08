@@ -5,7 +5,7 @@ Branch `release/2026-10-01-algos` (from main 41b96bd, the gc_nfp desk). Worktree
 **Status, checked 2026-10-04: merged.** Every commit listed below is in `main`, and `main` has moved on (42 commits after `9599283`, the last commit of this release). The rest of this file is the record as it was written on 2026-10-01. Read "Deploy" and "Rollback" as history, not as steps to run. For how the app works now, see `README.md`.
 
 ## Commits
-1. `2da9bbc` Merge `feat/nq-prop-algos-daily-rules` (fc560e1 + da4f215): the four "levels" algos nq_nyam_flex, nq_nyam_pro, nq_orb_pro, nq_pm_flex, daily rules (dayrules.py), their own timer (leveltimer.py).
+1. `2da9bbc` Merge `feat/nq-prop-algos-daily-rules` (fc560e1 + da4f215): the four "levels" algos nq_nyam_flex, nq_nyam_pro, nq_orb_pro, nq_pm_flex, daily rules (dayrules.py), their own timer (leveltimer.py). (The four algos were removed from Homebase 2026-10-08; the generic levels engine stays.)
 2. `8891cb6` Remove ym930, nq10am, nq_open_long, nq_open_short (config defaults, strategy classes, rules.py `_open_930` / `nq_10am_continuation`, UI names, test pins).
 3. `a1a5546`, `929b4e0` `config.load()` drops any strategy (and its book rows) with no shipped default, logs it, rewrites the file clean once.
 4. `263d208` `inactive_today`: a booked strategy that will not trade says why once a day (journal + readiness).
@@ -51,5 +51,5 @@ launchctl kickstart -k gui/$(id -u)/com.ramosquant.homebase
 ## Not proven
 - Real broker acks / fills: the engine ran against `FakeAdapter`. Tradovate behaviour for the "levels" stop-with-bracket orders and the day_take market-flatten backstop is untested outside fakes.
 - Broker-fed bars: LevelTimer's ATR comes from md prints plus the chart-history read; the rehearsal serves a synthetic tape. ATR parity with the research tester is unit-tested and audited at runtime (`level_atr_parity`), not proven on a real session.
-- target_take on real eval accounts needs `prop` blocks (start_balance, rules, mode) in config.json; none exist for the current accounts, so a booked nq_nyam_pro would journal `every_account_sits_out`.
+- target_take on real eval accounts needs `prop` blocks (start_balance, rules, mode) in config.json; none exist for the current accounts, so a booked nq_nyam_pro would journal `every_account_sits_out`. (nq_nyam_pro was removed 2026-10-08.)
 - Lucid's open-loss rule against the 3 x ATR stop is an assumption (`ack_open_loss`).

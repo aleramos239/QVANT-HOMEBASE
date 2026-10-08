@@ -7,8 +7,9 @@
      - gives the page's sidebar the glass pane, and adds an inspector that HOLDS nodes the page already renders
        (readiness, notices, the footer links; a strategy's figures, links and actions), re-collected after each of
        the page's repaints;
-     - adds a read-only "Setup" card to the strategy inspector, written from the same cfg the page prints as one line.
-   It calls no endpoint, changes no handler and never stops an event. If anything here throws, the page is shown as
+     - adds a "Setup" card to the strategy inspector, written from the same cfg the page prints as one line; a straddle with
+     an RR (nq930) also gets a small RR field whose Set button calls the page's own setStratRr().
+   It calls no endpoint itself, changes no handler and never stops an event. If anything here throws, the page is shown as
    the base page: the finally block always reveals it.                                                               */
 (function () {
   'use strict';
@@ -59,7 +60,7 @@
       el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Readiness' }), el('div', { class: 'hb-box' }, sum, ready)),
       el('section', { class: 'hb-isec hb-isec-foot' }, el('div', { class: 'hb-isec-h', text: 'Desk' }), el('div', { class: 'hb-box' }, foot)),
       el('section', { class: 'hb-isec hb-isec-notices' }, el('div', { class: 'hb-isec-h', text: 'Notices' }), el('div', { class: 'hb-box' }, notices)));
-    // a strategy: its setup (read-only), then the page's own figures, links and actions
+    // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
     const linksBox = el('div', { class: 'hb-box hb-links-box', id: 'hbLinks' });
@@ -95,7 +96,7 @@
       } else {
         rows.push(row('Entry offset', '±' + fmtN(c.offset_pts) + ' pts'));
         rows.push(row('Stop', fmtN(c.sl_pts) + ' pts'));
-        rows.push(row('Target', fmtN(c.tp_pts) + ' pts'));
+        rows.push(row('Target', c.rr > 0 ? '1:' + fmtN(c.rr) + ' · ' + fmtN(c.tp_pts) + ' pts' : fmtN(c.tp_pts) + ' pts'));
         if (c.self_fire && hm(c.fire_et)) rows.push(row('Fires', hm(c.fire_et) + ' ET'));
       }
       if (hm(c.cancel_et)) rows.push(row('Cancel unfilled', hm(c.cancel_et) + ' ET'));
@@ -103,9 +104,36 @@
       if (Array.isArray(c.only_dates) && c.only_dates.length) rows.push(row('Only on', c.only_dates.slice(0, 2).join(', ') + (c.only_dates.length > 2 ? ' +' + (c.only_dates.length - 2) : '')));
       rows.push(row('Signal', c.kind === 'bars' ? 'Price-action rule' : c.self_fire ? 'Fires itself' : 'Nothing fires it'));
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
-      const sig = JSON.stringify(rows.map((r) => r.textContent));
-      if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows); }
+      const edit = c.kind !== 'bars' && c.rr > 0;
+      const sig = JSON.stringify([name, edit, rows.map((r) => r.textContent)]);
+      const had = (D.activeElement === rrCtl.input || D.activeElement === rrCtl.btn) ? D.activeElement : null;
+      if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows, ...(edit ? [rrCtl.row, rrCtl.err] : [])); }
+      if (had && had.isConnected && D.activeElement !== had) had.focus();      // a rebuild must not take the field from the owner
+      if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; }
+      if (edit && !rrCtl.dirty && D.activeElement !== rrCtl.input) rrCtl.input.value = String(+c.rr);
     }
+    // the RR field of a straddle with a target multiple: ONE node set for the whole page, so a repaint never wipes what is typed
+    // (the rows' signature leaves it out). The write itself is the page's own setStratRr(), which says why a refusal came.
+    const rrCtl = { name: '', dirty: false };
+    rrCtl.input = el('input', { class: 'hb-field', type: 'number', step: '0.25', min: '0.25', max: '20', inputmode: 'decimal', 'aria-label': 'Target RR (1:x)', style: 'width:64px;text-align:right' });
+    rrCtl.btn = el('button', { class: 'hb-btn', type: 'button', text: 'Set' });
+    rrCtl.row = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Target RR · 1:' }), rrCtl.input, rrCtl.btn);
+    rrCtl.err = el('div', { class: 'hb-row hb-row-note', role: 'alert', hidden: true });
+    async function setRr() {
+      const name = rrCtl.name, v = parseFloat(rrCtl.input.value);
+      if (!(v >= 0.25 && v <= 20)) { rrCtl.err.textContent = 'Enter a number from 0.25 to 20.'; rrCtl.err.hidden = false; return; }
+      if (typeof window.setStratRr !== 'function') return;
+      rrCtl.btn.disabled = true;
+      try {
+        const why = await window.setStratRr(name, v);
+        if (rrCtl.name !== name) return;
+        rrCtl.err.textContent = why || ''; rrCtl.err.hidden = !why;
+        if (!why) rrCtl.dirty = false;
+      } finally { rrCtl.btn.disabled = false; }
+    }
+    rrCtl.input.addEventListener('input', () => { rrCtl.dirty = true; rrCtl.err.hidden = true; });
+    rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });
+    rrCtl.btn.addEventListener('click', setRr);
 
     let syncing = false;
     function sync() {

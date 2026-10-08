@@ -1,7 +1,7 @@
 """Bars built from ticks, and the research's ATR -- for the strategies whose geometry is a new number every day.
 
-The NQ prop strategies (homebase/strategies/prop_nq.py, config kind "levels") size their stops and entry offsets
-from ATR(14, Wilder) of N-minute bars, and one of them reads a 5-minute opening range.  The research (the
+The "levels" strategies (config kind "levels") size their stops and entry offsets
+from ATR(14, Wilder) of N-minute bars, and an opening-range shape reads a 5-minute range.  The research (the
 pp_* drafts) built those from the tester's 1-minute bars, from 00:00 ET of the day, so this module does the same:
 
   * a minute bar is one ET minute [m, m + 60 s) of prints: open = first, high/low, close = last;

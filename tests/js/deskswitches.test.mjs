@@ -14,9 +14,19 @@ import vm from 'node:vm';
 const require = createRequire(import.meta.url);
 const AV = require('../../homebase/static/algo-visibility.js');
 const HTML = readFileSync(new URL('../../homebase/static/index.html', import.meta.url), 'utf8');
+const LABEL = HTML.slice(HTML.indexOf('const stratLabel = '), HTML.indexOf('const actStrat = '));   // the page's name helper
 const STRAT = HTML.slice(HTML.indexOf('/* ---- strategy on/off + flatten ----'),
   HTML.indexOf('/* ---- accounts popup ---- */'));
 const plain = (v) => JSON.parse(JSON.stringify(v));
+
+test("the page names a strategy by its label when it has one, else by its id (display only)", () => {
+  const ctx = vm.createContext({ ST: { strategies: { gc_nfp: { cfg: { label: 'GC_NFP/CPI' } }, nq930: { cfg: {} } } } });
+  vm.runInContext(LABEL + '\nglobalThis.sl = stratLabel;', ctx);
+  assert.equal(ctx.sl('gc_nfp'), 'GC_NFP/CPI');
+  assert.equal(ctx.sl('nq930'), 'NQ930');
+  assert.equal(ctx.sl('unknown_one'), 'UNKNOWN_ONE');
+  assert.equal(ctx.sl(''), '');
+});
 
 test('the policy: ask only when turning ON something that can trade', () => {
   const ask = AV.switchNeedsConfirm;
@@ -73,7 +83,7 @@ function load({ confirm = true, shadow = false, enabled = false, answer = { ok: 
     DEMO: false,
     refresh: () => refreshes.push(true),
   });
-  vm.runInContext(HELPERS + BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
+  vm.runInContext(LABEL + HELPERS + BOUNCE + STRAT + '\nglobalThis.api = { toggleStrat, flattenStrat };', ctx);
   return { api: ctx.api, posts, toasts, confirms, refreshes, alerts, clock };
 }
 

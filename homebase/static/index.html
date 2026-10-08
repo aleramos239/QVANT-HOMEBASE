@@ -1386,7 +1386,13 @@ function renderNotices(list) {
    "neg" a closed trade's P&L, "" plain. */
 const fmtPx = (v) => v == null || v === "" || !isFinite(v) ? "—" : Number(v).toLocaleString("en-US",
   Number.isInteger(Number(v)) ? {} : {minimumFractionDigits: 2, maximumFractionDigits: 6});
-const actStrat = (r) => String(r.strategy || "").toUpperCase();
+/* A strategy's name as the desk shows it: its cfg.label when it has one (gc_nfp -> GC_NFP/CPI), else its id.
+   Display only: every API, the book and the journal keep the id. */
+const stratLabel = (n) => {
+  const s = ((typeof ST !== "undefined" && ST && ST.strategies) || {})[n];
+  return String((s && s.cfg && s.cfg.label) || n || "").toUpperCase();
+};
+const actStrat = (r) => stratLabel(r.strategy);
 const actOn = (r) => r.account ? " on " + acctShort(r.account) : "";
 const actErr = (e) => (typeof e === "string" ? e : JSON.stringify(e == null ? "" : e)).slice(0, 160);
 const actFail = (r) => r.ok ? "" : " — FAILED: " + actErr(r.error);
@@ -1723,13 +1729,13 @@ function dayTimeline() {
 
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
-  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
+  const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="event.stopPropagation();toggleStrat('${name}', ${!c.enabled})"></button>`;
   const go = `setView('strat','${name}')`;
   return `<div class="srow" role="button" tabindex="0" onclick="${go}"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
-    <div><div class="n">${esc(name.toUpperCase())}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : ""}</div>
+    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : ""}</div>
       <div class="sp mono">${esc(specOf(c))}</div></div>
     <div class="rs">${esc(state)}</div>
     <div class="rp mono${p < 0 ? " neg" : p > 0 ? " pos" : ""}">${usdS(p)}</div>${sw}</div>`;
@@ -1752,7 +1758,7 @@ function renderSide(names, hiddenCount, issues) {
   const strat = names.map(n => {
     const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
     return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
-      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(n.toUpperCase())}</b></span>
+      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
       <span class="ir mono${p == null ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
@@ -1838,11 +1844,11 @@ function stratView(name) {
         free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">Add an account to run this strategy.</div>`;
   const test = (ST && !ST.armed && c.enabled) ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>` : "";
-  const sw = `<button class="switch" role="switch" aria-label="${esc(name.toUpperCase())} on or off" aria-checked="${c.enabled}"
+  const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
   return `<button class="back" onclick="setView('today')">‹ Today</button>
-    <div class="sd-top"><div><h1 class="sd-title">${esc(name.toUpperCase())}</h1><div class="sp mono">${esc(specOf(c))}</div></div>${sw}</div>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(stratLabel(name))}</h1><div class="sp mono">${esc(specOf(c))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
     <div class="sd-note">${esc(execTxt)}</div>
     ${eqChart(name)}${figs}${links}
@@ -2193,7 +2199,7 @@ function liveBookingNote(strategy, account) {
     `stands if that changes.${acct}`;
   const when = c.kind === "bars" ? "on its next signal" : c.self_fire ? `at the next ${fireHM(strategy)} fire` : "on its next signal";
   const idle = [];
-  if (!c.enabled) idle.push(strategy.toUpperCase() + " is off");
+  if (!c.enabled) idle.push(stratLabel(strategy) + " is off");
   if (ST && !ST.armed) idle.push("the desk is disarmed");
   return `It will trade real money ${when}.` +
     (idle.length ? ` Right now ${idle.join(" and ")}, so nothing is placed until that changes.` : "") + acct;
@@ -2202,7 +2208,7 @@ async function pickAsg(strategy, account, qty) {
   FREEZE = false;
   closeAsgMenus(false);
   if (!isDemoAcct(account) && !await confirmDlg(
-      `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${qty}?`,
+      `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${qty}?`,
       liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);
   cur.push({account, qty});
@@ -2226,12 +2232,12 @@ function editQty(ev, strategy, account, qty) {
     if (v > 0 && v !== qty) {
       if (v > qty && !isDemoAcct(account)) {
         if (!explicit) {
-          toast(`${strategy.toUpperCase()} on ${acctShort(account)} stays × ${qty} — ` +
+          toast(`${stratLabel(strategy)} on ${acctShort(account)} stays × ${qty} — ` +
                 "press Enter to raise a LIVE booking.");
           refresh(); return;
         }
         if (!await confirmDlg(
-            `Book ${strategy.toUpperCase()} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
+            `Book ${stratLabel(strategy)} on ${acctShort(account)} LIVE × ${v} (now × ${qty})?`,
             liveBookingNote(strategy, account), "Book live", false)) { refresh(); return; }
       }
       const cur = (ST.book[strategy] || []).map(a =>
@@ -2833,7 +2839,7 @@ function renderEquityChart(points) {
 async function openRes(name) {
   const s = (ST.strategies || {})[name] || {};
   const r = s.research || {};
-  $("#resName").textContent = name.toUpperCase();
+  $("#resName").textContent = stratLabel(name);
   $("#resSource").textContent = r.source || "";
   $("#resChart").innerHTML = `<div class="mcap">loading curve…</div>`;
   $("#resChartCap").textContent = "";
@@ -2923,10 +2929,10 @@ async function toggleStrat(name, enabled) {
   if (switchBounced("strategy:" + name)) return;    // a double-click is one flip
   const c = ((((ST && ST.strategies) || {})[name]) || {}).cfg || {};
   if (needsConfirm("strategy", enabled, {shadow: !!c.shadow}) && !await confirmDlg(
-      "Turn ON " + name.toUpperCase() + "?",
+      "Turn ON " + stratLabel(name) + "?",
       "It will run and execute on its assigned accounts from the next signal.",
       "Turn on", false)) { refresh(); return; }
-  const N = name.toUpperCase();
+  const N = stratLabel(name);
   let r, err = null;
   try { r = await post("/api/strategy", {strategy: name, enabled}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
@@ -2936,15 +2942,28 @@ async function toggleStrat(name, enabled) {
   else if (enabled) toast(`${N} NOT switched on — ${why}.`, 8000);          // the safe side
   else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
+/* A straddle's target as 1:rr of its stop (nq930). The desk refuses 09:20-09:35 ET and while the strategy has
+   orders or a position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
+   under the field). */
+async function setStratRr(name, rr) {
+  const N = stratLabel(name);
+  let r, err = null;
+  try { r = await post("/api/strategy-rr", {strategy: name, rr}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return "";
+  if (err) return answerWhy(null, err);
+  if (r && r.ok === true) { toast(`${N} target set to 1:${r.rr} (${r.tp_pts} pts).`); return ""; }
+  return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
+}
 /* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
    whatever happened to the flatten itself, with each account's steps in `results` -- read them
    (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:
    a position may still be open. */
 async function flattenStrat(name) {
-  if (!await confirmDlg("Flatten " + name.toUpperCase() + "?",
+  if (!await confirmDlg("Flatten " + stratLabel(name) + "?",
       "Cancels its resting entries, market-flattens its symbol on every account it acted on today, and switches the strategy OFF.",
       "Flatten & turn off", true)) return;
-  const N = name.toUpperCase();
+  const N = stratLabel(name);
   let r, err = null;
   try { r = await post("/api/strategy-flatten", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
   refresh();
@@ -3014,7 +3033,7 @@ function renderAlgoMgr() {
         return `<div class="acct" style="padding:9px 0;align-items:flex-start">
           <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
             <div style="display:flex;align-items:center;gap:8px">
-              <span class="nm" style="font-size:13px">${a.name.toUpperCase()}</span>
+              <span class="nm" style="font-size:13px">${esc(stratLabel(a.name))}</span>
               <span class="hint" style="font-size:11.5px">${a.symbol}</span>
               ${onPill}${statusPill}
             </div>
@@ -3024,7 +3043,7 @@ function renderAlgoMgr() {
           <label class="hint" style="display:flex;align-items:center;gap:6px;cursor:${a.locked ? "default" : "pointer"};font-size:12px"
             title="${a.locked ? a.lockReason : "Show on home page"}">
             Show on home page
-            <button class="switch" role="switch" aria-label="Show ${esc(a.name)} on the home page" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
+            <button class="switch" role="switch" aria-label="Show ${esc(stratLabel(a.name))} on the home page" aria-checked="${a.visible}" ${a.locked ? "disabled" : ""}
               onclick="toggleAlgoHidden('${a.name}', ${a.visible})"></button>
           </label>
         </div>`;
@@ -3057,7 +3076,7 @@ $("#algoOverlay").addEventListener("click", (e) => {
 let LIVE = {name: "", d: new Date(), data: null};
 async function openLive(name) {
   LIVE.name = name; LIVE.d = new Date(); LIVE.data = null;
-  $("#liveName").textContent = name.toUpperCase() + " · LIVE";
+  $("#liveName").textContent = stratLabel(name) + " · LIVE";
   showOverlay("liveOverlay");
   renderLive();
   try {

@@ -74,7 +74,7 @@ def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
     c = desk_config._defaults().strategies["gc_nfp"]
     assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 5.0, 7.7)
     assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:29:59", "08:45", "09:55")   # rests before the release
-    assert c.only_dates == ["2026-10-02"]
+    assert c.only_dates == ["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04", "2026-12-10"]
     assert c.kind == "straddle" and c.self_fire and not c.gated and not c.shadow
     assert c.enabled is False                       # the user books the evals and switches it on
     assert (c.accept_from_et, c.accept_until_et) == ("08:29", "08:31")   # a fire a minute late is refused
@@ -293,7 +293,7 @@ def test_readiness_is_silent_on_other_days_and_flags_an_ungated_gc_nfp_on_nfp_da
     def checks(day, h, m):
         out = compute_readiness(dt.datetime(*day, h, m, tzinfo=ET), timer.cfg, engine, acct,
                                 timer_status=timer.status(), power=None)
-        return [c for c in out["checks"] if c["label"] == "gc_nfp"]
+        return [c for c in out["checks"] if c["label"] == "GC_NFP/CPI"]
 
     assert checks(THU, 9, 0) == [] and checks(NEXT_FRI, 12, 0) == []   # no "no signal arrived" alarm
     at(clock, 8, 25, date=NFP_DAY)

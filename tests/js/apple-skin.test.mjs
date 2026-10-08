@@ -79,7 +79,7 @@ test('apple skin: the Desk skin leans only on things the Desk page still has', (
                     'viewToday', 'viewStrat', 'viewActivity', 'themeToggle'])
     assert.ok(page.includes(`id="${id}"`) && skin.includes(`#${id}`), `#${id} is expected by the skin and present in the page`);
   for (const cls of ['pill-slot', 'app-main', 'frame', 'inset-topbar']) assert.ok(page.includes(cls), `.${cls} is in the page`);
-  for (const fn of ['openChecks']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
+  for (const fn of ['openChecks', 'setStratRr']) assert.match(page, new RegExp(`function ${fn}\\(`), `${fn}() is the page's own`);
   // the nodes the inspector borrows from a strategy's render
   for (const cls of ['figs', 'qlinks', 'sd-actions']) assert.ok(page.includes(`class="${cls}"`), `.${cls} is rendered by the page`);
 });

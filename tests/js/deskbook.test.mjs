@@ -13,6 +13,8 @@ const HTML = readFileSync(new URL('../../homebase/static/index.html', import.met
 const BLOCK = HTML.slice(
   HTML.indexOf('/* ---- the book (assignments) ---- */'),
   HTML.indexOf('/* ---- connect wizard ---- */'));
+// the page's own name helper (a strategy's label, else its id), defined above this block
+const LABEL = HTML.slice(HTML.indexOf('const stratLabel = '), HTML.indexOf('const actStrat = '));
 
 async function tick(n = 12) { for (let i = 0; i < n; i++) await Promise.resolve(); }
 const plain = (v) => JSON.parse(JSON.stringify(v));
@@ -24,7 +26,7 @@ const ACCOUNTS = {
 };
 const STRATS = {
   nq930_1030: { cfg: { symbol: 'NQ', qty: 3, enabled: true, self_fire: true, kind: 'straddle' } },
-  nq_pm_flex: { cfg: { symbol: 'NQ', qty: 1, enabled: true, self_fire: true, kind: 'bars' } },
+  bars_test: { cfg: { symbol: 'NQ', qty: 1, enabled: true, self_fire: true, kind: 'bars' } },
   gc_pine: { cfg: { symbol: 'GC', qty: 1, enabled: true, self_fire: false, kind: 'straddle' } },
   shadowy: { cfg: { symbol: 'NQ', qty: 1, enabled: true, shadow: true, kind: 'bars' } },
 };
@@ -48,7 +50,7 @@ function load({ armed = true, confirm = true, book = {}, strategies = STRATS, ac
     post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
     refresh: () => refreshes.push(true),
   });
-  vm.runInContext(BLOCK + `
+  vm.runInContext(LABEL + BLOCK + `
     globalThis.api = { pickAsg, editQty, acctShort, isDemoAcct, liveBookingNote,
       get ST() { return ST; }, get FREEZE() { return FREEZE; } };`, ctx);
   return { api: ctx.api, posts, toasts, confirms, refreshes, menus, qedit, answer: (v) => answer(v) };
@@ -111,7 +113,7 @@ test('the dialog says when nothing trades yet, and names the moment it will', ()
   assert.match(off.api.liveBookingNote('nq930_1030', '1234567885'),
     /Right now NQ930_1030 is off and the desk is disarmed, so nothing is placed until that changes\./);
   const s = load();
-  assert.match(s.api.liveBookingNote('nq_pm_flex', '1234567885'), /on its next signal/);
+  assert.match(s.api.liveBookingNote('bars_test', '1234567885'), /on its next signal/);
   assert.match(s.api.liveBookingNote('gc_pine', '1234567885'), /on its next signal/);
   assert.match(s.api.liveBookingNote('shadowy', '1234567885'), /SHADOW strategy/);
   assert.match(s.api.liveBookingNote('nq930_1030', 'apex2941870000048'), /Account APEX2941870000048\./,

@@ -5,10 +5,8 @@ from .base import Input, Strategy, resolve_inputs
 from .gc_nfp import GCNfp
 from .gc_nfpcpi import GCNfpCpi
 from .nq930 import NQ930
-from .prop_nq import NQNyamFlex, NQNyamPro, NQOrbPro, NQPmFlex
 
-REGISTRY: dict[str, type[Strategy]] = {c.id: c for c in (NQ930, GCNfpCpi, GCNfp,
-                                                          NQNyamFlex, NQNyamPro, NQOrbPro, NQPmFlex)}
+REGISTRY: dict[str, type[Strategy]] = {c.id: c for c in (NQ930, GCNfpCpi, GCNfp)}
 
 
 def get(strategy_id: str) -> type[Strategy]:
