@@ -36,15 +36,21 @@
                                           rows, each with the page's `label`], book: [the book cards], stages: [{n,
                                           name, words}]} -- two commands of the research toolkit (bp.py pipe list,
                                           pipe book), kept for PIPE_CACHE_S; the labels and the stages' words are
-                                          claude_mcp.pipeline_tools' own, typed nowhere else
+                                          claude_mcp.pipeline_tools' own, typed nowhere else. And what the add-idea
+                                          form is built from, off ONE `bp.py blocks` for the life of the service:
+                                          rules: [{name, words, markets, sessions, bars, settings: [{name, kind: number
+                                          | whole | choice | bool | text, min, max, choices, default, tried}]}],
+                                          indicators: [{block, sides: [{side, words}], markets}], sessions: [{name, words}]
     GET  /api/tester/pipeline/idea/{name}   one idea: {card, state, stages: [{n, name, passed, result, lines: [{line,
-                                          passed, text}], text}]} (bp.py pipe show); 404 for a name not on file
+                                          passed, text}], text}]} (bp.py pipe show); 404 for a name not on file.
+                                          Every text is plain: the toolkit's own command line is taken out
     POST /api/tester/pipeline/run        {action: add, card, inbox?} | {action: start | pause | resume} |
                                           {action: approve, name} | {action: refuse, name, why} -> {ok, text}: the
-                                          pipeline tool every chat has, run as a chat runs it; the toolkit's refusal
-                                          is ok false with its words. add / start / resume are refused 09:20-09:35
-                                          ET on weekdays (they can start heavy work); pause and the owner's yes or no
-                                          never are
+                                          checks and the ONE command of the pipeline tool every chat has; `text` is one
+                                          plain sentence for the page (pipeline_tools.page_said), and for a refusal of
+                                          the toolkit ok false with its own reason, without its command line. add /
+                                          start / resume are refused 09:20-09:35 ET on weekdays (they can start heavy
+                                          work); pause and the owner's yes or no never are
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -450,6 +456,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     pipe_cache: dict = {"at": None, "body": None, "error": None}
     pipe_lock = threading.Lock()
 
+    def pipe_parts() -> dict:
+        """What the add-idea form is built from (the entry rules with their settings, the indicators, the sessions): ONE
+        `bp.py blocks` for the life of this service (pipeline_tools.PipelineMixin.pipeline_parts). A toolkit that cannot
+        list them leaves the lists empty -- the form then takes text -- and never takes the Queue down with it."""
+        try:
+            return box.pipeline_parts()
+        except ToolError:
+            return pipeline_tools.parts(None)
+
     @r.get("/pipeline")
     def pipeline_state():
         """Where the pipeline stands, in one answer. Two commands of the toolkit at most, and the answer is kept for
@@ -459,7 +474,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         with pipe_lock:
             if pipe_cache["at"] is None or pipe_clock() - pipe_cache["at"] >= PIPE_CACHE_S:
                 try:
-                    got = {"body": box.pipeline_state(), "error": None}
+                    got = {"body": {**box.pipeline_state(), **pipe_parts()}, "error": None}
                 except ToolError as e:
                     got = {"body": None, "error": str(e)}
                 pipe_cache.update(got, at=pipe_clock())
@@ -492,11 +507,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(400, PIPE_SHAPE)
         if action in PIPE_QUIET and Slots().quiet():     # the desk's 9:30 window: nothing is started from the page then
             raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
-        try:
-            text = (box.t_pipeline_add(card, bool(inbox)) if action == "add" else
-                    box.t_pipeline_decide(name, action, why) if "name" in keys else box.t_pipeline_control(action))
-            return {"ok": True, "text": text}
-        except ToolError as e:    # a refusal of the toolkit (or a bad input): its own words, nothing was changed
+        try:                      # the checks and the ONE command of the tool a chat has, answered in one plain sentence
+            return {"ok": True, "text": box.pipeline_do(action, card=card, inbox=bool(inbox), name=name, why=why)}
+        except blueprint_tools.Refused as e:     # the toolkit said no: its own reason, without its command line; nothing was changed
+            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
+        except ToolError as e:    # a bad input, or a toolkit that is not there: said as it is
             return {"ok": False, "text": str(e)}
         finally:
             with pipe_lock:       # whatever it did, the next look is a new one

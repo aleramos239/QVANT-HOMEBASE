@@ -17,7 +17,7 @@
 <script>window.HB_PAGE = 'backtest';</script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=33">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=7">
-<link rel="stylesheet" href="/static/charts/lab.css?v=39">
+<link rel="stylesheet" href="/static/charts/lab.css?v=40">
 <link rel="stylesheet" href="/static/hb.css?v=6">
 </head>
 <body class="lab-page">
@@ -42,6 +42,9 @@
 </header>
 <div id="lab" class="lab" aria-label="Strategy Lab">
   <aside class="lab-side lab-lib" id="labLib" aria-label="Strategies"><div class="in"></div></aside>
+  <!-- the strategy pipeline's page (Queue / Book / Guide): it has the middle while one of those views is open; the editor, the chart
+       and the result are hidden meanwhile, never rebuilt (lab.js applyPanels) -->
+  <section class="lab-pipe" id="labPipe" aria-label="Strategy pipeline"><div class="in"></div></section>
   <section id="labEd" aria-label="Editor"></section>
   <div class="lab-split" id="labSplit" role="separator" aria-orientation="vertical" aria-label="Resize the editor and the chart" tabindex="0"></div>
   <div class="lab-chart" id="labChart" aria-label="Chart">
@@ -136,8 +139,8 @@
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
 <script src="/static/charts/app.js?v=35"></script>
-<script src="/static/charts/labcode.js?v=7"></script>
-<script src="/static/charts/lab.js?v=39"></script>
+<script src="/static/charts/labcode.js?v=8"></script>
+<script src="/static/charts/lab.js?v=40"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>
 </html>

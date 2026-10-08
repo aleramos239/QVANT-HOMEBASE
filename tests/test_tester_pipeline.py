@@ -1,8 +1,10 @@
 """The strategy pipeline in the Lab (chart service, /api/tester/pipeline): the Queue / Book / Guide answer, one idea's
-page, and the page's actions -- run through THE SAME tools every chat has (claude_mcp.pipeline_tools), against the
-FAKE toolkit of tests/test_claude_mcp_pipeline.py (it answers `pipe` in the real one's JSON and words, and keeps its
-state under --root). No tape, no engine, and no runner: the fake's `start` writes a pid down and starts nothing.
+page, and the page's actions -- the checks and the ONE command of the tool every chat has (claude_mcp.pipeline_tools),
+answered in one plain sentence for the page -- against the FAKE toolkit of tests/test_claude_mcp_pipeline.py (it answers
+`pipe` in the real one's JSON and words, and keeps its state under --root; `blocks` here in the real one's shape too).
+No tape, no engine, and no runner: the fake's `start` writes a pid down and starts nothing.
 Temp folders only: the pipeline root is a temp folder, HOME is a temp folder, and no ~/.homebase/pipeline may appear."""
+import inspect
 import json
 import sys
 
@@ -11,10 +13,35 @@ from fastapi.testclient import TestClient
 
 from homebase.charts import tester_api
 from homebase.claude_mcp import pipeline_tools
-from tests.test_claude_mcp_pipeline import BOOK, CARD, LABELS, NAME, REAL_HOME, Fake, card, seed
+from tests.test_claude_mcp_pipeline import BOOK, CARD, FAKE, LABELS, NAME, REAL_HOME, Fake, card, seed
+from tests.test_claude_mcp_pipeline import box as toolbox
 from tests.test_tester_api import EVIL, app
 
 ACTIONS = ("add", "start", "pause", "resume", "approve", "refuse")
+NO_PARTS = {"rules": [], "indicators": [], "sessions": []}
+# A small block list in the shape of the real `bp.py blocks --json` (research/edge-library/blueprint/blocklist.py):
+# a setting says its values in WORDS, and a family lists the variants the library ran.
+BLOCKS = {
+    "families": [
+        {"name": "fvg", "does": "a three-bar gap forms: a limit rests at its near edge", "why": "not sent", "markets": ["NQ", "ES", "GC"], "bars": ["1", "5", "15"],
+         "sessions": ["asia", "nyam", "eve"], "runs": True, "why_not": None, "bracket": False, "mirror": None,
+         "settings": [{"name": "min_gap", "default": 0.25, "values": "a number 0 .. 10"}, {"name": "mode", "default": "touch", "values": "touch | mid | go"},
+                      {"name": "new_gap", "default": "replace", "values": "replace | stop"}],
+         "tried": [{"min_gap": 0.1}, {"min_gap": 0.25, "mode": "touch"}, {"min_gap": 0.5}, {"min_gap": 0.25}]},
+        {"name": "donchian", "does": "close beyond the prior n-bar channel", "markets": ["NQ"], "bars": ["15", "30"], "sessions": ["nyam"], "runs": True,
+         "settings": [{"name": "n", "default": 20, "values": "a whole number 2 .. 200"}, {"name": "trend_f", "default": False, "values": "true | false"},
+                      {"name": "odd", "default": "x", "values": ""}], "tried": [{"n": 10}, {"n": 20}]},
+        {"name": "supertrend", "does": "the supertrend flips", "markets": ["NQ", "ES"], "bars": ["1", "5"], "sessions": ["nyam"], "runs": True, "settings": [], "tried": [{}]},
+        {"name": "later", "does": "not yet", "markets": ["NQ"], "bars": ["5"], "sessions": ["nyam"], "runs": False, "settings": [], "tried": []}],
+    "filters": [
+        {"block": "volatility", "side": "high", "words": "only after a wide day", "runs": True, "why_not": None, "markets": ["NQ", "ES", "GC"]},
+        {"block": "volatility", "side": "low", "words": "only after a quiet day", "runs": True, "why_not": None, "markets": ["NQ", "ES", "GC"]},
+        {"block": "book", "side": "agree", "words": "the book agrees", "runs": True, "why_not": None, "markets": ["NQ"]},
+        {"block": "gone", "side": "with", "words": "not yet", "runs": False, "why_not": "later", "markets": ["NQ"]}],
+    "sessions": [{"name": "asia", "words": "Asia (00:00-03:00 ET)", "runs": True}, {"name": "nyam", "words": "New York morning (09:30-11:00 ET)", "runs": True}],
+    "other_families": ["absorption"], "bars": ["1", "5", "15", "30"]}
+MARK = 'if pos[0] != "pipe":'             # where the fake answers a command of the blueprint: `blocks` is answered before it
+WITH_BLOCKS = 'if pos[0] == "blocks":\n    out(result("blocks", text="THE BLOCKS", blocks=json.loads(%r)))\n' % json.dumps(BLOCKS)
 
 
 @pytest.fixture
@@ -44,6 +71,14 @@ def c(tmp_path, monkeypatch, fake, proot):
     assert not (tmp_path / "home" / ".homebase" / "pipeline").exists() and real.exists() == was      # no test makes the real folder
 
 
+@pytest.fixture
+def blocks(fake):
+    """The fake toolkit also answers `blocks`, as the real one does (the plain fake only says "RAN blocks ...")."""
+    assert FAKE.count(MARK) == 1
+    fake.script.write_text(FAKE.replace(MARK, WITH_BLOCKS + MARK), encoding="utf-8")
+    return fake
+
+
 def run(c, action, **more):
     headers = more.pop("headers", None)
     return c.post("/api/tester/pipeline/run", json={"action": action, **more}, **({"headers": headers} if headers else {}))
@@ -58,10 +93,11 @@ def asked(fake) -> list:
 
 def test_the_queue_the_book_and_the_guide_in_one_answer(c, fake, proot):
     r = c.get("/api/tester/pipeline")
-    assert r.status_code == 200 and list(r.json()) == ["runner", "counts", "ideas", "book", "stages"]
+    assert r.status_code == 200 and list(r.json()) == ["runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
     assert r.json() == {"runner": {"running": False, "paused": False}, "counts": dict.fromkeys(LABELS, 0), "ideas": [], "book": [],
-                        "stages": pipeline_tools.STAGES}
-    assert asked(fake) == ["list", "book"] and not proot.exists(), "two commands of the toolkit, and a look makes no folder"
+                        "stages": pipeline_tools.STAGES, **NO_PARTS}, "a toolkit whose `blocks` carries no block list: empty lists, and the Queue all the same"
+    assert asked(fake) == ["list", "book"] and not proot.exists(), "two commands of the pipeline, and a look makes no folder"
+    assert [x["argv"][0] for x in fake.calls()] == ["pipe", "pipe", "blocks"]
     for x in fake.calls():
         assert x["argv"][-2:] == [f"--root={proot}", "--json"]              # the PIPELINE's own folder, never the idea folder
     stages = r.json()["stages"]
@@ -136,13 +172,13 @@ def test_a_look_never_waits_as_long_as_a_tool_may(c, fake, proot, monkeypatch):
     """A page asks every few seconds: its two reads are stopped after pipeline_tools.LOOK_S, not after a tool's 300 s."""
     seen = []
     real = tester_api._Blueprint._bp
-    monkeypatch.setattr(tester_api._Blueprint, "_bp", lambda self, args, **kw: (seen.append((args[1], kw.get("timeout"))), real(self, args, **kw))[1])
+    monkeypatch.setattr(tester_api._Blueprint, "_bp", lambda self, args, **kw: (seen.append((args[args[0] == "pipe"], kw.get("timeout"))), real(self, args, **kw))[1])
     c.get("/api/tester/pipeline")
     run(c, "add", card=CARD)
     c.get(f"/api/tester/pipeline/idea/{NAME}")
     run(c, "pause")
     assert pipeline_tools.LOOK_S == 20.0 < pipeline_tools.SHORT_S == 300.0
-    assert seen == [("list", 20.0), ("book", 20.0), ("add", 300.0), ("show", 20.0), ("pause", 300.0)]
+    assert seen == [("list", 20.0), ("book", 20.0), ("blocks", 20.0), ("add", 300.0), ("show", 20.0), ("pause", 300.0)]
 
 
 # ---------------------------------------------------------------- GET /pipeline/idea/{name}
@@ -181,39 +217,76 @@ def test_a_name_that_is_not_on_file_is_a_404(c, fake, proot):
 
 # ---------------------------------------------------------------- POST /pipeline/run
 
-def test_each_action_runs_the_tool_a_chat_has_and_answers_in_its_words(c, fake, proot):
+def test_each_action_runs_the_command_of_the_tool_a_chat_has_and_answers_in_one_plain_sentence(c, fake, proot):
     r = run(c, "add", card=CARD)
-    assert r.status_code == 200 and r.json() == {"ok": True, "text": "Pipeline add · fvg_open · Waiting\nfvg_open is in the queue: place 1 of 1.\n"
-                                                                     "Stage 1 will run 2 heat maps: fvg_open_a1, fvg_open_a5."}
+    assert r.status_code == 200 and r.json() == {"ok": True, "text": "fvg_open is in the Queue, place 1 of 1."}
     assert fake.argv() == ["pipe", "add", "--spec=-", f"--root={proot}", "--json"] and json.loads(fake.calls()[-1]["stdin"]) == CARD
     r = run(c, "add", card=card(name="orb_pre", session="pre"), inbox=True)
-    assert "orb_pre is in the queue: place 1 of 2 (inbox: it goes first)." in r.json()["text"] and "--inbox" in fake.argv()
-    assert run(c, "add", card=card(name="orb_mid", session="mid"), inbox=False).json()["ok"] is True and "--inbox" not in fake.argv()
-    assert run(c, "pause").json() == {"ok": True, "text": "Pipeline pause\nthe queue is paused: the runner stops after the stage in hand"}
-    assert run(c, "resume").json() == {"ok": True, "text": "Pipeline resume\nthe queue is not paused: no runner is working"}
-    assert run(c, "start").json() == {"ok": True, "text": "Pipeline start\nthe runner is started (pid 4242): it works through the queue by itself"}
+    assert r.json() == {"ok": True, "text": "orb_pre is in the Queue, place 1 of 2."} and "--inbox" in fake.argv()
+    assert run(c, "add", card=card(name="orb_mid", session="mid"), inbox=False).json() == {"ok": True, "text": "orb_mid is in the Queue, place 3 of 3."}
+    assert "--inbox" not in fake.argv()
+    assert run(c, "pause").json() == {"ok": True, "text": "Paused. It stops after the stage it is on."}
+    assert run(c, "resume").json() == {"ok": True, "text": "It is not paused any more."}, "no runner is working: nothing carries on yet"
+    assert run(c, "start").json() == {"ok": True, "text": "Testing has started."}
     assert fake.argv() == ["pipe", "start", f"--root={proot}", "--json"], "the toolkit's own start: this service spawns nothing itself"
+    assert run(c, "start").json() == {"ok": True, "text": "Testing is already on."}
+    assert run(c, "pause").json()["ok"] is True and run(c, "start").json() == {"ok": True, "text": "Testing is already on. It is paused: press Resume."}
+    assert run(c, "resume").json() == {"ok": True, "text": "Testing carries on."}
     seed(proot, "orb_one", "awaiting_owner")
     seed(proot, "orb_two", "awaiting_owner")
-    assert run(c, "approve", name="orb_one").json() == {"ok": True, "text": f"Pipeline approve · orb_one · In the book\norb_one is in the book ({proot / 'book' / 'orb_one.json'})"}
-    assert run(c, "refuse", name="orb_two", why="too few trades").json() == {"ok": True, "text": "Pipeline refuse · orb_two · Refused\norb_two is refused: too few trades"}
+    assert run(c, "approve", name="orb_one").json() == {"ok": True, "text": "orb_one is in the Book."}
+    assert run(c, "refuse", name="orb_two", why="too  few trades").json() == {"ok": True, "text": "orb_two is refused: too few trades"}
     assert fake.argv() == ["pipe", "refuse", "orb_two", "--why=too few trades", f"--root={proot}", "--json"]
-    assert asked(fake) == ["add", "add", "add", "pause", "resume", "start", "approve", "refuse"], "one command an action"
+    assert asked(fake) == ["add", "add", "add", "pause", "resume", "start", "start", "pause", "start", "resume", "approve", "refuse"], "one command an action"
+
+
+def test_the_pages_sentences_and_the_chat_tools_texts_are_two_things(fake, proot):
+    """page_said reads the toolkit's RESULT; a chat's tool still says the toolkit's text (tests/test_claude_mcp_pipeline.py)."""
+    said = pipeline_tools.page_said
+    assert said("add", {"name": "x", "text": "x is in the queue: place 2 of 7 (inbox: it goes first).\nStage 1 will run 2 heat maps"}) == "x is in the Queue, place 2 of 7."
+    assert said("add", {"name": "x", "text": "filed"}) == "x is in the Queue."
+    assert said("start", {"already": False, "paused": False, "pid": 9}) == "Testing has started."
+    assert said("start", {"already": False, "paused": True}) == "Testing has started. It is paused: press Resume."
+    assert said("resume", {"running": True}) == "Testing carries on." and said("pause", {"paused": True}) == "Paused. It stops after the stage it is on."
+    assert said("approve", {"name": "x", "text": "x is in the book (/Users/a/.homebase/pipeline/book/x.json)"}) == "x is in the Book."
+    assert said("refuse", {"name": "x", "state": {"why": "too thin (bp.py pipe list)"}}) == "x is refused: too thin"
+    b = toolbox()
+    assert b.t_pipeline_add(CARD).splitlines()[0] == "Pipeline add · fvg_open · Waiting", "the chat tool's text is as it was"
+    assert b.t_pipeline_control("pause") == "Pipeline pause\nthe queue is paused: the runner stops after the stage in hand"
+    assert b.pipeline_do("resume") == "It is not paused any more."
+
+
+def test_plain_takes_out_the_command_line_and_the_folders_and_nothing_else():
+    plain = pipeline_tools.plain
+    assert plain("refusing x needs the reason (bp.py pipe refuse x --why=TEXT): it is kept with the idea") == "refusing x needs the reason: it is kept with the idea"
+    assert plain("block 'nope' is no filter block (`bp.py blocks` lists them)") == "block 'nope' is no filter block"
+    assert plain("x is in the book (/Users/a b/.homebase/pipeline/book/x.json)".replace("a b", "ab")) == "x is in the book"
+    assert plain("no pipeline idea 'nope' under /tmp/t/pipeline") == "no pipeline idea 'nope' under pipeline"
+    assert plain("~/.homebase/pipeline/seen.jsonl holds a line that does not read (line 3): mend it first") == "seen.jsonl holds a line that does not read (line 3): mend it first"
+    assert plain("The queue is PAUSED: bp.py pipe resume lets it work") == "The queue is PAUSED:"
+    for same in ("orb_2_a5 P1.1 FAIL 44 % of boxes profitable (need over 60 %)", "a5: 44 % of boxes\nthe other heat map is no better", "NQ/ES and/or 1/2, 09:20/09:35",
+                 "way a: min_gap has 1 values (need 3, each once)", ""):
+        assert plain(same) == same, same
+    assert plain(None) == ""
+    assert pipeline_tools.page_refusal("Refused (pipeline add): the card is not whole: P0.3 FAIL block 'nope' is no filter block (`bp.py blocks` lists them)\n"
+                                       "Nothing was run.\nNext: bp.py pipe list shows where each idea is.") == "the card is not whole: P0.3 FAIL block 'nope' is no filter block"
+    assert pipeline_tools.page_refusal("") == "It was refused."
 
 
 def test_a_refusal_of_the_toolkit_is_the_answer_in_its_own_words(c, fake, proot):
     run(c, "add", card=CARD)
     r = run(c, "add", card=card(name="fvg_again"))
     assert r.status_code == 200 and r.json() == {"ok": False, "text": (
-        "Refused (pipeline add): 'fvg_again' is the same card as 'fvg_open', added 2026-10-08T04:44:21+00:00: the same market, session, sides and ways "
-        "under another name are the same card, and a card is run once\nNothing was run.")}
+        "'fvg_again' is the same card as 'fvg_open', added 2026-10-08T04:44:21+00:00: the same market, session, sides and ways "
+        "under another name are the same card, and a card is run once")}, "the reason as the toolkit wrote it, and no more"
     half = card(name="half_card", why="")
     r = run(c, "add", card=half)
-    assert r.json()["ok"] is False and "the card is not whole: P0.1 FAIL it does not say why it should make money" in r.json()["text"]
+    assert r.json() == {"ok": False, "text": "the card is not whole: P0.1 FAIL it does not say why it should make money (why, one sentence)"}
     r = run(c, "approve", name=NAME)
-    assert r.status_code == 200 and r.json()["ok"] is False
-    assert r.json()["text"].startswith("Refused (pipeline approve): fvg_open is queued: only an idea that passed every stage and waits for the owner")
-    assert run(c, "refuse", name=NAME, why="no").json()["ok"] is False and run(c, "approve", name="nope").json()["ok"] is False
+    assert r.status_code == 200 and r.json() == {"ok": False, "text": "fvg_open is queued: only an idea that passed every stage and waits for the owner "
+                                                                      "(awaiting_owner) is approved"}
+    assert run(c, "refuse", name=NAME, why="no").json()["ok"] is False
+    assert run(c, "approve", name="nope").json() == {"ok": False, "text": "no pipeline idea 'nope' under pipeline"}, "a path is cut to its last name"
     r = run(c, "approve", name="Not A Name")                                # the connector's own input check
     assert r.status_code == 200 and r.json()["ok"] is False and r.json()["text"].startswith("name: an idea's name")
     assert [i["name"] for i in c.get("/api/tester/pipeline").json()["ideas"]] == [NAME], "nothing was changed"
@@ -262,6 +335,80 @@ def test_the_page_runs_the_tools_and_nothing_else(c):
     src = tester_api.Path(tester_api.__file__).read_text(encoding="utf-8")
     body = src[src.index('@r.post("/pipeline/run")'):src.index('@r.post("/show")')]
     assert set(tester_api.PIPE_KEYS) == {"add", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}
-    assert body.count("box.t_pipeline_") == 3 and "_bp(" not in body and "_pipe(" not in body and "subprocess" not in src
+    assert body.count("box.pipeline_do(") == 1 and "box.t_" not in body and "_bp(" not in body and "_pipe(" not in body and "subprocess" not in src
+    do = inspect.getsource(pipeline_tools.PipelineMixin.pipeline_do)
+    assert do.count("self._pipe(") == 3 and "_bp(" not in do, "one command an action: the tool's own"
+    for check, tool in (("_card_ok(", "t_pipeline_add"), ("_action_ok(", "t_pipeline_control"), ("_decided(", "t_pipeline_decide")):
+        assert check in do and check in inspect.getsource(getattr(pipeline_tools.PipelineMixin, tool)), f"the page makes the checks of {tool}"
     for tool in ("blueprint_status", "desk_status", "pipeline_status"):
         assert run(c, tool).status_code == 400
+
+
+# ---------------------------------------------------------------- what the add-idea form is built from
+
+def test_the_rules_the_indicators_and_the_sessions_off_one_blocks_call_for_the_life_of_the_service(c, blocks, proot, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(tester_api, "pipe_clock", lambda: now[0])
+    got = c.get("/api/tester/pipeline").json()
+    assert list(got) == ["runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
+    assert [r["name"] for r in got["rules"]] == ["fvg", "donchian", "supertrend"], "a rule that does not run yet is not sent"
+    fvg = got["rules"][0]
+    assert list(fvg) == ["name", "words", "markets", "sessions", "bars", "settings"], "only what the form needs"
+    assert (fvg["words"], fvg["markets"], fvg["sessions"], fvg["bars"]) == ("a three-bar gap forms: a limit rests at its near edge", ["NQ", "ES", "GC"],
+                                                                         ["asia", "nyam", "eve"], ["1", "5", "15"])
+    assert fvg["settings"] == [
+        {"name": "min_gap", "kind": "number", "min": 0, "max": 10, "choices": [], "default": 0.25, "tried": [0.1, 0.25, 0.5]},
+        {"name": "mode", "kind": "choice", "min": None, "max": None, "choices": ["touch", "mid", "go"], "default": "touch", "tried": ["touch"]},
+        {"name": "new_gap", "kind": "choice", "min": None, "max": None, "choices": ["replace", "stop"], "default": "replace", "tried": []}]
+    assert got["rules"][1]["settings"] == [
+        {"name": "n", "kind": "whole", "min": 2, "max": 200, "choices": [], "default": 20, "tried": [10, 20]},
+        {"name": "trend_f", "kind": "bool", "min": None, "max": None, "choices": [], "default": False, "tried": []},
+        {"name": "odd", "kind": "text", "min": None, "max": None, "choices": [], "default": "x", "tried": []}], "words it cannot read: text, never a guess"
+    assert got["rules"][2]["settings"] == []
+    assert got["indicators"] == [
+        {"block": "volatility", "sides": [{"side": "high", "words": "only after a wide day"}, {"side": "low", "words": "only after a quiet day"}], "markets": ["NQ", "ES", "GC"]},
+        {"block": "book", "sides": [{"side": "agree", "words": "the book agrees"}], "markets": ["NQ"]}]
+    assert got["sessions"] == [{"name": "asia", "words": "Asia (00:00-03:00 ET)"}, {"name": "nyam", "words": "New York morning (09:30-11:00 ET)"}]
+    assert blocks.argv() == ["blocks", f"--root={proot}", "--json"] and not proot.exists()
+    for _ in range(3):                                                      # past the two seconds: the Queue is asked again, the block list never
+        now[0] += 5.0
+        assert c.get("/api/tester/pipeline").json()["rules"] == got["rules"]
+    assert [x["argv"][0] for x in blocks.calls()].count("blocks") == 1 and asked(blocks) == ["list", "book"] * 4
+    assert run(c, "add", card=CARD).json()["ok"] is True and "rules" in c.get("/api/tester/pipeline").json()
+    assert [x["argv"][0] for x in blocks.calls()].count("blocks") == 1
+
+
+def test_a_toolkit_that_cannot_list_its_blocks_leaves_the_form_its_text_fields_and_the_queue_whole(c, fake, proot, monkeypatch):
+    now = [1000.0]
+    monkeypatch.setattr(tester_api, "pipe_clock", lambda: now[0])
+    real = tester_api._Blueprint._bp
+
+    def bp(self, args, **kw):
+        if args[0] == "blocks":
+            raise tester_api.ToolError("The blueprint toolkit crashed (exit 1) on `blocks`: boom")
+        return real(self, args, **kw)
+    monkeypatch.setattr(tester_api._Blueprint, "_bp", bp)
+    r = c.get("/api/tester/pipeline")
+    assert r.status_code == 200 and {k: r.json()[k] for k in NO_PARTS} == NO_PARTS and r.json()["stages"] == pipeline_tools.STAGES
+    monkeypatch.setattr(tester_api._Blueprint, "_bp", real)                 # it answers again: a failure was not kept
+    fake.script.write_text(FAKE.replace(MARK, 'if pos[0] == "blocks":\n    out(result("blocks", blocks={"families": [{"name": "orb", "runs": True}]}))\n' + MARK), encoding="utf-8")
+    now[0] += 5.0
+    assert [x["name"] for x in c.get("/api/tester/pipeline").json()["rules"]] == ["orb"]
+    assert pipeline_tools.parts(None) == NO_PARTS and pipeline_tools.parts({"families": "x", "filters": [7]}) == NO_PARTS
+    assert pipeline_tools.parts({"families": [{"name": "orb"}]})["rules"] == [{"name": "orb", "words": "", "markets": [], "sessions": [], "bars": [], "settings": []}]
+
+
+def test_every_text_of_an_idea_is_plain_for_the_page(c, fake, proot):
+    seed(proot, "orb_done", "awaiting_owner", stage=7, why="it waits (bp.py pipe approve orb_done, or bp.py pipe refuse orb_done --why=TEXT)")
+    file = proot / "fake.json"
+    S = json.loads(file.read_text())
+    S["ideas"]["orb_done"]["stages"]["7"]["text"] = "orb_done waits for the owner's look: 9 of 12 months won (bp.py pipe approve orb_done, or bp.py pipe refuse orb_done --why=TEXT)"
+    S["ideas"]["orb_done"]["stages"]["1"]["lines"][0]["text"] = "P1.1 PASS 61 % of boxes (need over 60 %), table /tmp/runs/orb_done_a5-NQ-tf5"
+    S["ideas"]["orb_done"]["stages"]["7"]["book"]["stages"] = {"6": {"passed": True, "result": "proven on history", "text": "PROVEN (bp.py pipe show orb_done)"}}
+    file.write_text(json.dumps(S))
+    got = c.get("/api/tester/pipeline/idea/orb_done").json()
+    assert got["stages"][-1]["text"] == "orb_done waits for the owner's look: 9 of 12 months won" and got["state"]["why"] == "it waits"
+    assert got["stages"][1]["lines"][0]["text"] == "P1.1 PASS 61 % of boxes (need over 60 %), table orb_done_a5-NQ-tf5"
+    assert c.get("/api/tester/pipeline").json()["ideas"][0]["why"] == "it waits"
+    assert run(c, "approve", name="orb_done").json() == {"ok": True, "text": "orb_done is in the Book."}
+    assert c.get("/api/tester/pipeline").json()["book"][0]["stages"] == {"6": {"passed": True, "result": "proven on history", "text": "PROVEN"}}

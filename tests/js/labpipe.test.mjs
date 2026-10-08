@@ -111,15 +111,13 @@ test('the ladder: the server\'s eight stages, each with the ideas that are at it
   assert.equal(L.plAt(idea('a', 'Running', 7)), 7, 'never past the last stage');
 });
 
-test('marks, a card\'s lines in words, and the toolkit\'s own command line left out', () => {
+test('marks, and a card\'s lines in words', () => {
   assert.deepEqual([true, false, null, undefined].map((p) => L.plMark(p).text), ['PASS', 'FAIL', '—', '—']);
   assert.deepEqual([true, false, null].map((p) => L.plMark(p).tone), ['ok', 'err', '']);
   assert.equal(L.plWayLine({ family: 'fvg', main_setting: 'gap_atr', values: ['0.1', '0.25', '0.5'], fixed: { mode: 'touch' } }), 'fvg: gap_atr 0.1 / 0.25 / 0.5 (mode touch)');
   assert.equal(L.plWayLine({ family: 'orb', main_setting: 'or_min', values: [5, 15, 30] }), 'orb: or_min 5 / 15 / 30');
   assert.equal(L.plIndLine({ block: 'momentum', side: 'with', why: 'trades with the push' }), 'momentum with: trades with the push');
-  assert.equal(L.plPlain('x waits for the owner\'s look: 9 months won (bp.py pipe approve x, or bp.py pipe refuse x --why=TEXT)'), 'x waits for the owner\'s look: 9 months won');
-  assert.equal(L.plPlain('over 60 % of boxes (61 %)'), 'over 60 % of boxes (61 %)', 'any other bracket stays');
-  assert.equal(L.plPlain(null), '');
+  assert.equal(L.plPlain, undefined, 'the server sends plain text: the page takes nothing out of it');
   assert.deepEqual([L.plSession('nyam'), L.plSession('pre'), L.plSession('eve'), L.plSession(null), L.plSide('long'), L.plSide('both')],
     ['New York morning', 'Pre-market', 'eve', '—', 'Long only', 'Both']);
   assert.deepEqual(L.PL_SESSIONS.map(([k]) => k), ['asia', 'london', 'pre', 'nyam', 'mid', 'pm'], 'the six sessions, as they are sent');
@@ -127,7 +125,7 @@ test('marks, a card\'s lines in words, and the toolkit\'s own command line left 
 
 /* ---- the add-idea form ---- */
 const FILLED = () => ({ name: '  fvg_open ', why: ' Gaps at the open  fill fast. ', loser: 'Late chasers pay for it.', market: 'NQ', session: 'nyam', sides: 'both', sides_why: 'not read',
-  ways: [{ family: 'fvg', main_setting: ' gap_atr ', values: [' 0.1', '0.25 ', '0.5'] }, { family: '', main_setting: '', values: ['', '', ''] }],
+  ways: [{ family: 'fvg', main_setting: ' min_gap ', values: [' 0.1', '0.25 ', '0.5'] }, { family: '', main_setting: '', values: ['', '', ''] }],
   indicators: [{ block: 'momentum', side: 'with', why: ' trades with  the push ' }, { block: '', side: 'with', why: '' }] });
 
 test('the form starts empty: one way, no indicator, both sides, no market and no time of day chosen', () => {
@@ -138,7 +136,7 @@ test('the form starts empty: one way, no indicator, both sides, no market and no
 
 test('the card that is posted: trimmed, values as text, empty ways and indicators dropped, the owner as its source', () => {
   assert.deepEqual(L.plCard(FILLED()), { name: 'fvg_open', why: 'Gaps at the open fill fast.', loser: 'Late chasers pay for it.', source: 'owner', market: 'NQ', session: 'nyam', sides: 'both',
-    ways: [{ family: 'fvg', main_setting: 'gap_atr', values: ['0.1', '0.25', '0.5'] }], indicators: [{ block: 'momentum', side: 'with', why: 'trades with the push' }] });
+    ways: [{ family: 'fvg', main_setting: 'min_gap', values: ['0.1', '0.25', '0.5'] }], indicators: [{ block: 'momentum', side: 'with', why: 'trades with the push' }] });
   const one = L.plCard({ ...FILLED(), sides: 'long', sides_why: ' shorts squeeze ', indicators: [], ways: [{ family: 'orb', main_setting: 'or_min', values: [5, 15, 30] }] });
   assert.deepEqual([one.sides, one.sides_why], ['long', 'shorts squeeze']);
   assert.equal('indicators' in one, false, 'no indicator: the key is left out');
@@ -173,23 +171,113 @@ test('the form can be sent only when the card could pass: what is missing is nam
   assert.deepEqual(needs({ indicators: ['a', 'b', 'c', 'd', 'e'].map(ind) }), []);
 });
 
-test('the form\'s lists come from the arsenal\'s catalog: what runs, on the chosen market; a rule\'s settings only when the catalog gives them', () => {
-  const groups = [
-    { id: 'families', items: [{ name: 'fvg', words: 'a gap of three bars', markets: ['NQ', 'ES', 'GC'], runs: true }, { name: 'nq_only', words: 'w', markets: ['NQ'], runs: true },
-      { name: 'later', words: 'w', markets: ['NQ'], runs: false }, { name: 'with_list', words: 'w', markets: ['NQ'], runs: true, settings: ['n', { name: 'k' }, { key: 'z' }, null] }] },
-    { id: 'filters', items: [{ name: 'momentum', markets: ['NQ', 'ES', 'GC'], runs: true, sides: [{ side: 'with', words: 'RSI points the trade\'s way' }, { side: 'against', words: 'RSI points against' }] },
-      { name: 'book', markets: ['NQ'], runs: false, sides: [{ side: 'agree', words: 'w' }] }, { name: 'no_sides', markets: ['NQ'], runs: true }] },
-    { id: 'sessions', items: [{ name: 'asia', words: 'Asia (00:00-03:00 ET)', markets: [], runs: true }] },
-    { id: 'other', items: [{ name: 'absorption', markets: ['NQ'], runs: false }] }];
-  const nq = L.plCatalog(groups, 'NQ');
-  assert.deepEqual(nq.rules.map((r) => r.name), ['fvg', 'nq_only', 'with_list'], 'what does not run yet is not offered');
-  assert.deepEqual([nq.rules[0].words, nq.rules[0].settings], ['a gap of three bars', null], 'no settings list in the catalog: the form takes text');
-  assert.deepEqual(nq.rules[2].settings, ['n', 'k', 'z']);
-  assert.deepEqual(L.plCatalog(groups, 'ES').rules.map((r) => r.name), ['fvg']);
-  assert.deepEqual(L.plCatalog(groups, '').rules.length, 3, 'no market chosen yet: every rule that runs');
-  assert.deepEqual(nq.blocks, [{ name: 'momentum', sides: [{ side: 'with', words: 'RSI points the trade\'s way' }, { side: 'against', words: 'RSI points against' }] }]);
-  assert.deepEqual(nq.hours, { asia: 'Asia (00:00-03:00 ET)' });
-  assert.deepEqual(L.plCatalog(null, 'NQ'), { rules: [], blocks: [], hours: {} }, 'no catalog: empty lists (the form then takes text)');
+/* The server's lists, as GET /api/tester/pipeline sends them (homebase/claude_mcp/pipeline_tools.py parts()). */
+const set = (name, kind, more = {}) => ({ name, kind, min: null, max: null, choices: [], default: null, tried: [], ...more });
+const RULES = [
+  { name: 'fvg', words: 'a three-bar gap forms', markets: ['NQ', 'ES', 'GC'], sessions: ['asia', 'london', 'pre', 'nyam', 'mid', 'pm', 'eve'], bars: ['1', '5', '15'],
+    settings: [set('min_gap', 'number', { min: 0, max: 10, default: 0.25, tried: [0.1, 0.25, 0.5] }), set('mode', 'choice', { choices: ['touch', 'mid', 'go'], default: 'touch' }),
+      set('new_gap', 'choice', { choices: ['replace', 'stop'], default: 'replace' })] },
+  { name: 'gap', words: 'the open gaps', markets: ['NQ', 'ES'], sessions: ['nyam'], bars: ['1', '5'], settings: [set('min_gap_atr', 'number', { min: 0, max: 3, default: 0.1 }), set('mode', 'choice', { choices: ['fill', 'go'], default: 'fill', tried: ['fill', 'go'] })] },
+  { name: 'donchian', words: 'a channel breaks', markets: ['NQ'], sessions: ['nyam', 'mid', 'pm'], bars: ['5', '15'], settings: [set('n', 'whole', { min: 2, max: 200, default: 20, tried: [10, 20, 40, 60] })] },
+  { name: 'supertrend', words: 'it flips', markets: ['NQ', 'ES', 'GC'], sessions: ['nyam'], bars: ['1', '5'], settings: [] },
+  { name: 'ib', words: 'the first hour breaks', markets: ['NQ', 'ES', 'GC'], sessions: ['nyam'], bars: ['1', '5'], settings: [set('mode', 'choice', { choices: ['break', 'fade'], default: 'break' })] },
+  { name: 'slow', words: 'only on 15 and 30', markets: ['NQ'], sessions: ['nyam'], bars: ['15', '30'], settings: [set('n', 'whole', { min: 1, max: 9, default: 3 })] }];
+const INDS = [{ block: 'momentum', sides: [{ side: 'with', words: 'RSI points the trade\'s way' }, { side: 'against', words: 'RSI points against' }], markets: ['NQ', 'ES', 'GC'] },
+  { block: 'book', sides: [{ side: 'agree', words: 'the book agrees' }], markets: ['NQ'] }, { block: 'empty', sides: [], markets: ['NQ'] }];
+
+test('the entry rules the form offers: on the chosen market, at 1 or 5 minutes, with a setting that can take three values', () => {
+  const nq = L.plRules(RULES, 'NQ');
+  assert.deepEqual(nq.rules.map((r) => r.name), ['fvg', 'gap', 'donchian'], 'a rule only on 15 and 30 minutes is no rule of a card');
+  assert.equal(nq.hidden, 2, 'supertrend has no setting and ib only a choice of two: they are counted, not listed');
+  assert.deepEqual(nq.rules[0].settings.map((x) => x.name), ['min_gap', 'mode'], 'a choice of two cannot be a main setting');
+  assert.deepEqual(nq.rules[1].settings.map((x) => x.name), ['min_gap_atr']);
+  assert.deepEqual(L.plRules(RULES, 'GC').rules.map((r) => r.name), ['fvg']);
+  assert.deepEqual(nq.rules.map(L.plMainSetting), ['min_gap', 'min_gap_atr', 'n'], 'a way starts on the rule\'s only setting, or on the one the library ran three values of');
+  assert.equal(L.plMainSetting({ settings: [set('a', 'number'), set('b', 'number')] }), '', 'several, none of them run: the person picks');
+  assert.equal(L.plMainSetting(null), '');
+  assert.deepEqual(L.plRules(RULES, '').rules.length, 3, 'no market chosen yet: every market');
+  assert.deepEqual(L.plRules(null, 'NQ'), { rules: [], hidden: 0 }, 'no list from the server: the form takes text');
+  assert.equal(RULES[0].settings.length, 3, 'the server\'s list is not changed');
+  assert.deepEqual([set('a', 'bool'), set('a', 'choice', { choices: ['x', 'y', 'z'] }), set('a', 'whole', { min: 1, max: 2 }), set('a', 'whole', { min: 1, max: 3 }), set('a', 'number', { min: 1, max: 1 }),
+    set('a', 'number', { min: 0, max: 1 }), set('a', 'text'), null].map(L.plUsable), [false, true, false, true, false, true, true, false]);
+});
+
+test('the indicators on the chosen market, and the times of day the chosen rules run in', () => {
+  assert.deepEqual(L.plIndicators(INDS, 'ES').map((x) => x.block), ['momentum']);
+  assert.deepEqual(L.plIndicators(INDS, 'NQ').map((x) => x.block), ['momentum', 'book'], 'a block without a side is not offered');
+  assert.deepEqual(L.plIndicators(null, 'NQ'), []);
+  assert.deepEqual(L.plSessionsFor([]).map(([k]) => k), ['asia', 'london', 'pre', 'nyam', 'mid', 'pm'], 'no rule chosen: the pipeline\'s six (never the evening)');
+  assert.deepEqual(L.plSessionsFor([RULES[0]]).map(([k]) => k), ['asia', 'london', 'pre', 'nyam', 'mid', 'pm']);
+  assert.deepEqual(L.plSessionsFor([RULES[2]]), [['nyam', 'New York morning'], ['mid', 'Midday'], ['pm', 'Afternoon']]);
+  assert.deepEqual(L.plSessionsFor([RULES[2], null, RULES[1]]).map(([k]) => k), ['nyam'], 'several ways: the times every one of them runs in');
+});
+
+test('three values to start from: what the library ran, around the default; else the default and its neighbours inside the limits', () => {
+  const pre = (kind, more) => L.plPrefill(set('x', kind, more));
+  assert.deepEqual(pre('number', { min: 0, max: 10, default: 0.25, tried: [0.1, 0.25, 0.5] }), ['0.1', '0.25', '0.5']);
+  assert.deepEqual(pre('whole', { min: 2, max: 200, default: 20, tried: [60, 10, 20, 40, 20] }), ['10', '20', '40'], 'four were run: the three around the default, in order');
+  assert.deepEqual(pre('whole', { min: 2, max: 200, default: 60, tried: [10, 20, 40, 60] }), ['20', '40', '60']);
+  assert.deepEqual(pre('choice', { choices: ['5', '15', '30', '60'], default: '60', tried: ['5', '15', '30', '60'] }), ['15', '30', '60']);
+  assert.deepEqual(pre('choice', { choices: ['9', '21', '50'], default: 21, tried: [9, 21, 50] }), ['9', '21', '50'], 'a number the library ran is the choice of the same name');
+  assert.deepEqual(pre('choice', { choices: ['touch', 'mid', 'go'], default: 'touch' }), ['touch', 'mid', 'go'], 'nothing was run: three of its choices');
+  assert.deepEqual(pre('choice', { choices: ['a', 'b', 'c', 'd'], default: 'd' }), ['b', 'c', 'd']);
+  assert.deepEqual(pre('number', { min: 0, max: 3, default: 0.1 }), ['0.05', '0.1', '0.15'], 'half the default each way');
+  assert.deepEqual(pre('number', { min: 0, max: 20, default: 0, tried: [0, 1] }), ['0', '2', '4'], 'a default at the lower limit: upwards');
+  assert.deepEqual(pre('number', { min: 0.5, max: 0.95, default: 0.9 }), ['0.5', '0.725', '0.95'], 'limits too close for the step: the two ends and the middle');
+  assert.deepEqual(pre('whole', { min: 1, max: 20, default: 2 }), ['1', '2', '3']);
+  assert.deepEqual(pre('whole', { min: 0, max: 120, default: 0 }), ['0', '1', '2']);
+  assert.deepEqual(pre('whole', { min: 1, max: 6, default: 6 }), ['1', '4', '6']);
+  for (const s of [set('x', 'whole', { min: 1, max: 6, default: 6 }), set('x', 'number', { min: 0.2, max: 10, default: 1.5 }), set('x', 'whole', { min: 3, max: 100, default: 100 })]) {
+    const got = L.plPrefill(s);
+    assert.equal(new Set(got).size, 3, JSON.stringify(got));
+    assert.deepEqual(got.map((v) => L.plValueError(s, v)), ['', '', ''], 'what is prefilled is always a value the setting takes');
+  }
+  assert.deepEqual(pre('text'), ['', '', '']);
+  assert.deepEqual(pre('bool'), ['', '', '']);
+  assert.deepEqual(pre('choice', { choices: ['a', 'b'] }), ['', '', '']);
+});
+
+test('a value is checked against the setting\'s limits or choices, and the message says what it must be', () => {
+  const num = set('min_gap', 'number', { min: 0, max: 10 }), whole = set('n', 'whole', { min: 2, max: 200 }), choice = set('mode', 'choice', { choices: ['touch', 'mid', 'go'] });
+  assert.deepEqual(['0', '0.25', ' 10 ', '', '-0'].map((v) => L.plValueError(num, v)), ['', '', '', '', '']);
+  assert.deepEqual(['11', '-1', 'abc', '1e3', '0,5', '.5'].map((v) => L.plValueError(num, v)), Array(6).fill('a number from 0 to 10'));
+  assert.deepEqual(['2', '200', '20'].map((v) => L.plValueError(whole, v)), ['', '', '']);
+  assert.deepEqual(['1', '201', '2.5', 'ten'].map((v) => L.plValueError(whole, v)), Array(4).fill('a whole number from 2 to 200'));
+  assert.deepEqual(['touch', 'go', 'Touch', 'fade'].map((v) => L.plValueError(choice, v)), ['', '', 'one of: touch, mid, go', 'one of: touch, mid, go']);
+  assert.equal(L.plValueError(set('x', 'number'), '7'), '', 'no limits sent: any number');
+  assert.equal(L.plValueError(set('x', 'number'), 'x'), 'a number');
+  assert.equal(L.plValueError(set('x', 'text'), 'anything'), '');
+  assert.equal(L.plValueError(null, 'anything'), '');
+  assert.equal(L.plSettingWords(RULES[2].settings[0]), 'A whole number from 2 to 200. The library ran 10, 20, 40, 60.');
+  assert.equal(L.plSettingWords(RULES[0].settings[1]), 'One of: touch, mid, go.');
+  assert.equal(L.plSettingWords(set('x', 'number', { min: 0, max: 3 })), 'A number from 0 to 3.');
+});
+
+test('with the server\'s lists the form can be sent only for a rule it offers, a setting of that rule, values it takes and a time it runs in', () => {
+  const needs = (change) => L.plCanSend({ ...FILLED(), ...change }, RULES, INDS).needs;
+  const way = (more) => [{ family: 'fvg', main_setting: 'min_gap', values: ['0.1', '0.25', '0.5'], ...more }];
+  const base = { ways: way({}), indicators: [] };
+  assert.deepEqual(needs(base), []);
+  assert.deepEqual(needs({ ...base, ways: way({ family: 'supertrend' }) }), ['way 1: an entry rule'], 'a rule the form does not offer');
+  assert.deepEqual(needs({ ...base, market: 'GC', ways: way({ family: 'gap', main_setting: 'min_gap_atr' }) }), ['way 1: an entry rule'], 'gap does not run on GC');
+  assert.deepEqual(needs({ ...base, ways: way({ main_setting: 'new_gap' }) }), ['way 1: its main setting'], 'a setting that cannot take three values');
+  assert.deepEqual(needs({ ...base, ways: way({ values: ['0.1', '11', 'x'] }) }), ['way 1: value 2 must be a number from 0 to 10', 'way 1: value 3 must be a number from 0 to 10']);
+  assert.deepEqual(needs({ ...base, ways: way({ main_setting: 'mode', values: ['touch', 'mid', 'fade'] }) }), ['way 1: value 3 must be one of: touch, mid, go']);
+  assert.deepEqual(needs({ ...base, session: 'asia', ways: [{ family: 'donchian', main_setting: 'n', values: ['10', '20', '40'] }] }), ['a time of day donchian runs in']);
+  assert.deepEqual(needs({ ...base, indicators: [{ block: 'momentum', side: 'with', why: 'it helps' }] }), []);
+  assert.deepEqual(needs({ ...base, indicators: [{ block: 'nope', side: 'with', why: 'it helps' }] }), ['indicator 1: which one']);
+  assert.deepEqual(needs({ ...base, indicators: [{ block: 'momentum', side: 'high', why: 'it helps' }] }), ['indicator 1: its side']);
+  assert.deepEqual(needs({ ...base, market: 'ES', indicators: [{ block: 'book', side: 'agree', why: 'it helps' }] }), ['indicator 1: which one'], 'book is for NQ only');
+  assert.deepEqual(L.plCanSend({ ...FILLED(), ways: way({ family: 'anything', main_setting: 'typed', values: ['a', 'b', 'c'] }), indicators: [] }, [], []), { ok: true, needs: [] },
+    'no lists from the server: what is typed goes to the server, which checks it');
+});
+
+test('beside the Guide: what is happening now, and the selection of a list', () => {
+  assert.deepEqual(L.plSummary(state([idea('a', 'Running', 2), idea('b', 'Passed', 7), idea('c', 'Passed', 7)], { running: true })),
+    ['3 ideas: 1 running, 2 passed', 'Testing a — stage 3 of 7', '2 ideas passed and wait for your look.']);
+  assert.deepEqual(L.plSummary(state([idea('b', 'Passed', 7)])), ['1 idea: 1 passed', 'Nothing is running', '1 idea passed and waits for your look.']);
+  assert.deepEqual(L.plSummary(state([])), ['No ideas yet', 'Nothing is running']);
+  assert.deepEqual([L.plPick(['a', 'b'], 'b'), L.plPick(['a', 'b'], 'gone'), L.plPick(['a', 'b'], ''), L.plPick([], 'x')], ['b', 'a', 'a', ''], 'the one that was while it is there, else the first');
 });
 
 /* ---- the book ---- */
@@ -199,7 +287,7 @@ const BOOK = { name: 'fvg_open', sub: 'fvg_open_a5', family: 'fvg', source: 'own
     'apex-300k': { name: 'Apex 300K', confirmed: false, size: 10, payout_size: null, eval: 0.4, payout: null, label: 'helper' } },
   hours: ['09:31', '11:42'], trades: 1234, days_traded: 210, win_days_month: 9.26, winning_months: [31, 45], biggest_day_share: 0.118, fast_profit_share: 0.004,
   worst_day: -812.4, worst_drawdown: 1890, avg_trade: 71.6, profit_factor: 1.3149, net: 88357.2, tries: 2,
-  stages: { 1: { passed: true, result: 'strict', text: 'a5 moved on' }, 0: { passed: true, result: 'pass', text: 'the card is whole' }, 6: { passed: true, result: 'proven on history', text: 'PROVEN (bp.py pipe show x)' } } };
+  stages: { 1: { passed: true, result: 'strict', text: 'a5 moved on' }, 0: { passed: true, result: 'pass', text: 'the card is whole' }, 6: { passed: true, result: 'proven on history', text: 'PROVEN (4.1-4.9)' } } };
 
 test('percent and money as a person reads them; what is missing shows a dash', () => {
   assert.deepEqual([0.584, 0.52, 0, 1, 0.004].map(L.plPct), ['58 %', '52 %', '0 %', '100 %', '0 %']);
@@ -229,8 +317,8 @@ test('the whole book card: every fact, every account (one whose rules are not co
   assert.deepEqual(full.accounts, [
     { name: 'LucidPro 50K', rows: [['Pass the eval in 30 days', '58 % at 5 micros'], ['Full payout in 30 days', '52 % at 1 micro'], ['Label', 'Stands alone']] },
     { name: 'Apex 300K (rules not confirmed)', rows: [['Pass the eval in 30 days', '40 % at 10 micros'], ['Full payout in 30 days', '—'], ['Label', 'Helper']] }]);
-  assert.deepEqual(full.stages.map((s) => [s.n, s.name, s.mark.text, s.text]), [[0, 'Idea card', 'PASS', 'the card is whole'], [1, 'Raw heat map', 'PASS', 'a5 moved on'], [6, 'Unseen days', 'PASS', 'PROVEN']],
-    'in the order of the stages, without the toolkit\'s command line');
+  assert.deepEqual(full.stages.map((s) => [s.n, s.name, s.mark.text, s.text]), [[0, 'Idea card', 'PASS', 'the card is whole'], [1, 'Raw heat map', 'PASS', 'a5 moved on'], [6, 'Unseen days', 'PASS', 'PROVEN (4.1-4.9)']],
+    'in the order of the stages, each text as the server sent it');
   assert.equal(Object.fromEntries(L.plBookFull({ ...BOOK, filter: 'momentum_with' }, STAGES).facts).Indicator, 'momentum_with');
   const bare = L.plBookFull({}, null);
   assert.deepEqual([bare.why, bare.accounts, bare.stages, bare.facts.filter(([k]) => k !== 'Indicator').every(([, v]) => v === '—')], ['—', [], [], true]);
@@ -256,7 +344,8 @@ test('the pipeline pages talk to three routes only, and post nothing but the six
 
 test('one timer for the three views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {
   assert.equal((LAB.match(/setInterval\(loadPipeline, 5000\)/g) || []).length, 1);
-  assert.match(LAB, /const plOpen = \(\) => PIPE_VIEWS\.includes\(S\.view\) && !document\.hidden && P\.lib;/);
+  assert.match(LAB, /const pipeOn = \(\) => PIPE_VIEWS\.includes\(S\.view\);/);
+  assert.match(LAB, /const plOpen = \(\) => pipeOn\(\) && !document\.hidden;/);
   assert.match(LAB, /document\.addEventListener\('visibilitychange', plSync\)/);
   assert.match(PIPE, /if \(plLoading\) \{ plAgain = plAgain \|\| force; return; \}/);
   assert.match(PIPE, /Can’t reach the app\. Showing the last known state\./);
@@ -274,8 +363,24 @@ test('every string of the server or the person reaches the page escaped', () => 
   const holes = [...PIPE.matchAll(/\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map((m) => m[1].trim());
   assert.ok(holes.length > 120, 'the templates were read');
   // a hole that is nothing but a value (x.name, st.label, F.why ...) must go through esc(); a stage number, a helper's tone and a limit are the page's own
-  const raw = holes.filter((h) => /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)+$/.test(h) && !/\.(n|tone)$|^C\.PL_/.test(h));
+  const raw = holes.filter((h) => /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)+$/.test(h) && !/\.(n|tone)$|^C\.PL_|^S\.view$/.test(h));
   assert.deepEqual(raw, [], 'a value in a template without esc()');
-  assert.doesNotMatch(PIPE, /innerHTML = (?!`|'<)/, 'what becomes HTML is a template of this file, never a string that came from elsewhere');
+  assert.doesNotMatch(PIPE, /innerHTML = (?!`|'<|html;|head \+ pipeSide\(\);)/, 'what becomes HTML is a template of this file, never a string that came from elsewhere');
   assert.doesNotMatch(PIPE, /insertAdjacentHTML|outerHTML|document\.write/);
+});
+
+test('while a pipeline view is open the middle is its own: the editor, the chart and the result are hidden, never rebuilt, and come back as they were', () => {
+  const HTML = rd('backtest.html'), CSS = rd('charts/lab.css');
+  assert.ok(HTML.indexOf('id="labLib"') < HTML.indexOf('id="labPipe"') && HTML.indexOf('id="labPipe"') < HTML.indexOf('id="labEd"'), 'its page sits where the editor does');
+  const panels = LAB.slice(LAB.indexOf('function applyPanels('), LAB.indexOf('function setPanel('));
+  assert.match(panels, /for \(const k of PANELS\) root\.dataset\[k\] = P\[k\] && !\(pipe && k !== 'lib'\) \? '1' : '0';/, 'shown as switched off, by the rules of a panel that is off');
+  assert.match(panels, /root\.dataset\.pipe = pipe \? '1' : '0';/);
+  assert.doesNotMatch(panels.replace(/P\[k\] && /, ''), /P\[\w+\] = |P\.(code|chart|res) = /, 'the person\'s own panels are not touched');
+  assert.match(CSS, /\.lab-pipe \{ display: none;/);
+  assert.match(CSS, /\.lab\[data-pipe="1"\] \.lab-pipe \{ display: block; \}/);
+  const view = PIPE.slice(PIPE.indexOf('function setView('), PIPE.indexOf('function plSelect('));
+  assert.match(view, /applyPanels\(false\);/);
+  assert.doesNotMatch(PIPE, /paintEditor\(|paintAll\(|paintRes\(|S\.bufs|S\.cur\b/, 'nothing of the editor is painted or changed from here');
+  assert.match(LAB, /if \(inChart\(e\) \|\| pipeOn\(\)\) return;/, 'the editor\'s keys save and run nothing from behind the page');
+  assert.equal((PIPE.match(/dialog\(/g) || []).length, 2, 'two sheets only: the add-idea form and the reason of a no');
 });

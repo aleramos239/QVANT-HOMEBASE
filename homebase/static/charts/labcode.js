@@ -333,6 +333,13 @@ function plGuide(P) {
   const next = green ? 5 : steps[1].enabled ? 2 : !ideas.length ? 1 : 4;
   return steps.map((s) => ({ ...s, primary: s.n === next }));
 }
+/* Beside the Guide: what is happening now, in three lines at most (the count, what is being tested, who waits for the owner). */
+function plSummary(P) {
+  const n = ((P && P.counts) || {}).Passed || 0;
+  return [plCount(P && P.counts), plRunning(P), n ? `${n} idea${n === 1 ? '' : 's'} passed and wait${n === 1 ? 's' : ''} for your look.` : ''].filter(Boolean);
+}
+/* The one that is selected in a list: the one that was, while it is still there; else the first (the server lists what can run first). */
+const plPick = (names, cur) => (names.includes(cur) ? cur : names.length ? names[0] : '');
 /* The stage an idea is AT now: where it stopped; else, while it waits or runs, the next one; a finisher sits at the owner's look.
    An idea that is in the book or was refused is at none (null). */
 function plAt(row) {
@@ -349,8 +356,6 @@ function plLadder(P) {
 }
 /* PASS / FAIL / — for a stage or one of its lines, as the server judged it. */
 const plMark = (passed) => (passed === true ? { text: 'PASS', tone: 'ok' } : passed === false ? { text: 'FAIL', tone: 'err' } : { text: DASH, tone: '' });
-/* The toolkit's words without its own command line ("(bp.py pipe approve x ...)"), which no page has. */
-const plPlain = (text) => String(text == null ? '' : text).replace(/\s*\(bp\.py[^)]*\)/g, '').trim();
 /* A way and an indicator of a card, in words. */
 function plWayLine(w) {
   const fixed = Object.entries((w && w.fixed) || {}).map(([k, v]) => `${k} ${v}`).join(', ');
@@ -376,10 +381,72 @@ function plCard(F) {
   if (inds.length) card.indicators = inds;
   return card;
 }
-/* May the form be sent? -> {ok, needs: what is still missing, in plain words}. The server checks the card in full; this only keeps
-   a card that cannot pass from being sent. */
-function plCanSend(F) {
-  const c = plCard(F), needs = [];
+/* -- the form's lists: the server's `rules` ({name, words, markets, sessions, bars, settings: [{name, kind, min, max, choices, default,
+   tried}]}) and `indicators` ({block, sides: [{side, words}], markets}), read off the toolkit's own block list -- */
+const PL_BARS = ['1', '5'];                         // a card is always run on 1-minute and on 5-minute bars
+const plHas = (v) => plNum(v) != null;
+/* Can a setting be a card's MAIN setting? It must be able to take three different values: a switch and a choice of two cannot. */
+const plUsable = (s) => !!s && (s.kind === 'choice' ? (s.choices || []).length >= 3
+  : s.kind === 'whole' ? !plHas(s.min) || !plHas(s.max) || s.max - s.min >= 2
+    : s.kind === 'number' ? !plHas(s.min) || !plHas(s.max) || s.max > s.min : s.kind === 'text');
+/* The entry rules the form offers: those that run on the chosen market (any, while none is chosen) and on 1- or 5-minute bars, each
+   with the settings that can be a main setting. hidden: how many more would fit but have no such setting. */
+function plRules(all, market) {
+  const fit = (all || []).filter((r) => r && (!market || !(r.markets || []).length || r.markets.includes(market))
+    && (!(r.bars || []).length || r.bars.some((x) => PL_BARS.includes(String(x)))));
+  const rules = fit.map((r) => ({ ...r, settings: (r.settings || []).filter(plUsable) })).filter((r) => r.settings.length);
+  return { rules, hidden: fit.length - rules.length };
+}
+/* The setting a rule's way starts on: its only one; of several, the first the library ran three values of; else none (the person picks). */
+function plMainSetting(rule) {
+  const xs = (rule && rule.settings) || [], ran = xs.find((s) => new Set((s.tried || []).map(String)).size >= 3);
+  return xs.length === 1 ? xs[0].name : ran ? ran.name : '';
+}
+const plIndicators = (all, market) => (all || []).filter((x) => x && (x.sides || []).length && (!market || !(x.markets || []).length || x.markets.includes(market)));
+/* The times of day the form offers: the pipeline's six, less those a chosen rule does not run in. */
+const plSessionsFor = (rules) => PL_SESSIONS.filter(([k]) => (rules || []).every((r) => !r || !(r.sessions || []).length || r.sessions.includes(k)));
+const plRange = (s) => (plHas(s.min) && plHas(s.max) ? ` from ${s.min} to ${s.max}` : '');
+/* What a value of this setting must be, in words ("a number from 0 to 10"). */
+const plNeed = (s) => (s.kind === 'number' ? `a number${plRange(s)}` : s.kind === 'whole' ? `a whole number${plRange(s)}` : s.kind === 'choice' ? `one of: ${s.choices.join(', ')}` : 'a value');
+/* Is this text a value the setting takes? -> '' (yes, or nothing typed yet), else what it must be. */
+function plValueError(s, text) {
+  const t = plT(text);
+  if (!t || !s) return '';
+  if (s.kind === 'choice') return s.choices.map(String).includes(t) ? '' : plNeed(s);
+  if (s.kind !== 'number' && s.kind !== 'whole') return '';
+  const v = /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
+  return Number.isFinite(v) && (s.kind !== 'whole' || Number.isInteger(v)) && (!plHas(s.min) || v >= s.min) && (!plHas(s.max) || v <= s.max) ? '' : plNeed(s);
+}
+/* The line under a chosen setting: what it takes, and what the library ran. */
+function plSettingWords(s) {
+  const ran = [...new Set((s.tried || []).map(String))];
+  return `${plNeed(s).replace(/^./, (c) => c.toUpperCase())}.${ran.length ? ` The library ran ${ran.join(', ')}.` : ''}`;
+}
+/* Three values to start from, as text: three the library ran (those around the default) when it ran three; else the default and
+   its neighbours inside the setting's limits; for a choice, three of its choices. ['', '', ''] when nothing can be said. */
+function plPrefill(s) {
+  const around = (xs, d) => { const i = Math.max(0, xs.indexOf(String(d))), a = Math.max(0, Math.min(xs.length - 3, i - 1)); return xs.slice(a, a + 3); };
+  const num = s.kind === 'number' || s.kind === 'whole';
+  let ran = [...new Set((s.tried || []).map(String))].filter((v) => !plValueError(s, v));
+  if (num) ran = ran.sort((x, y) => Number(x) - Number(y));
+  if (ran.length >= 3) return around(ran, s.default);
+  if (s.kind === 'choice') return s.choices.length >= 3 ? around(s.choices.map(String), s.default) : ['', '', ''];
+  if (!num) return ['', '', ''];
+  const lo = plHas(s.min) ? s.min : -Infinity, hi = plHas(s.max) ? s.max : Infinity, whole = s.kind === 'whole';
+  const d = Math.min(hi, Math.max(lo, plHas(Number(s.default)) && s.default !== null && s.default !== '' ? Number(s.default) : plHas(s.min) ? s.min : 0));
+  const step = whole ? Math.max(1, Math.round(Math.abs(d) / 2)) : d ? Math.abs(d) / 2 : Number.isFinite(hi - lo) ? (hi - lo) / 10 : 1;
+  const tidy = (v) => String(whole ? Math.round(v) : Number(v.toPrecision(6)));
+  let xs = d - step < lo ? [d, d + step, d + 2 * step] : d + step > hi ? [d - 2 * step, d - step, d] : [d - step, d, d + step];
+  if (xs[0] < lo || xs[2] > hi) xs = [lo, (lo + hi) / 2, hi];             // limits too close together for the step: the two ends and the middle
+  xs = xs.map(tidy);
+  return new Set(xs).size === 3 && xs.every((v) => !plValueError(s, v)) ? xs : ['', '', ''];
+}
+
+/* May the form be sent? -> {ok, needs: what is still missing, in plain words}. With the server's lists (`rules`, `indicators`) a way
+   must also be a rule the form offers, its main setting one of that rule's, each value one the setting takes, and the time of day one
+   the rule runs in. The server checks the card in full; this only keeps a card that cannot pass from being sent. */
+function plCanSend(F, rules, indicators) {
+  const c = plCard(F), needs = [], offered = (rules || []).length ? plRules(rules, c.market).rules : null;
   if (!c.name) needs.push('a name');
   else if (!PL_NAME.test(c.name)) needs.push('a name of small letters, numbers and _ (2 to 34, a letter first)');
   if (!c.why) needs.push('why it should make money');
@@ -393,34 +460,26 @@ function plCanSend(F) {
   if (c.ways.length > PL_WAYS) needs.push(`${PL_WAYS} ways at most`);
   (F.ways || []).forEach((w, i) => {
     if (plWayEmpty(w)) return;
-    const n = `way ${i + 1}`, vs = (w.values || []).map(plT).filter(Boolean);
-    if (!plT(w.family)) needs.push(`${n}: an entry rule`);
-    if (!plT(w.main_setting)) needs.push(`${n}: its main setting`);
+    const n = `way ${i + 1}`, values = (w.values || []).map(plT), vs = values.filter(Boolean), family = plT(w.family);
+    const rule = offered && family ? offered.find((r) => r.name === family) : null, setting = rule ? rule.settings.find((x) => x.name === plT(w.main_setting)) : null;
+    if (!family || (offered && !rule)) needs.push(`${n}: an entry rule`);
+    if (!plT(w.main_setting) || (rule && !setting)) needs.push(`${n}: its main setting`);
     if (vs.length < 3) needs.push(`${n}: three values`);
     else if (new Set(vs).size < 3) needs.push(`${n}: three different values`);
+    if (setting) values.forEach((v, k) => { const bad = plValueError(setting, v); if (bad) needs.push(`${n}: value ${k + 1} must be ${bad}`); });
+    if (rule && c.session && (rule.sessions || []).length && !rule.sessions.includes(c.session)) needs.push(`a time of day ${family} runs in`);
   });
-  const inds = c.indicators || [];
+  const inds = c.indicators || [], blocks = (indicators || []).length ? plIndicators(indicators, c.market) : null;
   if (inds.length > PL_INDS) needs.push(`${PL_INDS} indicators at most`);
   (F.indicators || []).forEach((x, i) => {
     if (plIndEmpty(x)) return;
-    const n = `indicator ${i + 1}`;
-    if (!plT(x.block)) needs.push(`${n}: which one`);
-    if (!plT(x.side)) needs.push(`${n}: its side`);
+    const n = `indicator ${i + 1}`, block = blocks && plT(x.block) ? blocks.find((k) => k.block === plT(x.block)) : null;
+    if (!plT(x.block) || (blocks && !block)) needs.push(`${n}: which one`);
+    if (!plT(x.side) || (block && !block.sides.some((k) => k.side === plT(x.side)))) needs.push(`${n}: its side`);
     if (!plT(x.why)) needs.push(`${n}: why it should help`);
   });
   if (new Set(inds.map((x) => x.block).filter(Boolean)).size < inds.filter((x) => x.block).length) needs.push('each indicator once');
   return { ok: !needs.length, needs };
-}
-/* What the form's lists offer, from the arsenal's catalog (homebase/arsenal.py): the entry rules and the indicators that run, on the
-   chosen market when one is chosen. A rule's `settings` is a list only when the catalog gives one (it does not yet: the form then
-   takes the setting's name as text). hours: a session's own words ("Asia (00:00-03:00 ET)"). */
-function plCatalog(groups, market) {
-  const items = (id) => (((groups || []).find((g) => g.id === id) || {}).items || []);
-  const fits = (it) => it.runs !== false && (!market || !(it.markets || []).length || it.markets.includes(market));
-  const settings = (it) => { const xs = (Array.isArray(it.settings) ? it.settings : []).map((s) => (typeof s === 'string' ? s : s && (s.name || s.key))).filter(Boolean); return xs.length ? xs : null; };
-  return { rules: items('families').filter(fits).map((it) => ({ name: it.name, words: it.words || '', settings: settings(it) })),
-    blocks: items('filters').filter((it) => fits(it) && (it.sides || []).length).map((it) => ({ name: it.name, sides: it.sides.map((s) => ({ side: s.side, words: s.words || '' })) })),
-    hours: Object.fromEntries(items('sessions').map((it) => [it.name, it.words || ''])) };
 }
 
 /* -- the book -- */
@@ -459,14 +518,15 @@ function plBookFull(card, stages) {
     accounts: plAccounts(c).map((p) => ({ name: plAccountName(p), rows: [['Pass the eval in 30 days', `${plPct(p.eval)}${plNum(p.eval) == null ? '' : plMicros(p.size)}`],
       ['Full payout in 30 days', `${plPct(p.payout)}${plNum(p.payout) == null ? '' : plMicros(p.payout_size)}`], ['Label', plCap(p.label)]] })),
     stages: Object.entries((c.stages && typeof c.stages === 'object' && c.stages) || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
-      .map(([n, s]) => ({ n: Number(n), name: names[n] || '', mark: plMark(s && s.passed), text: plPlain(s && s.text) })) };
+      .map(([n, s]) => ({ n: Number(n), name: names[n] || '', mark: plMark(s && s.passed), text: String((s && s.text) || '') })) };
 }
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
-  plAt, plLadder, plMark, plPlain, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend, plCatalog,
+  plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
+  plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   plPct, plMoney, plBookCard, plBookFull };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

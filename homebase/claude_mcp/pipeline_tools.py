@@ -23,6 +23,16 @@ runner, reads, and passes on the owner's yes or no for an idea that passed every
 Three things the Lab's pages read are written ONCE, here: STAGES (the eight stages, a plain sentence each), LABELS
 (the word the page shows for a status of the toolkit) and what the two views hold (PipelineMixin.pipeline_state,
 .pipeline_idea; the routes are GET /api/tester/pipeline and /api/tester/pipeline/idea/{name}).
+
+FOR THE PAGE ONLY (a chat's tools say what they always said):
+  plain(text)                 the toolkit's words without what no page has: its own command line ("(bp.py pipe ...)", a
+                              "Next: bp.py ..." line) and the folders of a file path
+  page_said(action, r)        ONE plain sentence for an action that worked ("fvg_open is in the Queue, place 1 of 3.")
+  page_refusal(error)         a refusal's reason in the toolkit's own words, made plain()
+  PipelineMixin.pipeline_do   one action of the page: the same checks and the same ONE command as the tool a chat has
+  PipelineMixin.pipeline_parts  what the add-idea form is built from, off ONE `bp.py blocks` kept for the life of the process:
+                              {rules: [{name, words, markets, sessions, bars, settings: [{name, kind, min, max, choices,
+                              default, tried}]}], indicators: [{block, sides: [{side, words}], markets}], sessions: [{name, words}]}
 """
 from __future__ import annotations
 
@@ -62,6 +72,94 @@ def pipeline_root() -> Path:
     """The pipeline's own folder, where the toolkit looks for it too (pipe_store.root) -- whether or not it is there."""
     v = os.environ.get(ENV_ROOT)
     return Path(v).expanduser() if v else Path.home() / ".homebase" / "pipeline"
+
+
+# ---------------------------------------------------------------- the page's words
+
+_HINT = re.compile(r"[ \t]*\(`?bp\.py[^)]*\)")                         # "(bp.py pipe refuse x --why=TEXT)", "(`bp.py blocks` lists them)"
+_NEXT = re.compile(r"(?m)^(?:Next: .*|Nothing was run\.)\n?")            # the connector's own two lines after a refusal
+_HEAD = re.compile(r"^Refused \([^)]*\): ")                              # ... and its head
+_LONE_PATH = re.compile(r"[ \t]*\((?:~?/)[^\s()]*\)")                   # "(/Users/x/.homebase/pipeline/book/x.json)"
+_PATH = re.compile(r"(?<![\w.])~?/(?:[^\s/()'\"]+/)+([^\s/()'\",;:]+)")  # a path anywhere else: its last name stays
+_LOOSE = re.compile(r"[ \t]*`?bp\.py\b[^.;:\n]*`?")                      # a command line outside brackets
+_PLACE = re.compile(r"place (\d+) of (\d+)")
+
+
+def plain(text) -> str:
+    """The toolkit's words as a page shows them: no command line of its own and no folders (module docstring).
+    Nothing else is touched: a number, a line's name and a bracket that names no command stay as they are."""
+    t = _HINT.sub("", str(text or ""))
+    t = _LONE_PATH.sub("", t)
+    t = _PATH.sub(lambda m: m.group(1), t)
+    return _LOOSE.sub("", t).strip()
+
+
+def page_refusal(error) -> str:
+    """A refusal for the page: the reason in the toolkit's own words (they say what is wrong with a card), plain()."""
+    return plain(_NEXT.sub("", _HEAD.sub("", str(error or "")))) or "It was refused."
+
+
+def page_said(action: str, r: dict) -> str:
+    """ONE plain sentence for an action of the page that worked, from the toolkit's result (never its text as it is)."""
+    name, state = r.get("name"), r.get("state") if isinstance(r.get("state"), dict) else {}
+    if action == "add":
+        m = _PLACE.search(str(r.get("text") or ""))
+        return f"{name} is in the Queue" + (f", place {m.group(1)} of {m.group(2)}." if m else ".")
+    if action == "start":
+        return ("Testing is already on." if r.get("already") else "Testing has started.") + (" It is paused: press Resume." if r.get("paused") else "")
+    if action == "pause":
+        return "Paused. It stops after the stage it is on."
+    if action == "resume":
+        return "Testing carries on." if r.get("running") else "It is not paused any more."
+    if action == "approve":
+        return f"{name} is in the Book."
+    return f"{name} is refused: {plain(state.get('why'))}"
+
+
+# ---------------------------------------------------------------- what the add-idea form is built from (`bp.py blocks`)
+
+_RANGE = re.compile(r"^a (whole )?number (-?\d+(?:\.\d+)?) \.\. (-?\d+(?:\.\d+)?)$")
+
+
+def _num(text: str):
+    v = float(text)
+    return int(v) if v.is_integer() else v
+
+
+def _setting(s: dict, tried: list) -> dict:
+    """One setting of an entry rule for the form. The toolkit says its values in words (blocklist._values): "a number
+    0 .. 10", "a whole number 2 .. 200", "touch | mid | go", "true | false" -- read back here into a kind and its limits.
+    Words this does not know: kind "text" (the form then takes what is typed)."""
+    words, out = str(s.get("values") or "").strip(), {"name": s.get("name"), "kind": "text", "min": None, "max": None, "choices": [],
+                                                      "default": s.get("default"), "tried": tried}
+    m = _RANGE.match(words)
+    if m:
+        out.update(kind="whole" if m.group(1) else "number", min=_num(m.group(2)), max=_num(m.group(3)))
+    elif words == "true | false":
+        out.update(kind="bool")
+    elif words:
+        out.update(kind="choice", choices=[c.strip() for c in words.split(" | ") if c.strip()])
+    return out
+
+
+def parts(blocks) -> dict:
+    """The toolkit's block list (`bp.py blocks --json`, its "blocks") -> what the form needs of it, and nothing else."""
+    b = blocks if isinstance(blocks, dict) else {}
+    rules, by = [], {}
+    for f in b.get("families") or []:
+        if not isinstance(f, dict) or f.get("runs") is False:
+            continue
+        ran = [t for t in f.get("tried") or [] if isinstance(t, dict)]
+        rules.append({"name": f.get("name"), "words": str(f.get("does") or ""), "markets": list(f.get("markets") or []),
+                      "sessions": list(f.get("sessions") or []), "bars": [str(x) for x in f.get("bars") or []],
+                      "settings": [_setting(s, list(dict.fromkeys(t[s["name"]] for t in ran if s.get("name") in t)))
+                                   for s in f.get("settings") or [] if isinstance(s, dict) and s.get("name")]})
+    for x in b.get("filters") or []:
+        if isinstance(x, dict) and x.get("runs") is not False and x.get("block") and x.get("side"):
+            one = by.setdefault(x["block"], {"block": x["block"], "sides": [], "markets": list(x.get("markets") or [])})
+            one["sides"].append({"side": x["side"], "words": str(x.get("words") or "")})
+    return {"rules": rules, "indicators": list(by.values()),
+            "sessions": [{"name": x.get("name"), "words": str(x.get("words") or "")} for x in b.get("sessions") or [] if isinstance(x, dict) and x.get("name")]}
 
 
 def label(status) -> str:
@@ -185,6 +283,45 @@ def _name(name) -> str:
     return name
 
 
+def _card_ok(card, inbox) -> None:
+    """pipeline_add's inputs, as far as the connector reads them (the toolkit checks the card itself)."""
+    if not isinstance(card, dict):
+        raise ToolError("card: an object -- the idea card (name, why, loser, source, market, session, sides, ways, "
+                        "indicators)")
+    if not isinstance(inbox, bool):
+        raise ToolError("inbox: true or false")
+
+
+def _action_ok(action) -> str:
+    if action not in ACTIONS:
+        raise ToolError(f"action: {', '.join(ACTIONS[:-1])} or {ACTIONS[-1]}")
+    return action
+
+
+def _decided(name, decision, why) -> list:
+    """pipeline_decide's inputs -> what follows the command's word: the name, and for a refusal the owner's reason."""
+    _name(name)
+    if decision not in DECISIONS:
+        raise ToolError(f"decision: {' or '.join(DECISIONS)} -- the owner's word, never a guess")
+    if decision == "approve":
+        return [name]
+    if not isinstance(why, str) or not why.strip():
+        raise ToolError("why: the owner's reason for refusing it, in his words -- it is kept with the idea")
+    return [name, f"--why={' '.join(why.split())}"]
+
+
+def _plain_row(s: dict) -> dict:
+    """An idea's row for the page: the line that stopped it without the toolkit's command line."""
+    return {**s, "why": plain(s["why"])} if isinstance(s.get("why"), str) and s["why"] else s
+
+
+def _plain_book(card) -> dict:
+    """A book card for the page: its stages' first lines made plain(); everything else as the toolkit keeps it."""
+    if not isinstance(card, dict) or not isinstance(card.get("stages"), dict):
+        return card
+    return {**card, "stages": {n: ({**c, "text": plain(c.get("text"))} if isinstance(c, dict) else c) for n, c in card["stages"].items()}}
+
+
 def _said(r: dict, more=()) -> str:
     """A result as the tool's text: what it is of, then the toolkit's own words (never its JSON). The toolkit's
     `next` is left out: it names its own command line, which no chat and no page has."""
@@ -230,8 +367,8 @@ class PipelineMixin:
         """Not a tool: the Lab's Queue, Book and Guide in one answer (`pipe list` and `pipe book`, two commands)."""
         got, book = self._pipe("list", timeout=self._pipe_look_s), self._pipe("book", timeout=self._pipe_look_s)
         return {"runner": {"running": bool(got.get("running")), "paused": bool(got.get("paused"))},
-                "counts": counts(got.get("ideas")), "ideas": rows(got.get("ideas")), "book": book.get("book") or [],
-                "stages": STAGES}
+                "counts": counts(got.get("ideas")), "ideas": [_plain_row(s) for s in rows(got.get("ideas"))],
+                "book": [_plain_book(c) for c in book.get("book") or []], "stages": STAGES}
 
     def pipeline_idea(self, name) -> dict:
         """Not a tool: one idea for its page (`pipe show`): its card as it was added, its state with the page's label,
@@ -242,20 +379,40 @@ class PipelineMixin:
         for n in sorted(stages, key=_stage_no):
             c = stages[n] if isinstance(stages[n], dict) else {}
             out.append({"n": _stage_no(n), "name": names.get(_stage_no(n)) or str(c.get("name") or ""), "passed": c.get("passed"),
-                        "result": c.get("result"), "text": str(c.get("text") or ""),
-                        "lines": [{"line": x.get("line"), "passed": x.get("passed"), "text": str(x.get("text") or "")}
+                        "result": c.get("result"), "text": plain(c.get("text")),
+                        "lines": [{"line": x.get("line"), "passed": x.get("passed"), "text": plain(x.get("text"))}
                                   for x in c.get("lines") or [] if isinstance(x, dict)]})
         return {"card": {k: v for k, v in (r.get("card") or {}).items() if k != "subs"},      # (the toolkit's own heat-map specs stay there)
-                "state": rows([r.get("state") or {}])[0], "stages": out}
+                "state": _plain_row(rows([r.get("state") or {}])[0]), "stages": out}
+
+    def pipeline_parts(self) -> dict:
+        """Not a tool: what the add-idea form is built from (parts() of ONE `bp.py blocks`). The block list changes only
+        when the code does, so the first good answer is kept for the life of the process (a restart reads it again); an
+        answer without a block list is not kept."""
+        kept = getattr(self, "_pipe_parts", None)
+        if kept is None:
+            r = self._bp(["blocks"], timeout=self._pipe_look_s, root=pipeline_root())
+            kept = parts(r.get("blocks"))
+            if isinstance(r.get("blocks"), dict):
+                self._pipe_parts = kept
+        return kept
+
+    def pipeline_do(self, action: str, card=None, inbox=False, name=None, why=None) -> str:
+        """Not a tool: ONE action of the Lab's page -- the same checks and the same ONE command as the tool a chat has
+        (t_pipeline_add / _control / _decide), answered in one plain sentence (page_said) instead of the tool's text."""
+        if action == "add":
+            _card_ok(card, inbox)
+            r = self._pipe("add", "--spec=-", *(["--inbox"] if inbox else []), stdin=card)
+        elif action in DECISIONS:
+            r = self._pipe(action, *_decided(name, action, why))
+        else:
+            r = self._pipe(_action_ok(action))
+        return page_said(action, r)
 
     # ---- the tools
 
     def t_pipeline_add(self, card: dict, inbox=False) -> str:
-        if not isinstance(card, dict):
-            raise ToolError("card: an object -- the idea card (name, why, loser, source, market, session, sides, ways, "
-                            "indicators)")
-        if not isinstance(inbox, bool):
-            raise ToolError("inbox: true or false")
+        _card_ok(card, inbox)
         return _said(self._pipe("add", "--spec=-", *(["--inbox"] if inbox else []), stdin=card))
 
     def t_pipeline_status(self, name=None) -> str:
@@ -265,19 +422,10 @@ class PipelineMixin:
         return _said(r, _full(r))
 
     def t_pipeline_control(self, action: str) -> str:
-        if action not in ACTIONS:
-            raise ToolError(f"action: {', '.join(ACTIONS[:-1])} or {ACTIONS[-1]}")
-        return _said(self._pipe(action))
+        return _said(self._pipe(_action_ok(action)))
 
     def t_pipeline_decide(self, name: str, decision: str, why=None) -> str:
-        _name(name)
-        if decision not in DECISIONS:
-            raise ToolError(f"decision: {' or '.join(DECISIONS)} -- the owner's word, never a guess")
-        if decision == "approve":
-            return _said(self._pipe("approve", name))
-        if not isinstance(why, str) or not why.strip():
-            raise ToolError("why: the owner's reason for refusing it, in his words -- it is kept with the idea")
-        return _said(self._pipe("refuse", name, f"--why={' '.join(why.split())}"))
+        return _said(self._pipe(decision, *_decided(name, decision, why)))
 
     def t_pipeline_book(self) -> str:
         return _said(self._pipe("book"))
