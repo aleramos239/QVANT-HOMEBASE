@@ -31,9 +31,9 @@ The pipeline is an ORCHESTRATOR on top of the toolkit, not a second toolkit.
 
 ## Global constraints
 
-- Python: research code runs under `~/ONYX TRADING/.venv/bin/python` (3.9: no `match`, no `X | Y` at runtime outside
+- Python: research code runs under `<repo>/.venv-research/bin/python` (it was `~/ONYX TRADING/.venv` until that folder was deleted on 2026-10-08) (3.9: no `match`, no `X | Y` at runtime outside
   annotations under `from __future__ import annotations`). Tests: from `research/edge-library`,
-  `"$HOME/ONYX TRADING/.venv/bin/python" -m pytest tests/<file> -q -p no:cacheprovider`.
+  `../../.venv-research/bin/python -m pytest tests/<file> -q -p no:cacheprovider`.
 - Build days 2021-09-22 .. 2025-06-30. Nothing before stage 6 may read 2025-07-01 or later (the toolkit seals it; do
   not add a way around the seal).
 - Costs on, one contract, floors NQ $70 / ES $75 / GC $140 (`R.need("2.2", root)`).

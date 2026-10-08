@@ -49,7 +49,7 @@ claude mcp add --scope user \
   late / thin / silent, refused merges, what is about to leave the broker), read directly off disk (never over
   HTTP) for `data_coverage`; `desk_readiness` adds the watchdog's one line to the desk's own checks.
 - The blueprint toolkit, started as a child process by each `blueprint_*` tool (no service is asked):
-  `research/edge-library/bp.py`, run with the research engine's Python (`$HOME/ONYX TRADING/.venv/bin/python`).
+  `research/edge-library/bp.py`, run with the research engine's Python (`<repo>/.venv-research/bin/python`; see research/requirements-research.txt).
   `HOMEBASE_BP` and `HOMEBASE_BP_PYTHON` move them. The ideas it saves live in `~/.homebase/ideas/<name>/`
   (`HOMEBASE_IDEAS_ROOT` overrides), kept through `homebase/ideastore.py`. An idea folder that was moved
   writes no Lab draft and no group unless `HOMEBASE_DRAFTS_DIR` says where: it can never write the real Lab.
