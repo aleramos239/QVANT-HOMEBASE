@@ -516,12 +516,15 @@ def log_read(name, *, version, lock, rng, state, verdict=None, root=None) -> dic
         return _append_read(f, text, rec)
 
 
-def claim_read(name, *, version, lock, rng, second_look: bool = False, root=None) -> dict:
+def claim_read(name, *, version, lock, rng, second_look: bool = False, relatives=None, root=None) -> dict:
     """Log THE read of the test days, before they are opened -- once. Checked and written under one lock, so
     of two claims at the same moment one is refused. ReadOnFile when a read is on file for this idea: always
     for the same version and lock; for another version or lock unless `second_look` (the owner's explicit
-    second look at a changed rule: the line says so)."""
-    rec = _read_line(name, version, lock, rng, "claimed", **({"second_look": True} if second_look else {}))
+    second look at a changed rule: the line says so). `relatives` = the related ideas whose reads were on
+    file and did not stop this one (a list, kept on the line as it is given; None = the line has no such
+    key). It changes nothing of what is refused: an idea's own read is one read."""
+    rec = _read_line(name, version, lock, rng, "claimed", **({"second_look": True} if second_look else {}),
+                     **({} if relatives is None else {"relatives": list(relatives)}))
     with _reads_locked(root) as (f, text):
         prior = [r for r in _parse_reads(text) if r.get("name") == name]
         same = [r for r in prior if r.get("version") == version and r.get("lock") == lock]

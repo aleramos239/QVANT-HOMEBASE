@@ -328,10 +328,9 @@ What it means for the pipeline:
 - The Apex mix must keep its biggest day at or under 30 % of the profit.
 - The book card's Apex odds use the live-peak drawdown, not the end-of-day one.
 
-## 14. As built: the one-read rule (open, the owner decides)
+## 14. As built: the one-read rule (decided 2026-10-08: C, dropped for the pipeline)
 
-The toolkit lets only ONE idea of a family, market and time of day be read on the unseen days (a
-relative's read uses the days up for the others). The pipeline inherits it: a second idea in the same
-slot is refused at stage 6. Asked of the owner 2026-10-08: A refuse such a card when it is added
-(Claude's pick) · B let ideas of one slot wait at stage 5 and read only the strongest · C drop the rule.
+The toolkit lets only ONE idea of a family, market and time of day be read on the unseen days. The owner's decision (C): the pipeline drops that rule — every pipeline idea gets its own read, once (`pipeline.json` `test.one_read_a_slot` = false; stage 6 asks the toolkit with `relatives_ok`).
+The related ideas read before it are written on the read's line in the log, in `test.json` and on the stage-6 card, and counted on the book card (`relatives_read`).
+By hand (`bp.py test`, the chat tool) the rule still holds, and an idea's own read is never repeated.
 

@@ -488,6 +488,18 @@ def test_the_test_days_are_read_once(ideas_root):
     assert isinstance(ideastore.ReadOnFile("x"), ValueError)
 
 
+def test_a_claim_can_name_the_relatives_that_did_not_stop_it(ideas_root):
+    rel = [{"name": "aa_first", "kind": "idea", "utc": "2026-10-08T00:00:00+00:00", "verdict": "NOT PROVEN"}]
+    rec = ideastore.claim_read(NAME, version=1, lock=LOCK, rng=RANGE, relatives=rel)
+    assert rec["relatives"] == rel and "second_look" not in rec and ideastore.reads() == [rec]      # on the line, as given
+    assert ideastore.claim_read("another_idea", version=1, lock=LOCK, rng=RANGE, relatives=[])["relatives"] == []
+    assert "relatives" not in ideastore.claim_read("a_third_idea", version=1, lock=LOCK, rng=RANGE)  # not named: no key
+    for kw in ({"version": 1, "lock": LOCK}, {"version": 2, "lock": "77aa"}):                   # the idea's OWN read is still one read
+        with pytest.raises(ideastore.ReadOnFile, match="already on file"):
+            ideastore.claim_read(NAME, rng=RANGE, relatives=rel, **kw)
+    assert len(ideastore.reads()) == 3
+
+
 def test_the_verdict_is_a_second_line_and_the_latest_line_answers(ideas_root):
     ideastore.claim_read(NAME, version=1, lock=LOCK, rng=RANGE)
     before = reads_file(ideas_root).read_bytes()

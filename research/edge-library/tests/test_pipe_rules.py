@@ -56,7 +56,8 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
                               "book_accounts": ["lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"]}
     assert P.need("portfolio") == {"eval": {"days": 5, "odds": 0.6}, "payout": {"days": 14, "odds": 0.75}}
     assert P.need("portfolio", "payout", "odds") == 0.75
-    assert set(P.need()) == {"card", "raw", "indicator", "proof", "box", "prop", "portfolio"}      # the whole file, its notes left out
+    assert P.need("test") == {"one_read_a_slot": False} and P.need("test", "one_read_a_slot") is False      # every pipeline idea gets its own read (the owner, 2026-10-08)
+    assert set(P.need()) == {"card", "raw", "indicator", "proof", "box", "test", "prop", "portfolio"}      # the whole file, its notes left out
     assert "raw.nope" in refused(lambda: P.need("raw", "nope"), "pipeline.json has no")
     refused(lambda: P.need("nope"), "nope")
     refused(lambda: P.need("raw", "low", "share", "deeper"), "raw.low.share.deeper")               # a number has nothing under it

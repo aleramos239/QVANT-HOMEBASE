@@ -12,7 +12,9 @@
    the gates of stages 1-4 patched: a strict pass and a low pass go through the real code check, the real build and the
    real lock under BP_TEST_RUN -- no box, a box that fails, locked, and the same stage run again.
 6. THE ONE READ, canned (oos.test; its own tests lock it): pass / fail, the label of the three accounts on a pass, the
-   folders, the switch; a refusal goes up; the verdict on file for THIS lock is read instead of a second read.
+   folders, the switch; a refusal goes up; the verdict on file for THIS lock is read instead of a second read. EVERY IDEA
+   ITS OWN READ: the toolkit is asked with relatives_ok as pipeline.json test.one_read_a_slot says (false: on), and the
+   related ideas the read names are on the stage card and counted on the book card.
 7. THE BOOK CARD on a HAND-MADE idea that is locked and tested without the engine (tests/blueprint_synth.py: six trades
    typed here, dated on test days, in the library's own store format): every fact with numbers done in the head, the
    three accounts with the unconfirmed one marked, then the runner's step and the owner's approve.
@@ -465,8 +467,9 @@ def test_a_tiny_real_stage_5_after_a_low_pass_checks_and_locks_the_table_with_it
 
 # ================================================================ stage 6: the one read (the toolkit answers canned)
 
-def six(mp, name: str = C, fail=(), refuse=None, lock: str = HASH) -> dict:
-    """Stage 5 on file by hand (locked), and oos.test, propodds.handed / cell and pipe_prop.odds canned -> the calls."""
+def six(mp, name: str = C, fail=(), refuse=None, lock: str = HASH, relatives=None) -> dict:
+    """Stage 5 on file by hand (locked), and oos.test, propodds.handed / cell and pipe_prop.odds canned -> the calls.
+    relatives = what the read says of the related ideas read before it (None: a result without the key)."""
     picked = {"sub": f"{name}_a5", "bar": "5", "way": 0, "filter": None}
     ran(name, 5, hand(5, picked, 2, result="locked", locked={"default": "or_min15_atr3-r1", "lock": HASH, "prop": {}}))
     calls: dict = {"test": [], "handed": [], "cell": [], "odds": []}
@@ -476,7 +479,8 @@ def six(mp, name: str = C, fail=(), refuse=None, lock: str = HASH) -> dict:
         if refuse:
             raise refuse
         return {"ok": True, "passed": not fail, "failed": list(fail), "verdict": "NOT PROVEN" if fail else "PROVEN ON HISTORY", "lock": lock,
-                "lines": [row(f"4.{i}", f"4.{i}" not in fail) for i in range(1, 10)], "range": {"start": "2025-07-01", "end": "2026-09-30"}}
+                "lines": [row(f"4.{i}", f"4.{i}" not in fail) for i in range(1, 10)], "range": {"start": "2025-07-01", "end": "2026-09-30"},
+                **({} if relatives is None else {"relatives": relatives})}
 
     mp.setattr(OOS, "test", test)
     mp.setattr(PO, "handed", lambda sub, root=None: calls["handed"].append((sub, root)) or {"calendar": SY.weekdays(), "span": SY.SPAN})
@@ -525,6 +529,31 @@ def test_stage_6_a_failed_read_is_final_and_a_refusal_goes_up(world):
     TS.refused(lambda: ST.stage6(name, CTX), "stage 5 (pick one box and lock) has no passed card on file")
 
 
+def test_stage_6_gives_every_idea_its_own_read_as_the_rule_file_says_and_carries_the_relatives(world):
+    base(world)
+    rel = [{"name": "pfx_orb_a5", "kind": "idea", "utc": "2026-10-08T12:00:00+00:00", "verdict": "NOT PROVEN"},
+           {"name": "orb_nq_tf5_nyam", "kind": "old", "utc": "2026-09-01T00:00:00+00:00", "verdict": "OLD READ 2026-09-01, before the blueprint: 2025 FAILED"}]
+    assert PR.need("test") == {"one_read_a_slot": False}                                       # the rule as the file has it (the owner, 2026-10-08)
+    calls = six(world, relatives=rel)
+    c = TS.whole(ST.stage6(C, CTX), 6)
+    (t,) = calls["test"]                                                                       # the toolkit is told a relative's read does not refuse -- never a second look
+    assert (t["relatives_ok"], t["second_look"], t["confirm"]) == (True, False, True)
+    assert (c["passed"], c["relatives"], c["rules"]["test"]) == (True, rel, {"one_read_a_slot": False}) and "(2 related ideas read on these days before it)" in c["text"]
+    calls = six(world, fail=("4.3",), relatives=rel[:1])                                       # a read that fails names them too
+    c = TS.whole(ST.stage6(C, CTX), 6)
+    assert (c["passed"], c["relatives"]) == (False, rel[:1]) and "(1 related idea read on these days before it)" in c["text"] and calls["test"][0]["relatives_ok"] is True
+    calls = six(world)                                                                         # a result without the key (a verdict of before the rule): none
+    c = ST.stage6(C, CTX)
+    assert c["relatives"] == [] and "related idea" not in c["text"] and calls["test"][0]["relatives_ok"] is True
+    need = PR.need                                                                             # THE RULE FILE AT TRUE = the toolkit's rule: the keyword is off
+    world.setattr(PR, "need", lambda *keys: {"one_read_a_slot": True} if keys == ("test",) else need(*keys))
+    calls = six(world)
+    c = TS.whole(ST.stage6(C, CTX), 6)
+    assert calls["test"][0]["relatives_ok"] is False and c["rules"]["test"] == {"one_read_a_slot": True} and c["relatives"] == []
+    six(world, refuse=J.Refuse("a read of the test days is on file for a same-idea relative of the idea"))      # ... and its refusal goes up, as any other
+    TS.refused(lambda: ST.stage6(C, CTX), "same-idea relative")
+
+
 def test_stage_6_a_verdict_on_file_for_another_lock_is_not_this_locks(world):
     base(world)
     calls = six(world)
@@ -544,6 +573,8 @@ CARD7 = {"name": N7, "why": "The first minutes of the New York morning set a ran
          "loser": "Traders who faded the opening range.", "source": "owner", "market": "NQ", "session": "nyam", "sides": "both", "sides_why": "",
          "ways": [{"family": "orb", "main_setting": "or_min", "values": ["5", "15", "30"], "fixed": {}, "limits": {}}], "indicators": []}
 PICK7 = {"sub": SUB7, "bar": "15", "way": 0, "filter": None}
+REL7 = [{"name": "pfa_orb_a5", "kind": "idea", "utc": "2026-10-07T20:00:00+00:00", "verdict": "NOT PROVEN"},      # the related ideas its read names: read before it
+        {"name": "pfa_orb_two_a5", "kind": "idea", "utc": "2026-10-07T21:00:00+00:00", "verdict": "PROVEN ON HISTORY"}]
 SPEC7 = {"name": SUB7, "version": 1, "card": SY.CARD, "run": SY.RUN}
 CTX7 = {"root": ROOT7, "tiny": None}
 
@@ -567,7 +598,7 @@ def seven(fail=()) -> Path:
     if N7 not in _DONE:
         PS.add(CARD7, [{"name": SUB7, "way": 0, "bar": "15", "spec": SPEC7}], ROOT7, sig="hand-made", family="orb")
         d = SY.proven(IS, ideas, SUB7, folder=PS.runs_test(ROOT7), cells={CELL7: TRADES7}, span=SPAN7, lock_more={"spec": SPEC7})
-        IS.write_test(SUB7, {**TI.read(d / "test.json"), "passed": True, "failed": [], "verdict": "PROVEN ON HISTORY"}, ideas)     # as oos.run saves a verdict
+        IS.write_test(SUB7, {**TI.read(d / "test.json"), "passed": True, "failed": [], "verdict": "PROVEN ON HISTORY", "relatives": REL7}, ideas)     # as oos.run saves a verdict
         for n in range(5):
             ran(N7, n, hand(n, None if n == 0 else PICK7, 4, text=f"stage {n} passed\nand its second line"), ROOT7)
         ran(N7, 5, hand(5, PICK7, 4, result="locked", locked={"default": CELL7, "lock": SY.LOCK, "prop": {}}), ROOT7)
@@ -582,6 +613,7 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
         s6 = TS.whole(ST.stage6(N7, CTX7), 6)                                                  # the verdict of THIS lock is on file: it is read, the days are not
         assert (s6["passed"], s6["result"]) == (True, "proven on history") and "its verdict was on file" in s6["text"] and len(s6["lines"]) == 9
         assert list(s6["prop"]) == [OWN, FLEX, APEX] and s6["label"] == s6["prop"][OWN]["label"] and s6["label"] in (PP.ALONE, PP.HELPER)
+        assert s6["relatives"] == REL7 and "(2 related ideas read on these days before it)" in s6["text"]      # off the verdict on file, as the read wrote them
         ran(N7, 6, s6, ROOT7)
         PS.set_state(N7, ROOT7, status="running", stage=6, picked=PICK7, tries=4)
         st = RN.step(N7, CTX7)                                                                 # the runner's own step: stage 7, then the idea waits
@@ -591,9 +623,9 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     b = c["book"]
     assert list(b) == ["name", "sub", "family", "source", "why", "market", "session", "bar", "filter", "rule", "label", "prop", "hours", "trades", "days_traded",
                        "win_days_month", "winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor",
-                       "net", "tries", "stages", "utc"]
+                       "net", "tries", "relatives_read", "stages", "utc"]
     assert (b["name"], b["sub"], b["family"], b["source"], b["why"]) == (N7, SUB7, "orb", "owner", CARD7["why"])
-    assert (b["market"], b["session"], b["bar"], b["filter"], b["tries"]) == ("NQ", "nyam", "15", None, 4)
+    assert (b["market"], b["session"], b["bar"], b["filter"], b["tries"], b["relatives_read"]) == ("NQ", "nyam", "15", None, 4, 2)      # two related ideas were read before it
     assert b["rule"] == {"spec": SPEC7, "default": CELL7, "lock": SY.LOCK}                     # the frozen rule
     # the money facts, at ONE contract: +300 (held 4 s) +500 -200 | +700 -200 | -100 = $1,000 in 6 trades on 6 days
     assert (b["net"], b["trades"], b["days_traded"], b["hours"]) == (1000.0, 6, 6, ["09:35", "10:45"])

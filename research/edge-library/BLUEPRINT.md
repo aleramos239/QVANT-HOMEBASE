@@ -454,5 +454,9 @@ What it does differently from a round-by-round idea:
 | At most 5 rounds, one filter a round | No rounds: up to 5 indicators on the card, each tried alone, one kept |
 | The random bar rises by round (line 2.3) | It rises by tries: (100 − 5 ÷ tries) %. One try 95 %, two 97.5 %, five 99 % |
 
+The pipeline reads every idea on the unseen days, once each (owner, 2026-10-08). For an idea run by hand (`bp.py test`) the
+toolkit's rule still holds: one read for a family, market and session. So the pipeline's guards against luck are the tries
+bar and, not built yet, the luck rate and the score since the lock.
+
 Not built yet: the Lab screens (Queue, Book, Guide), the luck rate, the score since the lock, the portfolio builder and the
 hunter. Until then the pipeline is run from the command line only.

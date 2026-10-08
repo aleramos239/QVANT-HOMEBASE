@@ -65,12 +65,15 @@ card and the idea's state, and says what a refusal means.
                         locked (result "locked"): lines = the lock's rows 3.3-3.8 + P5.9 (passed None: a label, not a gate),
                         the prop check of the default box's BUILD trades on the pipeline's account (pipe_prop.odds).
                         + "locked": {"default": the box, "lock": the lock's hash, "prop": {account id: _prop's}}
-  stage6  UNSEEN DAYS   oos.test(picked.sub, confirm=True): THE ONE READ, logged by the toolkit in the pipeline's own
-                        <ideas root>/test_reads.jsonl before a day is opened; its stores go to pipe_store.runs_test. passed =
-                        its passed, lines = its rows 4.1-4.9, result "proven on history" | "not proven" (final). On a pass:
-                        the prop check again, on the default box's TEST trades and the days the read replayed (what
-                        propodds.handed hands phase 5), on the pipeline's account and every account of pipeline.json
-                        prop.book_accounts. + "prop": {account id: _prop's}, "label": the pipeline's account's
+  stage6  UNSEEN DAYS   oos.test(picked.sub, confirm=True, relatives_ok=not pipeline.json test.one_read_a_slot): THE ONE
+                        READ of this idea, logged by the toolkit in the pipeline's own <ideas root>/test_reads.jsonl before
+                        a day is opened; its stores go to pipe_store.runs_test. passed = its passed, lines = its rows
+                        4.1-4.9, result "proven on history" | "not proven" (final). + "relatives": [{name, kind, utc,
+                        verdict}] -- the related ideas that were read on these days before it (the read's own list; none,
+                        or the toolkit's rule in force: []). On a pass: the prop check again, on the default box's TEST
+                        trades and the days the read replayed (what propodds.handed hands phase 5), on the pipeline's
+                        account and every account of pipeline.json prop.book_accounts. + "prop": {account id: _prop's},
+                        "label": the pipeline's account's
   stage7  THE OWNER'S LOOK  nothing is run: THE BOOK CARD is put together from what is on file. passed None, result
                         "awaiting owner", + "book" (the runner's approve puts it in the book):
                           {name, sub, family, source, why, market, session, bar, filter,
@@ -83,7 +86,9 @@ card and the idea's state, and says what a refusal means.
                            biggest_day_share (its net / the net; None when the net is not above $0), fast_profit_share (the
                            net of the trades held box.fast_seconds or less / the net; None likewise), worst_day,
                            worst_drawdown (lines._drawdown: open losses counted), avg_trade, profit_factor (None: no losing
-                           trade), net, tries, stages {n: {passed, result, text}} of stages 0-6, utc}
+                           trade), net, tries, relatives_read (how many related ideas were read on the unseen days before
+                           this one: the count of stage 6's `relatives`), stages {n: {passed, result, text}} of stages
+                           0-6, utc}
                         EVERY MONEY FACT IS AT ONE CONTRACT after costs (win_days_month alone is at a size), read off the
                         default box's TEST trades on every session day the read replayed (a day without a trade = $0)
 
@@ -117,10 +122,14 @@ for the lock stage 5 froze (test.json) -- the days are not read twice, and a rea
 toolkit's refusal, never caught here.
 WHAT IS NOT CAUGHT: judge.Refuse and the other api.REFUSALS of the toolkit (the no-start window, a store of other inputs,
 the ledger's cap, a thin pool, a card the toolkit does not take at stage 3) go up to the runner. So do the refusals of the
-toolkit's commands at stages 5 and 6: a lock that is refused for anything but its box, and THE ONE-READ RULE of the test
-(oos.start, reads.used) -- a read on file for the idea, or for a SAME-IDEA RELATIVE of it: the same entry trigger, market
-and session with a read in the pipeline's log or among the old saved strategies, or a default box that takes the same side
-on most shared days. Such an idea stops at stage 6 with the toolkit's words; the pipeline never asks for a second look.
+toolkit's commands at stages 5 and 6: a lock that is refused for anything but its box, and the test's refusal of a read
+that is on file for the idea itself (oos.start): an idea's own read is one read, and the pipeline never asks for a second look.
+EVERY PIPELINE IDEA GETS ITS OWN READ (the owner, 2026-10-08; pipeline.json test.one_read_a_slot = false): the toolkit's rule
+that a SAME-IDEA RELATIVE's read uses the days up (reads.used: the same entry trigger, market and session with a read in the
+pipeline's log or among the old saved strategies, or a default box that takes the same side on most shared days) is waived
+at stage 6 -- oos.test is called with relatives_ok -- and the relatives it found are on the read's line in the log, in
+test.json and on the stage card. With the rule file at true the keyword is off, and such an idea stops at stage 6 with the
+toolkit's words. By hand (`bp.py test`, the chat tool) the rule always holds.
 A store row with `ok` False (a strategy error: no store was written) is a stage card with passed False and code_problem.
 WRITES NOTHING of the pipeline's state (no stage card, no state.json, no book card); the toolkit writes its own stores,
 ledger rows, sub-idea cards, check.json, rounds, lock.json, test.json and its one-read log. EVERY GATE NUMBER IS READ
@@ -606,25 +615,26 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     """THE ONE READ of the unseen days for the locked heat map, and on a pass the label off its test trades (module docstring)."""
     t0, kw, five = time.monotonic(), _kw(name, ctx), _before(name, ctx, 5)
     picked, tries, was = five["picked"], five["tries"], five["locked"]
-    sub, rules = picked["sub"], {"prop": PR.need("prop")}
+    sub, rules = picked["sub"], {"prop": PR.need("prop"), "test": PR.need("test")}
     r = REC._json(REC._carded(sub, kw["root"]) / "test.json")
     again = bool(r and r.get("lines") and r.get("lock") == was["lock"])      # the verdict of THIS lock's read is on file: it is read, the days are not
     if not again:
         with _switch(name, ctx):
             r = OOS.test(sub, confirm=True, root=kw["root"], workers=kw["workers"], out=PS.runs_test(ctx.get("root")), ledger=kw["ledger"],
-                         days=(ctx.get("tiny") or {}).get("test_days"))
-    rows, rng = r["lines"], r.get("range") or {}
+                         days=(ctx.get("tiny") or {}).get("test_days"), relatives_ok=not rules["test"]["one_read_a_slot"])
+    rows, rng, rel = r["lines"], r.get("range") or {}, list(r.get("relatives") or [])        # rel: the related ideas read on these days before this one
     rules.update(lines={x["line"]: x["need"] for x in rows}, range=rng)
-    head = f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
+    head = (f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
+            + (f" ({len(rel)} related idea{'s' * (len(rel) != 1)} read on these days before it)" if rel else ""))
     if r.get("passed") is not True:
         bad = [x for x in rows if x["passed"] is not True]
         return _card(6, t0, False, "not proven", rows, f"{head}: NOT PROVEN, it fails {', '.join(x['line'] for x in bad)} ({bad[0]['text'] if bad else r.get('verdict')}). "
-                     "A fail is final: no re-tune, no second read", picked, tries, rules)
+                     "A fail is final: no re-tune, no second read", picked, tries, rules, relatives=rel)
     got = PO.handed(sub, kw["root"])                # what the freeze and the read leave for the prop simulator: the read's own store and days
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
     return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, every line 4.1-4.9 holds; on those days the box {was['default']} is a "
-                 f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"])
+                 f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"], relatives=rel)
 
 
 # ================================================================ stage 7: the owner's look (the book card)
@@ -682,7 +692,7 @@ def stage7(name: str, ctx: dict, progress=None) -> dict:
             "label": prop[own]["label"], "prop": {a: {k: p.get(k) for k in BOOK_PROP} for a, p in prop.items()},
             **{k: facts[k] for k in ("hours", "trades", "days_traded")}, "win_days_month": _win_days(x, got["calendar"], own, prop[own]["size"]),
             **{k: facts[k] for k in ("winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor", "net")},
-            "tries": tries,
+            "tries": tries, "relatives_read": len(six.get("relatives") or []),
             "stages": {str(n): {"passed": c.get("passed"), "result": c.get("result"), "text": (str(c.get("text") or "").splitlines() or [""])[0]}
                        for n, c in cards.items() if n in NAMES and n < max(NAMES)},
             "utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}

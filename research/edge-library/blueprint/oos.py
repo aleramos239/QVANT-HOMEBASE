@@ -17,6 +17,13 @@ REFUSED (exit 2; nothing is run, nothing is written, no read is used), in this o
 --second-look is THE ONLY WAY PAST A USED READ of a relative (never past the idea's own read of the same lock), and the
 verdict is then labelled SECOND LOOK everywhere: on every line, in the text, in test.json, in the one-read log, on the
 tester run. A second look says less than a first read (BLUEPRINT.md section 12).
+`relatives_ok` (start, test: a keyword of the code, NOT of `bp.py test` and not of the chat tool -- by hand the rule holds) is
+THE PIPELINE'S: every pipeline idea gets its own read of the test days (the owner, 2026-10-08; pipeline.json
+test.one_read_a_slot). With it the read of a RELATIVE does not refuse, and nothing else changes: the idea's OWN read on file
+refuses as ever, the lock has to match, --confirm is asked, the read is claimed first. It is no second look and is not
+labelled as one. What was waived is never silent: the claim's line in the one-read log, test.json and the result carry
+`relatives` -- [{name, kind, utc, verdict}] of every relative with a read (an empty list: none) -- and the text says so in
+one line. Without the keyword there is no such key.
 
 THE ORDER OF WORK
   start()   every refusal above; then THE READ IS CLAIMED (ideastore.claim_read: state "claimed"; of two claims at the same
@@ -78,6 +85,7 @@ MARK = "SECOND LOOK"
 PROVEN, NOT_PROVEN = "PROVEN ON HISTORY", "NOT PROVEN"
 EARLY = "EARLY LOOK — the test days are used for this idea"       # what everything of an early look says
 EARLY_OUT = RUN.TESTS.with_name("runs_bp_early")    # the stores of an early look: never among those of THE one read (a later proper test writes there)
+WAIVED = ("name", "kind", "utc", "verdict")         # what is written down of a relative whose read did not stop this one (relatives_ok)
 
 
 def _keep(path: Path, data: dict) -> Path:
@@ -96,11 +104,13 @@ def _who(r: dict) -> str:
         + (f"its test days were read: {r['verdict']}" if r.get("verdict") else f"its read of the test days is on file, {r.get('state')} {r.get('utc')}") + ")"
 
 
-def start(name, confirm=False, second_look=False, root=None, workers=None, out=None, ledger=None, days=None, block=None, tester=None, early_look=False) -> dict:
+def start(name, confirm=False, second_look=False, root=None, workers=None, out=None, ledger=None, days=None, block=None, tester=None, early_look=False,
+          relatives_ok=False) -> dict:
     """EVERY REFUSAL OF THE TEST, THEN THE CLAIM -> the arguments of run() (JSON: a job keeps them). Module docstring.
     out, ledger, days, block, workers = runner.run_test's; tester = the tester's base folder the default variant's run goes
     to (the app's own for the app's own idea folder). early_look = the owner's early look at an idea that is NOT frozen
-    (module docstring): its lock is freeze.early's, written beside the idea's files just before the claim."""
+    (module docstring): its lock is freeze.early's, written beside the idea's files just before the claim. relatives_ok =
+    the pipeline's: the read of a relative does not refuse, and the relatives are written down (module docstring)."""
     test = REC._test_run(root)
     IS, d = api.ideastore(), REC._carded(name, root)
     lock, early = REC._json(d / "lock.json"), bool(early_look)
@@ -121,7 +131,7 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
     job = JOBS.running(name, root)
     if job:
         raise J.Refuse(f"a job of {name} is still running ({job}): bp.py job {job} picks its wait back up -- nothing is read again")
-    h, look = lock["home"], bool(second_look)
+    h, look, waive = lock["home"], bool(second_look), relatives_ok is True
     rng = {k: lock["test_range"][h["market"]][k] for k in ("start", "end")}
     use = READS.used(name, lock, root)
     own, rel = use["own"], use["relatives"]
@@ -134,7 +144,7 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
                            + (" -- a second look is never a second read of the same lock" if look else "")
                            + ("" if same or look else f" -- that read was of another lock of {name} (an early look, or an earlier version): the only way past it "
                               f"is an explicit second look ({cmd} --second-look), and its verdict is labelled {MARK} everywhere"))
-    if rel and not look:
+    if rel and not (look or waive):
         old = [r for r in rel if r["kind"] == "old"]
         raise J.Refuse((f"{name} is one of the old saved strategies whose history is used: it is the same idea as " if old else
                         f"a read of the test days is on file for a same-idea relative of {name}: ")
@@ -156,12 +166,13 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
                        "for it; the log has to say so before anything else happens")
     if early:                                       # an early look's lock: on file before its read is claimed, and never the idea's lock.json
         _keep(d / api.EARLY_LOOK / "lock.json", lock)
+    said = {"relatives": [{k: r.get(k) for k in WAIVED} for r in rel]} if waive else {}        # the relatives whose reads did not stop this one: never silent
     try:                                            # ---- THE CLAIM: the read is in the log before anything of the test days is opened
-        line = IS.claim_read(name, version=lock["version"], lock=lock["hash"], rng=rng, second_look=look, root=root)
+        line = IS.claim_read(name, version=lock["version"], lock=lock["hash"], rng=rng, second_look=look, root=root, **said)
     except IS.ReadOnFile as e:
         raise J.Refuse(str(e)) from None
     IS.append_log(name, "test_claimed", root, lock=lock["hash"], range=rng, second_look=look, **({api.EARLY_LOOK: True} if early else {}))
-    return {"idea": name, "read": {**read, "utc": line.get("utc")}, "rng": rng, "second_look": look, "second_of": [r["name"] for r in rel] if look else [],
+    return {"idea": name, "read": {**read, "utc": line.get("utc")}, "rng": rng, "second_look": look, "second_of": [r["name"] for r in rel] if look else [], **said,
             "root": None if root is None else str(root), "workers": workers, "out": None if out is None else str(out),
             "ledger": None if ledger is None else str(ledger), "days": days, "block": block, "tester": None if tester is None else str(tester),
             "test": bool(test), "early_look": early}
@@ -190,7 +201,7 @@ def _show(name: str, lock: dict, trades: list, t: dict, rng: dict, marks: list, 
 
 
 def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=None, out=None, ledger=None, days=None, block=None, tester=None, test=False,
-        early_look=False, progress=None) -> dict:
+        early_look=False, progress=None, relatives=None) -> dict:
     """THE READ ITSELF, with what start() returned (module docstring) -> the result: every line 4.1-4.9 as pass or fail with
     its number, the verdict, the status. Beyond the agreed keys: verdict, passed, failed, second_look, label,
     second_look_of, lock, version, range, home, unit, days, table, stores, default, read, notes, dry_run (false: a read
@@ -198,7 +209,9 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
     AN EARLY LOOK (early_look; module docstring) is the same pass on the lock freeze.early made. Its result adds early_look
     true, held (did the seven lines hold), build_failed and code_check (off its lock); `label` and every line say EARLY;
     `passed` is false whatever the lines say, the verdict is no verdict of the law, and the status is the one the saved
-    results gave before it. It is saved as <idea>/early_look/test.json -- never the idea's test.json."""
+    results gave before it. It is saved as <idea>/early_look/test.json -- never the idea's test.json.
+    relatives = what start() wrote down under `relatives_ok` (a list, or None: the read was not made under it): the result
+    and test.json carry it as `relatives`, and one line of the text names them when there are any."""
     IS, name, look, early = api.ideastore(), idea, bool(second_look), bool(early_look)
     d = IS.idea_dir(name, root)
     lock = REC._json(d / api.EARLY_LOOK / "lock.json" if early else d / "lock.json")
@@ -239,6 +252,8 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
         r.update({api.EARLY_LOOK: True, "held": not failed, "build_failed": lock["build_failed"], "code_check": lock["code_check"]})
     if test:
         r["test_run"] = True
+    if relatives is not None:
+        r["relatives"] = [dict(x) for x in relatives]
     sides = (lock.get("plan") or {}).get("sides") or "both"
     r["notes"] = ([f"a {sides}-only idea is read against random entries of BOTH sides (its pool holds no one-sided table): for line 4.4 that is a tilted control"]
                   if sides != "both" else [])
@@ -260,6 +275,8 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
              f"RESULT: {label}: " + ("every line 4.1-4.9 is true -- approved for a real eval." if not failed else
                                      f"fails {', '.join(failed)}. A FAIL IS FINAL: the idea is not re-tuned and re-tested on this period.")),
             *[f"NOTE: {x}." for x in r["notes"]],
+            *([f"{len(relatives)} relative{'s' * (len(relatives) != 1)} of this idea {'was' if len(relatives) == 1 else 'were'} read on these days before it "
+               f"({', '.join(str(x.get('name')) for x in relatives)}): the pipeline reads every idea."] if relatives else []),
             (f"STATUS: {status.replace('_', ' ').upper()} (as it was: an early look changes no status) · the test days are USED for {name}" if early else
              f"STATUS: {status.replace('_', ' ').upper()}{' (' + MARK + ')' if look else ''} · phase 4")]
     r["next"] = (f"{MARK}: " if look else "") + (
@@ -290,5 +307,6 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
 
 
 def test(name, confirm=False, second_look=False, root=None, **kw) -> dict:
-    """`bp.py test <name> --confirm [--early-look]` in the foreground: start(), then run()."""
+    """`bp.py test <name> --confirm [--early-look]` in the foreground: start(), then run(). kw = start()'s other arguments
+    (relatives_ok among them: the pipeline's, never the command line's)."""
     return run(**start(name, confirm, second_look, root, **kw))

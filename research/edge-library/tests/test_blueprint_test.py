@@ -499,6 +499,69 @@ def test_a_read_of_a_relative_stands_in_the_way_and_a_second_look_is_labelled_ev
     RESULTS["test_a_read_of_a_relative_stands_in_the_way_and_a_second_look_is_labelled_everywhere"] = (7, 7, "lines labelled SECOND LOOK, + the text, the log, test.json, the Lab")
 
 
+def test_relatives_ok_reads_an_idea_although_a_relatives_read_is_on_file_and_writes_the_relatives_down():
+    """THE PIPELINE'S KEYWORD (oos.start / oos.test `relatives_ok`; the owner, 2026-10-08: every pipeline idea gets its own
+    read). It waives ONE refusal -- a relative's read on file -- and writes down who the relatives were: on the claim's line,
+    in test.json, in the result and in one line of the text. Everything else is as it was: by default the rule holds, the
+    lock has to match, --confirm is asked, the idea's OWN read is one read, and nothing is labelled a second look."""
+    root = F.fresh(NAME, "rok", "bpl_two")
+    with F.tiny():
+        FRZ.lock(NAME, root), FRZ.lock("bpl_two", root)
+    with F.reading("rok"):
+        first = OOS.test(NAME, confirm=True, relatives_ok=True, root=root)
+    one = reads(root)                                                             # no relative had a read: an empty list, and no line of the text
+    assert first["relatives"] == [] == one[0]["relatives"] == F.read(root / NAME / "test.json")["relatives"] and "relatives" not in one[1]
+    assert "the pipeline reads every idea" not in first["text"] and (first["verdict"], first["second_look"]) == ("PROVEN ON HISTORY", False)
+    d, n = root / "bpl_two", 0
+
+    def no(word: str, **kw) -> str:
+        nonlocal n
+        n += 1
+        with F.reading("rok"), F.no_engine():
+            why = F.refused(lambda: OOS.test("bpl_two", **{"confirm": True, **kw}, root=root), word)
+        assert reads(root) == one and not (d / "test.json").exists(), word       # no read was used, nothing was written
+        return why
+
+    assert "--second-look" in no("same-idea relative of bpl_two")                 # BY DEFAULT THE RULE HOLDS: the keyword is not there ...
+    for other in (False, None, "yes", 1):                                         # ... or is anything but True
+        no("same-idea relative of bpl_two", relatives_ok=other)
+    for confirm in (False, None, "yes"):                                          # with it, every other refusal is as it was: the owner's yes ...
+        no("read ONCE", confirm=confirm, relatives_ok=True)
+    spec = F.read(d / "spec.json")                                                # ... and a lock that matches the files on disk
+    (d / "spec.json").write_text(json.dumps({**spec, "run": {**spec["run"], "limits": {"max_tr": 1}}}))
+    no("no longer matches the files on disk", relatives_ok=True)
+    (d / "spec.json").write_text(json.dumps(spec))
+    seen: list = []
+    with F.reading("rok", net=lambda cell, i, day: 90.0, seen=seen):
+        r = OOS.test("bpl_two", confirm=True, relatives_ok=True, root=root)
+    rel = [{"name": NAME, "kind": "idea", "utc": one[1]["utc"], "verdict": "PROVEN ON HISTORY"}]      # the relative's read as the log had it: judged
+    log = [x for x in reads(root) if x["name"] == "bpl_two"]
+    assert r["relatives"] == rel == log[0]["relatives"] == F.read(d / "test.json")["relatives"] and seen[0]["line"] == log[0]      # on the claim: before the pass
+    assert [(x["state"], x["verdict"]) for x in log] == [("claimed", None), ("judged", "PROVEN ON HISTORY")] and "second_look" not in log[0]
+    # NOT a second look: the verdict is the law's own, no line is labelled, the status is the app's reading of a first read
+    assert (r["second_look"], r["label"], r["second_look_of"], r["verdict"], r["status"], r["passed"]) == (False, None, [], "PROVEN ON HISTORY", "proven_on_history", True)
+    assert "SECOND LOOK" not in json.dumps(r) and [x["line"] for x in r["lines"]] == F.TEST_LINES and IS.status("bpl_two", root) == "proven_on_history"
+    text = r["text"].split("\n")
+    assert "1 relative of this idea was read on these days before it (bpl_orb): the pipeline reads every idea." in text
+    assert text[11] == "RESULT: PROVEN ON HISTORY: every line 4.1-4.9 is true -- approved for a real eval." and text[13] == "STATUS: PROVEN ON HISTORY · phase 4"
+    # THE IDEA'S OWN READ IS ONE READ, with the keyword too -- and with a second look on top of it
+    for kw in ({}, {"second_look": True}):
+        with F.reading("rok"), F.no_engine():
+            why = F.refused(lambda kw=kw: OOS.test("bpl_two", confirm=True, relatives_ok=True, root=root, **kw), "already on file")
+        assert "read once" in why and len(reads(root)) == 4
+    # a read made WITHOUT the keyword carries no such key, and a second look stays a second look whatever the keyword says
+    root2 = F.fresh(NAME, "rok2", "bpl_two")
+    with F.tiny():
+        FRZ.lock(NAME, root2), FRZ.lock("bpl_two", root2)
+    with F.reading("rok2"):
+        plain = OOS.test(NAME, confirm=True, root=root2)
+        look = OOS.test("bpl_two", confirm=True, second_look=True, relatives_ok=True, root=root2)
+    assert "relatives" not in plain and not [x for x in reads(root2)[:2] if "relatives" in x] and "relatives" not in F.read(root2 / NAME / "test.json")
+    assert (look["second_look"], look["label"], look["second_look_of"], look["verdict"]) == (True, "SECOND LOOK", [NAME], "SECOND LOOK: PROVEN ON HISTORY")
+    assert [x["name"] for x in look["relatives"]] == [NAME] and reads(root2)[2]["second_look"] is True
+    RESULTS["test_relatives_ok_reads_an_idea_although_a_relatives_read_is_on_file_and_writes_the_relatives_down"] = (n + 4, n + 4, "refusals and reads: one refusal waived, the relatives written down")
+
+
 def test_an_old_saved_strategy_has_used_its_history():
     """bpl_pre is the opening range break on NQ in the pre-market: the saved strategy orb-NQ-tf15-pre, whose 2025 was read
     before the blueprint (out/judge/year_reads.csv). Its test days are not unseen -- whether the old reads were brought
@@ -775,7 +838,7 @@ def test_the_runner_opens_nothing_without_a_claimed_read():
         no("not a table of", sess="pm", dry=True)
         no("not a cell of the unit", variants=[*lock["variants"], "or_min5_nope-r9"], dry=True)
         no("no variant to run", variants=[], dry=True)
-        for w in (0, 9):
+        for w in (0, S.MAX_WORKERS + 1):
             no("workers", workers=w, dry=True)
         # ---- THE CLAIM: without the read in the one-read log, claimed for THIS lock and not yet judged, nothing is opened
         assert "written to the log BEFORE the pass" in no("no claimed read")
