@@ -482,6 +482,27 @@ def test_stage_3_drops_the_idea_when_no_indicator_passes_and_counts_the_tries(wo
     assert (c["passed"], c["tries"], c["lines"]) == (False, 2, []) and "the card names none" in c["text"]
 
 
+def test_stage_3_an_indicator_that_leaves_no_trade_fails_alone_and_the_idea_is_not_a_problem(world):
+    """2026-10-08, nq_orb_stops: `bbw tight` left no trade at the open; the whole idea was stopped before its other indicators were read."""
+    first = one(world)
+    gate(world, "indicator")
+    real = ST._table
+
+    def empty(spec, plan, kw, filt=None, control=False):
+        if filt == "trend_with":
+            raise J.Refuse(f"{F1}__trend_with-NQ-tf5-nyam: no judged variant on the build days")
+        return real(spec, plan, kw, filt, control)
+    world.setattr(ST, "_table", empty)
+    c = whole(ST.stage3(NAME, CTX), 3)
+    assert (c["passed"], c["result"], c["picked"], c["tries"]) == (False, "fail", first["picked"], 3) and "none of the 1 indicators passes" in c["text"]
+    assert "code_problem" not in c and [(x["line"], x["passed"], x["indicator"], x["sub"]) for x in c["lines"]] == [("P3.3", False, "trend_with", F1)]
+    assert c["lines"][0]["text"].startswith("trend with: P3.3 FAIL no trade is left with it") and c["indicators"] == [
+        {"k": 1, "block": "trend", "side": "with", "sub": F1, "passed": False, "avg_trade": None}]
+    world.setattr(ST, "_table", lambda *a, **k: (_ for _ in ()).throw(J.Refuse("a store outside the stored build days")))
+    with pytest.raises(J.Refuse, match="outside the stored build days"):                      # any other refusal still goes up
+        ST.stage3(NAME, CTX)
+
+
 def test_stage_3_moves_on_the_passing_indicator_with_the_biggest_average_trade(world):
     one(world)
     real, two = PS.card, [CARD["indicators"][0], {"block": "vwap", "side": "with", "why": "A break above the session's average price has buyers behind it."}]

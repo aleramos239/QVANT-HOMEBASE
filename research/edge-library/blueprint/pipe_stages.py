@@ -463,7 +463,15 @@ def stage3(name: str, ctx: dict, progress=None) -> dict:
         why = _run(fspecs[:1], kw, "units", progress)       # its home table, plain and with the indicator on: one tape pass
         if why:
             return _error(3, t0, why, rows, picked, tries + len(tried), rules)
-        tf = _table(fspecs[0], fplan, kw, filt)
+        try:
+            tf = _table(fspecs[0], fplan, kw, filt)
+        except J.Refuse as e:
+            if "no judged variant" not in str(e):
+                raise
+            need = rules["indicator"]["trades"]             # the indicator leaves no trade to judge: IT fails, the others are still tried
+            rows += _named([L._row("P3.3", False, 0, need, f"no trade is left with it (need {need:,} a box)")], f"{ind['block']} {ind['side']}", indicator=filt, sub=fsub)
+            tried.append({"k": k, "block": ind["block"], "side": ind["side"], "sub": fsub, "passed": False, "avg_trade": None})
+            continue
         got = G.indicator(tf, traw, [others[m] for m in nbs if m in others])     # the other markets the indicator runs on too (none: P3.6 does not apply)
         ok, at = not [x for x in got if x["passed"] is False], G.numbers(tf)["avg_trade"]
         rows += _named(got, f"{ind['block']} {ind['side']}", indicator=filt, sub=fsub)
