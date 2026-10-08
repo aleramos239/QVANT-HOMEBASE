@@ -172,7 +172,8 @@ def ofb_dir() -> Path:
     env = os.environ.get("L2_OFB_DIR")
     if env:
         return Path(env)
-    hits = sorted(glob.glob(str(Path.home() / "Downloads" / "Desktop - Alejandro*" / "OFB_data" / "globex")))
+    home = Path.home() / "FUTURES DATA" / "bought" / "OFB_data" / "globex"      # its place since 2026-10-08 (it lay in Downloads before)
+    hits = [str(home)] if home.is_dir() else sorted(glob.glob(str(Path.home() / "Downloads" / "Desktop - Alejandro*" / "OFB_data" / "globex")))
     if not hits:
         raise FileNotFoundError("OFB globex directory not found (set L2_OFB_DIR)")
     return Path(hits[0])
