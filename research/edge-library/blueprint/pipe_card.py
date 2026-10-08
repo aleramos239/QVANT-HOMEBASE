@@ -8,7 +8,8 @@ to 5 indicators, each with its reason. This module reads the card and turns it i
   check(card)       -> (rows, subs). rows = the four lines of stage 0, each a row of lines._row (line, passed, number, need, text):
                         P0.1  why it should make money and who loses: one sentence each, 8 words or more together
                         P0.2  the ways: their count; each a family of the block list, a main setting that is a setting of
-                              that family, 3 values each once; the family runs on the card's market, in its session and on
+                              that family, 3 values each once; the card's session is one of the pipeline's (the evening
+                              session is not in this version); the family runs on the card's market, in its session and on
                               at least one of the pipeline's bar sizes; no way twice -- and each heat map is a card the
                               TOOLKIT takes (records.card_lines: what it refuses fails this line, in its own words)
                         P0.3  the indicators: their count; each a filter block and one of its sides, with a why; no block
@@ -21,18 +22,22 @@ to 5 indicators, each with its reason. This module reads the card and turns it i
                        setting, values, fixed, limits) -- in any order, a number typed as text or not. Not the name, the
                        reason, the source or the indicators. Of a card that check() passed.
   family_of(card)   -> the first way's family.
+  neighbors(market, family, bar, block=None)
+                    -> where else a heat map should work, as its toolkit card says it (below); `block` = the indicator
+                       of a stage 3 heat map: only the markets that indicator runs on as well (Level 2: NQ alone)
 
 A HEAT MAP'S SPEC is a standard idea card of the toolkit (records.py, THE SPEC): why and loser are the card's; home = the
 card's market and session and the heat map's bar; neighbors = the pipeline's other markets that the family runs on, as
 records.place reads a market ("ES") -- and when none is left the other bar size ("5-minute bars"), since the toolkit asks
-for one neighbor at least; no filter (an indicator is tried at stage 3, never part of a heat map); exits from the standard
-table; sides_why "both sides: the rule is symmetric" unless the card says; loses_when "not named on a pipeline card" (the
-pipeline dropped that line). A value written as text ("0.25") is typed as the family's schema types it.
+for one neighbor at least (neighbors(): the ONE place that says it, for stage 3's heat maps too); no filter (an indicator
+is tried at stage 3, never part of a heat map); exits from the standard table; sides_why "both sides: the rule is symmetric"
+unless the card says; loses_when "not named on a pipeline card" (the pipeline dropped that line). A value written as text
+("0.25") is typed as the family's schema types it.
 
 REFUSED OUTRIGHT (judge.Refuse): what is no card -- no JSON object, a field a card does not have, a source that is not one
 of the four, a name that is not ^[a-z][a-z0-9_]{1,33}$ or whose heat maps the toolkit would not take as idea names
 (records._name: '__', the c1 prefix, the app's reserved words). A card with a line missing is NOT refused: its row fails.
-THE LIMITS (ways 1-3, 3 values, indicators 0-5, bars 1 and 5, the markets) are pipe_rules.need("card"); none is typed here.
+THE LIMITS (ways 1-3, 3 values, indicators 0-5, bars 1 and 5, the markets, the sessions) are pipe_rules.need("card"); none is typed here.
 check() WRITES NOTHING and reads no tape: code and templates only (records.card_lines is pure; the idea folder is not
 touched). The card it is handed is not changed. Locked by tests/test_pipe_card.py.
 """
@@ -164,8 +169,11 @@ def _ways(card: dict, lim: dict) -> tuple:
     """Line P0.2 as the card alone says it -> (the row, [(way index, the way as typed, its family, its bars)])."""
     W, mk, ss, (lo, hi) = card.get("ways"), card.get("market"), card.get("session"), lim["ways"]
     n, out, keys = len(W) if isinstance(W, list) else 0, [], []
+    own = [s for s in lim["sessions"] if s in RM.DAY_PASSES]
     bad = (f"market {mk!r}: one of {', '.join(lim['markets'])}" if mk not in lim["markets"] else
-           f"session {ss!r}: one of {', '.join(RM.DAY_PASSES)}" if ss not in RM.DAY_PASSES else
+           f"session {ss!r}: the {J.SESS_PLAIN[ss].split(' (')[0]} session is not in this version of the pipeline (one of {', '.join(own)})"
+           if ss in RM.DAY_PASSES and ss not in own else
+           f"session {ss!r}: one of {', '.join(own)}" if ss not in own else
            f"{n} ways to enter (need {lo} to {hi}): ways is a list of {{{', '.join(WAY_KEYS)}}}" if not lo <= n <= hi else "")
     for i, w in enumerate(W if not bad else []):
         why, way, F, bars = _way(w, mk, ss, lim)
@@ -178,7 +186,7 @@ def _ways(card: dict, lim: dict) -> tuple:
         keys.append(_key(way))
     words = bad or (f"{n} way{'s' * (n > 1)} to enter on {mk}, {J.SESS_PLAIN[ss]}: " + " · ".join(
         f"{LETTERS[i]} {w['family']}, {w['main_setting']} {' / '.join(str(x) for x in w['values'])}, {'- and '.join(bars)}-minute bars" for i, w, _, bars in out))
-    return L._row("P0.2", not bad, n, {k: lim[k] for k in ("ways", "values", "bars", "markets")}, words), out
+    return L._row("P0.2", not bad, n, {k: lim[k] for k in ("ways", "values", "bars", "markets", "sessions")}, words), out
 
 
 def _indicators(card: dict, lim: dict) -> dict:
@@ -216,13 +224,22 @@ def _sides(card: dict) -> dict:
     return L._row("P0.4", not bad, None, None, bad or (f"{sides} only: {sw}" if sides != "both" else "both sides" + (f": {sw}" if sw else "")))
 
 
-def _spec(card: dict, name: str, way: dict, F: dict, bar: str, lim: dict) -> dict:
+def neighbors(market: str, family: str, bar: str, block=None) -> list:
+    """WHERE ELSE A HEAT MAP SHOULD WORK, in the words of its toolkit card: the pipeline's other markets that the family
+    runs on ("ES", "GC") -- with an indicator `block` on (stage 3), those of them the block runs on as well (a Level 2 block:
+    NQ alone; SMT: NQ and ES) -- and, when no market is left, the other bar size ("5-minute bars"): the toolkit asks for
+    one neighbor at least. [] = the family has no other bar size either (the toolkit then refuses the card)."""
+    F, lim, eng = _families()[family], P.need("card"), RUN._blocks()
+    ok = None if block is None else L2_MARKETS if block in eng.L2_BLOCKS else eng.BLOCK_MARKETS.get(block)
+    return ([m for m in lim["markets"] if m != market and m in F["markets"] and (not ok or m in ok)]
+            or [f"{b}-minute bars" for b in lim["bars"] if b != bar and b in F["bars"]][:1])
+
+
+def _spec(card: dict, name: str, way: dict, bar: str) -> dict:
     """The toolkit spec of one heat map (module docstring), as records._spec saves an idea's."""
-    nbs = ([m for m in lim["markets"] if m != card["market"] and m in F["markets"]]
-           or [f"{b}-minute bars" for b in lim["bars"] if b != bar and b in F["bars"]][:1])
     return REC._spec(name, {"name": name, "version": 1,
                             "card": {"why": card["why"], "loser": card["loser"], "home": {"market": card["market"], "session": card["session"], "bar": bar},
-                                     "neighbors": nbs, "main_setting": way["main_setting"], "sides": card["sides"],
+                                     "neighbors": neighbors(card["market"], way["family"], bar), "main_setting": way["main_setting"], "sides": card["sides"],
                                      "sides_why": REC._text(card.get("sides_why")) or SIDES_WHY, "loses_when": LOSES_WHEN},
                             "run": {"family": way["family"], "params": {way["main_setting"]: list(way["values"])}, "fixed": dict(way["fixed"]), "filters": [],
                                     "exits": R.need("0.2")["exits"], "limits": copy.deepcopy(way["limits"])}})
@@ -236,8 +253,8 @@ def check(card) -> tuple:
     rows = [_why(card), p2, _indicators(card, lim), _sides(card)]
     if not all(rows[i]["passed"] for i in (0, 1, 3)):
         return rows, None
-    subs = [{"name": sub_name(card["name"], i, bar), "way": i, "bar": bar, "spec": _spec(card, sub_name(card["name"], i, bar), w, F, bar, lim)}
-            for i, w, F, bars in ways for bar in bars]
+    subs = [{"name": sub_name(card["name"], i, bar), "way": i, "bar": bar, "spec": _spec(card, sub_name(card["name"], i, bar), w, bar)}
+            for i, w, _, bars in ways for bar in bars]
     for s in subs:
         got, plan = REC.card_lines(s["spec"])       # pure; it writes the engine's own spelling of a choice into the spec (5 -> "5")
         if plan is None:

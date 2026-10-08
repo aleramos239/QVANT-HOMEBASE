@@ -7,7 +7,8 @@
 3. NO CARD AT ALL is refused outright (judge.Refuse): no object, a field a card does not have, a name the heat maps cannot
    carry, a source that is not one of the four.
 4. EVERY LINE REFUSES WHAT IT HOLDS, as a failed row and no heat maps: P0.1 the reason and who loses · P0.2 the ways (count,
-   family, main setting, 3 values, market, session, bars -- and whatever the toolkit refuses, in the toolkit's words) ·
+   family, main setting, 3 values, market, session -- the evening session is not in this version --, bars -- and whatever
+   the toolkit refuses, in the toolkit's words) ·
    P0.3 the indicators (count, block and side, a why each, no block twice, a block only where it runs) · P0.4 the sides.
 5. THE LIMITS ARE THE RULES FILE'S (templates/pipeline.json `card`), not the code's.
 6. THE SIGNATURE says "the same idea": market, session, sides and the ways -- not the name, the reason, the source or the
@@ -28,6 +29,7 @@ from pathlib import Path
 W = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(W))
 import judge as J  # noqa: E402
+import run_menus as RM  # noqa: E402
 import test_blueprint_ideas as TI  # noqa: E402
 from blueprint import pipe_card as PC  # noqa: E402
 from blueprint import pipe_rules as P  # noqa: E402
@@ -111,7 +113,8 @@ def test_a_whole_card_passes_its_four_lines_and_gives_two_heat_maps_a_way():
     assert [r["line"] for r in rows] == LINES and all(set(r) >= {"line", "passed", "number", "need", "text"} for r in rows)
     assert [r["passed"] for r in rows] == [True] * 4 and all(r["text"].startswith(f"{r['line']} PASS ") for r in rows)
     assert rows[0]["need"] == {"sentences": 1, "words": 8} and rows[0]["number"] == 15
-    assert rows[1]["number"] == 1 and rows[1]["need"] == {"ways": [1, 3], "values": 3, "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"]}
+    assert rows[1]["number"] == 1 and rows[1]["need"] == {"ways": [1, 3], "values": 3, "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"],
+                                                          "sessions": ["asia", "london", "pre", "nyam", "mid", "pm"]}
     assert rows[2]["number"] == 1 and rows[2]["need"] == [0, 5] and "trend with" in rows[2]["text"]
     assert "fvg" in rows[1]["text"] and "min_gap" in rows[1]["text"] and "both sides" in rows[3]["text"]
     assert [(s["name"], s["way"], s["bar"]) for s in subs] == [("fvg_open_a1", 0, "1"), ("fvg_open_a5", 0, "5")]
@@ -157,6 +160,25 @@ def test_the_neighbors_are_the_other_markets_and_the_other_bar_size_when_none_is
     assert [s["spec"]["card"]["neighbors"] for s in passes(card())] == [["5-minute bars"], ["1-minute bars"]]
     family("fvg", markets=["NQ"], bars=["5", "15"])                                         # one market and one of the two bars: no neighbor is left
     fails(card(), "P0.2", "way a on 5-minute bars", "0.4 FAIL", "where else it should work")
+
+
+def test_the_neighbors_of_a_heat_map_with_an_indicator_are_the_markets_the_indicator_runs_on_too():
+    eng = RUN._blocks()
+    assert PC.neighbors("NQ", "fvg", "5") == PC.neighbors("NQ", "fvg", "5", "trend") == ["ES", "GC"] == passes(card())[1]["spec"]["card"]["neighbors"]
+    assert PC.neighbors("ES", "fvg", "1", "trend") == ["NQ", "GC"]                              # a block for every market: as without it
+    assert "book" in eng.L2_BLOCKS and PC.neighbors("NQ", "fvg", "5", "book") == ["1-minute bars"]     # Level 2 is NQ alone: the other bar size
+    assert PC.neighbors("NQ", "fvg", "1", "book") == ["5-minute bars"]
+    assert eng.BLOCK_MARKETS["smt"] == ("NQ", "ES") and PC.neighbors("NQ", "fvg", "5", "smt") == ["ES"] and PC.neighbors("ES", "fvg", "5", "smt") == ["NQ"]
+    nq = next(b for b, m in eng.BLOCK_MARKETS.items() if m == ("NQ",))                           # a block of NQ alone that is not Level 2
+    assert PC.neighbors("NQ", "fvg", "5", nq) == ["1-minute bars"]
+    for block, nbs in (("book", ["1-minute bars"]), ("smt", ["ES"])):                            # ... and the toolkit takes the card so written
+        spec = copy.deepcopy(passes(card())[1]["spec"])
+        spec["card"]["neighbors"], spec["run"]["filters"] = PC.neighbors("NQ", "fvg", "5", block), [{"block": block, "side": next(iter(eng.FILTERS[block]))}]
+        assert spec["card"]["neighbors"] == nbs and REC.card_lines(spec)[1] is not None, REC.card_lines(spec)[0][1]["text"]
+    spec["card"]["neighbors"] = ["ES", "GC"]                                                     # (the heat map's own neighbors: refused with smt on)
+    assert REC.card_lines(spec)[1] is None
+    family("fvg", bars=["5"])
+    assert PC.neighbors("NQ", "fvg", "5", "book") == []                                          # no other bar size either: nothing to name
 
 
 def test_a_one_sided_card_says_why_and_its_heat_maps_carry_it():
@@ -266,6 +288,10 @@ def test_line_p0_2_the_family_runs_on_the_market_the_session_and_one_of_the_bars
     fails(card(market=None), "P0.2", "market None")
     fails(card(session="lunch"), "P0.2", "session 'lunch'", "nyam")
     fails(card(session="morning"), "P0.2", "session 'morning'")
+    t = fails(card(session="eve"), "P0.2", "session 'eve'", "the evening session is not in this version", "asia, london, pre, nyam, mid, pm")
+    assert "eve" in RM.DAY_PASSES and "eve" not in P.need("card", "sessions") and ", eve" not in t      # the engine has it; the pipeline's file leaves it out
+    for s in P.need("card", "sessions"):                                                    # each of the six is read as a session: no row says it is not one
+        assert s in RM.DAY_PASSES and not PC.check(card(session=s))[0][1]["text"].startswith("P0.2 FAIL session")
     fails(ways({"family": "lon_break", "main_setting": "min_rng_atr", "values": [0, 1, 2]}) | {"session": "mid"}, "P0.2", "way a", "lon_break", "midday", "nyam")
     family("fvg", markets=["ES", "GC"])
     fails(card(), "P0.2", "way a", "fvg does not run on NQ", "ES, GC")
@@ -340,7 +366,7 @@ def test_a_card_with_more_than_one_line_missing_says_each():
 def test_the_limits_are_read_from_the_rules_file():
     with tempfile.TemporaryDirectory(prefix="pipe_card_") as d:
         p = json.loads(FILE.read_text(encoding="utf-8"))
-        p["card"] = {"ways": [2, 2], "values": 4, "indicators": [1, 1], "bars": ["5", "15"], "markets": ["ES", "GC"]}
+        p["card"] = {"ways": [2, 2], "values": 4, "indicators": [1, 1], "bars": ["5", "15"], "markets": ["ES", "GC"], "sessions": ["nyam", "eve"]}
         P.FILE = Path(d) / "pipeline.json"
         P.FILE.write_text(json.dumps(p), encoding="utf-8")
         P._all.cache_clear()
@@ -352,6 +378,7 @@ def test_the_limits_are_read_from_the_rules_file():
         fails({**good, "ways": [four]}, "P0.2", "1 ways", "need 2")
         fails({**good, "ways": [WAY, MID]}, "P0.2", "3 values", "need 4")
         fails({**good, "market": "NQ"}, "P0.2", "market 'NQ'", "ES, GC")
+        fails({**good, "session": "mid"}, "P0.2", "session 'mid'", "the midday session is not in this version", "one of nyam, eve")       # the file's sessions, not the code's
         fails({**good, "indicators": []}, "P0.3", "0 indicators", "need 1")
         fails({**good, "indicators": CARD["indicators"] * 2}, "P0.3", "2 indicators")
 
