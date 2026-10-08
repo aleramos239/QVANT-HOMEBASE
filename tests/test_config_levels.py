@@ -1,4 +1,5 @@
-"""config.json carries the "levels" strategies and the accounts' prop standing; old files still load."""
+"""The "levels" kind (its reference configs: not shipped on the desk since 2026-10-08) and the accounts' prop
+standing in config.json; old files still load."""
 from __future__ import annotations
 
 import json
@@ -6,9 +7,10 @@ import json
 import pytest
 
 from homebase import config as desk_config
-from homebase.config import AccountCfg, StrategyCfg
+from dataclasses import asdict
 
-NAMES = ("nq_nyam_flex", "nq_nyam_pro", "nq_orb_pro", "nq_pm_flex")
+from homebase.config import AccountCfg, StrategyCfg, levels_reference
+from tests.levels_util import NAMES
 
 
 @pytest.fixture
@@ -19,17 +21,34 @@ def cfg_path(tmp_path, monkeypatch):
     return p
 
 
-def test_the_four_strategies_ship_off_unbooked_and_unacknowledged():
+def test_the_desk_ships_only_nq930_gc_nfp_and_gc_cpi():
     d = desk_config._defaults()
-    for n in NAMES:
-        s = d.strategies[n]
-        assert s.kind == "levels" and not s.enabled and not s.shadow and not s.ack_open_loss
+    assert set(d.strategies) == {"nq930", "gc_nfp", "gc_cpi"}
+    assert not set(NAMES) & set(d.strategies) and not set(NAMES) & set(d.book)
+
+
+def test_gc_cpi_and_the_nfp_dates(cfg_path):
+    """gc_cpi: the gc_nfp geometry on the BLS CPI days (2026-10-08); ships off and unbooked. gc_nfp: three NFP dates."""
+    for c in (desk_config._defaults(), desk_config.load()):                  # shipped defaults, and as the desk loads them
+        s = c.strategies["gc_cpi"]
+        assert (s.kind, s.symbol, s.qty, s.offset_pts, s.sl_pts, s.tp_pts, s.rr) == ("straddle", "GC", 4, 2.0, 5.0, 7.7, 0.0)
+        assert (s.fire_et, s.cancel_et, s.flat_et, s.accept_from_et, s.accept_until_et) == \
+            ("08:29:59", "08:45", "09:55", "08:29", "08:31")
+        assert s.only_dates == ["2026-10-14", "2026-11-10", "2026-12-10"] and s.self_fire
+        assert not s.enabled and not s.shadow and "gc_cpi" not in c.book
+        assert c.strategies["gc_nfp"].only_dates == ["2026-10-02", "2026-11-06", "2026-12-04"]
+        assert not c.strategies["gc_nfp"].enabled and c.strategies["gc_nfp"].tp_pts == 7.7
+
+
+def test_the_four_levels_references_are_off_unbooked_and_unacknowledged():
+    for n, s in levels_reference().items():
+        assert n in NAMES and s.kind == "levels" and not s.enabled and not s.shadow and not s.ack_open_loss
         assert s.symbol == "NQ" and s.qty == 4 and s.fee_rt == 4.0 and s.sl_atr == 3.0
-        assert n not in d.book
+    assert set(levels_reference()) == set(NAMES)
 
 
 def test_the_specs_numbers():
-    s = {n: desk_config._defaults().strategies[n] for n in NAMES}
+    s = levels_reference()
     f, p, o, m = (s[n] for n in NAMES)
     assert (f.shape, f.fire_et, f.atr_tf, f.off_atr, f.day_take, f.target_take) == ("atr_straddle", "09:30:00", 30, 0.25, 1500.0, True)
     assert (f.cancel_et, f.flat_et, f.accept_from_et, f.accept_until_et) == ("10:55", "11:00", "09:29", "09:31")
@@ -45,7 +64,7 @@ def test_the_specs_numbers():
 def test_the_existing_strategies_are_untouched():
     d = desk_config._defaults().strategies["nq930"]
     assert (d.kind, d.day_take, d.day_lock, d.target_take, d.fee_rt, d.size_tiers) == ("straddle", 0.0, 0.0, False, 4.0, [])
-    assert (d.offset_pts, d.sl_pts, d.tp_pts, d.cancel_et, d.flat_et) == (10.0, 5.0, 15.0, "12:55", "15:55")
+    assert (d.offset_pts, d.sl_pts, d.tp_pts, d.cancel_et, d.flat_et) == (5.0, 5.0, 15.0, "12:55", "15:55")
 
 
 def test_a_saved_config_round_trips(cfg_path):
@@ -53,14 +72,21 @@ def test_a_saved_config_round_trips(cfg_path):
     c.accounts["eval1"] = AccountCfg(keyring_key="k", account_name="E1",
                                      prop={"rules": "lucid-pro-50k-no-dll@2026-09-27b", "start_balance": 50000,
                                            "largest_day": 0, "days": 0})
-    c.strategies["nq_nyam_pro"].enabled = True
-    c.book["nq_nyam_pro"] = [{"account": "eval1", "qty": 4}]
+    c.strategies["gc_nfp"].enabled = True
+    c.book["gc_nfp"] = [{"account": "eval1", "qty": 4}]
     desk_config.save(c)
     back = desk_config.load()
     assert back.accounts["eval1"].prop["start_balance"] == 50000
-    assert back.strategies["nq_nyam_pro"].enabled and back.strategies["nq_nyam_pro"].target_take
-    assert back.strategies["nq_pm_flex"].size_tiers == [[0, 2], [1000, 3], [2000, 4]]
-    assert desk_config.assignments(back, "nq_nyam_pro") == [{"account": "eval1", "qty": 4}]
+    assert back.strategies["gc_nfp"].enabled
+    assert desk_config.assignments(back, "gc_nfp") == [{"account": "eval1", "qty": 4}]
+
+
+def test_a_levels_config_survives_its_own_dict():
+    """The kind's fields (take rules, size tiers) are all StrategyCfg fields: asdict -> StrategyCfg is lossless."""
+    for n, s in levels_reference().items():
+        assert StrategyCfg(**asdict(s)) == s
+    assert levels_reference()["nq_nyam_pro"].target_take
+    assert levels_reference()["nq_pm_flex"].size_tiers == [[0, 2], [1000, 3], [2000, 4]]
 
 
 def test_a_config_written_before_these_fields_still_loads(cfg_path):
@@ -72,8 +98,8 @@ def test_a_config_written_before_these_fields_still_loads(cfg_path):
                                  "enabled": True}}}))
     c = desk_config.load()
     assert c.armed and c.accounts["main"].prop == {} and c.strategies["nq930"].day_take == 0.0
-    assert set(NAMES) <= set(c.strategies)                       # the new strategies appear, off
-    assert isinstance(c.strategies["nq_pm_flex"], StrategyCfg)
+    assert set(c.strategies) == {"nq930", "gc_nfp", "gc_cpi"}              # the shipped ones appear; gc_nfp off
+    assert isinstance(c.strategies["gc_nfp"], StrategyCfg) and not c.strategies["gc_nfp"].enabled
 
 
 def test_load_drops_removed_strategies_and_their_book_rows(cfg_path, caplog):
@@ -92,6 +118,18 @@ def test_load_drops_removed_strategies_and_their_book_rows(cfg_path, caplog):
     assert "ym930" in said and "nq_open_long" in said and "nq10am" in said and "35" not in said
     saved = json.loads(cfg_path.read_text())
     assert "ym930" not in saved["strategies"] and "nq_open_long" not in saved["book"]
+
+
+def test_a_levels_strategy_and_its_book_rows_leave_the_desk_file_on_load(cfg_path):
+    """2026-10-08: the four NQ levels algos are no longer shipped, so a file that still holds one is cleaned."""
+    cfg_path.write_text(json.dumps({
+        "accounts": {"a1": {"keyring_key": "k", "account_name": "A1"}},
+        "strategies": {"nq930": {"qty": 3}, "nq_nyam_flex": {"qty": 4, "enabled": True}},
+        "book": {"nq930": [{"account": "a1", "qty": 2}], "nq_nyam_flex": [{"account": "a1", "qty": 4}]}}))
+    cfg = desk_config.load()
+    assert set(cfg.strategies) == {"nq930", "gc_nfp", "gc_cpi"} and cfg.book == {"nq930": [{"account": "a1", "qty": 2}]}
+    saved = json.loads(cfg_path.read_text())
+    assert "nq_nyam_flex" not in saved["strategies"] and "nq_nyam_flex" not in saved["book"]
 
 
 # ---- a key this code does not know (2026-10-01: the desk, restarted on new code, wrote accounts with a "prop"
@@ -143,11 +181,10 @@ def test_a_reader_that_left_a_key_out_never_rewrites_the_file(cfg_path, caplog):
 
 
 def test_with_nothing_unknown_both_ways_of_loading_give_the_same_settings(cfg_path):
-    from dataclasses import asdict
     c = desk_config.load()
     c.accounts["eval1"] = AccountCfg(keyring_key="k", account_name="E1", prop={"rules": "x", "start_balance": 50000})
-    c.strategies["nq_nyam_pro"].enabled = True
-    c.book["nq_nyam_pro"] = [{"account": "eval1", "qty": 4}]
+    c.strategies["gc_nfp"].enabled = True
+    c.book["gc_nfp"] = [{"account": "eval1", "qty": 4}]
     desk_config.save(c)
     assert asdict(desk_config.load()) == asdict(desk_config.load(unknown="ignore"))
 

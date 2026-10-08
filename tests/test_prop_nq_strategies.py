@@ -218,11 +218,11 @@ def test_half_days_skip_the_strategies_that_would_arm_or_hold_in_a_closed_market
 
 
 def test_the_tester_strategies_follow_the_desk_config():
-    from homebase.config import load
-    cfg = load().strategies
+    from homebase.config import levels_reference
+    cfg = levels_reference()
     for name in ("nq_nyam_flex", "nq_nyam_pro", "nq_orb_pro", "nq_pm_flex"):
         s = REGISTRY[name]({})
         assert (s.fire, s.cancel_et, s.flat_et) == (cfg[name].fire_et, cfg[name].cancel_et, cfg[name].flat_et)
         assert s.session_window[0] == "00:00" and s.session_independent and s.bar_minutes == 1
-        assert not cfg[name].enabled and cfg[name].kind == "levels"          # shipped OFF
+        assert not cfg[name].enabled and cfg[name].kind == "levels"          # off, unbooked
         assert s.provenance()["desk_cfg"]["shape"] == cfg[name].shape

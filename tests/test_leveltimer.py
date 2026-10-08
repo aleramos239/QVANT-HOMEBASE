@@ -6,7 +6,6 @@ fires with can be checked against the research definition (ref_atr)."""
 from __future__ import annotations
 
 import asyncio
-import dataclasses
 import datetime as dt
 import json
 from zoneinfo import ZoneInfo
@@ -15,7 +14,8 @@ import pytest
 
 from homebase import leveltimer
 from homebase.atrbars import et_ms
-from homebase.config import AccountCfg, AppCfg, _defaults
+from homebase.config import AccountCfg, AppCfg
+from tests.levels_util import strategy_cfg
 from homebase.engine import Engine
 from homebase.leveltimer import LevelTimer
 from homebase.levels import straddle_geometry
@@ -101,7 +101,7 @@ class FakeMD:
 
 
 def strat(name="nq_nyam_flex", **over):
-    return dataclasses.replace(_defaults().strategies[name], **{"enabled": True, **over})
+    return strategy_cfg(name, **{"enabled": True, **over})
 
 
 class Rig:

@@ -56,20 +56,17 @@ It runs as launchd services on one Mac, from this folder
 
 ## Strategies
 
-These ship in `config.py` defaults. All times are ET. Each trades at most once a day.
+These three ship in `config.py` defaults. All times are ET. Each trades at most once a day.
 
 | Name | Market | Kind | What triggers it | Default |
 |---|---|---|---|---|
-| `nq930` | NQ | straddle | Every weekday at 09:30:00, if the daily TREND gate passes (ADX 14 on completed daily bars, read at 09:20). A chop day is skipped. | on |
+| `nq930` | NQ | straddle | Every weekday at 09:30:00, if the daily TREND gate passes (ADX 14 on completed daily bars, read at 09:20). A chop day is skipped. Target = `rr` × stop (default 1:3, edited in the app). | on |
 | `gc_nfp` | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (NFP days, added by hand). | off |
-| `nq_nyam_flex` | NQ | levels | 09:30:00. Entries at the last print ± 0.25 × ATR(14) of 30-minute bars. | off |
-| `nq_nyam_pro` | NQ | levels | Same entry as `nq_nyam_flex`, with a different take rule. | off |
-| `nq_orb_pro` | NQ | levels | 11:05:00. Buy stop one tick above the 11:00–11:05 high, sell stop one tick below its low. | off |
-| `nq_pm_flex` | NQ | levels | 13:30:00. Entries at the last print ± 1.0 × ATR(14) of 30-minute bars. | off |
+| `gc_cpi` | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (BLS CPI release days). Same geometry as `gc_nfp`. | off |
 
 - A **straddle** uses fixed distances from the config.
-- A **levels** strategy builds new distances every day from ATR. Its stop is
-  `sl_atr` × ATR from the trigger. Its take is a dollar rule (`day_take`,
+- A **levels** strategy (no longer shipped on the desk; the engine and the tester still run
+  the kind) builds new distances every day from ATR. Its stop is `sl_atr` × ATR from the trigger. Its take is a dollar rule (`day_take`,
   `target_take`) turned into points for each account.
 - A strategy that is off, or has no booked account, places nothing. A booked
   strategy that will not trade today says why once (`inactive_today` in the

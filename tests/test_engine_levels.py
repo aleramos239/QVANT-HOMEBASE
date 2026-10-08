@@ -12,6 +12,7 @@ import pytest
 
 from homebase.broker.base import FillEvent
 from homebase.config import AccountCfg, AppCfg, _defaults
+from tests.levels_util import strategy_cfg
 from homebase.engine import TAKE_GRACE_S, Engine
 from homebase.levels import Geometry
 from tests.test_engine import Clock, FakeAdapter, run
@@ -31,7 +32,7 @@ class BalAdapter(FakeAdapter):
 
 
 def strat(name="nq_nyam_flex", **over):
-    return dataclasses.replace(_defaults().strategies[name], **{"enabled": True, **over})
+    return strategy_cfg(name, **{"enabled": True, **over})
 
 
 def desk(tmp_path, strategies, accounts, book, balances=None, armed=True, clock=None, history=None, at=(9, 30)):
@@ -285,14 +286,14 @@ def test_a_locked_account_places_nothing_new_on_any_path(tmp_path):
     run(eng.handle_levels("nq_nyam_flex", GEO))
     fill(eng, enter_long(eng), "Sell", 24510.25 + 19.0)                           # day_take: locked
     n = len(ads["a"].brackets)
-    out = run(eng.handle_alert({"strategy": "nq930", "upper": 24510.0, "lower": 24490.0}))
+    out = run(eng.handle_alert({"strategy": "nq930", "upper": 24505.0, "lower": 24495.0}))
     assert not out["ok"] and ads["a"].brackets[n:] == []
     assert any(r["reason"].startswith("locked") for r in events(tmp_path, "place_skipped"))
 
 
 def test_day_lock_stops_the_day_after_a_close_and_cancels_resting_entries(tmp_path):
     eng, ads, _ = two_strategies(tmp_path, day_take=0.0, day_lock=750.0, target_take=False)
-    run(eng.handle_alert({"strategy": "nq930", "upper": 24510.0, "lower": 24490.0}))   # resting on the account
+    run(eng.handle_alert({"strategy": "nq930", "upper": 24505.0, "lower": 24495.0}))   # resting on the account
     run(eng.handle_levels("nq_nyam_flex", GEO))
     other = eng._state("nq930", "a")
     assert other.status == "placed"
@@ -362,7 +363,7 @@ def test_a_touch_waits_for_the_limit_then_market_flattens_and_stops_the_day(tmp_
 def test_the_take_cancels_the_accounts_other_resting_entries_and_sells_once(tmp_path):
     eng, ads, _ = two_strategies(tmp_path)
     mono = eng._mono = Mono()
-    run(eng.handle_alert({"strategy": "nq930", "upper": 24510.0, "lower": 24490.0}))      # resting on the account
+    run(eng.handle_alert({"strategy": "nq930", "upper": 24505.0, "lower": 24495.0}))      # resting on the account
     run(eng.handle_levels("nq_nyam_flex", GEO))
     st, other = enter_long(eng), eng._state("nq930", "a")
     assert other.status == "placed"
@@ -441,7 +442,7 @@ def test_the_backstop_uses_the_lower_of_day_take_and_target_take(tmp_path):
 def test_accounts_without_rules_are_not_watched(tmp_path):
     eng, ads, _ = desk(tmp_path, {"nq930": dataclasses.replace(_defaults().strategies["nq930"], enabled=True)},
                        {"a": paper()}, {"nq930": [("a", 3)]})
-    run(eng.handle_alert({"strategy": "nq930", "upper": 24510.0, "lower": 24490.0}))
+    run(eng.handle_alert({"strategy": "nq930", "upper": 24505.0, "lower": 24495.0}))
     st = eng._state("nq930", "a")
     fill(eng, st, "Buy", 24510.25, qty=3, oid=st.upper_id)
     ads["a"].net = 3

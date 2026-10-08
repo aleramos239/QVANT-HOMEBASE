@@ -1,17 +1,15 @@
 """The desk's page and readiness know the "levels" strategies and the level timer."""
 from __future__ import annotations
 
-import dataclasses
-
-from homebase.config import _defaults
+from tests.levels_util import levels_cfg
 from tests.test_server import client  # noqa: F401  (the desk fixture)
 
 
 def levels_on(client):                                   # noqa: F811
     cfg = client.app.state.cfg
-    cfg.strategies["nq_nyam_flex"] = dataclasses.replace(_defaults().strategies["nq_nyam_flex"], enabled=True)
+    cfg.strategies["nq_nyam_flex"] = levels_cfg("nq_nyam_flex", enabled=True)
     cfg.book["nq_nyam_flex"] = [{"account": "main", "qty": 4}]
-    cfg.strategies["nq_pm_flex"] = _defaults().strategies["nq_pm_flex"]            # off, unbooked
+    cfg.strategies["nq_pm_flex"] = levels_cfg("nq_pm_flex")            # off, unbooked
     return cfg
 
 

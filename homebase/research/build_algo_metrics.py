@@ -17,7 +17,7 @@ trade list or read from the research's own result files.
       next to it in the prop table.
 
 The desk side (contracts, takes, size tiers, half-day skip, fire time) is read from homebase.config's
-shipped defaults, and the build stops if the research finalist and the desk disagree.  Three choices turn an
+levels_reference (the four NQ algos; no longer shipped on the desk) and its shipped defaults (gc_nfp), and the build stops if the research finalist and the desk disagree.  Three choices turn an
 account rule into one continuous line; each artifact's note says its own:
   * target_take alone (nq_nyam_pro): every day is day 1 of a fresh eval, so the take is the eval target;
     target_take next to a day_take (nq_nyam_flex): the line carries the day_take only (the target level
@@ -50,7 +50,7 @@ for _p in (str(REPO), str(HERE)):
 
 from build_metrics import ledger_table, money, pct          # noqa: E402
 from homebase.backtest.propsim import load_rules            # noqa: E402
-from homebase.config import _defaults                       # noqa: E402
+from homebase.config import _defaults, levels_reference     # noqa: E402
 from homebase.dayrules import size_for_profit               # noqa: E402
 from homebase.levels import is_early_close_skip             # noqa: E402
 
@@ -138,7 +138,7 @@ def holdout_runs(pilot: Path) -> dict:
 
 
 def build_nq(name: str, a: argparse.Namespace) -> dict:
-    spec, cfg = NQ[name], _defaults().strategies[name]
+    spec, cfg = NQ[name], levels_reference()[name]
     man = json.loads((a.pilot / "out/holdout_manifest.json").read_text())
     res = json.loads((a.pilot / "out/holdout_results.json").read_text())
     ins = json.loads((a.pilot / "out/holdout_validate_insample.json").read_text())

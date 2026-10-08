@@ -74,7 +74,7 @@ def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
     c = desk_config._defaults().strategies["gc_nfp"]
     assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 5.0, 7.7)
     assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:29:59", "08:45", "09:55")   # rests before the release
-    assert c.only_dates == ["2026-10-02"]
+    assert c.only_dates == ["2026-10-02", "2026-11-06", "2026-12-04"]
     assert c.kind == "straddle" and c.self_fire and not c.gated and not c.shadow
     assert c.enabled is False                       # the user books the evals and switches it on
     assert (c.accept_from_et, c.accept_until_et) == ("08:29", "08:31")   # a fire a minute late is refused

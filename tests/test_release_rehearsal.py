@@ -1,6 +1,7 @@
 """Release rehearsal 2026-10-01: a whole desk day, fake broker + fake clock + fake market data, no IO outside tmp_path.
 
-Two days through the REAL SelfTimer (gc_nfp), LevelTimer (the four NQ "levels" algos), Engine and
+Two days through the REAL SelfTimer (gc_nfp), LevelTimer (the four NQ "levels" algos, as reference configs:
+the desk no longer ships them), Engine and
 inactive sweep, ticked every few seconds of simulated time from 07:50 to 16:00 ET:
 
   * Fri 2026-10-02 (NFP): gc_nfp fires at 08:29:59 -- not a second before -- on its two booked accounts, and a
@@ -13,7 +14,6 @@ What this does NOT prove: real broker acks / fills, and broker-fed bars (the md 
 """
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import json
 
@@ -26,6 +26,7 @@ from homebase.config import AccountCfg, AppCfg, _defaults
 from homebase.engine import Engine
 from homebase.leveltimer import LevelTimer
 from homebase.timer import SelfTimer
+from tests.levels_util import strategy_cfg
 from tests.test_atrbars import FIRE_NYAM, FIRE_ORB, FIRE_PM, day_minutes
 from tests.test_engine_levels import FLEX, PRO, BalAdapter
 from tests.test_leveltimer import Clock, FakeMD, run
@@ -44,8 +45,7 @@ class Day:
         monkeypatch.setattr(leveltimer.symbols, "resolve_contract", lambda s: "NQZ6")
         self.date, self.tmp = date, tmp_path
         self.clock = Clock(date)
-        d = _defaults().strategies
-        strategies = {n: dataclasses.replace(d[n], enabled=True) for n in ("gc_nfp", *LEVELS)}
+        strategies = {n: strategy_cfg(n, enabled=True) for n in ("gc_nfp", *LEVELS)}
         paper = lambda **prop: AccountCfg(keyring_key="k", account_name="P", paper=True, prop=prop)  # noqa: E731
         accounts = {"gc1": AccountCfg(keyring_key="g1", account_name="GC1"),
                     "gc2": AccountCfg(keyring_key="g2", account_name="GC2"),
@@ -118,9 +118,11 @@ def test_the_removed_strategies_are_gone_everywhere():
     from homebase import strategies
     gone = {"ym930", "nq10am", "nq_open_long", "nq_open_short"}
     assert not gone & set(_defaults().strategies) and not gone & set(strategies.REGISTRY)
-    assert set(_defaults().strategies) == {"nq930", "gc_nfp", *LEVELS}
-    for n in LEVELS + ("gc_nfp",):                          # new algos ship off and unbooked
-        assert _defaults().strategies[n].enabled is False and n not in _defaults().book
+    assert set(_defaults().strategies) == {"nq930", "gc_nfp", "gc_cpi"}        # 2026-10-08: the desk ships these three only
+    assert not set(LEVELS) & set(_defaults().strategies) and "gc_nfp" not in _defaults().book
+    assert _defaults().strategies["gc_nfp"].enabled is False         # ships off and unbooked
+    for n in LEVELS:                                                 # the levels algos stay off and unbooked as references
+        assert strategy_cfg(n).enabled is False
 
 
 # ---------------------------------------------------------------------------------------------- Friday

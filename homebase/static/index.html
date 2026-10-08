@@ -2936,6 +2936,19 @@ async function toggleStrat(name, enabled) {
   else if (enabled) toast(`${N} NOT switched on — ${why}.`, 8000);          // the safe side
   else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
 }
+/* A straddle's target as 1:rr of its stop (nq930). The desk refuses 09:20-09:35 ET and while the strategy has
+   orders or a position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
+   under the field). */
+async function setStratRr(name, rr) {
+  const N = name.toUpperCase();
+  let r, err = null;
+  try { r = await post("/api/strategy-rr", {strategy: name, rr}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return "";
+  if (err) return answerWhy(null, err);
+  if (r && r.ok === true) { toast(`${N} target set to 1:${r.rr} (${r.tp_pts} pts).`); return ""; }
+  return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
+}
 /* Flatten & turn off believes only what the desk reports (second review): it answers ok:true
    whatever happened to the flatten itself, with each account's steps in `results` -- read them
    (stepFailures). A failed flatten, a refusal or a dropped / unreadable answer is the red alert:

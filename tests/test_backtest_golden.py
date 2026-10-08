@@ -91,7 +91,7 @@ def _research_bundle(tmp_path):
     store = TapeStore(ARCHIVE, CACHE)
     # the pinned window by its DATES: {kind: research} is the build days since 2026-10-06 (it ends
     # 2025-06-30), and this pin must go on reading exactly the sessions it was hashed on
-    rid = runner.prepare({"strategy": "nq930",
+    rid = runner.prepare({"strategy": "nq930", "inputs": {"offset_pts": 10.0},     # the research spec, not the shipped default
                           "range": {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"}}, tmp_path)
     meta = runner.execute(tmp_path / "runs" / rid, store)
     d = tmp_path / "runs" / rid

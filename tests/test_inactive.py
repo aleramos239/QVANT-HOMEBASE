@@ -1,13 +1,13 @@
 """A booked strategy never silently does nothing: `inactive_today`, once per day, with why -- and readiness."""
 from __future__ import annotations
 
-import dataclasses
 import datetime as dt
 import json
 from zoneinfo import ZoneInfo
 
 from homebase import inactive
-from homebase.config import AccountCfg, AppCfg, StrategyCfg, _defaults
+from homebase.config import AccountCfg, AppCfg, StrategyCfg
+from tests.levels_util import strategy_cfg
 from homebase.engine import Engine
 from homebase.levels import Geometry
 from homebase.rules import RULES
@@ -22,7 +22,7 @@ PROP = {"rules": "lucidflex50k", "start_balance": 50000.0, "mode": "eval"}
 
 
 def cfg_with(name, *, paper=True, prop=None, book=True, **over):
-    s = dataclasses.replace(_defaults().strategies[name], **{"enabled": True, **over})
+    s = strategy_cfg(name, **{"enabled": True, **over})
     acct = AccountCfg(keyring_key="k", account_name="A", paper=paper, prop=prop or {})
     return AppCfg(armed=True, accounts={"a": acct}, strategies={name: s},
                   book={name: [{"account": "a", "qty": 4}]} if book else {})

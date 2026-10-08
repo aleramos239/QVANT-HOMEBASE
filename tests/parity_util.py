@@ -23,7 +23,7 @@ def parity_bundle() -> dict:
         config.config_path = lambda: t / "absent.json"     # the frozen desk defaults, not this machine's
         try:
             store = TapeStore(multiyear_archive(t / "ticks"), t / "cache")
-            rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False},
+            rid = prepare({"strategy": "nq930", "inputs": {"adx_gate": False, "offset_pts": 10.0},    # the 2021-24 research spec, not the shipped default
                            "range": {"kind": "custom", "start": "2021-01-01", "end": "2024-12-31"}}, t / "state")
             d = t / "state" / "runs" / rid
             req = read_json(d / "request.json")

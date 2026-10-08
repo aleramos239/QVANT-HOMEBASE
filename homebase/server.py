@@ -1145,7 +1145,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 name: {
                     "cfg": {"symbol": s.symbol, "qty": s.qty,
                             "offset_pts": s.offset_pts, "sl_pts": s.sl_pts,
-                            "tp_pts": s.tp_pts, "cancel_et": s.cancel_et,
+                            "tp_pts": s.tp_pts, "rr": s.rr, "cancel_et": s.cancel_et,
                             "flat_et": s.flat_et, "fire_et": s.fire_et,
                             "only_dates": list(s.only_dates), "enabled": s.enabled,
                             "gated": s.gated, "self_fire": s.self_fire,
@@ -1482,6 +1482,37 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                        enabled=cfg.strategies[name].enabled)
         return {"ok": True, "strategy": name,
                 "enabled": cfg.strategies[name].enabled}
+
+    @app.post("/api/strategy-rr")
+    async def strategy_rr(request: Request):
+        """Set a straddle's target as a multiple of its stop: tp_pts = round(sl_pts * rr, 4).
+        Refused 09:20-09:35 ET on weekdays and while the strategy has working orders or an open
+        position today (the target is read when the legs go out and when they re-price)."""
+        body = await request.json()
+        name = str(body.get("strategy") or "")
+        if name not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {name!r}")
+        s = cfg.strategies[name]
+        if s.kind != "straddle" or not s.sl_pts > 0:
+            raise HTTPException(400, f"{name} has no fixed stop to take a target from")
+        rr = body.get("rr")
+        if isinstance(rr, bool) or not isinstance(rr, (int, float)) or not 0.25 <= rr <= 20:
+            raise HTTPException(400, "rr must be a number from 0.25 to 20")
+        if _in_gone_quiet(engine.now_et()):
+            raise HTTPException(409, "refused: the target isn't changed 09:20-09:35 ET on weekdays "
+                                "(the 9:30 window) — try again after 09:35")
+        busy = [st.account for st in engine.day_states(name)
+                if st.status in ("placing", "placed", "live", "error")]
+        if busy:
+            raise HTTPException(409, f"refused: {name} has orders or a position today "
+                                "— change the target once it is flat")
+        previous = {"rr": s.rr, "tp_pts": s.tp_pts}
+        s.rr = float(rr)
+        s.tp_pts = round(s.sl_pts * s.rr, 4)
+        config_mod.save(cfg)
+        engine.journal("strategy_rr_changed", strategy=name, rr=s.rr, tp_pts=s.tp_pts,
+                       previous=previous)
+        return {"ok": True, "strategy": name, "rr": s.rr, "tp_pts": s.tp_pts}
 
     @app.post("/api/strategy-flatten")
     async def strategy_flatten(request: Request):

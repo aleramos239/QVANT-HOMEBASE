@@ -7,7 +7,7 @@ import datetime as dt
 import pytest
 
 from homebase.atrbars import MIN_MS, TickBars, et_ms
-from homebase.config import _defaults
+from tests.levels_util import strategy_cfg
 from homebase.dayrules import DayBook, DayRules
 from homebase.levels import (Geometry, account_leg, compute_geometry, is_early_close_skip, orb_geometry,
                              straddle_geometry)
@@ -18,7 +18,7 @@ TICK = 0.25
 
 
 def cfg(name):
-    return _defaults().strategies[name]
+    return strategy_cfg(name)
 
 
 # ------------------------------------------------------------------------------------------------ geometry

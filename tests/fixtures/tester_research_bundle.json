@@ -1041,11 +1041,12 @@
      "source": "one-shot sealed-year OOS exam \u00b7 2025-07-08\u21922026-07-07 \u00b7 TV 15s"
     },
     "off_atr": 0.0,
-    "offset_pts": 10.0,
+    "offset_pts": 5.0,
     "only_dates": [],
     "or_min": 5,
     "pine_file": "nq930.pine",
     "qty": 3,
+    "rr": 3.0,
     "rule": "",
     "self_fire": true,
     "shadow": false,
