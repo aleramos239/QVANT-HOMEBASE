@@ -88,6 +88,85 @@ class OpenRetrace(Template):
             self.armed = self.plan
 
 
+class Judas(Template):
+    """judas (v2 of open_retrace, the owner's redefinition of 2026-10-07; drops the first 5-minute candle).
+
+    THE JUDAS MOVE. From the 09:30 open (the first 1-minute bar's open) the FIRST side to travel at least `thrust` x the prior daily
+    ATR14 sets the direction (a bar that reaches both sides at once, or no daily ATR yet: no trade that day). From then on the extreme
+    of that direction is tracked over the completed 1-minute bars: M = |extreme - open|, the move.
+    THE REVERSAL. A resting STOP order trades half of it back: up move -> SELL at extreme - 0.5 M; down move -> BUY at extreme + 0.5 M.
+    It rests only for `cap_min` minutes after the bar that set the extreme (a new extreme re-places it and restarts the clock): a slow
+    drift back is a trend, not a Judas. Nothing rests while price is already through the level.
+    THE EXITS ARE IN UNITS OF THE MOVE (the owner's grid): stop = `stop_m` x M beyond the entry (0.5 = the extreme itself), target =
+    `tgt_m` x M back from the entry (0.5 = the open; 0 = none). One trade a day, 09:30-11:00, flat by 15:58 ET."""
+    DEFAULTS = {"thrust": 0.25, "stop_m": 0.5, "tgt_m": 0.5, "cap_min": 15, "stop_mode": "struct", "tgt_r": 0.0, "max_tr": 1}      # tgt_r 0: only tgt_m sets a target
+    SCHEMA = {"thrust": ("float", 0.02, 1.0), "stop_m": ("float", 0.05, 5.0), "tgt_m": ("float", 0.0, 5.0), "cap_min": ("int", 1, 120)}
+    SCREEN_TFS = ("1",)
+    FEATURES = ()
+
+    def fam_filter(self, ids):
+        return [s for s in ids if s == "nyam"]
+
+    def fam_session(self, ctx, s):
+        self.plan = self.armed = None
+        self.dir = 0
+        self.dead = False
+        self.ext = self.t_ext = None
+
+    def _dist(self, ctx, ref, struct):
+        if struct is None:
+            return super()._dist(ctx, ref, struct)
+        return max(abs(ref - struct), 0.25 * self.atr, 2 * ctx.tick)
+
+    def fam_update(self, ctx):
+        self.plan = None
+        if self.sid != "nyam" or self.dead:
+            return
+        xs = [m for m in self.M if m[0] >= OPEN_S]
+        if not xs or xs[0][0] != OPEN_S:                           # no print in the 09:30 minute: the open is unknown
+            return
+        a = self.datr()
+        if a is None:
+            return
+        o0 = xs[0][1]
+        if self.dir == 0:
+            d = float(self.p["thrust"]) * a
+            up, dn = max(m[2] for m in xs) - o0 >= d, o0 - min(m[3] for m in xs) >= d
+            if up and dn:
+                self.dead = True                                    # both sides in the bars so far: which came first is unknown
+                return
+            if not (up or dn):
+                return
+            self.dir = 1 if up else -1
+            self.ext = None
+        # the running extreme and the end of the bar that set it (a bar that ties the extreme does not restart the clock)
+        for m in xs:
+            hi, st = (m[2], m[0] + 60) if self.dir > 0 else (m[3], m[0] + 60)
+            if self.ext is None or (hi > self.ext if self.dir > 0 else hi < self.ext):
+                self.ext, self.t_ext = hi, st
+        now_s = (ctx.now_ns - self.t0) // 1_000_000_000
+        move = abs(self.ext - o0)
+        t = ctx.tick
+        px = round((self.ext - self.dir * 0.5 * move) / t) * t
+        stale = now_s >= self.t_ext + int(self.p["cap_min"]) * 60
+        if not stale and move > 0:
+            sd = self.dir
+            stop = px + sd * float(self.p["stop_m"]) * move
+            tgt = None if float(self.p["tgt_m"]) <= 0 else px - sd * float(self.p["tgt_m"]) * move
+            self.plan = ("short" if sd > 0 else "long", px, stop, tgt)
+        self._sync(ctx)
+        if ctx.flat and self.orders and self.armed != self.plan:    # a new extreme moved the level, or the clock ran out
+            self._cancel(ctx)
+            self.armed = None
+
+    def fam_signal(self, ctx):
+        if self.plan is None:
+            return
+        side, px, stop, tgt = self.plan
+        if self._arm(ctx, [(side, px, stop, tgt)]):
+            self.armed = self.plan
+
+
 FAMILIES = {
     "open_retrace": (OpenRetrace, {}, False,
                      "open_retrace: the first 5-minute candle of 09:30 gives the side, the move runs from the 09:30 open to its "
@@ -98,4 +177,11 @@ FAMILIES = {
                                    "start of the move pull price back toward the open.",
                       "complexity": 6,
                       "variants": [{"level": 0.4}, {"level": 0.5}, {"level": 0.6}]}),
+    "judas": (Judas, {}, False,
+              "judas: the first side to move `thrust` x the daily ATR from the 09:30 open is the Judas move; half of it given back within "
+              "cap_min minutes of its extreme is traded AGAINST it by a resting stop order; stop and target in units of the move",
+              {"rationale": "A big, fast push away from the cash open that gives half back is the sign of orders that had to trade now and "
+                            "are offside: the traders who chased the push pay when price returns toward where the day started.",
+               "complexity": 6,
+               "variants": [{"thrust": 0.2}, {"thrust": 0.25}, {"thrust": 0.3}]}),
 }
