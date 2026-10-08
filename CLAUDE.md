@@ -2,6 +2,10 @@
 
 ## Strategy work follows the blueprint (house law, 2026-10-05)
 
+**To run an idea, use the pipeline first** (skill `pipeline`; chat tools `pipeline_add / pipeline_status / pipeline_control / pipeline_decide /
+pipeline_book`; Lab > Queue, Book, Guide). It runs the blueprint's phases by code, stops at the first fail, and keeps the book. The rest of
+this section is the by-hand route and the law the pipeline is built on.
+
 Any request to build, test, backtest, optimize or judge a strategy or a strategy idea follows
 `research/edge-library/BLUEPRINT.md`, section 2 (skill: `strategy-blueprint`). Read it before the first run.
 
