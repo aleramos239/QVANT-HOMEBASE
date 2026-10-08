@@ -357,7 +357,7 @@ def build_days(u: dict, days=None) -> list:
 
 
 def box(st: dict, u: dict, cell: str, days=None) -> dict:
-    """THE BOX DATA of lines 3.3-3.7: ONE variant of a build store alone -- the net of each of its trades, and its net, its
+    """THE BOX DATA of lines 3.3-3.8: ONE variant of a build store alone -- the net of each of its trades, and its net, its
     trades and its worst open loss (library._worst_open on each trade's MAE + the round-turn commission, as library.metrics
     reads it) on every session day of the build range (days = the named days of a smoke run, as in built())."""
     cal = build_days(u, days)

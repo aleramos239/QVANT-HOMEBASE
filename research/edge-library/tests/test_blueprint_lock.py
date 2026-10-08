@@ -88,8 +88,8 @@ def box(day, trades=None, open_=None) -> dict:
             "open": np.zeros(len(day)) if open_ is None else np.asarray(open_, float)}
 
 
-def test_lines_3_3_to_3_7_on_the_default_variant_alone():
-    assert [f(box([100.0, -50.0, 80.0]))["line"] for f in L.BOX] == [f"3.{i}" for i in range(3, 8)] == [k for k in R.lines() if k.startswith("3.")][2:]
+def test_lines_3_3_to_3_8_on_the_default_variant_alone():
+    assert [f(box([100.0, -50.0, 80.0]))["line"] for f in L.BOX] == [f"3.{i}" for i in range(3, 9)] == [k for k in R.lines() if k.startswith("3.")][2:]
     # 3.3 profit factor: winning trades / losing trades, 1.2 or more
     r = L.box_pf(box([120.0, -100.0]))
     assert r["passed"] is True and (r["number"], r["need"]) == (1.2, 1.2) and r["text"] == "3.3 PASS default variant: profit factor 1.20 over 2 trades (need 1.2 or more)"
@@ -123,17 +123,23 @@ def test_lines_3_3_to_3_7_on_the_default_variant_alone():
     assert L.box_fits(box([30000.0, -20000.0, 5.0]))["passed"] is False and L.box_fits(box([10.0, 20.0]))["number"] == 0.0
     assert L.box_fits(box([30000.0, 5.0, 5.0], open_=[0.0, 20000.0, 0.0]))["passed"] is False      # three winning days: only the open loss says it
     assert "open losses counted" in R.rule("3.4")["text"] and "open losses counted" in R.rule("3.6")["text"]
-    # 3.7 Monte Carlo on its own days: money in 90 % of the reshuffled runs or more (the draws of line 2.8)
+    # 3.7 Monte Carlo on its own days: money in 80 % of the reshuffled runs or more (the draws of line 2.8)
     r = L.box_monte(box([60.0, 10.0, 5.0, 20.0, 30.0, 15.0]))
-    assert r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.9, 1000) and "100 % of 1,000 reshuffled runs" in r["text"]
+    assert r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.8, 1000) and "100 % of 1,000 reshuffled runs" in r["text"]
+    assert r["text"].endswith("(need 80 % or more)")
     r = L.box_monte(box([400.0, -100.0, -100.0, -100.0, -100.0, 50.0]))                       # a profit that hangs on one day
-    assert r["passed"] is False and 0.3 < r["number"] < 0.9
+    assert r["passed"] is False and 0.3 < r["number"] < 0.8
     one = np.array([400.0, -100.0, -100.0, -100.0, -100.0, 50.0])
     assert r["number"] == float((MC.reshuffle(one[None, :], np.ones((1, 6)))[0][0] > 0).mean())      # the same runs as the table's (mc.py: the fixed seed)
+    # 3.8 its net without its best 1 % of days (6 days: 1 day out), above $0 -- the same profit that hangs on one day: $50 - $400 = -$350 is left
+    r = L.box_best_days(box(one))
+    assert r["passed"] is False and (r["number"], r["need"], r["best"], r["count"], r["days"]) == (-350.0, 0, [400.0], 1, 6)
+    assert r["text"] == "3.8 FAIL default variant: -$350 without its best 1 % of days (1 of 6 session days; they made $400 of $50; need above $0)"
+    assert L.box_best_days(box([60.0, 10.0, 5.0, 20.0, 30.0, 15.0]))["number"] == 80.0 and R.need("3.8") == {"best_share": 0.01, "above": 0}
 
 
 def test_the_freeze_is_refused_when_the_default_variant_fails_a_line_of_its_own():
-    """The law, as it stands outside a test run: one of the lines 3.3-3.7 not met = nothing is frozen. (The fixtures' tiny
+    """The law, as it stands outside a test run: one of the lines 3.3-3.8 not met = nothing is frozen. (The fixtures' tiny
     runs say `box: "said"`: the lines are read and kept and do not refuse -- a 3-day table cannot pass them on its own.)"""
     F.fbm()
     root = F.fresh(F.FBM, "boxno")
@@ -144,7 +150,7 @@ def test_the_freeze_is_refused_when_the_default_variant_fails_a_line_of_its_own(
     with F.tiny(**F.settings(F.FBM)):                                                          # the same idea, said: frozen, with the lines as they read
         lock = FRZ.lock(F.FBM, root)["lock"]
     b = {x["line"]: x for x in lock["box"]}
-    assert list(b) == [f"3.{i}" for i in range(3, 8)] and b["3.7"]["passed"] is False and b["3.7"]["text"].startswith("3.7 FAIL ")
+    assert list(b) == [f"3.{i}" for i in range(3, 9)] and b["3.7"]["passed"] is False and b["3.7"]["text"].startswith("3.7 FAIL ")
     assert lock["build"] == {"avg_trade": 100.0}                                               # (the fixture's figure; without one: line 2.2's number, below)
 
 
@@ -346,7 +352,7 @@ def test_the_freeze_saves_everything_under_one_hash():
     assert log[-1]["event"] == "locked" and (log[-1]["hash"], log[-1]["default"], log[-1]["round"]) == (lock["hash"], lock["default"], 1)
     # the answer: lines 3.1 and 3.2, the hash, the default and the test range in words, the next step
     b = F.by(r)
-    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 8)] and all(x["passed"] is True and x["text"].startswith(x["line"] + " PASS ") for x in r["lines"])
+    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 9)] and all(x["passed"] is True and x["text"].startswith(x["line"] + " PASS ") for x in r["lines"])
     assert lock["default"] in b["3.1"]["text"] and "never the best" in b["3.1"]["text"] and "2 ticks + 250 ms + a 100 ms late cancel" in b["3.1"]["text"]
     assert lock["hash"] in b["3.2"]["text"] and "new version" in b["3.2"]["text"]
     text = r["text"].split("\n")
@@ -520,7 +526,7 @@ def test_the_command_line_runs_the_pass_as_a_job_and_shows_a_frozen_idea_again()
         assert rc == 0 and d["job"] == {"id": jid, "state": "done", "progress": d["job"]["progress"]} and len(list((root / "_jobs").iterdir())) == 1, d
         lock = F.read(root / name / "lock.json")
         assert (d["hash"], d["default"], d["already"], d["status"], d["phase"]) == (lock["hash"], lock["default"], False, "lead", 3)
-        assert [x["line"] for x in d["lines"]] == [f"3.{i}" for i in range(1, 8)] and d["range"]["start"] == "2025-07-01" and (F.OUT / f"{name}-NQ-tf15-nyam-worse" / "run.json").exists()
+        assert [x["line"] for x in d["lines"]] == [f"3.{i}" for i in range(1, 9)] and d["range"]["start"] == "2025-07-01" and (F.OUT / f"{name}-NQ-tf15-nyam-worse" / "run.json").exists()
         rc, js = F.run_cli(["job", jid, "--wait=0", *last])                      # the job by its id: the freeze's own answer
         assert rc == 0 and json.loads(js)["hash"] == lock["hash"]
         with F.no_engine():                                                      # a frozen idea: shown again at once, as the connector asks for it and for a person
@@ -563,7 +569,7 @@ def test_the_lock_keeps_the_builds_average_trade_and_the_lines_of_the_default():
     assert not any(x["line"].startswith("5.") for x in r["lines"]), "the shown odds are no line of the lock"
     mine = [f(data) for f in L.BOX]
     assert [(x["line"], x["passed"], x["text"]) for x in lock["box"]] == [(x["line"], x["passed"], x["text"]) for x in mine]
-    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 8)] and [x["text"] for x in r["lines"]][2:] == [x["text"] for x in mine]
+    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 9)] and [x["text"] for x in r["lines"]][2:] == [x["text"] for x in mine]
 
 
 def test_no_test_day_was_opened_and_nothing_was_written_outside_the_temp_folder():

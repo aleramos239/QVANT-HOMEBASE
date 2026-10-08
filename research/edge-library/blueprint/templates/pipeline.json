@@ -1,0 +1,64 @@
+{
+ "_about": "Every gate number of the strategy pipeline (docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md; `bp.py pipe`), read by blueprint/pipe_rules.py: need(*keys). Shares and odds are fractions. `card` = what a pipeline card may hold (ways, values a way, indicators, bar sizes, markets). `raw` = the raw heat map of stage 1: `strict` is the law's own bar (lines 2.1, 2.2, 2.4), `low` the wider door (a smaller share and half the floor, held to more trades); `floor_part` = the part of line 2.2's cost floor the average trade must reach. `indicator` = stage 3 (`other_markets` = the share of the other markets that must agree). `proof` = stage 4: `reshuffle` is line 2.8's share of the runs; `random_alpha` makes the random bar, 1 - alpha / tries, the law's ladder of line 2.3 carried on past round 5. `box` = the best days taken out at the lock and on the test (lines 3.8, 4.6). `prop` = the 30-day prop odds of one strategy; `portfolio` = the bar a portfolio is built to. A number the law also carries (raw.strict.share = 2.1, raw.strict.trades = 2.4, proof.reshuffle = 2.8, the random bar = 2.3 to 3 decimals, box.best_days_share = 3.8 and 4.6) must be the same here and in rules.json: pipe_rules.py refuses to load when they differ. A change here is a change of the pipeline's rules: it needs the owner's word. Locked by tests/test_pipe_rules.py.",
+ "card": {
+  "ways": [
+   1,
+   3
+  ],
+  "values": 3,
+  "indicators": [
+   0,
+   5
+  ],
+  "bars": [
+   "1",
+   "5"
+  ],
+  "markets": [
+   "NQ",
+   "ES",
+   "GC"
+  ]
+ },
+ "raw": {
+  "low": {
+   "share": 0.5,
+   "floor_part": 0.5,
+   "trades": 300
+  },
+  "strict": {
+   "share": 0.6,
+   "floor_part": 1.0,
+   "trades": 200
+  }
+ },
+ "indicator": {
+  "share": 0.6,
+  "floor_part": 1.0,
+  "trades": 200,
+  "other_markets": 0.5
+ },
+ "proof": {
+  "reshuffle": 0.75,
+  "random_alpha": 0.05
+ },
+ "box": {
+  "best_days_share": 0.01
+ },
+ "prop": {
+  "account": "lucid-pro-50k-no-dll@2026-09-27b",
+  "days": 30,
+  "eval": 0.5,
+  "payout": 0.5
+ },
+ "portfolio": {
+  "eval": {
+   "days": 5,
+   "odds": 0.6
+  },
+  "payout": {
+   "days": 14,
+   "odds": 0.75
+  }
+ }
+}

@@ -1,5 +1,5 @@
 {
- "_about": "Every numbered line of BLUEPRINT.md section 2 (house law since 2026-10-05; version 1.1 of 2026-10-06), keyed by its line number. `text` and `number` are that line's two cells, quoted exactly. `need` = the line's numbers as the code reads them (shares as fractions), `op` = how a value is held against `need` (\"above\" / \"more than\" = >, \"or more\" = >=, \"at most\" / \"or less\" = <=). `also` = a number that comes from a reading of the line, not from its words; `note` says which. A change here is a change of the law: it needs the owner's word. Locked by tests/test_blueprint_rules.py.",
+ "_about": "Every numbered line of BLUEPRINT.md section 2 (house law since 2026-10-05; version 1.1 of 2026-10-06), keyed by its line number. `text` and `number` are that line's two cells, quoted exactly. `need` = the line's numbers as the code reads them (shares as fractions), `op` = how a value is held against `need` (\"above\" / \"more than\" = >, \"or more\" = >=, \"at most\" / \"or less\" = <=). `also` = a number that comes from a reading of the line, not from its words; `note` says which. A change here is a change of the law: it needs the owner's word. AHEAD OF THE LAW'S TEXT (the strategy pipeline, owner 2026-10-07; docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md section 3): lines 3.7 and 4.7 (80 % of the runs, was 90 %), 4.6 (the best 1 % of days, was the 3 best days) and the new line 3.8 are in force as written HERE; BLUEPRINT.md still prints the earlier words until its own update, and the lock test names exactly these four. Locked by tests/test_blueprint_rules.py.",
  "0.1": {
   "text": "The reason, in one sentence: why it should make money and who is on the losing side",
   "need": {
@@ -175,7 +175,7 @@
   "number": "1.2 or more",
   "need": 1.2,
   "op": ">=",
-  "note": "lines 3.3-3.7: the default variant of 3.1 alone, on the build days, after costs at 1 contract (owner 2026-10-06; the course reads its numbers on the one setting it trades). No losing trade = met; no trade = not met"
+  "note": "lines 3.3-3.8: the default variant of 3.1 alone, on the build days, after costs at 1 contract (owner 2026-10-06; the course reads its numbers on the one setting it trades). No losing trade = met; no trade = not met"
  },
  "3.4": {
   "text": "Its profit is large against its worst drawdown (its net ÷ its worst drawdown, open losses counted)",
@@ -209,13 +209,22 @@
  },
  "3.7": {
   "text": "Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days",
-  "number": "90 % of the runs or more (the course's line)",
-  "need": 0.9,
+  "number": "80 % of the runs or more",
+  "need": 0.8,
   "op": ">=",
   "also": {
    "above": 0
   },
-  "note": "the runs of montecarlo.json (the same draws as line 2.8) on the default variant's own days"
+  "note": "the runs of montecarlo.json (the same draws as line 2.8) on the default variant's own days. 80 % since the strategy pipeline (owner 2026-10-07); until then 90 %, the course's line"
+ },
+ "3.8": {
+  "text": "The default variant still makes money without its best 1 % of days",
+  "number": "above $0",
+  "need": {
+   "best_share": 0.01,
+   "above": 0
+  },
+  "note": "new with the strategy pipeline (owner 2026-10-07): line 4.6's reading at the lock, on the default variant alone. Its net on every session day of the build range (a day without a trade = $0, and it counts as a day); the days taken out = 1 % of those session days rounded UP to a whole day, never fewer than 1 (900 days: 9 · 901 days: 10); what is left must be above $0"
  },
  "4.1": {
   "text": "Both parts make money on their own: Jul-Dec 2025 and Jan-Sep 2026",
@@ -261,23 +270,23 @@
   "note": "makes money = the average variant above $0 with these fills (costs.json worse)"
  },
  "4.6": {
-  "text": "It still makes money without its 3 best days",
+  "text": "It still makes money without its best 1 % of days",
   "number": "above $0",
   "need": {
-   "best_days": 3,
+   "best_share": 0.01,
    "above": 0
   },
-  "note": "read on the average variant (toolkit_plan.md section 6, decision 3)"
+  "note": "read on the average variant (toolkit_plan.md section 6, decision 3). The days taken out = 1 % of the session days of the test range rounded UP to a whole day, never fewer than 1 (300 days: 3 · 315 days: 4). The best 1 % since the strategy pipeline (owner 2026-10-07); until then its 3 best days"
  },
  "4.7": {
   "text": "Monte Carlo: it makes money in almost all reshuffled runs of the test period",
-  "number": "90 % of the runs or more (the course's line)",
-  "need": 0.9,
+  "number": "80 % of the runs or more",
+  "need": 0.8,
   "op": ">=",
   "also": {
    "above": 0
   },
-  "note": "makes money = the average variant above $0 in a run; the runs are montecarlo.json"
+  "note": "makes money = the average variant above $0 in a run; the runs are montecarlo.json. 80 % since the strategy pipeline (owner 2026-10-07); until then 90 %, the course's line"
  },
  "4.8": {
   "text": "The test looks like the build: the average trade (the reading of 4.3) holds against the build's own average trade of line 2.2",

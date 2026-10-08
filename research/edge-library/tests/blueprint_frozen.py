@@ -62,7 +62,7 @@ def tmp() -> Path:
 
 OUT, TOUT, LEDGER, TESTER, DRAFTS = tmp() / "runs", tmp() / "runs_test", tmp() / "ledger.csv", tmp() / "tester", tmp() / "drafts"
 TINY = {"days": DAYS, "cells": CELLS, "out": str(OUT), "ledger": str(LEDGER), "workers": 1, "draws": 200, "tester": str(TESTER), "test_out": str(TOUT),
-        "box": "said", "build_avg_trade": 100.0}      # lines 3.3-3.7 are read, not enforced, on 3 days; the build's average trade a hand-made test is held against
+        "box": "said", "build_avg_trade": 100.0}      # lines 3.3-3.8 are read, not enforced, on 3 days; the build's average trade a hand-made test is held against
 ENV = {"HOMEBASE_IDEAS_ROOT": str(tmp() / "ideas_env"),      # never the real ~/.homebase: every test names its own root ...
        "HOMEBASE_DRAFTS_DIR": str(DRAFTS)}                   # ... and the Lab drafts of all of them go here
 IS = A.ideastore()

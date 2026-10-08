@@ -104,7 +104,7 @@ def test_the_sessions_bars_markets_and_the_numbers_of_the_templates():
     assert [m["floor"] for m in B["markets"]] == [70, 75, 140]
     mc, ctl, sz = R.template("montecarlo"), R.template("control"), R.template("sizes")
     assert B["montecarlo"] == {"runs": mc["runs"], "seed": mc["seed"], "draw": "whole days, with replacement, the same days for every variant",
-                               "build": {"line": "2.8", "need": 0.75}, "test": {"line": "4.7", "need": 0.9},
+                               "build": {"line": "2.8", "need": 0.75}, "test": {"line": "4.7", "need": 0.8},
                                "eval_card": {"percentiles": [50, 75, 90, 95, 99], "after_trades": [10, 20, 30, 40]}}
     assert B["random_tables"] == {"seeds": ctl["seeds"], "draws": ctl["draws"]} == {"seeds": 10, "draws": 4000}
     assert B["sizes"] == {"unit": "micros", "steps": sz["steps"], "stage_a": sz["stage_a"]} and B["ranges"]["build"] == {"start": "2021-09-22", "end": "2025-06-30"}

@@ -18,13 +18,15 @@ TABLE DATA = a dict. tables.py fills it from a store; a test fills it by hand. A
   filters              [{"name", "avg_trade", "plain_avg_trade", "p_beat": [...]}]: each filter of the unit against the
                        same strategy without it (or {"name", "why"} when that cannot be read); empty = no filter      2.7
   reason               the reason of this round, as it was written before the run (2.9 also reads `round`)            2.9
-BOX DATA = the default variant ALONE (lines 3.3-3.7 before the freeze, 4.9 on the test days; tables.box fills it):
+BOX DATA = the default variant ALONE (lines 3.3-3.8 before the freeze, 4.9 on the test days; tables.box fills it):
   trades               (its trades,) the net of each of its trades, after costs at 1 contract                  3.3 4.9
-  day, n               (session days,) its net and its trades on every session day of the range (no trade = 0) 3.4-3.7
+  day, n               (session days,) its net and its trades on every session day of the range (no trade = 0) 3.4-3.8
   open                 (session days,) the day's WORST OPEN LOSS in dollars, 0 or more: how far the day stood under its
                        start at its worst point, open losses counted (library._worst_open; no trade = 0)       3.4 3.6
 """
 from __future__ import annotations
+
+import math
 
 import numpy as np
 
@@ -283,7 +285,7 @@ def box_fits(b: dict) -> dict:
 
 
 def box_monte(b: dict, rng=None) -> dict:
-    """3.7 Monte Carlo on the default variant alone: it makes money in 90 % of the reshuffled runs of the build days or more
+    """3.7 Monte Carlo on the default variant alone: it makes money in 80 % of the reshuffled runs of the build days or more
     (mc.py: the runs of line 2.8, on its own days). rng None = the fixed seed of montecarlo.json."""
     day = np.asarray(b["day"], np.float64)[None, :]
     tot, _ = MC.reshuffle(day, np.asarray(b.get("n", np.zeros(day.shape[1])), np.float64)[None, :], rng)
@@ -293,7 +295,38 @@ def box_monte(b: dict, rng=None) -> dict:
                 f"default variant: makes money in {_pc(share)} of {len(ok):,} reshuffled runs (need {_pc(need)} or more)", runs=len(ok))
 
 
-BOX = (box_pf, box_ratio, box_sharpe, box_fits, box_monte)                                # lines 3.3 .. 3.7, in the law's order
+def _best_count(share: float, days: int) -> int:
+    """How many days "the best 1 % of days" are (lines 3.8 and 4.6): `share` of the session days, rounded UP to a whole
+    day, never fewer than 1 -- 315 days: 4 · 300 days: 3 · 40 days: 1. (The product is rounded first: 0.01 * 700 is
+    7.000000000000001 in floating point, and that is 7 days, not 8.)"""
+    return max(1, math.ceil(round(share * days, 9)))
+
+
+def _without_best(day, share: float) -> tuple:
+    """A list of day results without its best days -> (the days taken out, best first; the net of all days; the net of the
+    rest). Every session day counts as a day, a day without a trade too."""
+    day = np.asarray(day, np.float64)
+    best = np.sort(day)[::-1][:_best_count(share, len(day))]
+    return best, float(day.sum()), float(day.sum() - best.sum())
+
+
+def _best_words(rest: float, best, total: float, days: int, need: dict, who: str = "") -> str:
+    """Lines 3.8 and 4.6 in words, with the count of the days taken out: "$5 without its best 1 % of days (4 of 315 session days; ..."."""
+    return (f"{_n(rest, unit='$')} without its best {_pc(need['best_share'])} of days ({len(best)} of {days:,} session day{'s' * (days != 1)}; they made "
+            f"{_n(float(best.sum()), unit='$')} of {_n(total, unit='$')}{who}; need above {_n(need['above'], unit='$')})")
+
+
+def box_best_days(b: dict) -> dict:
+    """3.8 The default variant still makes money without its best 1 % of days: its net on every session day of the build
+    range, the best days taken out (_best_count: 1 % of the session days, rounded up, at least 1), the rest above $0. One
+    day, or none, leaves nothing. (Line 4.6's reading, at the lock, on the one variant that is traded.)"""
+    need, day = R.need("3.8"), np.asarray(b["day"], np.float64)
+    best, total, rest = _without_best(day, need["best_share"])
+    return _row("3.8", bool(rest > need["above"]), rest, need["above"], "default variant: " + _best_words(rest, best, total, len(day), need),
+                best=[float(x) for x in best], total=total, count=len(best), days=len(day))
+
+
+BOX = (box_pf, box_ratio, box_sharpe, box_fits, box_monte, box_best_days)                 # lines 3.3 .. 3.8, in the law's order
 
 
 # ================================================================ phase 4: the out-of-sample test
@@ -356,20 +389,19 @@ def worse_fills(t: dict) -> dict:
 
 
 def best_days(t: dict) -> dict:
-    """4.6 It still makes money without its 3 best days: the average variant's net per session day, the 3 best days taken
-    out, the rest above $0. Fewer days than that leave nothing."""
+    """4.6 It still makes money without its best 1 % of days: the average variant's net per session day of the test range,
+    the best days taken out (_best_count: 1 % of the session days, rounded up, at least 1 -- 315 days: 4), the rest above
+    $0. The text says the count. One day leaves nothing."""
     need = R.need("4.6")
     net = np.asarray(t["net"], np.float64)
     day = net.mean(0) if net.shape[0] else np.zeros(0)
-    best = np.sort(day)[::-1][:need["best_days"]]
-    total, rest = float(day.sum()), float(day.sum() - best.sum())
-    return _row("4.6", bool(rest > need["above"]), rest, need["above"],
-                f"{_n(rest, unit='$')} without its {need['best_days']} best days (they made {_n(float(best.sum()), unit='$')} of {_n(total, unit='$')}, average variant; "
-                f"need above {_n(need['above'], unit='$')})", best=[float(x) for x in best], total=total)
+    best, total, rest = _without_best(day, need["best_share"])
+    return _row("4.6", bool(rest > need["above"]), rest, need["above"], _best_words(rest, best, total, len(day), need, ", average variant"),
+                best=[float(x) for x in best], total=total, count=len(best), days=len(day))
 
 
 def monte_test(t: dict, rng=None) -> dict:
-    """4.7 Monte Carlo: the average variant makes money in 90 % of the reshuffled runs of the test period or more."""
+    """4.7 Monte Carlo: the average variant makes money in 80 % of the reshuffled runs of the test period or more."""
     tot, _ = MC.reshuffle(t["net"], t["n"], rng)
     ok = tot.mean(0) > R.rule("4.7")["also"]["above"]
     share, need = float(ok.mean()), R.need("4.7")

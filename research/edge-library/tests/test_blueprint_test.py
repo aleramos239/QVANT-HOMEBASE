@@ -3,7 +3,7 @@
 BLUEPRINT.md phase 4.
 
 (a) THE LINES 4.1-4.9 on hand-made trade tables, each with its edge cases: "above $0" is strict, the floor is "or more",
-    95 % of the random tables is strict, the 3 best days are the average variant's, 90 % of the reshuffles is "or more".
+    95 % of the random tables is strict, the best 1 % of days are the average variant's, 80 % of the reshuffles is "or more".
 (b) WHAT THE TEST REFUSES (exit 2; nothing run, no read used): not frozen; a lock that no longer matches the files on disk;
     --confirm missing; a job of the idea at work; stores of a read without its line in the log; --second-look without a
     used read.
@@ -183,31 +183,35 @@ def test_line_4_5_it_still_makes_money_with_worse_fills():
     assert "2 ticks + 250 ms;" in L.worse_fills(table([[1, 1]], worse=[1.0]))["text"]      # (a one-sided rule: no late cancel in the words)
 
 
-def test_line_4_6_without_its_three_best_days():
-    r = L.best_days(table([[100, 50, 30, 10, -5, 0]]))                            # the 3 best days made $180 of $185: $5 is left
-    assert r["passed"] is True and (r["number"], r["need"], r["best"], r["total"]) == (5.0, 0, [100.0, 50.0, 30.0], 185.0)
-    assert r["text"] == "4.6 PASS $5 without its 3 best days (they made $180 of $185, average variant; need above $0)"
-    r = L.best_days(table([[100, 50, 30, 10, -15, 0]]))
+def test_line_4_6_without_its_best_1_percent_of_days():
+    """The days taken out = 1 % of the session days, rounded up, at least 1 (lines._best_count): 1 day on these short tables,
+    4 of the 315 days of the real stretch (tests/test_blueprint_lines.py reads the count on long tables)."""
+    r = L.best_days(table([[100, 50, 30, 10, -85, 0]]))                           # 6 days: the 1 best day made $100 of $105: $5 is left
+    assert r["passed"] is True and (r["number"], r["need"], r["best"], r["total"], r["count"], r["days"]) == (5.0, 0, [100.0], 105.0, 1, 6)
+    assert r["text"] == "4.6 PASS $5 without its best 1 % of days (1 of 6 session days; they made $100 of $105, average variant; need above $0)"
+    r = L.best_days(table([[100, 50, 30, 10, -95, 0]]))
     assert r["passed"] is False and r["number"] == -5.0
-    assert L.best_days(table([[100, 50, 30, 10, -10, 0]]))["passed"] is False     # exactly $0 is not above $0
-    r = L.best_days(table([[300, 0, 0, 0], [-100, 40, 40, 40]]))                  # the AVERAGE variant's days: $100, $20, $20, $20 -> $20 left
-    assert r["passed"] is True and r["best"] == [100.0, 20.0, 20.0] and r["number"] == 20.0
-    assert L.best_days(table([[900, 800, 700]], split=1))["number"] == 0.0 and L.best_days(table([[900, 800, 700]], split=1))["passed"] is False      # 3 days: nothing left
-    assert L.best_days(table([[900, 800]]))["passed"] is False
-    r = L.best_days(table([[-5, -10, -20, -40]]))                                 # all days lose: the "best" three are the smallest losses
-    assert r["passed"] is False and r["number"] == -40.0 and R.need("4.6") == {"best_days": 3, "above": 0}
+    assert L.best_days(table([[100, 50, 30, 10, -90, 0]]))["passed"] is False     # exactly $0 is not above $0
+    r = L.best_days(table([[300, 0, 0, 0], [-100, 40, 40, 40]]))                  # the AVERAGE variant's days: $100, $20, $20, $20 -> $60 left
+    assert r["passed"] is True and r["best"] == [100.0] and r["number"] == 60.0
+    assert L.best_days(table([[900]], split=1))["number"] == 0.0 and L.best_days(table([[900]], split=1))["passed"] is False      # 1 day: nothing left
+    assert L.best_days(table([[900, -800]]))["passed"] is False
+    r = L.best_days(table([[-5, -10, -20, -40]]))                                 # all days lose: the "best" one is the smallest loss
+    assert r["passed"] is False and r["number"] == -70.0 and R.need("4.6") == {"best_share": 0.01, "above": 0}
+    long = L.best_days(table([[10.0] * 315]))                                     # the real stretch: 1 % of 315 days = 3.15 -> 4 days out
+    assert (long["count"], long["days"], long["number"]) == (4, 315, 3110.0) and "(4 of 315 session days;" in long["text"]
 
 
 def test_line_4_7_monte_carlo_on_the_test_days():
     r = L.monte_test(table([[60, 10, 5, 20, 30, 15]]))                            # every day makes money: every reshuffled run does
-    assert r["line"] == "4.7" and r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.9, 1000)
-    assert r["text"] == "4.7 PASS the average variant makes money in 100 % of 1,000 reshuffled runs (need 90 % or more)"
+    assert r["line"] == "4.7" and r["passed"] is True and (r["number"], r["need"], r["runs"]) == (1.0, 0.8, 1000)
+    assert r["text"] == "4.7 PASS the average variant makes money in 100 % of 1,000 reshuffled runs (need 80 % or more)"
     r = L.monte_test(table([[400, -100, -100, -100, -100, 50]]))                  # a profit that hangs on one day: gone in many runs
-    assert r["passed"] is False and 0.3 < r["number"] < 0.9
+    assert r["passed"] is False and 0.3 < r["number"] < 0.8
     assert L.monte_test(table([[-60, -10, -5, -20]]))["number"] == 0.0
     # whole days, the same days for every variant: two variants that cancel each other out day by day never make money
     assert L.monte_test(table([[100, -50, 30, 10], [-100, 50, -30, -10]]))["number"] == 0.0
-    assert R.rule("4.7")["op"] == ">=" and R.meets("4.7", 0.9) and not R.meets("4.7", 0.8999)      # "90 % of the runs or more"
+    assert R.rule("4.7")["op"] == ">=" and R.meets("4.7", 0.8) and not R.meets("4.7", 0.7999)      # "80 % of the runs or more"
 
 
 # ================================================================ (b) what the test refuses
@@ -357,7 +361,7 @@ def test_a_read_that_passes_is_proven_on_history_and_everything_is_saved():
     assert (b["4.4"]["number"], b["4.4"]["seeds"], c["replicates"], c["seeds"], c["short"]) == (1.0, 10, lock["control"]["draws"], list(range(1, 11)), 0)
     assert c["ctl_mean"] == -40.0 and list(c["stores"]) == [f"runs_test_pass/{RUN.test_keys(KEY, NAME, 'NQ', '15', 'nyam')['pool']}"]      # 8 random trades of -$5 a table
     assert b["4.5"]["number"] == 480.0 and "2 ticks + 250 ms + a 100 ms late cancel" in b["4.5"]["text"]
-    assert b["4.6"]["number"] == 750.0 and b["4.7"]["number"] == 1.0 and r["days"]["sessions"] == 8 and [p["sessions"] for p in r["days"]["parts"]] == [4, 4]
+    assert b["4.6"]["number"] == 1050.0 and b["4.6"]["count"] == 1 and b["4.7"]["number"] == 1.0 and r["days"]["sessions"] == 8 and [p["sessions"] for p in r["days"]["parts"]] == [4, 4]
     # the read: claimed BEFORE the pass (what the pass saw), then judged with its verdict -- two lines, nothing rewritten
     assert (seen[0]["line"]["state"], seen[0]["test_json"]) == ("claimed", False)
     log = reads(root)
@@ -1009,7 +1013,7 @@ def test_the_apps_connector_against_this_toolkit():
     assert "before the freeze" in before or "freeze is next" in before
     head = lock.split("\n")
     assert head[0] == f"Blueprint lock · {name} · LEAD · phase 3 · round 1" and head[1].startswith(f"FROZEN now: {name} · lock {saved['hash']} · version 1 · round 1 · home NQ midday")
-    assert lock.count("\n3.1 PASS ") == 1 and lock.count("\n3.2 PASS ") == 1 and f"DEFAULT VARIANT {saved['default']}" in lock and all(lock.count(f"\n3.{i} ") == 1 for i in range(3, 8))
+    assert lock.count("\n3.1 PASS ") == 1 and lock.count("\n3.2 PASS ") == 1 and f"DEFAULT VARIANT {saved['default']}" in lock and all(lock.count(f"\n3.{i} ") == 1 for i in range(3, 9))
     assert f"TEST RANGE NQ 2025-07-01 .. {saved['test_range']['NQ']['end']}" in lock and lock.count("Next: ") == 1 and "--confirm" in lock and "Saved: " in lock
     assert again.split("\n")[1].startswith(f"FROZEN already: {name} · lock {saved['hash']}") and "The lock matches the files on disk" in again and "Saved: " not in again
     assert nobody.startswith("ToolError: Refused (blueprint lock): ") and "no card" in nobody and "Nothing was run." in nobody

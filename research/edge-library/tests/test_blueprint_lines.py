@@ -14,7 +14,7 @@
     where they are also the numbers out/v2 stored -- and, with BP_FULL=1, at the rule in force (4,000 draws, every seed on
     disk; about 15 minutes).
 (c) HAND-MADE TABLES: the edge of every line (exactly 60 %, exactly at the floor, exactly 95 %, exactly 200 / 120 trades, half
-    the neighbors, one side, a side at $0, no filter, exactly 75 % / 90 % of the runs, ...).
+    the neighbors, one side, a side at $0, no filter, exactly 75 % / 80 % of the runs, the best 1 % of days of 3.8 and 4.6, ...).
 (d) THE COMMAND: the DRY RUN label, the lines in order, text and JSON, exit codes, refusals, and the seal: nothing but stores of
     the old build days (2021-09-22 .. 2023-12-31) is loaded.
 Reads BUILD stores only; runs no simulation; writes nothing.
@@ -348,9 +348,9 @@ def test_line_2_8_and_4_7_monte_carlo():
     assert L.monte(mix, split(600, 400))["number"] == 0.6               # day-0 runs: 2 of 3 green, $200 a trade; day-1 runs: 1 of 3 green
     tot, cnt = MC.reshuffle(mix["net"], mix["n"], split(600, 400))
     assert tot.shape == (3, 1000) and (tot[:, 0] == [600, 600, 0]).all() and (tot[:, -1] == [0, 0, 600]).all() and (cnt == 6).all()
-    r = L.monte_test(t, split(900, 100))                                # 4.7: the average variant makes money in 90 % of the runs or more
-    assert r["passed"] is True and r["number"] == 0.9 and r["need"] == 0.90 and r["line"] == "4.7"
-    assert L.monte_test(t, split(899, 101))["passed"] is False
+    r = L.monte_test(t, split(800, 200))                                # 4.7: the average variant makes money in 80 % of the runs or more
+    assert r["passed"] is True and r["number"] == 0.8 and r["need"] == 0.80 and r["line"] == "4.7"
+    assert L.monte_test(t, split(799, 201))["passed"] is False
     assert L.monte_test(table([[60, -500]] * 3), split(1000, 0))["number"] == 1.0   # 4.7 asks for a profit, not for the floor
     # the real draws: whole days with replacement, as many as the range has; the fixed seed gives every table the same ones
     rng = np.random.default_rng(7)
@@ -363,6 +363,58 @@ def test_line_2_8_and_4_7_monte_carlo():
     one = MC.generator()                                                # ONE generator carried on (funnel.py): the second table gets other days
     assert L.monte(table(net), one)["number"] == L.monte(table(net))["number"] and (MC.reshuffle(net, n, one)[0] != a[0]).any()
     assert L.monte(table(np.abs(net) + 70))["number"] == 1.0 and L.monte(table(-np.abs(net)))["number"] == 0.0
+
+
+def box(day) -> dict:
+    """Box data by hand (lines.py docstring): the default variant's net on every session day, one trade on a day with a net."""
+    day = np.asarray(day, float)
+    return {"trades": day[day != 0], "day": day, "n": (day != 0).astype(float), "open": np.zeros(len(day))}
+
+
+def test_the_best_1_percent_of_days_is_a_count_of_whole_days():
+    share = R.need("4.6")["best_share"]
+    assert share == 0.01 == R.need("3.8")["best_share"]
+    assert [L._best_count(share, d) for d in (0, 1, 3, 99, 100, 101, 200, 201, 300, 315, 700, 942, 1000)] == [1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 7, 10, 10]
+    assert all(L._best_count(share, 100 * k) == k for k in range(1, 60))        # (0.01 * 700 = 7.000000000000001 is 7 days, not 8)
+    assert L._best_count(0.5, 5) == 3 and L._best_count(1.0, 5) == 5 and L._best_count(0.0, 5) == 1      # rounded UP to a whole day; never fewer than 1
+
+
+def test_line_3_8_the_default_variant_without_its_best_days():
+    assert L.BOX[-1] is L.box_best_days and [f(box([100.0, -50.0, 80.0]))["line"] for f in L.BOX] == [f"3.{i}" for i in range(3, 9)]
+    carried = [-10.0] * 150 + [5000.0] + [10.0] * 149                           # 300 days, net $4,990: ONE huge day carries it
+    r = L.box_best_days(box(carried))                                           # 1 % of 300 days = 3: $5,000 and two of the $10 days
+    assert r["line"] == "3.8" and r["passed"] is False and (r["number"], r["need"], r["count"], r["days"]) == (-30.0, 0, 3, 300)
+    assert r["best"] == [5000.0, 10.0, 10.0] and r["total"] == 4990.0
+    assert r["text"] == "3.8 FAIL default variant: -$30 without its best 1 % of days (3 of 300 session days; they made $5,020 of $4,990; need above $0)"
+    steady = [30.0, -10.0] * 150                                                # 300 days, net $3,000, no day stands out
+    r = L.box_best_days(box(steady))
+    assert r["passed"] is True and (r["number"], r["count"], r["best"], r["total"]) == (2910.0, 3, [30.0, 30.0, 30.0], 3000.0)
+    assert r["text"] == "3.8 PASS default variant: $2,910 without its best 1 % of days (3 of 300 session days; they made $90 of $3,000; need above $0)"
+    assert L.box_best_days(box([100.0, 50.0, -50.0]))["passed"] is False        # fewer than 100 days: still 1 day out; exactly $0 is not above $0
+    assert L.box_best_days(box([100.0, 50.0, -49.0]))["number"] == 1.0 and L.box_best_days(box([100.0, 50.0, -49.0]))["passed"] is True
+    r = L.box_best_days(box([900.0]))                                           # one day: nothing is left
+    assert r["passed"] is False and r["number"] == 0.0 and "1 of 1 session day;" in r["text"]
+    r = L.box_best_days(box([]))                                                # no session day at all
+    assert r["passed"] is False and (r["number"], r["best"], r["count"], r["days"]) == (0.0, [], 0, 0) and "(0 of 0 session days;" in r["text"]
+    assert L.box_best_days(box([-5.0, -10.0, -20.0]))["number"] == -30.0       # all days lose: the "best" one is the smallest loss
+    assert L.box_best_days(box([40.0] * 101))["count"] == 2 and L.box_best_days(box([40.0] * 101))["number"] == 99 * 40.0     # 101 days: 1.01 -> 2 days out
+    assert L.box_best_days(box(steady[:200] + [0.0] * 100))["count"] == 3       # a day without a trade is a session day: it counts
+
+
+def test_line_4_6_without_its_best_days_by_the_share():
+    days = [[-10.0] * 157 + [3000.0, 2000.0, 1000.0, 500.0] + [20.0] * 154]     # 315 days (the test stretch): 1 % = 3.15 -> 4 days out
+    r = L.best_days(table(days))
+    assert r["line"] == "4.6" and (r["count"], r["days"], r["best"], r["total"]) == (4, 315, [3000.0, 2000.0, 1000.0, 500.0], 8010.0)
+    assert r["passed"] is True and (r["number"], r["need"]) == (1510.0, 0)
+    assert r["text"] == "4.6 PASS $1,510 without its best 1 % of days (4 of 315 session days; they made $6,500 of $8,010, average variant; need above $0)"
+    r = L.best_days(table([[-30.0] * 157 + [3000.0, 2000.0, 1000.0, 500.0] + [20.0] * 154]))     # the same four days carry a losing rest
+    assert r["passed"] is False and r["number"] == -1630.0 and r["text"].startswith("4.6 FAIL -$1,630 without its best 1 % of days (4 of 315 session days; ")
+    two = table([[300.0, 0.0, 0.0, 0.0], [-100.0, 40.0, 40.0, 40.0]])           # the AVERAGE variant's days: $100, $20, $20, $20; 4 days -> 1 out
+    r = L.best_days(two)
+    assert (r["best"], r["number"], r["count"], r["days"]) == ([100.0], 60.0, 1, 4) and "(1 of 4 session days; they made $100 of $160, average variant;" in r["text"]
+    assert L.best_days(table([[100.0, 50.0, -50.0]]))["passed"] is False        # exactly $0 is left: not above $0
+    assert L.best_days(table([[900.0]]))["number"] == 0.0 and L.best_days(table([[900.0]]))["passed"] is False      # one day: nothing is left
+    assert L.best_days(table(np.zeros((0, 5))))["passed"] is False              # no variant: nothing made
 
 
 # ================================================================ (d) the command, and the seal

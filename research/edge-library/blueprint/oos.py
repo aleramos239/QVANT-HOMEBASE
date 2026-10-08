@@ -31,8 +31,8 @@ and a second `test` is refused: the days are read once. That is said in the erro
 A FAIL IS FINAL: NOT PROVEN is not re-tuned and re-tested on this period (BLUEPRINT.md phase 4).
 
 4.1  Jul-Dec 2025 and Jan-Sep 2026 each: the average variant above $0        4.5  the average variant above $0 with worse fills
-4.2  the whole test: the average AND the middle (median) variant above $0    4.6  ... and without its 3 best days
-4.3  the average trade at the market's floor                                 4.7  ... and in 90 % of 1,000 reshuffles of whole days
+4.2  the whole test: the average AND the middle (median) variant above $0    4.6  ... and without its best 1 % of days
+4.3  the average trade at the market's floor                                 4.7  ... and in 80 % of 1,000 reshuffles of whole days
 4.4  above 95 % of the random tables (strict)
 TEST ONLY: BP_TEST_RUN (records.TEST_RUN) may name `test_days`, `test_out`, `ledger`, `workers`, `tester`: a read of a few
 named days into a temp folder that COUNTS, for the tests. It is refused for the app's own idea folder.

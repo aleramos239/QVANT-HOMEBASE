@@ -3,8 +3,9 @@ touched": what the idea is gets saved, with one hash over all of it, and from he
 
     3.1  Saved: the rule, the variant list, the default variant (the middle survivor, never the best), the control and the costs
     3.2  From here nothing changes. A change is a new version: back to phase 2, and its earlier unseen read is marked as used
-    3.3-3.7  the default variant ON ITS OWN on the build days: profit factor, net / worst drawdown, Sharpe, its drawdown at 1
-         micro under the account's limit, Monte Carlo (lines.BOX on tables.box). One of them not met = refused: nothing is frozen
+    3.3-3.8  the default variant ON ITS OWN on the build days: profit factor, net / worst drawdown, Sharpe, its drawdown at 1
+         micro under the account's limit, Monte Carlo, its net without its best 1 % of days (lines.BOX on tables.box).
+         One of them not met = refused: nothing is frozen
     SHOWN, never a pass line: the default variant's prop odds on the build days for the account of line 3.6 (propodds.look)
 
 REFUSED unless, for the idea on file:
@@ -24,7 +25,7 @@ THEN (start() refuses, run() works):
        home          market, session, bar, table, the unit's store key and folder, its one filter, its uid
        variants      THE VARIANT LIST: the variants judged on build (dead and duplicate ones out), in table order
        default, survivors, default_rule
-       box           lines 3.3-3.7 as they were read on the default variant (each line's number, need and words)
+       box           lines 3.3-3.8 as they were read on the default variant (each line's number, need and words)
        prop          its prop odds on the build days as they were shown (propodds.look): a number on the card, no line reads it
        build         avg_trade: line 2.2's number of the frozen variants on the build days (line 4.8 holds the test against it)
        costs         normal (the engine's defaults) and worse (as run: with or without the late cancel)
@@ -41,7 +42,7 @@ THE WORSE-FILLS PASS IS A TAPE PASS over 45 months. The connector stops a comman
 command line waits LOCK_WAIT seconds by itself and then answers job.state = running (jobs.py); `bp.py lock <name>` again
 picks that job's wait back up (cli.py).
 TEST ONLY: BP_TEST_RUN (records.TEST_RUN) hands the pass its named build days, exit cells, store folder and ledger; with
-`box: "said"` lines 3.3-3.7 are read and kept but do not refuse (the default of a 3-day table cannot pass on its own), and
+`box: "said"` lines 3.3-3.8 are read and kept but do not refuse (the default of a 3-day table cannot pass on its own), and
 `build_avg_trade` is kept as the build's average trade (a hand-made test table is held against it: line 4.8).
 NOT A FREEZE: early() = the lock of the owner's EARLY LOOK at the test days (oos.py), for an idea that is not frozen: what is
 there, marked early_look, with the build lines that failed. It is never the idea's lock.json, and the idea stays unfrozen.
@@ -284,7 +285,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
     if default is None:
         raise J.Refuse(f"no variant of {u['addr']} makes money on build AND on build with worse fills ({RUN.worse_words(wst['meta']['worse'])}): there is "
                        "no default variant, so there is nothing to freeze (line 3.1)")
-    said, box = box == "said", [fn(T.box(st, u, default, days)) for fn in L.BOX]      # lines 3.3-3.7: the default variant on its own
+    said, box = box == "said", [fn(T.box(st, u, default, days)) for fn in L.BOX]      # lines 3.3-3.8: the default variant on its own
     if not said and not all(x["passed"] for x in box):          # (said: TEST ONLY, module docstring)
         raise J.Refuse(f"the default variant {default} of {u['addr']} does not meet every line read on it before the freeze -- "
                        + "; ".join(x["text"] for x in box if not x["passed"])

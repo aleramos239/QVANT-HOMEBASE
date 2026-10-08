@@ -12,7 +12,7 @@
  },
  "test": {
   "line": "4.7",
-  "need": 0.9
+  "need": 0.8
  },
  "eval_card": {
   "line": "6.4",

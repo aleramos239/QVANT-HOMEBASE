@@ -2,7 +2,9 @@
 
 1. rules.json IS BLUEPRINT.md section 2: every numbered line of its tables (0.1 .. 6.8) has an entry, no entry is extra, the
    order is the law's, and each entry's `text` / `number` are that line's cells word for word. The prose quotes of the other
-   templates occur in BLUEPRINT.md too (line wrapping aside).
+   templates occur in BLUEPRINT.md too (line wrapping aside). AHEAD = the four lines the strategy pipeline changed
+   (owner 2026-10-07): in force in rules.json, not yet in BLUEPRINT.md's text. Exactly these four may differ, and each MUST
+   still differ: when the law's text is updated the list is emptied, and the word-for-word lock holds for every line again.
 2. The machine numbers say what the quoted words say: every number under `need` is found in the entry's own quote, and `op`
    follows the wording ("above" / "more than" = >, "or more" / "at least" = >=, "at most" / "or less" = <=).
 3. The exit menu and the costs ARE the engine's: rules.exit_menu(root) == l2sim.menu(root) cell for cell (and the cells of
@@ -30,6 +32,7 @@ FLAT = " ".join(MD.split())                                  # the law without i
 MARKETS = ("NQ", "ES", "GC")
 WORDS = {0: ("no ",), 1: ("one ",), 3: ("three ",), 0.5: ("half",)}      # numbers the law writes as words
 OP_WORDS = {">": ("above", "more than"), ">=": ("or more", "at least"), "<=": ("at most", "or less")}
+AHEAD = ("3.7", "3.8", "4.6", "4.7")      # rules.json is ahead of BLUEPRINT.md's text on these (module docstring, 1): 80 % of the runs, the best 1 % of days
 
 
 def law_lines() -> dict:
@@ -63,13 +66,18 @@ def said(v, quote: str) -> bool:
 def test_every_numbered_line_of_section_2_has_its_entry_and_its_quote():
     law = law_lines()
     assert {k[0] for k in law} == set("0123456") and len(law) >= 42, f"section 2 was not parsed: {sorted(law)}"
-    assert R.lines() == list(law), f"rules.json and BLUEPRINT.md section 2 differ: {sorted(set(R.lines()) ^ set(law))}"
-    for k, cells in law.items():
-        e = R.rule(k)
+    assert [k for k in R.lines() if k not in AHEAD or k in law] == list(law) and R.lines() == sorted(R.lines()) and set(AHEAD) <= set(R.lines()), \
+        f"rules.json and BLUEPRINT.md section 2 differ: {sorted(set(R.lines()) ^ set(law))}"
+    for k in R.lines():
+        e, cells = R.rule(k), law.get(k)
+        assert set(e) <= {"text", "number", "need", "op", "also", "note"}, f"{k}: unknown keys {sorted(e)}"
+        if k in AHEAD:                                          # ahead of the law's text: it must still differ (or be new), else it is no longer ahead
+            assert cells is None or [e["text"], e.get("number")] != (cells + [None])[:2], f"{k}: BLUEPRINT.md says what rules.json says now: take it out of AHEAD"
+            continue
         assert e["text"] == cells[0] and e["text"] in MD, f"{k}: text is not the law's: {e['text']!r}"
         assert e.get("number") == (cells[1] if len(cells) > 1 else None), f"{k}: number is not the law's: {e.get('number')!r}"
         assert "number" not in e or e["number"] in MD
-        assert set(e) <= {"text", "number", "need", "op", "also", "note"}, f"{k}: unknown keys {sorted(e)}"
+    assert [k for k in AHEAD if k not in law] == ["3.8"] and all(R.rule(k)["text"] == law[k][0] for k in ("3.7", "4.7"))     # the new line; 3.7 and 4.7 changed their number only
     for bad in ("9.9", "_about", "2"):
         try:
             R.rule(bad)
@@ -115,7 +123,7 @@ def test_the_lines_the_build_reads():
     assert R.need("2.4") == 200 and R.meets("2.4", 200) and not R.meets("2.4", 199.9)
     assert R.need("2.5") == 0.5 and R.meets("2.5", 0.5) and not R.meets("2.5", 0.49)
     assert R.need("2.6") == 0 and R.meets("2.6", 0.5) and not R.meets("2.6", 0.0)
-    assert R.need("2.8") == 0.75 and R.meets("2.8", 0.75) and R.need("4.7") == 0.90 and R.need("2.9") == 5
+    assert R.need("2.8") == 0.75 and R.meets("2.8", 0.75) and R.need("4.7") == 0.80 == R.need("3.7") and R.need("2.9") == 5
     assert R.rule("2.1")["also"]["profitable_above"] == 0 == R.rule("4.7")["also"]["above"] and R.rule("2.8")["also"]["lines"] == ["2.1", "2.2"]
     for line, key in (("2.3", 6), ("2.2", "CL")):               # a round after the fifth, a market without a floor: refused
         try:
@@ -180,7 +188,7 @@ def test_control_montecarlo_ranges_sizes_idea():
     assert (ctl["seeds"], ctl["draws"], ctl["kind"]) == (10, 4000, "c1") == (J.THIN_BELOW, J.DRAWS, "c1") and J.DRAWS % J.BLOCK == 0
     assert said(ctl["seeds"], ctl["text"]) and "4,000 draws" in ctl["text"]
     assert mc["runs"] == 1000 and "1,000" in mc["text"] and mc["replace"] is True and mc["same_days_for_every_variant"] is True
-    assert isinstance(mc["seed"], int) and (mc["build"], mc["test"]) == ({"line": "2.8", "need": 0.75}, {"line": "4.7", "need": 0.90})
+    assert isinstance(mc["seed"], int) and (mc["build"], mc["test"]) == ({"line": "2.8", "need": 0.75}, {"line": "4.7", "need": 0.80})
     assert (rg["build"]["start"], rg["build"]["end"]) == ("2021-09-22", "2025-06-30") == tuple(d.isoformat() for d in S.BP_BUILD)   # the engine's switch
     assert rg["test"]["start"] == "2025-07-01"
     assert rg["test"]["end"] == "latest" and [(p["start"], p["end"]) for p in rg["test"]["parts"]] == [("2025-07-01", "2025-12-31"), ("2026-01-01", "latest")]
@@ -200,7 +208,7 @@ def test_control_montecarlo_ranges_sizes_idea():
 
 def test_templates_that_disagree_do_not_load():
     t = {n: R.template(n) for n in R.NAMES}
-    assert R.check(t) == [] and set(R.NAMES) == {p.stem for p in R.T.glob("*.json")}
+    assert R.check(t) == [] and set(R.NAMES) == {p.stem for p in R.T.glob("*.json")} - {"pipeline"}      # (pipeline.json: the pipeline's own, pipe_rules.py)
 
     def broken(name, path, value, word):
         c = copy.deepcopy(t)
