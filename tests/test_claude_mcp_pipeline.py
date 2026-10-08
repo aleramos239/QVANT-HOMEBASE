@@ -31,7 +31,7 @@ from homebase.claude_mcp.client import Client, ToolError
 REPO = Path(__file__).resolve().parent.parent
 TOOLKIT = REPO / "research" / "edge-library"
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)                      # the real one, whatever HOME says
-REAL_PYTHON = REAL_HOME / "ONYX TRADING" / ".venv" / "bin" / "python"   # the research engine's (blueprint_tools.toolkit)
+REAL_PYTHON = REPO / ".venv-research" / "bin" / "python"                # the research engine's (blueprint_tools.toolkit)
 NAME = "fvg_open"
 CARD = {"name": NAME, "why": "Late buyers chase the first gap after the open.", "loser": "Traders who fade the first move.",   # the toolkit's own example
         "source": "owner", "market": "NQ", "session": "nyam", "sides": "both", "sides_why": "",
@@ -746,7 +746,7 @@ def test_the_server_runs_a_pipeline_tool_over_stdio(fake, proot):
 # ---------------------------------------------------------------- the REAL toolkit: the commands that need no engine run
 
 @pytest.mark.skipif(not REAL_PYTHON.is_file() or not (TOOLKIT / "bp.py").is_file(),
-                    reason="needs the research toolkit and its Python (~/ONYX TRADING/.venv)")
+                    reason="needs the research toolkit and its Python (<repo>/.venv-research)")
 def test_the_real_toolkit_answers_these_tools_as_the_fake_does(monkeypatch, proot, home, ideas_root, drafts_dir):
     """Each tool end to end against research/edge-library/bp.py, in the temp pipeline root: a card in, the same card
     refused under another name, a card that is not whole, the queue, one idea, pause / resume, a yes that is refused,

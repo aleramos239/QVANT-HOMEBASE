@@ -417,7 +417,7 @@ def test_every_chat_is_told_their_order_and_that_the_lab_groups_fill_themselves(
 def test_the_toolkit_is_where_the_plan_says_and_both_paths_can_be_moved(monkeypatch, home, tmp_path):
     monkeypatch.delenv(blueprint_tools.ENV_BP, raising=False)
     monkeypatch.delenv(blueprint_tools.ENV_PYTHON, raising=False)
-    assert blueprint_tools.toolkit() == (str(home / "ONYX TRADING" / ".venv" / "bin" / "python"),
+    assert blueprint_tools.toolkit() == (str(paths.repo_root() / ".venv-research" / "bin" / "python"),
                                          str(paths.repo_root() / "research" / "edge-library" / "bp.py"))
     monkeypatch.setenv("HOMEBASE_BP", str(tmp_path / "x" / "bp.py"))
     monkeypatch.setenv("HOMEBASE_BP_PYTHON", "/opt/py/bin/python3")

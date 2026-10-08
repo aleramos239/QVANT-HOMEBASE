@@ -29,7 +29,9 @@ the toolkit plan's section 8 (research/edge-library/out/blueprint/toolkit_plan.m
     trades) or it does not apply (2.7 without a filter): the line's own text says which.
 
 The toolkit is looked for at <repo>/research/edge-library/bp.py and run with
-$HOME/ONYX TRADING/.venv/bin/python; HOMEBASE_BP and HOMEBASE_BP_PYTHON move them. A toolkit that is not
+<repo>/.venv-research/bin/python (the research Python: numpy, pandas, pyarrow, pytest as pinned in
+research/requirements-research.txt; inside the repo since 2026-10-08, when the folder that held it in the home
+directory was deleted); HOMEBASE_BP and HOMEBASE_BP_PYTHON move them. A toolkit that is not
 there is a plain error. The child runs in the toolkit's own folder and never gets this server's stdin (the
 JSON-RPC stream): it reads the JSON handed to it, or nothing.
 
@@ -79,7 +81,7 @@ class Refused(ToolError):
 
 def toolkit() -> tuple[str, str]:
     """(python, bp.py) as configured -- whether or not they are there."""
-    return (os.environ.get(ENV_PYTHON) or str(Path.home() / "ONYX TRADING" / ".venv" / "bin" / "python"),
+    return (os.environ.get(ENV_PYTHON) or str(paths.repo_root() / ".venv-research" / "bin" / "python"),
             os.environ.get(ENV_BP) or str(paths.repo_root() / "research" / "edge-library" / "bp.py"))
 
 

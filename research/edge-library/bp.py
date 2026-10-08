@@ -3,7 +3,7 @@
 Plan: out/blueprint/toolkit_plan.md. Code: blueprint/ (rules.py = every threshold as data, lines.py = one function per line,
 runner.py = the one store runner of the build range, checks.py = the code check, records.py = the idea's record: its card,
 its rounds, its status; jobs.py = long commands as jobs).
-Python: "$HOME/ONYX TRADING/.venv/bin/python". The command line is the connector's: <command> <the idea's name> --opt=value.
+Python: <repo>/.venv-research/bin/python (python3 -m venv .venv-research && pip install -r research/requirements-research.txt). The command line is the connector's: <command> <the idea's name> --opt=value.
 
   bp.py card <name> --spec=- | --spec=FILE                           PHASE 0: lines 0.1-0.7 off the idea card ({"name", "card",
                                                                      "run"} as JSON); saved in the app, with its Lab draft

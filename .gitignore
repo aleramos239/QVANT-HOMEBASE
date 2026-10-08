@@ -5,6 +5,7 @@ homebase/config.json
 
 # python
 .venv/
+.venv-research/
 __pycache__/
 *.pyc
 .pytest_cache/
