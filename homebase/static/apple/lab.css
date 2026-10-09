@@ -89,6 +89,8 @@ html.hb-apple #labLib.hb-side { width: var(--a-side-w); margin: 0 !important; ov
   -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-pane-shadow); transition: transform 320ms var(--a-spring), opacity 200ms ease; }
 html.hb-apple #labLib.hb-side > .in { width: auto; height: 100%; padding: 0 0 6px; overflow: hidden auto; overscroll-behavior: contain; }
 html.hb-apple #labLib .lb-top { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 0 10px; padding: 0 2px 0 4.5px; }
+/* the six views (two rows of three) sit in this bar: it grows to hold them and starts below the traffic lights */
+html.hb-apple #labLib .lb-top:has(> .lb-segs) { display: block; height: auto; margin: 36px 10px 8px; padding: 0; }
 html.hb-apple #labLib .lb-top b { font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-pane-3); }
 html.hb-apple #labLib .lb-top .hb-ib { display: block; width: 22px; height: 19px; padding: 0; border: 0; border-radius: 5px; background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
   -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }
