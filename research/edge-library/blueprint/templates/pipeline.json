@@ -6,7 +6,10 @@
   "region_boxes": 25,
   "region_trades": 200,
   "floor_part": 1.0,
-  "without_best_trades": 0.05
+  "without_best_trades": 0.05,
+  "months_won": 0.7,
+  "best_month_share": 0.1,
+  "losing_day_streak": 8
  },
  "card": {
   "ways": [

@@ -458,7 +458,7 @@ def test_variant_rows_are_the_picked_box_floor_trades_sides_and_the_shown_market
                 "n_short": n_short, "sides": sides}
 
     rows = G.variant_rows(box(), [3.0, -4.0])
-    assert [x["line"] for x in rows] == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7"] and marks(rows) == [True, True, True, None, None]
+    assert [x["line"] for x in rows] == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7", "P3.8", "P3.9", "P3.10"] and marks(rows) == [True, True, True, None, None, None, None, None]
     assert rows[0]["text"] == "P3.2 PASS average trade $70 (need $70)" and rows[0]["number"] == 70.0 and rows[0]["need"] == 70.0
     assert rows[1]["text"] == "P3.3 PASS 200 trades (need 200)" and rows[1]["number"] == 200.0 and rows[1]["need"] == P.need("variant", "region_trades")
     assert rows[3]["passed"] is None and rows[3]["need"] is None                         # the other markets: shown, never False
@@ -534,3 +534,39 @@ def test_variant_rows_p3_7_the_box_must_make_money_without_its_best_5_percent_of
     assert rows["P3.7"]["passed"] is None and "no list of the box's trades" in rows["P3.7"]["text"]
     with_number = dict(json.loads(FILE.read_text(encoding="utf-8")))
     assert with_number["variant"]["without_best_trades"] == 0.05
+
+
+def test_variant_rows_p3_8_to_p3_10_the_box_must_be_consistent_month_by_month_and_day_by_day():
+    """Owner-approved 2026-10-09. On the build days of the five ideas that were read on the unseen days, the two that held (months won 76 % and 73 %,
+    best month 8 % of the profit, longest losing-day streak 8 and 6) were separated from the three that lost (55-65 %, 12-15 %, 10-14): the thresholds
+    were chosen after seeing that outcome, so they are a hypothesis (pipeline.json variant.months_won / best_month_share / losing_day_streak)."""
+    import datetime as dt
+    day = lambda y, m, d: dt.date(y, m, d).toordinal()                       # noqa: E731
+    one = sided(boxes(1, 1, 80.0, 200))
+    dates, nets = [], []                                                      # 10 months of 20 trading days, one trade a day; months 3, 6 and 9 lose $50 a day, the others win $100
+    for mth in range(10):
+        for dd in range(20):
+            dates.append(day(2024, 1 + mth, 1 + dd)); nets.append(100.0 if mth not in (2, 5, 8) else -50.0)
+    box = {**one, "trade_date": np.array(dates, np.int64), "trade_net": np.array(nets)}
+    got = G.variant_rows(box, [])
+    rows = {r["line"]: r for r in got}
+    assert [r["line"] for r in got][-3:] == ["P3.8", "P3.9", "P3.10"]
+    assert (rows["P3.8"]["passed"], rows["P3.8"]["number"], rows["P3.8"]["need"]) == (True, 0.7, 0.7)                       # exactly 70 % of the months won: enough
+    assert rows["P3.8"]["text"] == "P3.8 PASS 7 of 10 months won, 70 % (need 70 % or more)"
+    assert rows["P3.9"]["passed"] is False and abs(rows["P3.9"]["number"] - 1 / 7) < 1e-9 and rows["P3.9"]["need"] == 0.1  # the best month is 1/7 of the winning months' profit
+    assert rows["P3.9"]["text"].startswith("P3.9 FAIL best month 2024-01 is 14.29 % of the profit of the months won (need 10 % or less)")
+    assert (rows["P3.10"]["passed"], rows["P3.10"]["number"], rows["P3.10"]["need"]) == (False, 20, 8)                       # a whole losing month in a row: 20 losing days
+    assert rows["P3.10"]["text"] == "P3.10 FAIL longest run of losing days: 20 (need 8 or fewer)"
+    few = {**box, "trade_net": np.array([-50.0 if (i // 20) in (1, 2, 4, 5, 8) else 100.0 for i in range(200)])}            # 5 losing months of 10
+    assert {r["line"]: r for r in G.variant_rows(few, [])}["P3.8"]["passed"] is False
+    flat = {**one, "trade_date": np.array([day(2024, 1 + i % 10, 1 + i // 10) for i in range(200)], np.int64), "trade_net": np.full(200, 10.0)}
+    r = {x["line"]: x for x in G.variant_rows(flat, [])}                                                                    # 10 equal months: the best is exactly 10 %: enough
+    assert r["P3.8"]["passed"] is True and r["P3.9"]["passed"] is True and r["P3.10"]["passed"] is True and r["P3.10"]["number"] == 0
+    none = {x["line"]: x for x in G.variant_rows(one, [])}                                                                  # no list of trades: the rows do not apply
+    assert all(none[k]["passed"] is None for k in ("P3.8", "P3.9", "P3.10")) and "no list of the box's trades" in none["P3.8"]["text"]
+    streak = np.array([-1.0 if 5 <= i % 30 < 15 else 10.0 for i in range(60)])                                             # 10 losing days in a row each 30
+    sbox = {**one, "trade_date": np.arange(day(2024, 1, 1), day(2024, 1, 1) + 60, dtype=np.int64), "trade_net": streak}
+    r = {x["line"]: x for x in G.variant_rows(sbox, [])}
+    assert r["P3.10"]["passed"] is False and r["P3.10"]["number"] == 10
+    v = dict(json.loads(FILE.read_text(encoding="utf-8")))["variant"]
+    assert (v["months_won"], v["best_month_share"], v["losing_day_streak"]) == (0.7, 0.1, 8)

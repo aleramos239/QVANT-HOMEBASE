@@ -219,7 +219,33 @@ def variant_rows(b: dict, others: list) -> list:
     return [L._row("P3.2", at is not None and bool(at >= floor), at, floor, f"no trade (need an average trade of {_fig(floor, (floor,), '$')})" if at is None else
                    f"average trade {_fig(at, (floor,), '$')} (need {_fig(floor, (floor,), '$')})"),
             L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-            side, markets, _without_best(b, need["without_best_trades"])]
+            side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]
+
+
+def _consistent(b: dict, need: dict) -> list:
+    """Rows P3.8-P3.10: how steadily the box made its money (owner, 2026-10-09; a hypothesis: the thresholds were read off the five ideas whose unseen days were
+    known). P3.8 the share of months with a profit, P3.9 the best month as a share of the profit of the months won, P3.10 the longest run of losing days.
+    Needs `trade_date` (ordinals) and `trade_net` of the box's trades; without them the rows do not apply."""
+    d, t = b.get("trade_date"), b.get("trade_net")
+    if d is None or t is None or not len(t):
+        return [L._row(k, None, None, n, "no list of the box's trades: the row does not apply") for k, n in (("P3.8", need["months_won"]), ("P3.9", need["best_month_share"]), ("P3.10", need["losing_day_streak"]))]
+    d, t = np.asarray(d, np.int64), np.asarray(t, np.float64)
+    months = (d - 719163).astype("datetime64[D]").astype("datetime64[M]")
+    um, inv = np.unique(months, return_inverse=True)
+    mn = np.bincount(inv, weights=t, minlength=len(um))
+    won, pos = int((mn > 0).sum()), float(mn[mn > 0].sum())
+    share_won = round(won / len(um), 9)
+    best = round(float(mn.max()) / pos, 9) if pos > 0 else 1.0
+    ud, di = np.unique(d, return_inverse=True)
+    day = np.bincount(di, weights=t, minlength=len(ud))
+    run = longest = 0
+    for v in day:
+        run = run + 1 if v < 0 else 0
+        longest = max(longest, run)
+    return [L._row("P3.8", bool(share_won >= need["months_won"]), share_won, need["months_won"], f"{won} of {len(um)} months won, {L._pc(share_won)} (need {L._pc(need['months_won'])} or more)"),
+            L._row("P3.9", bool(best <= need["best_month_share"]), best, need["best_month_share"],
+                   f"best month {str(um[int(np.argmax(mn))])} is {L._pc(best)} of the profit of the months won (need {L._pc(need['best_month_share'])} or less)"),
+            L._row("P3.10", bool(longest <= need["losing_day_streak"]), longest, need["losing_day_streak"], f"longest run of losing days: {longest} (need {need['losing_day_streak']} or fewer)")]
 
 
 def _without_best(b: dict, share: float) -> dict:
