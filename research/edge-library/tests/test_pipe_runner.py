@@ -156,6 +156,36 @@ def test_a_failed_stage_stops_the_idea_with_its_failed_row(root, monkeypatch):
     assert "no pipeline idea" in TI.refused(lambda: PR.step("nobody", ctx(root)), "nobody")
 
 
+def test_a_no_to_the_picked_box_runs_the_next_box_from_stage_2_and_stops_only_when_none_is_left(root, monkeypatch):
+    """The owner, 2026-10-09: a good idea is not lost to the box that was picked. A failed card with `next_box` asks pipe_stages.next_box for the
+    next box that holds; with one, the idea stays running at stage 1 with one more try, and the failed box's cards are kept aside."""
+    idea(root, "one")
+    pick = lambda cell: {"sub": "one_a5", "bar": "5", "way": 0, "filter": None, "cell": cell}  # noqa: E731
+    proof = {"passed": False, "next_box": True, "lines": [{"line": "P4.1", "passed": False, "text": "P4.1 FAIL 61 % of the runs"}], "text": "the proof fails for the picked box"}
+    calls = fakes(monkeypatch, {("one", 1): {"tries": 2, "picked": pick("c1")}, ("one", 4): proof})
+    asked, left = [], [{**card(1, "one"), "tries": 3, "picked": pick("c2"), "text": "THE PICK: box c2"}]
+    monkeypatch.setattr(PR, "next_fn", lambda: lambda name, c, failed: (asked.append((name, failed["stage"])) or (left.pop(0) if left else None)))
+    for _ in range(5):
+        st = PR.step("one", ctx(root))                                                         # stages 0, 1, 2, 3 and the first box's stage 4
+    assert asked == [("one", 4)] and (st["status"], st["stage"], st["tries"], st["picked"]["cell"]) == ("running", 1, 3, "c2")
+    assert st.get("stopped_at") is None and not st.get("why") and PS.order(root) == ["one"]
+    assert sorted(PS.stages("one", root)) == [0, 1] and PS.stages("one", root)[1]["picked"]["cell"] == "c2"
+    (old,) = [p for p in (root / "p" / "one" / "stages_old").iterdir()]
+    assert sorted(p.name for p in old.iterdir()) == ["2.json", "3.json", "4.json"]            # the first box's cards, stage 4's refusal among them: none deleted
+    assert log(root)[-1][2:4] == ["4", "NEXT"] and "NEXT BOX: c2 of one_a5 (try 3)" in log(root)[-1][5]
+    for _ in range(3):
+        st = PR.step("one", ctx(root))                                                         # stages 2, 3 and 4 again: no box is left now
+    assert calls[-3:] == [("one", 2), ("one", 3), ("one", 4)] and asked == [("one", 4), ("one", 4)]
+    assert (st["status"], st["stopped_at"], st["why"]) == ("stopped", 4, "P4.1 FAIL 61 % of the runs") and log(root)[-1][3] == "FAIL"
+    idea(root, "two")                                                                          # a refusal that is NOT the box's never asks for another box
+    fakes(monkeypatch, {("two", 2): {"passed": False, "next_box": True, "code_problem": True, "text": "a wrong price"},
+                        ("two", 3): {"passed": False, "lines": [{"line": "P3.7", "passed": False, "text": "P3.7 FAIL"}]}})
+    monkeypatch.setattr(PR, "next_fn", lambda: lambda *a: (_ for _ in ()).throw(AssertionError("another box was asked for")))
+    for _ in range(3):
+        st = PR.step("two", ctx(root))
+    assert (st["status"], st["stopped_at"]) == ("code_problem", 2)
+
+
 def test_a_stage_1_stop_is_known_by_the_heat_map_that_came_closest_not_the_first():
     """`pipe list` shows a state's why: at stage 1 the first failed row of the FIRST map hid a much better second map (12.5 % shown, 68 % on file)."""
     row = lambda sub, line, ok, n, text: {"sub": sub, "line": line, "passed": ok, "number": n, "text": f"{sub}: {text}"}  # noqa: E731

@@ -9,6 +9,11 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      none, else the last finished + 1. The state says "running" BEFORE the stage is called:
                                      a runner killed in a stage leaves "running" with the last FINISHED stage, and the next
                                      step runs the same stage again from its start (the toolkit skips what is on disk).
+                                       the card says passed False and `next_box`, and pipe_stages.next_box hands a box that was
+                                       not tried yet (variant mode: the proof or the lock said no to the PICKED BOX)
+                                                                   -> still "running": the failed box's cards (stage 2 on) go to
+                                                                      stages_old, stage 1's card is the next box's, stage = 1,
+                                                                      tries + 1, the log says NEXT; the stages run again from 2
                                        the card says passed False  -> "stopped" ("code_problem" when the card says so),
                                                                       stopped_at = the stage, why = its first failed row
                                                                       (stage 1: of the heat map that came closest: _why)
@@ -30,7 +35,7 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      sleeps idle_s and looks again. once=True: everything that can run now, then back (it
                                      never sleeps: a pause, a wait or an empty queue ends it). One idea's failure never ends
                                      the loop. A line a finished stage on runner.log:
-                                         UTC <tab> name <tab> stage <tab> PASS | FAIL | STOP | CODE | WAIT <tab> seconds <tab> text
+                                         UTC <tab> name <tab> stage <tab> PASS | FAIL | NEXT | STOP | CODE | WAIT <tab> seconds <tab> text
   start(root=None) -> {"pid", "already"}
                                      the runner as a DETACHED process (`bp.py pipe _loop --root=...`, its own session, its
                                      words to runner.out, its pid in runner.pid) -- or already: True when one is working
@@ -90,6 +95,7 @@ from . import rules as R
 from . import runner as RUN
 
 LAST = 7                                            # the owner's look: the last stage the runner runs
+PICK, BOX_FROM = 1, 2                               # stage 1 holds the pick; a next box runs the stages from the machine check on again
 NAMES = ("idea card", "raw heat map", "machine check", "indicators", "proof", "pick one box and lock", "unseen days", "the owner's look")
 LOCK, LOG, OUT, PID = "runner.lock", "runner.log", "runner.out", "runner.pid"
 WINDOW_WORDS = "nothing heavy starts"               # runner.may_start's refusal (tests/test_pipe_runner.py holds the two together)
@@ -104,6 +110,11 @@ RANDOM = "4.4"                                      # the read's line on the ran
 def stage_fn(n: int):
     """The function of stage n (pipe_stages.stage<n>), loaded when it is asked for."""
     return getattr(importlib.import_module(f"{__package__}.pipe_stages"), f"stage{int(n)}")
+
+
+def next_fn():
+    """pipe_stages.next_box, loaded when it is asked for (as a stage is): (name, ctx, the failed card) -> stage 1's card with the next box, or None."""
+    return importlib.import_module(f"{__package__}.pipe_stages").next_box
 
 
 def _utc() -> str:
@@ -167,7 +178,13 @@ def _step(name, ctx: dict, progress=None) -> tuple:
             raise TypeError(f"stage {n} returned {type(card).__name__}, not a stage card")
         PS.write_stage(name, n, card, root)         # (a card that cannot be saved is a code problem too)
         change = {"stage": n, **{k: card[k] for k in ("tries", "picked") if card.get(k) is not None}}
-        if card.get("passed") is False:
+        again = next_fn()(name, ctx, card) if card.get("passed") is False and card.get("next_box") and not card.get("code_problem") else None
+        if again is not None:                       # the stage said no to the PICKED BOX, and a box that holds every line is left: it is the pick now
+            PS.shelve(name, BOX_FROM, root)         # (the cards of the box that did not hold are kept aside, this one among them)
+            PS.write_stage(name, PICK, again, root)
+            word, change = "NEXT", {"stage": PICK, "tries": again["tries"], "picked": again["picked"]}
+            card = {**card, "text": f"{_first(card.get('text'))} -- NEXT BOX: {again['picked']['cell']} of {again['picked']['sub']} (try {again['tries']})"}
+        elif card.get("passed") is False:
             bad = _why(card)
             word = "CODE" if card.get("code_problem") else "FAIL"
             change.update(status="code_problem" if card.get("code_problem") else "stopped", stopped_at=n, why=bad or _first(card.get("text")))

@@ -33,6 +33,8 @@ every card ever added. It stores what it is given and reads it back: it checks n
                                                         why, picked None; tries 0) and its name goes last in the queue (order.jsonl, not the
                                                         inbox). Refused while it is running, awaits the owner or is in the book. The card,
                                                         the stores (runs/), the ledger and seen.jsonl are not touched
+    shelve(name, since, root=None) -> count             the stage cards of stage `since` and later go to stages_old/<UTC stamp>/ (never deleted):
+                                                        the next box of an idea runs its stages again (pipe_stages.next_box)
     stages(name, root=None) -> {n: card}                every stage card on file, by stage number
     order(root=None) -> [names]                         the queue: the ideas whose status is queued or running, the inbox's
                                                         first, then by the time they were added
@@ -275,6 +277,29 @@ def clear_owner_pick(name, root=None) -> bool:
     return False
 
 
+def _aside(d: Path, cards: list, now: str) -> int:
+    """Move these stage cards of an idea to stages_old/<UTC stamp>/ (never deleted; two sets in one second keep both) -> how many."""
+    if not cards:
+        return 0
+    stamp = dt.datetime.fromisoformat(now).astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    to, k = d / "stages_old" / stamp, 1
+    while to.exists():
+        k += 1
+        to = d / "stages_old" / f"{stamp}-{k}"
+    to.mkdir(parents=True)
+    for p in cards:
+        os.replace(p, to / p.name)
+    return len(cards)
+
+
+def shelve(name, since: int, root=None) -> int:
+    """The stage cards of stage `since` and later go to stages_old/<UTC stamp>/ (never deleted) -> how many. The pipeline's NEXT BOX: the cards
+    of the box that did not hold are kept aside, and the stages after the pick run again for the next one (pipe_stages.next_box)."""
+    d = _dir(name, root)
+    with _locked(d):
+        return _aside(d, sorted(p for p in (d / "stages").glob("*.json") if p.stem.isdigit() and int(p.stem) >= int(since)), _now())
+
+
 def reset(name, root=None) -> dict:
     """The idea starts again from stage 0 (module docstring) -> its state."""
     r, d = _at(root), _dir(name, root)
@@ -284,16 +309,8 @@ def reset(name, root=None) -> dict:
                "book": "is in the book"}.get(st.get("status"))
         if why:
             raise J.Refuse(f"{name} {why}: an idea is run again only after it stopped (or was refused); nothing was moved")
-        now, cards = _now(), sorted(p for p in (d / "stages").glob("*") if p.is_file())
-        if cards:
-            stamp = dt.datetime.fromisoformat(now).astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            to, k = d / "stages_old" / stamp, 1
-            while to.exists():                       # two re-runs in one second keep both sets
-                k += 1
-                to = d / "stages_old" / f"{stamp}-{k}"
-            to.mkdir(parents=True)
-            for p in cards:
-                os.replace(p, to / p.name)
+        now = _now()
+        _aside(d, sorted(p for p in (d / "stages").glob("*") if p.is_file()), now)
         st = {**st, "status": "queued", "stage": None, "stopped_at": None, "why": None, "tries": 0, "picked": None, "name": name, "updated_utc": now}
         _write(d / "state.json", st)
     with _log(r / ORDER) as (f, text):

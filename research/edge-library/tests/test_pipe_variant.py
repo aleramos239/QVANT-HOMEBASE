@@ -58,6 +58,7 @@ TINY = {"days": TI.DAYS, "cells": TI.CELLS, "workers": 1, "draws": 200}
 CTX = {"root": ROOT, "tiny": TINY}
 _DONE: dict = {}
 BOX_ROWS, HOLDING = ST._box_rows, ST._holding            # the real readings of a box (qualify() cans ST._box_rows for the stages)
+REAL_NEED = PR.need
 
 
 @pytest.fixture(autouse=True)
@@ -303,6 +304,70 @@ def test_boxes_that_never_traded_are_named_with_their_setting_value(world):
     assert ST._left_out({"_st": st, "_u": {}}) is None
 
 
+# ================================================================ 2b. the next box (the owner, 2026-10-09)
+
+def test_the_boxes_are_tried_from_the_middle_outward_and_the_best_one_last():
+    rows = [{"id": f"c{i}", "net": float(i), "vi": 0, "xi": i} for i in range(5)]
+    odds = {"c0": (0.10, 0.0), "c1": (0.20, 0.0), "c2": (0.30, 0.0), "c3": (0.40, 0.0), "c4": (0.50, 0.0)}
+    assert ST._outward(rows, odds) == ["c2", "c1", "c3", "c0", "c4"]                           # the middle, the next lower, the next higher, ... the best one last
+    assert ST._outward(rows, {k: odds[k] for k in ("c0", "c1", "c2", "c3")}) == ["c1", "c0", "c2", "c3"]      # an even count: the lower middle first
+    assert ST._outward(rows, {"c3": odds["c3"]}) == ["c3"] and ST._outward(rows, {}) == []
+    assert all(ST._pick(rows, {k: odds[k] for k in ks}) == ST._outward(rows, {k: odds[k] for k in ks})[0] for ks in (tuple(odds), ("c0", "c4"), ("c1",)))
+
+
+def test_stage_1_keeps_every_box_that_holds_as_a_candidate_in_the_order_they_are_tried(world):
+    zero()
+    qualify(world, five=3, one=2)
+    c = TS.whole(ST.stage1(NAME, CTX), 1)
+    assert c["picked"]["sub"] == A5 and c["tried"] == [] and [(x["sub"], x["bar"]) for x in c["candidates"]] == [(A5, "5")] * 3 + [(A1, "1")] * 2
+    assert c["candidates"][0]["cell"] == c["picked"]["cell"] and len({(x["sub"], x["cell"]) for x in c["candidates"]}) == 5
+    assert all(set(x) == {"sub", "bar", "way", "cell", "account", "eval", "payout", "size", "payout_size"} for x in c["candidates"])
+    assert "the next of 4 more boxes that hold every line is tried, each one more try of the random bar" in c["text"]
+    with world.context() as m:
+        m.setattr(PR, "need", lambda *k: 2 if k == ("variant", "box_tries") else REAL_NEED(*k))
+        assert "the next of 1 more box that holds every line is tried" in ST.stage1(NAME, CTX)["text"]         # the file's cap on the boxes an idea may try
+    qualify(world, five=1, one=0)
+    c = ST.stage1(NAME, CTX)
+    assert len(c["candidates"]) == 1 and "more box" not in c["text"]
+    PS.set_owner_pick(NAME, c["picked"]["cell"], "the owner's own", ROOT)
+    assert ST.stage1(NAME, CTX)["candidates"] == []                                            # the owner named the box: no other is tried
+    PS.clear_owner_pick(NAME, ROOT)
+
+
+def test_the_next_box_becomes_the_pick_with_one_more_try_until_none_is_left(world):
+    """A stage that says no to the PICKED BOX (stage 4's proof, stage 5's worse fills) does not stop the idea while a box that holds is left."""
+    zero()
+    qualify(world, five=2, one=1)
+    one = ran(1, ST.stage1(NAME, CTX))
+    a, b, c3 = one["candidates"]
+    failed = {"stage": 4, "passed": False, "next_box": True, "lines": [{"line": "P4.1", "passed": False, "text": "P4.1 FAIL 61 % of the runs"}], "text": "the proof fails"}
+    two = ST.next_box(NAME, CTX, failed)
+    assert two["picked"] == {"sub": b["sub"], "bar": b["bar"], "way": b["way"], "filter": None, "cell": b["cell"], "variant": two["box"]["variant"]}
+    assert two["tries"] == one["tries"] + 1 and two["passed"] is True and two["candidates"] == one["candidates"]
+    assert two["tried"] == [{"sub": a["sub"], "cell": a["cell"], "stage": 4, "why": "P4.1 FAIL 61 % of the runs"}]
+    assert two["box"]["cell"] == b["cell"] and two["box"]["odds"]["account"] == "the-account" and two["box"]["holding"] == 2
+    assert f"THE PICK: box {b['cell']} of {b['sub']} -- box 2 of at most 3" in two["text"] and f"{a['cell']} did not hold at stage 4 (P4.1 FAIL 61 % of the runs)" in two["text"]
+    assert f"at the random bar of try {one['tries'] + 1}" in two["text"] and two["text"].startswith(one["text"].split(" THE PICK:")[0])
+    ran(1, two)
+    three = ST.next_box(NAME, CTX, {**failed, "stage": 5, "lines": [], "text": "the picked box does not make money with worse fills\nmore"})
+    assert (three["picked"]["sub"], three["picked"]["cell"], three["tries"]) == (c3["sub"], c3["cell"], one["tries"] + 2)      # the other map's box, after this map's
+    assert three["tried"][-1] == {"sub": b["sub"], "cell": b["cell"], "stage": 5, "why": "the picked box does not make money with worse fills"}
+    ran(1, three)
+    assert ST.next_box(NAME, CTX, failed) is None                                              # none is left: the stage's own verdict stands
+    ran(1, one)
+    with world.context() as m:
+        m.setattr(PR, "need", lambda *k: 1 if k == ("variant", "box_tries") else REAL_NEED(*k))
+        assert ST.next_box(NAME, CTX, failed) is None                                          # the cap: one box an idea
+    ran(1, {**one, "picked": {**one["picked"], "by": "owner"}})
+    assert ST.next_box(NAME, CTX, failed) is None                                              # the owner's pick is not replaced
+    ran(1, {k: v for k, v in one.items() if k != "candidates"})
+    assert ST.next_box(NAME, CTX, failed) is None                                              # a stage 1 from before this existed
+    with world.context() as m:
+        m.setattr(PR, "mode", lambda: "map")
+        ran(1, one)
+        assert ST.next_box(NAME, CTX, failed) is None                                          # map mode has no picked box
+
+
 # ================================================================ 3. stage 2
 
 def test_stage_2_reads_the_price_check_of_the_picked_box(world):
@@ -367,6 +432,7 @@ def test_stage_4_runs_no_pool_when_the_picked_boxs_reshuffled_runs_fail(world):
     c = TS.whole(ST.stage4(NAME, CTX), 4)
     assert (c["passed"], c["result"], c["picked"], c["tries"]) == (False, "fail", t3["picked"], 2) and TS.lines(c) == ["P4.1"] and calls == []
     assert f"the reshuffled runs of the picked box {t3['picked']['cell']} do not hold" in c["text"]
+    assert c["next_box"] is True                                                               # the box's verdict, not the idea's: another box that holds may be tried
     (b,), = shuffled
     assert b["ids"] == [t3["picked"]["cell"]] and c["rules"]["mode"] == "variant" and c["rules"]["random_bar"] == PR.random_bar(2)
 
@@ -472,11 +538,13 @@ def test_stage_5_the_locks_refusal_of_the_picked_box_is_the_verdict(world):
     world.setattr(ST, "_box", lambda u, kw, pick=None: seen.append(pick) or (None, []))
     c = TS.whole(ST.stage5(name, CTX), 5)
     assert (c["passed"], c["result"], c["lines"]) == (False, "no box", []) and seen == [cell] and "code_problem" not in c
+    assert c["next_box"] is True
     assert f"the picked box {cell} of {name}_a5 does not make money with normal AND with worse fills" in c["text"]
     six = [TF.row(k, k != "3.4") for k in TF.BOXL]
     world.setattr(ST, "_box", lambda u, kw, pick=None: (cell, six))
     c = TS.whole(ST.stage5(name, CTX), 5)
     assert (c["result"], c["default"]) == ("box failed", cell) and f"the picked box {cell} of {name}_a5 does not meet 3.4" in c["text"]
+    assert c["next_box"] is True and "no second box" not in c["text"]
 
 
 def test_stage_5_a_locked_idea_says_the_picked_box(world):
