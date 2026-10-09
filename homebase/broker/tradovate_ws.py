@@ -336,12 +336,18 @@ class TradovateWS:
 
     async def modify_order(self, order_id: int, *, order_type: str, qty: int,
                            price: Optional[float] = None,
-                           stop_price: Optional[float] = None) -> dict:
+                           stop_price: Optional[float] = None,
+                           time_in_force: Optional[str] = None) -> dict:
         """Re-price a resting order in place (keeps its id). orderType AND
         orderQty are required even when unchanged (learned live in the
-        copier: without them Tradovate answers 'missing required field')."""
+        copier: without them Tradovate answers 'missing required field').
+        timeInForce is the order's OWN: left out, Tradovate reads it as Day and
+        refuses the modify of a GTC order ('Cannot modify time-in-force', live
+        2026-10-09). The answer is {"commandId"}: the verdict is pushed after it."""
         body: dict = {"orderId": order_id, "orderType": order_type,
                       "orderQty": int(qty)}
+        if time_in_force:
+            body["timeInForce"] = time_in_force
         if price is not None:
             body["price"] = price
         if stop_price is not None:

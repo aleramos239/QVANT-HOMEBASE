@@ -27,6 +27,11 @@ from .tradovate_auth import TradovateAuth
 from .tradovate_ws import TradovateWS, _ws_is_closed
 
 _SEEN_FILL_CAP = 20000
+# A command's pushed reports (commandReport.commandStatus). Refused = it changed nothing;
+# in flight = no verdict yet; any other status (AtExecution, Replaced, ...) = taken.
+_COMMAND_REFUSED = ("ExecutionRejected", "RiskRejected")
+_COMMAND_IN_FLIGHT = ("RiskPassed", "Pending", "PendingExecution", "OnHold")
+_COMMANDS_KEPT = 256
 _SEED_BACKOFF_CAP = 60.0    # seconds between cache-seed retries, at most
 
 # --- token renewal vs the 9:30 fire (2026-09-27) ------------------------------------------
@@ -233,6 +238,10 @@ class TradovateAdapter(BrokerAdapter):
         self._contracts: dict[int, str] = {}     # contractId -> symbol name
         self._orders: dict[int, dict] = {}        # orderId -> order entity
         self._order_versions: dict[int, dict] = {}  # orderId -> latest orderVersion
+        self._order_prev: dict[int, dict] = {}      # orderId -> the version before it (a refused modify goes back)
+        self._command_reports: dict[int, list] = {}  # commandId -> [(commandStatus, text)], newest _COMMANDS_KEPT
+        self._command_waiters: dict[int, asyncio.Future] = {}
+        self._command_wait_s = 3.0                  # how long a modify waits for the broker's verdict
         self._order_symbols: dict[int, str] = {}  # orderId -> contract, orders WE placed
         self._order_filled: dict[int, int] = {}   # orderId -> contracts filled (fills seen)
         self._seen_fills: set[int] = set()
@@ -473,9 +482,11 @@ class TradovateAdapter(BrokerAdapter):
         for o in sync.get("orders", []) or []:
             if "id" in o:
                 self._orders[o["id"]] = o
+        refused = {r.get("commandId") for r in sync.get("commandReports", []) or []
+                   if r.get("commandStatus") in _COMMAND_REFUSED}
         for ov in sync.get("orderVersions", []) or []:
             oid = ov.get("orderId")
-            if oid is not None:
+            if oid is not None and ov.get("id") not in refused:   # a refused modify changed nothing
                 self._order_versions[oid] = ov
         for f in sync.get("fills", []) or []:
             if "id" in f and self._mark_seen(f["id"]):   # historical fills must not be copied
@@ -577,9 +588,17 @@ class TradovateAdapter(BrokerAdapter):
         elif et == "orderVersion":
             oid = ent.get("orderId")
             if oid is not None:
-                self._order_versions[oid] = {**self._order_versions.get(oid, {}), **ent}
-                self._name_order_contract(et, oid, self._order_versions[oid])
-                self._notify_mine(et, self._order_versions[oid])
+                old = self._order_versions.get(oid, {})
+                if ent.get("id") is not None and old.get("id") not in (None, ent.get("id")):
+                    self._order_prev[oid] = old
+                new = {**old, **ent}
+                if new.get("timeInForce") is None and old.get("timeInForce"):
+                    new["timeInForce"] = old["timeInForce"]   # a modify's version carries none
+                self._order_versions[oid] = new
+                self._name_order_contract(et, oid, new)
+                self._notify_mine(et, new)
+        elif et == "commandReport":
+            self._on_command_report(ent)
         elif et == "fill":
             fid = ent.get("id")
             if fid is None or not self._mark_seen(fid):
@@ -595,6 +614,53 @@ class TradovateAdapter(BrokerAdapter):
         elif et == "cashBalance":
             if self._ingest_cash(ent):
                 self._notify_mine(et, self._cash)
+
+    def _on_command_report(self, ent: dict) -> None:
+        """The broker's verdict on a command (a modify answers with only its commandId).
+        A refused modify also pushed an orderVersion with the price it never took: the
+        order goes back to the version before it, so the chart shows where it rests."""
+        cid, status = ent.get("commandId"), ent.get("commandStatus")
+        if cid is None or not status:
+            return
+        self._command_reports.setdefault(cid, []).append(
+            (status, str(ent.get("text") or ent.get("rejectReason") or "").strip()))
+        while len(self._command_reports) > _COMMANDS_KEPT:
+            self._command_reports.pop(next(iter(self._command_reports)))
+        if status in _COMMAND_REFUSED:
+            for oid, ov in list(self._order_versions.items()):
+                if ov.get("id") == cid and oid in self._order_prev:
+                    self._order_versions[oid] = self._order_prev.pop(oid)
+                    self._notify_mine("orderVersion", self._order_versions[oid])
+        fut = self._command_waiters.get(cid)
+        if fut is not None and not fut.done():
+            fut.set_result(None)
+
+    def _command_verdict(self, cid: int) -> Optional[tuple[bool, str]]:
+        """(taken?, the broker's words) once a final report is in, else None."""
+        for status, text in self._command_reports.get(cid, ()):
+            if status in _COMMAND_REFUSED:
+                return False, text or status
+            if status not in _COMMAND_IN_FLIGHT:
+                return True, ""
+        return None
+
+    async def _await_command(self, cid: int) -> Optional[tuple[bool, str]]:
+        """Wait (at most _command_wait_s) for the verdict on `cid`; None = the broker
+        never said. A report that landed before the answer was read is already here."""
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._command_wait_s
+        while (v := self._command_verdict(cid)) is None:
+            left = deadline - loop.time()
+            if left <= 0:
+                return None
+            fut = self._command_waiters[cid] = loop.create_future()
+            try:
+                await asyncio.wait_for(fut, left)
+            except asyncio.TimeoutError:
+                return None
+            finally:
+                self._command_waiters.pop(cid, None)
+        return v
 
     def _owner(self, et: str, ent: dict):
         """The account an entity belongs to. orderVersion and fill pushes
@@ -1179,27 +1245,43 @@ class TradovateAdapter(BrokerAdapter):
                            price: Optional[float] = None,
                            stop_price: Optional[float] = None,
                            qty: Optional[int] = None) -> OrderResult:
-        """Re-price one resting order. The qty sent is the order's OWN, from
-        its pushed version, so a bracket is never resized by accident; `qty`
-        is only the fallback. A 200 carrying a failure text is a reject."""
+        """Re-price one resting order. The qty and time-in-force sent are the
+        order's OWN, from its pushed version, so a bracket is never resized by
+        accident; `qty` is only the fallback. A 200 carrying a failure text is a
+        reject, and so is a refusal pushed AFTER the 200: the answer is only a
+        commandId, so ok means the broker said the order moved (2026-10-09: a
+        stop dragged to breakeven was refused 2 ms after a 200 and reported ok)."""
         if self._ws is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
             oid = int(order_id)
         except (TypeError, ValueError):
             return OrderResult(ok=False, error=f"bad order id {order_id!r}")
-        q = (self._order_versions.get(oid) or {}).get("orderQty") or qty
+        ov = self._order_versions.get(oid) or {}
+        q = ov.get("orderQty") or qty
         if not q:
             return OrderResult(ok=False, error="order qty unknown — not modifying")
         try:
             d = await self._ws.modify_order(oid, order_type=order_type, qty=int(q),
-                                            price=price, stop_price=stop_price)
+                                            price=price, stop_price=stop_price,
+                                            time_in_force=ov.get("timeInForce"))
         except Exception as e:
             return OrderResult(ok=False, error=str(e))
         raw = d if isinstance(d, dict) else {}
         reason = _reject_reason(raw) or str(raw.get("errorText") or "").strip()
         if reason:
             return OrderResult(ok=False, error=reason, raw=raw)
+        cid = raw.get("commandId")
+        if cid is not None:
+            verdict = await self._await_command(cid)
+            if verdict is None:
+                seen = [st for st, _ in self._command_reports.get(cid, ())]
+                _log(f"{self.account_id}: modify {oid}: no final report (saw {seen})")
+                return OrderResult(ok=False, raw=raw, error="the move was not confirmed by the "
+                                   "broker — the order may still be at its old price")
+            if not verdict[0]:
+                return OrderResult(ok=False, error=f"the broker refused the move: {verdict[1]}",
+                                   raw=raw)
         return OrderResult(ok=True, order_id=str(oid), raw=raw)
 
     async def flatten_all(self) -> OrderResult:

@@ -209,6 +209,102 @@ def test_modify_reports_a_logical_reject(tmp_path):
     assert not r.ok and "Too late" in r.error
 
 
+# --- 2026-10-09: a stop dragged to breakeven on a chart was never moved -------------
+# PAAPEX...0021, NQZ6. The stop was GTC; both modifies went out without timeInForce and
+# Tradovate answered the request with a commandId (status 200), then pushed
+# commandReport ExecutionRejected "Cannot modify time-in-force" 2 ms later. The adapter
+# read the 200 as done, so the desk journalled ok and the stop stayed 44 points away.
+def push(ad, entity_type, entity):
+    ad._on_ws_event({"e": "props", "d": {"entityType": entity_type, "entity": entity}})
+
+
+def modify_acked(ad_box, reports=(), version=None, late=False):
+    """A fake wire whose modify answers {"commandId": 676172850292} like Tradovate, with
+    the pushes that follow it: before the answer is read, or (late) just after."""
+    def answer(endpoint, query, body):
+        if endpoint != "order/modifyorder":
+            return None
+        ad = ad_box[0]
+
+        def pushes():
+            if version is not None:
+                push(ad, "orderVersion", version)
+            for r in reports:
+                push(ad, "commandReport", {"commandId": 676172850292, **r})
+        if late:
+            asyncio.get_running_loop().call_later(0.02, pushes)
+        else:
+            pushes()
+        return {"commandId": 676172850292}
+    return answer
+
+
+GTC_STOP = {"id": 676172850286, "orderId": 676172850286, "orderQty": 1, "orderType": "Stop",
+            "stopPrice": 31112.5, "timeInForce": "GTC"}
+REJECTED = [{"commandStatus": "RiskPassed"},
+            {"commandStatus": "ExecutionRejected", "rejectReason": "Unsupported",
+             "text": "Cannot modify time-in-force"}]
+
+
+def mk_modify(tmp_path, **kw):
+    box = []
+    ad = mkadapter(tmp_path, modify_acked(box, **kw))
+    box.append(ad)
+    ad._order_symbols[676172850286] = "NQZ6"         # an order WE placed
+    ad._order_versions[676172850286] = dict(GTC_STOP)
+    ad._command_wait_s = 0.3
+    return ad
+
+
+def test_modify_sends_the_orders_own_time_in_force(tmp_path):
+    ad = mk_modify(tmp_path, reports=[{"commandStatus": "RiskPassed"}, {"commandStatus": "AtExecution"}])
+    r = run(ad.modify_order("676172850286", "Stop", stop_price=31156.5))
+    assert r.ok
+    body = json.loads(ad._ws.ws.sent[-1].split("\n", 3)[3])
+    assert body == {"orderId": 676172850286, "orderType": "Stop", "orderQty": 1,
+                    "stopPrice": 31156.5, "timeInForce": "GTC"}
+
+
+def test_a_version_push_without_time_in_force_keeps_the_known_one(tmp_path):
+    ad = mk_modify(tmp_path)
+    push(ad, "orderVersion", {"id": 676172850299, "orderId": 676172850286, "orderQty": 1,
+                              "orderType": "Stop", "stopPrice": 31150.0, "timeInForce": None})
+    assert ad._order_versions[676172850286]["timeInForce"] == "GTC"
+
+
+def test_modify_rejected_after_the_ack_is_a_reject(tmp_path):
+    for late in (False, True):                       # the report can land either side of the answer
+        ad = mk_modify(tmp_path, reports=REJECTED, late=late)
+        r = run(ad.modify_order("676172850286", "Stop", stop_price=31156.5))
+        assert not r.ok and "Cannot modify time-in-force" in r.error, late
+
+
+def test_a_rejected_modify_leaves_the_order_at_its_old_price(tmp_path):
+    moved = {"id": 676172850292, "orderId": 676172850286, "orderQty": 1,
+             "orderType": "Stop", "stopPrice": 31156.5}
+    ad = mk_modify(tmp_path, reports=REJECTED, version=moved)
+    r = run(ad.modify_order("676172850286", "Stop", stop_price=31156.5))
+    assert not r.ok
+    assert ad._order_versions[676172850286]["stopPrice"] == 31112.5
+
+
+def test_a_reconnect_does_not_bring_back_a_refused_price(tmp_path):
+    """The sync after a reconnect lists every version, the refused ones too."""
+    ad = mkadapter(tmp_path, tradovate_like)
+    ad._ingest_sync({"orderVersions": [GTC_STOP, {"id": 676172850292, "orderId": 676172850286,
+                                                  "orderQty": 1, "orderType": "Stop",
+                                                  "stopPrice": 31156.5}],
+                     "commandReports": [{"commandId": 676172850292, **r} for r in REJECTED],
+                     "accounts": [{"id": 66121477, "name": "APEX"}]})
+    assert ad._order_versions[676172850286]["stopPrice"] == 31112.5
+
+
+def test_modify_the_broker_never_answers_is_not_a_success(tmp_path):
+    ad = mk_modify(tmp_path, reports=[{"commandStatus": "RiskPassed"}])
+    r = run(ad.modify_order("676172850286", "Stop", stop_price=31156.5))
+    assert not r.ok and "not confirmed" in r.error
+
+
 def test_engine_and_adapter_move_the_brackets_on_the_wire(tmp_path):
     """Real engine + real adapter, fake wire. Today's 9:30 replayed: the buy
     stop 30231.5 fills 1 tick worse at 30231.75 — on the wire the sell stop is
