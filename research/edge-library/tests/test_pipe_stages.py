@@ -231,13 +231,13 @@ def test_stage_0_saves_each_heat_maps_card_in_the_toolkit_and_nothing_of_the_pip
 
 
 def test_stage_0_fails_a_card_that_is_not_whole_by_its_line():
-    card = {**copy.deepcopy(CARD), "name": "pst_eve", "session": "eve"}                       # filed without the check (the store checks no card)
-    if "pst_eve" not in _DONE:
+    card = {**copy.deepcopy(CARD), "name": "pst_lunch", "session": "lunch"}                   # filed without the check (the store checks no card)
+    if "pst_lunch" not in _DONE:
         PS.add(card, None, ROOT, sig=PC.signature(card), family="orb")
-        _DONE["pst_eve"] = True
-    c = whole(ST.stage0("pst_eve", CTX), 0)
+        _DONE["pst_lunch"] = True
+    c = whole(ST.stage0("pst_lunch", CTX), 0)
     assert (c["passed"], c["result"], c["subs"]) == (False, "fail", []) and [x["line"] for x in c["lines"] if x["passed"] is False] == ["P0.2"]
-    assert "the evening session is not in this version" in c["text"] and not (ROOT / "ideas" / "pst_eve_a5").exists()
+    assert "session 'lunch'" in c["text"] and not (ROOT / "ideas" / "pst_lunch_a5").exists()
 
 
 def test_stage_0_fails_when_the_toolkit_does_not_take_a_heat_maps_card(world):

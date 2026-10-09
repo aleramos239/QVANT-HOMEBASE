@@ -368,6 +368,23 @@ def test_the_next_box_becomes_the_pick_with_one_more_try_until_none_is_left(worl
         assert ST.next_box(NAME, CTX, failed) is None                                          # map mode has no picked box
 
 
+def test_an_evening_card_runs_its_heat_maps_the_pick_and_the_machine_check(world):
+    """The evening session (18:00-23:59 ET, the evening before the trade date) is a session of the pipeline since 2026-10-09: a card may name it,
+    its heat maps run, a box is picked, and the machine check reads its trades inside the evening window."""
+    name = "pvt_eve"
+    card = {**copy.deepcopy(TS.CARD), "name": name, "session": "eve"}
+    rows, subs = PC.check(card)
+    assert all(x["passed"] for x in rows) and [s["bar"] for s in subs] == ["1", "5"] and "evening" in rows[1]["text"]
+    PS.add(card, subs, ROOT, sig=PC.signature(card), family=PC.family_of(card))
+    ran(0, ST.stage0(name, CTX), name)
+    qualify(world)
+    one = ran(1, TS.whole(ST.stage1(name, CTX), 1), name)
+    assert one["passed"] is True and one["picked"]["sub"] == f"{name}_a5" and one["box"]["trades"] >= 0
+    two = TS.whole(ST.stage2(name, CTX), 2)
+    assert two["passed"] is True and "code_problem" not in two, two["text"]
+    assert any(x["line"] == "1.1" and x["passed"] is True and "eve" in x["text"] for x in two["lines"]), [x["text"] for x in two["lines"]]
+
+
 # ================================================================ 3. stage 2
 
 def test_stage_2_reads_the_price_check_of_the_picked_box(world):

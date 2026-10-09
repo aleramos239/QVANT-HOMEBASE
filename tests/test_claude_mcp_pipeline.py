@@ -343,7 +343,7 @@ def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
     spec = pipeline_tools.SPECS[0]
     said, c = spec["description"], spec["inputSchema"]["properties"]["card"]
     for what in ("Call blueprint_blocks first: it lists the entry rules (families) with their settings, and a card uses only those",
-                 "ONE market (NQ, ES or GC)", "ONE session (asia, london, pre, nyam, mid or pm)", "sides (both, or long / short with sides_why)",
+                 "ONE market (NQ, ES or GC)", "ONE session (asia, london, pre, nyam, mid, pm or eve)", "sides (both, or long / short with sides_why)",
                  "1 to 3 ways to enter, each a family, ONE main setting of it and EXACTLY 3 values", "A card names NO indicator: none is tried.",
                  "The bars are always 1 and 5 minutes", "a card does not choose them",
                  "The same idea (the same market, session, sides and ways) cannot be added twice, not under another name either.",
@@ -353,7 +353,7 @@ def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
     assert c["required"] == ["name", "why", "loser", "source", "market", "session", "sides", "ways"] and c["additionalProperties"] is False
     p = c["properties"]
     assert list(p) == [*CARD, "ref"], "the card's fields, as the toolkit names them and in its order; ref (which paper / book / course) is optional, last"
-    assert p["market"]["enum"] == ["NQ", "ES", "GC"] and p["session"]["enum"] == ["asia", "london", "pre", "nyam", "mid", "pm"]
+    assert p["market"]["enum"] == ["NQ", "ES", "GC"] and p["session"]["enum"] == ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]
     assert p["sides"]["enum"] == ["both", "long", "short"] and p["source"]["enum"] == ["owner", "video", "claude", "wiki", "paper", "book", "course"]
     way, ind = p["ways"]["items"], p["indicators"]["items"]
     assert (p["ways"]["minItems"], p["ways"]["maxItems"]) == (1, 3) and (way["properties"]["values"]["minItems"], way["properties"]["values"]["maxItems"]) == (3, 3)
@@ -361,7 +361,7 @@ def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
     assert list(way["properties"]) == list(CARD["ways"][0]) and way["required"] == ["family", "main_setting", "values"]
     assert list(ind["properties"]) == list(CARD["indicators"][0]) == ind["required"]
     assert way["additionalProperties"] is False and ind["additionalProperties"] is False
-    assert not re.search(r"\beve\b|\bevening\b", "\n".join(texts(pipeline_tools.SPECS))), "the evening session is not in this version"
+    assert "eve (the evening before, 18:00-23:59 ET)" in p["session"]["description"]             # the evening session is the pipeline's since 2026-10-09
     assert set(c["required"]) <= set(CARD) <= set(p), "the card these tests send is in the format"
 
 

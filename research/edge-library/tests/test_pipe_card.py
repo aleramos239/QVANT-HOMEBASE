@@ -7,7 +7,7 @@
 3. NO CARD AT ALL is refused outright (judge.Refuse): no object, a field a card does not have, a name the heat maps cannot
    carry, a source that is not one of the four.
 4. EVERY LINE REFUSES WHAT IT HOLDS, as a failed row and no heat maps: P0.1 the reason and who loses · P0.2 the ways (count,
-   family, main setting, 3 values, market, session -- the evening session is not in this version --, bars -- and whatever
+   family, main setting, 3 values, market, session, bars -- and whatever
    the toolkit refuses, in the toolkit's words) ·
    P0.3 the indicators (count, block and side, a why each, no block twice, a block only where it runs) · P0.4 the sides.
 5. THE LIMITS ARE THE RULES FILE'S (templates/pipeline.json `card`), not the code's.
@@ -114,7 +114,7 @@ def test_a_whole_card_passes_its_four_lines_and_gives_two_heat_maps_a_way():
     assert [r["passed"] for r in rows] == [True] * 4 and all(r["text"].startswith(f"{r['line']} PASS ") for r in rows)
     assert rows[0]["need"] == {"sentences": 1, "words": 8} and rows[0]["number"] == 15
     assert rows[1]["number"] == 1 and rows[1]["need"] == {"ways": [1, 3], "values": 3, "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"],
-                                                          "sessions": ["asia", "london", "pre", "nyam", "mid", "pm"]}
+                                                          "sessions": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]}
     assert rows[2]["number"] == 1 and rows[2]["need"] == [0, 5] and "trend with" in rows[2]["text"]
     assert "fvg" in rows[1]["text"] and "min_gap" in rows[1]["text"] and "both sides" in rows[3]["text"]
     assert [(s["name"], s["way"], s["bar"]) for s in subs] == [("fvg_open_a1", 0, "1"), ("fvg_open_a5", 0, "5")]
@@ -305,9 +305,9 @@ def test_line_p0_2_the_family_runs_on_the_market_the_session_and_one_of_the_bars
     fails(card(market=None), "P0.2", "market None")
     fails(card(session="lunch"), "P0.2", "session 'lunch'", "nyam")
     fails(card(session="morning"), "P0.2", "session 'morning'")
-    t = fails(card(session="eve"), "P0.2", "session 'eve'", "the evening session is not in this version", "asia, london, pre, nyam, mid, pm")
-    assert "eve" in RM.DAY_PASSES and "eve" not in P.need("card", "sessions") and ", eve" not in t      # the engine has it; the pipeline's file leaves it out
-    for s in P.need("card", "sessions"):                                                    # each of the six is read as a session: no row says it is not one
+    assert "eve" in RM.DAY_PASSES and "eve" in P.need("card", "sessions")                  # the evening session is the pipeline's too (the owner, 2026-10-09)
+    assert "evening (18:00-23:59 ET" in PC.check(card(session="eve"))[0][1]["text"] and PC.check(card(session="eve"))[1]
+    for s in P.need("card", "sessions"):                                                    # each of the seven is read as a session: no row says it is not one
         assert s in RM.DAY_PASSES and not PC.check(card(session=s))[0][1]["text"].startswith("P0.2 FAIL session")
     fails(ways({"family": "lon_break", "main_setting": "min_rng_atr", "values": [0, 1, 2]}) | {"session": "mid"}, "P0.2", "way a", "lon_break", "midday", "nyam")
     family("fvg", markets=["ES", "GC"])
