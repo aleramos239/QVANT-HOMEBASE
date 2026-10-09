@@ -95,6 +95,8 @@ html.hb-apple .hb-side .tag-live, html.hb-apple .hb-side .tag { display: inline-
 html.hb-apple .hb-side .tag-live { color: var(--a-red-text); background: color-mix(in srgb, var(--a-red) 12%, transparent); }
 html.hb-apple .hb-side .sh { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 13px 10px 0; padding: 0 2px 0 4.5px;
   font-size: 11px; line-height: 14px; font-weight: 590; color: var(--a-label-pane-3); letter-spacing: normal; }
+/* a watched strategy (promoted from the Lab's Book): a record that places no orders */
+html.hb-apple .watch-why { margin: 0; padding: 0 10px; font-size: 13px; line-height: 19px; color: var(--a-label-2); max-width: 68ch; text-wrap: pretty; }
 html.hb-apple .hb-side .sh-t { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 19px; margin: 0 0 0 -2px; padding: 0 5px 0 2px; border: 0; border-radius: 5px;
   background: transparent; color: inherit; font: inherit; letter-spacing: inherit; cursor: default; transition: background-color 120ms ease, color 120ms ease; }
 html.hb-apple .hb-side .sh-t:hover { color: var(--a-label-pane-2); background: color-mix(in srgb, var(--a-label-pane-3) 12%, transparent); }

@@ -47,6 +47,9 @@ ENV_ROOT = "HOMEBASE_PIPELINE_ROOT"
 NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,33}$")        # a pipeline card's name, as the toolkit takes it (pipe_store.NAME)
 ACTIONS = ("start", "pause", "resume")                 # pipeline_control
 DECISIONS = ("approve", "refuse")                      # pipeline_decide
+EXEC_S = 600.0                                         # the longest `pipe executions` may take: its first call builds the 1-minute bars it prices from
+CURVE_KEYS = ("period", "cell", "idea", "market", "session", "bar", "side", "start", "end", "trades", "days", "net", "win_rate", "avg_trade",
+              "avg_win", "avg_loss", "profit_factor", "best_day", "worst_day", "max_drawdown", "curve")
 LOOK_S = 20.0                                          # the longest a page's look waits for the toolkit: it reads a few small files
 # The eight stages, for the Lab's Guide and for an idea's page: the toolkit's own numbers (pipe_runner.NAMES), a
 # plain sentence each. Written here once; the page reads them from the route and types none. Since 2026-10-08 (variant
@@ -385,6 +388,19 @@ class PipelineMixin:
                                   for x in c.get("lines") or [] if isinstance(x, dict)]})
         return {"card": {k: v for k, v in (r.get("card") or {}).items() if k != "subs"},      # (the toolkit's own heat-map specs stay there)
                 "state": _plain_row(rows([r.get("state") or {}])[0]), "stages": out}
+
+    def pipeline_curve(self, name) -> dict:
+        """Not a tool: an idea's picked box as a person looks at it (`pipe curve`): its equity curve by day -- [[date, the day's
+        net, the running total], ...] -- and the first numbers. It reads the trades the pipeline stored; nothing is run."""
+        r = self._pipe("curve", _name(name), timeout=self._pipe_look_s)
+        return {k: r.get(k) for k in CURVE_KEYS}
+
+    def pipeline_executions(self, name) -> dict:
+        """Not a tool: the picked box's trades as a finished run of the tester page (`pipe executions`), so Show-on-chart opens
+        every entry and exit. Written once per store: a later call answers the same run id. The first call prices the trades
+        from the 1-minute bars, which can take a couple of minutes when those bars are not cached yet."""
+        r = self._pipe("executions", _name(name), timeout=EXEC_S)
+        return {k: r.get(k) for k in ("run_id", "trades", "of", "start", "end", "period", "cell", "fresh")}
 
     def pipeline_parts(self) -> dict:
         """Not a tool: what the add-idea form is built from (parts() of ONE `bp.py blocks`). The block list changes only

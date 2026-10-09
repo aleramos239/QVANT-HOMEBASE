@@ -63,11 +63,12 @@
     // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
+    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Research results" for a watched strategy (it has no live trades)
     const linksBox = el('div', { class: 'hb-box hb-links-box', id: 'hbLinks' });
     const actsBox = el('div', { class: 'hb-acts', id: 'hbActs' });
     const stratPage = el('div', { class: 'hb-ipage', id: 'hbInspStrat' },
       el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Setup' }), setupBox),
-      el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Live results' }), figsBox),
+      el('section', { class: 'hb-isec' }, figsH, figsBox),
       el('section', { class: 'hb-isec hb-isec-links' }, el('div', { class: 'hb-isec-h', text: 'More' }), linksBox),
       actsBox);
     insp.append(deskPage, stratPage);
@@ -85,6 +86,16 @@
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
     const hm = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || '')); return m ? String(parseInt(m[1], 10)) + ':' + m[2] : ''; };
     const row = (k, v) => el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: k }), el('span', { class: 'hb-row-v', text: v }));
+
+    /* A WATCHED strategy (promoted from the Lab's Book; the page's WATCH list): what it is, read-only. It has no desk setup -- it places no orders. */
+    const watched = () => { try { return VIEW && VIEW.k === 'watch' ? ((WATCH || []).find((w) => w && w.name === VIEW.name) || {}) : null; } catch (_) { return null; } };
+    function setupWatch(w) {
+      const sess = { asia: 'Asia', london: 'London', pre: 'Pre-market', nyam: 'NY morning', mid: 'Midday', pm: 'Afternoon', eve: 'Evening' };
+      const rows = [row('Instrument', String(w.market || '—')), row('Time of day', sess[w.session] || String(w.session || '—')),
+        row('Bars', w.bar ? fmtN(w.bar) + ' min' : '—'), row('Entry rule', String(w.family || '—')), row('Stop and target', String(w.cell || '—')),
+        row('Tested on', w.start && w.end ? String(w.start) + ' to ' + String(w.end) : '—'), row('Orders', 'None: watch-only')];
+      setupBox.replaceChildren(...rows);
+    }
 
     function setup(name) {
       const st = status_(), s = st && st.strategies && st.strategies[name], c = s && s.cfg;
@@ -157,7 +168,9 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
-          setup(name);
+          const w = watched();
+          figsH.textContent = w ? 'Research results' : 'Live results';
+          if (w) setupWatch(w); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');
