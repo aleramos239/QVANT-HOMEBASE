@@ -345,12 +345,14 @@ def _early_on_file(d: Path) -> bool:
     return _early(_json(d / EARLY_LOOK / "test.json")) or _early(_json(d / "test.json"))
 
 
-def _passed(r: dict, phase: int) -> bool:
-    """Every line the law has for this phase is in the result and none failed (null = it does not apply)."""
+def _passed(r: dict, phase: int, waived=()) -> bool:
+    """Every line the law has for this phase is in the result and none failed (null = it does not apply). `waived` = lines the lock names
+    (lock.json `waived`: the pipeline's variant mode does not ask the build's whole-map lines): a False among them is read as 'not asked'."""
     marks: dict = {}
     for ln in r["lines"]:
         if isinstance(ln, dict) and str(ln.get("line", "")).startswith(f"{phase}."):
-            marks.setdefault(str(ln["line"]), []).append(ln.get("passed"))
+            ok = None if ln.get("passed") is False and str(ln["line"]) in waived else ln.get("passed")
+            marks.setdefault(str(ln["line"]), []).append(ok)
     said = [m for ms in marks.values() for m in ms]
     if any(m is not True and m is not None for m in said) or not all(k in marks for k in LINES[phase]):
         return False
@@ -370,7 +372,8 @@ def _build(d: Path) -> tuple:
 
 def _status(d: Path) -> str:
     n, build = _build(d)
-    if build is None or not _passed(build, 2):
+    waived = {str(x) for x in ((_json(d / "lock.json") or {}).get("waived") or []) if isinstance(x, str)}
+    if build is None or not _passed(build, 2, waived):
         return "shelved" if build is not None and n >= MAX_ROUNDS else "idea"
     test = _json(d / "test.json")
     if not _finished(test) or _early(test):         # an early look proves nothing and shelves nothing

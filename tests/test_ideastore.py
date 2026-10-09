@@ -376,6 +376,28 @@ def test_a_field_another_hand_keeps_in_idea_json_survives_but_never_one_read_off
     assert [x["line"] for x in got["lines"]] == [f"2.{i}" for i in range(1, 10)]
 
 
+def test_a_build_line_the_lock_waived_does_not_hold_an_idea_back(ideas_root):
+    """The pipeline's variant mode (2026-10-08) locks a picked box and waives the build's whole-map lines (lock.json `waived`): the app must read
+    those as 'not asked', or an idea that passed the unseen days stays 'idea' and the prop simulator refuses it (nq_noise_gx_mid_long, 2026-10-09)."""
+    ideastore.create(NAME)
+    build(1, fail=("2.2", "2.5"))
+    assert ideastore.status(NAME) == "idea"                                       # a failed whole-map line, nothing waived
+    ideastore.write_lock(NAME, {"name": NAME, "waived": ["2.2", "2.5"]})
+    assert ideastore.status(NAME) == "lead"                                       # waived by the lock: not asked
+    ideastore.write_lock(NAME, {"name": NAME, "waived": ["2.2"]})
+    assert ideastore.status(NAME) == "idea"                                       # 2.5 still fails: only the named lines are waived
+    ideastore.write_lock(NAME, {"name": NAME, "waived": ["2.2", "2.5", "2.3"]})
+    assert ideastore.status(NAME) == "lead"                                       # a waived line that passed changes nothing
+    ideastore.write_lock(NAME, {"name": NAME, "waived": ["9.9", "2.2", "2.5"]})
+    assert ideastore.status(NAME) == "lead"
+    other = "waive_other"
+    ideastore.create(other)
+    ideastore.write_reason(other, 1, "reason of round 1")
+    ideastore.write_build(other, 1, result("build", 2, fail=("2.1", "2.2", "2.5"), na=("2.7",)))
+    ideastore.write_lock(other, {"name": other, "waived": ["2.2", "2.5"]})
+    assert ideastore.status(other) == "idea"                                      # a failed line that is not waived (2.1) still holds it back
+
+
 def test_a_saved_file_that_does_not_read_counts_as_not_saved(ideas_root):
     ideastore.create(NAME)
     build(1)
