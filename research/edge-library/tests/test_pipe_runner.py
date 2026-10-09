@@ -156,6 +156,22 @@ def test_a_failed_stage_stops_the_idea_with_its_failed_row(root, monkeypatch):
     assert "no pipeline idea" in TI.refused(lambda: PR.step("nobody", ctx(root)), "nobody")
 
 
+def test_a_stage_1_stop_is_known_by_the_heat_map_that_came_closest_not_the_first():
+    """`pipe list` shows a state's why: at stage 1 the first failed row of the FIRST map hid a much better second map (12.5 % shown, 68 % on file)."""
+    row = lambda sub, line, ok, n, text: {"sub": sub, "line": line, "passed": ok, "number": n, "text": f"{sub}: {text}"}  # noqa: E731
+    two = {"stage": 1, "lines": [row("x_a1", "P1.1", False, 0.125, "P1.1 FAIL 12.5 %"), row("x_a1", "P1.2", False, 0, "P1.2 FAIL 0 boxes"),
+                                 row("x_a5", "P1.1", True, 0.68, "P1.1 PASS 68 %"), row("x_a5", "P1.2", False, 22, "P1.2 FAIL 22 boxes")]}
+    assert PR._why(two) == "x_a5: P1.2 FAIL 22 boxes"                                          # one failed row against two
+    tie = {"stage": 1, "lines": [row("x_a1", "P1.1", False, 0.30, "P1.1 FAIL 30 %"), row("x_a5", "P1.1", False, 0.47, "P1.1 FAIL 47 %")]}
+    assert PR._why(tie) == "x_a5: P1.1 FAIL 47 %"                                              # as many failed rows: the bigger share of boxes profitable
+    held = {"stage": 1, "lines": [row("x_a1", "P1.1", False, 0.3, "P1.1 FAIL"), row("x_a5", "P1.1", True, 0.6, "P1.1 PASS"), row("x_a5", "P1.2", True, 30, "P1.2 PASS"),
+                                  row("x_a5", "P1.3", False, 0, "P1.3 FAIL no box holds")]}
+    assert PR._why(held) == "x_a5: P1.3 FAIL no box holds"
+    assert PR._why({"stage": 3, "lines": [{"line": "P3.7", "passed": False, "text": "first"}, {"line": "P3.8", "passed": False, "text": "second"}]}) == "first"      # any other stage: its first failed row
+    assert PR._why({"stage": 1, "lines": [{"line": "P1.1", "passed": False, "text": "no sub on the row"}]}) == "no sub on the row"
+    assert PR._why({"stage": 1, "lines": []}) is None and PR._why({"stage": 2}) is None
+
+
 def test_every_stage_passed_the_idea_waits_for_the_owner(root, monkeypatch):
     idea(root, "fvg_open")
     calls = fakes(monkeypatch)
@@ -527,6 +543,35 @@ def test_the_commands_end_to_end(root, monkeypatch, cards, tmp_path):
     rc, out = TI._run(["pipe", "list", R])
     assert rc == 0 and out.splitlines()[-2:] == ["2 ideas: 1 book, 1 refused", "runner: not working · queue: not paused"]
     assert "fvg_open  fvg     refused      7      0  too few trades a week" in out.splitlines()[1:3]
+
+
+def test_the_luck_count_holds_the_reads_of_the_unseen_days_against_what_luck_alone_gives(root):
+    """The design's section 4: "strategies read on unseen days, and how many passed. A pass share near what luck alone gives means the book is not
+    to be trusted yet." An idea with no edge passes line 4.4 (above 95 % of the random tables) once in 20 reads: at most 0.05 a read."""
+    R = f"--root={root}"
+    rc, r = run(["pipe", "luck", R])
+    assert rc == 0 and (r["command"], r["ideas"], r["read"], r["passed"]) == ("pipe luck", 0, 0, 0) and r["text"] == \
+        "The luck count: 0 ideas with a verdict, 0 ideas read on the unseen days, 0 passed; luck alone gives at most 0."
+    read = lambda ok, beat: card(6, passed=ok, lines=[{"line": "4.1", "passed": ok, "number": 1.0}, {"line": "4.4", "passed": beat > 0.95, "number": beat}])  # noqa: E731
+    for name, status, six in (("won", "book", read(True, 0.9998)), ("lost", "stopped", read(False, 0.6875)), ("early", "stopped", None),
+                              ("refused6", "stopped", card(6, passed=False, lines=[], refused=True)), ("going", "running", read(True, 0.99))):
+        idea(root, name)
+        if six:
+            PS.write_stage(name, 6, six, root)
+        PS.set_state(name, root, status=status)
+    rc, r = run(["pipe", "luck", R])
+    assert rc == 0 and (r["ideas"], r["read"], r["passed"]) == (4, 2, 1)                       # a running idea has no verdict yet; a refused stage 6 is no read
+    assert r["alpha"] == pytest.approx(0.05) and r["by_luck"] == pytest.approx(0.1) and r["any_luck"] == pytest.approx(1 - 0.95 ** 2)
+    by = {x["name"]: x for x in r["reads"]}
+    assert set(by) == {"won", "lost"} and by["won"]["by_luck"] == pytest.approx(0.0004) and by["lost"]["by_luck"] is None
+    assert r["families"] == {"fvg": {"ideas": 4, "read": 2, "passed": 1}}
+    lines_ = r["text"].splitlines()
+    assert lines_[0] == "The luck count: 4 ideas with a verdict, 2 ideas read on the unseen days, 1 passed; luck alone gives at most 0.1."
+    assert "beats 95 % of the random tables (line 4.4) 1 time in 20" in lines_[1] and "at most 0.1 lucky passes" in lines_[1] and "a 9.75 % chance of one or more" in lines_[1]
+    assert lines_[2] == "  won: beat 99.98 % of the random tables on the unseen days -- by luck at most 0.04 % over the 2 reads"
+    assert lines_[3] == "By family (ideas, read, passed): fvg 4, 2, 1" and "not to be trusted yet" in lines_[4] and "drift check is not built" in lines_[4]
+    rc, out = TI._run(["pipe", "book", R])                                                     # the Book ends with the count's line
+    assert rc == 0 and out.splitlines()[-2:] == ["", "luck count: 2 ideas read on the unseen days, 1 passed; luck alone gives at most 0.1 (bp.py pipe luck)"]
 
 
 def test_pick_names_the_box_with_a_reason_and_clear_takes_it_away(root):

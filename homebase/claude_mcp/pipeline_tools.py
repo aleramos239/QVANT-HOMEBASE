@@ -57,7 +57,7 @@ LOOK_S = 20.0                                          # the longest a page's lo
 # judge the picked variant, not the whole map. The names are the toolkit's and stay (they are on every card on file).
 STAGES = [
     {"n": 0, "name": "Idea card", "words": "Is the card complete, and does it use only parts that exist?"},
-    {"n": 1, "name": "Raw heat map", "words": "Does a region of the map make money (enough boxes at the floor)?"},
+    {"n": 1, "name": "Raw heat map", "words": "Does a region of the map make money, and does a box in it pass every build line of a box?"},
     {"n": 2, "name": "Machine check", "words": "Does every trade do exactly what the rule says?"},
     {"n": 3, "name": "Indicators", "words": "Does the picked variant make money on its side(s), even without its best trades?"},
     {"n": 4, "name": "Proof", "words": "Does the picked variant hold up against luck?"},
@@ -224,8 +224,8 @@ _CARD = {
         "ways": {"type": "array", "minItems": 1, "maxItems": 3, "items": _WAY,
                  "description": "1 to 3 ways to enter. Each is run on 1-minute and on 5-minute bars."},
         "indicators": {"type": "array", "maxItems": 5, "items": _INDICATOR,
-                       "description": "0 to 5 indicators, in the order they are tried; no block twice. They are tried "
-                                      "only when the plain idea passes the lower bar and misses the full one."},
+                       "description": "Leave it out: no indicator is tried (the pipeline picks one box of the heat map "
+                                      "and judges that box alone). A list a card still carries is taken and not used."},
         "ref": {"type": "string", "description": "Optional: WHICH paper, book, video or course (one line, 300 characters "
                                                  "at most), e.g. 'Zarattini & Aziz 2023 (SSRN 4416622)'."}},
     "required": ["name", "why", "loser", "source", "market", "session", "sides", "ways"],
@@ -236,13 +236,13 @@ SPECS = [
           "program that takes an idea through eight fixed stages by itself (the card, the raw heat map, the machine "
           "check, the indicators, the proof, one box locked, the unseen days, the owner's look) and stops it at the "
           "first stage it fails, with the reason. Call blueprint_blocks first: it lists the entry rules (families) "
-          "with their settings and the indicators (filters) that exist, and a card uses only those. THE CARD: name; "
+          "with their settings, and a card uses only those. THE CARD: name; "
           "why (one sentence: why it should make money) and loser (one sentence: who is on the losing side); source "
           "(owner, video, claude, wiki, paper, book or course) and, optionally, ref (which paper, book, video or course, "
           "one line); ONE market (NQ, ES or GC); ONE session (asia, london, pre, nyam, mid or "
           "pm); sides (both, or long / short with sides_why); ways: 1 to 3 ways to enter, each a family, ONE main "
-          "setting of it and EXACTLY 3 values (its other settings go under fixed); indicators: 0 to 5, each a filter "
-          "block, one of its sides and the reason it should help. The bars are always 1 and 5 minutes and the stops "
+          "setting of it and EXACTLY 3 values (its other settings go under fixed). A card names NO indicator: none "
+          "is tried. The bars are always 1 and 5 minutes and the stops "
           "and targets are the standard table: a card does not choose them. The same idea (the same market, session, "
           "sides and ways) cannot be added twice, not under another name either. Nothing is chosen after the run "
           "starts: every choice is on the card. A card with a line missing is refused with the lines that fail, and "
@@ -291,8 +291,7 @@ def _name(name) -> str:
 def _card_ok(card, inbox) -> None:
     """pipeline_add's inputs, as far as the connector reads them (the toolkit checks the card itself)."""
     if not isinstance(card, dict):
-        raise ToolError("card: an object -- the idea card (name, why, loser, source, market, session, sides, ways, "
-                        "indicators)")
+        raise ToolError("card: an object -- the idea card (name, why, loser, source, market, session, sides, ways)")
     if not isinstance(inbox, bool):
         raise ToolError("inbox: true or false")
 

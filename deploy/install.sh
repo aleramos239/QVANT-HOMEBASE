@@ -1,12 +1,12 @@
 #!/bin/bash
 # Install Homebase as always-on launchd services on THIS machine (laptop or
 # mini — same script). Idempotent: re-running updates and restarts.
-#   ./deploy/install.sh          install/refresh app + ticks + charts + sleep-blocker
+#   ./deploy/install.sh          install/refresh app + ticks + charts + sleep-blocker + the pipeline's runner at login
 #   ./deploy/install.sh remove   unload everything
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 AGENTS="$HOME/Library/LaunchAgents"
-LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-ticks com.ramosquant.homebase-charts)
+LABELS=(com.ramosquant.homebase com.ramosquant.homebase-awake com.ramosquant.homebase-ticks com.ramosquant.homebase-charts com.ramosquant.homebase-pipeline)
 # no longer installed; still unloaded and deleted so an old install gets cleaned
 RETIRED=(com.ramosquant.homebase-tunnel)
 
@@ -30,7 +30,7 @@ for l in "${RETIRED[@]}"; do
   rm -f "$AGENTS/$l.plist"
 done
 
-for l in com.ramosquant.homebase com.ramosquant.homebase-ticks com.ramosquant.homebase-charts; do
+for l in com.ramosquant.homebase com.ramosquant.homebase-ticks com.ramosquant.homebase-charts com.ramosquant.homebase-pipeline; do
   sed "s|__REPO__|$REPO|g" "$REPO/deploy/$l.plist.template" > "$AGENTS/$l.plist"
 done
 

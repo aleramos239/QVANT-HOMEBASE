@@ -451,15 +451,14 @@ What it does differently from a round-by-round idea:
 | A round-by-round idea | The pipeline |
 |---|---|
 | One entry rule on one home table | Up to 3 ways to enter, each on 1-minute and on 5-minute bars |
-| At most 5 rounds, one filter a round | No rounds: up to 5 indicators on the card, each tried alone, one kept |
+| At most 5 rounds, one filter a round | No rounds and, since 2026-10-09, no indicator: one box of the heat map is picked and judged |
 | The random bar rises by round (line 2.3) | It rises by tries: (100 − 5 ÷ tries) %. One try 95 %, two 97.5 %, five 99 % |
 
 The pipeline reads every idea on the unseen days, once each (owner, 2026-10-08). For an idea run by hand (`bp.py test`) the
 toolkit's rule still holds: one read for a family, market and session. So the pipeline's guards against luck are the tries
-bar and, not built yet, the luck rate and the score since the lock.
+bar, the luck count (`bp.py pipe luck`, 2026-10-09) and, not built yet, the measured luck rate and the score since the lock.
 
-Not built yet: the Lab screens (Queue, Book, Guide), the luck rate, the score since the lock, the portfolio builder and the
-hunter. Until then the pipeline is run from the command line only.
+Not built yet: the measured luck rate, the drift check for long-only ideas, the score since the lock and the portfolio builder.
 
 **2026-10-08, the owner:** in the pipeline the other markets ask nothing of an idea. Line P3.6 and the build's line 2.5 are
 shown and never stop a pipeline idea (pipeline.json `indicator.other_markets: null`; the lock writes `waived: ["2.5"]`).
@@ -475,3 +474,23 @@ takes the picked box as its default, and the build's lines about the whole map (
 ask nothing (`waived` in lock.json). Lines 3.3 to 3.8 on the one box, and the one read of the unseen days, are unchanged.
 Outside the pipeline (`bp.py build`, `lock`, `test`) the blueprint's lines 2.1 to 2.9 stand. The old whole-map behaviour is
 `"mode": "map"` in the same file. An idea run in the old way is run again with `bp.py pipe rerun <name>`.
+
+**2026-10-09, the owner (the pick, the indicators, the luck count):** "we could have a good strategy under our nose and lose it
+because we picked the wrong box."
+- **The pick.** Stage 1 no longer takes the middle box by build net. Of a map that passed the loose check it reads, for every
+  box at the floor, EVERY LINE A BOX IS HELD TO ON THE BUILD DAYS: stage 3's rows (P3.2 to P3.10) and the lock's lines 3.3 to
+  3.8. Row **P1.3**: at least `variant.pick_boxes` (1) boxes hold them all. The map with the most such boxes moves on, and of
+  its boxes the MIDDLE one by prop odds is picked (the odds to pass the eval within 30 days on `prop.account`, then the payout
+  odds; never the best). No box holds every line: the idea stops at stage 1, and the row says which lines are missed. Not
+  read before the pick: the proof of stage 4 (reshuffled days, random entries) and the worse fills of the lock; they still
+  judge the one picked box. The owner's own pick (`bp.py pipe pick`) is still any box at the floor.
+- **What it found (build days, the 20 ideas on file that had passed stage 1):** 14 have no box that holds every line, 5 get
+  another box, 1 keeps its box (the book's). Few boxes hold: 1 to 3 of 30 to 50 is usual, so a picked box is often the one of
+  forty; the unseen days and the luck count stay the judge.
+- **No indicator.** A card names none and none is tried (a list an old card carries is read and not used; row P0.3 says so).
+- **The luck count** (`bp.py pipe luck`; the last line of `bp.py pipe book`): the ideas read on the unseen days, how many
+  passed, and what luck alone gives: at most (1 − line 4.4's 95 %) = 5 % a read. Each idea that passed: the share of random
+  tables it beat on those days, times the reads. It does not cover drift: a long-only idea is not yet held against random long
+  entries. The measured luck rate of the design (random-entry strategies read through stage 6) is still not built.
+- **Small.** `pipe list` names the heat map that came closest, not the first one. Stage 1 says which boxes never traded (a
+  160-bar channel on 5-minute bars). The runner comes back at login (`deploy/com.ramosquant.homebase-pipeline.plist.template`).

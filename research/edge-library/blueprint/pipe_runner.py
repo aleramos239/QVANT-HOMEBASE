@@ -11,6 +11,7 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      step runs the same stage again from its start (the toolkit skips what is on disk).
                                        the card says passed False  -> "stopped" ("code_problem" when the card says so),
                                                                       stopped_at = the stage, why = its first failed row
+                                                                      (stage 1: of the heat map that came closest: _why)
                                        stage 7 came back           -> "awaiting_owner" (the owner decides: approve / refuse)
                                        anything else               -> still "running": the caller steps again
                                        the stage RAISED a refusal  -> "stopped", why = the refusal; the card says refused
@@ -46,6 +47,14 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      stages_old/<UTC stamp>/ (never deleted), its state is queued and empty, its name goes last in the queue
                                      (pipe_store.reset). Refused while it is running, awaits the owner or is in the book. The stores, the card
                                      and the ledger are not touched
+  luck(root=None) -> result          `pipe luck`: THE LUCK COUNT (the design's section 4). Of the ideas with a verdict, how many were READ ON THE
+                                     UNSEEN DAYS (a stage-6 card with its rows) and how many passed -- against what luck alone gives: an idea
+                                     with no edge beats line 4.4's share of the random tables (rules.json) once in 1 / (1 - share) reads, and it
+                                     must hold every other line of the read too, so in R reads luck gives AT MOST (1 - share) x R passes, and
+                                     at most 1 - share ** R the chance of one or more. Each idea that passed: the share of the random tables it
+                                     beat on those days, and what that is by luck over all R reads ((1 - its share) x R, at most 1). And by
+                                     family: ideas, read, passed (close cousins share their luck). `pipe book` ends with the count's one line
+                                     once an idea was read. Runs nothing; reads the states and the stage-6 cards
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -77,6 +86,7 @@ from . import W
 from . import api
 from . import pipe_card as PC
 from . import pipe_store as PS
+from . import rules as R
 from . import runner as RUN
 
 LAST = 7                                            # the owner's look: the last stage the runner runs
@@ -87,7 +97,8 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck")
+RANDOM = "4.4"                                      # the read's line on the random tables: its bar is what an idea with no edge passes by luck
 
 
 def stage_fn(n: int):
@@ -123,6 +134,21 @@ def _blank(n: int, was: dict, t0: float, text: str, **more) -> dict:
             "rules": {}, "utc": _utc(), "seconds": round(time.monotonic() - t0, 1), **more}
 
 
+def _why(card: dict):
+    """THE ROW A STOPPED IDEA IS KNOWN BY (its state's `why`, a row of `pipe list`): the first failed row of its stage card -- at stage 1, where
+    every heat map has rows of its own, of the map that came CLOSEST (the fewest failed rows, then the bigger share of boxes profitable: row
+    P1.1's number), not of the first map. None: the card has no failed row with a text."""
+    rows = [r for r in card.get("lines") or [] if isinstance(r, dict)]
+    bad = [r for r in rows if r.get("passed") is False and r.get("text")]
+    if card.get("stage") == 1 and bad and all(r.get("sub") for r in bad):
+        def far(sub):
+            mine = [r for r in rows if r.get("sub") == sub]
+            return sum(r.get("passed") is False for r in mine), -next((r.get("number") or 0 for r in mine if r.get("line") == "P1.1"), 0)
+        best = min(dict.fromkeys(r["sub"] for r in bad), key=far)
+        bad = [r for r in bad if r["sub"] == best]
+    return bad[0]["text"] if bad else None
+
+
 def _step(name, ctx: dict, progress=None) -> tuple:
     """step(), and what the runner's log says of it: -> (the state, {"stage", "word", "seconds", "text"})."""
     root = ctx.get("root")
@@ -142,7 +168,7 @@ def _step(name, ctx: dict, progress=None) -> tuple:
         PS.write_stage(name, n, card, root)         # (a card that cannot be saved is a code problem too)
         change = {"stage": n, **{k: card[k] for k in ("tries", "picked") if card.get(k) is not None}}
         if card.get("passed") is False:
-            bad = next((r["text"] for r in card.get("lines") or [] if isinstance(r, dict) and r.get("passed") is False and r.get("text")), None)
+            bad = _why(card)
             word = "CODE" if card.get("code_problem") else "FAIL"
             change.update(status="code_problem" if card.get("code_problem") else "stopped", stopped_at=n, why=bad or _first(card.get("text")))
         elif n == LAST:
@@ -372,11 +398,50 @@ def show(name, root=None) -> dict:
                       next=f"bp.py pipe approve {name}, or bp.py pipe refuse {name} --why=TEXT." if st.get("status") == "awaiting_owner" else "")
 
 
+def _pct(v: float, digits: int = 3) -> str:
+    return f"{100 * v:.{digits}g} %"
+
+
+def luck(root=None) -> dict:
+    """`pipe luck`: the luck count (module docstring) -> one result."""
+    alpha, done, fam, reads = 1 - R.need(RANDOM), [x for x in PS.ideas(root) if x.get("status") not in PS.LIVE], {}, []
+    for x in done:
+        six = PS.stages(x["name"], root).get(6) or {}
+        f = fam.setdefault(_dash(x.get("family")), {"ideas": 0, "read": 0, "passed": 0})
+        f["ideas"] += 1
+        if not six.get("lines"):                    # no read of the unseen days (a stage 6 that was refused leaves a card without rows)
+            continue
+        ok = six.get("passed") is True
+        reads.append({"name": x["name"], "family": x.get("family"), "passed": ok, "beat": next((r.get("number") for r in six["lines"] if r.get("line") == RANDOM), None)})
+        f["read"], f["passed"] = f["read"] + 1, f["passed"] + ok
+    n, k = len(reads), sum(r["passed"] for r in reads)
+    most, one = alpha * n, 1 - (1 - alpha) ** n
+    for r in reads:
+        r["by_luck"] = min(1.0, (1 - r["beat"]) * n) if r["passed"] and r["beat"] is not None else None
+    said = f"{n} idea{'s' * (n != 1)} read on the unseen days, {k} passed; luck alone gives at most {most:.2g}"
+    text = [f"The luck count: {len(done)} idea{'s' * (len(done) != 1)} with a verdict, {said}."]
+    if n:
+        text += [f"What luck gives: an idea with no edge beats {_pct(1 - alpha)} of the random tables (line {RANDOM}) 1 time in {1 / alpha:.3g}, and it must hold "
+                 f"every other line of the read too. In {n} read{'s' * (n != 1)} that is at most {most:.2g} lucky pass{'es' * (most != 1)}, and at most "
+                 f"a {_pct(one)} chance of one or more."]
+        text += [f"  {r['name']}: beat {_pct(r['beat'], 4)} of the random tables on the unseen days -- by luck at most {_pct(r['by_luck'])} over the {n} read{'s' * (n != 1)}"
+                 for r in reads if r["by_luck"] is not None]
+        text += ["By family (ideas, read, passed): " + " · ".join(f"{a} {f['ideas']}, {f['read']}, {f['passed']}"
+                                                                   for a, f in sorted(fam.items(), key=lambda kv: (-kv[1]["read"], -kv[1]["ideas"], kv[0])) if f["read"]),
+                 "A pass share near what luck gives means the book is not to be trusted yet. Close cousins (one family, one market) share their luck: a pass "
+                 "among many of them counts for less. The random tables do not take out a market that only rose: a long-only idea is not yet held against "
+                 "random LONG entries (the drift check is not built)."]
+    return api.result("pipe luck", ideas=len(done), read=n, passed=k, alpha=alpha, by_luck=most, any_luck=one, reads=reads, families=fam, said=said, text="\n".join(text))
+
+
 def booked(root=None) -> dict:
-    """`pipe book`: one row a book card."""
+    """`pipe book`: one row a book card; then the luck count's line, once an idea was read on the unseen days."""
     cards = PS.book(root)
     rows = [tuple(_dash(c.get(k)) for k in ("name", "label", "family", "market", "session", "bar")) for c in cards]
     text = _table(("name", "label", "family", "market", "session", "bar"), rows) if rows else ["the book is empty"]
+    lk = luck(root)
+    if lk["read"]:
+        text += ["", f"luck count: {lk['said']} (bp.py pipe luck)"]
     return api.result("pipe book", book=cards, text="\n".join(text))
 
 
@@ -414,6 +479,8 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return show(name, root)
     if sub == "book":
         return booked(root)
+    if sub == "luck":
+        return luck(root)
     if sub == "rerun":
         return rerun(name, root)
     if sub == "pick":

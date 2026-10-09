@@ -394,3 +394,12 @@ rest (profit in every year, and picking on past years and reading the next, were
 the floor, 4 pass P3.7 (noise_gx_mid_long, noise_nyam_short, noise_pm_long, value_reclaim); two of those failed the unseen days, so the line is
 a filter on luck, not a proof.
 
+### 16.2 The pick among the boxes that hold every line (decided 2026-10-09)
+The owner: "we could have a good strategy under our nose and lose it because we picked the wrong box." Two ideas had stopped on one line of the
+middle box by a hair (a 1-micro drawdown of $2,069 against $2,000; a Sharpe of 0.97 against 1) with no second box allowed, and the book's box wins
+34 % of its trades, a poor shape for a $2,000 drawdown. Stage 1 of variant mode now reads every box at the floor against stage 3's rows and the
+lock's lines 3.3-3.8 (`pipe_stages._box_rows`), asks for `variant.pick_boxes` (1) boxes that hold them all (row P1.3), takes the map with the most
+such boxes, and picks the middle one by its odds to pass the eval on `prop.account` (`_pick`). Stage 4 is as it was (the owner: leave it until the
+luck count has run a while). Dry run on the 20 ideas on file that had passed stage 1: 14 have no such box, 5 get another box (4 of them had already
+read the unseen days: final), 1 keeps its box. So the change mostly stops an idea a few stages earlier; it found one idea to run again
+(nq_noise_pm_long). The indicators left the card with it (none was tried in variant mode), and `bp.py pipe luck` is section 4's running count.
