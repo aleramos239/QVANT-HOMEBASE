@@ -8,7 +8,7 @@ The map gets a LOOSE check and ONE box is picked right after it; every hard rule
 3. stage 2: the price check reads the PICKED box
 4. stage 3: no indicator is tried; the picked box's rows P3.2, P3.3, P3.4, P3.6 (the other markets shown)
 5. stage 4: the picked box reshuffled; its random entries (the same box of the control pool) held to the bar of the tries
-6. stage 5: the toolkit's whole-map build lines are shown and ask nothing, the sides line is kept, a code problem is still a code
+6. stage 5: the toolkit's whole-map build lines (the sides line too) are shown and ask nothing, a code problem is still a code
    problem, and the lock takes the PICKED box as its default (once for real, tiny)
 7. an idea whose stage 1 picked no box is refused by the later stages, with the way out (pipe rerun)
 
@@ -319,11 +319,11 @@ def test_stage_5_shows_the_whole_map_lines_and_the_lock_takes_the_picked_box(wor
     f4 = four(world)
     name, cell = FNAME, f4["picked"]["cell"]
     ok = J.Refuse("a job of the idea is still running")                                        # the lock's own word goes up: all that is asked here is how it was called
-    calls = TF.fakes(world, build=("2.1", "2.2", "2.3", "2.4", "2.5", "2.8"), lock=ok)
+    calls = TF.fakes(world, build=("2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.8"), lock=ok)
     with pytest.raises(J.Refuse, match="still running"):
         ST.stage5(name, CTX)
     (k,), (b,) = calls["lock"], calls["build"]
-    assert k["waive"] == ST.WHOLE == ("2.1", "2.2", "2.3", "2.4", "2.5", "2.8") and k["default"] == cell and b["name"] == f"{name}_a5"
+    assert k["waive"] == ST.WHOLE == ("2.1", "2.2", "2.3", "2.4", "2.5", "2.6", "2.8") and k["default"] == cell and b["name"] == f"{name}_a5"
     calls = TF.fakes(world, lock=ok)                                                           # nothing failed: the lock is still told which lines are not asked, and the pick
     with pytest.raises(J.Refuse, match="still running"):
         ST.stage5(name, CTX)
@@ -335,13 +335,18 @@ def test_stage_5_shows_the_whole_map_lines_and_the_lock_takes_the_picked_box(wor
     assert calls["lock"][0]["waive"] == ("2.1", "2.2", "2.3", "2.4", "2.8")
 
 
-def test_stage_5_the_sides_line_of_the_whole_table_is_a_stop_and_no_code_problem(world):
-    f4 = four(world)
+def test_stage_5_the_sides_line_of_the_whole_table_is_shown_and_asks_nothing(world):
+    """The owner, 2026-10-08: the hard rules are the picked variant's; the sides of the PICKED box are P3.4, the whole table's 2.6 only shows."""
+    four(world)
     name = FNAME
-    calls = TF.fakes(world, build=("2.1", "2.6"))
+    stop = J.Refuse("a job of the idea is still running")                  # the lock's own word goes up: all that is asked is how it was called
+    calls = TF.fakes(world, build=("2.1", "2.6"), lock=stop)
+    with pytest.raises(J.Refuse, match="still running"):
+        ST.stage5(name, CTX)
+    assert len(calls["lock"]) == 1 and "2.6" in calls["lock"][0]["waive"] and "2.1" in calls["lock"][0]["waive"]
+    calls = TF.fakes(world, build=("2.7",))                                  # a line the variant mode does not read is still a code problem
     c = TS.whole(ST.stage5(name, CTX), 5)
-    assert (c["passed"], c["result"]) == (False, "sides") and "code_problem" not in c and calls["lock"] == []
-    assert f"the picked box {f4['picked']['cell']} of {name}_a5" in c["text"] and "2.6 FAIL canned" in c["text"] and TS.lines(c) == [f"2.{i}" for i in range(1, 10)]
+    assert c["code_problem"] is True and calls["lock"] == []
 
 
 def test_stage_5_any_other_false_line_is_still_a_code_problem(world):

@@ -107,9 +107,8 @@ mode the map gets a LOOSE check and ONE box is picked right after it; every hard
           only when it holds, P4.2 the SAME BOX of the random-entry control tables: the pool holds the random entries cell by cell, so the box's
           exit cell, days and trades a day are drawn from its seeds (tables.built(box=) = judge.c1_table on that one cell) and held to the bar of the tries
   stage5  the code check, the one build round and the lock stay; the lock takes the picked box as its default (freeze.lock(default=), refused when it is
-          not a survivor: result "no box"). The build's lines about the WHOLE map (WHOLE: 2.1 2.2 2.3 2.4 2.5 2.8) are shown and ask nothing (waive=,
-          lock.json `waived`); line 2.6 (SIDES, the whole table's sides) is kept and stops an idea with the toolkit's words (result "sides", no code
-          problem); any other False line is still a CODE PROBLEM
+          not a survivor: result "no box"). The build's lines about the WHOLE map (WHOLE: 2.1 2.2 2.3 2.4 2.5 2.6 2.8; the sides of the PICKED box are P3.4) are shown and ask
+          nothing (waive=, lock.json `waived`; the owner, 2026-10-08: the hard rules are the picked variant's); any other False line is still a CODE PROBLEM
   stages 6 and 7  unchanged. A stage of variant mode on an idea whose stage 1 picked no box (_cell) is refused: `bp.py pipe rerun <name>`.
 
 THE PRICE CHECK (P2.5). The middle box of the heat map (records.middle: the middle of the boxes that made money; when none
@@ -194,9 +193,8 @@ CHECKED = ("1.1", "1.2", "1.3", "1.4")              # the lines of the code chec
 SHOWN = 20                                          # trades listed in a row (their count is always whole)
 REASON = "pipeline: stages 1 to 4 passed"           # the reason of a sub-idea's ONE build round (line 2.9 asks for it before the run)
 OTHERS = "2.5"                                      # the build's line on the other markets: after a low pass the build is the first to read it
-WHOLE = ("2.1", "2.2", "2.3", "2.4", OTHERS, "2.8")  # the build's lines about the WHOLE map (share, average trade, random tables, trades, other markets, Monte Carlo):
+WHOLE = ("2.1", "2.2", "2.3", "2.4", OTHERS, "2.6", "2.8")  # the build's lines about the WHOLE map (share, average trade, random tables, trades, other markets, sides, Monte Carlo):
                                                     # in variant mode they are shown and ask nothing (the picked box is judged by the stages and by the lock's lines 3.3-3.8)
-SIDES = "2.6"                                       # the build's line about the sides of the whole table: kept in variant mode (a stop with the toolkit's words, no code problem)
 MINE = {"2.1": ("P1.1", "P3.1"), "2.2": ("P1.2", "P3.2"), "2.3": ("P4.2", "P4.2"), "2.4": ("P1.3", "P3.3"), "2.5": ("P3.6", "P3.6"), "2.6": ("P3.4", "P3.4"),
         "2.7": (None, "P3.5"), "2.8": ("P4.1", "P4.1")}     # a line of the build -> the pipeline's gate of it: (of a raw heat map, of one with an indicator)
 SWITCH = ("days", "cells", "workers", "draws", "box", "build_avg_trade", "test_days")      # what a tiny run hands the toolkit's test switch (records.TEST_RUN)
@@ -727,14 +725,10 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
         shown = G.others_bar() is None              # the other markets ask nothing (pipeline.json): the build's 2.5 is shown, and the lock is told so
         waive = tuple(x for x in WHOLE if shown or x != OTHERS) if variant else (OTHERS,) if shown else ()      # variant mode: the lines about the whole map are shown, none asks (module docstring)
         bad = [x for x in rows if x["passed"] is False and x["line"] not in waive]
-        if variant:                                 # the whole map's lines asked nothing; line 2.6 (the whole table's sides) is still read, and it is no code problem
-            odd = [x for x in bad if x["line"] != SIDES]
-            if odd:
-                return _card(5, t0, False, "fail", rows, f"CODE PROBLEM: the toolkit's build of {sub} fails {', '.join(x['line'] for x in odd)}, a line no gate of the pipeline's "
-                             f"variant mode reads: {'; '.join(x['text'] for x in odd)}", picked, tries, needs(rows), code_problem=True)
+        if variant:                                 # the whole map's lines (2.6 among them) asked nothing: any other False line is a code problem
             if bad:
-                return _card(5, t0, False, "sides", rows, f"the picked box {pick} of {sub}: the toolkit's build reads the sides of the whole table, and {bad[0]['text']} -- the idea stops",
-                             picked, tries, needs(rows))
+                return _card(5, t0, False, "fail", rows, f"CODE PROBLEM: the toolkit's build of {sub} fails {', '.join(x['line'] for x in bad)}, a line no gate of the pipeline's "
+                             f"variant mode reads: {'; '.join(x['text'] for x in bad)}", picked, tries, needs(rows), code_problem=True)
         odd = [] if variant else [x for x in bad if not (picked["filter"] and x["line"] == OTHERS)]
         if odd:                                     # the toolkit reads a line otherwise than the pipeline's gate did: neither number is believed
             said = "; ".join(f"the toolkit: {x['text']} -- the pipeline: {(_gate(name, ctx, picked, x['line']) or {}).get('text') or 'no gate of its own reads this line'}"
