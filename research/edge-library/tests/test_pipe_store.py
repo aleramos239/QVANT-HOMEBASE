@@ -247,6 +247,57 @@ def test_order_holds_when_two_cards_share_a_second_and_when_a_line_is_missing():
 
 # ================================================================ 5. stage cards, the book, the ledger, the pause
 
+def test_reset_puts_an_idea_back_in_the_queue_and_moves_its_stage_cards_aside_without_deleting_any():
+    """pipe_store.reset: `bp.py pipe rerun`. The stage cards go to stages_old/<UTC stamp>/ (never deleted); the state is queued again, empty, and the
+    name is last in the queue. Stores, the card, the ledger and the registries are not touched."""
+    ticking()
+    add("fvg_open")
+    add("fvg_two", sig="s2")
+    PS.write_stage("fvg_open", 0, {**STAGE, "stage": 0}, root())
+    PS.write_stage("fvg_open", 1, STAGE, root())
+    PS.set_state("fvg_open", root(), status="stopped", stage=1, stopped_at=1, why="P1.1 FAIL 44 %", tries=2, picked=STAGE["picked"])
+    d = root() / "p" / "fvg_open"
+    (d / "ledger.csv").write_text("key,stage\n")
+    runs = root() / "runs"
+    runs.mkdir(parents=True)
+    (runs / "fvg_open_a5-NQ-tf5").mkdir()
+    before = {"card": (d / "card.json").read_bytes(), "seen": (root() / PS.SEEN).read_bytes(), "ledger": (d / "ledger.csv").read_bytes(), "runs": tree(runs)}
+    cards = {n: (d / "stages" / f"{n}.json").read_bytes() for n in (0, 1)}
+    st = PS.reset("fvg_open", root())
+    assert (st["status"], st["stage"], st["stopped_at"], st["why"], st["tries"], st["picked"]) == ("queued", None, None, None, 0, None) and PS.state("fvg_open", root()) == st
+    assert PS.stages("fvg_open", root()) == {} and [p.name for p in (d / "stages").iterdir()] == []
+    (old,) = [p for p in (d / "stages_old").iterdir()]
+    assert len(old.name) == len("20261008T030000Z") and old.name.endswith("Z") and {p.name: p.read_bytes() for p in old.iterdir()} == {f"{n}.json": b for n, b in cards.items()}
+    assert (d / "card.json").read_bytes() == before["card"] and (root() / PS.SEEN).read_bytes() == before["seen"] and (d / "ledger.csv").read_bytes() == before["ledger"]
+    assert tree(runs) == before["runs"] and st["added_utc"] == "2026-10-08T03:00:00+00:00"       # (the time it was added is not changed)
+    assert PS.order(root()) == ["fvg_two", "fvg_open"]                          # back at the END of the queue, not the inbox
+    assert lines(root() / PS.ORDER)[-1]["name"] == "fvg_open" and lines(root() / PS.ORDER)[-1]["inbox"] is False and len(lines(root() / PS.ORDER)) == 3
+    # a second rerun keeps the first set aside as well: stages_old holds every set, none replaced
+    PS.write_stage("fvg_open", 0, {**STAGE, "stage": 0, "text": "second time"}, root())
+    PS.set_state("fvg_open", root(), status="code_problem", stage=0, stopped_at=0, why="x")
+    PS.reset("fvg_open", root())
+    olds = sorted((d / "stages_old").iterdir())
+    assert len(olds) == 2 and json.loads((olds[0] / "0.json").read_text())["text"] == STAGE["text"] and json.loads((olds[1] / "0.json").read_text())["text"] == "second time"
+    assert PS.reset("fvg_open", root())["status"] == "queued" and PS.stages("fvg_open", root()) == {}      # nothing to move: still fine, no empty folder is made
+    assert len(list((d / "stages_old").iterdir())) == 2
+
+
+def test_reset_is_refused_while_the_idea_is_running_awaits_the_owner_or_is_in_the_book():
+    add("fvg_open")
+    PS.write_stage("fvg_open", 1, STAGE, root())
+    for status in ("running", "awaiting_owner", "book"):
+        PS.set_state("fvg_open", root(), status=status, stage=1)
+        was = tree(root() / "p" / "fvg_open")
+        refused(lambda: PS.reset("fvg_open", root()), "fvg_open", status.replace("_", " ") if status != "awaiting_owner" else "waits for the owner")
+        assert tree(root() / "p" / "fvg_open") == was and PS.state("fvg_open", root())["status"] == status and PS.stages("fvg_open", root())
+    for status in ("queued", "stopped", "code_problem", "refused"):
+        PS.set_state("fvg_open", root(), status=status, stage=1)
+        assert PS.reset("fvg_open", root())["status"] == "queued"
+        PS.write_stage("fvg_open", 1, STAGE, root())
+    refused(lambda: PS.reset("fvg_nobody", root()), "no pipeline idea")
+    refused(lambda: PS.reset("Bad Name", root()), "no pipeline card's name")
+
+
 def test_stage_cards_round_trip():
     add()
     p = PS.write_stage("fvg_open", 1, STAGE, root())

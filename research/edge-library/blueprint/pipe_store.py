@@ -28,6 +28,11 @@ every card ever added. It stores what it is given and reads it back: it checks n
     set_state(name, root=None, **changes) -> state      the state with `changes` over it, updated_utc stamped (always, and
                                                         by the store). A status outside STATUS: ValueError, nothing changed
     write_stage(name, n, card, root=None) -> Path       stages/<n>.json (a stage run again replaces its card)
+    reset(name, root=None) -> state                     `bp.py pipe rerun`: the idea starts again from stage 0. Its stage cards are MOVED to
+                                                        stages_old/<UTC stamp>/ (never deleted), its state is queued, empty (stage, stopped_at,
+                                                        why, picked None; tries 0) and its name goes last in the queue (order.jsonl, not the
+                                                        inbox). Refused while it is running, awaits the owner or is in the book. The card,
+                                                        the stores (runs/), the ledger and seen.jsonl are not touched
     stages(name, root=None) -> {n: card}                every stage card on file, by stage number
     order(root=None) -> [names]                         the queue: the ideas whose status is queued or running, the inbox's
                                                         first, then by the time they were added
@@ -236,6 +241,32 @@ def set_state(name, root=None, **changes) -> dict:
     with _locked(d):
         st = {**json.loads((d / "state.json").read_text(encoding="utf-8")), **changes, "name": name, "updated_utc": _now()}
         _write(d / "state.json", st)
+    return st
+
+
+def reset(name, root=None) -> dict:
+    """The idea starts again from stage 0 (module docstring) -> its state."""
+    r, d = _at(root), _dir(name, root)
+    with _locked(d):
+        st = json.loads((d / "state.json").read_text(encoding="utf-8"))
+        why = {"running": "is running (the runner works on it, or died in a stage)", "awaiting_owner": "waits for the owner's look",
+               "book": "is in the book"}.get(st.get("status"))
+        if why:
+            raise J.Refuse(f"{name} {why}: an idea is run again only after it stopped (or was refused); nothing was moved")
+        now, cards = _now(), sorted(p for p in (d / "stages").glob("*") if p.is_file())
+        if cards:
+            stamp = dt.datetime.fromisoformat(now).astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            to, k = d / "stages_old" / stamp, 1
+            while to.exists():                       # two re-runs in one second keep both sets
+                k += 1
+                to = d / "stages_old" / f"{stamp}-{k}"
+            to.mkdir(parents=True)
+            for p in cards:
+                os.replace(p, to / p.name)
+        st = {**st, "status": "queued", "stage": None, "stopped_at": None, "why": None, "tries": 0, "picked": None, "name": name, "updated_utc": now}
+        _write(d / "state.json", st)
+    with _log(r / ORDER) as (f, text):
+        _append(f, text, {"name": name, "utc": now, "inbox": False})
     return st
 
 

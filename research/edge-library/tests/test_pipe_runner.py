@@ -529,6 +529,32 @@ def test_the_commands_end_to_end(root, monkeypatch, cards, tmp_path):
     assert "fvg_open  fvg     refused      7      0  too few trades a week" in out.splitlines()[1:3]
 
 
+def test_rerun_puts_a_stopped_idea_back_at_the_end_of_the_queue_and_show_names_the_picked_box(root, monkeypatch):
+    R = f"--root={root}"
+    idea(root, "fvg_open")
+    idea(root, "fvg_two")
+    pick = {"sub": "fvg_open_a5", "bar": "5", "way": 0, "filter": None, "cell": "d_atr0_pct0p2-r3", "variant": 0.0}
+    calls = fakes(monkeypatch, {("fvg_open", 1): {"tries": 2, "picked": pick}, ("fvg_open", 2): {"passed": False, "text": "P2.5 FAIL a price is off"}, ("fvg_two", 0): {"passed": False}})
+    assert PR.loop(ctx(root), once=True) == 0
+    assert calls == [("fvg_open", 0), ("fvg_open", 1), ("fvg_open", 2), ("fvg_two", 0)] and PS.state("fvg_open", root)["status"] == "stopped"
+    rc, out = TI._run(["pipe", "show", "fvg_open", R])
+    assert rc == 0 and "status: stopped · stage 2 · tries 2 · picked fvg_open_a5, box d_atr0_pct0p2-r3" in out.splitlines()
+    rc, r = run(["pipe", "rerun", "fvg_open", R])
+    assert rc == 0 and r["ok"] and (r["command"], r["name"], r["status"], r["moved"]) == ("pipe rerun", "fvg_open", "queued", 3)
+    assert r["text"] == ("fvg_open runs again from its first stage (place 1 of 1 in the queue); its 3 stage cards are kept under stages_old (nothing was deleted).")
+    st = PS.state("fvg_open", root)
+    assert (st["status"], st["stage"], st["stopped_at"], st["why"], st["tries"], st["picked"]) == ("queued", None, None, None, 0, None) and PS.stages("fvg_open", root) == {}
+    assert len(list((root / "p" / "fvg_open" / "stages_old").iterdir())) == 1 and PS.order(root) == ["fvg_open"] and PS.state("fvg_two", root)["status"] == "stopped"
+    calls = fakes(monkeypatch)                                                                 # this time every stage passes
+    assert PR.loop(ctx(root), once=True) == 0 and calls[:1] == [("fvg_open", 0)] and PS.state("fvg_open", root)["status"] == "awaiting_owner"      # from its start
+    rc, r = run(["pipe", "rerun", "fvg_open", R])                                              # it waits for the owner now
+    assert rc == 2 and r["command"] == "pipe rerun" and "waits for the owner" in r["error"]
+    rc, r = run(["pipe", "rerun", "nobody", R])
+    assert rc == 2 and "no pipeline idea" in r["error"]
+    rc, r = run(["pipe", "rerun", R])
+    assert rc == 2 and "name" in r["error"]
+
+
 def pipe_help() -> str:
     """What `bp.py pipe --help` prints."""
     out = io.StringIO()

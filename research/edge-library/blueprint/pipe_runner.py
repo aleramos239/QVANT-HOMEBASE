@@ -42,6 +42,10 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
   add(card, root=None, inbox=False) -> result
                                      `pipe add`: stage 0's check first (pipe_card.check). A card with a line missing is
                                      refused WITH its rows and nothing is saved; a whole one is filed and queued
+  rerun(name, root=None) -> result   `pipe rerun`: an idea that stopped (or was refused) starts again from stage 0 -- its stage cards are moved to
+                                     stages_old/<UTC stamp>/ (never deleted), its state is queued and empty, its name goes last in the queue
+                                     (pipe_store.reset). Refused while it is running, awaits the owner or is in the book. The stores, the card
+                                     and the ledger are not touched
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -83,7 +87,7 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun")
 
 
 def stage_fn(n: int):
@@ -359,7 +363,8 @@ def show(name, root=None) -> dict:
     text = [f"{name}: {_dash(st.get('family'))} on {card.get('market')} {card.get('session')}, sides {card.get('sides')} (source {_dash(st.get('source'))})",
             f"why: {card.get('why')}", f"loser: {card.get('loser')}",
             f"status: {st.get('status')} · stage {_dash(_reached(st))} · tries {st.get('tries') or 0}"
-            + (f" · picked {picked.get('sub')}" + (f" with {picked['filter']}" if picked.get("filter") else "") if picked.get("sub") else "")]
+            + (f" · picked {picked.get('sub')}" + (f" with {picked['filter']}" if picked.get("filter") else "") + (f", box {picked['cell']}" if picked.get("cell") else "")
+               if picked.get("sub") else "")]
     if st.get("why"):
         text.append(f"{'refused' if st.get('status') == 'refused' else 'stopped'}: {st['why']}")
     text += [f"stage {n} {MARK.get(c.get('passed'), 'n/a'):<4} {c.get('name') or (NAMES[n] if 0 <= n <= LAST else '')}: {_first(c.get('text'))}" for n, c in stages.items()]
@@ -375,6 +380,16 @@ def booked(root=None) -> dict:
     return api.result("pipe book", book=cards, text="\n".join(text))
 
 
+def rerun(name, root=None) -> dict:
+    """`pipe rerun`: the idea starts again from its first stage (module docstring) -> one result."""
+    moved = len(PS.stages(name, root))
+    st = PS.reset(name, root)
+    queue = PS.order(root)
+    text = (f"{name} runs again from its first stage (place {queue.index(name) + 1} of {len(queue)} in the queue); its {moved} stage card{'s' * (moved != 1)} "
+            "are kept under stages_old (nothing was deleted).") if moved else f"{name} is queued again from its first stage (place {queue.index(name) + 1} of {len(queue)})."
+    return api.result("pipe rerun", name, status=st["status"], state=st, moved=moved, text=text, next="bp.py pipe start runs the queue (a runner that is working takes it by itself).")
+
+
 def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
@@ -386,6 +401,8 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return show(name, root)
     if sub == "book":
         return booked(root)
+    if sub == "rerun":
+        return rerun(name, root)
     if sub == "start":
         got = start(root)
         pid = f" (pid {got['pid']})" if got["pid"] else ""
