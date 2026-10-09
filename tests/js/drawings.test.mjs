@@ -328,7 +328,7 @@ function pointerRig(saved, { tool = 'cursor', magnet = { on: false, mode: 'weak'
     timeScale: () => ({ logicalToCoordinate: (i) => 100 + i * 10, coordinateToLogical: (x) => (x - 100) / 10 }) };
   const menuCalls = [];
   const cell = { shown: { root: 'NQ' }, el: { dataset: {} }, P: { accent: '#2962FF' }, chart, bars: rigBars, tick: 0.25,
-    isTime: () => true, barMs: () => MIN, onMenu(e, dbl) { menuCalls.push(!!dbl); },
+    isTime: () => true, barMs: () => MIN, spec: () => 'time:60', onMenu(e, dbl) { menuCalls.push(!!dbl); },
     box: { clientWidth: 460, getBoundingClientRect: () => ({ left: 0, top: 0 }), addEventListener() {}, removeEventListener() {} },
     candles: { attachPrimitive() {}, priceToCoordinate: (p) => 1000 - p, coordinateToPrice: (y) => 1000 - y,
       createPriceLine: () => ({ applyOptions() {} }), removePriceLine() {} } };
@@ -659,5 +659,121 @@ test('commit() prefers the host\'s saved default preset for that tool, still nor
   assert.equal(style.width, 4);                          // the saved default's field, kept
   assert.equal(style.lineStyle, DS.DEFAULTS.trend.lineStyle);   // an untouched field still reads the built-in default
   assert.equal('junk' in style, false);                   // a field the type doesn't take is dropped, not stored
+  R.done();
+});
+
+/* ---- 2026-10-09: ray, extended line, vertical line, Fib retracement; the box's extras; per-interval visibility ---- */
+const G = { ...geo, h: 1000 };       // the same pane, with its height (a vertical line and a ray need it)
+const ray = { id: 'r', type: 'ray', points: [{ t: bars[0].ms, p: 900 }, { t: bars[2].ms, p: 880 }] };        // (100,100) -> (120,120), then on to the right edge
+const xline = { id: 'x', type: 'xline', points: [{ t: bars[1].ms, p: 890 }, { t: bars[2].ms, p: 880 }] };    // through (110,110) and (120,120), both ways
+const vline = { id: 'v', type: 'vline', points: [{ t: bars[2].ms }] };                                    // x 120
+const fib = { id: 'f', type: 'fib', points: [{ t: bars[0].ms, p: 800 }, { t: bars[4].ms, p: 900 }] };        // low 800 (y 200) to high 900 (y 100), x 100-140
+
+test('a ray and an extended line have a trend line\'s two handles and are grabbed along their whole run', () => {
+  assert.deepEqual(D.handlePoints(ray, G), [[100, 100], [120, 120]]);
+  assert.deepEqual(D.hitTest(ray, { x: 300, y: 300 }, G), { part: 'body' }, 'far past its second point, on the run');
+  assert.equal(D.hitTest(ray, { x: 80, y: 80 }, G), null, 'behind its first point: a ray does not run back');
+  assert.deepEqual(D.hitTest(xline, { x: 80, y: 80 }, G), { part: 'body' }, 'an extended line runs back too');
+  assert.deepEqual(D.hitTest(xline, { x: 350, y: 350 }, G), { part: 'body' });
+  assert.equal(D.hitTest(xline, { x: 350, y: 300 }, G), null, 'off the line');
+  assert.deepEqual(D.hitTest(ray, { x: 120, y: 120 }, G), { part: 'handle', index: 1 });
+  // a plain trend line is still only its own segment, unless it is told to extend
+  assert.equal(D.hitTest(trend, { x: 300, y: 300 }, G), null);
+  assert.deepEqual(D.hitTest({ ...trend, style: { extendRight: true } }, { x: 300, y: 300 }, G), { part: 'body' });
+});
+
+test('a vertical line is one time: one handle half-way up, grabbed anywhere along it, moved in time only', () => {
+  assert.deepEqual(D.handlePoints(vline, G), [[120, 500]]);
+  assert.deepEqual(D.hitTest(vline, { x: 122, y: 40 }, G), { part: 'body' });
+  assert.deepEqual(D.hitTest(vline, { x: 120, y: 500 }, G), { part: 'handle', index: 0 });
+  assert.equal(D.hitTest(vline, { x: 131, y: 40 }, G), null);
+  assert.deepEqual(D.setPoint(vline, 0, bars[4].ms, 123, TIME).points, [{ t: bars[4].ms }], 'a price is never stored on it');
+  assert.deepEqual(D.moveDrawing(vline, 2, 50, 0.25, TIME).points, [{ t: bars[4].ms }]);
+  assert.deepEqual(D.moveDrawing(vline, 0, 50, 0.25, TIME).points, [{ t: bars[2].ms }], 'a price-only drag leaves it where it is');
+  assert.ok(D.samePoints(vline, { ...vline }));
+});
+
+test('a Fib retracement: its levels count back from the second point, and its block is what is grabbed', () => {
+  const rows = D.fibRows(fib, G, DS.normalize('fib', {}));
+  assert.deepEqual(rows.map((r) => r.v), [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1]);
+  assert.deepEqual([rows[0].price, rows[3].price, rows[6].price], [900, 850, 800], '0 at the high it ended on, 50 % half-way, 1 at the low it started from');
+  assert.ok(Math.abs(rows[4].price - 838.2) < 1e-9, 'the 61.8 % pullback');
+  assert.deepEqual([rows[0].y, rows[6].y], [100, 200]);
+  assert.deepEqual(D.handlePoints(fib, G), [[100, 200], [140, 100]]);
+  assert.deepEqual(D.hitTest(fib, { x: 120, y: 150 }, G), { part: 'body' }, 'inside its block');
+  assert.equal(D.hitTest(fib, { x: 250, y: 150 }, G), null, 'right of it');
+  assert.deepEqual(D.hitTest({ ...fib, style: { extendRight: true } }, { x: 250, y: 150 }, G), { part: 'body' }, 'extended: the levels run on');
+  assert.equal(D.hitTest(fib, { x: 120, y: 260 }, G), null, 'under its lowest level');
+  // the 1.618 extension switched on stretches the block below the low
+  const ext = { ...fib, style: { levels: [{ v: 0, on: true }, { v: 1, on: true }, { v: 1.618, on: true }] } };
+  assert.deepEqual(D.hitTest(ext, { x: 120, y: 250 }, G), { part: 'body' });
+  const moved = D.moveDrawing(fib, 0, 10, 0.25, TIME);
+  assert.deepEqual(moved.points.map((q) => q.p), [810, 910]);
+});
+
+test('a rectangle that extends right is grabbed all the way to the pane\'s edge', () => {
+  assert.equal(D.hitTest(rect, { x: 300, y: 135 }, G), null);
+  assert.deepEqual(D.hitTest({ ...rect, style: { extendRight: true } }, { x: 300, y: 135 }, G), { part: 'body' });
+  assert.equal(D.hitTest({ ...rect, style: { extendRight: true } }, { x: 300, y: 300 }, G), null, 'still its own height');
+});
+
+test('a line\'s numbers are the measure tool\'s words on one row; a level fill keeps the level\'s colour', () => {
+  const a = { t: bars[0].ms, p: 100 }, b = { t: bars[4].ms, p: 112.5 };
+  assert.equal(D.lineStats(a, b, { ...TIME, tick: 0.25 }), '+12.50 (+12.50%) · 50 ticks · 4 bars · 4m');
+  assert.equal(D.withAlpha('#089981', 0.08), 'rgba(8,153,129,0.08)');
+  assert.equal(D.withAlpha('rgba(1, 2, 3, 0.9)', 0.08), 'rgba(1,2,3,0.08)');
+  assert.match(D.timeTag(Date.UTC(2026, 9, 9, 13, 30)), /Oct 9.*09:30/, 'New York wall clock');
+});
+
+test('the vertical-line tool places with one click; ray, extended line and Fib place like a trend line', async (t) => {
+  const had = globalThis.window;
+  t.after(() => { if (had === undefined) delete globalThis.window; else globalThis.window = had; });
+  const V = pointerRig([], { tool: 'vline' });
+  await V.store.ensure('NQ');
+  await V.gesture([[120, 300]]);
+  assert.deepEqual(V.store.list('NQ').map((d) => [d.type, d.points]), [['vline', [{ t: bars[2].ms }]]]);
+  assert.equal(V.store.list('NQ')[0].style.timeLabel, true, 'its own default style');
+  assert.equal(V.tool(), 'cursor');
+  V.done();
+  for (const tool of ['ray', 'xline', 'fib']) {
+    const R = pointerRig([], { tool });
+    await R.store.ensure('NQ');
+    await R.gesture([[100, 100], [120, 110], [140, 140]]);
+    const d = R.store.list('NQ')[0];
+    assert.equal(d.type, tool);
+    assert.deepEqual(d.points, [{ t: bars[0].ms, p: 900 }, { t: bars[4].ms, p: 860 }], tool);
+    assert.deepEqual(Object.keys(d.style).sort(), [...DS.FIELDS[tool]].sort(), `${tool}: exactly its own style fields`);
+    R.done();
+  }
+});
+
+test('Shift keeps a ray level while it is placed, as it does a trend line', async (t) => {
+  const had = globalThis.window;
+  t.after(() => { if (had === undefined) delete globalThis.window; else globalThis.window = had; });
+  const R = pointerRig([], { tool: 'ray' });
+  await R.store.ensure('NQ');
+  const ev = (x, y, buttons, shiftKey) => ({ button: 0, buttons, ctrlKey: false, metaKey: false, shiftKey, clientX: x, clientY: y, preventDefault() {}, stopPropagation() {} });
+  R.ctl.onDown(ev(100, 100, 1, false));
+  R.ctl.onMove(ev(140, 140, 1, true));
+  R.ctl.onUp(ev(140, 140, 0, true));
+  await new Promise((r) => setTimeout(r, 5));
+  assert.deepEqual(R.store.list('NQ')[0].points.map((q) => q.p), [900, 900]);
+  R.done();
+});
+
+test('a drawing told to show on other intervals is not on this chart: not listed, not grabbed, and it comes back on its own interval', async (t) => {
+  const had = globalThis.window;
+  t.after(() => { if (had === undefined) delete globalThis.window; else globalThis.window = had; });
+  const hourly = { ...trend, id: 'h', vis: { min: 3600, max: null } };       // 1h and higher only
+  const R = pointerRig([hourly, rect]);                                        // the stand-in chart is a 1-minute one
+  await R.store.ensure('NQ');
+  assert.deepEqual(R.ctl.items().map((d) => d.id), ['b'], 'the hourly line is off the 1-minute chart');
+  await R.gesture([[120, 120], [121, 121]]);                                   // a click where the line would be (outside the rectangle's box: y 120 is its top edge)
+  assert.notEqual(R.ctl.sel, 'h', 'what is not shown cannot be selected');
+  assert.equal(R.store.list('NQ').length, 2, 'it is still saved');
+  R.ctl.cell.spec = () => 'time:3600';
+  assert.deepEqual(R.ctl.items().map((d) => d.id), ['h', 'b']);
+  R.ctl.cell.spec = () => 'tick:500';
+  assert.deepEqual(R.ctl.items().map((d) => d.id), ['h', 'b'], 'a tick chart has no interval: everything shows');
   R.done();
 });

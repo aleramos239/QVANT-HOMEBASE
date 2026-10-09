@@ -1359,7 +1359,7 @@ function positionDialog(cell, d) {
 }
 
 /* ---- 2026-09-27 draw-tools plan: the floating per-drawing toolbar + its settings dialog ---- */
-const DRAW_TYPES = ['trend', 'hline', 'rect'];          // the types that take a style object at all
+const DRAW_TYPES = ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib'];          // the types that take a style object at all
 const isPosDrawing = (d) => d.type === 'long' || d.type === 'short';
 const drawStyleDefaults = new Map();                    // type -> that tool's saved "__default__" preset payload
 async function loadDrawStyleDefaults() {
@@ -1430,6 +1430,7 @@ function patchDrawing(root, id, patch) {
   if (!now) return null;
   const next = { ...now, ...patch };
   if (patch.style) next.style = DS.normalize(now.type, { ...DS.normalize(now.type, now.style), ...patch.style });
+  if ('vis' in patch) { const v = DS.normalizeVis(patch.vis); if (v) next.vis = v; else delete next.vis; }   // no rule = shown everywhere: nothing stored
   drawings.replace(root, next);
   markDirty();
   return next;
@@ -1544,17 +1545,19 @@ function drawingSettingsDialog(cell, d0) {
   const root = cell.dc ? cell.dc.root : cell.cfg.root;
   const orig = drawings.list(root).find((x) => x.id === d0.id);
   if (!orig) return;
-  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(orig.type, orig.style) };
+  const type = orig.type, has = (k) => DS.FIELDS[type].includes(k);
+  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis) };
   let work = { ...atOpen, style: { ...atOpen.style } }, tab = 'style', done = false;
-  const title = { trend: 'Trend line', rect: 'Rectangle', hline: 'Horizontal line' }[orig.type] || 'Drawing';
+  const title = { trend: 'Trend line', ray: 'Ray', xline: 'Extended line', rect: 'Rectangle', hline: 'Horizontal line', vline: 'Vertical line',
+    fib: 'Fib retracement' }[type] || 'Drawing';
   const box = openDialog(title, 'drawstyle');
   const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   body.append(tabs, pane);
   box.append(body, foot);
 
-  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style }); }
+  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style, vis: work.vis }); }
   function set(patch) { work = { ...work, ...patch }; preview(); }
-  function setStyle(patch) { work = { ...work, style: DS.normalize(orig.type, { ...work.style, ...patch }) }; preview(); renderPane(); }
+  function setStyle(patch, repaint = true) { work = { ...work, style: DS.normalize(type, { ...work.style, ...patch }) }; preview(); if (repaint) renderPane(); }
 
   function row(label, ctl) { const el = mk('div', 'set-row'), name = mk('div', 'set-name', label), c = mk('div', 'set-ctl'); c.append(ctl); el.append(name, c); return el; }
   function colorCtl(get, setv) {
@@ -1571,11 +1574,11 @@ function drawingSettingsDialog(cell, d0) {
     return n;
   }
   function selectCtl(val, choices, onchange) {
-    const s = mk('select', 'set-select');
-    for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; s.append(o); }
-    s.value = val;
-    s.onchange = () => onchange(s.value);
-    return s;
+    const sel = mk('select', 'set-select');
+    for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; sel.append(o); }
+    sel.value = val;
+    sel.onchange = () => onchange(sel.value);
+    return sel;
   }
   function checkCtl(val, onchange) {
     const c = mk('input'); c.type = 'checkbox'; c.checked = !!val; c.onchange = () => onchange(c.checked);
@@ -1586,9 +1589,61 @@ function drawingSettingsDialog(cell, d0) {
     inp.oninput = () => onchange(inp.value);
     return inp;
   }
+  const LINE_CHOICES = [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']];
+  const sw = (key) => checkCtl(work.style[key], (v) => setStyle({ [key]: v }));      // one on/off setting
 
+  /* A Fib retracement's levels: each one on or off, its ratio, its colour; one can be added (to 16) or taken away (to 1). */
+  function levelRows() {
+    const levels = work.style.levels, put = (next) => setStyle({ levels: next });
+    const rows = levels.map((l, i) => {
+      const el = mk('div', 'set-row fib-row'), on = checkCtl(l.on, (v) => put(levels.map((x, k) => (k === i ? { ...x, on: v } : x))));
+      const ratio = mk('input', 'set-num');
+      ratio.type = 'number'; ratio.step = '0.001'; ratio.min = '-10'; ratio.max = '10'; ratio.value = String(l.v);
+      ratio.setAttribute('aria-label', `Level ${i + 1} ratio`);
+      on.setAttribute('aria-label', `Level ${DS.fibText(l.v)} shown`);
+      ratio.onchange = () => {
+        const v = Number(ratio.value);
+        if (!Number.isFinite(v) || v < -10 || v > 10) { ratio.value = String(l.v); return; }
+        put(levels.map((x, k) => (k === i ? { ...x, v } : x)));
+      };
+      const col = colorCtl(() => l.color, (c) => { work = { ...work, style: DS.normalize(type, { ...work.style, levels: levels.map((x, k) => (k === i ? { ...x, color: c } : x)) }) }; preview(); });
+      const del = mk('button', 'btn btn-ghost fib-del', '×');
+      del.type = 'button'; del.title = 'Remove this level'; del.setAttribute('aria-label', `Remove level ${DS.fibText(l.v)}`);
+      del.disabled = levels.length <= 1;
+      del.onclick = () => put(levels.filter((_, k) => k !== i));
+      el.append(on, ratio, col, del);
+      return el;
+    });
+    const add = mk('button', 'btn btn-ghost', 'Add a level');
+    add.type = 'button';
+    add.disabled = levels.length >= DS.MAX_FIB_LEVELS;
+    add.onclick = () => put([...levels, { v: Math.round((levels[levels.length - 1].v + 0.5) * 1000) / 1000, on: true, color: '#787B86' }]);
+    return [...rows, add];
+  }
+
+  /* Which intervals it shows on: from / to, each an interval or "any". Tick, volume and range charts always show it. */
+  const VIS_CHOICES = [['', 'Any'], ...C.INTERVAL_GROUPS.flatMap(([, specs]) => specs).filter((x) => x.startsWith('time:')).map((x) => [x.slice(5), C.specLabel(x)])];
+  function visRows() {
+    const v = work.vis || { min: null, max: null }, num = (x) => (x === '' ? null : Number(x));
+    const put = (next) => { set({ vis: DS.normalizeVis(next) }); renderPane(); };
+    const here = C.parseSpec(cell.cfg.spec), sec = here && here.kind === 'time' ? here.n : null;
+    const rows = [mk('div', 'set-cap', 'SHOW ON'),
+      row('From', selectCtl(v.min == null ? '' : String(v.min), VIS_CHOICES, (x) => { const min = num(x); put({ min, max: v.max != null && min != null && v.max < min ? min : v.max }); })),
+      row('To', selectCtl(v.max == null ? '' : String(v.max), VIS_CHOICES, (x) => { const max = num(x); put({ min: v.min != null && max != null && v.min > max ? max : v.min, max }); }))];
+    const quick = mk('div', 'set-row vis-quick');
+    const q = (text, next) => { const bq = mk('button', 'btn btn-ghost', text); bq.type = 'button'; bq.onclick = () => put(next); return bq; };
+    quick.append(q('All intervals', null), ...(sec ? [q(`Only ${C.specLabel(cell.cfg.spec)}`, { min: sec, max: sec }), q(`${C.specLabel(cell.cfg.spec)} and higher`, { min: sec, max: null }),
+      q(`${C.specLabel(cell.cfg.spec)} and lower`, { min: null, max: sec })] : []));
+    rows.push(quick);
+    const note = !DS.shownOn(work.vis, cell.cfg.spec) ? `Hidden on this chart now (${C.specLabel(cell.cfg.spec)}). It is still saved: it shows on the intervals above.`
+      : 'Tick, volume and range charts always show it.';
+    rows.push(mk('div', 'set-note', note));
+    return rows;
+  }
+
+  const TABS = [['style', 'Style'], ...(has('text') ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []), ['vis', 'Visibility']];
   function renderTabs() {
-    tabs.replaceChildren(...[['style', 'Style'], ['text', 'Text']].map(([id, label]) => {
+    tabs.replaceChildren(...TABS.map(([id, label]) => {
       const b = mk('button', 'set-tab' + (id === tab ? ' active' : ''), label);
       b.type = 'button';
       b.onclick = () => { if (tab !== id) { tab = id; renderTabs(); renderPane(); } };
@@ -1599,27 +1654,48 @@ function drawingSettingsDialog(cell, d0) {
     const rows = [];
     if (tab === 'style') {
       rows.push(mk('div', 'set-cap', 'LINE'));
-      rows.push(row('Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row(type === 'fib' ? 'Trend colour' : 'Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
       rows.push(row('Width', numberCtl(work.style.width, 1, 4, (v) => setStyle({ width: v }))));
-      rows.push(row('Style', selectCtl(work.style.lineStyle, [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']], (v) => setStyle({ lineStyle: v }))));
-      if (orig.type === 'trend') {
-        rows.push(row('Extend left', checkCtl(work.style.extendLeft, (v) => setStyle({ extendLeft: v }))));
-        rows.push(row('Extend right', checkCtl(work.style.extendRight, (v) => setStyle({ extendRight: v }))));
-      }
-      if (orig.type === 'rect') {
+      rows.push(row('Style', selectCtl(work.style.lineStyle, LINE_CHOICES, (v) => setStyle({ lineStyle: v }))));
+      if (has('extendLeft')) rows.push(row('Extend left', sw('extendLeft')));
+      if (has('extendRight') && type !== 'rect') rows.push(row('Extend right', sw('extendRight')));
+      if (has('priceLabel')) rows.push(row('Price tag at its end', sw('priceLabel')));
+      if (has('stats')) rows.push(row('Its move, in points and bars', sw('stats')));
+      if (type === 'hline') rows.push(row('Price label', sw('axisLabel')));
+      if (type === 'vline') rows.push(row('Time tag', sw('timeLabel')));
+      if (type === 'rect') {
+        rows.push(row('Border', sw('border')));
+        rows.push(row('Extend right', sw('extendRight')));
         rows.push(mk('div', 'set-cap', 'FILL'));
         // unset (follows the theme) previews as the theme's own accentSoft, never a fixed default
         rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+        rows.push(mk('div', 'set-cap', 'INSIDE'));
+        rows.push(row('Middle line (50%)', sw('midline')));
+        rows.push(row('Quarter lines (25%, 75%)', sw('quarters')));
+        rows.push(row('Their style', selectCtl(work.style.midStyle, LINE_CHOICES, (v) => setStyle({ midStyle: v }))));
+        rows.push(row('Prices on its edges', sw('priceLabels')));
       }
-      if (orig.type === 'hline') rows.push(row('Price label', checkCtl(work.style.axisLabel, (v) => setStyle({ axisLabel: v }))));
+      if (type === 'fib') {
+        rows.push(mk('div', 'set-cap', 'LEVELS'));
+        rows.push(row('Show the ratio', sw('showLevels')));
+        rows.push(row('Show the price', sw('showPrices')));
+        rows.push(row('Fill between levels', sw('fill')));
+        rows.push(row('Reverse (0 at the start)', sw('reverse')));
+        rows.push(row('Text size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
+      }
+    } else if (tab === 'levels') {
+      rows.push(mk('div', 'set-cap', 'LEVELS'), ...levelRows());
+    } else if (tab === 'vis') {
+      rows.push(...visRows());
     } else {
       rows.push(mk('div', 'set-cap', 'TEXT'));
-      rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }))));
+      rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));      // typing never rebuilds the field it is typed in
       rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
       rows.push(row('Colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
-      rows.push(row('Bold', checkCtl(work.style.bold, (v) => setStyle({ bold: v }))));
-      const posChoices = DS.LABEL_POS[orig.type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
+      rows.push(row('Bold', sw('bold')));
+      const posChoices = DS.LABEL_POS[type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
       rows.push(row('Position', selectCtl(work.style.labelPos, posChoices, (v) => setStyle({ labelPos: v }))));
+      if (has('labelAlign')) rows.push(row('Along the line', selectCtl(work.style.labelAlign, DS.LABEL_ALIGN.map((p) => [p, p[0].toUpperCase() + p.slice(1)]), (v) => setStyle({ labelAlign: v }))));
     }
     pane.replaceChildren(...rows);
   }
@@ -1629,20 +1705,20 @@ function drawingSettingsDialog(cell, d0) {
   tpl.append(mk('span', '', 'Template'), chev);
   tpl.setAttribute('aria-haspopup', 'menu');
   tpl.onclick = () => window.HBPresets.menu(pageMenuHost(), tpl, {
-    kind: `drawing:${orig.type}`,
+    kind: `drawing:${type}`,
     current: () => work.style,
     apply(payload, { isDefault }) {
-      work = { ...work, style: DS.normalize(orig.type, payload) };
+      work = { ...work, style: DS.normalize(type, payload) };
       preview();
       renderPane();
-      if (isDefault) drawStyleDefaults.set(orig.type, payload);
+      if (isDefault) drawStyleDefaults.set(type, payload);
     },
   });
   const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
   cancel.onclick = () => closeDialog();
   ok.onclick = () => { done = true; closeDialog(); };
   foot.append(tpl, grow, cancel, ok);
-  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style }); };
+  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style, vis: atOpen.vis }); };
 
   renderTabs();
   renderPane();
