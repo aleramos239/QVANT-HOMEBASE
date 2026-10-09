@@ -34,6 +34,7 @@ from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
 from .session import session_date
 from .studies import Profile, make
+from .studies_ta import NAMES as TA_NAMES, warm_ta
 from .tick import BUY, SideClassifier, Tick, from_row
 
 HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
@@ -64,6 +65,8 @@ def warm_bars(key: str) -> int:
     carry a third `:source` token, which never changes the window length."""
     name, *rest = str(key).split(":")
     n = int(rest[0]) if rest and rest[0].isdecimal() else 0
+    if name in TA_NAMES:
+        return warm_ta(name, rest)
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 

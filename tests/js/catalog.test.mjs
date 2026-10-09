@@ -390,13 +390,13 @@ test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; cryp
 });
 
 test('dialog filtering by name and group', () => {
-  assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma']);
+  assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma', 'tema']);
   assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta']);
   assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigorders', 'imbalance', 'heatmap']);
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
-  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow']);
+  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Ranges', 'Levels', 'Volume', 'Order flow']);
 });
 
 test('a saved spec is normalised on migration (a Build-1 tick:0750 is tick:750)', () => {
@@ -786,4 +786,71 @@ test('barIndexAtMs finds the bar a time falls in, whatever the chart interval', 
   assert.equal(C.barIndexAtMs([], m(30), 60000), -1);
   assert.equal(C.barIndexAtMs([{ ms: m(30) }, { ms: m(31) }], m(50), 0), 1, 'a tick chart: the last hour counts');
   assert.equal(C.barIndexAtMs([{ ms: m(30) }, { ms: m(31) }], m(30) + 2 * 3600000, 0), -1);
+});
+
+/* 2026-10-09 technical indicators: declared as data, keys match studies_ta.py's wire keys. */
+test('technical indicators: wire keys, labels and style keys come from the definition', () => {
+  const k = (id, params) => C.serverKey(C.instance(id, params));
+  assert.equal(k('rsi'), 'rsi:14');
+  assert.equal(k('rsi', { length: 2 }), 'rsi:2');
+  assert.equal(k('macd'), 'macd:12:26:9');
+  assert.equal(k('bb', { length: 20, mult: 2.5 }), 'bb:20:2.5');
+  assert.equal(k('stoch'), 'stoch:14:3:3');
+  assert.equal(k('keltner'), 'keltner:20:20:1.5');
+  assert.equal(k('supertrend'), 'supertrend:10:3');
+  assert.equal(k('orb', { minutes: 30 }), 'orb:30');
+  assert.equal(k('sess', { session: 'asia' }), 'sess:asia');
+  assert.equal(k('sess', { session: 'nonsense' }), 'sess:london', 'a bad choice falls back to the default');
+  assert.equal(C.label(C.instance('macd')), 'MACD 12 26 9');
+  assert.equal(C.label(C.instance('orb', { minutes: 5 })), 'Opening range 5m');
+  assert.deepEqual(C.styleLineKeys('macd'), ['hist', 'macd', 'signal']);
+  assert.deepEqual(C.styleLineKeys('supertrend'), ['up', 'dn']);
+  assert.equal(C.clampParams('rsi', { length: 99999 }).length, 500);
+  assert.equal(C.clampParams('rsi', { length: 1 }).length, 2);
+  assert.deepEqual(C.serverKeys([C.instance('rsi'), C.instance('rsi'), C.instance('atr')]), ['rsi:14', 'atr:14'], 'two RSIs ask the server once');
+});
+
+test('technical indicators: own-pane ones move between panes, overlays stay on price', () => {
+  for (const id of ['rsi', 'macd', 'stoch', 'mfi', 'er', 'atr']) assert.equal(C.placement(C.instance(id)), 'own', id);
+  for (const id of ['bb', 'keltner', 'donchian', 'supertrend', 'tema', 'orb', 'sess']) assert.equal(C.placement(C.instance(id)), null, id);
+});
+
+test('technical indicators: lineValue reads a number, a part, or a custom reader, and never NaN', () => {
+  const [up, dn] = C.TA_BY_ID.supertrend.lines;
+  assert.equal(C.lineValue(up, { line: 100, dir: 1 }), 100);
+  assert.equal(C.lineValue(dn, { line: 100, dir: 1 }), null, 'only the side the trend is on draws');
+  assert.equal(C.lineValue(dn, { line: 100, dir: -1 }), 100);
+  assert.equal(C.lineValue(C.TA_BY_ID.rsi.lines[0], 61.5), 61.5);
+  assert.equal(C.lineValue(C.TA_BY_ID.rsi.lines[0], null), null);
+  assert.equal(C.lineValue(C.TA_BY_ID.macd.lines[0], { hist: -0.3 }), -0.3);
+  assert.equal(C.lineValue(C.TA_BY_ID.macd.lines[1], { macd: 1, signal: null }), 1);
+  assert.equal(C.lineValue(C.TA_BY_ID.macd.lines[2], { macd: 1, signal: null }), null, 'signal still warming up');
+  assert.equal(C.lineValue(C.TA_BY_ID.bb.lines[0], { up: NaN }), null);
+});
+
+test('technical indicators: the legend shows one value per visible line in its colour', () => {
+  const inst = C.instance('stoch'), bar = { sv: { 'stoch:14:3:3': { k: 71.234, d: 65.5 } } };
+  const v = C.legendValues(inst, bar, {}, 0.25);
+  assert.deepEqual(v.map((x) => x.text), ['71.23', '65.50']);
+  assert.deepEqual(v.map((x) => x.color), [C.TA_BY_ID.stoch.lines[0].color, C.TA_BY_ID.stoch.lines[1].color]);
+  inst.style = { k: { color: '#112233', width: 1, dash: 'solid', visible: true }, d: { color: '#445566', width: 1, dash: 'solid', visible: false } };
+  assert.deepEqual(C.legendValues(inst, bar, {}, 0.25), [{ text: '71.23', color: '#112233' }], 'a hidden line leaves the legend');
+  assert.deepEqual(C.legendValues(C.instance('rsi'), { sv: {} }, {}, 0.25).map((x) => x.text), ['—'], 'warming up reads a dash');
+});
+
+test('technical indicators: a second copy of one indicator starts in a different colour', () => {
+  const first = C.defaultStyle('rsi', []), second = C.defaultStyle('rsi', [C.instance('rsi')]);
+  assert.notEqual(first.main.color, second.main.color);
+  const sc = C.defaultStyle('macd', [C.instance('macd')]);
+  assert.equal(sc.signal.color, C.TA_BY_ID.macd.lines[2].color, 'only the first line changes colour');
+  assert.deepEqual(C.sanitizePreset('macd', { params: { fast: 5 } }).params, { fast: 5, slow: 26, signal: 9 });
+});
+
+test('technical indicators: Supertrend\'s legend shows only the side in force', () => {
+  const inst = C.instance('supertrend'), k = 'supertrend:10:3';
+  assert.deepEqual(C.legendValues(inst, { sv: { [k]: { line: 100.5, dir: 1 } } }, {}, 0.25).map((x) => x.text), ['100.50']);
+  const down = C.legendValues(inst, { sv: { [k]: { line: 101, dir: -1 } } }, {}, 0.25);
+  assert.deepEqual(down.map((x) => x.text), ['101.00']);
+  assert.equal(down[0].color, C.TA_BY_ID.supertrend.lines[1].color, 'in the downtrend colour');
+  assert.deepEqual(C.legendValues(inst, { sv: {} }, {}, 0.25).map((x) => x.text), ['—'], 'warming up: one dash');
 });

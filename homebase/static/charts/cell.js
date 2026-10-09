@@ -802,8 +802,34 @@ class Cell {
             { priceFormat: { ...WHOLE }, ...scale, lineStyle: dash(st.dash), visible: st.visible !== false }), where, MAIN_TOP);
           break;
         }
-        default:   // levels, footprint, profile, big prints: price lines, layers and markers
+        default: {
+          const t = C.TA_BY_ID[inst.id];
+          if (!t) break;   // levels, footprint, profile, big prints: price lines, layers and markers
+          // a technical indicator, drawn from its catalog definition: a pane of its own (or the price pane)
+          // when it can move, the price pane when it cannot
+          const { where, scale } = t.pane ? spot(inst) : { where: 0, scale: {} };
+          const st = inst.style || {}, own = where > 0;
+          const fmt = t.pane ? { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } } : {};
+          let top = null;
+          t.lines.forEach((ln, j) => {
+            const sty = st[ln.part] || { color: ln.color, width: ln.width, dash: ln.dash, visible: true };
+            if (j === 0) this.colorOf[inst.uid] = sty.color;
+            const tag = ln.tag !== false;   // its value on the price axis (a band or a histogram has none)
+            const serie = ln.type === 'hist'
+              ? add(inst, k, ln.part, LW.HistogramSeries, { ...fmt, lastValueVisible: false, ...scale, visible: sty.visible !== false }, where)
+              : line(inst, k, ln.part, sty.color, sty.width, where,
+                { ...fmt, lastValueVisible: tag, ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false });
+            this.lines[this.lines.length - 1].gen = ln;
+            if (!top) top = serie;
+          });
+          if (own && t.refs) {
+            for (const r of t.refs) {
+              top.createPriceLine({ price: r, color: P.text2 || '#787B86', lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false, title: '' });
+            }
+          }
+          if (top) pin(top, where, MAIN_TOP);
           break;
+        }
       }
     }
   }
@@ -1022,6 +1048,11 @@ class Cell {
     if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? P.upA : P.downA };
     const v = b.sv ? b.sv[l.src] : null;
     if (v == null) return { time };
+    if (l.gen) {   // a technical indicator: its definition says which number this line plots
+      const x = C.lineValue(l.gen, v);
+      if (x == null) return { time };
+      return l.gen.type === 'hist' ? { time, value: x, color: x >= 0 ? P.upA : P.downA } : { time, value: x };
+    }
     if (typeof v === 'number') return { time, value: v };
     if (l.src.startsWith('vwap')) {
       // l.part: null for the main line, else the signed sd multiplier itself (buildSeries's band n * +-1).

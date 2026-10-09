@@ -6,7 +6,8 @@ preview can never corrupt it. Values: float, dict, or None (warming up).
 
 Wire keys: "sma:50", "sma:50:hl2" (length + optional source, sma/ema only; default source is close), "ema:20",
 "vwma:15", "vwap", "vwap:rth", "vwap:week", "vwap:month", "vwap:t0200" (anchor eth/rth/week/month/tHHMM;
-"vwap" alone is "eth"), "adx:14", "cumdelta", "levels". ("profile" is not a Study — see Profile.)
+"vwap" alone is "eth"), "adx:14", "cumdelta", "levels". ("profile" is not a Study — see Profile.) The technical
+studies (rsi, macd, bb, atr, stoch, supertrend, donchian, keltner, tema, mfi, er, orb, sess) are in studies_ta.py.
 """
 from __future__ import annotations
 
@@ -14,6 +15,7 @@ import math
 import re
 
 from .session import custom_anchor_key, is_rth, month_key, week_key
+from .studies_ta import NAMES as TA_NAMES, make_ta
 
 SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
 
@@ -249,9 +251,11 @@ def make(key: str) -> Study:
     """A Study from its wire key. ValueError on anything malformed: an
     unknown name, a length outside LENGTHS, or a parameter too many."""
     name, *args = str(key).split(":")
+    if name in TA_NAMES:
+        return make_ta(name, args)
     cls = REGISTRY.get(name)
     if cls is None:
-        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted(REGISTRY))}, profile)")
+        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES]))}, profile)")
     if cls in (SMA, EMA):
         if len(args) > 2 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
             raise ValueError(f"bad study {key!r}: {name} takes a length and optional source "
