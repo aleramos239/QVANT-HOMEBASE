@@ -1689,13 +1689,13 @@ async function removeWatch(name) {
 async function showWatch(name) {
   if (WATCH_BUSY) return;
   WATCH_BUSY = name; render();
-  toast("Putting its executions on the chart…");
+  toast("Opening its executions in the Lab…");
   const r = await chartPost("/api/tester/watch/show", {name});
   WATCH_BUSY = "";
   render();
-  if (!r || r.ok === false) { toast(`Could not open the chart: ${(r && r.detail) || "no answer"}`, 7000); return; }
-  toast(r.pages ? `${r.trades} executions of ${name} are on the chart (${r.start} to ${r.end}). Open the Charts tab.`
-    : `${r.trades} executions are ready, but no chart page is open: open the Charts tab, then press this again.`, 8000);
+  if (!r || r.ok === false || !r.run_id) { toast(`Could not open the chart: ${(r && r.detail) || "no answer"}`, 7000); return; }
+  // the Strategy Tester's chart is in the Lab: go there, on this run (the Lab reads #run=<id> and puts it on its chart)
+  location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#run=" + encodeURIComponent(r.run_id);
 }
 function setView(k, name) {
   closeAsgMenus(false);
@@ -1905,7 +1905,7 @@ function watchView(name) {
     ${chart}
     <div class="figs">${fig("Net", usdS(w.net))}${fig("Win rate", pct(w.win_rate))}${fig("Trades", w.trades == null ? "—" : w.trades)}${fig("Avg per trade", usdS(w.avg_trade), "After costs, per trade")}${fig("Profit factor", num(w.profit_factor, 2))}${fig("Worst day", money(w.worst_day))}${fig("Deepest drawdown", money(w.max_drawdown == null ? null : -Math.abs(w.max_drawdown)))}${fig("Days traded", w.days == null ? "—" : w.days)}</div>
     ${w.why ? `<div class="sec"><h2>Why it should work</h2><p class="watch-why">${esc(w.why)}</p></div>` : ""}
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="showWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Every entry and exit, on the Charts page">Show executions on chart</button>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="showWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Every entry and exit, on the Lab's chart">Show executions on chart</button>
       <button class="btn btn-outline btn-sm" onclick="removeWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off this page. It stays in the Book.">Remove from Desk</button></div>`;
 }
 
