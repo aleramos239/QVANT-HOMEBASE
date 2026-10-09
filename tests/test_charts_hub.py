@@ -771,3 +771,32 @@ def test_the_session_that_just_closed_is_watched_for_repairs_from_the_roll_on(tm
     assert hub.history.changed() == []                       # its files as they are now: the baseline
     write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", today[:40], complete=False)     # the evening fill lands
     assert hub.history.changed() == [("NQ", D)]
+
+
+def test_studies_that_read_many_days_are_primed_with_the_sessions_before_the_chart(tmp_path):
+    """A 1-minute chart loads 5 prior sessions; the 5-day high / low must still see 5 completed days at its first
+    bar, so the sessions before the chart are fed to it (hub.prime_sessions) and their values never shown."""
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("dhl:5", "ema:3"))
+    assert [b.session for b in s.prime] == [d.isoformat() for d in days[:3] for _ in range(3)]     # 8 sessions, 5 loaded
+    assert s.bars[0].session == days[3].isoformat()
+    every = [b for d in days for b in hub.history.bars("NQ", M1, d)]
+    st = make("dhl:5")
+    want = [st.push(b) for b in every]
+    assert s.values["dhl:5"][:len(s.bars) - 1] == want[len(s.prime):len(s.prime) + len(s.bars) - 1]
+    assert s.values["dhl:5"][0] is not None                       # day 4 of the history: three finished days already
+    # a study that reads only the chart's bars is untouched by the priming
+    fresh = make("ema:3")
+    assert s.values["ema:3"] == [fresh.push(b) for b in s.bars]
+
+
+def test_ensure_prime_reaches_back_further_for_a_study_added_later(tmp_path):
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("ema:3",))
+    assert s.prime == [] and s.prime_n == 0
+    hub.ensure_prime(s, ["dhl:5"])
+    assert len(s.prime) == 9 and s.prime_n == 6                   # the three sessions behind the chart
+    s.add_study("dhl:5")
+    assert s.values["dhl:5"][0] is not None
+    hub.ensure_prime(s, ["ema:3"])                                # nothing new to read: nothing reloaded
+    assert s.prime_n == 6

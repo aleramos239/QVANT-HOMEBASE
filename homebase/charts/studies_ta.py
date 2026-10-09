@@ -18,6 +18,18 @@ Wire keys (every part after the name is a number; a missing one takes its defaul
   orb:15            the first n minutes from 09:30 ET: high, low, mid, growing until n is up    -> {hi, lo, mid}
   sess:london       high / low of a named session window so far today (asia 00:00-03:00, london 03:00-08:25,
                     pre 08:25-09:30, nyam 09:30-11:00; ET), kept through the rest of the day  -> {hi, lo}
+
+Structure (engine/levels.py pivots, ranges.py, zones.py, families/round1.py va_reclaim, families/noise.py):
+  swing:50          the latest swing high / low no later bar traded beyond; a swing is a bar strictly above / below
+                    the n bars before AND the n after it, so it is known n bars later          -> {hi, lo}
+  equal:50:10       the latest equal high / low: two consecutive swings within `tol` points, the second not beyond the
+                    first, nothing between them beyond it, and no bar since beyond the level   -> {hi, lo}
+  rmove:200         the move in progress: a zigzag of N points; its range, middle and OTE band   -> {hi, lo, mid, ote1, ote2, dir}
+  rswing:50         the range between the latest untouched swing high and swing low, same value
+  vaprev            the PRIOR session's 09:30-16:00 value area (70 %) and point of control      -> {vah, val, poc}
+  noise:0.3:rth     open +/- k x the daily ATR(14) of the sessions before: families/noise.py   -> {up, dn}
+  rvol:14:10        bar volume over the median of the same clock bar on the n days before     -> float
+  dhl:5             highest high / lowest low of the last n completed sessions                -> {hi, lo}
 """
 from __future__ import annotations
 
@@ -350,6 +362,290 @@ class SessionRange(_Study):
         return (day, hi, lo), (None if hi is None else {"hi": hi, "lo": lo})
 
 
+
+# ---- structure ----------------------------------------------------------------------------------------------------
+_NEG = float("-inf")
+
+
+def _side_initial():
+    return ((), 0, None, _NEG, (), ())     # window, bars seen, previous swing (index, y), max since it, untouched swings, live equals
+
+
+def _side_step(st, y, n, tol):
+    """One side of the pivots (a low side is run on y = -low). `swings` are the swings no later bar went beyond,
+    `eqs` the equal levels no bar went beyond since their second swing (engine/levels.py pivots, equal_pairs)."""
+    win, i, prev, runmax, swings, eqs = st
+    if swings:
+        swings = tuple(s for s in swings if y <= s[1])
+    if eqs:
+        eqs = tuple(e for e in eqs if y <= e)
+    win = (win + (y,))[-(2 * n + 1):]
+    i += 1
+    if prev is not None and y > runmax:
+        runmax = y
+    if len(win) == 2 * n + 1:
+        c = win[n]
+        if c > max(win[:n]) and c > max(win[n + 1:]):
+            if prev is not None and 0 <= prev[1] - c <= tol and runmax <= prev[1]:
+                eqs = (eqs + (prev[1],))[-50:]
+            swings = (swings + ((i - 1 - n, c),))[-200:]
+            prev = (i - 1 - n, c)
+            runmax = max(win[n + 1:])
+    return (win, i, prev, runmax, swings, eqs)
+
+
+class Swing(_Study):
+    def __init__(self, n: int = 50):
+        self.n = int(n)
+        super().__init__()
+
+    def initial(self):
+        return (_side_initial(), _side_initial())
+
+    def step(self, st, bar):
+        hi, lo = _side_step(st[0], bar.h, self.n, 0.0), _side_step(st[1], -bar.l, self.n, 0.0)
+        if not hi[4] and not lo[4]:
+            return (hi, lo), None
+        return (hi, lo), {"hi": hi[4][-1][1] if hi[4] else None, "lo": -lo[4][-1][1] if lo[4] else None}
+
+
+class EqualHL(_Study):
+    def __init__(self, n: int = 50, tol: float = 10.0):
+        self.n, self.tol = int(n), float(tol)
+        super().__init__()
+
+    def initial(self):
+        return (_side_initial(), _side_initial())
+
+    def step(self, st, bar):
+        hi, lo = _side_step(st[0], bar.h, self.n, self.tol), _side_step(st[1], -bar.l, self.n, self.tol)
+        if not hi[5] and not lo[5]:
+            return (hi, lo), None
+        return (hi, lo), {"hi": hi[5][-1] if hi[5] else None, "lo": -lo[5][-1] if lo[5] else None}
+
+
+OTE_LO, OTE_HI = 0.62, 0.79
+
+
+def _range_value(lo, hi, d):
+    """A dealing range with its middle and the 62 % .. 79 % retracement band of a leg pointing d (+1 up)."""
+    r = hi - lo
+    if not r > 0:
+        return None
+    if d == 1:
+        a, b = hi - OTE_LO * r, hi - OTE_HI * r
+    else:
+        a, b = lo + OTE_LO * r, lo + OTE_HI * r
+    return {"hi": hi, "lo": lo, "mid": (hi + lo) / 2.0, "ote1": a, "ote2": b, "dir": d}
+
+
+class RangeMove(_Study):
+    """engine/ranges.move: a zigzag of `points`; the range runs from the last turning point to the extreme reached since."""
+
+    def __init__(self, points: float = 200.0):
+        self.points = float(points)
+        super().__init__()
+
+    def initial(self):
+        return (False, 0, None, None, 0.0, 0.0)   # started, mode, running high, running low, pivot, extreme
+
+    def step(self, st, bar):
+        started, mode, hi, lo, pv, ex = st
+        h, l, thr = bar.h, bar.l, self.points
+        if not started:
+            return (True, 0, h, l, 0.0, 0.0), None
+        if mode == 0:
+            hi, lo = max(hi, h), min(lo, l)
+            if h - lo >= thr:
+                mode, pv, ex = 1, lo, h
+            elif hi - l >= thr:
+                mode, pv, ex = -1, hi, l
+        elif mode == 1:
+            if h > ex:
+                ex = h
+            elif ex - l >= thr:
+                mode, pv, ex = -1, ex, l
+        else:
+            if l < ex:
+                ex = l
+            elif h - ex >= thr:
+                mode, pv, ex = 1, ex, h
+        return (True, mode, hi, lo, pv, ex), (None if mode == 0 else _range_value(min(pv, ex), max(pv, ex), mode))
+
+
+class RangeSwing(_Study):
+    """engine/ranges.swing_pair: the latest untouched swing high and swing low (the 5-session limit is left out)."""
+
+    def __init__(self, n: int = 50):
+        self.n = int(n)
+        super().__init__()
+
+    def initial(self):
+        return (_side_initial(), _side_initial())
+
+    def step(self, st, bar):
+        hi, lo = _side_step(st[0], bar.h, self.n, 0.0), _side_step(st[1], -bar.l, self.n, 0.0)
+        if not hi[4] or not lo[4]:
+            return (hi, lo), None
+        (a, h), (b, ny) = hi[4][-1], lo[4][-1]
+        return (hi, lo), _range_value(-ny, h, 1 if b < a else -1)
+
+
+def _value_area(vol: dict, share: float = 0.70):
+    """(VAL, VAH, POC) as tick rows of a {row: volume} map, engine/families/round1.value_area_of: start at the heaviest row
+    (ties: the lowest), add the larger neighbour (equal: both) until `share` of the volume is inside."""
+    k0, k1 = min(vol), max(vol)
+    rows = [float(vol.get(k0 + i, 0.0)) for i in range(k1 - k0 + 1)]
+    tot = sum(rows)
+    if tot <= 0:
+        return None
+    lo = hi = max(range(len(rows)), key=lambda i: (rows[i], -i))
+    poc, acc, n = lo, rows[lo], len(rows)
+    while acc < share * tot and (lo > 0 or hi < n - 1):
+        up = rows[hi + 1] if hi < n - 1 else -1.0
+        dn = rows[lo - 1] if lo > 0 else -1.0
+        if up >= dn:
+            hi += 1
+            acc += up
+        if dn >= up:
+            lo -= 1
+            acc += dn
+    return k0 + lo, k0 + hi, k0 + poc
+
+
+_RTH_OPEN, _RTH_CLOSE = dt.time(9, 30), dt.time(16, 0)
+
+
+class VaPrev(_Study):
+    """The prior session's RTH value area. The volume by price comes from each bar's footprint rows."""
+
+    def __init__(self, tick: float = 0.25):
+        self.tick = float(tick)
+        super().__init__()
+
+    def initial(self):
+        return (None, {}, None)   # session, its RTH volume by tick row so far (replaced, never changed in place), last finished value area
+
+    def step(self, st, bar):
+        sess, vol, last = st
+        if bar.session != sess:
+            if vol:
+                last = _value_area(vol) or last
+            sess, vol = bar.session, {}
+        t = _et(bar)
+        fp = getattr(bar, "fp", None)
+        if fp and t.date().isoformat() == bar.session and _RTH_OPEN <= t.time() < _RTH_CLOSE:
+            vol = dict(vol)
+            for k, (s, b) in fp.items():
+                vol[k] = vol.get(k, 0) + s + b
+        out = None if last is None else {"val": round(last[0] * self.tick, 6), "vah": round(last[1] * self.tick, 6),
+                                         "poc": round(last[2] * self.tick, 6)}
+        return (sess, vol, last), out
+
+
+class _Daily:
+    """Session highs / lows / closes, finished one at a time as the session key changes: shared by the studies that
+    read prior sessions (the daily ATR, the n-session high / low)."""
+
+
+class NoiseBand(_Study):
+    """families/noise.py: the anchor's open +/- k x the daily ATR(14) of the sessions BEFORE today (none until 15 exist).
+    The anchor's open is the first bar starting at or after the anchor, at most 5 minutes late."""
+
+    ANCHOR = {"rth": 9 * 60 + 30, "globex": 60}
+
+    def __init__(self, k: float = 0.3, anchor: str = "rth"):
+        if anchor not in self.ANCHOR:
+            raise ValueError(f"anchor {anchor!r} (have {', '.join(self.ANCHOR)})")
+        self.k, self.anchor, self.am = float(k), anchor, self.ANCHOR[anchor]
+        super().__init__()
+
+    def initial(self):
+        # session, its high, low, close, the close before it, true ranges so far, their sum, the ATR, the anchor's open, gave up today
+        return (None, None, None, None, None, 0, 0.0, None, None, False)
+
+    def step(self, st, bar):
+        sess, h, l, c, pc, nt, tsum, atr, ref, dead = st
+        if bar.session != sess:
+            if sess is not None:                                   # the session that just ended becomes a daily bar
+                if pc is not None:
+                    tr = max(h - l, abs(h - pc), abs(l - pc))
+                    nt += 1
+                    if nt <= 14:
+                        tsum += tr
+                        if nt == 14:
+                            atr = tsum / 14.0
+                    else:
+                        atr = (atr * 13.0 + tr) / 14.0
+                pc = c
+            sess, h, l, c, ref, dead = bar.session, bar.h, bar.l, bar.c, None, False
+        else:
+            h, l, c = max(h, bar.h), min(l, bar.l), bar.c
+        if ref is None and not dead:
+            t = _et(bar)
+            late = t.hour * 60 + t.minute - self.am
+            if t.date().isoformat() == bar.session and late >= 0:
+                if late <= 5:
+                    ref = bar.o
+                else:
+                    dead = True
+        new = (sess, h, l, c, pc, nt, tsum, atr, ref, dead)
+        if ref is None or atr is None:
+            return new, None
+        return new, {"up": ref + self.k * atr, "dn": ref - self.k * atr}
+
+
+class RelVolume(_Study):
+    """families/blocks.py rvol: the bar's volume over the median volume of the SAME clock bar on the `days` days before; None
+    with fewer than `need` of them. The per-clock history is kept inside the study; preview reads it without adding."""
+
+    def __init__(self, days: int = 14, need: int = 10):
+        self.days, self.need = int(days), int(need)
+        self.hist = {}
+        super().__init__()
+
+    def _ratio(self, bar):
+        t = _et(bar)
+        key = t.hour * 60 + t.minute
+        h = self.hist.get(key, ())
+        ratio = None
+        if len(h) >= self.need:
+            s = sorted(h)
+            m = (s[len(s) // 2] + s[(len(s) - 1) // 2]) / 2.0
+            ratio = bar.v / m if m > 0 else None
+        return key, ratio
+
+    def push(self, bar):
+        key, ratio = self._ratio(bar)
+        self.hist[key] = (self.hist.get(key, ()) + (bar.v,))[-self.days:]
+        return ratio
+
+    def preview(self, bar):
+        return self._ratio(bar)[1]
+
+
+class DayHL(_Study):
+    """Highest high / lowest low of the last `days` COMPLETED sessions."""
+
+    def __init__(self, days: int = 5):
+        self.days = int(days)
+        super().__init__()
+
+    def initial(self):
+        return (None, None, None, ())   # session, its high, low, the finished sessions' (high, low)
+
+    def step(self, st, bar):
+        sess, h, l, done = st
+        if bar.session != sess:
+            if sess is not None:
+                done = (done + ((h, l),))[-self.days:]
+            sess, h, l = bar.session, bar.h, bar.l
+        else:
+            h, l = max(h, bar.h), min(l, bar.l)
+        if not done:
+            return (sess, h, l, done), None
+        return (sess, h, l, done), {"hi": max(x for x, _ in done), "lo": min(y for _, y in done)}
+
 # name -> (class, parameters): each parameter is (default, minimum, maximum); a wire key may give them in order
 PARAMS = {
     "rsi": (RSI, ((14, 2, 500),)),
@@ -364,18 +660,39 @@ PARAMS = {
     "mfi": (MFI, ((14, 2, 500),)),
     "er": (Efficiency, ((14, 2, 500),)),
     "orb": (OpeningRange, ((15, 1, 240),)),
+    "swing": (Swing, ((50, 2, 500),)),
+    "equal": (EqualHL, ((50, 2, 500), (10.0, 0.25, 1000))),
+    "rmove": (RangeMove, ((200.0, 1, 5000),)),
+    "rswing": (RangeSwing, ((50, 2, 500),)),
+    "rvol": (RelVolume, ((14, 3, 60), (10, 1, 60))),
+    "dhl": (DayHL, ((5, 1, 60),)),
+    "vaprev": (VaPrev, ()),
 }
-NAMES = tuple(PARAMS) + ("sess",)
+NAMES = tuple(PARAMS) + ("sess", "noise")
 
 
-def make_ta(name: str, args: list):
+def make_ta(name: str, args: list, tick: float = 0.25):
     """The study `name` with its wire-key `args` (strings), or ValueError: too many parameters, one not a number or
-    outside its range."""
+    outside its range. `tick` is the market's tick size, for the studies that read footprint rows."""
+    if name == "noise":
+        if len(args) > 2:
+            raise ValueError("bad study 'noise': noise:<k>:<rth|globex>")
+        try:
+            k = float(args[0]) if args else 0.3
+        except ValueError:
+            raise ValueError(f"bad study 'noise': {args[0]!r} is not a number") from None
+        if not (math.isfinite(k) and 0.05 <= k <= 3.0):
+            raise ValueError("bad study 'noise': k must be 0.05..3")
+        return NoiseBand(k, *args[1:])
     if name == "sess":
         if len(args) > 1:
             raise ValueError(f"bad study {name!r}: sess takes one session name ({', '.join(SESSIONS)})")
         return SessionRange(*args)
     cls, spec = PARAMS[name]
+    if cls is VaPrev:
+        if args:
+            raise ValueError("bad study 'vaprev': it takes no parameters")
+        return VaPrev(tick)
     if len(args) > len(spec):
         raise ValueError(f"bad study {name!r}: at most {len(spec)} parameter(s)")
     vals = []
@@ -417,4 +734,25 @@ def warm_ta(name: str, rest: list) -> int:
         return 15 * num(0, 20)
     if name in ("mfi", "er"):
         return num(0, 14) + 1
+    if name in ("swing", "rswing"):
+        return 10 * num(0, 50)
+    if name == "equal":
+        return 10 * num(0, 50)
+    if name == "rmove":
+        return 400
+    if name == "vaprev":
+        return 400
     return 0
+
+
+def prime_ta(name: str, rest: list) -> int:
+    """Completed sessions BEFORE the loaded ones that a study needs to be fed (hub.prime_sessions) so its first value
+    is right: the noise band's ATR needs 15 daily bars, relative volume its days, a day high / low its days. A chart
+    loads only 1-5 prior sessions (hub.sessions_back), so without this these read nothing on a 1-minute chart."""
+    def num(i, default):
+        try:
+            return int(float(rest[i]))
+        except (IndexError, ValueError):
+            return default
+    return {"noise": 16, "rvol": num(0, 14) + 1, "dhl": num(0, 5) + 1, "vaprev": 1, "swing": 3, "rswing": 3, "equal": 3,
+            "rmove": 5}.get(name, 0)

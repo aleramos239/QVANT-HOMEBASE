@@ -244,3 +244,232 @@ def test_warm_bars_covers_each_studys_memory():
     assert warm_bars("orb:15") == 0 and warm_bars("sess:london") == 0
     assert warm_bars("supertrend:10:3") == 100 and warm_bars("tema:20") == 300
     assert warm_bars("ema:20") == 100                           # the existing ones are untouched
+
+
+# ---- structure: each against the engine's own functions, restated in pure Python (engine/levels.py, ranges.py, round1.py) ----
+def ref_pivots(h, l, n):
+    hi = [i for i in range(n, len(h) - n) if h[i] > max(h[i - n:i]) and h[i] > max(h[i + 1:i + n + 1])]
+    lo = [i for i in range(n, len(l) - n) if l[i] < min(l[i - n:i]) and l[i] < min(l[i + 1:i + n + 1])]
+    return hi, lo
+
+
+def ref_untouched(h, l, n):
+    ih, il = ref_pivots(h, l, n)
+    hh = [i for i in ih if max(h[i + 1:], default=-1e18) <= h[i]]
+    ll = [i for i in il if min(l[i + 1:], default=1e18) >= l[i]]
+    return (h[hh[-1]] if hh else None), (l[ll[-1]] if ll else None), (hh[-1] if hh else None), (ll[-1] if ll else None)
+
+
+def ref_equal(h, l, n, tol):
+    ih, il = ref_pivots(h, l, n)
+    out = [None, None]
+    for k, (idx, y) in enumerate(((ih, h), (il, [-x for x in l]))):
+        pairs = [(a, b, y[a]) for a, b in zip(idx[:-1], idx[1:]) if 0 <= y[a] - y[b] <= tol and max(y[a + 1:b + 1]) <= y[a]]
+        for a, b, lvl in reversed(pairs):
+            if max(y[b + 1:], default=-1e18) <= lvl:
+                out[k] = lvl if k == 0 else -lvl
+                break
+    return out
+
+
+def zig(n=900, seed=3, amp=3.0):
+    """A wavy walk with real swings."""
+    r, px, out = random.Random(seed), 100.0, []
+    for i in range(n):
+        o = px
+        px += amp * math.sin(i / 23.0) + r.uniform(-1.2, 1.2)
+        out.append(mk(px, h=max(o, px) + r.uniform(0, 0.6), l=min(o, px) - r.uniform(0, 0.6), o=o, v=r.randint(5, 80),
+                      t=ms(2026, 10, 7, 9, 30) + i * 60000))
+    return out
+
+
+def test_swing_levels_equal_the_engines_untouched_swings_at_every_bar():
+    bars = zig()
+    H, L = [b.h for b in bars], [b.l for b in bars]
+    got = run("swing:5", bars)
+    seen = 0
+    for i in range(len(bars)):
+        rh, rl, _, _ = ref_untouched(H[:i + 1], L[:i + 1], 5)
+        if rh is None and rl is None:
+            assert got[i] is None
+            continue
+        seen += 1
+        assert got[i]["hi"] == rh and got[i]["lo"] == rl, i
+    assert seen > 400                                           # the walk really has swings
+
+
+def test_equal_levels_equal_the_engines_live_equals():
+    bars = zig(1200, seed=11, amp=1.5)
+    H, L = [b.h for b in bars], [b.l for b in bars]
+    got = run("equal:4:1.5", bars)
+    hits = 0
+    for i in range(0, len(bars), 7):
+        rh, rl = ref_equal(H[:i + 1], L[:i + 1], 4, 1.5)
+        g = got[i] or {"hi": None, "lo": None}
+        assert (g["hi"], g["lo"]) == (rh, rl), i
+        hits += rh is not None or rl is not None
+    assert hits > 20
+
+
+def ref_move(h, l, thr):
+    mode, hi, lo, pv, ex = 0, h[0], l[0], 0.0, 0.0
+    for i in range(1, len(h)):
+        if mode == 0:
+            hi, lo = max(hi, h[i]), min(lo, l[i])
+            if h[i] - lo >= thr:
+                mode, pv, ex = 1, lo, h[i]
+            elif hi - l[i] >= thr:
+                mode, pv, ex = -1, hi, l[i]
+        elif mode == 1:
+            if h[i] > ex:
+                ex = h[i]
+            elif ex - l[i] >= thr:
+                mode, pv, ex = -1, ex, l[i]
+        else:
+            if l[i] < ex:
+                ex = l[i]
+            elif h[i] - ex >= thr:
+                mode, pv, ex = 1, ex, h[i]
+    return None if mode == 0 else (min(pv, ex), max(pv, ex), mode)
+
+
+def test_move_range_equals_the_engines_zigzag_and_carries_the_ote_band():
+    bars = zig(600, seed=5, amp=4.0)
+    H, L = [b.h for b in bars], [b.l for b in bars]
+    got = run("rmove:6", bars)
+    flips = 0
+    for i in range(0, len(bars), 5):
+        ref = ref_move(H[:i + 1], L[:i + 1], 6.0)
+        if ref is None:
+            assert got[i] is None
+            continue
+        lo, hi, d = ref
+        g = got[i]
+        assert (g["lo"], g["hi"], g["dir"]) == (lo, hi, d), i
+        r = hi - lo
+        assert g["mid"] == pytest.approx((hi + lo) / 2)
+        if d == 1:                                              # an up leg retraces DOWN from its high
+            assert (g["ote1"], g["ote2"]) == pytest.approx((hi - 0.62 * r, hi - 0.79 * r))
+        else:
+            assert (g["ote1"], g["ote2"]) == pytest.approx((lo + 0.62 * r, lo + 0.79 * r))
+        flips += d == -1
+    assert flips
+
+
+def test_swing_range_is_the_latest_untouched_pair_and_points_the_way_its_low_came():
+    bars = zig(700, seed=9)
+    H, L = [b.h for b in bars], [b.l for b in bars]
+    got = run("rswing:5", bars)
+    n = 0
+    for i in range(0, len(bars), 6):
+        rh, rl, ia, ib = ref_untouched(H[:i + 1], L[:i + 1], 5)
+        if rh is None or rl is None:
+            assert got[i] is None
+            continue
+        n += 1
+        d = 1 if ib < ia else -1
+        assert (got[i]["lo"], got[i]["hi"], got[i]["dir"]) == (rl, rh, d), i
+    assert n > 30
+
+
+def test_prior_day_value_area_is_the_engines_70_percent_around_the_heaviest_row():
+    def day(session, rows, day_ms):
+        # one 1-minute bar per row group at 10:00 ET carrying a footprint: {tick row: (sell, buy)}
+        b = mk(100.0, t=day_ms, session=session)
+        b.fp = rows
+        return b
+    d1 = ms(2026, 10, 6, 10, 0)
+    vols = {400: 10, 401: 30, 402: 100, 403: 20, 404: 5, 405: 5}          # heaviest 402; 100 of 170
+    b1 = day("2026-10-06", {k: (v, 0) for k, v in vols.items()}, d1)
+    after = mk(100.0, t=ms(2026, 10, 7, 9, 45), session="2026-10-07")
+    s = make("vaprev", 0.25)
+    assert s.push(b1) is None                                    # no prior session yet
+    got = s.push(after)
+    # 70 % of 170 = 119: start 402 (100), neighbours 401 (30) vs 403 (20) -> 401 (130 >= 119)
+    assert got == {"val": 401 * 0.25, "vah": 402 * 0.25, "poc": 402 * 0.25}
+    # outside RTH nothing counts
+    ovn = mk(100.0, t=ms(2026, 10, 8, 3, 0), session="2026-10-08")
+    ovn.fp = {500: (999, 999)}
+    s.push(ovn)
+    s2 = make("vaprev", 0.25)
+    for b in (b1, after, ovn, mk(100.0, t=ms(2026, 10, 9, 9, 45), session="2026-10-09")):
+        out = s2.push(b)
+    assert out["poc"] == 402 * 0.25                              # the overnight prints never reach a profile: the last real one stays
+
+
+def test_value_area_ties_take_both_neighbours_like_the_engine():
+    from homebase.charts.studies_ta import _value_area
+    # heaviest row 5; its neighbours tie at 40: both join, 100 + 40 + 40 = 180 >= 70 % of 220
+    assert _value_area({4: 40, 5: 100, 6: 40, 7: 20, 3: 20}) == (4, 6, 5)
+    # a tie for heaviest takes the lowest row
+    assert _value_area({1: 50, 2: 50})[2] == 1
+
+
+def test_noise_band_is_open_plus_minus_k_times_the_daily_atr_of_the_days_before():
+    bars = []
+    day = dt.date(2026, 9, 1)
+    ranges = []
+    for i in range(16):                                         # 16 sessions of one bar before the test day
+        while day.weekday() >= 5:
+            day += dt.timedelta(days=1)
+        hi, lo = 100.0 + i, 90.0 - i * 0.5
+        bars.append(mk(95.0, h=hi, l=lo, o=95.0, t=ms(day.year, day.month, day.day, 10, 0), session=day.isoformat()))
+        day += dt.timedelta(days=1)
+    s = make("noise:0.5:rth")
+    for b in bars:
+        s.push(b)
+    while day.weekday() >= 5:
+        day += dt.timedelta(days=1)
+    open_bar = mk(120.0, h=121.0, l=119.0, o=120.0, t=ms(day.year, day.month, day.day, 9, 30), session=day.isoformat())
+    got = s.push(open_bar)
+    # reference: Wilder ATR(14) over the 16 finished days' true ranges against the previous close (all closes 95)
+    H = [100.0 + i for i in range(16)]
+    L = [90.0 - i * 0.5 for i in range(16)]
+    C = [95.0] * 16
+    trs = [max(H[i] - L[i], abs(H[i] - C[i - 1]), abs(L[i] - C[i - 1])) for i in range(1, 16)]
+    a = sum(trs[:14]) / 14
+    for x in trs[14:]:
+        a = (a * 13 + x) / 14
+    assert got["up"] == pytest.approx(120.0 + 0.5 * a) and got["dn"] == pytest.approx(120.0 - 0.5 * a)
+    # the early part of the day, before the anchor, has no band
+    pre = mk(110.0, t=ms(day.year, day.month, day.day, 9, 0), session=day.isoformat())
+    assert make("noise:0.5:rth").push(pre) is None
+    # fewer than 15 sessions: no ATR, no band
+    assert make("noise").push(open_bar) is None
+
+
+def test_relative_volume_is_the_bar_over_the_median_of_its_clock_bar():
+    s = make("rvol:5:3")
+    out = []
+    for d in range(7):
+        b = mk(100.0, v=100 + d * 10, t=ms(2026, 10, 1 + d, 9, 31), session=f"2026-10-0{1 + d}")
+        out.append(s.push(b))
+    assert out[:3] == [None, None, None]                         # fewer than 3 days of that clock bar
+    assert out[3] == pytest.approx(130 / 110.0)                  # median(100, 110, 120) = 110
+    assert out[6] == pytest.approx(160 / 130.0)                  # the last 5 days: 110..150 -> median 130
+    probe = mk(100.0, v=300, t=ms(2026, 10, 8, 9, 31), session="2026-10-08")
+    assert s.preview(probe) == pytest.approx(300 / 140.0) and s.preview(probe) == s.preview(probe)   # last 5: 120..160
+
+
+def test_day_high_low_covers_only_finished_sessions():
+    s = make("dhl:2")
+    days = [("2026-10-05", 110, 90), ("2026-10-06", 120, 95), ("2026-10-07", 105, 80)]
+    out = []
+    for sess, h, l in days:
+        d = dt.date.fromisoformat(sess)
+        out.append(s.push(mk(100.0, h=h, l=l, t=ms(d.year, d.month, d.day, 10, 0), session=sess)))
+    assert out[0] is None
+    assert out[1] == {"hi": 110, "lo": 90}                       # only 10-05 has finished
+    assert out[2] == {"hi": 120, "lo": 90}                       # 10-05 and 10-06
+    d = dt.date(2026, 10, 8)
+    assert s.push(mk(100.0, t=ms(2026, 10, 8, 10, 0), session="2026-10-08")) == {"hi": 120, "lo": 80}   # last two: 10-06, 10-07
+
+
+def test_structure_keys_and_warmup():
+    for key in ("swing", "swing:20", "equal:50:5", "rmove", "rmove:150", "rswing", "vaprev", "noise", "noise:0.4:globex",
+                "rvol", "rvol:20:10", "dhl", "dhl:10"):
+        make(key)
+    for key in ("swing:1", "equal:50:0", "rmove:0", "vaprev:1", "noise:9", "noise:0.3:moon", "rvol:2", "dhl:0", "noise:0.3:rth:x"):
+        with pytest.raises(ValueError):
+            make(key)
+    assert warm_bars("swing:50") == 500 and warm_bars("vaprev") == 400 and warm_bars("noise") == 0

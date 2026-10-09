@@ -818,7 +818,8 @@ class Cell {
             const serie = ln.type === 'hist'
               ? add(inst, k, ln.part, LW.HistogramSeries, { ...fmt, lastValueVisible: false, ...scale, visible: sty.visible !== false }, where)
               : line(inst, k, ln.part, sty.color, sty.width, where,
-                { ...fmt, lastValueVisible: tag, ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false });
+                { ...fmt, lastValueVisible: tag, ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
+                  ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}) });
             this.lines[this.lines.length - 1].gen = ln;
             if (!top) top = serie;
           });
@@ -827,7 +828,7 @@ class Cell {
               top.createPriceLine({ price: r, color: P.text2 || '#787B86', lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false, title: '' });
             }
           }
-          if (top) pin(top, where, MAIN_TOP);
+          if (top && t.pane) pin(top, where, MAIN_TOP);   // a movable one on the price pane shares an overlay scale; a plain overlay rides the price scale untouched
           break;
         }
       }

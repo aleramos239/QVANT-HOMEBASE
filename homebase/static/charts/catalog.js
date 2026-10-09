@@ -35,7 +35,7 @@ function classicOpen(weekday, minutes) {
 function marketOpen(root, weekday, minutes) {
   return ALWAYS_OPEN.has(root) || classicOpen(weekday, minutes);
 }
-const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Ranges', 'Levels', 'Volume', 'Order flow'];
+const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
 // SMA/EMA (studies.py SOURCES): "sma:50"/"ema:20" keep meaning close -- the source param defaults to it.
 const SOURCES = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'],
@@ -54,6 +54,10 @@ const BAND = (n, def) => [
 const TA_UP = '#089981', TA_DOWN = '#F23645', TA_BLUE = '#2962FF', TA_ORANGE = '#FF6D00', TA_VIOLET = '#7E57C2', TA_GREY = '#787B86';
 const TA_LEN = (def, min = 2, max = 500) => ({ key: 'length', label: 'Length', type: 'int', min, max, def });
 const TA_LINE = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
+const TA_LVL = { tag: false, step: true };   // a level: no axis tag, drawn as steps so a moved level is a jump, not a slant
+const TA_RANGE = [TA_LINE('hi', 'High', TA_GREY, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_GREY, 1, 'solid', TA_LVL),
+  TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', TA_LVL), TA_LINE('ote1', 'OTE 62%', TA_BLUE, 1, 'dotted', TA_LVL),
+  TA_LINE('ote2', 'OTE 79%', TA_BLUE, 1, 'dotted', TA_LVL)];
 const TA_DEFS = [
   { id: 'rsi', group: 'Momentum', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
     label: (p) => `RSI ${p.length}`, desc: 'Relative strength: how strongly the last N bars closed up versus down, 0 to 100',
@@ -104,14 +108,51 @@ const TA_DEFS = [
   { id: 'orb', group: 'Ranges', name: 'Opening range', key: (p) => `orb:${p.minutes}`,
     params: [{ key: 'minutes', label: 'Minutes from 09:30', type: 'int', min: 1, max: 240, def: 15 }],
     label: (p) => `Opening range ${p.minutes}m`, desc: 'High, low and middle of the first N minutes after the 09:30 ET open, all day',
-    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', { tag: false }), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', { tag: false }),
-      TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', { tag: false })] },
+    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', TA_LVL),
+      TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
   { id: 'sess', group: 'Ranges', name: 'Session range', key: (p) => `sess:${p.session}`,
     params: [{ key: 'session', label: 'Session', type: 'choice', def: 'london',
       choices: [['asia', 'Asia 00:00-03:00'], ['london', 'London 03:00-08:25'], ['pre', 'Pre-market 08:25-09:30'], ['nyam', 'NY morning 09:30-11:00']] }],
     label: (p) => `${{ asia: 'Asia', london: 'London', pre: 'Pre-market', nyam: 'NY morning' }[p.session] || 'Session'} range`,
     desc: 'High and low of one trading session (ET), kept on the chart for the rest of that day',
-    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', { tag: false }), TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', { tag: false })] },
+    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
+  // ---- structure: the same definitions the strategy blocks read (engine/levels.py, ranges.py, zones.py) ----
+  { id: 'swing', group: 'Structure', name: 'Swing high / low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
+    key: (p) => `swing:${p.length}`, label: (p) => `Swings ${p.length}`,
+    desc: 'Latest swing high and low not yet traded beyond: a bar above or below N each side',
+    lines: [TA_LINE('hi', 'Swing high', TA_DOWN, 1, 'dashed', TA_LVL), TA_LINE('lo', 'Swing low', TA_UP, 1, 'dashed', TA_LVL)] },
+  { id: 'equal', group: 'Structure', name: 'Equal highs / lows', key: (p) => `equal:${p.length}:${p.tol}`,
+    params: [{ ...TA_LEN(50), label: 'Bars each side' }, { key: 'tol', label: 'Tolerance (points)', type: 'num', min: 0.25, max: 1000, step: 0.25, def: 10 }],
+    label: (p) => `Equal H/L ${p.length} ${p.tol}`,
+    desc: 'Two swings at nearly one price, not traded beyond since: resting liquidity',
+    lines: [TA_LINE('hi', 'Equal highs', TA_DOWN, 1, 'dotted', TA_LVL), TA_LINE('lo', 'Equal lows', TA_UP, 1, 'dotted', TA_LVL)] },
+  { id: 'rmove', group: 'Structure', name: 'Range: move in progress', key: (p) => `rmove:${p.points}`,
+    params: [{ key: 'points', label: 'Reversal (points)', type: 'num', min: 1, max: 5000, step: 1, def: 200 }],
+    label: (p) => `Move range ${p.points}`,
+    desc: 'Last turning point to the extreme since, with its middle and 62-79% band',
+    lines: TA_RANGE },
+  { id: 'rswing', group: 'Structure', name: 'Range: swing pair', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
+    key: (p) => `rswing:${p.length}`, label: (p) => `Swing range ${p.length}`,
+    desc: 'Latest untouched swing high to swing low, with its middle and 62-79% band',
+    lines: TA_RANGE },
+  { id: 'vaprev', group: 'Levels', name: 'Prior value area', params: [], key: () => 'vaprev', label: () => 'Prior VA',
+    desc: 'Yesterday 09:30-16:00 value area (70% of volume) and its point of control',
+    lines: [TA_LINE('vah', 'VAH', TA_BLUE, 1, 'solid', TA_LVL), TA_LINE('poc', 'POC', TA_ORANGE, 1, 'solid', TA_LVL),
+      TA_LINE('val', 'VAL', TA_BLUE, 1, 'solid', TA_LVL)] },
+  { id: 'dhl', group: 'Levels', name: 'Prior days high / low', params: [{ key: 'days', label: 'Days', type: 'int', min: 1, max: 60, def: 5 }],
+    key: (p) => `dhl:${p.days}`, label: (p) => `${p.days}-day H/L`,
+    desc: 'Highest high and lowest low of the last N completed sessions, a liquidity level',
+    lines: [TA_LINE('hi', 'High', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_UP, 1, 'solid', TA_LVL)] },
+  { id: 'noise', group: 'Ranges', name: 'Noise band', key: (p) => `noise:${p.k}:${p.anchor}`,
+    params: [{ key: 'k', label: 'Multiplier', type: 'num', min: 0.05, max: 3, step: 0.05, def: 0.3 },
+      { key: 'anchor', label: 'Anchor', type: 'choice', def: 'rth', choices: [['rth', 'RTH open 09:30'], ['globex', 'Globex open 01:00']] }],
+    label: (p) => `Noise band ${p.k}`, desc: 'The open plus or minus k times the daily ATR: moves beyond it are not noise',
+    lines: [TA_LINE('up', 'Upper', TA_UP, 1, 'solid', TA_LVL), TA_LINE('dn', 'Lower', TA_DOWN, 1, 'solid', TA_LVL)] },
+  { id: 'rvol', group: 'Volume', name: 'Relative volume', pane: 'own', key: (p) => `rvol:${p.days}:${p.need}`,
+    params: [{ key: 'days', label: 'Days compared', type: 'int', min: 3, max: 60, def: 14 },
+      { key: 'need', label: 'Fewest days needed', type: 'int', min: 1, max: 60, def: 10 }],
+    label: (p) => `RVOL ${p.days}`, desc: 'Bar volume over the median of the same time of day on earlier days; 2 is a spike',
+    lines: [TA_LINE('main', 'RVOL', TA_VIOLET, 1, 'solid', { type: 'hist', tag: false })], refs: [1, 2] },
 ];
 const TA_BY_ID = Object.fromEntries(TA_DEFS.map((d) => [d.id, d]));
 /* The number a generic line plots from the server's value `v` for one bar, or null (still warming up). */

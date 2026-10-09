@@ -396,7 +396,7 @@ test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
-  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Ranges', 'Levels', 'Volume', 'Order flow']);
+  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow']);
 });
 
 test('a saved spec is normalised on migration (a Build-1 tick:0750 is tick:750)', () => {
@@ -853,4 +853,24 @@ test('technical indicators: Supertrend\'s legend shows only the side in force', 
   assert.deepEqual(down.map((x) => x.text), ['101.00']);
   assert.equal(down[0].color, C.TA_BY_ID.supertrend.lines[1].color, 'in the downtrend colour');
   assert.deepEqual(C.legendValues(inst, { sv: {} }, {}, 0.25).map((x) => x.text), ['—'], 'warming up: one dash');
+});
+
+test('structure indicators: wire keys match the server, the levels draw as steps, the range carries its OTE band', () => {
+  const k = (id, params) => C.serverKey(C.instance(id, params));
+  assert.equal(k('swing'), 'swing:50');
+  assert.equal(k('equal', { tol: 5 }), 'equal:50:5');
+  assert.equal(k('rmove'), 'rmove:200');
+  assert.equal(k('rswing', { length: 20 }), 'rswing:20');
+  assert.equal(k('vaprev'), 'vaprev');
+  assert.equal(k('dhl'), 'dhl:5');
+  assert.equal(k('noise', { k: 0.4, anchor: 'globex' }), 'noise:0.4:globex');
+  assert.equal(k('noise', { anchor: 'moon' }), 'noise:0.3:rth');
+  assert.equal(k('rvol'), 'rvol:14:10');
+  assert.deepEqual(C.styleLineKeys('rmove'), ['hi', 'lo', 'mid', 'ote1', 'ote2']);
+  for (const id of ['swing', 'equal', 'rmove', 'rswing', 'vaprev', 'dhl', 'noise']) {
+    assert.ok(C.TA_BY_ID[id].lines.every((l) => l.step && l.tag === false), `${id}: step lines without an axis tag`);
+  }
+  assert.equal(C.placement(C.instance('rvol')), 'own');
+  assert.equal(C.lineValue(C.TA_BY_ID.rmove.lines[3], { ote1: 19500.5, dir: 1 }), 19500.5);
+  assert.deepEqual(C.legendValues(C.instance('swing'), { sv: { 'swing:50': { hi: 19500.25, lo: null } } }, {}, 0.25).map((x) => x.text), ['19500.25', '—']);
 });

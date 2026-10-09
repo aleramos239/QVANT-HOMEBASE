@@ -34,7 +34,7 @@ from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
 from .session import session_date
 from .studies import Profile, make
-from .studies_ta import NAMES as TA_NAMES, warm_ta
+from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
 from .tick import BUY, SideClassifier, Tick, from_row
 
 HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
@@ -70,6 +70,12 @@ def warm_bars(key: str) -> int:
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 
+def prime_sessions(key: str) -> int:
+    """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars)."""
+    name, *rest = str(key).split(":")
+    return prime_ta(name, rest) if name in TA_NAMES else 0
+
+
 @dataclass
 class Stream:
     root: str
@@ -77,6 +83,9 @@ class Stream:
     tick_size: float
     builder: BarBuilder
     bars: list = field(default_factory=list)       # closed bars, oldest first
+    prime: list = field(default_factory=list)      # sessions BEFORE bars[0], oldest first: fed to the studies that
+                                                   # read many days (prime_sessions), their values never shown
+    prime_n: int = 0                               # how many sessions that is (asked for, not necessarily found)
     studies: dict = field(default_factory=dict)    # key -> Study
     values: dict = field(default_factory=dict)     # key -> [value per closed bar]
     profile: Profile | None = None
@@ -107,7 +116,10 @@ class Stream:
             return
         if key in self.studies:
             return
-        st = make(key)
+        st = make(key, self.tick_size)
+        if prime_sessions(key):
+            for b in self.prime:      # earlier sessions: the study's memory, not part of this chart
+                st.push(b)
         self.studies[key] = st
         self.values[key] = [st.push(b) for b in self.bars]
 
@@ -280,9 +292,31 @@ class Hub:
         info = self.today_info.get(root)
         if info:
             s.sessions.append(info)
+        self._prime(s, root, spec, today, study_keys)
         for k in study_keys:
             s.add_study(k)
         return Prepared(root, spec, s, tape, upto, today_date)
+
+    def ensure_prime(self, s: "Stream", keys) -> None:
+        """Worker thread: a study added to a stream that already exists may read more sessions than were primed."""
+        if any(k not in s.studies and prime_sessions(k) > s.prime_n for k in keys):
+            self._prime(s, s.root, s.spec, self.today_date.get(s.root) or session_date(self.now_ms(), s.root), keys)
+
+    def _prime(self, s: "Stream", root: str, spec: BarSpec, today, keys) -> None:
+        """Worker thread: load the sessions before the stream's first bar that the studies in `keys` read
+        (prime_sessions) -- only those not already there. Bounded by BUILD_BUDGET_S like a subscribe; a session
+        left out just leaves that study's first values empty."""
+        need = max((prime_sessions(k) for k in keys if k not in s.studies), default=0)
+        if need <= s.prime_n:
+            return
+        first = s.sessions[0]["date"] if s.sessions else today.isoformat()
+        older = [d for d in self.store.sessions(root) if d.isoformat() < str(first)][-need:]
+        got, t0 = [], time.monotonic()
+        for d in reversed(older):                    # newest first, so a budget cutoff drops the oldest
+            got[:0] = self.history.bars(root, spec, d, memo=False)
+            if time.monotonic() - t0 > BUILD_BUDGET_S:
+                break
+        s.prime, s.prime_n = got, need
 
     def _minutes(self, root: str, tape: list, ts: float) -> tuple[int, list[Bar]] | None:
         """Worker thread: (ticks covered, today's 1-minute bars over them, the last one a copy of the
@@ -378,7 +412,7 @@ class Hub:
             ahead = ahead[:span]
         studies, repair = {}, {}
         for k in keys:
-            st = make(k)
+            st = make(k, s.tick_size)
             studies[k] = [st.push(b) for b in chunk]
             repair[k] = [st.push(b) for b in ahead]
         return {"bars": [b.wire(s.tick_size, fp, big) for b in chunk], "studies": studies, "repair": repair,
