@@ -137,6 +137,12 @@ def test_second_look_table_is_exactly_the_old_holdout_job_keys():
     assert "NQ tf 5 / 15 / 30; ES tf 5 / 15" in port2.second_look("tod_drift")
 
 
+# 2026-10-08: settings added for the pipeline's cards. At their defaults the family is the old rule (the gate and the oracle
+# say so); other values are checked by the oracle only, the old tester drafts have no such input.
+NEW_SETTING = {"ema_ribbon": ("slow", (34, 55, 89)), "ema_pullback": ("n", (10, 20, 30)), "supertrend": ("mult", (2.0, 3.0, 4.0))}
+CHANGED_BY_SETTING = {"ema_ribbon": {"SPANS", "fam_update"}, "ema_pullback": {"SPANS", "fam_signal"}, "supertrend": {"fam_update"}}
+
+
 def test_variants_are_the_first_axis_of_the_old_heat_maps():
     """EDGE_SPEC 'PROPER RE-RUN' 4: the values of the FIRST axis of the family's heat-map in R/tune1.jsonl / tune2.jsonl;
     first axis max_tr or no grid -> defaults only; tod_drift = off_min x dir."""
@@ -189,8 +195,9 @@ def test_every_method_of_the_old_family_is_ast_identical_in_the_port():
         old = ast.parse((S.R / "families" / f"{name}.py").read_text())
         fam = _members(next(n for n in old.body if isinstance(n, ast.ClassDef) and n.name == "Fam"))
         new = ported[families.REGISTRY[name][0].__name__]
-        assert fam and all(new.get(k) == v for k, v in fam.items()), (name, [k for k, v in fam.items() if new.get(k) != v])
-        assert set(new) - set(fam) <= {"DEFAULTS", "SCHEMA", "SCREEN_TFS", "FEATURES"}, name      # nothing else was added
+        skip = CHANGED_BY_SETTING.get(name, set())
+        assert fam and all(new.get(k) == v for k, v in fam.items() if k not in skip), (name, [k for k, v in fam.items() if new.get(k) != v])
+        assert set(new) - set(fam) <= {"DEFAULTS", "SCHEMA", "SCREEN_TFS", "FEATURES", "spans_used"}, name      # nothing else was added
     assert port2.SESS is S.SESS and port2._hms is S._hms                  # the names the old bodies read as module globals
 
 
@@ -207,7 +214,8 @@ def test_inputs_and_defaults_are_the_tester_drafts():
             if "choices" in ov:
                 assert sch[key] == ("choice", tuple(ov["choices"]))
         own = {k for c in cls.__mro__ if c not in S.Template.__mro__ for k in c.__dict__.get("DEFAULTS", {})}
-        assert own == {i[0] for i in m.INPUTS} | set(getattr(m, "OVERRIDES", {})), name
+        extra = {NEW_SETTING[name][0]} if name in NEW_SETTING else set()
+        assert own == {i[0] for i in m.INPUTS} | set(getattr(m, "OVERRIDES", {})) | extra, name
         # ... and the tester's own resolved inputs of the screen run (run.json: no trade is read)
         for key, fam, kind, tid in PV.bundles("NQ", [name]):
             if kind == "run":
@@ -516,7 +524,7 @@ def test_the_code_hash_ignores_metadata_and_catches_a_trigger_change(tmp_path):
                      ('"""EMA ribbon. Hypothesis', '"""EMA ribbon!! Hypothesis')):
         assert old in src and sha_of(src.replace(old, new)) == base, old              # metadata / docstrings: the same code
     for old, new in (("if r < th and", "if r <= th and"), ("if self.sn != 1 or not self.atr_p", "if self.sn != 2 or not self.atr_p"),
-                     ("self.al = 1 if a > b > c", "self.al = 1 if a >= b > c"), ("- 3 * self.sa, (h + l)", "- 2 * self.sa, (h + l)"),
+                     ("self.al = 1 if a > b > c", "self.al = 1 if a >= b > c"), ("- m * self.sa, (h + l)", "- 2 * self.sa, (h + l)"),
                      ('self._mkt(ctx, "short" if mv > 0 else "long")', 'self._mkt(ctx, "long" if mv > 0 else "short")'),
                      ("self._mkt(ctx, self.p[\"dir\"], ref=lp)", "self._mkt(ctx, self.p[\"dir\"])")):
         assert src.count(old) == 1 and sha_of(src.replace(old, new)) != base, old     # one token of a trigger: another code
@@ -703,7 +711,7 @@ def o_signals(fam, p, b, tr):
     n = len(C)
     sig = [None] * n
     if fam == "ema_ribbon":                               # EMA 8 / 21 / 55 BECOME fully stacked on this bar
-        e8, e21, e55 = o_ema(C, 8), o_ema(C, 21), o_ema(C, 55)
+        e8, e21, e55 = o_ema(C, 8), o_ema(C, 21), o_ema(C, int(p.get("slow", 55)))
         prev = 0
         for i in range(n):
             al = 1 if e8[i] > e21[i] > e55[i] else -1 if e8[i] < e21[i] < e55[i] else 0
@@ -729,7 +737,7 @@ def o_signals(fam, p, b, tr):
                 slope = sg
             last = te
     elif fam == "ema_pullback":                           # EMA50 rising and the bar dips to EMA20 and closes back above (mirror)
-        e20, e50 = o_ema(C, 20), o_ema(C, 50)
+        e20, e50 = o_ema(C, int(p.get("n", 20))), o_ema(C, 50)
         for i in range(1, n):
             if e50[i] > e50[i - 1] and L[i] <= e20[i] < C[i]:
                 sig[i] = "long"
@@ -740,7 +748,8 @@ def o_signals(fam, p, b, tr):
         dr = 1                                            # every restart begins "up"
         for i in range(n):
             sa = sum(tr[:i + 1]) / (i + 1) if i < 10 else (sa * 9.0 + tr[i]) / 10.0
-            u, d_ = (H[i] + L[i]) / 2.0 - 3 * sa, (H[i] + L[i]) / 2.0 + 3 * sa
+            mu = float(p.get("mult", 3.0))
+            u, d_ = (H[i] + L[i]) / 2.0 - mu * sa, (H[i] + L[i]) / 2.0 + mu * sa
             if up is not None:
                 if C[i - 1] > up:
                     u = max(u, up)
@@ -841,6 +850,7 @@ def o_units(root):
         d = families.REGISTRY[f][0].defaults()
         units += [(f, v, tf) for v in families.library(f)["variants"] if v and v != {k: d[k] for k in v} for tf in ("5", "15")]
     units += [("mid_fade", {"k": 0.0}, tf) for tf in ("5", "30")]
+    units += [(f, {k: v}, tf) for f, (k, vs) in NEW_SETTING.items() for v in vs if v != families.REGISTRY[f][0].defaults()[k] for tf in ("5", "15")]
     return [(f, v, tf, {**stops[j % len(stops)], "tgt_r": tg[j % len(tg)]}) for j, (f, v, tf) in enumerate(units)]
 
 

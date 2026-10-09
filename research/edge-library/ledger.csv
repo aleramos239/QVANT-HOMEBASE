@@ -992,3 +992,51 @@ bp_build,fvg_regime_vollow_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,160620,6
 bp_build,fvg_regime_vollow_nq__volatility_low-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,77880,612.11,runs_bp/fvg_regime_vollow_nq__volatility_low-ES-tf5: idea fvg_regime_vollow_nq: filter volatility low,2026-10-08T03:26:39+00:00
 bp_build,fvg_regime_momag_nq-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,160620,581.82,runs_bp/fvg_regime_momag_nq-ES-tf5: idea fvg_regime_momag_nq,2026-10-08T03:26:56+00:00
 bp_build,fvg_regime_momag_nq__momentum_against-ES-tf5,grid,fvg,ES,5,bp_build,,,0,240,0,0,30000,581.82,runs_bp/fvg_regime_momag_nq__momentum_against-ES-tf5: idea fvg_regime_momag_nq: filter momentum against,2026-10-08T03:26:56+00:00
+bp_build,fvg_pr_vh_ma-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,1848.58,runs_bp/fvg_pr_vh_ma-NQ-tf5: idea fvg_pr_vh_ma,2026-10-08T20:28:15+00:00
+bp_build,fvg_pr_vh_ma__momentum_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,13800,1848.58,runs_bp/fvg_pr_vh_ma__momentum_against-NQ-tf5: idea fvg_pr_vh_ma: filter momentum against,2026-10-08T20:28:15+00:00
+bp_build,fvg_pr_vh_ma__volatility_high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24060,1848.58,runs_bp/fvg_pr_vh_ma__volatility_high-NQ-tf5: idea fvg_pr_vh_ma: filter volatility high,2026-10-08T20:28:15+00:00
+bp_build,fvg_pr_vh_ma__momentum+volatility_against+high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,6420,1848.58,runs_bp/fvg_pr_vh_ma__momentum+volatility_against+high-NQ-tf5: idea fvg_pr_vh_ma: filter momentum+volatility against+high,2026-10-08T20:28:15+00:00
+bp_build,fvg_pr_vh_mw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,1945.57,runs_bp/fvg_pr_vh_mw-NQ-tf5: idea fvg_pr_vh_mw,2026-10-08T20:29:52+00:00
+bp_build,fvg_pr_vh_mw__momentum_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,48540,1945.57,runs_bp/fvg_pr_vh_mw__momentum_with-NQ-tf5: idea fvg_pr_vh_mw: filter momentum with,2026-10-08T20:29:52+00:00
+bp_build,fvg_pr_vh_mw__volatility_high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24060,1945.57,runs_bp/fvg_pr_vh_mw__volatility_high-NQ-tf5: idea fvg_pr_vh_mw: filter volatility high,2026-10-08T20:29:52+00:00
+bp_build,fvg_pr_vh_mw__momentum+volatility_with+high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,23340,1945.57,runs_bp/fvg_pr_vh_mw__momentum+volatility_with+high-NQ-tf5: idea fvg_pr_vh_mw: filter momentum+volatility with+high,2026-10-08T20:29:52+00:00
+bp_build,fvg_pr_vl_mw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,1955.11,runs_bp/fvg_pr_vl_mw-NQ-tf5: idea fvg_pr_vl_mw,2026-10-08T20:30:02+00:00
+bp_build,fvg_pr_vl_mw__momentum_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,48540,1955.11,runs_bp/fvg_pr_vl_mw__momentum_with-NQ-tf5: idea fvg_pr_vl_mw: filter momentum with,2026-10-08T20:30:02+00:00
+bp_build,fvg_pr_vl_mw__volatility_low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24900,1955.11,runs_bp/fvg_pr_vl_mw__volatility_low-NQ-tf5: idea fvg_pr_vl_mw: filter volatility low,2026-10-08T20:30:02+00:00
+bp_build,fvg_pr_vl_mw__momentum+volatility_with+low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24120,1955.11,runs_bp/fvg_pr_vl_mw__momentum+volatility_with+low-NQ-tf5: idea fvg_pr_vl_mw: filter momentum+volatility with+low,2026-10-08T20:30:02+00:00
+bp_build,fvg_pr_vh_ta-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,407.73,runs_bp/fvg_pr_vh_ta-NQ-tf5: idea fvg_pr_vh_ta,2026-10-08T20:37:21+00:00
+bp_build,fvg_pr_vh_ta__trend_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,16500,407.73,runs_bp/fvg_pr_vh_ta__trend_against-NQ-tf5: idea fvg_pr_vh_ta: filter trend against,2026-10-08T20:37:21+00:00
+bp_build,fvg_pr_vh_ta__volatility_high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24060,407.73,runs_bp/fvg_pr_vh_ta__volatility_high-NQ-tf5: idea fvg_pr_vh_ta: filter volatility high,2026-10-08T20:37:21+00:00
+bp_build,fvg_pr_vh_ta__trend+volatility_against+high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,7500,407.73,runs_bp/fvg_pr_vh_ta__trend+volatility_against+high-NQ-tf5: idea fvg_pr_vh_ta: filter trend+volatility against+high,2026-10-08T20:37:21+00:00
+bp_build,fvg_pr_vh_tw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,482.04,runs_bp/fvg_pr_vh_tw-NQ-tf5: idea fvg_pr_vh_tw,2026-10-08T20:38:20+00:00
+bp_build,fvg_pr_vh_tw__trend_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,47640,482.04,runs_bp/fvg_pr_vh_tw__trend_with-NQ-tf5: idea fvg_pr_vh_tw: filter trend with,2026-10-08T20:38:21+00:00
+bp_build,fvg_pr_vh_tw__volatility_high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24060,482.04,runs_bp/fvg_pr_vh_tw__volatility_high-NQ-tf5: idea fvg_pr_vh_tw: filter volatility high,2026-10-08T20:38:21+00:00
+bp_build,fvg_pr_vh_tw__trend+volatility_with+high-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,23040,482.04,runs_bp/fvg_pr_vh_tw__trend+volatility_with+high-NQ-tf5: idea fvg_pr_vh_tw: filter trend+volatility with+high,2026-10-08T20:38:21+00:00
+bp_build,fvg_pr_vl_tw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,546.25,runs_bp/fvg_pr_vl_tw-NQ-tf5: idea fvg_pr_vl_tw,2026-10-08T20:47:33+00:00
+bp_build,fvg_pr_vl_tw__trend_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,47640,546.25,runs_bp/fvg_pr_vl_tw__trend_with-NQ-tf5: idea fvg_pr_vl_tw: filter trend with,2026-10-08T20:47:33+00:00
+bp_build,fvg_pr_vl_tw__volatility_low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24900,546.25,runs_bp/fvg_pr_vl_tw__volatility_low-NQ-tf5: idea fvg_pr_vl_tw: filter volatility low,2026-10-08T20:47:33+00:00
+bp_build,fvg_pr_vl_tw__trend+volatility_with+low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,23520,546.25,runs_bp/fvg_pr_vl_tw__trend+volatility_with+low-NQ-tf5: idea fvg_pr_vl_tw: filter trend+volatility with+low,2026-10-08T20:47:33+00:00
+bp_build,fvg_pr_vl_ta-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,736.8,runs_bp/fvg_pr_vl_ta-NQ-tf5: idea fvg_pr_vl_ta,2026-10-08T20:51:42+00:00
+bp_build,fvg_pr_vl_ta__trend_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,16500,736.8,runs_bp/fvg_pr_vl_ta__trend_against-NQ-tf5: idea fvg_pr_vl_ta: filter trend against,2026-10-08T20:51:42+00:00
+bp_build,fvg_pr_vl_ta__volatility_low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24900,736.8,runs_bp/fvg_pr_vl_ta__volatility_low-NQ-tf5: idea fvg_pr_vl_ta: filter volatility low,2026-10-08T20:51:42+00:00
+bp_build,fvg_pr_vl_ta__trend+volatility_against+low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,8700,736.8,runs_bp/fvg_pr_vl_ta__trend+volatility_against+low-NQ-tf5: idea fvg_pr_vl_ta: filter trend+volatility against+low,2026-10-08T20:51:42+00:00
+bp_build,fvg_pr_mw_tw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,388.61,runs_bp/fvg_pr_mw_tw-NQ-tf5: idea fvg_pr_mw_tw,2026-10-08T20:54:50+00:00
+bp_build,fvg_pr_mw_tw__momentum_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,48540,388.61,runs_bp/fvg_pr_mw_tw__momentum_with-NQ-tf5: idea fvg_pr_mw_tw: filter momentum with,2026-10-08T20:54:50+00:00
+bp_build,fvg_pr_mw_tw__trend_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,47640,388.61,runs_bp/fvg_pr_mw_tw__trend_with-NQ-tf5: idea fvg_pr_mw_tw: filter trend with,2026-10-08T20:54:50+00:00
+bp_build,fvg_pr_mw_tw__momentum+trend_with+with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,47640,388.61,runs_bp/fvg_pr_mw_tw__momentum+trend_with+with-NQ-tf5: idea fvg_pr_mw_tw: filter momentum+trend with+with,2026-10-08T20:54:50+00:00
+bp_build,fvg_pr_mw_ta-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,356.16,runs_bp/fvg_pr_mw_ta-NQ-tf5: idea fvg_pr_mw_ta,2026-10-08T20:58:08+00:00
+bp_build,fvg_pr_mw_ta__momentum_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,48540,356.16,runs_bp/fvg_pr_mw_ta__momentum_with-NQ-tf5: idea fvg_pr_mw_ta: filter momentum with,2026-10-08T20:58:08+00:00
+bp_build,fvg_pr_mw_ta__trend_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,16500,356.16,runs_bp/fvg_pr_mw_ta__trend_against-NQ-tf5: idea fvg_pr_mw_ta: filter trend against,2026-10-08T20:58:09+00:00
+bp_build,fvg_pr_mw_ta__momentum+trend_with+against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,3720,356.16,runs_bp/fvg_pr_mw_ta__momentum+trend_with+against-NQ-tf5: idea fvg_pr_mw_ta: filter momentum+trend with+against,2026-10-08T20:58:09+00:00
+bp_build,fvg_pr_ma_tw-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,290.76,runs_bp/fvg_pr_ma_tw-NQ-tf5: idea fvg_pr_ma_tw,2026-10-08T21:00:10+00:00
+bp_build,fvg_pr_ma_tw__momentum_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,13800,290.76,runs_bp/fvg_pr_ma_tw__momentum_against-NQ-tf5: idea fvg_pr_ma_tw: filter momentum against,2026-10-08T21:00:10+00:00
+bp_build,fvg_pr_ma_tw__trend_with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,47640,290.76,runs_bp/fvg_pr_ma_tw__trend_with-NQ-tf5: idea fvg_pr_ma_tw: filter trend with,2026-10-08T21:00:10+00:00
+bp_build,fvg_pr_ma_tw__momentum+trend_against+with-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,240,290.76,runs_bp/fvg_pr_ma_tw__momentum+trend_against+with-NQ-tf5: idea fvg_pr_ma_tw: filter momentum+trend against+with,2026-10-08T21:00:10+00:00
+bp_build,fvg_pr_ma_ta-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,310.12,runs_bp/fvg_pr_ma_ta-NQ-tf5: idea fvg_pr_ma_ta,2026-10-08T21:03:49+00:00
+bp_build,fvg_pr_ma_ta__momentum_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,13800,310.12,runs_bp/fvg_pr_ma_ta__momentum_against-NQ-tf5: idea fvg_pr_ma_ta: filter momentum against,2026-10-08T21:03:49+00:00
+bp_build,fvg_pr_ma_ta__trend_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,16500,310.12,runs_bp/fvg_pr_ma_ta__trend_against-NQ-tf5: idea fvg_pr_ma_ta: filter trend against,2026-10-08T21:03:49+00:00
+bp_build,fvg_pr_ma_ta__momentum+trend_against+against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,13560,310.12,runs_bp/fvg_pr_ma_ta__momentum+trend_against+against-NQ-tf5: idea fvg_pr_ma_ta: filter momentum+trend against+against,2026-10-08T21:03:49+00:00
+bp_build,fvg_pr_vl_ma-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,50040,2102.64,runs_bp/fvg_pr_vl_ma-NQ-tf5: idea fvg_pr_vl_ma,2026-10-08T21:04:01+00:00
+bp_build,fvg_pr_vl_ma__momentum_against-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,13800,2102.64,runs_bp/fvg_pr_vl_ma__momentum_against-NQ-tf5: idea fvg_pr_vl_ma: filter momentum against,2026-10-08T21:04:01+00:00
+bp_build,fvg_pr_vl_ma__volatility_low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,24900,2102.64,runs_bp/fvg_pr_vl_ma__volatility_low-NQ-tf5: idea fvg_pr_vl_ma: filter volatility low,2026-10-08T21:04:01+00:00
+bp_build,fvg_pr_vl_ma__momentum+volatility_against+low-NQ-tf5,grid,fvg,NQ,5,bp_build,,,0,60,0,0,7140,2102.64,runs_bp/fvg_pr_vl_ma__momentum+volatility_against+low-NQ-tf5: idea fvg_pr_vl_ma: filter momentum+volatility against+low,2026-10-08T21:04:01+00:00

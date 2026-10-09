@@ -1,7 +1,7 @@
 # PORT2_VALIDATION — port group 2 (families/port2.py) vs the Homebase Strategy Tester
 
-Generated 2026-10-05 11:07 ET by `port2_validate.py`, 2 worker processes. Raw: `out/port2_validation.json`.
-File sha256/16, read before every family x root pass and checked after it (the SAME for every row below): `l2sim.py` 50f67baa4337a160, `families/port2.py` e78c6a29f998a9e5, `port2_validate.py` 4b705c99cb14c128, `sim_validate.py` f19dd72c99835e24, `edge_validate.py` 8c5e39a19def9a7f. Trading-code hash of `families/port2.py` (classes + registered default inputs; metadata and docstrings excluded): **59b4af4d1e512352**.
+Generated 2026-10-08 22:42 ET by `port2_validate.py`, 2 worker processes. Raw: `out/port2_validation.json`.
+File sha256/16, read before every family x root pass and checked after it (the SAME for every row below): `l2sim.py` 6d21db2f50afa590, `families/port2.py` f7c77eb796d83364, `port2_validate.py` 4b705c99cb14c128, `sim_validate.py` f19dd72c99835e24, `edge_validate.py` 8c5e39a19def9a7f. Trading-code hash of `families/port2.py` (classes + registered default inputs; metadata and docstrings excluded): **740d03276e48206d**.
 In-sample bundles of the old pilots only (2021-09-22 → 2024-12-31; stages `screen` and `sizing` of R / RE `jobs.jsonl`), trade IDENTITY only: no P&L is shown; nothing dated ≥ 2025-01-01 was read (no `holdout` stage bundle, no walk-forward).
 
 ## Verdict: ALL GATES PASS

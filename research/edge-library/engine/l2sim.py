@@ -1777,6 +1777,9 @@ class Template(Strategy):
               "hold_to": ("choice", ("session", "day"))}                      # NEW (ORCHESTRATOR DECISIONS 1: flat by 4pm)
     session_independent = True                 # every bit of state is reset in on_session (as the pp_* drafts)
     SPANS = ()                                 # extra EMA spans the family reads as self.E[span]
+
+    def spans_used(self):
+        return self.SPANS                      # a family whose span is a setting overrides this
     WARM = 3                                   # min tf bars since 00:00 before any entry
     ATR_CARRY = False                          # True: see the class docstring (clock-time families, tf 30)
 
@@ -1882,7 +1885,7 @@ class Template(Strategy):
         self.held = 0                              # tf closes since the current position filled
         self.tf = int(self.p["tf"])
         self.step = self.tf * 60 * NS
-        self.spans = sorted(set(self.SPANS) | {50})
+        self.spans = sorted(set(self.spans_used()) | {50})
         self.O, self.H, self.L, self.C, self.V, self.TR = [], [], [], [], [], []
         self.nb = 0
         self.atr = self.atr_p = None

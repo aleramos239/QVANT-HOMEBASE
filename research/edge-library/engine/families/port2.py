@@ -84,16 +84,20 @@ class EmaRibbon(Template):
     """EMA ribbon. Hypothesis: EMA 8/21/55 becoming fully stacked marks a fresh trend leg; enter on the bar the
     stack forms (long 8>21>55, short reverse). EMAs seed at the day's first tf bar, so tf 30 is barely warm.
     No structural stop (atr fallback)."""
+    DEFAULTS = {"slow": 55}
+    SCHEMA = {"slow": ("int", 30, 200)}                                  # the slowest EMA; 8 and 21 stay fixed
     SCREEN_TFS = TFS
     FEATURES = ()
-    SPANS = (8, 21, 55)
     WARM = 10
+
+    def spans_used(self):
+        return (8, 21, int(self.p["slow"]))
 
     def fam_day(self, ctx):
         self.al, self.chg = 0, 0
 
     def fam_update(self, ctx):
-        a, b, c = self.E[8], self.E[21], self.E[55]
+        a, b, c = self.E[8], self.E[21], self.E[int(self.p["slow"])]
         prev = self.al
         self.al = 1 if a > b > c else -1 if a < b < c else 0
         self.chg = self.al if self.al and self.al != prev else 0
@@ -142,13 +146,17 @@ class TemaSlope(Template):
 class EmaPullback(Template):
     """EMA pullback. Hypothesis: in a trend (EMA50 slope) a dip that tags EMA20 and closes back on the trend
     side is a continuation entry. struct stop = the pullback bar's extreme."""
+    DEFAULTS = {"n": 20}
+    SCHEMA = {"n": ("int", 5, 40)}                                       # the pullback EMA; the trend EMA stays 50
     SCREEN_TFS = TFS
     FEATURES = ()
-    SPANS = (20, 50)
     WARM = 20
 
+    def spans_used(self):
+        return (int(self.p["n"]), 50)
+
     def fam_signal(self, ctx):
-        e20, e50, p50 = self.E[20], self.E[50], self.Ep[50]
+        e20, e50, p50 = self.E[int(self.p["n"])], self.E[50], self.Ep[50]
         if p50 is None:
             return
         h, l, c = self.H[-1], self.L[-1], self.C[-1]
@@ -161,6 +169,8 @@ class EmaPullback(Template):
 class Supertrend(Template):
     """Supertrend(10, 3) flip. Hypothesis: a flip of the ATR-band trend line starts a directional leg; enter in
     the new direction. struct stop = the Supertrend line after the flip."""
+    DEFAULTS = {"mult": 3.0}
+    SCHEMA = {"mult": ("float", 1, 6)}                                   # the band multiple; the ATR length stays 10
     SCREEN_TFS = TFS
     FEATURES = ()
     WARM = 10
@@ -173,7 +183,8 @@ class Supertrend(Template):
         tr, n = self.TR[-1], self.nb
         self.sa = sum(self.TR) / n if n <= 10 else (self.sa * 9.0 + tr) / 10.0
         h, l, c = self.H[-1], self.L[-1], self.C[-1]
-        up, dn = (h + l) / 2.0 - 3 * self.sa, (h + l) / 2.0 + 3 * self.sa
+        m = float(self.p["mult"])
+        up, dn = (h + l) / 2.0 - m * self.sa, (h + l) / 2.0 + m * self.sa
         self.flip = 0
         if self.up is not None:
             pc = self.C[-2]
@@ -299,7 +310,7 @@ FAMILIES = {      # name -> (StrategyClass, default_inputs, both_sides, notes, L
                     "complexity": 4,                 # 1 rule (the stack forms on this bar) + 3 fixed lengths (8, 21, 55)
                     # R/tune2.jsonl line 4, key hm2-ema_ribbon-tf1: "axes": [{"key": "max_tr", "values": [1, 3]},
                     #   {"key": "stop_val", ...}, {"key": "tgt_r", ...}] -> first axis max_tr -> defaults only (R/tune1: no grid)
-                    "variants": [{}],
+                    "variants": [{}],                   # `slow` (34 / 55 / 89) added 2026-10-08 for pipeline cards: not a tester-gated variant
                     "ported": "ema_ribbon"}),
     "tema_slope": (TemaSlope, {}, False,
                    "C (R 6): TEMA(n) slope changes sign at a tf close -> market in the new slope direction; ATR stop. "
@@ -319,7 +330,7 @@ FAMILIES = {      # name -> (StrategyClass, default_inputs, both_sides, notes, L
                       # R/tune1.jsonl line 13, key hm-ema_pullback-tf5 (and R/tune2.jsonl line 14, hm2-ema_pullback-tf1):
                       #   "axes": [{"key": "max_tr", "values": [1, 3]}, {"key": "stop_val", ...}, {"key": "tgt_r", ...}]
                       #   -> first axis max_tr -> defaults only
-                      "variants": [{}],
+                      "variants": [{}],                 # `n` (10 / 20 / 30) added 2026-10-08: not a tester-gated variant
                       "ported": "ema_pullback"}),
     "supertrend": (Supertrend, {}, False,
                    "C (R 8): Supertrend(10, 3) flips at a tf close -> market in the new direction; struct stop = the line",
@@ -328,7 +339,7 @@ FAMILIES = {      # name -> (StrategyClass, default_inputs, both_sides, notes, L
                     "complexity": 3,                 # 1 rule (the line flips) + 2 fixed numbers (ATR length 10, multiple 3)
                     # R/tune2.jsonl line 5, key hm2-supertrend-tf5: "axes": [{"key": "max_tr", "values": [1, 3]},
                     #   {"key": "stop_val", ...}, {"key": "tgt_r", ...}] -> first axis max_tr -> defaults only (R/tune1: no grid)
-                    "variants": [{}],
+                    "variants": [{}],                   # `mult` (2 / 3 / 4) added 2026-10-08: not a tester-gated variant
                     "ported": "supertrend"}),
     "rsi2": (Rsi2, {}, False,
              "C (R 9): RSI(2) < th at a tf close -> long, > 100 - th -> short (fade); ATR stop; trend_f off. " + SEEN,
