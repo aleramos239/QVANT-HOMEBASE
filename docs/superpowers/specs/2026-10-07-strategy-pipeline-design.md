@@ -351,3 +351,37 @@ on another market, but not the exact same, so a different execution."
 - A side effect: the toolkit's own status of such a heat-map idea stays "idea" (its build has a failed line); the
   pipeline's verdict at stage 6 reads lines 4.1-4.9 and is not touched by it.
 
+## 16. As built: the variant mode (decided 2026-10-08)
+
+The owner, after seeing that the whole 144-box map is a poor judge of the one strategy that will be traded: "i dont think we need the
+entire heatmap to reach all the requirements, some should just be for the individual strategy that will pass." The evidence he was
+shown: boxes at the floor in the first half of the build days averaged $40 a trade in the second half (68 % of them profitable),
+against -$5 for all boxes; 13 of 54 ideas had 25 or more boxes at the floor with 200+ trades and over 50 % of boxes profitable.
+
+**The switch.** `pipeline.json` `"mode"`: `"variant"` (shipped) or `"map"` (the sections above, kept whole and tested). `pipe_rules.mode()`
+reads it; a file without the key is `"map"`. The numbers of variant mode are `pipeline.json` `variant`: `map_share` 0.5,
+`region_boxes` 25, `region_trades` 200, `floor_part` 1.0. An idea runs in the mode of the file when each stage starts; a stage of
+variant mode on an idea whose stage 1 picked no box is refused with the way out (`bp.py pipe rerun <name>`).
+
+| Stage | Variant mode |
+|---|---|
+| 1 | The map check is LOOSE. Per heat map (1- and 5-minute bars, up to 3 ways): P1.1 over 50 % of the boxes have a net above $0; P1.2 at least 25 boxes have an average trade at the floor (NQ $70, ES $75, GC $140) with 200 or more trades. One level, `pass` (no strict / low). The heat map that moves on is the one with the most qualifying boxes (a tie: the bigger average trade, then the first). **The pick:** of its qualifying boxes the MIDDLE one by build net (judge.TIE_RULE: by net to the cent, then variant order; an even count takes the lower of the two middle ones) -- never the best. `picked` gains `cell` (the box id) and `variant` (its main-setting value); the stage card gains `box` (cell, setting, variant, net, trades, avg_trade, long, short, qualifying). |
+| 2 | As before; P2.5 (the prices against the 1-minute bars) reads the PICKED box ("the picked box"). |
+| 3 | NO indicator is tried (the card's list is ignored and the text says so; the code that tries them is kept for a mode that wants them back as a boost). Rows on the picked box: P3.2 average trade at the floor; P3.3 200 or more trades; P3.4 each side makes money (the card's `sides`: `both` = the long AND the short net of that box are above $0; `long` / `short` = that side is the whole box); P3.6 the other markets, SHOWN, never False. A fail stops the idea. |
+| 4 | The proof on the picked box. P4.1: its average trade is at the floor in 75 % or more of the 1,000 reshuffled runs (mc.reshuffle, the same runs as line 2.8's, one box). Only when it holds, P4.2: the SAME BOX of the random-entry control tables -- the pool `c1-<MKT>-tf<bar>` holds the random entries cell by cell (`s<seed>_<exit>`), so the box's exit cell, its days and its number of trades a day are drawn from the pool's 10 seeds (`tables.built(box=)`: judge.c1_table on that one cell, 4,000 draws, the draw seed of the whole table) and the box's build net must beat above the bar `random_bar(tries)` (95 %, 97.5 % ... as before). No new random model; no fallback to the whole table was needed. |
+| 5 | The toolkit's code check, its one build round and the lock stay. The lock takes the PICKED box as its default (`freeze.lock(default=<cell>)`, a keyword of the code like `waive`: never reachable from `bp.py` or the chat tools); it refuses a cell that is not a judged variant or does not make money on build AND with worse fills (stage 5 then says `no box`, naming the picked box), and `default_rule` in lock.json says the pipeline picked it. The build's lines about the WHOLE map -- 2.1 share, 2.2 average trade, 2.3 random tables, 2.4 trades, 2.5 other markets, 2.8 Monte Carlo -- are shown and ask nothing: the lock is called with `waive=` those lines and writes the ones that failed in `waived`. Line 2.6 (the sides of the whole table) is kept: a False 2.6 stops the idea with the toolkit's words (result `sides`, no code problem); any other False line (2.7, 2.9) is still a CODE PROBLEM. Lines 3.3-3.8 on the one box are the lock's own and unchanged. |
+| 6, 7 | Unchanged: they read the locked default. |
+
+**Not changed:** no look-ahead (every number is a build-days number); the unseen days are opened by stage 6 only; the runner, store,
+card and app routes work as before. `bp.py pipe show` names the picked box. The Guide words of stages 1, 3, 4 and 5 are
+the plain ones of `homebase/claude_mcp/pipeline_tools.STAGES` (the stage names stay: they are on every card on file).
+
+**Re-run.** `bp.py pipe rerun <name>` (`pipe_store.reset`): an idea that stopped (or was refused) starts again from stage 0. Its
+`stages/*.json` are moved to `stages_old/<UTC time>/` (never deleted), its state becomes queued with stage, stopped_at, why and
+picked empty and tries 0, and its name goes last in the queue. Refused while it is running, awaits the owner or is in the book.
+The stores (`runs/`), the card, the ledger and seen.jsonl are not touched. Not in the chat tool `pipeline_control` (that tool takes no
+name).
+
+**Open.** (1) The whole-table sides line 2.6 can fail while the picked box's own sides hold (the table adds up all 144 boxes); it is
+kept as the brief said and stops such an idea at stage 5 -- the owner may want it waived too. (2) The "tries" of the random bar is still
+the number of heat maps judged (1 or 2 bars x ways); with the indicators gone it no longer grows at stage 3.

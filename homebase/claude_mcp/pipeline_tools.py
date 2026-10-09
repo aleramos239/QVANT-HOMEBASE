@@ -49,17 +49,16 @@ ACTIONS = ("start", "pause", "resume")                 # pipeline_control
 DECISIONS = ("approve", "refuse")                      # pipeline_decide
 LOOK_S = 20.0                                          # the longest a page's look waits for the toolkit: it reads a few small files
 # The eight stages, for the Lab's Guide and for an idea's page: the toolkit's own numbers (pipe_runner.NAMES), a
-# plain sentence each. Written here once; the page reads them from the route and types none.
+# plain sentence each. Written here once; the page reads them from the route and types none. Since 2026-10-08 (variant
+# mode, pipeline.json "mode": "variant") the map gets a loose check at stage 1 and the pick is made there: stages 3 and 4
+# judge the picked variant, not the whole map. The names are the toolkit's and stay (they are on every card on file).
 STAGES = [
     {"n": 0, "name": "Idea card", "words": "Is the card complete, and does it use only parts that exist?"},
-    {"n": 1, "name": "Raw heat map", "words": "Does it make money across many stops and targets, with no indicators?"},
+    {"n": 1, "name": "Raw heat map", "words": "Does a region of the map make money (enough boxes at the floor)?"},
     {"n": 2, "name": "Machine check", "words": "Does every trade do exactly what the rule says?"},
-    {"n": 3, "name": "Indicators", "words": "Does it work long and short, and after a weaker result does one indicator "
-                                            "make it good enough? How it does on the other markets is shown, not asked."},
-    {"n": 4, "name": "Proof", "words": "Is it better than luck: does it hold when the days are reshuffled, and does it "
-                                       "beat random entries?"},
-    {"n": 5, "name": "Pick one box and lock", "words": "Does the one stop and target in the middle hold up on its own, "
-                                                       "so the rule can be frozen?"},
+    {"n": 3, "name": "Indicators", "words": "Does the picked variant make money on its side(s)?"},
+    {"n": 4, "name": "Proof", "words": "Does the picked variant hold up against luck?"},
+    {"n": 5, "name": "Pick one box and lock", "words": "Does the picked stop and target hold up on its own, so the rule can be frozen?"},
     {"n": 6, "name": "Unseen days", "words": "Does it still make money on days it has never seen, read one time only?"},
     {"n": 7, "name": "The owner's look", "words": "You read its card and approve it for the Book, or refuse it."},
 ]

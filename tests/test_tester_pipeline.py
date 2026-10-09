@@ -102,7 +102,7 @@ def test_the_queue_the_book_and_the_guide_in_one_answer(c, fake, proot):
         assert x["argv"][-2:] == [f"--root={proot}", "--json"]              # the PIPELINE's own folder, never the idea folder
     stages = r.json()["stages"]
     assert len(stages) == 8 and [s["n"] for s in stages] == list(range(8)) and all(set(s) == {"n", "name", "words"} for s in stages)
-    assert stages[1] == {"n": 1, "name": "Raw heat map", "words": "Does it make money across many stops and targets, with no indicators?"}
+    assert stages[1] == {"n": 1, "name": "Raw heat map", "words": "Does a region of the map make money (enough boxes at the floor)?"}
 
 
 def test_every_idea_carries_the_pages_label_and_the_counts_are_by_label(c, fake, proot, monkeypatch):

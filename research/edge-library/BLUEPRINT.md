@@ -436,7 +436,7 @@ first gate it fails, and the program writes why. The few that pass every stage w
 
 Its design is `docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md`. Its gate numbers are
 `blueprint/templates/pipeline.json`; a number this law also carries must be the same in both, or the pipeline does not load.
-The commands: `bp.py pipe add / list / show / start / pause / resume / approve / refuse / book`.
+The commands: `bp.py pipe add / list / show / start / pause / resume / approve / refuse / book / rerun`.
 
 What changed in the law with it (owner, 2026-10-07):
 
@@ -465,3 +465,13 @@ hunter. Until then the pipeline is run from the command line only.
 shown and never stop a pipeline idea (pipeline.json `indicator.other_markets: null`; the lock writes `waived: ["2.5"]`).
 Outside the pipeline line 2.5 stands.
 
+**2026-10-08, the owner (variant mode, `pipeline.json` `"mode": "variant"`):** "I dont think we need the entire heatmap to reach all
+the requirements, some should just be for the individual strategy that will pass." In the pipeline the map gets a LOOSE check
+(over 50 % of the 144 boxes profitable, and at least 25 boxes with an average trade at the floor and 200 or more trades), one
+box is picked right away (the middle of those boxes by build net, never the best), and the hard rules are read on THAT BOX:
+average trade at the floor, 200 trades, long and short both make money (a one-sided card: its side), the box survives the
+reshuffled days (75 % of 1,000), and it beats the random entries of the same box. No indicator is tried. The toolkit's lock
+takes the picked box as its default, and the build's lines about the whole map (2.1, 2.2, 2.3, 2.4, 2.5, 2.8) are shown and
+ask nothing (`waived` in lock.json). Lines 3.3 to 3.8 on the one box, and the one read of the unseen days, are unchanged.
+Outside the pipeline (`bp.py build`, `lock`, `test`) the blueprint's lines 2.1 to 2.9 stand. The old whole-map behaviour is
+`"mode": "map"` in the same file. An idea run in the old way is run again with `bp.py pipe rerun <name>`.

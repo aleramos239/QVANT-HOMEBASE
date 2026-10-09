@@ -384,7 +384,7 @@ def test_the_cards_limits_and_names_are_the_toolkits_own():
     assert list(lit("blueprint/pipe_store.py", "STATUS")) == STATUSES == list(pipeline_tools.LABELS)
     assert [s.lower() for s in (x["name"] for x in pipeline_tools.STAGES)] == list(lit("blueprint/pipe_runner.py", "NAMES"))
     assert lit("blueprint/pipe_store.py", "ENV") == pipeline_tools.ENV_ROOT
-    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}
+    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", "rerun", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}      # (rerun: the command line only, no chat tool yet)
 
 
 def test_the_decide_tool_says_it_is_used_only_on_the_owners_word():
@@ -437,7 +437,9 @@ def test_the_eight_stages_are_written_once_a_plain_sentence_each():
     assert [s["n"] for s in S] == list(range(8)) and all(list(s) == ["n", "name", "words"] for s in S)
     assert [s["name"] for s in S] == ["Idea card", "Raw heat map", "Machine check", "Indicators", "Proof", "Pick one box and lock", "Unseen days",
                                       "The owner's look"]
-    assert S[1]["words"] == "Does it make money across many stops and targets, with no indicators?"
+    assert S[1]["words"] == "Does a region of the map make money (enough boxes at the floor)?"
+    assert S[3]["words"] == "Does the picked variant make money on its side(s)?" and S[4]["words"] == "Does the picked variant hold up against luck?"      # variant mode, 2026-10-08
+    assert S[5]["words"] == "Does the picked stop and target hold up on its own, so the rule can be frozen?"
     for s in S:
         assert s["words"][0].isupper() and s["words"][-1] in "?." and len(s["words"].split()) >= 6, s
         assert not re.search(r"sub-idea|signature|\bstore\b|stage card|P\d\.\d|\bOOS\b|Monte Carlo", s["words"] + s["name"]), s    # no jargon on the page
