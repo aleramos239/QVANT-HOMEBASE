@@ -100,13 +100,18 @@ function distToSegment(px, py, ax, ay, bx, by) {
    trend 0/1 = its points; rect 0 (t0,p0), 1 (t1,p1), 2 (t0,p1), 3 (t1,p0), then its four side
    midpoints (TradingView-style) -- 4 top, 5 bottom (price only; "top" is whichever corner has the
    higher price, matching a price axis that runs upward), 6 left, 7 right (time only; "left" is
-   whichever corner is earlier); hline 0 = the middle of the pane. */
+   whichever corner is earlier); hline 0 = the middle of the pane; vline 0 = half-way up it; a ray, an
+   extended line and a Fib retracement 0/1 = their two points, like a trend line. */
 function handlePoints(d, geo) {
   if (isPos(d)) return Pos().handles(d, geo);
   const P = d.points;
   if (d.type === 'hline') {
     const y = geo.y(P[0].p);
     return y == null ? null : [[geo.w / 2, y]];
+  }
+  if (d.type === 'vline') {        // one handle, half-way up the pane
+    const x = geo.x(P[0].t);
+    return x == null ? null : [[x, (geo.h || 0) / 2]];
   }
   const x0 = geo.x(P[0].t), x1 = geo.x(P[1].t), y0 = geo.y(P[0].p), y1 = geo.y(P[1].p);
   if (x0 == null || x1 == null || y0 == null || y1 == null) return null;
@@ -125,11 +130,32 @@ function hitTest(d, pt, geo) {
     if (Math.hypot(pt.x - hs[i][0], pt.y - hs[i][1]) <= HANDLE_TOL) return { part: 'handle', index: i };
   }
   if (d.type === 'hline') return Math.abs(pt.y - hs[0][1]) <= LINE_TOL ? { part: 'body' } : null;
-  const [[x0, y0], [x1, y1]] = hs;
-  if (d.type === 'trend') return distToSegment(pt.x, pt.y, x0, y0, x1, y1) <= LINE_TOL ? { part: 'body' } : null;
-  const inside = pt.x >= Math.min(x0, x1) - LINE_TOL && pt.x <= Math.max(x0, x1) + LINE_TOL
-    && pt.y >= Math.min(y0, y1) - LINE_TOL && pt.y <= Math.max(y0, y1) + LINE_TOL;
+  if (d.type === 'vline') return Math.abs(pt.x - hs[0][0]) <= LINE_TOL ? { part: 'body' } : null;
+  const [[x0, y0], [x1, y1]] = hs, style = DS.normalize(d.type, d.style);
+  if (DS.isLine(d.type)) {         // the line as it is drawn: a ray or an extended one is grabbed along its whole run
+    const [ax, ay, bx, by] = DS.lineEnds(d.type, x0, y0, x1, y1, geo.w, geo.h || 0, style);
+    return distToSegment(pt.x, pt.y, ax, ay, bx, by) <= LINE_TOL ? { part: 'body' } : null;
+  }
+  let left = Math.min(x0, x1), right = Math.max(x0, x1), top = Math.min(y0, y1), bot = Math.max(y0, y1);
+  if (d.type === 'fib') {          // the block its levels cover
+    const ys = fibRows(d, geo, style).map((r) => r.y);
+    if (!ys.length) return null;
+    top = Math.min(...ys); bot = Math.max(...ys);
+    if (style.extendLeft) left = 0;
+    if (style.extendRight) right = geo.w;
+  } else if (style.extendRight) right = geo.w;
+  const inside = pt.x >= left - LINE_TOL && pt.x <= right + LINE_TOL && pt.y >= top - LINE_TOL && pt.y <= bot + LINE_TOL;
   return inside ? { part: 'body' } : null;
+}
+
+/* A Fib retracement's drawn levels, top of the list first by ratio: [{v, price, y, color}] (a level off the price scale is left out). */
+function fibRows(d, geo, style) {
+  const [a, b] = d.points, out = [];
+  for (const l of DS.fibLevels(style)) {
+    const price = DS.fibPrice(a.p, b.p, l.v, style.reverse), y = geo.y(price);
+    if (y != null) out.push({ v: l.v, price, y, color: l.color });
+  }
+  return out;
 }
 
 /* d with handle k moved to (t, p); a rectangle's side corners (2, 3) take their time from one
@@ -142,6 +168,7 @@ function hitTest(d, pt, geo) {
 function setPoint(d, k, t, p, ctx) {
   if (isPos(d)) return Pos().setHandle(d, k, t, p, ctx);
   if (d.type === 'hline') return { ...d, points: [{ p }] };
+  if (d.type === 'vline') return { ...d, points: [{ t }] };
   const [a, b] = d.points;
   let points;
   if (d.type === 'rect' && k >= 4) {
@@ -167,7 +194,8 @@ function shiftTime(t, dBars, ctx) {
 function moveDrawing(d, dBars, dPrice, tick, ctx) {
   return { ...d, points: d.points.map((q) => (d.type === 'hline'
     ? { p: roundToTick(q.p + dPrice, tick) }
-    : { t: shiftTime(q.t, dBars, ctx), p: roundToTick(q.p + dPrice, tick) })) };
+    : d.type === 'vline' ? { t: shiftTime(q.t, dBars, ctx) }
+      : { t: shiftTime(q.t, dBars, ctx), p: roundToTick(q.p + dPrice, tick) })) };
 }
 
 /* Do two versions of a drawing sit on exactly the same points? */
@@ -194,6 +222,24 @@ function measureLabel(a, b, ctx) {
   const n = La == null || Lb == null ? 0 : Math.abs(Math.round(Lb) - Math.round(La));
   return [`${sign}${Cat.fmtPrice(Math.abs(diff), ctx.tick)} (${sign}${Math.abs(pct).toFixed(2)}%) · ${ticks} tick${ticks === 1 ? '' : 's'}`,
     `${n} bar${n === 1 ? '' : 's'} · ${fmtDuration(b.t - a.t)}`];
+}
+
+/* A line's own numbers, on one row: the move in price, percent and ticks, then bars and time (the measure tool's words). */
+function lineStats(a, b, ctx) { return measureLabel(a, b, ctx).join(' · '); }
+
+/* '#RRGGBB' (or an rgba) with opacity `a`: the soft fill between two Fib levels. An rgba keeps its own colour and takes `a`. */
+function withAlpha(color, a) {
+  const hex = /^#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})$/.exec(String(color));
+  if (hex) return `rgba(${parseInt(hex[1], 16)},${parseInt(hex[2], 16)},${parseInt(hex[3], 16)},${a})`;
+  const m = /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(String(color));
+  return m ? `rgba(${m[1]},${m[2]},${m[3]},${a})` : color;
+}
+
+/* A vertical line's time, as its tag at the foot of the pane says it: New York wall clock. */
+function timeTag(ms) {
+  try {
+    return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+  } catch (_) { return new Date(ms).toISOString().slice(0, 16).replace('T', ' '); }
 }
 
 let seq = 0;
@@ -338,9 +384,9 @@ class Primitive {
       for (const d of c.items()) {
         if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel });
         else if (d.type === 'hline') drawHlineLabel(ctx, d, geo, P, mediaSize.width);
-        else drawShape(ctx, d, geo, P, mediaSize.width);
+        else drawShape(ctx, d, geo, P, mediaSize.width, c.ctx());
       }
-      if (c.place) drawShape(ctx, c.place, geo, P, mediaSize.width);
+      if (c.place) drawShape(ctx, c.place, geo, P, mediaSize.width, c.ctx());
       const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
       if (hs) {
         ctx.fillStyle = P.handleFill;
@@ -356,13 +402,13 @@ class Primitive {
 /* The optional text label (style.text): trend/hline above/below/middle the line, rect inside top/
    middle/bottom -- DS.labelAnchor (pure) says where; this only paints it. No background box (a
    plain caption, like TradingView's line labels), unlike the measure box's callout. */
-function drawLabel(ctx, type, hs, style, paneW) {
+function drawLabel(ctx, type, hs, style, paneW, paneH = 0) {
   if (!style.text) return;
-  const a = DS.labelAnchor(type, hs, style.labelPos, paneW);
+  const a = DS.labelAnchor(type, hs, style.labelPos, paneW, style.labelAlign, paneH);
   if (!a) return;
   ctx.font = `${style.bold ? 'bold ' : ''}${style.fontSize}px ${window.HBCell.FONT}`;
   ctx.fillStyle = style.textColor;
-  ctx.textAlign = 'center';
+  ctx.textAlign = a.align || 'center';
   ctx.textBaseline = a.baseline;
   ctx.fillText(style.text, a.x, a.y);
 }
@@ -376,32 +422,126 @@ function drawHlineLabel(ctx, d, geo, P, paneW) {
   drawLabel(ctx, 'hline', hs, DS.normalize('hline', d.style), paneW);
 }
 
-function drawShape(ctx, d, geo, P, paneW) {
+/* A small filled tag with `text`, its left edge at x and centred on y, kept inside the pane's width. */
+function drawTag(ctx, text, x, y, fill, ink, paneW, font) {
+  ctx.font = font;
+  const w = ctx.measureText(text).width + 10, h = 18, left = Math.max(2, Math.min(x, paneW - w - 2));
+  ctx.fillStyle = fill;
+  ctx.beginPath(); ctx.roundRect(left, y - h / 2, w, h, 4); ctx.fill();
+  ctx.fillStyle = ink;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, left + 5, y + 0.5);
+}
+
+function drawShape(ctx, d, geo, P, paneW, mctx = null) {
   const hs = handlePoints(d, geo);
   if (!hs) return;
-  const style = DS.normalize(d.type, d.style);
-  const [[x0, y0], [x1, y1]] = hs;
-  ctx.strokeStyle = d.color || P.accent;
+  const style = DS.normalize(d.type, d.style), color = d.color || P.accent, tick = mctx ? mctx.tick : 0;
+  const font = `12px ${window.HBCell.FONT}`, paneH = geo.h || 0;
+  ctx.strokeStyle = color;
   ctx.lineWidth = style.width;
   ctx.setLineDash(DS.dashFor(style));
-  if (d.type === 'trend') {
-    const [ex0, ey0, ex1, ey1] = DS.extendLine(x0, y0, x1, y1, paneW, style.extendLeft, style.extendRight);
+  if (d.type === 'vline') {
+    const x = Math.round(hs[0][0]) + 0.5;
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, paneH); ctx.stroke();
+    ctx.setLineDash([]);
+    drawLabel(ctx, 'vline', hs, style, paneW, paneH);
+    if (style.timeLabel) drawTag(ctx, timeTag(d.points[0].t), x + 4, paneH - 12, color, P.onAccent, paneW, font);
+    return;
+  }
+  const [[x0, y0], [x1, y1]] = hs;
+  if (DS.isLine(d.type)) {
+    const [ex0, ey0, ex1, ey1] = DS.lineEnds(d.type, x0, y0, x1, y1, paneW, paneH, style);
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(ex0, ey0); ctx.lineTo(ex1, ey1); ctx.stroke();
     ctx.setLineDash([]);
-    drawLabel(ctx, 'trend', hs, style, paneW);
+    drawLabel(ctx, d.type, hs, style, paneW);
+    const [a, b] = d.points;
+    if (style.stats && mctx && (a.t !== b.t || a.p !== b.p)) {
+      // its numbers sit on the other side of the line from its own text (which takes `labelPos`)
+      const below = style.labelPos !== 'below' || !style.text;
+      ctx.font = font;
+      ctx.fillStyle = color;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = below ? 'top' : 'bottom';
+      ctx.fillText(lineStats(a, b, mctx), (x0 + x1) / 2, (y0 + y1) / 2 + (below ? 8 : -8));
+    }
+    if (style.priceLabel) drawTag(ctx, Cat.fmtPrice(b.p, tick), x1 + 8, y1, color, P.onAccent, paneW, font);
     return;
   }
-  const x = Math.min(x0, x1), y = Math.min(y0, y1), w = Math.abs(x1 - x0), h = Math.abs(y1 - y0);
+  if (d.type === 'fib') { drawFib(ctx, d, geo, P, paneW, style, color, tick); return; }
+  const x = Math.min(x0, x1), y = Math.min(y0, y1), h = Math.abs(y1 - y0);
+  const w = style.extendRight ? Math.max(0, paneW - x) : Math.abs(x1 - x0);     // to the pane's right edge, as far as the chart goes
   // style.fillColor is unset ("follow the theme") on an old rect and on a fresh one with no
   // explicit fill -- P.accentSoft is exactly what an unstyled rect always filled with (review
   // finding: a fixed default here would have been the light theme's .10 even in dark, where an
   // old rect used .20)
   ctx.fillStyle = style.fillColor || P.accentSoft;
   ctx.fillRect(x, y, w, h);
-  ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+  if (style.border) ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
+  if (style.midline || style.quarters) {       // the 50 % line, and the 25 % / 75 % ones
+    ctx.lineWidth = 1;
+    ctx.setLineDash(DS.dashFor({ lineStyle: style.midStyle }));
+    ctx.beginPath();
+    for (const f of [...(style.midline ? [0.5] : []), ...(style.quarters ? [0.25, 0.75] : [])]) {
+      const ly = Math.round(y + h * f) + 0.5;
+      ctx.moveTo(x, ly); ctx.lineTo(x + w, ly);
+    }
+    ctx.stroke();
+  }
   ctx.setLineDash([]);
   drawLabel(ctx, 'rect', hs, style, paneW);
+  if (style.priceLabels) {                      // its top and bottom prices, inside its right edge
+    const [a, b] = d.points, hi = Math.max(a.p, b.p), lo = Math.min(a.p, b.p);
+    ctx.font = font;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(Cat.fmtPrice(hi, tick), x + w - 5, y + 4);
+    ctx.textBaseline = 'bottom';
+    ctx.fillText(Cat.fmtPrice(lo, tick), x + w - 5, y + h - 4);
+    if (style.midline) { ctx.textBaseline = 'bottom'; ctx.fillText(Cat.fmtPrice(roundToTick((hi + lo) / 2, tick), tick), x + w - 5, y + h / 2 - 3); }
+  }
+}
+
+/* A Fib retracement: a faint line between its two points, then each level across the span of the two (to the pane's
+   edges when it extends), in the level's own colour, with a soft fill up to the next level and its ratio and price. */
+function drawFib(ctx, d, geo, P, paneW, style, color, tick) {
+  const x0 = geo.x(d.points[0].t), x1 = geo.x(d.points[1].t), y0 = geo.y(d.points[0].p), y1 = geo.y(d.points[1].p);
+  const left = style.extendLeft ? 0 : Math.min(x0, x1), right = style.extendRight ? paneW : Math.max(x0, x1);
+  const rows = fibRows(d, geo, style);
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.globalAlpha = 0.5;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+  ctx.restore();
+  if (style.fill) {
+    for (let i = 0; i + 1 < rows.length; i++) {
+      ctx.fillStyle = withAlpha(rows[i + 1].color, 0.08);
+      ctx.fillRect(left, Math.min(rows[i].y, rows[i + 1].y), right - left, Math.abs(rows[i + 1].y - rows[i].y));
+    }
+  }
+  ctx.setLineDash(DS.dashFor(style));
+  ctx.lineWidth = style.width;
+  for (const r of rows) {
+    const y = Math.round(r.y) + 0.5;
+    ctx.strokeStyle = r.color;
+    ctx.beginPath(); ctx.moveTo(left, y); ctx.lineTo(right, y); ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  if (style.showLevels || style.showPrices) {
+    ctx.font = `${style.fontSize}px ${window.HBCell.FONT}`;
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'bottom';
+    for (const r of rows) {
+      const text = [style.showLevels ? DS.fibText(r.v) : '', style.showPrices ? (style.showLevels ? `(${Cat.fmtPrice(roundToTick(r.price, tick), tick)})` : Cat.fmtPrice(roundToTick(r.price, tick), tick)) : '']
+        .filter(Boolean).join(' ');
+      ctx.fillStyle = r.color;
+      ctx.fillText(text, left + 4, r.y - 2);
+    }
+  }
 }
 
 function drawMeasure(ctx, m, geo, P, mctx, size) {
@@ -479,7 +619,9 @@ class Controller {
 
   /* The symbol's drawings, with one being dragged shown where it is now. */
   items() {
-    const list = this.host.drawings.list(this.root), cur = this.drag && this.drag.cur;
+    // a drawing told to show on other intervals only (d.vis) is not on this chart at all: not drawn, not grabbed
+    const spec = this.cell.spec(), list = this.host.drawings.list(this.root).filter((d) => DS.shownOn(d.vis, spec));
+    const cur = this.drag && this.drag.cur;
     return cur ? list.map((d) => (d.id === cur.id ? cur : d)) : list;
   }
   selectedDrawing() { return this.sel ? this.items().find((d) => d.id === this.sel) || null : null; }
@@ -491,7 +633,7 @@ class Controller {
     const c = this.cell;
     if (!c.chart || !c.bars.length) return null;
     const ctx = this.ctx();
-    return { x: (t) => timeToX(t, ctx), y: (p) => c.candles.priceToCoordinate(p), w: this.paneW() };
+    return { x: (t) => timeToX(t, ctx), y: (p) => c.candles.priceToCoordinate(p), w: this.paneW(), h: this.paneH() };
   }
   paneW() { return this.box.clientWidth - this.cell.chart.priceScale('right').width(); }
   paneH() { return this.cell.chart.panes()[0].getHeight(); }
@@ -561,7 +703,7 @@ class Controller {
      perfectly horizontal line) while Shift is held; releasing Shift on a later move goes back to
      the pointer's own price (DS.snapEndpointPrice: no state, just the flag on this call). */
   placedEnd(at, shiftKey) {
-    const p = this.place && this.place.type === 'trend' ? DS.snapEndpointPrice(this.place.points[0].p, at.p, shiftKey) : at.p;
+    const p = this.place && DS.isLine(this.place.type) ? DS.snapEndpointPrice(this.place.points[0].p, at.p, shiftKey) : at.p;
     return { t: at.t, p };
   }
 
@@ -591,6 +733,7 @@ class Controller {
       this.own(e);
       if (this.mode === 'click') { this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at); return; }
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
+      if (tool === 'vline') { this.commit({ type: 'vline', points: [{ t: at.t }] }); return; }
       if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
       const start = { t: at.t, p: at.p };
       if (tool === 'measure') this.measure = { a: start, b: start, done: false };
@@ -639,7 +782,7 @@ class Controller {
     const at = this.at(pt, part === 'handle' ? e : null);
     if (!at) return;
     // dragging a trend line's own endpoint: Shift snaps it to the OTHER endpoint's current price
-    const p = part === 'handle' && orig.type === 'trend' ? DS.snapEndpointPrice(orig.points[1 - index].p, at.p, e.shiftKey) : at.p;
+    const p = part === 'handle' && DS.isLine(orig.type) ? DS.snapEndpointPrice(orig.points[1 - index].p, at.p, e.shiftKey) : at.p;
     this.drag.cur = part === 'handle' ? setPoint(orig, index, at.t, p, this.ctx())
       : moveDrawing(orig, Math.round(at.L) - Math.round(from.L), at.p - from.p, this.cell.tick, this.ctx());
     this.refresh();
@@ -810,7 +953,7 @@ class Controller {
 }
 
 const api = { barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
+  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

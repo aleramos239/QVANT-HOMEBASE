@@ -79,7 +79,8 @@ MIN_BAR = {"time": 5, "tick": 100, "volume": 100, "range": 2}   # finer bars cos
 MAX_STUDIES = 16              # per subscription
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
 MAX_DRAWINGS = 500            # per symbol
-DRAWING_POINTS = {"trend": 2, "rect": 2, "hline": 1, "long": 3, "short": 3}
+# 2026-10-09: a ray, an extended line and a Fib retracement are two points like a trend line; a vertical line is one TIME
+DRAWING_POINTS = {"trend": 2, "ray": 2, "xline": 2, "rect": 2, "fib": 2, "hline": 1, "vline": 1, "long": 3, "short": 3}
 POSITION_QTY_MAX = 10_000     # a long/short box's quantity
 MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
 MAX_TEMPLATE_NAME = 40
@@ -88,15 +89,25 @@ _HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 # carry opacity, the same shape the chart-settings colours already use (settings.js' fmtColor).
 _RGBA_COLOR = re.compile(r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)")
 DRAWING_LINE_STYLES = ("solid", "dashed", "dotted")
-DRAWING_LABEL_POS = {"trend": ("above", "below", "middle"), "hline": ("above", "below", "middle"),
-                     "rect": ("top", "middle", "bottom")}
+_LINE_POS, _BOX_POS = ("above", "below", "middle"), ("top", "middle", "bottom")
+DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "hline": _LINE_POS, "rect": _BOX_POS, "vline": _BOX_POS}
+DRAWING_LABEL_ALIGN = ("left", "center", "right")
+_TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
 # exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
 DRAWING_STYLE_FIELDS = {
-    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "text", "fontSize", "textColor", "bold", "labelPos"},
-    "hline": {"width", "lineStyle", "axisLabel", "text", "fontSize", "textColor", "bold", "labelPos"},
-    "rect": {"width", "lineStyle", "fillColor", "text", "fontSize", "textColor", "bold", "labelPos"},
+    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "ray": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "xline": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "hline": {"width", "lineStyle", "axisLabel", "labelAlign"} | _TEXT_FIELDS,
+    "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
+    "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels"} | _TEXT_FIELDS,
+    "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "reverse", "fontSize"},
     "long": set(), "short": set(),
 }
+DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
+                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse")
+MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
+DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
 MAX_DRAWING_LABEL_TEXT = 200
 # Task 4 app-settings plan, Fix round 1 (review of bdaccbd):
 BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_BUSY + "error"
@@ -214,11 +225,21 @@ def check_style(kind: str, style) -> dict:
         if style["lineStyle"] not in DRAWING_LINE_STYLES:
             raise ValueError("style.lineStyle: solid, dashed or dotted")
         out["lineStyle"] = style["lineStyle"]
-    for key in ("extendLeft", "extendRight", "axisLabel", "bold"):
+    for key in DRAWING_STYLE_BOOLS:
         if key in style:
             if not isinstance(style[key], bool):
                 raise ValueError(f"style.{key}: true or false")
             out[key] = style[key]
+    if "midStyle" in style:
+        if style["midStyle"] not in DRAWING_LINE_STYLES:
+            raise ValueError("style.midStyle: solid, dashed or dotted")
+        out["midStyle"] = style["midStyle"]
+    if "labelAlign" in style:
+        if style["labelAlign"] not in DRAWING_LABEL_ALIGN:
+            raise ValueError("style.labelAlign: left, center or right")
+        out["labelAlign"] = style["labelAlign"]
+    if "levels" in style:
+        out["levels"] = _check_levels(style["levels"])
     if "fillColor" in style:
         if not _valid_color(style["fillColor"]):
             raise ValueError("style.fillColor: #RRGGBB or rgba(r,g,b,a)")
@@ -245,10 +266,48 @@ def check_style(kind: str, style) -> dict:
     return out
 
 
+def _check_levels(levels) -> list:
+    """A Fib retracement's levels: 1-16 of {v: the ratio (-10 .. 10), on: drawn or not, color?}; nothing else is kept."""
+    if not isinstance(levels, list) or not 1 <= len(levels) <= MAX_FIB_LEVELS:
+        raise ValueError(f"style.levels: a list of 1 to {MAX_FIB_LEVELS} levels")
+    out = []
+    for lv in levels:
+        if not isinstance(lv, dict) or not _finite(lv.get("v")) or not FIB_MIN <= lv["v"] <= FIB_MAX:
+            raise ValueError(f"style.levels: each level has v, a number from {FIB_MIN} to {FIB_MAX}")
+        if not isinstance(lv.get("on"), bool):
+            raise ValueError("style.levels: each level has on, true or false")
+        item = {"v": lv["v"], "on": lv["on"]}
+        if "color" in lv:
+            if not _valid_color(lv["color"]):
+                raise ValueError("style.levels: a level's color is #RRGGBB or rgba(r,g,b,a)")
+            item["color"] = lv["color"]
+        out.append(item)
+    return out
+
+
+def check_vis(vis) -> dict | None:
+    """Which intervals a drawing shows on: {min, max} in bar SECONDS, either one null (no bound); None when both are
+    (it shows everywhere, and nothing is stored). ValueError on anything else."""
+    if not isinstance(vis, dict) or set(vis) - {"min", "max"}:
+        raise ValueError("vis: {min, max} in bar seconds, either one null")
+    out = {}
+    for key in ("min", "max"):
+        v = vis.get(key)
+        if v is not None and (not isinstance(v, int) or isinstance(v, bool) or not 1 <= v <= DRAWING_VIS_MAX_S):
+            raise ValueError(f"vis.{key}: null, or whole seconds from 1 to {DRAWING_VIS_MAX_S}")
+        out[key] = v
+    if out["min"] is None and out["max"] is None:
+        return None
+    if out["min"] is not None and out["max"] is not None and out["min"] > out["max"]:
+        raise ValueError("vis: min is at most max")
+    return out
+
+
 def check_drawings(body) -> list:
     """The page's drawings for one symbol, validated and stripped to what
-    the page draws: [{id, type, points: [{t?, p}], color?, qty?, locked?,
-    style?}]. A long / short position is [entry, target, stop] with target
+    the page draws: [{id, type, points: [{t?, p?}], color?, qty?, locked?,
+    style?, vis?}] (a horizontal line's point is a price, a vertical line's a
+    time; `vis` = the intervals it shows on, check_vis). A long / short position is [entry, target, stop] with target
     and stop on the box's right edge (same t), stop < entry < target (long)
     or target < entry < stop (short), and an optional qty 1-10000 (kept for
     positions only). `style` (2026-09-27 draw-tools plan) is per-type --
@@ -265,17 +324,22 @@ def check_drawings(body) -> list:
             raise ValueError("id: a string of 1-40 characters")
         n = DRAWING_POINTS.get(kind)
         if n is None:
-            raise ValueError("type: trend, hline, rect, long or short")
+            raise ValueError("type: trend, ray, xline, hline, vline, rect, fib, long or short")
         if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
             raise ValueError(f"a {kind} has exactly {n} point(s)")
         clean = []
         for p in pts:
+            t = p.get("t")
+            if kind == "vline":                       # a time and nothing else
+                if not isinstance(t, int) or isinstance(t, bool):
+                    raise ValueError("a point's t is an integer (epoch ms)")
+                clean.append({"t": t})
+                continue
             if not _finite(p.get("p")):
                 raise ValueError("a point's p is a finite number")
             if kind == "hline":
                 clean.append({"p": p["p"]})
                 continue
-            t = p.get("t")
             if not isinstance(t, int) or isinstance(t, bool):
                 raise ValueError("a point's t is an integer (epoch ms)")
             clean.append({"t": t, "p": p["p"]})
@@ -299,6 +363,10 @@ def check_drawings(body) -> list:
             style = check_style(kind, d["style"])
             if style:
                 item["style"] = style
+        if "vis" in d:
+            vis = check_vis(d["vis"])
+            if vis:
+                item["vis"] = vis
         out.append(item)
     return out
 
