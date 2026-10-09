@@ -1632,6 +1632,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     s = hub.streams.get((root, spec.key))
                     if s is None:
                         s = hub.attach(await asyncio.to_thread(hub.prepare, root, spec, keys))
+                    await asyncio.to_thread(hub.ensure_prime, s, keys)   # sessions the new studies read (noise band ...)
                     for k in keys:
                         s.add_study(k)
                     hub.subscribe(s, (conn, cid))

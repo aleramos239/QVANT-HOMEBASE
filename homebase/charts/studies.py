@@ -247,12 +247,12 @@ REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
 LENGTHS = range(1, 1001)        # the length a windowed study may be given
 
 
-def make(key: str) -> Study:
+def make(key: str, tick_size: float = 0.25) -> Study:
     """A Study from its wire key. ValueError on anything malformed: an
     unknown name, a length outside LENGTHS, or a parameter too many."""
     name, *args = str(key).split(":")
     if name in TA_NAMES:
-        return make_ta(name, args)
+        return make_ta(name, args, tick_size)
     cls = REGISTRY.get(name)
     if cls is None:
         raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES]))}, profile)")
