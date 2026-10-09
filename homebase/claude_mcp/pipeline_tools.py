@@ -56,7 +56,7 @@ STAGES = [
     {"n": 0, "name": "Idea card", "words": "Is the card complete, and does it use only parts that exist?"},
     {"n": 1, "name": "Raw heat map", "words": "Does a region of the map make money (enough boxes at the floor)?"},
     {"n": 2, "name": "Machine check", "words": "Does every trade do exactly what the rule says?"},
-    {"n": 3, "name": "Indicators", "words": "Does the picked variant make money on its side(s)?"},
+    {"n": 3, "name": "Indicators", "words": "Does the picked variant make money on its side(s), even without its best trades?"},
     {"n": 4, "name": "Proof", "words": "Does the picked variant hold up against luck?"},
     {"n": 5, "name": "Pick one box and lock", "words": "Does the picked stop and target hold up on its own, so the rule can be frozen?"},
     {"n": 6, "name": "Unseen days", "words": "Does it still make money on days it has never seen, read one time only?"},

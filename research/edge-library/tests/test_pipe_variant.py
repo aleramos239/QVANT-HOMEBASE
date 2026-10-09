@@ -231,7 +231,7 @@ def test_stage_3_tries_no_indicator_and_judges_the_picked_box(world):
     world.setattr(REC, "card", lambda *a, **k: seen.append(a[0]) or real(*a, **k))
     c = TS.whole(ST.stage3(NAME, CTX), 3)
     assert (c["passed"], c["result"], c["picked"], c["tries"]) == (True, "pass", one["picked"], 2) and c["indicators"] == [] and seen == []
-    assert TS.lines(c) == ["P3.2", "P3.3", "P3.4", "P3.6"] and "no indicator is tried in variant mode (the card names 1)" in c["text"]
+    assert TS.lines(c) == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7"] and "no indicator is tried in variant mode (the card names 1)" in c["text"]
     assert len(calls) == 1 and calls[0]["keys"] == [f"{A5}-ES-tf5", f"{A5}-GC-tf5"]           # the other markets' stores are still run: the build reads them
     (b, others), = rows_in
     assert b["ids"] == [cell] and b["net"].shape[0] == 1 and b["sides"] == "both" and len(others) == 2          # the picked box alone
@@ -242,7 +242,7 @@ def test_stage_3_tries_no_indicator_and_judges_the_picked_box(world):
 def test_stage_3_a_picked_box_that_misses_a_row_stops_the_idea_with_its_line(world):
     one = first(world)
     c = TS.whole(ST.stage3(NAME, CTX), 3)                                                      # the real rows on 3 days: far under 200 trades
-    assert c["passed"] is False and c["result"] == "fail" and "code_problem" not in c and TS.lines(c) == ["P3.2", "P3.3", "P3.4", "P3.6"]
+    assert c["passed"] is False and c["result"] == "fail" and "code_problem" not in c and TS.lines(c) == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7"]
     assert c["lines"][1]["passed"] is False and c["lines"][1]["text"].startswith("P3.3 FAIL ") and c["lines"][3]["passed"] is None
     assert f"the picked box {one['picked']['cell']} fails" in c["text"] and "P3.3" in c["text"]
     assert c["picked"] == one["picked"] and c["tries"] == 2

@@ -219,7 +219,18 @@ def variant_rows(b: dict, others: list) -> list:
     return [L._row("P3.2", at is not None and bool(at >= floor), at, floor, f"no trade (need an average trade of {_fig(floor, (floor,), '$')})" if at is None else
                    f"average trade {_fig(at, (floor,), '$')} (need {_fig(floor, (floor,), '$')})"),
             L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-            side, markets]
+            side, markets, _without_best(b, need["without_best_trades"])]
+
+
+def _without_best(b: dict, share: float) -> dict:
+    """Row P3.7: the box without its best `share` of trades (owner, 2026-10-09). `b["trade_net"]` = the box's trades, 1 contract after costs; none = the row does not apply."""
+    t = b.get("trade_net")
+    if t is None:
+        return L._row("P3.7", None, None, 0, "no list of the box's trades: the row does not apply")
+    t = np.sort(np.asarray(t, np.float64))
+    k = max(1, int(round(share * len(t) + 1e-9))) if len(t) else 0
+    left = float(t[:-k].sum()) if len(t) > k else float(0.0)
+    return L._row("P3.7", bool(left > 0), left, 0, f"without its best {L._pc(share)} of trades ({k} of {len(t)}) the box makes {_fig(left, (0,), '$')} (need above $0)", dropped=k)
 
 
 # ================================================================ stage 4: the proof

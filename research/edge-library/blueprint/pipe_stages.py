@@ -318,7 +318,8 @@ def _one_box(t: dict, cell: str) -> dict:
     i, x = t["ids"].index(cell), J.cellx(t["_st"], cell, t["_u"]["sess"], t["_u"])
     up = x["side"] > 0
     return {"root": t["root"], "net": t["net"][i:i + 1], "n": t["n"][i:i + 1], "ids": [cell], "unit": t["unit"], "days": t["days"], "sides": t.get("sides"),
-            "long": float(x["net"][up].sum()), "short": float(x["net"][~up].sum()), "n_long": int(up.sum()), "n_short": int((~up).sum()), "_st": t["_st"], "_u": t["_u"]}
+            "long": float(x["net"][up].sum()), "short": float(x["net"][~up].sum()), "n_long": int(up.sum()), "n_short": int((~up).sum()), "trade_net": np.asarray(x["net"], np.float64),
+            "_st": t["_st"], "_u": t["_u"]}
 
 
 def _box_card(t: dict, cell: str) -> dict:

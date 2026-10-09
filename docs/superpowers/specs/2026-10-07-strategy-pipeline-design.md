@@ -385,3 +385,12 @@ name).
 **Open.** (1) The whole-table sides line 2.6 can fail while the picked box's own sides hold (the table adds up all 144 boxes); it is
 kept as the brief said and stops such an idea at stage 5 -- the owner may want it waived too. (2) The "tries" of the random bar is still
 the number of heat maps judged (1 or 2 bars x ways); with the indicators gone it no longer grows at stage 3.
+
+### 16.1 Line P3.7 (decided 2026-10-09): without its best 5 % of trades
+After the first four unseen reads all failed (spec 16), the build data of the four were read again: the two VWAP pullbacks earned over 100 % of
+their profit from their best 5 % of trades. Stage 3 of variant mode gets a row P3.7: the picked box's trades (1 contract after costs), without
+the best `variant.without_best_trades` (0.05) of them, still add up to more than $0. No other build-days check separated the four from the
+rest (profit in every year, and picking on past years and reading the next, were passed by all four). Of 16 ideas with a region of boxes at
+the floor, 4 pass P3.7 (noise_gx_mid_long, noise_nyam_short, noise_pm_long, value_reclaim); two of those failed the unseen days, so the line is
+a filter on luck, not a proof.
+

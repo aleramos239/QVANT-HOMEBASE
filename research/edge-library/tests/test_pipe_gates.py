@@ -458,7 +458,7 @@ def test_variant_rows_are_the_picked_box_floor_trades_sides_and_the_shown_market
                 "n_short": n_short, "sides": sides}
 
     rows = G.variant_rows(box(), [3.0, -4.0])
-    assert [x["line"] for x in rows] == ["P3.2", "P3.3", "P3.4", "P3.6"] and marks(rows) == [True, True, True, None]
+    assert [x["line"] for x in rows] == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7"] and marks(rows) == [True, True, True, None, None]
     assert rows[0]["text"] == "P3.2 PASS average trade $70 (need $70)" and rows[0]["number"] == 70.0 and rows[0]["need"] == 70.0
     assert rows[1]["text"] == "P3.3 PASS 200 trades (need 200)" and rows[1]["number"] == 200.0 and rows[1]["need"] == P.need("variant", "region_trades")
     assert rows[3]["passed"] is None and rows[3]["need"] is None                         # the other markets: shown, never False
@@ -518,3 +518,19 @@ def test_variant_numbers_are_read_from_the_file_and_typed_nowhere():
                                   "n_long": 250, "n_short": 0}, []))["P3.2"]["passed"] is True
     teardown_function()
     assert G.variant_map(t)["result"] == "fail"
+
+
+def test_variant_rows_p3_7_the_box_must_make_money_without_its_best_5_percent_of_trades():
+    """Owner-approved 2026-10-09: two of the four ideas that failed the unseen days (both VWAP pullbacks) earned over 100 % of their profit from their
+    best 5 % of trades. The box's own trades (`trade_net`, 1 contract after costs) without the best 5 % must still be above $0; no list of trades = the row does not apply."""
+    one = sided(boxes(1, 1, 80.0, 200))
+    rows = {r["line"]: r for r in G.variant_rows({**one, "trade_net": np.array([1000.0] * 10 + [-10.0] * 190)}, [])}      # 10 big wins, 190 small losses: lives on the best 5 %
+    assert rows["P3.7"]["passed"] is False and rows["P3.7"]["number"] == -1900.0 and rows["P3.7"]["need"] == 0
+    assert rows["P3.7"]["text"].startswith("P3.7 FAIL without its best 5 % of trades (10 of 200)")
+    spread = np.array([100.0] * 120 + [-20.0] * 80)                                                                           # an even spread: still positive without the best 10
+    rows = {r["line"]: r for r in G.variant_rows({**one, "trade_net": spread}, [])}
+    assert rows["P3.7"]["passed"] is True and rows["P3.7"]["need"] == 0 and rows["P3.7"]["number"] == float(np.sort(spread)[:-10].sum())
+    rows = {r["line"]: r for r in G.variant_rows(one, [])}                                                                    # no trade list (a hand-made table)
+    assert rows["P3.7"]["passed"] is None and "no list of the box's trades" in rows["P3.7"]["text"]
+    with_number = dict(json.loads(FILE.read_text(encoding="utf-8")))
+    assert with_number["variant"]["without_best_trades"] == 0.05

@@ -438,7 +438,7 @@ def test_the_eight_stages_are_written_once_a_plain_sentence_each():
     assert [s["name"] for s in S] == ["Idea card", "Raw heat map", "Machine check", "Indicators", "Proof", "Pick one box and lock", "Unseen days",
                                       "The owner's look"]
     assert S[1]["words"] == "Does a region of the map make money (enough boxes at the floor)?"
-    assert S[3]["words"] == "Does the picked variant make money on its side(s)?" and S[4]["words"] == "Does the picked variant hold up against luck?"      # variant mode, 2026-10-08
+    assert S[3]["words"] == "Does the picked variant make money on its side(s), even without its best trades?" and S[4]["words"] == "Does the picked variant hold up against luck?"      # variant mode, 2026-10-08
     assert S[5]["words"] == "Does the picked stop and target hold up on its own, so the rule can be frozen?"
     for s in S:
         assert s["words"][0].isupper() and s["words"][-1] in "?." and len(s["words"].split()) >= 6, s

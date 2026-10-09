@@ -5,7 +5,8 @@
   "map_share": 0.5,
   "region_boxes": 25,
   "region_trades": 200,
-  "floor_part": 1.0
+  "floor_part": 1.0,
+  "without_best_trades": 0.05
  },
  "card": {
   "ways": [
