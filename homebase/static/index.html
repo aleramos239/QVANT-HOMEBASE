@@ -530,7 +530,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=5">
+<link rel="stylesheet" href="/static/apple.css?v=6">
 <link rel="stylesheet" href="/static/hb.css?v=6">
 <script src="/static/apple/web.js" data-tab="desk"></script>
 </head>
@@ -1648,6 +1648,14 @@ try {
   if (v && ["today", "strat", "activity"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
+/* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
+const SIDE_FOLD_KEY = "hb_side_fold";
+let SIDE_FOLD = (() => { try { const v = JSON.parse(localStorage.getItem(SIDE_FOLD_KEY) || "{}"); return v && typeof v === "object" ? v : {}; } catch (_) { return {}; } })();
+function toggleSide(k) {
+  SIDE_FOLD[k] = !SIDE_FOLD[k];
+  try { localStorage.setItem(SIDE_FOLD_KEY, JSON.stringify(SIDE_FOLD)); } catch (_) { /* stays for this page */ }
+  render();
+}
 function setView(k, name) {
   closeAsgMenus(false);
   VIEW = k === "strat" ? {k, name} : {k};
@@ -1755,6 +1763,12 @@ function todayFoot(issues) {
 
 /* ---- sidebar ---- */
 function renderSide(names, hiddenCount, issues) {
+  /* A section header: a button that folds its rows (chevron, title, a count while it is shut) and, beside it, the section's own action. */
+  const head = (k, title, n, action) => {
+    const shut = !!SIDE_FOLD[k];
+    return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
+      <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
+  };
   const sel = (k, n) => VIEW.k === k && (k !== "strat" || VIEW.name === n) ? " sel" : "";
   const strat = names.map(n => {
     const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
@@ -1776,14 +1790,13 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    <div class="sh"><span>Strategies</span><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></div>
-    ${strat}
-    ${hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : ""}
-    <div class="sh"><span>Accounts</span><button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button></div>
-    ${acctRows}${more}
-    <div class="sh"><span>Activity</span></div>
-    <button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
-      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`;
+    ${head("strat", "Strategies", names.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
+    ${SIDE_FOLD.strat ? "" : strat + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
+    ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
+    ${SIDE_FOLD.accts ? "" : acctRows + more}
+    ${head("act", "Activity", 0, "")}
+    ${SIDE_FOLD.act ? "" : `<button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
+      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`}`;
 }
 
 /* ---- strategy detail ---- */
