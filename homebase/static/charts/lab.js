@@ -291,6 +291,31 @@ async function showOnChart(report = false) {
   } else showTries = 0;
   paintNav();
 }
+/* A run that is NOT the open strategy's (a pipeline idea's executions, a run the Desk page asked for): the chart comes
+   forward with the Strategy Tester's report under it, and the tester is asked to show the run, at `focus` when given
+   ({date}). The pipeline's pages step aside first: the chart is behind them. -> true once this page's chart took it. */
+const RUN_ID = /^[0-9]{8}-[0-9]{6}-[a-z][a-z0-9_]*-[0-9a-f]{4}$/;
+async function showRunOnChart(rid, focus = null) {
+  if (!RUN_ID.test(String(rid))) return false;
+  if (pipeOn()) setView('lib');
+  if (!P.chart) {
+    P.chart = true;
+    if (innerWidth < 1500 && !panelsChosen) P.lib = false;
+    applyPanels();
+    await new Promise((res) => setTimeout(res, 160));
+  }
+  setReport(true);
+  soloChart();
+  shownRid = rid;
+  for (let k = 0; k < 6; k++) {          // this page's own socket may not be up yet (the page just loaded)
+    const o = await send('POST', '/api/tester/show', focus ? { run_id: rid, focus } : { run_id: rid });
+    if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); return false; }
+    if (o.json.pages) return true;
+    await new Promise((res) => setTimeout(res, 1200));
+  }
+  shownRid = null;
+  return false;
+}
 /* ONE chart: the Lab never shows a grid of them. (The grid menu is the chart shell's own; its button is hidden here.) */
 function soloChart() {
   const H = window.HBCharts;
@@ -953,7 +978,8 @@ async function showExecutions(name) {
   S.plExec = '';
   const j = r.json || {};
   if (!r.ok || j.ok === false) { pipeSaid(String(j.detail || r.error || 'The chart could not be opened.'), true); return; }
-  pipeSaid(C.plExecSaid(name, j), false);
+  const shown = await showRunOnChart(j.run_id, j.end ? { date: j.end } : null);
+  log(esc(C.plExecSaid(name, j, shown)));
 }
 async function watchDo(what, name) {
   if (!name || S.plBusy) return;
@@ -1595,6 +1621,8 @@ setTimeout(() => { if (P.chart) soloChart(); }, 1800);
 // Bar Replay lives in the same bottom panel: asking for it brings the panel back
 document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
 loadLists().then(() => {
+  const run = /^#run=([0-9a-z_-]+)$/.exec(location.hash);       // the Desk page's "Show executions on chart"
+  if (run) { showRunOnChart(run[1]).then((ok) => log(ok ? 'Its executions are on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.')); return; }
   const m = /^#(strategy|builtin)=(.+)$/.exec(location.hash);
   if (!m) return;
   const name = decodeURIComponent(m[2]);

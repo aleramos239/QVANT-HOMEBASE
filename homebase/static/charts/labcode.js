@@ -569,12 +569,12 @@ function plCurveRead(cv, i) {
   if (i < 0 || !pts[i]) return `before ${plText(c.start)} · $0`;
   return `${pts[i][0]} · ${plSigned(pts[i][2])} (${plSigned(pts[i][1])} that day)`;
 }
-/* One plain sentence after Show executions on chart: `j` = the server's answer {trades, of, start, end, pages}. */
-function plExecSaid(name, j) {
+/* One plain sentence after Show executions on chart: `j` = the server's answer {trades, of, start, end}; `shown` = this page's chart took the run. */
+function plExecSaid(name, j, shown) {
   const r = j || {}, n = plNum(r.trades) || 0, lost = plNum(r.of) != null && r.of > n ? r.of - n : 0;
   return `${n} execution${n === 1 ? '' : 's'} of ${name} (${plText(r.start)} to ${plText(r.end)})${lost ? `, ${lost} could not be priced` : ''}. `
-    + (r.pages ? 'They are on the chart: it shows the last day it traded, and its trade list steps through the rest.'
-      : 'No chart page is open: open the Charts tab, then press this again.');
+    + (shown ? 'They are on the chart, at the last day it traded: the list under it steps through every trade.'
+      : 'The chart did not take them: turn Chart off and on, then press this again.');
 }
 /* One plain sentence after a strategy goes on, or comes off, the Desk's watch list. */
 function plWatchSaid(what, name) {

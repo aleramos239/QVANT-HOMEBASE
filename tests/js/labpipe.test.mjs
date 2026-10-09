@@ -428,9 +428,13 @@ test('book results: the words beside the curve and after an action are plain tex
   assert.equal(L.plCurveRead(cv, -1), 'before 2025-07-01 · $0');
   assert.equal(L.plCurveRead(cv, 1), '2025-07-02 · $0 (−$300 that day)');
   assert.equal(L.plCurveRead(cv, 99), 'before 2025-07-01 · $0', 'an index off the end never throws');
-  assert.equal(L.plExecSaid('nq_x', { trades: 263, of: 263, start: '2025-07-03', end: '2026-09-21', pages: 1 }),
-    '263 executions of nq_x (2025-07-03 to 2026-09-21). They are on the chart: it shows the last day it traded, and its trade list steps through the rest.');
-  assert.match(L.plExecSaid('nq_x', { trades: 1, of: 3, start: 'a', end: 'b', pages: 0 }), /^1 execution of nq_x \(a to b\), 2 could not be priced\. No chart page is open/);
+  assert.equal(L.plExecSaid('nq_x', { trades: 263, of: 263, start: '2025-07-03', end: '2026-09-21' }, true),
+    '263 executions of nq_x (2025-07-03 to 2026-09-21). They are on the chart, at the last day it traded: the list under it steps through every trade.');
+  assert.match(L.plExecSaid('nq_x', { trades: 1, of: 3, start: 'a', end: 'b' }, false), /^1 execution of nq_x \(a to b\), 2 could not be priced\. The chart did not take them/);
+  // the executions open on THIS page's chart (the Lab's own): the pipeline's pages step aside, the tester is asked for the run
+  assert.match(LAB, /async function showRunOnChart\(rid, focus = null\) \{\n  if \(!RUN_ID\.test\(String\(rid\)\)\) return false;\n  if \(pipeOn\(\)\) setView\('lib'\);/);
+  assert.match(LAB, /const shown = await showRunOnChart\(j\.run_id, j\.end \? \{ date: j\.end \} : null\);/);
+  assert.match(LAB, /const run = \/\^#run=\(\[0-9a-z_-\]\+\)\$\/\.exec\(location\.hash\);/, 'a link from the Desk page opens a run here');
   assert.match(L.plWatchSaid('promote', 'nq_x'), /watch-only: it shows its results there and places no orders\.$/);
   assert.match(L.plWatchSaid('remove', 'nq_x'), /stays in the Book and can be promoted again\.$/);
 });
