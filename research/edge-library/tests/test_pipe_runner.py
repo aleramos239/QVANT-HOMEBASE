@@ -529,6 +529,23 @@ def test_the_commands_end_to_end(root, monkeypatch, cards, tmp_path):
     assert "fvg_open  fvg     refused      7      0  too few trades a week" in out.splitlines()[1:3]
 
 
+def test_pick_names_the_box_with_a_reason_and_clear_takes_it_away(root):
+    """The owner's pick (2026-10-09): command line only; no reason, no cell, no idea = refused; the pick survives a rerun."""
+    R = f"--root={root}"
+    idea(root, "fvg_open")
+    rc, r = run(["pipe", "pick", "fvg_open", "k0p4_pts45-r2", "--why", "the only box that passed every build-day line", R])
+    assert rc == 0 and r["ok"] and r["pick"]["cell"] == "k0p4_pts45-r2" and "stage 1 will pick the box k0p4_pts45-r2" in r["text"]
+    assert PS.owner_pick("fvg_open", root)["why"] == "the only box that passed every build-day line"
+    rc, r = run(["pipe", "pick", "fvg_open", "k0p4_pts45-r2", R])
+    assert rc == 2 and "why" in r["error"]
+    rc, r = run(["pipe", "pick", "nobody", "x", "--why", "y", R])
+    assert rc == 2 and "no pipeline idea" in r["error"]
+    rc, r = run(["pipe", "pick", "fvg_open", "--clear", R])
+    assert rc == 0 and PS.owner_pick("fvg_open", root) is None and "taken away" in r["text"]
+    rc, r = run(["pipe", "pick", "fvg_open", "--clear", R])
+    assert rc == 0 and "had no owner's pick" in r["text"]
+
+
 def test_rerun_puts_a_stopped_idea_back_at_the_end_of_the_queue_and_show_names_the_picked_box(root, monkeypatch):
     R = f"--root={root}"
     idea(root, "fvg_open")

@@ -244,6 +244,37 @@ def set_state(name, root=None, **changes) -> dict:
     return st
 
 
+def owner_pick(name, root=None):
+    """The box the owner named for an idea (`p/<name>/owner_pick.json`: {cell, why, utc}), or None."""
+    f = _dir(name, root) / "owner_pick.json"
+    try:
+        got = json.loads(f.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return got if isinstance(got, dict) and isinstance(got.get("cell"), str) and got["cell"] else None
+
+
+def set_owner_pick(name, cell, why, root=None) -> dict:
+    """The owner names the box stage 1 picks for `name` (2026-10-09; never a chat tool). It must still be one of the boxes at the floor of the
+    best map: stage 1 checks that. Kept across `rerun`. Refused: no cell, no reason."""
+    if not (isinstance(cell, str) and cell.strip()):
+        raise J.Refuse("pipe pick: the cell (the box's id, e.g. k0p4_pts45-r2) is needed")
+    if not (isinstance(why, str) and why.strip()):
+        raise J.Refuse("pipe pick: say why (--why=TEXT): the reason is kept with the idea")
+    d = _dir(name, root)
+    got = {"cell": cell.strip(), "why": " ".join(why.split()), "utc": _now()}
+    _write(d / "owner_pick.json", got)
+    return got
+
+
+def clear_owner_pick(name, root=None) -> bool:
+    f = _dir(name, root) / "owner_pick.json"
+    if f.exists():
+        f.unlink()
+        return True
+    return False
+
+
 def reset(name, root=None) -> dict:
     """The idea starts again from stage 0 (module docstring) -> its state."""
     r, d = _at(root), _dir(name, root)

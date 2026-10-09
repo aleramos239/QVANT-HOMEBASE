@@ -87,7 +87,7 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick")
 
 
 def stage_fn(n: int):
@@ -390,7 +390,20 @@ def rerun(name, root=None) -> dict:
     return api.result("pipe rerun", name, status=st["status"], state=st, moved=moved, text=text, next="bp.py pipe start runs the queue (a runner that is working takes it by itself).")
 
 
-def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False) -> dict:
+def pick(name, cell=None, why=None, root=None, clear: bool = False) -> dict:
+    """`pipe pick <name> <cell> --why=TEXT` / `pipe pick <name> --clear`: the OWNER names the box stage 1 picks (2026-10-09; command line only, never a chat
+    tool). It must still be one of the boxes at the floor of the idea's best heat map (stage 1 checks it when the idea runs again: `pipe rerun`)."""
+    PS.state(name, root)                                  # no such idea: the store's own refusal
+    if clear:
+        gone = PS.clear_owner_pick(name, root)
+        return api.result("pipe pick", name, pick=None, text=f"{name}: the owner's pick is taken away" if gone else f"{name} had no owner's pick",
+                          next=f"bp.py pipe rerun {name} runs it again with the middle box.")
+    got = PS.set_owner_pick(name, cell, why, root)
+    return api.result("pipe pick", name, pick=got, text=f"{name}: stage 1 will pick the box {got['cell']} (the owner's pick: {got['why']})",
+                      next=f"bp.py pipe rerun {name} runs it again from stage 0 (a stopped idea only); a new idea takes it at its stage 1.")
+
+
+def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
     if sub == "add":
@@ -403,6 +416,8 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return booked(root)
     if sub == "rerun":
         return rerun(name, root)
+    if sub == "pick":
+        return pick(name, cell, why, root, clear=clear)
     if sub == "start":
         got = start(root)
         pid = f" (pid {got['pid']})" if got["pid"] else ""

@@ -100,7 +100,7 @@ and --json out.
   bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
-  bp.py pipe rerun <name>                                                    refused with its rows; `start` = the runner, detached,
+  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT                    refused with its rows; `start` = the runner, detached,
                                                                              that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
@@ -227,18 +227,22 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
         ("pause", "the runner stops after the stage in hand"), ("resume", "the runner carries on"), ("approve", "the owner's yes: the idea goes in the book"),
         ("refuse", "the owner's no, with his reason"), ("book", "one row a book card"),
-        ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"), ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
+        ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
+        ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"), ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     pipes["add"].add_argument("--spec", metavar="-|FILE", help="the pipeline card as JSON: - = on stdin, else a file")
     pipes["add"].add_argument("--inbox", action="store_true", help="the card goes before the queued ones")
-    for name in ("show", "approve", "refuse", "rerun"):
+    for name in ("show", "approve", "refuse", "rerun", "pick"):
         pipes[name].add_argument("name", help="the pipeline card's name")
+    pipes["pick"].add_argument("cell", nargs="?", help="the box's id, e.g. k0p4_pts45-r2 (not with --clear)")
+    pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
+    pipes["pick"].add_argument("--why", metavar="TEXT", help="the owner's reason for the box (kept with the idea)")
     pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
     for x in pipes.values():
         x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
@@ -361,7 +365,7 @@ def _pipe(a) -> dict:
         if card is None:
             raise J.Refuse(f"no card {where}: the pipeline card as JSON")
     return pipe_runner.command(a.sub, getattr(a, "name", None), a.root, card=card, inbox=getattr(a, "inbox", False), why=getattr(a, "why", None),
-                               once=getattr(a, "once", False))
+                               once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False))
 
 
 def _said(r: dict) -> str:

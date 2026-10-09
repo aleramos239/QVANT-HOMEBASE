@@ -388,7 +388,7 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
     if why:
         return _error(1, t0, why, [], None, 0, rules)
     if variant:
-        return _stage1_variant(t0, kw, subs, rules)
+        return _stage1_variant(t0, kw, subs, rules, PS.owner_pick(name, ctx.get("root")))
     res = [G.raw(_table(specs[0], plan, kw)) for _, _, plan, specs in subs]
     rows = [x for (s, *_), r in zip(subs, res) for x in _named(r["lines"], s["name"], sub=s["name"])]
     tables = [{"sub": s["name"], "way": s["way"], "bar": s["bar"], "result": r["result"], "avg_trade": r["avg_trade"], "text": r["text"]} for (s, *_), r in zip(subs, res)]
@@ -400,7 +400,7 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
                  {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None}, len(res), rules, tables=tables)
 
 
-def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict) -> dict:
+def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) -> dict:
     """Stage 1 in variant mode: the LOOSE check of each map (G.variant_map), the best map by its qualifying boxes (G.rank), and THE PICK -- the
     middle qualifying box by build net, never the best -- written into the card and into `picked` (cell, variant)."""
     tabs = [_table(specs[0], plan, kw) for _, _, plan, specs in subs]
@@ -413,13 +413,21 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict) -> dict:
         return _card(1, t0, False, "fail", rows, f"every one of the {len(res)} heat maps failed the loose check of the map: the idea is dropped", None, len(res), rules, tables=tables)
     s, t = subs[i][0], tabs[i]
     cell = _middle(J.table(t["_st"], t["_u"]), res[i]["cells"])
+    if owner:                                       # the owner named the box (bp.py pipe pick): it must be one of the boxes at the floor of this map
+        if owner["cell"] not in res[i]["cells"]:
+            return _card(1, t0, False, "fail", rows, f"the owner's pick {owner['cell']} is not one of the {res[i]['qualifying']} boxes at the floor of {s['name']}: the idea is "
+                         "stopped; name another box (bp.py pipe pick <name> <cell> --why=TEXT) or take it away (bp.py pipe pick <name> --clear), then bp.py pipe rerun <name>",
+                         None, len(res), rules, tables=tables)
+        cell = owner["cell"]
     box = _box_card(t, cell)
     usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
-    return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- the middle, by build "
-                 f"net, of its {res[i]['qualifying']} boxes at the floor (never the best): average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
+    how = (f"chosen by the owner ({owner['why']}), one of its {res[i]['qualifying']} boxes at the floor" if owner else
+           f"the middle, by build net, of its {res[i]['qualifying']} boxes at the floor (never the best)")
+    return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- {how}: "
+                 f"average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
                  f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone",
-                 {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"]}, len(res), rules,
-                 tables=tables, box={**box, "qualifying": res[i]["qualifying"]})
+                 {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"], **({"by": "owner"} if owner else {})},
+                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"]})
 
 
 # ================================================================ stage 2: the machine check

@@ -191,6 +191,31 @@ def test_stage_1_picks_the_middle_qualifying_box_and_writes_it_into_the_card(wor
     assert TS.lines(c) == ["P1.1", "P1.2"] * 2
 
 
+def test_stage_1_takes_the_owners_pick_when_it_is_one_of_the_boxes_at_the_floor(world):
+    """The owner may name the box (`bp.py pipe pick <name> <cell> --why=TEXT`, 2026-10-09): it must be one of the qualifying boxes of the best map;
+    the card says so; with none named the middle box is picked as before; a box that is not at the floor stops the idea with the way out."""
+    first(world)                                                                                        # the stores are on file now
+    rows, ids = table_rows()
+    middle = by_hand_middle(rows, ids)
+    other = next(c for c in ids if c != middle)
+    PS.set_owner_pick(NAME, other, "the only boxes that passed every build-day line", ROOT)
+    c = TS.whole(ran(1, ST.stage1(NAME, CTX)), 1)
+    assert c["passed"] is True and c["picked"]["cell"] == other and c["picked"]["by"] == "owner" and c["box"]["cell"] == other
+    assert f"THE PICK: box {other} -- chosen by the owner (the only boxes that passed every build-day line)" in c["text"] and "never the best" not in c["text"]
+    PS.clear_owner_pick(NAME, ROOT)
+    assert TS.whole(ran(1, ST.stage1(NAME, CTX)), 1)["picked"].get("by") is None                       # none named: the middle again
+    PS.set_owner_pick(NAME, "not_a_cell", "a box that does not exist", ROOT)
+    c = TS.whole(ran(1, ST.stage1(NAME, CTX)), 1)
+    assert c["passed"] is False and "not_a_cell" in c["text"] and "not one of the" in c["text"] and "bp.py pipe pick" in c["text"]
+    for bad in ("", "  ", None):
+        with pytest.raises(J.Refuse, match="why"):
+            PS.set_owner_pick(NAME, other, bad, ROOT)
+    with pytest.raises(J.Refuse, match="cell"):
+        PS.set_owner_pick(NAME, "", "why", ROOT)
+    PS.clear_owner_pick(NAME, ROOT)
+    assert PS.owner_pick(NAME, ROOT) is None
+
+
 def test_stage_1_takes_the_map_with_more_qualifying_boxes(world):
     zero()
     qualify(world, five=3, one=4)                                                              # the 1-minute map has more boxes at the floor
