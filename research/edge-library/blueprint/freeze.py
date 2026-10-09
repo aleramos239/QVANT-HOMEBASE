@@ -19,6 +19,10 @@ THEN (start() refuses, run() works):
      + the 100 ms late cancel for a two-sided bracket). One tape pass; a table that is stored is never run again.
   2. THE DEFAULT VARIANT = the middle one, by build net, of the variants that make money on build AND on build with worse
      fills (plan section 6, decision 3; records.middle, the judge's tie rule). No such variant = refused: nothing to freeze.
+     `default=<cell>` (a keyword of the CODE, never of bp.py or the chat tools, like `waive`): the pipeline's variant mode
+     (pipeline.json "mode": "variant") has picked its box already, at the end of stage 1; that cell is the default instead of the
+     middle survivor, and default_rule says so. It has to be a judged variant that makes money on build AND with worse fills:
+     else refused (_choose).
   3. lock.json, written through the app's idea store (ideastore.write_lock):
        name, version, locked_utc, round, store
        spec          the card and the settings, as the frozen round ran them        plan   what a build of the card ran
@@ -187,7 +191,7 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
                        f"exactly before anything counts (line 1.6: bp.py code-check {name} --store=<a fresh run> --same-as={key}, then --looked)")
 
 
-def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=()) -> dict:
+def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=(), default=None) -> dict:
     """EVERYTHING OF THE FREEZE THAT NEEDS NO RUN -> the arguments of run() (JSON: a job keeps them). An idea that is frozen
     already comes back as {"idea", "root", "frozen": True}: run() then only shows its lock. Refused here: module docstring,
     and what the runner refuses before a pass (the no-start window, the ledger's cap, another run in the store folder)."""
@@ -243,11 +247,28 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     rows = RUN.run_worse(sp, key, h["session"], workers, out, ledger=ledger, days=days, cells=cells, block=block, dry=True)
     return {"idea": name, "root": None if root is None else str(root), "frozen": False, "round_": n, "heavy": not rows[0]["skipped"], "workers": workers,
             "out": None if out is None else str(out), "ledger": None if ledger is None else str(ledger), "days": days, "cells": cells, "block": block,
-            "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade"), **({"waived": waived} if waived else {})}
+            "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade"), **({"waived": waived} if waived else {}),
+            **({"default": str(default)} if default else {})}
+
+
+def _choose(rows: list, ids: list, worse: dict, pick, addr: str) -> tuple:
+    """The default variant -> (cell | None, the survivors, default_rule). No `pick`: the middle survivor (records.middle) and the
+    judge's tie rule, a cell of None when nothing survives (the caller refuses). `pick` = the pipeline's own choice (module docstring,
+    step 2): it must be a judged variant AND a survivor, else J.Refuse; the survivors are those the middle would be taken from."""
+    default, surv = REC.middle(rows, ids, worse)
+    if pick is None:
+        return default, surv, J.TIE_RULE
+    if pick not in ids:
+        raise J.Refuse(f"the box {pick} that the pipeline picked is no judged variant of {addr}: it cannot be the default variant")
+    if pick not in surv:
+        raise J.Refuse(f"the box {pick} that the pipeline picked is not a variant that makes money on build AND on build with worse fills (it needs both; "
+                       f"{len(surv)} variant{'s' * (len(surv) != 1)} of {addr} do): it cannot be the default variant")
+    return pick, surv, (f"picked by the pipeline, not by the toolkit: {pick}, the middle (by build net, never the best) of the boxes at the floor with enough trades in the "
+                        f"map check of its stage 1; it makes money on build and with worse fills (the toolkit's own default, the middle survivor, would be {default})")
 
 
 def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, draws=None,
-        progress=None, box=None, build_avg_trade=None, waived=None) -> dict:
+        progress=None, box=None, build_avg_trade=None, waived=None, default=None) -> dict:
     """THE FREEZE ITSELF, with what start() returned: the worse-fills table of the home on the build days (when it is not
     stored), the default variant, lock.json (module docstring), the Lab's copies -> the result: lines 3.1 and 3.2, the
     lock's hash, the default and the test range. Beyond the agreed keys: lock (lock.json as it is on file), hash, default,
@@ -282,7 +303,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
     if gone:
         raise J.Refuse(f"the worse-fills table {_where(folder, worse[0]['key'])} lacks the variant {gone[0]}: it is not the home table's")
     wnet = {c: float(J.cellx(wst, c, sess, u)["net"].sum()) for c in ids}
-    default, surv = REC.middle(rows, ids, wnet)
+    default, surv, rule = _choose(rows, ids, wnet, default, u["addr"])
     if default is None:
         raise J.Refuse(f"no variant of {u['addr']} makes money on build AND on build with worse fills ({RUN.worse_words(wst['meta']['worse'])}): there is "
                        "no default variant, so there is nothing to freeze (line 3.1)")
@@ -300,7 +321,7 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "store": store, "spec": {k: rspec[k] for k in ("name", "version", "card", "run") if k in rspec}, "plan": plan,
             "home": {**{k: h[k] for k in ("market", "session", "bar", "table")}, "unit": u["addr"], "uid": u["uid"], "key": key, "folder": str(folder),
                      "filter": filt, "worse": worse[0]["key"]},
-            "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": J.TIE_RULE,
+            "variants": list(ids), "default": default, "survivors": list(surv), "default_rule": rule,
             "box": [{k: (None if isinstance(x[k], float) and x[k] in (float("inf"), float("-inf")) else x[k]) for k in ("line", "passed", "number", "need", "text")}
                     for x in box],
             "prop": prop,
@@ -330,9 +351,13 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
     bad = verify(lock, REC._json(d / "spec.json"))
     nv, ns = len(lock["variants"]), len(lock["survivors"])
     who = "the 1 variant that makes money" if ns == 1 else f"the {ns} variants that make money"
+    mine = lock["default_rule"] != J.TIE_RULE                    # the pipeline picked the default (freeze.run(default=))
+    short = ("picked by the pipeline: the middle of the boxes at the floor with enough trades, by build net, never the best; it makes money on build and with worse fills"
+             if mine else f"the middle of {who} on build and on build with worse fills; never the best")
+    how = f"{short} ({ns} of {nv} variants make money on both)" if mine else f"the middle, by build net, of {who} on build and on build with worse fills ({ns} of {nv})"
     rows = [L._row("3.1", True, nv, None, f"saved: the rule ({lock['spec']['run']['family']}, home {REC._nice(h)}"
                    + (f", filter {h['filter'].replace('_', ' ', 1)}" if h["filter"] else "") + f"), the variant list ({nv} variants), the default variant "
-                   f"{lock['default']} (the middle of {who} on build and on build with worse fills; never the best), the control "
+                   f"{lock['default']} ({short}), the control "
                    f"({len(c['seeds'])} seeds, {c['draws']:,} draws, pool {c['pool']}) and the costs (worse fills: {RUN.worse_words(w)})", variants=nv, survivors=ns),
             L._row("3.2", True, None, None, f"from here nothing changes: lock {lock['hash']} of {lock['locked_utc']} holds version {lock['version']} -- a change "
                    "is a new version, back to the build, and its earlier read of the test days is marked as used"),
@@ -348,7 +373,7 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
                          "reproduced exactly before a new run counts (line 1.6)")
     text = [f"FROZEN {'already' if already else 'now'}: {name} · lock {lock['hash']} · version {lock['version']} · round {lock['round']} · home {REC._nice(h)} · "
             f"store {Path(h['folder']).name}/{h['key']}", *[x["text"] for x in rows],
-            f"DEFAULT VARIANT {lock['default']}: the middle, by build net, of {who} on build and on build with worse fills ({ns} of {nv})",
+            f"DEFAULT VARIANT {lock['default']}: {how}",
             *([lock["prop"]["text"]] if lock.get("prop") else []),
             f"TEST RANGE {h['market']} {rng['start']} .. {rng['end']} ({rng['sessions']} sessions: "
             + ", ".join(f"{p['name']} {p['sessions']}" for p in rng["parts"]) + "), frozen: read ONCE, only by bp.py test",

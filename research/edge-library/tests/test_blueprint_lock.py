@@ -376,6 +376,55 @@ def test_the_freeze_saves_everything_under_one_hash():
     RESULTS["test_the_freeze_saves_everything_under_one_hash"] = (len(KEYS), len(KEYS), "parts of the lock, one hash over all of them")
 
 
+def test_choose_takes_the_pipelines_pick_only_among_the_survivors():
+    """freeze._choose: the middle survivor (as before), or -- with `pick`, a keyword of the CODE: the pipeline's variant mode -- the picked
+    cell, which has to be a judged variant that makes money on build AND with worse fills."""
+    rows = [{"id": "a", "net": 50.0, "vi": 0, "xi": 0}, {"id": "b", "net": -10.0, "vi": 0, "xi": 1}, {"id": "c", "net": 300.0, "vi": 1, "xi": 0},
+            {"id": "d", "net": 120.0, "vi": 1, "xi": 1}, {"id": "e", "net": 0.0, "vi": 2, "xi": 0}, {"id": "f", "net": 80.0, "vi": 2, "xi": 1}]
+    ids, worse = [x["id"] for x in rows], {"a": 5.0, "b": 40.0, "c": 150.0, "d": -1.0, "e": 9.0, "f": 0.0}
+    assert FRZ._choose(rows, ids, worse, None, "t") == ("a", ["a", "c"], J.TIE_RULE)                    # no pick: the middle survivor, the old rule
+    d, surv, rule = FRZ._choose(rows, ids, worse, "c", "t")                                           # the best survivor, picked by the pipeline: taken
+    assert (d, surv) == ("c", ["a", "c"]) and rule != J.TIE_RULE and "picked by the pipeline" in rule and "c" in rule and "never the best" in rule
+    assert FRZ._choose(rows, ids, worse, "a", "t")[0] == "a"
+    for cell, word in (("d", "worse fills"), ("b", "makes money on build"), ("e", "makes money on build"), ("zz", "judged variant")):
+        try:
+            FRZ._choose(rows, ids, worse, cell, "t")
+        except J.Refuse as e:
+            assert cell in str(e) and word in str(e) and "picked" in str(e), str(e)
+        else:
+            raise AssertionError(f"{cell} was taken")
+    try:
+        FRZ._choose(rows, ids, {k: -1.0 for k in ids}, "a", "t")                                     # nothing survives at all: the old refusal
+    except J.Refuse as e:
+        assert "not a variant that makes money" in str(e)
+    else:
+        raise AssertionError("no survivor, no default")
+
+
+def test_a_default_the_pipeline_picked_is_locked_with_its_words_and_the_hash_over_them():
+    root0, r0, _, _ = _locked()
+    lock0 = r0["lock"]
+    pick = lock0["default"]
+    with F.tiny(), F.no_engine():
+        assert FRZ.start(NAME, F.fresh(NAME, "pick_start"), default=pick)["default"] == pick      # (start keeps it for run: a job keeps its arguments)
+        assert "default" not in FRZ.start(NAME, F.fresh(NAME, "pick_start0"))                      # no pick: no key
+    root = F.fresh(NAME, "pick")
+    with F.tiny():
+        r = FRZ.lock(NAME, root, default=pick)
+    lock = F.read(root / NAME / "lock.json")
+    assert lock["default"] == pick == r["default"] and lock["survivors"] == lock0["survivors"] and lock["variants"] == lock0["variants"]
+    assert lock["default_rule"] != J.TIE_RULE and "picked by the pipeline" in lock["default_rule"] and pick in lock["default_rule"]
+    assert FRZ.verify(lock, F.read(root / NAME / "spec.json")) == [] and lock["hash"] == FRZ.digest(lock) and lock["hash"] != lock0["hash"]
+    assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 9)] and "picked by the pipeline" in F.by(r)["3.1"]["text"]
+    assert f"DEFAULT VARIANT {pick}: picked by the pipeline" in r["text"]
+    fresh = F.fresh(NAME, "pick_no")                                                              # a cell that is no variant: refused, nothing written
+    before = F.tree(fresh / NAME)
+    with F.tiny():
+        F.refused(lambda: FRZ.lock(NAME, fresh, default="no_such_cell"), "judged variant")
+    assert not (fresh / NAME / "lock.json").exists() and F.tree(fresh / NAME) == before
+    assert lock0["default_rule"] == J.TIE_RULE                                                    # every other caller: the middle survivor
+
+
 def test_a_frozen_idea_stays_as_it_is():
     root, r, _, _ = _locked()
     d = root / NAME

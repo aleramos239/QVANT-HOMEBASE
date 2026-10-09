@@ -283,7 +283,7 @@ def place(name: str, root: str, tf, sess: str, filt=None, out_dir=None, like=Non
             "same": same, "copy": bool(like and rows and same >= R.rule("2.5")["also"]["copy_share"] * len(rows))}
 
 
-def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1, control: bool = True) -> dict:
+def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int = 1, control: bool = True, box=None) -> dict:
     """THE TABLE DATA of one table of an idea on the build range, from the stores runner.run_build wrote (module docstring):
       net, n, the sides     its judged variants on the engine's session calendar of the range        lines 2.1 2.2 2.4 2.6 2.8
       controls {c1}         the judge's random tables from the pool's 10 seeds (pool_seeds, against_random)        line 2.3
@@ -293,6 +293,9 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
       round, months         the round whose bar 2.3 is held against; the build's months (no "on pace" reading)
     control False = the random tables are NOT read (the idea's own tables were run, its control pool was not: the 10-seed control
     runs only for an idea that passes every other line): `controls` is empty and `control_skipped` says so, line 2.3 reads that.
+    box = a cell id (the pipeline's variant mode): the random tables are drawn for THAT ONE BOX alone -- the same exit cell, the same days and
+    the same number of trades a day (judge.c1_table on ids=[box], the pool and the draw seed of the whole table) -- and its net is held
+    against them; `controls` is then the box's, not the table's.
     days = the named days of a smoke run (the store must have been run on exactly those): the calendar is then those days
     and `months` is None. Refused: a missing store, the seal (runner.guard), a store that is not of the build range or of
     other days, no judged variant, a pool with fewer seeds than the law asks."""
@@ -315,7 +318,13 @@ def built(spec: dict, home=None, filt=None, out_dir=None, days=None, round_: int
     need = sorted({i.rsplit("_", 1)[-1] for i in ts["ids"]})
     if control:
         pool = pool_seeds(out, RUN.pool_key(root, tf, spec["exits"]), need, R.template("control")["seeds"])
-        t["controls"] = {"c1": against_random(st, u, ts, pool, f"{RUN.PERIOD}-c1")}
+        if box is not None:
+            if box not in ts["ids"]:
+                raise J.Refuse(f"{u['addr']}: {box} is no judged variant of the table: there is no box to draw random tables for")
+            own = {"ids": [box], "avg_net": float(t["net"][ts["ids"].index(box)].sum())}
+            t["controls"] = {"c1": against_random(st, u, own, pool, f"{RUN.PERIOD}-c1")}
+        else:
+            t["controls"] = {"c1": against_random(st, u, ts, pool, f"{RUN.PERIOD}-c1")}
     else:
         t["controls"], t["control_skipped"] = {}, True
     t["filters"], t["neighbors"] = [], []
