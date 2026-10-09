@@ -344,9 +344,47 @@ function migrate(cfg) {
   return { root, spec, indicators: out };
 }
 
+/* Chart grids: [columns, rows]. A layout may also carry `sizes` {cols, rows}: each track's share of the
+   page, mean 1 (equal tracks = null). The dividers between charts drag these. */
+const GRID_DIMS = { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] };
+const MIN_TRACK = 0.2;   // a track never shrinks below this share of an equal one
+function cleanSizes(s, grid) {
+  const d = GRID_DIMS[grid];
+  if (!d || !s || typeof s !== 'object') return null;
+  const ok = (a, n) => Array.isArray(a) && a.length === n && a.every((x) => typeof x === 'number' && Number.isFinite(x) && x > 0);
+  if (!ok(s.cols, d[0]) || !ok(s.rows, d[1])) return null;
+  const norm = (a) => { const t = a.reduce((x, y) => x + y, 0); return a.map((x) => Math.round((x * a.length / t) * 1e4) / 1e4); };
+  const cols = norm(s.cols), rows = norm(s.rows);
+  return cols.every((x) => x === 1) && rows.every((x) => x === 1) ? null : { cols, rows };
+}
+/* Drag the divider between track k-1 and k by `delta` equal-track widths: the pair keeps its total and
+   neither side goes under MIN_TRACK. A new array; the input is not touched. */
+function dragTrack(tracks, k, delta) {
+  const out = tracks.slice();
+  if (!(k >= 1 && k < out.length) || !Number.isFinite(delta)) return out;
+  const tot = out[k - 1] + out[k], a = Math.min(tot - MIN_TRACK, Math.max(MIN_TRACK, out[k - 1] + delta));
+  out[k - 1] = Math.round(a * 1e4) / 1e4;
+  out[k] = Math.round((tot - a) * 1e4) / 1e4;
+  return out;
+}
+/* The bar a time falls in, on a chart whose bars (ascending, each with its start `ms`) are given: the last bar
+   starting at or before `ms`, or -1 when none does, or when `ms` lies past that bar's end (a gap in the data;
+   barMs 0 = an event-driven chart whose bars have no fixed length: only the last hour past the last bar counts). */
+function barIndexAtMs(bars, ms, barMs) {
+  let lo = 0, hi = bars.length - 1, at = -1;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (bars[mid].ms <= ms) { at = mid; lo = mid + 1; } else hi = mid - 1;
+  }
+  if (at < 0) return -1;
+  if (barMs > 0) return ms < bars[at].ms + barMs ? at : -1;
+  return at === bars.length - 1 && ms - bars[at].ms > 3600000 ? -1 : at;
+}
+
 function migrateLayout(v) {
   const o = v && typeof v === 'object' ? v : {};
-  return { grid: [1, 2, 4, 6].includes(+o.grid) ? +o.grid : 4, cells: (Array.isArray(o.cells) ? o.cells : []).map(migrate) };
+  const grid = [1, 2, 4, 6].includes(+o.grid) ? +o.grid : 4;
+  return { grid, sizes: cleanSizes(o.sizes, grid), cells: (Array.isArray(o.cells) ? o.cells : []).map(migrate) };
 }
 
 function label(inst) {
@@ -591,7 +629,7 @@ function filter(query, group = 'All') {
 }
 
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
-  defaults, serverKey, serverKeys, migrate, migrateLayout, label, legendValues, decimals, fmtPrice, fmtCompact,
+  defaults, serverKey, serverKeys, migrate, migrateLayout, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };

@@ -154,7 +154,7 @@ test('layouts migrate every cell and keep only known grids', () => {
   assert.equal(l.cells.length, 1);
   assert.equal(l.cells[0].indicators[0].id, 'vwap');
   assert.equal(C.migrateLayout({ grid: 6, cells: [] }).grid, 6);
-  assert.deepEqual(C.migrateLayout(undefined), { grid: 4, cells: [] });
+  assert.deepEqual(C.migrateLayout(undefined), { grid: 4, sizes: null, cells: [] });
 });
 
 test('legend labels', () => {
@@ -743,4 +743,47 @@ test('W5: every catalog entry has a one-line, plain description of its own', () 
   assert.match(C.def('bigorders').desc, /median size/);
   assert.match(C.def('imbalance').desc, /top 10/);
   assert.match(C.def('bigprints').desc, /sellers hit the bid/);
+});
+
+/* 2026-10-09 chart upgrade: dividers between charts, and the crosshair shared across charts. */
+test('layout sizes: kept only when they fit the grid, mean 1, and differ from equal', () => {
+  const ok = { cols: [1.5, 0.5], rows: [1, 1] };
+  assert.deepEqual(C.migrateLayout({ grid: 4, sizes: ok, cells: [] }).sizes, ok);
+  assert.deepEqual(C.cleanSizes({ cols: [3, 1], rows: [1, 1] }, 4), { cols: [1.5, 0.5], rows: [1, 1] }, 'normalised to mean 1');
+  assert.equal(C.cleanSizes({ cols: [1, 1], rows: [1, 1] }, 4), null, 'equal tracks are the default');
+  assert.equal(C.cleanSizes({ cols: [1.5, 0.5], rows: [1, 1] }, 6), null, 'wrong track count for the grid');
+  assert.equal(C.cleanSizes({ cols: [1, -1], rows: [1, 1] }, 4), null);
+  assert.equal(C.cleanSizes({ cols: [1, NaN], rows: [1, 1] }, 4), null);
+  assert.equal(C.cleanSizes('x', 4), null);
+  assert.equal(C.cleanSizes({ cols: [1, 1], rows: [1] }, 4), null);
+  assert.deepEqual(C.cleanSizes({ cols: [2, 1, 1], rows: [1, 1] }, 6), { cols: [1.5, 0.75, 0.75], rows: [1, 1] });
+});
+
+test('dragTrack moves one divider: the pair keeps its total and neither side vanishes', () => {
+  assert.deepEqual(C.dragTrack([1, 1], 1, 0.5), [1.5, 0.5]);
+  assert.deepEqual(C.dragTrack([1, 1], 1, -0.25), [0.75, 1.25]);
+  assert.deepEqual(C.dragTrack([1, 1], 1, 5), [1.8, 0.2], 'stops at the minimum share');
+  assert.deepEqual(C.dragTrack([1, 1], 1, -5), [0.2, 1.8]);
+  assert.deepEqual(C.dragTrack([1, 1, 1], 2, 0.5), [1, 1.5, 0.5], 'only the two next to the divider move');
+  const t = [1, 1];
+  C.dragTrack(t, 1, 0.5);
+  assert.deepEqual(t, [1, 1], 'the input is left alone');
+  assert.deepEqual(C.dragTrack([1, 1], 0, 0.5), [1, 1], 'no divider before the first track');
+  assert.deepEqual(C.dragTrack([1, 1], 1, NaN), [1, 1]);
+});
+
+test('barIndexAtMs finds the bar a time falls in, whatever the chart interval', () => {
+  const m = (min) => Date.UTC(2026, 9, 9, 13, min);   // 09:30 ET = 13:30 UTC in October
+  const five = [0, 5, 10].map((x) => ({ ms: m(30 + x) })), one = Array.from({ length: 12 }, (_, i) => ({ ms: m(30 + i) }));
+  assert.equal(C.barIndexAtMs(five, m(30), 300000), 0, 'the 09:30 bar');
+  assert.equal(C.barIndexAtMs(five, m(33), 300000), 0, 'a minute chart at 09:33 lands in the 09:30 five-minute bar');
+  assert.equal(C.barIndexAtMs(five, m(35), 300000), 1);
+  assert.equal(C.barIndexAtMs(one, m(30), 60000), 0);
+  assert.equal(C.barIndexAtMs(one, m(41), 60000), 11);
+  assert.equal(C.barIndexAtMs(five, m(29), 300000), -1, 'before the first bar');
+  assert.equal(C.barIndexAtMs(five, m(45), 300000), -1, 'after the last bar ends: nothing to point at');
+  assert.equal(C.barIndexAtMs([{ ms: m(30) }, { ms: m(40) }], m(36), 60000), -1, 'a gap between two bars');
+  assert.equal(C.barIndexAtMs([], m(30), 60000), -1);
+  assert.equal(C.barIndexAtMs([{ ms: m(30) }, { ms: m(31) }], m(50), 0), 1, 'a tick chart: the last hour counts');
+  assert.equal(C.barIndexAtMs([{ ms: m(30) }, { ms: m(31) }], m(30) + 2 * 3600000, 0), -1);
 });

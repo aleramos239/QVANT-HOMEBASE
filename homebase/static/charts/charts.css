@@ -139,7 +139,19 @@ a { color: inherit; }
 .menu-ck .ic { width: 16px; height: 16px; }
 .rail-tip { position: fixed; z-index: 40; padding: 6px 10px; border-radius: 6px; background: var(--tip); color: #FFFFFF;
   font-size: 12px; white-space: nowrap; pointer-events: none; }
-.grid { flex: 1; min-width: 0; display: grid; gap: 4px; }
+.grid { flex: 1; min-width: 0; display: grid; gap: 4px; position: relative; }
+/* The dividers between charts (2026-10-09): a wide invisible hit area over the gap, a thin line on hover/drag. */
+.grid-split { position: absolute; z-index: 30; touch-action: none; }
+.grid-split.col { top: 0; bottom: 0; width: 12px; margin-left: -6px; cursor: col-resize; }
+.grid-split.row { left: 0; right: 0; height: 12px; margin-top: -6px; cursor: row-resize; }
+.grid-split::after { content: ""; position: absolute; border-radius: 2px; background: var(--accent); opacity: 0; transition: opacity .12s; }
+.grid-split.col::after { top: 0; bottom: 0; left: 5px; width: 2px; }
+.grid-split.row::after { left: 0; right: 0; top: 5px; height: 2px; }
+.grid-split:hover::after, .grid-split.dragging::after { opacity: .85; }
+body.split-dragging { user-select: none; }
+body.split-dragging.col * { cursor: col-resize !important; }
+body.split-dragging.row * { cursor: row-resize !important; }
+.grid[data-count="1"] > .grid-split { display: none; }
 .panel { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 6px; background: var(--panel); }
 .panel .chart { position: absolute; inset: 0; }
 .panel.selected::after { content: ""; position: absolute; inset: 0; z-index: 6; border-radius: 6px;

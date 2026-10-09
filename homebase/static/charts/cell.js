@@ -677,9 +677,36 @@ class Cell {
     this.chart.subscribeCrosshairMove((p) => {
       this.hover = p && p.logical != null ? Math.round(p.logical) : null;
       this.legend(this.hover);
+      if (this.onXhair) this.onXhair(this, p);   // the page shares it with the other charts (app.js xhairMove)
     });
     this.chart.timeScale().subscribeSizeChange(() => this.placeGear());
   }
+
+  /* Crosshair sharing between charts. The bar under a MOUSE-driven move, as {ms, price} (absolute time, so
+     charts of different intervals and time zones agree), or null; a move this chart was given by showXhair
+     carries no sourceEvent and is never passed on. */
+  xhairSource(p) {
+    if (!p || !p.sourceEvent || p.time == null) return null;
+    let lo = 0, hi = this.bars.length - 1;
+    while (lo <= hi) {
+      const mid = (lo + hi) >> 1, tt = this.bars[mid].tt;
+      if (tt === p.time) return { ms: this.bars[mid].ms, price: this.candles && p.point ? this.candles.coordinateToPrice(p.point.y) : null };
+      if (tt < p.time) lo = mid + 1; else hi = mid - 1;
+    }
+    return null;
+  }
+
+  /* Draw the crosshair on the bar this chart has at `ms`; on a chart with no bar there, no crosshair.
+     `price` places the horizontal line only when the other chart trades the same thing at the same scale. */
+  showXhair(ms, price) {
+    if (!this.chart || !this.candles || !this.bars.length) return;
+    const i = C.barIndexAtMs(this.bars, ms, this.barMs());
+    if (i < 0) { this.chart.clearCrosshairPosition(); return; }
+    const b = this.bars[i];
+    this.chart.setCrosshairPosition(price != null && Number.isFinite(price) ? price : b.c, b.tt, this.candles);
+  }
+
+  clearXhair() { if (this.chart) this.chart.clearCrosshairPosition(); }
 
   teardown() {
     for (const o of this.ov) { try { o.destroy(); } catch (e) { console.error(e); } }

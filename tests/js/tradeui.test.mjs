@@ -302,7 +302,7 @@ test('release/4: practicing in replay, then a layout-TAB switch -- the next one-
     window: global.window, T, Cell, GRIDS: { 1: [1, 1], 2: [2, 1], 4: [2, 2], 6: [3, 2] }, $: () => el(), mk: () => el(),
     closeHotkeyBox() {}, closeAllDrawToolbars() {}, deskState: () => STATE, starter: () => ({ root: 'NQ', spec: '1m', indicators: [], trade: { accounts: [] } }),
     hostFor: (id) => ({ id }), legendFolded: () => false, select() {}, saveLast() {}, dropLiveAccounts() {}, renderTabs() {},
-    renderToolbar() {}, sbNote(t) { throw new Error('sbNote: ' + t); },
+    renderToolbar() {}, sbNote(t) { throw new Error('sbNote: ' + t); }, applyTracks() {}, renderDividers() {}, xhairMove() {},
     // readLayout's safety half (HBTrade.loadedTrade) is pinned elsewhere; here: a NEW config object per load
     readLayout: (v) => ({ grid: v.grid, cells: v.cells.map((c) => ({ ...c, trade: { accounts: [...c.trade.accounts] }, algo: null })) }),
     layoutBody: () => ({ grid: ctx.layout.grid, cells: ctx.layout.cells.map(({ root, spec, indicators, trade }) => ({ root, spec, indicators, trade })) }),

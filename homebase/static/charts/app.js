@@ -30,7 +30,7 @@ function etNow() {
 
 let meta = { roots: ['NQ'], timeframes: [] };
 let ws = null;
-let layout = { grid: 4, cells: [], name: '', dirty: false };
+let layout = { grid: 4, sizes: null, cells: [], name: '', dirty: false };
 let cells = [];
 let selected = 0;
 let nextId = 1;
@@ -250,6 +250,117 @@ function hostFor(id) {
   };
 }
 
+/* ---- chart sizes: the dividers between charts (2026-10-09) ----
+   layout.sizes = {cols, rows}, each track's share (mean 1), or null for equal tracks. A divider sits in the gap
+   between two charts; dragging it trades width (or height) between the two tracks beside it, double-click puts
+   that direction back to equal. A column divider moves for every row of the grid, as in a spreadsheet. */
+function trackSizes() {
+  const [cols, rows] = GRIDS[layout.grid] || GRIDS[4], sz = layout.sizes;
+  return { cols: sz ? sz.cols.slice() : Array(cols).fill(1), rows: sz ? sz.rows.slice() : Array(rows).fill(1) };
+}
+function applyTracks(t = trackSizes()) {
+  const grid = $('#grid'), fr = (a) => a.map((f) => `minmax(0, ${f}fr)`).join(' ');
+  grid.style.gridTemplateColumns = fr(t.cols);
+  grid.style.gridTemplateRows = fr(t.rows);
+}
+function gridSlots() {
+  const [cols, rows] = GRIDS[layout.grid] || GRIDS[4], slots = Array.from($('#grid').children).filter((e) => !e.classList.contains('grid-split'));
+  return { cols, rows, slots: slots.length < cols * rows ? null : slots };
+}
+/* Put each divider in the middle of the gap between the two charts it sits between. */
+function placeDividers() {
+  const grid = $('#grid'), { cols, slots } = gridSlots();
+  if (!slots) return;
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, g = grid.getBoundingClientRect();
+  for (const d of grid.querySelectorAll(':scope > .grid-split')) {
+    const k = +d.dataset.k;
+    if (d.classList.contains('col')) d.style.left = `${slots[k - 1].getBoundingClientRect().right - g.left + gap / 2}px`;
+    else d.style.top = `${slots[(k - 1) * cols].getBoundingClientRect().bottom - g.top + gap / 2}px`;
+  }
+}
+function renderDividers() {
+  const grid = $('#grid'), { cols, rows, slots } = gridSlots();
+  for (const d of grid.querySelectorAll(':scope > .grid-split')) d.remove();
+  if (!slots) return;
+  const make = (axis, k) => {
+    const d = mk('div', `grid-split ${axis}`);
+    d.setAttribute('role', 'separator');
+    d.setAttribute('aria-orientation', axis === 'col' ? 'vertical' : 'horizontal');
+    d.title = 'Drag to resize · double-click to reset';
+    d.dataset.k = String(k);
+    d.onpointerdown = (e) => startDividerDrag(e, axis, k);
+    d.ondblclick = () => resetTracks(axis);
+    grid.appendChild(d);
+  };
+  for (let k = 1; k < cols; k++) make('col', k);
+  for (let k = 1; k < rows; k++) make('row', k);
+  placeDividers();
+}
+function startDividerDrag(e, axis, k) {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  const grid = $('#grid'), el = e.currentTarget, start = trackSizes(), key = axis === 'col' ? 'cols' : 'rows';
+  const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, rect = grid.getBoundingClientRect();
+  const total = (axis === 'col' ? rect.width : rect.height) - gap * (start[key].length - 1);
+  const equal = total / start[key].length;   // one equal track in px: sizes are in equal-track units
+  const from = axis === 'col' ? e.clientX : e.clientY;
+  el.setPointerCapture(e.pointerId);
+  el.classList.add('dragging');
+  document.body.classList.add('split-dragging', axis);
+  let moved = false;
+  el.onpointermove = (m) => {
+    const delta = ((axis === 'col' ? m.clientX : m.clientY) - from) / equal;
+    const next = { ...start, [key]: C.dragTrack(start[key], k, delta) };
+    moved = true;
+    applyTracks(next);
+    placeDividers();
+    layout.sizes = C.cleanSizes(next, layout.grid);
+  };
+  el.onpointerup = el.onpointercancel = () => {
+    el.classList.remove('dragging');
+    document.body.classList.remove('split-dragging', 'col', 'row');
+    if (moved) markDirty();
+  };
+}
+function resetTracks(axis) {
+  const t = trackSizes(), key = axis === 'col' ? 'cols' : 'rows';
+  t[key] = Array(t[key].length).fill(1);
+  layout.sizes = C.cleanSizes(t, layout.grid);
+  applyTracks();
+  renderDividers();
+  markDirty();
+}
+{
+  const g = typeof document !== 'undefined' && document.getElementById('grid');
+  if (g && typeof ResizeObserver !== 'undefined') new ResizeObserver(() => placeDividers()).observe(g);
+}
+
+/* ---- one crosshair across the charts (2026-10-09) ----
+   Hover a bar on one chart and every other open chart shows its crosshair at the same moment, even on another
+   interval: the 09:30 bar on a 5m chart puts the line over the 09:30 bar of the 1m chart. */
+const XHAIR_KEY = 'hb_xhair_sync';
+let xhairSync = (() => { try { return localStorage.getItem(XHAIR_KEY) !== 'off'; } catch (_) { return true; } })();
+let xhairFrom = null;   // the chart the mouse is on
+function xhairMove(src, p) {
+  if (!xhairSync) return;
+  const at = src.xhairSource(p);
+  if (!at) {
+    // the mouse left this chart: take the lines down -- a move another chart gave us never gets here with a source
+    if (xhairFrom === src && (!p || p.time == null)) { xhairFrom = null; for (const c of cells) if (c !== src) c.clearXhair(); }
+    return;
+  }
+  xhairFrom = src;
+  for (const c of cells) {
+    if (c === src) continue;
+    c.showXhair(at.ms, c.cfg.root === src.cfg.root ? at.price : null);
+  }
+}
+function setXhairSync(on) {
+  xhairSync = on;
+  try { localStorage.setItem(XHAIR_KEY, on ? 'on' : 'off'); } catch (_) { /* stays for this page */ }
+  if (!on) { xhairFrom = null; for (const c of cells) c.clearXhair(); }
+}
+
 function buildGrid() {
   closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
   closeAllDrawToolbars();   // anchored to cells this rebuild is about to destroy
@@ -259,8 +370,7 @@ function buildGrid() {
   // a chart kept beyond the visible grid is re-read like a load: its LIVE accounts drop, the rest stay
   // (T absent -- the Backtest tab -- means nothing was ever live on it: an empty hidden list)
   const hidden = T ? T.hiddenCellsLoaded(layout.cells, n, deskState()) : [];
-  grid.style.gridTemplateColumns = `repeat(${cols}, minmax(0, 1fr))`;
-  grid.style.gridTemplateRows = `repeat(${rows}, minmax(0, 1fr))`;
+  applyTracks();
   grid.dataset.count = String(n);
   grid.replaceChildren();
   while (layout.cells.length < n) layout.cells.push(starter(layout.cells.length));
@@ -270,7 +380,9 @@ function buildGrid() {
     const cell = new Cell(slot, layout.cells[i], hostFor('c' + (nextId++)));
     cells.push(cell);
     cell.applyFold(legendFolded(cell));   // needs this cell's grid index, only known once it is in `cells`
+    cell.onXhair = xhairMove;
   }
+  renderDividers();
   // fix round 2: a chart destroyed mid-replay latches whatever chart now sits at its grid position -- for EVERY
   // caller (a layout load, a layout-tab switch, a grid-size change): HBTradeUI holds the positions
   window.HBTradeUI?.gridRebuilt(cells);
@@ -650,10 +762,18 @@ function gridMenu() {
     b.title = GRID_NAMES[n];
     b.setAttribute('aria-label', GRID_NAMES[n]);
     b.appendChild(thumb(n, mk('span', 'thumb')));
-    b.onclick = () => { closeMenu(); if (layout.grid !== n) { layout.grid = n; saveLast(); buildGrid(); } };
+    b.onclick = () => { closeMenu(); if (layout.grid !== n) { layout.grid = n; layout.sizes = null; saveLast(); buildGrid(); } };
     picks.appendChild(b);
   }
   m.appendChild(picks);
+  const sync = menuItem('Share crosshair across charts', '', () => { closeMenu(); setXhairSync(!xhairSync); }, false), ck = icon('check');
+  ck.classList.add('menu-ck');
+  if (!xhairSync) ck.style.visibility = 'hidden';
+  sync.setAttribute('role', 'menuitemcheckbox');
+  sync.setAttribute('aria-checked', String(xhairSync));
+  sync.prepend(ck);
+  m.appendChild(sync);
+  if (layout.sizes) m.appendChild(menuItem('Reset chart sizes', '', () => { closeMenu(); layout.sizes = null; applyTracks(); renderDividers(); markDirty(); }, false));
 }
 
 /* ---- layout tabs (2026-09-27 layout-tabs plan, Task 3) ----
@@ -673,7 +793,7 @@ let dragTab = null;         // the tab name currently being dragged, or null
    chart's trade ACCOUNTS and algo are saved (HBTrade.tradeBits), never its Trading switch (Task 2); a LIVE
    one is dropped again on load (readLayout -> HBTrade.loadedTrade). */
 function layoutBody() {
-  return { grid: layout.grid, cells: layout.cells.map((c) => {
+  return { grid: layout.grid, ...(layout.sizes ? { sizes: layout.sizes } : {}), cells: layout.cells.map((c) => {
     const { root, spec, indicators, settings } = c;
     const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
     // T (HBTrade) is not loaded on the Backtest tab (2026-09-28 three-tabs plan): a saved layout
