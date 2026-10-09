@@ -361,6 +361,28 @@ function setXhairSync(on) {
   if (!on) { xhairFrom = null; for (const c of cells) c.clearXhair(); }
 }
 
+/* ---- one interval across the charts (2026-10-09): an option, like the shared crosshair ----
+   Off unless switched on (a layout often holds 1m beside 5m on purpose). On: an interval picked on one chart is
+   picked on every other open chart. A chart practising in Bar Replay is left alone -- a change there ends the
+   replay, and that is asked on the chart it happens on, never as a side effect of another chart. */
+const TF_KEY = 'hb_tf_sync';
+let tfSync = (() => { try { return localStorage.getItem(TF_KEY) === 'on'; } catch (_) { return false; } })();
+function followSpec(src, s) {
+  if (!tfSync || src.replay) return;
+  for (const c of cells) if (c !== src && !c.replay && c.cfg.spec !== s) c.update({ spec: s });
+}
+/* The ONE way the page changes a chart's interval: that chart, then (with the option on) the others. */
+function setSpec(cell, s) {
+  if (cell.cfg.spec !== s) cell.update({ spec: s });
+  followSpec(cell, s);
+}
+function setTfSync(on) {
+  tfSync = on;
+  try { localStorage.setItem(TF_KEY, on ? 'on' : 'off'); } catch (_) { /* stays for this page */ }
+  const c = cur();
+  if (on && c) followSpec(c, c.cfg.spec);     // switched on: the others take the selected chart's interval now
+}
+
 function buildGrid() {
   closeHotkeyBox();   // it is anchored to a cell element the rebuild is about to destroy
   closeAllDrawToolbars();   // anchored to cells this rebuild is about to destroy
@@ -421,7 +443,7 @@ function renderToolbar() {
     b.dataset.spec = s;
     b.title = C.longLabel(s);
     b.setAttribute('aria-pressed', String(s === spec));
-    b.onclick = () => { if (cur().cfg.spec !== s) cur().update({ spec: s }); };
+    b.onclick = () => setSpec(cur(), s);
     return b;
   }));
   if (had) {
@@ -578,7 +600,7 @@ function intervalMenu() {
   for (const [group, specs] of C.INTERVAL_GROUPS) {
     m.appendChild(mk('div', 'menu-h', group));
     for (const s of specs) {
-      const it = menuItem(C.longLabel(s), '', () => { closeMenu(); if (c.cfg.spec !== s) c.update({ spec: s }); }, s === spec);
+      const it = menuItem(C.longLabel(s), '', () => { closeMenu(); setSpec(c, s); }, s === spec);
       it.appendChild(starBtn(s));
       m.appendChild(it);
     }
@@ -640,7 +662,7 @@ function openTimeframeBox(cell, seed) {
     const s = C.parseInterval(input.value);
     if (!s) { err.hidden = false; return; }
     closeHotkeyBox();
-    if (cell.cfg.spec !== s) cell.update({ spec: s });
+    setSpec(cell, s);
   };
   input.oninput = () => { err.hidden = true; };
   input.onkeydown = (e) => {
@@ -717,7 +739,11 @@ function panelRoot() { const c = cur(); return c && c.shown ? c.shown.root : nul
 function onLoaded(cell) {
   algoBefore.delete(cell);   // a history arrived: whatever symbol it is on now, the algo decision stands
   if (page && cell === cur()) window.HBOrderPanel?.setRoot(panelRoot());   // its symbol / tick / point value may be new
-  if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) closeMenu();
+  if (customWait && customWait.cell === cell && cell.shown.spec === customWait.spec) {
+    const s = customWait.spec;
+    closeMenu();
+    followSpec(cell, s);       // accepted here first: only then do the other charts take it
+  }
 }
 
 /* The server refused a change (the cell already went back to its last good
@@ -766,13 +792,17 @@ function gridMenu() {
     picks.appendChild(b);
   }
   m.appendChild(picks);
-  const sync = menuItem('Share crosshair across charts', '', () => { closeMenu(); setXhairSync(!xhairSync); }, false), ck = icon('check');
-  ck.classList.add('menu-ck');
-  if (!xhairSync) ck.style.visibility = 'hidden';
-  sync.setAttribute('role', 'menuitemcheckbox');
-  sync.setAttribute('aria-checked', String(xhairSync));
-  sync.prepend(ck);
-  m.appendChild(sync);
+  const option = (text, on, flip) => {       // a menu row with a tick: an option of every chart on the page
+    const b = menuItem(text, '', () => { closeMenu(); flip(!on); }, false), ck = icon('check');
+    ck.classList.add('menu-ck');
+    if (!on) ck.style.visibility = 'hidden';
+    b.setAttribute('role', 'menuitemcheckbox');
+    b.setAttribute('aria-checked', String(on));
+    b.prepend(ck);
+    m.appendChild(b);
+  };
+  option('Share crosshair across charts', xhairSync, setXhairSync);
+  option('Same interval on all charts', tfSync, setTfSync);
   if (layout.sizes) m.appendChild(menuItem('Reset chart sizes', '', () => { closeMenu(); layout.sizes = null; applyTracks(); renderDividers(); markDirty(); }, false));
 }
 
