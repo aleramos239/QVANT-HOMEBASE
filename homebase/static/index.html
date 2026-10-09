@@ -530,7 +530,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=6">
+<link rel="stylesheet" href="/static/apple.css?v=7">
 <link rel="stylesheet" href="/static/hb.css?v=6">
 <script src="/static/apple/web.js" data-tab="desk"></script>
 </head>
@@ -1645,7 +1645,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 let VIEW = {k: "today"};
 try {
   const v = JSON.parse(localStorage.getItem("hb_view") || "null");
-  if (v && ["today", "strat", "activity"].includes(v.k)) VIEW = v;
+  if (v && ["today", "strat", "activity", "watch"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
@@ -1656,9 +1656,50 @@ function toggleSide(k) {
   try { localStorage.setItem(SIDE_FOLD_KEY, JSON.stringify(SIDE_FOLD)); } catch (_) { /* stays for this page */ }
   render();
 }
+/* ---- WATCHED strategies (2026-10-09): Book strategies promoted from the Lab. Records kept by the chart service
+   (:8852, GET /api/tester/watch): each shows its numbers and equity curve here and places NO orders -- the desk's
+   engine never reads them. Remove takes one off this page; it stays in the Book and can be promoted again. */
+let WATCH = [], WATCH_READ = false, WATCH_BUSY = "";
+const WATCH_NAME = /^[a-z][a-z0-9_]{1,33}$/;
+async function loadWatch() {
+  if (DEMO) return;
+  try {
+    const r = await fetch(CHART + "/api/tester/watch");
+    if (!r.ok) return;
+    const j = await r.json();
+    const next = (Array.isArray(j.strategies) ? j.strategies : []).filter(w => w && WATCH_NAME.test(String(w.name)));
+    const key = (a) => JSON.stringify(a.map(w => [w.name, w.promoted_utc]));
+    const changed = !WATCH_READ || key(next) !== key(WATCH);
+    WATCH = next; WATCH_READ = true;
+    if (changed && ST && !FREEZE) render();
+  } catch (_) { /* the chart service is not up: the list stays as it was */ }
+}
+async function removeWatch(name) {
+  if (WATCH_BUSY) return;
+  WATCH_BUSY = name; render();
+  const r = await chartPost("/api/tester/watch/remove", {name});
+  WATCH_BUSY = "";
+  if (r && r.ok) {
+    WATCH = WATCH.filter(w => w.name !== name);
+    if (VIEW.k === "watch" && VIEW.name === name) VIEW = {k: "today"};
+    toast(`${name} is off the Desk. It stays in the Book; promote it again from the Lab any time.`);
+  } else toast(`Could not remove ${name}: ${(r && r.detail) || "no answer"}`);
+  render();
+}
+async function showWatch(name) {
+  if (WATCH_BUSY) return;
+  WATCH_BUSY = name; render();
+  toast("Putting its executions on the chart…");
+  const r = await chartPost("/api/tester/watch/show", {name});
+  WATCH_BUSY = "";
+  render();
+  if (!r || r.ok === false) { toast(`Could not open the chart: ${(r && r.detail) || "no answer"}`, 7000); return; }
+  toast(r.pages ? `${r.trades} executions of ${name} are on the chart (${r.start} to ${r.end}). Open the Charts tab.`
+    : `${r.trades} executions are ready, but no chart page is open: open the Charts tab, then press this again.`, 8000);
+}
 function setView(k, name) {
   closeAsgMenus(false);
-  VIEW = k === "strat" ? {k, name} : {k};
+  VIEW = k === "strat" || k === "watch" ? {k, name} : {k};
   try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
   if (ST) render();
   const m = document.querySelector(".app-main");
@@ -1769,7 +1810,10 @@ function renderSide(names, hiddenCount, issues) {
     return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
-  const sel = (k, n) => VIEW.k === k && (k !== "strat" || VIEW.name === n) ? " sel" : "";
+  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "watch") || VIEW.name === n) ? " sel" : "";
+  const watchRows = WATCH.map(w => `<button class="item one${sel("watch", w.name)}" onclick="setView('watch',${jsArg(w.name)})" aria-current="${sel("watch", w.name) ? "page" : "false"}" title="Watch-only: it places no orders">
+      <i class="sd shadow"></i><span class="it"><b>${esc(w.name)}</b></span>
+      <span class="ir mono dim">${w.net == null ? "" : usdS(w.net)}</span></button>`).join("");
   const strat = names.map(n => {
     const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
     return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
@@ -1790,8 +1834,8 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
-    ${SIDE_FOLD.strat ? "" : strat + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
+    ${head("strat", "Strategies", names.length + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
+    ${SIDE_FOLD.strat ? "" : strat + watchRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
@@ -1810,6 +1854,24 @@ function loadEq(name) {
     if (VIEW.k === "strat" && VIEW.name === name && !FREEZE) render();
   }).catch(() => { EQ[name] = {days: e && e.days || {}, t: Date.now()}; });
 }
+/* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
+function eqPlot(vals, label, total, aria) {
+  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
+  const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
+  let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
+  for (let i = 1; i < vals.length; i++) {
+    const mx = (X(i - 1) + X(i)) / 2;
+    d += ` C ${mx.toFixed(1)} ${Y(vals[i - 1]).toFixed(1)} ${mx.toFixed(1)} ${Y(vals[i]).toFixed(1)} ${X(i).toFixed(1)} ${Y(vals[i]).toFixed(1)}`;
+  }
+  const zero = lo < 0 && hi > 0 ? `<line class="eq-zero" x1="0" y1="${Y(0).toFixed(1)}" x2="1000" y2="${Y(0).toFixed(1)}"/>` : "";
+  return `<div class="eq"><div class="lb"><span>${esc(label)}</span><b class="mono">${usdS(total)}</b></div>
+    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
+      <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+      <line class="eq-grid" x1="0" y1="26" x2="1000" y2="26"/><line class="eq-grid" x1="0" y1="101" x2="1000" y2="101"/><line class="eq-grid" x1="0" y1="176" x2="1000" y2="176"/>${zero}
+      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
+    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div></div>`;
+}
+const shortDay = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
 function eqChart(name) {
   loadEq(name);
   const days = EQ[name] && EQ[name].days;
@@ -1818,21 +1880,33 @@ function eqChart(name) {
   if (ks.length < 2) return `<div class="eq-empty">Not enough live days yet for a curve.</div>`;
   let cum = 0;
   const vals = ks.map(k => (cum += (days[k].net || 0), cum));
-  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
-  const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
-  let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
-  for (let i = 1; i < vals.length; i++) {
-    const mx = (X(i - 1) + X(i)) / 2;
-    d += ` C ${mx.toFixed(1)} ${Y(vals[i - 1]).toFixed(1)} ${mx.toFixed(1)} ${Y(vals[i]).toFixed(1)} ${X(i).toFixed(1)} ${Y(vals[i]).toFixed(1)}`;
-  }
-  const first = new Date(ks[0] + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
-  const zero = lo < 0 && hi > 0 ? `<line class="eq-zero" x1="0" y1="${Y(0).toFixed(1)}" x2="1000" y2="${Y(0).toFixed(1)}"/>` : "";
-  return `<div class="eq"><div class="lb"><span>After fees since ${esc(first)}</span><b class="mono">${usdS(cum)}</b></div>
-    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="Cumulative net P&amp;L after fees, by day">
-      <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-      <line class="eq-grid" x1="0" y1="26" x2="1000" y2="26"/><line class="eq-grid" x1="0" y1="101" x2="1000" y2="101"/><line class="eq-grid" x1="0" y1="176" x2="1000" y2="176"/>${zero}
-      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
-    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div></div>`;
+  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day");
+}
+
+/* A watched strategy's page: what it did on the days it was judged on, and the two things that can be done with it. */
+function watchView(name) {
+  const w = WATCH.find(x => x.name === name);
+  if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${WATCH_READ ? "That strategy is not on the Desk any more. Promote it again from the Lab's Book." : "Loading…"}</div>`;
+  const pts = (Array.isArray(w.curve) ? w.curve : []).filter(p => Array.isArray(p) && typeof p[2] === "number");
+  const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
+  const pct = (v) => v == null ? "—" : Math.round(v * 100) + "%";
+  const num = (v, d) => v == null ? "—" : Number(v).toFixed(d);
+  const money = (v) => v == null ? "—" : (v < 0 ? "−$" : "$") + fmt(Math.abs(v), 0);      // whole dollars, like the other figures here
+  const where = w.period === "test" ? "the days it had never seen" : "the build days";
+  const chart = pts.length >= 2
+    ? eqPlot([0, ...pts.map(p => p[2])], `After costs, 1 contract · ${shortDay(pts[0][0])} to ${shortDay(pts[pts.length - 1][0])}`, w.net, "Cumulative net P&L by traded day, one contract after costs")
+    : `<div class="eq-empty">Not enough traded days for a curve.</div>`;
+  const busy = WATCH_BUSY === name;
+  const sub = [w.market, w.session, w.bar ? w.bar + "-minute bars" : "", w.family].filter(Boolean).join(" · ");
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(w.name)}</h1><div class="sp mono">${esc(sub)}</div></div></div>
+    <div class="sd-state"><b>Watching</b> · places no orders</div>
+    <div class="sd-note">${esc("Promoted from the Lab's Book. These are its results on " + where + ", from the research engine, not live trades. Nothing here can send an order.")}</div>
+    ${chart}
+    <div class="figs">${fig("Net", usdS(w.net))}${fig("Win rate", pct(w.win_rate))}${fig("Trades", w.trades == null ? "—" : w.trades)}${fig("Avg per trade", usdS(w.avg_trade), "After costs, per trade")}${fig("Profit factor", num(w.profit_factor, 2))}${fig("Worst day", money(w.worst_day))}${fig("Deepest drawdown", money(w.max_drawdown == null ? null : -Math.abs(w.max_drawdown)))}${fig("Days traded", w.days == null ? "—" : w.days)}</div>
+    ${w.why ? `<div class="sec"><h2>Why it should work</h2><p class="watch-why">${esc(w.why)}</p></div>` : ""}
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="showWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Every entry and exit, on the Charts page">Show executions on chart</button>
+      <button class="btn btn-outline btn-sm" onclick="removeWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off this page. It stays in the Book.">Remove from Desk</button></div>`;
 }
 
 function stratView(name) {
@@ -1872,7 +1946,7 @@ function stratView(name) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "watch";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -1883,6 +1957,7 @@ function renderMain(names, issues) {
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
+  else if (VIEW.k === "watch") $("#viewStrat").innerHTML = watchView(VIEW.name);
 }
 
 function render() {
@@ -3184,6 +3259,7 @@ async function loadCal() {
 }
 
 refresh(); setInterval(refresh, 2500);
+loadWatch(); if (!DEMO) setInterval(loadWatch, 30000);   // a strategy promoted in the Lab shows up here within half a minute
 </script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

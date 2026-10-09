@@ -16,7 +16,7 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '' };
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '' };
 /* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
    pipeline's three: 'pq' (its Queue), 'pb' (its Book), 'pg' (its Guide). */
 const VIEWS = [['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pg', 'Guide']];
@@ -853,6 +853,11 @@ function plSelect() {
   S.plIdea = C.plPick(names, S.plIdea);
   S.plCard = C.plPick((A.book || []).map((c) => c.name), S.plCard);
   if (S.view === 'pq' && S.plIdea) loadIdea(S.plIdea);
+  if (S.view === 'pb') {
+    const card = (A.book || []).find((c) => c && c.name === S.plCard);
+    if (card) loadCurve(card.name, String(card.utc || ''));
+    if (!S.plWatch) loadWatch();
+  }
 }
 /* One idea in full (GET /pipeline/idea/<name>): asked again when its row in the Queue changed, or when the last try got no answer.
    What was on the page stays until the new answer is here. */
@@ -867,6 +872,98 @@ async function loadIdea(name) {
   const next = { name, key, loading: false, data: ok ? r.json : old.data, text: ok ? JSON.stringify(r.json) : old.text, error: ok || old.data ? '' : String(r.error || 'no answer') };
   S.plDetail = next;
   if ((next.text !== old.text || next.error !== old.error) && plOpen()) paintLib();
+}
+/* A Book row's own line: what it made on the unseen days (one contract, after costs), then how many trades and its profit factor. */
+function plBookRowLine(card) {
+  const l = C.plBookLine(card);
+  if (l.net === '—' && !l.rest) return '';
+  return `<span class="pl-res"><b class="${l.tone}">${esc(l.net)}</b>${l.rest ? `<span>${esc(l.rest)}</span>` : ''}${S.plWatch && S.plWatch.has(card.name) ? '<i title="On the Desk page, watch-only">On the Desk</i>' : ''}</span>`;
+}
+/* An idea's equity curve and first numbers (GET /pipeline/curve/<name>): asked once per name and row change; the old one stays on the page meanwhile. */
+let plCurveSeq = 0;
+async function loadCurve(name, key = '') {
+  const was = S.plCurve;
+  if (!name || (was && was.name === name && was.key === key && (was.loading || was.data || was.error))) return;
+  const seq = ++plCurveSeq;
+  S.plCurve = { name, key, loading: true, data: was && was.name === name ? was.data : null, error: '' };
+  const r = await send('GET', `/api/tester/pipeline/curve/${encodeURIComponent(name)}`);
+  if (seq !== plCurveSeq) return;
+  const ok = r.ok && !!r.json;
+  S.plCurve = { name, key, loading: false, data: ok ? r.json : null, error: ok ? '' : String(r.error || 'no answer') };
+  if (plOpen()) paintLib();
+}
+/* Which Book strategies are on the Desk's watch list (GET /watch). */
+async function loadWatch() {
+  const r = await send('GET', '/api/tester/watch');
+  if (!r.ok || !r.json) return;
+  const next = new Set((r.json.strategies || []).map((x) => x && x.name).filter(Boolean)), was = S.plWatch;
+  S.plWatch = next;
+  if ((!was || was.size !== next.size || [...next].some((n) => !was.has(n))) && plOpen()) paintLib();
+}
+/* The curve as a picture: the running total by traded day, a soft fill to the $0 line, the last value marked; its two ends dated. */
+const EQ_W = 640, EQ_H = 180, EQ_PAD = 8;
+function plCurveFig(cv) {
+  const g = C.plCurvePath(cv && cv.curve, EQ_W, EQ_H, EQ_PAD);
+  if (!g) return '<p class="pp-note">Not enough traded days to draw a curve.</p>';
+  const tone = g.up ? 'pos' : 'neg';
+  return `<figure class="pl-eq ${tone}" data-curve="1">
+    <div class="pl-eq-top"><span class="pl-eq-read" id="plEqRead" aria-live="off">${esc(C.plCurveRead(cv, null))}</span><span class="pl-eq-max">${esc(C.plMoney(g.max))}</span></div>
+    <svg viewBox="0 0 ${EQ_W} ${EQ_H}" preserveAspectRatio="none" role="img" aria-label="Equity curve: ${esc(C.plSigned(g.last))} over ${esc(String(cv.days))} traded days">
+      <path class="pl-eq-area" d="${esc(g.area)}"/><line class="pl-eq-zero" x1="${EQ_PAD}" x2="${EQ_W - EQ_PAD}" y1="${esc(g.zero)}" y2="${esc(g.zero)}"/>
+      <path class="pl-eq-line" d="${esc(g.line)}"/><line class="pl-eq-x" id="plEqX" x1="0" x2="0" y1="${EQ_PAD}" y2="${EQ_H - EQ_PAD}" hidden/>
+      <circle class="pl-eq-dot" cx="${g.dot[0]}" cy="${g.dot[1]}" r="3.5"/></svg>
+    <figcaption><span>${esc(cv.start || '')}</span><span>${cv.period === 'test' ? 'the days it had never seen' : 'the build days'} · 1 contract, after costs</span><span>${esc(cv.end || '')}</span></figcaption></figure>`;
+}
+/* What a strategy did, on top of its page: the tiles, the curve, and what can be done with it. */
+function plResults(name, canPromote) {
+  const L = S.plCurve && S.plCurve.name === name ? S.plCurve : null, cv = L && L.data;
+  const busy = S.plExec === name, watched = !!(S.plWatch && S.plWatch.has(name));
+  const acts = `<div class="pl-acts2"><button class="btn btn-outline" data-act="plexec" data-name="${esc(name)}" data-fk="exec"${busy || S.plBusy ? ' disabled' : ''}>${busy ? 'Opening the chart…' : 'Show executions on chart'}</button>
+    ${canPromote ? (watched
+      ? `<span class="pl-on" role="status">On the Desk page, watch-only</span><button class="btn btn-outline" data-act="plunwatch" data-name="${esc(name)}" data-fk="unwatch"${S.plBusy ? ' disabled' : ''}>Remove from Desk</button>`
+      : `<button class="btn btn-default" data-act="plpromote" data-name="${esc(name)}" data-fk="promote"${S.plBusy ? ' disabled' : ''}>Promote to strategy</button>`) : ''}</div>`;
+  if (!cv) return `${L && L.error ? `<p class="pp-note" role="status">${esc(L.error)}</p>` : '<p class="pp-note" role="status">Loading its results…</p>'}${L && L.error ? '' : ''}${canPromote ? acts : ''}`;
+  return `<div class="pl-tiles">${C.plCurveTiles(cv).map((t) => `<div class="pl-tile"><span>${esc(t.k)}</span><b class="${t.tone}">${esc(t.v)}</b></div>`).join('')}</div>
+    ${plCurveFig(cv)}${acts}`;
+}
+/* The curve under the pointer: the day's date and the total by then, with a hairline; off the chart, the last value again. */
+document.addEventListener('pointermove', (e) => {
+  const svg = e.target && e.target.closest ? e.target.closest('.pl-eq svg') : null;
+  if (!svg) return;
+  const cv = S.plCurve && S.plCurve.data, read = document.getElementById('plEqRead'), hair = document.getElementById('plEqX');
+  if (!cv || !read || !hair) return;
+  const box = svg.getBoundingClientRect(), x = ((e.clientX - box.left) / box.width) * EQ_W, n = cv.curve.length;
+  const i = C.plCurveAt(cv.curve, x, EQ_W, EQ_PAD);
+  const px = EQ_PAD + ((i + 1) / n) * (EQ_W - 2 * EQ_PAD);
+  hair.setAttribute('x1', px); hair.setAttribute('x2', px); hair.removeAttribute('hidden');
+  read.textContent = C.plCurveRead(cv, i);
+});
+document.addEventListener('pointerout', (e) => {
+  const svg = e.target && e.target.closest ? e.target.closest('.pl-eq svg') : null;
+  if (!svg || (e.relatedTarget && svg.contains(e.relatedTarget))) return;
+  const cv = S.plCurve && S.plCurve.data, read = document.getElementById('plEqRead'), hair = document.getElementById('plEqX');
+  if (hair) hair.setAttribute('hidden', '');
+  if (cv && read) read.textContent = C.plCurveRead(cv, null);
+});
+/* Show-on-chart: the picked box's trades become a run of the tester (once), and the chart on this page is asked to show it. */
+async function showExecutions(name) {
+  if (!name || S.plExec) return;
+  S.plExec = name; paintLib();
+  const r = await send('POST', '/api/tester/pipeline/executions', { name });
+  S.plExec = '';
+  const j = r.json || {};
+  if (!r.ok || j.ok === false) { pipeSaid(String(j.detail || r.error || 'The chart could not be opened.'), true); return; }
+  pipeSaid(C.plExecSaid(name, j), false);
+}
+async function watchDo(what, name) {
+  if (!name || S.plBusy) return;
+  S.plBusy = true; paintLib();
+  const r = await send('POST', `/api/tester/watch/${what}`, { name });
+  S.plBusy = false;
+  const j = r.json || {};
+  await loadWatch();
+  if (!r.ok || j.ok === false) { pipeSaid(String(j.detail || r.error || 'It did not work.'), true); return; }
+  pipeSaid(C.plWatchSaid(what, name), false);
 }
 const plKv = (rows) => `<div class="rs-group pl-grp">${rows.map(([k, v]) => `<div class="pl-kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;
 const plChip = (label, tone) => `<span class="rs-chip pl-chip ${tone}">${esc(label)}</span>`;
@@ -887,7 +984,8 @@ function pipeSide() {
     return `<div class="pl-list">${book.map((card) => {
       const b = C.plBookCard(card), on = b.name === S.plCard;
       return `<button class="tk-row pl-row${on ? ' sel' : ''}" data-act="plbook" data-name="${esc(b.name)}" data-fk="book:${esc(b.name)}" aria-current="${on}">
-        <span class="tk-nm"><b title="${esc(b.name)}">${esc(b.name)}</b>${plChip(b.label, b.tone)}</span><span class="pl-fam">${esc(b.sub)}</span></button>`;
+        <span class="tk-nm"><b title="${esc(b.name)}">${esc(b.name)}</b>${plChip(b.label, b.tone)}</span><span class="pl-fam">${esc(b.sub)}</span>
+        ${plBookRowLine(card)}</button>`;
     }).join('')}</div>`;
   }
   const ideas = A.ideas || [], names = Object.fromEntries((A.stages || []).map((s) => [s.n, s.name]));
@@ -930,6 +1028,7 @@ function queueMain(A) {
     ${why ? `<p class="pl-stop"><b>${st.label === 'Refused' ? 'Refused' : st.label === 'Problem' ? 'Problem' : 'Stopped'}:</b> ${esc(why)}</p>` : ''}
     <p class="pl-say">${esc([card.why, card.loser].filter(Boolean).join(' '))}</p>
     ${plKv([['Market', card.market || '—'], ['Time of day', C.plSession(card.session)], ['Sides', `${C.plSide(card.sides)}${card.sides_why ? `: ${card.sides_why}` : ''}`], ['Entry rule', st.family || '—']])}
+    ${(I.stages || []).some((x) => x.n === 1 && x.passed) ? `<div class="pl-acts2"><button class="btn btn-outline" data-act="plexec" data-name="${esc(S.plIdea)}" data-fk="exec"${S.plExec || S.plBusy ? ' disabled' : ''}>${S.plExec === S.plIdea ? 'Opening the chart…' : 'Show executions on chart'}</button><span class="pl-quiet">The picked box, on the build days.</span></div>` : ''}
     <h3>Ways to enter</h3><ul class="pl-ul">${list(card.ways, C.plWayLine)}</ul>
     <h3>Indicators to try</h3><ul class="pl-ul">${list(card.indicators, C.plIndLine)}</ul>
     <h3>Stages</h3>${(I.stages || []).map((s) => plStage(s.n, s.name, C.plMark(s.passed), s.text, s.lines)).join('') || '<p class="pp-note">No stage has run yet.</p>'}
@@ -944,7 +1043,9 @@ function bookMain(A) {
   if (!card) return '<div class="pp-empty"><h2>The Book</h2><p>The book is empty. A strategy lands here after it passes every stage and you approve it.</p></div>';
   const b = C.plBookCard(card), full = C.plBookFull(card, A.stages);
   return `<article class="pp-doc" aria-label="${esc(b.name)}"><div class="tk-head"><h2>${esc(b.name)}</h2>${plChip(b.label, b.tone)}</div>
-    <p class="pl-say">${esc(full.why)}</p>${plKv(full.facts)}
+    <p class="pl-say">${esc(full.why)}</p>
+    ${plResults(b.name, true)}
+    <h3>The card</h3>${plKv(full.facts)}
     <p class="pp-note">Money is for one contract, after costs, on the days it had never seen.</p>
     <h3>Accounts</h3>${full.accounts.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('') || '<p class="pp-note">None on this card.</p>'}
     <h3>Stages</h3>${full.stages.map((s) => plStage(s.n, s.name, s.mark, s.text)).join('') || '<p class="pp-note">None on this card.</p>'}</article>`;
@@ -987,7 +1088,7 @@ function guideStep(n) {
   else if (n === 5) { S.plIdea = s.name; setView('pq'); }
 }
 function pickIdea(name) { S.plIdea = name; S.plArmed = ''; paintLib(); loadIdea(name); }
-function pickCard(name) { S.plCard = name; paintLib(); }
+function pickCard(name) { S.plCard = name; plSelect(); paintLib(); }
 
 /* One post to the pipeline -> {ok, text}: the server's own sentence either way (a refusal is ok false with its reason). */
 async function pipeRun(body) {
@@ -1417,6 +1518,9 @@ function act(name, el) {
   else if (name === 'plrefuse') refuseSheet(S.plIdea);
   else if (name === 'pladd') addSheet();
   else if (name === 'plhide') { S.plSaid = null; paintLib(); }
+  else if (name === 'plexec') showExecutions(el.dataset.name);
+  else if (name === 'plpromote') watchDo('promote', el.dataset.name);
+  else if (name === 'plunwatch') watchDo('remove', el.dataset.name);
   else if (name === 'tkblock') codeSheet(el.dataset.id);
   else if (name === 'bptool') toolSheet(el.dataset.tool);
   else if (name === 'bpidea') { S.bpIdea = el.dataset.name; paintLib(); toolSheet('blueprint_status', { name: el.dataset.name }, true); }

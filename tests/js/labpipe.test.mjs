@@ -333,10 +333,17 @@ test('the view switcher lists the six views: Strategies, Blueprint, Arsenal, the
   assert.match(LAB, /\['pq', 'Queue'\], \['pb', 'Book'\], \['pg', 'Guide'\]/);
 });
 
-test('the pipeline pages talk to three routes only, and post nothing but the six actions', () => {
+test('the pipeline pages talk to five pipeline routes and the watch list only, and post nothing but the six actions', () => {
   assert.ok(PIPE.length > 2000, 'the section is there');
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/idea/', '/api/tester/pipeline/run']);
+  // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
+  assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
+    '/api/tester/pipeline/idea/', '/api/tester/pipeline/run']);
+  const watch = [...LAB.matchAll(/['"`](\/api\/tester\/watch[^'"`$?]*)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(watch)].sort(), ['/api/tester/watch', '/api/tester/watch/'], 'the Desk watch list: read, and promote / remove by name');
+  assert.match(LAB, /watchDo\('promote', el\.dataset\.name\)/);
+  assert.match(LAB, /watchDo\('remove', el\.dataset\.name\)/);
+  assert.doesNotMatch(LAB, /watchDo\('(?!promote'|remove')/, 'the Lab only promotes and removes');
   const actions = [...PIPE.matchAll(/action: '(\w+)'/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(actions)].sort(), ['add', 'approve', 'refuse']);
   assert.match(PIPE, /pipeRun\(\{ action: a \}\)/, 'start, pause and resume are posted as the helper names them');
@@ -383,4 +390,47 @@ test('while a pipeline view is open the middle is its own: the editor, the chart
   assert.doesNotMatch(PIPE, /paintEditor\(|paintAll\(|paintRes\(|S\.bufs|S\.cur\b/, 'nothing of the editor is painted or changed from here');
   assert.match(LAB, /if \(inChart\(e\) \|\| pipeOn\(\)\) return;/, 'the editor\'s keys save and run nothing from behind the page');
   assert.equal((PIPE.match(/dialog\(/g) || []).length, 2, 'two sheets only: the add-idea form and the reason of a no');
+});
+
+/* 2026-10-09: a Book strategy shows what it did -- one line on its row, its numbers as tiles, its equity curve. */
+test('book results: the row line, the tiles and the curve geometry', () => {
+  assert.deepEqual(L.plBookLine({ net: 39183, trades: 263, profit_factor: 1.3732 }), { net: '+$39,183', tone: 'pos', rest: '263 trades · PF 1.37' });
+  assert.deepEqual(L.plBookLine({ net: -500.4, trades: 1 }), { net: '−$500', tone: 'neg', rest: '1 trade' });
+  assert.deepEqual(L.plBookLine({}), { net: '—', tone: '', rest: '' }, 'a card without numbers shows a dash, never $0');
+  const tiles = L.plCurveTiles({ net: 39183, trades: 263, win_rate: 0.3422, avg_trade: 148.98, profit_factor: 1.373, worst_day: -1837, max_drawdown: 11502, days: 125 });
+  assert.deepEqual(tiles.map((t) => [t.k, t.v]), [['Net profit', '+$39,183'], ['Trades', '263'], ['Win rate', '34 %'], ['Average trade', '+$149'],
+    ['Profit factor', '1.37'], ['Worst day', '−$1,837'], ['Deepest drawdown', '−$11,502'], ['Days traded', '125']]);
+  assert.equal(tiles[0].tone, 'pos');
+  assert.ok(L.plCurveTiles(null).every((t) => t.v === '—'), 'no curve yet: dashes');
+
+  const curve = [['2025-07-01', 300, 300], ['2025-07-02', -300, 0], ['2025-07-07', 1000, 1000]];
+  const g = L.plCurvePath(curve, 206, 106, 3);     // inner box 200 x 100: easy numbers
+  assert.equal(g.line, 'M3 103 L69.7 73 L136.3 103 L203 3', 'starts at $0, then one step a traded day');
+  assert.equal(g.zero, 103);
+  assert.deepEqual(g.dot, [203, 3]);
+  assert.deepEqual([g.min, g.max, g.last, g.up], [0, 1000, 1000, true]);
+  assert.ok(g.area.startsWith(g.line) && g.area.endsWith('L203 103 L3 103 Z'), 'the fill closes on the $0 line');
+  const down = L.plCurvePath([['a', -100, -100], ['b', -100, -200]], 206, 106, 3);
+  assert.equal(down.up, false);
+  assert.equal(down.zero, 3, 'a losing curve hangs under $0 at the top');
+  assert.equal(L.plCurvePath([['a', 5, 5]], 200, 100), null, 'one day is not a curve');
+  assert.equal(L.plCurvePath(null, 200, 100), null);
+
+  assert.equal(L.plCurveAt(curve, 3, 206, 3), -1, 'the left edge is the $0 start');
+  assert.equal(L.plCurveAt(curve, 70, 206, 3), 0);
+  assert.equal(L.plCurveAt(curve, 203, 206, 3), 2);
+  assert.equal(L.plCurveAt(curve, 9999, 206, 3), 2, 'never past the last day');
+});
+
+test('book results: the words beside the curve and after an action are plain text built here', () => {
+  const cv = { start: '2025-07-01', end: '2025-07-07', net: 1000, curve: [['2025-07-01', 300, 300], ['2025-07-02', -300, 0], ['2025-07-07', 1000, 1000]] };
+  assert.equal(L.plCurveRead(cv, null), '2025-07-07 · +$1,000');
+  assert.equal(L.plCurveRead(cv, -1), 'before 2025-07-01 · $0');
+  assert.equal(L.plCurveRead(cv, 1), '2025-07-02 · $0 (−$300 that day)');
+  assert.equal(L.plCurveRead(cv, 99), 'before 2025-07-01 · $0', 'an index off the end never throws');
+  assert.equal(L.plExecSaid('nq_x', { trades: 263, of: 263, start: '2025-07-03', end: '2026-09-21', pages: 1 }),
+    '263 executions of nq_x (2025-07-03 to 2026-09-21). They are on the chart: it shows the last day it traded, and its trade list steps through the rest.');
+  assert.match(L.plExecSaid('nq_x', { trades: 1, of: 3, start: 'a', end: 'b', pages: 0 }), /^1 execution of nq_x \(a to b\), 2 could not be priced\. No chart page is open/);
+  assert.match(L.plWatchSaid('promote', 'nq_x'), /watch-only: it shows its results there and places no orders\.$/);
+  assert.match(L.plWatchSaid('remove', 'nq_x'), /stays in the Book and can be promoted again\.$/);
 });
