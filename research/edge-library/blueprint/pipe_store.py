@@ -15,6 +15,7 @@ every card ever added. It stores what it is given and reads it back: it checks n
         order.jsonl                  the queue: {name, utc, inbox}, one line an add
         pause                        there = the runner stops after the stage in hand
         book/<name>.json             the book card of an idea the owner approved
+        portfolios/<account>.json    the portfolio builder's last answer for an account (pipe_portfolio.py: `bp.py pipe portfolio`)
         runner.lock, runner.log      the runner's (pipe_runner.py)
 
     root(arg=None) -> Path                              the pipeline root
@@ -47,6 +48,7 @@ every card ever added. It stores what it is given and reads it back: it checks n
     ledger(name, root=None) -> Path                     p/<name>/ledger.csv
     book(root=None) -> [book cards]                     by name
     write_book(name, card, root=None) -> Path           book/<name>.json
+    write_portfolio(account, data, root=None) -> Path   portfolios/<account>.json (an account id that is no file name: J.Refuse)
 
 HOW IT WRITES. A JSON file is written whole or not at all: a temp file beside it, flushed to the disk, then put in its
 place (a reader never sees half a file; a write that dies leaves the old one). A line on a .jsonl is appended under an
@@ -403,3 +405,10 @@ def book(root=None) -> list:
 
 def write_book(name, card, root=None) -> Path:
     return _write(_at(root) / "book" / f"{_name(name)}.json", card)
+
+
+def write_portfolio(account, data, root=None) -> Path:
+    """The portfolio builder's answer for one account (a rule file's id of the app's prop simulator), replacing the last one."""
+    if not isinstance(account, str) or not account or Path(account).name != account or account.startswith("."):
+        raise J.Refuse(f"{account!r} is no account id: a portfolio is saved under its account's id")
+    return _write(_at(root) / "portfolios" / f"{account}.json", data)

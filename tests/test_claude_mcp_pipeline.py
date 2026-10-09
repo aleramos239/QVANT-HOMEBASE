@@ -384,7 +384,7 @@ def test_the_cards_limits_and_names_are_the_toolkits_own():
     assert list(lit("blueprint/pipe_store.py", "STATUS")) == STATUSES == list(pipeline_tools.LABELS)
     assert [s.lower() for s in (x["name"] for x in pipeline_tools.STAGES)] == list(lit("blueprint/pipe_runner.py", "NAMES"))
     assert lit("blueprint/pipe_store.py", "ENV") == pipeline_tools.ENV_ROOT
-    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", "rerun", "pick", "luck", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}      # (rerun, pick, luck: the command line only; the luck count is the last line of the book)
+    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", "rerun", "pick", "luck", "portfolio", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}      # (rerun, pick, luck, portfolio: the command line only; the luck count is the last line of the book)
 
 
 def test_the_decide_tool_says_it_is_used_only_on_the_owners_word():

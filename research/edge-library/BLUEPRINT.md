@@ -458,7 +458,8 @@ The pipeline reads every idea on the unseen days, once each (owner, 2026-10-08).
 toolkit's rule still holds: one read for a family, market and session. So the pipeline's guards against luck are the tries
 bar, the luck count (`bp.py pipe luck`, 2026-10-09) and, not built yet, the measured luck rate and the score since the lock.
 
-Not built yet: the measured luck rate, the drift check for long-only ideas, the score since the lock and the portfolio builder.
+Not built yet: the measured luck rate, the drift check for long-only ideas and the score since the lock. (The portfolio
+builder is built: see the 2026-10-09 note at the end of this section.)
 
 **2026-10-08, the owner:** in the pipeline the other markets ask nothing of an idea. Line P3.6 and the build's line 2.5 are
 shown and never stop a pipeline idea (pipeline.json `indicator.other_markets: null`; the lock writes `waived: ["2.5"]`).
@@ -494,3 +495,24 @@ because we picked the wrong box."
   entries. The measured luck rate of the design (random-entry strategies read through stage 6) is still not built.
 - **Small.** `pipe list` names the heat map that came closest, not the first one. Stage 1 says which boxes never traded (a
   160-bar channel on 5-minute bars). The runner comes back at login (`deploy/com.ramosquant.homebase-pipeline.plist.template`).
+
+**2026-10-09, the portfolio builder (the design's stage 8; `bp.py pipe portfolio [--account=ID]`):** one strategy alone
+passes an eval too rarely, so the strategies of the book are mixed on one account. For each account (`prop.account`, then
+`prop.book_accounts`) the program tries every mix of book strategies the rules allow and shows the best one, its odds
+against the bar, and what is missing. It runs nothing: it reads each strategy's trades on the unseen days (its locked box),
+every member at the same size, on the "live is worse" row, open losses counted.
+- **The bar** (`pipeline.json` `portfolio`): pass the eval within 5 trading days 60 % of the time or more, and reach the
+  maximum payout within 14 trading days 75 % or more.
+- **Who may be mixed.** Only book strategies. Never two of the same family on the same market. A mix is allowed only if
+  taking any one member away lowers its eval odds: a member that adds nothing is left out.
+- **The account's rules on the mix.** At most half the profit from trades held 5 seconds or less (every account). On
+  LucidFlex the biggest day is at most half the profit (its rule file's `consistency`).
+- **Apex** (the design's section 13; its rule file does not say these, so `pipeline.json` `portfolio.one_side` and
+  `funded_only` do): a strategy whose entry rule rests orders on both sides (orb, straddle, ib and the others the block
+  list marks) is left out, and the mix is judged on the payout odds alone, because there is no Apex eval to pass. Not
+  built for Apex yet: the biggest day at 30 % of the profit, a stop at most 5 times the target, the live-peak drawdown.
+- **Ranking.** Mixes that are allowed and hold the account's rules come first; among them the one nearest the bar on its
+  weaker number. The odds are the chance inside the bar's own days, so getting there sooner is the higher number.
+- **What it shows.** One row an account (best mix, the two odds, at the bar or not), then for each account what is
+  missing in points of odds and which rule does not hold. The answer of each account is saved in the pipeline's folder
+  under `portfolios/`. A book of one strategy is read alone against the bar; an empty book says so.

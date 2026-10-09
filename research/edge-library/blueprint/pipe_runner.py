@@ -55,6 +55,9 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      beat on those days, and what that is by luck over all R reads ((1 - its share) x R, at most 1). And by
                                      family: ideas, read, passed (close cousins share their luck). `pipe book` ends with the count's one line
                                      once an idea was read. Runs nothing; reads the states and the stage-6 cards
+  command("portfolio", account=ID)   `pipe portfolio [--account=ID]`: STAGE 8, the best mix of the book's strategies for each account and how far
+                                     it is from the portfolio's bar (pipe_portfolio.portfolio, loaded when it is asked for). Runs nothing; saves
+                                     one file an account under <root>/portfolios
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -97,7 +100,7 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "portfolio")
 RANDOM = "4.4"                                      # the read's line on the random tables: its bar is what an idea with no edge passes by luck
 
 
@@ -468,7 +471,7 @@ def pick(name, cell=None, why=None, root=None, clear: bool = False) -> dict:
                       next=f"bp.py pipe rerun {name} runs it again from stage 0 (a stopped idea only); a new idea takes it at its stage 1.")
 
 
-def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False) -> dict:
+def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False, account=None) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
     if sub == "add":
@@ -481,6 +484,9 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return booked(root)
     if sub == "luck":
         return luck(root)
+    if sub == "portfolio":
+        from . import pipe_portfolio                # the prop simulator's walks: loaded when the mix is asked for, never with the runner
+        return pipe_portfolio.portfolio(root, account)
     if sub == "rerun":
         return rerun(name, root)
     if sub == "pick":

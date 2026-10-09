@@ -101,7 +101,7 @@ and --json out.
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
   bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck             refused with its rows; `start` = the runner, detached,
-                                                                             that takes every queued idea through stages 0-7 by
+  bp.py pipe portfolio [--account=ID]                                        that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
                                                                              cards; `approve` / `refuse` = the owner's word on an
@@ -112,6 +112,11 @@ and --json out.
                                                                              running, awaits the owner or is in the book.
                                                                              `luck` = the luck count: the ideas read on the unseen days,
                                                                              how many passed, and what luck alone gives (pipe_runner.luck).
+                                                                             `portfolio` = STAGE 8: the best mix of the book's strategies
+                                                                             for each account of a book card (or the one of --account),
+                                                                             its odds against the portfolio's bar and what is missing
+                                                                             (pipe_portfolio.py). Runs nothing; saves one file an account
+                                                                             under the pipeline's portfolios/.
                                                                              For `pipe`, --root is the PIPELINE's own folder
                                                                              (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
                                                                              never the app's idea folder
@@ -229,7 +234,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,curve,executions}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,portfolio,curve,executions}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -238,6 +243,7 @@ def _parser() -> _Parser:
         ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
         ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"),
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
+        ("portfolio", "stage 8: the best mix of the book's strategies for each account, its odds against the portfolio's bar, what is missing (runs nothing)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
@@ -249,6 +255,7 @@ def _parser() -> _Parser:
     pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
     pipes["pick"].add_argument("--why", metavar="TEXT", help="the owner's reason for the box (kept with the idea)")
+    pipes["portfolio"].add_argument("--account", metavar="ID", help="one account: a rule file of the app's prop simulator (default: every account of a book card)")
     pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
     for x in pipes.values():
         x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
@@ -374,7 +381,7 @@ def _pipe(a) -> dict:
         from . import pipe_view
         return getattr(pipe_view, a.sub)(a.name, a.root)
     return pipe_runner.command(a.sub, getattr(a, "name", None), a.root, card=card, inbox=getattr(a, "inbox", False), why=getattr(a, "why", None),
-                               once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False))
+                               once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False), account=getattr(a, "account", None))
 
 
 def _said(r: dict) -> str:
