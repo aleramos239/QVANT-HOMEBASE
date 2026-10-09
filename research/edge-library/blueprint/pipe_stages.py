@@ -97,9 +97,15 @@ VARIANT MODE (pipeline.json "mode": "variant", the shipped default; the owner, 2
 requirements, some should just be for the individual strategy that will pass"). Everything above is MAP MODE ("mode": "map", kept whole). In variant
 mode the map gets a LOOSE check and ONE box is picked right after it; every hard rule is judged on that box (spec section 16):
   stage1  _stage1_variant: pipe_gates.variant_map on each heat map (over `variant.map_share` of the boxes profitable, at least `variant.region_boxes`
-          boxes at the floor with `variant.region_trades` trades) -> result "pass" | "fail" (no strict / low), the heat map with the most qualifying
-          boxes moves on (pipe_gates.rank). THE PICK: the MIDDLE qualifying box by build net -- never the best (_middle: judge.TIE_RULE) -- is
-          in `picked` as `cell` (the box id) and `variant` (its main-setting value) next to sub / bar / way / filter, and on the card as `box`
+          boxes at the floor with `variant.region_trades` trades) -> result "pass" | "fail" (no strict / low). THE PICK (the owner, 2026-10-09: "we
+          could have a good strategy under our nose and lose it because we picked the wrong box"): of a map that passed, the boxes at the floor
+          that HOLD EVERY LINE A BOX IS HELD TO ON THE BUILD DAYS (_box_rows: stage 3's rows P3.2-P3.10 and the lock's lines 3.3-3.8; not the
+          proof of stage 4, not the worse fills of the lock) -- row P1.3, at least `variant.pick_boxes` of them (pipe_gates.holding). The map with
+          the most such boxes moves on (then the more boxes at the floor, the bigger average trade, the first), and of its boxes the MIDDLE one
+          BY PROP ODDS (_pick: the odds to pass the eval on the pipeline's account, then the payout odds, then judge.TIE_RULE; never the best) is
+          in `picked` as `cell` (the box id) and `variant` (its main-setting value) next to sub / bar / way / filter, and on the card as `box`.
+          No map with enough such boxes: the idea stops here, and row P1.3 says which lines the boxes miss. The owner's own pick
+          (bp.py pipe pick) is still any box at the floor
   stage2  the same checks; P2.5 reads the PICKED box (_prices(picked=))
   stage3  _stage3_variant: NO indicator is tried (the card's list is ignored and the text says so; the code for them is kept). Rows P3.2 (average
           trade at the floor), P3.3 (trades), P3.4 (each side makes money, the card's sides), P3.6 (other markets, shown) on the picked box
@@ -310,6 +316,38 @@ def _middle(rows: list, cells: list):
     return order[(len(order) - 1) // 2] if order else None
 
 
+def _box_rows(t: dict, cell: str, days=None) -> list:
+    """EVERY LINE A BOX IS HELD TO ON THE BUILD DAYS, read before the pick: stage 3's rows of variant mode (pipe_gates.variant_rows; the other
+    markets are shown there, so none is read here) and the lock's lines 3.3-3.8 (lines.BOX off tables.box, as freeze.lock reads its default)."""
+    return G.variant_rows(_one_box(t, cell), []) + [fn(T.box(t["_st"], t["_u"], cell, days)) for fn in L.BOX]
+
+
+def _holding(t: dict, cells: list, days=None) -> tuple:
+    """(the boxes of `cells` that hold every row of _box_rows, {line: how many of `cells` miss it})."""
+    good, missed = [], {}
+    for c in cells:
+        bad = [x["line"] for x in _box_rows(t, c, days) if x["passed"] is False]
+        for k in bad:
+            missed[k] = missed.get(k, 0) + 1
+        if not bad:
+            good.append(c)
+    return good, missed
+
+
+def _odds(t: dict, cells: list, days=None) -> dict:
+    """{box: THE PROP CHECK of its build trades on the pipeline's account (pipe_prop.odds, as row P5.9 reads the locked box)}."""
+    own, cal = PR.need("prop", "account"), T.build_days(t["_u"], days)
+    return {c: PP.odds(J.cellx(t["_st"], c, t["_u"]["sess"], t["_u"]), cal, own) for c in cells}
+
+
+def _pick(rows: list, odds: dict):
+    """THE PICK: the MIDDLE of the boxes of `odds` ({box: (its odds to pass the eval, its payout odds)}) by those odds -- never the best -- then
+    by the judge's tie rule (net to the cent, variant order); an even count takes the lower of the two middle ones. None: no box."""
+    by = {r["id"]: r for r in rows}
+    order = sorted(odds, key=lambda c: (*odds[c], round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
+    return order[(len(order) - 1) // 2] if order else None
+
+
 def _one_box(t: dict, cell: str) -> dict:
     """ONE box of a table as a table of its own (the gates' shape): its net and trades a day, the net and trades of its two sides, the card's
     sides, the root, and the store and unit it came from. Refused: a box the table does not have (the store changed since the pick)."""
@@ -401,33 +439,58 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
 
 
 def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) -> dict:
-    """Stage 1 in variant mode: the LOOSE check of each map (G.variant_map), the best map by its qualifying boxes (G.rank), and THE PICK -- the
-    middle qualifying box by build net, never the best -- written into the card and into `picked` (cell, variant)."""
+    """Stage 1 in variant mode: the LOOSE check of each map (G.variant_map), row P1.3 of each map that passed it (the boxes at the floor that hold
+    every line of a box: _holding, G.holding), the map with the most such boxes, and THE PICK -- the middle of them by prop odds, never the
+    best (_pick) -- written into the card and into `picked` (cell, variant)."""
     tabs = [_table(specs[0], plan, kw) for _, _, plan, specs in subs]
     res = [G.variant_map(t) for t in tabs]
-    rows = [x for (s, *_), r in zip(subs, res) for x in _named(r["lines"], s["name"], sub=s["name"])]
-    tables = [{"sub": s["name"], "way": s["way"], "bar": s["bar"], "result": r["result"], "avg_trade": r["avg_trade"], "qualifying": r["qualifying"], "text": r["text"]}
-              for (s, *_), r in zip(subs, res)]
-    i = G.rank(res)
-    if i is None:
-        return _card(1, t0, False, "fail", rows, f"every one of the {len(res)} heat maps failed the loose check of the map: the idea is dropped", None, len(res), rules, tables=tables)
-    s, t = subs[i][0], tabs[i]
-    cell = _middle(J.table(t["_st"], t["_u"]), res[i]["cells"])
+    held = [_holding(t, r["cells"], kw["days"]) if r["result"] == "pass" else ([], {}) for t, r in zip(tabs, res)]
+    gate = [G.holding(len(g), r["qualifying"], m) if r["result"] == "pass" else None for r, (g, m) in zip(res, held)]
+    rows = [x for (s, *_), r, p in zip(subs, res, gate) for x in _named(r["lines"] + ([p] if p else []), s["name"], sub=s["name"])]
+    tables = [{"sub": s["name"], "way": s["way"], "bar": s["bar"], "result": r["result"], "avg_trade": r["avg_trade"], "qualifying": r["qualifying"],
+               "holding": len(g), "left_out": _left_out(t), "text": r["text"]} for (s, *_), r, t, (g, _) in zip(subs, res, tabs, held)]
+    said = "".join(f"; {x['sub']}: {x['left_out']['text']}" for x in tables if x["left_out"])
+    ok = [k for k, r in enumerate(res) if r["result"] == "pass"]
+    if not ok:
+        return _card(1, t0, False, "fail", rows, f"every one of the {len(res)} heat maps failed the loose check of the map: the idea is dropped{said}", None, len(res), rules, tables=tables)
+    i = max(ok, key=lambda k: (len(held[k][0]), res[k]["qualifying"], res[k]["avg_trade"], -k))      # the most boxes that hold, then G.rank's order
+    s, t, good = subs[i][0], tabs[i], held[i][0]
+    trows = J.table(t["_st"], t["_u"])
+    usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
     if owner:                                       # the owner named the box (bp.py pipe pick): it must be one of the boxes at the floor of this map
         if owner["cell"] not in res[i]["cells"]:
             return _card(1, t0, False, "fail", rows, f"the owner's pick {owner['cell']} is not one of the {res[i]['qualifying']} boxes at the floor of {s['name']}: the idea is "
                          "stopped; name another box (bp.py pipe pick <name> <cell> --why=TEXT) or take it away (bp.py pipe pick <name> --clear), then bp.py pipe rerun <name>",
                          None, len(res), rules, tables=tables)
-        cell = owner["cell"]
+        cell, odds = owner["cell"], None
+        how = f"chosen by the owner ({owner['why']}), one of its {res[i]['qualifying']} boxes at the floor"
+    else:
+        if gate[i]["passed"] is False:
+            return _card(1, t0, False, "fail", rows, f"no heat map has a box to pick: {s['name']} -- {gate[i]['text']}: the idea is dropped{said}", None, len(res), rules, tables=tables)
+        got = _odds(t, good, kw["days"])
+        cell = _pick(trows, {c: (o["eval"], o["payout"]) for c, o in got.items()})
+        o = got[cell]
+        odds = {"account": o["account"]["id"], **{k: o[k] for k in ("eval", "payout", "size", "payout_size")}}
+        how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 else
+               f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that hold every line "
+               "a box is held to on the build days (never the best)")
     box = _box_card(t, cell)
-    usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
-    how = (f"chosen by the owner ({owner['why']}), one of its {res[i]['qualifying']} boxes at the floor" if owner else
-           f"the middle, by build net, of its {res[i]['qualifying']} boxes at the floor (never the best)")
     return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- {how}: "
                  f"average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
-                 f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone",
+                 f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone{said}",
                  {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"], **({"by": "owner"} if owner else {})},
-                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"]})
+                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"], "holding": len(good), "odds": odds})
+
+
+def _left_out(t: dict):
+    """The boxes of a heat map that NEVER TRADED on the build days and so are no judged variant (a setting value that cannot trade on this bar
+    size: a 160-bar channel on 5-minute bars) -> {"boxes", "values": their main-setting values, "text"}, or None: every box traded."""
+    st, rows = t["_st"], J.table(t["_st"], t["_u"])
+    gone = [st["meta"]["cells"][st["_idx"][r["id"]]] for r in rows if not r["trades"]]
+    if not gone:
+        return None
+    vals = sorted({" ".join(f"{k} {v}" for k, v in (c.get("variant") or {}).items()) for c in gone} - {""})
+    return {"boxes": len(gone), "values": vals, "text": f"{len(gone)} of its {len(rows)} boxes never traded and are left out" + (f" ({', '.join(vals)})" if vals else "")}
 
 
 # ================================================================ stage 2: the machine check

@@ -41,6 +41,8 @@ some should just be for the individual strategy that will pass"). The map gets a
                                   of the boxes profitable, P1.2 at least `region_boxes` boxes with an average trade at the floor and
                                   `region_trades` trades], "text"}
   rank(results)                   (above) a variant_map result is ranked by the number of qualifying boxes, then the bigger average trade
+  holding(n, q, missed)           STAGE 1 -> row P1.3 of a map that passed the loose check: `n` of its `q` boxes at the floor hold every line a
+                                  box is held to on the build days (need `variant.pick_boxes`); `missed` = {line: boxes that miss it}
   variant_rows(b, others)         STAGE 3 on the picked box `b` = a one-box table (net and n of shape 1 x days, the box's `long` / `short` /
                                   `n_long` / `n_short`, the card's `sides`): P3.2 average trade at the floor, P3.3 `region_trades` trades,
                                   P3.4 each side makes money (line 2.6's reading of the one box), P3.6 the other markets (shown, never False)
@@ -161,6 +163,16 @@ def variant_map(t: dict) -> dict:
     return {"result": "fail" if bad else "pass", "avg_trade": x["avg_trade"], "qualifying": q, "cells": cells, "lines": rows,
             "text": f"fail: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} missed" if bad else
             f"pass: over {L._pc(need['map_share'])} of boxes profitable and {q} boxes at the floor with enough trades"}
+
+
+def holding(n: int, q: int, missed: dict) -> dict:
+    """Row P1.3 of variant mode, of a map that passed the loose check: `n` of its `q` boxes at the floor hold EVERY line a box is held to on the
+    build days (stage 3's rows and the lock's lines 3.3-3.8: pipe_stages._box_rows), against `variant.pick_boxes`. `missed` = {line: how many
+    of the boxes miss it}: the row says them, the most missed first."""
+    need = PR.need("variant", "pick_boxes")
+    said = ", ".join(f"{k} by {v}" for k, v in sorted(missed.items(), key=lambda kv: (-kv[1], kv[0])))
+    return L._row("P1.3", n >= need, n, need, f"{n} of its {q} boxes at the floor hold{'s' * (n == 1)} every line a box is held to on the build days "
+                  f"(need at least {need})" + (f"; the lines missed: {said}" if said else ""), boxes=q, missed=dict(missed))
 
 
 # ================================================================ stage 3: one indicator on the heat map

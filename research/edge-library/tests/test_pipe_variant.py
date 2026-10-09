@@ -57,6 +57,7 @@ ROOT, POOLS = D / "pipe", D / "pools"
 TINY = {"days": TI.DAYS, "cells": TI.CELLS, "workers": 1, "draws": 200}
 CTX = {"root": ROOT, "tiny": TINY}
 _DONE: dict = {}
+BOX_ROWS, HOLDING = ST._box_rows, ST._holding            # the real readings of a box (qualify() cans ST._box_rows for the stages)
 
 
 @pytest.fixture(autouse=True)
@@ -92,10 +93,17 @@ def zero(name: str = NAME) -> dict:
     return ran(0, ST.stage0(add(name), CTX), name)
 
 
-def qualify(mp, five=None, one=0) -> None:
+SAME = {"eval": 0.0, "payout": 0.0, "size": None, "payout_size": None, "account": {"id": "the-account", "name": "the account"}}
+
+
+def qualify(mp, five=None, one=0, hold=None, odds=None) -> None:
     """G.variant_map answers by bar size: the 5-minute map passes with `five` boxes at the floor (None = all of its boxes), the 1-minute one with `one`
-    (0 = it fails). The cells are the first ones of each table. The rows are the real gate's."""
+    (0 = it fails). The cells are the first ones of each table. The rows are the real gate's. THE PICK'S TWO READINGS are canned too (3 build days
+    hold no line of a box): a box at the floor holds every line unless `hold` names the boxes that do (the others miss line 3.5), and every box has
+    the same prop odds unless `odds` = {box: (eval, payout)} says otherwise -- so with neither the pick is the middle box by build net, the tie rule's."""
     real = G.variant_map
+    mp.setattr(ST, "_box_rows", lambda t, c, days=None: [] if hold is None or c in hold else [{"line": "3.5", "passed": False}])
+    mp.setattr(ST, "_odds", lambda t, cells, days=None: {c: {**SAME, **dict(zip(("eval", "payout"), (odds or {}).get(c, (0.0, 0.0))))} for c in cells})
 
     def canned(t):
         r = real(t)
@@ -186,9 +194,70 @@ def test_stage_1_picks_the_middle_qualifying_box_and_writes_it_into_the_card(wor
     assert c["box"]["trades"] == len(x["net"]) and c["box"]["net"] == pytest.approx(float(x["net"].sum()))
     assert c["box"]["long"] == pytest.approx(float(x["net"][up].sum())) and c["box"]["short"] == pytest.approx(float(x["net"][~up].sum()))
     assert f"THE PICK: box {cell}" in c["text"] and "never the best" in c["text"] and c["text"].startswith(f"{A5} moves on")
-    assert [(t["sub"], t["bar"], t["result"], t["qualifying"]) for t in c["tables"]] == [(A1, "1", "fail", 0), (A5, "5", "pass", len(ids))]
+    assert [(t["sub"], t["bar"], t["result"], t["qualifying"], t["holding"]) for t in c["tables"]] == [(A1, "1", "fail", 0, 0), (A5, "5", "pass", len(ids), len(ids))]
     assert c["rules"] == {"mode": "variant", "variant": PR.need("variant"), "floor": 70}
-    assert TS.lines(c) == ["P1.1", "P1.2"] * 2
+    assert TS.lines(c) == ["P1.1", "P1.2", "P1.1", "P1.2", "P1.3"]                             # P1.3 only of a map that passed the loose check
+    p13 = c["lines"][-1]
+    assert (p13["passed"], p13["number"], p13["need"], p13["sub"]) == (True, len(ids), PR.need("variant", "pick_boxes"), A5)
+    assert c["box"]["holding"] == len(ids) and c["box"]["odds"] == {"account": "the-account", "eval": 0.0, "payout": 0.0, "size": None, "payout_size": None}
+
+
+def test_the_pick_is_the_middle_box_by_prop_odds_never_the_best_then_the_tie_rule():
+    rows = [{"id": f"c{i}", "net": n, "vi": 0, "xi": i} for i, n in enumerate((500.0, 100.0, 300.0, 200.0, 400.0))]
+    odds = {"c0": (0.10, 0.5), "c1": (0.40, 0.1), "c2": (0.20, 0.2), "c3": (0.30, 0.9), "c4": (0.50, 0.0)}
+    assert ST._pick(rows, odds) == "c3"                                                        # eval odds .10 .20 .30 .40 .50: the middle one -- not the best net (c0), not the best odds (c4)
+    assert ST._pick(rows, {k: odds[k] for k in ("c0", "c1", "c2", "c4")}) == "c2"              # .10 .20 .40 .50: an even count takes the LOWER middle
+    assert ST._pick(rows, {"c0": (0.3, 0.1), "c1": (0.3, 0.3), "c2": (0.3, 0.2)}) == "c2"      # equal eval odds: the payout odds decide
+    same = {k: (0.0, 0.0) for k in odds}
+    assert ST._pick(rows, same) == ST._middle(rows, list(same))                                # equal odds: the judge's tie rule, the middle by build net
+    assert ST._pick(rows, {"c1": (0.4, 0.1)}) == "c1" and ST._pick(rows, {}) is None
+    assert all(ST._pick(rows, {k: odds[k] for k in ks}) != max(ks, key=lambda k: odds[k]) for ks in (("c0", "c1", "c2"), ("c1", "c4"), tuple(odds)))
+
+
+def test_stage_1_picks_among_the_boxes_that_hold_every_line_of_a_box_by_their_prop_odds(world):
+    """The owner, 2026-10-09: a box at the floor that misses a line of a box is no candidate; of those that hold every line the middle one by the odds
+    to pass the eval is picked. Each box's lines are read off its own build trades (_box_rows: stage 3's rows and the lock's 3.3-3.8)."""
+    first(world)                                                                               # the stores are on file now
+    rows, ids = table_rows()
+    a, b, c3 = ids[:3]
+    qualify(world, hold=(a, b, c3), odds={a: (0.5, 0.0), b: (0.1, 0.0), c3: (0.3, 0.0)})
+    c = TS.whole(ST.stage1(NAME, CTX), 1)
+    assert c["passed"] is True and c["picked"]["cell"] == c3 and c["box"]["holding"] == 3 and c["box"]["odds"]["eval"] == 0.3
+    assert "the middle, by its odds to pass the eval on the account, of the 3 boxes" in c["text"] and f"(of {len(ids)} at the floor)" in c["text"] and "never the best" in c["text"]
+    p13 = c["lines"][-1]
+    assert (p13["line"], p13["passed"], p13["number"]) == ("P1.3", True, 3) and p13["missed"] == {"3.5": len(ids) - 3} and f"3.5 by {len(ids) - 3}" in p13["text"]
+    qualify(world, hold=(b,))
+    c = TS.whole(ST.stage1(NAME, CTX), 1)
+    assert c["picked"]["cell"] == b and f"the one box of its {len(ids)} at the floor that holds every line" in c["text"] and "never the best" not in c["text"]
+
+
+def test_the_lines_of_a_box_are_stage_3s_rows_and_the_locks(world):
+    first(world)                                                                               # the stores are on file (the canned readings are not used below)
+    _, ids = table_rows()
+    kw = ST._kw(NAME, CTX)
+    _, plan, specs = ST._idea(A5, kw)
+    t = ST._table(specs[0], plan, kw)
+    got = BOX_ROWS(t, ids[0], TINY["days"])
+    assert [x["line"] for x in got] == ["P3.2", "P3.3", "P3.4", "P3.6", "P3.7", "P3.8", "P3.9", "P3.10", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8"]
+    assert [x["text"] for x in got[:8]] == [x["text"] for x in G.variant_rows(ST._one_box(t, ids[0]), [])]                    # stage 3's own rows of that box
+    assert [x["text"] for x in got[8:]] == [x["text"] for x in ST._box(t["_u"], kw, ids[0])[1]] if ST._box(t["_u"], kw, ids[0]) else True
+    good, missed = HOLDING(t, ids, TINY["days"])
+    assert set(good) <= set(ids) and all(v <= len(ids) for v in missed.values()) and sum(missed.values()) >= len(ids) - len(good)
+
+
+def test_stage_1_takes_the_map_with_more_boxes_that_hold_and_stops_an_idea_with_none(world):
+    zero()
+    qualify(world, five=5, one=4)
+    t1 = lambda t: t["_u"]["tf"] == "1"  # noqa: E731
+    world.setattr(ST, "_box_rows", lambda t, c, days=None: [] if t1(t) and c == t["ids"][0] else [{"line": "P3.7", "passed": False}])
+    c = TS.whole(ST.stage1(NAME, CTX), 1)                                                      # 1 box holds on the 1-minute map, none on the 5-minute one (which has more at the floor)
+    assert c["passed"] is True and c["picked"]["sub"] == A1 and [(t["qualifying"], t["holding"]) for t in c["tables"]] == [(4, 1), (5, 0)]
+    world.setattr(ST, "_box_rows", lambda t, c, days=None: [{"line": "P3.7", "passed": False}, {"line": "3.6", "passed": False}] if c == t["ids"][0] else [{"line": "P3.7", "passed": False}])
+    c = TS.whole(ST.stage1(NAME, CTX), 1)
+    assert (c["passed"], c["result"], c["picked"]) == (False, "fail", None) and "code_problem" not in c
+    assert "no heat map has a box to pick" in c["text"] and A5 in c["text"] and "P3.7 by 5, 3.6 by 1" in c["text"] and "the idea is dropped" in c["text"]
+    bad = [x for x in c["lines"] if x["line"] == "P1.3"]                                       # (the loose check's own rows are the real gate's on 3 days: canned to pass)
+    assert [x["passed"] for x in bad] == [False, False] and bad[0]["need"] == PR.need("variant", "pick_boxes") == 1
 
 
 def test_stage_1_takes_the_owners_pick_when_it_is_one_of_the_boxes_at_the_floor(world):
@@ -223,6 +292,15 @@ def test_stage_1_takes_the_map_with_more_qualifying_boxes(world):
     assert c["picked"]["sub"] == A1 and c["picked"]["bar"] == "1" and c["picked"]["cell"] and [t["qualifying"] for t in c["tables"]] == [4, 3]
     qualify(world, five=5, one=4)
     assert ST.stage1(NAME, CTX)["picked"]["sub"] == A5
+
+
+def test_boxes_that_never_traded_are_named_with_their_setting_value(world):
+    """A value that cannot trade on a bar size (a 160-bar channel on 5-minute bars) leaves its boxes out of the judged map: stage 1 says so."""
+    st = {"meta": {"cells": [{"id": "a", "variant": {"n": 40}}, {"id": "b", "variant": {"n": 160}}, {"id": "c", "variant": {"n": 160}}]}, "_idx": {"a": 0, "b": 1, "c": 2}}
+    world.setattr(ST.J, "table", lambda st_, u: [{"id": "a", "trades": 5}, {"id": "b", "trades": 0}, {"id": "c", "trades": 0}])
+    assert ST._left_out({"_st": st, "_u": {}}) == {"boxes": 2, "values": ["n 160"], "text": "2 of its 3 boxes never traded and are left out (n 160)"}
+    world.setattr(ST.J, "table", lambda st_, u: [{"id": k, "trades": 1} for k in "abc"])
+    assert ST._left_out({"_st": st, "_u": {}}) is None
 
 
 # ================================================================ 3. stage 2

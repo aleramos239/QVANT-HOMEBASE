@@ -369,6 +369,19 @@ def test_a_number_changed_in_the_file_changes_the_gate():
         assert number not in src, f"{number} is typed in pipe_gates.py"
 
 
+def test_holding_is_the_row_of_the_boxes_at_the_floor_that_hold_every_line_of_a_box():
+    """Variant mode's row P1.3 (the owner, 2026-10-09): the pick is made among the boxes that hold every line a box is held to on the build days."""
+    need = P.need("variant", "pick_boxes")
+    r = G.holding(2, 40, {"P3.7": 30, "3.6": 30, "P3.8": 12})
+    assert (r["line"], r["passed"], r["number"], r["need"], r["boxes"]) == ("P1.3", 2 >= need, 2, need, 40) and r["missed"] == {"P3.7": 30, "3.6": 30, "P3.8": 12}
+    assert f"2 of its 40 boxes at the floor hold every line a box is held to on the build days (need at least {need})" in r["text"]
+    assert r["text"].endswith("the lines missed: 3.6 by 30, P3.7 by 30, P3.8 by 12")           # the most missed first, then by name
+    none = G.holding(0, 40, {"P3.7": 40})
+    assert none["passed"] is False and none["number"] == 0 and "0 of its 40 boxes" in none["text"]
+    one = G.holding(1, 1, {})
+    assert "1 of its 1 boxes at the floor holds every line" in one["text"] and "missed" not in one["text"]
+
+
 if __name__ == "__main__":
     import time
     rc = 0
