@@ -161,7 +161,8 @@ function mount(box, host) {
     cb.type = 'checkbox';
     cb.checked = line.visible !== false;
     cb.onchange = () => { line.visible = cb.checked; preview(); };
-    name.append(cb, mk('span', '', (LINE_LABEL[inst.id] || {})[key] || key));
+    const generic = C.TA_BY_ID[inst.id] && C.TA_BY_ID[inst.id].lines.find((l) => l.part === key);
+    name.append(cb, mk('span', '', (LINE_LABEL[inst.id] || {})[key] || (generic && generic.label) || key));
     const sw = button('swatch'), i = mk('i');
     i.style.background = line.color;
     sw.title = `${name.textContent} colour`;

@@ -35,7 +35,7 @@ function classicOpen(weekday, minutes) {
 function marketOpen(root, weekday, minutes) {
   return ALWAYS_OPEN.has(root) || classicOpen(weekday, minutes);
 }
-const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Levels', 'Volume', 'Order flow'];
+const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Ranges', 'Levels', 'Volume', 'Order flow'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
 // SMA/EMA (studies.py SOURCES): "sma:50"/"ema:20" keep meaning close -- the source param defaults to it.
 const SOURCES = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'],
@@ -44,6 +44,83 @@ const SOURCE = { key: 'source', label: 'Source', type: 'choice', choices: SOURCE
 const BAND = (n, def) => [
   { key: `band${n}On`, label: `Band ${n}`, type: 'bool', def: false },
   { key: `band${n}Mult`, label: `Band ${n} multiplier`, type: 'num', min: 0.1, max: 10, step: 0.1, def }];
+/* 2026-10-09: the technical indicators are DATA, not switch cases. Each entry says how its server key is built
+   (`key`, matching studies_ta.py's wire keys), how its legend label reads, and every line it draws: `part` (the
+   Style tab's key), a default colour/width/dash, and optionally `read` (the number to plot from the server's
+   value; default: the value itself, or value[part]), `type: 'hist'` (a histogram coloured by sign) and `tag`
+   false (no price-axis tag). `refs` are the dashed reference lines of an own-pane study. Each is the same
+   definition the strategy engine's blocks read (studies_ta.py). A def with `pane` can live in a pane of its own
+   or on the price pane; one without is drawn on the price pane only. */
+const TA_UP = '#089981', TA_DOWN = '#F23645', TA_BLUE = '#2962FF', TA_ORANGE = '#FF6D00', TA_VIOLET = '#7E57C2', TA_GREY = '#787B86';
+const TA_LEN = (def, min = 2, max = 500) => ({ key: 'length', label: 'Length', type: 'int', min, max, def });
+const TA_LINE = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
+const TA_DEFS = [
+  { id: 'rsi', group: 'Momentum', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
+    label: (p) => `RSI ${p.length}`, desc: 'Relative strength: how strongly the last N bars closed up versus down, 0 to 100',
+    lines: [TA_LINE('main', 'RSI', TA_VIOLET)], refs: [70, 30] },
+  { id: 'macd', group: 'Momentum', name: 'MACD', pane: 'own', key: (p) => `macd:${p.fast}:${p.slow}:${p.signal}`,
+    params: [{ ...TA_LEN(12), key: 'fast', label: 'Fast length' }, { ...TA_LEN(26), key: 'slow', label: 'Slow length' },
+      { ...TA_LEN(9, 1), key: 'signal', label: 'Signal length' }],
+    label: (p) => `MACD ${p.fast} ${p.slow} ${p.signal}`, desc: 'Fast minus slow EMA, its signal line and the histogram between them',
+    lines: [TA_LINE('hist', 'Histogram', TA_UP, 1, 'solid', { type: 'hist', tag: false }), TA_LINE('macd', 'MACD', TA_BLUE),
+      TA_LINE('signal', 'Signal', TA_ORANGE)] },
+  { id: 'stoch', group: 'Momentum', name: 'Stochastic', pane: 'own', key: (p) => `stoch:${p.length}:${p.smooth}:${p.d}`,
+    params: [{ ...TA_LEN(14), label: 'K length' }, { ...TA_LEN(3, 1, 100), key: 'smooth', label: 'K smoothing' },
+      { ...TA_LEN(3, 1, 100), key: 'd', label: 'D smoothing' }],
+    label: (p) => `Stoch ${p.length} ${p.smooth} ${p.d}`, desc: 'Where the close sits inside the last N bars range, 0 to 100, with its signal line',
+    lines: [TA_LINE('k', '%K', TA_BLUE), TA_LINE('d', '%D', TA_ORANGE)], refs: [80, 20] },
+  { id: 'mfi', group: 'Momentum', name: 'Money flow index', pane: 'own', params: [TA_LEN(14)], key: (p) => `mfi:${p.length}`,
+    label: (p) => `MFI ${p.length}`, desc: 'Volume-weighted RSI: buying versus selling pressure over the last N bars, 0 to 100',
+    lines: [TA_LINE('main', 'MFI', TA_VIOLET)], refs: [80, 20] },
+  { id: 'er', group: 'Trend', name: 'Efficiency ratio', pane: 'own', params: [TA_LEN(14)], key: (p) => `er:${p.length}`,
+    label: (p) => `ER ${p.length}`, desc: 'Net move over the path travelled in N bars: 1 is a straight line, near 0 is chop',
+    lines: [TA_LINE('main', 'ER', TA_BLUE)], refs: [0.5, 0.25] },
+  { id: 'atr', group: 'Volatility', name: 'ATR', pane: 'own', params: [TA_LEN(14, 1)], key: (p) => `atr:${p.length}`,
+    label: (p) => `ATR ${p.length}`, desc: 'Average true range: the typical bar size over the last N bars, in points',
+    lines: [TA_LINE('main', 'ATR', TA_DOWN)] },
+  { id: 'bb', group: 'Volatility', name: 'Bollinger bands', key: (p) => `bb:${p.length}:${p.mult}`,
+    params: [TA_LEN(20), { key: 'mult', label: 'Deviations', type: 'num', min: 0.5, max: 6, step: 0.5, def: 2 }],
+    label: (p) => `BB ${p.length} ${p.mult}`, desc: 'The N-bar average of closes with bands this many standard deviations either side',
+    lines: [TA_LINE('up', 'Upper', TA_BLUE, 1, 'solid', { tag: false }), TA_LINE('mid', 'Basis', TA_ORANGE, 1, 'dashed', { tag: false }),
+      TA_LINE('dn', 'Lower', TA_BLUE, 1, 'solid', { tag: false })] },
+  { id: 'keltner', group: 'Volatility', name: 'Keltner channel', key: (p) => `keltner:${p.length}:${p.atr}:${p.mult}`,
+    params: [TA_LEN(20), { ...TA_LEN(20, 1), key: 'atr', label: 'Range length' },
+      { key: 'mult', label: 'Multiplier', type: 'num', min: 0.5, max: 10, step: 0.5, def: 1.5 }],
+    label: (p) => `KC ${p.length} ${p.atr} ${p.mult}`, desc: 'An EMA with bands set by the average true range, the squeeze strategy channel',
+    lines: [TA_LINE('up', 'Upper', TA_VIOLET, 1, 'solid', { tag: false }), TA_LINE('mid', 'Basis', TA_GREY, 1, 'dashed', { tag: false }),
+      TA_LINE('dn', 'Lower', TA_VIOLET, 1, 'solid', { tag: false })] },
+  { id: 'donchian', group: 'Volatility', name: 'Donchian channel', params: [TA_LEN(20)], key: (p) => `donchian:${p.length}`,
+    label: (p) => `Donchian ${p.length}`, desc: 'Highest high and lowest low of the last N bars, with the middle between them',
+    lines: [TA_LINE('up', 'Upper', TA_BLUE, 1, 'solid', { tag: false }), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', { tag: false }),
+      TA_LINE('dn', 'Lower', TA_BLUE, 1, 'solid', { tag: false })] },
+  { id: 'supertrend', group: 'Trend', name: 'Supertrend', key: (p) => `supertrend:${p.length}:${p.mult}`,
+    params: [TA_LEN(10, 1, 200), { key: 'mult', label: 'Multiplier', type: 'num', min: 0.5, max: 10, step: 0.5, def: 3 }],
+    label: (p) => `Supertrend ${p.length} ${p.mult}`, desc: 'A trailing ATR line under price in an uptrend and over it in a downtrend',
+    lines: [TA_LINE('up', 'Uptrend', TA_UP, 2, 'solid', { read: (v) => (v.dir === 1 ? v.line : null) }),
+      TA_LINE('dn', 'Downtrend', TA_DOWN, 2, 'solid', { read: (v) => (v.dir === -1 ? v.line : null) })] },
+  { id: 'tema', group: 'Moving averages', name: 'TEMA', params: [TA_LEN(20)], key: (p) => `tema:${p.length}`,
+    label: (p) => `TEMA ${p.length}`, desc: 'Triple exponential moving average: follows price closely with little lag',
+    lines: [TA_LINE('main', 'TEMA', TA_ORANGE)] },
+  { id: 'orb', group: 'Ranges', name: 'Opening range', key: (p) => `orb:${p.minutes}`,
+    params: [{ key: 'minutes', label: 'Minutes from 09:30', type: 'int', min: 1, max: 240, def: 15 }],
+    label: (p) => `Opening range ${p.minutes}m`, desc: 'High, low and middle of the first N minutes after the 09:30 ET open, all day',
+    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', { tag: false }), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', { tag: false }),
+      TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', { tag: false })] },
+  { id: 'sess', group: 'Ranges', name: 'Session range', key: (p) => `sess:${p.session}`,
+    params: [{ key: 'session', label: 'Session', type: 'choice', def: 'london',
+      choices: [['asia', 'Asia 00:00-03:00'], ['london', 'London 03:00-08:25'], ['pre', 'Pre-market 08:25-09:30'], ['nyam', 'NY morning 09:30-11:00']] }],
+    label: (p) => `${{ asia: 'Asia', london: 'London', pre: 'Pre-market', nyam: 'NY morning' }[p.session] || 'Session'} range`,
+    desc: 'High and low of one trading session (ET), kept on the chart for the rest of that day',
+    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', { tag: false }), TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', { tag: false })] },
+];
+const TA_BY_ID = Object.fromEntries(TA_DEFS.map((d) => [d.id, d]));
+/* The number a generic line plots from the server's value `v` for one bar, or null (still warming up). */
+function lineValue(ln, v) {
+  if (v == null) return null;
+  const x = ln.read ? ln.read(v) : typeof v === 'number' ? v : v[ln.part];
+  return typeof x === 'number' && Number.isFinite(x) ? x : null;
+}
+
 /* W5 (2026-09-28): `desc` is the one plain line the Indicators dialog shows under each name (TradingView-style). */
 const CATALOG = [
   { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main',
@@ -74,6 +151,7 @@ const CATALOG = [
     { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 }] },
   { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
   { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', params: [], desc: 'Resting book size at each price over time, drawn behind the candles' },
+  ...TA_DEFS,
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
@@ -197,7 +275,7 @@ const STYLE_LINES = { vwap: ['main', 'band1', 'band2', 'band3'], ema: ['main'], 
   adx: ['adx', 'pdi', 'mdi'], cumdelta: ['main'] };
 // delta has no Style tab: it draws a per-bar up/down-coloured histogram, not a single line -- style-able
 // the same way would need its own up/down fields, not this one-colour-per-key shape (spec: "unless trivial").
-function styleLineKeys(id) { return STYLE_LINES[id] || null; }
+function styleLineKeys(id) { return STYLE_LINES[id] || (TA_BY_ID[id] ? TA_BY_ID[id].lines.map((l) => l.part) : null); }
 
 const VWAP_DEFAULT = '#9C27B0';   // cell.js palette().vwap -- today's single-VWAP purple, kept as the first colour
 const UP_DEFAULT = '#089981', DOWN_DEFAULT = '#F23645';   // palette().up/.down -- theme-independent
@@ -228,7 +306,14 @@ function defaultStyle(id, siblings) {
       band2: lineStyle(color, 1, 'dashed'), band3: lineStyle(color, 1, 'dashed') };
     case 'adx': return { adx: lineStyle(color, 2, 'solid'), pdi: lineStyle(UP_DEFAULT, 1, 'solid'),
       mdi: lineStyle(DOWN_DEFAULT, 1, 'solid') };
-    default: return { main: lineStyle(color, id === 'cumdelta' ? 2 : 1, 'solid') };   // ema, sma, vwma, delta, cumdelta
+    default: {
+      if (TA_BY_ID[id]) {   // a second copy of the same indicator moves its first line's colour on, the rest keep theirs
+        const out = {}, again = (siblings || []).some((x) => x.id === id);
+        TA_BY_ID[id].lines.forEach((l, i) => { out[l.part] = lineStyle(again && i === 0 ? color : l.color, l.width, l.dash); });
+        return out;
+      }
+      return { main: lineStyle(color, id === 'cumdelta' ? 2 : 1, 'solid') };   // ema, sma, vwma, delta, cumdelta
+    }
   }
 }
 
@@ -289,7 +374,7 @@ function serverKey(inst) {
     case 'ema': case 'sma': return `${inst.id}:${p.length}${p.source && p.source !== 'close' ? `:${p.source}` : ''}`;
     case 'vwma': case 'adx': return `${inst.id}:${p.length}`;
     case 'levels': case 'cumdelta': case 'profile': return inst.id;
-    default: return null;
+    default: return TA_BY_ID[inst.id] ? TA_BY_ID[inst.id].key(p) : null;
   }
 }
 
@@ -404,7 +489,7 @@ function label(inst) {
     case 'footprint': return p.imbalance > 0 ? `Footprint ${p.imbalance}×` : 'Footprint';
     case 'bigprints': return `Big prints ≥${p.min}`;
     case 'bigorders': return `Big orders ${p.multiple}×`;
-    default: return d.name;
+    default: return d.label ? d.label(p) : d.name;
   }
 }
 
@@ -451,7 +536,16 @@ function legendValues(inst, bar, colors, tick) {
     case 'adx': return [{ text: n2(v && v.adx), color: colors.text }, { text: n2(v && v.pdi), color: colors.up },
       { text: n2(v && v.mdi), color: colors.down }];
     case 'cumdelta': return [{ text: fmtSigned(v), color: colors.cum }];
-    default: return [];
+    default: {
+      const t = TA_BY_ID[inst.id];
+      if (!t) return [];
+      // one value per drawn line, in that line's own colour; the histogram and a hidden line add nothing
+      const st = inst.style || {}, out = t.lines.filter((ln) => !(st[ln.part] && st[ln.part].visible === false))
+        .map((ln) => ({ text: n2(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
+      // lines that take turns (Supertrend's up / down side) show only the one in force
+      const live = out.filter((x) => !x.pick || x.on);
+      return (live.length ? live : out.slice(0, 1)).map(({ text, color }) => ({ text, color }));
+    }
   }
 }
 
@@ -629,7 +723,7 @@ function filter(query, group = 'All') {
 }
 
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
-  defaults, serverKey, serverKeys, migrate, migrateLayout, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
+  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };

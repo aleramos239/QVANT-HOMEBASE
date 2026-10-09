@@ -255,7 +255,7 @@ function hostFor(id) {
    between two charts; dragging it trades width (or height) between the two tracks beside it, double-click puts
    that direction back to equal. A column divider moves for every row of the grid, as in a spreadsheet. */
 function trackSizes() {
-  const [cols, rows] = GRIDS[layout.grid] || GRIDS[4], sz = layout.sizes;
+  const [cols, rows] = GRIDS[layout.grid] || GRIDS[4], sz = C.cleanSizes(layout.sizes, layout.grid);   // sizes of another grid count for nothing
   return { cols: sz ? sz.cols.slice() : Array(cols).fill(1), rows: sz ? sz.rows.slice() : Array(rows).fill(1) };
 }
 function applyTracks(t = trackSizes()) {
