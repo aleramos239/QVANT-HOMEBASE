@@ -281,6 +281,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .dialog { width: min(720px, 92vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden;
   background: var(--panel); border-radius: 8px; box-shadow: var(--shadow-dialog); }
 .dialog.small { width: min(380px, 92vw); }
+.dialog.indicators { height: min(600px, 80vh); }   /* the Indicators card keeps one size whichever group is open; the list scrolls */
 .dlg-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 16px 12px 12px 20px;
   font-size: 20px; font-weight: 600; letter-spacing: -.015em; }   /* the biggest text in the app -- size-specific tracking, feel pass */
 .dlg-x { width: 32px; height: 32px; display: grid; place-items: center; border-radius: 6px; color: var(--text); }

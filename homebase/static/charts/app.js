@@ -1207,7 +1207,7 @@ function trapTab(e) {   // Tab stays inside the open dialog
 function indicatorsDialog() {
   const c = cur();
   if (!c) return;
-  const box = openDialog('Indicators');
+  const box = openDialog('Indicators', 'indicators');   // a fixed size (charts.css): a short group scrolls inside it, never shrinks the card
   const search = mk('label', 'dlg-search'), input = mk('input');
   input.type = 'search'; input.placeholder = 'Search'; input.spellcheck = false;
   input.setAttribute('aria-label', 'Search indicators');
