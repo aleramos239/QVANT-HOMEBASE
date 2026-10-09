@@ -521,13 +521,74 @@ function plBookFull(card, stages) {
       .map(([n, s]) => ({ n: Number(n), name: names[n] || '', mark: plMark(s && s.passed), text: String((s && s.text) || '') })) };
 }
 
+/* -- what a Book strategy did: its row's one line, its numbers as tiles, its equity curve (2026-10-09) -- */
+const plSigned = (v) => (plNum(v) == null ? DASH : `${v > 0 ? '+' : v < 0 ? '−' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`);
+const plTone$ = (v) => (plNum(v) == null || v === 0 ? '' : v > 0 ? 'pos' : 'neg');
+/* The line under a Book row's name: its net, then trades and profit factor. One contract, after costs, on the unseen days. */
+function plBookLine(card) {
+  const c = card || {}, rest = [];
+  if (plNum(c.trades) != null) rest.push(`${plWhole(c.trades)} trade${c.trades === 1 ? '' : 's'}`);
+  if (plNum(c.profit_factor) != null) rest.push(`PF ${c.profit_factor.toFixed(2)}`);
+  return { net: plSigned(c.net), tone: plTone$(c.net), rest: rest.join(' · ') };
+}
+/* A curve's numbers as tiles, in the order a person asks: [{k, v, tone}]. `cv` = GET /pipeline/curve/<name> (or a watch snapshot). */
+function plCurveTiles(cv) {
+  const c = cv || {};
+  return [{ k: 'Net profit', v: plSigned(c.net), tone: plTone$(c.net) }, { k: 'Trades', v: plWhole(c.trades), tone: '' },
+    { k: 'Win rate', v: plPct(c.win_rate), tone: '' }, { k: 'Average trade', v: plSigned(c.avg_trade), tone: plTone$(c.avg_trade) },
+    { k: 'Profit factor', v: plFixed(c.profit_factor, 2), tone: '' }, { k: 'Worst day', v: plMoney(c.worst_day), tone: '' },
+    { k: 'Deepest drawdown', v: plNum(c.max_drawdown) == null ? DASH : plMoney(-Math.abs(c.max_drawdown)), tone: '' },
+    { k: 'Days traded', v: plWhole(c.days), tone: '' }];
+}
+/* The equity curve as SVG geometry in a w x h box with `pad` inside it: the running total, one point a traded day, starting from 0
+   the day before the first. -> {line, area, zero (y of $0), dot [x, y], min, max, last, up} or null with fewer than 2 days.
+   x is spread by POSITION (a traded day each step), so a quiet month does not flatten the line. */
+function plCurvePath(curve, w, h, pad = 6) {
+  const pts = (Array.isArray(curve) ? curve : []).filter((p) => Array.isArray(p) && plNum(p[2]) != null);
+  if (pts.length < 2) return null;
+  const ys = [0, ...pts.map((p) => p[2])], min = Math.min(...ys), max = Math.max(...ys), span = max - min || 1;
+  const X = (i) => pad + (i / (ys.length - 1)) * (w - 2 * pad), Y = (v) => pad + (1 - (v - min) / span) * (h - 2 * pad);
+  const r = (n) => Math.round(n * 10) / 10;
+  const xy = ys.map((v, i) => [r(X(i)), r(Y(v))]);
+  const line = xy.map(([x, y], i) => `${i ? 'L' : 'M'}${x} ${y}`).join(' '), zero = r(Y(0));
+  return { line, area: `${line} L${xy[xy.length - 1][0]} ${zero} L${xy[0][0]} ${zero} Z`, zero, dot: xy[xy.length - 1], min, max,
+    last: ys[ys.length - 1], up: ys[ys.length - 1] >= 0 };
+}
+/* The day under a pointer at x (0 .. w) on that curve: its index into `curve`, or -1 left of the first day (the $0 start). */
+function plCurveAt(curve, x, w, pad = 6) {
+  const n = (Array.isArray(curve) ? curve : []).length;
+  if (n < 2) return -1;
+  const i = Math.round(((x - pad) / (w - 2 * pad)) * n);
+  return Math.max(0, Math.min(n, i)) - 1;
+}
+
+/* The words beside the curve for the day under the pointer (i = plCurveAt: -1 is the $0 start; null = no pointer: the last value). Plain text. */
+function plCurveRead(cv, i) {
+  const c = cv || {}, pts = Array.isArray(c.curve) ? c.curve : [];
+  if (i == null) return `${plText(c.end)} · ${plSigned(c.net)}`;
+  if (i < 0 || !pts[i]) return `before ${plText(c.start)} · $0`;
+  return `${pts[i][0]} · ${plSigned(pts[i][2])} (${plSigned(pts[i][1])} that day)`;
+}
+/* One plain sentence after Show executions on chart: `j` = the server's answer {trades, of, start, end, pages}. */
+function plExecSaid(name, j) {
+  const r = j || {}, n = plNum(r.trades) || 0, lost = plNum(r.of) != null && r.of > n ? r.of - n : 0;
+  return `${n} execution${n === 1 ? '' : 's'} of ${name} (${plText(r.start)} to ${plText(r.end)})${lost ? `, ${lost} could not be priced` : ''}. `
+    + (r.pages ? 'They are on the chart: it shows the last day it traded, and its trade list steps through the rest.'
+      : 'No chart page is open: open the Charts tab, then press this again.');
+}
+/* One plain sentence after a strategy goes on, or comes off, the Desk's watch list. */
+function plWatchSaid(what, name) {
+  return what === 'promote' ? `${name} is on the Desk page now, under Strategies. It is watch-only: it shows its results there and places no orders.`
+    : `${name} is off the Desk page. It stays in the Book and can be promoted again.`;
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  plPct, plMoney, plBookCard, plBookFull };
+  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
