@@ -100,7 +100,7 @@ and --json out.
   bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
-  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck             refused with its rows; `start` = the runner, detached,
+  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
                                                                              that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
@@ -112,6 +112,8 @@ and --json out.
                                                                              running, awaits the owner or is in the book.
                                                                              `luck` = the luck count: the ideas read on the unseen days,
                                                                              how many passed, and what luck alone gives (pipe_runner.luck).
+                                                                             `near` = the near misses: what stopped closest to a line
+                                                                             before the unseen days, the closest first (pipe_runner.near).
                                                                              For `pipe`, --root is the PIPELINE's own folder
                                                                              (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
                                                                              never the app's idea folder
@@ -229,7 +231,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,curve,executions}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,curve,executions}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -238,6 +240,7 @@ def _parser() -> _Parser:
         ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
         ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"),
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
+        ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself

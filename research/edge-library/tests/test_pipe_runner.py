@@ -606,6 +606,39 @@ def test_the_luck_count_holds_the_reads_of_the_unseen_days_against_what_luck_alo
     assert rc == 0 and out.splitlines()[-2:] == ["", "luck count: 2 ideas read on the unseen days, 1 passed; luck alone gives at most 0.1 (bp.py pipe luck)"]
 
 
+def test_the_near_misses_are_the_stopped_ideas_by_how_far_their_worst_row_was_from_its_need(root):
+    """The owner, 2026-10-09: nothing that stopped close to a line goes out of sight. Stage 6 is final and a code problem is no verdict: neither is listed."""
+    R = f"--root={root}"
+    rc, r = run(["pipe", "near", R])
+    assert rc == 0 and (r["command"], r["ideas"], r["shown"]) == ("pipe near", [], 0) and r["text"] == "no idea has stopped on a verdict before the unseen days"
+    row = lambda line, n, need, text, **k: {"line": line, "passed": False, "number": n, "need": need, "text": f"{line} FAIL {text}", **k}  # noqa: E731
+    cards = {"sharpe": (5, [row("3.5", 0.97, 1, "Sharpe 0.97 (need 1)")]),                                              # missed by 3 %
+             "proof": (4, [row("P4.1", 0.704, 0.75, "70.4 % of the runs (need 75 %)")]),                              # by 6.1 %
+             "two_rows": (3, [row("P3.10", 9, 8, "9 losing days (need 8)"), row("P3.8", 0.35, 0.7, "35 % of months (need 70 %)")]),      # its WORST row: 50 %
+             "yes_no": (3, [row("P3.7", -5000.0, 0, "-$5,000 without its best trades (need above $0)")]),               # a need of 0: no measure
+             "maps": (1, [row("P1.1", 0.125, 0.5, "12.5 %", sub="maps_a1"), row("P1.2", 0, 25, "0 boxes", sub="maps_a1"),
+                          {"line": "P1.1", "passed": True, "number": 0.68, "need": 0.5, "text": "P1.1 PASS", "sub": "maps_a5"}, row("P1.2", 22, 25, "22 boxes (need 25)", sub="maps_a5")]),
+             "old_map": (1, [row("P1.2", 28.0, {"strict": 70, "low": 35}, "average trade $28", sub="old_map_a5")]),   # the old two-bar row: its low bar, 20 %
+             "final": (6, [row("4.3", 22.0, 70, "average trade $22 (need $70)")]),
+             "broken": (2, [row("P2.5", 3, 0, "3 prices off")])}
+    for name, (n, lines_) in cards.items():
+        idea(root, name)
+        PS.write_stage(name, n, card(n, name, passed=False, lines=lines_, **({"code_problem": True} if name == "broken" else {})), root)
+        PS.set_state(name, root, status="code_problem" if name == "broken" else "stopped", stage=n, stopped_at=n)
+    idea(root, "going")
+    rc, r = run(["pipe", "near", R])
+    got = [(x["name"], x["stage"], x["line"], None if x["gap"] is None else round(x["gap"], 3)) for x in r["ideas"]]
+    assert got == [("sharpe", 5, "3.5", 0.03), ("proof", 4, "P4.1", 0.061), ("maps", 1, "P1.2", 0.12), ("old_map", 1, "P1.2", 0.2), ("two_rows", 3, "P3.8", 0.5),
+                   ("yes_no", 3, "P3.7", None)]
+    assert r["ideas"][2]["missed"] == ["P1.2"] and r["ideas"][2]["text"] == "P1.2 FAIL 22 boxes (need 25)"           # stage 1: the map that came closest
+    assert r["ideas"][4]["missed"] == ["P3.10", "P3.8"]
+    out = r["text"].splitlines()
+    assert out[0].startswith("The near misses: 6 ideas stopped on a verdict before the unseen days; the closest 6") and out[0].endswith("A near miss is not a pass.")
+    assert out[1].split() == ["name", "stage", "rows", "missed", "worst", "by", "the", "worst", "row"] and out[2].split()[:4] == ["sharpe", "5", "1", "3"]
+    assert out[-1].split()[:4] == ["yes_no", "3", "1", "-"] and len(out) == 8
+    assert PR.near(root, top=2)["shown"] == 2 and len(PR.near(root, top=2)["text"].splitlines()) == 4
+
+
 def test_pick_names_the_box_with_a_reason_and_clear_takes_it_away(root):
     """The owner's pick (2026-10-09): command line only; no reason, no cell, no idea = refused; the pick survives a rerun."""
     R = f"--root={root}"

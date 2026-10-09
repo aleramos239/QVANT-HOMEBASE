@@ -60,6 +60,10 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      beat on those days, and what that is by luck over all R reads ((1 - its share) x R, at most 1). And by
                                      family: ideas, read, passed (close cousins share their luck). `pipe book` ends with the count's one line
                                      once an idea was read. Runs nothing; reads the states and the stage-6 cards
+  near(root=None, top=NEAR) -> result
+                                     `pipe near`: THE NEAR MISSES. Every idea that stopped on a verdict before the unseen days (stages 1-5), with
+                                     the rows it missed and how far its WORST row was from its need, the closest first. A near miss is not a
+                                     pass: the board keeps what stopped close in sight. Runs nothing
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -103,7 +107,8 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "near")
+NEAR, NEAR_TEXT, NEAR_STAGES = 15, 110, (1, 2, 3, 4, 5)   # the near misses: the rows shown, the characters of a row's text, the stages that stop on a verdict before the unseen days
 RANDOM = "4.4"                                      # the read's line on the random tables: its bar is what an idea with no edge passes by luck
 
 
@@ -145,10 +150,9 @@ def _blank(n: int, was: dict, t0: float, text: str, **more) -> dict:
             "rules": {}, "utc": _utc(), "seconds": round(time.monotonic() - t0, 1), **more}
 
 
-def _why(card: dict):
-    """THE ROW A STOPPED IDEA IS KNOWN BY (its state's `why`, a row of `pipe list`): the first failed row of its stage card -- at stage 1, where
-    every heat map has rows of its own, of the map that came CLOSEST (the fewest failed rows, then the bigger share of boxes profitable: row
-    P1.1's number), not of the first map. None: the card has no failed row with a text."""
+def _missed(card: dict) -> list:
+    """The failed rows a stopped idea is known by: those of its stage card -- at stage 1, where every heat map has rows of its own, those of
+    the map that came CLOSEST (the fewest failed rows, then the bigger share of boxes profitable: row P1.1's number), not of the first map."""
     rows = [r for r in card.get("lines") or [] if isinstance(r, dict)]
     bad = [r for r in rows if r.get("passed") is False and r.get("text")]
     if card.get("stage") == 1 and bad and all(r.get("sub") for r in bad):
@@ -157,6 +161,12 @@ def _why(card: dict):
             return sum(r.get("passed") is False for r in mine), -next((r.get("number") or 0 for r in mine if r.get("line") == "P1.1"), 0)
         best = min(dict.fromkeys(r["sub"] for r in bad), key=far)
         bad = [r for r in bad if r["sub"] == best]
+    return bad
+
+
+def _why(card: dict):
+    """THE ROW A STOPPED IDEA IS KNOWN BY (its state's `why`, a row of `pipe list`): the first of _missed. None: no failed row with a text."""
+    bad = _missed(card)
     return bad[0]["text"] if bad else None
 
 
@@ -451,6 +461,41 @@ def luck(root=None) -> dict:
     return api.result("pipe luck", ideas=len(done), read=n, passed=k, alpha=alpha, by_luck=most, any_luck=one, reads=reads, families=fam, said=said, text="\n".join(text))
 
 
+def _gap(row: dict):
+    """How far a failed row's number is from its need, as a share of the need (0.06 = it missed by 6 %); None: the row holds no two numbers to
+    compare (a yes / no row, a need of 0, a row of the old map mode with two bars: its low bar is read)."""
+    n, need = row.get("number"), row.get("need")
+    need = need.get("low") if isinstance(need, dict) else need
+    ok = all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in (n, need))
+    return abs(n - need) / abs(need) if ok and need else None
+
+
+def near(root=None, top: int = NEAR) -> dict:
+    """`pipe near`: THE NEAR MISSES (the owner, 2026-10-09: "i want to make it so we dont have to worry about missing a strategy under our nose").
+    Every idea that STOPPED ON A VERDICT before the unseen days (stages 1 to 5; a code problem is no verdict, stage 6 is final), with the rows it
+    missed (_missed) and how far its WORST row was from its need (_gap) -- the closest first: an idea that missed every row by a little comes
+    before one that missed one row by a lot; an idea with a row that has no measure (a yes / no row) comes after those that have one, the later
+    stage first. The first `top` are in the text. A near miss is NOT a pass: the board only keeps what stopped close in sight. Runs nothing."""
+    rows = []
+    for x in PS.ideas(root):
+        n = x.get("stopped_at")
+        card = PS.stages(x["name"], root).get(n) if x.get("status") == "stopped" and n in NEAR_STAGES else None
+        bad = _missed(card) if card and not card.get("code_problem") else []
+        if not bad:
+            continue
+        gaps = [_gap(r) for r in bad]
+        worst = None if None in gaps else max(gaps)
+        at = bad[gaps.index(worst)] if worst is not None else bad[0]
+        rows.append({"name": x["name"], "family": x.get("family"), "stage": n, "missed": [r.get("line") for r in bad], "gap": worst, "line": at.get("line"), "text": at["text"]})
+    rows.sort(key=lambda r: (r["gap"] is None, r["gap"] if r["gap"] is not None else -r["stage"], -r["stage"], r["name"]))
+    shown = rows[:max(0, int(top))]
+    text = [f"The near misses: {len(rows)} idea{'s' * (len(rows) != 1)} stopped on a verdict before the unseen days; the closest {len(shown)}, by how far the worst "
+            "row they missed was from its need. A near miss is not a pass."] if rows else ["no idea has stopped on a verdict before the unseen days"]
+    text += _table(("name", "stage", "rows missed", "worst by", "the worst row"),
+                   [(r["name"], r["stage"], len(r["missed"]), "-" if r["gap"] is None else _pct(r["gap"]), r["text"][:NEAR_TEXT]) for r in shown], right=(1, 2, 3)) if shown else []
+    return api.result("pipe near", ideas=rows, shown=len(shown), text="\n".join(text))
+
+
 def booked(root=None) -> dict:
     """`pipe book`: one row a book card; then the luck count's line, once an idea was read on the unseen days."""
     cards = PS.book(root)
@@ -498,6 +543,8 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return booked(root)
     if sub == "luck":
         return luck(root)
+    if sub == "near":
+        return near(root)
     if sub == "rerun":
         return rerun(name, root)
     if sub == "pick":
