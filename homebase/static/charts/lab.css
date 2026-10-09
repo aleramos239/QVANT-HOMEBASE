@@ -345,10 +345,6 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 .rs-chips { margin: 10px 4px 0; }
 
 /* ---- the blueprint toolkit: the sidebar's second list, and a tool's sheet ---- */
-.lb-seg { display: flex; gap: 2px; padding: 2px; border-radius: var(--hb-r-cap); background: var(--hb-seg-bg); }
-.lb-seg button { height: 24px; padding: 0 11px; border: 0; border-radius: calc(var(--hb-r-cap) - 2px); background: transparent; color: var(--hb-fg2); font-size: var(--hb-fs-ui); font-weight: 500; cursor: pointer; }
-.lb-seg button[aria-selected="true"] { background: var(--hb-seg-on); color: var(--hb-fg); box-shadow: var(--hb-seg-shadow); }
-.lb-seg button:focus-visible { outline: 0; box-shadow: 0 0 0 1.5px var(--hb-accent); }
 .lb-item > svg:first-child:not(.lb-ico) { width: 9px; height: 9px; color: var(--hb-fg2); justify-self: center; }
 .lb-item.bp-row { min-height: 42px; padding-top: 5px; padding-bottom: 5px; }      /* two lines: a tool's name is never cut short for its phase */
 .lb-item.bp-row .it { flex-direction: column; align-items: flex-start; gap: 0; }
@@ -372,8 +368,6 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 .bp-out:focus-visible { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 
 /* ---- the toolkit's blocks: the sidebar's third list, and a block's code ---- */
-.lb-seg button { padding: 0 6px; }
-@media (max-width: 1180px) { .lb-seg button { font-size: 12px; } }
 .tk-find { padding: 0 4px 6px; }
 .tk-find input { width: 100%; height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-ui); outline: none; }
 .tk-find input:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
@@ -428,10 +422,7 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 /* six views: two rows of three, each as wide as the list. The Strategies list's + sits at the end of the second row (beside the
    first it never fitted: the three long names take the whole width) */
 .lb-top { position: relative; }
-.lb-segs { flex: 1 1 auto; min-width: 0; display: grid; gap: 4px; }
-.lb-segs .lb-seg button { flex: 1 1 auto; min-width: 0; padding: 0 4px; white-space: nowrap; }
 .lb-top > .hb-ib { position: absolute; right: 4px; bottom: 6px; }
-.lb-top:has(> .hb-ib) .lb-seg:last-child { margin-right: 38px; }
 /* the middle of the page is the pipeline's while one of its views is open: one sheet, like the editor's, with a column to read.
    The code, the chart and the result are hidden by the rules of a panel that is switched off (lab.js applyPanels) */
 .lab-pipe { display: none; flex: 1 1 0; min-width: 0; min-height: 0; border-radius: 22px; background: var(--lab-sheet); box-shadow: var(--lab-sh); overflow: hidden; animation: lab-in 260ms var(--hb-spring); }
@@ -571,3 +562,13 @@ body.lab-pipe-on #labDoc, body.lab-pipe-on #labActs { visibility: hidden; }     
 .pl-foot .acts { margin-top: 10px; }
 .pl-clear { margin-right: auto; }
 @media (max-width: 560px) { .pl-two { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- the view switcher: one button that names the list on show, a menu behind it (2026-10-09) ---- */
+.lb-sw { gap: 8px; }
+.lb-sw > .hb-ib { position: static; flex: none; }
+.lb-view { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; height: 28px; padding: 0 8px 0 10px; border: 0; border-radius: 8px; background: transparent; color: var(--hb-fg); font: inherit; cursor: pointer; }
+.lb-view b { font-size: 15px; line-height: 20px; font-weight: 600; letter-spacing: -.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-view .lb-ud { flex: none; width: 9px; height: 13px; color: var(--hb-fg2); }
+.lb-view:hover { background: var(--hb-fill-hover); }
+.lb-view:focus-visible { outline: 0; box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.lb-view[aria-expanded="true"] { background: var(--hb-fill-hover); }

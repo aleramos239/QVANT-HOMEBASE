@@ -89,8 +89,16 @@ html.hb-apple #labLib.hb-side { width: var(--a-side-w); margin: 0 !important; ov
   -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-pane-shadow); transition: transform 320ms var(--a-spring), opacity 200ms ease; }
 html.hb-apple #labLib.hb-side > .in { width: auto; height: 100%; padding: 0 0 6px; overflow: hidden auto; overscroll-behavior: contain; }
 html.hb-apple #labLib .lb-top { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 0 10px; padding: 0 2px 0 4.5px; }
-/* the six views (two rows of three) sit in this bar: it grows to hold them and starts below the traffic lights */
-html.hb-apple #labLib .lb-top:has(> .lb-segs) { display: block; height: auto; margin: 36px 10px 8px; padding: 0; }
+/* the six views sit behind ONE button in this bar (a pop-up, like Notes' folder title); it starts below the traffic lights */
+html.hb-apple #labLib .lb-top.lb-sw { display: flex; align-items: center; justify-content: space-between; height: 28px; margin: 38px 10px 8px; padding: 0; }
+html.hb-apple #labLib .lb-view { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 28px; margin-left: -4px; padding: 0 6px 0 4px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--a-label-pane, var(--a-label)); cursor: default; transition: background-color 120ms ease; }
+html.hb-apple #labLib .lb-top .lb-view b { font-size: 15px; line-height: 20px; font-weight: 590; letter-spacing: -.01em; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.hb-apple #labLib .lb-view .lb-ud { flex: none; width: 8px; height: 12px; color: var(--a-label-pane-3); }
+html.hb-apple #labLib .lb-view:hover, html.hb-apple #labLib .lb-view[aria-expanded="true"] { background: color-mix(in srgb, var(--a-label-pane-3) 14%, transparent); }
+html.hb-apple #labLib .lb-view:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
+html.hb-apple #labLib .lb-view:active { background: color-mix(in srgb, var(--a-label-pane-3) 22%, transparent); }
+@media (prefers-reduced-motion: reduce) { html.hb-apple #labLib .lb-view { transition: none; } }
 html.hb-apple #labLib .lb-top b { font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-pane-3); }
 html.hb-apple #labLib .lb-top .hb-ib { display: block; width: 22px; height: 19px; padding: 0; border: 0; border-radius: 5px; background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
   -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }

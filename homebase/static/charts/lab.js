@@ -419,7 +419,10 @@ function dialog(html) {
   d.focus({ preventScroll: true });      // the sheet has the keyboard from the start; a sheet then moves it to its first field
   return d;
 }
-function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+function closeMenu() {
+  if (menuEl) { menuEl.remove(); menuEl = null; }
+  for (const t of document.querySelectorAll('[data-act="viewmenu"][aria-expanded="true"]')) t.setAttribute('aria-expanded', 'false');
+}
 function menu(anchor, html, onPick) {
   closeMenu();
   menuEl = document.createElement('div');
@@ -433,7 +436,7 @@ function menu(anchor, html, onPick) {
   menuEl.style.setProperty('--o', right ? 'top right' : 'top left');
   menuEl.addEventListener('click', (e) => { const t = e.target.closest('[data-pick]'); if (t) { closeMenu(); onPick(t.dataset.pick); } });
 }
-document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"], [data-act="more"]')) closeMenu(); });
+document.addEventListener('pointerdown', (e) => { if (menuEl && !menuEl.contains(e.target) && !e.target.closest('[data-act="new"], [data-act="more"], [data-act="viewmenu"]')) closeMenu(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMenu(); closeDialog(); } });
 
 async function newMenu(anchor) {
@@ -623,6 +626,24 @@ const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" st
 const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.7-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z" fill="currentColor"/></svg>';
 const ICON_MORE = '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5.5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="18.5" cy="12" r="1.7" fill="currentColor"/></svg>';
 const ICON_CHEV = '<svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg>';
+/* ---- the view switcher (2026-10-09) ----
+   Six views used to sit in two rows of segmented buttons. Now the sidebar's head is ONE button that names the view
+   on show; it opens a short menu in two groups -- the library of strategies, and the pipeline that tests ideas. */
+const VIEW_GROUPS = [['Library', VIEWS, { lib: 'Your saved scripts and the built-in ones', bp: 'Ideas built from the blueprint blocks', tk: 'Every block, chat tool, skill and script, read-only' }],
+  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage', pg: 'How the pipeline works, step by step' }]];
+const ICON_UPDOWN = '<svg class="lb-ud" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.2 5 2.2l3 3M2 8.8l3 3 3-3"/></svg>';
+function viewName(v) { const t = [...VIEWS, ...PIPE_TABS].find(([id]) => id === v); return t ? t[1] : 'Strategies'; }
+function viewSwitch() {
+  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Blueprint, Arsenal, Queue, Book and Guide"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
+}
+function viewMenu(anchor) {
+  const html = VIEW_GROUPS.map(([group, views, why]) => `<h6>${group}</h6>${views.map(([v, t]) =>
+    `<button class="row" role="menuitemradio" aria-checked="${S.view === v}" data-pick="${v}" title="${esc(why[v] || '')}"><span>${t}</span>${S.view === v ? '<small>✓</small>' : ''}</button>`).join('')}`).join('<hr>');
+  menu(anchor, html, (v) => { setView(v); const t = root.querySelector('[data-fk="viewmenu"]'); if (t) t.focus({ preventScroll: true }); });
+  menuEl.dataset.for = 'view';
+  menuEl.setAttribute('role', 'menu');
+  anchor.setAttribute('aria-expanded', 'true');
+}
 function paintLib() {
   const el = $('#labLib .in');
   if (!el) return;
@@ -647,16 +668,15 @@ function paintLib() {
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
-  const tabs = (row) => `<div class="lb-seg" role="presentation">${row.map(([v, t]) => `<button role="tab" data-act="view" data-v="${v}" data-fk="view:${v}" aria-selected="${S.view === v}">${t}</button>`).join('')}</div>`;
-  const seg = `<div class="lb-segs" role="tablist" aria-label="What this list shows">${tabs(VIEWS)}${tabs(PIPE_TABS)}</div>`;
-  if (pipeOn()) { paintPipe(el, `<div class="lb-top">${seg}</div>`, top); return; }      // its list here, its page in the middle
-  if (S.view === 'bp') { el.innerHTML = `<div class="lb-top">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
+  const seg = viewSwitch();
+  if (pipeOn()) { paintPipe(el, `<div class="lb-top lb-sw">${seg}</div>`, top); return; }      // its list here, its page in the middle
+  if (S.view === 'bp') { el.innerHTML = `<div class="lb-top lb-sw">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
   if (S.view === 'tk') {
-    el.innerHTML = `<div class="lb-top">${seg}</div>${toolkitHead()}<div id="tkList">${toolkitList()}</div>`;
+    el.innerHTML = `<div class="lb-top lb-sw">${seg}</div>${toolkitHead()}<div id="tkList">${toolkitList()}</div>`;
     el.scrollTop = top;
     return;
   }
-  el.innerHTML = `<div class="lb-top">${seg}<button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
+  el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
     ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
@@ -1388,6 +1408,7 @@ function act(name, el) {
   else if (name === 'file') fileMenu(el);
   else if (name === 'group') groupMenu(el);
   else if (name === 'view') setView(el.dataset.v);
+  else if (name === 'viewmenu') { if (menuEl && menuEl.dataset.for === 'view') closeMenu(); else viewMenu(el); }
   else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
   else if (name === 'plidea') pickIdea(el.dataset.name);
   else if (name === 'plbook') pickCard(el.dataset.name);
