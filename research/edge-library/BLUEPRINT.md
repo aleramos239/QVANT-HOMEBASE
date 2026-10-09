@@ -494,3 +494,17 @@ because we picked the wrong box."
   entries. The measured luck rate of the design (random-entry strategies read through stage 6) is still not built.
 - **Small.** `pipe list` names the heat map that came closest, not the first one. Stage 1 says which boxes never traded (a
   160-bar channel on 5-minute bars). The runner comes back at login (`deploy/com.ramosquant.homebase-pipeline.plist.template`).
+
+**2026-10-09, later, the owner:** "i want to make it so we dont have to worry about missing a strategy under our nose."
+- **The next box.** Stage 1 keeps EVERY box that holds every build line of a box (of every map that passed), in the order they are
+  tried: from the middle outward by prop odds, the moved-on map's first. When the proof (stage 4) or the lock (stage 5: the box does
+  not make money with worse fills too) says no to the PICKED BOX, the idea does not stop while such a box is left: the next one
+  becomes the pick, the stages run again from the machine check, and the try counts (`tries` + 1: the random bar, 100 − 5 ÷ tries %,
+  rises with every box). At most `variant.box_tries` (5) boxes an idea. The unseen days are still read once, for the first box that
+  is locked. So on the build days an idea now stops only when NO box at the floor passes everything.
+- **What still can be lost:** a box below the $70 floor or under 200 trades is never a candidate; the unseen days are read for one
+  box only; and every extra box is a second chance for luck, which the rising bar pays for only on the random-entry row, not on the
+  reshuffled-days row.
+- **The near misses** (`bp.py pipe near`): every idea that stopped on a verdict before the unseen days, by how far its WORST missed
+  row was from its need, the closest first. Not a pass: a list to look at, so nothing that stopped close goes out of sight.
+- **The evening session** (18:00-23:59 ET, the evening before the trade date) is a session a card may name.
