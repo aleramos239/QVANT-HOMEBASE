@@ -342,10 +342,10 @@ def test_the_five_tools_their_inputs_and_what_each_requires():
 def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
     spec = pipeline_tools.SPECS[0]
     said, c = spec["description"], spec["inputSchema"]["properties"]["card"]
-    for what in ("Call blueprint_blocks first: it lists the entry rules (families) with their settings and the indicators (filters) that exist",
+    for what in ("Call blueprint_blocks first: it lists the entry rules (families) with their settings, and a card uses only those",
                  "ONE market (NQ, ES or GC)", "ONE session (asia, london, pre, nyam, mid or pm)", "sides (both, or long / short with sides_why)",
-                 "1 to 3 ways to enter, each a family, ONE main setting of it and EXACTLY 3 values", "indicators: 0 to 5",
-                 "the reason it should help", "The bars are always 1 and 5 minutes", "a card does not choose them",
+                 "1 to 3 ways to enter, each a family, ONE main setting of it and EXACTLY 3 values", "A card names NO indicator: none is tried.",
+                 "The bars are always 1 and 5 minutes", "a card does not choose them",
                  "The same idea (the same market, session, sides and ways) cannot be added twice, not under another name either.",
                  "Nothing is chosen after the run starts: every choice is on the card.",
                  "A card with a line missing is refused with the lines that fail, and nothing is saved."):
@@ -384,7 +384,7 @@ def test_the_cards_limits_and_names_are_the_toolkits_own():
     assert list(lit("blueprint/pipe_store.py", "STATUS")) == STATUSES == list(pipeline_tools.LABELS)
     assert [s.lower() for s in (x["name"] for x in pipeline_tools.STAGES)] == list(lit("blueprint/pipe_runner.py", "NAMES"))
     assert lit("blueprint/pipe_store.py", "ENV") == pipeline_tools.ENV_ROOT
-    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", "rerun", "pick", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}      # (rerun: the command line only, no chat tool yet)
+    assert set(lit("blueprint/pipe_runner.py", "SUBS")) == {"add", "list", "show", "book", "rerun", "pick", "luck", *pipeline_tools.ACTIONS, *pipeline_tools.DECISIONS}      # (rerun, pick, luck: the command line only; the luck count is the last line of the book)
 
 
 def test_the_decide_tool_says_it_is_used_only_on_the_owners_word():
@@ -437,7 +437,7 @@ def test_the_eight_stages_are_written_once_a_plain_sentence_each():
     assert [s["n"] for s in S] == list(range(8)) and all(list(s) == ["n", "name", "words"] for s in S)
     assert [s["name"] for s in S] == ["Idea card", "Raw heat map", "Machine check", "Indicators", "Proof", "Pick one box and lock", "Unseen days",
                                       "The owner's look"]
-    assert S[1]["words"] == "Does a region of the map make money (enough boxes at the floor)?"
+    assert S[1]["words"] == "Does a region of the map make money, and does a box in it pass every build line of a box?"
     assert S[3]["words"] == "Does the picked variant make money on its side(s), even without its best trades?" and S[4]["words"] == "Does the picked variant hold up against luck?"      # variant mode, 2026-10-08
     assert S[5]["words"] == "Does the picked stop and target hold up on its own, so the rule can be frozen?"
     for s in S:

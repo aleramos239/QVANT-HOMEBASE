@@ -290,7 +290,8 @@ def test_the_book_card_holds_what_the_design_asks_and_the_owner_approves_it(worl
     assert rc == 0 and row[:5] == [A, "orb", "book", "7", "2"] and "1 book" in out
     rc, out = TI._run(["pipe", "book", R_])
     assert rc == 0 and out.splitlines()[0].split() == ["name", "label", "family", "market", "session", "bar"]
-    assert [x.split("  ")[0] for x in out.splitlines()[1:]] == [A] and b["label"] in out.splitlines()[1] and out.splitlines()[1].split()[-4:] == ["orb", "NQ", "nyam", "5"]
+    assert [x.split("  ")[0] for x in out.splitlines()[1:2]] == [A] and b["label"] in out.splitlines()[1] and out.splitlines()[1].split()[-4:] == ["orb", "NQ", "nyam", "5"]
+    assert out.splitlines()[2:] == ["", "luck count: 1 idea read on the unseen days, 1 passed; luck alone gives at most 0.05 (bp.py pipe luck)"]      # the Book's last line
     rc, r = cli(["pipe", "book"])
     assert rc == 0 and r["book"] == [b]
 

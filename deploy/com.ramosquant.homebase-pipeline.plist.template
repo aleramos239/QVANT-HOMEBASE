@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-pipeline</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv-research/bin/python</string>
+    <string>__REPO__/research/edge-library/bp.py</string>
+    <string>pipe</string>
+    <string>start</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__/research/edge-library</string>
+  <!-- the strategy pipeline's runner, back after a reboot or a login (it does not come back by
+       itself: research/edge-library/blueprint/pipe_runner.py). `pipe start` starts the runner as
+       its own detached process and ends; with one already working it starts nothing. A paused
+       queue stays paused, and the runner keeps the no-start window (09:20-09:35 ET) by itself.
+       Once at load, and no more: this job never restarts a runner that was stopped on purpose.
+       AbandonProcessGroup: launchd must not take the detached runner down when this job ends. -->
+  <key>RunAtLoad</key><true/>
+  <key>AbandonProcessGroup</key><true/>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/pipeline-start.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/pipeline-start.log</string>
+</dict>
+</plist>

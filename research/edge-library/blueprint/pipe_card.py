@@ -15,6 +15,9 @@ to 5 indicators, each with its reason. This module reads the card and turns it i
                               TOOLKIT takes (records.card_lines: what it refuses fails this line, in its own words)
                         P0.3  the indicators: their count; each a filter block and one of its sides, with a why; no block
                               twice; a block only on a market it runs on (Level 2: NQ only)
+                              IN VARIANT MODE (pipeline.json "mode": "variant", the shipped default) NO INDICATOR IS TRIED and a
+                              card needs none (the owner, 2026-10-09): a list a card still carries is read as above, and the
+                              row says it is not tried
                         P0.4  the sides: both, or one side and why
                        subs = None while a line fails, else the card's HEAT MAPS, one a way and a bar size the family runs on:
                         {"name": "<card>_<a|b|c><bar>", "way": its index, "bar": "1" | "5", "spec": the toolkit spec}
@@ -218,6 +221,10 @@ def _indicators(card: dict, lim: dict) -> dict:
         if why:
             bad = f"indicator {i + 1}: {why}"
             break
+    if P.mode() == "variant":                       # the hard rules are judged on one picked box: a card needs no indicator, and one it names is not tried
+        return L._row("P0.3", not bad, n, lim["indicators"], bad or ("no indicator" if not n else
+                      f"{n} indicator{'s' * (n > 1)} named ({', '.join(x['block'] + ' ' + x['side'] for x in I)}) and not tried: the pipeline judges one picked box, "
+                      "with no indicator on"))
     return L._row("P0.3", not bad, n, lim["indicators"], bad or ("no indicator" if not n else
                   f"{n} indicator{'s' * (n > 1)}, each tried alone, in this order: {', '.join(x['block'] + ' ' + x['side'] for x in I)}"))
 

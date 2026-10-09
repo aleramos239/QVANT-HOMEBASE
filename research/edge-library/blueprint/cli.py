@@ -100,7 +100,7 @@ and --json out.
   bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
-  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT                    refused with its rows; `start` = the runner, detached,
+  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck             refused with its rows; `start` = the runner, detached,
                                                                              that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
@@ -110,6 +110,8 @@ and --json out.
                                                                              from stage 0: its stage cards move to stages_old/<time>/ (none
                                                                              is deleted), it goes last in the queue; refused while it is
                                                                              running, awaits the owner or is in the book.
+                                                                             `luck` = the luck count: the ideas read on the unseen days,
+                                                                             how many passed, and what luck alone gives (pipe_runner.luck).
                                                                              For `pipe`, --root is the PIPELINE's own folder
                                                                              (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
                                                                              never the app's idea folder
@@ -227,14 +229,15 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
         ("pause", "the runner stops after the stage in hand"), ("resume", "the runner carries on"), ("approve", "the owner's yes: the idea goes in the book"),
         ("refuse", "the owner's no, with his reason"), ("book", "one row a book card"),
         ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
-        ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"), ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
+        ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"),
+        ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"), ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     pipes["add"].add_argument("--spec", metavar="-|FILE", help="the pipeline card as JSON: - = on stdin, else a file")
     pipes["add"].add_argument("--inbox", action="store_true", help="the card goes before the queued ones")
     for name in ("show", "approve", "refuse", "rerun", "pick"):
