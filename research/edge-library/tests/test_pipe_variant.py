@@ -332,7 +332,7 @@ def test_stage_5_shows_the_whole_map_lines_and_the_lock_takes_the_picked_box(wor
     calls = TF.fakes(world, lock=ok)
     with pytest.raises(J.Refuse, match="still running"):
         ST.stage5(name, CTX)
-    assert calls["lock"][0]["waive"] == ("2.1", "2.2", "2.3", "2.4", "2.8")
+    assert calls["lock"][0]["waive"] == ST.WHOLE
 
 
 def test_stage_5_the_sides_line_of_the_whole_table_is_shown_and_asks_nothing(world):
