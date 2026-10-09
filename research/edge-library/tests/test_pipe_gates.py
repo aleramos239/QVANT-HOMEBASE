@@ -395,3 +395,126 @@ def test_the_other_markets_are_shown_and_ask_nothing_when_the_file_holds_no_bar(
         r = G.strict_extra(t, others)[1]
         assert (r["line"], r["passed"], r["need"], r["text"]) == ("P3.6", None, None, said), r
         assert [x for x in G.indicator(t, RAW, others) if x["line"] == "P3.6"][0]["passed"] is None
+
+
+# ================================================================ 8. VARIANT MODE (the owner, 2026-10-08): the map gets a loose check, ONE picked box gets the hard rules
+
+def grid(avg, trades, of=None, root: str = "NQ", days: int = 1, **kw) -> dict:
+    """A hand-made heat map, one box a number of `avg` (the average trade of each box) and `trades` (its trades): ids c0, c1, ..."""
+    avg, trades = np.asarray(avg, float), np.asarray(trades, float)
+    avg, trades = np.broadcast_to(avg, np.broadcast(avg, trades).shape).copy(), np.broadcast_to(trades, np.broadcast(avg, trades).shape).copy()
+    net = (avg * trades).round(2)
+    return {"root": root, "net": net[:, None] / days * np.ones((1, days)), "n": trades[:, None] / days * np.ones((1, days)), "ids": [f"c{i}" for i in range(len(net))], **kw}
+
+
+def test_variant_map_check_is_loose_share_and_a_region_at_the_floor():
+    """Stage 1 in variant mode: over `map_share` of the boxes profitable AND at least `region_boxes` boxes with an average trade at the floor
+    and `region_trades` trades. One level: "pass" or "fail"."""
+    need = P.need("variant")
+    k, of = need["region_boxes"], 40
+    avg = [70.0] * k + [-5.0] * (of - k)                                  # exactly 25 boxes at $70 (the floor, "at or above"), 15 losing boxes
+    t = grid(avg, [200] * of)
+    r = G.variant_map(t)
+    assert r["result"] == "pass" and r["qualifying"] == k == len(r["cells"]) and r["cells"] == [f"c{i}" for i in range(k)]
+    assert [x["line"] for x in r["lines"]] == ["P1.1", "P1.2"] and marks(r["lines"]) == [True, True] and r["avg_trade"] is not None
+    assert r["lines"][0]["number"] == 25 / 40 and r["lines"][0]["need"] == need["map_share"]
+    assert r["lines"][1]["number"] == k and r["lines"][1]["need"] == k
+    assert r["lines"][0]["text"] == "P1.1 PASS 62.5 % of boxes profitable (25 of 40; need over 50 %)"
+    assert r["lines"][1]["text"] == f"P1.2 PASS {k} of 40 boxes have an average trade of $70 or more with 200 or more trades (need at least {k})"
+    assert r["text"] == f"pass: over 50 % of boxes profitable and {k} boxes at the floor with enough trades"
+    one_less = G.variant_map(grid([70.0] * (k - 1) + [-5.0] * (of - k + 1), [200] * of))        # 24 boxes: not enough, "at least 25"
+    assert one_less["result"] == "fail" and marks(one_less["lines"]) == [True, False] and one_less["qualifying"] == k - 1
+    assert one_less["lines"][1]["text"] == f"P1.2 FAIL {k - 1} of 40 boxes have an average trade of $70 or more with 200 or more trades (need at least {k})"
+    assert one_less["text"] == "fail: P1.2 is missed"
+    cent = G.variant_map(grid([69.99] * k + [-5.0] * (of - k), [200] * of))                     # a cent under the floor: not at the floor
+    assert cent["qualifying"] == 0 and cent["result"] == "fail"
+    few = G.variant_map(grid([70.0] * k + [-5.0] * (of - k), [199] * k + [200] * (of - k)))       # 199 trades: one under
+    assert few["qualifying"] == 0
+    half = G.variant_map(grid([70.0] * 25 + [-5.0] * 25, [200] * 50))                              # exactly 50 % profitable: not "over" half
+    assert half["lines"][0]["passed"] is False and half["lines"][0]["number"] == 0.5 and half["result"] == "fail" and half["qualifying"] == 25
+    assert half["lines"][0]["text"] == "P1.1 FAIL 50 % of boxes profitable (25 of 50; need over 50 %)"
+    both = G.variant_map(grid([10.0] * 30 + [-5.0] * 10, [200] * 40))                             # profitable boxes, none at the floor
+    assert marks(both["lines"]) == [True, False] and both["qualifying"] == 0
+    assert G.variant_map(grid([70.0] * 40, [0] * 40))["qualifying"] == 0                          # no trade is no average trade
+    es, gc = G.variant_map(grid([75.0] * 30, [200] * 30, root="ES")), G.variant_map(grid([139.0] * 30, [300] * 30, root="GC"))      # each market its own floor
+    assert es["qualifying"] == 30 and gc["qualifying"] == 0
+
+
+def test_variant_map_ranks_by_the_number_of_qualifying_boxes():
+    def res(q, at, result="pass"):
+        return {"result": result, "qualifying": q, "avg_trade": at}
+
+    assert G.rank([res(30, 50.0), res(40, 10.0)]) == 1                          # more boxes at the floor first, whatever the average trade
+    assert G.rank([res(30, 50.0), res(30, 60.0)]) == 1                          # a tie: the bigger average trade
+    assert G.rank([res(30, 50.0), res(30, 50.0)]) == 0                          # a tie again: the first
+    assert G.rank([res(0, None, "fail"), res(26, 40.0)]) == 1 and G.rank([res(0, None, "fail"), res(40, 4.0, "fail")]) is None
+    assert G.rank([]) is None
+    assert G.rank([{"result": "strict", "avg_trade": 80.0}, {"result": "low", "avg_trade": 90.0}]) == 0      # the old results rank the old way
+
+
+def test_variant_rows_are_the_picked_box_floor_trades_sides_and_the_shown_markets():
+    def box(avg=70.0, trades=200, long=100.0, short=100.0, n_long=100, n_short=100, sides="both", root="NQ"):
+        return {"root": root, "net": np.array([[avg * trades]]), "n": np.array([[float(trades)]]), "long": long, "short": short, "n_long": n_long,
+                "n_short": n_short, "sides": sides}
+
+    rows = G.variant_rows(box(), [3.0, -4.0])
+    assert [x["line"] for x in rows] == ["P3.2", "P3.3", "P3.4", "P3.6"] and marks(rows) == [True, True, True, None]
+    assert rows[0]["text"] == "P3.2 PASS average trade $70 (need $70)" and rows[0]["number"] == 70.0 and rows[0]["need"] == 70.0
+    assert rows[1]["text"] == "P3.3 PASS 200 trades (need 200)" and rows[1]["number"] == 200.0 and rows[1]["need"] == P.need("variant", "region_trades")
+    assert rows[3]["passed"] is None and rows[3]["need"] is None                         # the other markets: shown, never False
+    assert by(G.variant_rows(box(avg=69.99), []))["P3.2"]["passed"] is False and by(G.variant_rows(box(avg=69.99), []))["P3.2"]["text"] == "P3.2 FAIL average trade $69.99 (need $70)"
+    assert by(G.variant_rows(box(trades=199, avg=100.0), []))["P3.3"]["passed"] is False
+    assert by(G.variant_rows(box(root="GC", avg=139.0), []))["P3.2"]["passed"] is False and by(G.variant_rows(box(root="GC", avg=140.0), []))["P3.2"]["passed"] is True
+    assert by(G.variant_rows(box(short=-1.0), []))["P3.4"]["passed"] is False and by(G.variant_rows(box(n_short=0, short=0.0), []))["P3.4"]["passed"] is False      # both: each side
+    assert by(rows)["P3.4"]["text"] == "P3.4 PASS long $100, short $100 (need both above $0)"          # (one box: no "all variants together")
+    one = by(G.variant_rows(box(sides="long", n_short=0, short=0.0), []))["P3.4"]
+    assert one["passed"] is True and one["text"] == "P3.4 PASS long only by its card: $100 (need above $0)"
+    bad = by(G.variant_rows(box(sides="long", short=5.0), []))["P3.4"]
+    assert bad["passed"] is False                                                          # a trade on the other side is not the card's rule
+    none = G.variant_rows({**box(), "net": np.array([[0.0]]), "n": np.array([[0.0]])}, [])    # a box without a trade
+    assert marks(none)[:2] == [False, False] and by(none)["P3.2"]["text"] == "P3.2 FAIL no trade (need an average trade of $70)"
+    assert G.strict_extra(box(), [3.0, -4.0])[1] == rows[3] and {**G.strict_extra(box(), [3.0, -4.0])[0], "text": rows[2]["text"]} == rows[2]
+
+
+def test_reshuffle_box_is_the_boxes_average_trade_at_the_floor_in_three_quarters_of_the_runs():
+    def split(a, b):
+        return Draws([[2, 0]] * a + [[0, 2]] * b)
+
+    b = {"root": "NQ", "net": np.array([[100.0, -500.0]]), "n": np.ones((1, 2))}        # day 0: +$100 a trade; day 1: -$500
+    r = G.reshuffle_box(b, split(750, 250))
+    assert r["line"] == "P4.1" and r["passed"] is True and r["number"] == 0.75 == r["need"] == P.need("proof", "reshuffle") and r["runs"] == 1000
+    assert r["text"] == "P4.1 PASS the box's average trade is $70 or more in 75 % of 1,000 reshuffled runs (need 75 % or more)"
+    r = G.reshuffle_box(b, split(749, 251))
+    assert r["passed"] is False and r["number"] == 0.749 and r["text"].startswith("P4.1 FAIL ") and "74.9 %" in r["text"]
+    assert G.reshuffle_box({**b, "net": np.array([[60.0, -500.0]])}, split(1000, 0))["number"] == 0.0        # $60 a trade is under the floor in every run
+    assert G.reshuffle_box({**b, "root": "ES", "net": np.array([[74.0, -500.0]])}, split(1000, 0))["number"] == 0.0
+    net = np.random.default_rng(7).normal(80, 400, (1, 60)).round()
+    real = {"root": "NQ", "net": net, "n": np.ones((1, 60))}
+    assert G.reshuffle_box(real)["number"] == G.reshuffle_box(real, MC.generator())["number"] == G.reshuffle_box(real)["number"]      # the fixed seed
+    assert G.reshuffle_box({**real, "n": np.zeros((1, 60))})["number"] == 0.0                              # no trade in a run is no average trade
+    tot, cnt = MC.reshuffle(net, np.ones((1, 60)))
+    assert G.reshuffle_box(real)["number"] == float((tot[0] / cnt >= 70.0).mean())                      # the same runs as line 2.8's, read for the one box
+
+
+def test_random_text_says_what_it_was_held_against():
+    assert G.random(0.9501, 1)["text"] == "P4.2 PASS beats 95.01 % of the random heat maps on try 1 (need above 95 % = 100 - 5 / 1 try)"      # unchanged
+    r = G.random(0.97, 2, "random entries of the same box")
+    assert r["text"] == "P4.2 FAIL beats 97 % of the random entries of the same box on try 2 (need above 97.5 % = 100 - 5 / 2 tries)" and r["passed"] is False
+    assert G.random(None, 2, "random entries of the same box")["text"].startswith("P4.2 FAIL no random entries of the same box to hold it against")
+
+
+def test_variant_numbers_are_read_from_the_file_and_typed_nowhere():
+    t = grid([70.0] * 20 + [-5.0] * 20, [200] * 40)
+    assert G.variant_map(t)["result"] == "fail"                                            # 20 boxes of the 25 the file asks for
+    p = copy.deepcopy(json.loads(FILE.read_text(encoding="utf-8")))
+    p["variant"].update(region_boxes=20, region_trades=250, floor_part=0.5, map_share=0.4)
+    with tempfile.TemporaryDirectory() as tmp:
+        P.FILE = Path(tmp) / "pipeline.json"
+        P.FILE.write_text(json.dumps(p), encoding="utf-8")
+        P._all.cache_clear()
+        assert G.variant_map(grid([35.0] * 20 + [-5.0] * 20, [250] * 40))["result"] == "pass"
+        assert G.variant_map(grid([35.0] * 20 + [-5.0] * 20, [249] * 40))["result"] == "fail"
+        assert by(G.variant_rows({"root": "NQ", "net": np.array([[35.0 * 250]]), "n": np.array([[250.0]]), "sides": "long", "long": 1.0, "short": 0.0,
+                                  "n_long": 250, "n_short": 0}, []))["P3.2"]["passed"] is True
+    teardown_function()
+    assert G.variant_map(t)["result"] == "fail"

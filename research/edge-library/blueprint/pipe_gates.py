@@ -34,6 +34,19 @@ A "box" = one variant of the table (a stop/target box at one setting value); "pr
   random(p_beat, tries)           STAGE 4 -> row P4.2: `p_beat` = the share of the random heat maps the table beats, ABOVE
                                   (strict) the bar of its `tries`-th try, 100 - 5 / tries % (pipe_rules.random_bar)
 
+VARIANT MODE (pipeline.json "mode": "variant"; the owner, 2026-10-08: "i dont think we need the entire heatmap to reach all the requirements,
+some should just be for the individual strategy that will pass"). The map gets a LOOSE check and the hard rules are read on ONE box:
+  variant_map(t)                  STAGE 1 -> {"result": "pass" | "fail", "avg_trade" (the whole map's, for the tables list), "qualifying": the
+                                  boxes at the floor with enough trades, "cells": their ids in table order, "lines": [P1.1 over `map_share`
+                                  of the boxes profitable, P1.2 at least `region_boxes` boxes with an average trade at the floor and
+                                  `region_trades` trades], "text"}
+  rank(results)                   (above) a variant_map result is ranked by the number of qualifying boxes, then the bigger average trade
+  variant_rows(b, others)         STAGE 3 on the picked box `b` = a one-box table (net and n of shape 1 x days, the box's `long` / `short` /
+                                  `n_long` / `n_short`, the card's `sides`): P3.2 average trade at the floor, P3.3 `region_trades` trades,
+                                  P3.4 each side makes money (line 2.6's reading of the one box), P3.6 the other markets (shown, never False)
+  reshuffle_box(b, rng=None)      STAGE 4 -> row P4.1 for the one box: its average trade is at the floor in `proof.reshuffle` of the
+                                  reshuffled runs (the same runs as line 2.8's)
+  random(p_beat, tries, what)     (above) `what` names the random tables the share was read against
 THE COMPARISONS: a share of boxes is "over" (strict) · an average trade "at or above" · trades "or more" · an indicator "higher"
 than the raw table (strict) · the other markets "at least" · the reshuffled runs "or more" · the random bar "above" (strict).
 EVERY NUMBER IS READ: pipe_rules.need / floor / random_bar (templates/pipeline.json) and, where a gate IS a line of the law
@@ -111,15 +124,43 @@ def raw(t: dict) -> dict:
 
 
 def rank(results: list):
-    """The index of the raw() result that moves on: strict before low, then the bigger average trade, a tie = the first;
-    None when every one failed."""
+    """The index of the result that moves on: a raw() result - strict before low, then the bigger average trade; a variant_map()
+    result - the more qualifying boxes, then the bigger average trade; a tie = the first; None when every one failed."""
     best = None
     for i, r in enumerate(results):
-        if r["result"] in BARS:
+        if r["result"] == "pass" and "qualifying" in r:
+            key = (r["qualifying"], r["avg_trade"])
+        elif r["result"] in BARS:
             key = (-BARS.index(r["result"]), r["avg_trade"])
-            if best is None or key > best[0]:
-                best = (key, i)
+        else:
+            continue
+        if best is None or key > best[0]:
+            best = (key, i)
     return None if best is None else best[1]
+
+
+# ================================================================ stage 1, variant mode: the loose check of the map
+
+def variant_map(t: dict) -> dict:
+    """Stage 1 of variant mode: over `map_share` of the boxes make money AND at least `region_boxes` boxes are at the floor (an average
+    trade of `floor_part` of line 2.2's cost floor or more) with `region_trades` trades or more -> the result (module docstring)."""
+    need, x = PR.need("variant"), numbers(t)
+    net, n = np.asarray(t["net"], np.float64).sum(1), np.asarray(t["n"], np.float64).sum(1)
+    floor = PR.floor(t["root"], need["floor_part"])
+    ids = list(t.get("ids") or range(len(net)))
+    with np.errstate(all="ignore"):
+        at = np.where(n > 0, net / np.where(n > 0, n, 1.0), -np.inf)
+    ok = (at >= floor) & (n >= need["region_trades"])
+    cells, q, (k, m) = [ids[i] for i in np.flatnonzero(ok)], int(ok.sum()), _boxes(t)
+    rows = [L._row("P1.1", bool(x["share"] > need["map_share"]), x["share"], need["map_share"],
+                   f"{L._pc(x['share'])} of boxes profitable ({k} of {m}; need over {L._pc(need['map_share'])})", profitable=k, variants=m),
+            L._row("P1.2", q >= need["region_boxes"], q, need["region_boxes"],
+                   f"{q} of {m} boxes have an average trade of {_fig(floor, (floor,), '$')} or more with {_fig(need['region_trades'])} or more trades "
+                   f"(need at least {need['region_boxes']})", boxes=m, floor=floor, trades=need["region_trades"])]
+    bad = [r["line"] for r in rows if not r["passed"]]
+    return {"result": "fail" if bad else "pass", "avg_trade": x["avg_trade"], "qualifying": q, "cells": cells, "lines": rows,
+            "text": f"fail: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} missed" if bad else
+            f"pass: over {L._pc(need['map_share'])} of boxes profitable and {q} boxes at the floor with enough trades"}
 
 
 # ================================================================ stage 3: one indicator on the heat map
@@ -165,6 +206,22 @@ def indicator(tf: dict, traw: dict, others: list) -> list:
             markets]
 
 
+# ================================================================ stage 3, variant mode: the picked box
+
+def variant_rows(b: dict, others: list) -> list:
+    """Stage 3 of variant mode on the picked box `b` (module docstring) -> rows P3.2, P3.3, P3.4, P3.6. `others` = the net of the average
+    box of each other-market table (shown, as strict_extra shows them)."""
+    need, x = PR.need("variant"), numbers(b)
+    at, floor = x["avg_trade"], PR.floor(b["root"], PR.need("variant", "floor_part"))
+    n, count = float(np.asarray(b["n"], np.float64).sum()), need["region_trades"]
+    side, markets = strict_extra(b, others)
+    side = {**side, "text": side["text"].replace(", all variants together", "")}       # (line 2.6's words say "all variants together": this is one box)
+    return [L._row("P3.2", at is not None and bool(at >= floor), at, floor, f"no trade (need an average trade of {_fig(floor, (floor,), '$')})" if at is None else
+                   f"average trade {_fig(at, (floor,), '$')} (need {_fig(floor, (floor,), '$')})"),
+            L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
+            side, markets]
+
+
 # ================================================================ stage 4: the proof
 
 def reshuffle(t: dict, rng=None) -> dict:
@@ -178,12 +235,25 @@ def reshuffle(t: dict, rng=None) -> dict:
                   f"{len(ok):,} reshuffled runs (need {L._pc(need)} or more)", runs=len(ok))
 
 
-def random(p_beat, tries: int) -> dict:
+def random(p_beat, tries: int, what: str = "random heat maps") -> dict:
     """Row P4.2: `p_beat` (the share of the random heat maps the table beats; None = none was read) ABOVE the bar of the
-    idea's `tries`-th try. No try yet is held to the first bar."""
+    idea's `tries`-th try. No try yet is held to the first bar. `what` = the random tables in words (variant mode: those of the same box)."""
     k = max(1, int(tries))
     bar, alpha = PR.random_bar(k), PR.need("proof", "random_alpha")
     need = f"need above {_pct(bar)} = 100 - {100 * alpha:g} / {k} tr{'y' if k == 1 else 'ies'}"
     if p_beat is None:
-        return L._row("P4.2", False, None, bar, f"no random heat maps to hold it against ({need})", tries=k)
-    return L._row("P4.2", bool(p_beat > bar), float(p_beat), bar, f"beats {_pct(p_beat)} of the random heat maps on try {k} ({need})", tries=k)
+        return L._row("P4.2", False, None, bar, f"no {what} to hold it against ({need})", tries=k)
+    return L._row("P4.2", bool(p_beat > bar), float(p_beat), bar, f"beats {_pct(p_beat)} of the {what} on try {k} ({need})", tries=k)
+
+
+def reshuffle_box(b: dict, rng=None) -> dict:
+    """Row P4.1 of variant mode: the one box `b` (a table of one variant) is reshuffled like line 2.8's table (mc.reshuffle: whole days drawn
+    with replacement, the fixed seed) and its average trade is held against the floor in every run; the share of the runs that hold it
+    against `proof.reshuffle`. A run without a trade has no average trade: it does not hold."""
+    tot, cnt = MC.reshuffle(b["net"], b["n"], rng)
+    floor = PR.floor(b["root"], PR.need("variant", "floor_part"))
+    with np.errstate(all="ignore"):
+        ok = np.where(cnt > 0, tot[0] / np.where(cnt > 0, cnt, 1.0), -np.inf) >= floor
+    share, need = float(ok.mean()), PR.need("proof", "reshuffle")
+    return L._row("P4.1", bool(share >= need), share, need,
+                  f"the box's average trade is {_fig(floor, (floor,), '$')} or more in {L._pc(share)} of {len(ok):,} reshuffled runs (need {L._pc(need)} or more)", runs=len(ok))

@@ -16,6 +16,7 @@ card and the idea's state, and says what a refusal means.
                      + "code_problem": True ONLY when the stage stopped on the code and not on the idea (a wrong trade, a
                      strategy error, a line the toolkit and the pipeline read differently)
       picked    the heat map that moves on: {"sub": its toolkit idea, "bar", "way", "filter": None | "<block>_<side>"}
+                + in variant mode "cell" (the picked box's id) and "variant" (its main-setting value)
       tries     the heat maps judged for the idea so far (a way on a bar size at stage 1, an indicator at stage 3)
 
   stage0  THE CARD      pipe_card.check again (lines P0.1-P0.4), then every heat map's card saved in the toolkit
@@ -91,6 +92,25 @@ card and the idea's state, and says what a refusal means.
                            0-6, utc}
                         EVERY MONEY FACT IS AT ONE CONTRACT after costs (win_days_month alone is at a size), read off the
                         default box's TEST trades on every session day the read replayed (a day without a trade = $0)
+
+VARIANT MODE (pipeline.json "mode": "variant", the shipped default; the owner, 2026-10-08: "i dont think we need the entire heatmap to reach all the
+requirements, some should just be for the individual strategy that will pass"). Everything above is MAP MODE ("mode": "map", kept whole). In variant
+mode the map gets a LOOSE check and ONE box is picked right after it; every hard rule is judged on that box (spec section 16):
+  stage1  _stage1_variant: pipe_gates.variant_map on each heat map (over `variant.map_share` of the boxes profitable, at least `variant.region_boxes`
+          boxes at the floor with `variant.region_trades` trades) -> result "pass" | "fail" (no strict / low), the heat map with the most qualifying
+          boxes moves on (pipe_gates.rank). THE PICK: the MIDDLE qualifying box by build net -- never the best (_middle: judge.TIE_RULE) -- is
+          in `picked` as `cell` (the box id) and `variant` (its main-setting value) next to sub / bar / way / filter, and on the card as `box`
+  stage2  the same checks; P2.5 reads the PICKED box (_prices(picked=))
+  stage3  _stage3_variant: NO indicator is tried (the card's list is ignored and the text says so; the code for them is kept). Rows P3.2 (average
+          trade at the floor), P3.3 (trades), P3.4 (each side makes money, the card's sides), P3.6 (other markets, shown) on the picked box
+  stage4  _stage4_variant: P4.1 the picked box's average trade is at the floor in `proof.reshuffle` of the reshuffled runs (pipe_gates.reshuffle_box);
+          only when it holds, P4.2 the SAME BOX of the random-entry control tables: the pool holds the random entries cell by cell, so the box's
+          exit cell, days and trades a day are drawn from its seeds (tables.built(box=) = judge.c1_table on that one cell) and held to the bar of the tries
+  stage5  the code check, the one build round and the lock stay; the lock takes the picked box as its default (freeze.lock(default=), refused when it is
+          not a survivor: result "no box"). The build's lines about the WHOLE map (WHOLE: 2.1 2.2 2.3 2.4 2.5 2.8) are shown and ask nothing (waive=,
+          lock.json `waived`); line 2.6 (SIDES, the whole table's sides) is kept and stops an idea with the toolkit's words (result "sides", no code
+          problem); any other False line is still a CODE PROBLEM
+  stages 6 and 7  unchanged. A stage of variant mode on an idea whose stage 1 picked no box (_cell) is refused: `bp.py pipe rerun <name>`.
 
 THE PRICE CHECK (P2.5). The middle box of the heat map (records.middle: the middle of the boxes that made money; when none
 did, the box with the most trades, and the row says so) is run again for its prices (runner.cell_trades: a store keeps
@@ -174,6 +194,9 @@ CHECKED = ("1.1", "1.2", "1.3", "1.4")              # the lines of the code chec
 SHOWN = 20                                          # trades listed in a row (their count is always whole)
 REASON = "pipeline: stages 1 to 4 passed"           # the reason of a sub-idea's ONE build round (line 2.9 asks for it before the run)
 OTHERS = "2.5"                                      # the build's line on the other markets: after a low pass the build is the first to read it
+WHOLE = ("2.1", "2.2", "2.3", "2.4", OTHERS, "2.8")  # the build's lines about the WHOLE map (share, average trade, random tables, trades, other markets, Monte Carlo):
+                                                    # in variant mode they are shown and ask nothing (the picked box is judged by the stages and by the lock's lines 3.3-3.8)
+SIDES = "2.6"                                       # the build's line about the sides of the whole table: kept in variant mode (a stop with the toolkit's words, no code problem)
 MINE = {"2.1": ("P1.1", "P3.1"), "2.2": ("P1.2", "P3.2"), "2.3": ("P4.2", "P4.2"), "2.4": ("P1.3", "P3.3"), "2.5": ("P3.6", "P3.6"), "2.6": ("P3.4", "P3.4"),
         "2.7": (None, "P3.5"), "2.8": ("P4.1", "P4.1")}     # a line of the build -> the pipeline's gate of it: (of a raw heat map, of one with an indicator)
 SWITCH = ("days", "cells", "workers", "draws", "box", "build_avg_trade", "test_days")      # what a tiny run hands the toolkit's test switch (records.TEST_RUN)
@@ -259,9 +282,55 @@ def _run(specs: list, kw: dict, stage: str, progress) -> str:
     return f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0].get('error')}): no store was written; the family has to be fixed first" if bad else ""
 
 
-def _table(spec: dict, plan: dict, kw: dict, filt=None, control: bool = False) -> dict:
-    """The table data of a sub-idea's HOME table (tables.built), with the card's sides on it (the gates read line 2.6 by them)."""
-    return {**T.built(spec, plan["home"]["table"], filt, kw["out"], kw["days"], 1, control=control), "sides": plan["sides"]}
+def _table(spec: dict, plan: dict, kw: dict, filt=None, control: bool = False, box=None) -> dict:
+    """The table data of a sub-idea's HOME table (tables.built), with the card's sides on it (the gates read line 2.6 by them).
+    box = a cell id: the random tables (control) are those of that one box (variant mode)."""
+    return {**T.built(spec, plan["home"]["table"], filt, kw["out"], kw["days"], 1, control=control, box=box), "sides": plan["sides"]}
+
+
+# ================================================================ variant mode: the one picked box (pipeline.json "mode": "variant")
+
+def _variant() -> bool:
+    """Is the pipeline in variant mode (module docstring)? Read from pipeline.json each time a stage asks."""
+    return PR.mode() == "variant"
+
+
+def _cell(picked: dict) -> str:
+    """The picked box of an idea whose stage 1 ran in variant mode. An idea whose stage 1 ran before the mode existed (or in map mode)
+    has none: refused, with the way out (`bp.py pipe rerun`)."""
+    if not picked.get("cell"):
+        raise J.Refuse(f"{picked.get('sub')}: stage 1 picked no box (it was run in map mode, or before variant mode existed), and the pipeline runs in variant mode: "
+                       "run the idea again from its start (bp.py pipe rerun <name>)")
+    return picked["cell"]
+
+
+def _middle(rows: list, cells: list):
+    """THE PICK: the MIDDLE of the boxes `cells` by build net -- never the best -- with the judge's tie rule (judge.TIE_RULE: by net to the cent, then
+    by variant order; an even count takes the lower of the two middle ones). rows = the table's rows (id, net, vi, xi). None: no box."""
+    by = {r["id"]: r for r in rows}
+    order = sorted(cells, key=lambda c: (round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
+    return order[(len(order) - 1) // 2] if order else None
+
+
+def _one_box(t: dict, cell: str) -> dict:
+    """ONE box of a table as a table of its own (the gates' shape): its net and trades a day, the net and trades of its two sides, the card's
+    sides, the root, and the store and unit it came from. Refused: a box the table does not have (the store changed since the pick)."""
+    if cell not in t["ids"]:
+        raise J.Refuse(f"{t['unit']}: the picked box {cell} is no judged variant of the table now: run the idea again from its start (bp.py pipe rerun <name>)")
+    i, x = t["ids"].index(cell), J.cellx(t["_st"], cell, t["_u"]["sess"], t["_u"])
+    up = x["side"] > 0
+    return {"root": t["root"], "net": t["net"][i:i + 1], "n": t["n"][i:i + 1], "ids": [cell], "unit": t["unit"], "days": t["days"], "sides": t.get("sides"),
+            "long": float(x["net"][up].sum()), "short": float(x["net"][~up].sum()), "n_long": int(up.sum()), "n_short": int((~up).sum()), "_st": t["_st"], "_u": t["_u"]}
+
+
+def _box_card(t: dict, cell: str) -> dict:
+    """What a stage card says of the picked box: {cell, variant (its main-setting value), setting (the setting's name), net, trades, avg_trade, long, short}."""
+    b = _one_box(t, cell)
+    v = t["_st"]["meta"]["cells"][t["_st"]["_idx"][cell]].get("variant") or {}
+    net, n = float(b["net"].sum()), int(b["n"].sum())
+    one = len(v) == 1
+    return {"cell": cell, "setting": next(iter(v)) if one else None, "variant": next(iter(v.values())) if one else (v or None), "net": net, "trades": n,
+            "avg_trade": net / n if n else None, "long": b["long"], "short": b["short"]}
 
 
 @contextlib.contextmanager
@@ -313,10 +382,14 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
     t0, kw = time.monotonic(), _kw(name, ctx)
     card = PS.card(name, ctx.get("root"))
     subs = [(s, *_idea(s["name"], kw)) for s in card["subs"]]
-    rules = {"raw": PR.need("raw"), "floor": R.need("2.2", card["market"])}
+    variant = _variant()
+    rules = ({"mode": "variant", "variant": PR.need("variant"), "floor": R.need("2.2", card["market"])} if variant else
+             {"raw": PR.need("raw"), "floor": R.need("2.2", card["market"])})
     why = _run([specs[0] for _, _, _, specs in subs], kw, "units", progress)      # the home stores alone: one tape pass a bar size, no pool
     if why:
         return _error(1, t0, why, [], None, 0, rules)
+    if variant:
+        return _stage1_variant(t0, kw, subs, rules)
     res = [G.raw(_table(specs[0], plan, kw)) for _, _, plan, specs in subs]
     rows = [x for (s, *_), r in zip(subs, res) for x in _named(r["lines"], s["name"], sub=s["name"])]
     tables = [{"sub": s["name"], "way": s["way"], "bar": s["bar"], "result": r["result"], "avg_trade": r["avg_trade"], "text": r["text"]} for (s, *_), r in zip(subs, res)]
@@ -328,6 +401,28 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
                  {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None}, len(res), rules, tables=tables)
 
 
+def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict) -> dict:
+    """Stage 1 in variant mode: the LOOSE check of each map (G.variant_map), the best map by its qualifying boxes (G.rank), and THE PICK -- the
+    middle qualifying box by build net, never the best -- written into the card and into `picked` (cell, variant)."""
+    tabs = [_table(specs[0], plan, kw) for _, _, plan, specs in subs]
+    res = [G.variant_map(t) for t in tabs]
+    rows = [x for (s, *_), r in zip(subs, res) for x in _named(r["lines"], s["name"], sub=s["name"])]
+    tables = [{"sub": s["name"], "way": s["way"], "bar": s["bar"], "result": r["result"], "avg_trade": r["avg_trade"], "qualifying": r["qualifying"], "text": r["text"]}
+              for (s, *_), r in zip(subs, res)]
+    i = G.rank(res)
+    if i is None:
+        return _card(1, t0, False, "fail", rows, f"every one of the {len(res)} heat maps failed the loose check of the map: the idea is dropped", None, len(res), rules, tables=tables)
+    s, t = subs[i][0], tabs[i]
+    cell = _middle(J.table(t["_st"], t["_u"]), res[i]["cells"])
+    box = _box_card(t, cell)
+    usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
+    return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- the middle, by build "
+                 f"net, of its {res[i]['qualifying']} boxes at the floor (never the best): average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
+                 f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone",
+                 {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"]}, len(res), rules,
+                 tables=tables, box={**box, "qualifying": res[i]["qualifying"]})
+
+
 # ================================================================ stage 2: the machine check
 
 def _minute_bars(root: str, iso: str):
@@ -337,13 +432,19 @@ def _minute_bars(root: str, iso: str):
     return None if tape is None or not len(tape.ts) else RUN._levels().session_arrays(tape, 1)
 
 
-def _prices(spec: dict, t: dict, sess: str, kw: dict) -> dict:
-    """Row P2.5, the price check of ONE box of a heat map (module docstring): `t` = the table data of its home table."""
+def _prices(spec: dict, t: dict, sess: str, kw: dict, picked=None) -> dict:
+    """Row P2.5, the price check of ONE box of a heat map (module docstring): `t` = the table data of its home table. `picked` = the box
+    the pipeline picked at stage 1 (variant mode): that one; else the middle box of the boxes that made money."""
     st, u, root = t["_st"], t["_u"], t["root"]
     table = {r["id"]: r for r in J.table(st, u)}
-    cell, _ = REC.middle(list(table.values()), t["ids"])
-    box = "the middle box" if cell else "no box made money, so the box with the most trades"
-    cell = cell or max(t["ids"], key=lambda c: table[c]["trades"])
+    if picked is not None:
+        if picked not in table:
+            raise J.Refuse(f"{t['unit']}: the picked box {picked} is no judged variant of the table now: run the idea again from its start (bp.py pipe rerun <name>)")
+        cell, box = picked, "the picked box"
+    else:
+        cell, _ = REC.middle(list(table.values()), t["ids"])
+        box = "the middle box" if cell else "no box made money, so the box with the most trades"
+        cell = cell or max(t["ids"], key=lambda c: table[c]["trades"])
     slip, tick = R.template("costs")["normal"]["slippage_ticks"], R.template("costs")["contract"][root]["tick"]
     slack, need = slip * tick, {"slack_ticks": slip, "tick": tick}
     trades = RUN.cell_trades(spec, u["key"], cell, sess, kw["days"], RM.auto_workers(RUN.default_workers() if kw["workers"] is None else int(kw["workers"])))
@@ -413,7 +514,7 @@ def stage2(name: str, ctx: dict, progress=None) -> dict:
     chk = api.code_check(picked["sub"], store=t["_u"]["key"], looked=True, root=kw["root"], out=kw["out"])
     rows = [x for x in chk["lines"] if x["line"] in CHECKED]
     if all(x["passed"] is not False for x in rows):
-        rows.append(_prices(specs[0], t, plan["home"]["session"], kw))
+        rows.append(_prices(specs[0], t, plan["home"]["session"], kw, _cell(picked) if _variant() else None))
     bad = [x for x in rows if x["passed"] is False]
     na = [x["line"] for x in rows if x["passed"] is None]
     head = f"{picked['sub']}, {chk['source']['trades']:,} trades in {chk['source']['lists']:,} boxes"
@@ -442,10 +543,14 @@ def stage3(name: str, ctx: dict, progress=None) -> dict:
     sub = picked["sub"]
     spec, plan, specs = _idea(sub, kw)
     h, rules = plan["home"], {"indicator": PR.need("indicator"), "floor": R.need("2.2", plan["home"]["market"]), "2.6": R.need("2.6")}
+    if _variant():
+        rules = {"mode": "variant", "variant": PR.need("variant"), "floor": rules["floor"], "2.6": rules["2.6"]}
     why = _run([e for e in specs[1:] if e["markets"][0] != h["market"]], kw, "units", progress)      # the same heat map on the other markets
     if why:
         return _error(3, t0, why, [], picked, tries, rules)
     traw, others = _table(specs[0], plan, kw), _others(sub, plan, kw)
+    if _variant():
+        return _stage3_variant(t0, card, picked, tries, traw, list(others.values()), rules)
     if one["result"] == "strict":
         rows = G.strict_extra(traw, list(others.values()))
         bad = [x for x in rows if x["passed"] is False]
@@ -488,6 +593,22 @@ def stage3(name: str, ctx: dict, progress=None) -> dict:
                  {**picked, "sub": best["sub"], "filter": f"{best['block']}_{best['side']}"}, tries, rules, indicators=tried)
 
 
+def _stage3_variant(t0: float, card: dict, picked: dict, tries: int, traw: dict, others: list, rules: dict) -> dict:
+    """Stage 3 in variant mode: NO indicator is tried (the card's list is left alone; the code that tries them is kept, for a mode that wants
+    them back as a boost). The picked box: P3.2 average trade at the floor, P3.3 enough trades, P3.4 each side of the card makes money, P3.6
+    the other markets, shown."""
+    cell = _cell(picked)
+    b = _one_box(traw, cell)
+    rows = G.variant_rows(b, others)
+    bad = [x for x in rows if x["passed"] is False]
+    left = len(card.get("indicators") or [])
+    skip = f"; no indicator is tried in variant mode{f' (the card names {left})' if left else ''}"
+    if bad:
+        return _card(3, t0, False, "fail", rows, f"the picked box {cell} fails {' and '.join(x['line'] for x in bad)}: {bad[0]['text']}{skip}", picked, tries, rules, indicators=[])
+    return _card(3, t0, True, "pass", rows, f"the picked box {cell} holds: " + "; ".join(x["text"] for x in rows if x["passed"] is True) + skip +
+                 ("; the other markets are shown, not asked" if G.others_bar() is None else ""), picked, tries, rules, indicators=[])
+
+
 # ================================================================ stage 4: the proof
 
 @_stage
@@ -498,6 +619,8 @@ def stage4(name: str, ctx: dict, progress=None) -> dict:
     _, plan, specs = _idea(picked["sub"], kw)
     filt = REC.rule_filter(plan)
     rules = {"proof": PR.need("proof"), "tries": tries, "random_bar": PR.random_bar(tries), "floor": R.need("2.2", plan["home"]["market"])}
+    if _variant():
+        return _stage4_variant(t0, kw, picked, tries, plan, specs, {**rules, "mode": "variant"}, progress)
     rows = [G.reshuffle(_table(specs[0], plan, kw, filt))]
     if rows[0]["passed"] is False:
         return _card(4, t0, False, "fail", rows, f"the reshuffled runs do not hold, so the random heat maps are not run: {rows[0]['text']}", picked, tries, rules)
@@ -510,6 +633,25 @@ def stage4(name: str, ctx: dict, progress=None) -> dict:
     ok = rows[1]["passed"] is True
     return _card(4, t0, ok, "pass" if ok else "fail", rows, "the proof holds: " + "; ".join(x["text"] for x in rows) if ok else f"the proof fails: {rows[1]['text']}",
                  picked, tries, rules)
+
+
+def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, specs: list, rules: dict, progress) -> dict:
+    """Stage 4 in variant mode, the proof on the PICKED BOX: (a) its average trade is at the floor in `proof.reshuffle` of the reshuffled runs
+    (G.reshuffle_box); only when it holds, (b) the same box of the random-entry control tables -- the same exit cell, the same days, the same
+    number of trades a day (tables.built(box=): judge.c1_table on that one cell) -- is beaten above the bar of the idea's `tries`."""
+    cell = _cell(picked)
+    rows = [G.reshuffle_box(_one_box(_table(specs[0], plan, kw), cell))]
+    if rows[0]["passed"] is False:
+        return _card(4, t0, False, "fail", rows, f"the reshuffled runs of the picked box {cell} do not hold, so the random entries are not run: {rows[0]['text']}", picked, tries, rules)
+    why = _run(specs[:1], kw, "pools", progress)    # the control pool of the home's market and bar size: read where it stands, run only when it is not there
+    if why:
+        return _error(4, t0, why, rows, picked, tries, rules)
+    with _draws(kw["draws"]):
+        c1 = _table(specs[0], plan, kw, None, control=True, box=cell)["controls"].get("c1") or {}
+    rows.append({**G.random(c1.get("p_beat"), tries, "random-entry runs of the same box"), "seeds": c1.get("seeds"), "replicates": c1.get("replicates")})
+    ok = rows[1]["passed"] is True
+    return _card(4, t0, ok, "pass" if ok else "fail", rows, f"the proof holds for the picked box {cell}: " + "; ".join(x["text"] for x in rows) if ok else
+                 f"the proof fails for the picked box {cell}: {rows[1]['text']}", picked, tries, rules)
 
 
 # ================================================================ stage 5: pick one box and lock
@@ -542,17 +684,20 @@ def _gate(name: str, ctx: dict, picked: dict, line: str):
                  if want and x.get("line") == want and x.get("sub", picked["sub"]) == picked["sub"]), None)
 
 
-def _box(u: dict, kw: dict):
+def _box(u: dict, kw: dict, pick=None):
     """WHAT THE LOCK READ ON THE BOX, the lock's own way (freeze.run) off its two stores -- the home table and its worse-fills
     table -> (the default box | None: no box makes money with normal AND with worse fills, its rows 3.3-3.8). None: the
-    stores of a lock are not both there, or not one table (the lock did not get as far as the box)."""
+    stores of a lock are not both there, or not one table (the lock did not get as far as the box). `pick` = the box the pipeline picked
+    (variant mode): the default only when it is among those that make money both ways, else None."""
     try:
         st, _ = T._open(kw["out"], u["key"])
         wst, _ = T._open(kw["out"], RUN.worse_key(u["key"], u["sess"]))
         T._labels(st, u)
         rows = J.table(st, u)
         ids = J.table_stats(rows)["ids"]
-        default, _ = REC.middle(rows, ids, {c: float(J.cellx(wst, c, u["sess"], u)["net"].sum()) for c in ids})
+        default, surv = REC.middle(rows, ids, {c: float(J.cellx(wst, c, u["sess"], u)["net"].sum()) for c in ids})
+        if pick is not None:
+            default = pick if pick in surv else None
     except (KeyError, *api.REFUSALS):
         return None
     return default, ([] if default is None else [fn(T.box(st, u, default, kw["days"])) for fn in L.BOX])
@@ -564,6 +709,9 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
     t0, kw, four = time.monotonic(), _kw(name, ctx), _before(name, ctx, 4)
     picked, tries, own = four["picked"], four["tries"], PR.need("prop", "account")
     sub, with_ = picked["sub"], (f" with {picked['filter'].replace('_', ' ', 1)}" if picked["filter"] else "")
+    variant = _variant()
+    pick = _cell(picked) if variant else None       # the box the pipeline picked at stage 1, which the lock takes as its default
+    the_box = "the picked box" if variant else "the middle box"
     _, plan, specs = _idea(sub, kw)
     h, rules = plan["home"], {"prop": PR.need("prop"), "checked": list(CHECKED)}
     u = T.bp_unit(specs[0], h["market"], h["bar"], h["session"], "", T.filter_of(specs[0], REC.rule_filter(plan)))
@@ -577,8 +725,17 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
                          code_problem=True, check=chk["saved"])
         rows = (_built(sub, kw) or REC.build(sub, REASON, **_cmd(kw)))["lines"]
         shown = G.others_bar() is None              # the other markets ask nothing (pipeline.json): the build's 2.5 is shown, and the lock is told so
-        bad = [x for x in rows if x["passed"] is False and not (shown and x["line"] == OTHERS)]
-        odd = [x for x in bad if not (picked["filter"] and x["line"] == OTHERS)]
+        waive = tuple(x for x in WHOLE if shown or x != OTHERS) if variant else (OTHERS,) if shown else ()      # variant mode: the lines about the whole map are shown, none asks (module docstring)
+        bad = [x for x in rows if x["passed"] is False and x["line"] not in waive]
+        if variant:                                 # the whole map's lines asked nothing; line 2.6 (the whole table's sides) is still read, and it is no code problem
+            odd = [x for x in bad if x["line"] != SIDES]
+            if odd:
+                return _card(5, t0, False, "fail", rows, f"CODE PROBLEM: the toolkit's build of {sub} fails {', '.join(x['line'] for x in odd)}, a line no gate of the pipeline's "
+                             f"variant mode reads: {'; '.join(x['text'] for x in odd)}", picked, tries, needs(rows), code_problem=True)
+            if bad:
+                return _card(5, t0, False, "sides", rows, f"the picked box {pick} of {sub}: the toolkit's build reads the sides of the whole table, and {bad[0]['text']} -- the idea stops",
+                             picked, tries, needs(rows))
+        odd = [] if variant else [x for x in bad if not (picked["filter"] and x["line"] == OTHERS)]
         if odd:                                     # the toolkit reads a line otherwise than the pipeline's gate did: neither number is believed
             said = "; ".join(f"the toolkit: {x['text']} -- the pipeline: {(_gate(name, ctx, picked, x['line']) or {}).get('text') or 'no gate of its own reads this line'}"
                              for x in odd)
@@ -588,16 +745,17 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
             return _card(5, t0, False, "other markets", rows, f"{sub}{with_} does not hold on its other markets, which the build is the first to run with the "
                          f"indicator on: {bad[0]['text']}", picked, tries, needs(rows))
         try:
-            r = FRZ.lock(sub, **_cmd(kw), **({"waive": (OTHERS,)} if shown else {}))
+            r = FRZ.lock(sub, **_cmd(kw), **({"waive": waive} if waive else {}), **({"default": pick} if variant else {}))
         except J.Refuse:
-            got = _box(u, kw)
+            got = _box(u, kw, pick) if variant else _box(u, kw)
             if got is None or (got[0] is not None and all(x["passed"] for x in got[1])):
                 raise                               # not the box: the lock's own word goes up to the runner
             default, rows = got
             if default is None:
-                return _card(5, t0, False, "no box", rows, f"no box of {sub}{with_} makes money with normal AND with worse fills: there is no middle box to "
-                             "lock, and the idea stops", picked, tries, rules)
-            return _card(5, t0, False, "box failed", rows, f"the middle box {default} of {sub}{with_} does not meet "
+                return _card(5, t0, False, "no box", rows, (f"the picked box {pick} of {sub} does not make money with normal AND with worse fills: it cannot be locked, and the idea stops"
+                             if variant else f"no box of {sub}{with_} makes money with normal AND with worse fills: there is no middle box to lock, and the idea stops"),
+                             picked, tries, rules)
+            return _card(5, t0, False, "box failed", rows, f"{the_box} {default} of {sub}{with_} does not meet "
                          f"{', '.join(x['line'] for x in rows if not x['passed'])}: " + "; ".join(x["text"] for x in rows if not x["passed"])
                          + " -- no second box: the idea stops", picked, tries, needs(rows), default=default)
     lock = r["lock"]
@@ -608,8 +766,10 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
     p = prop[own]
     rows.append(L._row("P5.9", None, None, {k: rules["prop"][k] for k in ("days", "eval", "payout")}, p["text"], account=own,
                        **{k: p[k] for k in ("label", "eval", "payout", "size", "payout_size")}))
-    return _card(5, t0, True, "locked", rows, f"{sub}{with_} is locked: the middle box {default} (of {len(lock['survivors'])} that make money with normal and with worse "
-                 f"fills), lock {lock['hash']}; on the build days it is a {p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, needs(rows[:-1]),
+    shown_whole = list(lock.get("waived") or [])
+    return _card(5, t0, True, "locked", rows, f"{sub}{with_} is locked: {the_box} {default} (of {len(lock['survivors'])} that make money with normal and with worse "
+                 f"fills), lock {lock['hash']}; on the build days it is a {p['label'].upper()} on {p['name']} (a label, not a gate)"
+                 + (f"; the build's lines about the whole map were shown, not asked: {', '.join(shown_whole)}" if variant and shown_whole else ""), picked, tries, needs(rows[:-1]),
                  locked={"default": default, "lock": lock["hash"], "prop": prop})
 
 

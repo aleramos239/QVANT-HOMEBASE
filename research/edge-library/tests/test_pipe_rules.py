@@ -57,7 +57,9 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     assert P.need("portfolio") == {"eval": {"days": 5, "odds": 0.6}, "payout": {"days": 14, "odds": 0.75}}
     assert P.need("portfolio", "payout", "odds") == 0.75
     assert P.need("test") == {"one_read_a_slot": False} and P.need("test", "one_read_a_slot") is False      # every pipeline idea gets its own read (the owner, 2026-10-08)
-    assert set(P.need()) == {"card", "raw", "indicator", "proof", "box", "test", "prop", "portfolio"}      # the whole file, its notes left out
+    assert P.need("mode") == "variant" and P.mode() == "variant"                                  # the owner, 2026-10-08: the hard rules are judged on ONE picked variant
+    assert P.need("variant") == {"map_share": 0.5, "region_boxes": 25, "region_trades": 200, "floor_part": 1.0}      # the loose check of the map, and the one box's numbers
+    assert set(P.need()) == {"mode", "variant", "card", "raw", "indicator", "proof", "box", "test", "prop", "portfolio"}      # the whole file, its notes left out
     assert "raw.nope" in refused(lambda: P.need("raw", "nope"), "pipeline.json has no")
     refused(lambda: P.need("nope"), "nope")
     refused(lambda: P.need("raw", "low", "share", "deeper"), "raw.low.share.deeper")               # a number has nothing under it
@@ -65,6 +67,26 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     refused(lambda: P.need("_about"), "_about")                                                   # a note for the reader is no number
     P.need("raw")["low"]["share"] = 0.99                                                          # what a caller does to its copy ...
     assert P.need("raw", "low", "share") == 0.5                                                   # ... is not done to the rules
+
+
+def test_the_mode_is_map_or_variant_and_nothing_else():
+    """pipeline.json "mode": "variant" (default, 2026-10-08) judges one picked box; "map" is the legacy whole-map behaviour. A file that
+    says another word does not load, and a file without the key reads as "map" (the files written before the mode existed)."""
+    p = json.loads(FILE.read_text(encoding="utf-8"))
+    with tempfile.TemporaryDirectory() as tmp:
+        P.FILE = Path(tmp) / "pipeline.json"
+        for mode, expect in (("map", "map"), ("variant", "variant")):
+            P.FILE.write_text(json.dumps({**p, "mode": mode}), encoding="utf-8")
+            P._all.cache_clear()
+            assert P.mode() == expect
+        P.FILE.write_text(json.dumps({k: v for k, v in p.items() if k != "mode"}), encoding="utf-8")
+        P._all.cache_clear()
+        assert P.mode() == "map"
+        P.FILE.write_text(json.dumps({**p, "mode": "both"}), encoding="utf-8")
+        P._all.cache_clear()
+        refused(lambda: P.mode(), "mode")
+    teardown_function()
+    assert P.mode() == "variant"
 
 
 # ================================================================ 2. the random bar and the floor

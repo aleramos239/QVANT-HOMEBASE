@@ -122,6 +122,7 @@ def world(monkeypatch):
     monkeypatch.setattr(PS, "pools", lambda: POOLS)
     monkeypatch.setattr(RUN, "clock", lambda: TI.SAT)
     monkeypatch.setattr(RM, "auto_workers", lambda n=None: n)
+    monkeypatch.setattr(PR, "mode", lambda: "map")          # these tests lock the legacy whole-map behaviour (tests/test_pipe_variant.py locks variant mode)
     monkeypatch.setenv(PS.ENV, str(STRAY))
     if "before" not in _T:
         _T["before"] = snapshot()

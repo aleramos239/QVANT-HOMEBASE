@@ -5,6 +5,9 @@ typed in code. A change of a number is a change of the pipeline's rules (the own
   need(*keys)          one number, or one level, of pipeline.json: need("raw", "low", "share") -> 0.5 · need("raw", "low") ->
                        {"share", "floor_part", "trades"} · need() -> the whole file. A copy: a caller cannot change the rules.
                        A key the file does not have, a note ('_...'), a key under a number or a list: R.RuleError
+  mode()               "variant" (the shipped default, the owner 2026-10-08: the hard rules are judged on ONE picked box, the map gets a loose
+                       check) or "map" (the legacy behaviour: the whole 144-box map is judged); a file without the key reads "map"; any other
+                       word: R.RuleError. `variant` = the numbers of variant mode (map_share, region_boxes, region_trades, floor_part)
   random_bar(tries)    the share of the random tables an idea must beat on its `tries`-th try: 1 - alpha / max(1, tries) --
                        the law's ladder of line 2.3 (95 %, 97.5 %, 98.3 %, 98.75 %, 99 %), carried on past its fifth round
   floor(root, part)    `part` of the market's cost floor of line 2.2, in dollars a trade: floor("NQ", 0.5) -> 35.0
@@ -24,6 +27,7 @@ from functools import lru_cache
 from . import rules as R
 
 FILE = R.T / "pipeline.json"
+MODES = ("map", "variant")
 DECIMALS = 3                                        # the law prints the ladder of 2.3 to three decimals (98.3 % for 98.33 %)
 
 
@@ -52,6 +56,8 @@ def _all() -> dict:
     bad = check(p)
     if bad:
         raise R.RuleError("the pipeline's numbers and the blueprint's do not agree: " + "; ".join(bad))
+    if p.get("mode", MODES[0]) not in MODES:
+        raise R.RuleError(f"pipeline.json mode = {p['mode']!r}: the pipeline runs in one of {', '.join(MODES)}")
     return {k: v for k, v in p.items() if not k.startswith("_")}
 
 
@@ -64,6 +70,11 @@ def need(*keys):
                               + (f" (it has {', '.join(d)})" if isinstance(d, dict) else " (a number has nothing under it)"))
         d = d[k]
     return copy.deepcopy(d)
+
+
+def mode() -> str:
+    """"variant" (judge ONE picked box after a loose check of the map) or "map" (judge the whole map); a file without a mode is "map"."""
+    return _all().get("mode", MODES[0])
 
 
 def random_bar(tries: int) -> float:
