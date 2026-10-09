@@ -125,7 +125,8 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Callable
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
 
 from .. import arsenal, draftstore, ideastore, netguard, strategies
 from ..backtest import drafthost
@@ -139,12 +140,15 @@ from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
-from . import lab_templates, reviewpack
+from . import lab_templates, reviewpack, watch
+from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
 LAB_WAIT_S = 20          # the longest a blueprint tool started from the Lab waits for a job before it hands back its id
 PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long: a page asks every 5 s, and several may be open
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
+CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
+WATCH_ACTIONS = ("promote", "remove", "show")
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
 PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in the desk's 9:30 window
 PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
@@ -516,6 +520,122 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         finally:
             with pipe_lock:       # whatever it did, the next look is a new one
                 pipe_cache["at"] = None
+
+    # ---- what an idea did, as a person looks at it: its equity curve and its executions on the chart (2026-10-09) ----
+    curve_cache: OrderedDict = OrderedDict()
+
+    def curve_of(name: str) -> dict:
+        """`pipe curve`, kept CURVE_CACHE_S per idea: the curve changes only when a stage writes a new store."""
+        if not pipeline_tools.NAME_RE.fullmatch(name):
+            raise HTTPException(404, f"no idea {name!r}")
+        hit = curve_cache.get(name)
+        if hit is not None and pipe_clock() - hit[0] < CURVE_CACHE_S:
+            return hit[1]
+        try:
+            body = box.pipeline_curve(name)
+        except blueprint_tools.Refused as e:      # no pick yet, or no stored trades: said as it is
+            raise HTTPException(409, pipeline_tools.page_refusal(e)) from None
+        except ToolError as e:
+            raise HTTPException(503, str(e)) from None
+        curve_cache[name] = (pipe_clock(), body)
+        while len(curve_cache) > 64:
+            curve_cache.popitem(last=False)
+        return body
+
+    @r.get("/pipeline/curve/{name}")
+    def pipeline_curve(name: str):
+        return curve_of(name)
+
+    async def executions_shown(name: str) -> dict:
+        """The idea's picked box as a tester run (written once), then every open chart page is asked to show it at its
+        last traded day. Answers {run_id, trades, of, start, end, pages}."""
+        if not pipeline_tools.NAME_RE.fullmatch(name):
+            raise HTTPException(404, f"no idea {name!r}")
+        if Slots().quiet():       # the desk's 9:30 window: never move a chart or decode history then
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): show it after 09:35")
+        try:
+            got = await asyncio.to_thread(box.pipeline_executions, name)
+        except blueprint_tools.Refused as e:
+            raise HTTPException(409, pipeline_tools.page_refusal(e)) from None
+        except ToolError as e:
+            raise HTTPException(503, str(e)) from None
+        msg = {"type": "tester_show", "run_id": got["run_id"]}
+        if got.get("end"):
+            msg["focus"] = {"date": got["end"]}
+        pages = notify(msg) if notify is not None else 0
+        return {"ok": True, "pages": pages, **got}
+
+    @r.post("/pipeline/executions")
+    async def pipeline_executions(request: Request):
+        write_ok(request)
+        json_body(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        if not isinstance(body, dict) or set(body) != {"name"} or not isinstance(body["name"], str):
+            raise HTTPException(400, "{name}")
+        return await executions_shown(body["name"])
+
+    # ---- the Desk's watch list: Book strategies promoted from the Lab (watch.py). Records only: nothing here trades. ----
+    def watch_guard(request: Request) -> None:
+        bad = desk_origin_refusal(request.headers)
+        if bad is not None:
+            raise HTTPException(*bad)
+
+    def watch_answer(request: Request, body: dict, status: int = 200):
+        return _cors(JSONResponse(body, status_code=status), request)
+
+    @r.get("/watch")
+    def watch_list(request: Request):
+        watch_guard(request)
+        return watch_answer(request, {"strategies": watch.listing()})
+
+    @r.options("/watch/{what}")
+    def watch_preflight(what: str, request: Request):
+        """The desk page's CORS preflight: for its exact origins only."""
+        o = request.headers.get("origin")
+        if what not in WATCH_ACTIONS or o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
+
+    @r.post("/watch/{what}")
+    async def watch_write(what: str, request: Request):
+        """promote {name}: a strategy that is IN THE BOOK goes on the Desk's watch list, with a snapshot of its card and
+        curve. remove {name}: it leaves the list. show {name}: its executions on the chart. A refusal the desk page may
+        read is answered with its own words ({ok: false, detail})."""
+        watch_guard(request)
+        try:
+            write_ok(request)
+            json_body(request)
+            if what not in WATCH_ACTIONS:
+                raise HTTPException(404, f"unknown watch action {what!r}")
+            try:
+                body = await request.json()
+            except ValueError:
+                raise HTTPException(400, "the body is JSON") from None
+            name = body.get("name") if isinstance(body, dict) else None
+            if not isinstance(body, dict) or set(body) != {"name"} or not isinstance(name, str) or not watch.NAME_RE.fullmatch(name):
+                raise HTTPException(400, "{name: a Book strategy's name}")
+            if what == "remove":
+                return watch_answer(request, {"ok": True, "removed": watch.remove(name), "name": name})
+            if what == "show":
+                return watch_answer(request, await executions_shown(name))
+
+            def promote() -> dict:
+                try:
+                    card = next((c for c in box.pipeline_state()["book"] if isinstance(c, dict) and c.get("name") == name), None)
+                except ToolError as e:
+                    raise HTTPException(503, str(e)) from None
+                if card is None:
+                    raise HTTPException(409, f"{name} is not in the Book: only a strategy that passed every stage and was approved can be promoted")
+                return watch.put(watch.snapshot(card, curve_of(name)))
+            snap = await asyncio.to_thread(promote)
+            return watch_answer(request, {"ok": True, "name": name, "promoted_utc": snap["promoted_utc"]})
+        except HTTPException as e:
+            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
     @r.post("/show")
     async def show(request: Request):
