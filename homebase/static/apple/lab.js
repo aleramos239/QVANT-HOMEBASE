@@ -119,7 +119,9 @@
         if (titleEl && titleEl.title !== tip) titleEl.title = tip;
         if (!kind) return tb.title('Lab', '');
         const nameEl = $('.doc-name', doc);
-        const name = b ? (b.kind === 'builtin' ? (b.meta && b.meta.name) || b.id : b.name) : nameEl ? nameEl.textContent.replace(/\.py$/, '') : '';
+        // a saved draft shows the name the strategy gives itself, which the page's own title carries (its file name is in the line below)
+        const own = kind === 'draft' && nameEl ? nameEl.textContent.replace(/\.py$/, '').trim() : '';
+        const name = b ? (b.kind === 'builtin' ? (b.meta && b.meta.name) || b.id : own || b.name) : nameEl ? nameEl.textContent.replace(/\.py$/, '') : '';
         let sub = txt;
         if (kind === 'builtin') sub = 'Built-in, read only';
         else if (kind === 'draft' && !err) sub = st && st.classList.contains('edited') ? 'Edited' : txt ? 'Draft · ' + txt : 'Draft';
