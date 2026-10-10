@@ -467,11 +467,13 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeMen
 async function newMenu(anchor) {
   const r = await send('GET', '/api/tester/drafts/templates');
   const ts = (r.ok && r.json) || [];
-  menu(anchor, `<button data-pick="paste"><b>Paste a script</b><small>Insert Python from your clipboard or an editor</small></button>
+  menu(anchor, `<button data-pick="form"><b>Fill in a form</b><small>Pick a market, an entry rule, a stop and a target. No code.</small></button><hr>
+    <button data-pick="paste"><b>Paste a script</b><small>Insert Python from your clipboard or an editor</small></button>
     <button data-pick="file"><b>Open a .py file…</b><small>Load a script from disk</small></button><hr>
     <h6>Start from a template</h6>${ts.map((t) => `<button data-pick="t:${esc(t.id)}"><b>${esc(t.title)}</b><small>${esc(t.blurb)}</small></button>`).join('')}
     ${S.groups ? '<hr><button data-pick="group"><b>New group…</b><small>A section of this list to keep strategies under</small></button>' : ''}`,
   async (pick) => {
+    if (pick === 'form') return formOpen(anchor);
     if (pick === 'paste') return pasteScript();
     if (pick === 'file') return $('#labFile').click();
     if (pick === 'group') return nameGroup();
@@ -482,17 +484,24 @@ async function newMenu(anchor) {
 function moreMenu(anchor) {
   const b = buf();
   if (!b) return;
-  const draft = b.kind !== 'builtin', saved = b.kind === 'draft';
-  menu(anchor, `${draft ? `<button class="row" data-pick="save"${isDirty(b) || b.kind === 'new' ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>
+  const draft = b.kind !== 'builtin', saved = b.kind === 'draft', code = b.code || '';
+  const formRow = '<button class="row" data-pick="form"><span>Edit in the form…</span></button>';
+  const known = draft && fmRead.code === code && !!fmRead.got;          // the form's read of this code, when it is already in
+  menu(anchor, `${draft ? `<button class="row" data-pick="save"${isDirty(b) || b.kind === 'new' ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>${known ? formRow : ''}
       <button class="row" data-pick="review"${saved ? '' : ' disabled'}><span>Request a review…</span></button><hr>` : ''}
     <button class="row" data-pick="ref"><span>Scripting reference</span></button>
     ${saved ? '<hr><button class="row" data-pick="delete"><span>Delete…</span></button>' : ''}`,
   (pick) => {
     if (pick === 'save') save(b);
+    else if (pick === 'form') formEdit(anchor, b);
     else if (pick === 'review') reviewDialog();
     else if (pick === 'ref') referenceDialog();
     else if (pick === 'delete') deleteDialog(b.name);
   });
+  if (draft && !known && code) {            // asked once for this code; the row appears when the answer says the form made it
+    const mine = menuEl;
+    formRead(code).then((got) => { if (got && menuEl === mine && mine.isConnected && !mine.querySelector('[data-pick="form"]') && buf() === b && b.code === code) mine.querySelector('[data-pick="save"]').insertAdjacentHTML('afterend', formRow); });
+  }
 }
 async function referenceDialog() {
   const r = await send('GET', '/api/tester/drafts/reference');
@@ -518,6 +527,190 @@ function readFile(file) {
     openScript(code, C.nameError(stem) || takenNames().includes(stem) ? C.suggestName(code, takenNames()) : stem);
   };
   rd.readAsText(file);
+}
+
+/* ---- the strategy form: "Fill in a form" in the + menu, "Edit in the form…" in the ⋯ menu (2026-10-09) ----
+   The owner fills in a short form and gets a normal strategy file. The form is the server's (GET /api/tester/drafts/form: the
+   entry rules, their fields, words, choices, limits, defaults): this page names no rule. What he has chosen is read back in one
+   sentence that the server writes (the build route's `sentence`), asked for 400 ms after the last change and never while an earlier
+   answer is still out. The server is the authority on every answer; the page only spares a request for a number that is plainly not
+   one. Nothing in the sheet is rebuilt while a box has focus: the helper words, the errors and the sentence are patched in place, and
+   only the part below the entry rule is drawn again (when the rule changes, with the keyboard on the rule's own box above it).
+   Nothing is saved until he saves or runs, as with a template. */
+const FM_NAME_WORDS = 'Small letters, numbers and _ , a letter first. For example: nq_orb';
+const fmRead = { code: null, p: null, got: undefined };       // the form's read of the open code: asked once per code, kept
+function formRead(code) {
+  if (fmRead.code === code && fmRead.p) return fmRead.p;
+  fmRead.code = code; fmRead.got = undefined;
+  const p = send('POST', '/api/tester/drafts/form/read', { code }).then((r) => {
+    const got = r.ok && r.json && r.json.answers && typeof r.json.answers === 'object' ? { answers: r.json.answers, intact: r.json.intact === true } : null;
+    if (fmRead.p === p) { if (r.ok) fmRead.got = got; else fmRead.code = null; }         // a failed ask is asked again next time
+    return got;
+  });
+  fmRead.p = p;
+  return p;
+}
+function replaceCode(b, code) {       // as if he had typed it: the draft is changed and unsaved, and is checked again
+  b.code = code; b.valid = null;
+  if (S.cur === b.key) { paintEditor(); paintLib(); }
+  queueValidate(b, 0);
+}
+/* a key still held when the sheet closes must not type into the editor that gets the keyboard next */
+function swallowRepeats() {
+  const eat = (e) => { if (e.repeat) { e.preventDefault(); e.stopPropagation(); } };
+  const off = () => { document.removeEventListener('keydown', eat, true); document.removeEventListener('keyup', off, true); };
+  document.addEventListener('keydown', eat, true);
+  document.addEventListener('keyup', off, true);
+}
+/* edit: null for a new strategy, else { key, answers, wanted? } of the open draft. Resolves true when the sheet opened. */
+async function formOpen(anchor, edit = null) {
+  const r = await send('GET', '/api/tester/drafts/form');
+  const sc = r.ok && r.json && Array.isArray(r.json.rules) && r.json.rules.length ? r.json : null;
+  if (edit && edit.wanted && !edit.wanted()) return false;       // the question that led here was answered No while this loaded
+  const F0 = sc && (edit ? C.fmFill(sc, edit.answers) : C.fmStart(sc, takenNames()));
+  if (!F0) {
+    log(`<span class="err">${esc(!sc ? (r.status === 404 ? 'The chart service is from before the form: restart it once to use it.' : `Could not load the form: ${r.error || 'it came back empty'}`) : 'The form does not know this strategy’s entry rule.')}</span>`);
+    return false;
+  }
+  const back = anchor && anchor.isConnected ? anchor : root.querySelector(`[data-act="${edit ? 'more' : 'new'}"]`);
+  if (back && !overlay) back.focus({ preventScroll: true });       // the sheet hands the keyboard back to what opened it
+  let F = F0, touched = !!edit, built = null, serverErr = {}, lastSay = '', flying = false, making = false, timer = 0, ver = 0;
+  const taken = takenNames();
+  const d = dialog(`<h2 id="labDlgTitle">${edit ? 'Edit strategy' : 'New strategy'}</h2>`);
+  d.classList.add('pl-dlg');
+  const ruleOf = () => sc.rules.find((x) => x.id === F.rule) || sc.rules[0];
+  const words = (f) => (f === 'name' ? (edit ? 'A strategy keeps its name.' : FM_NAME_WORDS) : f === 'rule' ? ruleOf().words : sc.fields[f].words);
+  const opt = (v, t, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(t)}</option>`;
+  const sel = (f, opts, cur, more = '') => `<select id="fm_${f}" data-fm="${f}"${more} aria-describedby="fh_${f}">${opts.map(([v, t]) => opt(v, t, cur)).join('')}</select>`;
+  const kindOf = (f) => C.fmKinds(sc, F.rule, f).find((k) => k.id === (F[f] || {}).kind);
+  const control = (f) => {
+    const desc = ` aria-describedby="fh_${f}"`;
+    if (f === 'name') return `<input id="fm_name" data-fm="name" value="${esc(F.name)}"${edit ? ' readonly' : ''} spellcheck="false" autocomplete="off" autocapitalize="off"${desc}>`;
+    if (f === 'rule') return sel(f, sc.rules.map((x) => [x.id, x.label]), F.rule);
+    const def = sc.fields[f];
+    if (f === 'side') return sel(f, C.fmSides(sc, F.rule), F.side);
+    if (def.type === 'choice') return sel(f, (def.choices || []).map((c) => [c, c]), F[f]);
+    if (def.type === 'time') return `<input type="time" id="fm_${f}" data-fm="${f}" value="${esc(F[f])}" max="${C.FM_LATEST}" step="60"${desc}>`;
+    if (def.type === 'stop' || def.type === 'target') {
+      const k = kindOf(f);
+      return `<div class="pl-two">${sel(f, C.fmKinds(sc, F.rule, f).map((x) => [x.id, x.label]), (F[f] || {}).kind, ' data-part="kind"')}
+        <input id="fm_${f}_v" class="fm-v" data-fm="${f}" data-part="value" value="${esc((F[f] || {}).value == null ? '' : F[f].value)}" inputmode="decimal" aria-label="${esc(def.label)} amount" aria-describedby="fh_${f}" spellcheck="false" autocomplete="off"${C.fmHasValue(k) ? '' : ' hidden'}></div>`;
+    }
+    return `<input id="fm_${f}" data-fm="${f}" value="${esc(F[f] == null ? '' : F[f])}" inputmode="${def.type === 'int' ? 'numeric' : 'decimal'}" spellcheck="false" autocomplete="off"${desc}>`;
+  };
+  const field = (f) => `<div class="bp-f pl-f"><label for="fm_${f}">${esc(f === 'name' ? 'Name' : f === 'rule' ? 'Entry rule' : sc.fields[f].label)}</label>${control(f)}<small id="fh_${f}">${esc(words(f))}</small></div>`;
+  const restHtml = () => C.fmShown(sc, F.rule).slice(3).map(field).join('');
+  d.innerHTML = `<h2 id="labDlgTitle">${edit ? 'Edit strategy' : 'New strategy'}</h2>
+    <div class="pl-body" tabindex="-1"><div class="bp-form">${['name', 'market', 'rule'].map(field).join('')}<div class="bp-form" id="fmRest">${restHtml()}</div></div></div>
+    <div class="pl-foot"><p class="fm-say" id="fmSay" role="status" aria-live="polite"></p>
+      <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go" aria-describedby="fmSay" disabled>${edit ? 'Update' : 'Make it'}</button></div></div>`;
+  const rest = $('#fmRest', d), say = $('#fmSay', d), go = $('[data-x="go"]', d);
+  const errors = () => ({ ...serverErr, ...C.fmErrors(sc, F) });          // what the page can see wins over an older answer
+  const ready = () => !making && !flying && !timer && !!built && built.ver === ver && !Object.keys(C.fmErrors(sc, F)).length;
+  /* everything that changes while a box has focus is changed where it stands */
+  const paintState = () => {
+    const e = errors(), order = C.fmShown(sc, F.rule);
+    for (const f of order) {
+      const h = $(`#fh_${f}`, d);
+      if (!h) continue;
+      h.textContent = e[f] || words(f);
+      h.classList.toggle('pl-bad', !!e[f]);
+      for (const c of d.querySelectorAll(`[data-fm="${f}"]`)) { c.classList.toggle('bad', !!e[f]); c.setAttribute('aria-invalid', String(!!e[f])); }
+    }
+    const first = C.fmFirstError(e, order);
+    if (built && built.ver === ver) lastSay = built.sentence;
+    say.textContent = first || lastSay;
+    say.classList.toggle('bad', !!first);
+    go.disabled = !ready();
+  };
+  const ask = async () => {
+    timer = 0;
+    if (!d.isConnected || flying) return;           // an answer on its way asks again when it lands, if the form changed since
+    if (Object.keys(C.fmErrors(sc, F)).length) { built = null; paintState(); return; }
+    const mine = ver, answers = C.fmAnswers(sc, F);
+    flying = true; paintState();
+    const a = await send('POST', '/api/tester/drafts/form/build', edit ? { answers, replace: true } : { answers });
+    flying = false;
+    if (!d.isConnected) return;
+    const j = a.ok && a.json && typeof a.json === 'object' ? a.json : null;
+    if (mine === ver) {
+      built = null; serverErr = {};
+      if (j && j.ok === true && typeof j.code === 'string') built = { ver: mine, code: j.code, name: String(j.name || ''), sentence: String(j.sentence || '') };
+      else if (j && j.errors && typeof j.errors === 'object') serverErr = Object.fromEntries(Object.entries(j.errors).filter(([, v]) => typeof v === 'string'));
+      else serverErr = { form: a.error || 'The chart service did not answer.' };
+    }
+    paintState();
+    if (mine !== ver && !timer) ask();           // changed meanwhile and the 400 ms have passed: ask now
+  };
+  const touch = (f) => {
+    ver++;
+    if (f === 'rule' || f === 'market') serverErr = {}; else delete serverErr[f];
+    clearTimeout(timer);
+    timer = setTimeout(ask, 400);
+    paintState();
+  };
+  const suggest = () => { if (touched) return; F.name = C.fmSuggest(F.market, F.rule, taken); $('#fm_name', d).value = F.name; };
+  const onEdit = (e) => {
+    const t = e.target, f = t.dataset && t.dataset.fm;
+    if (!f || (t.tagName === 'SELECT') !== (e.type === 'change')) return;      // a box counts as it is typed, a list when it is chosen
+    if (f === 'rule') { F = C.fmSwitch(sc, F, t.value); suggest(); rest.innerHTML = restHtml(); }
+    else if (f === 'stop' || f === 'target') {
+      if (t.dataset.part === 'kind') {
+        const k = C.fmKinds(sc, F.rule, f).find((x) => x.id === t.value), v = $(`#fm_${f}_v`, d);
+        F[f] = C.fmHasValue(k) ? { kind: t.value, value: C.fmKindValue(sc, F.rule, f, t.value) } : { kind: t.value };
+        v.value = F[f].value == null ? '' : F[f].value; v.hidden = !C.fmHasValue(k);
+      } else F[f] = { ...F[f], value: t.value };
+    } else {
+      F[f] = t.value;
+      if (f === 'name') touched = true; else if (f === 'market') suggest();
+    }
+    touch(f);
+  };
+  d.addEventListener('input', onEdit);
+  d.addEventListener('change', onEdit);
+  d.addEventListener('keydown', (e) => { if (e.repeat && (e.key === 'Enter' || e.key === ' ') && e.target.closest('button')) e.preventDefault(); });      // a held key presses nothing twice
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    if (x.dataset.x === 'cancel') return closeDialog();
+    if (x.dataset.x !== 'go' || !ready()) return;
+    making = true; go.disabled = true;
+    if (e.detail === 0) swallowRepeats();           // pressed with the keyboard: a held key goes nowhere
+    if (!edit) {
+      closeDialog(false);
+      openScript(built.code, built.name);
+      return log('Made from the form. Run it to see how it would have done.');
+    }
+    const b = S.bufs.get(edit.key);
+    if (!b || b.kind === 'builtin') { closeDialog(); return log('<span class="err">That strategy is not open any more.</span>'); }
+    replaceCode(b, built.code);
+    closeDialog();
+    log('Updated from the form. Run it again.');
+  });
+  const at = $(edit ? '#fm_market' : '#fm_name', d);
+  at.focus({ preventScroll: true });
+  if (!edit) at.select();
+  paintState();
+  ask();
+  return true;
+}
+/* "Edit in the form…": a strategy the form made opens in it; one changed by hand asks first */
+async function formEdit(anchor, b) {
+  const got = await formRead(b.code);
+  if (!got) return log('<span class="err">This strategy was not made with the form.</span>');
+  if (got.intact) return formOpen(anchor, { key: b.key, answers: got.answers });
+  const back = anchor && anchor.isConnected ? anchor : root.querySelector('[data-act="more"]');
+  if (back) back.focus({ preventScroll: true });
+  const d = dialog(`<h2>Edit in the form</h2><p>This strategy was changed by hand. Updating it from the form replaces the code with the form's version.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go">Open the form</button></div>`);
+  d.querySelector('[data-x="go"]').focus();
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    if (x.dataset.x === 'cancel') return closeDialog();
+    x.disabled = true;
+    if (!(await formOpen(anchor, { key: b.key, answers: got.answers, wanted: () => d.isConnected })) && d.isConnected) closeDialog();
+  });
 }
 
 function reviewDialog() {
@@ -701,7 +894,7 @@ function paintLib() {
     el.scrollTop = top;
     return;
   }
-  el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
+  el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" data-fk="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
     ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
@@ -1360,7 +1553,7 @@ function paintHead() {
   else { const st = document.getElementById('edState'); if (st) { st.className = `doc-state ${cls}`; st.textContent = text; st.title = tip || text; } }
   const canRun = !busy && (ro || (b.code || '').trim());
   acts.innerHTML = `<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="Run the backtest (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : 'Run'}</span></button>
-    <button class="hb-ib" data-act="more" aria-label="More" title="More" aria-haspopup="menu">${ICON_MORE}</button>`;
+    <button class="hb-ib" data-act="more" data-fk="more" aria-label="More" title="More" aria-haspopup="menu">${ICON_MORE}</button>`;
   const hint = $('#edHint'); if (hint) hint.hidden = !!(b.code && b.code.length) || ro;
 }
 function paintGutter() {

@@ -564,6 +564,10 @@ body.lab-pipe-on #labDoc, body.lab-pipe-on #labActs { visibility: hidden; }     
 .pl-need:empty { display: none; }
 .pl-foot .acts { margin-top: 10px; }
 .pl-clear { margin-right: auto; }
+/* the strategy form (2026-10-09): the sentence that reads it back, and the number box a choice may not need */
+.lab-dlg .pl-foot p.fm-say { margin: 0; min-height: 3em; font-size: var(--hb-fs-ui); line-height: 1.5; color: var(--hb-fg); text-wrap: pretty; }
+.lab-dlg .pl-foot p.fm-say.bad { color: var(--pl-red); font-weight: 500; }
+.lab-dlg input.fm-v[hidden] { display: none; }
 @media (max-width: 560px) { .pl-two { grid-template-columns: minmax(0, 1fr); } }
 
 /* ---- the view switcher: one button that names the list on show, a menu behind it (2026-10-09) ---- */

@@ -455,3 +455,55 @@ test('fm: the time boxes stop at 15:55 and the server\'s sentences are shown as 
   assert.equal(L.fmFirstError({ form: 'The form is incomplete.' }, ['name']), 'The form is incomplete.', 'a key that is no field of the form comes last');
   assert.equal(L.fmFirstError({}, ['name']), '');
 });
+
+/* ---- the form's sheet in lab.js (source-text pins: the page has no DOM to run it in here) ---- */
+import { readFileSync } from 'node:fs';
+const LABJS = readFileSync(new URL('../../homebase/static/charts/lab.js', import.meta.url), 'utf8');
+const CODEJS = readFileSync(new URL('../../homebase/static/charts/labcode.js', import.meta.url), 'utf8');
+const FMSEC = LABJS.slice(LABJS.indexOf('/* ---- the strategy form: "Fill in a form"'), LABJS.indexOf('function reviewDialog()'));
+const FMPURE = CODEJS.slice(CODEJS.indexOf('/* ---- the strategy form ("Fill in a form"): the pure half'), CODEJS.indexOf('\nconst api = {'));
+
+test('form sheet: the words the owner reads are the brief\'s', () => {
+  assert.ok(FMSEC.length > 4000, 'the section is there');
+  for (const t of ['<b>Fill in a form</b><small>Pick a market, an entry rule, a stop and a target. No code.</small>', "'Edit strategy' : 'New strategy'", "'Update' : 'Make it'",
+    'Made from the form. Run it to see how it would have done.', 'Updated from the form. Run it again.',
+    "This strategy was changed by hand. Updating it from the form replaces the code with the form's version.", 'Open the form', 'Edit in the form…']) assert.ok(LABJS.includes(t), t);
+  assert.match(LABJS, /menu\(anchor, `<button data-pick="form">/, 'the form is the first item of the + menu');
+});
+
+test('form sheet: only the three form routes, and the page names no rule', () => {
+  const urls = [...FMSEC.matchAll(/['"`](\/api\/[^'"`$?]*)/g)].map((m) => m[1]);
+  assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/drafts/form', '/api/tester/drafts/form/build', '/api/tester/drafts/form/read']);
+  for (const src of [FMSEC, FMPURE]) assert.doesNotMatch(src.replace(/\/\*[\s\S]*?\*\//g, ''), /open_straddle|opening_range|bar_breakout|at_time|straddle|breakout/);
+  assert.doesNotMatch(FMSEC, /setInterval/, 'nothing polls');
+});
+
+test('form sheet: asked at most every 400 ms, never while an answer is out; Make it waits for the answer to this very form', () => {
+  assert.match(FMSEC, /timer = setTimeout\(ask, 400\)/);
+  assert.match(FMSEC, /if \(!d\.isConnected \|\| flying\) return;/);
+  assert.match(FMSEC, /const ready = \(\) => !making && !flying && !timer && !!built && built\.ver === ver/);
+  assert.match(FMSEC, /edit \? \{ answers, replace: true \} : \{ answers \}/);
+  assert.match(FMSEC, /openScript\(built\.code, built\.name\)/);
+  assert.equal((FMSEC.match(/'\/api\/tester\/drafts\/form\/read'/g) || []).length, 1, 'one place asks for the read, cached by code');
+});
+
+test('form sheet: nothing is rebuilt under a focused box -- only the part under the rule, redrawn from the rule\'s own list', () => {
+  assert.equal((FMSEC.match(/\.innerHTML = /g) || []).length, 2, 'the sheet once, and the part below the rule: nothing else is redrawn');
+  assert.match(FMSEC, /rest\.innerHTML = restHtml\(\)/);
+  assert.match(FMSEC, /h\.textContent = e\[f\] \|\| words\(f\)/, 'helper words and errors are patched in place');
+  assert.match(FMSEC, /say\.textContent = first \|\| lastSay/);
+  assert.match(FMSEC, /max="\$\{C\.FM_LATEST\}"/, 'the time boxes stop at 15:55');
+});
+
+test('form sheet: every value from the network reaches the page escaped', () => {
+  const holes = [...FMSEC.matchAll(/\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map((m) => m[1].trim());
+  const raw = holes.filter((h) => /^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)+$/.test(h) && !/^C\.FM_/.test(h));
+  assert.deepEqual(raw, [], 'a plain value in a template without esc()');
+  assert.doesNotMatch(FMSEC, /insertAdjacentHTML\([^)]*(?:got|answers|r\.json)|outerHTML|document\.write/);
+});
+
+test('form sheet: Enter submits nothing and a held key presses nothing twice', () => {
+  assert.doesNotMatch(FMSEC, /<form\b/);
+  assert.match(FMSEC, /e\.repeat && \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
+  assert.match(FMSEC, /if \(e\.detail === 0\) swallowRepeats\(\)/);
+});
