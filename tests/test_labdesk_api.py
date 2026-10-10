@@ -277,3 +277,111 @@ def test_the_file_modes_of_the_two_keys_never_loosen(client):
         os.chmod(client.tmp / f, 0o644)
         assert desk_api.ensure_key(client.tmp / f)[1] is None
         assert stat.S_IMODE((client.tmp / f).stat().st_mode) == 0o600
+
+
+# ================================================================ fix round 1 (task-b3-review.md)
+def test_the_runners_gate_refuses_a_host_the_page_allows(paths):                         # I7: runner_gate's own Host check
+    """cfg.allowed_hosts lets the PAGE be opened by another name; the runner's door stays loopback only."""
+    app, clock = make_app()
+    app.state.cfg.allowed_hosts = ["desk.lan", "100.64.0.7"]
+    with TestClient(app, base_url=DESK) as c:
+        c.clock = clock
+        H = {"X-Homebase-Key": (paths / "lab.key").read_text().strip()}
+        T = {"X-Homebase-Key": (paths / "desk.key").read_text().strip()}
+        assert c.get("/api/status", headers={"host": "desk.lan:8850"}).status_code == 200
+        assert c.get("/api/lab/state", headers={**H, "host": "desk.lan:8850"}).status_code == 403
+        assert c.post("/api/lab/intent", headers={**H, "host": "100.64.0.7:8850"}, json=event(c, [entry()])).status_code == 403
+        assert c.get("/api/trade/state", headers={**T, "host": "desk.lan:8850"}).status_code == 403
+        assert app.state.adapters["a1"].brackets == []
+        app.state.labdesk.close()
+
+
+def calls_of(client):
+    """Spy on the three steps of the two switch-off routes, in the order they run."""
+    ld, eng, order = client.app.state.labdesk, client.app.state.engine, []
+    real_stop, real_flat, real_set = ld.stop, eng.flatten_strategy, ld.set_enabled
+
+    async def stop(name, why, flatten=False):
+        order.append(("stop", why))
+        return await real_stop(name, why, flatten)
+
+    async def flat(name):
+        order.append(("flatten", ld._rec(name)["stopped"]))
+        return await real_flat(name)
+
+    async def set_enabled(name, on):
+        order.append(("write", on))
+        return await real_set(name, on)
+    ld.stop, eng.flatten_strategy, ld.set_enabled = stop, flat, set_enabled
+    return order
+
+
+def test_flatten_and_turn_off_ends_the_day_before_anything_else(client):                 # m3
+    client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
+    order = calls_of(client)
+    r = client.post("/api/strategy-flatten", json={"strategy": LAB})
+    assert r.status_code == 200 and r.json()["enabled"] is False
+    assert order == [("stop", "off"), ("flatten", "off"), ("write", False)]
+    assert client.app.state.labdesk._rec(LAB)["stopped"] == "off"
+    assert [(x["why"], x["cause"]) for x in jl(client.tmp, "lab_stopped")] == [("off", "desk")]
+    st = client.app.state.engine.states[f"{LAB}@a1"]
+    assert (st.status, st.exit_reason) == ("done", "cancelled")
+    out = client.post("/api/lab/intent", headers=client.H, json=event(client, [entry(2)], seq=2)).json()
+    assert out["results"][0]["refused"] in ("It is off.", "Stopped for today.")
+
+
+def test_a_switch_off_stops_the_day_before_the_store_is_written_even_when_the_write_fails(client):   # m3
+    from homebase.labdesk import NOT_SAVED, Refused
+    client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
+    order = calls_of(client)
+    ld = client.app.state.labdesk
+    inner = ld.set_enabled
+
+    async def cannot(name, on):
+        await inner(name, on) if False else order.append(("write", on))
+        raise Refused(NOT_SAVED)
+    ld.set_enabled = cannot
+    r = client.post("/api/strategy", json={"strategy": LAB, "enabled": False})
+    assert (r.status_code, r.json()["detail"]) == (409, "Could not save it. Try again.")
+    assert order == [("stop", "off"), ("write", False)]
+    st = client.app.state.engine.states[f"{LAB}@a1"]
+    assert (st.status, st.exit_reason) == ("done", "cancelled")                    # the resting entry is gone all the same
+    assert ld._rec(LAB)["stopped"] == "off"
+
+
+def test_switching_on_never_stops_the_day_and_another_kind_is_never_asked(client):
+    order = calls_of(client)
+    assert client.post("/api/strategy", json={"strategy": LAB, "enabled": True}).status_code == 200
+    assert client.post("/api/strategy", json={"strategy": "nq930", "enabled": False}).status_code == 200
+    assert client.post("/api/strategy-flatten", json={"strategy": "nq930"}).status_code == 200
+    assert order == [("write", True), ("flatten", None)] and jl(client.tmp, "lab_stopped") == []
+
+
+def test_a_start_call_that_raises_never_stops_the_desk_from_starting(paths, monkeypatch):   # m4
+    app, _ = make_app()
+
+    def boom():
+        raise RuntimeError("the start blew up")
+    monkeypatch.setattr(app.state.labdesk, "start", boom)
+    with TestClient(app, base_url=DESK) as c:
+        assert c.get("/api/status").status_code == 200
+        errs = jl(paths, "lab_start_error")
+        assert len(errs) == 1 and "the start blew up" in errs[0]["error"]
+        app.state.labdesk.close()
+
+
+def test_a_key_that_cannot_be_made_never_stops_the_desk_from_starting(paths, monkeypatch):   # m4
+    real = desk_api.ensure_key
+
+    def flaky(path):
+        if path.name == "lab.key":
+            raise OSError(28, "No space left on device")
+        return real(path)
+    monkeypatch.setattr(desk_api, "ensure_key", flaky)
+    app, _ = make_app()
+    with TestClient(app, base_url=DESK) as c:
+        assert c.get("/api/status").status_code == 200
+        assert c.get("/api/lab/state", headers={"X-Homebase-Key": "0" * 64}).status_code == 503
+        assert c.get("/api/trade/state", headers={"X-Homebase-Key": (paths / "desk.key").read_text().strip()}).status_code == 200
+        assert len(jl(paths, "lab_start_error")) == 1 and jl(paths, "lab_side") == [{**jl(paths, "lab_side")[0], "on": True}]
+        app.state.labdesk.close()

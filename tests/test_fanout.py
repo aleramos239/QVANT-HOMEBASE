@@ -156,3 +156,10 @@ def test_rows_that_do_not_read_never_raise():
     b = fanout.brain(junk, 0)
     assert b["flat"] is False                       # a live row, whatever else it says, is a position
     assert set(b["orders"]) <= {"3"}
+
+
+def test_one_accounts_resting_leg_of_an_order_another_account_filled_and_closed_is_not_flat():   # fix round 1, I7
+    done = row("a1", status="done", side="Buy", entry_qty=1, fill=100.0, exit_qty=1, clean=True, entry_ms=5)
+    b = fanout.brain([done, row("a2", status="placed")], 1)
+    assert b["flat"] is False and b["working"] == 0 and b["orders"]["3"]["status"] == "filled"
+    assert fanout.brain([done, row("a2", status="done", cancelled=["Buy"])], 1)["flat"] is True

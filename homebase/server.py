@@ -24,6 +24,7 @@ import contextlib
 import datetime as dt
 import json
 import os
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
@@ -1071,10 +1072,20 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if key_err:
             engine.journal("desk_key_error", error=key_err)
         # the Lab runner's OWN key (never the chart service's): /api/lab/* answers 503 without it
-        _app.state.lab_key, lab_key_err = desk_api.ensure_key(state_dir() / desk_api.LAB_KEY_FILE)
-        if lab_key_err:
-            engine.journal("lab_key_error", error=lab_key_err)
-        labdesk.start()                      # says whether the Lab side is on; never raises
+        _app.state.lab_key = None
+
+        def _lab_key() -> None:
+            _app.state.lab_key, lab_key_err = desk_api.ensure_key(state_dir() / desk_api.LAB_KEY_FILE)
+            if lab_key_err:
+                engine.journal("lab_key_error", error=lab_key_err)
+
+        for step in (_lab_key, labdesk.start):       # (start: says whether the Lab side is on, rebuilds its counters)
+            try:                             # a Lab problem never fails the desk's start, and one step's never the other's
+                step()
+            except Exception as e:  # noqa: BLE001
+                print(f"homebase desk: the Lab side's start failed: {e!r}", file=sys.stderr)
+                with contextlib.suppress(Exception):
+                    engine.journal("lab_start_error", error=f"{type(e).__name__}: {e}"[:200])
         tasks = []
         if background:
             tasks = [asyncio.create_task(_clock_loop()),
@@ -1518,14 +1529,13 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             # a promoted Lab strategy has ONE switch, its store record's (the runner hosts by it): nothing of it
             # is in config.json
             on = bool(body.get("enabled"))
+            if not on:                       # first, whatever the write below does: its unfilled entries are
+                await labdesk.stop(name, "off")      # cancelled and its day is over (never raises)
             try:
                 if not await labdesk.set_enabled(name, on):
                     raise HTTPException(409, labdesk_mod.RECORD_CHANGED)
             except labdesk_mod.Refused as e:
                 raise HTTPException(e.status, str(e)) from None
-            stop = getattr(labdesk, "stop", None)        # the intake half (task B3): cancels its unfilled entries
-            if not on and stop is not None:
-                await stop(name, "off")
             engine.journal("strategy_toggled", strategy=name, enabled=on)
             return {"ok": True, "strategy": name, "enabled": on}
         cfg.strategies[name].enabled = bool(body.get("enabled"))
@@ -1573,6 +1583,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
+        if labdesk.is_lab(name):             # a Lab strategy's day ends here too, before anything else: no entry of
+            await labdesk.stop(name, "off")  # it passes from now on, and its unfilled entries go (never raises)
         results = await engine.flatten_strategy(name)
         if labdesk.is_lab(name):             # its switch is the store record's
             try:

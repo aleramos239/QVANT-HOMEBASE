@@ -303,22 +303,30 @@ async def lab_stream(labdesk, *, heartbeat_s: float = LAB_HEARTBEAT_S, poll_s: f
     """The stream back to the runner (design C5): `state` first (every Lab strategy's whole snapshot), then one
     `strategy` event per snapshot that changed, and a heartbeat when nothing was sent for heartbeat_s. Level
     triggered: every event is a whole snapshot, so a reader that reconnects needs nothing replayed. It
-    subscribes BEFORE the first snapshot, so no change in between is lost. No snapshot is built while a non-Lab
-    strategy is placing (the 9:30 orders): the first state waits for the acks. Ends when the desk dropped this
-    reader (it fell behind): the runner reconnects."""
+    subscribes BEFORE the first snapshot, so no change in between is lost. No snapshot is built or serialized
+    while a non-Lab strategy is placing (the 9:30 orders): the first state waits for the acks, and a snapshot
+    that was queued just before them is held -- only the newest per strategy (a whole `state` replaces them
+    all) -- and sent when they are in. Ends when the desk dropped this reader (it fell behind): the runner
+    reconnects."""
     q = labdesk.subscribe()
     loop = asyncio.get_running_loop()
     started = False
+    held: dict = {}                    # while the acks are out: key -> (event, snapshot), the newest only
     last = loop.time()
     try:
         while True:
-            if not started and not labdesk.held():
-                started = True
-                yield sse("state", labdesk.snapshot())
+            if (not started or held) and not labdesk.held():
+                if not started:
+                    started = True
+                    held.clear()       # the state built now carries them
+                    yield sse("state", labdesk.snapshot())
+                for event, data in list(held.values()):
+                    yield sse(event, data)
+                held.clear()
                 last = loop.time()
                 continue
             wait = heartbeat_s - (loop.time() - last)
-            if not started:
+            if not started or held:
                 wait = min(wait, poll_s)
             try:
                 event, data = await asyncio.wait_for(q.get(), max(wait, 0.0))
@@ -329,9 +337,15 @@ async def lab_stream(labdesk, *, heartbeat_s: float = LAB_HEARTBEAT_S, poll_s: f
                 continue
             if event is None:
                 return
-            if started:                # before the first state: that state carries it
-                yield sse(event, data)
-                last = loop.time()
+            if not started:            # before the first state: that state carries it
+                continue
+            if held or labdesk.held():
+                if event == "state":
+                    held.clear()
+                held["state" if event == "state" else (data or {}).get("strategy")] = (event, data)
+                continue
+            yield sse(event, data)
+            last = loop.time()
     finally:
         labdesk.unsubscribe(q)
 
