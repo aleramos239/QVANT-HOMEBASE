@@ -7,6 +7,8 @@ import datetime as dt
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -17,7 +19,7 @@ from homebase.backtest.slots import Slots
 from homebase.backtest.tape import et_ns
 from homebase.labrun import host, match
 from homebase.labrun.match import MatchUnavailable, compare, match_day
-from tests.backtest_util import D1, ms, nq_archive
+from tests.backtest_util import D1, D2, ms, nq_archive
 from tests.charts_util import rows
 from tests.test_labrun_host import HEAD, plain, rec
 
@@ -118,7 +120,22 @@ RECORD = rec(SOURCE)
 NEED_SANDBOX = pytest.mark.skipif(not sandbox.available(), reason="no working sandbox-exec on this machine")
 
 
-def dirs(tmp_path) -> dict:
+def recorded(base, *days) -> None:
+    """Mark the archive's day as the tick job leaves it once the day's recording is merged in: a `live` source in the
+    manifest's merge log (tickarchive.merge_session)."""
+    for d in days:
+        (man,) = (Path(base) / "NQ" / str(d.year)).glob(f"{d.isoformat()}_*.json")
+        man.write_text(json.dumps({**json.loads(man.read_text()), "sources": [
+            {"kind": "history", "ticks": 5, "at_utc": "2024-03-05T15:00:00+00:00"},
+            {"kind": "live", "file": man.name.replace(".json", ".live.csv.gz"), "bytes": 1, "mtime_ns": 1,
+             "at_utc": "2024-03-05T21:10:00+00:00"}]}))
+
+
+def dirs(tmp_path, stored: bool = True) -> dict:
+    """Where a match works. stored: the archive holds D1 and D2 (nq_archive), merged with their recordings."""
+    if stored and not (tmp_path / "ticks").exists():
+        nq_archive(tmp_path / "ticks")
+        recorded(tmp_path / "ticks", D1, D2)
     return {"base": tmp_path / "match", "archive": tmp_path / "ticks", "cache": tmp_path / "cache", "python": sys.executable}
 
 
@@ -192,7 +209,6 @@ def test_the_run_lives_under_the_base_is_cleaned_up_and_the_slot_is_given_back(t
 
 
 @pytest.mark.parametrize("coverage, why", [
-    ({"sessions": 0, "used": 0, "skipped": []}, "the day's prices are not stored yet"),
     ({"sessions": 1, "used": 0, "skipped": [{"date": "2024-03-05", "reason": "no tape"}]}, "the day's prices are not stored yet"),
     ({"sessions": 1, "used": 0, "skipped": [{"date": "2024-03-05", "reason": "missing 13:00–16:00 ET"}]},
      "the stored prices for the day have a gap"),
@@ -227,16 +243,72 @@ def test_a_run_past_the_timeout_is_stopped_with_the_runners_stop_proc_and_unavai
     assert f.procs[0].poll() is not None and free()
 
 
-def test_no_free_slot_is_a_busy_tester_and_no_run_is_made(tmp_path, fake):
-    one = Slots(tmp_path / "slots", cap=1)
+def test_no_free_slot_for_the_whole_wait_is_a_busy_tester_and_no_run_is_made(tmp_path, fake):
+    """C1. The worker waits in line (it is in its own thread), but not for ever."""
+    one = Slots(tmp_path / "slots", cap=1, poll=0.02)
     taken = one.try_acquire()
     f = fake()
+    t = time.monotonic()
     try:
         with pytest.raises(MatchUnavailable, match="the tester is busy"):
-            match.tester_day(RECORD, D1, launch=f, slots=one, **dirs(tmp_path))
+            match.tester_day(RECORD, D1, launch=f, slots=one, slot_wait_s=0.3, **dirs(tmp_path))
     finally:
         taken.close()
-    assert f.procs == [] and not (dirs(tmp_path)["base"] / "runs").exists()
+    assert 0.3 <= time.monotonic() - t < 5.0
+    assert f.procs == [] and not (dirs(tmp_path)["base"] / "runs").exists() and list(one.queue.iterdir()) == []
+
+
+def test_a_slot_that_frees_while_the_worker_waits_is_taken_and_the_day_is_run(tmp_path, fake):
+    one = Slots(tmp_path / "slots", cap=1, poll=0.02)
+    taken = one.try_acquire()
+    threading.Timer(0.2, taken.close).start()
+    f = fake(trades=[trade()])
+    got = match.tester_day(RECORD, D1, launch=f, slots=one, slot_wait_s=10, **dirs(tmp_path))
+    assert len(got) == 1 and len(f.procs) == 1 and free(one)
+
+
+def test_the_worker_waits_twenty_minutes_for_a_slot_by_default():
+    import inspect
+    assert match.SLOT_WAIT_S == 20 * 60
+    assert inspect.signature(match.tester_day).parameters["slot_wait_s"].default == match.SLOT_WAIT_S
+
+
+def test_no_backtest_starts_in_the_quiet_window_however_long_the_worker_waits(tmp_path, fake):
+    quiet = Slots(tmp_path / "slots", cap=1, poll=0.02, clock=lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=host.ET))
+    f = fake()
+    with pytest.raises(MatchUnavailable, match="the tester is busy"):
+        match.tester_day(RECORD, D1, launch=f, slots=quiet, slot_wait_s=0.3, **dirs(tmp_path))
+    assert f.procs == []
+
+
+# ---------------------------------------------------------------- C1: the day must be in the archive first
+def test_a_day_whose_recording_is_not_merged_into_the_archive_yet_is_not_stored_even_if_a_fragment_exists(tmp_path, fake):
+    """The tick job merges the day's recording into the archive after the close and logs it in the manifest as a
+    `live` source. Until then the file is a fragment (an hourly fill): the tester is not even started."""
+    d = dirs(tmp_path, stored=False)
+    f = fake(trades=[trade()])
+    with pytest.raises(MatchUnavailable, match="the day's prices are not stored yet"):
+        match.tester_day(RECORD, D1, launch=f, **d)                             # no archive at all
+    nq_archive(d["archive"])                                                  # the file and its manifest, no `live` source
+    assert match.stored("NQ", D1, d["archive"], d["cache"]) is False
+    with pytest.raises(MatchUnavailable, match="the day's prices are not stored yet"):
+        match.tester_day(RECORD, D1, launch=f, **d)
+    assert match_day(RECORD, D1, [trade()], launch=f, **d) == {"ok": None, "text": "Not checked yet: the day's prices are not stored yet."}
+    assert f.procs == [] and not (d["base"] / "runs").exists() and free()     # nothing was run, no slot was taken
+    recorded(d["archive"], D1)                                                # the tick job merged the recording
+    assert match.stored("NQ", D1, d["archive"], d["cache"]) is True
+    assert match_day(RECORD, D1, [trade()], launch=f, **d) == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+
+
+@pytest.mark.parametrize("sources", [None, [], "live", [{"kind": "history"}, {"kind": "massive"}], [None, "live", 5]])
+def test_only_a_live_source_in_the_manifest_says_the_day_is_stored(tmp_path, sources):
+    d = dirs(tmp_path, stored=False)
+    nq_archive(d["archive"])
+    (man,) = (d["archive"] / "NQ" / "2024").glob(f"{D1}_*.json")
+    man.write_text(json.dumps({**json.loads(man.read_text()), "sources": sources}))
+    assert match.stored("NQ", D1, d["archive"], d["cache"]) is False
+    man.write_text("{not json")
+    assert match.stored("NQ", D1, d["archive"], d["cache"]) is False
 
 
 def test_no_sandbox_is_unavailable_and_nothing_is_launched(tmp_path, fake, monkeypatch):
@@ -249,7 +321,6 @@ def test_no_sandbox_is_unavailable_and_nothing_is_launched(tmp_path, fake, monke
 
 @NEED_SANDBOX
 def test_the_real_tester_runs_the_frozen_code_on_one_recorded_day_in_the_sandbox(tmp_path):
-    nq_archive(tmp_path / "ticks")
     d = dirs(tmp_path)
     got = match.tester_day(RECORD, D1, **d)
     (t,) = got
@@ -265,7 +336,6 @@ def test_the_real_tester_runs_the_frozen_code_on_one_recorded_day_in_the_sandbox
 @NEED_SANDBOX
 def test_a_shadow_day_on_the_recorded_prints_matches_the_real_tester_on_them(tmp_path):
     """The whole check: the runner's day on the prints of nq_archive's D1, against the tester on the archive."""
-    nq_archive(tmp_path / "ticks")
     prints = rows(ms(D1, "09:25:00"), [100.0] * 290) + rows(ms(D1, "09:30:01"), [110.0, 112.0, 126.0]) \
         + rows(ms(D1, "09:31:00"), [120.0] * 1500, step_ms=15_000)
     shadow = host.run_day(RECORD, [(r["ts_ms"] * 1_000_000, r["price"], r["size"]) for r in prints], D1, spawn=plain)
@@ -286,7 +356,8 @@ def test_match_day_compares_the_shadow_trades_with_the_testers(tmp_path, fake):
 
 
 @pytest.mark.parametrize("make, text", [
-    (dict(coverage={"sessions": 0}), "Not checked yet: the day's prices are not stored yet."),
+    (dict(coverage={"sessions": 1, "skipped": [{"date": "2024-03-05", "reason": "no tape"}]}),
+     "Not checked yet: the day's prices are not stored yet."),
     (dict(status="error"), "Not checked yet: the backtest could not run."),
 ])
 def test_match_day_turns_an_unavailable_day_into_not_checked_yet(tmp_path, fake, make, text):
@@ -322,7 +393,6 @@ def test_a_strategys_own_skip_with_no_trades_is_a_real_no_trade_day(tmp_path, fa
 
 
 def test_a_day_the_strategy_does_not_trade_is_not_checked_and_not_retried(tmp_path, fake):
-    nq_archive(tmp_path / "ticks")                                           # the day IS recorded; the run has no session
     none = {"sessions": 0, "used": 0, "skipped": [], "no_trade": []}
     with pytest.raises(match.DoesNotTrade):
         match.tester_day(RECORD, D1, launch=fake(coverage=none), **dirs(tmp_path))
@@ -346,7 +416,6 @@ OFF_TODAY = SOURCE.replace("    def times(self):", "    def trades_on(self, d):\
 
 @NEED_SANDBOX
 def test_the_real_tester_reports_a_strategy_that_raises_and_one_that_does_not_trade_today(tmp_path):
-    nq_archive(tmp_path / "ticks")
     assert match_day(rec(RAISES), D1, [], **dirs(tmp_path)) == {
         "ok": False, "text": "Did not match: the strategy failed in the backtest."}
     assert match_day(rec(OFF_TODAY), D1, [], **dirs(tmp_path)) == {

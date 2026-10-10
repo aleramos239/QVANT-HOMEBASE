@@ -166,3 +166,13 @@ def test_same_promotion_is_the_code_and_the_moment_it_was_promoted():
     assert store.same_promotion(day("2026-10-08", sha256="cd"), r) is False
     for not_a_day in (None, [], "x", {}):
         assert store.same_promotion(not_a_day, r) is False
+
+
+def test_every_test_works_in_a_temp_store_without_asking(desklab_root):
+    """C3. The conftest points HOMEBASE_DESKLAB_ROOT at a temp folder for every test: none can write the real store."""
+    real = store.Path.home() / ".homebase"
+    assert store.root() == desklab_root and real not in store.root().parents and list(desklab_root.iterdir()) == []
+    store.put(rec())
+    store.put_day("nq_x", day("2026-10-08"))
+    store.put_runner({"pid": 1})
+    assert sorted(x.name for x in desklab_root.iterdir()) == ["nq_x", "nq_x.json", "runner.json"]

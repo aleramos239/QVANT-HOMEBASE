@@ -6,13 +6,18 @@ LiveCtx + ShadowFills (host.run_day) equal run_session trade for trade."""
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
 import random
 import subprocess
+import sys
 from array import array
 from pathlib import Path
 
 import pytest
 
+from homebase import draftstore
+from homebase.backtest import sandbox
 from homebase.backtest.engine import Costs, run_session
 from homebase.backtest.tape import ARCHIVE, CACHE, OverlayTapeStore, Tape, TapeStore, effective_session_window, et_ns
 from homebase.labrun.host import run_day
@@ -448,7 +453,7 @@ CASES = {"straddle": STRADDLE, "bars": BARS, "time exit": TIME_EXIT, "tp_rr": RR
 
 
 def plain(argv, run_dir):
-    """A child with no sandbox: the tests' own strategies, and the owner's drafts read from his own folder."""
+    """A child with no sandbox: the tests' own strategies only (never the owner's drafts)."""
     return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
 
 
@@ -551,11 +556,28 @@ def test_parity_with_settings_and_size():
     assert want and want[0]["qty"] == 3
 
 
-# ---- the owner's own drafts on real archive days (read-only; skipped where they are not on this machine)
+# ---- the owner's own drafts on real archive days: OPT-IN, read-only, and their code runs only inside the sandbox.
+# ---- Without HOMEBASE_REAL_DRAFTS=1 the suite never reads ~/.homebase and never runs a draft that is not its own.
+REAL_DRAFTS = "HOMEBASE_REAL_DRAFTS"
 DRAFTS = Path.home() / ".homebase" / "strategies"
 REAL = [("pp_orb", dt.date(2024, 3, 5)), ("pp_orb", dt.date(2025, 6, 17)),
         ("s930_nq", dt.date(2024, 3, 5)), ("s930_nq", dt.date(2024, 11, 29)),          # 11-29: a half day (13:15)
         ("nq_long_930_vwap", dt.date(2024, 3, 6)), ("nq_long_930_vwap", dt.date(2025, 6, 17))]
+# The tester's side of the comparison, as whole_session runs it, in a sandboxed child: the draft is loaded there only.
+TESTER = '''import datetime as dt, json, sys
+out, sys.stdout = sys.stdout, sys.stderr
+from homebase.backtest import drafthost
+from homebase.backtest.engine import Costs, run_session
+from homebase.backtest.tape import OverlayTapeStore, effective_session_window
+job = json.load(sys.stdin)
+d = dt.date.fromisoformat(job["date"])
+cls = drafthost.register_source(job["name"], job["source"])
+strat = cls(None)
+strat.session_window = effective_session_window(cls.root, d, cls.session_window)
+tape = OverlayTapeStore(job["archive"], job["cache"], job["private"]).load(cls.root, d)
+res = run_session(strat, tape, Costs(), 1, job["daily"])
+json.dump({"needs_daily": bool(strat.needs_daily()), "skip": res.skip, "trades": [t.to_dict() for t in res.trades]}, out)
+'''
 
 
 class Rows:
@@ -571,13 +593,37 @@ class Rows:
         return list(zip(self.t.ts[s], self.t.px[s], self.t.size[s]))
 
 
+def sandboxed_tester(name: str, source: str, d: dt.date, daily: list, run_dir: Path) -> dict:
+    """run_session on the archive's day in the sandbox a draft backtest runs in: {"needs_daily", "skip", "trades"}."""
+    run_dir.mkdir()
+    job = {"name": name, "source": source, "date": d.isoformat(), "daily": daily, "archive": str(ARCHIVE),
+           "cache": str(CACHE), "private": str(run_dir / "tape")}
+    prm = sandbox.params(run_dir=run_dir, archive=ARCHIVE, cache=CACHE, tmp=run_dir)
+    p = subprocess.run(sandbox.command([sys.executable, "-c", TESTER], prm), input=json.dumps(job), cwd=run_dir,
+                       env=sandbox.env(run_dir), capture_output=True, text=True, timeout=600)
+    assert p.returncode == 0, p.stderr[-2000:]
+    return json.loads(p.stdout)
+
+
+def test_the_real_draft_cases_are_asked_for_never_run_by_default():
+    """C3. The suite does not execute the owner's drafts, or read ~/.homebase, unless HOMEBASE_REAL_DRAFTS=1 says so."""
+    marks = [m for m in test_parity_of_a_real_draft_on_a_real_day.pytestmark if m.name == "skipif"]
+    assert [m.args[0] for m in marks] == [os.environ.get(REAL_DRAFTS) != "1"] and REAL_DRAFTS in marks[0].kwargs["reason"]
+    src = Path(__file__).read_text()
+    body = src[src.rindex("def test_parity_of_a_real_draft_on_a_real_day"):]
+    assert "plain" not in body and "cls_of(" not in body and "whole_session(" not in body     # the sandbox, on both sides
+
+
+@pytest.mark.skipif(os.environ.get(REAL_DRAFTS) != "1", reason=f"the owner's real drafts run only when asked: {REAL_DRAFTS}=1")
 @pytest.mark.parametrize("name, d", REAL, ids=[f"{n} {d}" for n, d in REAL])
 def test_parity_of_a_real_draft_on_a_real_day(name, d, tmp_path):
+    if not sandbox.available():
+        pytest.skip("the macOS sandbox is not working here: a real draft never runs outside it")
     f = DRAFTS / f"{name}.py"
     shared = TapeStore(ARCHIVE, CACHE)
     try:
         source = f.read_text(encoding="utf-8")
-        root = cls_of(source).root
+        root = draftstore.static_meta(source)["root"]            # read from the text: nothing of the draft runs here
         ready = shared.cached(root, d)
     except (OSError, ValueError):
         pytest.skip(f"{f} or its market's tape is not on this machine")
@@ -585,10 +631,13 @@ def test_parity_of_a_real_draft_on_a_real_day(name, d, tmp_path):
         pytest.skip(f"no cached tape of {root} {d} on this machine")
     tapes = OverlayTapeStore(ARCHIVE, CACHE, tmp_path / "tape")      # reads the shared cache, never writes it
     t = tapes.load(root, d)
-    daily = []
-    if cls_of(source)(None).needs_daily():
-        daily = [tapes.daily(root, x) for x in tapes.sessions(root, d - dt.timedelta(days=400), d)
-                 if x < d and shared.cached(root, x)]
-    want = whole_session(source, None, d, daily=daily, as_tape=t)
-    got = shadow_day(source, Rows(t), d, daily=daily, name=name)
-    same(got, want)
+    daily = [tapes.daily(root, x) for x in tapes.sessions(root, d - dt.timedelta(days=400), d)
+             if x < d and shared.cached(root, x)]
+    want = sandboxed_tester(name, source, d, daily, tmp_path / "tester")
+    assert want["skip"] is None or not want["skip"].startswith("strategy error"), want["skip"]
+    before = d - dt.timedelta(days=3 if d.weekday() == 0 else 1)
+    if want["needs_daily"] and (not daily or daily[-1]["date"] < before.isoformat()):
+        pytest.skip(f"no cached tape of {root} {before} (the day before) on this machine")
+    record = {"name": name, "root": root, "source": source, "sha256": "x", "params": {}, "qty": 1}
+    got = run_day(record, Rows(t), d, daily=daily, deadline_s=5.0)   # the default spawn: the sandbox
+    same(got, want["trades"])

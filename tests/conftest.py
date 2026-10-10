@@ -62,3 +62,12 @@ def ideas_root(tmp_path_factory, monkeypatch):
     d = tmp_path_factory.mktemp("ideas")
     monkeypatch.setenv("HOMEBASE_IDEAS_ROOT", str(d))
     return d
+
+
+@pytest.fixture(autouse=True)
+def desklab_root(tmp_path_factory, monkeypatch):
+    """Promoted Lab strategies (homebase.labrun.store): a fresh, empty tmp dir per test -- never ~/.homebase/desklab.
+    Child processes (the runner, python -m homebase.labrun) inherit it through the environment."""
+    d = tmp_path_factory.mktemp("desklab")
+    monkeypatch.setenv("HOMEBASE_DESKLAB_ROOT", str(d))
+    return d

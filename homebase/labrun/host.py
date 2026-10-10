@@ -63,7 +63,8 @@ SILENT_S = 5.0                   # no clock from the stream for this long (our o
 SAVE_S = 1.0                     # the day summary is written at most this often between state changes
 BATCH = 200                      # run_day feeds this many prints at a time
 POLL_S = 5.0                     # the store is read, and the heartbeat written, this often
-MATCH_AFTER_NS = 600_000_000_000     # the daily match starts this long after the day's end (by the stream's clock) ...
+MATCH_AFTER_NS = 600_000_000_000     # the daily match starts this long after the day's end (by the stream's clock),
+MATCH_NOT_BEFORE = "17:35"           # never before this ET time of the session date (the archive must hold the day) ...
 MATCH_RETRY_NS = 1_800_000_000_000   # ... and "not checked yet" is tried again this often,
 MATCH_RETRIES = 6                    # at most this many times
 ACTIVE = ("waiting", "running")
@@ -76,6 +77,7 @@ GONE = "The strategy stopped by itself."
 TOO_MANY = "Too many orders at once."
 BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
+NO_YESTERDAY = "Yesterday's prices are not stored yet."
 TOO_LATE = "Started too late to follow today."
 NOT_CHECKED = "Not checked yet: the check failed."
 PROBLEM = "Stopped: the runner had a problem."
@@ -339,9 +341,10 @@ class StrategyDay:
     the reason (`why`, a sentence for the owner; `detail`, what broke, for the journal).
 
     spawn(argv, run_dir) -> Popen with stdin and stdout pipes (default: the sandbox). daily: the completed daily bars
-    before the date, or a function (root, date) that reads them, asked only if the strategy needs them (default: the
-    tape store). save(summary): called at every state change and else at most once a second. late(t0_ns) -> True
-    when a day whose window starts at t0 can no longer be followed in full: it is stopped before anything runs."""
+    before the date, or a function (root, date) that reads them, asked only if the strategy needs them and only when
+    its session event fires (default: the tape store). save(summary): called at every state change and else at most
+    once a second. late(t0_ns) -> True when a day whose window starts at t0 can no longer be followed in full: it is
+    stopped before anything runs."""
 
     def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None):
@@ -409,12 +412,8 @@ class StrategyDay:
         self._bar_min = meta["bar_minutes"]
         b0, b1 = meta["bar_window"] or (w0, w1)
         self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
-        self._daily = []
-        if meta["needs_daily"]:
-            try:
-                self._daily = daily(root, self.date) if callable(daily) else list(daily)
-            except OSError as e:
-                raise _Stop(NO_DAILY, f"{type(e).__name__}: {e}") from None
+        self._root = root
+        self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
         self.fills = ShadowFills(root, self.date, Costs(), meta["placement_ms"])
 
     # ---- the prints and the clock
@@ -505,7 +504,24 @@ class StrategyDay:
             self._bars.append((b.end_ns, 1, 0, "bar", asdict(b)))
         self._bar_next = -(-upto // step) * step
 
+    def _session_daily(self) -> list:
+        """The completed daily bars before the date, for a strategy that needs them: read when its session event
+        fires, not when the day was hosted (often 18:00 ET the evening before, before the tick job has stored that
+        day). Fail closed: bars that cannot be read, or whose newest is older than the session day before, stop the
+        day before the strategy sees anything."""
+        if self._daily is None:
+            return []
+        try:
+            bars = self._daily(self._root, self.date) if callable(self._daily) else list(self._daily)
+        except OSError as e:
+            raise _Stop(NO_DAILY, f"{type(e).__name__}: {e}") from None
+        newest = bars[-1].get("date") if bars and isinstance(bars[-1], dict) else None
+        if not isinstance(newest, str) or newest < _before(self.date).isoformat():
+            raise _Stop(NO_YESTERDAY, f"the newest daily bar is {newest if isinstance(newest, str) else 'none'}")
+        return bars
+
     def _event(self, t: int, _prio, _n, kind: str, arg) -> None:
+        daily = self._session_daily() if kind == "session" else None     # (it may stop the day: before anything runs)
         f = self.fills
         f.advance_to(t)
         f.now(t)
@@ -515,7 +531,7 @@ class StrategyDay:
         msg = {"op": "event", "kind": kind, "t_ns": t, "arg": arg, "last_price": last, "flat": f.flat,
                "updates": f.updates()}
         if kind == "session":
-            msg["daily"] = self._daily
+            msg["daily"] = daily
         seen = {"flat": f.flat, "working_entries": f.working_entries, "entries_today": self._entries,
                 "last_price": last, "now_hhmm": _hms(t)[:5], "prices_late": self._late.late or self._silent}
         intents = self._child.ask(msg, self._deadline).get("intents")
@@ -690,6 +706,13 @@ def session_today(now_ms: int, root: str | None) -> dt.date | None:
     return d if d.weekday() < 5 and session_range_ms(d, root)[0] <= now_ms else None
 
 
+def match_due(date: dt.date, end_ns: int) -> int:
+    """When a day's match may start (ns): ten minutes after its window's end, and not before 17:35 ET of the session
+    date -- the tick job merges the day's recording into the archive after the close (17:05-17:30 ET), and a backtest
+    of the day before that reads a fragment."""
+    return max(end_ns + MATCH_AFTER_NS, et_ns(date, MATCH_NOT_BEFORE))
+
+
 def _session_ns(d: dt.date, root: str) -> tuple[int, int]:
     """[start, end) of the prints that belong to session d: from its open (18:00 ET the evening before; a weekend's
     prints of a classic market file into Monday) to 18:00 ET on d, where the next session's prints begin."""
@@ -702,8 +725,9 @@ class Runner:
     what the tick client hands over, sync(), beat() and idle() every few seconds. `at`: the store's root (default
     ~/.homebase/desklab).
 
-    A finished day's match with the tester (labrun/match.py) starts MATCH_AFTER_NS after its end, by the stream's
-    clock, in a worker thread of its own (never in the 09:20-09:35 ET window on a weekday), and its answer is written
+    A finished day's match with the tester (labrun/match.py) starts when it is due (match_due: ten minutes after its
+    end, never before 17:35 ET of its date), by the stream's clock, in a worker thread of its own (never in the
+    09:20-09:35 ET window on a weekday; the worker waits in line for a backtest slot), and its answer is written
     into the day file and the journal by this thread. `matcher(record, date, trades) -> {"ok", "text"}` (default: the
     real tester, in the sandbox); a "not checked yet" is asked again every MATCH_RETRY_NS, MATCH_RETRIES times.
 
@@ -854,7 +878,7 @@ class Runner:
         if not quiet and day.trade_count > h.trades:
             lines += [{**head, "kind": "trade", **t} for t in day.summary()["trades"][h.trades:]]
         if day.state == "done":
-            self._plan(h.rec, day.date, day.end_ns + MATCH_AFTER_NS, day=day)
+            self._plan(h.rec, day.date, match_due(day.date, day.end_ns), day=day)
         for line in lines:
             self._write(store.journal, day.name, line)
         h.orders, h.trades, h.stop = len(day.orders), day.trade_count, stopped
@@ -972,7 +996,8 @@ class Runner:
 
     def _sweep(self, rec: dict) -> None:
         """A runner that starts again: a finished day of today or the session before, written for this promotion,
-        with no match or "not checked yet", is matched again (from the trades its file holds)."""
+        with no match or "not checked yet", is matched again (from the trades its file holds) -- today's not before
+        17:35 ET (match_due)."""
         today = self._dates[rec["root"]]
         match.clean(store.root(self.at) / rec["name"] / "match")
         for date in (today, _before(today)):
@@ -982,7 +1007,7 @@ class Runner:
                     trades = match.from_summary(was.get("trades") or [], date)
                 except (KeyError, TypeError, ValueError):
                     continue
-                self._plan(rec, date, 0, trades=trades)
+                self._plan(rec, date, match_due(date, 0), trades=trades)
 
     def _start_matches(self, now_ms: int) -> None:
         """Answers in; then each match that is due starts in a worker thread -- never 09:20-09:35 ET on a weekday,
