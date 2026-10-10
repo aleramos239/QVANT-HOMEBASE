@@ -309,13 +309,17 @@ def read_tells(lines, mark) -> dict | None:
       maybe    the events that carried an order and have no results line (the runner went away in the middle)
       never    the events of which nothing left for the Desk
       flat     the last `flat` a child was told
-    An event line with no intents line after it (the child was never heard) is as if it had not been written."""
-    head = lines[0] if isinstance(lines, list) and lines else None
-    if not isinstance(head, dict) or not head.get("head") or head.get("mark") != list(mark):
+    An event line with no intents line after it (the child was never heard) is as if it had not been written.
+    The file is the DATE's: it can hold the head (and the lines) of an earlier promotion of that day -- promoted again
+    in the morning, the old promotion's head is the file's first line. This promotion's day is what follows the LAST
+    head line, and only when that head is this promotion's: lines of another promotion are never this day's."""
+    lines = lines if isinstance(lines, list) else []
+    heads = [n for n, line in enumerate(lines) if isinstance(line, dict) and line.get("head")]
+    if not heads or lines[heads[-1]].get("mark") != list(mark):
         return None
     evs: dict[int, dict] = {}
     last = 0
-    for line in lines[1:]:
+    for line in lines[heads[-1] + 1:]:
         seq = line.get("seq")
         if not _int(seq) or seq < 1:
             continue
@@ -830,6 +834,7 @@ class StrategyDay:
         self._retry: list[_Ask] = []                 # exits the Desk has not taken yet (_again)
         self._entries_out = 0                        # entries that left for the Desk today (also before a pick-up)
         self._noted = None                           # the Desk's part of `why`, as the day file last had it
+        self._stop_owed: _Ask | None = None          # this day's stop, when its ten seconds ran out untaken
         self._keep = False                           # the stop being raised keeps the position (flatten: false)
         self._hush = False                           # the Desk ended the day itself: nothing is sent back
         self._stop_sent = False
@@ -1189,6 +1194,8 @@ class StrategyDay:
             tried = True
             if done or now >= r.until:
                 self._retry.remove(r)
+                if not done and r.what == "stop":    # the Desk never took this day's stop: once more when its
+                    self._stop_owed = r              # stream is back (on_desk)
             else:
                 r.next = now + RETRY_S
         note = self._desk_why() if self._desk is not None else None
@@ -1198,6 +1205,15 @@ class StrategyDay:
 
     def pending(self) -> bool:
         return bool(self._retry)
+
+    def owes_stop(self) -> bool:
+        """Its stop ran out of time untaken and has not had its one more try yet."""
+        return self._stop_owed is not None
+
+    def mute(self) -> None:
+        """This day is no longer the hosted one (switched off, or replaced): it may still ask its stop again, but it
+        writes nothing more -- the date's day file may be another day's by now."""
+        self._save = None
 
     def asking(self) -> bool:
         """Something is still to be asked again, and may be sent now."""
@@ -1219,10 +1235,15 @@ class StrategyDay:
         """The strategy's own window is over (StrategyDay._finish): ONE flatten, reason "eod" -- the tester ends every
         session that way, and the Desk's own flat time may be hours later (or, on a half day, after the close). Sent
         for every day that sent an entry, whatever this runner's own view of the brain says just then (it can be
-        stale, or down); with nothing open the Desk does nothing with it. It is an exit: asked again as exits are."""
+        stale, or down); with nothing open the Desk does nothing with it. It is an exit: asked again as exits are.
+        It has a row in the day file, so one that did not go through shows there and not only in the tell-log."""
         if self._hush or self._stop_sent or not self._entries_out or self._send is None:
             return
-        self._again([{"op": "flatten", "reason": "eod"}], [], what="eod", t_ns=self._t1, now=True)
+        it = {"op": "flatten", "reason": "eod"}
+        # its row in the day file: unanswered until the Desk has taken it (then no sentence, or the Desk's own)
+        row = {"t": _hms(self._t1), "text": words(it, self._tick), "refused": NO_ANSWER}
+        self.orders.append(row)
+        self._again([it], [row], what="eod", t_ns=self._t1, now=True)
 
     def blind(self, seconds: float) -> None:
         """No clock from the tick stream for `seconds`: after BLIND_S with an entry working, every unfilled entry is
@@ -1246,6 +1267,12 @@ class StrategyDay:
             return
         if side.killed:
             return self.desk_says(KILLED)
+        owed, self._stop_owed = self._stop_owed, None
+        if owed is not None and side.stopped is None and not self._held():
+            # this day's stop ran out of its ten seconds untaken, and the Desk's stream is back without `stopped`: it
+            # never got there. ONCE more -- the same request if it was never answered (seq, intents, t_ns)
+            self._attempt(owed)
+            self._resave()
         if side.stopped is not None:
             if not self._stop_sent:                  # the Desk ended the day itself
                 return self.desk_says(STOPPED_TODAY)
@@ -1265,6 +1292,7 @@ class StrategyDay:
         nothing that was still to be asked again."""
         self._hush = True
         self._retry.clear()
+        self._stop_owed = None
         if self.state in ACTIVE:
             self._stopped(why)
         self._changed(now=True)
@@ -1627,7 +1655,7 @@ class Runner:
             if rec is None:
                 h.day.off()
                 if h.day.pending():                  # (desk mode: its stop is asked again from idle())
-                    self._ending.append(h.day)
+                    self._let_go(h.day)
                 del self._days[name]
             elif _key(rec) != h.key:
                 if self._desk is not None:           # (a begun desk day is ended at the Desk before it is let go)
@@ -1881,7 +1909,13 @@ class Runner:
         the Desk first, with a stop that keeps the position, asked again from idle() if it gets no answer."""
         h.day.leave()
         if h.day.pending():
-            self._ending.append(h.day)
+            self._let_go(h.day)
+
+    def _let_go(self, day: StrategyDay) -> None:
+        """A day that is no longer hosted but still has its stop to ask: kept aside (idle() asks, the Desk's stream
+        still reaches it), and it writes nothing more: the date's day file belongs to whoever is hosted now."""
+        day.mute()
+        self._ending.append(day)
 
     def _desk_word(self, rec: dict, date: dt.date) -> str | None:
         """KILLED / STOPPED_TODAY when the Desk's latest snapshot, of THIS day and THIS promotion, says so."""
@@ -1945,25 +1979,28 @@ class Runner:
     def _on_desk(self, kind: str, event=None, data=None) -> None:
         """What the Desk's reader and the heartbeat's timer put on the queue (DeskClient)."""
         days = list(self._days.values())
+        gone = [day for day in self._ending if day.desk is not None]         # let go, and still owing their stop
         if kind == "desk_down":
             self._desk_up = False
-            for h in days:
-                if h.day.desk is not None:
-                    h.day.desk.down()
+            for day in [h.day for h in days] + gone:
+                if day.desk is not None:
+                    day.desk.down()
         elif kind == "desk_beat":
             self._desk_advice(event)
         elif isinstance(data, dict):
             self._desk_up = True
             if isinstance(data.get("date"), str):
                 self._desk_date = data["date"]
-                for h in days:                       # (a day sends nothing while the Desk is on another day)
-                    if h.day.desk is not None:
-                        h.day.desk.on_day(data["date"])
+                for day in [h.day for h in days] + gone:     # (a day sends nothing while the Desk is on another day)
+                    if day.desk is not None:
+                        day.desk.on_day(data["date"])
             if event == "state":                     # every Lab strategy on the Desk, whole
                 snaps = data.get("strategies")
                 self._snaps = {k: v for k, v in snaps.items() if isinstance(v, dict)} if isinstance(snaps, dict) else {}
                 for h in days:
                     self._desk_give(h, self._snaps.get(desk_id(h.day.name)))
+                for day in gone:
+                    self._desk_tell(day, self._snaps.get(desk_id(day.name)))
             else:
                 if event == "strategy" and isinstance(data.get("strategy"), str):
                     self._snaps[data["strategy"]] = data
@@ -1972,20 +2009,28 @@ class Runner:
                         self._desk_give(h, data)
                     elif h.day.desk is not None:
                         h.day.desk.heard()           # the stream is alive
+                for day in gone:
+                    if event == "strategy" and desk_id(day.name) == data.get("strategy"):
+                        self._desk_tell(day, data)
+                    else:
+                        day.desk.heard()
 
     def _desk_give(self, h: _Hosted, snap) -> None:
         """One strategy's snapshot to its day, when that day is in desk mode (StrategyDay.on_desk). A day in shadow
         reads NOTHING of the Desk's -- not its `stopped`, not its `killed`: the Desk marks a strategy's day stopped
         whenever its switch goes off, also one with no account, and shadow is the runner's own on / off (Step A)."""
-        day = h.day
-        if day.desk is None:
+        if h.day.desk is None:
             return
+        self._desk_tell(h.day, snap)
+        self._note(h)
+
+    @staticmethod
+    def _desk_tell(day: StrategyDay, snap) -> None:
         if snap is None:                             # a whole state that does not list it
             day.desk.heard()
             day.desk.gone()
         else:
             day.on_desk(snap)
-        self._note(h)
 
     def _desk_advice(self, answer) -> None:
         """The Desk's answer to a heartbeat: advice. Nothing is ever sent because of it; the child of a day in DESK
@@ -2014,30 +2059,31 @@ class Runner:
                 self._note(h)
         for day in self._ending:
             day.tend()
-        self._ending = [day for day in self._ending if day.pending()]
+        today = set(self._dates.values())            # (kept while its stop is still asked, or owed one more try)
+        self._ending = [day for day in self._ending if (day.pending() or day.owes_stop()) and day.date in today]
         if self._said is not None:
             self._desk.say(self._said)
 
     def _desk_say(self) -> None:
-        """The heartbeat's body: every enabled strategy the runner knows, by its desk id -- hosted or not, shadow ones
-        too. One that is not hosted (the Desk ended its day, or its day file is final) is named with what its day
-        file says, else as waiting, in the mode it would run in: a strategy with a position open must not read
-        "Runner down" only because its day is over. Not named: a desk day that could not be picked up (_desk_lost)."""
+        """The heartbeat's body, by desk id: every strategy the runner is HOSTING NOW (shadow ones too), and every
+        enabled one whose day file for its session date is final (`done` or `stopped`: the Desk ended its day, or it
+        is over) with what that file says. Nothing else -- never "waiting" from nothing.
+
+        Who is named matters: the Desk cancels a strategy's unfilled entries when no beat names it for 20 s, and a
+        beat that names it switches that rule off. A runner that started again and hosts nothing yet (the tick
+        stream is not live, or a day cannot be picked up: _desk_lost) must not say the strategy is there; a strategy
+        whose day is over with a position still open must not read "Runner down" for it."""
         named = {}
         for rec in self._enabled:
             name = rec["name"]
-            if name in self._days:
-                continue
             date = self._dates.get(rec["root"])
-            if date is not None and self._lost.get(name) == date:
+            if name in self._days or date is None or self._lost.get(name) == date:
                 continue
-            file = self._day_file(rec, date) if date is not None else None
-            if file is not None:
-                named[desk_id(name)] = {"state": file.get("state") if isinstance(file.get("state"), str) else "waiting",
+            file = self._day_file(rec, date)
+            if file is not None and file.get("state") in ("done", "stopped"):
+                named[desk_id(name)] = {"state": file["state"],
                                         "why": file.get("why") if isinstance(file.get("why"), str) else None,
                                         "mode": "desk" if file.get("mode") == "desk" else "shadow"}
-            else:
-                named[desk_id(name)] = {"state": "waiting", "why": None, "mode": "desk" if self._book(rec) else "shadow"}
         for name, h in self._days.items():
             named[desk_id(name)] = {"state": h.day.state, "why": h.day.summary()["why"], "mode": h.day.mode}
         self._said = {"pid": os.getpid(), "strategies": named}

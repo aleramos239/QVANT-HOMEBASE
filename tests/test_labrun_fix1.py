@@ -470,7 +470,6 @@ def test_at_the_strategys_own_window_end_one_flatten_eod_is_sent(kits):
     k.clock("10:00:05")
     k.r.idle()
     assert len(k.stub.bodies) == 2                                           # one
-    assert [o["text"] for o in k.today()["orders"]] == ["Buy at market, stop 20,990.00"]     # not the strategy's order
 
 
 def test_the_flatten_goes_whatever_the_runners_own_view_of_the_brain_says(kits):
@@ -629,7 +628,9 @@ def test_a_strategy_the_runner_does_not_host_is_still_named_in_the_heartbeat(kit
     assert k2.stub.said[-1]["strategies"] == {DESK_ID: {"state": "stopped", "why": "Stopped for today.", "mode": "desk"}}
 
 
-def test_an_enabled_strategy_with_no_day_yet_is_named_too_and_one_switched_off_is_not(kits):
+def test_an_enabled_strategy_with_no_day_at_all_is_not_named_and_one_switched_off_is_not(kits):
+    """Fix round 2 (N2): never "waiting" from nothing. A beat that names a strategy the runner does not host keeps
+    the Desk from cancelling a crashed day's unfilled entries."""
     k = kits()
     k.promote(ONE)                                                           # no account
     k.promote(MARKET_930, name="lab_y")
@@ -638,9 +639,7 @@ def test_an_enabled_strategy_with_no_day_yet_is_named_too_and_one_switched_off_i
     k.clock("09:00:00")
     k.r.sync()                                                               # no print yet: nothing is hosted
     k.r.beat()
-    assert k.r.hosting() == []
-    assert k.stub.said[-1]["strategies"] == {DESK_ID: {"state": "waiting", "why": None, "mode": "shadow"},
-                                             "lab_lab_y": {"state": "waiting", "why": None, "mode": "desk"}}
+    assert k.r.hosting() == [] and k.stub.said[-1]["strategies"] == {}
 
 
 # ================================================================ M5: an event in the future is not on time either
