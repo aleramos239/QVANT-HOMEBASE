@@ -1188,8 +1188,8 @@ class StrategyDay:
 
     def desk_says(self, why: str) -> None:
         """The Desk ended this strategy's day itself (killed there; stopped for today: switched off, "Flatten & turn
-        off", both entries of a pair filled, ...), in any mode: the child is stopped for today and nothing more is
-        sent for it -- no stop, and nothing that was still to be asked again."""
+        off", both entries of a pair filled, ...). Only ever called for a day in DESK MODE: the child is stopped for
+        today and nothing more is sent for it -- no stop, and nothing that was still to be asked again."""
         self._hush = True
         self._retry.clear()
         if self.state in ACTIVE:
@@ -1594,13 +1594,13 @@ class Runner:
                 return
             self._write(store.put_day, name, summary)
 
-        if self._desk is not None and self._desk_over(rec, date):
-            return                                   # the Desk has ended its day already: no child, in any mode
+        plan = self._desk_day(rec, date) if self._desk is not None else {}       # {}: shadow, as it always was
+        if plan and self._desk_over(rec, date, plan):
+            return                                   # the Desk has ended its desk day already: no child today
         # Fail closed: the clock is past the window's start and the prints held begin after it (the stream's backlog
         # is the session from its open; a tape that starts later cannot rebuild the day in full).
         day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
-                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now,
-                          **(self._desk_day(rec, date) if self._desk is not None else {}))
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now, **plan)
         h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
@@ -1764,12 +1764,23 @@ class Runner:
             return None
         return KILLED if snap.get("killed") is True else STOPPED_TODAY if isinstance(snap.get("stopped"), str) else None
 
-    def _desk_over(self, rec: dict, date: dt.date) -> bool:
-        """The Desk has ended this strategy's day (killed there, or stopped for today): it is not hosted, the day
-        file says so (what an earlier runner wrote of the day stays) and is final."""
+    def _desk_over(self, rec: dict, date: dt.date, plan: dict) -> bool:
+        """A strategy that would be hosted in DESK MODE now (accounts booked, and before its window or with a
+        tell-log to pick up) while the Desk says its day is over (killed there, or stopped for today): it is not
+        hosted, the day file says so (what an earlier runner wrote of the day stays) and is final -- no shadow day
+        takes its place either. A strategy that would run in shadow is never asked this: shadow reads nothing of the
+        Desk's."""
         why = self._desk_word(rec, date)
         if why is None:
             return False
+        if plan.get("resume") is None:               # nothing to pick up: desk mode only before its window begins
+            try:
+                w = rec.get("session_window")
+                w0 = effective_session_window(rec["root"], date, tuple(w) if _window(w) else tuple(store.DEFAULT_WINDOW))[0]
+                if self._clock_ms * 1_000_000 > et_ns(date, w0):
+                    return False
+            except Exception:  # noqa: BLE001 -- the day itself decides (StrategyDay._desk_start asks the Desk's word too)
+                return False
         name = rec["name"]
         was = self._day_file(rec, date) or {}
         self._write(store.put_day, name, {
@@ -1834,29 +1845,30 @@ class Runner:
                         h.day.desk.heard()           # the stream is alive
 
     def _desk_give(self, h: _Hosted, snap) -> None:
-        """One strategy's snapshot to its day. A day in desk mode reads all of it (StrategyDay.on_desk); a day in
-        shadow only whether the Desk has ended the strategy's day."""
+        """One strategy's snapshot to its day, when that day is in desk mode (StrategyDay.on_desk). A day in shadow
+        reads NOTHING of the Desk's -- not its `stopped`, not its `killed`: the Desk marks a strategy's day stopped
+        whenever its switch goes off, also one with no account, and shadow is the runner's own on / off (Step A)."""
         day = h.day
-        if day.desk is not None:
-            if snap is None:                         # a whole state that does not list it
-                day.desk.heard()
-                day.desk.gone()
-            else:
-                day.on_desk(snap)
-        elif day.state in ACTIVE and h.rec is not None:
-            why = self._desk_word(h.rec, day.date)
-            if why is not None:
-                day.desk_says(why)
+        if day.desk is None:
+            return
+        if snap is None:                             # a whole state that does not list it
+            day.desk.heard()
+            day.desk.gone()
+        else:
+            day.on_desk(snap)
         self._note(h)
 
     def _desk_advice(self, answer) -> None:
-        """The Desk's answer to a heartbeat: advice. Nothing is ever sent because of it; a child is stopped when it
-        says the strategy is killed or stopped -- and only for a day that is the Desk's own day (its stream says
-        which that is: a day hosted the evening before is not ended by yesterday's stop)."""
+        """The Desk's answer to a heartbeat: advice. Nothing is ever sent because of it; the child of a day in DESK
+        MODE is stopped when it says the strategy is killed or stopped -- and only for a day that is the Desk's own
+        day (its stream says which that is: a day hosted the evening before is not ended by yesterday's stop). A
+        shadow day never reads it."""
         named = answer.get("strategies") if isinstance(answer, dict) else None
         for h in list(self._days.values()) if isinstance(named, dict) else ():
             said = named.get(desk_id(h.day.name))
-            if not isinstance(said, dict) or h.day.state not in ACTIVE or self._desk_date != h.day.date.isoformat():
+            if h.day.desk is None or not isinstance(said, dict) or h.day.state not in ACTIVE:
+                continue
+            if self._desk_date != h.day.date.isoformat():
                 continue
             if said.get("killed") is True or isinstance(said.get("stopped"), str):
                 h.day.desk_says(KILLED if said.get("killed") is True else STOPPED_TODAY)

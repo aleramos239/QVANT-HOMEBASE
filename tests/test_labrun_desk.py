@@ -876,7 +876,7 @@ def test_the_heartbeats_answer_is_advice_it_never_sends_and_it_stops_a_child_the
     k.r.take(("desk_beat", {"ok": True, "armed": True, "strategies": {
         DESK_ID: {"enabled": True, "killed": False, "stopped": None},
         "lab_lab_y": {"enabled": True, "killed": True, "stopped": None}}}))
-    assert day.state == "running" and other.state == "stopped" and k.today("lab_y")["why"] == "Killed today."
+    assert day.state == "running" and other.state == "running"               # a shadow day never reads the Desk's word
     k.r.take(("desk_beat", {"ok": True, "armed": False, "strategies": {DESK_ID: {"enabled": False, "killed": False,
                                                                                 "stopped": "off"}}}))
     assert day.state == "stopped" and k.today()["why"] == "Stopped for today." and len(k.stub.bodies) == n
@@ -898,22 +898,49 @@ def test_yesterdays_stop_never_ends_a_day_hosted_the_evening_before(kit):
 
 # ---------------------------------------------------------------- the Desk has ended the day
 @pytest.mark.parametrize("word, why", [({"stopped": "off"}, "Stopped for today."), ({"killed": True}, "Killed today.")])
-@pytest.mark.parametrize("booking", ["booked", "no account"])
-def test_a_strategy_the_desk_has_stopped_is_not_hosted_in_any_mode_and_its_day_file_says_so(kit, word, why, booking):
+def test_a_booked_strategy_the_desk_has_stopped_is_not_hosted_today_and_its_day_file_says_so(kit, word, why):
     k = kit()
-    k.promote(ONE)
-    if booking == "booked":
-        store.put_desk("lab_x", sidecar(), k.at)
+    booked(k)
     k.clock("09:00:00")
     k.open()
     k.rows("09:20:00", [21000.0] * 2)
     k.r.take(state(snap(**word)))
     for _ in range(3):
         k.r.sync()
-    assert k.spawned == [] and k.r.day("lab_x") is None
+    assert k.spawned == [] and k.r.day("lab_x") is None                      # no child: not in desk mode, not in shadow
     s = k.file()
     assert (s["state"], s["why"], s["orders"], s["trades"]) == ("stopped", why, [], [])
     assert [(x["kind"], x["why"]) for x in k.journal()] == [("stop", why)] and k.stub.bodies == []
+
+
+@pytest.mark.parametrize("word", [{"stopped": "off"}, {"killed": True}])
+def test_a_strategy_with_no_account_is_hosted_in_shadow_whatever_the_desk_says(kit, word):
+    """The Desk marks a strategy's day stopped whenever its switch goes off, also with no account. Shadow is Step A:
+    the runner's own on / off, and nothing of the Desk's."""
+    k = kit()
+    k.promote(ONE)
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.take(state(snap(**word)))
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day is not None and day.mode == "shadow" and day.state == "waiting" and len(k.spawned) == 1
+    minute(k, "09:29:01")
+    assert day.state == "running" and day.fills.working_entries == 1 and k.journal()[0]["kind"] == "order"
+
+
+def test_a_booked_strategy_that_would_run_in_shadow_today_is_hosted_whatever_the_desk_says(kit):
+    k = kit()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 11)
+    k.clock("09:30:05")
+    k.r.take(state(snap(stopped="off")))
+    booked(k)                                                                # booked after the window began: shadow today
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day.mode == "shadow" and day.state == "running" and k.stub.bodies == []
 
 
 def test_what_an_earlier_runner_wrote_of_the_day_stays_when_the_desk_has_stopped_it(kit):
@@ -923,6 +950,7 @@ def test_what_an_earlier_runner_wrote_of_the_day_stays_when_the_desk_has_stopped
            "orders": [{"t": "09:30:00", "text": "Buy at market", "refused": None}], "trades": [], "net": 0.0,
            "match": None, "updated_utc": "x", "mode": "desk"}
     store.put_day("lab_x", was, k.at)
+    store.tell("lab_x", DATE, {"head": 1, "strategy": DESK_ID, "mark": mark_of(ONE), "date": DATE}, k.at)     # its tell-log
     k.r.take(state(snap(stopped="Both entries filled.")))
     k.clock("09:00:00")
     k.open()
@@ -934,16 +962,22 @@ def test_what_an_earlier_runner_wrote_of_the_day_stays_when_the_desk_has_stopped
     assert k.spawned == []
 
 
-def test_a_shadow_day_is_stopped_too_when_the_desk_says_the_strategy_is_stopped_today(kit):
+def test_the_desk_says_stopped_and_a_shadow_day_keeps_running_as_it_always_did(kit):
     k = kit()
     k.promote(ONE)
     day = before_the_window(k)
     minute(k, "09:29:01")
-    k.r.take(("desk", "strategy", {**snap(stopped="off"), "mark": ["x", "y"]}))      # another promotion's: no
-    k.r.take(("desk", "strategy", {**snap(stopped="off"), "date": "2024-03-04"}))    # another day's: no
-    assert day.state == "running"
-    k.r.take(("desk", "strategy", snap(stopped="off")))
-    assert day.state == "stopped" and k.today()["why"] == "Stopped for today." and k.stub.bodies == []
+    k.r.take(("desk", "strategy", snap(stopped="off")))                      # on the stream
+    k.r.take(state(snap(stopped="off", killed=True)))
+    k.r.take(("desk_beat", {"ok": True, "strategies": {DESK_ID: {"enabled": False, "killed": True, "stopped": "off"}}}))
+    minute(k, "09:30:01", px=21010.0)
+    assert day.mode == "shadow" and day.state == "running" and day.child_alive() is True
+    assert not day.fills.flat and k.stub.bodies == []                        # its paper fill, as in Step A
+    k.r.beat()
+    assert k.stub.said[-1]["strategies"][DESK_ID] == {"state": "running", "why": None, "mode": "shadow"}
+    store.set_enabled("lab_x", False, k.at)                                  # its own switch still ends it
+    k.r.sync()
+    assert day.state == "off" and k.stub.bodies == []
 
 
 # ---------------------------------------------------------------- the stream, as the runner hands it on
