@@ -439,8 +439,21 @@ Tests: `tests/test_pipe_prop_gates.py` (new); the older pipeline tests that coun
 (`tests/pipe_law.py`, the `PIPE_GATES = "law"` marker in `conftest.py`).
 
 ### 17.1 What happens to the ideas on file
-All 156 stopped ideas were queued again (`pipe rerun`, furthest first); their old stage cards are kept under `stages_old`. The eight ideas that
-had already read the unseen days are the exception: their sub-idea is frozen (lock.json), a frozen idea is never built again (line 3.2), and an
-idea's own read is one read (spec 14). They stop at stage 0 with "is frozen". For them the number the new gate 3 would give is read off the
-store already on disk (no run, no second read); a new version of such an idea (a new name, same card) would be a new read of the same unseen
-days, which the owner decides.
+All 156 stopped ideas were queued again (`pipe rerun`, furthest first); their old stage cards are kept under `stages_old`; the runner was
+restarted, since the old one held the old code in memory. Seven of them had already read the unseen days: their sub-idea is frozen (lock.json),
+a frozen idea is never built again (line 3.2) and an idea's own read is one read (spec 14), so they stop at stage 0 with "is frozen". Their
+picked box was scored by the new gates from the stores already on disk (no run, no second read):
+
+| idea | box | build days: avg trade / trades | plain eval odds, 30 days | unseen days: box net | gates 1 / 2 / 3 |
+|---|---|---|---|---|---|
+| nq_noise_pm_long | k0p4_pts45-r3 | $150 / 404 | 36.0 % | +$7,094 | pass / miss / pass |
+| nq_noise_gx_pm_long | k0p4_pts45-r2 | $161 / 445 | 37.3 % | +$16,310 | pass / miss / pass |
+| nq_noise_gx_pm_long_t3 | k0p4_pts45-r3 | $195 / 411 | 37.9 % | +$6,352 | pass / miss / pass |
+| nq_vwap_pull_mid_long | x0p1_atr1p5-r2 | $110 / 842 | 35.3 % | +$3,851 | pass / miss / pass |
+| nq_vwap_pull_pm | x0p2_pts45-r3 | | | -$35,998 | - / - / fail |
+| nq_noise_nyam_short | k0p3_pts45-r2 | | | -$6,098 | - / - / fail |
+| nq_value_reclaim | d_atr0p5_pct0p2-r3 | | | -$9,542 | - / - / fail |
+| nq_noise_gx_mid_long (in the book) | k0p3_pts30-r3 | $116 / 698 | 36.5 % | | pass / miss / (book, passed the old law) |
+
+The four that make money on the unseen days sit 2-5 points under the 40 % eval bar. The bar was not moved. A new version of such an idea
+(a new name, same card) would be a read of the same unseen days again; the owner decides. The book idea is not taken out of the book.
