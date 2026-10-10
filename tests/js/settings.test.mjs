@@ -90,17 +90,17 @@ test('a colour never changed follows the theme; a changed one stays', () => {
 
 test('chartOptions: background, text, font, grid, crosshair, right offset, scale lines', () => {
   assert.deepEqual(S.chartOptions(S.resolve({}, LIGHT)), {
-    layout: { background: { type: 'solid', color: '#FFFFFF' }, textColor: '#787B86', fontSize: 12 },
-    grid: { vertLines: { visible: true, color: '#F0F3FA' }, horzLines: { visible: true, color: '#F0F3FA' } },
+    layout: { background: { type: 'solid', color: '#FFFFFF' }, textColor: '#787B86', fontSize: 12, panes: { separatorColor: '#E0E3EB' } },
+    grid: { vertLines: { visible: true, color: '#F0F3FA', style: 0 }, horzLines: { visible: true, color: '#F0F3FA', style: 0 } },
     crosshair: { vertLine: { color: '#9598A1', style: 2, width: 1 }, horzLine: { color: '#9598A1', style: 2, width: 1 } },
     timeScale: { rightOffset: 6, borderColor: '#E0E3EB' },
     rightPriceScale: { borderColor: '#E0E3EB' },
   });
   const o = S.chartOptions(S.resolve({ vertGrid: false, horzGridColor: '#FF0000', crossStyle: 'solid', crossWidth: 3,
     crossColor: '#2962FF', scaleFont: 14, rightOffset: 20, scaleLines: '#000000', scaleText: '#111111', bg: '#131722' }, LIGHT));
-  assert.deepEqual(o.grid, { vertLines: { visible: false, color: '#F0F3FA' }, horzLines: { visible: true, color: '#FF0000' } });
+  assert.deepEqual(o.grid, { vertLines: { visible: false, color: '#F0F3FA', style: 0 }, horzLines: { visible: true, color: '#FF0000', style: 0 } });
   assert.deepEqual(o.crosshair.horzLine, { color: '#2962FF', style: 0, width: 3 });
-  assert.deepEqual(o.layout, { background: { type: 'solid', color: '#131722' }, textColor: '#111111', fontSize: 14 });
+  assert.deepEqual(o.layout, { background: { type: 'solid', color: '#131722' }, textColor: '#111111', fontSize: 14, panes: { separatorColor: '#E0E3EB' } });
   assert.deepEqual([o.timeScale.rightOffset, o.timeScale.borderColor, o.rightPriceScale.borderColor], [20, '#000000', '#000000']);
 });
 
@@ -109,7 +109,7 @@ test('candleOptions: colours and visibility, precision from the tick or the sett
     upColor: '#089981', downColor: '#F23645', borderVisible: true, borderUpColor: '#089981', borderDownColor: '#F23645',
     wickVisible: true, wickUpColor: '#089981', wickDownColor: '#F23645',
     priceFormat: { type: 'price', precision: 2, minMove: 0.25 },
-    lastValueVisible: true, priceLineVisible: true, priceLineStyle: 1,
+    lastValueVisible: true, priceLineVisible: true, priceLineStyle: 1, priceLineWidth: 1,
   });
   const off = S.candleOptions(S.resolve({ body: false, borders: false, wick: false, lastLabel: false, lastLine: false,
     lastLineStyle: 'solid' }, LIGHT), 0.25);
@@ -125,8 +125,8 @@ test('candleOptions: colours and visibility, precision from the tick or the sett
 test('scale margins and the legend flags', () => {
   assert.deepEqual(S.scaleMargins(S.resolve({}, LIGHT)), { top: 0.1, bottom: 0.15 });
   assert.deepEqual(S.scaleMargins(S.resolve({ marginTop: 0, marginBottom: 40 }, LIGHT)), { top: 0, bottom: 0.4 });
-  assert.deepEqual(S.legendFlags(S.resolve({}, LIGHT)), { title: true, titleMode: 'both', ohlc: true, change: true,
-    volume: true, indTitles: true, indArgs: true, indValues: true });
+  assert.deepEqual(S.legendFlags(S.resolve({}, LIGHT)), { logo: true, title: true, titleMode: 'both', ohlc: true, change: true,
+    volume: true, dayChange: false, indTitles: true, indArgs: true, indValues: true });
   assert.equal(S.legendFlags(S.resolve({ barChange: false }, LIGHT)).change, false);
 });
 
@@ -320,4 +320,67 @@ test('text on a fill: dark on a light fill, white on a dark one (the countdown o
   assert.equal(S.contrastText('rgba(255,255,255,.2)', '#0F0F0F'), '#FFFFFF');   // mostly the dark chart behind it
   assert.equal(S.contrastText('rgba(0,0,0,.2)', '#FFFFFF'), '#000000');
   assert.equal(S.contrastText('teal'), '#FFFFFF');
+});
+
+/* 2026-10-09, the owner sent TradingView's Settings as the reference: the fields ours lacked. */
+test('TradingView parity: the new fields default to today\'s look, so no saved chart changes', () => {
+  const d = S.DEFAULTS;
+  assert.deepEqual([d.logo, d.dayChange, d.scaleMode, d.invertScale, d.lastLineColor, d.lastLineWidth], [true, false, 'normal', false, null, 1]);
+  assert.deepEqual([d.prevDay, d.prevDayColor, d.prevDayStyle, d.highLow, d.highLowColor, d.indLabels], ['hidden', '#787B86', 'dotted', 'hidden', '#787B86', 'value']);
+  assert.deepEqual([d.dayOfWeek, d.dateFormat, d.bgType, d.bg2, d.vertGridStyle, d.horzGridStyle, d.paneSep, d.watermarkText],
+    [true, 'dmy', 'solid', null, 'solid', 'solid', null, 'both']);
+  assert.deepEqual(S.overrides({}), {});
+  assert.deepEqual(S.overrides({ scaleMode: 'log', prevDay: 'both', highLow: 'nope', lastLineWidth: 9 }), { scaleMode: 'log', prevDay: 'both', lastLineWidth: 4 });
+});
+
+test('the price scale: regular, logarithmic, percent, indexed to 100; inverted or not', () => {
+  const o = (over) => S.priceScaleOptions(S.resolve(over, LIGHT));
+  assert.deepEqual(o({}), { mode: 0, invertScale: false });
+  assert.deepEqual([o({ scaleMode: 'log' }).mode, o({ scaleMode: 'percent' }).mode, o({ scaleMode: 'indexed' }).mode], [1, 2, 3]);
+  assert.equal(o({ invertScale: true }).invertScale, true);
+});
+
+test('canvas: a gradient background, grid line styles, the pane separators\' colour', () => {
+  const o = S.chartOptions(S.resolve({ bgType: 'gradient', bg: '#101010', bg2: '#303030', vertGridStyle: 'dotted', horzGridStyle: 'dashed', paneSep: '#FF00FF' }, DARK));
+  assert.deepEqual(o.layout.background, { type: 'gradient', topColor: '#101010', bottomColor: '#303030' });
+  assert.deepEqual([o.grid.vertLines.style, o.grid.horzLines.style], [1, 2]);
+  assert.equal(o.layout.panes.separatorColor, '#FF00FF');
+  assert.equal(S.chartOptions(S.resolve({ bgType: 'gradient' }, DARK)).layout.background.bottomColor, '#0F0F0F');   // the second colour follows the theme
+});
+
+test('the last-price line in a colour of its own leaves the series\' line off (the chart draws it); its width', () => {
+  const c = (over) => S.candleOptions(S.resolve(over, LIGHT), 0.25);
+  assert.deepEqual([c({}).priceLineVisible, c({ lastLineWidth: 3 }).priceLineWidth], [true, 3]);
+  assert.equal(c({ lastLineColor: '#FFFFFF' }).priceLineVisible, false);
+  assert.equal(c({ lastLine: false, lastLineColor: '#FFFFFF' }).priceLineVisible, false);
+});
+
+test('the previous session\'s close: the last real bar before the last bar\'s session', () => {
+  const bars = [{ s: '2026-09-21', c: 100 }, { s: '2026-09-21', c: 101 }, { s: '2026-09-21', c: 101, blank: 'lost' },
+    { s: '2026-09-22', c: 105 }, { s: '2026-09-22', c: 107 }];
+  assert.equal(S.prevSessionClose(bars), 101);                     // not the empty slot after it
+  assert.equal(S.prevSessionClose(bars.slice(3)), null);           // one session on the chart: unknown
+  assert.equal(S.prevSessionClose([]), null);
+});
+
+test('the high and the low among the bars on screen, empty slots skipped', () => {
+  const bars = [{ h: 5, l: 1 }, { h: 9, l: 4 }, { h: 9, l: 0, blank: 'lost' }, { h: 7, l: 2 }, { h: 20, l: -3 }];
+  assert.deepEqual(S.highLow(bars, 0, 3), { hi: 9, hiAt: 1, lo: 1, loAt: 0 });
+  assert.deepEqual(S.highLow(bars, -4.2, 99), { hi: 20, hiAt: 4, lo: -3, loAt: 4 });     // a range past the bars: clamped
+  assert.deepEqual(S.highLow(bars, 0.4, 3.6), { hi: 9, hiAt: 1, lo: 2, loAt: 3 });       // only whole bars inside it
+  assert.equal(S.highLow(bars, 2, 2), null);
+});
+
+test('the date as the Date format setting spells it, with or without the day of the week', () => {
+  const t = Date.UTC(2026, 8, 22, 9, 31) / 1000;
+  assert.deepEqual(['dmy', 'mdy', 'iso', 'dmy_num', 'mdy_num'].map((f) => S.dateText(t, f, false)),
+    ["22 Sep '26", 'Sep 22, 2026', '2026-09-22', '22/09/2026', '09/22/2026']);
+  assert.equal(S.dateText(t, 'dmy', true), "Tue 22 Sep '26");
+  assert.equal(S.dateText(t, 'bogus', true), "Tue 22 Sep '26");
+});
+
+test('the watermark\'s words', () => {
+  assert.deepEqual(['both', 'ticker', 'interval', 'description'].map((m) => S.watermarkText('NQ', 'E-mini Nasdaq-100', '1m', m)),
+    ['NQ, 1m', 'NQ', '1m', 'E-mini Nasdaq-100']);
+  assert.equal(S.watermarkText('XX', '', '5m', 'description'), 'XX');
 });

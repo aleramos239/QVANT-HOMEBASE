@@ -21,7 +21,7 @@ const LW = window.LightweightCharts;
 const C = window.HBCatalog;
 const S = window.HBSettings;
 const CANDLE_KEYS = ['prevClose', 'body', 'bodyUp', 'bodyDown', 'borders', 'borderUp', 'borderDown', 'wick', 'wickUp', 'wickDown'];
-const { Footprint, Profile, Gaps, EthBg, Countdown, EventFlags, Start } = window.HBLayers;
+const { Footprint, Profile, Gaps, EthBg, Countdown, HighLow, EventFlags, Start } = window.HBLayers;
 const NO_SCALE = () => null;   // autoscaleInfoProvider: the series takes no part in autoscale
 const FAKE0 = 946684800;    // synthetic-axis origin for tick/volume/range bars
 const FONT = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
@@ -35,7 +35,6 @@ const MIN_GAP_S = 5;        // a recording gap shorter than this is not marked: 
                             // marker (it may have lost one tick), a reconnect a blip -- not a hole to look at
 const BLANKS_MAX = 20000;   // empty slots one chart adds for its known holes, at most (a 5 s chart of a day-long hole: 16,560)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const clone = (x) => JSON.parse(JSON.stringify(x));
 
 /* The chart canvas colours: charts.css's tokens for the current theme. */
@@ -166,7 +165,8 @@ class Cell {
     this.hover = null;      // bar index under the crosshair (null: the last bar)
     this.noteTimer = 0; this.noteOn = false;   // noteOn: the legend message is still a note()
     this.dc = null;   // the drawing controller of the current chart
-    this.eth = this.cd = null; this.clockEt = null;   // the hours background, the countdown, now (ET wall ms)
+    this.eth = this.cd = this.hl = null; this.clockEt = null;   // the hours background, the countdown, the high and low, now (ET wall ms)
+    this.refLines = {}; this.pdc = null;   // the chart's own price lines; the previous session's close, cached
     this.evl = null;   // the economic-calendar flags layer
     this.back = new window.HBScrollBack.ScrollBack();   // scroll-back: older history on demand
     this.start = null;   // the "Start of data" / "History limit reached" layer
@@ -234,8 +234,8 @@ class Cell {
 
   /* The crosshair's time label, e.g. "Tue 22 Sep '26  09:31". */
   fullTime(tt) {
-    const d = new Date(this.real(tt) * 1000), s = d.toISOString(), ms = this.barMs();
-    const day = `${DAYS[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} '${s.slice(2, 4)}`;
+    const t = this.real(tt), s = new Date(t * 1000).toISOString(), ms = this.barMs();
+    const day = S.dateText(t, this.R.dateFormat, this.R.dayOfWeek);   // the Date format and Day of week settings
     if (ms >= 86400000) return day;
     return `${day}  ${S.clockText(s.slice(11, ms >= 60000 ? 16 : 19), this.R.timeFormat)}`;
   }
@@ -243,6 +243,7 @@ class Cell {
   title() {
     const { root, spec } = this.cfg, F = S.legendFlags(this.R);
     this.lg.name.hidden = !F.title;
+    this.lg.logo.hidden = !F.logo;
     this.lg.name.textContent = S.titleText(root, C.rootName(root), C.specLabel(spec), F.titleMode);
     this.lg.logo.replaceChildren(badgeEl(root, 20));
   }
@@ -292,13 +293,17 @@ class Cell {
     this.title();
     if (!this.chart) return;
     if (was.timezone !== R.timezone) { this.retime(); this.restyle(); return; }
-    if (was.timeFormat !== R.timeFormat) {
+    if (was.timeFormat !== R.timeFormat || was.dateFormat !== R.dateFormat || was.dayOfWeek !== R.dayOfWeek) {
       this.chart.applyOptions({ timeScale: { tickMarkFormatter: (t, type) => tickLabel(this.real(t), type, this.R.timeFormat) },
         localization: { timeFormatter: (t) => this.fullTime(t) } });
     }
     const o = S.chartOptions(R);
     this.chart.applyOptions({ ...o, rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) } });
+    this.chart.priceScale('right', 0).applyOptions(S.priceScaleOptions(R));   // the price pane's scale only: an RSI pane stays regular
     this.candles.applyOptions(this.candleOpts());
+    this.syncRefLines();
+    if (was.indLabels !== R.indLabels) this.syncIndLabels();
+    if (this.hl) this.hl.redraw();
     this.wm.applyOptions({ visible: R.watermark, lines: [this.wmLine()] });
     if ((R.prevClose || was.prevClose) && CANDLE_KEYS.some((k) => R[k] !== was[k])) this.resetCandles();
     if (R.scalePriceOnly !== was.scalePriceOnly) {   // "Scale price chart only": the price pane's lines leave autoscale
@@ -323,7 +328,8 @@ class Cell {
   /* The watermark line: "NQ, 1m" in the settings' colour. */
   wmLine() {
     const s = this.shown || this.cfg;
-    return { text: `${s.root}, ${C.specLabel(s.spec)}`, color: this.R.watermarkColor, fontSize: 48, fontFamily: FONT };
+    const text = S.watermarkText(s.root, C.rootName(s.root), C.specLabel(s.spec), this.R.watermarkText);
+    return { text, color: this.R.watermarkColor, fontSize: 48, fontFamily: FONT };
   }
 
   /* The price step the legend shows: the tick size, or the Precision setting's 10^-n. */
@@ -365,10 +371,62 @@ class Cell {
      changes -- a new bar direction, new colours, the body switched off. */
   syncLastColor() {
     if (!this.candles) return;
+    this.syncRefLines();
     const col = this.bars.length ? S.lastColor(this.R, this.lastUp()) : '';
     if (col === this.lastCol) return;
     this.lastCol = col;
     this.candles.applyOptions({ priceLineColor: col });
+  }
+
+  /* The chart's own price lines (S.prevSessionClose, the last price in a colour of its own), made, moved and
+     removed to follow the settings and the bars: the last-price line only when it has its own colour (else the
+     series draws it, in the last bar's), the previous session's close when asked and on the chart. */
+  syncRefLines() {
+    if (!this.candles) return;
+    const R = this.R, n = this.bars.length, last = n ? this.bars[n - 1] : null, want = {};
+    if (last && R.lastLine && R.lastLineColor != null) {
+      want.last = { price: last.c, color: R.lastLineColor, lineWidth: R.lastLineWidth, lineStyle: S.LINE_STYLE[R.lastLineStyle],
+        axisLabelVisible: false, title: '' };
+    }
+    const pc = R.prevDay !== 'hidden' ? this.prevClose() : null;
+    if (pc != null) {
+      want.prev = { price: pc, color: R.prevDayColor, lineWidth: 1, lineStyle: S.LINE_STYLE[R.prevDayStyle],
+        axisLabelVisible: R.prevDay === 'both', title: R.prevDay === 'both' ? 'Prev close' : '' };
+    }
+    for (const k of ['last', 'prev']) {
+      const cur = this.refLines[k], w = want[k], key = w ? JSON.stringify(w) : '';
+      if (!w) { if (cur) { this.candles.removePriceLine(cur.line); delete this.refLines[k]; } continue; }
+      if (!cur) this.refLines[k] = { line: this.candles.createPriceLine(w), key };
+      else if (cur.key !== key) { cur.line.applyOptions(w); cur.key = key; }
+    }
+  }
+
+  /* The previous session's close, read once per session on screen (a scan back over the last session's bars). */
+  prevClose() {
+    const n = this.bars.length;
+    if (!n) return null;
+    const key = `${this.bars[n - 1].s}|${this.bars[0].ms}`;
+    if (!this.pdc || this.pdc.key !== key) this.pdc = { key, v: S.prevSessionClose(this.bars) };
+    return this.pdc.v;
+  }
+
+  /* An indicator's label on the price scale, for the "Indicator labels" setting: its value, its name too, or none.
+     Only the lines that carry a label at all (l.tag): bands, histograms on the price pane and the like never do. */
+  syncIndLabels() {
+    const m = this.R.indLabels;
+    for (const l of this.lines) if (l.tag) l.s.applyOptions({ lastValueVisible: m !== 'hidden', title: m === 'both' ? l.name : '' });
+  }
+
+  /* What the high-and-low layer draws now: the highest high and the lowest low among the bars on screen. */
+  highLowNow() {
+    const R = this.R;
+    if (R.highLow === 'hidden' || !this.chart || !this.bars.length) return null;
+    const ts = this.chart.timeScale(), vr = ts.getVisibleLogicalRange(), hl = vr ? S.highLow(this.bars, vr.from, vr.to) : null;
+    if (!hl) return null;
+    const fmt = this.candles.priceFormatter(), color = S.hexOf(R.highLowColor) || R.scaleText;   // the axis' own spelling of a price
+    return { color, textColor: S.contrastText(color, R.bg), lines: R.highLow === 'both',
+      hi: { price: hl.hi, text: fmt.format(hl.hi), x: ts.logicalToCoordinate(hl.hiAt) },
+      lo: { price: hl.lo, text: fmt.format(hl.lo), x: ts.logicalToCoordinate(hl.loAt) } };
   }
 
   /* What the calendar layer draws now: the events this chart shows (its Events settings) and where. A tick,
@@ -451,6 +509,7 @@ class Cell {
       if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
       if (this.hover != null) this.hover += k;
       this.drawMarkers(); this.drawGaps(); this.syncFootprint(); this.syncEth();
+      this.syncRefLines();   // an older session on the chart: the previous close may be on it now
       this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
       this.legend(this.hover);
       if (this.dc) this.dc.refresh();
@@ -622,6 +681,7 @@ class Cell {
     this.candles.setData(this.candleData());
     this.syncLastColor();
     this.buildSeries();
+    if (this.R.indLabels !== 'value') this.syncIndLabels();
     for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
     this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile(); this.syncEth();
     // Pane heights as px-sized stretch factors. Not setHeight(): it spreads each change using the laid-out
@@ -664,7 +724,7 @@ class Cell {
       autoSize: true,
       layout: { ...o.layout, fontFamily: FONT,
         attributionLogo: false,   // the credit lives once in the bottom bar
-        panes: { separatorColor: P.border, separatorHoverColor: P.accentSoft, enableResize: true } },
+        panes: { ...o.layout.panes, separatorHoverColor: P.accentSoft, enableResize: true } },
       grid: o.grid,
       rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) },
       timeScale: { ...o.timeScale, timeVisible: true, secondsVisible: sub,
@@ -675,11 +735,14 @@ class Cell {
         horzLine: { ...o.crosshair.horzLine, labelBackgroundColor: P.crossLabel } },
     });
     this.candles = this.chart.addSeries(LW.CandlestickSeries, this.candleOpts());
+    this.chart.priceScale('right', 0).applyOptions(S.priceScaleOptions(R));
+    this.refLines = {}; this.pdc = null;   // the chart's own price lines (syncRefLines): gone with the old series
     this.markers = LW.createSeriesMarkers(this.candles, []);
     this.wm = LW.createTextWatermark(this.chart.panes()[0], { visible: R.watermark, horzAlign: 'center',
       vertAlign: 'center', lines: [this.wmLine()] });
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
     this.eth = new EthBg(P); this.cd = new Countdown(P, () => this.countdownNow());
+    this.hl = new HighLow(P, () => this.highLowNow());
     this.evl = new EventFlags(P, () => this.eventsNow());
     this.start = new Start(P);
     const fp = this.fp;   // pin the instance this callback belongs to
@@ -689,7 +752,7 @@ class Cell {
       this.candles.applyOptions(this.candleOpts());
       if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
-    for (const l of [this.eth, this.gaps, this.start, this.prof, this.fp, this.cd, this.evl]) this.candles.attachPrimitive(l);
+    for (const l of [this.eth, this.gaps, this.start, this.prof, this.fp, this.hl, this.cd, this.evl]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
     this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { this.syncFootprint(); this.evTip.hidden = true; this.askOlder(r); });
     this.chart.subscribeCrosshairMove((p) => {
@@ -749,7 +812,7 @@ class Cell {
       const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
       const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
       const s = this.chart.addSeries(type, { priceLineVisible: false, visible: inst.visible !== false, ...opts, ...auto }, where);
-      this.lines.push({ uid: inst.uid, s, src, part, overlay });
+      this.lines.push({ uid: inst.uid, s, src, part, overlay, tag: opts.lastValueVisible !== false, name: C.label(inst) });
       return s;
     };
     const line = (inst, src, part, color, width, where = 0, extra = {}) => add(inst, src, part, LW.LineSeries,
@@ -995,6 +1058,10 @@ class Cell {
     const F = S.legendFlags(R), parts = [];
     if (F.ohlc) parts.push(...[['O', b.o], ['H', b.h], ['L', b.l], ['C', b.c]].map(([key, v]) => kv(key, C.fmtPrice(v, dt), col)));
     if (F.change) parts.push(val(ch.text, ch.up ? R.bodyUp : R.bodyDown));
+    if (F.dayChange) {   // "Last day change values": the last price against the previous session's close
+      const pc = this.prevClose(), last = this.bars[n - 1];
+      if (pc != null) { const d = C.change({ c: last.c, o: pc }, { c: pc }, dt); parts.push(kv('Day', d.text, d.up ? R.bodyUp : R.bodyDown)); }
+    }
     if (F.volume) parts.push(kv('Vol', C.fmtCompact(b.v), col), kv('Δ', C.fmtSigned(b.d), b.d >= 0 ? P.up : P.down));
     this.lg.ohlc.replaceChildren(...parts);
     for (const r of this.rows) {

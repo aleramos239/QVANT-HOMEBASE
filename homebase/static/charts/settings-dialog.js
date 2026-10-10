@@ -19,11 +19,18 @@ const S = window.HBSettings, I = window.HBIcons, DX = window.HBDataExport;
 const LINE = [['solid', 'Solid'], ['dotted', 'Dotted'], ['dashed', 'Dashed']];
 const PRECISION = [['', 'Default'], ...[0, 1, 2, 3, 4, 5, 6].map((n) => [String(n), n ? (10 ** -n).toFixed(n) : '1'])];
 const FONT_SIZES = [10, 11, 12, 13, 14, 15, 16].map((n) => [String(n), String(n)]);
+const WIDTHS = [1, 2, 3, 4].map((n) => [String(n), `${n} px`]);
+const SHOW_LINE = [['hidden', 'Hidden'], ['line', 'Line'], ['both', 'Line and label']];
+const TIME_FORMAT = [['24h', '24-hour (19:30)'], ['12h', '12-hour (7:30 PM)']];
+const DATE_FORMAT = [['dmy', "22 Sep '26"], ['mdy', 'Sep 22, 2026'], ['iso', '2026-09-22'], ['dmy_num', '22/09/2026'], ['mdy_num', '09/22/2026']];
+/* behind a see-through colour in a swatch, so its opacity can be seen (TradingView's) */
+const CHECKER = 'repeating-conic-gradient(#8A8A8A 0% 25%, #C4C4C4 0% 50%) 50% / 8px 8px';
 const asNumber = (v) => Number(v);
 const asPrecision = (v) => (v === '' ? null : Number(v));
 
 /* The tabs, in TradingView's order. A row: {label, check?: key (a checkbox before the label), colors?: [[key,
-   what]] (a swatch each), select?: {key, choices: [[value, text]], parse?}, number?: {key, min, max, unit?},
+   what]] (a swatch each), select?: {key, choices: [[value, text]], parse?, name?} or a list of them (name: the
+   select's own accessible name when a row has two), number?: {key, min, max, unit?},
    dot?: colour (a colour dot before the label, no swatch), chips?: key (a multi-select of host.countries()),
    algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting),
    accounts?: true (the Trading tab's ACCOUNTS list: the chart's own accounts, not a setting),
@@ -40,17 +47,18 @@ const TABS = [
     ['DATA', [
       { label: 'Precision', select: { key: 'precision', choices: PRECISION, parse: asPrecision } },
       { label: 'Timezone', select: { key: 'timezone', choices: S.TIMEZONES.map(([k, text]) => [k, text]) } },
-      { label: 'Time format', select: { key: 'timeFormat', choices: [['24h', '24-hour (19:30)'], ['12h', '12-hour (7:30 PM)']] } },
       { label: 'Electronic trading hours background', check: 'ethBg', colors: [['ethBgColor', '']] },
     ]],
   ] },
   { id: 'status', label: 'Status line', icon: 'list', sections: [
     ['SYMBOL', [
+      { label: 'Logo', check: 'logo' },
       { label: 'Symbol title', check: 'title', select: { key: 'titleMode',
         choices: [['ticker', 'Ticker'], ['description', 'Description'], ['both', 'Ticker and description']] } },
       { label: 'OHLC values', check: 'ohlc' },
       { label: 'Bar change values', check: 'barChange' },
       { label: 'Volume', check: 'volume' },
+      { label: 'Last day change values', check: 'dayChange' },
     ]],
     ['INDICATORS', [
       { label: 'Indicator titles', check: 'indTitles' },
@@ -60,25 +68,46 @@ const TABS = [
   ] },
   { id: 'scales', label: 'Scales and lines', icon: 'measure', sections: [
     ['PRICE SCALE', [
+      { label: 'Scale type', select: { key: 'scaleMode',
+        choices: [['normal', 'Regular'], ['percent', 'Percent'], ['indexed', 'Indexed to 100'], ['log', 'Logarithmic']] } },
+      { label: 'Invert scale', check: 'invertScale' },
       { label: 'Scale price chart only', check: 'scalePriceOnly' },
-      { label: 'Symbol last price label', check: 'lastLabel' },
-      { label: 'Symbol last price line', check: 'lastLine', select: { key: 'lastLineStyle', choices: LINE } },
-      { label: 'Countdown to bar close', check: 'countdown' },
       { label: 'Top margin', number: { key: 'marginTop', min: 0, max: 40, unit: '%' } },
       { label: 'Bottom margin', number: { key: 'marginBottom', min: 0, max: 40, unit: '%' } },
     ]],
+    ['PRICE LABELS AND LINES', [
+      { label: 'Symbol last price label', check: 'lastLabel' },
+      { label: 'Symbol last price line', check: 'lastLine', colors: [['lastLineColor', '']], select: [
+        { key: 'lastLineStyle', choices: LINE, name: 'Symbol last price line style' },
+        { key: 'lastLineWidth', choices: WIDTHS, parse: asNumber, name: 'Symbol last price line width' }] },
+      { label: 'Countdown to bar close', check: 'countdown' },
+      { label: 'Previous day close', colors: [['prevDayColor', '']], select: [
+        { key: 'prevDay', choices: SHOW_LINE },
+        { key: 'prevDayStyle', choices: LINE, name: 'Previous day close line style' }] },
+      { label: 'High and low', colors: [['highLowColor', '']], select: { key: 'highLow',
+        choices: [['hidden', 'Hidden'], ['labels', 'Labels'], ['both', 'Lines and labels']] } },
+      { label: 'Indicator labels', select: { key: 'indLabels',
+        choices: [['value', 'Value'], ['both', 'Name and value'], ['hidden', 'Hidden']] } },
+    ]],
     ['TIME SCALE', [
+      { label: 'Day of week on labels', check: 'dayOfWeek' },
+      { label: 'Date format', select: { key: 'dateFormat', choices: DATE_FORMAT } },
+      { label: 'Time format', select: { key: 'timeFormat', choices: TIME_FORMAT } },
       { label: 'Right margin', number: { key: 'rightOffset', min: 0, max: 100, unit: 'bars' } },
     ]],
   ] },
   { id: 'canvas', label: 'Canvas', icon: 'paintbrush', sections: [
     ['CHART BASIC STYLES', [
-      { label: 'Background', colors: [['bg', '']] },
-      { label: 'Vert grid lines', check: 'vertGrid', colors: [['vertGridColor', '']] },
-      { label: 'Horz grid lines', check: 'horzGrid', colors: [['horzGridColor', '']] },
-      { label: 'Crosshair', colors: [['crossColor', '']], select: { key: 'crossStyle', choices: LINE },
-        number: { key: 'crossWidth', min: 1, max: 4 } },
-      { label: 'Watermark', check: 'watermark', colors: [['watermarkColor', '']] },
+      { label: 'Background', colors: [['bg', 'top'], ['bg2', 'bottom (gradient)']], select: { key: 'bgType',
+        choices: [['solid', 'Solid'], ['gradient', 'Gradient']] } },
+      { label: 'Vertical grid lines', check: 'vertGrid', colors: [['vertGridColor', '']], select: { key: 'vertGridStyle', choices: LINE } },
+      { label: 'Horizontal grid lines', check: 'horzGrid', colors: [['horzGridColor', '']], select: { key: 'horzGridStyle', choices: LINE } },
+      { label: 'Pane separators', colors: [['paneSep', '']] },
+      { label: 'Crosshair', colors: [['crossColor', '']], select: [
+        { key: 'crossStyle', choices: LINE, name: 'Crosshair line style' },
+        { key: 'crossWidth', choices: WIDTHS, parse: asNumber, name: 'Crosshair line width' }] },
+      { label: 'Watermark', check: 'watermark', colors: [['watermarkColor', '']], select: { key: 'watermarkText',
+        choices: [['both', 'Ticker, interval'], ['ticker', 'Ticker'], ['interval', 'Interval'], ['description', 'Description']] } },
     ]],
     ['SCALES', [
       { label: 'Text colour', colors: [['scaleText', '']] },
@@ -366,7 +395,15 @@ function mount(box, host) {
   function set(key, v) { work = S.normalize({ ...work, [key]: v }); preview(); paint(); }
   /* What each colour field shows: its value, or the theme's colour while it follows the theme. */
   const shown = () => S.resolve(S.overrides(work), cell.P || {});
-  function paint() { const r = shown(); for (const [k, i] of swatches) i.style.background = r[k] || ''; }
+  /* A colour never set that is not the theme's either: the last-price line follows the last bar (an up bar's here). */
+  const swatchColor = (r, k) => r[k] || (k === 'lastLineColor' ? S.lastColor(r, true) : '');
+  function paint() {
+    const r = shown();
+    for (const [k, i] of swatches) {
+      const c = swatchColor(r, k);
+      i.style.background = c && S.alphaOf(c) < 1 ? `linear-gradient(${c}, ${c}), ${CHECKER}` : c;
+    }
+  }
 
   function renderTabs() {
     const had = tabs.contains(document.activeElement);
@@ -723,9 +760,9 @@ function mount(box, host) {
       b.onclick = () => swatchMenu(b, key);
       ctl.append(b);
     }
-    if (r.select) {
-      const { key, choices, parse } = r.select, s = mk('select', 'set-select');
-      s.setAttribute('aria-label', r.label);
+    for (const { key, choices, parse, name: selName } of [].concat(r.select || [])) {
+      const s = mk('select', 'set-select');
+      s.setAttribute('aria-label', selName || r.label);
       for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; s.append(o); }
       s.value = work[key] == null ? '' : String(work[key]);
       s.onchange = () => set(key, parse ? parse(s.value) : s.value);
@@ -803,7 +840,7 @@ function mount(box, host) {
      following the theme / the default). Picking a palette colour keeps the opacity. */
   function swatchMenu(anchor, key) {
     host.toggleMenu(anchor, 'menu-swatch', (m) => {
-      const cur = () => shown()[key];
+      const cur = () => swatchColor(shown(), key);
       const grid = mk('div', 'sw-grid'), err = mk('div', 'sw-err'), picks = [];
       err.hidden = true;
       err.setAttribute('role', 'alert');
