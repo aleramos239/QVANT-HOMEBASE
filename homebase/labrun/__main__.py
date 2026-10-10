@@ -56,7 +56,7 @@ def desk_url(url: str, charts: str) -> str:
     if (u.scheme != "http" or u.hostname not in LOCAL or port is None or "@" in u.netloc or u.path not in ("", "/")
             or u.query or u.fragment):
         raise ValueError("it must be http://127.0.0.1:<port> or http://localhost:<port>")
-    if port == urlsplit(charts).port:
+    if port == (urlsplit(charts).port or 80):        # (a chart service given with no port is on 80)
         raise ValueError("that is the chart service's own address")
     return f"http://{u.netloc}"
 

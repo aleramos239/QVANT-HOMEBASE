@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import queue
 import re
 import sys
 import threading
@@ -36,7 +37,8 @@ import httpx
 
 STREAM, INTENT, BEAT = "/api/lab/stream", "/api/lab/intent", "/api/lab/heartbeat"
 KEY_HEADER = "X-Homebase-Key"
-SEND_S = 5.0                     # one request's answer (the Desk may hold an entry 2 s for the 9:30 orders)
+SEND_S = 5.0                     # one request's answer, by the wall clock (the Desk may hold an entry 2 s for the
+                                 # 9:30 orders): send() never holds its caller longer, whatever the transport does
 READ_S = 15.0                    # the stream says it is alive every 5 s: this long with nothing and it is down
 BACKOFF_S = (1.0, 30.0)
 BEAT_S = 5.0
@@ -76,9 +78,31 @@ class DeskClient:
 
     # ---- one request, once
     def _post(self, path: str, body: dict, timeout: float) -> dict:
+        """ONE request, and its answer within `timeout` seconds of the wall clock. The transport's own timeouts are
+        per phase (connect, write, each read), so a Desk that answers in pieces could hold the caller for several of
+        them: the request runs in a thread of its own and the caller waits `timeout` for it, no longer. A request
+        that is still out then is "no answer" (it may yet arrive at the Desk: it is never sent again from here)."""
         key = self._key()
         if key is None:
             return _failed(False)
+        box: queue.Queue = queue.Queue(1)
+
+        def work() -> None:
+            try:
+                box.put(self._request(path, body, key, timeout))
+            except BaseException:  # noqa: BLE001 -- whatever it was, the caller gets one answer
+                box.put(_failed(True))
+        try:
+            threading.Thread(target=work, name="labrun-desk-send", daemon=True).start()
+        except RuntimeError:                         # no thread to be had: nothing left this process
+            return _failed(False)
+        try:
+            return box.get(timeout=timeout)
+        except queue.Empty:
+            log(f"desk: {path}: no answer in {timeout:g} s")
+            return _failed(True)
+
+    def _request(self, path: str, body: dict, key: str, timeout: float) -> dict:
         try:
             r = self._http.post(path, json=body, headers={KEY_HEADER: key}, timeout=httpx.Timeout(timeout))
         except Exception as e:  # noqa: BLE001 -- a timeout, a refused or dropped connection: no answer

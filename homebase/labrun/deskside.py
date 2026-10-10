@@ -11,6 +11,9 @@ each event of the child, says what changed against what the child was last told.
     updates()          one update per order whose status or fill is not what the child was told
     trades()           the lead account's finished rounds of today, as the tester's trade rows
     silent()           the stream is down, holds nothing of this day for us, or said nothing for 15 s
+    other_day          the stream says the Desk's own day is NOT this day's date (a replay took the tick stream's
+                       place, a day hosted the evening before, ...). The Desk applies a cancel, a flatten or a stop
+                       whatever date its event carries, so the host sends NOTHING for a day while this holds.
 
 WHAT A SNAPSHOT MAY SAY ABOUT AN ORDER. The stream is read by a thread of its own, so a snapshot can be OLDER than the
 runner's last request: it does not list an order the Desk had not been sent yet, and that is not "cancelled". The
@@ -110,6 +113,7 @@ class DeskSide:
         self._snap: dict | None = None               # the latest snapshot of this day
         self._valid = False                          # ... and the Desk's latest word about us WAS one
         self._down = True                            # the stream is not open
+        self._other = False                          # the stream says the Desk is on another day than this one
         self._heard = float("-inf")                  # when it last said anything
         self._flat = bool(flat)
         self._orders: dict[int, list] = {}           # the child's entry id -> [the last event that touched it, what
@@ -123,8 +127,18 @@ class DeskSide:
 
     def down(self) -> None:
         """The stream ended. What it said before is kept (flat, the orders, the trades), but the Desk is not answering
-        for us until a new stream has sent this strategy's snapshot again (a new stream starts with a whole state)."""
-        self._down, self._valid = True, False
+        for us until a new stream has sent this strategy's snapshot again (a new stream starts with a whole state).
+        Which day the Desk is on is not known any more."""
+        self._down, self._valid, self._other = True, False, False
+
+    def on_day(self, date) -> None:
+        """The day the Desk's stream says it is on (every event of it carries one)."""
+        if isinstance(date, str):
+            self._other = date != self.date
+
+    @property
+    def other_day(self) -> bool:
+        return self._other
 
     def gone(self) -> None:
         """A whole state arrived that does not list this strategy: the Desk says nothing of this day for us."""
@@ -134,6 +148,7 @@ class DeskSide:
         if not isinstance(snap, dict) or snap.get("strategy") != self.desk_id:
             return False
         self.heard()
+        self.on_day(snap.get("date"))
         if snap.get("mark") != self.mark or snap.get("date") != self.date:
             self._valid = False                      # another promotion's, or another day's: nothing of it is believed
             return False

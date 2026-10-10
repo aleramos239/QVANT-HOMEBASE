@@ -359,3 +359,22 @@ def test_a_sidecar_gives_a_book_only_when_it_reads_is_this_promotions_has_limits
             {"account": "a4", "qty": 1}, {"account": "a4", "qty": 2}]
     assert booked({**side_, "book": rows}, REC) == ["a4"]                    # only a row that is a booking, once
     assert booked({**side_, "book": rows[:5]}, REC) is None
+
+
+def test_the_side_knows_when_the_desks_stream_is_on_another_day():
+    s = side()
+    assert s.other_day is False                                              # nothing heard: not known, so not "other"
+    s.take(snap())
+    assert s.other_day is False
+    s.take({**snap(), "date": "2024-03-04"})
+    assert s.other_day is True and s.silent() is True
+    s.take({**snap(), "mark": ["another", "promotion"]})                     # another promotion's, but this day's
+    assert s.other_day is False and s.silent() is True
+    s.on_day("2026-10-12")                                                   # a whole state that does not list us
+    assert s.other_day is True
+    s.on_day(None)
+    assert s.other_day is True
+    s.down()                                                                 # the stream is gone: its day is unknown
+    assert s.other_day is False
+    s.on_day(DATE)
+    assert s.other_day is False
