@@ -10,7 +10,7 @@ import time
 from fastapi.testclient import TestClient
 
 from homebase import draftstore
-from homebase.charts import lab_templates, reviewpack
+from homebase.charts import lab_forms, lab_templates, reviewpack
 from homebase.charts.server import create_app
 from tests.backtest_util import D1, nq_archive
 
@@ -237,3 +237,152 @@ def test_listing_many_drafts_walks_the_package_once(drafts_dir, monkeypatch):
         (drafts_dir / f"d_{i}.py").write_text(lab_templates.BLANK)
     assert len(draftstore.list_files()) == 12 and len(calls) == 1
     assert "json" in draftstore.shadow_names() and "engine" in draftstore.shadow_names()
+
+
+# ---- the form's three routes: answers in, a draft's text out (nothing here runs or writes a draft) ------------
+
+FORM = "/api/tester/drafts/form"
+RULES = ("open_straddle", "opening_range", "bar_breakout", "at_time")
+
+
+def answers_for(base, /, name="form_one", **over):
+    a = {**lab_forms.schema()["defaults"][base], "name": name}
+    a.update(over)
+    return a
+
+
+def test_the_form_route_serves_the_schema(tmp_path):
+    with client(tmp_path) as c:
+        got = c.get(FORM).json()
+        assert got == lab_forms.schema()
+        assert [r["id"] for r in got["rules"]] == list(RULES) and "NQ" in got["markets"]
+        assert set(got["defaults"]) == set(RULES) and "name" not in got["defaults"]["open_straddle"]
+
+
+def test_every_rule_builds_validates_saves_and_lists(tmp_path, drafts_dir):
+    with client(tmp_path) as c:
+        for rule in RULES:
+            a = answers_for(rule, name=f"form_{rule}")
+            r = c.post(f"{FORM}/build", json={"answers": a}, headers=OK)
+            assert r.status_code == 200, r.text
+            got = r.json()
+            assert got["ok"] is True and got["name"] == f"form_{rule}"
+            assert got["code"] == lab_forms.build(a) and got["sentence"] == lab_forms.sentence(a)
+            v = c.post("/api/tester/drafts/validate", json={"code": got["code"]}, headers=OK).json()
+            assert v["ok"] is True and v["meta"]["root"] == "NQ", v
+            s = c.put(f"/api/tester/drafts/{got['name']}", json={"code": got["code"]}, headers=OK)
+            assert s.status_code == 200, s.text
+            assert (drafts_dir / f"form_{rule}.py").read_text() == got["code"]
+        listed = c.get("/api/tester/drafts").json()
+        assert sorted(d["name"] for d in listed) == sorted(f"form_{r}" for r in RULES)
+        assert all(d["ok"] for d in listed)
+    assert not any(m.startswith("homebase_draft_") for m in sys.modules), "building never imports a draft"
+
+
+def test_building_never_writes_a_file(tmp_path, drafts_dir):
+    with client(tmp_path) as c:
+        assert c.post(f"{FORM}/build", json={"answers": answers_for("at_time", side="long")}, headers=OK).json()["ok"]
+        assert c.post(f"{FORM}/build", json={"answers": answers_for("at_time", stop={"kind": "range"})}, headers=OK).json()["ok"] is False
+        assert list(drafts_dir.iterdir()) == [] and c.get("/api/tester/drafts").json() == []
+
+
+def test_a_built_form_draft_backtests_in_the_sandbox(tmp_path):
+    with client(tmp_path) as c:
+        a = answers_for("bar_breakout", name="form_bars", bar_min=5, lookback=6)
+        code = c.post(f"{FORM}/build", json={"answers": a}, headers=OK).json()["code"]
+        assert c.put("/api/tester/drafts/form_bars", json={"code": code}, headers=OK).status_code == 200
+        rid = c.post("/api/tester/run", json={"strategy": "draft_form_bars", "range": MARCH}, headers=OK).json()["id"]
+        st = poll(c, rid)
+        assert st["status"] == "done", st.get("error")
+        assert c.get(f"/api/tester/run/{rid}/bundle").json()["run"]["strategy"]["id"] == "draft_form_bars"
+
+
+def test_a_refused_answer_comes_back_under_its_field_with_status_200(tmp_path):
+    cases = [
+        ("open_straddle", {"market": "ZZ"}, "market", "Pick one from the list."),
+        ("open_straddle", {"rule": "nope"}, "rule", "Pick one from the list."),
+        ("at_time", {"side": "both"}, "side", "Pick long or short for this rule."),
+        ("open_straddle", {"stop": {"kind": "points", "value": 0}}, "stop", "Every entry needs a stop."),
+        ("open_straddle", {"stop": {"kind": "range"}}, "stop", "That stop only works with the opening range."),
+        ("open_straddle", {"target": {"kind": "rr", "value": 99}}, "target", "Give a target, or pick None."),
+        ("open_straddle", {"distance": 0}, "distance", "The distance must be at least one tick."),
+        ("bar_breakout", {"lookback": 1}, "lookback", "Between 2 and 40 bars."),
+        ("bar_breakout", {"trades": 9}, "trades", "Between 1 and 5."),
+        ("opening_range", {"range_min": 7}, "range_min", "Pick one from the list."),
+        ("open_straddle", {"time": "9:30am"}, "time", "A New York time, like 09:30."),
+        ("open_straddle", {"last_entry": "09:00"}, "last_entry", "It must be after the start."),
+        ("open_straddle", {"out_by": "10:00"}, "out_by", "It must be after the last entry, and 15:55 at the latest."),
+        ("open_straddle", {"name": "Bad-Name"}, "name", None),
+    ]
+    with client(tmp_path) as c:
+        for rule, over, field, sentence in cases:
+            r = c.post(f"{FORM}/build", json={"answers": answers_for(rule, **over)}, headers=OK)
+            assert r.status_code == 200, (field, r.text)
+            got = r.json()
+            assert got["ok"] is False and list(got["errors"]) == [field], (field, got)
+            assert sentence is None or got["errors"][field] == sentence, (field, got)
+            assert "code" not in got
+        a = answers_for("open_straddle")
+        del a["distance"]
+        got = c.post(f"{FORM}/build", json={"answers": a}, headers=OK).json()
+        assert got == {"ok": False, "errors": {"distance": "The form is incomplete."}}
+
+
+def test_a_name_already_taken_is_refused_unless_it_replaces(tmp_path):
+    with client(tmp_path) as c:
+        a = answers_for("at_time", name="form_taken")
+        first = c.post(f"{FORM}/build", json={"answers": a}, headers=OK).json()
+        assert first["ok"] is True
+        assert c.put("/api/tester/drafts/form_taken", json={"code": first["code"]}, headers=OK).status_code == 200
+        taken = {"ok": False, "errors": {"name": "That name is taken."}}
+        r = c.post(f"{FORM}/build", json={"answers": a}, headers=OK)
+        assert r.status_code == 200 and r.json() == taken
+        assert c.post(f"{FORM}/build", json={"answers": a, "replace": False}, headers=OK).json() == taken
+        again = c.post(f"{FORM}/build", json={"answers": {**a, "side": "short"}, "replace": True}, headers=OK).json()
+        assert again["ok"] is True and again["name"] == "form_taken" and again["code"] != first["code"]
+        # a built-in's name stays taken, replace or not (saving it would be refused too)
+        for body in ({"answers": {**a, "name": "gc_nfp"}}, {"answers": {**a, "name": "gc_nfp"}, "replace": True}):
+            got = c.post(f"{FORM}/build", json=body, headers=OK).json()
+            assert got["ok"] is False and list(got["errors"]) == ["name"] and "built-in" in got["errors"]["name"], got
+        # other refusals still come first
+        got = c.post(f"{FORM}/build", json={"answers": {**a, "side": "both"}}, headers=OK).json()
+        assert list(got["errors"]) == ["side"]
+
+
+def test_build_and_read_take_only_the_strict_bodies(tmp_path):
+    good = answers_for("at_time")
+    with client(tmp_path) as c:
+        for body in ({}, {"answers": []}, {"answers": "x"}, {"answers": None}, [], "x", 3,
+                     {"answers": good, "replace": "yes"}, {"answers": good, "replace": 1}):
+            r = c.post(f"{FORM}/build", json=body, headers=OK)
+            assert r.status_code == 400, body
+        assert c.post(f"{FORM}/build", content="{not json", headers={**OK, "content-type": "application/json"}).status_code == 400
+        for body in ({}, {"code": 3}, {"code": None}, {"code": ["x"]}, [], "x"):
+            assert c.post(f"{FORM}/read", json=body, headers=OK).status_code == 400, body
+        assert c.post(f"{FORM}/read", content="{not json", headers={**OK, "content-type": "application/json"}).status_code == 400
+        big = "x" * (draftstore.MAX_BYTES + 1)
+        assert c.post(f"{FORM}/read", json={"code": big}, headers=OK).status_code == 400
+        assert c.post(f"{FORM}/read", json={"code": "x" * draftstore.MAX_BYTES}, headers=OK).status_code == 200
+
+
+def test_read_gives_the_answers_back_and_whether_the_file_is_untouched(tmp_path):
+    a = answers_for("opening_range", name="form_read")
+    with client(tmp_path) as c:
+        code = c.post(f"{FORM}/build", json={"answers": a}, headers=OK).json()["code"]
+        got = c.post(f"{FORM}/read", json={"code": code}, headers=OK).json()
+        assert got == {"answers": lab_forms.read(code)["answers"], "intact": True} and got["answers"]["name"] == "form_read"
+        edited = c.post(f"{FORM}/read", json={"code": code + "# my own line\n"}, headers=OK).json()
+        assert edited["intact"] is False and edited["answers"] == got["answers"]
+        plain = c.post(f"{FORM}/read", json={"code": lab_templates.BAR_BREAKOUT}, headers=OK).json()
+        assert plain == {"answers": None, "intact": False}
+        assert c.post(f"{FORM}/read", json={"code": ""}, headers=OK).json() == {"answers": None, "intact": False}
+
+
+def test_the_form_posts_keep_the_origin_host_and_json_guards(tmp_path):
+    body = {"answers": answers_for("at_time")}
+    with client(tmp_path) as c:
+        for path, b in ((f"{FORM}/build", body), (f"{FORM}/read", {"code": "x"})):
+            assert c.post(path, json=b, headers=EVIL).status_code == 403
+            assert c.post(path, json=b, headers={**OK, "host": "evil.example"}).status_code == 403
+            assert c.post(path, content="x=1", headers={**OK, "content-type": "text/plain"}).status_code == 415
+            assert c.post(path, json=b, headers=OK).status_code == 200

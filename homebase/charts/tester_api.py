@@ -11,6 +11,13 @@
     GET  /api/tester/drafts/templates    the "New strategy" starters [{id, title, blurb, code}]
     GET  /api/tester/drafts/reference    {text}: the scripting contract (events, orders, reads), for the Lab's reference sheet
     POST /api/tester/drafts/validate     {code} -> {ok, meta} | {ok: false, error, line?} (parse + catalog read)
+    GET  /api/tester/drafts/form         the strategy form's schema (homebase.charts.lab_forms.schema): markets, rules,
+                                          fields with their words, and a complete default answer set per rule
+    POST /api/tester/drafts/form/build   {answers, replace?} -> {ok, code, name, sentence} | {ok: false, errors: {field:
+                                          sentence}} (status 200: a refusal is an answer; a name already on file or a
+                                          built-in's is refused unless replace). Builds TEXT only: nothing is written or run
+    POST /api/tester/drafts/form/read    {code} -> {answers: {...} | null, intact} (null: not a file the form made;
+                                          intact: it is exactly what the form writes for those answers)
     PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
     DELETE /api/tester/drafts/{name}     remove it
     POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under
@@ -158,7 +165,7 @@ from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from ..labrun import door, store
 from ..labrun.host import session_today
-from . import DEFAULT_ROOTS, lab_templates, reviewpack, watch
+from . import DEFAULT_ROOTS, lab_forms, lab_templates, reviewpack, watch
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -337,6 +344,50 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(400, "the body is JSON") from None
         meta, err, line = meta_or_error(code)
         return {"ok": True, "meta": brief(meta)} if meta is not None else {"ok": False, "error": err, "line": line}
+
+    @r.get("/drafts/form")
+    def draft_form():
+        return lab_forms.schema()
+
+    async def form_body(request: Request):
+        write_ok(request)
+        json_body(request)
+        try:
+            body = await request.json()
+        except ValueError:
+            raise HTTPException(400, "the body is JSON") from None
+        if not isinstance(body, dict):
+            raise HTTPException(400, "send a JSON object")
+        return body
+
+    @r.post("/drafts/form/build")
+    async def build_draft_form(request: Request):
+        body = await form_body(request)
+        answers, replace = body.get("answers"), body.get("replace", False)
+        if not isinstance(answers, dict) or not isinstance(replace, bool):
+            raise HTTPException(400, "{answers: the form's answers, replace?: true}")
+        try:
+            code = lab_forms.build(answers)
+        except lab_forms.FormError as e:
+            return {"ok": False, "errors": {e.field: e.sentence}}
+        name, taken = answers["name"], {"ok": False, "errors": {"name": "That name is taken."}}
+        try:
+            draftstore.validate_name(name, builtin_ids())           # the check PUT /drafts/{name} makes
+        except ValueError:
+            return taken
+        path = draftstore.path_for(name)
+        if not replace and (path.exists() or path.is_symlink()):
+            return taken
+        return {"ok": True, "code": code, "name": name, "sentence": lab_forms.sentence(answers)}
+
+    @r.post("/drafts/form/read")
+    async def read_draft_form(request: Request):
+        body = await form_body(request)
+        code = body.get("code")
+        if not isinstance(code, str) or len(code.encode("utf-8", "replace")) > draftstore.MAX_BYTES:
+            raise HTTPException(400, f"{{code: the draft's text, at most {draftstore.MAX_BYTES:,} bytes}}")
+        got = lab_forms.read(code)
+        return {"answers": got["answers"], "intact": got["intact"]} if got else {"answers": None, "intact": False}
 
     @r.put("/drafts/{name}")
     async def save_draft(name: str, request: Request):
