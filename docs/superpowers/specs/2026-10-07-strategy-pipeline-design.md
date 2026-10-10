@@ -120,7 +120,8 @@ The reshuffle runs first (minutes). The random check (hours) runs only if the re
   - makes money in 80 % of 1,000 reshuffled runs
   - still makes money without its best 1 % of days
 - Prop check, LucidPro 50K no daily limit, at the best size (1 to 40 micros), open losses counted,
-  read on the "live is worse" row (win rate −5 points, winners −15 %):
+  read on the plain row (the build days' own trades; since 2026-10-10 -- the "live is worse" row, win rate −5 points and
+  winners −15 %, is printed beside it as a stress line and never read by a gate):
   - chance to pass the eval within 30 trading days: over 50 %
   - chance to reach the maximum payout within 30 trading days: over 50 %
   Both yes = **stands alone**. Otherwise = **helper**. This is a label, not a gate.

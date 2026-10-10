@@ -179,7 +179,8 @@ def odds_fake(calls: list):
     def odds(x, calendar, account=None, paths=None, seed=None):
         calls.append({"trades": len(x["net"]), "calendar": list(calendar), "account": account, "env": env()})
         return {"account": {"id": account, "name": f"the account {account}", "confirmed": account != APEX}, "days": 30, "size": 5, "payout_size": 3, "eval": 0.6,
-                "payout": 0.7, "label": PP.ALONE, "need": {"eval": 0.5, "payout": 0.5}, "table": [], "text": f"PROP CHECK canned on {account} -- STANDS ALONE."}
+                "payout": 0.7, "label": PP.ALONE, "need": {"eval": 0.5, "payout": 0.5}, "table": [],
+                "stress": {"size": 5, "payout_size": 3, "eval": 0.4, "payout": 0.5, "table": []}, "text": f"PROP CHECK canned on {account} -- STANDS ALONE."}
     return odds
 
 
@@ -368,7 +369,8 @@ def test_stage_5_a_locked_idea_is_six_rows_the_prop_label_and_what_was_locked(wo
     assert (p["label"], p["account"], p["eval"], p["payout"], p["size"], p["payout_size"]) == (PP.ALONE, OWN, 0.6, 0.7, 5, 3)
     assert p["text"] == f"P5.9 n/a  PROP CHECK canned on {OWN} -- STANDS ALONE." and p["need"] == {"days": 30, "eval": 0.5, "payout": 0.5}
     assert c["locked"] == {"default": cell, "lock": HASH, "prop": {OWN: {"name": f"the account {OWN}", "confirmed": True, "size": 5, "payout_size": 3, "eval": 0.6,
-                                                                         "payout": 0.7, "label": PP.ALONE, "text": f"PROP CHECK canned on {OWN} -- STANDS ALONE."}}}
+                                                                         "payout": 0.7, "label": PP.ALONE, "stress": {"size": 5, "payout_size": 3, "eval": 0.4, "payout": 0.5, "table": []},
+                                                                         "text": f"PROP CHECK canned on {OWN} -- STANDS ALONE."}}}
     assert f"the middle box {cell} (of 2 that make money" in c["text"] and f"lock {HASH}" in c["text"] and "STANDS ALONE" in c["text"]
     assert c["rules"]["lines"] == {k: 0.5 for k in BOXL} and c["rules"]["checked"] == ["1.1", "1.2", "1.3", "1.4"]
     (o,) = calls["odds"]                                                                       # the default box's BUILD trades on the build days, the pipeline's account
@@ -527,7 +529,7 @@ def test_stage_6_reads_the_unseen_days_once_through_the_toolkit_and_labels_a_pas
     assert [o["account"] for o in calls["odds"]] == [OWN, FLEX, APEX] == list(c["prop"]) and ACCOUNTS == [OWN, FLEX, APEX]
     assert all((o["trades"], o["calendar"]) == (2, SY.weekdays()) for o in calls["odds"])
     assert c["label"] == PP.ALONE == c["prop"][OWN]["label"] and c["prop"][APEX]["confirmed"] is False and c["prop"][FLEX]["confirmed"] is True
-    assert set(c["prop"][OWN]) == {"name", "confirmed", "size", "payout_size", "eval", "payout", "label", "text"}
+    assert set(c["prop"][OWN]) == {"name", "confirmed", "size", "payout_size", "eval", "payout", "label", "stress", "text"}
     assert c["rules"]["lines"] == {f"4.{i}": 0.5 for i in range(1, 10)} and c["rules"]["range"] == {"start": "2025-07-01", "end": "2026-09-30"}
     calls = six(world)                                                                         # a tiny run names its test days; no tiny run: no days, no switch
     ST.stage6(C, {"root": ROOT, "tiny": {**TINY, "test_days": ["2025-07-08", "2026-02-11"]}})

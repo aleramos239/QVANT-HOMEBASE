@@ -68,9 +68,10 @@ THE RULES (the design's own, fixed) AND HOW EACH IS READ HERE
 
 THE ODDS OF A MIX are pipe_prop.odds' reading of one box, for several: every member at the SAME size step in micros
 (propodds.together; k members at a step each = k x the step inside the account's maximum, as propodds.table has it), on the
-session days the members SHARE, the day pool with each day's worst open loss (propodds.days: OPEN LOSSES COUNT), THE "LIVE IS
-WORSE" ROW (propodds.worse), the app's paths and seed without a day limit (propodds.draws) cut at the bar's days, the walks
-propodds.eval_walk and funded_walk. Each phase at its own best size: `size` = the step with the highest eval odds,
+session days the members SHARE, the day pool with each day's worst open loss (propodds.days: OPEN LOSSES COUNT), the app's paths
+and seed without a day limit (propodds.draws) cut at the bar's days, the walks propodds.eval_walk and funded_walk. THE PLAIN
+ROW (the trades as they were) is the number the bar, the ranking and the members' test read; THE "LIVE IS WORSE" ROW
+(propodds.worse) is `stress` on every mix, shown beside it and never a gate (the owner, 2026-10-10). Each phase at its own best size: `size` = the step with the highest eval odds,
 `payout_size` = the funded step with the highest payout odds; equal odds = the smaller step. With the prop check's day count
 one strategy reads here exactly as pipe_prop.odds reads it (locked by the test).
 
@@ -204,28 +205,34 @@ def _steps(r: dict, k: int) -> tuple:
 
 
 def odds(cells: list, calendar, r: dict, paths=None, seed=None) -> dict:
-    """THE TWO ODDS OF ONE MIX (module docstring): its members' cells at the same size step each, on `calendar`, on the "live is
-    worse" row, open losses counted -- the eval passed within the bar's eval days, the maximum payout reached within its payout
-    days, each at its best size. Nothing to read (no size the account may hold, no trade on those days): size None, both 0."""
+    """THE TWO ODDS OF ONE MIX (module docstring): its members' cells at the same size step each, on `calendar`, open losses
+    counted -- the eval passed within the bar's eval days, the maximum payout reached within its payout days, each at its best
+    size. The PLAIN row is the number (the owner, 2026-10-10); the "live is worse" row is `stress`, beside it. Nothing to read
+    (no size the account may hold, no trade on those days): size None, both 0."""
     need, A, cal = PR.need("portfolio"), PO.app(), [str(d) for d in calendar]
     (ev, fu), n, sd = _steps(r, len(cells)), int(paths or A.N_PATHS), A.SEED if seed is None else int(seed)
     ne, np_ = int(need[EVAL]["days"]), int(need[PAYOUT]["days"])
     de, far = min(ne, int(r.get("max_days") or ne)), max(ne, np_)      # an eval with its own maximum of days cannot be passed after them
+    zero = {"size": None, "payout_size": None, EVAL: 0.0, PAYOUT: 0.0, "table": []}
     if not (cal and ev and PO.together(cells, ev[0], r, cal)):
-        return {"size": None, "payout_size": None, EVAL: 0.0, PAYOUT: 0.0, "table": []}
-    rows = []
+        return {**zero, "stress": dict(zero)}
+    rows, srows = [], []
     for size in ev:
         net, traded, opn, _ = PO.days(PO.together(cells, size, r, cal), r, cal)
-        wnet, wopn = PO.worse(net, traded, opn)     # the "live is worse" row
+        wnet, wopn = PO.worse(net, traded, opn)     # the stress row: "live is worse"
         idx = PO.draws(len(net), n, max(far, PO.horizon(r)), sd)[:, :far]       # the no-day-limit paths, their first days
-        p, t, o = wnet[idx], traded[idx], wopn[idx]
-        e = PO.eval_walk(p[:, :de], t[:, :de], o[:, :de], r)
-        f = PO.funded_walk(p[:, :np_], o[:, :np_], r) if size in fu else None
-        rows.append({"size": size, EVAL: int(((e["outcome"] == PO.PASS) & (e["day"] <= ne)).sum()) / n,
-                     PAYOUT: None if f is None else int(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= np_)).sum()) / n})
-    be = max(rows, key=lambda v: v[EVAL])           # smallest size first: equal odds = the smaller step
-    bp = max((v for v in rows if v[PAYOUT] is not None), key=lambda v: v[PAYOUT], default={"size": None, PAYOUT: 0.0})
-    return {"size": be["size"], "payout_size": bp["size"], EVAL: be[EVAL], PAYOUT: bp[PAYOUT], "table": rows}
+        for dst, (a_, t_, o_) in ((rows, (net, traded, opn)), (srows, (wnet, traded, wopn))):
+            p, t, o = a_[idx], t_[idx], o_[idx]
+            e = PO.eval_walk(p[:, :de], t[:, :de], o[:, :de], r)
+            f = PO.funded_walk(p[:, :np_], o[:, :np_], r) if size in fu else None
+            dst.append({"size": size, EVAL: int(((e["outcome"] == PO.PASS) & (e["day"] <= ne)).sum()) / n,
+                        PAYOUT: None if f is None else int(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= np_)).sum()) / n})
+
+    def best(tab):                                  # smallest size first: equal odds = the smaller step
+        be = max(tab, key=lambda v: v[EVAL])
+        bp = max((v for v in tab if v[PAYOUT] is not None), key=lambda v: v[PAYOUT], default={"size": None, PAYOUT: 0.0})
+        return {"size": be["size"], "payout_size": bp["size"], EVAL: be[EVAL], PAYOUT: bp[PAYOUT], "table": tab}
+    return {**best(rows), "stress": best(srows)}
 
 
 def held(cells: list, size: int, r: dict, calendar, rl: dict) -> dict:
@@ -376,9 +383,13 @@ def _table(got: list) -> list:
     """THE ANSWER FIRST: one row an account -- its best mix, the two odds against their bars, and whether it is at the bar."""
     def odds_(a: dict, p: str) -> str:
         return "-" if a["best"] is None else "not judged" if p not in a["judged"] else f"{PO._pc(a['best'][p])} of {L._pc(a['need'][p]['odds'])}"
+    def stress_(a: dict) -> str:                     # the "live is worse" row of the best mix, beside the number (never a gate)
+        st = None if a["best"] is None else a["best"].get("stress")
+        return "-" if not st else " / ".join("-" if p not in a["judged"] else PO._pc(st[p]) for p in (EVAL, PAYOUT))
     need = got[0]["need"]
-    rows = [("account", "best mix", f"eval in {need[EVAL]['days']} days", f"max payout in {need[PAYOUT]['days']} days", "at the bar"),
-            *[(a["account"]["name"], "none" if a["best"] is None else " + ".join(a["best"]["members"]), odds_(a, EVAL), odds_(a, PAYOUT), "YES" if a["meets"] else "no") for a in got]]
+    rows = [("account", "best mix", f"eval in {need[EVAL]['days']} days", f"max payout in {need[PAYOUT]['days']} days", "at the bar", "stress: eval / payout"),
+            *[(a["account"]["name"], "none" if a["best"] is None else " + ".join(a["best"]["members"]), odds_(a, EVAL), odds_(a, PAYOUT), "YES" if a["meets"] else "no",
+               stress_(a)) for a in got]]
     wide = [max(len(str(r[i])) for r in rows) for i in range(len(rows[0]))]
     return ["  ".join(str(c).ljust(w) for c, w in zip(r, wide)).rstrip() for r in rows]
 
@@ -397,5 +408,5 @@ def portfolio(root=None, account=None, paths=None, seed=None) -> dict:
     head = (f"THE PORTFOLIO (stage 8): {k} strateg{'y' if k == 1 else 'ies'} in the book" + (f" ({', '.join(str(x) for x in names)})" if names else "")
             + f". A mix must pass the eval within {need[EVAL]['days']} trading days {L._pc(need[EVAL]['odds'])} of the time or more AND reach the maximum payout "
             f"within {need[PAYOUT]['days']} trading days {L._pc(need[PAYOUT]['odds'])} of the time or more. Read on each strategy's unseen-day trades (its locked box), "
-            "every member at the same size, on the \"live is worse\" row; open losses count. Nothing was run.")
+            "every member at the same size; open losses count; each mix also shows the \"live is worse\" row as a stress line. Nothing was run.")
     return api.result("pipe portfolio", book=names, accounts=got, saved=saved, text="\n".join([head, *_table(got), *[a["text"] for a in got]]))
