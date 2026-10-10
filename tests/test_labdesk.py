@@ -360,7 +360,8 @@ def test_one_position_at_a_time(tmp_path):
     assert refusal(send(d, entry(3), seq=3)) == door.ONE_AT_A_TIME                 # in a position
     fill_exit(d.eng, d.ads["a1"], st(d), 120.0, "tp")
     assert st(d).status == "done"
-    assert refusal(send(d, entry(4), seq=4)) == door.ONE_AT_A_TIME                 # out, its orders not read ended yet
+    # out, its orders not read ended yet: no account takes it, and the words are the engine's (fix round 1, I6)
+    assert refusal(send(d, entry(4), seq=4)) == "The Desk cannot check the last trade's orders."
     tick(d)
     assert d.eng.lab_rounds(LAB)[0]["clean"] is True
     assert send(d, entry(5), seq=5)["results"][0]["status"] == "working"           # clean: the next round
@@ -826,8 +827,9 @@ def test_a_restarted_desk_knows_todays_events_trades_and_stop(tmp_path):
 
 def test_an_event_the_desk_went_down_in_the_middle_of_is_counted_and_its_seq_is_spent(tmp_path):
     d = mkdesk(tmp_path)
-    d.eng.journal("lab_event", strategy=LAB, seq=9, date=DATE, mark=MARK, t_ns=1, state={}, intents=[entry(5)])
-    d.eng.journal("lab_event", strategy=LAB, seq=10, date=DATE, mark=MARK, t_ns=1, state={}, intents=[{"op": "cancel", "id": 5}])
+    d.eng.journal("lab_event", strategy=LAB, seq=9, date=DATE, mark=MARK, counted=True, t_ns=1, state={}, intents=[entry(5)])
+    d.eng.journal("lab_event", strategy=LAB, seq=10, date=DATE, mark=MARK, counted=True, t_ns=1, state={},
+                  intents=[{"op": "cancel", "id": 5}])
     ld2 = LabDesk(d.cfg, d.eng, d.ads)
     ld2.start()
     assert (ld2._rec(LAB)["entries"], ld2._rec(LAB)["seq_max"], sorted(ld2._rec(LAB)["answers"])) == (1, 10, [])

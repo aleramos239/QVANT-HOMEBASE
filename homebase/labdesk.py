@@ -95,6 +95,8 @@ PUBLISH_S = 0.25                         # the stream's snapshots are compared t
 SUB_QUEUE_MAX = 200                      # snapshots a stream reader may fall behind before it is dropped
 ANSWERS_KEPT = 2000                      # answered events kept per strategy per day (an older `seq` is out of date)
 REFUSED_KEPT = 20                        # refusals shown on the Desk page
+DEAD_KEPT = 200                          # order ids no account took, kept for the snapshot (the newest)
+GHOST_SAY_S = 60.0                       # a name that is not a Lab strategy here: one `lab_refused` line this often
 
 # The sentences the intake answers (design C3 and E). The engine's and the door's are repeated here so this module
 # never imports the engine (its imports reach the tester's tape); tests/test_labdesk.py holds them equal.
@@ -105,6 +107,8 @@ OUT_OF_DATE = "This order is out of date."
 TOO_MANY = "Too many orders at once."
 FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
+LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
+BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
 TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
 NOT_WRITTEN = "The Desk could not write this trade down. Nothing was sent."
 BROKER_REFUSED = "The broker refused it: "
@@ -691,6 +695,7 @@ class LabDesk:
         self._last: dict = {}            # strategy -> the snapshot the readers were last sent
         self._said_tick: tuple | None = None     # (error text, monotonic) of the last lab_intake_error line
         self._orphans_said: set = set()  # (strategy, account) of the lab_open_without_cfg lines
+        self._ghost_said: dict = {}      # a name that is not a Lab strategy here -> when its refusal was last journaled
 
     # ------------------------------------------------------------ small reads (memory only)
     def _lab_kind(self, name) -> bool:
@@ -702,13 +707,33 @@ class LabDesk:
         today = self.engine._today()
         d = self._days.get(name)
         if d is None or d["date"] != today:
+            # answers: seq -> the stored answer; digest: seq -> the order intents of the event that got it (the same
+            # seq with other intents is ANOTHER event: never answered from the store); both: the accounts whose
+            # both-legs-filled round the desk already stopped the strategy for
             d = self._days[name] = {"date": today, "mark": None, "entries": 0, "untaken": 0, "stopped": None,
-                                    "answers": OrderedDict(), "seq_max": -1, "dead": [],
+                                    "answers": OrderedDict(), "digest": {}, "seq_max": -1, "dead": [], "both": [],
                                     "refused": deque(maxlen=REFUSED_KEPT)}
         return d
 
     def _alive(self, name: str) -> dict:
-        return self._live.setdefault(name, {"beat": None, "info": None, "down": False})
+        # fired: the open rounds (account, round, date) the heartbeat rule already cancelled the entries of
+        return self._live.setdefault(name, {"beat": None, "info": None, "down": False, "fired": set()})
+
+    @staticmethod
+    def _keep(d: dict, seq: int, answer: dict, digest) -> None:
+        """Store an event's answer under its seq, with the digest of its order intents. The FIRST answer of a seq is
+        the one kept."""
+        if seq in d["answers"]:
+            return
+        d["answers"][seq], d["digest"][seq] = answer, digest
+        while len(d["answers"]) > ANSWERS_KEPT:
+            d["digest"].pop(d["answers"].popitem(last=False)[0], None)
+
+    @staticmethod
+    def _dead(d: dict, ids) -> None:
+        """Order ids no account took: the newest DEAD_KEPT."""
+        d["dead"] += [i for i in ids if i not in d["dead"]]
+        del d["dead"][:-DEAD_KEPT]
 
     def _lock(self, name: str) -> asyncio.Lock:
         loop = asyncio.get_running_loop()
@@ -773,14 +798,15 @@ class LabDesk:
     def _fire_first(self) -> bool:
         return self.held() or self._near_fire(self.engine.now_et())
 
-    async def _hold(self) -> bool:
-        """Before an entry leaves: wait while the 9:30 orders go first, HOLD_S at most. True = go."""
-        end = self._mono() + HOLD_S
+    async def _hold(self) -> tuple:
+        """Before an entry leaves: wait while the 9:30 orders go first, HOLD_S at most. -> (go, it waited)."""
+        end, waited = self._mono() + HOLD_S, False
         while self._fire_first():
             if self._mono() >= end:
-                return False
+                return False, waited
+            waited = True
             await self._sleep(HOLD_POLL_S)
-        return True
+        return True, waited
 
     # ------------------------------------------------------------ what an entry needs (design C3, 1-2 and 6)
     def _stale(self, ev) -> str | None:
@@ -812,8 +838,9 @@ class LabDesk:
             return CANNOT_READ_LIMITS if labcfg.frozen(self.cfg, name) else SET_LIMITS_FIRST
         return None
 
-    def _too_fast(self, name: str) -> bool:
-        """Check 3: at most RATE_N entry-carrying requests a second per strategy."""
+    def _too_fast(self, name) -> bool:
+        """Check 3: at most RATE_N entry-carrying requests a second per strategy. `name` None: the one count every
+        name that is not a Lab strategy on this Desk shares (nothing grows with the names a caller makes up)."""
         now = self._mono()
         hits = self._hits.setdefault(name, deque())
         while hits and now - hits[0] >= RATE_WINDOW_S:
@@ -832,10 +859,16 @@ class LabDesk:
 
     @staticmethod
     def _past(it: dict, last: float | None) -> bool:
-        """Ruling Q6: a stop entry whose trigger is already at or through the last price."""
-        if it.get("kind") != "stop" or last is None:
+        """Ruling Q6: a stop entry whose trigger is already at or through the fresh last price. And (review I4) a
+        market entry whose STOP the last price is already at or through: its bracket's stop would sit on the wrong
+        side of the fill, so it is never sent."""
+        if last is None:
             return False
-        return it["price"] - last <= 1e-9 if it["side"] == "long" else last - it["price"] <= 1e-9
+        if it.get("kind") == "stop":
+            return it["price"] - last <= 1e-9 if it["side"] == "long" else last - it["price"] <= 1e-9
+        if it.get("kind") == "market" and it.get("sl") is not None:
+            return last - it["sl"] <= 1e-9 if it["side"] == "long" else it["sl"] - last <= 1e-9
+        return False
 
     def _verdicts(self, name: str, ev, booked: list) -> tuple:
         """Checks 7 and 8, once per booked account with that account's size: ({entry index: {account: sentence |
@@ -845,7 +878,11 @@ class LabDesk:
         rows = self._rows(name)
         b = fanout.brain(rows, d["entries"])
         last, root = self._last_price(ev), rec.get("root")
-        state = {"flat": b["flat"] and all(r.get("clean") for r in rows if not r.get("carried")),
+        clean = all(r.get("clean") for r in rows if not r.get("carried"))
+        # no position and nothing working, yet a round of today is not read ended: no account takes a new entry, and
+        # the refusal says why in the engine's own words (the door only knows "not flat")
+        unread = b["flat"] and not b["working"] and not clean
+        state = {"flat": b["flat"] and clean,
                  "working_entries": b["working"], "entries_today": d["entries"], "last_price": last,
                  "now_hhmm": self.engine.now_et().strftime("%H:%M"), "prices_late": bool(ev.prices_late) or last is None}
         lim = {"max_trades_day": limits.max_trades_day, "max_qty": limits.max_qty, "max_risk_usd": limits.max_risk_usd,
@@ -866,7 +903,7 @@ class LabDesk:
                         x, y = (index[k] for k in it["ids"])
                         pair[x], pair[y] = y, x
             for i in entries:
-                why = got[i]
+                why = LAST_TRADE if (unread and got[i] == door.ONE_AT_A_TIME) else got[i]
                 if why is None and q > limits.max_qty:
                     why = f"Size is capped at {limits.max_qty} here."
                 if why is None and self._past(ev.intents[i], last):
@@ -898,6 +935,13 @@ class LabDesk:
         if self.is_lab(name):
             self._rec(name)["refused"].append({"t": self.engine.now_et().strftime("%H:%M:%S"), "text": text,
                                                "account": account})
+        else:                                # not a Lab strategy on this Desk: said once a minute per name, at most
+            now, last = self._mono(), self._ghost_said.get(name)
+            if last is not None and now - last < GHOST_SAY_S:
+                return
+            if len(self._ghost_said) >= 200:
+                self._ghost_said.clear()
+            self._ghost_said[name] = now
         self._journal("lab_refused", strategy=name, seq=seq, ids=ids, text=text, account=account)
 
     # ------------------------------------------------------------ one event
@@ -913,11 +957,13 @@ class LabDesk:
             raise Refused(SWITCHED_OFF)
         ev = parse_event(body)
         limited = False
-        if ev.entries and self._stale(ev) is None:           # (an event that is refused anyway is not counted)
-            limited = self._too_fast(ev.strategy)
-            if limited and not ev.exits:
-                self._rec(ev.strategy)["refused"].append({"t": self.engine.now_et().strftime("%H:%M:%S"),
-                                                          "text": TOO_MANY, "account": None})
+        if ev.entries:                       # EVERY event that carries an entry is counted, also one that is refused
+            mine = self.is_lab(ev.strategy)  # at checks 1-2 (a runner gone wrong must not fill the journal)
+            limited = self._too_fast(ev.strategy if mine else None)
+            if limited and not ev.exits:     # nothing to apply: 429, and not a line in the journal
+                if mine:
+                    self._rec(ev.strategy)["refused"].append({"t": self.engine.now_et().strftime("%H:%M:%S"),
+                                                              "text": TOO_MANY, "account": None})
                 raise Refused(TOO_MANY, 429)
         task = asyncio.ensure_future(self._event_locked(ev, limited))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())     # a result nobody waits for any more
@@ -933,42 +979,52 @@ class LabDesk:
         name = ev.strategy
         known = self.is_lab(name)
         d = self._rec(name) if known else None
-        why = self._stale(ev)                                # 1, 2: refuses the entries only
-        # this event counts its `seq` with the promotion the desk knows, today
-        same = known and ev.date == d["date"] and list(ev.mark) == labcfg.mark_of(self.cfg, name)
-        if same:
-            if d["mark"] != list(ev.mark):                   # the day's first event, or a new promotion: its own count
-                d["mark"], d["seq_max"] = list(ev.mark), -1
-                d["answers"].clear()
-            hit = d["answers"].get(ev.seq)                   # 4: answered already -- the same answer, nothing applied
-            if hit is not None:
-                return {**hit, "brain": self._brain_now(name)}
-            if why is None and ev.entries and ev.seq <= d["seq_max"]:
-                why = OUT_OF_DATE                            # an earlier event the desk never answered: its orders are old
-        if why is None and limited:
-            why = TOO_MANY                                   # 3 (the event also carries exits: they are applied)
-        if known or name in self.cfg.strategies:             # 5: write-ahead
-            try:
+        orders = [it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"]
+        digest = json.dumps(orders, sort_keys=True)
+        why, same, booked = None, False, []
+        per, oco, pair = ({}, {}, {})
+        try:
+            # this event counts its `seq` with the promotion the desk knows, today
+            same = bool(known and ev.date == d["date"] and list(ev.mark) == labcfg.mark_of(self.cfg, name))
+            why = self._stale(ev)                            # 1, 2: refuses the entries only
+            if same:
+                if d["mark"] != list(ev.mark):               # the day's first event, or a new promotion: its own count
+                    d["mark"], d["seq_max"] = list(ev.mark), -1
+                    d["answers"].clear()
+                    d["digest"].clear()
+                # 4: THIS event was answered already (its seq AND its order intents): the same answer, nothing
+                # applied. The same seq with other intents is another event (a runner that lost its place): it is
+                # never answered from the store -- its exits are applied below, its entries are out of date
+                if ev.seq in d["answers"] and d["digest"].get(ev.seq) == digest:
+                    return {**d["answers"][ev.seq], "brain": self._brain_now(name)}
+                if why is None and ev.entries and ev.seq <= d["seq_max"]:
+                    why = OUT_OF_DATE                        # a seq the desk has seen: its orders are old
+            if why is None and limited:
+                why = TOO_MANY                               # 3 (the event also carries exits: they are applied)
+        except Exception as e:  # noqa: BLE001 -- fail closed for the entries; the exits below are still applied
+            self._journal("lab_event_error", strategy=name, seq=ev.seq, error=f"{type(e).__name__}: {e}"[:200])
+            why = door.CANNOT_CHECK
+        if known:                                            # 5: write-ahead (nothing for a name that is not a Lab
+            try:                                             # strategy on this Desk: it has no day to rebuild)
                 self.engine.journal("lab_event", strategy=name, seq=ev.seq, date=ev.date, mark=list(ev.mark),
-                                    t_ns=ev.t_ns, state={"last_price": ev.last_price, "last_ms": ev.last_ms,
-                                                         "prices_late": ev.prices_late},
-                                    intents=[it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"])
+                                    counted=same, t_ns=ev.t_ns,
+                                    state={"last_price": ev.last_price, "last_ms": ev.last_ms,
+                                           "prices_late": ev.prices_late}, intents=orders)
             except Exception:  # noqa: BLE001 -- an entry that cannot be written down is not sent
                 why = why or NOT_WRITTEN
         if same:
             d["seq_max"] = max(d["seq_max"], ev.seq)
-        if why is None and ev.entries:
-            why = self._not_now(name)                        # 6
-        booked = [dict(r) for r in assignments(self.cfg, name)] if known else []
-        if why is None and ev.entries and not booked:
-            why = OUT_OF_DATE                                # no account is booked: the runner's view of the book is old
-        per, oco, pair = ({}, {}, {})
-        if why is None and ev.entries:
-            try:
+        try:
+            if why is None and ev.entries:
+                why = self._not_now(name)                    # 6
+            booked = [dict(r) for r in assignments(self.cfg, name)] if known else []
+            if why is None and ev.entries and not booked:
+                why = OUT_OF_DATE                            # no account is booked: the runner's view of the book is old
+            if why is None and ev.entries:
                 per, oco, pair = self._verdicts(name, ev, booked)        # 7, 8
-            except Exception as e:  # noqa: BLE001 -- fail closed: what cannot be checked is not sent
-                self._journal("lab_event_error", strategy=name, seq=ev.seq, error=f"{type(e).__name__}: {e}"[:200])
-                why = door.CANNOT_CHECK
+        except Exception as e:  # noqa: BLE001 -- fail closed: what cannot be checked is not sent
+            self._journal("lab_event_error", strategy=name, seq=ev.seq, error=f"{type(e).__name__}: {e}"[:200])
+            why = door.CANNOT_CHECK
         out: list = [None] * len(ev.intents)
         go: bool | None = None                               # the 9:30 hold: asked once, at the event's first entry
         for i, it in enumerate(ev.intents):
@@ -992,16 +1048,23 @@ class LabDesk:
                     ids = [ev.intents[j]["id"] for j in unit]
                     no, accounts = why, {}
                     if no is None:
-                        # (a lone leg of a pair never goes out: an account takes both legs or neither, and says the
-                        # first refused leg's sentence)
-                        accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None)
-                                    for r in booked}
-                        sizes = {r["account"]: int(r["qty"]) for r in booked if accounts[r["account"]] is None}
+                        accounts, sizes = self._takers(unit, per, booked)
                         if sizes:
+                            waited = False
                             if go is None:
-                                go = await self._hold()      # 9
+                                go, waited = await self._hold()          # 9
                             # the wait yielded: everything the desk itself decides is asked again
                             no = (None if go else FIRE_FIRST) or self._stale(ev) or self._not_now(name)
+                            if no is None and waited:
+                                # ... and after a wait that really waited, so are the book (who is booked, at what
+                                # size), the door and the size cap, on the state as it is NOW. (The price is still
+                                # the event's own: the desk has no fresher one on this path.)
+                                booked = [dict(r) for r in assignments(self.cfg, name)]
+                                if not booked:
+                                    no = OUT_OF_DATE
+                                else:
+                                    per, oco, _ = self._verdicts(name, ev, booked)
+                                    accounts, sizes = self._takers(unit, per, booked)
                         if sizes and no is None:
                             rows = await self._enter(name, ev, d, unit, ids, sizes, accounts)
                         else:
@@ -1020,14 +1083,20 @@ class LabDesk:
                           **({"status": "cancelled", "accounts": {}} if op == "entry" else {})}
         answer = {"ok": True, "seq": ev.seq, "results": out}
         if same:
-            d["answers"][ev.seq] = answer
-            while len(d["answers"]) > ANSWERS_KEPT:
-                d["answers"].popitem(last=False)
-        if known or name in self.cfg.strategies:             # 11
+            self._keep(d, ev.seq, answer, digest)
+        if known:                                            # 11
             self._journal("lab_event_done", strategy=name, seq=ev.seq, mark=list(ev.mark), results=out,
-                          **({"entries": d["entries"], "untaken": d["untaken"], "dead": list(d["dead"])} if known else {}))
+                          entries=d["entries"], untaken=d["untaken"], dead=list(d["dead"]))
         self._publish_safe()
         return {**answer, "brain": self._brain_now(name)}
+
+    @staticmethod
+    def _takers(unit: list, per: dict, booked: list) -> tuple:
+        """({account: the sentence that refuses this entry there | None}, {account: size} of the ones that may take
+        it). A lone leg of a pair never goes out: an account takes both legs or neither, and says the first refused
+        leg's sentence."""
+        accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None) for r in booked}
+        return accounts, {r["account"]: int(r["qty"]) for r in booked if accounts[r["account"]] is None}
 
     def _no_entry(self, name: str, ev, d, ids: list, why: str | None, accounts: dict) -> list:
         """An entry (or a pair) the desk itself refused: it never reached the engine. `why`: one sentence for every
@@ -1040,7 +1109,7 @@ class LabDesk:
             for a, s in said.items():
                 self._refused(name, ev.seq, ids, s, a)
         if d is not None:
-            d["dead"] += [i for i in ids if i not in d["dead"]]
+            self._dead(d, ids)
         answers = {a: {"ok": False, "round": None, "reason": s} for a, s in said.items()}
         return [{"op": "entry", "id": i, "status": "cancelled", "refused": text, "accounts": answers} for i in ids]
 
@@ -1074,7 +1143,7 @@ class LabDesk:
         text = None
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
-            d["dead"] += [i for i in ids if i not in d["dead"]]
+            self._dead(d, ids)
             if whole is None:
                 d["untaken"] += 1                            # it was offered to its accounts and none took it
         if not took and (whole is not None or len(set(said.values())) <= 1):
@@ -1115,6 +1184,9 @@ class LabDesk:
             first = d["stopped"] is None
             if first:
                 d["stopped"] = why                           # before the await: no entry of this strategy passes it
+            # ... and written down before the engine is asked: a desk that goes down in the middle still knows
+            # (what the engine then did is in its own lines: lab_cancelled / lab_flatten)
+            self._journal("lab_stopped", strategy=name, why=why, flatten=bool(flatten), cause=cause, first=first)
         try:
             if flatten:
                 res = await self.engine.lab_flatten(name, reason="stopped")
@@ -1122,9 +1194,6 @@ class LabDesk:
                 res = await self.engine.lab_cancel(name, None, why="stopped")
         except Exception as e:  # noqa: BLE001
             res = {"error": f"{type(e).__name__}: {e}"[:200]}
-        if known:
-            self._journal("lab_stopped", strategy=name, why=why, flatten=bool(flatten), cause=cause, first=first,
-                          results=res)
         self._publish_safe()
         return res
 
@@ -1164,6 +1233,7 @@ class LabDesk:
             live["info"] = {"state": said.get("state") if isinstance(said.get("state"), str) else None,
                             "why": said["why"][:200] if isinstance(said.get("why"), str) else None,
                             "mode": said.get("mode") if said.get("mode") in ("shadow", "desk") else None}
+            live["fired"].clear()                # a new silence is judged afresh
             if live["down"]:
                 live["down"] = False
                 self._journal("lab_runner_back", strategy=name)
@@ -1178,24 +1248,50 @@ class LabDesk:
 
     async def _runner_rule(self) -> None:
         """No beat naming a strategy for RUNNER_ALIVE_S (monotonic, counted from the desk's start) while it has an
-        open round: ONCE, its unfilled entries are cancelled (`lab_runner_down`). Never a flatten: an open position
-        keeps its broker stop and the engine's flat time."""
+        open round: its unfilled entries are cancelled (`lab_runner_down`), ONCE PER ROUND -- a round opened after the
+        rule fired (an event is not a beat) is guarded too, and a position that stays open is spoken of once, not on
+        every pass. Never a flatten: an open position keeps its broker stop and the engine's flat time."""
         now = self._mono()
         for name in list(labcfg.lab_ids(self.cfg)):
             live = self._alive(name)
             last = live["beat"] if live["beat"] is not None else self._t0
-            if live["down"] or now - last < RUNNER_ALIVE_S or not self._has_open_round(name):
+            if now - last < RUNNER_ALIVE_S or not self._has_open_round(name):
                 continue
+            rounds = {(r.get("account"), r.get("round"), r.get("date")) for r in self._rows(name)
+                      if r.get("status") in OPEN and not r.get("carried")}
+            if not rounds - live["fired"]:
+                continue                                     # every open round was dealt with: nothing more to say
             lock = self._lock(name)
             if lock.locked():                                # an event of it is being applied: the next pass
                 continue
-            live["down"] = True                              # before the await: once
+            live["fired"] |= rounds                          # before the await: once for each of them
+            live["down"] = True
             async with lock:
                 try:
                     res = await self.engine.lab_cancel(name, None, why="runner_down")
                 except Exception as e:  # noqa: BLE001
                     res = {"error": f"{type(e).__name__}: {e}"[:200]}
             self._journal("lab_runner_down", strategy=name, silent_s=round(now - last, 1), results=res)
+
+    async def _both_filled_rule(self) -> None:
+        """Both legs of a pair filled on an account (the engine's emergency: that round is `error` / both_filled and a
+        person must look): the desk stops the strategy for today, ONCE per such account -- the other accounts'
+        unfilled entries are cancelled and the runner is told (`stopped` on the stream). Never waits for an event
+        that is being applied: the next pass."""
+        for name in list(labcfg.lab_ids(self.cfg)):
+            hit = [st.account for st in self.engine.day_states(name)
+                   if st.status == "error" and st.exit_reason == "both_filled"
+                   and self.engine.states.get(f"{name}@{st.account}") is st]
+            if not hit:
+                continue
+            d = self._rec(name)
+            new = [a for a in hit if a not in d["both"]]
+            lock = self._lock(name)
+            if not new or lock.locked():
+                continue
+            d["both"] += new                                 # before the await: once
+            async with lock:
+                await self._stop(name, BOTH_FILLED, False, cause="both_filled")
 
     # ------------------------------------------------------------ the stream back (design C5, D7)
     def subscribe(self) -> asyncio.Queue:
@@ -1240,8 +1336,9 @@ class LabDesk:
 
     def publish_changed(self) -> bool:
         """Send every reader the snapshots that changed since the last send. Nothing when nobody listens, and nothing
-        while a strategy that is not from the Lab is placing. True when it published."""
-        if not self.on or not self._subs or self.held():
+        while a strategy that is not from the Lab is placing or in the seconds around a timer strategy's fire (no
+        snapshot is built then: the next pass after it carries the level). True when it published."""
+        if not self.on or not self._subs or self._fire_first():
             return False
         ids = [n for n in labcfg.lab_ids(self.cfg) if n in self.cfg.strategies]
         if any(n not in ids for n in self._last):            # one left the Desk: a whole state says so
@@ -1272,9 +1369,11 @@ class LabDesk:
             self._journal("lab_intake_error", error=msg)
 
     async def _intake_tick(self) -> None:
-        """run()'s publish step: the heartbeat rule, then the snapshots that changed. Never raises."""
+        """run()'s publish step: the heartbeat rule, the both-legs-filled stop, then the snapshots that changed.
+        Never raises."""
         try:
             await self._runner_rule()
+            await self._both_filled_rule()
             self.publish_changed()
         except Exception as e:  # noqa: BLE001 -- the next pass tries again
             self._say_tick(e)
@@ -1288,7 +1387,7 @@ class LabDesk:
             with contextlib.suppress(Exception):
                 ask(name)
         for box in (self._hits, self._live, self._locks):    # a strategy that left the Desk leaves these too
-            for name in [n for n in box if n not in self.cfg.strategies]:
+            for name in [n for n in box if n is not None and n not in self.cfg.strategies]:
                 del box[name]
 
     # ------------------------------------------------------------ the start
@@ -1330,6 +1429,7 @@ class LabDesk:
             return
         today = self.engine._today()
         open_events: dict = {}                               # (strategy, seq) -> it carried an entry
+        digests: dict = {}                                   # (strategy, seq) -> its COUNTED event's order intents
         for line in p.read_text(errors="replace").splitlines():
             if '"lab_' not in line:
                 continue
@@ -1344,23 +1444,30 @@ class LabDesk:
                 continue
             d = self._rec(name)
             whole = isinstance(seq, int) and not isinstance(seq, bool)
-            if ev == "lab_event" and whole and isinstance(r.get("mark"), list):
-                if d["mark"] != r["mark"]:
-                    d["mark"], d["seq_max"] = list(r["mark"]), -1
-                    d["answers"].clear()
-                d["seq_max"] = max(d["seq_max"], seq)
+            if ev == "lab_event" and whole:
                 held = r.get("intents") if isinstance(r.get("intents"), list) else []
                 open_events[(name, seq)] = any(isinstance(i, dict) and i.get("op") == "entry" for i in held)
+                # the mark, the seq count and the answered set come ONLY from lines the live desk counted (an event
+                # made for another promotion or another day is written down too -- its exits were applied -- and
+                # must never reset them)
+                if r.get("counted") is True and isinstance(r.get("mark"), list):
+                    if d["mark"] != r["mark"]:
+                        d["mark"], d["seq_max"] = list(r["mark"]), -1
+                        d["answers"].clear()
+                        d["digest"].clear()
+                    d["seq_max"] = max(d["seq_max"], seq)
+                    digests[(name, seq)] = json.dumps(held, sort_keys=True)
+                else:
+                    digests.pop((name, seq), None)
             elif ev == "lab_event_done" and whole:
                 open_events.pop((name, seq), None)
-                if isinstance(r.get("mark"), list) and r["mark"] == d["mark"]:
-                    d["answers"][seq] = {"ok": True, "seq": seq, "results": r.get("results") or []}
-                    while len(d["answers"]) > ANSWERS_KEPT:
-                        d["answers"].popitem(last=False)
+                digest = digests.pop((name, seq), None)
+                if digest is not None and isinstance(r.get("mark"), list) and r["mark"] == d["mark"]:
+                    self._keep(d, seq, {"ok": True, "seq": seq, "results": r.get("results") or []}, digest)
                 for k in ("entries", "untaken"):
                     if isinstance(r.get(k), int) and not isinstance(r.get(k), bool):
                         d[k] = max(d[k], r[k])
-                d["dead"] += [i for i in r.get("dead") or [] if isinstance(i, int) and i not in d["dead"]]
+                self._dead(d, [i for i in r.get("dead") or [] if isinstance(i, int)])
             elif ev == "lab_stopped" and d["stopped"] is None:
                 d["stopped"] = str(r.get("why") or STOPPED_TODAY)
             elif ev == "lab_refused" and isinstance(r.get("text"), str):
@@ -1368,6 +1475,9 @@ class LabDesk:
         for (name, _), carried_entry in open_events.items():
             if carried_entry:
                 self._rec(name)["entries"] += 1
+        for d in self._days.values():                        # two entries no account took stop the day, whether or
+            if d["date"] == today and d["stopped"] is None and d["untaken"] >= 2:     # not the stop's own line was written
+                d["stopped"] = STOPPED_TODAY
 
     # ------------------------------------------------------------ what the status block shows of the intake
     def _intake_view(self, name: str, state: str, why) -> dict:
