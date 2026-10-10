@@ -220,3 +220,23 @@ def test_a_stop_at_the_unbooking_that_gets_no_answer_is_asked_again(kits):
     k.r.idle()
     assert k.stub.ops() == [["entry"], ["stop"], ["stop"]] and k.stub.bodies[1] == k.stub.bodies[2]
 
+
+# ================================================================ R2: a replayed event the Desk answered
+@pytest.mark.parametrize("answered", [True, False])
+def test_a_replayed_event_with_no_results_line_counts_as_refused_only_when_the_desk_did_not_answer_it(days, answered):
+    """The reviewer's probe P2 (b): the runner died between the request and its results line; the Desk had taken it.
+    (False: the Desk's snapshot is not in yet, so nobody knows: it reads as before.)"""
+    day, stub, _, tells, _ = days(ONE)
+    feed(day, "09:29:01", [21000.0] * 60)                                    # 09:30: the entry leaves (seq 2), taken
+    assert stub.ops() == [["entry"]] and day._refused_run == 0
+    day.kill()
+    cut = [t for t in tells if not ("results" in t and t.get("seq") == 2)]
+    up = snap(ONE, orders={1: WORKING}, answered=[2]) if answered else False
+    day2, stub2, _, _, _ = days(ONE, resume=cut, tells=list(cut), up=up)
+    feed(day2, "09:29:01", [21000.0] * 60)
+    assert stub2.bodies == [] and day2.state == "running"
+    if answered:
+        assert day2._refused_run == 0 and day2.orders[-1]["refused"] is None
+    else:
+        assert day2._refused_run == 1 and day2.orders[-1]["refused"] == "The Desk did not answer."
+

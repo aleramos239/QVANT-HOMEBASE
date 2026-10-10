@@ -246,7 +246,7 @@ def test_an_event_cut_off_before_its_answer_was_written_is_picked_up_only_if_the
                                                   answered=answered))
     assert day.state == state_
     if answered:
-        assert stub.bodies == [] and texts(day)[0][1] == "The Desk did not answer."     # (this runner has no answer)
+        assert stub.bodies == [] and texts(day)[0][1] is None                # the Desk answered it (final wave R2)
         assert plots(day)["status filled"]                                   # ... but the Desk says what happened
     else:
         assert day.summary()["why"] == NO_RESUME and stub.bodies[0]["intents"] == STOP_KEEP

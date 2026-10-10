@@ -1016,14 +1016,16 @@ class StrategyDay:
             rows = [None] * len(orders)
         went = res.get("went") if isinstance(res, dict) else None    # (no results line: it may have left)
         self._entries_out += went if _int(went) else sum(1 for it in orders if it["op"] == "entry")
+        answered = seq in side.answered              # the Desk's snapshot says it answered this event
         entries = []
         for it, r in zip(orders, rows):
             if isinstance(r, dict):
                 said = r.get("refused") if isinstance(r.get("refused"), str) else None
                 if it["op"] == "entry" and r.get("dead") is True:
                     side.dead([it["id"]])
-            else:                                    # the runner went away before the answer was written down
-                said = NO_ANSWER if it["op"] == "entry" else None
+            else:                                    # the runner went away before the answer was written down: not
+                # known -- unless the Desk says it answered it (then it is not a refused entry; the snapshot says the rest)
+                said = NO_ANSWER if it["op"] == "entry" and not answered else None
             self.orders.append({"t": _hms(t), "text": words(it, self._tick), "refused": said})
             if it["op"] == "entry":
                 entries.append(said)
