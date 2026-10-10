@@ -335,6 +335,11 @@ def test_a_round_the_engine_calls_open_blocks_limits_too(client):
     """B2 adds engine.lab_open (a round placing / placed / live, or not clean): the desk asks it when it is there."""
     set_limits(client)
     client.engine.lab_open = lambda name: ["eval1"] if name == LAB else []
+    # final wave M-D1: a round the engine calls open that is not placing / placed / live is over, and an old order
+    # of it still works: a flatten does nothing there, so the engine's own sentence
+    assert set_limits(client, max_trades_day=5).json()["detail"] == \
+        "An old order of this trade is still working. Cancel it first."
+    open_round(client, "eval1", "live")
     assert set_limits(client, max_trades_day=5).json()["detail"] == FLATTEN_FIRST
 
 

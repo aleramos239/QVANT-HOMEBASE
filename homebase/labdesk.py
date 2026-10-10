@@ -119,6 +119,7 @@ BROKER_REFUSED = "The broker refused it: "
 OPEN_WITHOUT_CFG = "A Lab trade is open but its strategy is not on this Desk. Check it."
 NOT_READ = "The request does not read."
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"     # the engine's own note
+OLD_ORDER_WORKING = "An old order of this trade is still working. Cancel it first."     # the engine's own
 EXITS = ("cancel", "flatten", "stop")    # always applied, in every desk state
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -243,6 +244,17 @@ class LabDesk:
         out = {st.account for st in self.engine.day_states(name) if st.status in OPEN}
         out |= set(getattr(self.engine, "lab_open", lambda n: [])(name))
         return sorted(out)
+
+    def _open_why(self, name: str, accounts=None) -> str | None:
+        """The refusal for accounts (all, or those in `accounts`) with a round in _open(): "Flatten it first." when one
+        of them holds a trade the engine still acts on (placing, placed, live); otherwise the trade is over and an old
+        order of it is not read ended at the broker -- a flatten does nothing there, so the engine's own sentence for
+        it (M-D1). None: none of them."""
+        busy = [a for a in self._open(name) if accounts is None or a in accounts]
+        if not busy:
+            return None
+        live = {st.account for st in self.engine.day_states(name) if st.status in OPEN}
+        return FLATTEN_FIRST if any(a in live for a in busy) else OLD_ORDER_WORKING
 
     def _label(self, aid: str) -> str:
         a = self.cfg.accounts.get(aid)
@@ -440,8 +452,9 @@ class LabDesk:
             raise ValueError(labcfg.SAY_WINDOW)
         if self._in_quiet():
             raise Refused(NOT_NOW)
-        if self._open(name):
-            raise Refused(FLATTEN_FIRST)
+        why = self._open_why(name)
+        if why is not None:
+            raise Refused(why)
         if any(int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
             raise Refused(BOOKED_FOR_MORE)   # (the rows of accounts this desk has; another pool's are not its to judge)
         rows = [dict(r) for r in self.cfg.book.get(name) or []]
@@ -491,8 +504,9 @@ class LabDesk:
                     raise Refused(f"Another strategy trades {so.symbol} on this account.")
         if mine:
             keep = {r["account"] for r in rows}
-            if any(aid not in keep for aid in self._open(name)):
-                raise Refused(FLATTEN_FIRST)
+            why = self._open_why(name, [aid for aid in self._open(name) if aid not in keep])
+            if why is not None:
+                raise Refused(why)
 
     async def set_book(self, name: str, rows: list) -> None:
         """A Lab strategy's book (it lives in its sidecar, never in config.json): the checks, then the file, then the
@@ -543,8 +557,9 @@ class LabDesk:
         except (ValueError, TypeError):
             raise Refused(NOT_ON_DESK, 404) from None
         self._must_own()
-        if self._open(name):
-            raise Refused(FLATTEN_FIRST)
+        why = self._open_why(name)
+        if why is not None:
+            raise Refused(why)
         at = self._at
 
         def work():
@@ -586,8 +601,9 @@ class LabDesk:
             return await self._remove_unusable(name)
         self._need(name)
         self._must_own()
-        if self._open(name):
-            raise Refused(FLATTEN_FIRST)
+        why = self._open_why(name)
+        if why is not None:
+            raise Refused(why)
         cfg, at, sname = self.cfg, self._at, labcfg.store_name(name)
         accounts = [r.get("account") for r in cfg.book.get(name) or []]      # every row goes with the sidecar
 

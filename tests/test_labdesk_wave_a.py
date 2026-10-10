@@ -246,3 +246,65 @@ def test_a_trade_that_needs_a_look_still_reads_check_with_the_runner_not_connect
     d, s = _live(tmp_path)
     d.eng._lab_x(s)["blind"] = True
     assert _view(d)[0] == "check"
+
+
+# ---------------------------------------------------------------- M-D1: a finished trade whose old order still works
+FLATTEN_FIRST = "Flatten it first."
+OLD_ORDER = "An old order of this trade is still working. Cancel it first."
+
+
+def _done_not_clean(tmp_path):
+    d, s = _live(tmp_path)
+    ad, eid = d.ads["a1"], s.upper_id
+    ad.order_status[f"{eid}-tp"], ad.net = "Filled", 0
+    ad.stuck.add(f"{eid}-sl")
+    run(d.eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=120.0,
+                                raw={"orderId": f"{eid}-tp"})))
+    tick(d.eng)
+    assert s.status == "done" and d.ld._open(LAB) == ["a1"]
+    return d
+
+
+def _refused(coro_or_fn):
+    with pytest.raises(Refused) as e:
+        coro_or_fn()
+    return str(e.value)
+
+
+def test_the_sentence_is_the_engines_own():
+    from homebase import engine, labdesk
+    assert labdesk.OLD_ORDER_WORKING == engine.LAB_OLD_ORDER_WORKING == OLD_ORDER
+
+
+def test_a_done_trade_whose_stop_still_works_asks_to_cancel_the_old_order_not_to_flatten(tmp_path):
+    d = _done_not_clean(tmp_path)
+    assert _refused(lambda: run(d.ld.set_limits(LAB, LIMITS))) == OLD_ORDER
+    assert _refused(lambda: d.ld.check_book(LAB, [])) == OLD_ORDER
+    assert _refused(lambda: run(d.ld.set_book(LAB, []))) == OLD_ORDER
+    assert _refused(lambda: run(d.ld.remove(LAB))) == OLD_ORDER
+    d.ld.check_book(LAB, [{"account": "a1", "qty": 1}])          # keeping the account is not refused
+
+
+def test_a_really_open_trade_still_asks_to_flatten_first(tmp_path):
+    d, s = _live(tmp_path)
+    assert _refused(lambda: run(d.ld.set_limits(LAB, LIMITS))) == FLATTEN_FIRST
+    assert _refused(lambda: d.ld.check_book(LAB, [])) == FLATTEN_FIRST
+    assert _refused(lambda: run(d.ld.remove(LAB))) == FLATTEN_FIRST
+
+
+def test_an_open_trade_on_one_account_and_an_old_order_on_another_asks_to_flatten(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"))
+    send(d, entry(1))
+    for a in ("a1", "a2"):
+        fill_entry(d.eng, d.ads[a], d.eng.states[f"{LAB}@{a}"], 110.0)
+    s1 = d.eng.states[f"{LAB}@a1"]
+    ad, eid = d.ads["a1"], s1.upper_id
+    ad.order_status[f"{eid}-tp"], ad.net = "Filled", 0
+    ad.stuck.add(f"{eid}-sl")
+    run(d.eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=120.0,
+                                raw={"orderId": f"{eid}-tp"})))
+    tick(d.eng)
+    assert s1.status == "done" and d.eng.states[f"{LAB}@a2"].status == "live"
+    assert _refused(lambda: run(d.ld.set_limits(LAB, LIMITS))) == FLATTEN_FIRST
+    assert _refused(lambda: d.ld.check_book(LAB, [{"account": "a2", "qty": 1}])) == OLD_ORDER    # only a1 leaves
+    assert _refused(lambda: d.ld.check_book(LAB, [{"account": "a1", "qty": 1}])) == FLATTEN_FIRST  # a2 leaves
