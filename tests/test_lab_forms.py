@@ -4,13 +4,19 @@ run_session replays a small synthetic tape through it."""
 from __future__ import annotations
 
 import copy
+import datetime as dt
 import hashlib
 import itertools
 import json
+import sys
+from array import array
 
 import pytest
 
-from homebase import draftstore
+from homebase import draftstore, strategies
+from homebase.backtest import drafthost, sandbox
+from homebase.backtest.engine import Costs, run_session
+from homebase.backtest.tape import Tape, et_ns
 from homebase.charts import lab_forms, lab_templates
 from homebase.labrun import door
 
@@ -366,3 +372,287 @@ def _name_error(name) -> ValueError:
     except ValueError as e:
         return e
     raise AssertionError("valid name")
+
+
+# ---------------------------------------------------------------- the behaviour gate: the trade each rule takes
+# The generated text is loaded the way the backtest child loads a draft (drafthost.register_source), here in the
+# test process because the text is this generator's own output, and replayed through the tester's run_session.
+
+D = dt.date(2024, 3, 5)
+
+
+def tape(rows, root="NQ") -> Tape:
+    """rows: [("HH:MM:SS[.mmm]", price), ...] in tape order."""
+    ts, px = array("q"), array("d")
+    for t, p in rows:
+        hms, _, ms = t.partition(".")
+        ts.append(et_ns(D, hms) + int(ms or 0) * 1_000_000)
+        px.append(p)
+    return Tape(root, D, root + "H4", ts, px, array("i", [1] * len(ts)), {})
+
+
+@pytest.fixture
+def play():
+    """play(answers, rows) -> (SessionResult, the strategy); the registered drafts are removed afterwards."""
+    made = []
+
+    def go(answers, rows, root=None, slip=1.0):
+        name = answers["name"]
+        cls = drafthost.register_source(name, lab_forms.build(answers))
+        made.append(name)
+        strategy = cls({})
+        return run_session(strategy, tape(rows, root or answers["market"]), Costs(4.0, slip), qty=1), strategy
+
+    yield go
+    for name in made:
+        strategies.REGISTRY.pop(draftstore.draft_id(name), None)
+        sys.modules.pop(f"homebase_draft_{name}", None)
+
+
+def at(hms: str) -> int:
+    return et_ns(D, hms)
+
+
+def straddle(**over):
+    kw = dict(name="form_run", distance=15.0, stop={"kind": "points", "value": 10.0},
+              target={"kind": "rr", "value": 3.0})
+    return base("open_straddle", **(kw | over))
+
+
+def test_straddle_both_sides_the_buy_fills_and_the_sell_is_cancelled(play):
+    res, _ = play(straddle(), [("09:29:59", 100.0), ("09:31:00", 114.0), ("09:32:00", 115.0),
+                               ("09:40:00", 146.0), ("10:00:00", 80.0)])
+    t, = res.trades                                  # the sell stop at 85 never lives on: 80 at 10:00 trades nothing
+    assert (t.side, t.order_price, t.entry_price) == ("long", 115.0, 115.25)
+    assert (t.sl, t.tp) == (105.25, 145.25)          # 10 behind the fill, 3 x that ahead of it
+    assert (t.exit_reason, t.exit_price, t.exit_ns) == ("tp", 145.25, at("09:40:00"))
+    assert res.skip is None
+
+
+def test_straddle_short_only_places_no_buy_stop(play):
+    res, _ = play(straddle(side="short"), [("09:29:59", 100.0), ("09:31:00", 90.0), ("09:32:00", 84.5),
+                                           ("09:40:00", 95.0), ("10:00:00", 130.0)])
+    t, = res.trades                                  # 130 at 10:00 would fill a buy stop at 115
+    assert (t.side, t.order_price, t.entry_price) == ("short", 85.0, 84.25)
+    assert (t.sl, t.tp) == (94.25, 54.25)
+    assert (t.exit_reason, t.exit_price) == ("sl", 95.25)
+
+
+def test_straddle_long_only_places_no_sell_stop(play):
+    res, _ = play(straddle(), [("09:29:59", 100.0)])      # (both sides, as a control: nothing triggers)
+    assert res.trades == []
+    res, _ = play(straddle(side="long"), [("09:29:59", 100.0), ("09:31:00", 70.0), ("09:32:00", 115.5),
+                                          ("12:00:00", 116.0), ("15:56:00", 118.0)])
+    t, = res.trades                                  # 70 at 09:31 would fill a sell stop at 85
+    assert (t.side, t.entry_price, t.sl) == ("long", 115.75, 105.75)
+    assert (t.exit_reason, t.exit_price, t.exit_ns) == ("time", 117.75, at("15:56:00"))
+
+
+def test_straddle_rr_target_is_taken_from_a_gapped_fill(play):
+    res, _ = play(straddle(), [("09:29:59", 100.0), ("09:31:00", 120.0), ("09:40:00", 151.0)])
+    t, = res.trades
+    assert t.order_price == 115.0 and t.entry_price == 120.25      # the gap is paid
+    assert (t.sl, t.tp) == (110.25, 150.25)                         # stop 10 and target 30 from the FILL
+    assert (t.exit_reason, t.exit_price) == ("tp", 150.25)
+
+
+def test_straddle_points_target(play):
+    res, _ = play(straddle(target={"kind": "points", "value": 20.0}),
+                  [("09:29:59", 100.0), ("09:31:00", 115.0), ("09:40:00", 136.0)])
+    t, = res.trades
+    assert (t.entry_price, t.sl, t.tp) == (115.25, 105.25, 135.25)
+    assert (t.exit_reason, t.exit_price) == ("tp", 135.25)
+
+
+def test_straddle_without_a_target_leaves_at_out_by(play):
+    a = straddle(target={"kind": "none"}, out_by="11:30")
+    res, strategy = play(a, [("09:29:59", 100.0), ("09:32:00", 115.0), ("11:29:00", 130.0), ("11:31:00", 131.0)])
+    t, = res.trades
+    assert t.tp is None and t.sl == 105.25
+    assert (t.exit_reason, t.exit_price, t.exit_ns) == ("time", 130.75, at("11:31:00"))
+    assert strategy.session_window == ("09:25", "11:35")
+
+
+def test_straddle_unfilled_stops_are_cancelled_at_the_last_entry(play):
+    tape_rows = [("09:29:59", 100.0), ("10:59:00", 100.0), ("11:00:30", 120.0), ("11:30:00", 80.0)]
+    res, _ = play(straddle(), tape_rows)
+    assert res.trades == [] and res.skip is None
+    res, _ = play(straddle(last_entry="12:00"), tape_rows)          # the control: with time left, the buy fills
+    assert [t.side for t in res.trades] == ["long"]
+
+
+def test_straddle_with_no_print_before_its_time_skips_the_day(play):
+    res, _ = play(straddle(), [("09:31:00", 100.0), ("10:00:00", 130.0)])
+    assert res.trades == [] and res.skip == "no print before 09:30"
+
+
+def ranged(**over):
+    return base("opening_range", name="form_run", **over)
+
+
+RANGE_ROWS = [("09:29:59", 300.0), ("09:31:00", 102.0), ("09:35:00", 110.0), ("09:40:00", 98.0),
+              ("09:44:59", 105.0)]                                  # the range is 98 to 110; 300 is before it
+
+
+def test_opening_range_both_sides_stop_at_the_other_side_of_the_range(play):
+    res, _ = play(ranged(), RANGE_ROWS + [("09:50:00", 111.0), ("10:00:00", 140.0), ("10:30:00", 90.0)])
+    t, = res.trades                                  # 90 at 10:30 would fill the sell stop at 97.75
+    assert (t.side, t.order_price, t.entry_price) == ("long", 110.25, 111.25)
+    assert (t.sl, t.tp) == (99.0, 135.75)            # the range's low, moved by the 1.0 gap; 2 x the stop from the fill
+    assert (t.exit_reason, t.exit_price) == ("tp", 135.75)
+
+
+def test_opening_range_short_only(play):
+    res, _ = play(ranged(side="short"), RANGE_ROWS + [("09:50:00", 97.0), ("10:00:00", 70.0), ("10:30:00", 130.0)])
+    t, = res.trades                                  # 130 at 10:30 would fill a buy stop at 110.25
+    assert (t.side, t.order_price, t.entry_price) == ("short", 97.75, 96.75)
+    assert (t.sl, t.tp) == (109.0, 72.25)
+    assert (t.exit_reason, t.exit_price) == ("tp", 72.25)
+
+
+def test_opening_range_long_only_and_points_stop(play):
+    a = ranged(side="long", stop={"kind": "points", "value": 12.0}, target={"kind": "points", "value": 20.0})
+    res, _ = play(a, RANGE_ROWS + [("09:44:59.500", 90.0), ("09:50:00", 111.0), ("10:00:00", 132.0)])
+    t, = res.trades
+    assert (t.entry_price, t.sl, t.tp) == (111.25, 99.25, 131.25)     # 12 behind the entry, 20 ahead; both follow the fill
+    assert (t.exit_reason, t.exit_price) == ("tp", 131.25)
+
+
+def test_opening_range_a_longer_range_and_a_later_start(play):
+    a = ranged(range_from="10:00", range_min=30, last_entry="12:00")
+    rows = [("09:35:00", 500.0), ("10:05:00", 100.0), ("10:20:00", 108.0), ("10:29:59", 104.0),
+            ("10:50:00", 109.0), ("11:00:00", 140.0)]
+    res, strategy = play(a, rows)
+    t, = res.trades
+    assert (t.order_price, t.entry_price, t.sl, t.tp) == (108.25, 109.25, 101.0, 125.75)
+    assert strategy.session_window == ("09:55", "16:00") and strategy.bar_window == ("10:00", "10:30")
+
+
+def test_opening_range_with_no_price_in_the_range_skips_the_day(play):
+    res, _ = play(ranged(), [("09:29:59", 100.0), ("09:50:00", 130.0)])
+    assert res.trades == [] and res.skip == "no prices in the opening range"
+
+
+def test_opening_range_unfilled_stops_are_cancelled_at_the_last_entry(play):
+    rows = RANGE_ROWS + [("10:59:00", 105.0), ("11:00:30", 120.0), ("11:30:00", 80.0)]
+    res, _ = play(ranged(), rows)
+    assert res.trades == []
+    res, _ = play(ranged(last_entry="12:00"), rows)
+    assert [t.side for t in res.trades] == ["long"]
+
+
+def breakout(**over):
+    kw = dict(name="form_run", bar_min=5, lookback=3, trades=2, side="long", last_entry="11:00",
+              stop={"kind": "points", "value": 5.0}, target={"kind": "points", "value": 10.0})
+    kw.update(over)
+    return base("bar_breakout", **kw)
+
+
+# 5-minute bars from 09:30, one print each: 100, 101, 100, then a close above the 3 bars' high, and so on
+RISING = [("09:30:10", 100.0), ("09:35:10", 101.0), ("09:40:10", 100.0), ("09:45:10", 102.0),
+          ("09:50:10", 102.5), ("09:55:10", 113.5), ("10:00:10", 114.0), ("10:05:10", 125.0),
+          ("10:10:10", 140.0), ("10:15:10", 150.0)]
+
+
+def test_bar_breakout_takes_two_trades_with_trades_2_and_never_a_third(play):
+    res, _ = play(breakout(), RISING)
+    first, second = res.trades                      # the bars closing at 10:10 and 10:15 also break out: no third
+    assert (first.side, first.entry_ns, first.entry_price) == ("long", at("09:50:10"), 102.75)
+    assert (first.sl, first.tp) == (97.75, 112.75)   # 5 and 10 from the 102 close, moved by the 0.75 fill gap
+    assert (first.exit_reason, first.exit_price) == ("tp", 112.75)
+    assert (second.entry_ns, second.entry_price) == (at("10:00:10"), 114.25)
+    assert (second.sl, second.tp) == (109.25, 124.25)
+    assert (second.exit_reason, second.exit_price) == ("tp", 124.25)
+    res, _ = play(breakout(trades=3), RISING)
+    assert len(res.trades) == 3                     # the limit is the only thing that stopped the third
+
+
+def test_bar_breakout_one_trade_a_day_and_one_position_at_a_time(play):
+    res, _ = play(breakout(trades=1), RISING)
+    assert len(res.trades) == 1
+    # a slow target: the bar that closes while the first trade is still open takes no second one
+    res, _ = play(breakout(trades=3, target={"kind": "points", "value": 100.0}), RISING)
+    assert len(res.trades) == 1 and res.trades[0].exit_reason in ("time", "eod")
+
+
+def test_bar_breakout_sells_a_close_below_the_low_and_a_long_only_strategy_does_not(play):
+    falling = [("09:30:10", 100.0), ("09:35:10", 101.0), ("09:40:10", 100.0), ("09:45:10", 98.0),
+               ("09:50:10", 97.5), ("09:55:10", 87.0), ("10:00:10", 86.0)]
+    res, _ = play(breakout(side="both", trades=1), falling)
+    t, = res.trades
+    assert (t.side, t.entry_price, t.sl, t.tp) == ("short", 97.25, 102.25, 87.25)
+    assert (t.exit_reason, t.exit_price) == ("tp", 87.25)
+    assert play(breakout(side="long"), falling)[0].trades == []
+    assert play(breakout(side="short"), RISING)[0].trades == []
+
+
+def test_bar_breakout_rr_target_is_worked_out_from_the_close(play):
+    res, _ = play(breakout(side="long", target={"kind": "rr", "value": 2.0}), RISING)
+    assert (res.trades[0].sl, res.trades[0].tp) == (97.75, 112.75)      # stop 5, target 2 x 5, both from the close
+
+
+def test_bar_breakout_last_entry_is_inclusive_and_later_closes_do_nothing(play):
+    res, _ = play(breakout(last_entry="09:50"), RISING)                 # the signal bar closes at 09:50
+    assert [t.entry_ns for t in res.trades] == [at("09:50:10")]
+    res, _ = play(breakout(last_entry="09:49"), RISING)
+    assert res.trades == []
+
+
+def test_bar_breakout_bars_that_began_before_the_start_time_do_not_count(play):
+    rows = [("09:30:10", 100.0), ("09:35:10", 100.0), ("09:40:10", 101.0), ("09:45:10", 101.0)]
+    res, _ = play(breakout(lookback=2, **{"from": "09:30"}), rows)
+    assert len(res.trades) == 1                      # 09:30 and 09:35 count; the 09:40 bar breaks out
+    res, _ = play(breakout(lookback=2, **{"from": "09:32"}), rows)
+    assert res.trades == []                          # the 09:30 bar began before 09:32 and is not used
+
+
+def timed(**over):
+    kw = dict(name="form_run", side="long", time="09:30", stop={"kind": "points", "value": 5.0},
+              target={"kind": "points", "value": 10.0})
+    return base("at_time", **(kw | over))
+
+
+def test_at_time_long_buys_at_the_market_with_stop_and_target_from_the_price(play):
+    res, _ = play(timed(), [("09:29:59", 100.0), ("09:30:10", 100.5), ("10:00:00", 111.0)])
+    t, = res.trades
+    assert (t.side, t.order_price, t.entry_price, t.entry_ns) == ("long", None, 100.75, at("09:30:10"))
+    assert (t.sl, t.tp) == (95.75, 110.75)
+    assert (t.exit_reason, t.exit_price) == ("tp", 110.75)
+
+
+def test_at_time_short_and_rr_target(play):
+    res, _ = play(timed(side="short", target={"kind": "rr", "value": 2.0}),
+                  [("09:29:59", 100.0), ("09:30:10", 99.5), ("10:00:00", 89.0)])
+    t, = res.trades
+    assert (t.side, t.entry_price, t.sl, t.tp) == ("short", 99.25, 104.25, 89.25)
+    assert (t.exit_reason, t.exit_price) == ("tp", 89.25)
+
+
+def test_at_time_with_no_print_before_its_time_skips_the_day(play):
+    res, _ = play(timed(), [("09:30:10", 100.5), ("10:00:00", 111.0)])
+    assert res.trades == [] and res.skip == "no print before 09:30"
+
+
+def test_at_time_on_another_market_with_no_target_leaves_at_out_by(play):
+    a = timed(market="GC", side="short", time="08:30", out_by="09:55", target={"kind": "none"})
+    res, strategy = play(a, [("08:29:59", 2000.0), ("08:30:10", 1999.5), ("09:30:00", 1990.0),
+                             ("09:56:00", 1989.0)])
+    t, = res.trades
+    assert t.entry_price == pytest.approx(1999.4) and t.sl == pytest.approx(2004.4) and t.tp is None
+    assert (t.exit_reason, t.exit_price) == ("time", pytest.approx(1989.1))
+    assert strategy.session_window == ("08:25", "10:00")
+
+
+# ---------------------------------------------------------------- end to end in the real sandboxed backtest
+
+@pytest.mark.skipif(not sandbox.available(), reason="the macOS sandbox is not available here")
+@pytest.mark.parametrize("rule", RULES)
+def test_each_rule_backtests_in_the_sandbox(rule, tmp_path):
+    from tests.test_lab_api import MARCH, OK, client, poll
+    code = lab_forms.build(base(rule, name="form_sandbox"))
+    with client(tmp_path) as c:
+        assert c.put("/api/tester/drafts/form_sandbox", json={"code": code}, headers=OK).status_code == 200
+        rid = c.post("/api/tester/run", json={"strategy": "draft_form_sandbox", "range": MARCH}, headers=OK).json()["id"]
+        st = poll(c, rid)
+        assert st["status"] == "done", st.get("error")
+        assert c.get(f"/api/tester/run/{rid}/bundle").json()["run"]["strategy"]["id"] == "draft_form_sandbox"
