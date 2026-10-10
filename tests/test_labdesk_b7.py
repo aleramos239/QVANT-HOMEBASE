@@ -208,3 +208,38 @@ def test_a_flatten_with_nothing_to_flatten_has_no_account_to_speak_of(tmp_path):
     assert d.ld.flatten_view(LAB, run(d.eng.flatten_strategy(LAB))) == {}
     assert d.ld.flatten_view(LAB, None) == {} and d.ld.flatten_view(LAB, {"a1": ["internal error: KeyError: 'x'"]}) == \
         {"a1": {"ok": False, "steps": ["internal error: KeyError: 'x'"]}}
+
+
+# ================================================================ 4: a failed entry's row in the status block, in plain words
+NOT_PLACED = "The entry was not placed. Check it."
+
+
+@pytest.mark.parametrize("note", ["entry: adapter not connected", "placement did not finish: TimeoutError: no answer",
+                                  "upper leg: margin", "lower leg: margin", "not written: [Errno 28] No space left"])
+def test_a_failed_entrys_row_shows_plain_words_and_keeps_the_engines_note_as_detail(tmp_path, note):
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    s = st(d)
+    s.status, s.exit_reason, s.note = "error", "error", note                       # as the engine leaves a failed placement
+    d.eng._lab_x(s)["clean"] = True
+    assert d.eng.lab_rounds(LAB)[0]["why"] == note                                 # the engine's own row: its raw note
+    row, = d.ld.status_view(LAB)["rounds"]
+    assert (row["why"], row["detail"], row["status"]) == (NOT_PLACED, note, "error")
+    snap, = d.ld.snapshot()["strategies"][LAB]["rounds"]                           # the stream's row is not changed
+    assert snap["why"] == note and "detail" not in snap
+
+
+def test_a_long_note_is_cut_and_the_engines_own_sentences_are_left_as_they_are(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"))
+    d.ads["a1"].reject = "x" * 500                                                 # an outcome the engine cannot call a reject
+    send(d, entry(1), seq=1)
+    rows = {r["account"]: r for r in d.ld.status_view(LAB)["rounds"]}
+    assert rows["a1"]["why"] == "The Desk cannot check the last trade's orders." and "detail" not in rows["a1"]
+    assert rows["a2"]["why"] is None and "detail" not in rows["a2"]                # a healthy round: no detail key
+    s = st(d, "a2")
+    s.status, s.note = "error", "entry: " + "y" * 500
+    d.eng._lab_x(s)["clean"] = True
+    row = {r["account"]: r for r in d.ld.status_view(LAB)["rounds"]}["a2"]
+    assert row["why"] == NOT_PLACED and row["detail"] == ("entry: " + "y" * 500)[:200]
+    s.note = "account not connected"                                               # a note that is already plain: kept
+    assert {r["account"]: r for r in d.ld.status_view(LAB)["rounds"]}["a2"]["why"] == "account not connected"

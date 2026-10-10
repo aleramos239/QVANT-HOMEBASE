@@ -109,6 +109,8 @@ FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
 LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
 BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
+NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
+RAW_NOTES = ("entry: ", "upper leg: ", "lower leg: ", "placement did not finish: ", "not written: ")
 TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
 NOT_WRITTEN = "The Desk could not write this trade down. Nothing was sent."
 BROKER_REFUSED = "The broker refused it: "
@@ -628,8 +630,18 @@ class LabDesk:
         return [{"account": r.get("account"), "round": r.get("round"), "status": r.get("status"),
                  "side": r.get("side", r.get("entry_side")), "qty": r.get("qty"), "entry_fill": r.get("entry_fill"),
                  "exit_fill": r.get("exit_fill"), "exit_reason": r.get("exit_reason"), "pnl": r.get("pnl"),
-                 "why": r.get("why"),
+                 **self._row_why(r.get("why")),
                  **({"carried": bool(r["carried"]), "date": r.get("date")} if "carried" in r else {})} for r in rows]
+
+    @staticmethod
+    def _row_why(why) -> dict:
+        """A row's `why` for the page. The engine's own raw note of a placement that failed ("entry: <the venue's
+        words>", "placement did not finish: ...") is not a sentence for the owner: he reads "The entry was not
+        placed. Check it." and the note rides in `detail` (200 characters at most). Anything else is as it is. (The
+        stream's rows keep the engine's own `why`: _snap.)"""
+        if isinstance(why, str) and why.startswith(RAW_NOTES):
+            return {"why": NOT_PLACED, "detail": why[:200]}
+        return {"why": why}
 
     def _state(self, name: str) -> tuple:
         """(state, why) from what the desk itself knows. The runner's states (watching, runner_down, done for today)
