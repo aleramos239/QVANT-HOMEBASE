@@ -1120,3 +1120,97 @@ def test_a_restart_matches_a_finished_desk_day_from_its_file_at_the_desks_size(k
     assert [(t["qty"], t["exit_reason"]) for t in trades] == [(2, "tp")] and again.spawned == []
     m = next(iter(again.r._matches.values()))
     assert m.rec["qty"] == 2
+
+
+# ---------------------------------------------------------------- the shadow path does not move
+def a_shadow_day(k):
+    k.promote(MARKET_930)
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.sync()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.rows("09:30:00", [21000.0, 21001.0])
+    k.clock("09:30:02")
+    k.r.idle()
+    k.r.beat()
+    k.rows("15:54:59", [21010.0] * 3)
+    k.clock("16:00:03")
+    k.r.idle()
+    k.clock("17:35:00")
+
+    def plain_(x):
+        return {key: v for key, v in x.items() if key not in ("utc", "updated_utc")}
+    return plain_(k.file()), [plain_(x) for x in k.journal()], sorted(p.name for p in (k.at / "lab_x").rglob("*"))
+
+
+def test_a_strategy_with_no_account_writes_the_same_day_file_and_journal_with_or_without_a_desk(tmp_path):
+    from tests.test_labrun_host import Desk as Kit_
+    without = Kit_(tmp_path / "a")
+    with_ = Kit_(tmp_path / "b", desk=StubDesk())
+    try:
+        a, b = a_shadow_day(without), a_shadow_day(with_)
+    finally:
+        without.r.close()
+        with_.r.close()
+    assert a == b and a[0]["state"] == "done" and len(a[0]["trades"]) == 1 and a[0]["match"]["ok"] is True
+    assert with_.r._desk.bodies == [] and a[2] == ["2024-03-05.json", "days", "journal.jsonl"]
+
+
+# ---------------------------------------------------------------- python -m homebase.labrun --desk
+from homebase.labrun import __main__ as cli  # noqa: E402
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:8850", "http://localhost:8859", "http://127.0.0.1:8850/"])
+def test_the_runner_starts_with_a_desk_on_this_machine(url, monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(host, "run", lambda charts, at=None, **kw: ran.append((charts, at, kw)))
+    key = tmp_path / "k" / "lab.key"
+    assert cli.main(["--root", str(tmp_path), "--desk", url, "--desk-key", str(key)]) == 0
+    assert ran == [("http://127.0.0.1:8852", str(tmp_path), {"desk": url.rstrip("/"), "desk_key": key})]
+    assert not key.exists() and not key.parent.exists()                      # the key file is the Desk's: only ever read
+
+
+def test_the_default_key_file_is_the_desks_own_in_the_checkouts_state_folder(monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(host, "run", lambda charts, at=None, **kw: ran.append(kw))
+    assert cli.main(["--root", str(tmp_path), "--desk", "http://127.0.0.1:8850"]) == 0
+    from homebase import desk_api, paths
+    assert ran[0]["desk_key"] == paths.state_dir() / desk_api.LAB_KEY_FILE
+
+
+def test_without_desk_the_runner_is_started_exactly_as_before_and_the_key_option_is_not_read(monkeypatch, tmp_path):
+    ran = []
+    monkeypatch.setattr(host, "run", lambda charts, at=None: ran.append((charts, at)))       # (no room for a desk)
+    assert cli.main(["--root", str(tmp_path)]) == 0
+    assert cli.main(["--root", str(tmp_path), "--desk-key", str(tmp_path / "no" / "lab.key")]) == 0
+    assert ran == [("http://127.0.0.1:8852", str(tmp_path))] * 2
+
+
+@pytest.mark.parametrize("url", ["http://10.0.0.5:8850", "http://example.com:8850", "https://127.0.0.1:8850",
+                                 "http://127.0.0.1.nip.io:8850", "127.0.0.1:8850", "http://user@127.0.0.1:8850",
+                                 "http://127.0.0.1:8850/api/lab", "http://127.0.0.1:8850?x=1", "http://[::1]:8850",
+                                 "http://0.0.0.0:8850", "http://127.0.0.1", "http://127.0.0.1:port", ""])
+def test_a_desk_that_is_not_this_machine_is_refused_at_the_start_in_one_line(url, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(host, "run", lambda *a, **k: pytest.fail("the runner started"))
+    assert cli.main(["--root", str(tmp_path), "--desk", url]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "--desk" in err
+    assert not (tmp_path / "runner.lock").exists()                           # refused before anything is touched
+
+
+@pytest.mark.parametrize("charts, desk", [("http://127.0.0.1:8852", "http://127.0.0.1:8852"),
+                                          ("http://127.0.0.1:8852", "http://localhost:8852"),
+                                          ("http://localhost:8853", "http://127.0.0.1:8853/")])
+def test_the_desk_is_never_the_chart_services_own_address(charts, desk, monkeypatch, capsys, tmp_path):
+    monkeypatch.setattr(host, "run", lambda *a, **k: pytest.fail("the runner started"))
+    assert cli.main(["--root", str(tmp_path), "--charts", charts, "--desk", desk]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "chart service" in err
+
+
+def test_the_chart_service_is_still_never_the_desks_port_also_with_a_desk(monkeypatch, capsys):
+    monkeypatch.setattr(host, "run", lambda *a, **k: pytest.fail("the runner started"))
+    with pytest.raises(SystemExit) as e:
+        cli.main(["--charts", "http://127.0.0.1:8850", "--desk", "http://127.0.0.1:8859"])
+    assert e.value.code == 2 and "--charts" in capsys.readouterr().err
