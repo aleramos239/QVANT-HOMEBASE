@@ -299,3 +299,87 @@ def test_the_store_keeps_the_drafts_name_rule_without_importing_the_draft_helper
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+# ---- fix round 1: the desk's own lock, the sidecars' names, a bounded wait on the switch
+def test_desk_names_are_the_sidecars_whatever_became_of_their_records(tmp_path):
+    assert store.desk_names(tmp_path) == []
+    store.put(rec("a_one"), tmp_path)
+    store.put_desk("a_one", SIDE, tmp_path)
+    store.put_desk("b_gone", SIDE, tmp_path)                                    # its record is no longer there
+    (tmp_path / "Bad Name.desk.json").write_text("{}")
+    (tmp_path / "runner.json").write_text("{}")
+    assert store.desk_names(tmp_path) == ["a_one", "b_gone"]
+
+
+def test_one_desk_holds_the_stores_desk_lock_until_it_lets_go(tmp_path):
+    a = store.desk_lock(tmp_path / "new-store")                                 # the folder is made
+    assert a is not None and (tmp_path / "new-store" / "desk.lock").is_file()
+    assert store.desk_lock(tmp_path / "new-store") is None                      # a second desk, even in this process
+    assert store.listing(tmp_path / "new-store") == [] and store.desk_names(tmp_path / "new-store") == []   # not a record
+    store.put(rec(), tmp_path / "new-store")                                    # the desk's lock is not the write lock
+    store.desk_unlock(a)
+    b = store.desk_lock(tmp_path / "new-store")
+    assert b is not None
+    store.desk_unlock(b)
+
+
+def test_the_desk_lock_is_held_across_processes_and_ends_with_the_process(tmp_path):
+    import subprocess
+    import sys
+    code = ("import sys, time; from homebase.labrun import store\n"
+            "fd = store.desk_lock(sys.argv[1]); print('held' if fd is not None else 'busy', flush=True); time.sleep(30)\n")
+    p = subprocess.Popen([sys.executable, "-c", code, str(tmp_path)], stdout=subprocess.PIPE, text=True)
+    try:
+        assert p.stdout.readline().strip() == "held"
+        assert store.desk_lock(tmp_path) is None
+    finally:
+        p.kill()
+        p.wait(10)
+    fd = store.desk_lock(tmp_path)                                              # the OS gave it back
+    assert fd is not None
+    store.desk_unlock(fd)
+
+
+def test_set_enabled_with_a_bounded_wait_gives_up_and_writes_nothing(tmp_path):
+    import threading
+    store.put(rec(enabled=False), tmp_path)
+    inside, release = threading.Event(), threading.Event()
+
+    def holder():
+        with store.write_lock(tmp_path):
+            inside.set()
+            release.wait(5)
+    t = threading.Thread(target=holder)
+    t.start()
+    assert inside.wait(5)
+    try:
+        with pytest.raises(TimeoutError):
+            store.set_enabled("nq_x", True, tmp_path, wait_s=0.05)
+    finally:
+        release.set()
+        t.join(5)
+    assert store.get("nq_x", tmp_path)["enabled"] is False
+    assert store.set_enabled("nq_x", True, tmp_path, wait_s=0.05)["enabled"] is True
+
+
+def test_a_wait_of_zero_never_sleeps(tmp_path):
+    import threading
+    import time
+    inside, release = threading.Event(), threading.Event()
+
+    def holder():
+        with store.write_lock(tmp_path):
+            inside.set()
+            release.wait(5)
+    t = threading.Thread(target=holder)
+    t.start()
+    assert inside.wait(5)
+    try:
+        t0 = time.perf_counter()
+        with pytest.raises(TimeoutError):
+            store.put_desk("nq_x", SIDE, tmp_path, wait_s=0.0)
+        assert time.perf_counter() - t0 < 0.05
+    finally:
+        release.set()
+        t.join(5)

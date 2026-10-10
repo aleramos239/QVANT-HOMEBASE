@@ -13,8 +13,11 @@ this module talks to a service. Remove deletes the record only: the days and the
                                         (the runner and the chart service read it); listing() skips it (its stem is not
                                         a strategy name)
 
+    <root>/desk.lock                    the ONE desk that owns the sidecars holds a flock on it for its whole life
+                                        (desk_lock); a second desk on this store reads only
+
 One writer at a time, across processes, for put, set_enabled, remove and put_desk: write_lock() is a flock on the root
-folder itself (no lock file: the folder holds records, sidecars, the heartbeat and each strategy's history, nothing else).
+folder itself (no lock file for it).
 
 The record carries, besides the code and the run's numbers, `session_window` (["09:25", "16:00"]) and `bar_minutes` (0 =
 none) from the draft's static meta, and the `commission` and `slippage_ticks` that backtest ran with (the runner's
@@ -48,6 +51,7 @@ HEADLINE = (("net", "net_profit"), ("trades", "trades"), ("win_rate", "win_rate"
             ("max_drawdown", "max_drawdown"))        # our key, the report summary's key
 DEFAULT_WINDOW = ["09:25", "16:00"]      # the Strategy's own session_window
 DESK_SUFFIX = ".desk.json"               # the desk's sidecar beside the record
+DESK_LOCK = "desk.lock"                  # held by the one desk that owns this store's sidecars
 
 
 def root(arg=None) -> Path:
@@ -185,12 +189,12 @@ def mark_of(rec: dict) -> list:
     return [rec.get("sha256"), rec.get("promoted_utc")]
 
 
-def set_enabled(name: str, on: bool, at=None, mark=None) -> dict | None:
+def set_enabled(name: str, on: bool, at=None, mark=None, wait_s: float | None = None) -> dict | None:
     """The switch. None when the strategy is not on the Desk, or -- with a `mark` -- when the record is no longer that
     promotion (it was promoted again since the caller looked): nothing is written then. Read and write under one lock,
-    so a Promote at the same instant is never half undone."""
+    so a Promote at the same instant is never half undone. wait_s: see write_lock."""
     f = _file(name, at)
-    with write_lock(at):
+    with write_lock(at, wait_s):
         rec = _read(f)
         if rec is None or (mark is not None and list(mark) != mark_of(rec)):
             return None
@@ -220,6 +224,40 @@ def remove_desk(name: str, at=None) -> bool:
             return True
         except FileNotFoundError:
             return False
+
+
+def desk_names(at=None) -> list:
+    """The names that have a sidecar, whether or not their record is still there."""
+    d = root(at)
+    out = []
+    for f in sorted(d.glob("*" + DESK_SUFFIX)) if d.is_dir() else []:
+        name = f.name[:-len(DESK_SUFFIX)]
+        if NAME_RE.fullmatch(name) and f"{name}.json" != RUNNER_FILE:
+            out.append(name)
+    return out
+
+
+def desk_lock(at=None) -> int | None:
+    """Take this store for ONE desk: an exclusive flock on <root>/desk.lock, never waited for. Returns the open file
+    (keep it for as long as the desk lives: the lock ends with desk_unlock or with the process), or None when another
+    desk -- another process, or another holder in this one -- has it, or the file cannot be opened."""
+    d = root(at)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+        fd = os.open(d / DESK_LOCK, os.O_CREAT | os.O_RDWR, 0o600)
+    except OSError:
+        return None
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return fd
+    except OSError:
+        os.close(fd)
+        return None
+
+
+def desk_unlock(fd) -> None:
+    with contextlib.suppress(OSError, TypeError):
+        os.close(fd)
 
 
 def booked(name: str, at=None) -> bool:
