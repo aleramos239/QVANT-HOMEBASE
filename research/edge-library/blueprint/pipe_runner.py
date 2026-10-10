@@ -64,6 +64,9 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      `pipe near`: THE NEAR MISSES. Every idea that stopped on a verdict before the unseen days (stages 1-5), with
                                      the rows it missed and how far its WORST row was from its need, the closest first. A near miss is not a
                                      pass: the board keeps what stopped close in sight. Runs nothing
+  command("portfolio", account=ID)   `pipe portfolio [--account=ID]`: STAGE 8, the best mix of the book's strategies for each account and how far
+                                     it is from the portfolio's bar (pipe_portfolio.portfolio, loaded when it is asked for). Runs nothing; saves
+                                     one file an account under <root>/portfolios
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -107,7 +110,7 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "near")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "near", "portfolio")
 NEAR, NEAR_TEXT, NEAR_STAGES = 15, 110, (1, 2, 3, 4, 5)   # the near misses: the rows shown, the characters of a row's text, the stages that stop on a verdict before the unseen days
 RANDOM = "4.4"                                      # the read's line on the random tables: its bar is what an idea with no edge passes by luck
 
@@ -530,7 +533,7 @@ def pick(name, cell=None, why=None, root=None, clear: bool = False) -> dict:
                       next=f"bp.py pipe rerun {name} runs it again from stage 0 (a stopped idea only); a new idea takes it at its stage 1.")
 
 
-def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False) -> dict:
+def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False, account=None) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
     if sub == "add":
@@ -545,6 +548,9 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return luck(root)
     if sub == "near":
         return near(root)
+    if sub == "portfolio":
+        from . import pipe_portfolio                # the prop simulator's walks: loaded when the mix is asked for, never with the runner
+        return pipe_portfolio.portfolio(root, account)
     if sub == "rerun":
         return rerun(name, root)
     if sub == "pick":
