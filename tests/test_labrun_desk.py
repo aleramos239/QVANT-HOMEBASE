@@ -99,7 +99,7 @@ def test_every_event_is_written_down_before_the_child_is_asked_then_its_intents_
     assert tells[3] == {"seq": 2, "t_ns": at("09:30:00"), "kind": "time", "arg": "09:30:00", "last_price": 21000.0,
                         "flat": True, "updates": []}
     assert tells[4] == {"seq": 2, "intents": stub.bodies[0]["intents"]}
-    assert tells[5] == {"seq": 2, "sent": True, "ok": True,
+    assert tells[5] == {"seq": 2, "sent": True, "ok": True, "went": 1,
                         "results": [{"op": "entry", "id": 1, "refused": None, "dead": False}]}
     day.on_desk(snap(orders={1: filled()}, flat=False, answered=[2]))
     feed(day, "09:30:01", [21010.0] * 60)
@@ -174,7 +174,9 @@ def test_a_desk_that_is_not_answering_refuses_the_entry_here(days, how):
         side.gone()
     feed(day, "09:29:50", [21000.0] * 11)
     assert [r for _, r in texts(day)] == ["The Desk is not answering."] and stub.bodies == []
-    assert day.summary()["why"] == "The Desk is not answering." and day.state == "running"
+    assert day.state == "running"
+    assert day.summary()["why"] == ("The Desk is on another day." if how == "another day's snapshot"
+                                    else "The Desk is not answering.")
     feed(day, "09:30:01", [21000.0] * 60)
     assert list(plots(day)) == ["status cancelled"]                          # the child knows it never went
 
@@ -186,7 +188,7 @@ def test_exits_in_the_same_event_still_go_when_the_entry_is_refused_here(days):
     feed(day, "09:30:01", [21000.0] * 60)                                    # 09:31: cancel 1, entry 2
     assert stub.ops() == [["entry"], ["cancel"]]                             # the entry stayed here, the cancel went
     assert texts(day)[1:] == [("Cancel", None), ("Buy stop 21,006.00, stop 20,996.00", "The Desk is not answering.")]
-    assert tells[-1] == {"seq": 3, "sent": True, "ok": True,
+    assert tells[-1] == {"seq": 3, "sent": True, "ok": True, "went": 0,     # (no entry left in that request)
                          "results": [{"op": "cancel", "id": 1, "refused": None, "dead": False},
                                      {"op": "entry", "id": 2, "refused": "The Desk is not answering.", "dead": True}]}
 
@@ -334,7 +336,7 @@ def test_whatever_the_transport_does_exactly_one_entry_request_leaves_the_proces
     day, _, side, tells, wall = days(stub=wire.client)
     feed(day, "09:29:50", [21000.0] * 11)
     assert texts(day) == [("Buy stop 21,005.00, stop 20,995.00, target 2 x the stop", "The Desk did not answer.")]
-    assert tells[-1] == {"seq": 2, "sent": True, "ok": False,
+    assert tells[-1] == {"seq": 2, "sent": True, "ok": False, "went": 1,
                          "results": [{"op": "entry", "id": 1, "refused": "The Desk did not answer.", "dead": False}]}
     for _ in range(15):                                                      # the retry clock runs out: still one
         wall.t += 1.0
@@ -403,7 +405,8 @@ def test_a_cancel_whose_answer_never_came_is_asked_again_once_a_second_with_the_
     assert len({r.content for r in wire.requests[1:]}) == 1                  # the same seq, the same intents: one body
     assert json.loads(wire.requests[1].content)["seq"] == 6 and wire.entry_requests() == 1
     assert [t for t in tells if t.get("seq") == 6 and "results" in t][-1] == {
-        "seq": 6, "sent": True, "ok": True, "results": [{"op": "cancel", "id": 1, "refused": None, "dead": False}]}
+        "seq": 6, "sent": True, "ok": True, "went": 0,
+        "results": [{"op": "cancel", "id": 1, "refused": None, "dead": False}]}
     wall.t += 5.0
     day.tend()
     assert len(wire.requests) == 5
@@ -950,7 +953,10 @@ def test_what_an_earlier_runner_wrote_of_the_day_stays_when_the_desk_has_stopped
            "orders": [{"t": "09:30:00", "text": "Buy at market", "refused": None}], "trades": [], "net": 0.0,
            "match": None, "updated_utc": "x", "mode": "desk"}
     store.put_day("lab_x", was, k.at)
-    store.tell("lab_x", DATE, {"head": 1, "strategy": DESK_ID, "mark": mark_of(ONE), "date": DATE}, k.at)     # its tell-log
+    for line in ({"head": 1, "strategy": DESK_ID, "mark": mark_of(ONE), "date": DATE},       # its tell-log: it began
+                 {"seq": 1, "t_ns": at("09:25:00"), "kind": "session", "arg": None, "last_price": None, "flat": True,
+                  "updates": [], "daily": []}, {"seq": 1, "intents": []}):
+        store.tell("lab_x", DATE, line, k.at)
     k.r.take(state(snap(stopped="Both entries filled.")))
     k.clock("09:00:00")
     k.open()
