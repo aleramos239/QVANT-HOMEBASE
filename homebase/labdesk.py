@@ -1614,9 +1614,10 @@ class LabDesk:
                 state, why = "runner_down", None
             elif state in ("waiting", "disarmed") and d["stopped"] is not None:
                 state, why = "stopped", d["stopped"]
-            elif state == "waiting" and live["beat"] is None and assignments(self.cfg, name):
-                state, why = "runner_down", RUNNER_NOT_CONNECTED      # booked, and no runner has named it to this
-                                                                      # Desk: its file alone is not "waiting" (G1)
+            elif state == "waiting" and self._beat_at is None and assignments(self.cfg, name):
+                state, why = "runner_down", RUNNER_NOT_CONNECTED      # booked, and no runner has posted one beat to
+                # this Desk since it started (G1): its file alone is not "waiting". Any beat, naming it or not, is a
+                # connected runner -- it names a strategy only once it hosts it (wave review N1)
             elif state == "waiting" and fresh:
                 told = {"running": "watching", "done": "done", "not_today": "done", "stopped": "stopped"}.get(info.get("state"))
                 if told is not None:

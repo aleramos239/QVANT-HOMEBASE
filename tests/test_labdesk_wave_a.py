@@ -208,10 +208,16 @@ def test_a_booked_strategy_whose_runner_never_beat_reads_runner_down_even_with_a
     assert (v["state"], v["why"]) == ("runner_down", NOT_CONNECTED)
 
 
-def test_a_beat_that_names_another_strategy_does_not_connect_this_one(tmp_path):
-    d = mkdesk(tmp_path)
-    d.ld.heartbeat({"pid": 7, "strategies": {}})
-    assert _view(d) == ("runner_down", NOT_CONNECTED)
+def test_a_connected_runner_that_hosts_nothing_yet_is_not_called_not_connected(tmp_path):
+    """Wave review N1 (the reviewer's probe p_g1_connected): the Desk restarted in an hour with no session (17:30 ET);
+    the runner's beats arrive every 5 s but name nothing, since it hosts a strategy only once its market prints. The
+    page must not say "not connected": any beat since the Desk started means the runner is connected."""
+    d = mkdesk(tmp_path, at=(17, 30))
+    assert _view(d) == ("runner_down", NOT_CONNECTED)                    # no beat at all yet
+    d.ld.heartbeat({"pid": 7, "strategies": {}})                         # connected, names nothing
+    state, why = _view(d)
+    assert why != NOT_CONNECTED and state == "waiting"
+    assert d.ld.status_view(LAB)["runner"]["alive"] is True
 
 
 def test_once_the_runner_names_it_the_state_is_the_usual_one(tmp_path):
