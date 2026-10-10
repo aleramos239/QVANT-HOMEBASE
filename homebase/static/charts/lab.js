@@ -16,7 +16,7 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '' };
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBusy: false };
 /* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
    pipeline's three: 'pq' (its Queue), 'pb' (its Book), 'pg' (its Guide). */
 const VIEWS = [['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pg', 'Guide']];
@@ -181,7 +181,8 @@ async function run() {
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { log(`<span class="err">${esc(pr)}</span>`); return; }
   S.busy = true;
-  S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy };
+  const started = S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy, sha: '' };
+  if (nb.kind === 'draft') hexSha(nb.code).then((h) => { started.sha = h; paintRes(); });         // which code this run is of: what Promote to Desk compares
   paintRes(); paintHead();
   const r = await send('POST', '/api/tester/run', X.body(f));
   if (!r.ok) { S.busy = false; S.run = null; log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
@@ -678,11 +679,11 @@ function paintLib() {
     ...S.drafts.map((d) => {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
-      return { key: `d:${d.name}`, id: d.id, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '' };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
   const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${r.lock ? ' title="Read-only"' : ''}>
-        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small></span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk, in shadow">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}" aria-label="Move ${esc(r.name)} to a group" title="Move to a group" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
@@ -867,7 +868,7 @@ function setView(v) {
   plSelect();
   applyPanels(false);           // the middle is the pipeline's while one of its views is open, and the editor's again after (it also sets the timer)
   paintLib();
-  if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit();
+  if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit(); else if (S.view === 'lib') loadDesk();
 }
 /* What is selected in each list: the one that was, while it is still there, else the first; and the selected idea's own page. */
 function plSelect() {
@@ -1475,6 +1476,98 @@ function rangeText(rg) {
   const d = (x) => RS_DAY.format(new Date(`${x}T12:00:00Z`));
   return a.slice(0, 4) === b.slice(0, 4) ? `${d(a)} – ${d(b)}, ${b.slice(0, 4)}` : `${d(a)}, ${a.slice(0, 4)} – ${d(b)}, ${b.slice(0, 4)}`;
 }
+/* ---- Promote to Desk (2026-10-09) ----
+   A draft that was backtested can go on the Desk page, where the runner hosts it in SHADOW: it writes down its orders and nothing is
+   sent. The chart service keeps a frozen copy of the code (POST /desklab/promote) and says what the Desk would refuse; this page only
+   asks, and shows the answer. Which Lab strategies are on the Desk (GET /desklab) is asked when the Strategies list opens and after
+   each action -- never on a timer. The pure half (the row's four states, the words) is labcode.js. */
+async function hexSha(text) {        // the sha-256 the Desk keeps of the code it runs; '' where this browser cannot say
+  try {
+    const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(text)));
+    return [...new Uint8Array(d)].map((x) => x.toString(16).padStart(2, '0')).join('');
+  } catch (_) { return ''; }
+}
+const shaMemo = new Map(), shaAsked = new Set();
+function shaNow(code) {              // the hash of saved code, once it is worked out (a repaint follows); '' until then
+  if (code == null) return '';
+  if (shaMemo.has(code)) return shaMemo.get(code);
+  if (!shaAsked.has(code)) {
+    shaAsked.add(code);
+    hexSha(code).then((h) => {
+      shaMemo.set(code, h);
+      if (shaMemo.size > 6) { const old = shaMemo.keys().next().value; shaMemo.delete(old); shaAsked.delete(old); }
+      paintRes();
+    });
+  }
+  return '';
+}
+async function loadDesk() {
+  const r = await send('GET', '/api/tester/desklab');
+  if (!r.ok || !r.json) return;                      // the last list stays
+  const key = (m) => JSON.stringify(m ? [...m].map(([n, x]) => [n, x.sha256, x.enabled, x.promoted_utc]) : null);
+  const was = key(S.desk);
+  S.desk = new Map((r.json.strategies || []).filter((x) => x && x.name).map((x) => [x.name, x]));
+  if (key(S.desk) === was) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
+  paintLib(); paintRes();
+}
+/* The row under a finished run: its state, from what is open now (never from a remembered one). */
+function deskState(b) {
+  if (!b || b.kind !== 'draft') return null;
+  const dirty = isDirty(b), sha = dirty ? '' : shaNow(b.code);
+  const r = S.run && S.run.key === b.key ? S.run : null;
+  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid && sha && r.sha === sha), row: (S.desk && S.desk.get(b.name)) || null, sha });
+}
+function deskRows(b) {
+  const st = deskState(b);
+  if (!st) return '';
+  const on = !!(S.desk && S.desk.has(b.name));
+  return `<button class="rs-row" data-act="deskgo" data-fk="deskgo" title="${esc(st.hint)}"${st.disabled ? ' aria-disabled="true"' : ''}${S.deskBusy ? ' disabled' : ''}><span>${esc(st.label)}</span><span>›</span></button>`
+    + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="Takes it off the Desk. Its history is kept."${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
+}
+function deskGo() {
+  const b = buf(), st = deskState(b);
+  if (!st || st.disabled || S.deskBusy) return;
+  if (st.action === 'open') {      // the Desk page, where the page switcher already points, on this strategy
+    const home = document.querySelector('#pgSw a[data-page="desk"]');
+    if (home && home.href) location.href = `${home.href.split('#')[0]}#lab=${encodeURIComponent(b.name)}`;
+    return;
+  }
+  if (st.action === 'promote') promoteToDesk(b);
+}
+async function promoteToDesk(b) {
+  const r = S.run && S.run.key === b.key ? S.run : null;
+  if (!r || !r.rid || !r.bundle) return;
+  S.deskBusy = true; paintRes();
+  const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
+  S.deskBusy = false;
+  const j = a.json || {};
+  if (!a.ok || j.ok === false) log(`<span class="err">${esc(String(j.detail || a.error || 'It did not work.'))}</span>`);
+  else for (const line of C.deskSaid(j)) log(esc(line));
+  await loadDesk();
+  paintRes(); paintLib();
+}
+function deskOffDialog() {
+  const b = buf();
+  if (!b || b.kind !== 'draft' || S.deskBusy) return;
+  const name = b.name;
+  const d = dialog(`<h2>Remove ${esc(name)} from the Desk?</h2><p>Its history is kept.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it</button><button class="btn btn-default" data-x="go">Remove</button></div>`);
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x !== 'go') return;
+    S.deskBusy = true; paintRes();
+    const r = await send('POST', '/api/tester/desklab/remove', { name });
+    S.deskBusy = false;
+    const j = r.json || {};
+    if (!r.ok || j.ok === false) log(`<span class="err">${esc(String(j.detail || r.error || 'It did not work.'))}</span>`);
+    else log(`${esc(name)} is off the Desk. Its history is kept.`);
+    await loadDesk();
+    paintRes(); paintLib();
+  });
+}
+
 function paintRes() {
   const el = $('#labRes .in');
   if (!el) return;
@@ -1505,7 +1598,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
-        <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button></div>`;
+        <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}</div>`;
     settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
@@ -1530,6 +1623,8 @@ function act(name, el) {
   else if (name === 'show') showOnChart(false);
   else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
   else if (name === 'review') reviewDialog();
+  else if (name === 'deskgo') deskGo();
+  else if (name === 'deskoff') deskOffDialog();
   else if (name === 'save') save(b);
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);
@@ -1620,6 +1715,7 @@ paintNav();
 setTimeout(() => { if (P.chart) soloChart(); }, 1800);
 // Bar Replay lives in the same bottom panel: asking for it brings the panel back
 document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
+loadDesk();
 loadLists().then(() => {
   const run = /^#run=([0-9a-z_-]+)$/.exec(location.hash);       // the Desk page's "Show executions on chart"
   if (run) { showRunOnChart(run[1]).then((ok) => log(ok ? 'Its executions are on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.')); return; }

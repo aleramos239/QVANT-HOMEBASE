@@ -206,3 +206,47 @@ test('line numbers, dedent and the one-line clip', () => {
   const long = L.tkClip('word '.repeat(60), 40);
   assert.ok(long.endsWith('…') && long.length <= 41 && !/ …$/.test(long), long);
 });
+
+/* ---- Promote to Desk: the row under a finished run (2026-10-09) ---- */
+test('promoteState: no finished run of this code, or unsaved edits: the row is there and cannot be used yet', () => {
+  const off = { label: 'Promote to Desk', hint: 'Run a backtest of this exact code first.', disabled: true, action: null };
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: null, sha: 'aa' }) }, off);
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: true, hasRun: true, row: null, sha: 'aa' }) }, off, 'unsaved edits');
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: true, hasRun: false, row: null, sha: '' }) }, off);
+});
+
+test('promoteState: a finished run, not on the Desk: promote', () => {
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: 'aa' }) },
+    { label: 'Promote to Desk', hint: 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' });
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: undefined, sha: '' }).action, 'promote', 'a missing hash does not stop a run that finished');
+});
+
+test('promoteState: on the Desk with this same code: open it there', () => {
+  const open = { label: 'On the Desk: shadow', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'aa' }, sha: 'aa' }) }, open);
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'aa' }, sha: 'aa' }) }, open, 'it is on the Desk whether or not a run is open');
+});
+
+test('promoteState: on the Desk with other code: promote again (needs a run of this code first)', () => {
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: 'aa' }) },
+    { label: 'Promote again', hint: 'The Desk runs an older version. Promoting again starts it in shadow.', disabled: false, action: 'promote' });
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: true, hasRun: true, row: { sha256: 'bb' }, sha: '' }) },
+    { label: 'Promote again', hint: 'Run a backtest of this exact code first.', disabled: true, action: null });
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'bb' }, sha: 'aa' }).disabled, true);
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: '' }).label, 'Promote again', 'a hash that is not known is not the same code');
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: '' }, sha: '' }).action, 'promote', 'two unknowns are not the same code');
+});
+
+test('promoteState: a built-in strategy (or a script not saved yet) has no such row', () => {
+  assert.equal(L.promoteState({ kind: 'builtin', dirty: false, hasRun: true, row: null, sha: 'aa' }), null);
+  assert.equal(L.promoteState({ kind: 'new', dirty: true, hasRun: true, row: null, sha: '' }), null);
+  assert.equal(L.promoteState(null), null);
+});
+
+test('deskSaid: the lines after a promote, in the words of the page', () => {
+  assert.deepEqual(L.deskSaid({ ok: true, notes: ['1 order can go out with no stop.', 'It sets its own size.'] }),
+    ['On the Desk, in shadow. It places no orders.', 'The Desk would refuse: 1 order can go out with no stop.', 'The Desk would refuse: It sets its own size.']);
+  assert.deepEqual(L.deskSaid({ ok: true }), ['On the Desk, in shadow. It places no orders.']);
+  assert.deepEqual(L.deskSaid({ ok: true, notes: 'x' }), ['On the Desk, in shadow. It places no orders.'], 'notes is a list or nothing');
+  assert.deepEqual(L.deskSaid({ ok: true, notes: [1, null, ''] }), ['On the Desk, in shadow. It places no orders.']);
+});

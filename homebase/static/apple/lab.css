@@ -259,6 +259,8 @@ html.hb-apple #labRes .rs-row { display: flex; align-items: center; justify-cont
 html.hb-apple #labRes .rs-row:hover { background: transparent; }
 html.hb-apple #labRes .rs-row:active { background: var(--a-hover); }
 html.hb-apple #labRes .rs-row[disabled] { opacity: 1; color: var(--a-label-3); pointer-events: none; }
+html.hb-apple #labRes .rs-row[aria-disabled="true"] { opacity: 1; color: var(--a-label-3); }
+html.hb-apple #labRes .rs-row[aria-disabled="true"]:active { background: transparent; }
 html.hb-apple #labRes .rs-row span:last-child { flex: none; width: 9px; height: 12px; font-size: 0; background: var(--a-label-3);
   -webkit-mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; mask: var(--sf-chevron-right) center / var(--sf-chevron-right-w) var(--sf-chevron-right-h) no-repeat; }
 /* run settings: a disclosure row, then a form of labelled fields on the 37 pitch */

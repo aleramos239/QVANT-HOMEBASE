@@ -582,13 +582,31 @@ function plWatchSaid(what, name) {
     : `${name} is off the Desk page. It stays in the Book and can be promoted again.`;
 }
 
+/* ---- Promote to Desk (2026-10-09): the row under a finished run of a draft ----
+   `row` = this draft's record on the Desk (GET /desklab) or null; `sha` = the hash of the open code ('' when it is not known yet);
+   `hasRun` = a finished run of exactly this code is open. Returns {label, hint, disabled, action: 'promote' | 'open' | null},
+   or null where there is no such row (a built-in, or a script not saved yet). The Desk judges the rest when it is asked. */
+function promoteState(state) {
+  const { kind, dirty, hasRun, row, sha } = state || {};
+  if (kind !== 'draft') return null;
+  if (row && sha && row.sha256 === sha) return { label: 'On the Desk: shadow', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
+  const label = row ? 'Promote again' : 'Promote to Desk';
+  if (dirty || !hasRun) return { label, hint: 'Run a backtest of this exact code first.', disabled: true, action: null };
+  return { label, hint: row ? 'The Desk runs an older version. Promoting again starts it in shadow.' : 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' };
+}
+/* The lines after a promote went through: that it is on the Desk, then one for each thing the Desk would refuse on an account. */
+function deskSaid(answer) {
+  const notes = Array.isArray(answer && answer.notes) ? answer.notes.filter((n) => typeof n === 'string' && n) : [];
+  return ['On the Desk, in shadow. It places no orders.', ...notes.map((n) => `The Desk would refuse: ${n}`)];
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid };
+  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();
