@@ -97,6 +97,7 @@ ANSWERS_KEPT = 2000                      # answered events kept per strategy per
 REFUSED_KEPT = 20                        # refusals shown on the Desk page
 DEAD_KEPT = 200                          # order ids no account took, kept for the snapshot (the newest)
 GHOST_SAY_S = 60.0                       # a name that is not a Lab strategy here: one `lab_refused` line this often
+GHOSTS_KEPT = 200                        # ... for this many such names at a time; past it a new name writes no line
 
 # The sentences the intake answers (design C3 and E). The engine's and the door's are repeated here so this module
 # never imports the engine (its imports reach the tester's tape); tests/test_labdesk.py holds them equal.
@@ -982,8 +983,11 @@ class LabDesk:
             now, last = self._mono(), self._ghost_said.get(name)
             if last is not None and now - last < GHOST_SAY_S:
                 return
-            if len(self._ghost_said) >= 200:
-                self._ghost_said.clear()
+            if len(self._ghost_said) >= GHOSTS_KEPT:         # full: the names that have been quiet for a minute go;
+                for k in [k for k, t in self._ghost_said.items() if now - t >= GHOST_SAY_S]:
+                    del self._ghost_said[k]
+                if len(self._ghost_said) >= GHOSTS_KEPT:     # still GHOSTS_KEPT names in play: this one writes no
+                    return                                   # line at all (a caller that makes names up fills nothing)
             self._ghost_said[name] = now
         self._journal("lab_refused", strategy=name, seq=seq, ids=ids, text=text, account=account, **more)
 

@@ -285,3 +285,35 @@ def test_a_restarted_desk_tells_them_apart_by_their_time_too(tmp_path):
     again = body(d, [entry(1)], seq=1)                                             # an entry under an answered seq at
     out = run(ld2.event({**again, "t_ns": again["t_ns"] + 1}))                     # another time: out of date, never sent
     assert refusal(out) == "This order is out of date." and len(d.ads["a1"].brackets) == 1
+
+
+# ================================================================ 6: made-up names cannot fill the journal
+def test_past_two_hundred_made_up_names_an_event_for_an_unknown_name_writes_no_line(tmp_path):
+    d = mkdesk(tmp_path)
+    mono = d.ld._mono = Mono()
+    n0 = len(lines(d))
+    for i in range(250):                                                           # each with an entry AND an exit: never a 429
+        out = run(d.ld.event(body(d, [entry(1), {"op": "cancel", "id": 9}], seq=i, strategy=f"lab_ghost{i}")))
+        assert refusal(out) == "That strategy is not on the Desk."
+        mono.t += 0.21                                                             # (under five a second)
+    new = lines(d)[n0:]
+    assert len(new) == 200 and {x["event"] for x in new} == {"lab_refused"}
+    assert [x["strategy"] for x in new] == [f"lab_ghost{i}" for i in range(200)]   # the 201st name on: not a line
+    assert len(d.ld._ghost_said) == 200
+    for i in range(250, 260):                                                      # still full: an exit alone writes nothing either
+        run(d.ld.event(body(d, [{"op": "flatten", "reason": "x"}], seq=i, strategy=f"lab_ghost{i}")))
+    assert len(lines(d)) == n0 + 200
+    mono.t += 61.0                                                                 # a minute on, the names have gone quiet:
+    run(d.ld.event(body(d, [entry(1), {"op": "cancel", "id": 9}], seq=1, strategy="lab_new")))
+    assert [x["strategy"] for x in lines(d)[n0 + 200:]] == ["lab_new"] and len(d.ld._ghost_said) == 1
+
+
+def test_a_real_lab_strategy_is_never_counted_among_the_made_up_names(tmp_path):
+    d = mkdesk(tmp_path)
+    mono = d.ld._mono = Mono()
+    for i in range(200):
+        run(d.ld.event(body(d, [entry(1), {"op": "cancel", "id": 9}], seq=i, strategy=f"lab_ghost{i}")))
+        mono.t += 0.21
+    out = send(d, entry(1, sl=None), seq=1)                                        # the Desk's own strategy: said as ever
+    assert refusal(out) == "Every entry needs a stop held at the broker."
+    assert lines(d, "lab_refused")[-1]["strategy"] == LAB and len(lines(d, "lab_event")) == 1
