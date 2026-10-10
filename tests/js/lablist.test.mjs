@@ -544,3 +544,17 @@ test('page: one strategy already gone says so', async () => {
   assert.equal(p.S.log.at(-1).html, 'Already gone: b.');
   assert.deepEqual(p.S.drafts.map((x) => x.name), ['a']);
 });
+
+test('withDeskGroup: the strategies on the Desk are one group of their own, first; the rest stay where they are filed', () => {
+  const on = (n) => ({ ...d(n), desk: true });
+  const all = [on('a'), d('b'), on('c'), d('d'), unsaved, b('nq930')];
+  const secs = L.withDeskGroup(L.sections(all, groups));
+  assert.deepEqual(secs.map((s) => s.name), ['On the Desk', 'Fades', 'Empty', '']);
+  assert.equal(secs[0].auto, true);
+  assert.deepEqual(keys(secs[0].rows), ['d:a', 'd:c']);                 // a was filed under Fades: it shows once, under the Desk
+  assert.deepEqual(keys(secs[1].rows), []);
+  assert.deepEqual(keys(L.shownRows(secs, new Set())), ['d:a', 'd:c', 'd:b', 'd:d', 'n:1', 'b:nq930']);
+  assert.deepEqual(keys(L.shownRows(secs, new Set(['On the Desk']))), ['d:b', 'd:d', 'n:1', 'b:nq930']);   // it folds like any group
+  // nothing on the Desk: no group, nothing moves
+  assert.deepEqual(L.withDeskGroup(L.sections(rows, groups)).map((s) => s.name), ['Fades', 'Empty', '']);
+});

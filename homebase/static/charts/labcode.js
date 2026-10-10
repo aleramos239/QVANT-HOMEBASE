@@ -157,6 +157,15 @@ function sections(rows, groups) {
   return [...out, rest];
 }
 
+/* The sections as the list shows them: the strategies that are on the Desk (their row's `desk` flag) first, in a group of their own that
+   follows Promote and Remove by itself; every other row stays in the group it is filed in. */
+const ON_DESK = 'On the Desk';
+function withDeskGroup(secs) {
+  const on = [];
+  const rest = secs.map((s) => ({ ...s, rows: s.rows.filter((r) => { if (r.desk) { on.push(r); return false; } return true; }) }));
+  return on.length ? [{ name: ON_DESK, auto: true, rows: on }, ...rest] : rest;
+}
+
 /* ---- picking strategies in the list, and deleting them ----
    A shift-click picks the rows from the last picked (or the open) row to the clicked one, in the order the list shows
    them; a cmd/ctrl-click adds or removes one; a plain click opens the strategy and clears the picks. Only a saved
@@ -887,7 +896,7 @@ function fmFirstError(errors, order) {
   return keys.length ? e[keys[0]] : '';
 }
 
-const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
+const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,

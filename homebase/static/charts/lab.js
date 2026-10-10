@@ -17,7 +17,7 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
   view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false };
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set() };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
@@ -140,7 +140,7 @@ async function validateNow(b) {
   return b.valid;
 }
 async function save(b) {
-  if (!b || b.kind === 'builtin') return false;
+  if (!b || b.kind === 'builtin' || locked(b)) return false;
   const nerr = C.nameError(b.name);
   if (nerr) { log(`<span class="err">${esc(nerr)}</span>`); const n = document.getElementById('edName'); if (n) { n.classList.add('bad'); n.focus(); } return false; }
   const r = await send('PUT', `/api/tester/drafts/${encodeURIComponent(b.name)}`, { code: b.code });
@@ -487,10 +487,10 @@ async function newMenu(anchor) {
 function moreMenu(anchor) {
   const b = buf();
   if (!b) return;
-  const draft = b.kind !== 'builtin', saved = b.kind === 'draft', code = b.code || '';
+  const draft = b.kind !== 'builtin', saved = b.kind === 'draft', code = b.code || '', lockedNow = locked(b);
   const formRow = '<button class="row" data-pick="form"><span>Edit in the form…</span></button>';
-  const known = draft && fmRead.code === code && !!fmRead.got;          // the form's read of this code, when it is already in
-  menu(anchor, `${draft ? `<button class="row" data-pick="save"${isDirty(b) || b.kind === 'new' ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>${known ? formRow : ''}
+  const known = draft && !lockedNow && fmRead.code === code && !!fmRead.got;          // the form's read of this code, when it is already in
+  menu(anchor, `${draft ? `<button class="row" data-pick="save"${!lockedNow && (isDirty(b) || b.kind === 'new') ? '' : ' disabled'}><span>Save</span><kbd>⌘S</kbd></button>${known ? formRow : ''}
       <button class="row" data-pick="review"${saved ? '' : ' disabled'}><span>Request a review…</span></button><hr>` : ''}
     <button class="row" data-pick="ref"><span>Scripting reference</span></button>
     ${saved ? '<hr><button class="row" data-pick="delete"><span>Delete…</span></button>' : ''}`,
@@ -912,6 +912,7 @@ function dropGroup(g, n) {
 function paintAll() { paintLib(); paintEditor(); paintRes(); }
 
 const ICON_DOC = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3.5H8A2.5 2.5 0 0 0 5.5 6v12A2.5 2.5 0 0 0 8 20.5h8a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M14 3.5V8h4.5"/></svg>';
+const ICON_UNLOCK = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 7.5-2"/></svg>';
 const ICON_LOCK = '<svg class="lb-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9" rx="2.5"/><path d="M8.5 11V8.2a3.5 3.5 0 0 1 7 0V11"/></svg>';
 const ICON_PLUS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>';
 const ICON_PLAY = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.8v14.4a.9.9 0 0 0 1.36.77l11.7-7.2a.9.9 0 0 0 0-1.54L8.86 4.03a.9.9 0 0 0-1.36.77z" fill="currentColor"/></svg>';
@@ -935,6 +936,10 @@ function viewMenu(anchor) {
   menuEl.setAttribute('role', 'menu');
   anchor.setAttribute('aria-expanded', 'true');
 }
+/* A strategy that is on the Desk is locked in the Lab (its code is what the Desk copied): read-only until the owner unlocks it by hand.
+   The unlock lasts until the page is closed; the copy on the Desk never changes by editing, only by Promote. */
+const onDesk = (b) => !!b && b.kind === 'draft' && !!S.desk && S.desk.has(b.name);
+const locked = (b) => onDesk(b) && !S.unlocked.has(b.name);
 /* The name a strategy gives itself (its `name`, the one the Desk shows), when it is not the file's: "NQ 5m 9:30 CLOSE" for nq_fair_price_v1. */
 function ownName(file) {
   const b = S.bufs.get(`d:${file}`), d = S.drafts.find((x) => x.name === file);
@@ -950,27 +955,27 @@ function libRows() {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
       const own = ownName(d.name), state = bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft';
-      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, dirty: !!dirty, sub: own ? `${state} · ${d.name}` : state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: own ? `${state} · ${d.name}` : state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
   return { rows, builtins };
 }
 /* the rows as the list shows them, top to bottom (a folded group's rows are not shown) */
-const shownList = () => { const { rows, builtins } = libRows(); return S.groups ? C.shownRows(C.sections([...rows, ...builtins], S.groups), folded) : [...rows, ...builtins]; };
+const shownList = () => { const { rows, builtins } = libRows(); return S.groups ? C.shownRows(C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)), folded) : [...rows, ...builtins]; };
 function paintLib() {
   const el = $('#labLib .in');
   if (!el) return;
   const { rows, builtins } = libRows();
   if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
-  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''}${r.lock ? ' title="Read-only"' : ''}>
-        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''}${r.lock ? ' title="Read-only"' : r.locked ? ' title="On the Desk: locked. Open it and press the lock to edit."' : ''}>
+        ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}"${C.canPick(r) ? ` data-row="${esc(r.key)}"` : ''} aria-label="${C.canPick(r) ? `Move ${esc(r.name)} to a group, or delete it` : `Move ${esc(r.name)} to a group`}" title="${C.canPick(r) ? 'Move to a group, or delete' : 'Move to a group'}" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
     if (!s.name && !s.rows.length) return '';
     const shut = folded.has(s.name), n = s.rows.length;
     return `<div class="lb-g${shut ? ' folded' : ''}"><div class="lb-gh"><button class="lb-sh" data-act="fold" data-g="${esc(s.name)}" aria-expanded="${!shut}">${ICON_CHEV}<span>${esc(s.name || 'Ungrouped')}</span><i>${n}</i></button>
-        ${s.name ? `<button class="hb-ib lb-more" data-act="group" data-g="${esc(s.name)}" data-n="${n}" aria-label="Rename or delete the group ${esc(s.name)}" title="Rename or delete" aria-haspopup="menu">${ICON_MORE}</button>` : ''}</div>
+        ${s.name && !s.auto ? `<button class="hb-ib lb-more" data-act="group" data-g="${esc(s.name)}" data-n="${n}" aria-label="Rename or delete the group ${esc(s.name)}" title="Rename or delete" aria-haspopup="menu">${ICON_MORE}</button>` : ''}</div>
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
   const top = el.scrollTop;
@@ -984,7 +989,7 @@ function paintLib() {
   }
   el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" data-fk="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
-    ${S.groups ? C.sections([...rows, ...builtins], S.groups).map(section).join('')
+    ${S.groups ? C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)).map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
   el.scrollTop = top;
 }
@@ -1614,7 +1619,7 @@ function paintEditor() {
   const ro = b.kind === 'builtin';
   el.innerHTML = `<div class="ed-wrap" id="edWrap"><pre class="ed-gut" id="edGut" aria-hidden="true"></pre>
       <div class="ed-main"><pre class="ed-hl" aria-hidden="true"><code id="edHl"></code></pre>
-        <textarea class="ed-ta" id="edTa" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="off" aria-label="Python source" ${ro ? 'readonly' : ''}></textarea>
+        <textarea class="ed-ta" id="edTa" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" wrap="off" aria-label="Python source" ${ro || locked(b) ? 'readonly' : ''}></textarea>
         <div class="ed-hint" id="edHint" hidden>Press <kbd>⌘V</kbd> to paste your script, or drop a .py file here.</div></div></div>
     <div class="ed-log" id="edLog"></div>`;
   $('#edTa').value = b.code || '';
@@ -1628,6 +1633,7 @@ function paintHead() {
   const ro = b.kind === 'builtin', busy = S.busy, dirty = isDirty(b);
   let cls = '', text = '', tip = '';
   if (ro) text = 'Built-in · read-only';
+  else if (locked(b)) { cls = ''; text = 'On the Desk · locked'; tip = 'It is the code the Desk copied. Press the lock to edit it; the copy on the Desk changes only when you promote it again.'; }
   else if (b.valid && !b.valid.ok) { const st = C.statusOf(b.valid); cls = 'err'; text = st.text; }
   else if (b.kind === 'new') text = (b.code || '').trim() ? 'Not saved yet' : '';
   else if (dirty) { cls = 'edited'; text = 'Edited'; }
@@ -1643,7 +1649,10 @@ function paintHead() {
   if (!had) doc.innerHTML = `${name}<span class="doc-state ${cls}" id="edState" title="${esc(tip || text)}">${esc(text)}</span>`;
   else { const st = document.getElementById('edState'); if (st) { st.className = `doc-state ${cls}`; st.textContent = text; st.title = tip || text; } }
   const canRun = !busy && (ro || (b.code || '').trim());
-  acts.innerHTML = `<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="Run the backtest (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : 'Run'}</span></button>
+  const lockBtn = onDesk(b)
+    ? (locked(b) ? `<button class="hb-ib" data-act="unlock" aria-label="Unlock to edit" title="On the Desk: locked. Unlock to edit.">${ICON_LOCK}</button>`
+      : `<button class="hb-ib" data-act="lock" aria-label="Lock again" title="Unlocked. Lock it again.">${ICON_UNLOCK}</button>`) : '';
+  acts.innerHTML = `${lockBtn}<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="Run the backtest (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : 'Run'}</span></button>
     <button class="hb-ib" data-act="more" data-fk="more" aria-label="More" title="More" aria-haspopup="menu">${ICON_MORE}</button>`;
   const hint = $('#edHint'); if (hint) hint.hidden = !!(b.code && b.code.length) || ro;
 }
@@ -1792,6 +1801,7 @@ async function loadDesk() {
   S.desk = new Map((r.json.strategies || []).filter((x) => x && x.name).map((x) => [x.name, x]));
   if (key(S.desk) === was) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
   paintLib(); paintRes();
+  if (buf() && buf().kind === 'draft') paintEditor();          // its lock may have changed (promoted, or taken off the Desk)
 }
 /* The row under a finished run: its state, from what is open now (never from a remembered one). */
 function deskState(b) {
@@ -1915,6 +1925,8 @@ function act(name, el) {
   else if (name === 'deskgo') deskGo();
   else if (name === 'deskoff') deskOffDialog();
   else if (name === 'save') save(b);
+  else if (name === 'unlock' && b) { S.unlocked.add(b.name); log('Unlocked. The copy on the Desk does not change until you promote it again.'); paintLib(); paintEditor(); }
+  else if (name === 'lock' && b) { S.unlocked.delete(b.name); paintLib(); paintEditor(); }
   else if (name === 'fold') foldGroup(el);
   else if (name === 'file') fileMenu(el);
   else if (name === 'group') groupMenu(el);
@@ -1962,7 +1974,7 @@ root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
   if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
-  if (t.id === 'edTa' && b && b.kind !== 'builtin') {
+  if (t.id === 'edTa' && b && b.kind !== 'builtin' && !locked(b)) {
     const wasEmpty = !b.code.trim();
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
     if (b.kind === 'new' && wasEmpty && b.code.trim() && !b.name) { b.name = C.suggestName(b.code, takenNames()); const n = document.getElementById('edName'); if (n) n.value = b.name; }
@@ -1996,7 +2008,7 @@ root.addEventListener('keydown', (e) => {
   const b = buf(), t = e.target, mod = e.metaKey || e.ctrlKey;
   if (mod && e.key === 's') { e.preventDefault(); if (b && b.kind !== 'builtin') save(b); return; }
   if (mod && e.key === 'Enter') { e.preventDefault(); if (!e.repeat) run(); return; }   // a held ⌘↵ starts one run, not many
-  if (t.id !== 'edTa' || !b || b.kind === 'builtin') return;
+  if (t.id !== 'edTa' || !b || b.kind === 'builtin' || locked(b)) return;
   let r = null;
   if (e.key === 'Tab') r = C.tab(t.value, t.selectionStart, t.selectionEnd, e.shiftKey);
   else if (e.key === 'Enter' && !mod && !e.shiftKey) r = C.enter(t.value, t.selectionStart, t.selectionEnd);
