@@ -55,7 +55,7 @@ def test_good_limits_parse():
 
 BAD = {"max_trades_day": ([0, 21, 1.5, "2", None, True], "Trades a day: a whole number from 1 to 20."),
        "max_qty": ([0, 11, 2.0, "1", None, True], "Contracts: a whole number from 1 to 10."),
-       "max_risk_usd": ([0, -5, "300", None, True, float("nan"), float("inf")], "At risk per trade: a dollar amount above 0."),
+       "max_risk_usd": ([0, -5, "300", None, True, float("nan"), float("inf")], "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
        "last_entry_et": (["", "11", "25:00", "11:60", None, 1100, "15:55", "16:10", "09:24"],
                          "No new trade after: a time like 11:00, before the flat time."),
        "flat_et": (["", "4pm", "24:00", None, "15:56", "16:00"], "Flat by: a time like 15:55, no later than 15:55.")}
@@ -600,9 +600,9 @@ def test_a_known_strategy_whose_record_stops_reading_is_kept_switched_off(monkey
 
 
 @pytest.mark.parametrize("key, value, sentence", [
-    ("max_risk_usd", 10 ** 400, "At risk per trade: a dollar amount above 0."),
-    ("max_risk_usd", 1e300, "At risk per trade: a dollar amount above 0."),
-    ("max_risk_usd", float("-inf"), "At risk per trade: a dollar amount above 0."),
+    ("max_risk_usd", 10 ** 400, "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
+    ("max_risk_usd", 1e300, "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
+    ("max_risk_usd", float("-inf"), "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
     ("max_trades_day", 10 ** 400, "Trades a day: a whole number from 1 to 20."),
     ("max_qty", -10 ** 400, "Contracts: a whole number from 1 to 10.")])
 def test_an_absurd_number_in_the_limits_is_its_fields_sentence(key, value, sentence):

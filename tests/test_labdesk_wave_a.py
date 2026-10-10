@@ -340,3 +340,29 @@ def test_a_day_file_that_cannot_be_written_either_still_answers_nothing_was_sent
     out = go(eng, leg())["accounts"]["a1"]
     assert out == {"ok": False, "round": 1, "reason": "The Desk could not write this trade down. Nothing was sent."}
     assert ads["a1"].brackets == [] and eng.states[f"{LAB}@a1"].status == "error"
+
+
+# ---------------------------------------------------------------- M-W: the words an owner reads
+def test_the_new_words_on_the_server_side():
+    from homebase import labdesk
+    assert labdesk.OTHER_DESK == "Another copy of the Desk is using the Lab strategies."
+    assert labdesk.READ_ONLY_HERE == "Another copy of the Desk is using the Lab strategies. They are read-only here."
+    assert labdesk.RECORD_CHANGED == "This strategy was promoted again. Try again."
+    assert labcfg.SAY_RISK == "At risk per trade: a dollar amount above 0, like 300 or 300.50."
+
+
+def test_the_risk_sentence_is_the_same_on_the_server_and_the_page():
+    from pathlib import Path
+    page = (Path(__file__).resolve().parent.parent / "homebase" / "static" / "desklab.js").read_text()
+    assert f'var SAY_RISK = "{labcfg.SAY_RISK}";' in page
+    for name in ("SAY_TRADES", "SAY_QTY", "SAY_LAST", "SAY_FLAT"):
+        assert f'var {name} = "{getattr(labcfg, name)}";' in page, name
+    from homebase import labdesk
+    assert f'var OTHER_DESK = "{labdesk.OTHER_DESK}";' in page
+
+
+def test_a_row_whose_placement_outcome_is_unknown_never_shows_the_engines_raw_note():
+    from homebase import labdesk
+    got = labdesk.LabDesk._row_why(labdesk.PLACING_UNKNOWN)
+    assert got == {"why": "The Desk restarted while this entry was going out. Check it at the broker."}
+    assert labdesk.LabDesk._row_why("entry: margin") == {"why": labdesk.NOT_PLACED, "detail": "entry: margin"}

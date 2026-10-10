@@ -1639,7 +1639,7 @@ function activityLine(r, prev) {
       if (text) return {text, tone: tone || ""};
     } catch (_) { /* a row this formatter can't read falls back to plain words below */ }
   }
-  if (String(r.event).indexOf("lab_") === 0) return {text: "A Lab strategy event: check the Desk's log.", tone: "warn"};      // a Lab event with no words of its own: never a raw name
+  if (String(r.event).indexOf("lab_") === 0) return {text: "Something happened to a Lab strategy: see the Activity log.", tone: "warn"};      // a Lab event with no words of its own: never a raw name
   const what = String(r.event || "event").replace(/_/g, " ");
   return {text: what.charAt(0).toUpperCase() + what.slice(1) + (r.strategy ? " — " + actStrat(r) : "") + actOn(r),
           tone: /error|fail/.test(String(r.event)) ? "neg" : ""};

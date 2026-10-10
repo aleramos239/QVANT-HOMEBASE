@@ -147,7 +147,7 @@ def test_the_activity_list_and_the_last_event_time_leave_out_only_the_named_lab_
     for ev in ("lab_event_error", "lab_intake_error", "lab_save_error", "lab_carry_fill", "lab_sidecar_replaced", "lab_unbooked", "lab_unreadable",
                "lab_restore_error", "lab_start_error", "lab_key_error", "lab_store_error", "lab_view_error", "lab_open_without_cfg", "lab_side"):
         assert f'{ev}: labAct("{ev}")' in act, ev
-    assert "A Lab strategy event: check the Desk's log." in HTML
+    assert "Something happened to a Lab strategy: see the Activity log." in HTML
 
 
 def test_the_risk_field_says_what_a_dollar_amount_looks_like():

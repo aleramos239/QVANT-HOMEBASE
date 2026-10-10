@@ -240,7 +240,8 @@
   var NEXT_SESSION = "Starts with the next session.";
   var STOPPED_TODAY = "Stopped for today.";            // the Desk's own sentence for a stop that has no other cause
   var QUIET_STOPS = ["", "off", STOPPED_TODAY];         // a stop that only means "not any more today": ON, it starts with the next session
-  var OTHER_DESK = "Another Desk is running on this store.";
+  var OTHER_DESK = "Another copy of the Desk is using the Lab strategies.";
+  var READ_ONLY_HERE = "Another copy of the Desk is using the Lab strategies. They are read-only here.";     // the Desk's own (labdesk.py)
   var LIMITS_CAPTION = "Set the limits first. Then assign an account.";
   var NOTE_SHADOW = "From the Lab. With no account it runs in shadow: it writes down its orders and nothing is sent.";
   var NOTE_ACCOUNTS = "From the Lab. Its orders go to the accounts below. Every entry carries a stop held at the broker.";
@@ -255,7 +256,7 @@
   // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request) and a strategy
   // appearing on the Desk (its row says so). Everything else shows -- an event with no words of its own gets LAB_UNKNOWN, never nothing.
   var HIDDEN_EVENTS = ["lab_event", "lab_event_done", "lab_added"];
-  var LAB_UNKNOWN = "A Lab strategy event: check the Desk's log.";
+  var LAB_UNKNOWN = "Something happened to a Lab strategy: see the Activity log.";
   var NOT_ANSWERING_DESK = "The Desk is not answering.";
   var NOT_ON_DESK = "That strategy is not on the Desk.";
   var CLOSE_OUT = "Its close order is already out.";
@@ -635,9 +636,9 @@
     lab_store_error: function () { return ["The Desk cannot use the Lab store. Check it.", "neg"]; },
     lab_view_error: function (r, who) { return [who + ": the Desk had a problem showing it. Check it.", "neg"]; },
     lab_refresh_error: function () { return ["The Desk could not read its Lab strategies just now. Check it.", "neg"]; },
-    lab_foreign_key: function () { return ["A Lab file holds an entry that is not a Lab strategy's. Check it.", "warn"]; },
-    lab_store_busy: function () { return [OTHER_DESK.replace(/\.$/, "") + ": Lab strategies are read-only here.", "warn"]; },
-    lab_store_owned: function () { return ["This Desk holds the Lab store now."]; },
+    lab_foreign_key: function () { return ["A Lab file names something that is not a Lab strategy. Check it.", "warn"]; },
+    lab_store_busy: function () { return [READ_ONLY_HERE, "warn"]; },
+    lab_store_owned: function () { return ["This Desk is in charge of the Lab strategies now."]; },
     lab_side: function (r) { return [r.on === false ? "Lab strategies are off for this Desk." : "Lab strategies are on for this Desk."]; },
     lab_exit_unconfirmed: function (r, who, on) { return [who + ": the close was not confirmed" + on + ". Its stop is still working.", "neg"]; },
     lab_cancel_raced_fill: function (r, who, on) { return [who + ": an entry filled as it was cancelled" + on, "warn"]; },

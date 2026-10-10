@@ -76,10 +76,10 @@ SET_LIMITS_FIRST = "Set the limits first."
 FLATTEN_FIRST = "Flatten it first."
 NOT_NOW = "Not 09:20-09:35 ET. Try again after 09:35."
 NOT_SAVED = "Could not save it. Try again."
-RECORD_CHANGED = "The Lab record changed. Try again."
+RECORD_CHANGED = "This strategy was promoted again. Try again."
 BOOKED_FOR_MORE = "An account is booked for more. Lower its size first."
-OTHER_DESK = "Another Desk is running on this store."
-READ_ONLY_HERE = "Another Desk is running on this store: Lab strategies are read-only here."
+OTHER_DESK = "Another copy of the Desk is using the Lab strategies."
+READ_ONLY_HERE = "Another copy of the Desk is using the Lab strategies. They are read-only here."
 CANNOT_READ = "The Desk cannot read it."
 CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
@@ -119,6 +119,7 @@ BROKER_REFUSED = "The broker refused it: "
 OPEN_WITHOUT_CFG = "A Lab trade is open but its strategy is not on this Desk. Check it."
 NOT_READ = "The request does not read."
 PLACING_UNKNOWN = "placement outcome unknown after a restart — check the broker"     # the engine's own note
+PLACED_UNKNOWN = "The Desk restarted while this entry was going out. Check it at the broker."     # the page's words for it
 OLD_ORDER_WORKING = "An old order of this trade is still working. Cancel it first."     # the engine's own
 EXITS = ("cancel", "flatten", "stop")    # always applied, in every desk state
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -212,7 +213,7 @@ class LabDesk:
     def _must_own(self) -> None:
         """For limits, the book, switching ON and Remove. Nothing here takes the store: a desk becomes the owner only
         in a refresh, which re-reads every sidecar under its own lock first. Until then the answer is a refusal --
-        "Another Desk is running on this store." while another desk holds it or the take-over's re-read is still owed."""
+        "Another copy of the Desk is using the Lab strategies." while another desk holds it or the take-over's re-read is still owed."""
         if not self.on:
             raise Refused(SWITCHED_OFF)
         if labcfg.ready(self.cfg):
@@ -662,6 +663,8 @@ class LabDesk:
         words>", "placement did not finish: ...") is not a sentence for the owner: he reads "The entry was not
         placed. Check it." and the note rides in `detail` (200 characters at most). Anything else is as it is. (The
         stream's rows keep the engine's own `why`: _snap.)"""
+        if why == PLACING_UNKNOWN:           # it may or may not be at the broker: never "not placed", never "refused"
+            return {"why": PLACED_UNKNOWN}
         if isinstance(why, str) and why.startswith(RAW_NOTES):
             return {"why": NOT_PLACED, "detail": why[:200]}
         return {"why": why}

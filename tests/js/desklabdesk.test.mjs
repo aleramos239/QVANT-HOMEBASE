@@ -193,13 +193,13 @@ test('the picker is disabled with its caption until limits exist', () => {
   assert.match(html, /Edit limits/);
 });
 
-test('read_only: "Another Desk is running on this store." and Limits, the picker and Remove are disabled; the switch and Flatten are not', () => {
+test('read_only: "Another copy of the Desk is using the Lab strategies." and Limits, the picker and Remove are disabled; the switch and Flatten are not', () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ read_only: true }) } });
   const html = t.view();
-  assert.match(html, /<div class="sd-note">Another Desk is running on this store\.<\/div>/);
+  assert.match(html, /<div class="sd-note">Another copy of the Desk is using the Lab strategies\.<\/div>/);
   assert.match(html, /openLabLimits\([^)]*\)" disabled>Edit limits/);
   assert.match(html, /removeLabStrat\([^)]*\)" disabled title/);
-  assert.match(html, /disabled title="Another Desk is running on this store\.">\+ Assign an account/);
+  assert.match(html, /disabled title="Another copy of the Desk is using the Lab strategies\.">\+ Assign an account/);
   assert.doesNotMatch(html, /toggleAsgMenu|pickAsg/);
   assert.match(html, /toggleStrat\(&quot;lab_nq_orb&quot;, false\)/, 'switching off is never refused');
   assert.doesNotMatch(html, /flattenStrat\([^)]*\)"[^>]*disabled/);
@@ -314,10 +314,10 @@ test('switching OFF says what happens to orders and an open position, and never 
 });
 
 test('a refused switch-on shows the Desk\'s own sentence; a switch-off that did not land is still the red alert', async () => {
-  const on = load({ answer: { detail: 'The Lab record changed. Try again.' }, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
+  const on = load({ answer: { detail: 'This strategy was promoted again. Try again.' }, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
   await on.api.toggleStrat('lab_nq_orb', true);
-  assert.deepEqual(on.toasts, ['The Lab record changed. Try again.']);
-  const off = load({ answer: { detail: 'The Lab record changed. Try again.' } });
+  assert.deepEqual(on.toasts, ['This strategy was promoted again. Try again.']);
+  const off = load({ answer: { detail: 'This strategy was promoted again. Try again.' } });
   await off.api.toggleStrat('lab_nq_orb', false);
   assert.equal(off.alerts.length, 1);
   assert.match(off.alerts[0], /NQ ORB NOT switched off/);
@@ -561,7 +561,7 @@ test('the Activity page reads a Lab line through the page\'s own formatter', () 
   // a desklab.js that did not load: the generic line, never a blank row
   const bare = vm.createContext({ console, ST: ctx.ST, $: ctx.$, window: { getSelection: () => '' } });
   vm.runInContext(HELPERS + SLICE('/* ---- readiness, as the page shows it (W4) ----', '/* ---- render ---- */') + '\nglobalThis.line = activityLine;', bare);
-  assert.equal(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', account: 'a1', text: 'x' }).text, "A Lab strategy event: check the Desk's log.", 'never a raw name');
+  assert.equal(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', account: 'a1', text: 'x' }).text, "Something happened to a Lab strategy: see the Activity log.", 'never a raw name');
 });
 
 test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helper, and the figures box says Backtest', () => {
@@ -745,9 +745,9 @@ test('N2 each Lab event reaches the real Activity feed as a plain line; an event
   }
   assert.equal(ctx.line({ event: 'lab_unbooked', ...sample }).text, 'The Desk took Lucid Eval #1, Apex 2 off NQ ORB.');
   assert.deepEqual(plain(ctx.line({ event: 'lab_key_error', error: 'x' })), { text: "The Lab runner's key could not be made. Check it.", tone: 'neg' });
-  assert.deepEqual(plain(ctx.line({ event: 'lab_zzz_new' })), { text: "A Lab strategy event: check the Desk's log.", tone: 'warn' });
+  assert.deepEqual(plain(ctx.line({ event: 'lab_zzz_new' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' });
   const bare = mkctx(null);
-  assert.deepEqual(plain(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', text: 'x' })), { text: "A Lab strategy event: check the Desk's log.", tone: 'warn' }, 'desklab.js missing: still a plain line, never a raw name');
+  assert.deepEqual(plain(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', text: 'x' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' }, 'desklab.js missing: still a plain line, never a raw name');
 });
 
 test('c4 the Today headline and the day bar are what they were when a Lab strategy only runs in shadow', () => {

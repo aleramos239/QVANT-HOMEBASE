@@ -214,7 +214,7 @@ def test_the_switch_writes_the_stores_record_and_never_config_json(client):
 def test_switching_on_a_record_promoted_again_is_refused(client):
     store.put(rec(promoted="2026-10-10T08:00:00+00:00", sha256="cd"))            # promoted again behind the desk's back
     r = client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
-    assert r.status_code == 409 and r.json()["detail"] == "The Lab record changed. Try again."
+    assert r.status_code == 409 and r.json()["detail"] == "This strategy was promoted again. Try again."
     assert store.get("pp_orb")["enabled"] is False and client.cfg.strategies[LAB].enabled is False
     asyncio.run(client.labdesk.refresh())                                        # the desk reads the new promotion
     assert client.post("/api/strategy", json={"strategy": LAB, "enabled": True}).status_code == 200
@@ -290,7 +290,7 @@ def test_a_flat_time_before_the_window_end_is_refused_and_at_it_is_kept(client):
 @pytest.mark.parametrize("change, sentence", [
     ({"max_trades_day": 0}, "Trades a day: a whole number from 1 to 20."),
     ({"max_qty": 11}, "Contracts: a whole number from 1 to 10."),
-    ({"max_risk_usd": 0}, "At risk per trade: a dollar amount above 0."),
+    ({"max_risk_usd": 0}, "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
     ({"last_entry_et": "15:55"}, "No new trade after: a time like 11:00, before the flat time."),
     ({"flat_et": "16:00"}, "Flat by: a time like 15:55, no later than 15:55.")])
 def test_bad_limits_are_refused_with_their_sentence_and_nothing_is_kept(client, change, sentence):
@@ -817,7 +817,7 @@ import time
 L3 = {**LIMITS, "max_qty": 3}
 BOOKED_FOR_MORE = "An account is booked for more. Lower its size first."
 NOT_SAVED = "Could not save it. Try again."
-OTHER_DESK = "Another Desk is running on this store."
+OTHER_DESK = "Another copy of the Desk is using the Lab strategies."
 CANNOT_READ = "The Desk cannot read it."
 CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 
@@ -1016,7 +1016,7 @@ def test_the_routes_of_a_second_desk_answer_another_desk_is_running(paths):
         d = c2.get("/api/status").json()
         assert d["strategies"][LAB]["lab"]["read_only"] is True
         assert {"level": "warn", "label": "Lab strategies",
-                "detail": "Another Desk is running on this store: Lab strategies are read-only here."} in d["readiness"]["checks"]
+                "detail": "Another copy of the Desk is using the Lab strategies. They are read-only here."} in d["readiness"]["checks"]
         d1 = c1.get("/api/status").json()
         assert d1["strategies"][LAB]["lab"]["read_only"] is False
         assert not [x for x in d1["readiness"]["checks"] if x["label"] == "Lab strategies"]
@@ -1159,9 +1159,9 @@ def test_a_strategy_whose_record_stops_reading_shows_check_and_cannot_be_switche
 
 
 @pytest.mark.parametrize("raw, sentence", [
-    ('"max_risk_usd": 1' + "0" * 400, "At risk per trade: a dollar amount above 0."),
-    ('"max_risk_usd": 1e999', "At risk per trade: a dollar amount above 0."),
-    ('"max_risk_usd": NaN', "At risk per trade: a dollar amount above 0."),
+    ('"max_risk_usd": 1' + "0" * 400, "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
+    ('"max_risk_usd": 1e999', "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
+    ('"max_risk_usd": NaN', "At risk per trade: a dollar amount above 0, like 300 or 300.50."),
     ('"max_trades_day": 1' + "0" * 400, "Trades a day: a whole number from 1 to 20.")])
 def test_an_absurd_number_in_a_limits_body_is_a_400_never_a_500(client, raw, sentence):
     rest = {k: v for k, v in LIMITS.items() if f'"{k}"' not in raw}
@@ -1350,7 +1350,7 @@ def test_the_status_blocks_why_carries_no_error_text(client, monkeypatch):
 # Fix round 2
 # =====================================================================================================================
 READ_ONLY_LINE = {"level": "warn", "label": "Lab strategies",
-                  "detail": "Another Desk is running on this store: Lab strategies are read-only here."}
+                  "detail": "Another copy of the Desk is using the Lab strategies. They are read-only here."}
 
 
 def no_accounts_cfg():

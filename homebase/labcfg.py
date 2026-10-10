@@ -76,7 +76,7 @@ HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 SAY_TRADES = "Trades a day: a whole number from 1 to 20."
 SAY_QTY = "Contracts: a whole number from 1 to 10."
-SAY_RISK = "At risk per trade: a dollar amount above 0."
+SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
 SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
 SAY_WINDOW = "Its window ends after the flat time. Shorten the window to end by 15:55."

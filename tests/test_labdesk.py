@@ -214,11 +214,11 @@ def test_the_mark_must_be_the_sidecars_too(tmp_path):
 def test_a_desk_that_does_not_own_the_store_takes_no_entry(tmp_path):
     d = mkdesk(tmp_path)
     d.cfg.__dict__["_lab_owed"] = True                                             # it holds the lock and owes its re-read
-    assert refusal(send(d, entry())) == "Another Desk is running on this store."
+    assert refusal(send(d, entry())) == "Another copy of the Desk is using the Lab strategies."
     d.cfg.__dict__["_lab_owed"] = False
     d.cfg.__dict__["_lab_store"] = "busy"
     lease, d.cfg.__dict__["_lab_lease"] = d.cfg.__dict__["_lab_lease"], None       # another desk holds it
-    assert refusal(send(d, entry(), seq=2)) == "Another Desk is running on this store."
+    assert refusal(send(d, entry(), seq=2)) == "Another copy of the Desk is using the Lab strategies."
     d.cfg.__dict__["_lab_store"] = "unknown"                                       # the lock could not even be tried
     assert refusal(send(d, entry(), seq=3)) == "The Desk cannot check this order."
     assert placed(d) == []

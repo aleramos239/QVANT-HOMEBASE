@@ -512,8 +512,8 @@ test('deskDot: off / shadow / live / warn, in step with the words', () => {
   assert.equal(D.deskDot(null), 'warn');
 });
 
-test('read_only: "Another Desk is running on this store." shows from the field; the picker and Limits are locked then', () => {
-  assert.equal(D.OTHER_DESK, 'Another Desk is running on this store.');
+test('read_only: "Another copy of the Desk is using the Lab strategies." shows from the field; the picker and Limits are locked then', () => {
+  assert.equal(D.OTHER_DESK, 'Another copy of the Desk is using the Lab strategies.');
   assert.equal(D.readOnly(deskStrat({ read_only: true })), true);
   assert.equal(D.readOnly(deskStrat({ read_only: false })), false);
   assert.equal(D.readOnly(deskStrat({ read_only: 1 })), false, 'only true is true');
@@ -524,8 +524,8 @@ test('the picker is locked with the caption until limits exist, and when another
   assert.equal(D.LIMITS_CAPTION, 'Set the limits first. Then assign an account.');
   assert.deepEqual({ ...D.accountsLock(deskStrat({ limits: null })) }, { locked: true, caption: 'Set the limits first. Then assign an account.' });
   assert.deepEqual({ ...D.accountsLock(deskStrat()) }, { locked: false, caption: '' });
-  assert.deepEqual({ ...D.accountsLock(deskStrat({ read_only: true })) }, { locked: true, caption: 'Another Desk is running on this store.' });
-  assert.deepEqual({ ...D.accountsLock(deskStrat({ read_only: true, limits: null })) }, { locked: true, caption: 'Another Desk is running on this store.' });
+  assert.deepEqual({ ...D.accountsLock(deskStrat({ read_only: true })) }, { locked: true, caption: 'Another copy of the Desk is using the Lab strategies.' });
+  assert.deepEqual({ ...D.accountsLock(deskStrat({ read_only: true, limits: null })) }, { locked: true, caption: 'Another copy of the Desk is using the Lab strategies.' });
   assert.equal(D.accountsLock(deskStrat({ state: 'check', limits: null })).locked, true, 'check it, no limits: still locked');
   assert.equal(D.accountsLock(null).locked, true, 'fail closed');
 });
@@ -957,13 +957,13 @@ test('N2 the plain lines of the Lab events that had none', () => {
   assert.deepEqual(A.lab_store_error({}, ''), ['The Desk cannot use the Lab store. Check it.', 'neg']);
   assert.deepEqual(A.lab_view_error({}, 'NQ ORB'), ['NQ ORB: the Desk had a problem showing it. Check it.', 'neg']);
   assert.deepEqual(A.lab_refresh_error({}, ''), ['The Desk could not read its Lab strategies just now. Check it.', 'neg']);
-  assert.deepEqual(A.lab_foreign_key({}, ''), ["A Lab file holds an entry that is not a Lab strategy's. Check it.", 'warn']);
-  assert.deepEqual(A.lab_store_busy({}, ''), ['Another Desk is running on this store: Lab strategies are read-only here.', 'warn']);
-  assert.deepEqual(A.lab_store_owned({}, ''), ['This Desk holds the Lab store now.']);
+  assert.deepEqual(A.lab_foreign_key({}, ''), ["A Lab file names something that is not a Lab strategy. Check it.", 'warn']);
+  assert.deepEqual(A.lab_store_busy({}, ''), ['Another copy of the Desk is using the Lab strategies. They are read-only here.', 'warn']);
+  assert.deepEqual(A.lab_store_owned({}, ''), ['This Desk is in charge of the Lab strategies now.']);
   assert.deepEqual(A.lab_side({ on: true }, ''), ['Lab strategies are on for this Desk.']);
   assert.deepEqual(A.lab_side({ on: false }, ''), ['Lab strategies are off for this Desk.']);
   assert.deepEqual(A.lab_removed({}, 'NQ ORB'), ['NQ ORB taken off the Desk']);
-  assert.equal(D.LAB_UNKNOWN, "A Lab strategy event: check the Desk's log.");
+  assert.equal(D.LAB_UNKNOWN, "Something happened to a Lab strategy: see the Activity log.");
 });
 
 test('fix 3 the risk sentence', () => {
@@ -979,4 +979,16 @@ test('final wave G1: runner_down with the Desk\'s sentence reads "Runner down" a
   assert.equal(D.deskDot(s), 'warn');
   assert.equal(D.stateNote(deskStrat({ state: 'runner_down', why: null })), '', 'the runner rule\'s own runner_down has no sentence');
   assert.equal(D.stateNote(deskStrat({ state: 'waiting', why: say })), '', 'only check and runner_down carry a sentence');
+});
+
+test('final wave M-W: the words an owner reads', () => {
+  const A = D.activity;
+  assert.equal(D.OTHER_DESK, 'Another copy of the Desk is using the Lab strategies.');
+  assert.deepEqual({ ...D.accountsLock(deskStrat({ read_only: true })) }, { locked: true, caption: 'Another copy of the Desk is using the Lab strategies.' });
+  assert.deepEqual(A.lab_store_busy({}, ''), ['Another copy of the Desk is using the Lab strategies. They are read-only here.', 'warn']);
+  assert.deepEqual(A.lab_store_owned({}, ''), ['This Desk is in charge of the Lab strategies now.']);
+  assert.deepEqual(A.lab_foreign_key({}, ''), ['A Lab file names something that is not a Lab strategy. Check it.', 'warn']);
+  assert.equal(D.LAB_UNKNOWN, 'Something happened to a Lab strategy: see the Activity log.');
+  assert.ok(HTML.includes('return {text: "Something happened to a Lab strategy: see the Activity log.", tone: "warn"};'));
+  assert.ok(!HTML.includes("check the Desk's log"));
 });
