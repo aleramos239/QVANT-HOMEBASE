@@ -1075,6 +1075,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         _app.state.lab_key = None
 
         def _lab_key() -> None:
+            if not labdesk.on:                       # an OFF desk makes no key: the gate answers 503 and the runner
+                return                               # has none to read (it stays in shadow)
             _app.state.lab_key, lab_key_err = desk_api.ensure_key(state_dir() / desk_api.LAB_KEY_FILE)
             if lab_key_err:
                 engine.journal("lab_key_error", error=lab_key_err)

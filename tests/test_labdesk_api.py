@@ -149,14 +149,21 @@ def test_the_page_guard_applies_to_the_runners_routes_too(client):
 
 # ---------------------------------------------------------------- the Lab side off
 def test_with_the_lab_side_off_every_route_says_so_behind_the_gate(paths):
+    """Final wave M-G5: an OFF desk makes no runner's key, so its gate has none to check: 503 for every route, with
+    or without a key (the runner, with no key file to read, stays in shadow)."""
     app, clock = make_app(lab=False)
     with TestClient(app, base_url=DESK) as c:
-        H = {"X-Homebase-Key": (paths / "lab.key").read_text().strip()}
+        assert not (paths / desk_api.LAB_KEY_FILE).exists()
         for m, url in LAB_ROUTES:
             send = getattr(c, m)
             kw = {"json": {}} if m == "post" else {}
-            assert send(url, **kw).status_code == 401, url                       # the gate comes first
-            r = send(url, headers=H, **kw)
+            assert send(url, **kw).status_code == 503, url                       # the gate comes first: no key here
+            assert send(url, headers={"X-Homebase-Key": "0" * 64}, **kw).status_code == 503, url
+            assert send(url, headers={"X-Homebase-Key": "0" * 64, "Origin": DESK}, **kw).status_code == 403, url
+        app.state.lab_key = "k" * 64                                             # a key that is there all the same:
+        for m, url in LAB_ROUTES:                                                # the routes still say the side is off
+            kw = {"json": {}} if m == "post" else {}
+            r = getattr(c, m)(url, headers={"X-Homebase-Key": "k" * 64}, **kw)
             assert (r.status_code, r.json()["detail"]) == (409, OFF), url
         r = c.post("/api/lab-clear", json={"strategy": LAB, "account": "a1"})
         assert (r.status_code, r.json()["detail"]) == (409, OFF)

@@ -16,7 +16,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
-from homebase import labcfg, labdesk
+from homebase import desk_api, labcfg, labdesk
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.engine import Engine
 from homebase.labdesk import LabDesk, Refused
@@ -1654,6 +1654,7 @@ def test_with_the_lab_side_off_the_desk_is_what_it_was_before_this_task(paths, d
     assert not (desklab_root / "desk.lock").exists() and labcfg.store_state(app.state.cfg) is None
     assert "_lab" not in vars(app.state.cfg) and set(app.state.cfg.strategies) == {"nq930"}
     assert "lab_" not in (paths / "config.json").read_text()
+    assert not (paths / desk_api.LAB_KEY_FILE).exists()                          # final wave M-G5: no runner's key made
 
 
 def test_the_flag_is_a_file_in_this_checkouts_state_folder(paths):
