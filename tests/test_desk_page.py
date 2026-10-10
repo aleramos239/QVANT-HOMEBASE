@@ -85,8 +85,9 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 
 def test_the_asset_versions_are_bumped():
-    assert '<script src="/static/desklab.js?v=7"></script>' in HTML                  # 7: a strategy carries its own limits
-    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5, 6))
+    assert '<script src="/static/desklab.js?v=8"></script>' in HTML                  # 8: adjustable settings in the Setup panel
+    assert '<script src="/static/desklabset.js?v=1"></script>' in HTML
+    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5, 6, 7))
     assert '"version": 8' in (STATIC / "apple" / "manifest.json").read_text()      # 8: the wave review's words (N9)
 
 
@@ -127,7 +128,7 @@ def test_the_words_on_the_lab_part_of_the_page_never_say_round_sidecar_intent_or
 
 def test_the_activity_map_has_the_labs_journal_lines():
     act = _section("const ACTIVITY = {", "function activityLine(")
-    for ev in ("lab_refused", "lab_runner_down", "lab_runner_back", "lab_stopped", "lab_flatten", "lab_cancelled", "lab_limits_set"):
+    for ev in ("lab_refused", "lab_runner_down", "lab_runner_back", "lab_stopped", "lab_flatten", "lab_cancelled", "lab_limits_set", "lab_settings_set"):
         assert f'{ev}: labAct("{ev}")' in act, ev
 
 

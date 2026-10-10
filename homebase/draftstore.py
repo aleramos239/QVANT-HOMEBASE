@@ -334,7 +334,8 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 # ---------------------------------------------------------------- static metadata (never runs the code)
 
 _CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
-                "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool}
+                "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
+                "desk_settings": (tuple, list)}
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 
 
@@ -408,6 +409,12 @@ def static_meta(source: str) -> dict:
             meta["inputs"] = [_input(c, i) for i, c in enumerate(body[0].value.elts)]
     if not meta.get("root"):
         raise StaticError('the strategy needs a literal `root = "NQ"` (or another archive root)')
+    if "desk_settings" in meta:      # the inputs the Desk's Setup panel may change once it is promoted (2026-10-10)
+        keys = {i["key"] for i in meta["inputs"]}
+        names = meta["desk_settings"]
+        if not all(isinstance(k, str) for k in names) or len(names) > 6 or len(set(names)) != len(names) \
+                or any(k not in keys for k in names):
+            raise StaticError("desk_settings: up to 6 different input keys, each one of this strategy's inputs()")
     if "session_window" in meta and len(meta["session_window"]) != 2:
         raise StaticError("session_window: (start, end)")
     return meta

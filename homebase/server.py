@@ -1870,6 +1870,21 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 
+    @app.post("/api/lab-settings")
+    async def lab_settings(request: Request):
+        """Change the settings a promoted Lab strategy declared adjustable: {strategy, settings: {key: value}}. A bad
+        key or value is a 400 with its sentence; refused (409) while its session runs, 09:20-09:35 ET on weekdays,
+        and while it has a round open. Takes effect from its next session."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy, settings}")
+        try:
+            return await labdesk.set_settings(str(body.get("strategy") or ""), body.get("settings"))
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     @app.post("/api/lab-remove")
     async def lab_remove(request: Request):
         """Take a promoted Lab strategy off the Desk: {strategy}. Its accounts are unassigned, its record and

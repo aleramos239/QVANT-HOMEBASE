@@ -580,7 +580,7 @@
     var mark = Array.isArray(lab.mark) ? lab.mark : [], sha = text(mark[0]);
     // A strategy that carries its own limits has none to show: its size and its settings are the setup.
     var own = lab.auto === true && isObj(lab.params);
-    var limitRows = own ? [["Contracts", l[1].v]].concat(paramRows(lab.params)) : [
+    var limitRows = own ? [["Contracts", l[1].v]].concat(paramRows(lab.params, lab.settings)) : [
       ["Trades a day", l[0].v],
       ["Most contracts", l[1].v],
       ["Most at risk", l[2].v],
@@ -598,8 +598,11 @@
     ]);
   }
   // The settings a strategy was promoted with, one row each: "stop pts  25".
-  function paramRows(params) {
-    return Object.keys(params).map(function (k) {
+  // The ones the Desk lets the owner change (`settings`) are controls in the Setup panel, not read-only rows.
+  function paramRows(params, settings) {
+    var skip = {};
+    (Array.isArray(settings) ? settings : []).forEach(function (s) { if (isObj(s) && typeof s.key === "string") skip[s.key] = true; });
+    return Object.keys(params).filter(function (k) { return !skip[k]; }).map(function (k) {
       var v = params[k];
       return [k.replace(/_/g, " "), v === true ? "on" : v === false ? "off" : text(String(v))];
     });
@@ -627,6 +630,10 @@
     },
     lab_cancelled: function (r, who, on) {
       return num(r.part) ? [who + " entry cancelled" + on + " — part of it had filled", "warn"] : [who + " entry cancelled" + on];
+    },
+    lab_settings_set: function (r, who) {
+      var s = isObj(r.settings) ? Object.keys(r.settings).map(function (k) { return k.replace(/_/g, " ") + " " + text(String(r.settings[k])); }) : [];
+      return [who + " setting changed: " + (s.join(", ") || "none") + ". It applies from its next session."];
     },
     lab_limits_set: function (r, who) {
       var l = r.limits;

@@ -143,6 +143,15 @@ def auto_limits(trades) -> dict | None:
     return {"max_trades_day": max(1, min(20, max(per.values())))} if per else None
 
 
+def settings_of(meta: dict) -> list:
+    """The inputs a draft declared as `desk_settings`, as the Desk's Setup panel needs them to draw a control and to
+    check a value: [{key, label, type, default, min, max, step, choices}]. Empty for a draft that declares none."""
+    want = list(meta.get("desk_settings") or ())
+    by = {i.get("key"): i for i in meta.get("inputs") or [] if isinstance(i, dict)}
+    return [{k: by[key].get(k) for k in ("key", "label", "type", "default", "min", "max", "step", "choices")}
+            for key in want if key in by]
+
+
 def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, notes: list,
              now: dt.datetime | None = None) -> dict:
     """What is kept when a draft is promoted: its text as it was backtested, the settings and size of that run, and the
@@ -154,13 +163,17 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
     auto = auto_limits(bundle.get("trades")) or {"max_trades_day": OWN_TRADES_DAY}
-    return {"auto_limits": auto, "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
+    snap = {"auto_limits": auto, "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},
             "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": False,
             "commission": run.get("commission"), "slippage_ticks": run.get("slippage_ticks"),
             "session_window": list(meta.get("session_window") or DEFAULT_WINDOW), "bar_minutes": meta.get("bar_minutes") or 0}
+    declared = settings_of(meta)
+    if declared:                                  # only a strategy that declares some carries the key: older records are as before
+        snap["settings"] = declared
+    return snap
 
 
 def put(rec: dict, at=None) -> dict:

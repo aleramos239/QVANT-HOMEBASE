@@ -766,6 +766,26 @@ test('deskSetupRows: a strategy with its own limits lists its size and settings,
   assert.equal(D.accountsLock(own).locked, false);                      // its own limits: accounts can be assigned
 });
 
+test('deskSetupRows: the settings the Desk lets the owner change are controls, not read-only rows', () => {
+  const settings = [{ key: 'open_min', label: 'Opening candle (minutes)', type: 'choice', choices: ['1', '5'] }, { key: 'big_body', label: 'Big', type: 'float' }];
+  const own = deskStrat({ mode_today: null, auto: true, settings, params: { open_min: '5', big_body: 25, stop_pts: 25, m_prev: 6 } });
+  const rows = D.deskSetupRows(own, row(), []);
+  assert.deepEqual(rows.slice(3, 6).map((r) => r[0]), ['Contracts', 'stop pts', 'm prev']);
+  assert.equal(rows.some((r) => /open min|big body/.test(r[0])), false);
+  // no `settings` on the block (an older Desk, or a strategy that declares none): every setting is a row, as before
+  const old = D.deskSetupRows(deskStrat({ mode_today: null, auto: true, params: { open_min: '5' } }), row(), []);
+  assert.equal(old.some((r) => r[0] === 'open min'), true);
+});
+
+test('the activity line of a changed setting', () => {
+  const A = D.activity;
+  assert.deepEqual(A.lab_settings_set({ settings: { open_min: '1' } }, 'NQ 5m', ''),
+    ['NQ 5m setting changed: open min 1. It applies from its next session.']);
+  assert.deepEqual(A.lab_settings_set({ settings: { open_min: '1', big_body: 30 } }, 'N', '')[0],
+    'N setting changed: open min 1, big body 30. It applies from its next session.');
+  assert.deepEqual(A.lab_settings_set({}, 'N', ''), ['N setting changed: none. It applies from its next session.']);
+});
+
 test('the activity lines of the Lab\'s journal events, in simple words', () => {
   const A = D.activity;
   assert.deepEqual(A.lab_refused({ text: 'The price is already past this entry.', account: 'a1' }, 'NQ ORB', ' on APEX…048'), ['NQ ORB order refused on APEX…048 — The price is already past this entry.', 'warn']);
