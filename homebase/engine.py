@@ -1866,10 +1866,51 @@ class Engine:
                     data = json.loads(p.read_text())
                     if isinstance(data, dict):
                         mem = {str(k): v for k, v in data.items() if isinstance(v, dict)}
+                        for k, v in mem.items():
+                            self._lab_coerce(v, carried_key="#c" in k)
             except Exception as e:  # noqa: BLE001 -- lost extras mean "not clean", never a crash
                 print(f"homebase engine: reading the Lab rounds file failed: {e!r}", file=sys.stderr)
             self._lab = mem
         return mem
+
+    @staticmethod
+    def _lab_coerce(x: dict, carried_key: bool = False) -> None:
+        """A file is only text: every value the section leans on is given its type back. One that is of the
+        wrong type takes the safe value AND makes the round not clean (never an exception on every tick). The
+        safe value of "this close was sent" and of "this is a carried block" is yes."""
+        def num(v) -> bool:
+            return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v
+
+        bad = False
+        for k, typ in (("cancelled", list), ("legs", dict), ("iid", dict)):
+            if k in x and not isinstance(x[k], typ):
+                x[k], bad = typ(), True
+        if any(v not in ("Buy", "Sell") for v in x.get("cancelled") or []):
+            x["cancelled"], bad = [v for v in x["cancelled"] if v in ("Buy", "Sell")], True
+        if any(not isinstance(v, dict) for v in (x.get("legs") or {}).values()):
+            x["legs"], bad = {k: v for k, v in x["legs"].items() if isinstance(v, dict)}, True
+        if "round" in x and not (isinstance(x["round"], int) and not isinstance(x["round"], bool)):
+            x["round"], bad = None, True
+        for k in ("placed_ms", "entry_ms", "exit_ms"):
+            if x.get(k) is not None and not num(x[k]):
+                x[k], bad = None, True
+        for k in ("close_sent_ms", "gone_ms"):
+            if x.get(k) is not None and not num(x[k]):
+                x[k], bad = 1, True                  # it may have been sent: never a second one
+        for k in ("clean", "check", "unconfirmed", "close_ok", "blind", "move"):
+            if k in x and not isinstance(x[k], bool):
+                x[k], bad = k not in ("clean", "move"), True
+        if x.get("carry") is not None and not isinstance(x["carry"], dict):
+            # under a block's own key it stays a block; on a round of today it is no block (the round is its own)
+            x["carry"], bad = ({"date": None, "status": None, "orders": []} if carried_key else None), True
+        elif isinstance(x.get("carry"), dict) and not isinstance(x["carry"].get("orders"), list):
+            x["carry"]["orders"], bad = [], True
+        if x.get("closing") is not None and not isinstance(x["closing"], str):
+            x["closing"] = str(x["closing"])
+        if x.get("why") is not None and not isinstance(x["why"], str):
+            x["why"] = None
+        if bad:
+            x["check"], x["clean"], x["why"] = True, False, LAB_CANNOT_CHECK
 
     def _lab_save(self, strict: bool = False) -> None:
         """Write the extras whole (a temp file, then a rename). strict: raise when it cannot be written (a new
@@ -1927,6 +1968,8 @@ class Engine:
         for k, v in self._lab_blank(0).items():          # a file written by an older build: fill what it lacks
             if k not in x:
                 x[k] = v
+        if x.get("round") is None:
+            x["round"] = self._lab_round_no(st)
         return x
 
     def _lab_stamp(self, st: DayState, x: dict) -> bool:
@@ -2210,6 +2253,9 @@ class Engine:
     def lab_rounds(self, name: str) -> list[dict]:
         """Today's rounds of a Lab strategy, oldest first: one row per round per account. Memory only."""
         out = []
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or cfg.kind != LAB:           # never extras for a strategy of another kind
+            return out
         self._lab_roll()
         for st in self.day_states(name):
             if st.status == "idle":
@@ -2234,6 +2280,9 @@ class Engine:
     def lab_open(self, name: str) -> list[str]:
         """Accounts with a round of this strategy that is placing, placed or live, or whose orders are not checked
         (a block carried from an earlier day is one)."""
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or cfg.kind != LAB:
+            return []
         self._lab_roll()
         return sorted({st.account for st in self.day_states(name)
                        if st.status in ("placing", "placed", "live") or not self._lab_clean(st)})
@@ -2250,8 +2299,7 @@ class Engine:
             return LAB_BAD_ORDER
         num = self._lab_num
         for g in legs:
-            if not all(hasattr(g, k) for k in ("iid", "side", "entry", "entry_price", "sl_px", "tp_px", "tp_rr",
-                                               "ref_px", "move")):
+            if not isinstance(g, LabLeg) or not isinstance(g.move, bool):
                 return LAB_BAD_ORDER
             if not isinstance(g.iid, int) or isinstance(g.iid, bool) or g.side not in ("Buy", "Sell") \
                     or g.entry not in ("Market", "Stop"):
@@ -2282,6 +2330,14 @@ class Engine:
             if not buy.entry_price > sell.entry_price:
                 return LAB_BAD_ORDER
         return None
+
+    @staticmethod
+    def _lab_clear_reject(err) -> bool:
+        """Did the broker (or the adapter, before sending) clearly refuse this entry? Only the adapters' own fixed
+        phrases count. Anything else -- no words, None, an exception's text, a phrase nobody listed -- is
+        OUTCOME UNKNOWN: the order may exist at the broker under an id nobody recorded."""
+        e = str(err if err is not None else "").strip()
+        return e in LAB_CLEAR_REJECTS and not any(w in e.lower() for w in LAB_UNKNOWN_WORDS)
 
     def _lab_market_taken(self, name: str, cfg: StrategyCfg, account: str) -> Optional[str]:
         """Design A5, at placement: the symbol of another strategy that is booked on this account, or busy on it
@@ -2330,8 +2386,9 @@ class Engine:
         if taken is not None:
             return f"Another strategy trades {taken} on this account."
         today = self._today()                                               # 3
-        if any(self._lab_carried(s) for s in self.day_states(name) if s.account == account):
-            return LAB_CANNOT_CHECK                 # an earlier day's round is not resolved on this account
+        if any(self._archived(s) and (self._lab_carried(s) or not self._lab_clean(s))
+               for s in self.day_states(name) if s.account == account):
+            return LAB_CANNOT_CHECK                 # an earlier round (of today or of a day before) is not resolved
         cur = self.states.get(f"{name}@{account}")
         if cur is not None and cur.date == today and cur.status != "idle":
             if cur.status in ("placing", "placed", "live"):
@@ -2375,6 +2432,11 @@ class Engine:
         cur = self.states.get(key)
         n = 1 + max([int(self._lab_x(s).get("round") or 0) for s in self.day_states(name)
                      if s.account == account and s.status != "idle"], default=0)
+        x = self._lab_blank(n)                      # everything is built BEFORE anything changes: a failure here
+        x["iid"] = {g.side: g.iid for g in legs}    # leaves no state behind, and never one that is "placing"
+        x["legs"] = {g.side: asdict(g) for g in legs}
+        x["move"] = any(g.move for g in legs)
+        x["placed_ms"] = self._lab_ms()
         if cur is not None and cur.date == today and cur.status != "idle":
             self._lab_archive(key, cur)
         else:
@@ -2382,11 +2444,7 @@ class Engine:
             self._lab_mem().pop(key, None)
         st = self._state(name, account)                                     # 4
         st.qty, st.status = qty, "placing"
-        x = self._lab_mem()[key] = self._lab_blank(n)
-        x["iid"] = {g.side: g.iid for g in legs}
-        x["legs"] = {g.side: asdict(g) for g in legs}
-        x["move"] = any(g.move for g in legs)
-        x["placed_ms"] = self._lab_ms()
+        self._lab_mem()[key] = x
         try:                                        # durable BEFORE the order leaves
             self._save()
             self._lab_save(strict=True)
@@ -2408,18 +2466,18 @@ class Engine:
         why = await self._lab_position(name, cfg, account)
         if why is not None:
             return {"ok": False, "round": None, "reason": why}
+        buy, sell = (legs if legs[0].side == "Buy" else legs[::-1]) if len(legs) == 2 else (None, None)
+        reqs = None if buy is None else tuple(
+            OrderRequest(symbol=cfg.symbol, side=g.side, qty=qty, order_type=g.entry, price=g.entry_price,
+                         stop_price=g.sl_px, tp_price=g.tp_px, text="homebase:entry") for g in (buy, sell))
         st, ans = self._lab_open_round(name, cfg, account, qty, legs, max_rounds, source)
         if st is None:
             return ans
         x = self._lab_x(st)
         try:                                                                # 5
-            if len(legs) == 1:
+            if reqs is None:
                 got = await self._place_one(name, cfg, account, qty, legs[0], source, t0)
             else:
-                buy, sell = legs if legs[0].side == "Buy" else legs[::-1]
-                reqs = tuple(OrderRequest(symbol=cfg.symbol, side=g.side, qty=qty, order_type=g.entry,
-                                          price=g.entry_price, stop_price=g.sl_px, tp_price=g.tp_px,
-                                          text="homebase:entry") for g in (buy, sell))
                 got = await self._place(name, cfg, account, qty, buy.entry_price, sell.entry_price, source, t0,
                                         reqs=reqs)
         except Exception as e:  # noqa: BLE001 -- the outcome is unknown
@@ -2437,16 +2495,31 @@ class Engine:
                 x["clean"] = True
             elif len(legs) == 2:                    # _place cancels the survivor and keeps no id: unreadable
                 self._lab_mark_check(st, x, f"a pair's placement failed ({words}); the other leg's id is not kept")
-            elif any(w in words.lower() for w in LAB_UNKNOWN_WORDS):
+            elif not self._lab_clear_reject(words[len("entry: "):] if words.startswith("entry: ") else words):
+                # no answer, an empty one, or words nobody has proven to be a reject: the order may be there
                 self._lab_mark_check(st, x, f"the entry's outcome is unknown ({words})")
-            elif not x.get("check"):                # rejected: nothing is at the broker
+            elif not x.get("check"):                # a clear refusal: nothing is at the broker
                 x["clean"] = True
             self._lab_stamp(st, x)
             self._lab_save()
+        if st.status in ("placed", "live"):
+            for g in legs:                          # I1: every entry has a stop, and the desk must know its order
+                sl_id, tp_id = (st.up_sl_id, st.up_tp_id) if g.side == "Buy" else (st.dn_sl_id, st.dn_tp_id)
+                if not sl_id or (g.tp_px is not None and not tp_id):
+                    x["blind"] = True
+            if x["blind"]:
+                self._lab_mark_check(st, x, "the broker's answer named no stop order (or no target order)",
+                                     why=LAB_NO_STOP_ID)
+                ans = {**ans, "warning": LAB_NO_STOP_ID}
         if isinstance(got, dict) and got.get("ok"):
             return ans
+        if isinstance(got, Exception) and st.status in ("placed", "live", "done"):
+            # S3: the broker acknowledged it and a later step here raised: it IS a trade of this round
+            return {**ans, "warning": f"placed; a later step failed: {type(got).__name__}: {got}"[:200]}
         if st.status == "error" and st.note == "account not connected":
             return {"ok": False, "round": ans["round"], "reason": LAB_NOT_CONNECTED}
+        if len(legs) == 1 and x.get("check"):       # outcome unknown: "refused" would be a guess
+            return {"ok": False, "round": ans["round"], "reason": LAB_BAD_ORDER}
         if isinstance(got, dict) and "rejected: " in str(got.get("reason")):
             return {"ok": False, "round": ans["round"],
                     "reason": "The broker refused it: " + str(got["reason"]).split("rejected: ", 1)[1]}
@@ -2623,8 +2696,9 @@ class Engine:
         if not asked or st.status not in ("placed", "live"):
             return {"ok": True, "state": "none", "actions": acts}
         seen = {s: "cancelled" for s in asked if s in x["cancelled"]}
-        if st.status == "live" and st.entry_side in asked:
-            seen[st.entry_side] = "filled"
+        part = 0
+        if st.status == "live" and st.entry_side in asked and st.qty and st.entry_qty >= st.qty:
+            seen[st.entry_side] = "filled"           # every contract is in: nothing of it is left to cancel
         todo = [s for s in asked if s not in seen]
         res = await asyncio.gather(*(ad.cancel_order_by_id(ids[s]) for s in todo), return_exceptions=True)
         for s, r in zip(todo, res):
@@ -2635,11 +2709,17 @@ class Engine:
         done_now = []
         for s in todo:
             status, filled = states[ids[s]]
-            if status == "Filled" or (status in TERMINAL and filled):
+            got = int(filled or 0) or (int(st.entry_qty or 0) if st.entry_side == s else 0)
+            if status == "Filled":
                 seen[s] = "filled"                   # the fill beat the cancel: on_fill / the clock take it live
                 self.journal("lab_cancel_raced_fill", strategy=st.strategy, account=st.account,
                              round=x.get("round"), iid=(x.get("iid") or {}).get(s), order_id=ids[s],
                              status=status, filled=filled)
+            elif status in TERMINAL and got:
+                seen[s], part = "part", part + got   # the rest is cancelled; what is in keeps its stop
+                self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
+                             sides=[s], iids=[(x.get("iid") or {}).get(s)], why=why, ended=False,
+                             part=got, actions=list(acts))
             elif status in TERMINAL:
                 seen[s] = "cancelled"
                 if s not in x["cancelled"]:
@@ -2659,8 +2739,9 @@ class Engine:
             self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
                          sides=done_now, iids=[(x.get("iid") or {}).get(s) for s in done_now], why=why,
                          ended=ended, actions=acts)
-        state = next(k for k in ("working", "filled", "cancelled") if k in seen.values())
-        return {"ok": state != "working", "state": state, "actions": acts}
+        state = next(k for k in ("working", "part", "filled", "cancelled") if k in seen.values())
+        return {"ok": state != "working", "state": state, "actions": acts,
+                **({"filled": part} if state == "part" else {})}
 
     async def lab_cancel(self, name: str, iid: Optional[int] = None, *, why: str = "cancel") -> dict:
         """Cancel a Lab strategy's unfilled entry (its own order id `iid`; None = every unfilled entry) on every
@@ -2708,6 +2789,7 @@ class Engine:
         x["unconfirmed"] = False
         if x.get("why") == LAB_CLOSE_UNCONFIRMED:
             x["why"] = None
+        self._lab_mark_check(st, x, "the round ended with no exit fill seen")
         self._lab_stamp(st, x)
         self._save()
         self._lab_save()
@@ -2847,6 +2929,8 @@ class Engine:
                          sides=list(x["cancelled"]), iids=list((x.get("iid") or {}).values()), why=reason,
                          ended=True, actions=acts)
             return ans(True)
+        if x.get("blind"):
+            return unsure("the Desk does not know this trade's stop order and could not cancel it")
         try:                                                                # 3
             net = int(await ad.get_net_position(cfg.symbol) or 0)
         except Exception as e:  # noqa: BLE001 -- unreadable is NOT flat
@@ -2985,6 +3069,13 @@ class Engine:
         """The clock's capped flatten: every LAB_FLAT_RETRY_S (a "check it" close: LAB_CHECK_RETRY_S), and only
         when the strategy's kill lock is free -- a Kill or a flatten in progress is never waited for here, so
         another strategy's tick on this account is not held up behind it."""
+        said = self.__dict__.setdefault("_lab_said", {})
+        if not ad.connected:                         # nothing is sent blind: the one close is not used up
+            if said.get(f"wait:{key}") != x.get("round"):
+                said[f"wait:{key}"] = x.get("round")
+                self.journal("clock_flat_waiting", strategy=st.strategy, account=st.account,
+                             round=x.get("round"), reason="account not connected")
+            return
         gap = LAB_CHECK_RETRY_S if x.get("unconfirmed") else LAB_FLAT_RETRY_S
         rk = f"flat:{key}"
         lock = self._kill_lock(st.strategy)
@@ -2996,7 +3087,6 @@ class Engine:
             res = await self._lab_flatten_one(st, cfg, ad, "flat", quick=True)
         self._save()
         self._lab_save()
-        said = self.__dict__.setdefault("_lab_said", {})
         told = ("ok", x.get("round")) if res["ok"] else ("failed", x.get("round"), tuple(res["actions"]))
         if said.get(rk) == told or (res["ok"] and not res["actions"]):
             return                                   # said already: one line per round that closed, one per new failure
@@ -3085,6 +3175,16 @@ LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
 LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."
 LAB_NO_POSITION_READ = "The Desk cannot read this account's position."
+LAB_NO_STOP_ID = "Check it: the Desk does not know this trade's stop order."
+# The ONLY failures of a single entry that leave its round clean: the adapters' own fixed phrases for a path that
+# sends nothing, or for a broker answer that carries no order (homebase/broker/). Everything else is unknown.
+LAB_CLEAR_REJECTS = (
+    "adapter not connected",                                        # tradovate.py place_bracket / place_order: no socket
+    "OSO rejected (no orderId returned)",                           # tradovate.py place_bracket: answered, no order
+    "order rejected (no orderId returned)",                         # tradovate.py place_order: answered, no order
+    "a Stop Limit order needs both a limit price and a trigger",    # tradovate.py STOPLIMIT_INCOMPLETE: not sent
+    "bracketed stop entries need a broker OSO",                     # base.py place_bracket (legged fallback): not sent
+)
 LAB_BAD_ORDER = "The Desk cannot check this order."
 LAB_NO_STOP = "Every entry needs a stop held at the broker."
 LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."
