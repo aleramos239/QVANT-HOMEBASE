@@ -71,3 +71,13 @@ def desklab_root(tmp_path_factory, monkeypatch):
     d = tmp_path_factory.mktemp("desklab")
     monkeypatch.setenv("HOMEBASE_DESKLAB_ROOT", str(d))
     return d
+
+
+@pytest.fixture(autouse=True)
+def no_real_desk_for_the_lab_list(monkeypatch):
+    """The Lab's list of the Desk's built-ins asks the Desk on :8850: a test never asks a real one."""
+    try:
+        from homebase.charts import tester_api
+    except Exception:       # (a test of something that does not load the chart service)
+        return
+    monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: [])

@@ -16,7 +16,7 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBusy: false,
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
   picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set() };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
@@ -957,7 +957,7 @@ function libRows() {
       const own = ownName(d.name), state = bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft';
       return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: own ? `${state} · ${d.name}` : state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
-  const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
+  const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true, desk: S.deskBuiltins.has(s.id) }));
   return { rows, builtins };
 }
 /* the rows as the list shows them, top to bottom (a folded group's rows are not shown) */
@@ -1796,9 +1796,10 @@ function shaNow(code) {              // the hash of saved code, once it is worke
 async function loadDesk() {
   const r = await send('GET', '/api/tester/desklab');
   if (!r.ok || !r.json) return;                      // the last list stays
-  const key = (m) => JSON.stringify(m ? [...m].map(([n, x]) => [n, x.sha256, x.enabled, x.promoted_utc]) : null);
+  const key = (m) => JSON.stringify(m ? [...m].map(([n, x]) => [n, x.sha256, x.enabled, x.promoted_utc]).concat([[...S.deskBuiltins]]) : null);
   const was = key(S.desk);
   S.desk = new Map((r.json.strategies || []).filter((x) => x && x.name).map((x) => [x.name, x]));
+  S.deskBuiltins = new Set((Array.isArray(r.json.builtins) ? r.json.builtins : []).filter((x) => typeof x === 'string'));      // the built-ins the Desk itself runs
   if (key(S.desk) === was) return;                   // nothing changed: the page stays as it is (a field being typed in is not rebuilt)
   paintLib(); paintRes();
   if (buf() && buf().kind === 'draft') paintEditor();          // its lock may have changed (promoted, or taken off the Desk)

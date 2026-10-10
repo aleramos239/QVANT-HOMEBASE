@@ -172,6 +172,7 @@ from ..backtest.tape import CACHE
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from ..labrun import door, store
+from .desk import DESK_URL
 from ..labrun.host import session_today
 from . import DEFAULT_ROOTS, lab_forms, lab_templates, reviewpack, watch
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
@@ -182,6 +183,22 @@ PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long:
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
+def desk_strategy_ids() -> list[str]:
+    """The built-in strategies the Desk itself runs (its status' strategies that are not Lab ones), by id. [] when it does not
+    answer: the Lab page then simply shows no built-in as being on the Desk."""
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{DESK_URL}/api/status", timeout=1.5) as r:
+            got = json.loads(r.read())
+    except (OSError, ValueError):
+        return []
+    strategies = got.get("strategies") if isinstance(got, dict) else None
+    if not isinstance(strategies, dict):
+        return []
+    return sorted(k for k, v in strategies.items()
+                  if isinstance(k, str) and isinstance(v, dict) and (v.get("cfg") or {}).get("kind") != "lab")
+
+
 DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
@@ -748,7 +765,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                         "days": [{**{k: d.get(k) for k in DESKLAB_DAY_KEYS}, "rebuilt": d.get("rebuilt") is True}
                                  for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
         beat = store.get_runner() or {}
-        return watch_answer(request, {"strategies": out, "runner": {
+        return watch_answer(request, {"strategies": out, "builtins": desk_strategy_ids(), "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
 
     def runner_alive(seen) -> bool:

@@ -170,7 +170,7 @@ def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir
 
 def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts_dir, make_run, tmp_path):
     at = tmp_path / "desklab"
-    assert c.get("/api/tester/desklab").json() == {"strategies": [], "runner": {"alive": False, "seen_utc": None, "prices": {}}}
+    assert c.get("/api/tester/desklab").json() == {"strategies": [], "builtins": [], "runner": {"alive": False, "seen_utc": None, "prices": {}}}
     draft(drafts_dir)
     promote(c, run_id=make_run())
     today = slots.et_now().date().isoformat()                                  # conftest pins this to 2026-09-28
@@ -487,3 +487,10 @@ def test_open_in_the_lab_is_asked_by_the_desk_and_taken_once_by_the_lab_page(c, 
     assert bad.status_code == 400
     evil = c.post("/api/tester/desklab/open", json={"name": "nq_bars"}, headers=EVIL)
     assert evil.status_code == 403
+
+
+def test_the_list_names_the_built_ins_the_desk_runs(c, monkeypatch):
+    """The Lab's "On the Desk" group holds the Desk's built-ins too: the list says which ones the Desk runs."""
+    assert c.get("/api/tester/desklab").json()["builtins"] == []
+    monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: ["gc_nfp", "nq930"])
+    assert c.get("/api/tester/desklab").json()["builtins"] == ["gc_nfp", "nq930"]
