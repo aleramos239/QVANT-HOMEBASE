@@ -229,7 +229,7 @@ def test_a_log_that_is_behind_the_desk_is_not_picked_up_and_the_stop_goes_above_
     assert (day.state, day.summary()["why"]) == ("stopped", NO_RESUME)
     assert stub.ops() == [["stop"]] and stub.bodies[0]["seq"] == 8           # never a number the Desk has answered
     assert stub.bodies[0]["intents"] == STOP_KEEP and "event 5" in day.detail
-    assert {"seq": 8, "own": "stop", "intents": STOP_KEEP} in new
+    assert {"seq": 8, "own": "stop", "t_ns": stub.bodies[0]["t_ns"], "intents": STOP_KEEP} in new
 
 
 def test_an_event_the_desk_answered_that_the_log_never_sent_is_not_picked_up(days):

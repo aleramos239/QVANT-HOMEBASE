@@ -507,7 +507,7 @@ def test_a_strategy_that_breaks_gets_out_at_once_a_stop_with_flatten(days, case)
     assert stub.ops() == [["entry"], ["stop"]]
     assert stub.bodies[1]["intents"] == [{"op": "stop", "why": why, "flatten": True}]
     assert stub.bodies[1]["seq"] == 4 and stub.bodies[1]["strategy"] == DESK_ID and stub.bodies[1]["date"] == DATE
-    assert {"seq": 4, "own": "stop", "intents": stub.bodies[1]["intents"]} in tells
+    assert {"seq": 4, "own": "stop", "t_ns": stub.bodies[1]["t_ns"], "intents": stub.bodies[1]["intents"]} in tells
     feed(day, "09:31:01", [21000.0] * 60)
     assert len(stub.bodies) == 2                                             # once
 

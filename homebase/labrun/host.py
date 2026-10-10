@@ -353,6 +353,37 @@ def read_tells(lines, mark) -> dict | None:
             "never": set(range(1, last + 1)) - must - maybe - either, "flat": flat}
 
 
+def owed_stop(lines, mark) -> dict | None:
+    """The runner's own `stop` of this promotion's day (read as read_tells reads the log: after its LAST head line) when
+    no results line says the Desk answered it: its own line, with the request's `seq`, `t_ns` and intents. None when
+    there is none, when it was answered, or when its line carries no `t_ns` (a log written before the stop line did):
+    without it the request cannot be made again byte for byte."""
+    lines = lines if isinstance(lines, list) else []
+    heads = [n for n, line in enumerate(lines) if isinstance(line, dict) and line.get("head")]
+    if not heads or lines[heads[-1]].get("mark") != list(mark):
+        return None
+    stop = None
+    for line in lines[heads[-1] + 1:]:
+        if not isinstance(line, dict):
+            continue
+        if line.get("own") == "stop" and _int(line.get("seq")):
+            stop = line
+        elif stop is not None and line.get("seq") == stop["seq"] and "results" in line and line.get("ok") is True:
+            return None                              # the Desk answered it
+    if stop is None or not _int(stop.get("t_ns")) or not isinstance(stop.get("intents"), list):
+        return None
+    return stop
+
+
+def event_body(desk: str, date: str, mark, seq: int, t_ns: int, state: dict, intents: list) -> dict:
+    """One event as the Desk reads it (homebase/labdesk.py, parse_event)."""
+    return {"strategy": desk, "date": date, "mark": list(mark), "seq": seq, "t_ns": t_ns, "state": state,
+            "intents": intents}
+
+
+NO_PRICE = {"last_price": None, "last_ms": None, "prices_late": True}    # the state of a request the runner makes itself
+
+
 class _Late:
     """Prices are late: prints that ARRIVE more than 2 s behind the stream's clock, for 5 s running; it clears on
     the first print that arrives within 2 s of the clock. Judged only when a print arrives: a market with no prints
@@ -816,6 +847,7 @@ class StrategyDay:
     #   {"seq", "sent", "ok", "went", "results": [{"op"[, "id"], "refused", "dead"}]}     only for an event with orders
     #                                                                     (went: how many entries left in its request)
     #   {"seq", "own": "stop" | "blind" | "again" | "eod", "intents": [...]}   the runner's own request, then its results
+    #                                                                     (a stop's line also carries its "t_ns")
     # ==================================================================================================================
     def _desk_init(self, desk, send, tell, resume, now_ns) -> None:
         self._desk: DeskSide | None = desk
@@ -1017,10 +1049,9 @@ class StrategyDay:
         `last_price` is."""
         f, side = self.fills, self._desk
         i = bisect_left(f.ts, t) if f is not None and last is not None else 0
-        return {"strategy": side.desk_id, "date": side.date, "mark": list(side.mark), "seq": seq, "t_ns": t,
-                "state": {"last_price": last, "last_ms": f.ts[i - 1] // 1_000_000 if i else None,
-                          "prices_late": bool(last is None or self._late.late or self._silent)},
-                "intents": intents}
+        return event_body(side.desk_id, side.date, side.mark, seq, t,
+                          {"last_price": last, "last_ms": f.ts[i - 1] // 1_000_000 if i else None,
+                           "prices_late": bool(last is None or self._late.late or self._silent)}, intents)
 
     def _desk_orders(self, seq: int, t: int, last, orders: list, calm: bool = False) -> None:
         """The order intents of one event: refuse the entries here when they must not go, send the rest in ONE
@@ -1138,8 +1169,10 @@ class StrategyDay:
                 self._word(r, None)                  # the first request did reach the Desk: its exits were applied
                 return True
             seq = self._next_seq()
-            self._tell({"seq": seq, "own": r.what, "intents": r.intents})
             r.body = self._body(seq, r.t_ns if r.t_ns is not None else self._now_ref(), None, r.intents)
+            # (a stop's line carries its t_ns: a later runner may have to make the very same request: Runner._desk_owed)
+            self._tell({"seq": seq, "own": r.what, **({"t_ns": r.body["t_ns"]} if r.what == "stop" else {}),
+                        "intents": r.intents})
             r.left, r.write = False, None
         seq = r.body["seq"]
         got = self._post(r.body)                     # the SAME request as the last try of it: seq, intents, t_ns
@@ -1485,6 +1518,7 @@ class Runner:
         self._said: dict | None = None               # the heartbeat's body, as last built
         self._enabled: list = []                     # the store's enabled strategies, as sync() last read them
         self._lost: dict[str, dt.date] = {}          # name -> the date of a desk day that could not be picked up
+        self._owed_tried: set[tuple] = set()         # (name, date, promotion) whose owed stop was sent once more
         self._nap = time.sleep                       # close() waits between two tries of a stop (the tests replace it)
 
     # ---- what the tests and the status read
@@ -2069,13 +2103,17 @@ class Runner:
 
     def _desk_say(self) -> None:
         """The heartbeat's body, by desk id: every strategy the runner is HOSTING NOW (shadow ones too), and every
-        enabled one whose day file for its session date is final (`done` or `stopped`: the Desk ended its day, or it
-        is over) with what that file says. Nothing else -- never "waiting" from nothing.
+        enabled one whose day file for its session date is final (`done` or `stopped`) with what that file says --
+        a final DESK day only when the Desk's own snapshot of that day says it ended it (stopped or killed there:
+        _desk_word). Nothing else -- never "waiting" from nothing.
 
         Who is named matters: the Desk cancels a strategy's unfilled entries when no beat names it for 20 s, and a
         beat that names it switches that rule off. A runner that started again and hosts nothing yet (the tick
-        stream is not live, or a day cannot be picked up: _desk_lost) must not say the strategy is there; a strategy
-        whose day is over with a position still open must not read "Runner down" for it."""
+        stream is not live, or a day cannot be picked up: _desk_lost) must not say the strategy is there; nor for a
+        desk day whose file is final while the Desk never ended it (its stop or its eod flatten died with the runner
+        before the Desk took it): then the Desk's own rule acts, and "Runner down" on the page is true. Such a day's
+        stop, when the Desk never answered it, is sent once more (_desk_owed). A strategy whose day the Desk did end
+        never reads "Runner down", also with a position still open."""
         named = {}
         for rec in self._enabled:
             name = rec["name"]
@@ -2083,14 +2121,52 @@ class Runner:
             if name in self._days or date is None or self._lost.get(name) == date:
                 continue
             file = self._day_file(rec, date)
-            if file is not None and file.get("state") in ("done", "stopped"):
-                named[desk_id(name)] = {"state": file["state"],
-                                        "why": file.get("why") if isinstance(file.get("why"), str) else None,
-                                        "mode": "desk" if file.get("mode") == "desk" else "shadow"}
+            if file is None or file.get("state") not in ("done", "stopped"):
+                continue
+            if file.get("mode") == "desk" and self._desk_word(rec, date) is None:
+                self._desk_owed(rec, date)
+                continue
+            named[desk_id(name)] = {"state": file["state"],
+                                    "why": file.get("why") if isinstance(file.get("why"), str) else None,
+                                    "mode": "desk" if file.get("mode") == "desk" else "shadow"}
         for name, h in self._days.items():
             named[desk_id(name)] = {"state": h.day.state, "why": h.day.summary()["why"], "mode": h.day.mode}
         self._said = {"pid": os.getpid(), "strategies": named}
         self._desk.say(self._said)
+
+    def _desk_owed(self, rec: dict, date: dt.date) -> None:
+        """A final desk day the runner does not host and the Desk never ended (a runner that started again): when its
+        tell-log's own `stop` has no answer the Desk said ok to (owed_stop), that very request -- its seq, its intents,
+        its t_ns: the Desk applies one event at most once -- is sent ONCE MORE, as soon as the Desk's stream holds its
+        snapshot of that day and that promotion and is on that day. Not when that snapshot says it answered the stop.
+        Once per process, whatever the answer; the answer goes into the tell-log like any other try of it."""
+        name, d, mark = rec["name"], date.isoformat(), store.mark_of(rec)
+        key = (name, d, *mark)
+        snap = self._snaps.get(desk_id(name)) if self._desk_up else None
+        if key in self._owed_tried or snap is None or snap.get("date") != d or snap.get("mark") != mark \
+                or self._desk_date != d:
+            return                                   # (not yet: the Desk's own word on that day first)
+        self._owed_tried.add(key)
+        try:
+            line = owed_stop(store.tells(name, d, self.at), mark)
+        except (OSError, ValueError):
+            return
+        answered = snap.get("answered")
+        if line is None or (isinstance(answered, list) and line["seq"] in answered):
+            return
+        seq = line["seq"]
+        try:
+            got = self._desk.send(event_body(desk_id(name), d, mark, seq, line["t_ns"], dict(NO_PRICE), line["intents"]))
+        except Exception as e:  # noqa: BLE001 -- no answer: it was the one more try
+            log(f"{name}: desk: {type(e).__name__}")
+            got = None
+        got = got if isinstance(got, dict) else {"ok": False, "left": True}
+        ok = got.get("ok") is True
+        self._write(store.tell, name, d, {"seq": seq, "sent": got.get("left") is not False, "ok": ok, "went": 0,
+                                          "results": [{"op": it.get("op") if isinstance(it, dict) else None,
+                                                       "refused": None if ok else NO_ANSWER, "dead": False}
+                                                      for it in line["intents"]]})
+        log(f"{name}: {d} its stop never reached the Desk: sent once more ({'taken' if ok else 'no answer'})")
 
     def _desk_leave(self) -> None:
         """The runner is going away on purpose: every day that has begun in desk mode is ended at the Desk (a stop

@@ -152,7 +152,11 @@ def test_only_hosted_strategies_and_final_days_are_named(kits):
     k.clock("09:00:00")
     k.r.sync()
     k.r.beat()                                                               # no print yet: nothing is hosted, and
-    assert sorted(k.stub.said[-1]["strategies"]) == ["lab_lab_done", "lab_lab_stop"]     # only the final days are named
+    assert sorted(k.stub.said[-1]["strategies"]) == ["lab_lab_stop"]         # only the final days are named -- a desk
+    # day's only when the Desk's own snapshot says it ended it (final wave R1)
+    k.r.take(state(snap(MARKET_930, stopped="off") | {"strategy": "lab_lab_done"}))
+    k.r.beat()
+    assert sorted(k.stub.said[-1]["strategies"]) == ["lab_lab_done", "lab_lab_stop"]
     k.open()
     k.rows("09:20:00", [21000.0] * 2)
     k.r.sync()
