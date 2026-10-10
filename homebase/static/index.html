@@ -2172,7 +2172,7 @@ function labDeskView(name, s) {
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.deskState(s))}</b>${p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
-    <div class="sd-note">${esc(DeskLab.deskNote(!shadow || book.length > 0))}</div>
+    <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     <div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>
