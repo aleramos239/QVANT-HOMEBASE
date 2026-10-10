@@ -765,3 +765,15 @@ test('the activity lines of the Lab\'s journal events, in simple words', () => {
   assert.deepEqual(A.lab_open_without_cfg({}, 'NQ ORB', ' on A'), ['NQ ORB has a trade open but is not on this Desk. Check it.', 'neg']);
   assert.deepEqual(A.lab_removed({}, 'NQ ORB', ''), ['NQ ORB taken off the Desk']);
 });
+
+test('bookedNext: an account added while the day runs in shadow starts with the next session', () => {
+  const one = [{ account: 'a1', qty: 1 }], two = [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }];
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), [], one), true);
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), one, two), true);
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), two, one), false, 'taking one off');
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), one, one), false, 'a size change');
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'desk' }), [], one), false);
+  assert.equal(D.bookedNext(deskStrat({ mode_today: null }), [], one), false, 'the session has not begun: nothing to wait for');
+  assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }, { enabled: false }), [], one), false, 'switched off: it starts when it is switched on');
+  assert.equal(D.bookedNext(null, [], one), false);
+});

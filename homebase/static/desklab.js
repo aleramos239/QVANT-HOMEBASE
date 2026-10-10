@@ -460,6 +460,12 @@
     if (s && startsNext(s)) return switchOnNext(n);
     return Array.isArray(book) && book.length > 0 ? switchOnAccounts(n) : switchOnShadow(n);
   }
+  // An account added while today's day runs in shadow: "Booked. It starts with the next session." (ruling, Q3)
+  function bookedNext(s, before, after) {
+    var lab = blockOf(s);
+    return !!lab && lab.mode_today === "shadow" && !!s.cfg && s.cfg.enabled === true &&
+      Array.isArray(before) && Array.isArray(after) && after.length > before.length;
+  }
   function flattenAsk(n) {
     return { title: "Flatten " + n + "?", body: "Cancels its orders, closes its own position on every account, and switches it OFF.", action: "Flatten & turn off" };
   }
@@ -554,7 +560,7 @@
     accountsLock: accountsLock, deskNote: deskNote, inShadow: inShadow, limitsRows: limitsRows, limitsFields: limitsFields,
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
-    switchOff: switchOff, switchOnToast: switchOnToast, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
+    switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
     deskSetupRows: deskSetupRows, activity: activity,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,
     OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, LIVE_NOTE: LIVE_NOTE,

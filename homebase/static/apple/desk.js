@@ -104,6 +104,17 @@
       setupBox.replaceChildren(...rows);
     }
 
+    /* A LAB strategy the Desk itself knows (desk id lab_<name>, kind "lab", a `lab` block in the status): its limits, when it was promoted, and
+       whether its orders are written down or go through the Desk. The words are DeskLab.deskSetupRows (desklab.js). */
+    const deskLabbed = (name) => { const st = status_(), s = st && st.strategies && st.strategies[name]; return s && s.cfg && s.cfg.kind === 'lab' && s.lab ? s : null; };
+    function setupDeskLab(name, s) {
+      const rowOf = () => { try { return (DESKLAB.strategies || []).find((w) => w && w.name === s.lab.name) || null; } catch (_) { return null; } };
+      const bookOf = () => { try { return (ST.book && ST.book[name]) || []; } catch (_) { return []; } };
+      const rows = window.DeskLab ? window.DeskLab.deskSetupRows(s, rowOf(), bookOf()).map(([k, v]) => row(k, v)) : [];
+      setupBox._sig = '';      // what setup() cached is not what is here now
+      setupBox.replaceChildren(...rows);
+    }
+
     function setup(name) {
       const st = status_(), s = st && st.strategies && st.strategies[name], c = s && s.cfg;
       if (!c) { setupBox.replaceChildren(); return; }
@@ -175,9 +186,9 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
-          const w = watched(), l = labbed();
-          figsH.textContent = w ? 'Research results' : l ? 'Backtest' : 'Live results';
-          if (w) setupWatch(w); else if (l) setupLab(l); else setup(name);
+          const w = watched(), l = labbed(), dl = deskLabbed(name);
+          figsH.textContent = w ? 'Research results' : l || dl ? 'Backtest' : 'Live results';
+          if (w) setupWatch(w); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');

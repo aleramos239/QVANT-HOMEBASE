@@ -131,7 +131,7 @@ function load() {
 // ---- the markup ---------------------------------------------------------------------------------
 test('every dialog is role="dialog" aria-modal and has a name', () => {
   const overlays = HTML.match(/<div class="overlay" id="\w+"[^>]*>\s*<div class="modal"[^>]*>/g) || [];
-  assert.equal(overlays.length, 9);
+  assert.equal(overlays.length, 10);   // + the Limits dialog of a Lab strategy (Step B)
   for (const o of overlays) {
     assert.match(o, /role="dialog" aria-modal="true" tabindex="-1" inert/, o);   // inert until opened
     const named = /aria-label="[^"]+"/.exec(o) || /aria-labelledby="(\w+)"/.exec(o);
@@ -149,7 +149,7 @@ test('every dialog opens and closes through the one path (no stray class flips)'
   assert.equal(flips.length, 2, 'only showOverlay/hideOverlay touch .open');
   for (const [open, close] of [['openChecks', 'closeChecks'], ['openConnect', 'closeConnect'], ['openSettings', 'closeSettings'],
     ['openRes', 'closeRes'], ['openAccts', 'closeAccts'], ['openAlgoMgr', 'closeAlgoMgr'], ['openLive', 'closeLive'],
-    ['openCal', 'closeCal']]) {
+    ['openCal', 'closeCal'], ['openLabLimits', 'closeLabLimits']]) {
     const o = HTML.slice(HTML.indexOf(`function ${open}(`)), c = HTML.slice(HTML.indexOf(`function ${close}(`));
     assert.match(o.slice(0, o.indexOf('\n}') + 2), /showOverlay\("\w+Overlay"\)/, open);
     assert.match(c.slice(0, c.indexOf('}') + 1), /hideOverlay\("\w+Overlay"\)/, close);
