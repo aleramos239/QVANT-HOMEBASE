@@ -4,9 +4,10 @@ of pipeline.json. Few paths and a fixed seed: seconds.
 
 1. The shape of the answer; the account, the days and the two bars are pipeline.json's.
 2. A strong steady strategy STANDS ALONE; a flat coin flip is a HELPER; the label asks BOTH numbers strictly over their bar.
-3. The numbers are the walks of propodds on the "live is worse" row, cut at the days: path for path a pass inside the days
-   is a pass without a day limit, so the number is never above line 5.5's at the same size -- and for a slow strategy it is
-   far below it. More days in pipeline.json = a higher number.
+3. The numbers are the walks of propodds on the PLAIN row (the trades as they were; the owner, 2026-10-10), cut at the days: path
+   for path a pass inside the days is a pass without a day limit, so the number is never above line 5.5's at the same size -- and
+   for a slow strategy it is far below it. More days in pipeline.json = a higher number. `stress` = the same walks on the "live is
+   worse" row, beside it: never above the plain row for a box with an edge, and never read by the label.
 4. The eval is read at its best size of the eval's steps (a tie: the smaller); the payout at its best size of the FUNDED
    account's steps -- a step above the size the funded account starts at has no payout.
 5. Open losses count.
@@ -43,7 +44,7 @@ FILE = P.FILE
 PRO_FREE, FLEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
 CAL = SY.weekdays("2024-01-01", "2024-10-04")        # 200 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed
-KEYS = {"account", "days", "size", "payout_size", "eval", "payout", "label", "need", "table", "text"}
+KEYS = {"account", "days", "size", "payout_size", "eval", "payout", "label", "need", "table", "stress", "text"}
 
 
 def teardown_function(_=None):
@@ -63,20 +64,22 @@ def weekly(win: float, loss: float, mae: float = 2.0, every: int = 5) -> dict:
 
 STRONG = weekly(20.0, -6.0)                          # four winning days of five, small losses
 FLAT = weekly(10.0, -10.0, 10.0, every=2)            # a coin flip: up $10, down $10
-SLOW = weekly(4.0, -2.0)                             # it gets there, but not inside the days
-LUMPY = weekly(-5.0, 70.0, every=5)                  # one big winning day a week, four small losing ones
+SLOW = weekly(3.2, -1.6)                             # it gets there, but not inside the days (plain row: 25 % in 30 days, 100 % without a limit)
+LUMPY = weekly(-5.0, 120.0, every=5)                 # one big winning day a week, four small losing ones (big enough that Flex's consistency rule bites on the plain row)
 
 
 def odds(x, **kw) -> dict:
     return PP.odds(x, CAL, paths=N, seed=SEED, **kw)
 
 
-def free(x, size: int, rid: str = PRO_FREE) -> dict:
-    """propodds' own odds at a size on the "live is worse" row: `free` = WITHOUT A DAY LIMIT (line 5.5)."""
+def free(x, size: int, rid: str = PRO_FREE, worse: bool = False) -> dict:
+    """propodds' own odds at a size: on the PLAIN row (the number) or, with worse=True, on the "live is worse" row (the stress);
+    `free` = WITHOUT A DAY LIMIT (line 5.5)."""
     r = PS.load_rules(rid)
     net, traded, opn, _ = PO.days(PO.ledger(x, size, r), r, CAL)
-    wnet, wopn = PO.worse(net, traded, opn)
-    return PO.odds(wnet, traded, wopn, r, N, SEED)
+    if worse:
+        net, opn = PO.worse(net, traded, opn)
+    return PO.odds(net, traded, opn, r, N, SEED)
 
 
 @contextlib.contextmanager
@@ -162,14 +165,16 @@ def test_the_day_limit_bites_a_slow_strategy():
 
 def test_the_numbers_are_propodds_walks_cut_at_the_days():
     r, got = PS.load_rules(PRO_FREE), odds(STRONG)
-    for x in got["table"]:
-        net, traded, opn, _ = PO.days(PO.ledger(STRONG, x["size"], r), r, CAL)
-        wnet, wopn = PO.worse(net, traded, opn)
-        idx = PO.draws(len(net), N, PO.horizon(r), SEED)
-        P_, T_, O_ = wnet[idx], traded[idx], wopn[idx]
-        e, f = PO.eval_walk(P_, T_, O_, r), PO.funded_walk(P_, O_, r)        # the whole walk, read at the day
-        assert x["eval"] == float(((e["outcome"] == PO.PASS) & (e["day"] <= 30)).mean()), x
-        assert x["payout"] is None or x["payout"] == float(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= 30)).mean()), x
+    for row, tab in ((False, got["table"]), (True, got["stress"]["table"])):          # the plain row, then the stress row
+        for x in tab:
+            net, traded, opn, _ = PO.days(PO.ledger(STRONG, x["size"], r), r, CAL)
+            if row:
+                net, opn = PO.worse(net, traded, opn)
+            idx = PO.draws(len(net), N, PO.horizon(r), SEED)
+            P_, T_, O_ = net[idx], traded[idx], opn[idx]
+            e, f = PO.eval_walk(P_, T_, O_, r), PO.funded_walk(P_, O_, r)        # the whole walk, read at the day
+            assert x["eval"] == float(((e["outcome"] == PO.PASS) & (e["day"] <= 30)).mean()), x
+            assert x["payout"] is None or x["payout"] == float(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= 30)).mean()), x
 
 
 # ================================================================ 4. the sizes

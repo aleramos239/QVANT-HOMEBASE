@@ -530,3 +530,12 @@ every member at the same size, on the "live is worse" row, open losses counted.
 - **What it shows.** One row an account (best mix, the two odds, at the bar or not), then for each account what is
   missing in points of odds and which rule does not hold. The answer of each account is saved in the pipeline's folder
   under `portfolios/`. A book of one strategy is read alone against the bar; an empty book says so.
+
+**2026-10-10, the owner: the "live is worse" row is a stress line, not the number.** "Soften the haircut ... keep it as a stress line."
+Line 5.2's row (win rate -5 points, winners -15 %) turned an edge of about $100 a trade into a loss of $220 a trade, so no idea with a normal
+edge could "stand alone" and mixing looked worse. Since this date, in the PIPELINE only (`pipe_prop.py`, `pipe_portfolio.py`):
+- the prop check, the pick's order (middle by eval odds), the label and the portfolio's bar read the PLAIN row, the build days' own trades,
+  open losses counted, each phase at its best size, the same paths;
+- the "live is worse" row is `stress` on every prop check and every mix, printed beside the number and never read by a gate.
+No gate number changed (`prop.eval`, `prop.payout`, `portfolio.*` stay as they were). The by-hand route (`propodds.look`, line 5.5, the eval card)
+still reads the worse row: it is the law's own text and the owner has not moved it. The lock's worse FILLS (line 3.x) are another thing and stay.
