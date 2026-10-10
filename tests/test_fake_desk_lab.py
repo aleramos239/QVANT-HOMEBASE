@@ -332,7 +332,8 @@ def test_order_status_unknown_the_last_trade_cannot_be_checked_until_it_reads_ag
     d.fault(order_status_unknown=None)
     d.eng.__dict__.get("_lab_tries", {}).clear()
     d.tick()
-    assert d.send(entry(3))["results"][0]["accounts"][A1] == {"ok": True, "round": 2, "reason": None}
+    assert d.send(entry(3, price=130.0, sl=125.0, tp=140.0), last=120.5)["results"][0]["accounts"][A1] == {
+        "ok": True, "round": 2, "reason": None}
 
 
 def test_order_status_unknown_a_cancel_that_cannot_be_read_back_is_check_it(tmp_path):
@@ -515,7 +516,10 @@ def test_resume_the_days_trades_counters_stopped_and_the_accounts_books_come_bac
     assert json.loads((b.root / "day-2026-09-14.json").read_text())[f"{LAB}@{A1}"]["status"] == "done"
 
 
-def test_resume_what_filled_while_the_desk_was_down_is_found_by_the_engines_own_check(tmp_path):
+def test_resume_what_filled_while_the_desk_was_down_is_found_by_the_real_restarts_reconcile(tmp_path):
+    """Fix round 1, I3: the real Desk calls engine.reconcile_account after every connect (server.py). Here too: at
+    the start, and -- on a saved book -- again once the stream's backlog is in (only then does the simulated account
+    know what a broker knows at connect). The reconcile, not the clock, finds the fill."""
     d = Lab(tmp_path)
     d.send(entry(1, price=110.0, sl=105.0, tp=120.0))
     assert d.st().status == "placed"
@@ -524,9 +528,122 @@ def test_resume_what_filled_while_the_desk_was_down_is_found_by_the_engines_own_
     b.t = d.t
     b.prints([110.0])                                            # the backlog: it filled while nobody listened
     assert b.net() == 1 and b.st().status == "placed" and b.journal("entry_fill") == []
+    run(b.rig.take(("live",)))                                   # no clock tick here
+    assert b.st().status == "live" and b.st().entry_side == "Buy"
+    assert b.journal("fill_recovered_on_reconnect")[0]["account"] == A1 and b.journal("entry_found_by_check") == []
+
+
+def test_resume_a_trade_that_closed_while_the_desk_was_down_is_ended_by_the_reconcile(tmp_path):
+    d = Lab(tmp_path)
+    d.send(entry(1, price=110.0, sl=105.0, tp=None))
+    d.prints([110.0])
+    assert d.st().status == "live"
+    d.ld.close()
+    b = Lab(tmp_path, record=False, setup=False, hms="10:00:10")
+    assert b.journal("exit_recovered_on_reconnect") == []        # at the start the account still holds it
+    b.t = d.t
+    b.prints([105.0])                                            # stopped out while the Desk was down
+    assert b.net() == 0 and b.st().status == "live"
     run(b.rig.take(("live",)))
-    b.tick()                                                     # the order-status backstop adopts it (real engine)
-    assert b.st().status == "live" and b.journal("entry_found_by_check")[0]["side"] == "Buy"
+    assert b.st().status == "done" and b.journal("exit_recovered_on_reconnect")[0]["account"] == A1
+
+
+def test_every_account_is_reconciled_right_after_it_connects_and_a_failure_is_journaled_not_fatal(tmp_path):
+    store.put(rec(), tmp_path / "desklab")
+    clock = StreamClock()
+    clock.heard(at("10:00:00"))
+    app = create_lab_desk(tmp_path / "desklab", tmp_path / "engine", key=KEY, clock=clock, background=False)
+    rig = app.state.rig
+    seen = []
+
+    async def reconcile(aid):
+        ad = rig.adapters[aid]
+        seen.append((aid, ad.connected, ad._on_fill is not None))
+        if aid == A2:
+            raise RuntimeError("boom")
+        return {}
+    rig.engine.reconcile_account = reconcile
+    run(rig.start())
+    assert seen == [(A1, True, True), (A2, True, True), (LIVE, True, True)]         # connected and listening first
+    events = [json.loads(x) for x in (tmp_path / "engine" / "journal.jsonl").read_text().splitlines()]
+    assert [(e["account"], e["error"]) for e in events if e["event"] == "reconcile_error"] == [(A2, "boom")]
+    run(rig.take(("live",)))                                     # a fresh book was never away: no second reconcile,
+    run(rig.take(("live",)))                                     # and a later `live` (the stream came back) is none either
+    assert len(seen) == 3
+    rig.labdesk.close()
+
+
+def test_a_stop_the_market_ran_through_is_refused_by_the_account_and_the_account_is_out_for_the_day(tmp_path):
+    """Fix round 1, I5a, on the real engine: the refusal a rehearsal must be able to show."""
+    d = Lab(tmp_path)
+    d.prints([111.0])                                            # the market ran; the runner's last price (100) is older
+    acct = d.send(entry(1))["results"][0]["accounts"][A1]        # a buy stop at 110
+    assert (acct["ok"], acct["reason"]) == (False, engine_mod.LAB_BAD_ORDER) and d.working() == {}
+    assert acct["detail"] == "The broker refused it: a buy stop must be above the last price (111.0)"
+    d.tick()
+    assert d.send(entry(2, price=120.0, sl=115.0, tp=130.0), last=111.0)["results"][0]["refused"] == engine_mod.LAB_CANNOT_CHECK
+    assert d.ld.status_view(LAB)["state"] == "check"
+
+
+def test_the_practice_desks_config_can_never_be_saved(tmp_path, monkeypatch):
+    """Fix round 1, M3: config.json is the real Desk's. A save of the practice Desk's config raises and writes
+    nothing; every other config is saved as before."""
+    import homebase.config as config_mod
+    from homebase.config import AppCfg
+    target = tmp_path / "config.json"
+    monkeypatch.setattr(config_mod, "config_path", lambda: target)
+    d = Lab(tmp_path / "lab")
+    with pytest.raises(RuntimeError, match="practice Desk's config is never saved"):
+        config_mod.save(d.rig.cfg)
+    assert not target.exists() and not target.with_name("config.json.tmp").exists()
+    config_mod.save(AppCfg())                                    # another config: untouched behaviour
+    assert json.loads(target.read_text())["armed"] is False
+    d2 = Lab(tmp_path / "lab2")                                  # the guard is put on once, not stacked
+    with pytest.raises(RuntimeError):
+        config_mod.save(d2.rig.cfg)
+    assert getattr(config_mod.save, "__wrapped__", None) is not None and not hasattr(config_mod.save.__wrapped__, "__wrapped__")
+
+
+def test_the_accounts_carry_their_live_mark_and_the_chart_client_neither_follows_nor_trusts_the_environment(tmp_path):
+    seen = []
+
+    def chart(request):
+        seen.append(str(request.url))
+        if request.url.path == "/api/status":
+            return httpx.Response(302, headers={"location": "http://127.0.0.1:8852/api/status"})
+        return httpx.Response(200, json={})
+    d = Lab(tmp_path, setup=False, ticks="http://127.0.0.1:8853", own_port=8859, chart_transport=httpx.MockTransport(chart))
+    assert {a: ad.live for a, ad in d.ads.items()} == {A1: False, A2: False, LIVE: True}
+    client = d.app.state.chart
+    assert client.follow_redirects is False and client.trust_env is False and str(client.base_url) == "http://127.0.0.1:8853"
+    with TestClient(d.app, base_url="http://127.0.0.1:8859") as c:
+        r = c.get("/chart/api/status", follow_redirects=False)
+        assert r.status_code == 302 and seen == ["http://127.0.0.1:8853/api/status"]      # never followed to 8852
+    d.ld.close()
+
+
+def test_nothing_the_practice_desk_serves_from_static_names_the_real_ports(desk):
+    """Fix round 1, M2: every file under homebase/static, as served: a text file with the real Desk's or the real
+    chart service's port has it swapped as the page has; everything else is the file on disk, byte for byte."""
+    files = [p for p in STATIC.rglob("*") if p.is_file()]
+    assert len(files) > 20
+    swapped = 0
+    for p in files:
+        rel = p.relative_to(STATIC).as_posix()
+        r = desk.get("/static/" + rel)
+        assert r.status_code == 200, rel
+        disk = p.read_bytes()
+        assert b":8850" not in r.content and b":8852" not in r.content, rel
+        if b":8850" in disk or b":8852" in disk:
+            swapped += 1
+            assert r.content == disk.replace(b":8852", b":8853").replace(b":8850", b":8859"), rel
+        else:
+            assert r.content == disk, rel
+    assert swapped >= 2                                          # charts/app.js and apple/web.js today
+    assert desk.get("/static/charts/app.js").headers["content-type"].startswith(("text/javascript", "application/javascript"))
+    for bad in ("/static/%2e%2e/config.json", "/static/..%2fconfig.py", "/static/%2e%2e/%2e%2e/tools/fake_desk.py",
+                "/static/nope.js", "/static/", "/static/charts"):
+        assert desk.get(bad).status_code == 404, bad
 
 
 def test_resume_a_trade_left_open_overnight_is_carried_as_a_block_and_stays_one(tmp_path):
@@ -810,29 +927,125 @@ def test_every_labdesk_and_engine_call_of_the_real_route_is_made_by_the_practice
 MAIN = fake_desk.main_checkout()
 
 
-def test_the_main_checkout_is_found_from_a_worktree():
-    here = Path(fake_desk.__file__).resolve().parents[1]
-    assert MAIN == (here.parents[2] if here.parent.name == "worktrees" else here)
-    assert (MAIN / ".git").exists()
+def git(cwd, *args):
+    import subprocess
+    subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@example.com", *args], cwd=cwd, check=True,
+                   capture_output=True)
 
 
-@pytest.mark.parametrize("folder", [
-    Path.home() / ".homebase" / "desklab", Path.home() / ".homebase", Path.home() / ".homebase" / "desklab" / "x",
-    "~/.homebase/desklab", MAIN, MAIN / "homebase" / ".state", MAIN / "tmp" / "store"])
-def test_a_folder_of_the_real_desk_or_of_the_main_checkout_is_refused(folder, tmp_path):
-    assert refused_folder(folder) is not None
+@pytest.fixture()
+def layout(tmp_path, monkeypatch):
+    """A made-up machine in tmp_path: a home with a `.homebase/desklab`, and a real git repository (the "main
+    checkout") with one worktree under `.worktrees/` and one under `.claude/worktrees/`. HOME points at the made-up
+    home, so a refusal that fails here can only ever write inside tmp_path."""
+    home, repo = tmp_path / "home", tmp_path / "repo"
+    (home / ".homebase" / "desklab").mkdir(parents=True)
+    (repo / "homebase" / ".state").mkdir(parents=True)
+    git(repo, "init", "-q")
+    git(repo, "commit", "-q", "--allow-empty", "-m", "x")
+    git(repo, "worktree", "add", "-q", str(repo / ".worktrees" / "x"), "-b", "x")
+    git(repo, "worktree", "add", "-q", str(repo / ".claude" / "worktrees" / "y"), "-b", "y")
+    monkeypatch.setenv("HOME", str(home))
+    fake_desk.main_checkout.cache_clear()
+    yield home.resolve(), repo.resolve()
+    getattr(fake_desk.main_checkout, "cache_clear", lambda: None)()
+
+
+def test_the_main_checkout_is_what_git_says_from_any_worktree_layout(layout):
+    """Fix round 1, I2: asked of git (the common dir), not guessed from where the tool's file sits."""
+    _, repo = layout
+    assert fake_desk.main_checkout(repo) == repo
+    assert fake_desk.main_checkout(repo / ".worktrees" / "x") == repo                # the layout a guess gets wrong
+    assert fake_desk.main_checkout(repo / ".claude" / "worktrees" / "y") == repo
+    (repo / ".worktrees" / "x" / "tools").mkdir()
+    assert fake_desk.main_checkout(repo / ".worktrees" / "x" / "tools") == repo
+    fake_desk.main_checkout.cache_clear()
+    assert MAIN == fake_desk.main_checkout() and (MAIN / ".git").is_dir()            # ... and of this very checkout
+    assert Path(fake_desk.__file__).resolve().is_relative_to(MAIN)
+
+
+def test_when_git_cannot_say_where_the_main_checkout_is_nothing_starts(tmp_path, monkeypatch, capsys):
+    fake_desk.main_checkout.cache_clear()
+    with pytest.raises(ValueError, match="git could not say"):
+        fake_desk.main_checkout(tmp_path)                        # not a repository
+
+    def no_git(*a, **k):
+        raise FileNotFoundError("git")
+    monkeypatch.setattr(fake_desk.subprocess, "run", no_git)
+    fake_desk.main_checkout.cache_clear()
+    with pytest.raises(ValueError, match="git could not say"):
+        fake_desk.main_checkout()
     with pytest.raises(ValueError):
-        LabRig(folder, tmp_path / "engine")
-    with pytest.raises(ValueError):
-        LabRig(tmp_path / "store", folder)
+        refused_folder(tmp_path / "store")                       # no answer is a refusal, never "allowed"
+    monkeypatch.setattr(fake_desk, "first_clock", lambda *a: pytest.fail("it went on"))
+    monkeypatch.setattr(fake_desk, "bind_port", lambda *a: pytest.fail("it went on"))
+    with pytest.raises(SystemExit) as e:
+        fake_desk.main(["--lab", "--ticks", "http://127.0.0.1:8853", "--store", str(tmp_path / "s")])
+    assert e.value.code == 2 and "git could not say" in capsys.readouterr().err
+    fake_desk.main_checkout.cache_clear()
 
 
-def test_a_temp_folder_and_a_worktrees_folder_are_allowed(tmp_path):
-    assert refused_folder(tmp_path / "store") is None
+REFUSED = [                                  # (which root, the path under it) -- every one must be refused
+    ("home", ".homebase"), ("home", ".homebase/desklab"), ("home", ".homebase/desklab/x/y"),
+    ("home", ".HOMEBASE/desklab"), ("home", ".Homebase/DeskLab/x"),                 # I1: another spelling, the same folder
+    ("repo", ""), ("repo", "homebase/.state"), ("repo", "tmp/store"), ("repo", "HOMEBASE/.STATE"),
+    ("repo", ".claude"), ("repo", ".claude/settings"), ("repo", ".claude/worktrees"), ("repo", ".worktrees"),
+    ("repo", ".claude/worktreesX/y"), ("repo", ".git/x"),
+]
+ALLOWED = [("repo", ".worktrees/x/scratch"), ("repo", ".claude/worktrees/y/scratch"), ("repo", ".claude/worktrees/new/s"),
+           ("repo", ".WORKTREES/x/scratch"), ("tmp", "store"), ("tmp", "a/b/c")]
+
+
+@pytest.mark.parametrize("root,rel", REFUSED)
+def test_a_folder_of_the_real_desk_or_of_the_main_checkout_is_refused_however_it_is_spelled(root, rel, layout, tmp_path,
+                                                                                              monkeypatch):
+    home, repo = layout
+    monkeypatch.setattr(fake_desk, "main_checkout", lambda start=None: repo)        # what LabRig's own check asks
+    folder = {"home": home, "repo": repo}[root] / rel
+    assert refused_folder(folder, main=repo, home=home) is not None
+    upper = Path(str({"home": home, "repo": repo}[root]).upper()) / rel             # the whole path in capitals
+    assert refused_folder(upper, main=repo, home=home) is not None
+    for a, b in ((folder, tmp_path / "engine"), (tmp_path / "store", folder)):      # ... and LabRig asks again itself
+        with pytest.raises(ValueError):
+            LabRig(a, b)
+    assert not (tmp_path / "engine").exists() and not (tmp_path / "store").exists()
+    assert sorted(p.name for p in (home / ".homebase").iterdir()) == ["desklab"] and list((home / ".homebase" / "desklab").iterdir()) == []
+
+
+@pytest.mark.parametrize("root,rel", ALLOWED)
+def test_a_temp_folder_and_a_worktrees_own_folder_are_allowed(root, rel, layout, tmp_path):
+    home, repo = layout
+    if rel.startswith(".WORKTREES") and not (repo / ".WORKTREES").exists():
+        pytest.skip("a case-sensitive disk: .WORKTREES is another folder there, and refused")
+    assert refused_folder({"repo": repo, "tmp": tmp_path}[root] / rel, main=repo, home=home) is None
+
+
+def test_a_link_into_a_forbidden_place_is_refused_and_so_is_a_link_to_a_place_that_holds_one(layout, tmp_path):
+    home, repo = layout
+    for name, target in (("to_home", home), ("to_store", home / ".homebase" / "desklab"), ("to_repo", repo),
+                         ("to_state", repo / "homebase" / ".state")):
+        link = tmp_path / name
+        link.symlink_to(target)
+        for rel in ("", ".homebase/desklab", "homebase", "new/folder"):
+            p = link / rel
+            want = target.joinpath(rel)
+            inside = any(str(want).startswith(str(x)) for x in (home / ".homebase", repo))
+            assert (refused_folder(p, main=repo, home=home) is not None) == inside, (name, rel)
+    chain = tmp_path / "chain"
+    chain.symlink_to(tmp_path / "to_store")                      # a link to a link
+    assert refused_folder(chain / "x", main=repo, home=home) is not None
+    ok = tmp_path / "to_tree"
+    ok.symlink_to(repo / ".worktrees" / "x")
+    assert refused_folder(ok / "scratch", main=repo, home=home) is None
+
+
+def test_the_real_folders_of_this_machine_are_refused_too():
+    """The same rule on the real paths (a pure question: nothing is opened or made)."""
+    home = Path.home()
+    for p in (home / ".homebase" / "desklab", "~/.homebase/desklab", "~/.HOMEBASE/desklab", home / ".homebase",
+              MAIN, MAIN / "homebase" / ".state", Path(str(MAIN).upper()) / "homebase", MAIN / ".claude" / "settings.json"):
+        assert refused_folder(p) is not None, p
     assert refused_folder(MAIN / ".claude" / "worktrees" / "some-tree" / "scratch") is None
-    link = tmp_path / "link"
-    link.symlink_to(Path.home())
-    assert refused_folder(link / ".homebase" / "desklab") is not None               # resolved, not as written
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1:8850", "http://127.0.0.1:8852", "http://localhost:8852/",
@@ -870,30 +1083,65 @@ def test_the_tool_does_not_start_on_a_forbidden_port_address_or_folder(argv, tmp
     monkeypatch.setattr(fake_desk, "first_clock", never)
     monkeypatch.setattr(fake_desk.uvicorn, "run", never)
     monkeypatch.setattr(fake_desk, "write_key", never)
+    monkeypatch.setattr(fake_desk, "bind_port", never)
+    monkeypatch.setattr(fake_desk, "serve_lab", never)
     with pytest.raises(SystemExit) as e:
         fake_desk.main([a.replace("TMP", str(tmp_path)) for a in argv])
     assert e.value.code == 2 and "error:" in capsys.readouterr().err
 
 
+class Sock:
+    """What bind_port hands back, in a test: never a socket."""
+
+    def __init__(self):
+        self.closed = False
+
+    def close(self):
+        self.closed = True
+
+
 def test_with_no_clock_from_the_tick_stream_it_does_not_start(tmp_path, monkeypatch, capsys):
+    sock = Sock()
+    monkeypatch.setattr(fake_desk, "bind_port", lambda port: sock)
     monkeypatch.setattr(fake_desk, "first_clock", lambda ticks: None)
-    monkeypatch.setattr(fake_desk.uvicorn, "run", lambda *a, **k: pytest.fail("it served"))
+    monkeypatch.setattr(fake_desk, "serve_lab", lambda *a, **k: pytest.fail("it served"))
     monkeypatch.setattr(fake_desk, "write_key", lambda p: pytest.fail("it wrote a key"))
     assert fake_desk.main(["--lab", "--ticks", "http://127.0.0.1:8853", "--store", str(tmp_path / "s")]) == 1
     assert "did not start" in capsys.readouterr().err and not (tmp_path / "s").exists()
+    assert sock.closed is True                                   # the port is given back
+
+
+def test_a_port_that_is_taken_stops_the_start_before_the_key_file_is_touched(tmp_path, monkeypatch, capsys):
+    """Fix round 1, M1: a second start beside a running practice Desk must not write a new key over the one the
+    running Desk holds (the runner reads the file at every request)."""
+    asked = []
+    monkeypatch.setattr(fake_desk, "bind_port", lambda port: asked.append(port))    # None: taken
+    monkeypatch.setattr(fake_desk, "first_clock", lambda ticks: pytest.fail("it went on to the tick stream"))
+    monkeypatch.setattr(fake_desk, "write_key", lambda p: pytest.fail("it wrote a key"))
+    monkeypatch.setattr(fake_desk, "serve_lab", lambda *a, **k: pytest.fail("it served"))
+    assert fake_desk.main(["--lab", "--ticks", "http://127.0.0.1:8853", "--store", str(tmp_path / "s"), "--port", "8861"]) == 1
+    assert asked == [8861] and "Port 8861 is taken" in capsys.readouterr().err and not (tmp_path / "s").exists()
 
 
 def test_lab_mode_starts_on_the_replayed_day_with_a_fresh_key_and_a_fresh_engine_folder(tmp_path, monkeypatch, capsys):
-    served, keys = [], []
+    served, keys, order, sock = [], [], [], Sock()
 
-    def serve(app, host, port, log_level):
-        served.append((app, host, port))
+    def serve(app, s):
+        order.append("serve")
+        served.append((app, s))
 
     def key(path):
+        order.append("key")
         keys.append(path)
         return KEY
-    monkeypatch.setattr(fake_desk, "first_clock", lambda ticks: at("09:20:00"))
-    monkeypatch.setattr(fake_desk.uvicorn, "run", serve)
+
+    def bind(port):
+        order.append(("bind", port))
+        return sock
+    monkeypatch.setattr(fake_desk, "first_clock", lambda ticks: order.append("clock") or at("09:20:00"))
+    monkeypatch.setattr(fake_desk, "bind_port", bind)
+    monkeypatch.setattr(fake_desk, "serve_lab", serve)
+    monkeypatch.setattr(fake_desk.uvicorn, "run", lambda *a, **k: pytest.fail("it bound a port by itself"))
     monkeypatch.setattr(fake_desk, "write_key", key)
     monkeypatch.setattr("homebase.labrun.tickclient.TickClient.run", lambda self, stop: None)     # no connection
     monkeypatch.setattr("tempfile.mkdtemp", lambda prefix: str(tmp_path / (prefix + "x")))
@@ -904,8 +1152,8 @@ def test_lab_mode_starts_on_the_replayed_day_with_a_fresh_key_and_a_fresh_engine
     real = {n: (state / n).stat().st_mtime_ns if (state / n).exists() else None
             for n in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE)}
     assert fake_desk.main(["--lab", "--ticks", "http://127.0.0.1:8853", "--store", str(tmp_path / "s")]) == 0
-    (app, bind, port), = served
-    assert (bind, port) == ("127.0.0.1", 8859)
+    (app, got), = served
+    assert got is sock and order == [("bind", 8859), "clock", "key", "serve"]     # the port is held before the key is written
     assert [(k.name, k.parent) for k in keys] == [("fake-lab.key", state)]         # ONE key file, its own
     assert real == {n: (state / n).stat().st_mtime_ns if (state / n).exists() else None for n in real}
     rig = app.state.rig

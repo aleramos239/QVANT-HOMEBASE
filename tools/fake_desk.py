@@ -44,10 +44,12 @@ from __future__ import annotations
 import argparse
 import asyncio
 import datetime as dt
+import functools
 import itertools
 import json
 import os
 import secrets
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -690,8 +692,11 @@ def write_key(path: Path) -> str:
 #                   runner with --desk-key). The Lab side is on without the flag file.
 #   its clock       the tick stream's (a replayed day): the engine's `now` is the stream's clock, so "today", the
 #                   session window and the flat time are the replayed day's.
-#   never           port 8850 or 8852 (its own port, --ticks, and every address in the page it serves), a broker,
-#                   ~/.homebase, the main checkout.
+#   never           port 8850 or 8852 (its own port, --ticks, and every address in the page and the static files it
+#                   serves), a broker, ~/.homebase, the main checkout (asked of git; a folder is refused however it
+#                   is spelled or linked), a real Desk's key file, config.json (a save of this config raises).
+#   a restart       --resume: each simulated account is reconciled by the engine right after it connects, as the real
+#                   Desk does (engine.reconcile_account), and once more when the stream's backlog is in.
 #
 # The page routes below are the real server's bodies for a Lab strategy, calling the same LabDesk / Engine methods
 # (homebase/server.py cannot be imported for them: it builds the real app, from config.json, at import). What differs
@@ -726,27 +731,112 @@ RIG_FAULTS = ("stream_drop", "silent_s", "timer_placing_s", "chart_kill", "accou
 TIMER_STATE = "fake_timer@timer"             # the made-up state of timer_placing_s (no such strategy, no such account)
 
 
-def main_checkout() -> Path:
-    """The checkout the live services run from: this repository's own folder, or -- when this file sits in one of
-    its worktrees (<main>/.claude/worktrees/<name>) -- the folder that holds them."""
-    here = Path(__file__).resolve().parents[1]
-    if here.parent.name == "worktrees" and here.parent.parent.name == ".claude":
-        return here.parent.parent.parent
-    return here
+@functools.lru_cache(maxsize=None)
+def main_checkout(start: Path | None = None) -> Path:
+    """The checkout the live services run from, ASKED OF GIT (never guessed from where this file sits: this
+    repository keeps worktrees in two places): the folder that holds the repository's common git dir, as
+    `git rev-parse --git-common-dir` answers from the tool's own folder (`start`: another folder, for the tests).
+    ValueError when git cannot say: the practice Desk then does not start."""
+    here = Path(start) if start is not None else Path(__file__).resolve().parent
+    out = ""
+    try:
+        r = subprocess.run(["git", "rev-parse", "--path-format=absolute", "--git-common-dir"], cwd=here,
+                           capture_output=True, text=True, timeout=10,
+                           env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")})
+        out = r.stdout.strip() if r.returncode == 0 else ""
+    except (OSError, subprocess.SubprocessError):
+        pass
+    common = Path(out) if out else None
+    if common is None or not common.is_absolute() or not common.is_dir():
+        raise ValueError("git could not say where this repository's main checkout is: the practice Desk does not start")
+    common = common.resolve()
+    return common.parent if common.name == ".git" else common
+
+
+WORKTREE_DIRS = (Path(".claude") / "worktrees", Path(".worktrees"))     # inside the main checkout: where worktrees live
+
+
+def _same(a: Path, b: Path) -> bool:
+    try:
+        return a.exists() and b.exists() and os.path.samefile(a, b)
+    except OSError:
+        return False
+
+
+def _inside(p: Path, root: Path, *, loose: bool, strict: bool = False) -> bool:
+    """Is `p` the folder `root` or under it (strict: under it only)? Asked twice. By IDENTITY: one of p's own
+    folders is that folder, whatever it is called here -- another spelling on a disk that ignores case, a link.
+    And by TEXT, for folders that do not exist yet: loose compares without case (a refusal errs towards refusing),
+    else exactly (an allowance never does)."""
+    chain = list(p.parents) if strict else [p, *p.parents]
+    if any(_same(q, root) for q in chain):
+        return True
+    fold = (lambda x: x.casefold()) if loose else (lambda x: x)
+    a, b = [fold(c) for c in p.parts], [fold(c) for c in root.parts]
+    return a[:len(b)] == b and (len(a) > len(b) or not strict)
 
 
 def refused_folder(path, main: Path | None = None, home: Path | None = None) -> str | None:
-    """Why this folder may not hold a practice Desk's store or engine files, or None: nothing under ~/.homebase (the
-    real store is ~/.homebase/desklab), nothing inside the main checkout except its worktrees."""
+    """Why this folder may not hold a practice Desk's store or engine files, or None. Refused: anything that IS, or
+    lies under, ~/.homebase (the real store is ~/.homebase/desklab) or the main checkout -- however it is spelled
+    and through whatever link it is reached (the path is resolved first, then compared by identity and without
+    case). Allowed inside the main checkout: only what lies under one of its worktree folders (.claude/worktrees/,
+    .worktrees/). ValueError when git cannot say where the main checkout is."""
     p = Path(path).expanduser().resolve()
     real = ((home or Path.home()) / ".homebase").resolve()
-    if p == real or real in p.parents:
+    if _inside(p, real, loose=True):
         return f"{p} is inside {real}: the real Desk's own folder"
     main = (main or main_checkout()).resolve()
-    trees = main / ".claude" / "worktrees"
-    if (p == main or main in p.parents) and not (trees in p.parents):
+    if _inside(p, main, loose=True) and not any(_inside(p, main / t, loose=False, strict=True) for t in WORKTREE_DIRS):
         return f"{p} is inside the main checkout ({main}): the live services run from it"
     return None
+
+
+def guard_config_save() -> None:
+    """config.json is the real Desk's. Put ONCE on homebase.config.save, for this process: a config marked as a
+    practice Desk's is never saved (RuntimeError, nothing written); every other config goes to the real save as
+    it is. Nothing the practice Desk runs calls save today; this holds if something one day does."""
+    import homebase.config as config_mod
+    real = config_mod.save
+    if getattr(real, "_practice_guard", False):
+        return
+
+    @functools.wraps(real)
+    def save(cfg):
+        if getattr(cfg, "_practice_desk", False):
+            raise RuntimeError("the practice Desk's config is never saved: config.json is the real Desk's")
+        return real(cfg)
+    save._practice_guard = True
+    config_mod.save = save
+
+
+def swap_ports(data: bytes, own_port: int, ticks_port: int | None) -> bytes:
+    """Every ":8852" (the real chart service) becomes the --ticks service's port, every ":8850" (the real Desk) this
+    tool's own: nothing the practice Desk serves names a real port."""
+    return data.replace(b":8852", f":{ticks_port if ticks_port else own_port}".encode()).replace(b":8850", f":{own_port}".encode())
+
+
+STATIC_TEXT = frozenset({".html", ".js", ".mjs", ".css", ".json", ".svg", ".txt", ".map"})
+
+
+def bind_port(port: int):
+    """This tool's own port on 127.0.0.1, bound now -- or None when it is taken. Lab mode holds the port BEFORE it
+    writes its key file: a second start beside a running practice Desk must not write a new key over the one the
+    running Desk answers to."""
+    import socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)      # as uvicorn binds: a restart right after a stop works
+        s.bind(("127.0.0.1", port))
+    except OSError:
+        s.close()
+        return None
+    return s
+
+
+def serve_lab(app, sock) -> None:
+    """Serve on the socket bind_port holds (127.0.0.1 only: it was bound there)."""
+    uvicorn.Server(uvicorn.Config(app, log_level="warning")).run(sockets=[sock])
 
 
 def lab_key_path() -> Path:
@@ -819,6 +909,8 @@ class LabRig:
         self.cfg = AppCfg(armed=saved.get("armed") is not False, book={}, strategies={},
                           accounts={aid: AccountCfg(account_name=label, label=label, live=env == "live")
                                     for aid, label, env in ACCOUNTS})
+        self.cfg.__dict__["_practice_desk"] = True           # config.save refuses it (guard_config_save)
+        guard_config_save()
         self.adapters = {aid: SimAdapter(aid, self.root, live=env == "live", label=label, first_id=(i + 1) * 100_000 + 1,
                                          placement_ms=PLACEMENT_MS if placement_ms is None else placement_ms)
                          for i, (aid, label, env) in enumerate(ACCOUNTS)}
@@ -833,10 +925,19 @@ class LabRig:
         self._live: dict = {"recs": None, "live": {}}
 
     async def start(self) -> None:
-        for ad in self.adapters.values():
+        for aid, ad in self.adapters.items():
             await ad.connect()
             await ad.observe_fills(self.engine.on_fill)
+            await self.reconcile(aid)                        # where the real Desk does it: right after the connect
         self.labdesk.start()
+
+    async def reconcile(self, aid: str) -> None:
+        """server.py `_connect_account_locked`, its last step: engine.reconcile_account, and a failure of it is
+        journaled, never the end of the connect."""
+        try:
+            await self.engine.reconcile_account(aid)
+        except Exception as e:  # noqa: BLE001 -- never block the connect on it
+            self.engine.journal("reconcile_error", account=aid, error=str(e)[:200])
 
     def roots(self) -> list:
         """The markets the tick stream is asked for: every Lab strategy's, and any a simulated account still holds."""
@@ -858,8 +959,11 @@ class LabRig:
                 for ad in self.adapters.values():
                     await ad.on_ticks(item[1], [row])
         elif item[0] == "live":                              # the backlog is in: a fill is told to the engine again
-            for ad in self.adapters.values():
+            for aid, ad in self.adapters.items():
+                was_away = ad.away
                 ad.back()
+                if was_away:                                 # a start on a saved book: only now does the account know
+                    await self.reconcile(aid)                # what a broker knows at connect -- reconciled again
 
     def silent(self) -> bool:
         return self.mono() < self.silent_until
@@ -1040,7 +1144,6 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     import httpx
     from fastapi.responses import HTMLResponse, JSONResponse, Response
-    from fastapi.staticfiles import StaticFiles
 
     from homebase import desk_api
     from homebase import labdesk as labdesk_mod
@@ -1100,11 +1203,27 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     app = FastAPI(title="practice Desk (rehearsals only)", lifespan=lifespan)
     app.state.rig, app.state.engine, app.state.labdesk, app.state.cfg, app.state.adapters = rig, engine, labdesk, cfg, adapters
+    app.state.chart = chart
     app.state.lab_key = key
     app.include_router(desk_api.labdesk_router(labdesk), prefix="/api/lab")     # the REAL runner routes and gate
     app.add_middleware(_Silence, rig=rig)
     app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)    # the REAL guard of every page write
-    app.mount("/static", StaticFiles(directory=static), name="static")
+    static_root = static.resolve()
+
+    @app.get("/static/{path:path}")
+    async def static_file(path: str):
+        """homebase/static as it is on disk -- except that a text file naming a real port (":8850", ":8852") is
+        served with it swapped, as the page is (the chart pages do). Nothing outside that folder is served."""
+        import mimetypes
+        f = (static_root / path).resolve()
+        if static_root not in f.parents or not f.is_file():
+            raise HTTPException(404, "Not Found")
+        data = f.read_bytes()
+        if b":8850" in data or b":8852" in data:
+            if f.suffix.lower() not in STATIC_TEXT:
+                raise HTTPException(404, "Not Found")        # not text: it cannot be swapped, so it is not served
+            data = swap_ports(data, own_port, ticks_port)
+        return Response(content=data, media_type=mimetypes.guess_type(f.name)[0] or "application/octet-stream")
 
     def refused(e) -> HTTPException:
         return HTTPException(e.status, str(e))
@@ -1340,13 +1459,22 @@ def lab_main(ap, a) -> int:
     except ValueError as e:
         ap.error(f"--ticks {a.ticks}: {e}")
     for flag, d in (("--store", a.store), ("--resume", a.resume)):
-        why = refused_folder(d) if d else None
+        try:
+            why = refused_folder(d) if d else None
+        except ValueError as e:                              # git could not say where the main checkout is
+            why = str(e)
         if why:
             ap.error(f"{flag}: {why}")
     if a.resume and not Path(a.resume).is_dir():
         ap.error(f"--resume {a.resume}: no such folder")
+    sock = bind_port(a.port)                                 # held before anything else is touched (the key above all)
+    if sock is None:
+        print(f"Port {a.port} is taken: is a practice Desk already running? Nothing was started and its key file "
+              "was not touched.", file=sys.stderr)
+        return 1
     now_ms = first_clock(ticks)
     if now_ms is None:
+        sock.close()
         print(f"No clock from {ticks} in {LAB_FIRST_CLOCK_S:.0f} s: is the private chart service running? "
               "The practice Desk did not start.", file=sys.stderr)
         return 1
@@ -1368,7 +1496,7 @@ def lab_main(ap, a) -> int:
           f"  runner      --desk http://127.0.0.1:{a.port} --desk-key {key_path}",
           file=sys.stderr, flush=True)
     try:
-        uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")
+        serve_lab(app, sock)
     finally:
         stop.set()
     return 0
