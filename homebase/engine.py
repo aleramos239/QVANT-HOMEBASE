@@ -2027,17 +2027,150 @@ class Engine:
             return "exit"
 
     # --- the rounds: what the Desk reads -----------------------------------------------------------
-    def _lab_prune(self) -> None:
-        """The first Lab action of a new day: yesterday's archived rounds and extras go."""
+    def _lab_roll(self) -> None:
+        """The first Lab call of a day, and the first after a start: yesterday's Lab rounds leave the day. One
+        that is NOT resolved (placing / placed / live, or its orders never read ended) is carried as a block
+        for its (strategy, account): see _lab_carry. Never raises."""
         today = self._today()
         if self.__dict__.get("_lab_day") == today:
             return
         self._lab_day = today
+        try:
+            self._lab_roll_day(today)
+        except Exception as e:  # noqa: BLE001 -- the position read in front of every entry still stands
+            print(f"homebase engine: the Lab day roll failed: {e!r}", file=sys.stderr)
+
+    @staticmethod
+    def _lab_unresolved(rec: dict, x) -> bool:
+        """A round (its state as a dict, its extras) that an account may not trade past."""
+        if isinstance(x, dict) and isinstance(x.get("carry"), dict):
+            return True                               # a block that never cleared
+        status = rec.get("status")
+        if status in ("placing", "placed", "live"):
+            return True
+        if status in (None, "idle"):
+            return False
+        return not (isinstance(x, dict) and x.get("clean") is True and not x.get("check")
+                    and not x.get("unconfirmed"))
+
+    def _lab_last_files(self, today: str) -> tuple:
+        """(date, extras, states) of the most recent earlier day that has a Lab file, at most 7 days back. A file
+        that is missing or does not read carries nothing: (None, {}, {})."""
+        try:
+            now, best = dt.date.fromisoformat(today), None
+            for f in self._root.glob("labday-*.json"):
+                try:
+                    d = dt.date.fromisoformat(f.name[len("labday-"):-len(".json")])
+                except ValueError:
+                    continue
+                if d < now and (now - d).days <= 7 and (best is None or d > best):
+                    best = d
+            if best is None:
+                return None, {}, {}
+            lab = json.loads((self._root / f"labday-{best.isoformat()}.json").read_text())
+            day = json.loads(self._day_path(best.isoformat()).read_text())
+            if not isinstance(lab, dict) or not isinstance(day, dict):
+                return None, {}, {}
+            return best.isoformat(), lab, day
+        except Exception as e:  # noqa: BLE001
+            print(f"homebase engine: an earlier day's Lab files do not read: {e!r}", file=sys.stderr)
+            return None, {}, {}
+
+    def _lab_roll_day(self, today: str) -> None:
         mem = self._lab_mem()
-        for k in [k for k, s in self.states.items() if s.date != today and self._archived(s)]:
+        first_today = not self._lab_path().exists()   # this day's file is written below: a later restart skips the disk
+        found: dict = {}                              # (strategy, account) -> what to carry
+
+        def note(rec: dict, x, date: str) -> None:
+            was = x.get("carry") if isinstance(x, dict) and isinstance(x.get("carry"), dict) else None
+            c = found.setdefault((str(rec.get("strategy")), str(rec.get("account"))), {
+                "date": (was or {}).get("date") or date, "status": (was or {}).get("status") or rec.get("status"),
+                "round": (x or {}).get("round") if isinstance(x, dict) else None, "qty": rec.get("qty") or 0,
+                "iid": (x or {}).get("iid") if isinstance(x, dict) else None,
+                "placed_ms": (x or {}).get("placed_ms") if isinstance(x, dict) else None, "ids": {}})
+            for k in ("upper_id", "lower_id", "up_sl_id", "up_tp_id", "dn_sl_id", "dn_tp_id"):
+                if rec.get(k) and rec[k] not in c["ids"].values():
+                    c["ids"][k if k not in c["ids"] else f"{k}+{len(c['ids'])}"] = rec[k]
+
+        def lab(name) -> bool:
+            cfg = self.cfg.strategies.get(name)
+            return cfg is not None and cfg.kind == LAB
+
+        changed = False
+        for k, st in list(self.states.items()):       # 1. what this engine still holds of an earlier day
+            if st.date == today or not (lab(st.strategy) or k in mem):
+                continue
+            if self._lab_unresolved(asdict(st), mem.get(k)):
+                note(asdict(st), mem.get(k), st.date)
             del self.states[k]
-        for k in [k for k in mem if k not in self.states or self.states[k].date != today]:
+            changed = True
+        for k in [k for k in mem if k not in self.states]:
             del mem[k]
+        if first_today:                               # 2. what the files of the last Lab day say (a restart)
+            date, lab_old, day_old = self._lab_last_files(today)
+            for k, rec in day_old.items():
+                if not isinstance(rec, dict) or rec.get("date") != date or not (lab(rec.get("strategy")) or k in lab_old):
+                    continue
+                x = lab_old.get(k)
+                if (str(rec.get("strategy")), str(rec.get("account"))) not in found and self._lab_unresolved(rec, x):
+                    note(rec, x if isinstance(x, dict) else None, date)
+        for (name, account), c in found.items():      # 3. a block per pair, as a state of today under its own key
+            if not lab(name) or any(self._lab_carried(s) for s in self.states.values()
+                                    if s.strategy == name and s.account == account and s.date == today):
+                continue
+            key = f"{name}@{account}#c{c['date']}"
+            ids = {k: v for k, v in c["ids"].items() if "+" not in k}
+            st = self.states[key] = DayState(strategy=name, account=account, date=today, qty=int(c["qty"] or 0),
+                                             status="error", exit_reason="carried", note=LAB_CANNOT_CHECK, **ids)
+            n = c["round"] if isinstance(c["round"], int) and not isinstance(c["round"], bool) else 1
+            x = mem[key] = self._lab_blank(n)
+            x.update(check=True, why=LAB_CANNOT_CHECK, placed_ms=c["placed_ms"],
+                     iid=c["iid"] if isinstance(c["iid"], dict) else {},
+                     carry={"date": c["date"], "status": c["status"], "since_ms": self._lab_ms(),
+                            "orders": sorted(set(c["ids"].values()))})
+            changed = True
+            self.journal("lab_carry", strategy=name, account=account, round=n, date=c["date"],
+                         status=c["status"], orders=x["carry"]["orders"])
+        if changed:
+            self._save()
+        self._lab_save()                              # always: the file says "this day was rolled"
+
+    def _lab_carried(self, st: DayState) -> bool:
+        """A block carried from an earlier day: a state of today that only says "this account is not resolved"."""
+        x = self._lab_mem().get(self._lab_key(st) or "")
+        return isinstance(x, dict) and isinstance(x.get("carry"), dict)
+
+    async def _lab_carry_check(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, x: dict) -> None:
+        """Read only, never an order: the block clears when every order of that round reads ended at the broker
+        AND the account's net in the market reads zero. Every 5 s for a minute, then every 30 s."""
+        key = self._lab_key(st)
+        tries = self.__dict__.setdefault("_lab_tries", {})
+        rk = f"carry:{key}"
+        gap = LAB_FLAT_RETRY_S if tries.get(rk, 0) < 12 else LAB_CHECK_RETRY_S
+        if key is None or not ad.connected or time.time() - self._retry_at.get(rk, 0.0) < gap:
+            return
+        self._retry_at[rk] = time.time()
+        tries[rk] = tries.get(rk, 0) + 1
+        for i in (x["carry"].get("orders") or []):
+            try:
+                status = await ad.get_order_status(i)
+            except Exception:  # noqa: BLE001 -- unread: asked again
+                return
+            if status not in TERMINAL:
+                return
+        try:
+            net = await ad.get_net_position(cfg.symbol)
+        except Exception:  # noqa: BLE001 -- unreadable is NOT flat
+            return
+        if net is None or int(net) != 0 or self.states.get(key) is not st:
+            return
+        del self.states[key]
+        self._lab_mem().pop(key, None)
+        tries.pop(rk, None)
+        self._save()
+        self._lab_save()
+        self.journal("lab_carry_cleared", strategy=st.strategy, account=st.account, round=x.get("round"),
+                     date=x["carry"].get("date"))
 
     def _lab_mark_check(self, st: DayState, x: dict, reason: str, *, why: Optional[str] = None,
                         actions: Optional[list] = None) -> None:
@@ -2077,6 +2210,7 @@ class Engine:
     def lab_rounds(self, name: str) -> list[dict]:
         """Today's rounds of a Lab strategy, oldest first: one row per round per account. Memory only."""
         out = []
+        self._lab_roll()
         for st in self.day_states(name):
             if st.status == "idle":
                 continue
@@ -2084,7 +2218,9 @@ class Engine:
             if self._lab_stamp(st, x):
                 self._lab_save()
             sl, tp = self._lab_levels(st, x)
+            carry = x.get("carry") if isinstance(x.get("carry"), dict) else None
             out.append({"account": st.account, "round": x.get("round"), "status": st.status,
+                        "date": (carry or {}).get("date") or st.date, "carried": carry is not None,
                         "iid": dict(x.get("iid") or {}), "qty": st.qty, "entry_side": st.entry_side,
                         "entry_qty": st.entry_qty, "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
                         "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
@@ -2096,7 +2232,9 @@ class Engine:
         return out
 
     def lab_open(self, name: str) -> list[str]:
-        """Accounts with a round of this strategy that is placing, placed or live, or whose orders are not checked."""
+        """Accounts with a round of this strategy that is placing, placed or live, or whose orders are not checked
+        (a block carried from an earlier day is one)."""
+        self._lab_roll()
         return sorted({st.account for st in self.day_states(name)
                        if st.status in ("placing", "placed", "live") or not self._lab_clean(st)})
 
@@ -2173,41 +2311,70 @@ class Engine:
         if x is not None:
             mem[new] = x
 
+    def _lab_sits_out(self, name: str, cfg: StrategyCfg, account: str, qty, max_rounds: int) -> Optional[str]:
+        """Steps 1-3 of lab_enter for one account, as one read with no side effect: the sentence when the account
+        sits this trade out, None when a round may be opened. It is asked twice: before the position read (an
+        account that sits out anyway costs no broker request) and again in the same run that opens the round."""
+        if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or "#" in str(account) \
+                or not any(a.get("account") == account for a in assignments(self.cfg, name)):
+            return LAB_BAD_ORDER
+        if self.account_locked(account):                                    # 1
+            return LAB_ACCOUNT_STOPPED
+        ad = self.adapters.get(account)
+        if ad is None or not ad.connected:
+            return LAB_NOT_CONNECTED
+        rules = self.rules_for(account)
+        if rules.day_take or rules.target_take:     # check_takes needs a price for every live state on the account
+            return LAB_TAKE_RULE
+        taken = self._lab_market_taken(name, cfg, account)                  # 2
+        if taken is not None:
+            return f"Another strategy trades {taken} on this account."
+        today = self._today()                                               # 3
+        if any(self._lab_carried(s) for s in self.day_states(name) if s.account == account):
+            return LAB_CANNOT_CHECK                 # an earlier day's round is not resolved on this account
+        cur = self.states.get(f"{name}@{account}")
+        if cur is not None and cur.date == today and cur.status != "idle":
+            if cur.status in ("placing", "placed", "live"):
+                return LAB_ONE_AT_A_TIME
+            if not self._lab_clean(cur):
+                return LAB_CANNOT_CHECK
+        n = 1 + max([int(self._lab_x(s).get("round") or 0) for s in self.day_states(name)
+                     if s.account == account and s.status != "idle"], default=0)
+        if n > max_rounds:
+            return f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'})."
+        return None
+
+    async def _lab_position(self, name: str, cfg: StrategyCfg, account: str) -> Optional[str]:
+        """Before EVERY Lab entry: the account's net in the strategy's market, read at the broker. Not zero, or
+        not readable -> the sentence, and the account sits the trade out (it uses no round). A round of an
+        earlier day that nobody carried, a position opened by hand, an order nobody recorded: none of them is
+        traded on top of."""
+        ad = self.adapters.get(account)
+        try:
+            net = await ad.get_net_position(cfg.symbol) if ad is not None and ad.connected else None
+            net = None if net is None or isinstance(net, bool) else int(net)
+        except Exception:  # noqa: BLE001 -- unreadable is NOT flat
+            net = None
+        why = LAB_NO_POSITION_READ if net is None else (
+            f"The account already holds {cfg.symbol}. Check it." if net else None)
+        if why is not None:
+            self.journal("place_skipped", strategy=name, account=account, reason=why,
+                         **({"net": net} if net is not None else {}))
+        return why
+
     def _lab_open_round(self, name: str, cfg: StrategyCfg, account: str, qty, legs: list,
                         max_rounds: int, source: str) -> tuple:
         """Steps 1-4 of lab_enter for one account, in ONE run with no await: the checks, the archive of the last
         round and the new round written to disk can never be interleaved with another entry, a fill or a kill.
         -> (the new round's state | None, the answer when there is none)"""
-        def out(reason: str, n=None, said: bool = True) -> tuple:
-            if said:
-                self.journal("place_skipped", strategy=name, account=account, reason=reason)
-            return None, {"ok": False, "round": n, "reason": reason}
-
-        if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or "#" in str(account) \
-                or not any(a.get("account") == account for a in assignments(self.cfg, name)):
-            return out(LAB_BAD_ORDER)
-        if self.account_locked(account):                                    # 1
-            return out(LAB_ACCOUNT_STOPPED)
-        ad = self.adapters.get(account)
-        if ad is None or not ad.connected:
-            return out(LAB_NOT_CONNECTED)
-        rules = self.rules_for(account)
-        if rules.day_take or rules.target_take:     # check_takes needs a price for every live state on the account
-            return out(LAB_TAKE_RULE)
-        taken = self._lab_market_taken(name, cfg, account)                  # 2
-        if taken is not None:
-            return out(f"Another strategy trades {taken} on this account.")
-        key, today = f"{name}@{account}", self._today()                     # 3
+        why = self._lab_sits_out(name, cfg, account, qty, max_rounds)
+        if why is not None:
+            self.journal("place_skipped", strategy=name, account=account, reason=why)
+            return None, {"ok": False, "round": None, "reason": why}
+        key, today = f"{name}@{account}", self._today()
         cur = self.states.get(key)
-        if cur is not None and cur.date == today and cur.status != "idle":
-            if cur.status in ("placing", "placed", "live"):
-                return out(LAB_ONE_AT_A_TIME)
-            if not self._lab_clean(cur):
-                return out(LAB_CANNOT_CHECK)
         n = 1 + max([int(self._lab_x(s).get("round") or 0) for s in self.day_states(name)
                      if s.account == account and s.status != "idle"], default=0)
-        if n > max_rounds:
-            return out(f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'}).")
         if cur is not None and cur.date == today and cur.status != "idle":
             self._lab_archive(key, cur)
         else:
@@ -2234,6 +2401,13 @@ class Engine:
 
     async def _lab_enter_one(self, name: str, cfg: StrategyCfg, account: str, qty, legs: list,
                              max_rounds: int, source: str, t0: float) -> dict:
+        why = self._lab_sits_out(name, cfg, account, qty, max_rounds)
+        if why is not None:
+            self.journal("place_skipped", strategy=name, account=account, reason=why)
+            return {"ok": False, "round": None, "reason": why}
+        why = await self._lab_position(name, cfg, account)
+        if why is not None:
+            return {"ok": False, "round": None, "reason": why}
         st, ans = self._lab_open_round(name, cfg, account, qty, legs, max_rounds, source)
         if st is None:
             return ans
@@ -2311,7 +2485,7 @@ class Engine:
             for a, q in sizes.items():
                 self.journal(ev, strategy=name, source=source, account=a, qty=q, legs=[asdict(g) for g in legs])
             return refused(LAB_DISARMED, armed=False)
-        self._lab_prune()
+        self._lab_roll()
         t0 = time.time()
         order = list(sizes)
         outs = await asyncio.gather(*(self._lab_enter_one(name, cfg, a, sizes[a], legs, max_rounds, source, t0)
@@ -2497,7 +2671,7 @@ class Engine:
         cfg = self.cfg.strategies.get(name)
         if cfg is None or cfg.kind != LAB:
             return {}
-        self._lab_prune()
+        self._lab_roll()
         rounds = {st.account: st for st in self.day_states(name)
                   if not self._archived(st) and st.status != "idle"}
 
@@ -2734,7 +2908,7 @@ class Engine:
         if cfg is None or cfg.kind != LAB:
             return {}
         reason = str(reason or "flat")
-        self._lab_prune()
+        self._lab_roll()
         async with self._kill_lock(name):
             rounds = {st.account: st for st in self.day_states(name)     # read INSIDE the lock
                       if not self._archived(st) and st.status != "idle"}
@@ -2839,7 +3013,11 @@ class Engine:
           live with exit fills        is the trade over? (_close_if_out)
           live or done, a sibling     is the other entry really gone? (_guard_sibling)
           done or error               are its orders all ended? (_lab_settle)"""
-        if self._archived(st) or st.status == "idle":
+        if self._archived(st):
+            if self._lab_carried(st):
+                await self._lab_carry_check(st, cfg, ad, self._lab_x(st))
+            return
+        if st.status == "idle":
             return
         x = self._lab_x(st)
         if self._lab_stamp(st, x):
@@ -2906,6 +3084,7 @@ LAB_ONE_AT_A_TIME = "One position at a time."
 LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
 LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."
+LAB_NO_POSITION_READ = "The Desk cannot read this account's position."
 LAB_BAD_ORDER = "The Desk cannot check this order."
 LAB_NO_STOP = "Every entry needs a stop held at the broker."
 LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."

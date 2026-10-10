@@ -136,6 +136,11 @@ def test_the_whole_path_engine_to_wire_for_a_stop_only_entry(tmp_path):
     ad, sent = mkadapter(tmp_path)
     # no socket in a test (the wire is the capturing fake): THIS instance alone reads connected
     ad.__class__ = type("Wired", (type(ad),), {"connected": property(lambda self: True)})
+
+    async def flat(symbol):                                # the position read in front of every Lab entry (fix
+        return 0                                           # round 1, C2): not what this file pins
+
+    ad.get_net_position = flat
     eng.adapters["a1"] = ad
     out = run(eng.lab_enter(LAB, [LabLeg(iid=1, side="Buy", entry="Stop", entry_price=21010.5, sl_px=21005.5,
                                          tp_px=None, tp_rr=None, ref_px=21010.5)], {"a1": 2}, max_rounds=3))

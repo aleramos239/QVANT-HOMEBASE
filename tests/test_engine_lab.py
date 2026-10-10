@@ -374,7 +374,7 @@ def test_disarmed_journals_only_and_creates_no_state(tmp_path):
     dry = events(tmp_path, "dry_run")
     assert [(e["strategy"], e["account"], e["qty"]) for e in dry] == [(LAB, "a1", 1), (LAB, "a2", 1)]
     assert dry[0]["legs"][0]["sl_px"] == 95.0 and eng.lab_rounds(LAB) == [] and eng.lab_open(LAB) == []
-    assert not (tmp_path / f"labday-{eng._today()}.json").exists()
+    assert json.loads((tmp_path / f"labday-{eng._today()}.json").read_text()) == {}     # the day was rolled; no round
 
 
 @pytest.mark.parametrize("how,reason", [("unknown", "That strategy is not on the Desk."),
@@ -1273,9 +1273,10 @@ def test_the_flat_time_retry_waits_five_seconds_and_sells_once_it_can_read(tmp_p
     st = live_round(eng, ad)
     ad.net_error = True
     clock.set_et(15, 55)
+    before = ad.net_reads                                             # the entry's own position read (C2)
     run(eng.clock_tick())
     run(eng.clock_tick())                                             # inside the 5 s: no second read
-    assert ad.net_reads == 1 and ad.orders == []
+    assert ad.net_reads == before + 1 and ad.orders == []
     assert len(events(tmp_path, "clock_flat_failed")) == 1
     ad.net_error = False
     tick(eng)
@@ -1826,3 +1827,183 @@ def test_s5_a_filled_count_that_may_lag_is_not_trusted_against_the_net(tmp_path)
     ad.net = 1                                                      # the count and the net agree: it closes
     eng2_out = run(eng.lab_flatten(LAB))["a1"]
     assert eng2_out["sold"] == 1
+
+
+# ------------------------------------------------------------------------------------------------ C2 (i)
+def test_c2_an_account_that_already_holds_the_market_sits_out_every_round(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    ads["a1"].net = 1
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "The account already holds NQ. Check it."}
+    assert out["accounts"]["a2"] == {"ok": True, "round": 1, "reason": None}
+    assert ads["a1"].brackets == [] and list(eng.states) == [f"{LAB}@a2"]         # no round, nothing on disk
+    assert f"{LAB}@a1" not in json.loads((tmp_path / f"labday-{eng._today()}.json").read_text())
+    assert ("a1", "The account already holds NQ. Check it.") in \
+        [(e["account"], e["reason"]) for e in events(tmp_path, "place_skipped")]
+    ads["a1"].net = 0
+    trade(eng, ads["a1"])                                           # round 1 on a1, closed and clean
+    ads["a1"].net = -2                                              # not only the day's first entry: every round
+    assert go(eng, leg(iid=2), {"a1": 1})["accounts"]["a1"]["reason"] == "The account already holds NQ. Check it."
+    assert len(ads["a1"].brackets) == 1 and rnd(eng, "a1").status == "done"
+    ads["a1"].net = 0
+    assert go(eng, leg(iid=2), {"a1": 1})["accounts"]["a1"] == {"ok": True, "round": 2, "reason": None}
+
+
+@pytest.mark.parametrize("how", ["raises", "none"])
+def test_c2_an_account_whose_position_cannot_be_read_sits_out(tmp_path, how):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    if how == "raises":
+        ad.net_error = True
+    else:
+        async def nothing(symbol):
+            return None
+
+        ad.get_net_position = nothing
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": None,
+                                     "reason": "The Desk cannot read this account's position."}
+    assert ad.brackets == [] and eng.states == {}
+
+
+def test_c2_the_position_is_read_before_the_round_exists(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    seen = []
+    real = ad.get_net_position
+
+    async def read(symbol):
+        seen.append((symbol, dict(eng.states), [e["event"] for e in events(tmp_path)], list(ad.brackets)))
+        return await real(symbol)
+
+    ad.get_net_position = read
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is True
+    assert seen == [("NQ", {}, [], [])]                             # one read, before anything was made or sent
+
+
+# ------------------------------------------------------------------------------------------------ C2 (ii)
+def next_day(clock, days=1):
+    import datetime as dt
+    clock.dt = dt.datetime(2026, 9, 14, 13, 31, tzinfo=dt.timezone.utc) + dt.timedelta(days=days)
+
+
+def unresolved_day_one(tmp_path):
+    """Day 1: a live round whose close was refused at the flat time. Its stop still works at the broker."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.fail_market = True
+    clock.set_et(15, 56)
+    tick(eng)
+    ad.fail_market = False
+    assert st.status == "live" and eng.lab_open(LAB) == ["a1"] and ad.net == 1
+    return eng, ad, clock, st
+
+
+def assert_carried(eng, ad, tmp_path, n_orders=1, n_brackets=1):
+    assert eng.lab_open(LAB) == ["a1"]
+    (r,) = eng.lab_rounds(LAB)
+    assert (r["account"], r["round"], r["date"], r["carried"], r["clean"], r["why"]) == \
+        ("a1", 1, "2026-09-14", True, False, "The Desk cannot check the last trade's orders.")
+    out = go(eng, leg(iid=7))["accounts"]["a1"]
+    assert out == {"ok": False, "round": None, "reason": "The Desk cannot check the last trade's orders."}
+    assert len(ad.orders) == n_orders and len(ad.brackets) == n_brackets          # nothing sent
+    assert eng.day_status(LAB) == "idle"                            # a block, not a trade of today
+
+
+def test_c2_a_round_still_open_at_midnight_blocks_the_next_day(tmp_path):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    assert_carried(eng, ad, tmp_path)
+    (c,) = events(tmp_path, "lab_carry")
+    assert (c["strategy"], c["account"], c["round"], c["date"], c["status"]) == (LAB, "a1", 1, "2026-09-14", "live")
+    assert set(c["orders"]) == {"a1-101", "a1-101-sl", "a1-101-tp"}
+    assert list(eng.states) == [f"{LAB}@a1#c2026-09-14"]            # yesterday's live state is gone from the day
+
+
+def test_c2_a_carried_block_clears_by_itself_and_never_sends_anything(tmp_path):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    eng.lab_open(LAB)
+    cancelled = list(ad.cancelled)
+    for _ in range(3):                                              # the stop still works: it stays
+        tick(eng)
+    assert eng.lab_open(LAB) == ["a1"]
+    ad.order_status.update({"a1-101-sl": "Filled", "a1-101-tp": "Canceled"})      # the stop is hit ...
+    tick(eng)
+    assert eng.lab_open(LAB) == ["a1"]                              # ... but the account does not read flat yet
+    ad.net = 0
+    run(eng.clock_tick())                                           # inside the 5 s: not asked again
+    assert eng.lab_open(LAB) == ["a1"]
+    tick(eng)
+    assert eng.lab_open(LAB) == [] and eng.lab_rounds(LAB) == []
+    (c,) = events(tmp_path, "lab_carry_cleared")
+    assert (c["strategy"], c["account"], c["round"], c["date"]) == (LAB, "a1", 1, "2026-09-14")
+    assert ad.cancelled == cancelled and len(ad.orders) == 1        # read only, from the first day's close on
+    assert go(eng, leg(iid=7))["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+
+
+def test_c2_a_carried_block_survives_a_restart_and_is_carried_once(tmp_path):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    eng2 = restart(eng, tmp_path)                                   # the desk starts on day 2: only the files
+    assert eng2.states == {}
+    assert_carried(eng2, ad, tmp_path)
+    eng3 = restart(eng2, tmp_path)                                  # and again, the same day
+    assert_carried(eng3, ad, tmp_path)
+    assert list(eng3.states) == [f"{LAB}@a1#c2026-09-14"] and len(events(tmp_path, "lab_carry")) == 1
+    next_day(clock, 2)                                              # a third day: still not resolved
+    eng4 = restart(eng3, tmp_path)
+    assert_carried(eng4, ad, tmp_path)
+    assert events(tmp_path, "lab_carry")[-1]["date"] == "2026-09-14"
+
+
+def test_c2_a_block_that_cleared_is_not_carried_again_by_a_restart(tmp_path):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    eng.lab_open(LAB)
+    ad.order_status.update({"a1-101-sl": "Filled", "a1-101-tp": "Canceled"})
+    ad.net = 0
+    tick(eng)
+    assert eng.lab_open(LAB) == []
+    eng2 = restart(eng, tmp_path)
+    assert eng2.lab_open(LAB) == [] and eng2.lab_rounds(LAB) == [] and len(events(tmp_path, "lab_carry")) == 1
+
+
+def test_c2_every_kill_and_flatten_leaves_a_carried_block_alone(tmp_path):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    eng.lab_open(LAB)
+    cancelled, orders = list(ad.cancelled), len(ad.orders)
+    ad.net = 3
+    out = run(eng.kill_strategy(LAB))
+    assert out["a1"]["ok"] is False and "check it" in out["a1"]["actions"][0]
+    assert run(eng.flatten_today()) == {} and run(eng.flatten_strategy(LAB)) == {}
+    assert run(eng.lab_cancel(LAB)) == {} and run(eng.lab_flatten(LAB)) == {}
+    clock.set_et(15, 56)
+    tick(eng)
+    assert ad.cancelled == cancelled and len(ad.orders) == orders   # yesterday's stop is never touched
+
+
+def test_c2_a_clean_yesterday_carries_nothing(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    trade(eng, ads["a1"])
+    next_day(clock)
+    eng2 = restart(eng, tmp_path)
+    assert eng2.lab_open(LAB) == [] and not events(tmp_path, "lab_carry")
+    assert go(eng2, leg())["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+
+
+@pytest.mark.parametrize("damage", ["lab_garbage", "day_missing", "eight_days"])
+def test_c2_an_older_file_that_does_not_read_carries_nothing(tmp_path, damage):
+    """... and rule (i) still stands in front of the entry: the account holds the market."""
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    if damage == "lab_garbage":
+        (tmp_path / "labday-2026-09-14.json").write_text("{nope")
+    elif damage == "day_missing":
+        (tmp_path / "day-2026-09-14.json").unlink()
+    next_day(clock, 8 if damage == "eight_days" else 1)
+    eng2 = restart(eng, tmp_path)                                   # the desk starts all the same
+    assert eng2.lab_open(LAB) == [] and eng2.lab_rounds(LAB) == []
+    assert go(eng2, leg())["accounts"]["a1"]["reason"] == "The account already holds NQ. Check it."
+    assert len(ad.brackets) == 1
