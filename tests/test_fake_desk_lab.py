@@ -897,12 +897,71 @@ def test_lab_mode_starts_on_the_replayed_day_with_a_fresh_key_and_a_fresh_engine
     monkeypatch.setattr(fake_desk, "write_key", key)
     monkeypatch.setattr("homebase.labrun.tickclient.TickClient.run", lambda self, stop: None)     # no connection
     monkeypatch.setattr("tempfile.mkdtemp", lambda prefix: str(tmp_path / (prefix + "x")))
+    monkeypatch.setattr(desk_api, "ensure_key", lambda path: pytest.fail(f"it opened a real Desk's key file: {path}"))
     (tmp_path / "fake-lab-desk-x").mkdir()
     store.put(rec(), tmp_path / "s")
+    state = fake_desk.state_dir()
+    real = {n: (state / n).stat().st_mtime_ns if (state / n).exists() else None
+            for n in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE)}
     assert fake_desk.main(["--lab", "--ticks", "http://127.0.0.1:8853", "--store", str(tmp_path / "s")]) == 0
     (app, bind, port), = served
-    assert (bind, port) == ("127.0.0.1", 8859) and keys[0].name == "fake-lab.key" and keys[0].parent.name == ".state"
+    assert (bind, port) == ("127.0.0.1", 8859)
+    assert [(k.name, k.parent) for k in keys] == [("fake-lab.key", state)]         # ONE key file, its own
+    assert real == {n: (state / n).stat().st_mtime_ns if (state / n).exists() else None for n in real}
     rig = app.state.rig
-    assert rig.root == tmp_path / "fake-lab-desk-x" and rig.engine._today() == "2026-09-14" and rig.roots() == ["NQ"]
-    assert app.state.lab_key == KEY and "--resume" in capsys.readouterr().err
+    assert rig.root == tmp_path / "fake-lab-desk-x" and rig.roots() == ["NQ"]
+    # the engine is on the REPLAYED day and its New York time, whatever the wall clock says
+    assert rig.engine._today() == "2026-09-14" and rig.engine.now_et().strftime("%H:%M:%S") == "09:20:00"
+    said = capsys.readouterr().err
+    assert app.state.lab_key == KEY and "--resume" in said
+    assert f"--desk http://127.0.0.1:8859 --desk-key {state / 'fake-lab.key'}" in said.splitlines()[-1]   # one line
     rig.labdesk.close()
+
+
+def test_the_practice_desk_only_ever_names_its_own_key_file(monkeypatch):
+    assert fake_desk.lab_key_path() == fake_desk.state_dir() / "fake-lab.key"
+    assert fake_desk.LAB_KEY_FILE not in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE, fake_desk.KEY_FILE)
+    for name in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE):
+        monkeypatch.setattr(fake_desk, "LAB_KEY_FILE", name)
+        with pytest.raises(ValueError, match="real Desk's key file"):
+            fake_desk.lab_key_path()
+    sim = (Path(fake_desk.__file__).parent / "sim_adapter.py").read_text(encoding="utf-8")
+    for text in (TOOL, sim):                         # no path to a real key file is spelled, and none is ever made
+        assert f'"{desk_api.KEY_FILE}"' not in text and f'"{desk_api.LAB_KEY_FILE}"' not in text
+        assert "ensure_key" not in text.replace("nothing here calls desk_api.ensure_key", "")
+        assert "desk_api.KEY_FILE)" not in text.replace("(desk_api.KEY_FILE, desk_api.LAB_KEY_FILE)", "")
+
+
+# ---------------------------------------------------------------- its clock is the replayed stream's
+def test_the_clock_is_the_tick_streams_a_print_moves_it_on_and_only_the_streams_own_clock_moves_it_back():
+    c = StreamClock()
+    wall = dt.datetime.now(dt.timezone.utc)
+    assert abs((c() - wall).total_seconds()) < 5                 # nothing heard yet (main never builds a Desk then)
+    c.heard(at("09:20:00"))
+    assert c().astimezone(host.ET).strftime("%Y-%m-%d %H:%M:%S") == "2026-09-14 09:20:00"
+    c.saw(at("09:20:05"))
+    c.saw(at("09:20:03"))                                        # an older print never moves time back
+    assert c().astimezone(host.ET).strftime("%H:%M:%S") == "09:20:05"
+    c.heard(at("09:20:01"))                                      # the stream's own clock may (a replay that restarts)
+    assert c().astimezone(host.ET).strftime("%H:%M:%S") == "09:20:01"
+
+
+def test_the_date_the_last_entry_time_and_the_flat_time_are_read_on_the_replayed_clock(tmp_path):
+    d = Lab(tmp_path)
+    assert d.ld.snapshot()["date"] == DATE == d.eng._today() != dt.date.today().isoformat()
+    wrong = {**d.body(entry(1)), "date": dt.date.today().isoformat()}
+    assert run(d.ld.event(wrong))["results"][0]["refused"] == labdesk_mod.OUT_OF_DATE     # the wall clock's day
+    d.send(entry(2, price=110.0, sl=105.0, tp=None))
+    d.prints([110.0])
+    assert d.st().status == "live"
+    run(d.rig.take(("clock", at("11:01:00"))))                   # past "no new trade after" (11:00), by the stream
+    assert d.send(entry(3), last=110.0)["results"][0]["refused"] is not None and len(d.working()) == 1
+    run(d.rig.take(("clock", at("15:54:59"))))
+    d.tick()
+    assert d.st().status == "live" and d.journal("clock_flat") == []
+    run(d.rig.take(("clock", at("15:55:00"))))                   # the flat time, by the stream
+    d.tick()
+    assert d.journal("clock_flat")[0]["actions"][0] == "market Sell 1: ok"
+    d.t = at("15:55:00")
+    d.prints([111.0])
+    assert (d.st().status, d.st().exit_reason) == ("done", "flat") and d.net() == 0

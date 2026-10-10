@@ -749,6 +749,17 @@ def refused_folder(path, main: Path | None = None, home: Path | None = None) -> 
     return None
 
 
+def lab_key_path() -> Path:
+    """The ONE key file Lab mode touches: its own, in this checkout's state folder, written fresh at each start.
+    The real Desk's key files (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE) are never opened by this tool, in any
+    checkout, for reading or for writing: nothing here calls desk_api.ensure_key, and a name that is one of theirs
+    is refused here."""
+    from homebase import desk_api
+    if LAB_KEY_FILE in (desk_api.KEY_FILE, desk_api.LAB_KEY_FILE) or not LAB_KEY_FILE.startswith("fake-"):
+        raise ValueError(f"{LAB_KEY_FILE} is a real Desk's key file: the practice Desk only writes its own")
+    return state_dir() / LAB_KEY_FILE
+
+
 def ticks_url(url: str, own_port: int) -> str:
     """--ticks, or ValueError: http, this machine, a port -- never 8850 or 8852, never this tool's own."""
     from homebase.labrun.__main__ import local_url          # the runner's own rule for --charts (loopback, not 8850)
@@ -1343,7 +1354,7 @@ def lab_main(ap, a) -> int:
     root = Path(a.resume) if a.resume else Path(tempfile.mkdtemp(prefix="fake-lab-desk-"))
     clock = StreamClock()
     clock.heard(now_ms)
-    key_path = state_dir() / LAB_KEY_FILE
+    key_path = lab_key_path()
     key = write_key(key_path)
     inbox: queue.Queue = queue.Queue()
     app = create_lab_desk(a.store, root, key=key, clock=clock, ticks=ticks, own_port=a.port, inbox=inbox)
@@ -1354,7 +1365,7 @@ def lab_main(ap, a) -> int:
           f"  prices      {ticks}  (the day is {clock().astimezone(ET).date()})\n"
           f"  Lab store   {Path(a.store).resolve()}\n"
           f"  engine      {root}   (start again on it: --resume {root})\n"
-          f"  runner key  {key_path}   (give it to the runner: --desk http://127.0.0.1:{a.port} --desk-key <that file>)",
+          f"  runner      --desk http://127.0.0.1:{a.port} --desk-key {key_path}",
           file=sys.stderr, flush=True)
     try:
         uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")
