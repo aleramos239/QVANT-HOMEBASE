@@ -1527,6 +1527,12 @@ class LabDesk:
             if ev == "lab_event" and whole:
                 held = r.get("intents") if isinstance(r.get("intents"), list) else []
                 open_events[(name, seq)] = any(isinstance(i, dict) and i.get("op") == "entry" for i in held)
+                # a `stop` the runner sent is in this line, written AHEAD of everything: the day is stopped by it
+                # even when the stop's own `lab_stopped` line was never written (whatever mark the event carried:
+                # an exit never looks at it). In the words the live desk kept (_stop).
+                asked = next((i for i in held if intents.well_formed_stop(i)), None)
+                if asked is not None and d["stopped"] is None:
+                    d["stopped"] = (asked["why"].strip() or STOPPED_TODAY)[:200]
                 # the mark, the seq count and the answered set come ONLY from lines the live desk counted (an event
                 # made for another promotion or another day is written down too -- its exits were applied -- and
                 # must never reset them)

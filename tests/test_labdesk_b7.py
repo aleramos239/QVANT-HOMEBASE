@@ -317,3 +317,41 @@ def test_a_real_lab_strategy_is_never_counted_among_the_made_up_names(tmp_path):
     out = send(d, entry(1, sl=None), seq=1)                                        # the Desk's own strategy: said as ever
     assert refusal(out) == "Every entry needs a stop held at the broker."
     assert lines(d, "lab_refused")[-1]["strategy"] == LAB and len(lines(d, "lab_event")) == 1
+
+
+# ================================================================ 7: a runner's own stop survives a stop line that was not written
+def test_a_runners_stop_whose_own_line_was_not_written_is_remembered_after_a_restart(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    real = d.eng.journal
+
+    def flaky(event, **kw):
+        if event == "lab_stopped":
+            raise OSError("disk hiccup")
+        return real(event, **kw)
+    d.eng.journal = flaky
+    send(d, {"op": "stop", "why": "Strategy error: boom", "flatten": False}, seq=2)
+    d.eng.journal = real
+    assert d.ld._rec(LAB)["stopped"] == "Strategy error: boom" and lines(d, "lab_stopped") == []
+    tick(d)
+    ld2 = restart(d)
+    assert ld2._rec(LAB)["stopped"] == "Strategy error: boom"                      # from the event's own write-ahead line
+    assert refusal(run(ld2.event(body(d, [entry(2)], seq=3)))) == "Stopped for today." and len(placed(d)) == 1
+
+
+def test_the_stop_is_rebuilt_in_the_words_the_live_desk_kept(tmp_path):
+    d = mkdesk(tmp_path)
+    d.eng.journal("lab_event", strategy=LAB, seq=1, date=DATE, mark=MARK, counted=False, t_ns=1, state={},
+                  intents=[{"op": "cancel", "id": 1}, {"op": "stop", "why": "  ", "flatten": True}])
+    assert restart(d)._rec(LAB)["stopped"] == "Stopped for today."                 # an empty why reads as the desk says it
+    d2 = mkdesk(tmp_path / "b", own_store=True)
+    d2.eng.journal("lab_event", strategy=LAB, seq=1, date=DATE, mark=MARK, counted=True, t_ns=1, state={},
+                   intents=[{"op": "stop", "why": "x" * 500, "flatten": False}])
+    d2.eng.journal("lab_event", strategy=LAB, seq=2, date=DATE, mark=MARK, counted=True, t_ns=2, state={},
+                   intents=[{"op": "stop", "why": "later", "flatten": False}, "junk", {"op": "stop", "why": 5}])
+    assert restart(d2)._rec(LAB)["stopped"] == "x" * 200                           # the first stop of the day, cut as live
+    d3 = mkdesk(tmp_path / "c", own_store=True)
+    d3.eng.journal("lab_event", strategy=LAB, seq=1, date=DATE, mark=MARK, counted=True, t_ns=1, state={},
+                   intents=[{"op": "cancel", "id": 1}, {"op": "flatten", "reason": "stop"}])
+    assert restart(d3)._rec(LAB)["stopped"] is None                                # only a stop intent stops the day
+
