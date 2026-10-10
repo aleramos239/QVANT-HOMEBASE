@@ -2145,11 +2145,17 @@ class Engine:
         that is NOT resolved (placing / placed / live, or its orders never read ended) is carried as a block
         for its (strategy, account): see _lab_carry. Never raises."""
         today = self._today()
-        if self.__dict__.get("_lab_day") == today:
+        names = frozenset(n for n, c in self.cfg.strategies.items()
+                          if isinstance(n, str) and getattr(c, "kind", None) == LAB)
+        seen = self.__dict__.get("_lab_names")
+        if self.__dict__.get("_lab_day") == today and seen is not None and names <= seen:
             return
-        self._lab_day = today
+        # N-1: a Lab strategy that was not in the config at the roll (its record did not read at that moment)
+        # was left completely alone. When it is there again, the roll runs once more, for it only.
+        only = None if self.__dict__.get("_lab_day") != today or seen is None else names - seen
+        self._lab_day, self._lab_names = today, (names if only is None else seen | names)
         try:
-            self._lab_roll_day(today)
+            self._lab_roll_day(today, only)
         except Exception as e:  # noqa: BLE001 -- the position read in front of every entry still stands
             print(f"homebase engine: the Lab day roll failed: {e!r}", file=sys.stderr)
 
@@ -2214,9 +2220,21 @@ class Engine:
                                                   "upper_px", "lower_px", "pnl", "sl_pts", "sl_sell_pts", "tp_pts",
                                                   "take_usd", "take_px")))
 
-    def _lab_roll_day(self, today: str) -> None:
+    def _lab_roll_day(self, today: str, only=None) -> None:
+        """`only`: None for the day's roll; else the names of Lab strategies that came (back) into the config
+        after it -- the roll is run again for their states and rows alone.
+        Whose is a key? By its strategy name in self.cfg, three ways (N-1):
+          kind "lab"            the Lab section's: checked, carried, pruned;
+          another kind          foreign: never looked at; extras a Lab file holds for it are dropped, said once;
+          not in the config     nobody's just now: its state, its extras in memory and its entry in the Lab file
+                                all stay exactly as they are, with no journal line, until the strategy is back."""
         mem = self._lab_mem()
-        first_today = not self._lab_path().exists()   # this day's file is written below: a later restart skips the disk
+        if only is None:
+            first_today = not self._lab_path().exists()   # this day's file is written below: a later restart skips the disk
+            if first_today:
+                self._lab_disk_day = today
+        else:                                         # a strategy that came back: the disk too, if this process read it
+            first_today = self.__dict__.get("_lab_disk_day") == today
         found: dict = {}                              # (strategy, account) -> the round to carry
         unread: dict = {}                             # (strategy, account) -> a record that does not read
 
@@ -2224,7 +2242,15 @@ class Engine:
             if not isinstance(name, str):            # O-3: a damaged name (a list, a number) is not a Lab strategy,
                 return False                         # and is never used as a dict key here
             cfg = self.cfg.strategies.get(name)
-            return cfg is not None and cfg.kind == LAB
+            return cfg is not None and cfg.kind == LAB and (only is None or name in only)
+
+        def foreign(name) -> bool:                   # in the config, and of another kind
+            cfg = self.cfg.strategies.get(name) if isinstance(name, str) else None
+            return cfg is not None and cfg.kind != LAB
+
+        def strange(key) -> None:                    # extras a Lab file holds for another kind's state
+            del mem[key]
+            self.journal("lab_foreign_key", key=key, note="the Lab file named a state that is not a Lab strategy's")
 
         def pair_of(key) -> tuple:
             name, _, rest = str(key).partition("@")
@@ -2286,10 +2312,10 @@ class Engine:
             pair = pair_of(k)
             if not lab(pair[0]):
                 # O-2: the Lab section never looks at, changes or deletes a state of another kind, whatever a
-                # labday file names. A state is the Lab section's by its KEY (what _state built it under)
-                if k in mem:
-                    del mem[k]
-                    self.journal("lab_foreign_key", key=k, note="the Lab file named a state that is not a Lab strategy's")
+                # labday file names. A state is the Lab section's by its KEY (what _state built it under).
+                # N-1: and a name that is in NO config is left completely alone, its extras too
+                if k in mem and foreign(pair[0]):
+                    strange(k)
                 continue
             if st.date != today and isinstance(st.date, str):    # 1. what this engine still holds of an earlier day
                 take(k, asdict(st), mem.get(k), st.date)
@@ -2301,7 +2327,11 @@ class Engine:
             del self.states[k]
             changed = True
         for k in [k for k in mem if k not in self.states]:
-            del mem[k]
+            name = pair_of(k)[0]
+            if lab(name):                             # a Lab strategy's extras with no state: gone with the day
+                del mem[k]
+            elif foreign(name):
+                strange(k)                            # (a name in no config: left as it is)
         if first_today:                               # 2. what the files of the last Lab day say (a restart)
             date, lab_old, day_old = self._lab_last_files(today)
             for k, rec in day_old.items():
@@ -2332,7 +2362,8 @@ class Engine:
         for pair, u in unread.items():
             changed = self._lab_carry_make(pair, {"date": u["date"] if isinstance(u["date"], str) else today,
                                                   "status": None, "orders": u["orders"], "unread": True}, today) or changed
-        self.__dict__.pop("_lab_tries", None)         # G2: a new day reads on the fast schedule again
+        if only is None:
+            self.__dict__.pop("_lab_tries", None)     # G2: a new day reads on the fast schedule again
         if changed:
             self._save()
         self._lab_save()                              # always: the file says "this day was rolled"
@@ -3322,7 +3353,7 @@ class Engine:
             acts.append(f"cancel entry {ids[s]}: " + ("ok" if ok else str(r if isinstance(r, Exception) else r.error)))
         states = await self._lab_entry_states(ad, [ids[s] for s in ask], quick) if ask else {}
         if st.status not in ("placed", "live"):      # the poll yielded: the round may have ended by itself
-            acts.append(f"the round ended on its own ({st.exit_reason})")
+            acts.append("This trade had already ended.")
             return ans(True)
         doubt = []
         for s in ask:                                                       # 2
@@ -3345,6 +3376,9 @@ class Engine:
         side = "Buy" if held["Buy"] else "Sell" if held["Sell"] else None
         if side is None:                             # nothing of this round ever filled
             if not await self._lab_end_unfilled(st, cfg, ad, acts):
+                if st.status not in ("placed", "live"):      # it ended by itself during the read
+                    acts.append("This trade had already ended.")
+                    return ans(True)
                 return ans(False)
             self._lab_save()
             self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
@@ -3358,7 +3392,7 @@ class Engine:
         except Exception as e:  # noqa: BLE001 -- unreadable is NOT flat
             return unsure(f"position unreadable ({e})")
         if st.status not in ("placed", "live"):      # the read yielded too: re-checked right before any sale
-            acts.append(f"the round ended on its own ({st.exit_reason})")
+            acts.append("This trade had already ended.")
             return ans(True)
         if st.status == "placed" or st.entry_side != side:    # the entry is in and its fill push never came
             st.status, st.entry_side = "live", side

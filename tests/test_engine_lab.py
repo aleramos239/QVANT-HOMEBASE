@@ -3306,3 +3306,192 @@ def test_o1_a_round_is_never_ended_as_cancelled_without_reading_its_entries(tmp_
     assert out["ok"] is False and "check it" in out["actions"][-1]
     assert st.status == "placed" and ad.cancelled == [] and not events(tmp_path, "lab_cancelled")
     assert ad.order_status[f"{up}-sl"] == "Suspended"              # its stop is there for the fill
+
+
+# ================================================================================================ fix round 5
+def labday(tmp_path, eng):
+    return json.loads((tmp_path / f"labday-{eng._today()}.json").read_text())
+
+
+def test_n1_the_roll_leaves_a_round_alone_whose_strategy_is_not_in_the_config_just_now(tmp_path):
+    """The reviewer's d_cfg: a Lab round of today is open; the desk restarts while that strategy's record does not
+    read (it is not in the config), another Lab strategy is there. When the record reads again the round must be a
+    healthy, managed round -- not one whose record the roll threw away."""
+    import dataclasses
+    other = lab_cfg(name="qq", root="ES")
+    eng, ads, clock = mk(tmp_path, extra={"lab_qq": other}, book={"lab_qq": [{"account": "a1", "qty": 1}]})
+    ad = ads["a1"]
+    go(eng, pair())
+    up, dn = rnd(eng).upper_id, rnd(eng).lower_id
+    before = labday(tmp_path, eng)[f"{LAB}@a1"]
+    less = dataclasses.replace(eng.cfg, strategies={k: v for k, v in eng.cfg.strategies.items() if k != LAB})
+    eng2 = quick(Engine(less, eng.adapters, now_fn=clock, root=tmp_path))
+    assert eng2.lab_open("lab_qq") == []                            # the first Lab call of this process: the roll
+    st = eng2.states[f"{LAB}@a1"]
+    assert st.status == "placed" and eng2._lab_mem()[f"{LAB}@a1"]["iid"] == before["iid"]
+    assert labday(tmp_path, eng2)[f"{LAB}@a1"]["iid"] == before["iid"] == {"Buy": 3, "Sell": 4}
+    assert labday(tmp_path, eng2)[f"{LAB}@a1"]["legs"] == before["legs"]
+    assert not events(tmp_path, "lab_foreign_key") and not events(tmp_path, "lab_check")
+    assert not events(tmp_path, "lab_carry")
+    eng2.cfg.strategies[LAB] = eng.cfg.strategies[LAB]              # the record reads again
+    (r,) = eng2.lab_rounds(LAB)
+    assert (r["status"], r["iid"], r["why"], r["carried"]) == ("placed", {"Buy": 3, "Sell": 4}, None, False)
+    assert eng2._lab_x(st)["lost"] is False and not events(tmp_path, "lab_check")
+    clock.set_et(15, 56)
+    tick(eng2)                                                      # the flat time closes it as a healthy round
+    assert (st.status, st.exit_reason) == ("done", "cancelled") and ad.cancelled[:2] == [up, dn] and ad.orders == []
+    assert events(tmp_path, "clock_flat") and events(tmp_path, "lab_cancelled")[0]["why"] == "flat"
+
+
+def test_n1_a_damaged_state_of_a_strategy_that_comes_back_is_still_taken_out_of_play(tmp_path):
+    """Left alone while its strategy is out of the config; checked (G1) at the first Lab call after it is back."""
+    import dataclasses
+    other = lab_cfg(name="qq", root="ES")
+    eng, ads, clock = mk(tmp_path, extra={"lab_qq": other}, book={"lab_qq": [{"account": "a1", "qty": 1}]})
+    go(eng, leg())
+    edit_file(tmp_path, eng, "day", lambda d: d[f"{LAB}@a1"].update(entry_qty=-1))
+    less = dataclasses.replace(eng.cfg, strategies={k: v for k, v in eng.cfg.strategies.items() if k != LAB})
+    eng2 = quick(Engine(less, eng.adapters, now_fn=clock, root=tmp_path))
+    eng2.lab_open("lab_qq")
+    assert eng2.states[f"{LAB}@a1"].entry_qty == -1                 # untouched while it is nobody's
+    eng2.cfg.strategies[LAB] = eng.cfg.strategies[LAB]
+    assert eng2.lab_open(LAB) == ["a1"] and f"{LAB}@a1" not in eng2.states
+    assert eng2.lab_rounds(LAB)[0]["carried"] is True
+
+
+def test_n1_a_round_of_an_earlier_day_is_carried_when_its_strategy_comes_back(tmp_path):
+    """The desk starts on day 2 with the strategy out of the config: nothing of it is carried or dropped. It comes
+    back later that day: yesterday's unresolved round is carried then."""
+    import dataclasses
+    other = lab_cfg(name="qq", root="ES")
+    eng, ads, clock = mk(tmp_path, extra={"lab_qq": other}, book={"lab_qq": [{"account": "a1", "qty": 1}]})
+    ad = ads["a1"]
+    live_round(eng, ad)
+    next_day(clock)
+    less = dataclasses.replace(eng.cfg, strategies={k: v for k, v in eng.cfg.strategies.items() if k != LAB})
+    eng2 = quick(Engine(less, eng.adapters, now_fn=clock, root=tmp_path))
+    assert eng2.lab_open("lab_qq") == [] and not events(tmp_path, "lab_carry")
+    eng2.cfg.strategies[LAB] = eng.cfg.strategies[LAB]
+    assert eng2.lab_open(LAB) == ["a1"]
+    (c,) = events(tmp_path, "lab_carry")
+    assert (c["strategy"], c["date"], c["status"]) == (LAB, "2026-09-14", "live")
+    assert go(eng2, leg(iid=9))["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+
+
+def test_o2_a_foreign_key_that_is_only_in_yesterdays_files_is_never_carried(tmp_path):
+    """The disk half of O-2: the last Lab day's files name another kind's state. Nothing of it becomes a block."""
+    es = StrategyCfg(symbol="ES", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
+    eng, ads, clock = mk(tmp_path, extra={"es930": es}, book={"es930": [{"account": "a1", "qty": 1}]})
+    assert run(eng.handle_alert({"strategy": "es930", "upper": 5010.0, "lower": 4990.0}))["ok"]
+    eng.lab_open(LAB)
+    edit_file(tmp_path, eng, "labday", lambda d: d.update({"es930@a1": {"round": 1, "iid": {"Buy": 1}}}))
+    next_day(clock)
+    eng2 = restart(eng, tmp_path)
+    assert eng2.lab_open(LAB) == [] and eng2.lab_open("es930") == [] and eng2.states == {}
+    assert not events(tmp_path, "lab_carry") and "es930@a1" not in labday(tmp_path, eng2)
+
+
+def test_o2_a_foreign_key_with_no_state_is_dropped_from_the_file_and_said_once(tmp_path):
+    es = StrategyCfg(symbol="ES", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
+    eng, ads, clock = mk(tmp_path, extra={"es930": es}, book={"es930": [{"account": "a1", "qty": 1}]})
+    eng.lab_open(LAB)
+    edit_file(tmp_path, eng, "labday", lambda d: d.update({"es930@a1": {}, "gone_strategy@a1": {"round": 2}}))
+    eng2 = restart(eng, tmp_path)
+    eng2.lab_open(LAB)
+    assert [e["key"] for e in events(tmp_path, "lab_foreign_key")] == ["es930@a1"]
+    assert list(labday(tmp_path, eng2)) == ["gone_strategy@a1"]     # a name that is in no config is left as it is
+    eng3 = restart(eng2, tmp_path)
+    eng3.lab_open(LAB)
+    assert len(events(tmp_path, "lab_foreign_key")) == 1 and list(labday(tmp_path, eng3)) == ["gone_strategy@a1"]
+
+
+# ------------------------------------------------------------------------------------------------ the pins
+def test_a_lost_placed_round_is_never_taken_live_on_a_position_read(tmp_path):
+    """L-1's backstop is called with check_position=False: only an entry ORDER that reads Filled adopts it."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d.pop(f"{LAB}@a1"))
+    ad.net = 1                                                      # a position by hand; both entries still work
+    reads = ad.net_reads
+    for _ in range(3):
+        tick(eng2)
+    assert rnd(eng2).status == "placed" and ad.cancelled == [] and ad.net_reads == reads
+
+
+def scripted_states(ad, script):
+    """get_order_state answers from `script` {order id: [status or (status, filled), ...]}, one per read, the last
+    one repeated."""
+    seq = {k: list(v) for k, v in script.items()}
+    real = ad.get_order_state
+
+    async def read(i):
+        items = seq.get(str(i))
+        if not items:
+            return await real(i)
+        got = items.pop(0) if len(items) > 1 else items[0]
+        status, filled = got if isinstance(got, tuple) else (got, None)
+        return {"status": status, "filled_qty": filled}
+
+    ad.get_order_state = read
+
+
+@pytest.mark.parametrize("then", ["Working", ("Filled", None), ("Canceled", 1)])
+def test_the_flatten_ends_nothing_when_the_last_read_says_an_entry_is_not_ended_unfilled(tmp_path, then):
+    """The flatten's own read-back says "cancelled, no fill"; the read inside _lab_end_unfilled says otherwise
+    (still working / filled / cancelled after a part fill -- each half of the unfilled check on its own)."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    scripted_states(ad, {st.upper_id: ["Canceled", then]})
+    n = len(ad.cancelled)
+    out = run(eng.lab_flatten(LAB))["a1"]
+    assert out["ok"] is False and "check it" in out["actions"][-1]
+    assert st.status == "placed" and ad.cancelled[n:] == [st.upper_id] and ad.orders == []
+    assert not events(tmp_path, "lab_cancelled")
+
+
+def test_a_flatten_of_a_round_that_ended_during_its_read_says_so(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    real, calls = ad.get_order_state, []
+
+    async def read(i):
+        calls.append(i)
+        if len(calls) == 2:                                         # the read inside _lab_end_unfilled
+            st.status, st.exit_reason = "done", "day_lock"          # the account's day lock ended it meanwhile
+        return await real(i)
+
+    ad.get_order_state = read
+    out = run(eng.lab_flatten(LAB))["a1"]
+    assert out["ok"] is True and out["actions"][-1] == "This trade had already ended."
+    assert (st.status, st.exit_reason) == ("done", "day_lock")
+
+
+@pytest.mark.parametrize("truth", ["filled", "part", "recorded"])
+def test_a_hinted_entry_that_filled_is_never_turned_into_a_cancelled_fact(tmp_path, truth):
+    """The three fill guards of _lab_hints: the entry reads Filled; it reads Canceled with a filled quantity; or
+    this state already holds a fill of it."""
+    eng, ads, _ = mk(tmp_path, qty=2)
+    ad = ads["a1"]
+    go(eng, leg(), {"a1": 2})
+    st = rnd(eng)
+    eid = st.upper_id
+    if truth == "recorded":
+        fill_entry(eng, ad, st, 100.0, qty=1)                       # the state holds 1 of 2
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d[f"{LAB}@a1"].update(cancelled=["Buy"]))
+    if truth == "filled":
+        ad.order_status[eid] = "Filled"                             # it reads Filled; the broker gives no count
+        ad.filled.pop(eid, None)
+    elif truth == "part":
+        ad.order_status[eid], ad.filled[eid] = "Canceled", 1
+    else:
+        ad.order_status[eid] = "Canceled"
+        ad.filled.pop(eid, None)                                    # the broker's count is gone; the state's is not
+    eng2._lab_tick_flat = None                                      # (not reached: before the flat time)
+    x = eng2._lab_x(rnd(eng2))
+    run(eng2._lab_hints(rnd(eng2), ad, x))
+    assert x["cancelled"] == [] and x["cancelled_hint"] == []
