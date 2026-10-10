@@ -803,7 +803,7 @@ def guard_config_save() -> None:
 
     @functools.wraps(real)
     def save(cfg):
-        if getattr(cfg, "_practice_desk", False):
+        if getattr(cfg, "__dict__", {}).get("_practice_desk"):      # its own mark only: a Mock answers every getattr
             raise RuntimeError("the practice Desk's config is never saved: config.json is the real Desk's")
         return real(cfg)
     save._practice_guard = True
@@ -828,6 +828,7 @@ def bind_port(port: int):
     try:
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)      # as uvicorn binds: a restart right after a stop works
         s.bind(("127.0.0.1", port))
+        s.listen(128)                    # listening at once: a second start cannot bind it before the server runs
     except OSError:
         s.close()
         return None

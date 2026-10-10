@@ -1226,3 +1226,76 @@ def test_the_date_the_last_entry_time_and_the_flat_time_are_read_on_the_replayed
     d.t = at("15:55:00")
     d.prints([111.0])
     assert (d.st().status, d.st().exit_reason) == ("done", "flat") and d.net() == 0
+
+
+# ---- final fix wave: B5 N1-N3 ----------------------------------------------------------------------------------
+class _Sock:
+    """socket.socket in a test: records what bind_port asks of it; no real socket is made."""
+    made: list = []
+
+    def __init__(self, *a):
+        self.calls, self.taken = [], False
+        _Sock.made.append(self)
+
+    def setsockopt(self, *a):
+        self.calls.append(("setsockopt", a))
+
+    def bind(self, addr):
+        self.calls.append(("bind", addr))
+        if self.taken:
+            raise OSError("in use")
+
+    def listen(self, *a):
+        self.calls.append(("listen", a))
+
+    def close(self):
+        self.calls.append(("close",))
+
+
+def test_the_practice_desk_binds_127_0_0_1_only_and_listens_at_once(monkeypatch):
+    """B5 N1 / N2: the address is pinned; the port is listening straight after the bind, so a second start cannot
+    bind it in the window before the server runs."""
+    import socket
+    _Sock.made = []
+    monkeypatch.setattr(socket, "socket", _Sock)
+    s = fake_desk.bind_port(8859)
+    assert s is _Sock.made[0]
+    names = [c[0] for c in s.calls]
+    assert ("bind", ("127.0.0.1", 8859)) in s.calls
+    assert names.index("listen") == names.index("bind") + 1
+    assert "close" not in names
+
+
+def test_a_taken_port_is_closed_and_none(monkeypatch):
+    import socket
+
+    class Taken(_Sock):
+        def bind(self, addr):
+            self.calls.append(("bind", addr))
+            raise OSError("in use")
+    _Sock.made = []
+    monkeypatch.setattr(socket, "socket", Taken)
+    assert fake_desk.bind_port(8859) is None
+    assert [c[0] for c in _Sock.made[0].calls][-1] == "close"
+
+
+def test_the_config_guard_reads_the_configs_own_mark_never_an_attribute_made_up_on_the_fly(tmp_path, monkeypatch):
+    """B5 N3: a stand-in config whose every attribute answers (a Mock) is not a practice Desk's; only a config whose
+    own fields carry the mark is. The guard is put on a recorder here: nothing is ever written."""
+    from types import SimpleNamespace
+    from unittest.mock import MagicMock
+
+    import homebase.config as config_mod
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+    saved = []
+    monkeypatch.setattr(config_mod, "save", lambda cfg: saved.append(cfg))
+    fake_desk.guard_config_save()
+    mock = MagicMock()
+    assert getattr(mock, "_practice_desk", False)                       # it answers every attribute
+    config_mod.save(mock)
+    assert saved == [mock]
+    marked = SimpleNamespace()
+    marked.__dict__["_practice_desk"] = True
+    with pytest.raises(RuntimeError, match="practice Desk's config is never saved"):
+        config_mod.save(marked)
+    assert saved == [mock] and not (tmp_path / "config.json").exists()
