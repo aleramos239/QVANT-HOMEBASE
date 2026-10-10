@@ -17,15 +17,26 @@ Who is the truth:
     loses its book and keeps its limits (when they still fit the new record's window).
 
 The load path holds the routes' rules, at the first appearance and on every apply():
-  * no limits (none set, or they do not parse) -> NO book; a row above "most contracts" or for an account that is not on
-    the desk is dropped. Every book the desk drops on its own is noted (`lab_unbooked`: strategy, accounts, why);
+  * no limits (none set, or they do not parse) -> NO book; a row above "most contracts" is dropped. Every book the desk
+    drops on its own is noted (`lab_unbooked`: strategy, accounts, why);
+  * the rules judge only the rows of accounts THIS desk has. A row of an account that is not in its pool is kept, in
+    cfg.book and in the sidecar, exactly as it is: it is simply not active (config.assignments() filters on the pool).
+    A desk never un-books on disk an account merely because it does not have it; removing an account from the desk
+    (server.py) is the one path that strips its rows;
   * limits that were on disk (or in memory) but do not parse against the record FREEZE the sidecar: it is left on disk
     exactly as it is -- never `limits: null` over what he typed -- until he saves limits again;
   * one record that cannot be made a strategy is skipped (`lab_unreadable`, once per promotion) and the others load. One
     already on the desk is kept as it last read, switched off, until its record reads again.
 
 One desk owns a store: take_store() (an exclusive lock on <store>/desk.lock, for the life of the process). Only the
-owner writes sidecars; a config that never took the store, or could not, reads only.
+owner writes sidecars; a config that never took the store, or could not, reads only -- and then its limits and book
+FOLLOW the owner's sidecar (apply(reload=True)), so that a reader which later gets the lock takes over with what is on
+disk, not with what it read at its start. A lock that could not even be tried (an OSError) is "unknown", not "another
+desk": both are tried again.
+
+A record is GONE only when its file is absent from the store. A file that is there and does not read (permissions, too
+many open files, garbage) is a record the desk cannot read: the strategy stays, switched off, and its sidecar is never
+touched.
 
 The pieces are split so the desk can keep disk work off its event loop: read_store() is the only reader (run it in a
 thread), apply() only touches memory (run it on the loop: every other reader of cfg.strategies iterates it without
@@ -210,14 +221,24 @@ class _Lease:
 
 
 def take_store(cfg: AppCfg, at=None) -> bool:
-    """Make this config's desk the ONE that writes the store's sidecars. Decided once per config, never waited for and
-    never asked again: a desk that found the store taken stays read-only even after the other desk has gone (what it
-    holds in memory was read for its own accounts; writing it later would drop the other desk's book)."""
-    got = cfg.__dict__.get("_lab_lease")
-    if got is None:
+    """Make this config's desk the ONE that writes the store's sidecars. Never waited for. A desk that does not get it
+    asks again (every refresh): "busy" (another desk holds it) and "unknown" (the lock could not be tried) both end when
+    the lock is free. A desk that let go (release_store: it is shutting down) never takes it back."""
+    d = cfg.__dict__
+    if owns(cfg):
+        return True
+    if d.get("_lab_store") == "released":
+        return False
+    try:
         fd = store.desk_lock(_at(cfg, at))
-        got = cfg.__dict__["_lab_lease"] = _Lease(fd)
-    return got.fd is not None
+    except OSError as e:
+        d["_lab_store"], d["_lab_store_error"] = "unknown", f"{type(e).__name__}: {e}"[:200]
+        return False
+    if fd is None:
+        d["_lab_store"] = "busy"
+        return False
+    d["_lab_lease"], d["_lab_store"] = _Lease(fd), "owner"
+    return True
 
 
 def owns(cfg: AppCfg) -> bool:
@@ -225,10 +246,22 @@ def owns(cfg: AppCfg) -> bool:
     return got is not None and got.fd is not None
 
 
+def store_state(cfg: AppCfg) -> str | None:
+    """None: never asked. "owner" | "busy" (another desk holds the store) | "unknown" (the lock could not be tried) |
+    "released"."""
+    return cfg.__dict__.get("_lab_store")
+
+
+def store_error(cfg: AppCfg) -> str | None:
+    return cfg.__dict__.get("_lab_store_error")
+
+
 def release_store(cfg: AppCfg) -> None:
     got = cfg.__dict__.get("_lab_lease")
     if got is not None:
         got.close()
+    if cfg.__dict__.get("_lab_store") is not None:
+        cfg.__dict__["_lab_store"] = "released"
 
 
 # ------------------------------------------------------------------ what apply() has to say
@@ -309,7 +342,7 @@ def set_enabled(cfg: AppCfg, desk_id: str, on: bool) -> None:
     """Memory only, after the store took the switch: the page must not wait for the next read."""
     m = _meta(cfg)[desk_id]
     m["rec"] = {**m["rec"], "enabled": bool(on)}
-    cfg.strategies[desk_id] = strategy_cfg(m["rec"], m["limits"])
+    cfg.strategies[desk_id] = dataclasses.replace(cfg.strategies[desk_id], enabled=bool(on))   # (never raises: off is off)
 
 
 def forget(cfg: AppCfg, desk_id: str) -> None:
@@ -321,15 +354,28 @@ def forget(cfg: AppCfg, desk_id: str) -> None:
 
 # ------------------------------------------------------------------ the overlay
 def read_store(at=None) -> dict:
-    """{"records": [(record without its code, its sidecar | None)], "sidecars": [every name that has a sidecar]}.
-    The ONLY disk read of the overlay: the desk runs it in a thread."""
-    return {"records": [({k: v for k, v in rec.items() if k != "source"}, store.get_desk(rec["name"], at))
-                        for rec in store.listing(at)],
-            "sidecars": store.desk_names(at)}
+    """{"records": [(record without its code, its sidecar | None)] for every record that reads,
+        "files": [every name with a record FILE, whether or not it reads], "sidecars": [every name with a sidecar]}.
+    The ONLY disk read of the overlay: the desk runs it in a thread. A store that cannot be listed raises (nothing may
+    be concluded from it: no strategy is taken off and no sidecar removed on the strength of a failed listing)."""
+    files, sides = store.names(at)
+    recs = []
+    for name in files:
+        rec = store.get(name, at)
+        if rec is not None and rec.get("name") == name:      # the file name must match the record (as store.listing)
+            recs.append(({k: v for k, v in rec.items() if k != "source"}, store.get_desk(name, at)))
+    return {"records": recs, "files": files, "sidecars": sides}
 
 
 def _records(snap) -> list:
     return snap["records"] if isinstance(snap, dict) else list(snap)
+
+
+def _files(snap) -> set:
+    """Names whose record FILE is in the store. (A bare list of records, as a test may pass: those records' names.)"""
+    if isinstance(snap, dict) and "files" in snap:
+        return set(snap["files"])
+    return {rec.get("name") for rec, _ in _records(snap) if isinstance(rec, dict)}
 
 
 def _shaped(book) -> list:
@@ -367,9 +413,10 @@ def _unbook(cfg: AppCfg, did: str, rows: list, why: str) -> None:
         _note(cfg, "lab_unbooked", strategy=did, accounts=[r.get("account") for r in rows], why=why)
 
 
-def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> None:
-    """A strategy the desk did not know: its limits and its book come from the sidecar, this once. Everything that can
-    raise comes before the first change, so a record that cannot be read leaves nothing behind."""
+def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> bool:
+    """The limits and the book come from the sidecar: for a strategy the desk did not know (this once), and -- reload --
+    on every read for a desk that does not own the store. Everything that can raise comes before the first change, so a
+    record that cannot be read leaves nothing behind. True when its StrategyCfg changed."""
     side = side if isinstance(side, dict) else None
     mark = store.mark_of(rec)
     raw = side.get("limits") if side else None
@@ -378,6 +425,7 @@ def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> None:
     rows = _shaped(side.get("book")) if side else []
     meta[did] = {"name": rec["name"], "rec": rec, "mark": mark, "gone": False, "bad": False, "busy": False,
                  "limits": limits, "frozen": raw is not None and limits is None, "saved": _saved(side)}
+    changed = cfg.strategies.get(did) != s
     cfg.strategies[did] = s
     if rows and side.get("mark") != mark:    # the sidecar of another promotion: the accounts go, the limits stay
         _unbook(cfg, did, rows, "promoted again")
@@ -386,6 +434,7 @@ def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> None:
         cfg.book[did] = rows
     else:
         cfg.book.pop(did, None)
+    return changed
 
 
 def _known(cfg: AppCfg, m: dict, did: str, rec: dict) -> bool:
@@ -407,10 +456,9 @@ def _known(cfg: AppCfg, m: dict, did: str, rec: dict) -> bool:
     return False
 
 
-def _cannot_read(cfg: AppCfg, m: dict | None, did: str, rec: dict, e: Exception) -> bool:
-    """A record that cannot be made a strategy: said once per promotion. One the desk already knows is kept as it last
-    read, switched off. True when its StrategyCfg changed."""
-    mark = store.mark_of(rec)
+def _cannot_read(cfg: AppCfg, m: dict | None, did: str, mark, e: Exception) -> bool:
+    """A record that cannot be made a strategy, or whose file does not read (mark None): said once per promotion. One
+    the desk already knows is kept as it last read, switched off. True when its StrategyCfg changed."""
     said = cfg.__dict__.setdefault("_lab_said", set())
     if (did, repr(mark)) not in said:
         said.add((did, repr(mark)))
@@ -426,35 +474,39 @@ def _cannot_read(cfg: AppCfg, m: dict | None, did: str, rec: dict, e: Exception)
 
 
 def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
-    """The routes' rules over the book the desk holds: no limits, no book; no row above the cap; no row for an account
-    that is not on the desk."""
+    """The routes' rules over the rows of the accounts THIS desk has: no limits, no book; no row above the cap. A row
+    of an account that is not in this desk's pool is not this desk's to judge: it stays exactly as it is."""
     rows = cfg.book.get(did)
     if not rows:
         return
     lim = m["limits"]
+    mine = [r for r in rows if r.get("account") in cfg.accounts]
     if lim is None:
-        _unbook(cfg, did, rows, "limits unreadable" if m["frozen"] else "no limits")
-        cfg.book.pop(did, None)
-        return
-    over = [r for r in rows if not _whole(r.get("qty"), 1, lim.max_qty)]
-    lost = [r for r in rows if r not in over and r.get("account") not in cfg.accounts]
-    if over or lost:
-        _unbook(cfg, did, over, "above the size cap")
-        _unbook(cfg, did, lost, "account not on the desk")
-        keep = [r for r in rows if r not in over and r not in lost]
+        drop, why = mine, "limits unreadable" if m["frozen"] else "no limits"
+    else:
+        drop, why = [r for r in mine if not _whole(r.get("qty"), 1, lim.max_qty)], "above the size cap"
+    if drop:
+        _unbook(cfg, did, drop, why)
+        keep = [r for r in rows if r not in drop]
         if keep:
             cfg.book[did] = keep
         else:
             cfg.book.pop(did, None)
 
 
-def apply(cfg: AppCfg, snap, held=None) -> dict:
+def apply(cfg: AppCfg, snap, held=None, reload: bool = False) -> dict:
     """Bring cfg.strategies / cfg.book in line with what read_store() saw. Memory only. `held(desk_id)` says whether the
     engine holds an open round for it: such a strategy is never removed (it is switched off and kept until the round
-    is over). Returns {"added": [...], "removed": [...], "changed": [...]} (desk ids); what else there is to say (a
-    dropped book, a record that does not read) goes to take_notes()."""
+    is over). `reload`: also take the limits and the book of the strategies the desk already knows from their sidecars
+    (a desk that does not own the store follows the owner's; one that just got the store starts from what is on disk)
+    -- never over a change of its own that is still waiting to be written. Returns {"added": [...], "removed": [...],
+    "changed": [...]} (desk ids); what else there is to say (a dropped book, a record that does not read, the accounts
+    that went with a record) goes to take_notes()."""
     meta = cfg.__dict__.setdefault("_lab", {})           # the one place that starts it
     added, removed, changed, seen = [], [], [], set()
+    queue = cfg.__dict__.setdefault("_lab_notes", [])
+    said0 = len(queue)
+    had = {did: {r.get("account") for r in cfg.book.get(did) or [] if isinstance(r, dict)} for did in meta} if reload else {}
     for rec, side in _records(snap):
         if not isinstance(rec, dict) or not isinstance(rec.get("name"), str):
             continue
@@ -464,27 +516,57 @@ def apply(cfg: AppCfg, snap, held=None) -> dict:
             if not usable(rec):
                 raise ValueError("the record names no market")
             if did in meta:
-                if _known(cfg, meta[did], did, rec):
+                again = reload and not meta[did]["busy"] and not (owns(cfg) and pending(cfg, did))
+                if _first(cfg, meta, did, rec, side) if again else _known(cfg, meta[did], did, rec):
                     changed.append(did)
             elif did not in cfg.strategies:              # (an id the desk uses for something not from the Lab is left alone)
                 _first(cfg, meta, did, rec, side)
                 added.append(did)
+            (cfg.__dict__.get("_lab_said") or set()).discard((did, repr(None)))   # its file reads again
         except Exception as e:  # noqa: BLE001
-            if _cannot_read(cfg, meta.get(did), did, rec, e):
+            if _cannot_read(cfg, meta.get(did), did, store.mark_of(rec), e):
                 changed.append(did)
-    for did in [d for d in meta if d not in seen]:       # the record is gone
+    files = _files(snap)
+    for name in sorted(files):                           # a record FILE that is there and did not read: not gone
+        did = desk_id(name) if isinstance(name, str) else None
+        if did is None or did in seen:
+            continue
+        seen.add(did)
+        if _cannot_read(cfg, meta.get(did), did, None, ValueError("the record file does not read")):
+            changed.append(did)
+    for did in [d for d in meta if d not in seen]:       # the record is gone: its file is not in the store
+        m = meta[did]
         if held is not None and held(did):
-            m = meta[did]
             if not m["gone"] or cfg.strategies[did].enabled:
                 m["gone"], m["rec"] = True, {**m["rec"], "enabled": False}
                 cfg.strategies[did] = dataclasses.replace(cfg.strategies[did], enabled=False)
                 changed.append(did)
             continue
+        _note(cfg, "lab_removed", strategy=did, why="record gone",
+              unbooked=[r.get("account") for r in cfg.book.get(did) or [] if isinstance(r, dict)])
         forget(cfg, did)
         removed.append(did)
     for did, m in meta.items():
         _enforce(cfg, did, m)
+    if reload:                                           # a reload reads every row again: say only what LEFT the desk's
+        kept = []                                        # memory, not again what was dropped (and said) the first time
+        for event, f in queue[said0:]:
+            if event == "lab_unbooked" and f.get("strategy") in had:
+                left = [a for a in f.get("accounts") or [] if a in had[f["strategy"]]]
+                if not left:
+                    continue
+                f = {**f, "accounts": left}
+            kept.append((event, f))
+        queue[said0:] = kept
+    cfg.__dict__["_lab_unusable"] = sorted(n for n in files if isinstance(n, str) and desk_id(n) not in meta
+                                           and desk_id(n) not in cfg.strategies)
     return {"added": added, "removed": removed, "changed": changed}
+
+
+def unusable(cfg: AppCfg) -> list:
+    """Store names whose record file is there but is not a strategy on this desk (it does not read, or names no
+    market), as of the last apply(). Remove takes them off the store: there is no dead end."""
+    return list(cfg.__dict__.get("_lab_unusable") or [])
 
 
 def overlay(cfg: AppCfg, at=None, *, held=None) -> dict:
@@ -492,15 +574,18 @@ def overlay(cfg: AppCfg, at=None, *, held=None) -> dict:
     return apply(cfg, read_store(_at(cfg, at)), held)
 
 
-def orphans(cfg: AppCfg, snap) -> list:
-    """Store names whose sidecar has no record any more (removed by hand, or a file that does not read) and that the desk
-    is not holding for an open round: the owner removes them, so the Lab page is never left refusing Promote / Remove
-    for a name that is no longer on the Desk. Ask after apply() of the same read. Empty for a desk that reads only."""
+def orphans(cfg: AppCfg, snap, held=None) -> list:
+    """Store names whose sidecar has no record FILE any more and that the desk is not holding for an open round: the
+    owner removes them, so the Lab page is never left refusing Promote / Remove for a name that is no longer on the
+    Desk. A record file that is there but does not read is NOT an orphan. `held(desk_id)` is asked for every name, also
+    one the desk does not know (after a restart the engine may have restored a round of a strategy whose record went).
+    Ask after apply() of the same read. Empty for a desk that reads only."""
     if not owns(cfg) or not isinstance(snap, dict):
         return []
-    there = {rec.get("name") for rec, _ in snap["records"] if isinstance(rec, dict)}
+    there = _files(snap)
     mine = {m["name"] for m in _meta(cfg).values()}
-    return sorted(n for n in snap["sidecars"] if n not in there and n not in mine)
+    return sorted(n for n in snap["sidecars"]
+                  if n not in there and n not in mine and not (held is not None and held(desk_id(n))))
 
 
 # ------------------------------------------------------------------ the sidecar

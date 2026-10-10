@@ -7,7 +7,9 @@ that calls it, can send an order.
                            as config.save's after-save hook. Never raises: a Lab problem never stops the desk.
     LabDesk.owner()        ONE desk owns a store (labcfg.take_store: <store>/desk.lock). Asked when the desk starts to
                            run or first changes something -- never by a desk that is only built. A desk that is not the
-                           owner reads only: it writes no sidecar and refuses every change of a Lab strategy.
+                           owner reads only: it writes no sidecar, follows the owner's, and refuses limits, book,
+                           switching ON and Remove (switching OFF is never refused). It asks again on every refresh
+                           and takes over, from what is on disk, once the lock is free.
     LabDesk.refresh()      every 2 s (run()): the store is read in a thread, the config is changed on the loop. Skipped
                            while the chart views are paused (a bot is placing, the seconds around a fire) and while a
                            request is writing. It never waits for the store's lock.
@@ -60,6 +62,7 @@ NOT_SAVED = "Could not save it. Try again."
 RECORD_CHANGED = "The Lab record changed. Try again."
 BOOKED_FOR_MORE = "An account is booked for more. Lower its size first."
 OTHER_DESK = "Another Desk is running on this store."
+READ_ONLY_HERE = "Another Desk is running on this store: Lab strategies are read-only here."
 CANNOT_READ = "The Desk cannot read it."
 CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
@@ -71,6 +74,17 @@ class Refused(Exception):
     def __init__(self, sentence: str, status: int = 409):
         super().__init__(sentence)
         self.status = status
+
+
+def readiness_line(cfg: AppCfg) -> dict | None:
+    """The one readiness line of a desk that reads only (another desk holds the store), when there is a Lab strategy
+    to be read-only about. None for every other desk. Memory only."""
+    try:
+        if labcfg.store_state(cfg) == "busy" and labcfg.lab_ids(cfg):
+            return {"level": "warn", "label": "Lab strategies", "detail": READ_ONLY_HERE}
+    except Exception:  # noqa: BLE001 -- readiness is the whole desk's: a Lab problem adds no line, never breaks it
+        pass
+    return None
 
 
 def attach(cfg: AppCfg, at=None) -> None:
@@ -97,17 +111,29 @@ class LabDesk:
                                          # before one is thrown away (it may hold what the change replaced)
         self._seen_utc: dt.datetime | None = None    # the runner's heartbeat, as last read
         self._said: tuple | None = None  # (error text, monotonic) of the last lab_refresh_error line
-        self._said_busy = False          # lab_store_busy is journaled once
+        self._said_busy = False          # lab_store_busy / lab_store_error are journaled once each
+        self._said_err = False
+        self._reload = False             # the store was just taken: the next refresh starts from what is on disk
         self._said_view: set = set()     # (strategy, error) of the lab_view_error lines
 
     # ------------------------------------------------------------ one desk owns the store
     def owner(self) -> bool:
-        """True for the one desk that writes this store's sidecars. Decided the first time it is asked (run(), a
-        refresh, a change) and never again; a desk that is not the owner says so once in the journal."""
+        """True for the one desk that writes this store's sidecars. Asking TRIES the lock (run() and every refresh
+        ask): a desk that did not get it -- another desk holds it, or the lock could not be tried -- says so once and
+        takes over when it is free (`lab_store_owned`)."""
+        before = labcfg.store_state(self.cfg)
         got = labcfg.take_store(self.cfg, self._at)
-        if not got and not self._said_busy:
+        state = labcfg.store_state(self.cfg)
+        if got and before != "owner":
+            self._reload = True
+            if before in ("busy", "unknown"):
+                self._journal("lab_store_owned", store=str(store.root(self._at)), was=before)
+        elif state == "busy" and not self._said_busy:
             self._said_busy = True
             self._journal("lab_store_busy", store=str(store.root(self._at)))
+        elif state == "unknown" and not self._said_err:
+            self._said_err = True
+            self._journal("lab_store_error", store=str(store.root(self._at)), error=labcfg.store_error(self.cfg))
         return got
 
     def close(self) -> None:
@@ -115,8 +141,14 @@ class LabDesk:
         labcfg.release_store(self.cfg)
 
     def _must_own(self) -> None:
-        if not self.owner():
-            raise Refused(OTHER_DESK)
+        """For limits, the book, switching ON and Remove. A desk that never asked takes the store here (the first to
+        act owns it). One that was refused it takes over only in a refresh, which re-reads the sidecars first: until
+        then the answer stays a refusal."""
+        if labcfg.owns(self.cfg):
+            return
+        if labcfg.store_state(self.cfg) is None and self.owner():
+            return
+        raise Refused(OTHER_DESK if labcfg.store_state(self.cfg) == "busy" else NOT_SAVED)
 
     # ------------------------------------------------------------ small reads (memory only)
     def is_lab(self, name) -> bool:
@@ -146,12 +178,18 @@ class LabDesk:
         with contextlib.suppress(Exception):
             self.engine.journal(event, **kw)
 
-    def _say_notes(self) -> None:
+    def _say_notes(self, dropped: dict) -> None:
         """Journal what the overlay had to say (labcfg.take_notes). A desk that reads only dropped nothing on disk:
-        its `lab_unbooked` notes are about its own view and are not journaled."""
+        its `lab_unbooked` notes are about its own view and are not journaled, and its `lab_removed` lines name no
+        accounts. `dropped`: the sidecars this refresh removed ({store name: removed})."""
+        own = labcfg.owns(self.cfg)
         for event, fields in labcfg.take_notes(self.cfg):
-            if event == "lab_unbooked" and not labcfg.owns(self.cfg):
+            if event == "lab_unbooked" and not own:
                 continue
+            if event == "lab_removed":
+                fields = {**fields, "sidecar_removed": dropped.pop(labcfg.store_name(fields.get("strategy")), False)}
+                if not own:
+                    fields.pop("unbooked", None)
             self._journal(event, **fields)
 
     # ------------------------------------------------------------ the 2 s refresh
@@ -160,11 +198,12 @@ class LabDesk:
         return labcfg.read_store(self._at), store.get_runner(self._at)
 
     def _drop_orphan(self, sname: str) -> bool:
-        """Remove the sidecar of a record that is gone. Never waits for the store; checked again under its lock, so a
-        strategy promoted again in the meantime keeps its sidecar. True when it was removed."""
+        """Remove the sidecar of a record whose FILE is gone. Never waits for the store; checked again under its lock,
+        so a strategy promoted again in the meantime -- or a record file that is there, readable or not -- keeps its
+        sidecar. True when it was removed."""
         try:
             with store.write_lock(self._at, 0.0):
-                if store.get(sname, self._at) is not None:
+                if store.has_record_file(sname, self._at):
                     return False
                 return store.remove_desk(sname, self._at)
         except Exception:  # noqa: BLE001 -- held, or it cannot be removed: the next refresh tries again
@@ -175,14 +214,18 @@ class LabDesk:
         or by the time it came back), a request is writing, or the desk changed something while the read ran."""
         if self._paused():
             return None
-        own = self.owner()
+        self.owner()                         # a desk that reads only asks for the store again, every time
         if labcfg.any_busy(self.cfg):
             return None
         gen = self._gen
         snap, beat = await asyncio.to_thread(self._read)
         if gen != self._gen or self._paused() or labcfg.any_busy(self.cfg):
             return None
-        out = labcfg.apply(self.cfg, snap, held=lambda did: bool(self._open(did)))
+        own = labcfg.owns(self.cfg)
+        held = lambda did: bool(self._open(did))  # noqa: E731
+        # a reader follows the owner's sidecars; a desk that just got the store starts from what is on disk
+        out = labcfg.apply(self.cfg, snap, held=held, reload=self._reload or not own)
+        self._reload = False
         try:
             seen = dt.datetime.fromisoformat((beat or {}).get("seen_utc"))
             self._seen_utc = seen if seen.tzinfo is not None else seen.replace(tzinfo=dt.timezone.utc)
@@ -190,18 +233,18 @@ class LabDesk:
             self._seen_utc = None
         for did in out["added"]:
             self._journal("lab_added", strategy=did, mark=labcfg.mark_of(self.cfg, did))
-        self._say_notes()
-        # a record that is gone with no round open: its sidecar goes too (the owner's job), so the Lab page is never
-        # left refusing Promote / Remove for a name that is no longer on the Desk
-        dropped = {sname: self._drop_orphan(sname) for sname in labcfg.orphans(self.cfg, snap)} if own else {}
-        for did in out["removed"]:
-            self._journal("lab_removed", strategy=did, why="record gone",
-                          sidecar_removed=dropped.pop(labcfg.store_name(did), False))
+        # a record whose FILE is gone with no round open: its sidecar goes too (the owner's job), so the Lab page is
+        # never left refusing Promote / Remove for a name that is no longer on the Desk
+        dropped = {sname: self._drop_orphan(sname) for sname in labcfg.orphans(self.cfg, snap, held)} if own else {}
+        self._say_notes(dropped)             # `lab_removed` lines carry the accounts and whether the sidecar went
         for sname, ok in dropped.items():    # a sidecar left from before (the record went while the desk was down)
             if ok:
                 self._journal("lab_removed", strategy=labcfg.desk_id(sname), why="record gone", sidecar_removed=True)
         if own and labcfg.pending(self.cfg):     # a dropped book, a cleaned row, a write the hook missed
-            labcfg.persist_all(self.cfg, self._at)   # never waits: a miss is tried again by the next refresh
+            try:
+                labcfg.persist_all(self.cfg, self._at)   # never waits for the store ...
+            except TimeoutError:
+                pass                         # ... and a miss is not an error: the next refresh tries again
         return out
 
     async def run(self, interval_s: float = REFRESH_S) -> None:
@@ -278,9 +321,9 @@ class LabDesk:
             raise Refused(NOT_NOW)
         if self._open(name):
             raise Refused(FLATTEN_FIRST)
+        if any(int(r.get("qty") or 0) > limits.max_qty for r in assignments(self.cfg, name)):
+            raise Refused(BOOKED_FOR_MORE)   # (the rows of accounts this desk has; another pool's are not its to judge)
         rows = [dict(r) for r in self.cfg.book.get(name) or []]
-        if any(int(r.get("qty") or 0) > limits.max_qty for r in rows):
-            raise Refused(BOOKED_FOR_MORE)
         was = labcfg.limits_of(self.cfg, name)
         await self._commit(name, limits, rows)
         self._journal("lab_limits_set", strategy=name, limits=asdict(limits), previous=asdict(was) if was else None)
@@ -329,20 +372,25 @@ class LabDesk:
         self._need(name)
         self._must_own()
         self.check_book(name, rows)
-        await self._commit(name, labcfg.limits_of(self.cfg, name), [{"account": r["account"], "qty": int(r["qty"])} for r in rows])
+        # the rows of accounts that are not in this desk's pool are not its to take off: they stay as they are
+        others = [dict(r) for r in self.cfg.book.get(name) or [] if r.get("account") not in self.cfg.accounts]
+        await self._commit(name, labcfg.limits_of(self.cfg, name),
+                           [{"account": r["account"], "qty": int(r["qty"])} for r in rows] + others)
 
     # ------------------------------------------------------------ the switch
     async def set_enabled(self, name: str, on: bool) -> bool:
-        """Write the store record's `enabled`. Switching ON needs the promotion the desk knows (False: the record was
-        promoted again, or is gone -- the page says "The Lab record changed. Try again.") and a record the desk can
-        read. Switching OFF is never refused for the record: off is off whatever it now is. Refused when another desk
-        owns the store or the record could not be written (nothing changes)."""
+        """Write the store record's `enabled`. Switching ON needs the store (a desk that reads only refuses), the
+        promotion the desk knows (False: the record was promoted again, or is gone -- the page says "The Lab record
+        changed. Try again.") and a record the desk can read. Switching OFF is NEVER refused: not on a desk that reads
+        only, not for a changed record -- the switch is the record's, and refusing OFF protects nothing. Either way
+        "Could not save it. Try again." when the record could not be written (nothing changes)."""
         if not self.is_lab(name):
             return False
-        self._must_own()
         on = bool(on)
-        if on and labcfg.unreadable(self.cfg, name):
-            raise Refused(CANNOT_READ)
+        if on:
+            self._must_own()
+            if labcfg.unreadable(self.cfg, name):
+                raise Refused(CANNOT_READ)
         cfg, at, sname, mark = self.cfg, self._at, labcfg.store_name(name), labcfg.mark_of(self.cfg, name)
 
         def keep(rec) -> bool:
@@ -353,13 +401,49 @@ class LabDesk:
         return await self._write(name, lambda: store.set_enabled(sname, on, at, mark if on else None, wait_s=REQ_WAIT_S), keep)
 
     # ------------------------------------------------------------ remove
+    async def _remove_unusable(self, name: str) -> dict:
+        """A store name whose record FILE is there but is not a strategy on this desk (it does not read, or names no
+        market): its sidecar and its record go, the history stays. So a record the Lab page refuses to touch ("Take its
+        accounts off on the Desk first.") always has a way out here."""
+        sname = labcfg.store_name(name)
+        try:
+            store.has_record_file(sname, self._at)       # (also: is it a name the store takes at all?)
+        except (ValueError, TypeError):
+            raise Refused(NOT_ON_DESK, 404) from None
+        self._must_own()
+        if self._open(name):
+            raise Refused(FLATTEN_FIRST)
+        at = self._at
+
+        def work() -> bool:
+            with store.write_lock(at, REQ_WAIT_S):
+                if not store.has_record_file(sname, at):
+                    return False
+                store.remove_desk(sname, at)
+                store.remove(sname, at)
+                return True
+        self._gen += 1
+        try:
+            there = await asyncio.shield(asyncio.to_thread(work))
+        except Exception as e:  # noqa: BLE001
+            self._journal("lab_save_error", strategy=name, error=f"{type(e).__name__}: {e}"[:200])
+            raise Refused(NOT_SAVED) from None
+        finally:
+            self._gen += 1
+        if not there:
+            raise Refused(NOT_ON_DESK, 404)
+        self._journal("lab_removed", strategy=name, why="removed", unusable=True)
+        return {"ok": True, "removed": name}
+
     async def remove(self, name: str) -> dict:
+        if not self.is_lab(name) and labcfg.store_name(name) is not None and name not in self.cfg.strategies:
+            return await self._remove_unusable(name)
         self._need(name)
         self._must_own()
         if self._open(name):
             raise Refused(FLATTEN_FIRST)
         cfg, at, sname = self.cfg, self._at, labcfg.store_name(name)
-        accounts = [r["account"] for r in assignments(cfg, name)]
+        accounts = [r.get("account") for r in cfg.book.get(name) or []]      # every row goes with the sidecar
 
         began = []
 
@@ -434,11 +518,13 @@ class LabDesk:
                     "state": state, "why": why,
                     "trades_today": 0, "mode_today": None,           # the intake half (B3) fills these
                     "runner": self._runner(), "rounds": self._rounds(name),
-                    "refused": []}                                   # ... and this
+                    "refused": [],                                   # ... and this
+                    "read_only": labcfg.store_state(self.cfg) in ("busy", "unknown")}    # another desk owns the store
         except Exception as e:  # noqa: BLE001 -- the page gets the plain sentence, the journal the detail (once)
             key = (name, f"{type(e).__name__}: {e}"[:200])
             if key not in self._said_view and len(self._said_view) < 100:
                 self._said_view.add(key)
                 self._journal("lab_view_error", strategy=name, error=key[1])
             return {"name": sname, "mark": None, "limits": None, "state": "check", "why": CANNOT_READ,
-                    "trades_today": 0, "mode_today": None, "runner": {"alive": False, "age_s": None}, "rounds": [], "refused": []}
+                    "trades_today": 0, "mode_today": None, "runner": {"alive": False, "age_s": None}, "rounds": [], "refused": [],
+                    "read_only": labcfg.store_state(self.cfg) in ("busy", "unknown")}

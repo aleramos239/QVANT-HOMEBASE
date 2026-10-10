@@ -394,6 +394,9 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                                          "trades every day"})
         elif status != "idle":
             checks.append({"level": "ok", "label": shown(name), "detail": status})
+    lab_line = labdesk_mod.readiness_line(cfg)   # only on a desk that reads another desk's Lab store
+    if lab_line is not None:
+        checks.append(lab_line)
     if cfg.armed:
         checks.append({"level": "info", "label": "Mode",
                        "detail": "ARMED — signals place real orders"})
@@ -1076,6 +1079,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         finally:
             for t in tasks:
                 t.cancel()
+            labdesk.close()                  # the Lab store's desk lock goes back (the desk that starts next owns it)
             await _feed_close("shutdown")
             for ad in adapters.values():
                 with contextlib.suppress(Exception):
