@@ -11,26 +11,26 @@
   --frame: #e9eaec;
   --hover: #efeff1;
   --pill: #e4e5e8;
-  --accent: #3f2a20;
-  --accent-hover: #2e1d15;
-  --accent-soft: rgba(63, 42, 32, .09);
+  --accent: #48484a;
+  --accent-hover: #2c2c2e;
+  --accent-soft: rgba(72, 72, 74, .09);
   --accent-fg: #ffffff;
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #fafafb 0%, var(--frame) 65%);
-  --shadow-menu: 0 0 0 .5px rgba(63, 42, 32, .08), 0 8px 28px rgba(22, 23, 26, .14);
-  --shadow-dialog: 0 0 0 .5px rgba(63, 42, 32, .1), 0 30px 80px rgba(22, 23, 26, .26);
+  --shadow-menu: 0 0 0 .5px rgba(72, 72, 74, .08), 0 8px 28px rgba(22, 23, 26, .14);
+  --shadow-dialog: 0 0 0 .5px rgba(72, 72, 74, .1), 0 30px 80px rgba(22, 23, 26, .26);
   --text: #16171a;
   --text-2: #6a6e75;
   --border: rgb(22 23 26 / .1);
-  --warn-ink: #9a5b00;
+  --warn-ink: #c93400;
 }
 :root[data-theme="dark"] {
   --frame: #1b1c1f;
   --hover: #26272b;
   --pill: #2a2b30;
-  --accent: #c8b6a6;
-  --accent-hover: #d8c9bb;
-  --accent-soft: rgba(200, 182, 166, .16);
-  --accent-fg: #1a120e;
+  --accent: #d1d1d6;
+  --accent-hover: #e5e5ea;
+  --accent-soft: rgba(209, 209, 214, .16);
+  --accent-fg: #1c1c1e;
   --frame-wash: radial-gradient(1400px 700px at 50% -10%, #17181b 0%, var(--frame) 65%);
   --shadow-menu: 0 0 0 .5px rgba(255, 255, 255, .1), 0 10px 30px rgba(0, 0, 0, .6);
   --shadow-dialog: 0 0 0 .5px rgba(255, 255, 255, .12), 0 30px 80px rgba(0, 0, 0, .7);
@@ -107,7 +107,7 @@
 .rail-tip { border-radius: var(--hb-r-sm); }
 
 /* the trading surfaces keep their market colours: buy is blue (TradingView convention), sell is red.
-   They read var(--accent), which is espresso now, so they are pinned here -- nothing about an order's look changed. */
+   They read var(--accent), which is graphite (silver on dark) now, so they are pinned here -- nothing about an order's look changed. */
 .tr-buy, .dom-chip-order.dom-chip-buy, .replay-bar .rb-side.rb-buy, .op-send:not(.sell) { background: #2962ff; color: #ffffff; }
 .op-tile.buy { color: #2962ff; background: rgba(41, 98, 255, .10); }
 .op-tile.buy.on { color: #ffffff; background: #2962ff; }
