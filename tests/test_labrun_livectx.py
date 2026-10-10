@@ -203,3 +203,18 @@ def test_ids_run_1_2_3_in_creation_order():
     c = ctx()
     ids = [c.market("long", sl=1.0).id, c.stop_entry("short", 5, sl=6).id, c.limit_entry("long", 4, sl=3).id]
     assert ids == [1, 2, 3]
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), float("-inf")])
+def test_a_plot_or_hline_that_is_not_finite_is_dropped_and_costs_nothing(bad):
+    c = ctx()
+    c.begin(2_000_000_000, 100.0, True, [])
+    c.plot("vwap", 1_500_000_000, bad)
+    rec = c.hline("up", bad, role="entry")
+    assert rec["price"] != rec["price"] or rec["price"] in (float("inf"), float("-inf"))   # the record still comes back
+    assert rec["name"] == "up" and rec["role"] == "entry"
+    o = c.market("long", sl=99.0)
+    c.plot("ok", 1_500_000_000, 1.0)
+    got = c.drain()
+    assert [i["op"] for i in got] == ["entry", "plot"] and got[0]["id"] == o.id
+    json.dumps(got, allow_nan=False)

@@ -9,10 +9,10 @@ Stdlib only; imports nothing from homebase, so the child can load it without the
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 SIDE = {"long": 1, "short": -1}
-NAME = {1: "long", -1: "short"}
 ROLES = ("anchor", "entry", "sl", "tp", "level")   # Ctx.hline: what the page styles a level by
 
 
@@ -134,6 +134,8 @@ class LiveCtx:
         self._out.append({"op": "flatten", "reason": reason})
 
     def plot(self, name: str, t_ns: int, value: float) -> None:
+        if not math.isfinite(value):        # a NaN / infinite point is dropped: it must never cost the event's orders
+            return
         self._out.append({"op": "plot", "name": name, "t_ms": t_ns // 1_000_000, "value": value})
 
     def hline(self, name: str, price: float, role: str = "level") -> dict:
@@ -142,7 +144,8 @@ class LiveCtx:
         if role not in ROLES:
             raise ValueError(f"role must be one of {', '.join(ROLES)}, not {role!r}")
         t_ms = self._now // 1_000_000
-        self._out.append({"op": "hline", "name": name, "price": price, "role": role, "t_ms": t_ms})
+        if math.isfinite(price):            # a NaN / infinite level is not sent, the record still comes back
+            self._out.append({"op": "hline", "name": name, "price": price, "role": role, "t_ms": t_ms})
         return {"name": name, "price": price, "date": self.date.isoformat(), "role": role, "t_ms": t_ms}
 
     def skip(self, reason: str) -> None:

@@ -84,6 +84,21 @@ class Boom(Strategy):
         ctx.skip("fine")
 '''
 
+NAN_PLOT = '''
+from homebase.strategies.base import Strategy
+
+
+class NanPlot(Strategy):
+    id, name, root = "n", "NanPlot", "NQ"
+
+    def times(self):
+        return ["09:30:00"]
+
+    def on_time(self, ctx, et_time):
+        ctx.plot("bad", ctx.now_ns, float("nan"))
+        ctx.market("long", sl=ctx.last_price - 5)
+'''
+
 TWO = BOOM + '''
 
 class Other(Strategy):
@@ -265,3 +280,16 @@ def test_stdin_closed_exits_zero(child):
     child.init(STRADDLE)
     child.p.stdin.close()
     assert child.p.wait(timeout=30) == 0
+
+
+def test_an_event_without_flat_is_an_error_reply(child):
+    child.init(STRADDLE)
+    r = child.send({"op": "event", "kind": "session", "t_ns": T0, "arg": None, "last_price": None, "updates": []})
+    assert r["ok"] is False and "flat" in r["error"]
+    assert child.event("session") == {"ok": True, "intents": []}          # and the child still answers
+
+
+def test_a_nan_plot_does_not_cost_the_events_order_intents(child):
+    child.init(NAN_PLOT)
+    r = child.event("time", "09:30:00", last_price=100.0)
+    assert r["ok"] is True and [i["op"] for i in r["intents"]] == ["entry"]

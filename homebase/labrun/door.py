@@ -1,7 +1,14 @@
 """The door: pure checks that say, in one sentence, why a Lab strategy's order would be refused (2026-10-09).
 
 check() judges one intent, check_event() the intents of one event, read_source() reads a draft's text (AST only,
-nothing runs) and returns notes for the owner. Nothing here places an order, reads a file or talks to a service: the
+nothing runs) and returns notes for the owner. The sentences, in the order check() tries them:
+
+    Limit entries are not built yet. / Every entry needs a stop held at the broker. / The stop must sit on the losing
+    side of the entry. / Size is set on the Desk, per account. / One position at a time. / Daily limit reached (N trade[s]).
+    / Too late for a new trade today. / Stop too far: $X at risk, limit $Y. / Prices are late.
+    Only a buy-stop and sell-stop pair can be linked. (an oco, in check_event)
+    The Desk cannot check this order. (the state or the limits cannot be read: an entry fails closed, before any other)
+ Nothing here places an order, reads a file or talks to a service: the
 host passes in the state and the limits and shows the sentence it gets back.
 
     state  = {"flat", "working_entries", "entries_today", "last_price", "now_hhmm", "prices_late"}
@@ -23,6 +30,9 @@ OWN_SIZE = "Size is set on the Desk, per account."
 TOO_LATE = "Too late for a new trade today."
 PRICES_LATE = "Prices are late."
 NOT_A_PAIR = "Only a buy-stop and sell-stop pair can be linked."
+CANNOT_CHECK = "The Desk cannot check this order."
+STATE_KEYS = ("flat", "working_entries", "entries_today", "last_price", "now_hhmm", "prices_late")   # last_price may be None
+LIMIT_KEYS = ("max_trades_day", "last_entry_et", "session_from_et", "max_risk_usd", "point_value")
 
 
 def _entry_price(intent: dict, state: dict) -> float | None:
@@ -44,9 +54,24 @@ def _wrong_side(intent: dict, px: float | None) -> bool:
 
 def check(intent: dict, state: dict, limits: dict) -> str | None:
     """None = allowed, else the sentence for the first check that fails. Only entries can be refused here; an
-    oco is judged with its entries in check_event."""
+    oco is judged with its entries in check_event. Fails closed: a state or limits it cannot read, or an entry
+    it cannot make sense of, is refused ("The Desk cannot check this order."); it never raises."""
     if intent.get("op") != "entry":
         return None
+    try:
+        if (any(state.get(k, _MISSING) is _MISSING for k in STATE_KEYS)
+                or any(state.get(k) is None for k in STATE_KEYS if k != "last_price")
+                or any(limits.get(k) is None for k in LIMIT_KEYS)):
+            return CANNOT_CHECK
+        return _check_entry(intent, state, limits)
+    except (TypeError, ValueError, KeyError, AttributeError, ArithmeticError):
+        return CANNOT_CHECK
+
+
+_MISSING = object()
+
+
+def _check_entry(intent: dict, state: dict, limits: dict) -> str | None:
     if intent.get("kind") == "limit":
         return NO_LIMIT
     if intent.get("sl") is None:
@@ -76,13 +101,14 @@ def check(intent: dict, state: dict, limits: dict) -> str | None:
 
 def _is_pair(oco: dict, entries: dict) -> bool:
     """Exactly one buy stop and one sell stop of the same size, both sent in this event."""
-    ids = oco.get("ids") or []
-    legs = [entries.get(i) for i in ids]
-    if len(ids) != 2 or ids[0] == ids[1] or None in legs:
+    ids = oco.get("ids")
+    if not isinstance(ids, list) or len(ids) != 2 or ids[0] == ids[1]:
         return False
-    a, b = legs
-    return (a["kind"] == b["kind"] == "stop" and {a["side"], b["side"]} == {"long", "short"}
-            and a["qty"] == b["qty"])
+    a, b = (entries.get(i) for i in ids)
+    if a is None or b is None:
+        return False
+    return (a.get("kind") == b.get("kind") == "stop" and {a.get("side"), b.get("side")} == {"long", "short"}
+            and a.get("qty") == b.get("qty"))
 
 
 def _used(st: dict) -> None:
@@ -93,21 +119,21 @@ def _used(st: dict) -> None:
 def check_event(intents: list, state: dict, limits: dict) -> list[str | None]:
     """One verdict per intent, in order. An allowed entry uses the slot, so a second lone entry in the same event
     is refused. Two stop entries of opposite sides that one oco intent of the same event links are ONE trade:
-    the second leg is judged against the state before the first, and the oco's own verdict is None."""
-    st = dict(state)
+    both legs are judged against the state before the pair, if either is refused BOTH get the first refused leg's
+    sentence (a lone leg of a pair never goes out), and the oco's own verdict is None."""
+    st = dict(state) if isinstance(state, dict) else {}
     entries = {i.get("id"): i for i in intents if i.get("op") == "entry"}
-    pair_of: dict = {}                                   # entry id -> the pair's key
+    pair_of: dict = {}                                   # entry id -> (the pair's ids, in order)
     out: list[str | None] = [None] * len(intents)
     for n, i in enumerate(intents):
         if i.get("op") != "oco":
             continue
         if _is_pair(i, entries):
             for leg in i["ids"]:
-                pair_of.setdefault(leg, tuple(sorted(i["ids"])))
+                pair_of.setdefault(leg, tuple(i["ids"]))
         else:
             out[n] = NOT_A_PAIR
-    before: dict = {}                                    # pair key -> the state before its first leg
-    counted: set = set()                                 # pairs that already used the slot
+    pairs: dict = {}                                     # a pair's ids -> its one verdict, judged at its first leg
     for n, i in enumerate(intents):
         if i.get("op") != "entry":
             continue
@@ -117,10 +143,12 @@ def check_event(intents: list, state: dict, limits: dict) -> list[str | None]:
             if out[n] is None:
                 _used(st)
             continue
-        out[n] = check(i, before.setdefault(key, dict(st)), limits)
-        if out[n] is None and key not in counted:
-            counted.add(key)
-            _used(st)
+        if key not in pairs:
+            first, other = entries[i["id"]], entries[key[1] if key[0] == i["id"] else key[0]]
+            pairs[key] = check(first, st, limits) or check(other, st, limits)
+            if pairs[key] is None:
+                _used(st)
+        out[n] = pairs[key]
     return out
 
 

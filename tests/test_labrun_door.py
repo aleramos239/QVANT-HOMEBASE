@@ -136,6 +136,42 @@ def test_the_first_failing_check_wins_in_this_order():
     assert ask(e, **{**bad, "max_trades_day": 9, "now_hhmm": "10:00", "max_risk_usd": 0.0}) == "Prices are late."
 
 
+@pytest.mark.parametrize("state", [
+    {**STATE, "now_hhmm": None},
+    {k: v for k, v in STATE.items() if k != "flat"},
+    {k: v for k, v in STATE.items() if k != "last_price"},
+    {**STATE, "entries_today": None},
+    None,
+])
+def test_an_unreadable_state_refuses_an_entry(state):
+    assert check(entry(), state, LIMITS) == "The Desk cannot check this order."
+
+
+@pytest.mark.parametrize("limits", [
+    {k: v for k, v in LIMITS.items() if k != "max_trades_day"},
+    {**LIMITS, "last_entry_et": None},
+    {**LIMITS, "point_value": None},
+    {**LIMITS, "max_risk_usd": None},
+    {},
+])
+def test_unreadable_limits_refuse_an_entry(limits):
+    assert check(entry(), STATE, limits) == "The Desk cannot check this order."
+
+
+def test_an_unreadable_state_still_lets_the_other_ops_through():
+    for op in ({"op": "cancel", "id": 1}, {"op": "flatten", "reason": "x"}, {"op": "skip", "reason": "x"},
+               {"op": "plot", "name": "a", "t_ms": 1, "value": 1.0}, {"op": "oco", "ids": [1, 2]}):
+        assert check(op, {}, {}) is None
+
+
+@pytest.mark.parametrize("bad", [{}, {"op": "entry"}, {"sl": "x", "price": 1.0}, {"qty": None}, {"price": None},
+                                 {"side": None}, {"sl": float("nan")}])
+def test_check_never_raises_on_a_dict_shaped_entry(bad):
+    got = check({**entry(), **bad}, STATE, {**LIMITS, "max_risk_usd": 1000.0})
+    assert got is None or isinstance(got, str)
+    assert isinstance(check({"op": "entry", **bad}, STATE, LIMITS), (str, type(None)))
+
+
 # ---------------------------------------------------------------- check_event
 
 def straddle(**kw):
@@ -159,10 +195,26 @@ def test_the_oco_intent_may_come_before_its_entries():
     assert check_event([o, a, b], STATE, LIMITS) == [None, None, None]
 
 
-def test_pair_legs_still_get_their_own_sentences():
+@pytest.mark.parametrize("leg", [0, 1])
+def test_a_pair_is_one_trade_if_either_leg_is_refused_both_are(leg):
+    legs = straddle()
+    legs[leg]["sl"] = None
+    assert check_event(legs, STATE, LIMITS) == [NO_STOP, NO_STOP, None]
+
+
+def test_both_legs_get_the_first_refused_legs_sentence():
+    a, b, o = straddle()
+    a["own_qty"] = True                              # the first leg fails on size, the second on its stop
+    b["sl"] = None
+    assert check_event([a, b, o], STATE, LIMITS) == [OWN_SIZE_S, OWN_SIZE_S, None]
+    assert check_event([b, a, o], STATE, LIMITS) == [NO_STOP, NO_STOP, None]
+
+
+def test_a_refused_pair_does_not_use_the_slot():
     a, b, o = straddle()
     b["sl"] = None
-    assert check_event([a, b, o], STATE, LIMITS) == [None, "Every entry needs a stop held at the broker.", None]
+    c = entry(id=3, side="long", price=101.0, sl=100.0)
+    assert check_event([a, b, o, c], STATE, LIMITS) == [NO_STOP, NO_STOP, None, None]
 
 
 def test_a_lone_entry_makes_the_next_one_in_the_same_event_refuse():
@@ -185,6 +237,9 @@ def test_the_callers_state_is_not_changed():
 
 NOT_A_PAIR = "Only a buy-stop and sell-stop pair can be linked."
 LONE = "One position at a time."
+NO_STOP = "Every entry needs a stop held at the broker."
+OWN_SIZE_S = "Size is set on the Desk, per account."
+CANNOT = "The Desk cannot check this order."
 
 
 @pytest.mark.parametrize("fix, want", [
