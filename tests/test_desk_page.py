@@ -137,12 +137,22 @@ def test_the_mac_skin_gives_the_warn_caption_its_colour():
     assert "html.hb-apple .mcap.warn { color: var(--a-red-text); }" in css
 
 
-def test_the_activity_list_and_the_last_event_time_leave_out_lab_events_the_page_has_no_words_for():
-    rule = 'r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]'
+def test_the_activity_list_and_the_last_event_time_leave_out_only_the_named_lab_bookkeeping():
+    rule = 'r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)'
     assert HTML.count(rule) == 2
+    assert 'HIDDEN_EVENTS = ["lab_event", "lab_event_done", "lab_added"]' in DESKLAB
     act = _section("const ACTIVITY = {", "function activityLine(")
-    for ev in ("lab_event", "lab_event_done"):
+    for ev in ("lab_event", "lab_event_done", "lab_added"):
         assert f"{ev}:" not in act, ev          # bookkeeping: never a line
+    for ev in ("lab_event_error", "lab_intake_error", "lab_save_error", "lab_carry_fill", "lab_sidecar_replaced", "lab_unbooked", "lab_unreadable",
+               "lab_restore_error", "lab_start_error", "lab_key_error", "lab_store_error", "lab_view_error", "lab_open_without_cfg", "lab_side"):
+        assert f'{ev}: labAct("{ev}")' in act, ev
+    assert "A Lab strategy event: check the Desk's log." in HTML
+
+
+def test_the_risk_field_says_what_a_dollar_amount_looks_like():
+    assert 'placeholder="300"' in HTML
+    assert "At risk per trade: a dollar amount above 0, like 300 or 300.50." in DESKLAB
 
 
 def test_no_visible_lab_line_says_round_sidecar_intent_overlay_or_carried():

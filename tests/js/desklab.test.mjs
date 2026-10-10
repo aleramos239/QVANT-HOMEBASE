@@ -586,8 +586,8 @@ test('checkLimits: "Contracts: a whole number from 1 to 10."', () => {
   assert.equal(D.checkLimits(F({ qty: '1' })).errors.qty, undefined);
 });
 
-test('checkLimits: "At risk per trade: a dollar amount above 0."', () => {
-  const say = 'At risk per trade: a dollar amount above 0.';
+test('checkLimits: "At risk per trade: a dollar amount above 0, like 300 or 300.50."', () => {
+  const say = 'At risk per trade: a dollar amount above 0, like 300 or 300.50.';
   for (const bad of ['', '0', '0.00', '-5', 'lots', '1e3', '$', '12abc', '1000000001', 'Infinity']) {
     assert.equal(D.checkLimits(F({ risk: bad })).errors.risk, say, JSON.stringify(bad));
   }
@@ -862,7 +862,7 @@ test('c3 deskDot: a day stopped by refused entries is not a calm dot', () => {
 });
 
 test('I5 checkLimits: the risk field is never changed; a comma, a third decimal or a sign is refused with the field\'s sentence', () => {
-  const say = 'At risk per trade: a dollar amount above 0.';
+  const say = 'At risk per trade: a dollar amount above 0, like 300 or 300.50.';
   for (const bad of ['300,5', '1,5', '2,50', '1,000', '1,250.5', '300.999', '300.', '.5', '-5', '+5', '1 000', '$ 300', '$$300', '1e3', '0x10']) {
     assert.equal(D.checkLimits(F({ risk: bad })).errors.risk, say, JSON.stringify(bad));
   }
@@ -935,4 +935,38 @@ test('m4 accountsLock stays; m5 / m17 sentences exist', () => {
   assert.equal(D.NOT_ON_DESK, 'That strategy is not on the Desk.');
   assert.equal(D.CLOSE_OUT, 'Its close order is already out.');
   assert.equal(D.NOT_OFF, 'It could not be switched off: try the switch again.');
+});
+
+test('N2 hiddenEvent: only the named bookkeeping is hidden; anything else, known or not, shows', () => {
+  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_added', 'lab_event', 'lab_event_done']);
+  for (const e of ['lab_event', 'lab_event_done', 'lab_added']) assert.equal(D.hiddenEvent(e), true, e);
+  for (const e of ['lab_event_error', 'lab_intake_error', 'lab_save_error', 'lab_unbooked', 'lab_key_error', 'lab_zzz', 'lab_refused']) assert.equal(D.hiddenEvent(e), false, e);
+  assert.equal(D.hiddenEvent('strategy_toggled'), false);
+  assert.equal(D.hiddenEvent(undefined), false);
+});
+
+test('N2 the plain lines of the Lab events that had none', () => {
+  const A = D.activity;
+  assert.deepEqual(A.lab_unbooked({ accounts: ['a1', 'a2'] }, 'NQ ORB', '', (x) => x.toUpperCase()), ['The Desk took A1, A2 off NQ ORB.', 'warn']);
+  assert.deepEqual(A.lab_unbooked({ accounts: ['a1'] }, 'NQ ORB', ''), ['The Desk took a1 off NQ ORB.', 'warn']);
+  assert.deepEqual(A.lab_unbooked({}, 'NQ ORB', ''), ['The Desk took its accounts off NQ ORB.', 'warn']);
+  assert.deepEqual(A.lab_unreadable({}, 'NQ ORB'), ['NQ ORB: the Desk cannot read it. Check it.', 'neg']);
+  assert.deepEqual(A.lab_restore_error({}, ''), ["The Desk could not pick up today's Lab trades after the restart. Check it.", 'neg']);
+  assert.deepEqual(A.lab_start_error({}, ''), ['The Lab side did not start on this Desk. Check it.', 'neg']);
+  assert.deepEqual(A.lab_key_error({}, ''), ["The Lab runner's key could not be made. Check it.", 'neg']);
+  assert.deepEqual(A.lab_store_error({}, ''), ['The Desk cannot use the Lab store. Check it.', 'neg']);
+  assert.deepEqual(A.lab_view_error({}, 'NQ ORB'), ['NQ ORB: the Desk had a problem showing it. Check it.', 'neg']);
+  assert.deepEqual(A.lab_refresh_error({}, ''), ['The Desk could not read its Lab strategies just now. Check it.', 'neg']);
+  assert.deepEqual(A.lab_foreign_key({}, ''), ["A Lab file holds an entry that is not a Lab strategy's. Check it.", 'warn']);
+  assert.deepEqual(A.lab_store_busy({}, ''), ['Another Desk is running on this store: Lab strategies are read-only here.', 'warn']);
+  assert.deepEqual(A.lab_store_owned({}, ''), ['This Desk holds the Lab store now.']);
+  assert.deepEqual(A.lab_side({ on: true }, ''), ['Lab strategies are on for this Desk.']);
+  assert.deepEqual(A.lab_side({ on: false }, ''), ['Lab strategies are off for this Desk.']);
+  assert.deepEqual(A.lab_removed({}, 'NQ ORB'), ['NQ ORB taken off the Desk']);
+  assert.equal(D.LAB_UNKNOWN, "A Lab strategy event: check the Desk's log.");
+});
+
+test('fix 3 the risk sentence', () => {
+  assert.equal(D.checkLimits({ trades: '2', qty: '1', risk: '1,000', last: '11:00', flat: '15:55' }).errors.risk, 'At risk per trade: a dollar amount above 0, like 300 or 300.50.');
+  assert.equal(D.checkLimits({ trades: '0', qty: '1', risk: '300', last: '11:00', flat: '15:55' }).errors.trades, 'Trades a day: a whole number from 1 to 20.', 'the others stay the table\'s');
 });

@@ -749,7 +749,7 @@
       <input id="llQty" onkeydown="labLimKey(event)" type="text" inputmode="numeric" autocomplete="off" aria-describedby="llQtyErr">
       <div class="mcap warn" id="llQtyErr" role="alert" hidden></div></div>
     <div class="field"><label for="llRisk">Most at risk per trade</label>
-      <input id="llRisk" onkeydown="labLimKey(event)" type="text" inputmode="decimal" autocomplete="off" aria-describedby="llRiskErr">
+      <input id="llRisk" onkeydown="labLimKey(event)" type="text" inputmode="decimal" autocomplete="off" placeholder="300" aria-describedby="llRiskErr">
       <div class="mcap warn" id="llRiskErr" role="alert" hidden></div></div>
     <div class="field"><label for="llLast">No new trade after</label>
       <input id="llLast" onkeydown="labLimKey(event)" type="text" inputmode="numeric" autocomplete="off" placeholder="11:00" aria-describedby="llLastErr">
@@ -1473,7 +1473,7 @@ function actWould(r) {
   return `${r.side} ${r.qty} ${r.entry || ""}${r.entry_price != null ? " @ " + fmtPx(r.entry_price) : ""}` +
     ` · SL ${fmtPx(r.sl)} · TP ${fmtPx(r.tp)}`;
 }
-const labAct = (k) => (r) => DeskLab.activity[k](r, actStrat(r), actOn(r));      // the Lab's journal lines: the words are in desklab.js
+const labAct = (k) => (r) => DeskLab.activity[k](r, actStrat(r), actOn(r), acctShort);      // the Lab's journal lines: the words are in desklab.js
 const ACTIVITY = {
   armed_toggled: (r) => [r.armed ? "Desk ARMED — signals place real orders" : "Desk disarmed — signals are journaled only"],
   kill_switch: (r) => {
@@ -1509,9 +1509,15 @@ const ACTIVITY = {
   strategy_toggled: (r) => [`${actStrat(r)} switched ${r.enabled ? "ON" : "OFF"}${r.cause === "manual_flatten" ? " (Flatten & turn off)" : ""}`],
   lab_refused: labAct("lab_refused"), lab_runner_down: labAct("lab_runner_down"), lab_runner_back: labAct("lab_runner_back"),
   lab_stopped: labAct("lab_stopped"), lab_flatten: labAct("lab_flatten"), lab_cancelled: labAct("lab_cancelled"),
-  lab_limits_set: labAct("lab_limits_set"), lab_round: labAct("lab_round"), lab_settled: labAct("lab_settled"), lab_check: labAct("lab_check"),
-  lab_carry: labAct("lab_carry"), lab_carry_cleared: labAct("lab_carry_cleared"), lab_exit_unconfirmed: labAct("lab_exit_unconfirmed"),
-  lab_cancel_raced_fill: labAct("lab_cancel_raced_fill"), lab_open_without_cfg: labAct("lab_open_without_cfg"), lab_removed: labAct("lab_removed"),
+  lab_limits_set: labAct("lab_limits_set"), lab_round: labAct("lab_round"), lab_settled: labAct("lab_settled"),
+  lab_check: labAct("lab_check"), lab_carry: labAct("lab_carry"), lab_carry_cleared: labAct("lab_carry_cleared"),
+  lab_exit_unconfirmed: labAct("lab_exit_unconfirmed"), lab_cancel_raced_fill: labAct("lab_cancel_raced_fill"), lab_open_without_cfg: labAct("lab_open_without_cfg"),
+  lab_removed: labAct("lab_removed"), lab_event_error: labAct("lab_event_error"), lab_intake_error: labAct("lab_intake_error"),
+  lab_save_error: labAct("lab_save_error"), lab_carry_fill: labAct("lab_carry_fill"), lab_sidecar_replaced: labAct("lab_sidecar_replaced"),
+  lab_unbooked: labAct("lab_unbooked"), lab_unreadable: labAct("lab_unreadable"), lab_restore_error: labAct("lab_restore_error"),
+  lab_start_error: labAct("lab_start_error"), lab_key_error: labAct("lab_key_error"), lab_store_error: labAct("lab_store_error"),
+  lab_view_error: labAct("lab_view_error"), lab_refresh_error: labAct("lab_refresh_error"), lab_foreign_key: labAct("lab_foreign_key"),
+  lab_store_busy: labAct("lab_store_busy"), lab_store_owned: labAct("lab_store_owned"), lab_side: labAct("lab_side"),
   timer_gate: (r) => r.gate === true ? [`${actStrat(r)} gate open — trend day (ADX ${fmt(r.adx, 1)})`]
     : r.gate === false ? [`${actStrat(r)} gate closed — chop day (ADX ${fmt(r.adx, 1)}), no trade today`]
     : [`${actStrat(r)} gate unknown — only ${r.bars} daily bars, it will not fire`, "warn"],
@@ -1633,6 +1639,7 @@ function activityLine(r, prev) {
       if (text) return {text, tone: tone || ""};
     } catch (_) { /* a row this formatter can't read falls back to plain words below */ }
   }
+  if (String(r.event).indexOf("lab_") === 0) return {text: "A Lab strategy event: check the Desk's log.", tone: "warn"};      // a Lab event with no words of its own: never a raw name
   const what = String(r.event || "event").replace(/_/g, " ");
   return {text: what.charAt(0).toUpperCase() + what.slice(1) + (r.strategy ? " — " + actStrat(r) : "") + actOn(r),
           tone: /error|fail/.test(String(r.event)) ? "neg" : ""};
@@ -1646,7 +1653,7 @@ let FEED_ROWS = [], FEED_SIG = null, FEED_RAW = false;
 const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|account
 function renderActivity(journal) {
   FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object" &&
-    !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]));      // a Lab event the page has no words for shows nothing
+    !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));      // the Lab's named bookkeeping (DeskLab.HIDDEN_EVENTS) shows nothing; every other Lab event shows
   const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
@@ -1835,9 +1842,9 @@ const OPEN_MIN = 570;                                    // 09:30 ET, the cash o
 const lenTxt = (m) => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`;
 const usdS = (v) => v == null ? "—" : (v < 0 ? "−$" : v > 0 ? "+$" : "$") + fmt(Math.abs(v), 0);
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
-/* The journal as the Today page and the sidebar read it: the Lab's bookkeeping lines (lab_event, lab_event_done) and every Lab event the page has
-   no words for are left out, so they never become the "Last event" time. Every other line is returned as it is. (The Activity list filters the same way.) */
-const journalShown = (j) => (Array.isArray(j) ? j : []).filter(r => !(r && typeof r.event === "string" && r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]));
+/* The journal as the Today page and the sidebar read it: the Lab's named bookkeeping lines (DeskLab.HIDDEN_EVENTS: lab_event, lab_event_done, lab_added)
+   are left out, so they never become the "Last event" time. Every other line is returned as it is. (The Activity list filters the same way.) */
+const journalShown = (j) => (Array.isArray(j) ? j : []).filter(r => !(r && typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));
 const specOf = (c, name) => c.kind === "lab" ? labSafe(() => DeskLab.deskSpec(c, labRowOf(ST.strategies[name])), String(c.symbol || ""))
   : c.kind === "bars"
   ? `${c.symbol} · ${c.bar_minutes}m bars · ${c.rule}`
@@ -1897,16 +1904,19 @@ function dayTimeline() {
   const pct = (m) => Math.max(0, Math.min(100, (m - 540) / 420 * 100));
   const strategies = Object.values(ST.strategies || {});
   const own = strategies.filter(v => v.cfg.kind !== "lab");      // a Lab strategy sets its own times: never the day bar's
-  const ref = (own.find(v => v.cfg.enabled && !v.cfg.shadow) || own[0] || strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
+  // when no Desk strategy is armed, a Lab strategy WITH an account booked is the bar's (its Flat mark only: it has no cancel time of its own)
+  const armedOwn = own.find(v => v.cfg.enabled && !v.cfg.shadow);
+  const labRef = armedOwn ? null : Object.entries(ST.strategies || {}).find(([n, v]) => v.cfg.kind === "lab" && v.cfg.enabled && !v.cfg.shadow && ((ST.book && ST.book[n]) || []).length);
+  const ref = (armedOwn || (labRef && labRef[1]) || own[0] || strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
   const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(ref.flat_et) ?? 955;
   const now = etMin(ST.et_now) ?? 540;
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
     .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
   return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(String(ST.et_now).slice(11, 16))} ET</span></div>
-    <div class="tl" role="img" aria-label="The trading day: open at 9:30, unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, flat at ${esc(ref.flat_et || "15:55")}">
-      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i><i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
-      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (ref.flat_et || "15:55") + " Flat", "tl-t at-end")}</div>
+    <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${labRef ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(ref.flat_et || "15:55")}">
+      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${labRef ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
+      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${labRef ? "" : lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (ref.flat_et || "15:55") + " Flat", "tl-t at-end")}</div>
     </div>`;
 }
 

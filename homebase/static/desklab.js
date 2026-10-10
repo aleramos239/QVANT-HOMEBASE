@@ -252,6 +252,10 @@
   var CLEARED = "Cleared.";
   var BOOKED_NEXT = "Booked. It starts with the next session.";
   var LIVE_NOTE = "It will trade real money on its next order. Every entry carries a stop held at the broker.";
+  // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request) and a strategy
+  // appearing on the Desk (its row says so). Everything else shows -- an event with no words of its own gets LAB_UNKNOWN, never nothing.
+  var HIDDEN_EVENTS = ["lab_event", "lab_event_done", "lab_added"];
+  var LAB_UNKNOWN = "A Lab strategy event: check the Desk's log.";
   var NOT_ANSWERING_DESK = "The Desk is not answering.";
   var NOT_ON_DESK = "That strategy is not on the Desk.";
   var CLOSE_OUT = "Its close order is already out.";
@@ -260,7 +264,7 @@
   var BROKER_REFUSED = "The broker refused it: ";
   var SAY_TRADES = "Trades a day: a whole number from 1 to 20.";
   var SAY_QTY = "Contracts: a whole number from 1 to 10.";
-  var SAY_RISK = "At risk per trade: a dollar amount above 0.";
+  var SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50.";
   var SAY_LAST = "No new trade after: a time like 11:00, before the flat time.";
   var SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55.";
   var FLAT_LATEST = "15:55";
@@ -578,6 +582,9 @@
   // ---- the Activity lines of the journal's lab_* events: (record, strategy's name, " on <account>") -> [text, tone?]
   function plur(n, a, b) { return n + " " + (n === 1 ? a : b); }
   function clip(v) { return text(v).slice(0, 160); }
+  function hiddenEvent(name) {
+    return HIDDEN_EVENTS.indexOf(name) >= 0;
+  }
   var activity = {
     lab_refused: function (r, who, on) { return [who + " order refused" + on + " — " + clip(r.text), "warn"]; },
     lab_runner_down: function (r, who) { return [who + ": runner down", "neg"]; },
@@ -615,6 +622,22 @@
     lab_event_error: function (r, who) { return [who + ": the Desk had a problem with an order. Check it.", "neg"]; },
     lab_intake_error: function (r, who) { return [who ? who + ": the Desk had a problem with an order. Check it." : "The Desk had a problem with a Lab order. Check it.", "neg"]; },
     lab_save_error: function (r, who) { return [who + ": could not save. Try again.", "neg"]; },
+    lab_unbooked: function (r, who, on, acct) {
+      var name = typeof acct === "function" ? acct : function (x) { return x; };
+      var list = Array.isArray(r.accounts) ? r.accounts.map(function (a) { return name(String(a)); }).filter(Boolean) : [];
+      return ["The Desk took " + (list.length ? list.join(", ") : "its accounts") + " off " + who + ".", "warn"];
+    },
+    lab_unreadable: function (r, who) { return [who + ": the Desk cannot read it. Check it.", "neg"]; },
+    lab_restore_error: function () { return ["The Desk could not pick up today's Lab trades after the restart. Check it.", "neg"]; },
+    lab_start_error: function () { return ["The Lab side did not start on this Desk. Check it.", "neg"]; },
+    lab_key_error: function () { return ["The Lab runner's key could not be made. Check it.", "neg"]; },
+    lab_store_error: function () { return ["The Desk cannot use the Lab store. Check it.", "neg"]; },
+    lab_view_error: function (r, who) { return [who + ": the Desk had a problem showing it. Check it.", "neg"]; },
+    lab_refresh_error: function () { return ["The Desk could not read its Lab strategies just now. Check it.", "neg"]; },
+    lab_foreign_key: function () { return ["A Lab file holds an entry that is not a Lab strategy's. Check it.", "warn"]; },
+    lab_store_busy: function () { return [OTHER_DESK.replace(/\.$/, "") + ": Lab strategies are read-only here.", "warn"]; },
+    lab_store_owned: function () { return ["This Desk holds the Lab store now."]; },
+    lab_side: function (r) { return [r.on === false ? "Lab strategies are off for this Desk." : "Lab strategies are on for this Desk."]; },
     lab_exit_unconfirmed: function (r, who, on) { return [who + ": the close was not confirmed" + on + ". Its stop is still working.", "neg"]; },
     lab_cancel_raced_fill: function (r, who, on) { return [who + ": an entry filled as it was cancelled" + on, "warn"]; },
     lab_open_without_cfg: function (r, who, on) { return [who + " has a trade open but is not on this Desk. Check it.", "neg"]; },
@@ -636,7 +659,7 @@
     switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
     deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle,
     switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
-    NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF,
+    NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF, hiddenEvent: hiddenEvent, HIDDEN_EVENTS: HIDDEN_EVENTS, LAB_UNKNOWN: LAB_UNKNOWN,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,
     OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, LIVE_NOTE: LIVE_NOTE,
   };
