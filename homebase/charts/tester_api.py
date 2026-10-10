@@ -19,7 +19,8 @@
     POST /api/tester/drafts/form/read    {code} -> {answers: {...} | null, intact} (null: not a file the form made;
                                           intact: the code under the header was not edited by hand)
     PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
-    DELETE /api/tester/drafts/{name}     remove it
+    DELETE /api/tester/drafts/{name}     remove it: the file moves to <drafts dir>/.trash (never unlinked); 409 while the
+                                          Desk holds a promoted copy of it (ON_THE_DESK)
     POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under
                                           ~/.homebase/review-requests; never runs, imports or promotes anything
     GET  /api/tester/groups              the Lab's strategy groups {groups: [names, in order], members: {strategy
@@ -179,6 +180,7 @@ CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
 DESKLAB_ACTIONS = ("promote", "remove", "onoff")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
+ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
@@ -416,7 +418,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def delete_draft(name: str, request: Request):
         write_ok(request)
         try:
-            return {"deleted": draftstore.delete(name)}
+            with store.write_lock():              # the check and the move are one step: a Promote is not half way in
+                if store.has_record_file(name):   # promoted (the record file is there, whether or not it reads)
+                    raise HTTPException(409, ON_THE_DESK)
+                return {"deleted": draftstore.delete(name)}
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 

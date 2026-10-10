@@ -22,6 +22,7 @@ and never looks here (tests/test_claude_drafts.py pins that).
 from __future__ import annotations
 
 import ast
+import datetime as dt
 import json
 import os
 import re
@@ -180,12 +181,34 @@ def write(name: str, code: str, base: Path | None = None, builtin_ids=()) -> Pat
     return p
 
 
+TRASH = ".trash"           # inside the drafts dir: deleted strategies wait here (never listed, never run)
+
+
+def _stamp() -> str:
+    return dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+
+
 def delete(name: str, base: Path | None = None) -> bool:
+    """Take <name>.py out of the drafts. The file is MOVED to <drafts dir>/.trash/<name>.<UTC timestamp>.py (the folder
+    is made on demand), never unlinked; a second delete of the same name keeps both copies. The trash is not a draft
+    folder: list_files() and the catalog look at <drafts dir>/*.py only, and nothing reads the trash."""
     p = path_for(name, base)
     if p.is_symlink() or not p.exists():
         return False
-    p.unlink()
-    return True
+    trash = p.parent / TRASH
+    if trash.is_symlink() or (trash.exists() and not trash.is_dir()):
+        raise ValueError(f"{trash} is not a plain folder: nothing was deleted")
+    trash.mkdir(exist_ok=True)
+    stamp = _stamp()
+    for n in range(1, 1000):                    # a name taken in this very instant gets -2, -3 ...
+        dst = trash / f"{name}.{stamp}{'' if n == 1 else f'-{n}'}.py"
+        try:
+            os.link(p, dst)                     # fails (never overwrites) when dst is there
+        except FileExistsError:
+            continue
+        os.unlink(p)
+        return True
+    raise ValueError("nothing was deleted: the trash already holds too many copies of this name")
 
 
 # ---------------------------------------------------------------- groups (the Lab's strategy list)

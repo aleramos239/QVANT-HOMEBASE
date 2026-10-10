@@ -385,7 +385,8 @@ def test_write_strategy_and_delete_draft(fake, drafts_dir):
     with pytest.raises(ToolError, match="SyntaxError"):
         b.call("write_strategy", {"name": "oops", "code": "def f(:\n"})
     assert "Deleted" in b.call("delete_draft", {"name": "nq_orb"}) and not (drafts_dir / "nq_orb.py").exists()
-    assert sorted(p.name for p in drafts_dir.iterdir()) == ["bad.py"]
+    assert sorted(p.name for p in drafts_dir.iterdir()) == [".trash", "bad.py"]       # deleted = moved to the trash, not unlinked
+    assert [p.name.split(".")[0] for p in (drafts_dir / ".trash").iterdir()] == ["nq_orb"]
 
 
 def test_set_group_files_a_strategy_and_list_strategies_shows_each_group(fake, drafts_dir):

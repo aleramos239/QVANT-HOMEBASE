@@ -91,6 +91,33 @@ def test_save_lists_reads_and_deletes_a_draft(tmp_path, drafts_dir):
     assert not any(m.startswith("homebase_draft_") for m in sys.modules), "saving never imports a draft"
 
 
+def test_deleting_a_draft_moves_its_file_to_the_trash_and_the_listing_forgets_it(tmp_path, drafts_dir):
+    with client(tmp_path) as c:
+        c.put("/api/tester/drafts/nq_bars", json={"code": lab_templates.BAR_BREAKOUT}, headers=OK)
+        assert c.delete("/api/tester/drafts/nq_bars", headers=OK).json() == {"deleted": True}
+        trash = list((drafts_dir / ".trash").iterdir())
+        assert len(trash) == 1 and trash[0].name.startswith("nq_bars.") and trash[0].read_text() == lab_templates.BAR_BREAKOUT
+        assert c.get("/api/tester/drafts").json() == []
+        assert "draft_nq_bars" not in {s["id"] for s in c.get("/api/tester/strategies").json()}
+
+
+def test_a_draft_on_the_desk_is_not_deleted(tmp_path, drafts_dir):
+    from homebase.labrun import store
+    with client(tmp_path) as c:
+        c.put("/api/tester/drafts/nq_bars", json={"code": lab_templates.BAR_BREAKOUT}, headers=OK)
+        store.put({"name": "nq_bars", "id": "draft_nq_bars", "promoted_utc": "2026-10-10T12:00:00+00:00"})
+        r = c.delete("/api/tester/drafts/nq_bars", headers=OK)
+        assert r.status_code == 409 and r.json()["detail"] == "It is on the Desk. Remove it from the Desk first."
+        assert (drafts_dir / "nq_bars.py").exists() and not (drafts_dir / ".trash").exists()
+        store.remove("nq_bars")                                    # off the Desk: it goes like any other
+        assert c.delete("/api/tester/drafts/nq_bars", headers=OK).json() == {"deleted": True}
+
+
+def test_a_bad_name_is_still_a_400_on_delete(tmp_path):
+    with client(tmp_path) as c:
+        assert c.delete("/api/tester/drafts/Bad-Name", headers=OK).status_code == 400
+
+
 def test_a_draft_that_does_not_read_is_listed_with_its_error(tmp_path, drafts_dir):
     (drafts_dir / "broken.py").write_text("class A(Strategy):\n    root = 3 + 4\n")
     with client(tmp_path) as c:
