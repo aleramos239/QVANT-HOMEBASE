@@ -214,7 +214,7 @@ def test_the_switch_writes_the_stores_record_and_never_config_json(client):
 def test_switching_on_a_record_promoted_again_is_refused(client):
     store.put(rec(promoted="2026-10-10T08:00:00+00:00", sha256="cd"))            # promoted again behind the desk's back
     r = client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
-    assert r.status_code == 409 and r.json()["detail"] == "This strategy was promoted again. Try again."
+    assert r.status_code == 409 and r.json()["detail"] == "This strategy changed. Try again."
     assert store.get("pp_orb")["enabled"] is False and client.cfg.strategies[LAB].enabled is False
     asyncio.run(client.labdesk.refresh())                                        # the desk reads the new promotion
     assert client.post("/api/strategy", json={"strategy": LAB, "enabled": True}).status_code == 200
@@ -264,8 +264,8 @@ def test_limits_are_set_shown_and_kept_in_the_sidecar(client):
     assert store.get_desk("pp_orb")["limits"]["max_qty"] == 3
 
 
-NOTE_1600 = ("Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes "
-             "before the test's, so that day will not match.")
+NOTE_1600 = ("Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes "
+             "before the backtest's, so that day will not match.")
 
 
 def test_a_window_to_1600_books_and_its_answers_carry_one_note(client):

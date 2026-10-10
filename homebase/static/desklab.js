@@ -257,7 +257,7 @@
   // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request).
   // Everything else shows -- an event with no words of its own gets LAB_UNKNOWN, never nothing.
   var HIDDEN_EVENTS = ["lab_event", "lab_event_done"];
-  var LAB_UNKNOWN = "Something happened to a Lab strategy: see the Activity log.";
+  var LAB_UNKNOWN = "Something happened to a Lab strategy. Check it.";
   var NOT_ANSWERING_DESK = "The Desk is not answering.";
   var NOT_ON_DESK = "That strategy is not on the Desk.";
   var CLOSE_OUT = "Its close order is already out.";

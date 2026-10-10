@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=5"></script>
+<script src="/static/desklab.js?v=6"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
@@ -1640,7 +1640,7 @@ function activityLine(r, prev) {
       if (text) return {text, tone: tone || ""};
     } catch (_) { /* a row this formatter can't read falls back to plain words below */ }
   }
-  if (String(r.event).indexOf("lab_") === 0) return {text: "Something happened to a Lab strategy: see the Activity log.", tone: "warn"};      // a Lab event with no words of its own: never a raw name
+  if (String(r.event).indexOf("lab_") === 0) return {text: "Something happened to a Lab strategy. Check it.", tone: "warn"};      // a Lab event with no words of its own: never a raw name
   const what = String(r.event || "event").replace(/_/g, " ");
   return {text: what.charAt(0).toUpperCase() + what.slice(1) + (r.strategy ? " — " + actStrat(r) : "") + actOn(r),
           tone: /error|fail/.test(String(r.event)) ? "neg" : ""};

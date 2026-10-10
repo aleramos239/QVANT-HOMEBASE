@@ -142,8 +142,8 @@ def window_note(rec: dict, limits: LabLimits | None) -> str | None:
     if end <= flat:                                                       # "HH:MM" strings compare as times
         return None
     n = _minutes(end) - _minutes(flat)
-    return (f"Its window runs to {end} but the Desk closes at {flat}. A trade still open then is closed "
-            f"{n} minute{'' if n == 1 else 's'} before the test's, so that day will not match.")
+    return (f"Its window runs to {end} but it closes its trades at {flat}. A trade still open then closes "
+            f"{n} minute{'' if n == 1 else 's'} before the backtest's, so that day will not match.")
 
 
 def parse_limits(body, rec: dict) -> LabLimits:

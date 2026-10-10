@@ -15,8 +15,8 @@ from tests.labdesk_util import DATE, LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
 from tests.test_engine_lab import fill_entry, tick
 
-NOTE_1600 = ("Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes "
-             "before the test's, so that day will not match.")
+NOTE_1600 = ("Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes "
+             "before the backtest's, so that day will not match.")
 
 
 # ---------------------------------------------------------------- I1: a window past the flat time books, with one note
@@ -48,8 +48,8 @@ def test_a_window_that_ends_before_the_flat_time_carries_no_note(tmp_path):
 def test_flat_1530_with_a_window_to_1555_books_with_its_own_numbers(tmp_path):
     d = mkdesk(tmp_path, limits={**LIMITS, "flat_et": "15:30"}, window=("09:25", "15:55"))
     assert d.cfg.book[LAB] == [{"account": "a1", "qty": 1}]
-    assert d.ld.window_note(LAB) == ("Its window runs to 15:55 but the Desk closes at 15:30. A trade still open then is "
-                                     "closed 25 minutes before the test's, so that day will not match.")
+    assert d.ld.window_note(LAB) == ("Its window runs to 15:55 but it closes its trades at 15:30. A trade still open then "
+                                     "closes 25 minutes before the backtest's, so that day will not match.")
 
 
 def test_with_no_limits_the_default_flat_time_is_the_window_end_cut_at_1555(tmp_path):
@@ -68,8 +68,8 @@ def test_window_note(end, flat, minutes):
         assert got is None
     else:
         word = "minute" if minutes == 1 else "minutes"
-        assert got == (f"Its window runs to {end} but the Desk closes at {flat or '15:55'}. A trade still open then is "
-                       f"closed {minutes} {word} before the test's, so that day will not match.")
+        assert got == (f"Its window runs to {end} but it closes its trades at {flat or '15:55'}. A trade still open then "
+                       f"closes {minutes} {word} before the backtest's, so that day will not match.")
 
 
 # ---------------------------------------------------------------- I2: a fill the Desk adopted from an order read
@@ -346,7 +346,7 @@ def test_the_new_words_on_the_server_side():
     from homebase import labdesk
     assert labdesk.OTHER_DESK == "Another copy of the Desk is using the Lab strategies."
     assert labdesk.READ_ONLY_HERE == "Another copy of the Desk is using the Lab strategies. They are read-only here."
-    assert labdesk.RECORD_CHANGED == "This strategy was promoted again. Try again."
+    assert labdesk.RECORD_CHANGED == "This strategy changed. Try again."
     assert labcfg.SAY_RISK == "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 
 

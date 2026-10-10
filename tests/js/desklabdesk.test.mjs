@@ -314,10 +314,10 @@ test('switching OFF says what happens to orders and an open position, and never 
 });
 
 test('a refused switch-on shows the Desk\'s own sentence; a switch-off that did not land is still the red alert', async () => {
-  const on = load({ answer: { detail: 'This strategy was promoted again. Try again.' }, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
+  const on = load({ answer: { detail: 'This strategy changed. Try again.' }, strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
   await on.api.toggleStrat('lab_nq_orb', true);
-  assert.deepEqual(on.toasts, ['This strategy was promoted again. Try again.']);
-  const off = load({ answer: { detail: 'This strategy was promoted again. Try again.' } });
+  assert.deepEqual(on.toasts, ['This strategy changed. Try again.']);
+  const off = load({ answer: { detail: 'This strategy changed. Try again.' } });
   await off.api.toggleStrat('lab_nq_orb', false);
   assert.equal(off.alerts.length, 1);
   assert.match(off.alerts[0], /NQ ORB NOT switched off/);
@@ -479,7 +479,7 @@ test('the Desk\'s own refusal is shown in the dialog as its sentence, with no pr
 });
 
 test('final wave I1: a window that runs past the flat time -- the Desk\'s note under the Limits panel, small and warn; none without it', () => {
-  const say = "Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes before the test's, so that day will not match.";
+  const say = "Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes before the backtest's, so that day will not match.";
   const html = load({ strategies: { lab_nq_orb: deskStrat({ note: say }) }, book: BOOKED0 }).view();
   assert.ok(html.includes(`<div class="mcap warn">${say.replace("'", '&#39;')}</div>`), 'the note as the Desk sends it, escaped');
   const at = html.indexOf('<h2>Limits</h2>');
@@ -560,7 +560,7 @@ test('the Activity page reads a Lab line through the page\'s own formatter', () 
   // a desklab.js that did not load: the generic line, never a blank row
   const bare = vm.createContext({ console, ST: ctx.ST, $: ctx.$, window: { getSelection: () => '' } });
   vm.runInContext(HELPERS + SLICE('/* ---- readiness, as the page shows it (W4) ----', '/* ---- render ---- */') + '\nglobalThis.line = activityLine;', bare);
-  assert.equal(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', account: 'a1', text: 'x' }).text, "Something happened to a Lab strategy: see the Activity log.", 'never a raw name');
+  assert.equal(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', account: 'a1', text: 'x' }).text, "Something happened to a Lab strategy. Check it.", 'never a raw name');
 });
 
 test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helper, and the figures box says Backtest', () => {
@@ -571,8 +571,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=5"><\/script>/);
-  assert.doesNotMatch(HTML, /desklab\.js\?v=[1234]\b/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=6"><\/script>/);
+  assert.doesNotMatch(HTML, /desklab\.js\?v=[12345]\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
 });
@@ -744,9 +744,9 @@ test('N2 each Lab event reaches the real Activity feed as a plain line; an event
   }
   assert.equal(ctx.line({ event: 'lab_unbooked', ...sample }).text, 'The Desk took Lucid Eval #1, Apex 2 off NQ ORB.');
   assert.deepEqual(plain(ctx.line({ event: 'lab_key_error', error: 'x' })), { text: 'The Desk could not set up its link to the Lab runner. Lab strategies cannot send orders. Check it.', tone: 'neg' });
-  assert.deepEqual(plain(ctx.line({ event: 'lab_zzz_new' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' });
+  assert.deepEqual(plain(ctx.line({ event: 'lab_zzz_new' })), { text: "Something happened to a Lab strategy. Check it.", tone: 'warn' });
   const bare = mkctx(null);
-  assert.deepEqual(plain(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', text: 'x' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' }, 'desklab.js missing: still a plain line, never a raw name');
+  assert.deepEqual(plain(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', text: 'x' })), { text: "Something happened to a Lab strategy. Check it.", tone: 'warn' }, 'desklab.js missing: still a plain line, never a raw name');
 });
 
 test('c4 the Today headline and the day bar are what they were when a Lab strategy only runs in shadow', () => {

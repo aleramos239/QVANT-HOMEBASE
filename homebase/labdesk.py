@@ -76,7 +76,7 @@ SET_LIMITS_FIRST = "Set the limits first."
 FLATTEN_FIRST = "Flatten it first."
 NOT_NOW = "Not 09:20-09:35 ET. Try again after 09:35."
 NOT_SAVED = "Could not save it. Try again."
-RECORD_CHANGED = "This strategy was promoted again. Try again."
+RECORD_CHANGED = "This strategy changed. Try again."
 BOOKED_FOR_MORE = "An account is booked for more. Lower its size first."
 OTHER_DESK = "Another copy of the Desk is using the Lab strategies."
 READ_ONLY_HERE = "Another copy of the Desk is using the Lab strategies. They are read-only here."
@@ -533,7 +533,7 @@ class LabDesk:
     # ------------------------------------------------------------ the switch
     async def set_enabled(self, name: str, on: bool) -> bool:
         """Write the store record's `enabled`. Switching ON needs the store (a desk that reads only refuses), the
-        promotion the desk knows (False: the record was promoted again, or is gone -- the page says "The Lab record
+        promotion the desk knows (False: the record was promoted again, or is gone -- the page says "This strategy
         changed. Try again.") and a record the desk can read. Switching OFF is NEVER refused: not on a desk that reads
         only, not for a changed record -- the switch is the record's, and refusing OFF protects nothing. Either way
         "Could not save it. Try again." when the record could not be written (nothing changes)."""

@@ -85,9 +85,9 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 
 def test_the_asset_versions_are_bumped():
-    assert '<script src="/static/desklab.js?v=5"></script>' in HTML                  # 5: the window note (final wave I1)
-    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4))
-    assert '"version": 7' in (STATIC / "apple" / "manifest.json").read_text()      # 7: the window note (final wave I1)
+    assert '<script src="/static/desklab.js?v=6"></script>' in HTML                  # 6: the wave review's words (N9)
+    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5))
+    assert '"version": 8' in (STATIC / "apple" / "manifest.json").read_text()      # 8: the wave review's words (N9)
 
 
 def test_the_old_step_a_caption_is_not_on_the_desks_page_for_a_lab_strategy():
@@ -148,7 +148,7 @@ def test_the_activity_list_and_the_last_event_time_leave_out_only_the_named_lab_
     for ev in ("lab_event_error", "lab_intake_error", "lab_save_error", "lab_carry_fill", "lab_sidecar_replaced", "lab_unbooked", "lab_unreadable",
                "lab_restore_error", "lab_start_error", "lab_key_error", "lab_store_error", "lab_view_error", "lab_open_without_cfg", "lab_side"):
         assert f'{ev}: labAct("{ev}")' in act, ev
-    assert "Something happened to a Lab strategy: see the Activity log." in HTML
+    assert "Something happened to a Lab strategy. Check it." in HTML
 
 
 def test_the_risk_field_says_what_a_dollar_amount_looks_like():

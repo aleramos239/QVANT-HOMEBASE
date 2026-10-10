@@ -963,7 +963,7 @@ test('N2 the plain lines of the Lab events that had none', () => {
   assert.deepEqual(A.lab_side({ on: true }, ''), ['Lab strategies are on for this Desk.']);
   assert.deepEqual(A.lab_side({ on: false }, ''), ['Lab strategies are off for this Desk.']);
   assert.deepEqual(A.lab_removed({}, 'NQ ORB'), ['NQ ORB taken off the Desk']);
-  assert.equal(D.LAB_UNKNOWN, "Something happened to a Lab strategy: see the Activity log.");
+  assert.equal(D.LAB_UNKNOWN, "Something happened to a Lab strategy. Check it.");
 });
 
 test('fix 3 the risk sentence', () => {
@@ -988,8 +988,8 @@ test('final wave M-W: the words an owner reads', () => {
   assert.deepEqual(A.lab_store_busy({}, ''), ['Another copy of the Desk is using the Lab strategies. They are read-only here.', 'warn']);
   assert.deepEqual(A.lab_store_owned({}, ''), ['This Desk is in charge of the Lab strategies now.']);
   assert.deepEqual(A.lab_foreign_key({}, ''), ['A Lab file names something that is not a Lab strategy. Check it.', 'warn']);
-  assert.equal(D.LAB_UNKNOWN, 'Something happened to a Lab strategy: see the Activity log.');
-  assert.ok(HTML.includes('return {text: "Something happened to a Lab strategy: see the Activity log.", tone: "warn"};'));
+  assert.equal(D.LAB_UNKNOWN, 'Something happened to a Lab strategy. Check it.');
+  assert.ok(HTML.includes('return {text: "Something happened to a Lab strategy. Check it.", tone: "warn"};'));
   assert.ok(!HTML.includes("check the Desk's log"));
 });
 
@@ -1016,7 +1016,7 @@ test('final wave B6: the Activity sentences in plain words; a strategy arriving 
 });
 
 test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing', () => {
-  const say = "Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes before the test's, so that day will not match.";
+  const say = "Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes before the backtest's, so that day will not match.";
   assert.equal(D.windowNote(deskStrat({ note: say })), say);
   assert.equal(D.windowNote(deskStrat()), '');
   assert.equal(D.windowNote(deskStrat({ note: 7 })), '');
