@@ -1825,7 +1825,10 @@ async function removeDeskLab(name) {
   if (ST) render();
   loadDeskLab();
 }
-function openDeskLabInLab(name) {      // the Lab page, on this strategy (it reads #strategy=<name>)
+async function openDeskLabInLab(name) {      // the Lab page, on this strategy
+  // The Mac app turns this link into a tab switch and drops the #strategy part, so the chart service is told first:
+  // the Lab page takes the ask when it is shown (in a browser the link itself carries it).
+  if (!DEMO) await chartPost("/api/tester/desklab/open", {name});
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#strategy=" + encodeURIComponent(name);
 }
 function setView(k, name) {

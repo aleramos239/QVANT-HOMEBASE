@@ -2015,6 +2015,18 @@ setTimeout(() => { if (P.chart) soloChart(); }, 1800);
 // Bar Replay lives in the same bottom panel: asking for it brings the panel back
 document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
 loadDesk();
+/* The Desk page's "Open in the Lab": the Mac app switches tab and drops the link's #strategy part, so the Desk leaves its ask with the
+   chart service and this page takes it, when it is shown and every few seconds (a hidden tab's page may not be told it was shown). */
+async function takeDeskAsk() {
+  const r = await send('GET', '/api/tester/lab-open');
+  const name = r.ok && r.json && typeof r.json.name === 'string' ? r.json.name : '';
+  if (!name) return;
+  if (!S.drafts.some((d) => d.name === name)) await loadLists();
+  if (S.drafts.some((d) => d.name === name)) selectDraft(name);
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') takeDeskAsk(); });
+window.addEventListener('focus', takeDeskAsk);
+setInterval(takeDeskAsk, 2500);
 loadLists().then(() => {
   const run = /^#run=([0-9a-z_-]+)$/.exec(location.hash);       // the Desk page's "Show executions on chart"
   if (run) { showRunOnChart(run[1]).then((ok) => log(ok ? 'Its executions are on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.')); return; }

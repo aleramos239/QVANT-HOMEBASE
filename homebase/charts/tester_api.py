@@ -66,6 +66,9 @@
                                           each cut to {date, state, why, net, match, rebuilt})],
                                           runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat is under
                                           20 s old
+    POST /api/tester/desklab/open        {name} -> {ok, name}: the Desk page's "Open in the Lab" leaves its ask (the Mac app
+                                          drops a link's #fragment when it switches tab). GET /api/tester/lab-open -> {name}
+                                          hands it to the Lab page once (null when none, or one older than two minutes)
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
                                           draft's text, its settings and that backtest's headline numbers. Refused (in
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
@@ -179,7 +182,7 @@ PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long:
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
-DESKLAB_ACTIONS = ("promote", "remove", "onoff")
+DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
 NOT_TRASHED = "It could not be moved to the trash."   # the move failed (an OSError): nothing was deleted
@@ -811,6 +814,25 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
+    open_ask = {"name": None, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
+
+    def desklab_open(name: str) -> dict:
+        """The Desk page asks the Lab page to show one draft. The Mac app drops a link's #fragment when it switches
+        tab, so the ask waits here and the Lab page takes it (GET /lab-open) the moment it is shown."""
+        try:
+            draftstore.read(name)
+        except (FileNotFoundError, ValueError, OSError):
+            raise HTTPException(404, "That strategy is not in the Lab.") from None
+        open_ask["name"], open_ask["at"] = name, time.monotonic()
+        return {"ok": True, "name": name}
+
+    @r.get("/lab-open")
+    def lab_open_take():
+        """The Lab page takes the Desk's ask, once: {name} (null when none, or one older than two minutes)."""
+        name, at = open_ask["name"], open_ask["at"]
+        open_ask["name"] = None
+        return {"name": name if name and time.monotonic() - at <= 120 else None}
+
     def desklab_onoff(name: str, on: bool) -> dict:
         if store.set_enabled(name, on) is None:
             raise HTTPException(404, "That strategy is not on the Desk.")
@@ -831,7 +853,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 body = await request.json()
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
-            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}}[what]
+            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"}}[what]
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
@@ -846,6 +868,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     done = await asyncio.to_thread(desklab_promote, name, body["run_id"])
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
+                elif what == "open":
+                    done = await asyncio.to_thread(desklab_open, name)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)

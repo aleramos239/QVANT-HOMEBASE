@@ -470,3 +470,20 @@ def test_promote_checks_the_sidecar_and_writes_the_record_under_one_lock(c, draf
     monkeypatch.setattr(store, "put", lambda *a, **k: (seen.append(("put", held())), real_put(*a, **k))[1])
     assert promote(c, run_id=make_run()).status_code == 200
     assert seen == [("booked", True), ("put", True)]
+
+
+def test_open_in_the_lab_is_asked_by_the_desk_and_taken_once_by_the_lab_page(c, drafts_dir):
+    """The Mac app drops a link's #fragment when it switches tab, so the Desk leaves its ask and the Lab page takes it."""
+    draft(drafts_dir)
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # nothing asked
+    gone = c.post("/api/tester/desklab/open", json={"name": "nq_none"}, headers=DESK)
+    assert gone.status_code == 404 and gone.json() == {"ok": False, "detail": LAB}
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # a refusal asks nothing
+    ok = c.post("/api/tester/desklab/open", json={"name": "nq_bars"}, headers=DESK)
+    assert ok.status_code == 200 and ok.json() == {"ok": True, "name": "nq_bars"}
+    assert c.get("/api/tester/lab-open").json() == {"name": "nq_bars"}
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # taken once
+    bad = c.post("/api/tester/desklab/open", json={"name": "nq_bars", "x": 1}, headers=DESK)
+    assert bad.status_code == 400
+    evil = c.post("/api/tester/desklab/open", json={"name": "nq_bars"}, headers=EVIL)
+    assert evil.status_code == 403
