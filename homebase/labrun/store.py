@@ -23,7 +23,9 @@ record's, copied when the day starts: a day file is final for its date only for 
 ({"ok": bool | None, "text"}: the daily match against the tester, labrun/match.py) and, only for a day made from prints
 already held (catch-up), `rebuilt: true`.
 
-Stdlib only (draftstore, for the name rule, is too).
+Stdlib only, and it imports nothing else of homebase: the desk process reads this store (Step B), and the desk must
+never load the draft helper (tests/test_claude_drafts.py). The name rule is the drafts' own, kept here as a copy that a
+test holds equal to draftstore.NAME_RE.
 """
 from __future__ import annotations
 
@@ -38,8 +40,7 @@ import threading
 import time
 from pathlib import Path
 
-from ..draftstore import NAME_RE
-
+NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,39}$")        # a draft's name (draftstore.NAME_RE: tests pin them equal)
 ENV_ROOT = "HOMEBASE_DESKLAB_ROOT"
 RUNNER_FILE = "runner.json"              # the heartbeat sits beside the records, so a strategy may not be called "runner"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")

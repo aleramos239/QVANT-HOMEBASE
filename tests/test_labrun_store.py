@@ -284,3 +284,18 @@ def test_the_lock_is_held_across_processes(tmp_path):
     assert out.stdout.strip() == "busy", out.stderr
     out = subprocess.run([sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, timeout=30)
     assert out.stdout.strip() == "wrote", out.stderr
+
+
+def test_the_store_keeps_the_drafts_name_rule_without_importing_the_draft_helper():
+    """The desk process reads this store (Step B) and must never load homebase.draftstore
+    (tests/test_claude_drafts.py::test_importing_the_desk_never_loads_a_draft): the store carries the rule itself."""
+    import subprocess
+    import sys
+
+    from homebase import draftstore
+    assert store.NAME_RE.pattern == draftstore.NAME_RE.pattern and store.NAME_RE.flags == draftstore.NAME_RE.flags
+    code = ("import sys, homebase.labrun.store, homebase.labcfg, homebase.labdesk\n"
+            "bad = sorted(m for m in sys.modules if m == 'homebase.draftstore' or m.startswith('homebase.backtest'))\n"
+            "print(bad); sys.exit(1 if bad else 0)\n")
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stdout + out.stderr
