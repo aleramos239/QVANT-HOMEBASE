@@ -123,3 +123,88 @@ def test_heartbeat_posts_alone_keep_the_runner_alive(tmp_path):
     run(d.ld.refresh())
     d.ld.heartbeat({"pid": 7, "strategies": {}})
     assert d.ld.status_view(LAB)["runner"] == {"alive": True, "age_s": 0.0}
+
+
+# ================================================================ 3: the flatten answer says, per account, whether a person must look
+def _live(d):
+    send(d, entry(1), seq=1)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+
+
+def _resting(d):
+    send(d, entry(1), seq=1)
+
+
+def _stuck(d):
+    _resting(d)
+    d.ads["a1"].stuck.add(st(d).upper_id)                                          # the cancel is accepted, the order stays
+
+
+def _refused_close(d):
+    _live(d)
+    d.ads["a1"].fail_market = True
+
+
+def _unreadable(d):
+    _live(d)
+    d.ads["a1"].net_error = True
+
+
+def _already_flat(d):
+    _live(d)
+    d.ads["a1"].net = 0
+
+
+def _close_out(d):
+    _live(d)
+    run(d.eng.lab_flatten(LAB, reason="time"))                                     # its one close order is out already
+
+
+def _lost(d):
+    _live(d)
+    d.eng._lab_x(st(d))["lost"] = True
+
+
+def _no_adapter_open(d):
+    _live(d)
+    del d.ads["a1"]
+
+
+def _no_adapter_done(d):
+    _resting(d)
+    run(d.eng.lab_cancel(LAB))
+    del d.ads["a1"]
+
+
+SCENES = {"a position": (_live, True), "a resting entry": (_resting, True), "a cancel that does not take": (_stuck, False),
+          "a close the broker refuses": (_refused_close, False), "a position that cannot be read": (_unreadable, False),
+          "already flat": (_already_flat, True), "its close order already out": (_close_out, True),
+          "a lost record": (_lost, False), "no adapter, a trade open": (_no_adapter_open, False),
+          "no adapter, the trade over": (_no_adapter_done, True)}
+
+
+@pytest.mark.parametrize("scene", list(SCENES))
+def test_the_per_account_ok_of_a_flatten_is_the_engines_own(tmp_path, scene):
+    """LabDesk.flatten_view reads `ok` off the steps engine.flatten_strategy answers (and the round's status); the
+    engine's own per-account ok (lab_flatten's, which flatten_strategy does not pass on) is the judge."""
+    setup, want = SCENES[scene]
+    d = mkdesk(tmp_path)
+    setup(d)
+    own, real = {}, d.eng.lab_flatten
+
+    async def spy(name, **kw):
+        got = await real(name, **kw)
+        own.update(got)
+        return got
+    d.eng.lab_flatten = spy
+    results = run(d.eng.flatten_strategy(LAB))
+    view = d.ld.flatten_view(LAB, results)
+    assert view == {"a1": {"ok": own["a1"]["ok"], "steps": results["a1"]}}
+    assert view["a1"]["ok"] is want and isinstance(view["a1"]["steps"], list)
+
+
+def test_a_flatten_with_nothing_to_flatten_has_no_account_to_speak_of(tmp_path):
+    d = mkdesk(tmp_path)
+    assert d.ld.flatten_view(LAB, run(d.eng.flatten_strategy(LAB))) == {}
+    assert d.ld.flatten_view(LAB, None) == {} and d.ld.flatten_view(LAB, {"a1": ["internal error: KeyError: 'x'"]}) == \
+        {"a1": {"ok": False, "steps": ["internal error: KeyError: 'x'"]}}

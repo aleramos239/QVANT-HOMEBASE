@@ -1223,6 +1223,37 @@ class LabDesk:
         self._publish_safe()
         return res
 
+    # ------------------------------------------------------------ "Flatten & turn off": is anything left to check?
+    def flatten_view(self, name: str, results) -> dict:
+        """engine.flatten_strategy's answer for a Lab strategy ({account: [steps]}), with the engine's own verdict
+        per account put back: {account: {"ok": bool, "steps": [...]}}. ok True = nothing is left to check there (it
+        is flat, or its one close order is out); False = a person must look. The engine's capped flatten knows this
+        (lab_flatten's `ok`) and its page answer drops it; it is read back here from what the engine itself wrote --
+        every step of a flatten that is not ok starts "check it" (or "internal error"), and an account with no
+        adapter is not ok only while its trade is open -- so the page never has to guess from the words.
+        tests/test_labdesk_b7.py holds it equal to lab_flatten's own ok, scene by scene. Memory only."""
+        out = {}
+        for a, steps in (results.items() if isinstance(results, dict) else ()):
+            steps = [str(x) for x in steps] if isinstance(steps, (list, tuple)) else [str(steps)]
+            low = [x.strip().lower() for x in steps]
+            st = self.engine.states.get(f"{name}@{a}")
+            bad = any(x.startswith(("check it", "internal error")) for x in low) \
+                or ("account not connected" in low and st is not None and st.status in OPEN)
+            out[a] = {"ok": not bad, "steps": steps}
+        return out
+
+    def flatten_check(self, name: str, results) -> dict:
+        """What the flatten route adds to its answer for a Lab strategy: {"check": [the accounts where a person must
+        look]} when there is one, else nothing at all -- an answer with nothing to check is, key for key, the answer
+        it always was (tests/test_server_lab.py pins it). An account of `results` that is not listed is ok. Never
+        raises: the flatten is done, its answer goes out."""
+        try:
+            bad = [a for a, v in self.flatten_view(name, results).items() if not v["ok"]]
+        except Exception as e:  # noqa: BLE001
+            self._say_tick(e)
+            return {}
+        return {"check": bad} if bad else {}
+
     # ------------------------------------------------------------ a carried block, cleared by hand
     async def clear_block(self, name: str, account: str) -> dict:
         """The owner's "this account is fine" for a block carried from an earlier day (engine.lab_clear_block: only

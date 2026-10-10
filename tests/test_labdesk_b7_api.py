@@ -54,3 +54,49 @@ def test_a_desk_with_the_lab_side_off_shows_its_tail_exactly_as_before(paths):
         file_rows = [json.loads(x) for x in (paths / "journal.jsonl").read_text().splitlines()]
         tail = c.get("/api/status").json()["journal"]
         assert tail == file_rows[-60:][::-1] and sum(1 for r in tail if r["event"] in BOOK) == 40
+
+
+# ================================================================ 3: the flatten answer's per-account ok
+def test_flatten_and_turn_off_answers_ok_for_each_account_and_keeps_its_steps(client):
+    client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
+    st = client.app.state.engine.states[f"{LAB}@a1"]
+    fill_entry(client.app.state.engine, client.adapters["a1"], st, 110.25)
+    r = client.post("/api/strategy-flatten", json={"strategy": LAB}).json()
+    assert r["ok"] is True and r["enabled"] is False
+    assert isinstance(r["results"]["a1"], list) and r["results"]["a1"][0] == "market Sell 1: ok"     # as the page reads it today
+    assert set(r) == {"ok", "enabled", "results"}                                  # nothing to check: the answer it always was
+    assert client.app.state.labdesk.flatten_view(LAB, r["results"]) == {"a1": {"ok": True, "steps": r["results"]["a1"]}}
+
+
+def test_a_flatten_that_leaves_something_to_check_says_so_for_that_account(client):
+    client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
+    st = client.app.state.engine.states[f"{LAB}@a1"]
+    client.adapters["a1"].stuck.add(st.upper_id)                                   # the broker accepts the cancel; the order stays
+    r = client.post("/api/strategy-flatten", json={"strategy": LAB}).json()
+    assert r["check"] == ["a1"] and set(r) == {"ok", "enabled", "results", "check"}
+    assert any(s.startswith("check it") for s in r["results"]["a1"])               # its steps are kept as they were
+
+
+def test_the_check_list_never_fails_a_flatten_that_is_done(client, monkeypatch):
+    client.post("/api/lab/intent", headers=client.H, json=event(client, [entry()]))
+
+    def boom(*a):
+        raise RuntimeError("the view blew up")
+    monkeypatch.setattr(client.app.state.labdesk, "flatten_view", boom)
+    r = client.post("/api/strategy-flatten", json={"strategy": LAB})
+    assert r.status_code == 200 and set(r.json()) == {"ok", "enabled", "results"}
+
+
+def test_the_flatten_answer_of_every_other_kind_is_what_it_was(client):
+    eng = client.app.state.engine
+    client.app.state.cfg.book["nq930"] = [{"account": "a1", "qty": 1}]
+    bot = eng._state("nq930", "a1")
+    bot.status, bot.qty, bot.entry_side, bot.entry_qty = "live", 1, "Buy", 1
+    client.adapters["a1"].net = 1
+    r = client.post("/api/strategy-flatten", json={"strategy": "nq930"})
+    assert r.json() == {"ok": True, "enabled": False, "results": {"a1": r.json()["results"]["a1"]}}
+    assert r.json()["results"]["a1"][0] == "market Sell 1: ok"
+    client.adapters["a1"].fail_market = True                                       # ... also when it could not get out
+    bot.status = "live"
+    r = client.post("/api/strategy-flatten", json={"strategy": "nq930"}).json()
+    assert set(r) == {"ok", "enabled", "results"} and "check" not in r

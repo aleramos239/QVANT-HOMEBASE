@@ -1595,10 +1595,12 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 engine.journal("lab_save_error", strategy=name, error=str(e)[:200], cause="manual_flatten")
                 s = cfg.strategies.get(name)
                 return {"ok": True, "enabled": bool(s is not None and s.enabled), "results": results,
-                        "detail": labdesk_mod.SWITCH_NOT_OFF}
+                        **labdesk.flatten_check(name, results), "detail": labdesk_mod.SWITCH_NOT_OFF}
             engine.journal("strategy_toggled", strategy=name, enabled=False,
                            cause="manual_flatten")
-            return {"ok": True, "enabled": False, "results": results}
+            # `check` (kind lab, only when there is one): the accounts where a person must look -- every account
+            # of `results` that is not in it is ok (flat, or its close order is out)
+            return {"ok": True, "enabled": False, "results": results, **labdesk.flatten_check(name, results)}
         cfg.strategies[name].enabled = False
         config_mod.save(cfg)
         engine.journal("strategy_toggled", strategy=name, enabled=False,
