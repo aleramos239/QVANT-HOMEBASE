@@ -670,7 +670,10 @@ def test_a_second_desk_with_other_accounts_never_rewrites_the_first_desks_sideca
         labcfg.overlay(second)
         labcfg.persist_all(second)
     assert store.get_desk("pp_orb") == disk and store.booked("pp_orb") is True
-    assert labcfg.orphans(second, labcfg.read_store()) == []
+    store.put_desk("old_one", side())                                            # a sidecar whose record is gone
+    snap = labcfg.read_store()
+    assert labcfg.orphans(first, snap) == ["old_one"]                            # the owner's to remove
+    assert labcfg.orphans(second, snap) == []                                    # never a reader's
 
 
 # ---- item 6: a sidecar whose record is gone

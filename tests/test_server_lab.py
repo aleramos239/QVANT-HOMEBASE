@@ -1167,13 +1167,18 @@ def test_a_second_change_to_a_strategy_while_one_is_being_written_is_refused_not
     store.put(rec())
     ld, cfg, _ = make_desk(tmp_path)
     done = hold_the_store()
+    reads = []
+    real = labcfg.read_store
+    monkeypatch.setattr(labcfg, "read_store", lambda *a, **k: (reads.append(1), real(*a, **k))[1])
 
     async def go():
         first = asyncio.create_task(ld.set_limits(LAB, LIMITS))
         await asyncio.sleep(0.05)                                                # the first is waiting for the store
-        with pytest.raises(Refused, match="Could not save it"):
-            await ld.set_limits(LAB, {**LIMITS, "max_trades_day": 9})
-        assert await ld.refresh() is None                                        # and the refresh changes nothing meanwhile
+        for other in (ld.set_limits(LAB, {**LIMITS, "max_trades_day": 9}), ld.set_enabled(LAB, True),
+                      ld.set_enabled(LAB, False), ld.remove(LAB)):
+            with pytest.raises(Refused, match="Could not save it"):
+                await other
+        assert await ld.refresh() is None and reads == []                        # the refresh does not even read meanwhile
         done()
         return await first
     try:
@@ -1181,6 +1186,7 @@ def test_a_second_change_to_a_strategy_while_one_is_being_written_is_refused_not
     finally:
         done()
     assert store.get_desk("pp_orb")["limits"]["max_trades_day"] == 2 and labcfg.limits_of(cfg, LAB).max_trades_day == 2
+    assert store.get("pp_orb")["enabled"] is False and LAB in cfg.strategies     # the refused ones changed nothing
 
 
 def test_a_request_that_is_cancelled_while_it_writes_still_ends_with_memory_and_disk_agreeing(tmp_path, monkeypatch):
