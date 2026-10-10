@@ -92,6 +92,19 @@ def test_promoted_again_derives_again_from_the_new_record():
     assert labcfg.auto_of(cfg, "lab_pp_orb") is True
 
 
+def test_an_older_record_promoted_again_with_its_own_limits_picks_them_up():
+    cfg = desk_cfg()
+    store.put(rec())
+    labcfg.overlay(cfg)
+    assert labcfg.limits_of(cfg, "lab_pp_orb") is None
+    store.put(own_rec(promoted="2026-10-10T16:00:00+00:00"))
+    labcfg.overlay(cfg)
+    assert labcfg.limits_of(cfg, "lab_pp_orb") == LabLimits(1, 4, 0.0, "15:54", "15:55")
+    assert labcfg.auto_of(cfg, "lab_pp_orb") is True
+    s = cfg.strategies["lab_pp_orb"]
+    assert (s.qty, s.flat_et) == (4, "15:55")
+
+
 def test_an_older_record_is_as_before():
     cfg = desk_cfg()
     store.put(rec())

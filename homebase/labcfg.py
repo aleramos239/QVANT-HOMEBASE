@@ -533,6 +533,9 @@ def _known(cfg: AppCfg, m: dict, did: str, rec: dict) -> bool:
     elif again and limits is not None:       # promoted again: the limits stay only if they still fit the new record
         limits = _limits_from(asdict(limits), rec)
         froze = limits is None
+    elif again and limits is None and not froze:     # none typed, none of its own before: the new record may carry them
+        limits = derive_limits(rec)
+        auto = limits is not None
     s = strategy_cfg(rec, limits)            # may raise: nothing has changed yet
     if again:
         _unbook(cfg, did, cfg.book.pop(did, None) or [], "promoted again")
