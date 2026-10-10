@@ -1267,10 +1267,13 @@ class StrategyDay:
             return
         if side.killed:
             return self.desk_says(KILLED)
-        owed, self._stop_owed = self._stop_owed, None
-        if owed is not None and side.stopped is None and not self._held():
+        owed = self._stop_owed
+        if owed is not None and side.stopped is not None:
+            self._stop_owed = None                   # it did get there after all
+        elif owed is not None and not self._held():
             # this day's stop ran out of its ten seconds untaken, and the Desk's stream is back without `stopped`: it
             # never got there. ONCE more -- the same request if it was never answered (seq, intents, t_ns)
+            self._stop_owed = None
             self._attempt(owed)
             self._resave()
         if side.stopped is not None:

@@ -298,3 +298,18 @@ def test_a_switched_off_days_stop_is_asked_once_more_too_though_it_is_no_longer_
     k.wall[0] += 5.0
     k.r.idle()
     assert len(k.stub.bodies) == 13 and k.r._ending == []                    # once, and then it is let go for good
+
+
+def test_only_the_stop_is_owed_a_cancel_that_ran_out_is_not_asked_again(days):
+    stub = StubDesk("took", *[StubDesk.NO_ANSWER] * 11)
+    day, stub, side, _, wall = days(stub=stub)
+    feed(day, "09:29:50", [21000.0] * 11)
+    feed(day, "09:30:01", [21000.0] * 180)                                   # 09:33: the cancel, never answered
+    for _ in range(12):
+        wall.t += 1.0
+        day.tend()
+    assert len(stub.bodies) == 12 and not day.pending() and not day.owes_stop()
+    day.on_desk(snap(orders={1: WORKING}, answered=[2]))
+    wall.t += 5.0
+    day.tend()
+    assert len(stub.bodies) == 12
