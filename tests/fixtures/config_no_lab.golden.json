@@ -1,0 +1,171 @@
+{
+  "armed": true,
+  "accounts": {
+    "main": {
+      "keyring_key": "tv:live:me",
+      "account_name": "MAIN1",
+      "live": true,
+      "label": "Main",
+      "paper": false,
+      "prop": {}
+    },
+    "eval1": {
+      "keyring_key": "tv:demo:apex",
+      "account_name": "APEX-1",
+      "live": false,
+      "label": "Éval 1",
+      "paper": false,
+      "prop": {
+        "rules": "lucid-pro-50k@2026-09-27b",
+        "start_balance": 50000,
+        "largest_day": 0,
+        "days": 0
+      }
+    },
+    "paper-5": {
+      "keyring_key": "",
+      "account_name": "five",
+      "live": false,
+      "label": "five (paper)",
+      "paper": true,
+      "prop": {}
+    }
+  },
+  "book": {
+    "nq930": [
+      {
+        "account": "main",
+        "qty": 3
+      },
+      {
+        "account": "paper-5",
+        "qty": 1
+      }
+    ],
+    "gc_nfp": [
+      {
+        "account": "eval1",
+        "qty": 4
+      }
+    ]
+  },
+  "strategies": {
+    "nq930": {
+      "symbol": "NQ",
+      "qty": 3,
+      "offset_pts": 5.0,
+      "sl_pts": 5.0,
+      "tp_pts": 15.0,
+      "cancel_et": "12:55",
+      "flat_et": "15:55",
+      "accept_from_et": "09:29",
+      "accept_until_et": "09:45",
+      "enabled": true,
+      "gated": true,
+      "self_fire": true,
+      "pine_file": "nq930.pine",
+      "metrics": {
+        "source": "one-shot sealed-year OOS exam · 2025-07-08→2026-07-07 · TV 15s",
+        "rows": {
+          "trades": "167",
+          "WR": "47.3%",
+          "PF": "2.34",
+          "t": "5.04",
+          "avg/trade/mini": "$79.0",
+          "maxDD/mini": "−$1,135",
+          "green months": "10/10"
+        },
+        "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
+        "equity_file": "nq930_equity.json"
+      },
+      "kind": "straddle",
+      "shadow": false,
+      "rule": "",
+      "bar_minutes": 1,
+      "warmup_bars": 60,
+      "fire_et": "09:30:00",
+      "only_dates": [],
+      "label": "",
+      "rr": 3.0,
+      "shape": "",
+      "atr_tf": 30,
+      "off_atr": 0.0,
+      "sl_atr": 3.0,
+      "or_min": 5,
+      "tgt_r": 2.0,
+      "fee_rt": 4.0,
+      "day_take": 0.0,
+      "day_lock": 0.0,
+      "target_take": false,
+      "size_tiers": [],
+      "skip_early_close": false,
+      "ack_open_loss": false
+    },
+    "gc_nfp": {
+      "symbol": "GC",
+      "qty": 4,
+      "offset_pts": 2.0,
+      "sl_pts": 5.0,
+      "tp_pts": 7.7,
+      "cancel_et": "08:45",
+      "flat_et": "09:55",
+      "accept_from_et": "08:29",
+      "accept_until_et": "08:31",
+      "enabled": true,
+      "gated": false,
+      "self_fire": true,
+      "pine_file": "",
+      "metrics": {
+        "source": "GC 08:30 NFP + CPI straddle, one setup for both releases (2026-10-08)",
+        "rows": {
+          "entry": "OCO stops anchor +/-2.0",
+          "SL": "5.0 pts, $500/ct, $2,000 at 4 ct (a stop-out ends the eval)",
+          "TP": "7.7 pts, $770/ct, $3,080 at 4 ct",
+          "2025-01..2026-09 tick replay, 4 ct": "NFP 19 trades 74% win +$32.1k eval pass 68% / CPI 20 trades 60% win +$19.6k eval pass 48%",
+          "events": "NFP and CPI days"
+        },
+        "rev": 3,
+        "caveat": "19-20 trades per event; the 2025-26 days were already spent on this family; CPI is the weaker of the two and its win rate fell 64% -> 56% from 2025 to 2026; most winners last under 5 s (Lucid micro-scalp: over 50% of profit from trades held 5 s or less)",
+        "equity_file": "gc_nfp_equity.json"
+      },
+      "kind": "straddle",
+      "shadow": false,
+      "rule": "",
+      "bar_minutes": 1,
+      "warmup_bars": 60,
+      "fire_et": "08:29:59",
+      "only_dates": [
+        "2026-10-02",
+        "2026-10-14",
+        "2026-11-06",
+        "2026-11-10",
+        "2026-12-04",
+        "2026-12-10"
+      ],
+      "label": "GC_NFP/CPI",
+      "rr": 0.0,
+      "shape": "",
+      "atr_tf": 30,
+      "off_atr": 0.0,
+      "sl_atr": 3.0,
+      "or_min": 5,
+      "tgt_r": 2.0,
+      "fee_rt": 4.0,
+      "day_take": 0.0,
+      "day_lock": 0.0,
+      "target_take": false,
+      "size_tiers": [],
+      "skip_early_close": false,
+      "ack_open_loss": false
+    }
+  },
+  "chart_trading": {
+    "enabled": true,
+    "max_order_qty": 5,
+    "max_position_qty": 10
+  },
+  "allowed_hosts": [
+    "desk.tailnet.ts.net",
+    "100.64.0.7"
+  ]
+}

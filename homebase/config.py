@@ -308,14 +308,30 @@ def load(unknown: str = "raise") -> AppCfg:
     return cfg
 
 
+_after_save: list = []  # fn(cfg), called after each save() once the file is whole; the desk registers
+                        # labcfg.persist_all here (the Lab strategies' own files). A hook never breaks a save.
+
+
 def save(cfg: AppCfg) -> None:
     d = asdict(cfg)
+    # A promoted Lab strategy (kind "lab", id "lab_<name>": homebase/labcfg.py) lives in the desk's memory and in
+    # its own file beside its record, never here: load() drops a strategy it does not ship, with its book rows.
+    # With none, `d` is untouched and the file is byte for byte what it always was.
+    for name in [n for n, s in cfg.strategies.items() if getattr(s, "kind", "") == "lab"] \
+            + [n for n in d["book"] if str(n).startswith("lab_")]:
+        d["strategies"].pop(name, None)
+        d["book"].pop(name, None)
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, path)
+    for fn in list(_after_save):
+        try:
+            fn(cfg)
+        except Exception as e:  # noqa: BLE001 -- config.json is written; a hook's trouble is its own
+            log.warning("config.json: an after-save step failed: %s", e)
 
 
 def assignments(cfg: AppCfg, strategy: str) -> list[dict]:
