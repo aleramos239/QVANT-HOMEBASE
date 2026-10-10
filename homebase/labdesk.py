@@ -463,6 +463,59 @@ class LabDesk:
         note = labcfg.window_note(rec, limits)
         return {"ok": True, "strategy": name, "limits": asdict(limits), **({"note": note} if note else {})}
 
+    # ------------------------------------------------------------ settings
+    def _in_session(self, rec: dict) -> bool:
+        """Weekdays, ET, between the strategy's window start and end: the runner is (or may be) hosting its day."""
+        w = rec.get("session_window")
+        now = self.engine.now_et()
+        try:
+            a, b = (dt.time.fromisoformat(str(x)[:5]) for x in w)
+        except (TypeError, ValueError):
+            return False
+        return now.weekday() < 5 and a <= now.time() < b
+
+    async def set_settings(self, name: str, body) -> dict:
+        """The settings the strategy declared adjustable (record `settings`), written into the record's params; the
+        runner takes them from its next session (its own settings key changes). ValueError: a setting that is not
+        adjustable or a bad value. Refused: the Lab side is off, not a Lab strategy (404), another desk owns the store,
+        the strategy's session is running (change it before the window opens or after it closes), the 9:30 window, a
+        round open, or the record changed / could not be written. Nothing changes on a refusal."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
+        self._need(name)
+        self._must_own()
+        rec = labcfg.record_of(self.cfg, name)
+        changes = labcfg.parse_settings(body, rec)
+        if self._in_quiet() or self._in_session(rec):
+            w = rec.get("session_window") or ["", ""]
+            raise Refused(f"Not while it is in session. Change it before {w[0]} or after {w[1]} ET.")
+        why = self._open_why(name)
+        if why is not None:
+            raise Refused(why)
+        was = dict(rec.get("params") or {})
+        new_params = {**was, **changes}
+        if new_params == was:
+            return {"ok": True, "strategy": name, "settings": changes, "changed": False}
+        sname, mark, at = labcfg.store_name(name), store.mark_of(rec), self._at
+
+        def work():
+            with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
+                cur = store.get(sname, at)
+                if cur is None or store.mark_of(cur) != mark:
+                    return None
+                return store.put({**cur, "params": new_params}, at)
+
+        def keep(new):
+            if new is None:
+                raise Refused(RECORD_CHANGED)
+            m = labcfg.entry(self.cfg, name)
+            if m is not None:
+                m["rec"] = new
+        await self._write(name, work, keep)
+        self._journal("lab_settings_set", strategy=name, settings=changes, previous={k: was.get(k) for k in changes})
+        return {"ok": True, "strategy": name, "settings": changes, "changed": True}
+
     def window_note(self, name: str) -> str | None:
         """The window-past-the-flat-time note of a Lab strategy (labcfg.window_note), or None. Memory only; never
         raises: it rides along an answer that is already a success."""
@@ -712,6 +765,15 @@ class LabDesk:
         return {str(k)[:40]: v for k, v in list(got.items())[:40]
                 if isinstance(v, (bool, int, float)) or (isinstance(v, str) and len(v) <= 40)}
 
+    def _settings(self, name: str) -> list:
+        """The adjustable settings' specs the record carries ([] for a strategy that declares none): plain values only."""
+        got = (labcfg.record_of(self.cfg, name) or {}).get("settings")
+        out = []
+        for s in got if isinstance(got, list) else []:
+            if isinstance(s, dict) and isinstance(s.get("key"), str):
+                out.append({k: s.get(k) for k in ("key", "label", "type", "default", "min", "max", "step", "choices")})
+        return out[:6]
+
     def status_view(self, name: str) -> dict | None:
         """The `lab` block of /api/status; None for a strategy that is not from the Lab. Memory only, and it never
         raises: the whole Desk page reads through this route."""
@@ -724,7 +786,8 @@ class LabDesk:
             took = self._intake_view(name, state, why)               # the intake half (B3): what only it can tell
             return {"name": sname, "mark": labcfg.mark_of(self.cfg, name), "limits": asdict(limits) if limits else None,
                     "auto": labcfg.auto_of(self.cfg, name),          # its limits are its own: nothing to fill in
-                    "params": self._params(name),                    # the settings it was promoted with (read-only)
+                    "params": self._params(name),                    # the settings it was promoted with
+                    "settings": self._settings(name),                # the ones of them the Setup panel may change
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
                     "runner": self._runner(), "rounds": self._rounds(name),

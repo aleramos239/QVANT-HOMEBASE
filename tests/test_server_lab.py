@@ -138,7 +138,7 @@ def test_a_promoted_strategy_is_a_desk_strategy_off_with_no_account(client):
     assert s["day_status"] == "idle" and s["killed"] is False and s["accounts"] == []
     assert s["lab"] == {"name": "pp_orb", "mark": MARK, "limits": None, "state": "off", "why": None, "trades_today": 0,
                         "mode_today": None, "runner": {"alive": False, "age_s": None}, "rounds": [], "refused": [],
-                        "read_only": False, "auto": False, "params": {}}
+                        "read_only": False, "auto": False, "params": {}, "settings": []}
     assert d["strategies"]["nq930"]["lab"] is None                               # every other strategy: no block
     assert d["book"] == {"nq930": [{"account": "main", "qty": 3}]}               # no account on it yet
 

@@ -619,6 +619,45 @@ def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
             cfg.book.pop(did, None)
 
 
+def parse_settings(body, rec) -> dict:
+    """{key: value} the owner sent for a promoted strategy's adjustable settings, checked against the specs the record
+    carries (`settings`: what the strategy declared). Returns the plain values to write into `params`. ValueError with
+    the sentence for a key that is not adjustable, or a value outside its choices / range. Nothing is guessed."""
+    spec = {s["key"]: s for s in ((rec or {}).get("settings") or []) if isinstance(s, dict) and isinstance(s.get("key"), str)}
+    if not isinstance(body, dict) or not body:
+        raise ValueError("settings: {name: value}")
+    out: dict = {}
+    for key, v in body.items():
+        s = spec.get(key)
+        if s is None:
+            raise ValueError("That setting cannot be changed here.")
+        label, kind = str(s.get("label") or key), s.get("type")
+        if kind == "choice":
+            choices = [str(c) for c in (s.get("choices") or [])]
+            if isinstance(v, bool) or str(v) not in choices:
+                raise ValueError(f"{label}: one of {', '.join(choices)}.")
+            out[key] = str(v)
+        elif kind == "bool":
+            if not isinstance(v, bool):
+                raise ValueError(f"{label}: on or off.")
+            out[key] = v
+        elif kind in ("int", "float"):
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or v in (float("inf"), float("-inf")):
+                raise ValueError(f"{label}: a number.")
+            lo, hi = s.get("min"), s.get("max")
+            if (lo is not None and v < lo) or (hi is not None and v > hi):
+                raise ValueError(f"{label}: from {lo:g} to {hi:g}." if lo is not None and hi is not None else f"{label}: out of range.")
+            if kind == "int":
+                if v != int(v):
+                    raise ValueError(f"{label}: a whole number.")
+                out[key] = int(v)
+            else:
+                out[key] = float(v)
+        else:
+            raise ValueError("That setting cannot be changed here.")
+    return out
+
+
 def apply(cfg: AppCfg, snap, held=None, reload: bool = False) -> dict:
     """Bring cfg.strategies / cfg.book in line with what read_store() saw. Memory only. `held(desk_id)` says whether the
     engine holds an open round for it: such a strategy is never removed (it is switched off and kept until the round

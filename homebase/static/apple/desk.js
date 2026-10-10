@@ -110,9 +110,15 @@
     function setupDeskLab(name, s) {
       const rowOf = () => { try { return (DESKLAB.strategies || []).find((w) => w && w.name === s.lab.name) || null; } catch (_) { return null; } };
       const bookOf = () => { try { return (ST.book && ST.book[name]) || []; } catch (_) { return []; } };
-      const rows = window.DeskLab ? window.DeskLab.deskSetupRows(s, rowOf(), bookOf()).map(([k, v]) => row(k, v)) : [];
-      setupBox._sig = '';      // what setup() cached is not what is here now
-      setupBox.replaceChildren(...rows);
+      const data = window.DeskLab ? window.DeskLab.deskSetupRows(s, rowOf(), bookOf()) : [];
+      const sig = 'dl:' + name + '|' + JSON.stringify(data) + '|' + (window.DeskLabSet ? window.DeskLabSet.sig(s.lab) : '');
+      // the settings it lets the Desk change are controls: the same nodes every time, repainted only when something shown changed,
+      // so a menu or a field being used is never rebuilt under the hand
+      const ctl = window.DeskLabSet ? window.DeskLabSet.nodes(name, s.lab, !!(s.lab && s.lab.read_only)) : [];
+      if (setupBox._sig !== sig) {
+        setupBox._sig = sig;      // (never what setup() cached)
+        setupBox.replaceChildren(...data.map(([k, v]) => row(k, v)), ...ctl);
+      }
     }
 
     function setup(name) {
