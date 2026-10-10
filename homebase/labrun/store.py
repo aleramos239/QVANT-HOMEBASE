@@ -348,3 +348,44 @@ def put_runner(status: dict, at=None) -> None:
 
 def get_runner(at=None) -> dict | None:
     return _read(root(at) / RUNNER_FILE)
+
+
+# ---------------------------------------------------------------- the tell-log (Step B: a day hosted in desk mode)
+#   <root>/<name>/days/<YYYY-MM-DD>.tell.jsonl    what the strategy's child was told and what it answered, one JSON
+#                                                 line each, in order (labrun/host.py writes it, and reads it back when
+#                                                 the runner starts again mid-day). Appended only; days() never reads it
+#                                                 (it is not a .json file). It never holds the runner's key.
+TELL_SUFFIX = ".tell.jsonl"
+
+
+def _append(f: Path, line: dict) -> None:
+    """One whole line at the end of the file, in one write (a line is far smaller than what an append may split)."""
+    f.parent.mkdir(parents=True, exist_ok=True)
+    with open(f, "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(line) + "\n")
+
+
+def tell_path(name: str, date: str, at=None) -> Path:
+    return day_path(name, date, at).with_name(f"{date}{TELL_SUFFIX}")
+
+
+def tell(name: str, date: str, line: dict, at=None) -> None:
+    _append(tell_path(name, date, at), line)
+
+
+def tells(name: str, date: str, at=None) -> list:
+    """The day's lines, in the order they were written; [] when there is no log. A line that does not read -- the
+    last one, cut off when the runner went away -- is left out."""
+    try:
+        raw = tell_path(name, date, at).read_text(encoding="utf-8")
+    except OSError:
+        return []
+    out = []
+    for line in raw.split("\n")[:-1]:                    # (what follows the last newline was never finished)
+        try:
+            got = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(got, dict):
+            out.append(got)
+    return out
