@@ -697,10 +697,30 @@ def test_a_stream_whose_clock_is_on_an_earlier_day_is_asked_again_from_that_days
                                                (None, {"root": "NQ", "rows": [[replayed - 5, 1.0, 1]]})))
 
     c, got, slept = client(handler)
+    assert c.fresh("NQ", [[ms_of("09:59"), 9.0, 1]])                         # held from the live day it was reading before
     c.run(stop)
-    assert asked == [ms_of("00:00"), ms_of("00:00", d=MON), replayed - 5] and slept == [1.0]   # the second: at once
+    assert asked == [ms_of("09:59"), ms_of("00:00", d=MON), replayed - 5] and slept == [1.0]   # the second: at once
     assert [x for x in got if x[0] == "ticks"] == [("ticks", "NQ", [[replayed - 5, 1.0, 1]])]
     assert [x for x in got if x[0] == "clock"] == [("clock", replayed)]
+
+
+def test_a_surprise_in_the_stream_never_ends_the_reader():
+    """Whatever a line holds, the reader's thread logs it, backs off and asks again."""
+    stop = host.threading.Event()
+    bodies = [b"data: [1, 2]\n\n", b"data: {\"root\": \"NQ\"}\n\n", b"data: not json\n\n",
+              sse((None, {"root": "NQ", "rows": [[5, 1.0, 1]]}))]
+    n = [0]
+
+    def handler(req):
+        n[0] += 1
+        if n[0] > len(bodies):
+            stop.set()
+            return httpx.Response(503)
+        return httpx.Response(200, content=bodies[n[0] - 1])
+
+    c, got, slept = client(handler)
+    c.run(stop)
+    assert got == [("ticks", "NQ", [[5, 1.0, 1]])] and slept == [1.0, 2.0, 4.0, 1.0]
 
 
 def test_the_client_reconnects_when_the_markets_it_wants_change():

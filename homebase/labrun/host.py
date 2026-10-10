@@ -724,7 +724,7 @@ class TickClient:
     dropped, k being how many it already holds at that millisecond. The only connection this process opens."""
 
     def __init__(self, url: str, roots, put, *, transport=None, sleep=time.sleep, wall_ms=lambda: int(time.time() * 1000)):
-        self.url, self._roots, self._put, self._sleep = url, roots, put, sleep
+        self._roots, self._put, self._sleep = roots, put, sleep
         self._http = httpx.Client(base_url=url, transport=transport, trust_env=False, follow_redirects=False,
                                   timeout=httpx.Timeout(10.0, read=15.0))   # the stream's clock ticks every second
         self._day = _midnight_ms(wall_ms())          # 00:00 ET of the day it asks for
@@ -783,7 +783,8 @@ class TickClient:
         if event == "clock":
             day = _midnight_ms(data["now_ms"])
             earlier, self._day = day < self._day, day
-            if earlier:                              # a replayed session: ask again from ITS midnight
+            if earlier:                              # a replayed session: another timeline, asked again from ITS
+                self._newest.clear()                 # midnight (what is held from the later day says nothing here)
                 raise _Again()
             self._put(("clock", data["now_ms"]))
         elif not event:
@@ -798,7 +799,7 @@ class TickClient:
                 ok = self._once(stop)
             except _Again:
                 continue
-            except (httpx.HTTPError, OSError, ValueError, LookupError, TypeError) as e:
+            except Exception as e:  # noqa: BLE001 -- the reader's thread must never end: say so, wait, ask again
                 ok = False
                 log(f"stream: {type(e).__name__}: {e}")
             if stop.is_set():
