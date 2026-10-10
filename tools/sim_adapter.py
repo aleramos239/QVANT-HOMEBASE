@@ -135,6 +135,7 @@ class SimAdapter(BrokerAdapter):
         self._skip: dict[str, int] = {}              # after a restart: prints AT that ns still to drop (used before it)
         self._at: dict[str, int] = {}                # market -> the next print to work (an order placed now is born there)
         self._fid = 0
+        self._dirty = False              # the book changed since it was last saved
         self._clock_ns = 0
         self._ids = int(first_id)
         self._balance0 = float(balance)
@@ -162,6 +163,7 @@ class SimAdapter(BrokerAdapter):
     def _save(self) -> None:
         if self._path is None:
             return
+        self._dirty = False
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps({
             "orders": [asdict(o) for o in self.orders.values()], "pos": self.pos, "fills": self.fills[-FILLS_KEPT:],
@@ -245,7 +247,8 @@ class SimAdapter(BrokerAdapter):
                     await self._print(market, tape, k)
             finally:
                 self._at.pop(market, None)
-                self._save()
+                if self._dirty:              # a batch that filled nothing writes nothing (it would only say which
+                    self._save()             # prints were used: after a restart those are worked again, to the same end)
 
     def _hit(self, tape: ShadowFills, o: SimOrder, k: int) -> Optional[float]:
         """The tester's law, asked for ONE print: the fill price when print k fills this order, else None."""
@@ -274,6 +277,7 @@ class SimAdapter(BrokerAdapter):
             events = []
 
     def _fill(self, o: SimOrder, px: float, tape: ShadowFills, k: int) -> list[FillEvent]:
+        self._dirty = True
         qty = o.qty - o.filled
         if o.role == "entry" and self.faults.partial_next and self.faults.partial_next < qty:
             qty, self.faults.partial_next = self.faults.partial_next, 0

@@ -48,6 +48,8 @@ import itertools
 import json
 import os
 import secrets
+import sys
+import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -672,12 +674,689 @@ def write_key(path: Path) -> str:
     return key
 
 
+# =====================================================================================================================
+# LAB MODE (Step B, task B5): python -m tools.fake_desk --lab --ticks http://127.0.0.1:8853 --store <dir> [--port 8859]
+#                                                        [--resume <engine dir>]
+#
+# A whole practice Desk for rehearsing a promoted Lab strategy on accounts: the REAL engine (homebase.engine.Engine),
+# the REAL intake and config half (homebase.labdesk.LabDesk), the REAL runner routes (desk_api.labdesk_router behind
+# desk_api.runner_gate) and the REAL write guard (desk_api.WriteGuard), on three SIMULATED accounts
+# (tools/sim_adapter.py: two demo, one marked live) whose orders fill by the tester's fill law on the prints of a
+# private chart service (--ticks, labrun.tickclient). The Desk page is served from homebase/static.
+#
+#   its own state   an in-memory AppCfg (config.json is never read or written), the engine's files in a temp folder
+#                   (printed at the start; --resume <that folder> starts again on it), the Lab store given by --store,
+#                   its own key homebase/.state/fake-lab.key (mode 0600, written fresh at every start: give it to the
+#                   runner with --desk-key). The Lab side is on without the flag file.
+#   its clock       the tick stream's (a replayed day): the engine's `now` is the stream's clock, so "today", the
+#                   session window and the flat time are the replayed day's.
+#   never           port 8850 or 8852 (its own port, --ticks, and every address in the page it serves), a broker,
+#                   ~/.homebase, the main checkout.
+#
+# The page routes below are the real server's bodies for a Lab strategy, calling the same LabDesk / Engine methods
+# (homebase/server.py cannot be imported for them: it builds the real app, from config.json, at import). What differs
+# is said at each route.
+#
+#   POST /fake/lab   (the runner's gate: loopback Host, no Origin, X-Homebase-Key = fake-lab.key; JSON)
+#       {"account": "sim047"}?            the account the adapter faults below go to (default: all three)
+#       {"reject_next": n, "reject_words": "..."}   the next n entries are refused by the broker, in these words
+#       {"partial_next": qty}             the next entry fill gives only qty contracts
+#       {"fill_both": bool}               both entries of a pair fill
+#       {"ack_delay_ms": n}               a broker answer comes n ms late (the order is live meanwhile)
+#       {"order_status_unknown": id | true | null}   that order's (every order's) status cannot be read
+#       {"position_unreadable": bool}     the position read before an entry (and before a close) fails
+#       {"close_refused": bool}           the one market close is refused
+#       {"legs_outlive": bool}            a cancelled entry's stop and target stay until cancelled themselves
+#       {"stream_drop": true}             every reader of GET /api/lab/stream is ended (the runner reconnects)
+#       {"silent_s": n}                   that stream says nothing, not even its heartbeat, for n seconds
+#       {"timer_placing_s": n}            a strategy that is not from the Lab reads `placing` for n seconds
+#       {"chart_kill": "lab_<name>"}      the chart's per-strategy Kill (engine.kill_strategy), with no chart link
+#   GET /fake/lab    the simulated accounts as a person would see them, and the faults that are on
+# =====================================================================================================================
+LAB_KEY_FILE = "fake-lab.key"
+LAB_STATE_FILE = "fake-desk.json"            # in the engine folder: what the real Desk keeps in config.json (armed)
+LAB_CLOCK_S, LAB_SIBLING_S = 1, 0.25         # server.CLOCK_INTERVAL_S / SIBLING_INTERVAL_S
+LAB_JOURNAL_TAIL = 60                        # server.JOURNAL_TAIL
+LAB_FIRST_CLOCK_S = 30.0                     # the start waits this long for the tick stream's first clock
+TICKS_REFUSED = frozenset({8850, 8852})      # the real desk and the real chart service: never read from
+PAGE_CHART_LINE = 'const CHART = location.protocol + "//" + location.hostname + ":8852";'
+PAGE_CHART_SWAP = 'const CHART = location.origin + "/chart";'
+CHART_GETS = ("api/tester/desklab", "api/tester/watch", "api/paper/accounts", "api/status", "api/settings")
+RIG_FAULTS = ("stream_drop", "silent_s", "timer_placing_s", "chart_kill", "account")
+TIMER_STATE = "fake_timer@timer"             # the made-up state of timer_placing_s (no such strategy, no such account)
+
+
+def main_checkout() -> Path:
+    """The checkout the live services run from: this repository's own folder, or -- when this file sits in one of
+    its worktrees (<main>/.claude/worktrees/<name>) -- the folder that holds them."""
+    here = Path(__file__).resolve().parents[1]
+    if here.parent.name == "worktrees" and here.parent.parent.name == ".claude":
+        return here.parent.parent.parent
+    return here
+
+
+def refused_folder(path, main: Path | None = None, home: Path | None = None) -> str | None:
+    """Why this folder may not hold a practice Desk's store or engine files, or None: nothing under ~/.homebase (the
+    real store is ~/.homebase/desklab), nothing inside the main checkout except its worktrees."""
+    p = Path(path).expanduser().resolve()
+    real = ((home or Path.home()) / ".homebase").resolve()
+    if p == real or real in p.parents:
+        return f"{p} is inside {real}: the real Desk's own folder"
+    main = (main or main_checkout()).resolve()
+    trees = main / ".claude" / "worktrees"
+    if (p == main or main in p.parents) and not (trees in p.parents):
+        return f"{p} is inside the main checkout ({main}): the live services run from it"
+    return None
+
+
+def ticks_url(url: str, own_port: int) -> str:
+    """--ticks, or ValueError: http, this machine, a port -- never 8850 or 8852, never this tool's own."""
+    from homebase.labrun.__main__ import local_url          # the runner's own rule for --charts (loopback, not 8850)
+    from urllib.parse import urlsplit
+    out = local_url(url)
+    port = urlsplit(out).port
+    if port is None:
+        raise ValueError("it must name a port")
+    if port in TICKS_REFUSED:
+        raise ValueError(f"port {port} belongs to the real desk or the real chart service")
+    if port == own_port:
+        raise ValueError("that is this tool's own port")
+    return out
+
+
+class StreamClock:
+    """The practice Desk's clock: the tick stream's. Until the stream has said anything, the wall clock."""
+
+    def __init__(self):
+        self.ms: int | None = None
+
+    def heard(self, now_ms: int) -> None:        # the stream's own clock (it may go back: a replay that starts again)
+        self.ms = int(now_ms)
+
+    def saw(self, ts_ms: int) -> None:           # a print: time only goes on
+        if self.ms is None or ts_ms > self.ms:
+            self.ms = int(ts_ms)
+
+    def __call__(self) -> dt.datetime:
+        if self.ms is None:
+            return dt.datetime.now(dt.timezone.utc)
+        return dt.datetime.fromtimestamp(self.ms / 1000, dt.timezone.utc)
+
+
+class LabRig:
+    """The practice Desk's parts: the config in memory, three simulated accounts, the real engine and the real
+    LabDesk. `store`: the Lab store; `root`: the engine's folder (also the simulated accounts' books)."""
+
+    def __init__(self, store, root, *, clock=None, placement_ms: int | None = None):
+        from homebase import labdesk as labdesk_mod
+        from homebase.config import AccountCfg, AppCfg
+        from homebase.engine import Engine
+        from tools.sim_adapter import PLACEMENT_MS, SimAdapter
+        for d in (store, root):
+            why = refused_folder(d)
+            if why:
+                raise ValueError(why)
+        self.store, self.root = Path(store), Path(root)
+        self.store.mkdir(parents=True, exist_ok=True)
+        self.root.mkdir(parents=True, exist_ok=True)
+        self.clock = clock or StreamClock()
+        saved = {}
+        try:
+            saved = json.loads((self.root / LAB_STATE_FILE).read_text())
+        except (OSError, ValueError):
+            pass
+        self.cfg = AppCfg(armed=saved.get("armed") is not False, book={}, strategies={},
+                          accounts={aid: AccountCfg(account_name=label, label=label, live=env == "live")
+                                    for aid, label, env in ACCOUNTS})
+        self.adapters = {aid: SimAdapter(aid, self.root, live=env == "live", label=label, first_id=(i + 1) * 100_000 + 1,
+                                         placement_ms=PLACEMENT_MS if placement_ms is None else placement_ms)
+                         for i, (aid, label, env) in enumerate(ACCOUNTS)}
+        labdesk_mod.attach(self.cfg, self.store)             # the promoted strategies join the config in memory
+        self.engine = Engine(self.cfg, self.adapters, now_fn=self.clock, root=self.root)
+        self.labdesk = labdesk_mod.LabDesk(self.cfg, self.engine, self.adapters, at=self.store, on=True)
+        self.silent_until = 0.0                              # time.monotonic: the runner's stream says nothing until then
+        self.mono = time.monotonic
+        self.sleep = asyncio.sleep
+        self._timer: asyncio.Task | None = None
+        self.journal_cache = bothistory.JournalCache()
+        self._live: dict = {"recs": None, "live": {}}
+
+    async def start(self) -> None:
+        for ad in self.adapters.values():
+            await ad.connect()
+            await ad.observe_fills(self.engine.on_fill)
+        self.labdesk.start()
+
+    def roots(self) -> list:
+        """The markets the tick stream is asked for: every Lab strategy's, and any a simulated account still holds."""
+        out = {str(s.symbol).upper() for s in list(self.cfg.strategies.values()) if getattr(s, "kind", "") == "lab"}
+        for ad in self.adapters.values():
+            out |= {o.market for o in list(ad.orders.values()) if o.status in ("Working", "Suspended")}
+            out |= {m for m, p in list(ad.pos.items()) if p["net"]}
+        return sorted(out)
+
+    async def take(self, item: tuple) -> None:
+        """One item of the tick client (labrun.tickclient.TickClient): the clock, the prints, `live`."""
+        if item[0] == "clock":
+            self.clock.heard(item[1])
+            for ad in self.adapters.values():
+                await ad.on_clock(item[1])
+        elif item[0] == "ticks":
+            for row in item[2]:                              # one print at a time on every account: the engine's clock
+                self.clock.saw(int(row[0]))                  # is that print's time when it hears of a fill
+                for ad in self.adapters.values():
+                    await ad.on_ticks(item[1], [row])
+        elif item[0] == "live":                              # the backlog is in: a fill is told to the engine again
+            for ad in self.adapters.values():
+                ad.back()
+
+    def silent(self) -> bool:
+        return self.mono() < self.silent_until
+
+    def save_state(self) -> None:
+        (self.root / LAB_STATE_FILE).write_text(json.dumps({"armed": bool(self.cfg.armed)}) + "\n")
+
+    async def _timer_placing(self, seconds: float) -> None:
+        try:
+            await self.sleep(seconds)
+        finally:
+            self.engine.states.pop(TIMER_STATE, None)
+
+    async def fault(self, body) -> dict:
+        """POST /fake/lab. ValueError: the body does not read (nothing is changed then)."""
+        from tools.sim_adapter import Faults
+        if not isinstance(body, dict):
+            raise ValueError("a JSON object of faults")
+        acct = body.get("account")
+        if acct is not None and acct not in self.adapters:
+            raise ValueError(f"unknown account {acct!r}")
+        mine = {k: v for k, v in body.items() if k not in RIG_FAULTS}
+        Faults().set(mine)                                   # every field is checked before any is set
+        for k in ("silent_s", "timer_placing_s"):
+            v = body.get(k)
+            if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 3600):
+                raise ValueError(f"{k}: seconds, 0 to 3600")
+        if "stream_drop" in body and body["stream_drop"] is not True:
+            raise ValueError("stream_drop: true")
+        kill = body.get("chart_kill")
+        if kill is not None and not self.labdesk.is_lab(kill):
+            raise ValueError("chart_kill: a Lab strategy on this Desk (lab_<name>)")
+        for aid, ad in self.adapters.items():
+            if acct in (None, aid):
+                ad.faults.set(mine)
+        out: dict = {"ok": True}
+        if body.get("stream_drop") is True:
+            # what LabDesk._publish does to a reader that fell behind: its queue is emptied and ends
+            subs = list(self.labdesk._subs)
+            for q in subs:
+                self.labdesk.unsubscribe(q)
+                while not q.empty():
+                    q.get_nowait()
+                q.put_nowait((None, None))
+            out["dropped"] = len(subs)
+        if body.get("silent_s") is not None:
+            self.silent_until = self.mono() + float(body["silent_s"])
+        if body.get("timer_placing_s") is not None:
+            if self._timer is not None:
+                self._timer.cancel()
+            self.engine.states.pop(TIMER_STATE, None)
+            if body["timer_placing_s"]:
+                from homebase.engine import DayState
+                # a state of a strategy that is not from the Lab, placing: what LabDesk.held() looks for. No such
+                # strategy and no such account exist here, so nothing else of the engine acts on it
+                self.engine.states[TIMER_STATE] = DayState(strategy="fake_timer", account="timer",
+                                                            date=self.engine._today(), status="placing")
+                self._timer = asyncio.ensure_future(self._timer_placing(float(body["timer_placing_s"])))
+        if kill is not None:                                 # trading.ChartDesk.bot_kill's own engine call
+            out["chart_kill"] = await self.engine.kill_strategy(kill, source="chart", client_id="fake-lab")
+        return {**out, "faults": self.view()["faults"]}
+
+    def view(self) -> dict:
+        from dataclasses import asdict as _asdict
+        return {"accounts": [ad.book() for ad in self.adapters.values()],
+                "faults": {**{aid: _asdict(ad.faults) for aid, ad in self.adapters.items()},
+                           "silent_s": round(max(0.0, self.silent_until - self.mono()), 1),
+                           "timer_placing": TIMER_STATE in self.engine.states},
+                "et_now": self.engine.now_et().isoformat(timespec="seconds"), "engine_root": str(self.root),
+                "store": str(self.store)}
+
+    async def status(self) -> dict:
+        """GET /api/status with the real route's keys (server.py `status`). The strategies block, the accounts
+        block, the book and the journal tail are built as there, by the same calls. What is NOT the real thing:
+        readiness holds only the Mode line and the two Lab lines (labdesk.readiness_line / orphan_line) -- the real
+        compute_readiness lives in server.py; timer / levels / feed are empty (no timer, no feed here); no notices."""
+        from dataclasses import asdict as _asdict
+        from homebase import labdesk as labdesk_mod
+        from homebase.metrics import live_metrics
+        cfg, engine, labdesk = self.cfg, self.engine, self.labdesk
+        accounts = {}
+        for aid, a in cfg.accounts.items():
+            ad = self.adapters.get(aid)
+            try:
+                m = await ad.get_metrics() if ad else {"connected": False}
+            except Exception as e:  # noqa: BLE001
+                m = {"connected": False, "error": f"metrics: {e}"}
+            accounts[aid] = {"label": a.label or a.account_name or aid,
+                             "env": "paper" if a.paper else "live" if a.live else "demo", "cooldown_s": 0, **m}
+        recs = self.journal_cache.records(self.root / "journal.jsonl")
+        if recs is not self._live["recs"]:
+            self._live.update(recs=recs, live=live_metrics(recs))
+        live = self._live["live"]
+        checks = [c for c in (labdesk_mod.readiness_line(cfg), labdesk_mod.orphan_line(cfg, engine)) if c is not None]
+        checks.append({"level": "info", "label": "Mode", "detail": "ARMED — signals place real orders" if cfg.armed
+                       else "shadow — signals journal only"})
+        date = engine.now_et().date().isoformat()
+        return {
+            "armed": cfg.armed,
+            "chart_trading": _asdict(cfg.chart_trading),
+            "et_now": engine.now_et().isoformat(timespec="seconds"),
+            "readiness": {"ready": not any(c["level"] == "bad" for c in checks), "checks": checks},
+            "timer": {"date": date, "strategies": {}},
+            "levels": {"date": date, "strategies": {}},
+            "feed": {"connected": False, "watching": {}, "error": None, "window": False},
+            "accounts": accounts,
+            "notices": [],
+            "book": labdesk.book_view(),
+            "strategies": {
+                name: {
+                    "cfg": {"symbol": s.symbol, "qty": s.qty,
+                            "offset_pts": s.offset_pts, "sl_pts": s.sl_pts,
+                            "tp_pts": s.tp_pts, "rr": s.rr, "label": s.label, "cancel_et": s.cancel_et,
+                            "flat_et": s.flat_et, "fire_et": s.fire_et,
+                            "only_dates": list(s.only_dates), "enabled": s.enabled,
+                            "gated": s.gated, "self_fire": s.self_fire,
+                            "kind": getattr(s, "kind", "straddle"),
+                            "shadow": getattr(s, "shadow", False),
+                            "rule": getattr(s, "rule", ""),
+                            "bar_minutes": getattr(s, "bar_minutes", 1),
+                            "shape": s.shape, "day_take": s.day_take,
+                            "day_lock": s.day_lock, "target_take": s.target_take,
+                            "size_tiers": s.size_tiers, "ack_open_loss": s.ack_open_loss},
+                    "research": s.metrics,
+                    "live": live.get(name),
+                    "day_status": engine.day_status(name),
+                    "killed": engine.killed_today(name),
+                    "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
+                                 for st in engine.day_states(name)],
+                    "lab": labdesk.status_view(name),
+                } for name, s in list(cfg.strategies.items())
+            },
+            "journal": recs[-LAB_JOURNAL_TAIL:][::-1],
+        }
+
+
+def lab_page(static: Path, own_port: int, ticks_port: int | None) -> str:
+    """The Desk page as it is on disk, with every address that would leave this practice Desk pointed back at it:
+    the chart-service line (the page's CHART) becomes this tool's own /chart pass-through, every other ":8852" the
+    --ticks service's port and every ":8850" this tool's. ValueError when the page no longer has that one line: a
+    page that would call the real chart service is never served."""
+    text = (static / "index.html").read_text(encoding="utf-8")
+    if text.count(PAGE_CHART_LINE) != 1:
+        raise ValueError("the Desk page's chart-service line changed: tools/fake_desk.py (PAGE_CHART_LINE) must follow it")
+    text = text.replace(PAGE_CHART_LINE, PAGE_CHART_SWAP)
+    return text.replace(":8852", f":{ticks_port if ticks_port else own_port}").replace(":8850", f":{own_port}")
+
+
+class _Silence:
+    """Pure ASGI: while the rig is `silent`, nothing of GET /api/lab/stream reaches the reader -- not a snapshot, not
+    the heartbeat. What was held goes out, in order, when the silence ends (the stream's own generator simply waits
+    at its send, as for a reader that does not read: LabDesk drops one that falls 200 snapshots behind)."""
+
+    def __init__(self, app, rig: LabRig, path: str = "/api/lab/stream"):
+        self.app, self.rig, self.path = app, rig, path
+
+    async def __call__(self, scope, receive, send) -> None:
+        if scope["type"] != "http" or scope["path"] != self.path:
+            await self.app(scope, receive, send)
+            return
+
+        async def held(message) -> None:
+            while message["type"] == "http.response.body" and self.rig.silent():
+                await self.rig.sleep(0.05)
+            await send(message)
+        await self.app(scope, receive, held)
+
+
+def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = None, own_port: int = PORT,
+                    inbox=None, placement_ms: int | None = None, background: bool = True,
+                    chart_transport=None) -> FastAPI:
+    """The practice Desk's app. key: what /api/lab/* and /fake/lab ask for (X-Homebase-Key). ticks: the private chart
+    service, for the page's /chart pass-through; the tick client itself is started by main, which hands its queue in
+    as `inbox`. background False (the tests): no clock loop, no LabDesk loop, no pump -- a test turns them by hand."""
+    import contextlib
+    import queue as queue_mod
+    from urllib.parse import urlsplit
+
+    import httpx
+    from fastapi.responses import HTMLResponse, JSONResponse, Response
+    from fastapi.staticfiles import StaticFiles
+
+    from homebase import desk_api
+    from homebase import labdesk as labdesk_mod
+
+    rig = LabRig(store, root, clock=clock, placement_ms=placement_ms)
+    cfg, engine, labdesk, adapters = rig.cfg, rig.engine, rig.labdesk, rig.adapters
+    static = Path(__file__).resolve().parents[1] / "homebase" / "static"        # server.STATIC
+    ticks_port = urlsplit(ticks).port if ticks else None
+    chart = httpx.AsyncClient(base_url=ticks, trust_env=False, follow_redirects=False, timeout=5.0,
+                              transport=chart_transport) if ticks else None
+
+    async def _loop(step, every: float, event: str) -> None:
+        while True:
+            try:
+                await step()
+            except Exception as e:  # noqa: BLE001 -- as the real desk's loops: journaled, never the end of the loop
+                with contextlib.suppress(Exception):
+                    engine.journal(event, error=str(e)[:200])
+            await asyncio.sleep(every)
+
+    async def _pump() -> None:
+        while True:
+            try:
+                item = await asyncio.to_thread(inbox.get, True, 0.5)
+            except queue_mod.Empty:
+                continue
+            try:
+                await rig.take(item)
+            except Exception as e:  # noqa: BLE001 -- one bad item must not end the prints
+                with contextlib.suppress(Exception):
+                    engine.journal("fake_pump_error", error=f"{type(e).__name__}: {e}"[:200])
+
+    @contextlib.asynccontextmanager
+    async def lifespan(_app):
+        _app.state.lab_key = key                     # desk_api.runner_gate reads it (the real desk: its own key file)
+        await rig.start()
+        tasks = []
+        if background:
+            tasks = [asyncio.create_task(_loop(engine.clock_tick, LAB_CLOCK_S, "clock_error")),
+                     asyncio.create_task(_loop(engine.sibling_tick, LAB_SIBLING_S, "sibling_loop_error")),
+                     asyncio.create_task(labdesk.run())]
+            if inbox is not None:
+                tasks.append(asyncio.create_task(_pump()))
+        try:
+            yield
+        finally:
+            for t in tasks:
+                t.cancel()
+            with contextlib.suppress(Exception):
+                labdesk.close()
+            for ad in adapters.values():
+                with contextlib.suppress(Exception):
+                    await ad.close()
+            if chart is not None:
+                with contextlib.suppress(Exception):
+                    await chart.aclose()
+
+    app = FastAPI(title="practice Desk (rehearsals only)", lifespan=lifespan)
+    app.state.rig, app.state.engine, app.state.labdesk, app.state.cfg, app.state.adapters = rig, engine, labdesk, cfg, adapters
+    app.state.lab_key = key
+    app.include_router(desk_api.labdesk_router(labdesk), prefix="/api/lab")     # the REAL runner routes and gate
+    app.add_middleware(_Silence, rig=rig)
+    app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)    # the REAL guard of every page write
+    app.mount("/static", StaticFiles(directory=static), name="static")
+
+    def refused(e) -> HTTPException:
+        return HTTPException(e.status, str(e))
+
+    def known(body) -> str:
+        name = str(body.get("strategy") or "")
+        if name not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {name!r}")
+        return name
+
+    only_lab = HTTPException(409, "the practice Desk has Lab strategies only")   # the real route's other branch
+
+    @app.get("/")
+    async def index():
+        try:
+            return HTMLResponse(lab_page(static, own_port, ticks_port), headers={"Cache-Control": "no-store"})
+        except (OSError, ValueError) as e:
+            return JSONResponse({"detail": str(e)}, 500)
+
+    @app.get("/chart/{path:path}")
+    async def chart_get(path: str, request: Request):
+        """The page's reads of the chart service, passed on to the PRIVATE one (--ticks): the page itself cannot
+        reach it (that service answers the real Desk's origin only). Reads only, and only the five the page makes."""
+        if chart is None or path not in CHART_GETS:
+            raise HTTPException(404, "not passed on")
+        try:
+            r = await chart.get("/" + path, params=dict(request.query_params))
+        except httpx.HTTPError:
+            return JSONResponse({"detail": "the private chart service is not reachable"}, 502)
+        return Response(content=r.content, status_code=r.status_code,
+                        media_type=r.headers.get("content-type", "application/json"))
+
+    @app.get("/api/status")
+    async def status():
+        return await rig.status()
+
+    @app.post("/api/arm")
+    async def arm(request: Request):
+        """server.py `arm`. Differs: the switch is kept in the engine folder's fake-desk.json, not in config.json."""
+        body = await request.json()
+        cfg.armed = bool(body.get("armed"))
+        rig.save_state()
+        engine.journal("armed_toggled", armed=cfg.armed)
+        return {"ok": True, "armed": cfg.armed}
+
+    kill_lock_box: dict = {}
+
+    def _kill_lock() -> asyncio.Lock:
+        loop = asyncio.get_running_loop()
+        held = kill_lock_box.get("lock")
+        if held is None or held[0] is not loop:
+            held = kill_lock_box["lock"] = (loop, asyncio.Lock())
+        return held[1]
+
+    @app.post("/api/kill")
+    async def kill():
+        """server.py `kill`: disarm, then engine.flatten_today and each account's cancel_all / flatten_all under the
+        same locks. Differs: there is no chart trading to switch off, and the disarm goes to fake-desk.json."""
+        cfg.armed = False
+        rig.save_state()
+        async with _kill_lock(), engine.all_kill_locks():
+            strategies = await engine.flatten_today()
+
+            async def sweep(ad) -> dict:
+                r = {}
+                for call in ("cancel_all", "flatten_all"):
+                    try:
+                        x = await getattr(ad, call)()
+                        r[call] = {"ok": x.ok, "error": x.error}
+                    except Exception as e:  # noqa: BLE001 -- kill always finishes
+                        r[call] = {"ok": False, "error": str(e)}
+                return r
+
+            pool = dict(adapters)
+            got, _ = await engine.each_account(pool, lambda aid: sweep(pool[aid]))
+            results = {aid: (g if isinstance(g, dict) else {call: {"ok": False, "error": str(g)}
+                                                            for call in ("cancel_all", "flatten_all")})
+                       for aid, g in got.items()}
+            engine.journal("kill_switch", results=results, strategies=strategies)
+        return {"ok": True, "armed": False, "results": results, "strategies": strategies}
+
+    @app.post("/api/strategy")
+    async def strategy_toggle(request: Request):
+        """server.py `strategy_toggle`, the Lab branch, line for line."""
+        body = await request.json()
+        name = known(body)
+        if not labdesk.is_lab(name):
+            raise only_lab
+        on = bool(body.get("enabled"))
+        if not on:
+            await labdesk.stop(name, "off")
+        try:
+            if not await labdesk.set_enabled(name, on):
+                raise HTTPException(409, labdesk_mod.RECORD_CHANGED)
+        except labdesk_mod.Refused as e:
+            raise refused(e) from None
+        engine.journal("strategy_toggled", strategy=name, enabled=on)
+        return {"ok": True, "strategy": name, "enabled": on}
+
+    @app.post("/api/strategy-flatten")
+    async def strategy_flatten(request: Request):
+        """server.py `strategy_flatten`, the Lab branch, line for line."""
+        body = await request.json()
+        name = known(body)
+        if not labdesk.is_lab(name):
+            raise only_lab
+        await labdesk.stop(name, "off")
+        results = await engine.flatten_strategy(name)
+        try:
+            await labdesk.set_enabled(name, False)
+        except Exception as e:  # noqa: BLE001 -- the flatten is done: its result is answered whatever the switch did
+            engine.journal("lab_save_error", strategy=name, error=str(e)[:200], cause="manual_flatten")
+            s = cfg.strategies.get(name)
+            return {"ok": True, "enabled": bool(s is not None and s.enabled), "results": results,
+                    "detail": labdesk_mod.SWITCH_NOT_OFF}
+        engine.journal("strategy_toggled", strategy=name, enabled=False, cause="manual_flatten")
+        return {"ok": True, "enabled": False, "results": results}
+
+    @app.post("/api/book")
+    async def set_book(request: Request):
+        """server.py `set_book`: the same reading of the rows, then LabDesk.set_book (a Lab strategy is the only
+        kind here)."""
+        body = await request.json()
+        name = known(body)
+        rows = []
+        for a in body.get("assignments") or []:
+            aid, qty = str(a.get("account") or ""), int(a.get("qty") or 0)
+            if aid not in cfg.accounts:
+                raise HTTPException(400, f"unknown account {aid!r}")
+            if qty > 0:
+                rows.append({"account": aid, "qty": qty})
+        try:
+            if labdesk.is_lab(name):
+                await labdesk.set_book(name, rows)
+                engine.journal("book_updated", strategy=name, assignments=rows)
+                return {"ok": True, "book": labdesk.book_view()}
+            labdesk.check_book(name, rows)
+        except labdesk_mod.Refused as e:
+            raise refused(e) from None
+        raise only_lab
+
+    def lab_route(path: str, shape: str, call) -> None:
+        """server.py `lab_limits` / `lab_remove` / `lab_clear`: the body must be an object, LabDesk does the rest."""
+        async def handler(request: Request):
+            body = await request.json()
+            if not isinstance(body, dict):
+                raise HTTPException(400, shape)
+            try:
+                return await call(body)
+            except labdesk_mod.Refused as e:
+                raise refused(e) from None
+            except ValueError as e:
+                raise HTTPException(400, str(e)) from None
+        app.add_api_route(path, handler, methods=["POST"], name=path.strip("/").replace("/", "_"))
+
+    lab_route("/api/lab-limits", "{strategy, limits}",
+              lambda b: labdesk.set_limits(str(b.get("strategy") or ""), b.get("limits")))
+    lab_route("/api/lab-remove", "{strategy}", lambda b: labdesk.remove(str(b.get("strategy") or "")))
+    lab_route("/api/lab-clear", "{strategy, account}",
+              lambda b: labdesk.clear_block(str(b.get("strategy") or ""), str(b.get("account") or "")))
+
+    @app.get("/fake/lab")
+    async def fake_lab_view(request: Request):
+        desk_api.runner_gate(request)
+        return rig.view()
+
+    @app.post("/fake/lab")
+    async def fake_lab(request: Request):
+        desk_api.runner_gate(request)
+        body = await desk_api.read_json(request, desk_api.BODY_MAX)
+        try:
+            return await rig.fault(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    return app
+
+
+def first_clock(ticks: str, wait_s: float = LAB_FIRST_CLOCK_S) -> int | None:
+    """The tick stream's clock, once (ms), or None when it does not come: the engine must be built ON the replayed
+    day (it loads that day's files), so the practice Desk does not start before it knows what day it is."""
+    import queue
+    import threading
+
+    from homebase.labrun.tickclient import TickClient
+    box: queue.Queue = queue.Queue()
+    stop = threading.Event()
+    threading.Thread(target=TickClient(ticks, lambda: [], box.put).run, args=(stop,), name="fake-lab-probe", daemon=True).start()
+    end = time.monotonic() + wait_s
+    try:
+        while time.monotonic() < end:
+            try:
+                item = box.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            if item[0] == "clock":
+                return int(item[1])
+        return None
+    finally:
+        stop.set()
+
+
+def lab_main(ap, a) -> int:
+    import queue
+    import tempfile
+    import threading
+
+    if not a.ticks or not a.store:
+        ap.error("--lab needs --ticks http://127.0.0.1:<port> (a private chart service) and --store <folder>")
+    try:
+        ticks = ticks_url(a.ticks, a.port)
+    except ValueError as e:
+        ap.error(f"--ticks {a.ticks}: {e}")
+    for flag, d in (("--store", a.store), ("--resume", a.resume)):
+        why = refused_folder(d) if d else None
+        if why:
+            ap.error(f"{flag}: {why}")
+    if a.resume and not Path(a.resume).is_dir():
+        ap.error(f"--resume {a.resume}: no such folder")
+    now_ms = first_clock(ticks)
+    if now_ms is None:
+        print(f"No clock from {ticks} in {LAB_FIRST_CLOCK_S:.0f} s: is the private chart service running? "
+              "The practice Desk did not start.", file=sys.stderr)
+        return 1
+    from homebase.labrun.tickclient import TickClient
+    root = Path(a.resume) if a.resume else Path(tempfile.mkdtemp(prefix="fake-lab-desk-"))
+    clock = StreamClock()
+    clock.heard(now_ms)
+    key_path = state_dir() / LAB_KEY_FILE
+    key = write_key(key_path)
+    inbox: queue.Queue = queue.Queue()
+    app = create_lab_desk(a.store, root, key=key, clock=clock, ticks=ticks, own_port=a.port, inbox=inbox)
+    stop = threading.Event()
+    client = TickClient(ticks, app.state.rig.roots, inbox.put)
+    threading.Thread(target=client.run, args=(stop,), name="fake-lab-ticks", daemon=True).start()
+    print(f"practice Desk (Lab mode) -- http://127.0.0.1:{a.port}/\n"
+          f"  prices      {ticks}  (the day is {clock().astimezone(ET).date()})\n"
+          f"  Lab store   {Path(a.store).resolve()}\n"
+          f"  engine      {root}   (start again on it: --resume {root})\n"
+          f"  runner key  {key_path}   (give it to the runner: --desk http://127.0.0.1:{a.port} --desk-key <that file>)",
+          file=sys.stderr, flush=True)
+    try:
+        uvicorn.run(app, host="127.0.0.1", port=a.port, log_level="warning")
+    finally:
+        stop.set()
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m tools.fake_desk")
     ap.add_argument("--port", type=int, default=PORT)
+    ap.add_argument("--lab", action="store_true",
+                    help="a practice Desk for a promoted Lab strategy: the real engine on simulated accounts")
+    ap.add_argument("--ticks", default=None, help="--lab: the PRIVATE chart service whose prints fill the orders")
+    ap.add_argument("--store", default=None, help="--lab: the Lab store (a temp folder; never ~/.homebase/desklab)")
+    ap.add_argument("--resume", default=None, metavar="DIR", help="--lab: start again on this engine folder")
     a = ap.parse_args(argv)
     if a.port in FORBIDDEN_PORTS:
         ap.error(f"port {a.port} belongs to the real desk or the chart service")
+    if a.lab:
+        return lab_main(ap, a)
+    if a.ticks or a.store or a.resume:
+        ap.error("--ticks, --store and --resume go with --lab")
     key = write_key(state_dir() / KEY_FILE)
     uvicorn.run(create_fake_desk(key), host="127.0.0.1", port=a.port, log_level="warning")
     return 0
