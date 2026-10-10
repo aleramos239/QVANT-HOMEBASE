@@ -49,16 +49,17 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     assert P.need("raw", "strict") == {"share": 0.6, "floor_part": 1.0, "trades": 200}
     assert P.need("indicator") == {"share": 0.6, "floor_part": 1.0, "trades": 200, "other_markets": None}   # None: shown, asks nothing (the owner, 2026-10-08)
     assert P.need("card") == {"ways": [1, 3], "values": 3, "indicators": [0, 5], "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"],
-                              "sessions": ["asia", "london", "pre", "nyam", "mid", "pm"]}             # the evening session is not in this version
+                              "sessions": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]}      # the evening session too (the owner, 2026-10-09)
     assert P.need("proof") == {"reshuffle": 0.75, "random_alpha": 0.05} and P.need("box", "best_days_share") == 0.01
     assert P.need("box") == {"best_days_share": 0.01, "fast_seconds": 5, "month_days": 21}         # ... and the book card's two numbers (stage 7)
     assert P.need("prop") == {"account": "lucid-pro-50k-no-dll@2026-09-27b", "days": 30, "eval": 0.5, "payout": 0.5,
                               "book_accounts": ["lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"]}
-    assert P.need("portfolio") == {"eval": {"days": 5, "odds": 0.6}, "payout": {"days": 14, "odds": 0.75}}
+    assert P.need("portfolio") == {"eval": {"days": 5, "odds": 0.6}, "payout": {"days": 14, "odds": 0.75}, "fast_share": 0.5,       # the bar, and what the design says of a mix
+                                   "one_side": ["apex-legacy-300k@2026-09-28"], "funded_only": ["apex-legacy-300k@2026-09-28"]}     # that no rule file carries (stage 8, 2026-10-09)
     assert P.need("portfolio", "payout", "odds") == 0.75
     assert P.need("test") == {"one_read_a_slot": False} and P.need("test", "one_read_a_slot") is False      # every pipeline idea gets its own read (the owner, 2026-10-08)
     assert P.need("mode") == "variant" and P.mode() == "variant"                                  # the owner, 2026-10-08: the hard rules are judged on ONE picked variant
-    assert P.need("variant") == {"map_share": 0.5, "region_boxes": 25, "region_trades": 200, "pick_boxes": 1, "floor_part": 1.0, "without_best_trades": 0.05, "months_won": 0.7, "best_month_share": 0.1, "losing_day_streak": 8}      # the loose check of the map, and the one box's numbers
+    assert P.need("variant") == {"map_share": 0.5, "region_boxes": 25, "region_trades": 200, "pick_boxes": 1, "box_tries": 5, "floor_part": 1.0, "without_best_trades": 0.05, "months_won": 0.7, "best_month_share": 0.1, "losing_day_streak": 8}      # the loose check of the map, and the one box's numbers
     assert set(P.need()) == {"mode", "variant", "card", "raw", "indicator", "proof", "box", "test", "prop", "portfolio"}      # the whole file, its notes left out
     assert "raw.nope" in refused(lambda: P.need("raw", "nope"), "pipeline.json has no")
     refused(lambda: P.need("nope"), "nope")

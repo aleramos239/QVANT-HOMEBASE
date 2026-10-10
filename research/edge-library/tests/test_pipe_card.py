@@ -7,7 +7,7 @@
 3. NO CARD AT ALL is refused outright (judge.Refuse): no object, a field a card does not have, a name the heat maps cannot
    carry, a source that is not one of the four.
 4. EVERY LINE REFUSES WHAT IT HOLDS, as a failed row and no heat maps: P0.1 the reason and who loses · P0.2 the ways (count,
-   family, main setting, 3 values, market, session -- the evening session is not in this version --, bars -- and whatever
+   family, main setting, 3 values, market, session, bars -- and whatever
    the toolkit refuses, in the toolkit's words) ·
    P0.3 the indicators (count, block and side, a why each, no block twice, a block only where it runs) · P0.4 the sides.
 5. THE LIMITS ARE THE RULES FILE'S (templates/pipeline.json `card`), not the code's.
@@ -114,7 +114,7 @@ def test_a_whole_card_passes_its_four_lines_and_gives_two_heat_maps_a_way():
     assert [r["passed"] for r in rows] == [True] * 4 and all(r["text"].startswith(f"{r['line']} PASS ") for r in rows)
     assert rows[0]["need"] == {"sentences": 1, "words": 8} and rows[0]["number"] == 15
     assert rows[1]["number"] == 1 and rows[1]["need"] == {"ways": [1, 3], "values": 3, "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"],
-                                                          "sessions": ["asia", "london", "pre", "nyam", "mid", "pm"]}
+                                                          "sessions": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]}
     assert rows[2]["number"] == 1 and rows[2]["need"] == [0, 5] and "trend with" in rows[2]["text"]
     assert "fvg" in rows[1]["text"] and "min_gap" in rows[1]["text"] and "both sides" in rows[3]["text"]
     assert [(s["name"], s["way"], s["bar"]) for s in subs] == [("fvg_open_a1", 0, "1"), ("fvg_open_a5", 0, "5")]
@@ -139,6 +139,36 @@ def test_a_noise_band_card_passes_stage_0_with_one_side_a_held_anchor_and_a_cap(
     passes({**c, "sides": "both", "sides_why": "The rule is symmetric.", "ways": [nb]})
     fails({**c, "ways": [{**nb, "main_setting": "anchor", "values": ["rth", "globex", "rth"]}]}, "P0.2")
     fails({**c, "ways": [{**nb, "fixed": {"anchor": "asia"}}]}, "P0.2")
+
+
+def test_an_ifvg_card_passes_stage_0_with_a_held_age_one_side_and_a_cap():
+    iv = {"family": "ifvg", "main_setting": "min_gap", "values": ["0.1", "0.25", "0.5"], "fixed": {}, "limits": {}}
+    c = card(name="ifvg_open", why="Traders caught inside a gap that fails must get out.", loser="Traders who bought inside the gap.", ways=[iv],
+             indicators=[{"block": "htf60", "side": "with", "why": "A failed gap with the hourly trend has more room."}])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("ifvg_open_a1", "1"), ("ifvg_open_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "ifvg", "params": {"min_gap": [0.1, 0.25, 0.5]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    held = {**iv, "fixed": {"age": 20}, "limits": {"max_tr": 2}}                                 # the age is ONE value an idea; max_tr is a limit
+    run = passes({**c, "ways": [held]})[0]["spec"]["run"]
+    assert run["fixed"] == {"age": 20} and run["limits"] == {"max_tr": 2}
+    passes({**c, "sides": "short", "sides_why": "The index falls faster than it rises, so the failed up gap is the cleaner one.", "ways": [iv]})
+    passes({**c, "ways": [{**iv, "main_setting": "age", "values": [10, 30, 60]}]})                # the age can be the heat map's setting too
+    fails({**c, "ways": [{**iv, "fixed": {"age": 3}}]}, "P0.2")                                   # under the family's own limit (5 .. 240)
+    fails({**c, "ways": [{**iv, "fixed": {"mode": "go"}}]}, "P0.2")                               # fvg's setting, not this family's
+
+
+def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
+    sf = {"family": "sfp", "main_setting": "swing", "values": ["15", "30", "60"], "fixed": {}, "limits": {}}
+    c = card(name="sfp_open", why="Stops behind a small swing are taken and the move fails.", loser="Traders who chase the break of the swing.", ways=[sf],
+             indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("sfp_open_a1", "1"), ("sfp_open_a5", "5")]
+    assert subs[0]["spec"]["run"]["params"] == {"swing": ["15", "30", "60"]} and subs[0]["spec"]["card"]["main_setting"] == "swing"      # the engine names its choices in text
+    passes({**c, "ways": [{**sf, "values": [15, 30, 60]}]})                                       # (a number typed as a number is the same choice)
+    passes({**c, "ways": [{**sf, "limits": {"max_tr": 1}}]})
+    passes({**c, "session": "london", "sides": "long", "sides_why": "London sweeps the Asian lows before the day's rise.", "ways": [sf]})
+    fails({**c, "ways": [{**sf, "values": ["15", "30", "45"]}]}, "P0.2")                          # 45 is not a swing size
+    fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
 
 
 def test_every_heat_map_is_a_card_the_toolkit_takes():
@@ -305,9 +335,9 @@ def test_line_p0_2_the_family_runs_on_the_market_the_session_and_one_of_the_bars
     fails(card(market=None), "P0.2", "market None")
     fails(card(session="lunch"), "P0.2", "session 'lunch'", "nyam")
     fails(card(session="morning"), "P0.2", "session 'morning'")
-    t = fails(card(session="eve"), "P0.2", "session 'eve'", "the evening session is not in this version", "asia, london, pre, nyam, mid, pm")
-    assert "eve" in RM.DAY_PASSES and "eve" not in P.need("card", "sessions") and ", eve" not in t      # the engine has it; the pipeline's file leaves it out
-    for s in P.need("card", "sessions"):                                                    # each of the six is read as a session: no row says it is not one
+    assert "eve" in RM.DAY_PASSES and "eve" in P.need("card", "sessions")                  # the evening session is the pipeline's too (the owner, 2026-10-09)
+    assert "evening (18:00-23:59 ET" in PC.check(card(session="eve"))[0][1]["text"] and PC.check(card(session="eve"))[1]
+    for s in P.need("card", "sessions"):                                                    # each of the seven is read as a session: no row says it is not one
         assert s in RM.DAY_PASSES and not PC.check(card(session=s))[0][1]["text"].startswith("P0.2 FAIL session")
     fails(ways({"family": "lon_break", "main_setting": "min_rng_atr", "values": [0, 1, 2]}) | {"session": "mid"}, "P0.2", "way a", "lon_break", "midday", "nyam")
     family("fvg", markets=["ES", "GC"])

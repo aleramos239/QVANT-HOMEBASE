@@ -282,6 +282,20 @@ def test_reset_puts_an_idea_back_in_the_queue_and_moves_its_stage_cards_aside_wi
     assert len(list((d / "stages_old").iterdir())) == 2
 
 
+def test_shelve_keeps_the_cards_of_a_box_that_did_not_hold_aside_from_a_stage_on():
+    """pipe_store.shelve: the pipeline's next box. The cards of stage `since` and later go to stages_old (never deleted); the earlier ones and the state stay."""
+    ticking()
+    add("fvg_open")
+    for n in range(5):
+        PS.write_stage("fvg_open", n, {**STAGE, "stage": n}, root())
+    PS.set_state("fvg_open", root(), status="running", stage=3, tries=2)
+    d, before = root() / "p" / "fvg_open", PS.state("fvg_open", root())
+    assert PS.shelve("fvg_open", 2, root()) == 3 and sorted(PS.stages("fvg_open", root())) == [0, 1] and PS.state("fvg_open", root()) == before
+    (old,) = [p for p in (d / "stages_old").iterdir()]
+    assert sorted(p.name for p in old.iterdir()) == ["2.json", "3.json", "4.json"]
+    assert PS.shelve("fvg_open", 2, root()) == 0 and len(list((d / "stages_old").iterdir())) == 1      # nothing to move: no empty folder
+
+
 def test_reset_is_refused_while_the_idea_is_running_awaits_the_owner_or_is_in_the_book():
     add("fvg_open")
     PS.write_stage("fvg_open", 1, STAGE, root())

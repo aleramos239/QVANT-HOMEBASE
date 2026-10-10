@@ -204,7 +204,7 @@ def test_blocks_registers_ib_n_and_wraps_every_bar_based_library_family():
     assert [v["ib_min"] for v in lib["variants"]] == ["5", "15", "30", "60"] and lib["roots"] == ("NQ", "ES", "GC")
     assert B.IbN.SCREEN_TFS == ("5", "15", "30") and B.IbN.defaults()["mode"] == "break" and B.IbN.defaults()["ib_min"] == "60"
     want = {n for n, e in families.REGISTRY.items() if n in families.LIBRARY and not e[0].FEATURES
-            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks", "fvg", "liq", "noise")}
+            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks", "fvg", "liq", "noise", "ifvg", "sfp")}
     assert set(B.WRAPPED) == want and {"orb", "ib", "ib_n", "donchian", "first_bar_mom", "vwap_trend_pull", "vol_spike_break"} <= want
     for name, cls in B.WRAPPED.items():
         base = families.REGISTRY[name][0]

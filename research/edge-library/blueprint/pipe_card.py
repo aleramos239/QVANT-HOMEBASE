@@ -10,7 +10,7 @@ to 5 indicators, each with its reason. This module reads the card and turns it i
                         P0.1  why it should make money and who loses: one sentence each, 8 words or more together
                         P0.2  the ways: their count; each a family of the block list, a main setting that is a setting of
                               that family, 3 values each once; the card's session is one of the pipeline's (the evening
-                              session is not in this version); the family runs on the card's market, in its session and on
+                              session too, since 2026-10-09); the family runs on the card's market, in its session and on
                               at least one of the pipeline's bar sizes; no way twice -- and each heat map is a card the
                               TOOLKIT takes (records.card_lines: what it refuses fails this line, in its own words)
                         P0.3  the indicators: their count; each a filter block and one of its sides, with a why; no block
