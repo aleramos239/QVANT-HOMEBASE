@@ -65,12 +65,14 @@ async def until(gen, name) -> list:
 
 
 # ---------------------------------------------------------------- the fan-out by itself
-def test_the_backlog_comes_first_then_live_once_then_the_live_batches():
+def test_the_backlog_comes_first_then_live_once_then_the_clock_and_the_live_batches():
+    """No clock before the backlog is complete: a clock ahead of its prints would make the runner fire events "with
+    no print" whose prints are still on their way (review C1)."""
     async def go():
         t = tape(5)
         fan = fan_of({"NQ": t})
         gen = fan.stream(["NQ"], 0, clock_s=60)
-        head = await until(gen, "live")
+        head = await until(gen, "clock")
         fan.publish("NQ", [{"ts_ms": T0 + 9000, "price": "250.25", "size": "4"}, {"ts_ms": T0 + 9000, "price": 250.5, "size": 2}])
         fan.publish("ES", [{"ts_ms": 1, "price": 1.0, "size": 1}])               # a market it did not ask for
         fan.publish("NQ", [{"ts_ms": T0 + 9500, "price": 251.0, "size": 1}])
@@ -79,8 +81,8 @@ def test_the_backlog_comes_first_then_live_once_then_the_live_batches():
         return parse(head), parse(live), len(fan.readers)
 
     head, live, readers = asyncio.run(go())
-    assert [n for n, _ in head] == ["clock", "", "live"] and head[0][1] == {"now_ms": 1_000}
-    assert head[1][1] == {"root": "NQ", "rows": [[T0 + i * 1000, 100.0 + i, 1 + i % 3] for i in range(5)]}
+    assert [n for n, _ in head] == ["", "live", "clock"] and head[2][1] == {"now_ms": 1_000}
+    assert head[0][1] == {"root": "NQ", "rows": [[T0 + i * 1000, 100.0 + i, 1 + i % 3] for i in range(5)]}
     assert live == [("", {"root": "NQ", "rows": [[T0 + 9000, 250.25, 4], [T0 + 9000, 250.5, 2]]}),
                     ("", {"root": "NQ", "rows": [[T0 + 9500, 251.0, 1]]})]
     assert readers == 0                                                      # closed: no longer fanned out to
@@ -94,20 +96,20 @@ def test_nothing_is_missing_and_nothing_comes_twice_across_the_seam(monkeypatch)
         t = tape(10)
         fan = fan_of({"NQ": t})
         gen = fan.stream(["NQ"], 0, clock_s=60)
-        out = await take(gen, 2)                                             # the clock, the first backlog rows
+        out = await take(gen, 1)                                             # the first backlog rows
         for i in range(10, 14):                                              # as the service does: the tape, then the fan-out
             tk = Tick(T0 + i * 1000, 100.0 + i, 1, 1, i + 1)
             t.append(tk)
             fan.publish("NQ", [{"ts_ms": tk.ts_ms, "price": tk.price, "size": tk.size}])
-        out += await until(gen, "live")
+        out += await until(gen, "clock")
         out += await take(gen, 4)
         await gen.aclose()
         return parse(out)
 
     ev = asyncio.run(go())
     names = [n for n, _ in ev]
-    assert names.index("live") == 5 and names.count("live") == 1             # 10 backlog rows: 3 + 3 + 3 + 1
-    assert [len(d["rows"]) for n, d in ev[1:5]] == [3, 3, 3, 1]              # at most LABRUN_CHUNK rows an event
+    assert names[:6] == ["", "", "", "", "live", "clock"] and names.count("live") == 1 and names.count("clock") == 1
+    assert [len(d["rows"]) for n, d in ev[:4]] == [3, 3, 3, 1]               # at most LABRUN_CHUNK rows an event
     assert [r[0] for r in prints(ev)] == [T0 + i * 1000 for i in range(14)]
 
 
@@ -129,7 +131,7 @@ def test_the_clock_ticks_every_second_and_is_the_services_own():
         now = [5_000]
         fan = fan_of({}, now=lambda: now[0])
         gen = fan.stream(["NQ"], 0, clock_s=0.2)
-        first = await until(gen, "live")
+        first = await until(gen, "clock")                                    # live, then the clock at once
         now[0] = 6_000
         second = await take(gen, 1)
         fan.publish("NQ", [{"ts_ms": 1, "price": 1.0, "size": 1}])
@@ -140,7 +142,7 @@ def test_the_clock_ticks_every_second_and_is_the_services_own():
         return parse(first + second + third + fourth)
 
     ev = asyncio.run(go())
-    assert ev == [("clock", {"now_ms": 5_000}), ("live", {}), ("clock", {"now_ms": 6_000}),
+    assert ev == [("live", {}), ("clock", {"now_ms": 5_000}), ("clock", {"now_ms": 6_000}),
                   ("", {"root": "NQ", "rows": [[1, 1.0, 1]]}), ("clock", {"now_ms": 7_000})]
 
 
@@ -151,7 +153,7 @@ def test_a_reader_that_falls_behind_is_dropped_and_the_others_go_on(monkeypatch)
         fan = fan_of({})
         slow, fast = fan.stream(["NQ"], 0, clock_s=60), fan.stream(["NQ"], 0, clock_s=60)
         await until(slow, "live")
-        await until(fast, "live")
+        await until(fast, "clock")
         got = []
         for i in range(6):                                                   # the slow one reads nothing
             fan.publish("NQ", [{"ts_ms": i, "price": 1.0, "size": 1}])
@@ -163,7 +165,7 @@ def test_a_reader_that_falls_behind_is_dropped_and_the_others_go_on(monkeypatch)
 
     got, left, readers = asyncio.run(go())
     assert [r[0] for r in prints(got)] == list(range(6))                     # the fast reader missed nothing
-    assert left == [] and readers == 1
+    assert prints(parse(left)) == [] and readers == 1
 
 
 def test_the_stream_ends_when_the_service_is_told_to_stop():
@@ -172,14 +174,14 @@ def test_the_stream_ends_when_the_service_is_told_to_stop():
         stop = [False]
         fan = fan_of({"NQ": tape(2)}, stopping=lambda: stop[0])
         gen = fan.stream(["NQ"], 0, clock_s=0.05)
-        out = await until(gen, "live")
+        out = await until(gen, "clock")
         out += await take(gen, 1)
         stop[0] = True
         rest = [x async for x in gen]
         return parse(out), rest, len(fan.readers)
 
     ev, rest, readers = asyncio.run(go())
-    assert [n for n, _ in ev] == ["clock", "", "live", "clock"] and len(rest) <= 1 and readers == 0
+    assert [n for n, _ in ev] == ["", "live", "clock", "clock"] and len(rest) <= 1 and readers == 0
 
 
 def test_the_stop_signal_is_read_where_this_uvicorn_keeps_it():
@@ -215,7 +217,7 @@ def test_a_reader_that_hangs_up_leaves_the_fan_out_at_once(spec):
 
         scope = {"type": "http", "asgi": {"version": "3.0", "spec_version": spec}}
         task = asyncio.create_task(resp(scope, receive, send))
-        await wait_for(lambda: len(sent) == 4)                               # the headers, the clock, the rows, live
+        await wait_for(lambda: len(sent) == 4)                               # the headers, the rows, live, the clock
         attached = len(fan.readers)
         gone.set()
         fan.publish("NQ", [{"ts_ms": 1, "price": 1.0, "size": 1}])
@@ -265,14 +267,14 @@ def test_the_route_serves_the_replayed_session_so_far_then_ends_when_the_service
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
         assert r.headers["cache-control"] == "no-cache" and "access-control-allow-origin" not in r.headers
         ev = parse([r.text])
-        assert [n for n, _ in ev] == ["clock", "", "live"]
-        assert abs(ev[0][1]["now_ms"] - session_ms(D, 9, 30)) < 5_000        # the replay's clock, not the wall's
+        assert [n for n, _ in ev] == ["", "live", "clock"]
+        assert abs(ev[2][1]["now_ms"] - session_ms(D, 9, 30)) < 5_000        # the replay's clock, not the wall's
         got = prints(ev)                                                     # 09:29:30 up to where the replay is
         assert [x[0] for x in got] == [T0 + i * 1000 for i in range(30, 30 + len(got))] and 30 <= len(got) <= 45
         assert got[0] == [T0 + 30_000, 200.5, 1]
         assert c.get("/api/labrun/ticks?since_ms=x", headers=OK).status_code == 422
         none = parse([c.get("/api/labrun/ticks", headers=OK).text])           # no market asked for: the clock only
-        assert [n for n, _ in none] == ["clock", "live"]
+        assert [n for n, _ in none] == ["live", "clock"]
 
 
 class Feed:
@@ -368,7 +370,7 @@ def test_live_prints_reach_the_reader_once_and_the_tick_path_never_depends_on_it
             return first, body(sent), body(stuck)
 
     first, ev, late = asyncio.run(go())
-    assert [n for n, _ in first[:3]] == ["clock", "", "live"]                # the backlog: what was recorded before
+    assert [n for n, _ in first[:2]] == ["", "live"]                         # the backlog: what was recorded before
     got = prints(ev)
     assert [x[0] for x in got] == [session_ms(D, 9, 40) + i * 1000 for i in range(3)] + [t + i * 1000 for i in range(8)]
     assert got[3] == [t, 101.0, 1] and len(prints(late)) < 8                 # none missing, none twice; the slow one: cut
@@ -392,12 +394,13 @@ def test_the_real_stream_feeds_the_runner(tmp_path, monkeypatch):
     """The chart service (a replay, built in-process) -> its SSE stream -> the tick client -> the runner -> the child
     -> the store. The stream is made to end (the service is stopping), so the test client can hand it over whole."""
     from homebase.labrun import store
-    from homebase.labrun.host import Runner, TickClient
+    from homebase.labrun.host import Runner
+    from homebase.labrun.tickclient import TickClient
     from tests.test_labrun_host import MARKET_930, plain, rec
     import threading
     monkeypatch.setattr(server, "server_stopping", lambda *a: True)
-    base, t0 = tmp_path / "ticks", session_ms(D, 9, 29)
-    write_archive(base, "NQ", D, "NQZ6", rows(t0, [200.0 + 0.25 * (i % 4) for i in range(240)], first_id=5000))
+    base, t0 = tmp_path / "ticks", session_ms(D, 9, 20)                      # a tape that begins before the window does
+    write_archive(base, "NQ", D, "NQZ6", rows(t0, [200.0 + 0.25 * (i % 4) for i in range(720)], first_id=5000))
     app = server.create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
     source = MARKET_930.replace('"09:30:00", "15:55"', '"09:29:30", "15:55"').replace('== "09:30:00"', '== "09:29:30"')
     at_ = tmp_path / "desklab"
@@ -405,8 +408,9 @@ def test_the_real_stream_feeds_the_runner(tmp_path, monkeypatch):
     got, stop = [], threading.Event()
     with TestClient(app, base_url="http://127.0.0.1:8852") as c:
         TickClient("http://127.0.0.1:8852", lambda: ["NQ"], got.append, transport=c._transport,
-                   sleep=lambda s: stop.set(), wall_ms=lambda: t0).run(stop)
-    assert got[0][0] == "clock" and abs(got[0][1] - session_ms(D, 9, 30)) < 5_000
+                   sleep=lambda s: stop.set()).run(stop)
+    assert [x[0] for x in got] == ["connect", "ticks", "live", "clock"]      # the whole session, then live, then the clock
+    assert abs(got[-1][1] - session_ms(D, 9, 30)) < 5_000
     held = [r for x in got if x[0] == "ticks" for r in x[2]]
     assert [r[0] for r in held][:60] == [t0 + i * 1000 for i in range(60)] and held[1] == [t0 + 1000, 200.25, 1]
     r = Runner(at=at_, source="http://127.0.0.1:8852", spawn=plain, deadline_s=2.0, daily=lambda root, d: [])

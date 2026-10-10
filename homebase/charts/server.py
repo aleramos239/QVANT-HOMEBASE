@@ -498,9 +498,11 @@ class TickFan:
             log(f"labrun ticks: {type(e).__name__}: {e}")
 
     async def stream(self, roots: list, since_ms: int, clock_s: float | None = None):
-        """`event: clock` {"now_ms"} first and then every clock_s; the backlog -- each market's prints of the current
-        session with ts_ms >= since_ms, oldest first, at most LABRUN_CHUNK rows an event, built in a worker thread;
-        `event: live` once; then the live batches as they arrive. Rows are [ts_ms, price, size]."""
+        """The backlog -- each market's prints of the current session with ts_ms >= since_ms, oldest first, at most
+        LABRUN_CHUNK rows an event, built in a worker thread; `event: live` once; then `event: clock` {"now_ms"} at
+        once and every clock_s, and the live batches as they arrive. Rows are [ts_ms, price, size]. NO clock before
+        the backlog is complete: the runner fires an event "with no print" off the clock, and a clock ahead of the
+        prints it is still being sent would fire it before its prints arrive."""
         clock_s = LABRUN_CLOCK_S if clock_s is None else clock_s
         loop = asyncio.get_running_loop()
         rd = _TickReader(roots)
@@ -510,7 +512,6 @@ class TickFan:
         self.readers.add(rd)
         backlog = [(r, t, len(t)) for r in roots if (t := self.tape_of(r))]
         try:
-            yield _sse({"now_ms": self.clock()}, "clock")
             for root, tape, n in backlog:
                 i = bisect_left(tape, since_ms, 0, n, key=lambda t: t.ts_ms)
                 while i < n and not rd.dropped:
@@ -518,6 +519,7 @@ class TickFan:
                     yield await asyncio.to_thread(_backlog_rows, root, tape, i, j)
                     i = j
             yield _sse({}, "live")
+            yield _sse({"now_ms": self.clock()}, "clock")
             ticked = loop.time()
             while not rd.dropped and not self.stopping():
                 wait = ticked + clock_s - loop.time()

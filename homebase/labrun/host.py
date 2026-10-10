@@ -15,7 +15,7 @@ others at most one deadline.
 
     StrategyDay   one strategy, one date: the child, the schedule, the would-be fills, the day summary
     run_day       a whole list of prints through one StrategyDay (the tests, the replay check)
-    Runner        the store's strategies on today's prints: start / catch up / stop, the journal, the heartbeat
+    Runner        the store's strategies on the session's prints: start / catch up / stop, the journal, the heartbeat
     run           the process: the tick client's thread (labrun/tickclient.py) reads, this thread works
 """
 from __future__ import annotations
@@ -24,6 +24,7 @@ import datetime as dt
 import json
 import os
 import queue
+import re
 import select
 import shutil
 import signal
@@ -33,7 +34,6 @@ import tempfile
 import threading
 import time
 from array import array
-from bisect import bisect_left
 from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -42,6 +42,7 @@ from ..backtest import sandbox
 from ..backtest.engine import Costs, build_bars
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ET, TapeStore, effective_session_window, et_ns
+from ..charts.session import session_date, session_range_ms
 from ..contracts import point_value, tick_size
 from . import door, store
 from .shadowfills import ShadowFills
@@ -54,17 +55,27 @@ MAX_REPLY = 64 * 1024            # one reply line, bytes
 MAX_ORDERS = 20                  # order intents in one event
 ORDER_OPS = ("entry", "oco", "cancel", "flatten")
 CLOCK_GRACE_NS = 1_000_000_000   # an event this far behind the clock fires without a print
-LATE_NS = 2_000_000_000          # the newest print this much older than the clock ...
+END_GRACE_NS = 2_000_000_000     # the clock this far past the window's end ends the day (prints still on their way)
+LATE_NS = 2_000_000_000          # a print that arrives this far behind the clock ...
 LATE_FOR_NS = 5_000_000_000      # ... for this long: prices are late
+SILENT_S = 5.0                   # no clock from the stream for this long (our own time): no prices
 SAVE_S = 1.0                     # the day summary is written at most this often between state changes
 BATCH = 200                      # run_day feeds this many prints at a time
 POLL_S = 5.0                     # the store is read, and the heartbeat written, this often
 ACTIVE = ("waiting", "running")
 SHADOW = {"max_trades_day": 99, "max_qty": 99, "max_risk_usd": 0}
 
+# Every sentence a day's `why` can read (owner-facing: plain words, no Python names). While a day is still going:
+#   door.PRICES_LATE ("Prices are late.") and NO_STREAM. A stopped day: one of the others.
 NO_SANDBOX = "The sandbox is not working."
 GONE = "The strategy stopped by itself."
 TOO_MANY = "Too many orders at once."
+BAD_SETTINGS = "The strategy's settings cannot be read."
+NO_DAILY = "The daily bars could not be read."
+TOO_LATE = "Started too late to follow today."
+PROBLEM = "Stopped: the runner had a problem."
+NO_STREAM = "No prices: the chart service is not answering."
+#   "Too slow: no answer in N s." (_Child.ask) and "Strategy error: <its message>" / "Strategy error." (strategy_error)
 
 
 def log(msg: str) -> None:
@@ -72,7 +83,23 @@ def log(msg: str) -> None:
 
 
 class _Stop(Exception):
-    """The strategy is stopped for today; str(e) is the sentence for the owner."""
+    """The strategy is stopped for today; str(e) is the sentence for the owner, `detail` what broke (the journal's)."""
+
+    def __init__(self, why: str, detail: str | None = None):
+        super().__init__(why)
+        self.detail = detail
+
+
+_TYPED = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*: ?")          # the child's event error: "<Type>: <message>"
+_NAMED = re.compile(r"^[A-Z][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit|Interrupt)(?: while loading the draft)?: ?")
+_BARE = re.compile(r"^[A-Z][A-Za-z0-9_]*(?:Error|Exception|Warning|Exit|Interrupt)$")
+
+
+def strategy_error(msg, typed: bool) -> str:
+    """"Strategy error: <message>" for the owner: the message text only, never a Python type name."""
+    text = (_TYPED if typed else _NAMED).sub("", str(msg or "").strip(), count=1).strip()
+    text = "" if _BARE.match(text) else (text.splitlines() or [""])[0][:200]
+    return f"Strategy error: {text}" if text else "Strategy error."
 
 
 def _utc() -> str:
@@ -117,6 +144,39 @@ def well_formed(it) -> bool:
         return (isinstance(it.get("name"), str) and _num(it.get("price")) and isinstance(it.get("role"), str)
                 and _int(it.get("t_ms")))
     return False
+
+
+_HHMM = re.compile(r"\d{2}:\d{2}")
+_HMS = re.compile(r"\d{2}:\d{2}(?::\d{2})?")
+
+
+def _at(v, shape) -> bool:
+    """A wall time written exactly as `shape` and that exists (no 25:00)."""
+    if not isinstance(v, str) or not shape.fullmatch(v):
+        return False
+    try:
+        dt.time.fromisoformat(v)
+    except ValueError:
+        return False
+    return True
+
+
+def _window(w) -> bool:
+    return isinstance(w, list) and len(w) == 2 and _at(w[0], _HHMM) and _at(w[1], _HHMM) and w[0] < w[1]
+
+
+def well_set(meta, root) -> bool:
+    """The child's answer to `init`, checked like an intent before anything is built from it (a negative bar_minutes
+    kept the tester's build_bars going for ever): the record's own market, windows of two "HH:MM" with start < end,
+    whole numbers in range, at most 500 times, true/false where true/false belongs."""
+    if not isinstance(meta, dict):
+        return False
+    bars, place, times = meta.get("bar_minutes"), meta.get("placement_ms"), meta.get("times")
+    return (isinstance(root, str) and meta.get("root") == root and _window(meta.get("session_window"))
+            and (meta.get("bar_window") is None or _window(meta["bar_window"]))
+            and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
+            and isinstance(times, list) and len(times) <= 500 and all(_at(t, _HMS) for t in times)
+            and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool))
 
 
 def words(it: dict, tick: float) -> str:
@@ -165,14 +225,16 @@ def sandboxed(argv: list, run_dir: Path) -> subprocess.Popen:
 
 
 class _Late:
-    """Prices are late: the newest print more than 2 s older than the clock for 5 s running, until a fresh print."""
+    """Prices are late: prints that ARRIVE more than 2 s behind the stream's clock, for 5 s running; it clears on
+    the first print that arrives within 2 s of the clock. Judged only when a print arrives: a market with no prints
+    is quiet, not late."""
 
     def __init__(self):
         self.since: int | None = None
         self.late = False
 
-    def see(self, clock_ns: int, newest_ns: int | None) -> bool:
-        if newest_ns is not None and clock_ns - newest_ns <= LATE_NS:
+    def see(self, clock_ns: int, print_ns: int) -> bool:
+        if clock_ns - print_ns <= LATE_NS:
             self.since, self.late = None, False
         else:
             if self.since is None:
@@ -222,8 +284,9 @@ class _Child:
             except OSError:
                 raise _Stop(GONE) from None
 
-    def ask(self, msg: dict, deadline_s: float) -> dict:
-        """The child's one reply to one line, or the sentence that stops the strategy."""
+    def ask(self, msg: dict, deadline_s: float, typed: bool = True) -> dict:
+        """The child's one reply to one line, or the sentence that stops the strategy. typed: its error reads
+        "<Type>: <message>" (an event's; the first line's is the message alone)."""
         slow = f"Too slow: no answer in {deadline_s:g} s."
         if not self._q.empty():                       # it spoke out of turn, or it is gone
             raise _Stop(GONE)
@@ -242,7 +305,7 @@ class _Child:
         if not isinstance(reply, dict):
             raise _Stop(GONE)
         if reply.get("ok") is not True:
-            raise _Stop(f"Strategy error: {reply.get('error')}")
+            raise _Stop(strategy_error(reply.get("error"), typed), str(reply.get("error")))
         return reply
 
     def alive(self) -> bool:
@@ -267,21 +330,24 @@ class _Child:
 
 class StrategyDay:
     """One promoted strategy on one date. on_ticks() takes the prints as they come, on_clock() the clock; the day
-    ends `done` when the clock passes its window, or `stopped` with the reason.
+    ends `done` when a print at or after its window's end arrives (or the clock is 2 s past it), or `stopped` with
+    the reason (`why`, a sentence for the owner; `detail`, what broke, for the journal).
 
     spawn(argv, run_dir) -> Popen with stdin and stdout pipes (default: the sandbox). daily: the completed daily bars
     before the date, or a function (root, date) that reads them, asked only if the strategy needs them (default: the
-    tape store). save(summary): called at every state change and else at most once a second."""
+    tape store). save(summary): called at every state change and else at most once a second. late(t0_ns) -> True
+    when a day whose window starts at t0 can no longer be followed in full: it is stopped before anything runs."""
 
     def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
-                 start_s: float = START_S, save=None, wall=time.monotonic):
+                 start_s: float = START_S, save=None, wall=time.monotonic, late=None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
-        self.state, self.why = "waiting", None
+        self.state, self.why, self.detail = "waiting", None, None
         self.fills: ShadowFills | None = None
         self.orders: list[dict] = []                 # the summary's rows, as they happened
         self._child: _Child | None = None
         self._deadline, self._save, self._wall = deadline_s, save, wall
         self._late = _Late()
+        self._silent = False                         # the runner hears no clock from the stream
         self._clock: int | None = None               # ns, as on_clock last heard it
         self._newest: int | None = None              # ns, the newest print seen (inside the window or not)
         self._entries = 0                            # entries the door let through today
@@ -289,102 +355,121 @@ class StrategyDay:
         self._saved_at = float("-inf")
         self._updated = _utc()
         try:
-            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s)
+            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late)
         except _Stop as e:
-            self._stopped(str(e))
+            self._stopped(str(e), e.detail)
+        except Exception as e:  # noqa: BLE001 -- whatever broke, its child must not outlive the attempt
+            self._problem(e)
         self._changed()
 
     # ---- the start
-    def _start(self, record: dict, spawn, daily, start_s: float) -> None:
-        run_dir = None
+    def _start(self, record: dict, spawn, daily, start_s: float, late) -> None:
+        run_dir = proc = None
         try:
             run_dir = Path(tempfile.mkdtemp(prefix="hb-labrun-"))
             proc = spawn([sys.executable, *CHILD], run_dir)
-        except (sandbox.SandboxUnavailable, OSError):    # fail closed: no sandbox, no strategy
+            self._child = _Child(proc, run_dir)
+        except BaseException as e:                   # whatever broke: no process and no folder is left behind
+            if proc is not None:
+                proc.kill()
+                proc.wait(timeout=5)
             if run_dir is not None:
                 shutil.rmtree(run_dir, ignore_errors=True)
-            raise _Stop(NO_SANDBOX) from None
-        self._child = _Child(proc, run_dir)
+            if isinstance(e, (sandbox.SandboxUnavailable, OSError)):     # fail closed: no sandbox, no strategy
+                raise _Stop(NO_SANDBOX) from None
+            raise
         meta = self._child.ask({"op": "init", "name": record.get("name"), "source": record.get("source"),
                                 "params": record.get("params"), "qty": record.get("qty"),
-                                "date": self.date.isoformat()}, start_s).get("meta")
-        try:
-            root = meta["root"]
-            if not meta["trades_on"]:
-                self.state = "not_today"
-                self._end_child()
-                return
-            w0, w1 = effective_session_window(root, self.date, tuple(meta["session_window"]))
-            self._t0, self._t1 = et_ns(self.date, w0), et_ns(self.date, w1)
-            self._tick = tick_size(root)
-            self._limits = {**SHADOW, "last_entry_et": w1[:5], "session_from_et": w0[:5],
-                            "point_value": point_value(root) or 0.0, "tick": self._tick}
-            # the schedule, run_session's: by time, then session < bar < time, then index
-            self._events = deque(sorted([(self._t0, 0, 0, "session", None)]
-                                        + [(et_ns(self.date, t), 2, n, "time", t) for n, t in enumerate(meta["times"])]))
-            self._bars: deque = deque()              # bar events found so far and not yet fired
-            self._bar_min = int(meta["bar_minutes"])
-            b0, b1 = meta["bar_window"] or (w0, w1)
-            self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
-            placement = int(meta["placement_ms"])
-            needs_daily = bool(meta["needs_daily"])
-        except (KeyError, TypeError, ValueError, AttributeError) as e:
-            raise _Stop(f"Strategy error: {e}") from None
-        try:
-            self._daily = (daily(root, self.date) if callable(daily) else list(daily)) if needs_daily else []
-        except (OSError, ValueError) as e:
-            raise _Stop(f"The daily bars could not be read: {e}") from None
-        self.fills = ShadowFills(root, self.date, Costs(), placement)
+                                "date": self.date.isoformat()}, start_s, typed=False).get("meta")
+        root = record.get("root")
+        if not well_set(meta, root):                 # checked like an intent, before anything is built from it
+            raise _Stop(BAD_SETTINGS, f"meta: {str(meta)[:300]}")
+        if not meta["trades_on"]:
+            self.state = "not_today"
+            self._end_child()
+            return
+        w0, w1 = effective_session_window(root, self.date, tuple(meta["session_window"]))
+        self._t0, self._t1 = et_ns(self.date, w0), et_ns(self.date, w1)
+        if late is not None and late(self._t0):
+            raise _Stop(TOO_LATE)
+        self._tick = tick_size(root)
+        self._limits = {**SHADOW, "last_entry_et": w1[:5], "session_from_et": w0[:5],
+                        "point_value": point_value(root) or 0.0, "tick": self._tick}
+        # the schedule, run_session's: by time, then session < bar < time, then index
+        self._events = deque(sorted([(self._t0, 0, 0, "session", None)]
+                                    + [(et_ns(self.date, t), 2, n, "time", t) for n, t in enumerate(meta["times"])]))
+        self._bars: deque = deque()                  # bar events found so far and not yet fired
+        self._bar_min = meta["bar_minutes"]
+        b0, b1 = meta["bar_window"] or (w0, w1)
+        self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
+        self._daily = []
+        if meta["needs_daily"]:
+            try:
+                self._daily = daily(root, self.date) if callable(daily) else list(daily)
+            except OSError as e:
+                raise _Stop(NO_DAILY, f"{type(e).__name__}: {e}") from None
+        self.fills = ShadowFills(root, self.date, Costs(), meta["placement_ms"])
 
     # ---- the prints and the clock
     def on_ticks(self, rows) -> None:
         """Prints (ts_ns, price, size) in time order. Every event that is due (its time <= the newest print's) runs
-        first, each after the prints before it; then the rest of the prints are processed."""
+        first, each after the prints before it; then the rest of the prints are processed. A print at or after the
+        window's end ends the day."""
         if self.state not in ACTIVE:
             return
-        keep, newest = [], self._newest or 0
+        keep, newest, arrived = [], self._newest or 0, 0
         for r in rows:
             ts = r[0]
+            arrived = max(arrived, ts)
             if ts >= newest:
                 newest = ts
                 if self._t0 <= ts < self._t1:
                     keep.append(r)
-        if not newest:
+        if not arrived:
             return
         self._newest = newest
         self.fills.add_ticks(keep)
-        self._judge_late()
+        if self._clock is not None and self._t0 <= self._clock < self._t1:
+            self._late.see(self._clock, arrived)     # judged as the print arrives, against the clock as last heard
         self._run(newest)
+        if newest >= self._t1:
+            self._finish()
         self._changed()
 
     def on_clock(self, now_ms: int) -> None:
-        """An event more than 1 s behind the clock runs even though no print has reached it. When the clock passes
-        the window's end: what is left runs, the day is finished and the child is stopped."""
+        """An event more than 1 s behind the clock runs even though no print has reached it. When the clock is 2 s
+        past the window's end (time for the prints still on their way), the day ends."""
         now = self._clock = now_ms * 1_000_000
         if self.state in ACTIVE:
-            self._judge_late()
-            if now < self._t1:
-                self._run(now - CLOCK_GRACE_NS - 1)
-            else:
-                self._run(self._t1 - 1)
-                if self.state in ACTIVE:
-                    self.fills.finish(self._t1)
-                    self.state = "done"
-                    self._end_child()
+            if not self._t0 <= now < self._t1:
+                self._late.clear()
+            self._run(now - CLOCK_GRACE_NS - 1)
+            if now > self._t1 + END_GRACE_NS:
+                self._finish()
         self._changed()
 
-    @property
-    def end_ms(self) -> int:
-        """When the window ends (0: the day never got one)."""
-        return self._t1 // 1_000_000 if self.fills is not None else 0
+    def end(self) -> None:
+        """The session is over (it rolled): what is left runs and the day ends, as run_session ends a day."""
+        self._finish()
+        self._changed()
 
-    def _judge_late(self) -> None:
-        if self._clock is None or not self._t0 <= self._clock < self._t1:
-            self._late.clear()
-        else:
-            self._late.see(self._clock, self._newest)
+    def no_prices(self, silent: bool) -> None:
+        """The runner hears no clock from the stream (or hears it again)."""
+        self._silent = bool(silent)
+        self._changed()
+
+    def _finish(self) -> None:
+        if self.state in ACTIVE:
+            self._run(self._t1 - 1)
+        if self.state in ACTIVE:
+            self.fills.finish(self._t1)
+            self.state = "done"
+            self._end_child()
 
     def _run(self, horizon: int) -> None:
+        """Every event at or before `horizon` (and before the window's end), in order; then the prints held."""
+        if self.state not in ACTIVE:
+            return
         try:
             self._find_bars(horizon)
             while True:
@@ -395,10 +480,9 @@ class StrategyDay:
                 self._event(*ev)
             self.fills.advance_all()
         except _Stop as e:
-            self._stopped(str(e))
+            self._stopped(str(e), e.detail)
         except Exception as e:  # noqa: BLE001 -- an event that broke half way: the day cannot be trusted any more
-            log(f"{self.name}: {type(e).__name__}: {e}")
-            self._stopped(f"The runner could not go on: {type(e).__name__}: {e}")
+            self._problem(e)
 
     def _find_bars(self, horizon: int) -> None:
         """The bars that closed by `horizon`, built by the tester's own build_bars from the prints held: aligned to
@@ -426,7 +510,7 @@ class StrategyDay:
         if kind == "session":
             msg["daily"] = self._daily
         seen = {"flat": f.flat, "working_entries": f.working_entries, "entries_today": self._entries,
-                "last_price": last, "now_hhmm": _hms(t)[:5], "prices_late": self._late.late}
+                "last_price": last, "now_hhmm": _hms(t)[:5], "prices_late": self._late.late or self._silent}
         intents = self._child.ask(msg, self._deadline).get("intents")
         if not isinstance(intents, list) or not all(well_formed(i) for i in intents):
             raise _Stop(GONE)
@@ -452,11 +536,16 @@ class StrategyDay:
         if self._child is not None:
             self._child.kill()
 
-    def _stopped(self, why: str) -> None:
-        self.state, self.why = "stopped", why
+    def _stopped(self, why: str, detail: str | None = None) -> None:
+        self.state, self.why, self.detail = "stopped", why, detail
         self._end_child()
         if self.fills is not None:
             self.fills.crash()
+
+    def _problem(self, e: Exception) -> None:
+        """Not the strategy's doing: stop the day, say so in plain words, keep what broke for the journal."""
+        log(f"{self.name}: {type(e).__name__}: {e}")
+        self._stopped(PROBLEM, f"{type(e).__name__}: {e}")
 
     def off(self) -> None:
         """Switched off or removed: the child is stopped; a day that was still going reads `off`."""
@@ -465,10 +554,11 @@ class StrategyDay:
             if self.fills is not None:
                 self.fills.crash("off")
         self._end_child()
-        self._changed()
+        self._changed(now=True)
 
     def kill(self) -> None:
-        """Stop the child and say nothing (the runner is going away, or a fresh day takes this one's place)."""
+        """The runner is going away, or a fresh day takes this one's place: write what is known, stop the child."""
+        self._changed(now=True)
         self._end_child()
 
     def child_alive(self) -> bool:
@@ -487,17 +577,20 @@ class StrategyDay:
         trades = [{"side": t["side"], "qty": t["qty"], "entry_t": _hms(t["entry_ns"]), "entry_px": t["entry_price"],
                    "exit_t": _hms(t["exit_ns"]), "exit_px": t["exit_price"], "reason": t["exit_reason"], "net": t["net"]}
                   for t in self.trades()]
-        why = self.why or (door.PRICES_LATE if self.state in ACTIVE and self._late.late else None)
+        why = self.why
+        if why is None and self.state in ACTIVE:
+            why = NO_STREAM if self._silent else door.PRICES_LATE if self._late.late else None
         return {"date": self.date.isoformat(), "sha256": self.sha256, "state": self.state, "why": why,
                 "orders": list(self.orders), "trades": trades, "net": round(sum((t["net"] for t in trades), 0.0), 2),
                 "match": None, "updated_utc": self._updated}
 
-    def _changed(self) -> None:
-        """Hand the summary to save() when it changed: at once on a new state, else at most once every SAVE_S."""
-        key = (self.state, self.why, self._late.late, len(self.orders), self.trade_count)
+    def _changed(self, now: bool = False) -> None:
+        """Hand the summary to save() when it changed: at once on a new state (or `now`), else at most once every
+        SAVE_S."""
+        key = (self.state, self.why, self._late.late, self._silent, len(self.orders), self.trade_count)
         if key == self._saved_key:
             return
-        fresh = self._saved_key is None or key[0] != self._saved_key[0]
+        fresh = now or self._saved_key is None or key[0] != self._saved_key[0]
         if not fresh and self._wall() - self._saved_at < SAVE_S:
             return
         self._saved_key, self._saved_at, self._updated = key, self._wall(), _utc()
@@ -515,7 +608,7 @@ def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, deadli
             part = rows[i:i + batch]
             day.on_ticks(part)
             day.on_clock(part[-1][0] // 1_000_000)
-        day.on_clock(day.end_ms)
+        day.end()                                    # a tape that stops before the window does
         return {"summary": day.summary(), "trades": day.trades()}
     finally:
         day.kill()
@@ -538,24 +631,33 @@ def _key(rec: dict) -> tuple:
     return (rec.get("sha256"), json.dumps(rec.get("params"), sort_keys=True, default=str), rec.get("qty"))
 
 
-def _midnight_ms(now_ms: int) -> int:
-    d = dt.datetime.fromtimestamp(now_ms / 1000, ET).date()
-    return int(dt.datetime.combine(d, dt.time(0), ET).timestamp() * 1000)
+def _session_ns(d: dt.date, root: str) -> tuple[int, int]:
+    """[start, end) of the prints that belong to session d: from its open (18:00 ET the evening before; a weekend's
+    prints of a classic market file into Monday) to 18:00 ET on d, where the next session's prints begin."""
+    end = int(dt.datetime.combine(d, dt.time(18, 0), ET).timestamp())
+    return session_range_ms(d, root)[0] * 1_000_000, end * 1_000_000_000
 
 
 class Runner:
-    """The strategies of the store on today's prints. One thread calls everything here: on_clock() and on_rows() with
-    what the stream sent, sync() and beat() every few seconds. `at`: the store's root (default ~/.homebase/desklab)."""
+    """The strategies of the store on the current session's prints. One thread calls everything here: take() with
+    what the tick client hands over, sync(), beat() and idle() every few seconds. `at`: the store's root (default
+    ~/.homebase/desklab).
+
+    A market's day is the SESSION date of the stream's clock (charts.session.session_date: it rolls at 18:00 ET, as
+    the chart service's tape and the tester's archive do), and the prints held are that session's. While a
+    connection is still sending its backlog (`connect` seen, `live` not yet) nothing is hosted, finished or clocked:
+    the days only take the prints, in order."""
 
     def __init__(self, *, at=None, source: str = "", spawn=None, deadline_s: float = DEADLINE_S, daily=None,
                  wall=time.monotonic):
         self.at, self.source = at, source
         self._spawn, self._deadline, self._daily, self._wall = spawn, deadline_s, daily, wall
-        self._date: dt.date | None = None            # today, ET: the date of the stream's clock
-        self._midnight = 0                           # ns
-        self._clock_ms: int | None = None
-        self._clock_wall = float("-inf")             # when (wall) the stream's clock was last heard
-        self._tapes: dict[str, tuple] = {}           # root -> today's prints from 00:00 ET: (ts_ns, price, size) arrays
+        self._live = False                           # the current connection has sent its whole backlog
+        self._clock_ms: int | None = None            # the stream's clock (heard while live)
+        self._clock_wall = wall()                    # when (wall) it was last heard
+        self._silent = False                         # ... more than SILENT_S ago
+        self._dates: dict[str, dt.date] = {}         # root -> its session date
+        self._tapes: dict[str, tuple] = {}           # root -> that session's prints: (ts_ns, price, size) arrays
         self._late: dict[str, _Late] = {}
         self._days: dict[str, _Hosted] = {}
         self._roots: list[str] = []                  # the markets the enabled strategies trade
@@ -571,24 +673,32 @@ class Runner:
         h = self._days.get(name)
         return h.day if h is not None else None
 
+    def date(self, root: str) -> dt.date | None:
+        return self._dates.get(root)
+
     def prints(self, root: str) -> int:
         return len(self._tapes[root][0]) if root in self._tapes else 0
 
     # ---- the stream
     def take(self, item: tuple) -> None:
-        if item[0] == "clock":
+        if item[0] == "connect":
+            self._live = False                       # a backlog follows: no clock counts until it is complete
+        elif item[0] == "live":
+            self._live = True
+        elif item[0] == "clock":
             self.on_clock(item[1])
         elif item[0] == "ticks":
             self.on_rows(item[1], item[2])
 
     def on_clock(self, now_ms: int) -> None:
+        if not self._live:                           # a clock ahead of its backlog would fire events "with no print"
+            return                                   # whose prints are still on their way
         self._clock_ms, self._clock_wall = now_ms, self._wall()
-        d = dt.datetime.fromtimestamp(now_ms / 1000, ET).date()
-        if d != self._date:
-            self._roll(d, now_ms)
-        for root in self._roots:
-            ts = self._tapes[root][0] if root in self._tapes else ()
-            self._late.setdefault(root, _Late()).see(now_ms * 1_000_000, ts[-1] if len(ts) else None)
+        self._quiet(False)
+        rolled = [self._roll(root, d) for root in sorted({*self._roots, *self._tapes})
+                  if (d := session_date(now_ms, root)) != self._dates.get(root)]
+        if rolled:
+            self.sync()
         for h in list(self._days.values()):
             h.day.on_clock(now_ms)
             self._note(h)
@@ -598,27 +708,44 @@ class Runner:
         ts, px, size = self._tapes.setdefault(root, (array("q"), array("d"), array("q")))
         for r in rows:
             ns, price, n = int(r[0]) * 1_000_000, float(r[1]), int(r[2])   # ns: the tester's rule for ms recordings
-            if ns >= self._midnight:
-                ts.append(ns)
-                px.append(price)
-                size.append(n)
+            ts.append(ns)
+            px.append(price)
+            size.append(n)
+        if rows and self._live and self._clock_ms is not None:             # as the print arrives (a backlog is not judged)
+            self._late.setdefault(root, _Late()).see(self._clock_ms * 1_000_000, ts[-1])
         for h in list(self._days.values()):
             if h.root == root:
                 self._feed(h)
 
-    def _roll(self, d: dt.date, now_ms: int) -> None:
-        """The ET date changed: every day is finished and dropped, yesterday's prints are dropped, new days start."""
-        for h in self._days.values():
-            h.day.on_clock(now_ms)                   # past its window: what is left runs, the day ends `done`
-            self._note(h)
-            h.day.kill()
-        self._days.clear()
-        self._date = d
-        self._midnight = _midnight_ms(now_ms) * 1_000_000
-        for root, (ts, px, size) in list(self._tapes.items()):
-            i = bisect_left(ts, self._midnight)
-            self._tapes[root] = (ts[i:], px[i:], size[i:])
-        self.sync()
+    def idle(self) -> None:
+        """No clock from the stream for SILENT_S of our own time: there are no prices, and every day says so."""
+        self._quiet(self._wall() - self._clock_wall > SILENT_S)
+
+    def _quiet(self, silent: bool) -> None:
+        if silent != self._silent:
+            self._silent = silent
+            for h in self._days.values():
+                h.day.no_prices(silent)
+
+    def _roll(self, root: str, d: dt.date) -> str:
+        """The market's session date changed: its days are finished and dropped, and of its prints only the new
+        session's are kept (none of an older session, and none of a later one when the clock went back: a replay)."""
+        for name, h in list(self._days.items()):
+            if h.root == root:
+                h.day.end()
+                self._note(h)
+                h.day.kill()
+                del self._days[name]
+        self._dates[root] = d
+        self._late.pop(root, None)
+        if root in self._tapes:
+            ts, px, size = self._tapes[root]
+            lo, hi = _session_ns(d, root)
+            if len(ts) and not (lo <= min(ts) and max(ts) < hi):
+                keep = [i for i, t in enumerate(ts) if lo <= t < hi]
+                self._tapes[root] = (array("q", (ts[i] for i in keep)), array("d", (px[i] for i in keep)),
+                                     array("q", (size[i] for i in keep)))
+        return root
 
     def _feed(self, h: _Hosted) -> None:
         ts, px, size = self._tapes[h.root]
@@ -629,18 +756,21 @@ class Runner:
         self._note(h)
 
     def _note(self, h: _Hosted, quiet: bool = False) -> None:
-        """One journal line per new order, stop and trade (quiet: catch-up, nothing is written)."""
+        """One journal line per new order, stop and trade. quiet (catch-up): nothing is written, but a stop that was
+        the runner's own problem, whose detail has no other home."""
         day = h.day
-        if not quiet and (len(day.orders) > h.orders or day.trade_count > h.trades or (day.state == "stopped") > h.stop):
-            head = {"utc": _utc(), "date": day.date.isoformat()}
-            lines = [{**head, "kind": "order", **o} for o in day.orders[h.orders:]]
-            if day.state == "stopped" and not h.stop:
-                lines.append({**head, "kind": "stop", "why": day.why})
-            if day.trade_count > h.trades:
-                lines += [{**head, "kind": "trade", **t} for t in day.summary()["trades"][h.trades:]]
-            for line in lines:
-                self._write(store.journal, day.name, line)
-        h.orders, h.trades, h.stop = len(day.orders), day.trade_count, day.state == "stopped"
+        stopped = day.state == "stopped"
+        head = {"utc": _utc(), "date": day.date.isoformat()}
+        lines = []
+        if not quiet:
+            lines += [{**head, "kind": "order", **o} for o in day.orders[h.orders:]]
+        if stopped and not h.stop and (not quiet or day.why == PROBLEM):
+            lines.append({**head, "kind": "stop", "why": day.why, "detail": day.detail})
+        if not quiet and day.trade_count > h.trades:
+            lines += [{**head, "kind": "trade", **t} for t in day.summary()["trades"][h.trades:]]
+        for line in lines:
+            self._write(store.journal, day.name, line)
+        h.orders, h.trades, h.stop = len(day.orders), day.trade_count, stopped
 
     def _write(self, fn, *args) -> None:
         """A write to the store must never take the runner down: say so and go on."""
@@ -651,53 +781,75 @@ class Runner:
 
     # ---- the store
     def sync(self) -> None:
-        """Read the store: host each enabled strategy whose market has prints today (weekdays only); a strategy that
-        appears, is switched on or was promoted again gets a fresh day, fed from today's prints first (catch-up)."""
+        """Read the store: host each enabled strategy whose market has prints this session (never a Saturday's or a
+        Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
+        the session's prints first (catch-up). While a backlog is in flight nothing is hosted or stopped: the tape
+        is not whole yet."""
         try:
             recs = [r for r in store.listing(self.at) if r.get("enabled") and isinstance(r.get("root"), str)]
         except OSError as e:
             log(f"store: {type(e).__name__}: {e}")
             return
         self._roots = sorted({r["root"] for r in recs})
-        if self._date is None:
+        if not self._live or self._clock_ms is None:
             return
-        want = {r["name"]: r for r in recs if self.prints(r["root"])} if self._date.weekday() < 5 else {}
+        for root in self._roots:                     # a market nobody traded until now
+            if root not in self._dates:
+                self._roll(root, session_date(self._clock_ms, root))
+        want = {r["name"]: r for r in recs if self._dates[r["root"]].weekday() < 5 and self.prints(r["root"])}
         for name, h in list(self._days.items()):
             rec = want.get(name)
             if rec is None:
                 h.day.off()
                 del self._days[name]
             elif _key(rec) != h.key:
-                h.day.kill()
+                h.day.kill()                         # (its last word is written first)
                 del self._days[name]
         for name, rec in want.items():
             if name not in self._days:
                 self._host(rec)
 
     def _host(self, rec: dict) -> None:
-        name = rec["name"]
-        day = StrategyDay(rec, self._date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline,
-                          save=lambda s: self._write(store.put_day, name, s), wall=self._wall)
-        h = self._days[name] = _Hosted(day, rec["root"], _key(rec))
-        ts, px, size = self._tapes[h.root]
-        h.fed = len(ts)
-        day.on_ticks(zip(ts, px, size))              # catch-up: today so far
-        if self._clock_ms is not None:
-            day.on_clock(self._clock_ms)
+        name, root = rec["name"], rec["root"]
+        date = self._dates[root]
+        ts, px, size = self._tapes[root]
+        now, oldest = self._clock_ms * 1_000_000, ts[0]
+        try:
+            there = store.day_path(name, date.isoformat(), self.at).exists()
+        except (OSError, ValueError):
+            there = True                             # cannot tell: fail closed, as if a day file were there
+
+        def save(summary: dict) -> None:
+            if summary["why"] == TOO_LATE and there:     # never over a day file that exists: it may be a finished day
+                return
+            self._write(store.put_day, name, summary)
+
+        # Fail closed: the clock is past the window's start and the prints held begin after it (the stream's backlog
+        # is the session from its open; a tape that starts later cannot rebuild the day in full).
+        day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0)
+        h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts))
+        if self._silent:
+            day.no_prices(True)
+        day.on_ticks(zip(ts, px, size))              # catch-up: the session so far
+        day.on_clock(self._clock_ms)
         self._note(h, quiet=True)
-        log(f"{name}: hosted ({day.state}{', ' + day.why if day.why else ''}), {h.fed} prints to catch up")
+        log(f"{name}: {date} {day.state}{' (' + day.why + ')' if day.why else ''}, {h.fed} prints to catch up")
 
     def beat(self) -> None:
-        """The heartbeat (contracts.md runner status)."""
-        heard = self._clock_ms is not None and self._wall() - self._clock_wall <= POLL_S
+        """The heartbeat (contracts.md runner status). No clock from the stream: every market reads late, no age.
+        A market with no prints is quiet, not late."""
+        heard = self._clock_ms is not None and self._wall() - self._clock_wall <= SILENT_S
         prices = {}
         for root in self._roots:
             ts = self._tapes[root][0] if root in self._tapes else ()
-            if heard and len(ts):
+            if not heard:
+                prices[root] = {"age_s": None, "late": True}
+            elif not len(ts):
+                prices[root] = {"age_s": None, "late": False}
+            else:
                 prices[root] = {"age_s": round((self._clock_ms - ts[-1] // 1_000_000) / 1000, 1),
                                 "late": self._late[root].late if root in self._late else False}
-            else:
-                prices[root] = {"age_s": None, "late": True}
         self._write(store.put_runner, {"pid": os.getpid(), "seen_utc": _utc(), "source": self.source, "prices": prices,
                                        "hosting": self.hosting()})
 
@@ -728,6 +880,7 @@ def run(charts: str, at=None) -> None:
             try:
                 if item is not None:
                     runner.take(item)
+                runner.idle()
                 if time.monotonic() - polled >= POLL_S:
                     polled = time.monotonic()
                     runner.sync()

@@ -1,8 +1,9 @@
 """The runner's tick client: the chart service's read-only stream, and nothing else (2026-10-09).
 
-GET /api/labrun/ticks on the chart service (homebase/charts/server.py, TickFan) is Server-Sent Events: the backlog, then
-`live`, then the live batches and a clock every second. TickClient reads it in its own thread and hands what it carries
-to the runner (labrun/host.py). This is the only connection the runner process opens.
+GET /api/labrun/ticks on the chart service (homebase/charts/server.py, TickFan) is Server-Sent Events: the backlog,
+then `live`, then the live batches and a clock every second (never a clock before the backlog is complete).
+TickClient reads it in its own thread and hands what it carries to the runner (labrun/host.py). This is the only
+connection the runner process opens.
 """
 from __future__ import annotations
 
@@ -18,15 +19,11 @@ from ..backtest.tape import ET
 
 STREAM = "/api/labrun/ticks"
 BACKOFF_S = (1.0, 30.0)
+BACK_MS = 60_000                 # a clock this far behind the last one heard is another timeline
 
 
 def log(msg: str) -> None:
     print(f"[labrun] {dt.datetime.now(ET).strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
-
-
-def _midnight_ms(now_ms: int) -> int:
-    d = dt.datetime.fromtimestamp(now_ms / 1000, ET).date()
-    return int(dt.datetime.combine(d, dt.time(0), ET).timestamp() * 1000)
 
 
 class _Again(Exception):
@@ -34,17 +31,19 @@ class _Again(Exception):
 
 
 class TickClient:
-    """Reads GET /api/labrun/ticks (Server-Sent Events) and hands put() what it carries: ("clock", now_ms) and
-    ("ticks", root, [[ts_ms, price, size], ...]). It reconnects with back-off (1 s to 30 s), asks for since_ms = 00:00
-    ET today on the first connect and the oldest of its newest-print times after that, and never takes a print twice:
-    per market, a row older than its newest time is dropped, and of the rows AT its newest time the first k are
-    dropped, k being how many it already holds at that millisecond. The only connection this process opens."""
+    """Reads GET /api/labrun/ticks (Server-Sent Events) and hands put() what happens, in order:
+    ("connect",) a stream opened: its backlog follows; ("ticks", root, [[ts_ms, price, size], ...]);
+    ("live",) the backlog is complete; ("clock", now_ms) the service's clock, which only comes after `live`.
+    It reconnects with back-off (1 s to 30 s). The first connect asks for the whole current session (since_ms=0), a
+    later one for the oldest of its newest-print times. It never takes a print twice: per market, a row older than
+    its newest time is dropped, and of the rows AT its newest time the first k are dropped, k being how many it
+    already holds at that millisecond. The only connection this process opens."""
 
-    def __init__(self, url: str, roots, put, *, transport=None, sleep=time.sleep, wall_ms=lambda: int(time.time() * 1000)):
+    def __init__(self, url: str, roots, put, *, transport=None, sleep=time.sleep):
         self._roots, self._put, self._sleep = roots, put, sleep
         self._http = httpx.Client(base_url=url, transport=transport, trust_env=False, follow_redirects=False,
                                   timeout=httpx.Timeout(10.0, read=15.0))   # the stream's clock ticks every second
-        self._day = _midnight_ms(wall_ms())          # 00:00 ET of the day it asks for
+        self._clock: int | None = None               # the stream's clock as last heard, ms
         self._newest: dict[str, list] = {}           # root -> [its newest print's ms, how many it holds at that ms]
         self._skip: dict[str, int] = {}              # root -> rows at that ms still to drop on this connection
 
@@ -71,7 +70,8 @@ class TickClient:
         return out
 
     def since_ms(self, roots) -> int:
-        return min([self._newest[r][0] if r in self._newest else self._day for r in roots], default=self._day)
+        """0 (the whole current session) until every market asked for has a print held."""
+        return min([self._newest[r][0] if r in self._newest else 0 for r in roots], default=0)
 
     def _once(self, stop: threading.Event) -> bool:
         """One connection. True when it carried anything."""
@@ -81,6 +81,7 @@ class TickClient:
         with self._http.stream("GET", STREAM, params={"roots": ",".join(roots), "since_ms": self.since_ms(roots)}) as r:
             if r.status_code != 200:
                 raise ValueError(f"the chart service answered {r.status_code}")
+            self._put(("connect",))
             event = ""
             for line in r.iter_lines():
                 if line.startswith("event:"):
@@ -98,12 +99,17 @@ class TickClient:
 
     def _on(self, event: str, data: dict) -> None:
         if event == "clock":
-            day = _midnight_ms(data["now_ms"])
-            earlier, self._day = day < self._day, day
-            if earlier:                              # a replayed session: another timeline, asked again from ITS
-                self._newest.clear()                 # midnight (what is held from the later day says nothing here)
+            now = data["now_ms"]
+            if self._clock is not None and now < self._clock - BACK_MS:
+                # the clock went back: another timeline (a replayed session took the service's place). What is held
+                # from the later one says nothing about it: forget it and ask for this session whole.
+                self._clock = None
+                self._newest.clear()
                 raise _Again()
-            self._put(("clock", data["now_ms"]))
+            self._clock = now
+            self._put(("clock", now))
+        elif event == "live":
+            self._put(("live",))
         elif not event:
             rows = self.fresh(data["root"], data["rows"])
             if rows:
