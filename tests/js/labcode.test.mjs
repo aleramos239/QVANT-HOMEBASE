@@ -261,3 +261,197 @@ test('deskSaid: the lines after a promote, in the words of the page', () => {
   assert.deepEqual(L.deskSaid({ ok: true, notes: 'x' }), ['On the Desk, switched off. Turn it on there to run it in shadow.'], 'notes is a list or nothing');
   assert.deepEqual(L.deskSaid({ ok: true, notes: [1, null, ''] }), ['On the Desk, switched off. Turn it on there to run it in shadow.']);
 });
+
+
+/* ---- the strategy form's pure half (fm*): the schema is the server's, the page knows no rule by name ---- */
+const FM = JSON.parse("{\"markets\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"ticks\":{\"NQ\":0.25,\"ES\":0.25,\"YM\":1.0,\"RTY\":0.1,\"GC\":0.1,\"SI\":0.005},\"sides\":[[\"both\",\"Both\"],[\"long\",\"Long only\"],[\"short\",\"Short only\"]],\"rules\":[{\"id\":\"open_straddle\",\"label\":\"Stop straddle\",\"words\":\"At a time of day, a buy stop above the price and a sell stop below it. The first one to fill cancels the other.\",\"fields\":[\"market\",\"side\",\"time\",\"distance\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"opening_range\",\"label\":\"Opening range\",\"words\":\"Measure the high and low of the first minutes, then a buy stop above the range and a sell stop below it.\",\"fields\":[\"market\",\"side\",\"range_from\",\"range_min\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"bar_breakout\",\"label\":\"Bar breakout\",\"words\":\"Buy when a bar closes above the highs of the last few bars, sell when it closes below their lows.\",\"fields\":[\"market\",\"side\",\"bar_min\",\"lookback\",\"from\",\"last_entry\",\"trades\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"at_time\",\"label\":\"At a time\",\"words\":\"Buy or sell at the market at a time of day.\",\"fields\":[\"market\",\"side\",\"time\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"long\",\"short\"]}],\"fields\":{\"market\":{\"label\":\"Market\",\"words\":\"The futures market to trade.\",\"type\":\"choice\",\"choices\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"default\":\"NQ\"},\"side\":{\"label\":\"Trade\",\"words\":\"Buy, sell, or both.\",\"type\":\"choice\",\"choices\":[\"both\",\"long\",\"short\"],\"default\":\"both\"},\"time\":{\"label\":\"Time\",\"words\":\"The New York time it acts, like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"distance\":{\"label\":\"Distance (points)\",\"words\":\"How far from the price each stop entry sits.\",\"type\":\"number\",\"min_ticks\":1,\"tick_multiple\":true,\"default\":15.0},\"range_from\":{\"label\":\"Range starts\",\"words\":\"Where the range starts, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"range_min\":{\"label\":\"Range length (minutes)\",\"words\":\"How many minutes the range is measured over.\",\"type\":\"choice\",\"choices\":[5,15,30],\"default\":15},\"bar_min\":{\"label\":\"Bar size (minutes)\",\"words\":\"How long each bar is.\",\"type\":\"choice\",\"choices\":[1,5,15],\"default\":5},\"lookback\":{\"label\":\"Look back (bars)\",\"words\":\"How many bars back the high and low are taken from.\",\"type\":\"int\",\"min\":2,\"max\":40,\"step\":1,\"default\":6},\"from\":{\"label\":\"Start at\",\"words\":\"The first time it may enter, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"trades\":{\"label\":\"Trades a day\",\"words\":\"Most entries it takes in one day.\",\"type\":\"int\",\"min\":1,\"max\":5,\"step\":1,\"default\":1},\"last_entry\":{\"label\":\"Last entry\",\"words\":\"No new entry after this time. A stop not filled by then is cancelled.\",\"type\":\"time\",\"default\":\"11:00\"},\"stop\":{\"label\":\"Stop\",\"words\":\"Every entry carries a stop.\",\"type\":\"stop\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":2,\"tick_multiple\":true},{\"id\":\"range\",\"label\":\"Other side of the range\"}],\"default\":{\"kind\":\"points\",\"value\":50.0}},\"target\":{\"label\":\"Target\",\"words\":\"Where to take profit, or none.\",\"type\":\"target\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":1,\"tick_multiple\":true},{\"id\":\"rr\",\"label\":\"x the stop\",\"min\":0.25,\"max\":20,\"step\":0.25},{\"id\":\"none\",\"label\":\"None\"}],\"default\":{\"kind\":\"rr\",\"value\":3.0}},\"out_by\":{\"label\":\"Out by\",\"words\":\"Anything still open is closed at this time. 15:55 at the latest.\",\"type\":\"time\",\"default\":\"15:55\"}},\"defaults\":{\"open_straddle\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"open_straddle\",\"time\":\"09:30\",\"distance\":15.0,\"stop\":{\"kind\":\"points\",\"value\":50.0},\"target\":{\"kind\":\"rr\",\"value\":3.0}},\"opening_range\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"opening_range\",\"range_from\":\"09:30\",\"range_min\":15,\"stop\":{\"kind\":\"range\"},\"target\":{\"kind\":\"rr\",\"value\":2.0}},\"bar_breakout\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"bar_breakout\",\"bar_min\":5,\"lookback\":6,\"from\":\"09:30\",\"trades\":1,\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}},\"at_time\":{\"market\":\"NQ\",\"side\":\"long\",\"out_by\":\"15:55\",\"rule\":\"at_time\",\"time\":\"09:30\",\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}}}}");
+const FM_TAKEN = ['nq_open_straddle', 'my_strategy'];
+
+test('fm: the fields shown for a rule are the schema\'s, in its order, after name, market and the rule', () => {
+  assert.deepEqual(L.fmShown(FM, 'open_straddle'), ['name', 'market', 'rule', 'side', 'time', 'distance', 'stop', 'target', 'last_entry', 'out_by']);
+  assert.deepEqual(L.fmShown(FM, 'at_time'), ['name', 'market', 'rule', 'side', 'time', 'stop', 'target', 'out_by']);
+  assert.deepEqual(L.fmShown(FM, 'bar_breakout'), ['name', 'market', 'rule', 'side', 'bar_min', 'lookback', 'from', 'last_entry', 'trades', 'stop', 'target', 'out_by']);
+  assert.deepEqual(L.fmShown(FM, 'nope'), [], 'a rule the schema does not list shows nothing');
+  // no rule is named: a made-up schema works the same
+  const odd = { rules: [{ id: 'zz', fields: ['market', 'qq', 'out_by'] }], fields: {} };
+  assert.deepEqual(L.fmShown(odd, 'zz'), ['name', 'market', 'rule', 'qq', 'out_by']);
+  assert.deepEqual(L.fmKeys(odd, 'zz'), ['name', 'rule', 'market', 'qq', 'out_by']);
+});
+
+test('fm: a rule\'s answer keys are name, rule and its fields (nothing else belongs)', () => {
+  assert.deepEqual(L.fmKeys(FM, 'at_time'), ['name', 'rule', 'market', 'side', 'time', 'stop', 'target', 'out_by']);
+});
+
+test('fm: which stop and target choices and which sides a rule offers', () => {
+  assert.deepEqual(L.fmKinds(FM, 'at_time', 'target').map((k) => k.id), ['points', 'rr', 'none']);
+  assert.deepEqual(L.fmKinds(FM, 'open_straddle', 'stop').map((k) => k.id), ['points', 'range'], 'the schema as it is today names no restriction: the server answers for the rest');
+  // a choice the schema limits to some rules is offered to those rules only
+  const limited = { fields: { stop: { kinds: [{ id: 'points' }, { id: 'range', rules: ['opening_range'] }] } } };
+  assert.deepEqual(L.fmKinds(limited, 'opening_range', 'stop').map((k) => k.id), ['points', 'range']);
+  assert.deepEqual(L.fmKinds(limited, 'at_time', 'stop').map((k) => k.id), ['points']);
+  assert.deepEqual(L.fmSides(FM, 'at_time'), [['long', 'Long only'], ['short', 'Short only']]);
+  assert.deepEqual(L.fmSides(FM, 'open_straddle').map((s) => s[0]), ['both', 'long', 'short']);
+  assert.equal(L.fmHasValue({ id: 'points', min_ticks: 2 }), true);
+  assert.equal(L.fmHasValue({ id: 'rr', min: 0.25, max: 20 }), true);
+  assert.equal(L.fmHasValue({ id: 'none' }), false);
+  assert.equal(L.fmHasValue({ id: 'range' }), false);
+});
+
+test('fm: the value a choice starts from comes from the schema\'s defaults, never from a rule\'s name', () => {
+  assert.equal(L.fmKindValue(FM, 'at_time', 'stop', 'points'), 20);
+  assert.equal(L.fmKindValue(FM, 'open_straddle', 'stop', 'points'), 50);
+  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points'), 40, 'this rule\'s default is a ratio: the first points default of any rule');
+  assert.equal(L.fmKindValue(FM, 'bar_breakout', 'target', 'rr'), 3);
+  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'none'), '');
+});
+
+test('fm: the first state is the first rule\'s defaults with a suggested name', () => {
+  const s = L.fmStart(FM, ['nq_open_straddle']);
+  assert.equal(s.rule, 'open_straddle');
+  assert.equal(s.market, 'NQ');
+  assert.equal(s.name, 'nq_open_straddle_2');
+  assert.deepEqual(s.stop, { kind: 'points', value: 50 });
+  assert.equal('distance' in s, true);
+  s.stop.value = 1;
+  assert.equal(L.fmStart(FM, []).stop.value, 50, 'a state never shares an object with the schema');
+  assert.equal(FM.defaults.open_straddle.stop.value, 50);
+});
+
+test('fm: a suggested name is the market and the rule, made unique the way a pasted script\'s is', () => {
+  assert.equal(L.fmSuggest('NQ', 'open_straddle', []), 'nq_open_straddle');
+  assert.equal(L.fmSuggest('GC', 'at_time', ['gc_at_time', 'gc_at_time_2']), 'gc_at_time_3');
+  assert.equal(L.fmSuggest('RTY', 'bar_breakout', []), 'rty_bar_breakout');
+  assert.equal(L.fmSuggest('', '', []), 'my_strategy');
+  assert.equal(L.fmSuggest('NQ', 'x'.repeat(60), []).length <= 40, true);
+  assert.equal(L.nameError(L.fmSuggest('NQ', 'x'.repeat(60), [])), null);
+});
+
+test('fm: changing the rule keeps name, market, side, stop, target and out by, and fills the rest from that rule\'s defaults', () => {
+  const a = L.fmStart(FM, []);
+  Object.assign(a, { name: 'mine', market: 'GC', side: 'short', out_by: '15:30', distance: '22', last_entry: '12:00', stop: { kind: 'points', value: '33' }, target: { kind: 'points', value: '77' } });
+  const b = L.fmSwitch(FM, a, 'bar_breakout');
+  assert.equal(b.rule, 'bar_breakout');
+  assert.deepEqual([b.name, b.market, b.side, b.out_by], ['mine', 'GC', 'short', '15:30']);
+  assert.deepEqual(b.stop, { kind: 'points', value: '33' });
+  assert.deepEqual(b.target, { kind: 'points', value: '77' });
+  assert.deepEqual([b.bar_min, b.lookback, b.from, b.trades, b.last_entry], [5, 6, '09:30', 1, '11:00'], 'the rule\'s own fields start from its defaults');
+  assert.equal('distance' in b, false, 'a key the new rule does not have is gone');
+  assert.deepEqual(Object.keys(L.fmAnswers(FM, b)).sort(), [...L.fmKeys(FM, 'bar_breakout')].sort());
+  // a copy, not the same object
+  b.stop.value = 'x';
+  assert.equal(a.stop.value, '33');
+});
+
+test('fm: a rule change drops a shared answer the new rule does not take', () => {
+  const a = L.fmStart(FM, []);      // side: both
+  const b = L.fmSwitch(FM, a, 'at_time');
+  assert.equal(b.side, 'long', 'both is not offered here: the rule\'s default side');
+  assert.equal('last_entry' in b, false);
+  const limited = { rules: [{ id: 'r1', fields: ['market', 'stop'], sides: ['both'] }, { id: 'r2', fields: ['market', 'stop'], sides: ['both'] }],
+    fields: { stop: { kinds: [{ id: 'points', min_ticks: 2 }, { id: 'range', rules: ['r1'] }] } },
+    defaults: { r1: { rule: 'r1', market: 'NQ', stop: { kind: 'range' } }, r2: { rule: 'r2', market: 'NQ', stop: { kind: 'points', value: 9 } } } };
+  const c = L.fmSwitch(limited, { rule: 'r1', name: 'n', market: 'ES', stop: { kind: 'range' } }, 'r2');
+  assert.deepEqual(c.stop, { kind: 'points', value: 9 }, 'a stop kind the new rule does not offer falls back to its default');
+  assert.equal(c.market, 'ES');
+});
+
+test('fm: a name that was suggested follows the market and rule; one he typed does not (the dialog decides which)', () => {
+  const a = L.fmStart(FM, []);
+  const b = L.fmSwitch(FM, a, 'at_time');
+  assert.equal(b.name, a.name, 'switching keeps the name; the page re-suggests only while it is untouched');
+});
+
+test('fm: the page-side number check: empty, not a number, below the floor, not a multiple of the tick', () => {
+  const dist = FM.fields.distance, tick = FM.ticks.NQ;
+  assert.equal(L.fmNumberError(dist, '15', tick), '');
+  assert.equal(L.fmNumberError(dist, 15, tick), '');
+  assert.equal(L.fmNumberError(dist, ' 15.25 ', tick), '');
+  assert.equal(L.fmNumberError(dist, '', tick), 'Type a number.');
+  assert.equal(L.fmNumberError(dist, 'abc', tick), 'Type a number.');
+  assert.equal(L.fmNumberError(dist, '1e3', tick), 'Type a number.', 'plain digits only');
+  assert.equal(L.fmNumberError(dist, '0x10', tick), 'Type a number.');
+  assert.equal(L.fmNumberError(dist, '0', tick), 'Use at least 0.25.');
+  assert.equal(L.fmNumberError(dist, '-5', tick), 'Use at least 0.25.');
+  assert.equal(L.fmNumberError(dist, '0.1', tick), 'Use at least 0.25.');
+  assert.equal(L.fmNumberError(dist, '7.5', FM.ticks.YM), 'Use a multiple of the tick (1).');
+  assert.equal(L.fmNumberError(dist, '7.3', tick), 'Use a multiple of the tick (0.25).');
+  assert.equal(L.fmNumberError(dist, '7.25', tick), '');
+  assert.equal(L.fmNumberError(dist, '0.3', FM.ticks.GC), '', '0.3 / 0.1 is whole within 1e-9');
+  assert.equal(L.fmNumberError(dist, '0.015', FM.ticks.SI), '');
+  const stop = FM.fields.stop.kinds[0];
+  assert.equal(L.fmNumberError(stop, '0.25', tick), 'Use at least 0.5.', 'a stop is at least two ticks');
+  assert.equal(L.fmNumberError(stop, '0.5', tick), '');
+  assert.equal(L.fmNumberError(FM.fields.target.kinds[0], '0.25', tick), '');
+});
+
+test('fm: whole-number and ratio boxes carry their own limits, whatever the market', () => {
+  const lb = FM.fields.lookback, rr = FM.fields.target.kinds[1];
+  assert.equal(L.fmNumberError(lb, '6', 0.25), '');
+  assert.equal(L.fmNumberError(lb, '2', 0.25), '');
+  assert.equal(L.fmNumberError(lb, '40', 0.25), '');
+  assert.equal(L.fmNumberError(lb, '1', 0.25), 'Between 2 and 40.');
+  assert.equal(L.fmNumberError(lb, '41', 0.25), 'Between 2 and 40.');
+  assert.equal(L.fmNumberError(lb, '6.5', 0.25), 'Between 2 and 40.', 'a whole number');
+  assert.equal(L.fmNumberError(FM.fields.trades, '6', 0.25), 'Between 1 and 5.');
+  assert.equal(L.fmNumberError(rr, '3', 0.25), '');
+  assert.equal(L.fmNumberError(rr, '0.2', 0.25), 'Between 0.25 and 20.');
+  assert.equal(L.fmNumberError(rr, '20.5', 0.25), 'Between 0.25 and 20.');
+  assert.equal(L.fmNumberError(rr, '', 0.25), 'Type a number.');
+});
+
+test('fm: the page-side errors of a state are by field, for the boxes that are shown only', () => {
+  const s = L.fmStart(FM, []);
+  assert.deepEqual(L.fmErrors(FM, s), {});
+  s.distance = '';
+  s.stop = { kind: 'points', value: 'abc' };
+  s.target = { kind: 'rr', value: '30' };
+  assert.deepEqual(L.fmErrors(FM, s), { distance: 'Type a number.', stop: 'Type a number.', target: 'Between 0.25 and 20.' });
+  s.stop = { kind: 'range' }; s.target = { kind: 'none' }; s.distance = '7.3';
+  assert.deepEqual(L.fmErrors(FM, s), { distance: 'Use a multiple of the tick (0.25).' }, 'a kind with no number has no box to check');
+  // a box of a field the rule does not have is not looked at
+  const t = L.fmSwitch(FM, s, 'at_time');
+  t.lookback = 'junk';
+  assert.deepEqual(L.fmErrors(FM, t), {});
+  // the market's tick is the one used
+  const y = L.fmStart(FM, []); y.market = 'YM'; y.distance = '7.5';
+  assert.deepEqual(L.fmErrors(FM, y), { distance: 'Use a multiple of the tick (1).' });
+});
+
+test('fm: the answers object has the rule\'s keys only, numbers as numbers, choices with their own type', () => {
+  const s = L.fmStart(FM, []);
+  Object.assign(s, { name: '  my_orb ', distance: '15.5', stop: { kind: 'points', value: '50' }, target: { kind: 'rr', value: '2.5' }, junk: 1, lookback: 9 });
+  assert.deepEqual(L.fmAnswers(FM, s), { name: 'my_orb', rule: 'open_straddle', market: 'NQ', side: 'both', time: '09:30', distance: 15.5,
+    stop: { kind: 'points', value: 50 }, target: { kind: 'rr', value: 2.5 }, last_entry: '11:00', out_by: '15:55' });
+  const r = L.fmSwitch(FM, s, 'opening_range');
+  r.range_min = '30';
+  const a = L.fmAnswers(FM, r);
+  assert.strictEqual(a.range_min, 30, 'the choice list holds numbers: the answer is a number');
+  assert.deepEqual(Object.keys(a).sort(), [...L.fmKeys(FM, 'opening_range')].sort());
+  const k = L.fmAnswers(FM, { ...r, stop: { kind: 'range', value: '12' }, target: { kind: 'none', value: '4' } });
+  assert.deepEqual(k.stop, { kind: 'range' }, 'a kind with no number sends none');
+  assert.deepEqual(k.target, { kind: 'none' });
+  const bb = L.fmSwitch(FM, s, 'bar_breakout');
+  bb.lookback = '12'; bb.trades = '3';
+  assert.strictEqual(L.fmAnswers(FM, bb).lookback, 12);
+  assert.strictEqual(L.fmAnswers(FM, bb).trades, 3);
+  // a box that is not a number stays what was typed, for the server to refuse in its words
+  bb.lookback = 'many';
+  assert.strictEqual(L.fmAnswers(FM, bb).lookback, 'many');
+});
+
+test('fm: reading a file\'s answers back into a state fills what is missing from the rule\'s defaults and drops what does not belong', () => {
+  const got = { name: 'x_y', rule: 'at_time', market: 'ES', side: 'short', time: '10:00', stop: { kind: 'points', value: 12 }, target: { kind: 'none' }, out_by: '15:00', distance: 4 };
+  const s = L.fmFill(FM, got);
+  assert.deepEqual(L.fmAnswers(FM, s), { name: 'x_y', rule: 'at_time', market: 'ES', side: 'short', time: '10:00', stop: { kind: 'points', value: 12 }, target: { kind: 'none' }, out_by: '15:00' });
+  assert.equal(L.fmFill(FM, { name: 'a', rule: 'mystery' }), null, 'a rule this page does not know is not opened');
+  assert.equal(L.fmFill(FM, null), null);
+  const thin = L.fmFill(FM, { name: 'a', rule: 'at_time' });
+  assert.equal(thin.time, '09:30');
+});
+
+test('fm: the time boxes stop at 15:55 and the server\'s sentences are shown as they come', () => {
+  assert.equal(L.FM_LATEST, '15:55');
+  assert.equal(L.fmFirstError({ stop: 'Every entry needs a stop.', name: 'bad' }, ['name', 'market', 'stop']), 'bad', 'the first in the order the fields are shown');
+  assert.equal(L.fmFirstError({ form: 'The form is incomplete.' }, ['name']), 'The form is incomplete.', 'a key that is no field of the form comes last');
+  assert.equal(L.fmFirstError({}, ['name']), '');
+});

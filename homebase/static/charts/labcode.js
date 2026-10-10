@@ -616,12 +616,145 @@ function deskSaid(answer) {
   return ['On the Desk, switched off. Turn it on there to run it in shadow.', ...notes.map((n) => `The Desk would refuse: ${n}`)];
 }
 
+/* ---- the strategy form ("Fill in a form"): the pure half ----
+   The schema is the server's (GET /api/tester/drafts/form, homebase/charts/lab_forms.py): the rules, their fields, labels, words,
+   choices, limits and defaults. Nothing here names a rule. A state is an answers-shaped object whose number boxes may still hold what
+   was typed (a string); fmAnswers turns it into the object the build route takes. The server is the authority on every answer: the
+   checks here only spare a request for a box that is plainly not a number. */
+const FM_LATEST = '15:55';                 // the latest "out by" the server takes: the time boxes stop here
+const FM_KEEP = ['name', 'market', 'side', 'stop', 'target', 'out_by'];      // what a rule change keeps when the new rule has it
+const fmClone = (x) => JSON.parse(JSON.stringify(x));
+const fmRule = (sc, id) => ((sc && sc.rules) || []).find((r) => r.id === id) || null;
+const fmField = (sc, id) => (sc && sc.fields && sc.fields[id]) || null;
+const fmNum = (x) => String(Math.round(x * 1e6) / 1e6);
+/* what the form draws for a rule: name, market and the rule first, then the rule's own fields in the schema's order */
+function fmShown(sc, rule) {
+  const r = fmRule(sc, rule);
+  return r ? ['name', 'market', 'rule', ...r.fields.filter((f) => f !== 'market')] : [];
+}
+/* the keys of an answers object for the rule: nothing else belongs in it */
+function fmKeys(sc, rule) {
+  const r = fmRule(sc, rule);
+  return r ? ['name', 'rule', ...r.fields] : [];
+}
+/* the choices of a stop or target the rule offers: all of them, unless the schema limits a choice to some rules (`rules`) */
+function fmKinds(sc, rule, field) {
+  const f = fmField(sc, field);
+  return ((f && f.kinds) || []).filter((k) => !Array.isArray(k.rules) || k.rules.includes(rule));
+}
+function fmSides(sc, rule) {
+  const r = fmRule(sc, rule), all = (sc && sc.sides) || [];
+  return r && Array.isArray(r.sides) ? all.filter((s) => r.sides.includes(s[0])) : all;
+}
+/* a choice that asks for a number has limits in the schema (points: min_ticks; a ratio: min / max) */
+const fmHasValue = (k) => !!k && (k.min_ticks != null || k.min != null || k.max != null);
+/* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else any rule's */
+function fmKindValue(sc, rule, field, kind) {
+  const f = fmField(sc, field), d = (sc && sc.defaults) || {};
+  const hit = [d[rule] && d[rule][field], f && f.default, ...Object.values(d).map((x) => x && x[field])].find((x) => x && x.kind === kind && x.value != null);
+  return hit ? hit.value : '';
+}
+function fmSuggest(market, rule, taken = []) {
+  let base = snake(`${market || ''}_${rule || ''}`) || 'my_strategy';
+  if (!/^[a-z]/.test(base)) base = 'my_' + base;
+  base = base.slice(0, 36);
+  if (base.length < 2 || nameError(base)) base = 'my_strategy';
+  let n = base, i = 2;
+  while (taken.includes(n)) n = `${base.slice(0, 36)}_${i++}`;
+  return n;
+}
+function fmStart(sc, taken = []) {
+  const first = sc && sc.rules && sc.rules[0];
+  if (!first || !sc.defaults || !sc.defaults[first.id]) return null;
+  const s = fmClone(sc.defaults[first.id]);
+  s.rule = first.id;
+  s.name = fmSuggest(s.market, s.rule, taken);
+  return s;
+}
+/* the rule changed: the rule's own defaults, with what both rules share carried over when the new rule takes it */
+function fmSwitch(sc, st, rule) {
+  const d = sc && sc.defaults && sc.defaults[rule];
+  if (!d) return st;
+  const next = fmClone(d), keys = fmKeys(sc, rule);
+  next.rule = rule;
+  for (const k of FM_KEEP) {
+    if (st[k] === undefined || (k !== 'name' && !keys.includes(k))) continue;
+    if (k === 'side' && !fmSides(sc, rule).some((s) => s[0] === st.side)) continue;
+    if ((k === 'stop' || k === 'target') && !fmKinds(sc, rule, k).some((x) => x.id === (st[k] || {}).kind)) continue;
+    next[k] = fmClone(st[k]);
+  }
+  return next;
+}
+/* a state from the answers a file carries: the rule's defaults under them, and only the keys that belong */
+function fmFill(sc, answers) {
+  if (!answers || typeof answers !== 'object' || !sc || !sc.defaults || !sc.defaults[answers.rule]) return null;
+  const s = fmClone(sc.defaults[answers.rule]);
+  for (const k of fmKeys(sc, answers.rule)) if (answers[k] !== undefined) s[k] = fmClone(answers[k]);
+  s.rule = answers.rule;
+  if (typeof s.name !== 'string') s.name = '';
+  return s;
+}
+function fmParse(raw) {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : undefined;
+  const t = String(raw == null ? '' : raw).trim();
+  return /^[+-]?(\d+\.?\d*|\.\d+)$/.test(t) ? Number(t) : undefined;
+}
+/* The page-side check of one number box against the box's limits (a schema field or a stop / target choice) and the market's tick:
+   '' when it can go to the server. The sentence for a multiple of the tick is the server's own. */
+function fmNumberError(spec, raw, tick) {
+  const v = fmParse(raw), t = Number(tick) > 0 ? Number(tick) : 0;
+  if (v === undefined) return 'Type a number.';
+  if (spec.min_ticks && t && v < spec.min_ticks * t - 1e-9) return `Use at least ${fmNum(spec.min_ticks * t)}.`;
+  if (spec.tick_multiple && t) { const q = v / t; if (Math.abs(q - Math.round(q)) > 1e-9) return `Use a multiple of the tick (${fmNum(t)}).`; }
+  const bad = (spec.min != null && v < spec.min) || (spec.max != null && v > spec.max) || (spec.type === 'int' && !Number.isInteger(v));
+  if (!bad) return '';
+  return spec.min != null && spec.max != null ? `Between ${spec.min} and ${spec.max}.` : spec.type === 'int' ? 'Use a whole number.' : spec.min != null ? `Use at least ${spec.min}.` : `Use at most ${spec.max}.`;
+}
+/* the number boxes of the state that is shown, checked: { field: sentence } */
+function fmErrors(sc, st) {
+  const out = {}, tick = sc && sc.ticks && sc.ticks[st.market];
+  for (const f of fmKeys(sc, st.rule)) {
+    const def = fmField(sc, f);
+    if (!def) continue;
+    if (def.type === 'number' || def.type === 'int') { const e = fmNumberError(def, st[f], tick); if (e) out[f] = e; }
+    else if (def.type === 'stop' || def.type === 'target') {
+      const k = (def.kinds || []).find((x) => x.id === (st[f] || {}).kind);
+      if (fmHasValue(k)) { const e = fmNumberError(k, st[f].value, tick); if (e) out[f] = e; }
+    }
+  }
+  return out;
+}
+/* the object the build route takes: the rule's keys only, numbers as numbers, a choice as the schema's own value */
+function fmAnswers(sc, st) {
+  const out = {};
+  for (const k of fmKeys(sc, st.rule)) {
+    const v = st[k], def = fmField(sc, k);
+    if (v === undefined) continue;
+    if (k === 'name') out[k] = String(v).trim();
+    else if (!def) out[k] = v;
+    else if (def.type === 'stop' || def.type === 'target') {
+      const kind = (def.kinds || []).find((x) => x.id === (v || {}).kind), a = { kind: (v || {}).kind };
+      if (fmHasValue(kind)) { const n = fmParse(v.value); a.value = n === undefined ? v.value : n; }
+      out[k] = a;
+    } else if (def.type === 'number' || def.type === 'int') { const n = fmParse(v); out[k] = n === undefined ? v : n; }
+    else if (def.type === 'choice') out[k] = (def.choices || []).find((c) => String(c) === String(v)) ?? v;
+    else out[k] = v;
+  }
+  return out;
+}
+/* the sentence to show for a set of errors: the first of the fields in the order they are drawn, then any other key */
+function fmFirstError(errors, order) {
+  const e = errors || {}, keys = [...order.filter((k) => e[k]), ...Object.keys(e).filter((k) => !order.includes(k) && e[k])];
+  return keys.length ? e[keys[0]] : '';
+}
+
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
+  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
