@@ -130,6 +130,9 @@ def _read(f: Path) -> dict | None:
     return got if isinstance(got, dict) else None
 
 
+OWN_TRADES_DAY = 20            # a backtest with no trade list or no trades: the strategy is not held to fewer than the Desk allows
+
+
 def auto_limits(trades) -> dict | None:
     """What the strategy itself did in the backtest the record is frozen from: the most trades it took in one day.
     The Desk reads its limits from this (labcfg.derive_limits), so the owner fills in nothing. None: no trade list."""
@@ -150,8 +153,8 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
     now = now or dt.datetime.now(dt.timezone.utc)
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
-    auto = auto_limits(bundle.get("trades"))
-    return {**({"auto_limits": auto} if auto else {}), "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
+    auto = auto_limits(bundle.get("trades")) or {"max_trades_day": OWN_TRADES_DAY}
+    return {"auto_limits": auto, "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},

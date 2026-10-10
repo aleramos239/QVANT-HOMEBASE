@@ -29,7 +29,7 @@ def day(date, **kw):
 
 def test_snapshot_is_the_record_the_runner_reads():
     s = store.snapshot("nq_x", SRC, META, BUNDLE, "20261009-1-draft_nq_x-ab12", ["It sets its own size."], now=NOW)
-    assert s == {"name": "nq_x", "id": "draft_nq_x", "label": "Bar breakout", "root": "NQ", "source": SRC,
+    assert s == {"auto_limits": {"max_trades_day": 20}, "name": "nq_x", "id": "draft_nq_x", "label": "Bar breakout", "root": "NQ", "source": SRC,
                  "sha256": hashlib.sha256(SRC.encode("utf-8")).hexdigest(), "params": {"sl_pts": 20.0}, "qty": 2,
                  "run": {"id": "20261009-1-draft_nq_x-ab12", "range": BUNDLE["run"]["range"], "net": 1234.5, "trades": 41,
                          "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0},

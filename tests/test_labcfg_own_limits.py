@@ -119,7 +119,9 @@ def test_the_store_reads_the_trade_list_into_auto_limits():
     assert store.auto_limits([{"date": "d"}] * 99) == {"max_trades_day": 20}
     snap = store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}, "trades": trades}, "r1", [])
     assert snap["auto_limits"] == {"max_trades_day": 2}
-    assert "auto_limits" not in store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}}, "r1", [])
+    # no trade list, or no trades in it: held to what the Desk holds any strategy to, never to a limit the owner must fill in
+    assert store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}}, "r1", [])["auto_limits"] == {"max_trades_day": 20}
+    assert store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}, "trades": []}, "r1", [])["auto_limits"] == {"max_trades_day": 20}
 
 
 def test_the_runner_derives_the_same_limits_as_the_desk():
