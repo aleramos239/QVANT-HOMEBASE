@@ -259,9 +259,20 @@ def test_limits_are_set_shown_and_kept_in_the_sidecar(client):
     side = store.get_desk("pp_orb")
     assert side["mark"] == MARK and side["limits"] == {**LIMITS, "max_risk_usd": 300.0} and side["book"] == []
     assert journal(client, "lab_limits_set")[-1]["strategy"] == LAB and no_lab_in_config(client)
-    set_limits(client, last_entry_et="10:30", max_qty=3)
-    assert store.get_desk("pp_orb")["limits"]["last_entry_et"] == "10:30" and client.cfg.strategies[LAB].accept_until_et == "10:30"
+    set_limits(client, flat_et="15:00", max_qty=3)                               # the flat time, through the route
+    assert store.get_desk("pp_orb")["limits"]["flat_et"] == "15:00" and client.cfg.strategies[LAB].flat_et == "15:00"
     assert store.get_desk("pp_orb")["limits"]["max_qty"] == 3
+
+
+def test_a_flat_time_after_1555_is_refused_by_the_route_also_for_a_window_to_1600(client):
+    """Wave review N8: the window note never lifts the cap -- the route refuses a flat time later than 15:55."""
+    store.put(rec(session_window=["09:25", "16:00"]))
+    asyncio.run(client.labdesk.refresh())
+    for flat in ("15:56", "16:00"):
+        r = set_limits(client, flat_et=flat)
+        assert (r.status_code, r.json()["detail"]) == (400, "Flat by: a time like 15:55, no later than 15:55.")
+    assert status(client)["lab"]["limits"] is None and store.get_desk("pp_orb") is None
+    assert set_limits(client).json()["limits"]["flat_et"] == "15:55"
 
 
 NOTE_1600 = ("Its window runs to 16:00 but it closes its trades at 15:55. A trade still open then closes 5 minutes "

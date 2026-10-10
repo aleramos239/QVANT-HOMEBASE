@@ -83,8 +83,8 @@ def test_a_day_through_the_real_desk_the_child_sees_the_fills_the_engine_booked(
     rec = {"name": NAME, "id": f"draft_{NAME}", "label": "PP", "root": "NQ", "source": SOURCE,
            "sha256": hashlib.sha256(SOURCE.encode()).hexdigest(), "params": {}, "qty": 1, "run": {"id": "r1"}, "notes": [],
            "promoted_utc": "2026-09-10T12:00:00+00:00", "enabled": True, "commission": 4.0, "slippage_ticks": 1.0,
-           "session_window": ["09:25", "15:55"], "bar_minutes": 1}    # (final wave I1: the Desk books no window that
-    # ends after its flat time)
+           "session_window": ["09:25", "15:55"], "bar_minutes": 1}    # (a window that ends by the Desk's flat time:
+    # this day's match has no window note; a later window books too, with one note)
     store.put(rec, root)
 
     # ---- the Desk: one paper account, the strategy's limits set and the account booked on the Desk's own page path
