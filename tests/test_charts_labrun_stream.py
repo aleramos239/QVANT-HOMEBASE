@@ -88,29 +88,89 @@ def test_the_backlog_comes_first_then_live_once_then_the_clock_and_the_live_batc
     assert readers == 0                                                      # closed: no longer fanned out to
 
 
-def test_nothing_is_missing_and_nothing_comes_twice_across_the_seam(monkeypatch):
-    """Prints that land while the backlog is being read (several thread hops here) are in the live part, once."""
+def test_prints_queued_while_the_backlog_went_out_come_before_live_and_before_the_first_clock(monkeypatch):
+    """The seam (review C1, round 2). Prints that land while the backlog is being read are sent after it, once, and
+    BEFORE `live` and the first clock: a clock ahead of prints still queued for the reader would let the runner fire
+    an event "with no print" whose prints are a queue away."""
     monkeypatch.setattr(server, "LABRUN_CHUNK", 3)
 
     async def go():
-        t = tape(10)
-        fan = fan_of({"NQ": t})
+        t, now = tape(10), [T0 + 9_500]
+        fan = fan_of({"NQ": t}, now=lambda: now[0])
         gen = fan.stream(["NQ"], 0, clock_s=60)
         out = await take(gen, 1)                                             # the first backlog rows
         for i in range(10, 14):                                              # as the service does: the tape, then the fan-out
             tk = Tick(T0 + i * 1000, 100.0 + i, 1, 1, i + 1)
             t.append(tk)
             fan.publish("NQ", [{"ts_ms": tk.ts_ms, "price": tk.price, "size": tk.size}])
+            now[0] = tk.ts_ms + 500
         out += await until(gen, "clock")
-        out += await take(gen, 4)
         await gen.aclose()
         return parse(out)
 
     ev = asyncio.run(go())
     names = [n for n, _ in ev]
-    assert names[:6] == ["", "", "", "", "live", "clock"] and names.count("live") == 1 and names.count("clock") == 1
+    assert names == [""] * 8 + ["live", "clock"]                             # 4 backlog events, 4 queued, live, the clock
     assert [len(d["rows"]) for n, d in ev[:4]] == [3, 3, 3, 1]               # at most LABRUN_CHUNK rows an event
-    assert [r[0] for r in prints(ev)] == [T0 + i * 1000 for i in range(14)]
+    assert [r[0] for r in prints(ev)] == [T0 + i * 1000 for i in range(14)]  # none missing, none twice, in order
+    assert ev[-1][1] == {"now_ms": T0 + 13_500}                              # and no print older than the clock comes after it
+
+
+def test_a_clock_is_never_sent_ahead_of_prints_already_queued():
+    """Later too: the reader's queue is drained before each clock."""
+    async def go():
+        now = [1_000]
+        fan = fan_of({}, now=lambda: now[0])
+        gen = fan.stream(["NQ"], 0, clock_s=0.05)
+        out = await until(gen, "clock")
+        out += await take(gen, 1)                                            # the next clock, 50 ms on
+        await asyncio.sleep(0.12)                                            # another is due, and meanwhile:
+        for i in range(3):
+            now[0] = 2_000 + i
+            fan.publish("NQ", [{"ts_ms": now[0], "price": 1.0, "size": 1}])
+        out += await take(gen, 4)
+        await gen.aclose()
+        return parse(out)
+
+    ev = asyncio.run(go())
+    assert [n for n, _ in ev] == ["live", "clock", "clock", "", "", "", "clock"]
+    assert [r[0] for r in prints(ev)] == [2_000, 2_001, 2_002] and ev[-1][1] == {"now_ms": 2_002}
+
+
+def test_a_reader_dropped_while_its_backlog_goes_out_gets_no_live_and_no_clock():
+    """The reviewer's probe: 2,000+ live batches queue up during one backlog. Its stream ends at once; a `live` or a
+    clock here would tell the runner that a partial tape is whole."""
+    async def go():
+        t = tape(50_000, step=40)
+        fan = fan_of({"NQ": t}, now=lambda: T0 + 10_000_000)
+        gen = fan.stream(["NQ"], 0, clock_s=1.0)
+        got = await take(gen, 1)
+        for i in range(server.LABRUN_QUEUE_MAX + 1):                         # the tick path, while the backlog is in flight
+            fan.publish("NQ", [{"ts_ms": T0 + 9_000_000 + i, "price": 1.0, "size": 1}])
+        got += [x async for x in gen]
+        return parse(got), len(fan.readers)
+
+    ev, readers = asyncio.run(go())
+    assert [n for n, _ in ev if n] == [] and readers == 0                    # no live, no clock: just the end
+    assert 0 < len(prints(ev)) < 50_000
+
+
+def test_a_reader_dropped_while_its_queue_is_drained_gets_no_live_and_no_clock(monkeypatch):
+    monkeypatch.setattr(server, "LABRUN_QUEUE_MAX", 3)
+
+    async def go():
+        fan = fan_of({"NQ": tape(2)})
+        gen = fan.stream(["NQ"], 0, clock_s=60)
+        got = await take(gen, 1)                                             # the backlog
+        for i in range(3):
+            fan.publish("NQ", [{"ts_ms": T0 + 5000 + i, "price": 1.0, "size": 1}])
+        got += await take(gen, 1)                                            # the first queued batch ...
+        for i in range(3, 8):
+            fan.publish("NQ", [{"ts_ms": T0 + 5000 + i, "price": 1.0, "size": 1}])   # ... and it falls behind for good
+        got += [x async for x in gen]
+        return parse(got)
+
+    assert [n for n, _ in asyncio.run(go()) if n] == []
 
 
 def test_since_ms_cuts_the_backlog_and_each_market_has_its_own():
@@ -425,3 +485,60 @@ def test_the_real_stream_feeds_the_runner(tmp_path, monkeypatch):
         assert store.get_runner(at_)["hosting"] == ["lab_x"]
     finally:
         r.close()
+
+
+def test_a_reconnect_with_prints_queued_behind_its_backlog_gives_the_runner_the_day_in_order(tmp_path, monkeypatch):
+    """The reviewer's seam probe, end to end: TickFan's own bytes -> the tick client -> the Runner. The prints that
+    were queued while the backlog went out (the last before 09:30 and the first after) reach the runner before `live`
+    and the clock, so the 09:30 order is the one the prints in order give: stop 21,010.00, not 20,990.00."""
+    import httpx
+    import threading
+    from homebase.backtest.tape import et_ns
+    from homebase.labrun.tickclient import TickClient
+    from tests.test_labrun_host import D as DAY, Desk
+    monkeypatch.setattr(server, "LABRUN_CHUNK", 4)
+
+    def ms(hms):
+        return et_ns(DAY, hms) // 1_000_000
+
+    held = [[ms("09:29:50") + i * 1000, 21000.0, 1] for i in range(8)]       # what the runner had before it lost the stream
+    queued = [[ms("09:29:58"), 21010.0, 1], [ms("09:29:59"), 21020.0, 1], [ms("09:30:00"), 21020.0, 1],
+              [ms("09:30:01"), 21021.0, 1]]
+
+    async def stream():
+        t = [Tick(r[0], r[1], r[2], 1, i + 1) for i, r in enumerate(held)]
+        fan = fan_of({"NQ": t}, now=lambda: ms("09:30:03"))
+        gen = fan.stream(["NQ"], 0, clock_s=60)
+        out = await take(gen, 1)                                             # the backlog is on its way ...
+        for r in queued:                                                     # ... and the market does not wait for it
+            t.append(Tick(r[0], r[1], r[2], 1, 0))
+            fan.publish("NQ", [{"ts_ms": r[0], "price": r[1], "size": r[2]}])
+        out += await until(gen, "clock")
+        await gen.aclose()
+        return "".join(out)
+
+    sent = asyncio.run(stream())
+    k = Desk(tmp_path)
+    try:
+        k.promote()
+        k.clock("09:29:00")
+        k.open()
+        k.r.on_rows("NQ", held)
+        k.r.sync()
+        got, stop = [], threading.Event()
+        c = TickClient("http://127.0.0.1:8852", lambda: ["NQ"], got.append, sleep=lambda s: stop.set(),
+                       transport=httpx.MockTransport(lambda req: httpx.Response(200, content=sent.encode())))
+        assert c.fresh("NQ", held) == held                                   # the same client: it holds those already
+        c.run(stop)
+        assert got == [("connect",), ("ticks", "NQ", queued[:1]), ("ticks", "NQ", queued[1:2]), ("ticks", "NQ", queued[2:3]),
+                       ("ticks", "NQ", queued[3:]), ("live",), ("clock", ms("09:30:03"))]
+        for item in got:
+            k.r.take(item)
+        k.rows("15:54:59", [21030.0] * 3)
+        k.clock("16:00:03")
+        s = k.today()
+        assert [o["text"] for o in s["orders"]] == ["Buy at market, stop 21,010.00", "Flatten (time)"]
+        assert [(t["entry_px"], t["exit_px"], t["reason"], t["net"]) for t in s["trades"]] == [
+            (21021.25, 21029.75, "time", 166.0)]
+    finally:
+        k.r.close()

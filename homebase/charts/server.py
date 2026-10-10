@@ -462,6 +462,11 @@ def _backlog_rows(root: str, tape: list, i: int, j: int) -> str:
     return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size] for t in tape[i:j]]})
 
 
+def _live_rows(root: str, rows: list) -> str:
+    """One live batch, as the feed delivered it (numbers live, strings in a replay)."""
+    return _sse({"root": root, "rows": [[int(r["ts_ms"]), float(r["price"]), int(r["size"])] for r in rows]})
+
+
 class _TickReader:
     __slots__ = ("roots", "q", "dropped")
 
@@ -499,10 +504,14 @@ class TickFan:
 
     async def stream(self, roots: list, since_ms: int, clock_s: float | None = None):
         """The backlog -- each market's prints of the current session with ts_ms >= since_ms, oldest first, at most
-        LABRUN_CHUNK rows an event, built in a worker thread; `event: live` once; then `event: clock` {"now_ms"} at
-        once and every clock_s, and the live batches as they arrive. Rows are [ts_ms, price, size]. NO clock before
-        the backlog is complete: the runner fires an event "with no print" off the clock, and a clock ahead of the
-        prints it is still being sent would fire it before its prints arrive."""
+        LABRUN_CHUNK rows an event, built in a worker thread; then the prints that queued up behind it; `event: live`
+        once; then `event: clock` {"now_ms"} at once and every clock_s, and the live batches as they arrive. Rows are
+        [ts_ms, price, size].
+
+        A `live` or a clock is NEVER sent while prints that arrived before it are still queued for this reader: the
+        runner takes `live` for "the tape is whole" and fires an event "with no print" off the clock, so either one
+        ahead of its prints would act on a tape that is a queue short. A reader that was dropped gets neither: its
+        stream just ends."""
         clock_s = LABRUN_CLOCK_S if clock_s is None else clock_s
         loop = asyncio.get_running_loop()
         rd = _TickReader(roots)
@@ -514,24 +523,32 @@ class TickFan:
         try:
             for root, tape, n in backlog:
                 i = bisect_left(tape, since_ms, 0, n, key=lambda t: t.ts_ms)
-                while i < n and not rd.dropped:
+                while i < n:
+                    if rd.dropped:
+                        return
                     j = min(i + LABRUN_CHUNK, n)
                     yield await asyncio.to_thread(_backlog_rows, root, tape, i, j)
                     i = j
-            yield _sse({}, "live")
-            yield _sse({"now_ms": self.clock()}, "clock")
-            ticked = loop.time()
-            while not rd.dropped and not self.stopping():
-                wait = ticked + clock_s - loop.time()
-                if wait <= 0:
+            live, ticked = False, -math.inf
+            while not rd.dropped:
+                if ticked > -math.inf and self.stopping():
+                    return
+                if not rd.q.empty():                 # prints first, always
+                    yield _live_rows(*rd.q.get_nowait())
+                    continue
+                # the queue is empty in THIS turn of the loop: nothing that arrived before now is still unsent
+                if not live:
+                    live = True
+                    yield _sse({}, "live")
+                    continue
+                if loop.time() >= ticked + clock_s:
                     ticked = loop.time()
                     yield _sse({"now_ms": self.clock()}, "clock")
                     continue
                 try:
-                    root, rows = await asyncio.wait_for(rd.q.get(), wait)
+                    yield _live_rows(*await asyncio.wait_for(rd.q.get(), ticked + clock_s - loop.time()))
                 except asyncio.TimeoutError:
                     continue
-                yield _sse({"root": root, "rows": [[int(r["ts_ms"]), float(r["price"]), int(r["size"])] for r in rows]})
         finally:
             self.readers.discard(rd)
 

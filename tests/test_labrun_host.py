@@ -938,33 +938,93 @@ def test_a_start_in_the_evening_leaves_the_finished_day_exactly_as_it_is(desk, c
     assert f.read_bytes() == before and sorted(p.name for p in f.parent.iterdir()) == [f"{D}.json", f"{WED}.json"]
 
 
-def test_a_start_before_the_roll_rebuilds_the_same_finished_day(desk):
-    """17:30 ET: the stream still holds the whole session, so the day can be made again in full."""
-    def session(k):
-        k.open()
-        k.rows("09:29:50", [21000.0] * 9)
-        k.rows("09:30:00", [21000.0, 21001.0])
-        k.rows("15:54:59", [21010.0] * 3)
-        k.rows("16:59:58", [21015.0] * 2)
+def whole_session(k):
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.rows("09:30:00", [21000.0, 21001.0])
+    k.rows("15:54:59", [21010.0] * 3)
+    k.rows("16:59:58", [21015.0] * 2)
 
+
+def restart(desk, at_="17:30:00"):
+    """The runner starts again: a new stream sends the whole session, then live, then its clock."""
+    k = desk(live=False)
+    k.r.sync()
+    k.r.take(("connect",))
+    whole_session(k)
+    k.r.take(("live",))
+    k.clock(at_)
+    k.r.sync()
+    return k
+
+
+def a_finished_day(desk):
     k = desk()
     k.promote()
     k.clock("08:00:00")
-    session(k)
+    whole_session(k)
     k.r.sync()                                                               # (hosted late in the day: all catch-up)
     k.clock("17:00:00")
     first = k.today()
     assert first["state"] == "done" and len(first["orders"]) == 2 and [t["reason"] for t in first["trades"]] == ["time"]
     k.r.close()
-    again = desk(live=False)                                                 # the runner starts again
+    return k.at / "lab_x" / "days" / f"{D}.json"
+
+
+def test_a_finished_day_is_final_a_restart_starts_no_child_and_leaves_the_file(desk):
+    """RULING (round 2). A day file with the same sha256 and state `done` is final: never hosted again for that date,
+    never rewritten -- whatever the stream still holds."""
+    f = a_finished_day(desk)
+    before = f.read_bytes()
+    again = restart(desk)
+    assert again.r.date("NQ") == D and again.r.prints("NQ") == 17             # the whole session IS held
+    for _ in range(3):
+        again.r.sync()
+        again.clock("17:30:05")
+    assert again.spawned == [] and again.r.hosting() == [] and again.r.day("lab_x") is None
+    again.r.close()
+    assert f.read_bytes() == before and again.journal() == []
+
+
+def test_a_stopped_day_is_final_too(desk):
+    k = desk()
+    k.promote()
+    stopped = {"date": D.isoformat(), "sha256": rec(MARKET_930)["sha256"], "state": "stopped",
+               "why": "Too slow: no answer in 1 s.", "orders": [], "trades": [], "net": 0.0, "match": None, "updated_utc": "x"}
+    store.put_day("lab_x", stopped, k.at)
+    f = k.at / "lab_x" / "days" / f"{D}.json"
+    before = f.read_bytes()
+    again = restart(desk, "10:00:00")
+    assert again.spawned == [] and again.r.hosting() == [] and f.read_bytes() == before
+    store.set_enabled("lab_x", False, again.at)                              # off and on again does not start it either
     again.r.sync()
-    again.r.take(("connect",))
-    session(again)
-    again.r.take(("live",))
-    again.clock("17:30:00")
+    store.set_enabled("lab_x", True, again.at)
     again.r.sync()
-    second = again.today()
-    assert again.r.date("NQ") == D and {**second, "updated_utc": None} == {**first, "updated_utc": None}
+    assert again.spawned == [] and f.read_bytes() == before
+
+
+def test_a_day_that_was_still_running_is_rebuilt_by_catch_up(desk):
+    k = desk()
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    assert k.today()["state"] == "running" and k.today()["orders"] == []
+    k.r.close()                                                              # the runner went away mid-day
+    again = restart(desk)
+    s = again.today()
+    assert len(again.spawned) == 1 and s["state"] == "done" and [o["t"] for o in s["orders"]] == ["09:30:00", "15:55:00"]
+
+
+def test_a_finished_day_of_other_code_is_not_final_promoted_again_it_runs_afresh(desk):
+    f = a_finished_day(desk)
+    newer = MARKET_930.replace("- 10", "- 20")
+    store.put(rec(newer), f.parent.parent.parent)
+    again = restart(desk)
+    s = again.today()
+    assert len(again.spawned) == 1 and s["sha256"] == rec(newer)["sha256"] and s["state"] == "done"
+    assert s["orders"][0]["text"] == "Buy at market, stop 20,980.00"
 
 
 def test_a_day_that_cannot_be_rebuilt_in_full_is_not_hosted(desk):
@@ -1015,24 +1075,32 @@ def test_a_day_that_breaks_at_its_start_is_not_tried_again_and_leaves_no_child(d
         ("stop", "Stopped: the runner had a problem.", "RuntimeError: an error nobody planned for")]
 
 
-def test_a_roll_to_an_earlier_day_drops_the_prints_held(desk):
-    """M5. A replayed session takes the stream's place: nothing of the later day may be left under it."""
+def test_a_roll_to_an_earlier_day_drops_the_prints_held_and_the_days_without_finishing_them(desk):
+    """M5, and round 2 (the reviewer's back.py). A replayed session takes the stream's place: nothing of the later day
+    may be left under it, and the later day's strategies are simply let go -- no event is fired at them, no `done`
+    is written, no journal line: their day files stay as they were."""
     k = desk()
     k.promote()
     k.clock("09:00:00")
     k.open()
-    k.rows("09:29:50", [21000.0] * 9)
+    k.rows("09:29:50", [21000.0] * 9)                                        # the live day: 09:29:58, nothing ordered yet
     k.r.sync()
     old = k.r.day("lab_x")
+    f = k.at / "lab_x" / "days" / f"{D}.json"
+    before = f.read_bytes()
+    assert (k.file()["state"], k.file()["orders"], k.journal()) == ("running", [], [])
     k.r.take(("connect",))
     k.open(MON, px=20000.0)
     k.rows("09:29:50", [20000.0] * 9, MON)
     k.r.take(("live",))
     k.clock("09:30:00", MON)
     assert k.r.date("NQ") == MON and k.r.prints("NQ") == 10 and not old.child_alive()
+    assert f.read_bytes() == before and k.journal() == []                    # not finished, not "done", not journaled
+    assert (old.state, old.orders, old.trades()) == ("running", [], [])      # and nothing was fired at it
     assert k.r.day("lab_x") is not old and k.file(d=MON)["state"] == "running"
     k.clock("09:30:02", MON)
     assert k.today(d=MON)["orders"] == [{"t": "09:30:00", "text": "Buy at market, stop 19,990.00", "refused": None}]
+    assert f.read_bytes() == before and [x["date"] for x in k.journal()] == [MON.isoformat()]
 
 
 # ---------------------------------------------------------------- the tick client

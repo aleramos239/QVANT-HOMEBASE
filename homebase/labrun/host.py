@@ -561,6 +561,10 @@ class StrategyDay:
         self._changed(now=True)
         self._end_child()
 
+    def drop(self) -> None:
+        """Let go and write nothing: this day's prices were another timeline's (a replay took the stream's place)."""
+        self._end_child()
+
     def child_alive(self) -> bool:
         return self._child is not None and self._child.alive()
 
@@ -660,6 +664,7 @@ class Runner:
         self._tapes: dict[str, tuple] = {}           # root -> that session's prints: (ts_ns, price, size) arrays
         self._late: dict[str, _Late] = {}
         self._days: dict[str, _Hosted] = {}
+        self._final: dict[str, tuple] = {}           # name -> (date, sha256) of a day file found final: never hosted again
         self._roots: list[str] = []                  # the markets the enabled strategies trade
 
     # ---- what the tests and the status read
@@ -729,12 +734,18 @@ class Runner:
 
     def _roll(self, root: str, d: dt.date) -> str:
         """The market's session date changed: its days are finished and dropped, and of its prints only the new
-        session's are kept (none of an older session, and none of a later one when the clock went back: a replay)."""
+        session's are kept (none of an older session, and none of a later one when the clock went back). A roll to
+        an EARLIER session is a replay taking the stream's place: the later date's days are let go as they are --
+        no event is fired at them, nothing is written, their day files and the journal stay as they were."""
+        back = root in self._dates and d < self._dates[root]
         for name, h in list(self._days.items()):
             if h.root == root:
-                h.day.end()
-                self._note(h)
-                h.day.kill()
+                if back:
+                    h.day.drop()
+                else:
+                    h.day.end()
+                    self._note(h)
+                    h.day.kill()
                 del self._days[name]
         self._dates[root] = d
         self._late.pop(root, None)
@@ -783,8 +794,8 @@ class Runner:
     def sync(self) -> None:
         """Read the store: host each enabled strategy whose market has prints this session (never a Saturday's or a
         Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
-        the session's prints first (catch-up). While a backlog is in flight nothing is hosted or stopped: the tape
-        is not whole yet."""
+        the session's prints first (catch-up) -- unless its day file for the date is final (_is_final). While a
+        backlog is in flight nothing is hosted or stopped: the tape is not whole yet."""
         try:
             recs = [r for r in store.listing(self.at) if r.get("enabled") and isinstance(r.get("root"), str)]
         except OSError as e:
@@ -806,8 +817,25 @@ class Runner:
                 h.day.kill()                         # (its last word is written first)
                 del self._days[name]
         for name, rec in want.items():
-            if name not in self._days:
+            if name not in self._days and not self._is_final(rec):
                 self._host(rec)
+
+    def _is_final(self, rec: dict) -> bool:
+        """A day file for the date with the SAME sha256 and state `done` or `stopped` is final: that strategy is not
+        hosted again for that date and the file is never rewritten -- not after a restart, a failure or a late
+        start. Promoted again (another sha256), it starts a fresh day."""
+        name, mark = rec["name"], (self._dates[rec["root"]], rec.get("sha256"))
+        if self._final.get(name) == mark:
+            return True
+        try:
+            was = store.get_day(name, mark[0].isoformat(), self.at)
+        except (OSError, ValueError):
+            was = None
+        if was is None or was.get("sha256") != mark[1] or was.get("state") not in ("done", "stopped"):
+            return False
+        self._final[name] = mark
+        log(f"{name}: {mark[0]} is {was.get('state')} already: left as it is")
+        return True
 
     def _host(self, rec: dict) -> None:
         name, root = rec["name"], rec["root"]
