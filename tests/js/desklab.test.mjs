@@ -754,6 +754,18 @@ test('deskSetupRows: the Setup card of a Lab strategy on the Desk, in the brief\
   assert.deepEqual(D.deskSetupRows(null, null, []), []);
 });
 
+test('deskSetupRows: a strategy with its own limits lists its size and settings, no limits', () => {
+  const own = deskStrat({ mode_today: null, auto: true, params: { stop_pts: 25, tgt_pts: 37.75, fade: false, cont: true, news: 'none' } });
+  const rows = D.deskSetupRows(own, row(), []);
+  assert.deepEqual(rows.map((r) => r[0]), ['Instrument', 'Session', 'Bars', 'Contracts', 'stop pts', 'tgt pts', 'fade', 'cont', 'news', 'Promoted', 'Code', 'Orders']);
+  assert.deepEqual(rows.slice(3, 9).map((r) => r[1]), ['1', '25', '37.75', 'off', 'on', 'none']);
+  assert.equal(rows.some((r) => /risk|new trade|Flat|Trades a day/.test(r[0])), false);
+  // a strategy whose limits were typed keeps the five limit rows
+  const typed = D.deskSetupRows(deskStrat({ mode_today: null, auto: false, params: { stop_pts: 25 } }), row(), []);
+  assert.equal(typed.some((r) => r[0] === 'Trades a day'), true);
+  assert.equal(D.accountsLock(own).locked, false);                      // its own limits: accounts can be assigned
+});
+
 test('the activity lines of the Lab\'s journal events, in simple words', () => {
   const A = D.activity;
   assert.deepEqual(A.lab_refused({ text: 'The price is already past this entry.', account: 'a1' }, 'NQ ORB', ' on APEX…048'), ['NQ ORB order refused on APEX…048 — The price is already past this entry.', 'warn']);

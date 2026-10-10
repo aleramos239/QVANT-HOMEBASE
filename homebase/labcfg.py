@@ -175,6 +175,32 @@ def _limits_from(saved, rec: dict) -> LabLimits | None:
         return None
 
 
+def _before(hhmm: str) -> str:
+    """One minute earlier ("HH:MM")."""
+    m = max(0, _minutes(hhmm) - 1)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def derive_limits(rec: dict) -> LabLimits | None:
+    """The limits a strategy carries itself (2026-10-10, owner: "the strategy should be copy paste ... i dont want limits
+    per strategy"). Nothing is typed: the size is the one it was backtested at, the trades a day are the most it took in
+    one day of that backtest (`auto_limits`, written when it was promoted), it may enter any time inside its own window
+    and is flat when the window ends (never later than 15:55). The dollars at risk are not capped (0 = not set): its
+    stop is in its code. None for a record without `auto_limits` (an older promotion): the owner sets limits as before."""
+    a = rec.get("auto_limits") if isinstance(rec, dict) else None
+    if not isinstance(a, dict):
+        return None
+    n, qty = a.get("max_trades_day"), rec.get("qty")
+    if not _whole(n, 1, 20) or not _whole(qty, 1, 10 ** 6):
+        return None
+    start, end = window(rec)
+    flat = min(end, FLAT_LATEST)
+    last = _before(flat)
+    if not start <= last < flat:
+        return None
+    return LabLimits(n, min(qty, 10), 0.0, last, flat)
+
+
 # ------------------------------------------------------------------ record -> StrategyCfg
 def usable(rec) -> bool:
     """A record the desk can make a strategy of: it names itself and its market."""
@@ -474,10 +500,15 @@ def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> bool:
     mark = store.mark_of(rec)
     raw = side.get("limits") if side else None
     limits = _limits_from(raw, rec)
+    auto = False
+    if raw is None and not cannot:           # none typed: the strategy's own (a record that carries them)
+        limits = derive_limits(rec)
+        auto = limits is not None
     s = strategy_cfg(rec, limits)
     rows = _shaped(side.get("book")) if side else []
     meta[did] = {"name": rec["name"], "rec": rec, "mark": mark, "gone": False, "bad": False, "busy": False,
-                 "limits": limits, "frozen": cannot or (raw is not None and limits is None), "blind": cannot,
+                 "limits": limits, "auto": auto,
+                 "frozen": cannot or (raw is not None and limits is None), "blind": cannot,
                  "saved": {"unreadable": True} if cannot else _saved(side)}
     changed = cfg.strategies.get(did) != s
     cfg.strategies[did] = s
@@ -495,14 +526,17 @@ def _known(cfg: AppCfg, m: dict, did: str, rec: dict) -> bool:
     """A strategy the desk knows: follow its record. True when its StrategyCfg changed."""
     mark = store.mark_of(rec)
     again = mark != m["mark"]
-    limits, froze = m["limits"], m["frozen"]
-    if again and limits is not None:         # promoted again: the limits stay only if they still fit the new record
+    limits, froze, auto = m["limits"], m["frozen"], bool(m.get("auto"))
+    if again and auto:                       # the strategy's own limits follow the new record
+        limits = derive_limits(rec)
+        auto, froze = limits is not None, False
+    elif again and limits is not None:       # promoted again: the limits stay only if they still fit the new record
         limits = _limits_from(asdict(limits), rec)
         froze = limits is None
     s = strategy_cfg(rec, limits)            # may raise: nothing has changed yet
     if again:
         _unbook(cfg, did, cfg.book.pop(did, None) or [], "promoted again")
-        m["mark"], m["limits"], m["frozen"] = mark, limits, froze
+        m["mark"], m["limits"], m["frozen"], m["auto"] = mark, limits, froze, auto
     m["rec"], m["gone"], m["bad"] = rec, False, False
     if cfg.strategies.get(did) != s:
         cfg.strategies[did] = s
@@ -662,7 +696,20 @@ def orphans(cfg: AppCfg, snap, held=None) -> list:
 # ------------------------------------------------------------------ the sidecar
 def sidecar(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list) -> dict:
     """What this strategy's sidecar would hold with these limits and this book (no stamp)."""
-    return _norm(_meta(cfg)[desk_id]["mark"], asdict(limits) if limits else None, book)
+    return _norm(_meta(cfg)[desk_id]["mark"], _typed(_meta(cfg)[desk_id], limits), book)
+
+
+def _typed(m: dict, limits: LabLimits | None) -> dict | None:
+    """The limits a sidecar holds: only what the owner typed. The strategy's own are derived again on every read."""
+    if limits is None or (m.get("auto") and limits == derive_limits(m["rec"])):
+        return None
+    return asdict(limits)
+
+
+def auto_of(cfg: AppCfg, desk_id: str) -> bool:
+    """Its limits are the strategy's own (nothing typed)."""
+    m = _meta(cfg).get(desk_id)
+    return bool(m and m.get("auto") and m["limits"] is not None)
 
 
 def commit(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list, saved: dict | None) -> None:
@@ -670,6 +717,7 @@ def commit(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list, save
     had to be written (what the desk remembers as written stays). A frozen sidecar thaws only when limits are saved."""
     m = _meta(cfg)[desk_id]
     m["limits"], m["frozen"] = limits, m["frozen"] and limits is None
+    m["auto"] = bool(m.get("auto")) and limits is not None and limits == derive_limits(m["rec"])
     if saved is not None:
         m["saved"], m["blind"] = saved, False
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
@@ -685,7 +733,7 @@ def pending(cfg: AppCfg, only: str | None = None) -> list:
     for did, m in _meta(cfg).items():
         if (only is not None and did != only) or m["gone"] or m["frozen"] or m["busy"]:
             continue
-        want = _norm(m["mark"], asdict(m["limits"]) if m["limits"] else None, cfg.book.get(did) or [])
+        want = _norm(m["mark"], _typed(m, m["limits"]), cfg.book.get(did) or [])
         if want != m["saved"] and not (m["saved"] is None and want["limits"] is None and not want["book"]):
             out.append((m["name"], want))
     return out

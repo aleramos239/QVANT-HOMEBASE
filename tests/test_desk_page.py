@@ -85,8 +85,8 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 
 def test_the_asset_versions_are_bumped():
-    assert '<script src="/static/desklab.js?v=6"></script>' in HTML                  # 6: the wave review's words (N9)
-    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5))
+    assert '<script src="/static/desklab.js?v=7"></script>' in HTML                  # 7: a strategy carries its own limits
+    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5, 6))
     assert '"version": 8' in (STATIC / "apple" / "manifest.json").read_text()      # 8: the wave review's words (N9)
 
 

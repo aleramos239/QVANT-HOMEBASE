@@ -130,6 +130,16 @@ def _read(f: Path) -> dict | None:
     return got if isinstance(got, dict) else None
 
 
+def auto_limits(trades) -> dict | None:
+    """What the strategy itself did in the backtest the record is frozen from: the most trades it took in one day.
+    The Desk reads its limits from this (labcfg.derive_limits), so the owner fills in nothing. None: no trade list."""
+    per: dict = {}
+    for t in trades if isinstance(trades, list) else []:
+        if isinstance(t, dict) and isinstance(t.get("date"), str):
+            per[t["date"]] = per.get(t["date"], 0) + 1
+    return {"max_trades_day": max(1, min(20, max(per.values())))} if per else None
+
+
 def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, notes: list,
              now: dt.datetime | None = None) -> dict:
     """What is kept when a draft is promoted: its text as it was backtested, the settings and size of that run, and the
@@ -140,7 +150,8 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
     now = now or dt.datetime.now(dt.timezone.utc)
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
-    return {"name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
+    auto = auto_limits(bundle.get("trades"))
+    return {**({"auto_limits": auto} if auto else {}), "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},

@@ -798,7 +798,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         with store.write_lock():             # the check and the write are one step: the desk may book an account now
             if store.booked(name):
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
-            store.put(store.snapshot(name, source, meta, {"run": run}, run_id, notes))
+            trades = read_json(d / "trades.json", None)
+            trades = trades.get("trades") if isinstance(trades, dict) else trades
+            store.put(store.snapshot(name, source, meta, {"run": run, "trades": trades}, run_id, notes))
         return {"ok": True, "name": name, "notes": notes}
 
     def desklab_remove(name: str) -> dict:

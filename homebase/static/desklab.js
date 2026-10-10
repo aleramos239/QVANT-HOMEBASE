@@ -578,19 +578,31 @@
     if (!lab) return [];
     var c = s.cfg || {}, l = limitsRows(lab.limits), bars = row ? barMinutes(row) : 0;
     var mark = Array.isArray(lab.mark) ? lab.mark : [], sha = text(mark[0]);
-    return [
-      ["Instrument", text(c.symbol) || DASH],
-      ["Session", (row && sessionText(row)) || DASH],
-      ["Bars", bars ? bars + " min" : DASH],
+    // A strategy that carries its own limits has none to show: its size and its settings are the setup.
+    var own = lab.auto === true && isObj(lab.params);
+    var limitRows = own ? [["Contracts", l[1].v]].concat(paramRows(lab.params)) : [
       ["Trades a day", l[0].v],
       ["Most contracts", l[1].v],
       ["Most at risk", l[2].v],
       ["No new trade after", l[3].v],
       ["Flat", l[4].v],
+    ];
+    return [
+      ["Instrument", text(c.symbol) || DASH],
+      ["Session", (row && sessionText(row)) || DASH],
+      ["Bars", bars ? bars + " min" : DASH],
+    ].concat(limitRows).concat([
       ["Promoted", mark[1] ? promotedText({ promoted_utc: mark[1] }) : DASH],
       ["Code", sha ? sha.slice(0, 8) : DASH],
       ["Orders", inShadow(s, book) ? "Shadow" : "Through the Desk"],
-    ];
+    ]);
+  }
+  // The settings a strategy was promoted with, one row each: "stop pts  25".
+  function paramRows(params) {
+    return Object.keys(params).map(function (k) {
+      var v = params[k];
+      return [k.replace(/_/g, " "), v === true ? "on" : v === false ? "off" : text(String(v))];
+    });
   }
 
   // ---- the Activity lines of the journal's lab_* events: (record, strategy's name, " on <account>") -> [text, tone?]

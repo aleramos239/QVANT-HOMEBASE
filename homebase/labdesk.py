@@ -704,6 +704,14 @@ class LabDesk:
             return "disarmed", None
         return "waiting", None
 
+    def _params(self, name: str) -> dict:
+        """The settings the record was promoted with, plain values only (the Setup card lists them)."""
+        got = (labcfg.record_of(self.cfg, name) or {}).get("params")
+        if not isinstance(got, dict):
+            return {}
+        return {str(k)[:40]: v for k, v in list(got.items())[:40]
+                if isinstance(v, (bool, int, float)) or (isinstance(v, str) and len(v) <= 40)}
+
     def status_view(self, name: str) -> dict | None:
         """The `lab` block of /api/status; None for a strategy that is not from the Lab. Memory only, and it never
         raises: the whole Desk page reads through this route."""
@@ -715,6 +723,8 @@ class LabDesk:
             state, why = self._state(name)
             took = self._intake_view(name, state, why)               # the intake half (B3): what only it can tell
             return {"name": sname, "mark": labcfg.mark_of(self.cfg, name), "limits": asdict(limits) if limits else None,
+                    "auto": labcfg.auto_of(self.cfg, name),          # its limits are its own: nothing to fill in
+                    "params": self._params(name),                    # the settings it was promoted with (read-only)
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
                     "runner": self._runner(), "rounds": self._rounds(name),
