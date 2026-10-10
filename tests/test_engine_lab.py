@@ -3495,3 +3495,120 @@ def test_a_hinted_entry_that_filled_is_never_turned_into_a_cancelled_fact(tmp_pa
     x = eng2._lab_x(rnd(eng2))
     run(eng2._lab_hints(rnd(eng2), ad, x))
     assert x["cancelled"] == [] and x["cancelled_hint"] == []
+
+
+# ------------------------------------------------------------------------------------------------ B7, item 9
+def test_the_roll_for_a_strategy_that_returns_is_bounded(tmp_path):
+    """When a Lab strategy comes (back) into the config after the day was rolled, the roll runs ONCE more, for that
+    strategy ALONE, without resetting anybody's read schedule, and it reads the last Lab day's files only in the
+    process that read them at the day roll. Everything else it could do would fail closed (carry more, read more)
+    and was pinned by no test: the reviewer's probe c_bounded, as assertions.
+      X (NQ) on a1, Y (ES) on a2 and a3; day 1 ends with all three rounds unresolved; day 2 starts with X out."""
+    import dataclasses
+    X, Y = LAB, "lab_qq"
+    clock = Clock()
+    clock.set_et(9, 31)
+    cfg = AppCfg(armed=True, accounts={a: AccountCfg(keyring_key="k", account_name=a.upper()) for a in ("a1", "a2", "a3")},
+                 book={X: [{"account": "a1", "qty": 1}], Y: [{"account": "a2", "qty": 1}, {"account": "a3", "qty": 1}]},
+                 strategies={X: lab_cfg(), Y: lab_cfg(name="qq", root="ES")})
+    ads = {a: LabAdapter(a) for a in cfg.accounts}
+    eng = quick(Engine(cfg, ads, now_fn=clock, root=tmp_path))
+
+    def into_a_position(name, account):
+        st, ad = eng.states[f"{name}@{account}"], ads[account]
+        ad.filled[st.upper_id], ad.order_status[st.upper_id] = 1, "Filled"
+        for k in ("sl", "tp"):
+            ad.order_status[f"{st.upper_id}-{k}"] = "Working"
+        ad.net += 1
+        run(eng.on_fill(FillEvent(account_id=account, symbol=cfg.strategies[name].symbol, side="Buy", qty=1, price=100.0,
+                                  raw={"orderId": st.upper_id})))
+
+    def cleared_by_hand(e, name, account):
+        ad = ads[account]
+        ad.net = 0                                                   # he closed it at the broker and cancelled its orders
+        for i in list(ad.order_status):
+            if ad.order_status[i] in ("Working", "Suspended"):
+                ad.order_status[i] = "Canceled"
+        assert run(e.lab_clear_block(name, account))["ok"] is True
+
+    def without_x():
+        return dataclasses.replace(cfg, strategies={k: v for k, v in cfg.strategies.items() if k != X})
+
+    def rolls_of(e):
+        calls, real = [], e._lab_roll_day
+
+        def spy(today, only=None):
+            calls.append(None if only is None else sorted(only))
+            return real(today, only)
+        e._lab_roll_day = spy
+        return calls
+
+    def carried():
+        return [(c["strategy"], c["account"], c["date"]) for c in events(tmp_path, "lab_carry")]
+
+    assert run(eng.lab_enter(X, [leg(iid=1)], {"a1": 1}, max_rounds=3))["accounts"]["a1"]["ok"]
+    assert all(r["ok"] for r in run(eng.lab_enter(Y, [leg(iid=1)], {"a2": 1, "a3": 1}, max_rounds=3))["accounts"].values())
+    for name, account in ((X, "a1"), (Y, "a2"), (Y, "a3")):
+        into_a_position(name, account)
+    for ad in ads.values():
+        ad.fail_market = True                                        # the close is refused at the flat time
+    clock.set_et(15, 56)
+    tick(eng)
+    for ad in ads.values():
+        ad.fail_market = False
+    assert eng.lab_open(X) == ["a1"] and eng.lab_open(Y) == ["a2", "a3"]
+
+    # ---- day 2, a new process, X out of the config: ONE roll, for the day; Y's two rounds are carried, nothing of X
+    next_day(clock)
+    e2 = quick(Engine(without_x(), ads, now_fn=clock, root=tmp_path))
+    rolls = rolls_of(e2)
+    for _ in range(3):
+        e2.lab_open(Y)
+        e2.lab_rounds(Y)
+        tick(e2)
+    assert rolls == [None] and e2.lab_open(Y) == ["a2", "a3"]
+    assert carried() == [(Y, "a2", "2026-09-14"), (Y, "a3", "2026-09-14")]
+    cleared_by_hand(e2, Y, "a2")
+    assert e2.lab_open(Y) == ["a3"]
+    schedule = dict(e2._lab_tries)
+    assert schedule                                                  # a3's block is being read on its own schedule
+
+    # ---- X is back: the roll runs once more, for X alone
+    e2.cfg.strategies[X] = cfg.strategies[X]
+    assert e2.lab_open(X) == ["a1"]
+    assert rolls == [None, [X]]
+    assert carried()[2:] == [(X, "a1", "2026-09-14")]
+    assert e2.lab_open(Y) == ["a3"]                                  # Y's cleared block is NOT carried again by X's return
+    assert e2._lab_tries == schedule                                 # ... and nobody's read schedule starts over
+
+    # ---- X leaves and returns three more times: not one more roll, not one more block
+    for _ in range(3):
+        del e2.cfg.strategies[X]
+        for _ in range(3):
+            e2.lab_open(Y)
+            e2.lab_rounds(Y)
+            tick(e2)
+        e2.cfg.strategies[X] = cfg.strategies[X]
+        for _ in range(3):
+            e2.lab_open(X)
+            e2.lab_rounds(X)
+            e2.lab_open(Y)
+            tick(e2)
+    assert rolls == [None, [X]] and len(carried()) == 3
+    assert e2.lab_open(X) == ["a1"] and e2.lab_open(Y) == ["a3"]
+
+    # ---- X's own block cleared by hand; X leaves and returns: it is not carried a second time
+    cleared_by_hand(e2, X, "a1")
+    del e2.cfg.strategies[X]
+    e2.lab_open(Y)
+    e2.cfg.strategies[X] = cfg.strategies[X]
+    assert e2.lab_open(X) == [] and rolls == [None, [X]] and len(carried()) == 3
+
+    # ---- a restart later on day 2 (today's Lab file exists: this process never read yesterday's files), X out and
+    # back again: its return does not go to the disk for yesterday (the block he cleared stays cleared)
+    e3 = quick(Engine(without_x(), ads, now_fn=clock, root=tmp_path))
+    rolls3 = rolls_of(e3)
+    assert e3.lab_open(Y) == ["a3"] and rolls3 == [None]
+    e3.cfg.strategies[X] = cfg.strategies[X]
+    assert e3.lab_open(X) == [] and rolls3 == [None, [X]]
+    assert len(carried()) == 3 and e3.lab_rounds(X) == []
