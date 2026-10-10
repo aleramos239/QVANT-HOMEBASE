@@ -85,9 +85,9 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 
 def test_the_asset_versions_are_bumped():
-    assert '<script src="/static/desklab.js?v=3"></script>' in HTML
-    assert "desklab.js?v=1" not in HTML and "desklab.js?v=2" not in HTML
-    assert '"version": 5' in (STATIC / "apple" / "manifest.json").read_text()      # 5: the Lab list's picked-row tint (apple/lab.css)
+    assert '<script src="/static/desklab.js?v=4"></script>' in HTML                  # 4: the final fix wave's words
+    assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3))
+    assert '"version": 6' in (STATIC / "apple" / "manifest.json").read_text()      # 6: the final fix wave (Desk and Lab pages)
 
 
 def test_the_old_step_a_caption_is_not_on_the_desks_page_for_a_lab_strategy():
