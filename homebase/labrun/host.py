@@ -252,6 +252,11 @@ def desk_sentence(row: dict) -> str | None:
     return reason if isinstance(reason, str) and reason else door.CANNOT_CHECK
 
 
+def closes(it: dict) -> bool:
+    """A flatten, or the runner's stop that flattens: it asks the engine for a trade's ONE close order."""
+    return it.get("op") == "flatten" or (it.get("op") == "stop" and it.get("flatten") is True)
+
+
 def exit_trouble(row: dict) -> str | None:
     """A cancel, a flatten or a stop the Desk answered: None when every account carried it out, else the Desk's
     sentence for the first account that did not (its `reason`, else the last step it names)."""
@@ -751,7 +756,9 @@ class StrategyDay:
     #     identical event at most once (_attempt).
     #   * the exits of an event that also carried an entry, when no answer came, are asked again as a NEW event with a
     #     new `seq` and only those exits (and not at all once the stream shows the first request did arrive). So is an
-    #     exit the Desk answered but could not carry out on an account. All of it for RETRY_FOR_S at most.
+    #     exit the Desk answered but could not carry out on an account. All of it for RETRY_FOR_S at most -- and a
+    #     flatten (or a stop that flattens) the Desk has answered is asked ONCE more at most: the engine sends one
+    #     close order a trade, ever, so its second answer stands.
     #   * a new `seq` is always above every one this day has used AND every one the Desk says it answered (_next_seq),
     #     also for a runner that starts again.
     #   * a runner that starts again feeds a fresh child the tell-log's own inputs and sends NOTHING while it does, and
@@ -1061,7 +1068,8 @@ class StrategyDay:
         rows: the day's order rows of those intents ([] for the runner's own), kept true to the latest word."""
         t = self._wall()
         r = {"intents": intents, "rows": rows, "body": body, "write": write, "first": first, "left": left, "text": text,
-             "what": what, "then": then, "until": None if now or self._held() else t + RETRY_FOR_S, "next": t + RETRY_S}
+             "what": what, "then": then, "until": None if now or self._held() else t + RETRY_FOR_S, "next": t + RETRY_S,
+             "answers": 1 if text is not None else 0}        # how often the Desk has answered these intents
         if not now or self._attempt(r) is not True:
             self._retry.append(r)
 
@@ -1095,6 +1103,9 @@ class StrategyDay:
         self._log_try(r, seq, ok, texts)
         if not ok:
             return False
+        r["answers"] += 1
+        if r["answers"] >= 2:                        # one close order a trade, ever: a flatten's second answer stands
+            bad = [n for n in bad if not closes(r["intents"][n])]
         if not bad:
             return True
         # answered, and an account could not carry it out: only a NEW event may ask for it again

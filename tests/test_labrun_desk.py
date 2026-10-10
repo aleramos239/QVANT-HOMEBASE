@@ -1067,6 +1067,8 @@ def test_a_desk_days_match_compares_the_lead_accounts_real_trades_at_the_desks_s
                        "exit_ns": at("09:40:00"), "exit_price": 21025.25, "exit_reason": "tp", "net": 400.0}]
     assert k.file()["match"] == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}       # (the stub matcher's)
     assert k.file()["trades"][0]["qty"] == 2
+    (m,) = k.r._matches.values()
+    assert m.rec["qty"] == 2 and store.get("lab_x", k.at)["qty"] == 1        # the tester ran at the Desk's size
 
 
 def test_the_tester_is_run_at_the_size_the_desk_traded_and_judged_by_the_shadow_matchs_own_rule():
@@ -1243,3 +1245,45 @@ def test_a_request_that_waits_for_the_desk_does_not_rewrite_the_day_file_on_ever
     wall.t += 1.0
     day.tend()
     assert len(saved) == n + 1
+
+
+# ---------------------------------------------------------------- a flatten is one close order, ever
+def test_a_flatten_the_desk_answered_is_asked_once_more_at_most_and_its_second_answer_stands(days):
+    """The engine sends ONE close order a trade: a second flatten answers its sentence and sends nothing. That is
+    not a failure to try again."""
+    stub = StubDesk()
+    day, stub, _, _, wall = days(REPLACE, stub=stub)
+    feed(day, "09:29:50", [21000.0] * 11)
+    feed(day, "09:30:01", [21000.0] * 60)
+    stub.script = [not_ok("Check it: the close order was not confirmed. Its stop is still working.")] * 20
+    feed(day, "09:31:01", [21000.0] * 60)                                    # 09:32: the flatten, answered not ok
+    assert stub.ops()[2:] == [["flatten"]]
+    for _ in range(30):
+        wall.t += 0.5
+        day.tend()
+    assert stub.ops()[2:] == [["flatten"], ["flatten"]] and not day.pending()        # once more, under a new number
+    assert stub.bodies[3]["seq"] == stub.bodies[2]["seq"] + 1
+    assert texts(day)[-1] == ("Flatten (time)", "Check it: the close order was not confirmed. Its stop is still working.")
+
+
+def test_a_stop_that_flattens_is_asked_once_more_at_most_too_and_one_that_only_cancels_for_ten_seconds(days):
+    body, why = STOPS["raises"]
+    stub = StubDesk("took", *[not_ok("check it")] * 30)
+    day, stub, _, _, wall = days(planted(body), stub=stub)
+    feed(day, "09:29:50", [21000.0] * 11)
+    feed(day, "09:30:01", [21000.0] * 60)                                    # it raises: a stop with flatten
+    for _ in range(30):
+        wall.t += 0.5
+        day.tend()
+    assert stub.ops() == [["entry"], ["stop"], ["stop"]] and stub.bodies[2]["intents"][0]["flatten"] is True
+    assert stub.bodies[2]["seq"] == stub.bodies[1]["seq"] + 1 and not day.pending()
+
+    stub = StubDesk("took", *[not_ok("check it")] * 30)
+    off, stub, _, _, wall = days(stub=stub)
+    feed(off, "09:29:50", [21000.0] * 11)
+    off.off()                                                                # a stop that keeps the position
+    for _ in range(30):
+        wall.t += 0.5
+        off.tend()
+    seqs = [b["seq"] for b in stub.bodies[1:]]
+    assert len(seqs) == 11 and seqs == sorted(set(seqs)) and not off.pending()      # every second, a new number each

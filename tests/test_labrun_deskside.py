@@ -254,6 +254,8 @@ def test_a_carried_row_is_an_old_block_never_a_trade_and_never_makes_the_lead():
     assert s.lead() is None and s.trades() == [] and s.unpriced() == 0
     s.take(snap(rounds=[rnd("a1", date="2024-03-04")]))                      # a row of another date is not today's either
     assert s.lead() is None and s.trades() == []
+    s.take(snap(rounds=[rnd("a1", carried=True)]))                           # carried is carried, whatever its date reads
+    assert s.lead() is None and s.trades() == [] and s.unpriced() == 0
 
 
 def test_a_round_that_is_not_a_finished_trade_is_not_a_trade():

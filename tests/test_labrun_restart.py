@@ -154,6 +154,31 @@ def test_a_schedule_that_does_not_reach_the_logs_event_is_not_picked_up(days):
     assert (day.state, day.summary()["why"]) == ("stopped", NO_RESUME) and stub.bodies[0]["intents"] == STOP_KEEP
 
 
+def test_an_event_the_days_schedule_no_longer_has_is_not_picked_up_even_when_the_child_would_answer_the_same(days):
+    tells, _, _, _ = before_the_crash(days)
+    bent = copy.deepcopy(tells)
+    next(t for t in bent if t.get("kind") == "session")["t_ns"] -= 10 ** 9   # the log's session began a second early
+    day, stub, _, _, _ = again(days, bent, up=snap(orders={1: filled()}, flat=False, answered=[2]))
+    assert (day.state, day.summary()["why"]) == ("stopped", NO_RESUME) and "event 1" in day.detail
+    assert stub.ops() == [["stop"]]
+
+
+def test_what_this_runner_sent_before_the_desks_first_snapshot_is_not_held_against_the_log(days):
+    """A day that began with the Desk away: its flatten went out (exits always go) and was answered. The Desk's first
+    snapshot then lists that event -- this process's own, not one the log never sent."""
+    day, stub, side, _, _ = days(REPLACE, up=False)
+    feed(day, "09:29:50", [21000.0] * 11)                                    # 09:30: the entry is refused here
+    feed(day, "09:30:01", [21000.0] * 60)                                    # 09:31: another, refused here
+    feed(day, "09:31:01", [21000.0] * 60)                                    # 09:32: the flatten goes
+    assert stub.ops() == [["flatten"]] and stub.bodies[0]["seq"] == 4
+    day.on_desk(snap(REPLACE, answered=[4]))
+    assert day.state == "running" and stub.ops() == [["flatten"]]
+    other, stub2, _, _, _ = days(REPLACE, up=False)
+    feed(other, "09:29:50", [21000.0] * 11)
+    other.on_desk(snap(REPLACE, answered=[4]))                               # ... while one it never sent IS held against it
+    assert other.state == "stopped" and other.summary()["why"] == NO_RESUME
+
+
 def test_a_strategy_that_breaks_while_it_is_fed_the_log_is_not_picked_up_and_never_flattens(days):
     """In the replay nothing is the strategy's own doing yet: a fresh child that raises there keeps the position."""
     src = HEAD + '''import os
@@ -445,3 +470,34 @@ def test_a_tell_log_of_another_promotion_is_not_picked_up(tmp_path):
         assert k2.r.day("lab_x").mode == "shadow" and k2.stub.bodies == []
     finally:
         k2.r.close()
+
+
+def test_a_strategy_that_no_longer_loads_when_the_runner_starts_again_keeps_the_position(days, tmp_path):
+    """Its own error sentence ("Strategy error: ...") would flatten in a live event. Here the day is only being
+    picked up: the trade keeps its stop."""
+    flag = tmp_path / "now-it-breaks"
+    src = HEAD + f'''import os
+
+if os.path.exists({str(flag)!r}):
+    raise RuntimeError("boom at load")
+
+
+class L(Strategy):
+    id, name, root = "l", "L", "NQ"
+
+    def times(self):
+        return ["09:30:00"]
+
+    def on_time(self, ctx, et_time):
+        ctx.market("long", sl=ctx.last_price - 10, ref=ctx.last_price)
+'''
+    day, stub, _, tells, _ = days(src)
+    feed(day, "09:29:50", [21000.0] * 11)
+    assert stub.ops() == [["entry"]]
+    day.drop()
+    flag.write_text("x")
+    late, stub2, _, _, _ = days(src, up=snap(src, orders={1: filled()}, flat=False, answered=[2]), resume=list(tells),
+                                now_ns=at("09:31:30"))
+    assert late.state == "stopped" and late.summary()["why"] == "Strategy error: boom at load"
+    assert stub2.bodies[0]["intents"] == [{"op": "stop", "why": "Strategy error: boom at load", "flatten": False}]
+    assert stub2.bodies[0]["seq"] == 3
