@@ -308,3 +308,35 @@ def test_an_open_trade_on_one_account_and_an_old_order_on_another_asks_to_flatte
     assert _refused(lambda: run(d.ld.set_limits(LAB, LIMITS))) == FLATTEN_FIRST
     assert _refused(lambda: d.ld.check_book(LAB, [{"account": "a2", "qty": 1}])) == OLD_ORDER    # only a1 leaves
     assert _refused(lambda: d.ld.check_book(LAB, [{"account": "a1", "qty": 1}])) == FLATTEN_FIRST  # a2 leaves
+
+
+# ---------------------------------------------------------------- M-D2: the day file follows a Lab write that failed
+def test_a_round_whose_lab_file_cannot_be_written_leaves_the_day_file_saying_error_not_placing(tmp_path):
+    import json
+
+    from tests.test_engine_lab import go, leg, mk, restart
+    eng, ads, _ = mk(tmp_path)
+
+    def full(strict=False):
+        if strict:
+            raise OSError("disk full")
+    eng._lab_save = full
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is False
+    on_disk = json.loads(eng._day_path(eng._today()).read_text())[f"{LAB}@a1"]
+    assert (on_disk["status"], on_disk["note"]) == ("error", "not written: disk full")      # the file is what memory is
+    assert ads["a1"].brackets == []
+    del eng._lab_save
+    eng2 = restart(eng, tmp_path)
+    assert eng2.states[f"{LAB}@a1"].status == "error"
+
+
+def test_a_day_file_that_cannot_be_written_either_still_answers_nothing_was_sent(tmp_path):
+    from tests.test_engine_lab import go, leg, mk
+    eng, ads, _ = mk(tmp_path)
+
+    def broken():
+        raise OSError("disk gone")
+    eng._save = broken
+    out = go(eng, leg())["accounts"]["a1"]
+    assert out == {"ok": False, "round": 1, "reason": "The Desk could not write this trade down. Nothing was sent."}
+    assert ads["a1"].brackets == [] and eng.states[f"{LAB}@a1"].status == "error"

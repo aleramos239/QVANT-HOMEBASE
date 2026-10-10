@@ -2806,6 +2806,10 @@ class Engine:
             st.status, st.exit_reason, st.note = "error", "error", f"not written: {e}"[:200]
             x["clean"] = True
             print(f"homebase engine: a Lab round could not be written: {e!r}", file=sys.stderr)
+            try:                                    # M-D2: the day file may already say "placing": make it say
+                self._save()                        # what memory says, or a restart sits the account out all day
+            except Exception as e2:  # noqa: BLE001 -- best effort: it fails closed either way
+                print(f"homebase engine: the day file could not follow: {e2!r}", file=sys.stderr)
             return None, {"ok": False, "round": n, "reason": LAB_NOT_WRITTEN}, cfg, None
         return st, {"ok": True, "round": n, "reason": None}, cfg, reqs
 
