@@ -39,8 +39,8 @@ def _init(msg: dict):
 
 def _event(strategy, ctx: LiveCtx, msg: dict) -> list[dict]:
     kind = msg["kind"]
-    if "flat" not in msg:
-        raise ValueError("an event line needs flat")
+    if not isinstance(msg.get("flat"), bool):
+        raise ValueError("an event line needs flat, true or false")
     if kind == "session":
         ctx.daily = msg.get("daily") or []
     ctx.begin(msg["t_ns"], msg.get("last_price"), msg["flat"], msg.get("updates") or [])

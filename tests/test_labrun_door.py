@@ -172,6 +172,35 @@ def test_check_never_raises_on_a_dict_shaped_entry(bad):
     assert isinstance(check({"op": "entry", **bad}, STATE, LIMITS), (str, type(None)))
 
 
+@pytest.mark.parametrize("bad", [
+    dict(sl=float("nan")), dict(sl=float("inf")), dict(sl="99"), dict(sl=True),
+    dict(tp=float("nan")), dict(tp="103"), dict(tp=False),
+    dict(price=float("nan")), dict(price="101"), dict(price=None), dict(price=True),
+    dict(ref=float("nan")), dict(ref="101"), dict(ref=float("-inf")),
+    dict(qty=0), dict(qty=-1), dict(qty=None), dict(qty="1"), dict(qty=1.5), dict(qty=True), dict(qty=float("nan")),
+])
+def test_an_entry_with_a_number_it_cannot_read_is_never_allowed(bad):
+    assert ask(entry(**bad), max_risk_usd=5000.0) == "The Desk cannot check this order."
+    assert ask(entry(**bad)) == "The Desk cannot check this order."
+
+
+@pytest.mark.parametrize("bad", [dict(price=None, ref=float("nan")), dict(price=None, ref="x")])
+def test_a_market_entry_with_a_bad_ref_cannot_be_checked(bad):
+    assert ask(entry(kind="market", **bad)) == "The Desk cannot check this order."
+
+
+def test_a_bad_last_price_cannot_be_checked():
+    m = entry(kind="market", price=None, ref=None, sl=99.0)
+    assert ask(m, last_price=float("nan")) == "The Desk cannot check this order."
+    assert ask(m, last_price="x") == "The Desk cannot check this order."
+    assert ask(m, last_price=100.0) is None
+
+
+def test_whole_number_floats_and_ints_are_numbers():
+    assert ask(entry(price=101, sl=100, tp=103, ref=101)) is None
+    assert ask(entry(tp=None, ref=None)) is None
+
+
 # ---------------------------------------------------------------- check_event
 
 def straddle(**kw):
@@ -359,3 +388,40 @@ def test_the_module_imports_nothing_from_homebase():
             assert n.level == 0 and not (n.module or "").startswith("homebase")
         if isinstance(n, ast.Import):
             assert not any(a.name.startswith("homebase") for a in n.names)
+
+
+@pytest.mark.parametrize("ids", [None, "12", [1, [2]], [1, "2"], [1.0, 2.0], [True, 2], 5, {"a": 1}, [[1], [2]],
+                                 [1, None]])
+def test_an_oco_whose_ids_are_not_a_list_of_ints_gets_the_pair_sentence(ids):
+    a, b, _ = straddle()
+    got = check_event([a, b, {"op": "oco", "ids": ids}], STATE, {**LIMITS, "max_trades_day": 5})
+    assert got == [None, LONE, NOT_A_PAIR]               # its entries are judged as lone entries
+
+
+def test_an_oco_with_no_ids_key_does_not_raise():
+    a, b, _ = straddle()
+    assert check_event([a, b, {"op": "oco"}], STATE, {**LIMITS, "max_trades_day": 5})[2] == NOT_A_PAIR
+
+
+def test_an_entry_with_an_unhashable_id_does_not_raise():
+    a = entry(id=[1])
+    assert check_event([a, {"op": "oco", "ids": [[1], 2]}], STATE, LIMITS) == [None, NOT_A_PAIR]
+
+
+def test_two_ocos_sharing_a_leg_are_not_pairs():
+    a, b, _ = straddle()
+    c = entry(id=3, side="short", price=98.0, sl=100.0, tp=96.0)
+    got = check_event([a, b, c, {"op": "oco", "ids": [1, 2]}, {"op": "oco", "ids": [2, 3]}], STATE,
+                      {**LIMITS, "max_trades_day": 5})
+    assert got == [None, LONE, LONE, NOT_A_PAIR, NOT_A_PAIR]
+
+
+def test_the_same_oco_sent_twice_is_not_a_pair_either():
+    a, b, o = straddle()
+    got = check_event([a, b, o, dict(o)], STATE, {**LIMITS, "max_trades_day": 5})
+    assert got == [None, LONE, NOT_A_PAIR, NOT_A_PAIR]
+
+
+def test_a_separate_valid_pair_is_unaffected_by_a_bad_neighbour():
+    a, b, o = straddle()
+    assert check_event([a, b, o, {"op": "oco", "ids": [7, 8]}], STATE, LIMITS) == [None, None, None, NOT_A_PAIR]

@@ -293,3 +293,12 @@ def test_a_nan_plot_does_not_cost_the_events_order_intents(child):
     child.init(NAN_PLOT)
     r = child.event("time", "09:30:00", last_price=100.0)
     assert r["ok"] is True and [i["op"] for i in r["intents"]] == ["entry"]
+
+
+@pytest.mark.parametrize("flat", [None, 1, 0, "yes", "true", [True]])
+def test_an_event_whose_flat_is_not_a_boolean_is_an_error_reply(child, flat):
+    child.init(STRADDLE)
+    r = child.send({"op": "event", "kind": "session", "t_ns": T0, "arg": None, "last_price": None, "flat": flat,
+                    "updates": []})
+    assert r["ok"] is False and "flat" in r["error"]
+    assert child.event("session", flat=False) == {"ok": True, "intents": []}

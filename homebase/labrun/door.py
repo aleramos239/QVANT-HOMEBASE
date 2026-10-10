@@ -35,6 +35,28 @@ STATE_KEYS = ("flat", "working_entries", "entries_today", "last_price", "now_hhm
 LIMIT_KEYS = ("max_trades_day", "last_entry_et", "session_from_et", "max_risk_usd", "point_value")
 
 
+def _num(v) -> bool:
+    """A finite number; a bool, a string or None is not one."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
+def _int(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool)
+
+
+def _readable(intent: dict, state: dict) -> bool:
+    """Every number the checks lean on is a finite number of the right kind (a NaN stop must never pass)."""
+    if not _int(intent.get("qty")) or intent["qty"] < 1:
+        return False
+    if intent.get("sl") is not None and not _num(intent["sl"]):
+        return False
+    if any(intent.get(k) is not None and not _num(intent[k]) for k in ("tp", "ref")):
+        return False
+    if intent.get("kind") in ("stop", "limit") and not _num(intent.get("price")):
+        return False
+    return state["last_price"] is None or _num(state["last_price"])
+
+
 def _entry_price(intent: dict, state: dict) -> float | None:
     """The price the stop and the risk are measured from: the order's own, else ref, else the last print."""
     if intent.get("kind") == "market":
@@ -62,6 +84,8 @@ def check(intent: dict, state: dict, limits: dict) -> str | None:
         if (any(state.get(k, _MISSING) is _MISSING for k in STATE_KEYS)
                 or any(state.get(k) is None for k in STATE_KEYS if k != "last_price")
                 or any(limits.get(k) is None for k in LIMIT_KEYS)):
+            return CANNOT_CHECK
+        if not _readable(intent, state):
             return CANNOT_CHECK
         return _check_entry(intent, state, limits)
     except (TypeError, ValueError, KeyError, AttributeError, ArithmeticError):
@@ -102,7 +126,7 @@ def _check_entry(intent: dict, state: dict, limits: dict) -> str | None:
 def _is_pair(oco: dict, entries: dict) -> bool:
     """Exactly one buy stop and one sell stop of the same size, both sent in this event."""
     ids = oco.get("ids")
-    if not isinstance(ids, list) or len(ids) != 2 or ids[0] == ids[1]:
+    if not isinstance(ids, list) or len(ids) != 2 or not all(_int(i) for i in ids) or ids[0] == ids[1]:
         return False
     a, b = (entries.get(i) for i in ids)
     if a is None or b is None:
@@ -122,13 +146,19 @@ def check_event(intents: list, state: dict, limits: dict) -> list[str | None]:
     both legs are judged against the state before the pair, if either is refused BOTH get the first refused leg's
     sentence (a lone leg of a pair never goes out), and the oco's own verdict is None."""
     st = dict(state) if isinstance(state, dict) else {}
-    entries = {i.get("id"): i for i in intents if i.get("op") == "entry"}
+    entries = {i["id"]: i for i in intents if i.get("op") == "entry" and _int(i.get("id"))}
     pair_of: dict = {}                                   # entry id -> (the pair's ids, in order)
     out: list[str | None] = [None] * len(intents)
+    uses: dict = {}                                      # entry id -> how many oco intents name it
+    for i in intents:
+        if i.get("op") == "oco" and isinstance(i.get("ids"), list):
+            for leg in i["ids"]:
+                if _int(leg):
+                    uses[leg] = uses.get(leg, 0) + 1
     for n, i in enumerate(intents):
         if i.get("op") != "oco":
             continue
-        if _is_pair(i, entries):
+        if _is_pair(i, entries) and all(uses[leg] == 1 for leg in i["ids"]):
             for leg in i["ids"]:
                 pair_of.setdefault(leg, tuple(i["ids"]))
         else:
@@ -137,7 +167,7 @@ def check_event(intents: list, state: dict, limits: dict) -> list[str | None]:
     for n, i in enumerate(intents):
         if i.get("op") != "entry":
             continue
-        key = pair_of.get(i.get("id"))
+        key = pair_of.get(i["id"]) if _int(i.get("id")) else None
         if key is None:
             out[n] = check(i, st, limits)
             if out[n] is None:

@@ -218,3 +218,15 @@ def test_a_plot_or_hline_that_is_not_finite_is_dropped_and_costs_nothing(bad):
     got = c.drain()
     assert [i["op"] for i in got] == ["entry", "plot"] and got[0]["id"] == o.id
     json.dumps(got, allow_nan=False)
+
+
+@pytest.mark.parametrize("bad", [None, "x", True, False, [1.0], float("nan"), float("inf")])
+def test_a_plot_or_hline_that_is_not_a_finite_number_never_raises(bad):
+    c = ctx()
+    c.plot("p", 1_000_000, bad)
+    rec = c.hline("h", bad)
+    assert rec["name"] == "h" and rec["price"] is bad
+    assert c.drain() == []
+    c.plot("p", 1_000_000, 2)                        # an int is a number
+    c.hline("h", 3)
+    assert [i["op"] for i in c.drain()] == ["plot", "hline"]

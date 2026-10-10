@@ -20,6 +20,11 @@ def to_tick(px: float, tick: float) -> float:
     return round(round(px / tick) * tick, 6)
 
 
+def _finite(v) -> bool:
+    """A real, finite number (a bool is not one). Anything else is not drawn: a bad point must not cost the orders."""
+    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+
+
 @dataclass(eq=False)
 class LiveOrder:
     id: int
@@ -134,7 +139,7 @@ class LiveCtx:
         self._out.append({"op": "flatten", "reason": reason})
 
     def plot(self, name: str, t_ns: int, value: float) -> None:
-        if not math.isfinite(value):        # a NaN / infinite point is dropped: it must never cost the event's orders
+        if not _finite(value):              # a bad point is dropped: it must never cost the event's orders
             return
         self._out.append({"op": "plot", "name": name, "t_ms": t_ns // 1_000_000, "value": value})
 
@@ -144,7 +149,7 @@ class LiveCtx:
         if role not in ROLES:
             raise ValueError(f"role must be one of {', '.join(ROLES)}, not {role!r}")
         t_ms = self._now // 1_000_000
-        if math.isfinite(price):            # a NaN / infinite level is not sent, the record still comes back
+        if _finite(price):                  # a bad level is not sent, the record still comes back
             self._out.append({"op": "hline", "name": name, "price": price, "role": role, "t_ms": t_ms})
         return {"name": name, "price": price, "date": self.date.isoformat(), "role": role, "t_ms": t_ms}
 
