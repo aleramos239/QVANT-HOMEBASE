@@ -397,6 +397,20 @@ def test_what_was_held_goes_when_the_desks_day_is_the_days_own_again(days):
     assert stub.ops() == [["flatten"]] and not day.pending() and day.summary()["why"] is None
 
 
+def test_a_shutdown_while_the_desk_is_on_another_day_leaves_the_day_as_it_is(days):
+    """Nothing may be sent for it, so no stop is queued either: one that went out once the Desk's day is the day's
+    again would end a day nobody is hosting any more. The next runner picks the day up."""
+    day, stub, side, _, wall = days(IN_OUT)
+    feed(day, "09:29:50", [21000.0] * 11)
+    day.on_desk({**snap(IN_OUT), "date": "2026-10-12"})
+    day.leave()
+    assert day.state == "running" and not day.pending()
+    day.on_desk(snap(IN_OUT, orders={1: WORKING}, answered=[2]))             # the Desk's day is ours again
+    wall.t += 2.0
+    day.tend()
+    assert stub.ops() == [["entry"]]
+
+
 def test_the_desks_day_changing_mid_day_holds_everything_from_then_on(days):
     day, stub, side, _, wall = days(IN_OUT)
     feed(day, "09:29:50", [21000.0] * 11)
@@ -464,6 +478,7 @@ def test_the_flatten_goes_whatever_the_runners_own_view_of_the_brain_says(kits):
     k.r.take(("desk_down",))                                                 # ... and the stream is down
     k.clock("10:00:03")                                                      # the clock ends the day (2 s of grace)
     assert k.r.day("lab_x").state == "done" and k.stub.ops() == [["entry"], ["flatten"]]
+    assert k.stub.bodies[1]["t_ns"] == at("10:00:00")                        # the window's end, not the clock then
 
 
 def test_the_eod_flatten_is_asked_again_like_any_exit(kits):
