@@ -11,9 +11,9 @@ from homebase import labcfg
 from homebase.broker.base import FillEvent
 from homebase.labdesk import Refused
 from homebase.labrun import store
-from tests.labdesk_util import LAB, LIMITS, entry, mkdesk, rec, send
+from tests.labdesk_util import DATE, LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
-from tests.test_engine_lab import tick
+from tests.test_engine_lab import fill_entry, tick
 
 WINDOW_PAST_FLAT = "Its window ends after the flat time. Shorten the window to end by 15:55."
 
@@ -123,3 +123,76 @@ def test_a_round_with_no_entry_side_still_reads_its_own_count(tmp_path):
     (row,) = d.eng.lab_rounds(LAB)
     assert (row["entry_side"], row["entry_qty"]) == (None, 0)
     assert d.ld._brain(LAB)["orders"]["1"]["status"] == "working"
+
+
+# ---------------------------------------------------------------- I3: the state line says "check" while a trade needs a look
+CANNOT_CHECK = "The Desk cannot check the last trade's orders."
+
+
+def _live(tmp_path, **kw):
+    d = mkdesk(tmp_path, **kw)
+    assert send(d, entry(1))["ok"] is True
+    s = d.eng.states[f"{LAB}@a1"]
+    fill_entry(d.eng, d.ads["a1"], s, 110.0)
+    assert s.status == "live"
+    return d, s
+
+
+def _view(d):
+    v = d.ld.status_view(LAB)
+    return v["state"], v["why"]
+
+
+def test_a_live_trade_with_nothing_to_look_at_reads_in_position(tmp_path):
+    d, s = _live(tmp_path)
+    assert _view(d) == ("in_position", None)
+
+
+def test_a_done_trade_whose_stop_still_works_reads_check(tmp_path):
+    d, s = _live(tmp_path)
+    ad, eid = d.ads["a1"], s.upper_id
+    ad.order_status[f"{eid}-tp"], ad.net = "Filled", 0                 # the target filled; its stop stays Working
+    ad.stuck.add(f"{eid}-sl")                                          # (a cancel is taken and the stop keeps working)
+    run(d.eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=120.0,
+                                raw={"orderId": f"{eid}-tp"})))
+    tick(d.eng)
+    assert s.status == "done" and ad.order_status[f"{eid}-sl"] == "Working"
+    assert _view(d) == ("check", CANNOT_CHECK)
+
+
+def test_a_live_trade_whose_record_was_lost_reads_check(tmp_path):
+    d, s = _live(tmp_path)
+    x = d.eng._lab_x(s)
+    x["check"], x["why"], x["lost"] = True, CANNOT_CHECK, True        # what the engine's load writes for a lost record
+    assert s.status == "live"
+    assert _view(d) == ("check", CANNOT_CHECK)
+
+
+def test_a_carried_block_reads_check(tmp_path):
+    d = mkdesk(tmp_path)
+    d.eng.lab_open(LAB)
+    assert d.eng._lab_carry_make((LAB, "a1"), {"date": "2026-09-11", "status": "live", "orders": []}, DATE)
+    state, why = _view(d)
+    assert state == "check" and why == CANNOT_CHECK
+
+
+def test_a_refused_close_reads_check(tmp_path):
+    d, s = _live(tmp_path)
+    d.ads["a1"].fail_market = True
+    run(d.eng.lab_flatten(LAB))
+    assert s.status == "live"
+    assert _view(d) == ("check", "Check it: the close order was not confirmed. Its stop is still working.")
+
+
+def test_a_trade_whose_stop_order_the_desk_does_not_know_reads_check(tmp_path):
+    d, s = _live(tmp_path)
+    d.eng._lab_x(s)["blind"] = True
+    assert _view(d) == ("check", "Check it: the Desk does not know this trade's stop order.")
+
+
+def test_a_failed_entry_reads_check_with_its_rows_sentence(tmp_path):
+    d = mkdesk(tmp_path)
+    d.ads["a1"].reject = "Insufficient margin"
+    send(d, entry(1))
+    (row,) = d.ld.status_view(LAB)["rounds"]
+    assert row["why"] and _view(d) == ("check", row["why"])

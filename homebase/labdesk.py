@@ -658,6 +658,9 @@ class LabDesk:
             return "check", CANNOT_READ_LIMITS
         s = self.cfg.strategies[name]
         day = self.engine.day_status(name)
+        for r in self._rounds(name):         # a trade that needs a look: a block from an earlier day, or any row the
+            if r.get("why") or r.get("carried"):     # Desk has a sentence for (not clean, lost, close refused, ...)
+                return "check", r.get("why")
         if day == "error":
             return "check", None
         if day == "live":
