@@ -1335,8 +1335,11 @@ class StrategyDay:
 
     def unbooked(self) -> None:
         """Every account was taken off this strategy on the Desk mid-day (the Desk allows it only when the strategy
-        is flat): the desk day is over, and no shadow day takes its place."""
+        is flat), or its sidecar or limits stopped reading: the desk day is over, and no shadow day takes its place.
+        The Desk is told first: a stop that keeps the position (it cancels the unfilled entries; nothing when really
+        flat), asked again as a stop is."""
         if self.state in ACTIVE:
+            self._desk_stop(STOPPED_TODAY)
             self.state = "done"
             self._end_child()
         self._changed(now=True)

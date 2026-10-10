@@ -185,3 +185,38 @@ def test_the_runners_stop_line_in_the_tell_log_carries_its_event_time(days):
     assert stub.ops() == [["entry"], ["stop"]]
     assert {"seq": 4, "own": "stop", "t_ns": stub.bodies[1]["t_ns"], "intents": stub.bodies[1]["intents"]} in tells
 
+
+# ================================================================ R3: every account gone mid-day
+@pytest.mark.parametrize("how", ["unreadable", "empty book", "limits gone"])
+def test_a_begun_desk_day_whose_book_stops_reading_sends_one_stop_and_then_ends(kits, how):
+    k = booked_at_nine(kits)
+    minute(k, "09:29:01")
+    assert k.stub.ops() == [["entry"]]
+    if how == "unreadable":
+        (k.at / "lab_x.desk.json").write_text("{not json")
+    elif how == "empty book":
+        store.put_desk("lab_x", sidecar(accounts=()), k.at)
+    else:
+        store.put_desk("lab_x", sidecar(limits=None), k.at)
+    k.r.sync()
+    assert k.stub.ops() == [["entry"], ["stop"]]
+    assert k.stub.bodies[1]["intents"] == [{"op": "stop", "why": "Stopped for today.", "flatten": False}]
+    assert k.r.day("lab_x").state == "done" and k.today()["state"] == "done"
+    for _ in range(3):
+        k.wall[0] += 1.0
+        k.r.idle()
+        k.r.sync()
+    minute(k, "09:30:01")
+    assert len(k.stub.bodies) == 2
+
+
+def test_a_stop_at_the_unbooking_that_gets_no_answer_is_asked_again(kits):
+    k = booked_at_nine(kits)
+    minute(k, "09:29:01")
+    k.stub.script = [StubDesk.NO_ANSWER]
+    store.put_desk("lab_x", sidecar(accounts=()), k.at)
+    k.r.sync()
+    k.wall[0] += 1.0
+    k.r.idle()
+    assert k.stub.ops() == [["entry"], ["stop"], ["stop"]] and k.stub.bodies[1] == k.stub.bodies[2]
+

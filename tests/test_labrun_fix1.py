@@ -511,6 +511,7 @@ def test_no_eod_flatten_when_there_is_nothing_of_the_day_at_the_desk_or_the_day_
     elif why == "every account taken off":
         store.put_desk("lab_x", sidecar(SHORT, accounts=()), k.at)
         k.r.sync()
+        n += 1                                                               # its own stop (final wave R3)
     k.clock("10:00:03")
     k.r.idle()
     assert len(k.stub.bodies) == n and not any(it["op"] == "flatten" for b in k.stub.bodies for it in b["intents"])
