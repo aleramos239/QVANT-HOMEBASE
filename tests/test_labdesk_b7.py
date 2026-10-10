@@ -355,3 +355,23 @@ def test_the_stop_is_rebuilt_in_the_words_the_live_desk_kept(tmp_path):
                    intents=[{"op": "cancel", "id": 1}, {"op": "flatten", "reason": "stop"}])
     assert restart(d3)._rec(LAB)["stopped"] is None                                # only a stop intent stops the day
 
+
+# ================================================================ 8: every account taken off during the wait
+def test_every_account_taken_off_during_the_wait_is_an_order_out_of_date(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), extra=dict(BOT))
+    hold_clock(d)
+    bot = d.eng._state("nq930", "a1")
+    bot.status = "placing"
+
+    def flip(n):
+        if n == 5:
+            d.cfg.book[LAB] = []                                                   # the owner takes every account off
+            bot.status = "placed"
+    d.on_poll.append(flip)
+    out = send(d, entry(1), seq=1)
+    assert refusal(out) == "This order is out of date." and out["results"][0]["status"] == "cancelled"
+    said = {"ok": False, "round": None, "reason": "This order is out of date."}
+    assert out["results"][0]["accounts"] == {"a1": said, "a2": said}               # the accounts it was judged for, each told
+    assert placed(d, "a1") == [] and placed(d, "a2") == [] and d.ads["a1"].net_reads == d.ads["a2"].net_reads == 0
+    assert (d.ld._rec(LAB)["entries"], d.ld._rec(LAB)["untaken"]) == (0, 0)        # the desk's own refusal: counts nothing
+    assert [(x["text"], x["account"]) for x in lines(d, "lab_refused")] == [("This order is out of date.", None)]
