@@ -7,7 +7,7 @@
   --frame: #EBEBEB; --panel: #FFFFFF; --text: #0F0F0F; --text-2: #787B86; --border: #E0E3EB;
   --grid: #F0F3FA; --hover: #F0F3FA; --pill: #EBEBEB;
   --accent: #2962FF; --accent-hover: #1E53E5; --accent-soft: rgba(41, 98, 255, .10);
-  --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600; --warn-soft: #FFF6E0;
+  --up: #089981; --down: #F23645; --down-soft: rgba(242, 54, 69, .10); --warn: #F7A600; --warn-soft: #F2F2F7;
   --paper: #7E57C2; --paper-soft: rgba(126, 87, 194, .10);
   --heat-lo: rgba(41, 98, 255, .06); --heat-mid: rgba(247, 166, 0, .45); --heat-hi: rgba(242, 54, 69, .85);   /* the liquidity heatmap (cell.js palette) */
   --tip: #131722;
@@ -42,7 +42,7 @@
 :root[data-theme="dark"] {
   --frame: #0A0A0A; --panel: #0F0F0F; --text: #DBDBDB; --text-2: #8C8C8C; --border: #2E2E2E;
   --grid: #1C1C1C; --hover: #2A2A2A; --pill: #2A2A2A; --accent-soft: rgba(41, 98, 255, .20);
-  --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2B2412;
+  --down-soft: rgba(242, 54, 69, .18); --tip: #2A2E39; --warn-soft: #2C2C2E;
   --ctl-border: #3D3D3D; --ctl-border-hover: #5C5C5C; --ctl-bg-disabled: #161616; --ctl-placeholder: #6A6A6A;
   --paper: #B39DDB; --paper-soft: rgba(179, 157, 219, .18);
   --heat-lo: rgba(41, 98, 255, .10); --heat-mid: rgba(247, 166, 0, .55); --heat-hi: rgba(242, 54, 69, .90);

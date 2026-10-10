@@ -1,7 +1,7 @@
 /* ============================================================================
    Homebase — design/apple-pass, v2: Today · Strategy · Activity, in the Qvant palette.
-   Palette: platinum #E9EAEC · white · ink #16171A · espresso #3F2A20 (+ latte #C8B6A6 on dark).
-   Colour is rationed: ink does the work, espresso marks selection and focus, green is profit only,
+   Palette: platinum #E9EAEC · white · ink #16171A · graphite #48484A (+ silver #D1D1D6 on dark).
+   Colour is rationed: ink does the work, graphite marks selection and focus, green is profit only,
    red is ONLY the armed / kill signal and real errors. A loss is ink with a minus sign.
    Presentation only: no handler, id or data path of the desk changed.
    ============================================================================ */
@@ -15,7 +15,7 @@
   --card-foreground: #16171a;
   --popover: #ffffff;
   --popover-foreground: #16171a;
-  --primary: #3f2a20;
+  --primary: #48484a;
   --primary-foreground: #ffffff;
   --secondary: #eeeff1;
   --secondary-foreground: #16171a;
@@ -25,11 +25,11 @@
   --accent-foreground: #16171a;
   --border: rgb(22 23 26 / .1);
   --input: rgb(22 23 26 / .16);
-  --ring: #3f2a20;
+  --ring: #48484a;
   --destructive: #c8102e;
   --pos: #2e6b4f;
   --neg: #c8102e;
-  --warn: #9a5b00;
+  --warn: #c93400;
 
   --radius: 0.75rem;
   --radius-sm: 8px;
@@ -52,19 +52,19 @@
   --hb-side-float: rgb(255 255 255 / .62);
   --hb-fill: rgb(22 23 26 / .05);
   --hb-fill-hover: rgb(22 23 26 / .09);
-  --hb-hair: rgb(63 42 32 / .1);
-  --hb-sel: rgb(63 42 32 / .10);
-  --hb-sel-fg: #3f2a20;
+  --hb-hair: rgb(72 72 74 / .1);
+  --hb-sel: rgb(72 72 74 / .10);
+  --hb-sel-fg: #48484a;
   --hb-sel-fg2: #6a6e75;
-  --hb-accent-soft: rgb(63 42 32 / .08);
-  --hb-title: #3f2a20;
-  --hb-title-2: #7d6656;
-  --hb-label: #7a6252;
+  --hb-accent-soft: rgb(72 72 74 / .08);
+  --hb-title: #48484a;
+  --hb-title-2: #6b6b6f;
+  --hb-label: #67676b;
   --hb-seg-bg: rgb(22 23 26 / .07);
   --hb-seg-on: #ffffff;
   --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
   --hb-track: rgb(22 23 26 / .12);
-  --hb-accent: #3f2a20;
+  --hb-accent: #48484a;
   --hb-gain: #2e6b4f;
 }
 :root[data-theme="dark"] {
@@ -84,7 +84,7 @@
   --accent-foreground: #f2f2f3;
   --border: rgb(255 255 255 / .1);
   --input: rgb(255 255 255 / .16);
-  --ring: #c8b6a6;
+  --ring: #d1d1d6;
   --destructive: #ff5a52;
   --pos: #4cc38a;
   --neg: #ff5a52;
@@ -105,18 +105,18 @@
   --hb-fill: rgb(255 255 255 / .07);
   --hb-fill-hover: rgb(255 255 255 / .13);
   --hb-hair: rgb(255 255 255 / .09);
-  --hb-sel: rgb(200 182 166 / .16);
-  --hb-sel-fg: #e6d9cd;
+  --hb-sel: rgb(209 209 214 / .16);
+  --hb-sel-fg: #dcdce0;
   --hb-sel-fg2: #a5a8ae;
-  --hb-accent-soft: rgb(200 182 166 / .14);
+  --hb-accent-soft: rgb(209 209 214 / .14);
   --hb-title: #f2f2f3;
   --hb-title-2: #9a9ea5;
-  --hb-label: #a79a8e;
+  --hb-label: #9d9da1;
   --hb-seg-bg: rgb(255 255 255 / .1);
   --hb-seg-on: #4a4b50;
   --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
   --hb-track: rgb(255 255 255 / .14);
-  --hb-accent: #c8b6a6;
+  --hb-accent: #d1d1d6;
   --hb-gain: #4cc38a;
 }
 
@@ -344,8 +344,8 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
   .btn-outline, .pill { box-shadow: inset 0 0 0 1px var(--muted-foreground); }
 }
 
-/* ---- 9. Espresso is the accent (latte on dark) ------------------------------------------------ */
-/* the selected sidebar item is a solid espresso pill */
+/* ---- 9. Graphite is the accent (silver on dark) ------------------------------------------------ */
+/* the selected sidebar item is a solid graphite pill */
 .nav.sel, .item.sel { background: var(--hb-sel); color: var(--hb-sel-fg); }
 .nav.sel svg { opacity: 1; color: var(--hb-accent); }
 .item.sel .it small, .item.sel .ir.dim { color: var(--hb-sel-fg2); }
@@ -370,11 +370,11 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
 .back:hover, .foot-b:hover, .btn-quiet:hover { color: var(--hb-accent); }
 .foot-b.warn { color: var(--foreground); }
 .opt.sel { background: var(--hb-accent); color: #fff; }
-:root[data-theme="dark"] .opt.sel { color: #1a120e; }
+:root[data-theme="dark"] .opt.sel { color: #1c1c1e; }
 .btn-default { background: var(--hb-accent); color: #fff; }
-:root[data-theme="dark"] .btn-default { color: #1a120e; }
+:root[data-theme="dark"] .btn-default { color: #1c1c1e; }
 .btn-outline:hover, .row:hover { background: var(--hb-accent-soft); }
-.list, .agroup, .act-card, .ready, .notices, .card { box-shadow: 0 0 0 .5px rgb(63 42 32 / .07), 0 1px 2px rgb(63 42 32 / .03), 0 12px 36px rgb(63 42 32 / .06); }
+.list, .agroup, .act-card, .ready, .notices, .card { box-shadow: 0 0 0 .5px rgb(72 72 74 / .07), 0 1px 2px rgb(72 72 74 / .03), 0 12px 36px rgb(72 72 74 / .06); }
 :root[data-theme="dark"] .list, :root[data-theme="dark"] .agroup, :root[data-theme="dark"] .act-card,
 :root[data-theme="dark"] .ready, :root[data-theme="dark"] .notices, :root[data-theme="dark"] .card { box-shadow: var(--glass-shadow); }
 
@@ -416,14 +416,14 @@ body { font-size: 13px; line-height: 16px; }
 .sh-btn { width: 20px; height: 20px; font-size: 14px; }
 .side-more { font-size: 11px; }
 .sd { width: 7px; height: 7px; }
-.nav.sel, .item.sel { color: #fff; background: linear-gradient(180deg, #6a4a3a 0%, #432c21 100%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / .28), inset 0 -1px 0 rgb(0 0 0 / .25), 0 1px 2px rgb(0 0 0 / .2), 0 6px 14px -4px rgb(63 42 32 / .55); }
+.nav.sel, .item.sel { color: #fff; background: linear-gradient(180deg, #525256 0%, #323236 100%);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / .28), inset 0 -1px 0 rgb(0 0 0 / .25), 0 1px 2px rgb(0 0 0 / .2), 0 6px 14px -4px rgb(72 72 74 / .55); }
 .nav.sel svg { color: #fff; } .item.sel .it b { font-weight: 500; }
 .item.sel .ir, .item.sel .ir.dim, .item.sel .it small { color: rgb(255 255 255 / .74); }
 .item.sel .sd { background: #fff; } .item.sel .sd.off { background: rgb(255 255 255 / .35); } .item.sel .sd.shadow { background: transparent; box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / .7); }
-:root[data-theme="dark"] .nav.sel, :root[data-theme="dark"] .item.sel { color: #24160f; background: linear-gradient(180deg, #f1e6dc, #c8b6a6); box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 6px 14px -4px rgb(0 0 0 / .55); }
-:root[data-theme="dark"] .nav.sel svg { color: #24160f; } :root[data-theme="dark"] .item.sel .ir, :root[data-theme="dark"] .item.sel .it small { color: rgb(36 22 15 / .66); }
-:root[data-theme="dark"] .item.sel .sd { background: #24160f; }
+:root[data-theme="dark"] .nav.sel, :root[data-theme="dark"] .item.sel { color: #1c1c1e; background: linear-gradient(180deg, #e8e8ec, #d1d1d6); box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 6px 14px -4px rgb(0 0 0 / .55); }
+:root[data-theme="dark"] .nav.sel svg { color: #1c1c1e; } :root[data-theme="dark"] .item.sel .ir, :root[data-theme="dark"] .item.sel .it small { color: rgb(28 28 30 / .66); }
+:root[data-theme="dark"] .item.sel .sd { background: #1c1c1e; }
 .tag-live { font-size: 10px; padding: 1px 6px; }
 
 /* content */
@@ -447,8 +447,8 @@ body { font-size: 13px; line-height: 16px; }
 .eq .lb { font-size: 13px; }
 /* the switch: a white knob with weight */
 .switch::after { box-shadow: 0 0 0 .5px rgb(0 0 0 / .06), 0 1px 1.5px rgb(0 0 0 / .2), 0 4px 9px -2px rgb(0 0 0 / .3); }
-.switch[aria-checked="true"] { background: linear-gradient(180deg, #5b3e30, #3f2a20); box-shadow: inset 0 1px 2px rgb(0 0 0 / .3); }
-:root[data-theme="dark"] .switch[aria-checked="true"] { background: linear-gradient(180deg, #d9c8b9, #b9a493); }
+.switch[aria-checked="true"] { background: linear-gradient(180deg, #454549, #48484a); box-shadow: inset 0 1px 2px rgb(0 0 0 / .3); }
+:root[data-theme="dark"] .switch[aria-checked="true"] { background: linear-gradient(180deg, #cbcbcf, #a8a8ac); }
 .switch { box-shadow: inset 0 1px 2px rgb(0 0 0 / .1); }
 .modal { box-shadow: 0 0 0 .5px rgb(0 0 0 / .1), 0 30px 80px rgb(0 0 0 / .28); border-radius: 26px; }
 .hb-bar .pill.brand-tag, .brand-tag { display: none !important; }

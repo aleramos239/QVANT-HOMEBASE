@@ -16,7 +16,7 @@
      colour     label .847 / .498 / .259 / .098 of black (white on dark) · window #FFF / #1E1E1E
                 pane #FAFAFA / #1B1B1B · group box 3 % · control fill 4.7 % + 3 %
 
-   The accent is the app's own (espresso, latte on dark), the way an Apple app carries its own accent.
+   The accent is the app's own (graphite, silver on dark: no brown, no cream -- the owner, 2026-10-09).
    Green is profit only. Red is the armed state, Kill and real errors only. A loss is ink with a minus.
    Scoped to html.hb-apple: only "Homebase Next" adds that class, so the classic pages never see this.
    ===================================================================================================== */
@@ -52,11 +52,11 @@ html.hb-apple {
   --a-field-edge: rgb(0 0 0 / .047);
   --a-scrim: rgb(0 0 0 / .20);
 
-  --a-accent: #3f2a20;
-  --a-accent-on: #38251c;                  /* accent + 9.8 % black: switch on, checkbox on, selected segment */
+  --a-accent: #48484a;
+  --a-accent-on: #3a3a3c;                  /* accent + 9.8 % black: switch on, checkbox on, selected segment */
   --a-on-accent: #ffffff;
-  --a-accent-text: #5a3b2c;                /* the accent as text / symbol on a light surface */
-  --a-focus: rgb(63 42 32 / .5);
+  --a-accent-text: #3a3a3c;                /* the accent as text / symbol on a light surface */
+  --a-focus: rgb(72 72 74 / .5);
   --a-red: #ff383c;                        /* systemRed */
   --a-red-text: #d70015;                   /* red as text on a light surface (increased-contrast systemRed) */
   --a-on-red: #ffffff;
@@ -113,11 +113,11 @@ html.hb-apple[data-theme="dark"] {
   --a-field-edge: rgb(255 255 255 / .042);
   --a-scrim: rgb(0 0 0 / .45);
 
-  --a-accent: #c8b6a6;
-  --a-accent-on: #cdbcad;
-  --a-on-accent: #1e140e;
-  --a-accent-text: #d8c8ba;
-  --a-focus: rgb(200 182 166 / .55);
+  --a-accent: #d1d1d6;
+  --a-accent-on: #dcdce0;
+  --a-on-accent: #1c1c1e;
+  --a-accent-text: #e5e5ea;
+  --a-focus: rgb(209 209 214 / .55);
   --a-red: #ff4245;
   --a-red-text: #ff6165;
   --a-green: #30d158;

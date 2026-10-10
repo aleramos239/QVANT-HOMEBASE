@@ -10,7 +10,7 @@
      weight  400 · 500 · 600 only            numerals  tabular everywhere
      size    controls 28 / 32 / 36 high      top bar 44 high
      radius  8 small · 10 control · 14 card · 20 sheet · capsule for page-level pills
-     colour  ink + platinum + white, espresso (latte on dark) is THE accent; green = profit only;
+     colour  ink + platinum + white, graphite (silver on dark) is THE accent; green = profit only;
              red = armed / kill / real errors only; a loss is ink with a minus sign.
    ============================================================================ */
 
@@ -29,17 +29,17 @@
 
   --hb-fg: #16171a;
   --hb-fg2: #6a6e75;
-  --hb-accent: #3f2a20;
+  --hb-accent: #48484a;
   --hb-accent-fg: #ffffff;
-  --hb-accent-soft: rgb(63 42 32 / .09);
-  --hb-hair: rgb(63 42 32 / .1);
+  --hb-accent-soft: rgb(72 72 74 / .09);
+  --hb-hair: rgb(72 72 74 / .1);
   --hb-fill: rgb(22 23 26 / .05);
   --hb-fill-hover: rgb(22 23 26 / .09);
   --hb-seg-bg: rgb(22 23 26 / .07);
   --hb-seg-on: #ffffff;
   --hb-seg-shadow: 0 1px 3px rgb(22 23 26 / .16), 0 0 0 .5px rgb(22 23 26 / .05);
   --hb-bar-bg: rgb(255 255 255 / .82);
-  --hb-focus: #3f2a20;
+  --hb-focus: #48484a;
   /* Liquid Glass, for the FUNCTIONAL layer only (navigation and the few controls that float over content):
      a tinted translucent material, a bright top edge where light catches it, a soft shadow that lifts it. */
   --hb-glass: rgb(244 244 246 / .72);
@@ -54,9 +54,9 @@
 :root[data-theme="dark"] {
   --hb-fg: #f2f2f3;
   --hb-fg2: #9a9ea5;
-  --hb-accent: #c8b6a6;
-  --hb-accent-fg: #1a120e;
-  --hb-accent-soft: rgb(200 182 166 / .16);
+  --hb-accent: #d1d1d6;
+  --hb-accent-fg: #1c1c1e;
+  --hb-accent-soft: rgb(209 209 214 / .16);
   --hb-hair: rgb(255 255 255 / .1);
   --hb-fill: rgb(255 255 255 / .07);
   --hb-fill-hover: rgb(255 255 255 / .13);
@@ -64,7 +64,7 @@
   --hb-seg-on: #4a4b50;
   --hb-seg-shadow: 0 1px 3px rgb(0 0 0 / .5);
   --hb-bar-bg: rgb(15 15 16 / .84);
-  --hb-focus: #c8b6a6;
+  --hb-focus: #d1d1d6;
   --hb-gain: #4cc38a;
   --hb-glass: rgb(40 41 45 / .62);
   --hb-glass-strong: rgb(44 45 50 / .84);
