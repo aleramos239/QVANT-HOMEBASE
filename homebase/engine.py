@@ -2395,6 +2395,106 @@ class Engine:
             self.journal("lab_check", strategy=st.strategy, account=st.account, round=x.get("round"),
                          reason="orders of the last trade are not all ended", actions=acts)
 
+    # --- lab_cancel -----------------------------------------------------------------------------------
+    async def _lab_acked(self, st: DayState) -> bool:
+        """Wait (3 s at most) for a round whose placement acks are still out. True = its ids are known."""
+        for _ in range(KILL_POLL_N):
+            if st.status != "placing":
+                break
+            await self._kill_sleep(KILL_POLL_S)
+        return st.status != "placing"
+
+    async def _lab_end_unfilled(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, acts: list) -> None:
+        """Every entry of the round ended with no fill: the round is done / "cancelled". Its stop and target died
+        with their entries; they are cancelled for good measure ONLY when the account's net in the market reads
+        zero (a fill push can be missed: never take a stop from a position), as the kill does."""
+        st.status, st.exit_reason = "done", "cancelled"
+        self._lab_stamp(st, self._lab_x(st))
+        self._save()
+        try:
+            net = int(await ad.get_net_position(cfg.symbol) or 0)
+        except Exception as e:  # noqa: BLE001 -- unreadable is NOT flat
+            acts.append(f"position unreadable ({e}) — stop/target left alone")
+            return
+        if net:
+            acts.append(f"the account holds {net:+d} {cfg.symbol} — stop/target left alone")
+            return
+        await self._cancel_brackets(st, ad, acts)
+
+    async def _lab_cancel_one(self, st: DayState, cfg: StrategyCfg, iid: Optional[int], why: str) -> dict:
+        acts: list[str] = []
+        ad = self.adapters.get(st.account)
+        if ad is None:
+            return {"ok": st.status not in ("placing", "placed"), "state": "working" if st.status in
+                    ("placing", "placed") else "none", "actions": ["account not connected"]}
+        if not await self._lab_acked(st):
+            return {"ok": False, "state": "working", "actions": ["its orders are not acknowledged yet"]}
+        x = self._lab_x(st)
+        ids = {"Buy": st.upper_id, "Sell": st.lower_id}
+        asked = [s for s in ("Buy", "Sell") if ids[s] and (iid is None or (x.get("iid") or {}).get(s) == iid)]
+        if not asked or st.status not in ("placed", "live"):
+            return {"ok": True, "state": "none", "actions": acts}
+        seen = {s: "cancelled" for s in asked if s in x["cancelled"]}
+        if st.status == "live" and st.entry_side in asked:
+            seen[st.entry_side] = "filled"
+        todo = [s for s in asked if s not in seen]
+        res = await asyncio.gather(*(ad.cancel_order_by_id(ids[s]) for s in todo), return_exceptions=True)
+        for s, r in zip(todo, res):
+            ok = not isinstance(r, Exception) and r.ok
+            acts.append(f"cancel entry {ids[s]}: " + ("ok" if ok else str(r if isinstance(r, Exception) else r.error)))
+        states = await self._entry_states(ad, [ids[s] for s in todo]) if todo else {}
+        # the poll yielded: from here to the end of the block nothing awaits, so what is read is what is written
+        done_now = []
+        for s in todo:
+            status, filled = states[ids[s]]
+            if status == "Filled" or (status in TERMINAL and filled):
+                seen[s] = "filled"                   # the fill beat the cancel: on_fill / the clock take it live
+                self.journal("lab_cancel_raced_fill", strategy=st.strategy, account=st.account,
+                             round=x.get("round"), iid=(x.get("iid") or {}).get(s), order_id=ids[s],
+                             status=status, filled=filled)
+            elif status in TERMINAL:
+                seen[s] = "cancelled"
+                if s not in x["cancelled"]:
+                    x["cancelled"].append(s)
+                    done_now.append(s)
+            else:
+                seen[s] = "working"                  # not resolved: the round stays as it is, and it says so
+                self.journal("lab_check", strategy=st.strategy, account=st.account, round=x.get("round"),
+                             reason=f"entry {ids[s]} not cancelled or filled ({status or 'status unknown'})",
+                             actions=list(acts))
+        ended = (not self._archived(st) and st.status == "placed"
+                 and all(s in x["cancelled"] for s in ("Buy", "Sell") if ids[s]))
+        if ended:
+            await self._lab_end_unfilled(st, cfg, ad, acts)
+        self._lab_save()
+        if done_now or ended:
+            self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
+                         sides=done_now, iids=[(x.get("iid") or {}).get(s) for s in done_now], why=why,
+                         ended=ended, actions=acts)
+        state = next(k for k in ("working", "filled", "cancelled") if k in seen.values())
+        return {"ok": state != "working", "state": state, "actions": acts}
+
+    async def lab_cancel(self, name: str, iid: Optional[int] = None, *, why: str = "cancel") -> dict:
+        """Cancel a Lab strategy's unfilled entry (its own order id `iid`; None = every unfilled entry) on every
+        account with an open round. A cancel "ok" is not cancelled: each entry is read back (3 s at most).
+        Ended with no fill -> that leg is cancelled, and a round with no working leg left is done / "cancelled".
+        Filled -> nothing more (the position keeps its broker stop). Neither -> the round stays, `lab_check`.
+        Never a market order. -> {account: {"ok", "state": "cancelled|filled|working|none", "actions"}}"""
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or cfg.kind != LAB:
+            return {}
+        self._lab_prune()
+        rounds = {st.account: st for st in self.day_states(name)
+                  if not self._archived(st) and st.status != "idle"}
+
+        async def account(a: str) -> dict:
+            return await self._lab_cancel_one(rounds[a], cfg, iid, why)
+
+        got, _ = await self.each_account(rounds, account)
+        return {a: (g if isinstance(g, dict) else
+                    {"ok": False, "state": "working", "actions": [f"internal error: {type(g).__name__}: {g}"]})
+                for a, g in got.items()}
+
     # --- hook 5: filled in by the flatten commit ---
     async def _lab_flatten_strategy(self, name: str) -> dict:
         return {}

@@ -765,3 +765,131 @@ def test_an_account_with_a_daily_take_rule_sits_out(tmp_path):
     assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is False
     eng.cfg.strategies["lv_atr_take"] = tl.strat(day_take=0.0, target_take=False, symbol="ES")     # no take rule: it trades
     assert go(eng, leg(), {"a1": 1})["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+
+
+# ------------------------------------------------------------------------------------------------ lab_cancel
+def test_cancel_ends_an_unfilled_round_and_the_next_one_may_start(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(iid=7))
+    st = rnd(eng)
+    out = run(eng.lab_cancel(LAB, 7))
+    assert out == {"a1": {"ok": True, "state": "cancelled",
+                          "actions": ["cancel entry a1-101: ok", "cancel a1-101-sl: ok", "cancel a1-101-tp: ok"]}}
+    assert ad.cancelled == ["a1-101", "a1-101-sl", "a1-101-tp"] and ad.orders == []      # no market order, ever
+    assert (st.status, st.exit_reason) == ("done", "cancelled")
+    (ev,) = events(tmp_path, "lab_cancelled")
+    assert (ev["strategy"], ev["account"], ev["round"], ev["sides"], ev["why"], ev["ended"]) == \
+        (LAB, "a1", 1, ["Buy"], "cancel", True)
+    assert rows(eng)[0]["cancelled"] == ["Buy"] and rows(eng)[0]["clean"] is False
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True
+    assert go(eng, leg(iid=8))["accounts"]["a1"] == {"ok": True, "round": 2, "reason": None}
+
+
+def test_cancel_of_an_order_the_round_does_not_hold_does_nothing(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    assert run(eng.lab_cancel(LAB, 7)) == {}                              # no round today
+    go(eng, leg(iid=7))
+    assert run(eng.lab_cancel(LAB, 99)) == {"a1": {"ok": True, "state": "none", "actions": []}}
+    assert run(eng.lab_cancel("nq930")) == {} and run(eng.lab_cancel("lab_nope")) == {}
+    assert rnd(eng).status == "placed" and ads["a1"].cancelled == []
+
+
+def test_cancel_of_one_leg_of_a_pair_leaves_the_other_working(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    out = run(eng.lab_cancel(LAB, 4))                                     # the sell stop
+    assert out["a1"]["state"] == "cancelled" and ad.cancelled == [st.lower_id]
+    assert st.status == "placed" and rows(eng)[0]["cancelled"] == ["Sell"]
+    assert events(tmp_path, "lab_cancelled")[0]["ended"] is False
+    fill_entry(eng, ad, st, 110.0, side="Buy")                            # the buy stop still fills
+    assert (st.status, st.entry_side) == ("live", "Buy")
+    assert run(eng.lab_cancel(LAB)) == {"a1": {"ok": True, "state": "filled", "actions": []}}
+    assert st.status == "live" and ad.orders == []                        # a cancel never closes a position
+
+
+def test_cancel_of_both_legs_ends_the_round(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    go(eng, pair())
+    out = run(eng.lab_cancel(LAB, why="runner_down"))
+    assert out["a1"]["state"] == "cancelled" and (rnd(eng).status, rnd(eng).exit_reason) == ("done", "cancelled")
+    assert set(ads["a1"].cancelled[:2]) == {"a1-101", "a1-102"}
+    assert events(tmp_path, "lab_cancelled")[0]["why"] == "runner_down"
+
+
+def test_a_fill_that_beat_the_cancel_leaves_the_round_and_its_stop_alone(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(iid=7))
+    st = rnd(eng)
+    ad.order_status[st.upper_id], ad.filled[st.upper_id], ad.net = "Filled", 1, 1     # filled; its push is on the way
+    out = run(eng.lab_cancel(LAB, 7))
+    assert out["a1"]["ok"] is True and out["a1"]["state"] == "filled"
+    assert ad.cancelled == ["a1-101"] and st.status == "placed"           # the stop and target were never touched
+    (ev,) = events(tmp_path, "lab_cancel_raced_fill")
+    assert (ev["account"], ev["iid"], ev["order_id"]) == ("a1", 7, "a1-101")
+    assert not events(tmp_path, "lab_cancelled")
+    run(eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Buy", qty=1, price=100.25,
+                              raw={"orderId": st.upper_id})))
+    assert (st.status, st.entry_fill) == ("live", 100.25)                 # the position is live with its broker stop
+
+
+def test_a_cancel_the_broker_does_not_confirm_blocks_the_next_round(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(iid=7))
+    ad.stuck.add("a1-101")                                                # accepted, and still working 3 s later
+    out = run(eng.lab_cancel(LAB, 7))
+    assert out["a1"]["ok"] is False and out["a1"]["state"] == "working"
+    assert rnd(eng).status == "placed" and ad.cancelled == ["a1-101"]
+    (chk,) = events(tmp_path, "lab_check")
+    assert chk["round"] == 1 and "a1-101" in chk["reason"]
+    assert go(eng, leg(iid=8))["accounts"]["a1"]["reason"] == "One position at a time."
+    assert len(ad.brackets) == 1 and eng.lab_open(LAB) == ["a1"]
+    ad.stuck.clear()                                                      # the runner asks again: now it ends
+    assert run(eng.lab_cancel(LAB, 7))["a1"]["state"] == "cancelled"
+
+
+@pytest.mark.parametrize("net,error", [(2, False), (0, True)])
+def test_cancel_never_takes_a_stop_from_an_account_that_may_hold_a_position(tmp_path, net, error):
+    """A fill push can be missed: with a position in that market on the account (or one that cannot be read) the
+    cancelled entry's stop and target are left alone, as the kill does."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(iid=7))
+    ad.net, ad.net_error = net, error
+    out = run(eng.lab_cancel(LAB, 7))
+    assert out["a1"]["state"] == "cancelled" and ad.cancelled == ["a1-101"]
+    assert "left alone" in out["a1"]["actions"][-1] and rnd(eng).status == "done"
+
+
+def test_cancel_waits_for_an_entry_whose_ack_is_still_out(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    real = ad.place_bracket
+
+    async def slow(req):
+        await asyncio.sleep(0.01)
+        return await real(req)
+
+    ad.place_bracket = slow
+
+    async def poll(s):
+        await asyncio.sleep(0.002)
+
+    eng._kill_sleep = poll
+
+    async def cancel_soon():
+        await asyncio.sleep(0.001)                                        # the round exists, its ack does not
+        assert rnd(eng).status == "placing"
+        return await eng.lab_cancel(LAB)
+
+    async def both():
+        return await asyncio.gather(eng.lab_enter(LAB, [leg(iid=7)], {"a1": 1}, max_rounds=3), cancel_soon())
+
+    entered, cancelled = run(both())
+    assert entered["accounts"]["a1"]["ok"] is True
+    assert cancelled["a1"]["state"] == "cancelled" and rnd(eng).status == "done"
