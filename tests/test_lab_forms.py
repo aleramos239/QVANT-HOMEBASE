@@ -3,6 +3,7 @@ behaviour gate: each generated strategy takes exactly the trade the contracts de
 run_session replays a small synthetic tape through it."""
 from __future__ import annotations
 
+import ast
 import copy
 import datetime as dt
 import hashlib
@@ -92,10 +93,36 @@ def test_every_combination_builds_a_valid_clean_draft(a):
     t = a["target"]
     assert got.get("tp_pts") == (t["value"] if t["kind"] == "points" else None)
     assert got.get("rr") == (t["value"] if t["kind"] == "rr" else None)
-    for k, key in (("distance", "distance"), ("lookback", "lookback"), ("trades", "trades")):
-        assert got.get(key) == a.get(k)
+    for key in ("distance", "lookback", "trades"):
+        assert got.get(key) == a.get(key)
     assert door.read_source(code) == []
     assert meta["doc"] == lab_forms.sentence(a)
+
+
+@pytest.mark.parametrize("market", lab_forms.MARKETS)
+@pytest.mark.parametrize("rule", RULES)
+def test_every_market_builds_with_its_own_root(market, rule):
+    a = base(rule, market=market, stop={"kind": "points", "value": 5.0})
+    code = lab_forms.build(a)
+    draftstore.check_source(code)
+    assert draftstore.static_meta(code)["root"] == market and lab_forms.sentence(a).startswith(market)
+
+
+@pytest.mark.parametrize("a", EVERY, ids=ident)
+def test_a_one_sided_file_has_no_code_for_the_other_side(a):
+    code = lab_forms.build(a)
+    for side, other in (("long", '"short"'), ("short", '"long"')):
+        if a["side"] == side:
+            assert other not in code.replace(f'"side": "{side}"', "")
+
+
+@pytest.mark.parametrize("a", EVERY, ids=ident)
+def test_no_generated_local_is_set_and_never_used(a):
+    for fn in (n for n in ast.walk(ast.parse(lab_forms.build(a))) if isinstance(n, ast.FunctionDef)):
+        names = [n for n in ast.walk(fn) if isinstance(n, ast.Name)]
+        stored = {n.id for n in names if isinstance(n.ctx, ast.Store)}
+        loaded = {n.id for n in names if isinstance(n.ctx, ast.Load)}
+        assert stored <= loaded, (fn.name, stored - loaded)
 
 
 @pytest.mark.parametrize("a", EVERY, ids=ident)
@@ -217,8 +244,9 @@ def test_a_name_that_is_not_a_draft_name_gets_the_draftstores_message():
             "letter (e.g. nq_orb_15)")
 
 
-@pytest.mark.parametrize("key,bad", [("market", "CL"), ("market", None), ("market", "nq"), ("rule", "orb"),
-                                     ("rule", None), ("side", "up"), ("side", None)])
+@pytest.mark.parametrize("key,bad", [("market", "CL"), ("market", None), ("market", "nq"), ("market", []),
+                                     ("rule", "orb"), ("rule", None), ("rule", {}), ("side", "up"), ("side", None),
+                                     ("side", [])])
 def test_market_rule_and_side_are_picked_from_their_lists(key, bad):
     refused(base("open_straddle", **{key: bad}), key, PICK)
 
@@ -235,6 +263,12 @@ def test_the_at_time_rule_takes_long_or_short_only():
                                   {"kind": "points", "value": 5.0, "extra": 1}, "50"])
 def test_every_entry_needs_a_stop(stop):
     refused(base("open_straddle", stop=stop), "stop", STOP)
+
+
+def test_a_huge_number_still_makes_a_readable_draft():
+    code = lab_forms.build(base("open_straddle", distance=1e300, stop={"kind": "points", "value": 1e308}))
+    draftstore.check_source(code)
+    assert {i["key"]: i["default"] for i in draftstore.static_meta(code)["inputs"]}["sl_pts"] == 1e308
 
 
 def test_the_stop_floor_is_two_ticks_of_the_market():
@@ -646,6 +680,8 @@ def test_at_time_on_another_market_with_no_target_leaves_at_out_by(play):
 # ---------------------------------------------------------------- end to end in the real sandboxed backtest
 
 @pytest.mark.skipif(not sandbox.available(), reason="the macOS sandbox is not available here")
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")        # the web test client's own import notices
+@pytest.mark.filterwarnings("ignore:Using `httpx`")
 @pytest.mark.parametrize("rule", RULES)
 def test_each_rule_backtests_in_the_sandbox(rule, tmp_path):
     from tests.test_lab_api import MARCH, OK, client, poll

@@ -28,7 +28,6 @@ RANGE_MINS = (5, 15, 30)
 BAR_MINS = (1, 5, 15)
 EARLIEST, LATEST = "00:05", "15:55"        # a time the form accepts; a session opens 5 minutes before its first time
 PAD = 5                                    # minutes the session window reaches before the first time and past out_by
-EPS = 1e-9
 
 PICK = "Pick one from the list."
 PICK_SIDE = "Pick long or short for this rule."
@@ -111,7 +110,8 @@ def _is_time(v) -> bool:
 
 def _hi(v: float) -> float:
     """The top of a points Input: room to tune, and never below the answer."""
-    return max(1000.0, float(v) * 10)
+    top = float(v) * 10
+    return max(1000.0, top if math.isfinite(top) else float(v))
 
 
 def _rule_start(a: dict) -> str | None:
@@ -148,16 +148,16 @@ def _check(answers) -> dict:
         raise FormError("name", str(e)) from None
     if a.get("market") not in MARKETS:
         raise FormError("market", PICK)
-    if a.get("rule") not in RULE_FIELDS:
+    if a.get("rule") not in tuple(RULE_FIELDS):
         raise FormError("rule", PICK)
-    if a.get("side") not in {s for s, _ in SIDES}:
+    if a.get("side") not in tuple(s for s, _ in SIDES):
         raise FormError("side", PICK)
     rule, tick = a["rule"], tick_size(a["market"])
     if rule == "at_time" and a["side"] == "both":
         raise FormError("side", PICK_SIDE)
     _check_stop(a.get("stop"), rule, tick)
     _check_target(a.get("target"), tick)
-    if "distance" in a and not (_num(a["distance"]) and a["distance"] >= tick - EPS):
+    if "distance" in a and not (_num(a["distance"]) and a["distance"] >= tick):
         raise FormError("distance", NEED_DISTANCE)
     for key, low, high, sentence in (("lookback", 2, 40, LOOKBACK), ("trades", 1, 5, TRADES)):
         if key in a:
@@ -199,7 +199,7 @@ def _check_stop(stop, rule: str, tick: float) -> None:
         if set(stop) != {"kind"}:
             raise FormError("stop", NEED_STOP)
     elif kind == "points":
-        if set(stop) != {"kind", "value"} or not _num(stop["value"]) or stop["value"] < 2 * tick - EPS:
+        if set(stop) != {"kind", "value"} or not _num(stop["value"]) or stop["value"] < round(2 * tick, 6):
             raise FormError("stop", NEED_STOP)
     else:
         raise FormError("stop", NEED_STOP)
@@ -210,7 +210,7 @@ def _check_target(target, tick: float) -> None:
     if kind == "none":
         ok = set(target) == {"kind"}
     elif kind == "points":
-        ok = set(target) == {"kind", "value"} and _num(target["value"]) and target["value"] >= tick - EPS
+        ok = set(target) == {"kind", "value"} and _num(target["value"]) and target["value"] >= tick
     elif kind == "rr":
         ok = set(target) == {"kind", "value"} and _num(target["value"]) and 0.25 <= target["value"] <= 20
     else:
@@ -257,7 +257,7 @@ def _sentence(a: dict) -> str:
     return f"{head}{what} {stop_words}, {target_words}. {count} Out by {a['out_by']}."
 
 
-def label(a: dict) -> str:
+def _label(a: dict) -> str:
     """The strategy's readable title, e.g. "NQ open straddle 09:30"."""
     rule = a["rule"]
     if rule == "open_straddle":
@@ -379,11 +379,17 @@ def _straddle(a: dict) -> dict:
 
 def _opening_range(a: dict) -> dict:
     end = _rule_start(a)
-    lines = ["# the range is done: a stop entry one tick beyond each end of it",
-             "if not self.highs:", '    ctx.skip("no prices in the opening range")', "    return",
-             "hi, lo = max(self.highs), min(self.lows)", *_read_line(_reads(a))]
+    long_, short = "long" in _sides(a), "short" in _sides(a)
+    by_range = a["stop"]["kind"] == "range"
+    need_hi, need_lo = long_ or (by_range and short), short or (by_range and long_)
+    levels = {(True, True): "hi, lo = max(self.highs), min(self.lows)", (True, False): "hi = max(self.highs)",
+              (False, True): "lo = min(self.lows)"}[(need_hi, need_lo)]
+    where = {"both": "each end of it", "long": "the high", "short": "the low"}[a["side"]]
     ups = {"both": "up, dn = hi + ctx.tick, lo - ctx.tick", "long": "up = hi + ctx.tick",
            "short": "dn = lo - ctx.tick"}[a["side"]]
+    lines = [f"# the range is done: a stop entry one tick beyond {where}",
+             "if not self.highs:", '    ctx.skip("no prices in the opening range")', "    return",
+             levels, *_read_line(_reads(a))]
     lines += _stops_block(a, ups)
     return {"first": a["range_from"], "start": [(end, lines)],
             "session": ["self.highs, self.lows, self.entries = [], [], []"],
@@ -394,11 +400,12 @@ def _opening_range(a: dict) -> dict:
 def _breakout(a: dict) -> dict:
     t0, last = a["from"], a["last_entry"]
     w1 = _window(a)[1]
-    inner = ["hi, lo = max(self.highs[-n:]), min(self.lows[-n:])", *_read_line(_reads(a)),
-             "ctx.move_brackets_to_fill = True  # the stop and target follow the fill"]
+    levels = {"both": "hi, lo = max(self.highs[-n:]), min(self.lows[-n:])", "long": "hi = max(self.highs[-n:])",
+              "short": "lo = min(self.lows[-n:])"}[a["side"]]
+    inner = [levels, *_read_line(_reads(a)), "ctx.move_brackets_to_fill = True  # the stop and target follow the fill"]
     branches = [("bar.c > hi", "long"), ("bar.c < lo", "short")]
-    for cond, s in [b for b in branches if b[1] in _sides(a)]:
-        inner += [("if " if len(inner) == 3 else "elif ") + cond + ":",
+    for i, (cond, s) in enumerate(b for b in branches if b[1] in _sides(a)):
+        inner += [("if " if i == 0 else "elif ") + cond + ":",
                   "    " + _order(a, "market", s, "bar.c", "", False, "ref=bar.c"), "    self.taken += 1"]
     lines = ["if bar.start_ns < self.t_from or self.closed:",
              "    return  # before the start time, or after the last entry",
@@ -450,7 +457,7 @@ def _body(a: dict) -> str:
     items = [f'Input("{k}", "{lab}", "{typ}", {d!r}, {lo!r}, {hi!r}, {step!r})' for k, lab, typ, d, lo, hi, step in ins]
     out = ["", "",
            f"class {_class_name(a['name'])}(Strategy):",
-           f'    name = "{label(a)}"',
+           f'    name = "{_label(a)}"',
            f'    root = "{a["market"]}"',
            f'    session_window = ("{w0}", "{w1}")  # ET [start, end) the tape must cover',
            *["    " + x for x in parts["attrs"]],
