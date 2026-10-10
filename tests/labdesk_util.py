@@ -23,7 +23,7 @@ LIMITS = {"max_trades_day": 3, "max_qty": 2, "max_risk_usd": 300, "last_entry_et
 def rec(name=NAME, promoted=MARK[1], **kw):
     return {"name": name, "id": f"draft_{name}", "label": "PP", "root": "NQ", "source": "class X: pass\n", "sha256": MARK[0],
             "params": {}, "qty": 1, "run": {"id": "r1"}, "notes": [], "promoted_utc": promoted, "enabled": True,
-            "commission": 4.0, "slippage_ticks": 1.0, "session_window": ["09:25", "16:00"], "bar_minutes": 5, **kw}
+            "commission": 4.0, "slippage_ticks": 1.0, "session_window": ["09:25", "15:55"], "bar_minutes": 5, **kw}
 
 
 class Stepper:
@@ -40,13 +40,13 @@ class Stepper:
 
 
 def mkdesk(tmp_path, accounts=("a1",), qty=1, armed=True, at=(10, 0), enabled=True, limits=LIMITS, extra=None,
-           book=None, start=True, own_store=False):
+           book=None, start=True, own_store=False, window=("09:25", "15:55")):
     """A desk at `at` ET whose Lab strategy is on, has limits and is booked on `accounts` at `qty` (0: not booked).
     `extra`: {name: StrategyCfg} of other strategies, `book`: their rows. own_store: a second desk in one test gets a
     store of its own under its tmp_path (one desk owns a store). -> ld, cfg, eng, ads, clock, tmp."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     root = tmp_path / "store" if own_store else None
-    store.put(rec(enabled=enabled), root)
+    store.put(rec(enabled=enabled, session_window=list(window)), root)
     clock = Clock()
     clock.set_et(*at)
     cfg = AppCfg(armed=armed,

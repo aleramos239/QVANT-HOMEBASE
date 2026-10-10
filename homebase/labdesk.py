@@ -433,7 +433,10 @@ class LabDesk:
             raise Refused(SWITCHED_OFF)
         self._need(name)
         self._must_own()
-        limits = labcfg.parse_limits(body, labcfg.record_of(self.cfg, name))
+        rec = labcfg.record_of(self.cfg, name)
+        limits = labcfg.parse_limits(body, rec)
+        if labcfg.ends_after_flat(rec, limits):         # the Desk would close a trade before the backtest does
+            raise ValueError(labcfg.SAY_WINDOW)
         if self._in_quiet():
             raise Refused(NOT_NOW)
         if self._open(name):
@@ -458,6 +461,8 @@ class LabDesk:
         mine = self.is_lab(name)
         if mine:
             limits = labcfg.limits_of(self.cfg, name)
+            if rows and labcfg.ends_after_flat(labcfg.record_of(self.cfg, name) or {}, limits):
+                raise Refused(labcfg.SAY_WINDOW)     # final wave I1: the live trade would close before the backtest's
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)
             for r in rows:

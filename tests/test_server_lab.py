@@ -38,7 +38,7 @@ NOT_ON_DESK = "That strategy is not on the Desk."
 def rec(name="pp_orb", promoted=MARK[1], **kw):
     return {"name": name, "id": f"draft_{name}", "label": "PP ORB", "root": "NQ", "source": "class X: pass\n", "sha256": "ab",
             "params": {}, "qty": 1, "run": {"id": "r1"}, "notes": [], "promoted_utc": promoted, "enabled": False,
-            "commission": 2.5, "slippage_ticks": 1.0, "session_window": ["09:25", "16:00"], "bar_minutes": 5, **kw}
+            "commission": 2.5, "slippage_ticks": 1.0, "session_window": ["09:25", "15:55"], "bar_minutes": 5, **kw}
 
 
 def desk_cfg():
@@ -256,8 +256,32 @@ def test_limits_are_set_shown_and_kept_in_the_sidecar(client):
     side = store.get_desk("pp_orb")
     assert side["mark"] == MARK and side["limits"] == {**LIMITS, "max_risk_usd": 300.0} and side["book"] == []
     assert journal(client, "lab_limits_set")[-1]["strategy"] == LAB and no_lab_in_config(client)
-    set_limits(client, flat_et="15:00", max_qty=3)
-    assert store.get_desk("pp_orb")["limits"]["flat_et"] == "15:00" and client.cfg.strategies[LAB].flat_et == "15:00"
+    set_limits(client, last_entry_et="10:30", max_qty=3)
+    assert store.get_desk("pp_orb")["limits"]["last_entry_et"] == "10:30" and client.cfg.strategies[LAB].accept_until_et == "10:30"
+    assert store.get_desk("pp_orb")["limits"]["max_qty"] == 3
+
+
+WINDOW_PAST_FLAT = "Its window ends after the flat time. Shorten the window to end by 15:55."
+
+
+def test_a_window_to_1600_takes_no_limits_and_no_account_with_one_sentence(client):
+    """Final wave I1: the Desk is flat by 15:55 at the latest, so a window that ends later would close the live trade
+    before the backtest's every such day. The route answers the sentence as it is; the page shows it as it is."""
+    store.put(rec(session_window=["09:25", "16:00"]))
+    asyncio.run(client.labdesk.refresh())
+    r = set_limits(client)
+    assert r.status_code == 400 and r.json()["detail"] == WINDOW_PAST_FLAT
+    assert status(client)["lab"]["limits"] is None and store.get_desk("pp_orb") is None
+    r = book(client, [("eval1", 1)])
+    assert r.status_code == 409 and r.json()["detail"] == WINDOW_PAST_FLAT
+    assert not client.cfg.book.get(LAB) and journal(client, "book_updated") == []
+
+
+def test_a_flat_time_before_the_window_end_is_refused_and_at_it_is_kept(client):
+    r = set_limits(client, flat_et="15:30")
+    assert r.status_code == 400 and r.json()["detail"] == WINDOW_PAST_FLAT
+    assert set_limits(client).status_code == 200
+    assert book(client, [("eval1", 1)]).status_code == 200
 
 
 @pytest.mark.parametrize("change, sentence", [

@@ -124,7 +124,7 @@ def day_record() -> dict:
     return {"name": "pp", "id": "draft_pp", "label": "PP", "root": "NQ", "source": SOURCE,
             "sha256": hashlib.sha256(SOURCE.encode()).hexdigest(), "params": {}, "qty": 1, "run": {"id": "r1"}, "notes": [],
             "promoted_utc": "2026-09-10T12:00:00+00:00", "enabled": True, "commission": 4.0, "slippage_ticks": 1.0,
-            "session_window": ["09:25", "16:00"], "bar_minutes": 0}
+            "session_window": ["09:25", "15:55"], "bar_minutes": 0}
 
 
 class Rehearsal:

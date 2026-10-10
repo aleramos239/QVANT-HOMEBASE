@@ -475,6 +475,20 @@ test('the Desk\'s own refusal is shown in the dialog as its sentence, with no pr
   assert.equal(down.els.llNote.textContent, 'The Desk is not answering.');
 });
 
+test('final wave I1: a window that ends after the flat time -- the Desk\'s sentence in the dialog\'s own line, and as the book\'s toast', async () => {
+  const say = 'Its window ends after the flat time. Shorten the window to end by 15:55.';
+  const t = load({ answer: { detail: say } });
+  t.api.openLabLimits('lab_nq_orb');
+  await t.api.saveLabLimits();
+  assert.equal(t.els.llNote.textContent, say);
+  assert.equal(t.els.llNote.hidden, false);
+  assert.deepEqual(t.hidden, [], 'the dialog stays open');
+  for (const id of ['llTradesErr', 'llQtyErr', 'llRiskErr', 'llLastErr', 'llFlatErr']) assert.equal(t.els[id].hidden, true, id);
+  const b = load({ answer: { ok: false, detail: say } });
+  await b.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
+  assert.deepEqual(b.toasts, [say]);
+});
+
 test('the session start the checks use is the strategy\'s own, when the chart service knows it', async () => {
   const t = load({ rows: [ROW({ session_window: ['08:30', '16:00'] })] });
   t.api.openLabLimits('lab_nq_orb');

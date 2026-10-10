@@ -79,6 +79,7 @@ SAY_QTY = "Contracts: a whole number from 1 to 10."
 SAY_RISK = "At risk per trade: a dollar amount above 0."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
 SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
+SAY_WINDOW = "Its window ends after the flat time. Shorten the window to end by 15:55."
 
 
 def desk_id(name: str) -> str:
@@ -126,6 +127,15 @@ def window(rec: dict) -> tuple[str, str]:
     if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]):
         return w[0], w[1]
     return store.DEFAULT_WINDOW[0], store.DEFAULT_WINDOW[1]
+
+
+def ends_after_flat(rec: dict, limits: LabLimits | None) -> bool:
+    """Does the record's window end AFTER the strategy's flat time (its limits', or with none set the default:
+    the window's end cut at 15:55)? Then the Desk would close a trade before the backtest does, and the daily match
+    could never agree: such a strategy takes no account and no limits (SAY_WINDOW). A window that ends at or before
+    the flat time is fine."""
+    end = window(rec)[1]
+    return end > (limits.flat_et if limits else min(end, FLAT_LATEST))     # "HH:MM" strings compare as times
 
 
 def parse_limits(body, rec: dict) -> LabLimits:
