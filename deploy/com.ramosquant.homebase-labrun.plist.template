@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-labrun</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv/bin/python</string>
+    <string>-m</string>
+    <string>homebase.labrun</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <!-- the runner of promoted Lab strategies (homebase/labrun/host.py), SHADOW only: it reads the chart
+       service's tick stream on 127.0.0.1:8852 and writes ~/.homebase/desklab. It places no order and never
+       talks to the trading app on :8850. Its OWN process: a strategy's code runs in a sandboxed child of
+       this job, never in the chart service or the trading app. With the chart service down it waits and
+       reconnects by itself. -->
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <!-- nice 10: below the chart service (5): at the 09:30 burst the trading app, then the charts, win the CPU -->
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/labrun.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/labrun.log</string>
+</dict>
+</plist>

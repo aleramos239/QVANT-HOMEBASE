@@ -1,14 +1,21 @@
 """The would-be fills: the tester's fill law fed tick by tick must give the tester's own trades.
 
-The three traps of a tape that is still arriving (an order's first eligible print, a flat with no print yet, the end
-of the tape), each against run_session on the whole day; then the rest of the object."""
+First the three traps of a tape that is still arriving (an order's first eligible print, a flat with no print yet, the
+end of the tape), each against run_session on the whole day. Then PARITY, the gate: whole days through the child +
+LiveCtx + ShadowFills (host.run_day) equal run_session trade for trade."""
 from __future__ import annotations
 
 import datetime as dt
+import random
+import subprocess
 from array import array
+from pathlib import Path
+
+import pytest
 
 from homebase.backtest.engine import Costs, run_session
-from homebase.backtest.tape import Tape, et_ns
+from homebase.backtest.tape import ARCHIVE, CACHE, OverlayTapeStore, Tape, TapeStore, effective_session_window, et_ns
+from homebase.labrun.host import run_day
 from homebase.labrun.shadowfills import ShadowFills
 from homebase.strategies.base import Strategy
 
@@ -301,3 +308,287 @@ def test_crash_with_no_print_at_the_event_closes_on_the_last_print_held():
     (t,) = f.trades()
     assert (t["exit_ns"], t["exit_price"]) == (at("09:30:01"), 105.75) and f.flat
 
+
+# ================================================================ PARITY: the gate
+# A whole day through the child + LiveCtx + ShadowFills (host.run_day), prints arriving a few at a time, must give the
+# trades run_session gives on the whole day: every field of every trade, in the same order.
+REPO = Path(__file__).resolve().parent.parent
+HEAD = "from homebase.strategies.base import Input, Strategy\n\n\n"
+
+STRADDLE = HEAD + '''class Straddle(Strategy):
+    """(a) a 09:30 OCO stop straddle, brackets re-priced to the fill, entries cancelled 12:55, flat 15:55."""
+    id, name, root = "a", "A", "NQ"
+    session_window = ("09:25", "16:00")
+
+    @classmethod
+    def inputs(cls):
+        return [Input("off", "Offset", "float", 2.125, 0.0, 500.0, 0.005),      # half a tick off the grid
+                Input("sl", "Stop", "float", 4.0, 0.05, 500.0, 0.05), Input("tp", "Target", "float", 9.0, 0.0, 500.0, 0.05)]
+
+    def times(self):
+        return ["09:30:00", "12:55", "15:55"]
+
+    def on_session(self, ctx):
+        self.legs = ()
+
+    def on_time(self, ctx, et_time):
+        if et_time == "09:30:00":
+            px = ctx.last_price
+            if px is None:
+                ctx.skip("no print before 09:30")
+                return
+            up, dn = px + self.p["off"], px - self.p["off"]
+            ctx.hline("anchor", px, role="anchor")
+            ctx.move_brackets_to_fill = True
+            a = ctx.stop_entry("long", up, sl=px - self.p["sl"], tp=px + self.p["tp"])
+            b = ctx.stop_entry("short", dn, sl=px + self.p["sl"], tp=px - self.p["tp"])
+            ctx.oco(a, b)
+            self.legs = (a, b)
+        elif et_time == "12:55":
+            for o in self.legs:
+                ctx.cancel(o)
+        else:
+            ctx.flatten("time")
+'''
+
+BARS = HEAD + '''class Bars(Strategy):
+    """(b) one-minute bars: a market entry after two bars the same way while flat, out after five bars by ctx.flatten;
+    what the strategy reads back from its orders (status, fill) steers it, so the updates must be the tester's too."""
+    id, name, root = "b", "B", "NQ"
+    session_window = ("09:30", "15:00")
+    bar_minutes = 1
+    placement_ms = 40
+
+    def on_session(self, ctx):
+        self.prev = self.order = None
+        self.held = self.cool = 0
+
+    def on_bar(self, ctx, bar):
+        up = bar.c > bar.o
+        o = self.order
+        if o is not None and o.status == "filled" and not ctx.flat:
+            self.held += 1
+            ctx.plot("fill", bar.end_ns, o.fill_px + (o.fill_sl or 0.0) + (o.fill_ms or 0) % 1000)
+            if self.held >= 5:
+                ctx.flatten("bars")
+                self.cool = 2
+                assert ctx.flat
+        elif ctx.flat:
+            self.held = 0
+            if self.cool:
+                self.cool -= 1
+            elif self.prev is not None and up == self.prev and bar.c != bar.o:
+                side = "long" if up else "short"
+                sl = bar.l - 1.0 if up else bar.h + 1.0
+                self.order = ctx.market(side, sl=sl, tp=None if bar.v % 2 else bar.c + (8.0 if up else -8.0), ref=bar.c)
+        self.prev = up
+'''
+
+TIME_EXIT = HEAD + '''class TimeExit(Strategy):
+    """(c) in at a time with a stop and no target, out at a time; twice a day, the second the other way."""
+    id, name, root = "c", "C", "NQ"
+    session_window = ("09:25", "16:00")
+    placement_ms = 0
+
+    def times(self):
+        return ["10:00:00", "11:30:00", "13:00:00", "14:00:00"]
+
+    def on_time(self, ctx, et_time):
+        px = ctx.last_price
+        if et_time == "10:00:00":
+            ctx.market("short", sl=px + 12.0)
+        elif et_time == "13:00:00":
+            ctx.flatten("reverse")
+            ctx.market("long", sl=px - 12.0)
+        else:
+            ctx.flatten("time")
+'''
+
+RR = HEAD + '''class RR(Strategy):
+    """(d) targets by tp_rr: a stop entry (re-priced to the fill) in the morning, a market entry with a ref later."""
+    id, name, root = "d", "D", "NQ"
+    session_window = ("09:25", "16:00")
+
+    def times(self):
+        return ["09:45:00", "12:00:00", "12:30:00", "15:30:00"]
+
+    def on_time(self, ctx, et_time):
+        px = ctx.last_price
+        if et_time == "09:45:00":
+            ctx.move_brackets_to_fill = True
+            self.o = ctx.stop_entry("long", px + 2.125, sl=px - 3.0, tp_rr=1.5)     # half a tick off the grid
+        elif et_time == "12:00:00":
+            ctx.cancel(self.o)
+            ctx.flatten("noon")
+        elif et_time == "12:30:00":
+            ctx.market("short", sl=px + 5.0, tp_rr=2, ref=px, qty=2)
+        else:
+            ctx.flatten("time")
+'''
+
+LIMIT = HEAD + '''class Limit(Strategy):
+    """Limit entries (the Desk does not take them yet; the would-be fills still follow the tester's law)."""
+    id, name, root = "e", "E", "NQ"
+    session_window = ("09:25", "16:00")
+
+    def times(self):
+        return ["10:00:00", "12:00:00", "15:55"]
+
+    def on_time(self, ctx, et_time):
+        px = ctx.last_price
+        if et_time == "10:00:00":
+            self.o = ctx.limit_entry("long", px - 2.0, sl=px - 8.0, tp=px + 4.0)
+        elif et_time == "12:00:00":
+            ctx.cancel(self.o)
+        else:
+            ctx.flatten("time")
+'''
+
+CASES = {"straddle": STRADDLE, "bars": BARS, "time exit": TIME_EXIT, "tp_rr": RR, "limit": LIMIT}
+
+
+def plain(argv, run_dir):
+    """A child with no sandbox: the tests' own strategies, and the owner's drafts read from his own folder."""
+    return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+
+
+ACT_AT = ("09:30:00", "09:45:00", "10:00:00", "11:30:00", "12:00:00", "12:30:00", "12:55:00", "13:00:00", "14:00:00",
+          "15:30:00", "15:55:00")
+
+
+def walk(seed: int, n: int = 12_000, start: str = "09:24:00", end: str = "16:02:00", px0: float = 21000.0,
+         ns_noise: bool = False, burst: bool = False) -> list:
+    """A synthetic NQ day: a random walk on the tick grid with prints that share a millisecond and gaps of many ticks
+    (through a stop). Around the times strategies act at there is either no print for seconds, or (burst) a crowd of
+    prints inside the placement delay, so an order's first eligible print is not the next one to arrive."""
+    rng = random.Random(seed)
+    a, b = at(start) // MS, at(end) // MS
+    acts = [at(t) // MS for t in ACT_AT]
+    times = [rng.randrange(a, b) for _ in range(n)]
+    if burst:
+        acts += [at("09:30:00") // MS + 60_000 * m for m in range(1, 90)]        # and the first bar closes
+        times += [t + rng.randrange(-60, 160) for t in acts for _ in range(25)]
+    else:
+        times = [ms for ms in times if not any(t - 1500 <= ms < t + 2500 for t in acts)]
+    rows, px = [], px0
+    for ms in sorted(times):
+        if rng.random() < 0.25 and rows:
+            ms = rows[-1][0] // MS                               # the same millisecond as the print before
+        step = rng.choice((-2, -1, -1, 0, 1, 1, 2)) * 0.25
+        if rng.random() < 0.004:
+            step = rng.choice((-1, 1)) * rng.randrange(20, 60) * 0.25   # a gap
+        px = round(px + step, 2)
+        ns = ms * MS + (rng.randrange(MS) if ns_noise else 0)
+        rows.append((max(ns, rows[-1][0]) if rows else ns, px, rng.randrange(1, 9)))
+    return rows
+
+
+def whole_session(source: str, rows, d: dt.date = D, params=None, qty: int = 1, daily=None, as_tape=None) -> list:
+    """The tester's trades for the day, as runner.execute runs a session (the half-day window included)."""
+    cls = cls_of(source)
+    strat = cls(params)
+    strat.session_window = effective_session_window(cls.root, d, cls.session_window)
+    t = as_tape if as_tape is not None else Tape(cls.root, d, "X", array("q", [r[0] for r in rows]),
+                                                 array("d", [r[1] for r in rows]), array("i", [r[2] for r in rows]), {})
+    res = run_session(strat, t, Costs(), qty, daily)
+    assert res.skip is None or not res.skip.startswith("strategy error"), res.skip
+    return [x.to_dict() for x in res.trades]
+
+
+def shadow_day(source: str, rows, d: dt.date = D, params=None, qty: int = 1, daily=None, batch: int = 200,
+               name: str = "lab_case") -> dict:
+    record = {"name": name, "root": cls_of(source).root, "source": source, "sha256": "x", "params": params or {},
+              "qty": qty}
+    return run_day(record, rows, d, spawn=plain, daily=daily, batch=batch, deadline_s=5.0)
+
+
+def same(got: dict, want: list) -> None:
+    assert got["summary"]["state"] == "done", got["summary"]
+    assert cut(got["trades"]) == cut(want)                       # the fields the gate names
+    assert got["trades"] == want                                 # ... and every other one
+
+
+@pytest.mark.parametrize("case", list(CASES))
+@pytest.mark.parametrize("seed, ns_noise, burst", [(1, False, False), (2, True, True), (3, False, True)])
+def test_parity_on_synthetic_days(case, seed, ns_noise, burst):
+    rows = walk(seed, ns_noise=ns_noise, burst=burst)
+    want = whole_session(CASES[case], rows)
+    same(shadow_day(CASES[case], rows), want)
+    TRADED[case] = TRADED.get(case, 0) + len(want)
+
+
+TRADED: dict = {}
+
+
+def test_the_synthetic_days_traded():
+    """The parity above compared real trades, not empty lists (runs after it, in file order)."""
+    if set(TRADED) == set(CASES):
+        assert all(n >= 2 for n in TRADED.values()), TRADED
+
+
+@pytest.mark.parametrize("case", list(CASES))
+@pytest.mark.parametrize("batch", [1, 7])
+def test_parity_when_the_prints_come_one_at_a_time(case, batch):
+    rows = walk(4, n=2500, burst=True)
+    same(shadow_day(CASES[case], rows, batch=batch), whole_session(CASES[case], rows))
+
+
+@pytest.mark.parametrize("case", list(CASES))
+def test_parity_on_a_day_whose_tape_stops_early(case):
+    """No print at or after the last flat: the close is the last print, "eod", on both sides."""
+    rows = [r for r in walk(5) if r[0] < at("13:40:00")]
+    want = whole_session(CASES[case], rows)
+    same(shadow_day(CASES[case], rows), want)
+    if case in ("straddle", "time exit"):
+        assert want and want[-1]["exit_reason"] in ("eod", "sl", "tp")
+
+
+def test_parity_with_settings_and_size():
+    rows = walk(6)
+    params = {"off": 1.5, "sl": 3.25, "tp": 20.0}
+    want = whole_session(STRADDLE, rows, params=params, qty=3)
+    same(shadow_day(STRADDLE, rows, params=params, qty=3), want)
+    assert want and want[0]["qty"] == 3
+
+
+# ---- the owner's own drafts on real archive days (read-only; skipped where they are not on this machine)
+DRAFTS = Path.home() / ".homebase" / "strategies"
+REAL = [("pp_orb", dt.date(2024, 3, 5)), ("pp_orb", dt.date(2025, 6, 17)),
+        ("s930_nq", dt.date(2024, 3, 5)), ("s930_nq", dt.date(2024, 11, 29)),          # 11-29: a half day (13:15)
+        ("nq_long_930_vwap", dt.date(2024, 3, 6)), ("nq_long_930_vwap", dt.date(2025, 6, 17))]
+
+
+class Rows:
+    """A tape as run_day's rows, cut on demand (a real day is a million prints)."""
+
+    def __init__(self, t: Tape):
+        self.t = t
+
+    def __len__(self) -> int:
+        return len(self.t.ts)
+
+    def __getitem__(self, s: slice) -> list:
+        return list(zip(self.t.ts[s], self.t.px[s], self.t.size[s]))
+
+
+@pytest.mark.parametrize("name, d", REAL, ids=[f"{n} {d}" for n, d in REAL])
+def test_parity_of_a_real_draft_on_a_real_day(name, d, tmp_path):
+    f = DRAFTS / f"{name}.py"
+    shared = TapeStore(ARCHIVE, CACHE)
+    try:
+        source = f.read_text(encoding="utf-8")
+        root = cls_of(source).root
+        ready = shared.cached(root, d)
+    except (OSError, ValueError):
+        pytest.skip(f"{f} or its market's tape is not on this machine")
+    if not ready:
+        pytest.skip(f"no cached tape of {root} {d} on this machine")
+    tapes = OverlayTapeStore(ARCHIVE, CACHE, tmp_path / "tape")      # reads the shared cache, never writes it
+    t = tapes.load(root, d)
+    daily = []
+    if cls_of(source)(None).needs_daily():
+        daily = [tapes.daily(root, x) for x in tapes.sessions(root, d - dt.timedelta(days=400), d)
+                 if x < d and shared.cached(root, x)]
+    want = whole_session(source, None, d, daily=daily, as_tape=t)
+    got = shadow_day(source, Rows(t), d, daily=daily, name=name)
+    same(got, want)
