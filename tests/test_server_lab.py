@@ -1256,6 +1256,24 @@ def test_flatten_and_turn_off_reports_the_flatten_when_the_switch_cannot_be_writ
     assert r.json() == {"ok": True, "enabled": False, "results": {"eval1": ["cancel entry 1: ok", "market Sell 1: ok"]}}
 
 
+def test_a_flatten_whose_switch_cannot_be_written_still_names_the_accounts_to_check(client, short_wait, monkeypatch):
+    """B7 N2: the answer of a flatten whose switch could not be saved carries `check` too."""
+    client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
+    steps = ["check it — the close order was not confirmed; its stop is still working"]
+
+    async def flattened(name):
+        return {"eval1": list(steps)}
+    monkeypatch.setattr(client.engine, "flatten_strategy", flattened)
+    done = hold_the_store()
+    try:
+        r = client.post("/api/strategy-flatten", json={"strategy": LAB})
+    finally:
+        done()
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "enabled": True, "results": {"eval1": steps}, "check": ["eval1"],
+                        "detail": "Flattened. Could not switch it off: try the switch again."}
+
+
 def test_a_second_change_to_a_strategy_while_one_is_being_written_is_refused_not_interleaved(tmp_path, monkeypatch):
     monkeypatch.setattr(labdesk, "REQ_WAIT_S", 1.0)
     store.put(rec())

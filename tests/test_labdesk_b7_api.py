@@ -41,6 +41,14 @@ def test_the_status_tail_leaves_the_intakes_bookkeeping_out_and_keeps_its_length
     assert {"lab_round", "placed"} <= {r["event"] for r in tail}                   # a Lab line that is not bookkeeping shows
 
 
+def test_the_tail_keeps_a_refusal_between_the_bookkeeping_lines(client):
+    """B7 N3: only lab_event / lab_event_done leave the tail; a lab_refused among them stays."""
+    write_journal(client.tmp, mixed(10) + [{"event": "lab_refused", "strategy": LAB, "text": "It is off."}] + mixed(10))
+    tail = client.get("/api/status").json()["journal"]
+    assert [r["text"] for r in tail if r["event"] == "lab_refused"] == ["It is off."]
+    assert not [r for r in tail if r["event"] in BOOK]
+
+
 def test_a_journal_with_no_bookkeeping_line_reads_as_it_always_did(client):
     write_journal(client.tmp, [{"event": "note", "i": i} for i in range(90)])
     file_rows = [json.loads(x) for x in (client.tmp / "journal.jsonl").read_text().splitlines()]
