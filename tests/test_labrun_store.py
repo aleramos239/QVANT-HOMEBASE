@@ -383,3 +383,45 @@ def test_a_wait_of_zero_never_sleeps(tmp_path):
     finally:
         release.set()
         t.join(5)
+
+
+# ---- fix round 2: what is in the folder (one listing), a record FILE that is there, a lock that could not be tried
+def test_names_are_the_record_files_and_the_sidecars_from_one_listing_readable_or_not(tmp_path):
+    assert store.names(tmp_path / "no-such-store") == ([], [])                  # no store yet: nothing, not an error
+    store.put(rec("a_one"), tmp_path)
+    store.put_desk("a_one", SIDE, tmp_path)
+    store.put_desk("b_gone", SIDE, tmp_path)
+    (tmp_path / "c_garbage.json").write_text("{not json")                       # a record file that does not read
+    (tmp_path / "runner.json").write_text("{}")
+    (tmp_path / "desk.lock").write_text("")
+    (tmp_path / "Bad Name.json").write_text("{}")
+    store.put_day("a_one", day("2026-10-08"), tmp_path)                         # the history folder is not a record
+    assert store.names(tmp_path) == (["a_one", "c_garbage"], ["a_one", "b_gone"])
+    (tmp_path / "not-a-folder").write_text("x")
+    with pytest.raises(OSError):                                                # a store that cannot be listed is not an empty one
+        store.names(tmp_path / "not-a-folder")
+
+
+def test_has_record_file_is_about_the_file_not_about_reading_it(tmp_path):
+    assert store.has_record_file("nq_x", tmp_path) is False
+    store.put(rec(), tmp_path)
+    f = tmp_path / "nq_x.json"
+    f.chmod(0o000)
+    try:
+        assert store.get("nq_x", tmp_path) is None and store.has_record_file("nq_x", tmp_path) is True
+    finally:
+        f.chmod(0o600)
+    f.write_text("{not json")
+    assert store.has_record_file("nq_x", tmp_path) is True
+    assert store.remove("nq_x", tmp_path) is True and store.has_record_file("nq_x", tmp_path) is False
+    with pytest.raises(ValueError):
+        store.has_record_file("../x", tmp_path)
+
+
+def test_a_desk_lock_that_cannot_be_tried_raises_and_is_not_another_desk(tmp_path):
+    (tmp_path / "a-file").write_text("x")
+    with pytest.raises(OSError):
+        store.desk_lock(tmp_path / "a-file")                                    # the store folder cannot be made
+    fd = store.desk_lock(tmp_path)
+    assert fd is not None and store.desk_lock(tmp_path) is None                 # held: None, as before
+    store.desk_unlock(fd)

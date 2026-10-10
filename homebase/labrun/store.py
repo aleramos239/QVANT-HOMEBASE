@@ -237,22 +237,55 @@ def desk_names(at=None) -> list:
     return out
 
 
+def names(at=None) -> tuple:
+    """(names with a record FILE, names with a sidecar), each sorted, from ONE listing of the folder -- whether or not
+    the files read. A store that is not there yet is empty; one that cannot be listed raises OSError (it is not an empty
+    store: nothing may be concluded from it)."""
+    try:
+        files = os.listdir(root(at))
+    except FileNotFoundError:
+        return [], []
+    recs, sides = [], []
+    for f in files:
+        if f.endswith(DESK_SUFFIX):
+            n = f[:-len(DESK_SUFFIX)]
+            if NAME_RE.fullmatch(n) and f"{n}.json" != RUNNER_FILE:
+                sides.append(n)
+        elif f.endswith(".json") and f != RUNNER_FILE and NAME_RE.fullmatch(f[:-5]):
+            recs.append(f[:-5])
+    return sorted(recs), sorted(sides)
+
+
+def has_record_file(name: str, at=None) -> bool:
+    """Is <name>.json in the store? About the file, not about reading it: a record that is there but does not read
+    (permissions, too many open files, garbage) is still there. Anything but "no such file" counts as there."""
+    f = _file(name, at)
+    try:
+        os.lstat(f)
+        return True
+    except FileNotFoundError:
+        return False
+    except OSError:
+        return True
+
+
 def desk_lock(at=None) -> int | None:
     """Take this store for ONE desk: an exclusive flock on <root>/desk.lock, never waited for. Returns the open file
     (keep it for as long as the desk lives: the lock ends with desk_unlock or with the process), or None when another
-    desk -- another process, or another holder in this one -- has it, or the file cannot be opened."""
+    desk -- another process, or another holder in this one -- has it. An OSError (the folder or the file cannot be
+    made or opened) is raised: that is not "another desk", the caller tries again later."""
     d = root(at)
-    try:
-        d.mkdir(parents=True, exist_ok=True)
-        fd = os.open(d / DESK_LOCK, os.O_CREAT | os.O_RDWR, 0o600)
-    except OSError:
-        return None
+    d.mkdir(parents=True, exist_ok=True)
+    fd = os.open(d / DESK_LOCK, os.O_CREAT | os.O_RDWR, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return fd
-    except OSError:
+    except BlockingIOError:
         os.close(fd)
         return None
+    except OSError:
+        os.close(fd)
+        raise
 
 
 def desk_unlock(fd) -> None:
