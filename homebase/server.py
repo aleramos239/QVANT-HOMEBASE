@@ -49,6 +49,7 @@ from .leveltimer import LevelTimer
 from .timer import SelfTimer, fire_clock, fire_said, fire_time, miss_why, off_anchor, schedule
 from . import desk_api
 from . import inactive as inactive_mod
+from . import labdesk as labdesk_mod
 from .trading import ChartDesk
 
 STATIC = Path(__file__).resolve().parent / "static"
@@ -263,6 +264,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                if s.enabled and s.trades_on(now_et.date())}
     for name, s in enabled.items():
         if not config_mod.assignments(cfg, name):
+            if getattr(s, "kind", "straddle") == "lab":      # a promoted Lab strategy: its resting state too
+                checks.append({"level": "info", "label": shown(name),
+                               "detail": "no account: runs in shadow"})
+                continue
             # a SHADOW strategy with no account is a normal resting state —
             # it must not hold the bulb amber forever
             checks.append({"level": "info" if getattr(s, "shadow", False) else "warn",
@@ -357,6 +362,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     tstrats = (timer_status or {}).get("strategies") or {}
     for name, s in enabled.items():
         status = engine.day_status(name)
+        if getattr(s, "kind", "straddle") == "lab":
+            if status != "idle":
+                checks.append({"level": "ok", "label": shown(name), "detail": status})
+            continue                     # no trade by its last-entry time is a normal day for a Lab strategy
         h, m = s.accept_until_et.split(":")
         after_window = now_et.time() > dt.time(int(h), int(m))
         if getattr(s, "kind", "straddle") == "bars":
@@ -475,6 +484,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                login_budget: LoginBudget | None = None,
                paper_client: httpx.AsyncClient | None = None) -> FastAPI:
     cfg = cfg or config_mod.load()
+    labdesk_mod.attach(cfg)      # promoted Lab strategies join the config in memory (never config.json); never raises
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
@@ -548,6 +558,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     engine.balance_history = lambda account: equity_by_day(account)
     # trading from the chart (spec 2026-09-26): views, guards, journaling
     desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
+    # promoted Lab strategies (kind "lab"): limits, book checks, the switch, Remove, the status block (labdesk.py)
+    labdesk = labdesk_mod.LabDesk(cfg, engine, adapters, paused=desk.views_paused)
     feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
 
     def _bars_strategies() -> dict[str, config_mod.StrategyCfg]:
@@ -1057,7 +1069,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_inactive_loop()),
                      asyncio.create_task(_sibling_loop()),
                      asyncio.create_task(_feed_loop()),
-                     asyncio.create_task(desk.run())]
+                     asyncio.create_task(desk.run()),
+                     asyncio.create_task(labdesk.run())]
         try:
             yield
         finally:
@@ -1093,6 +1106,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.notices = notices
     app.state.feed_box = feed_box
     app.state.desk = desk
+    app.state.labdesk = labdesk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
     app.include_router(desk_api.settings_router(desk))
     # Task 5b: every write needs an allowed Host/Origin and a JSON body (main app only)
@@ -1165,6 +1179,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     "killed": engine.killed_today(name),
                     "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
                                  for st in engine.day_states(name)],
+                    "lab": labdesk.status_view(name),      # None unless kind "lab"
                 } for name, s in cfg.strategies.items()
             },
             "journal": journal,
@@ -1479,6 +1494,17 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
+        if labdesk.is_lab(name):
+            # a promoted Lab strategy has ONE switch, its store record's (the runner hosts by it): nothing of it
+            # is in config.json
+            on = bool(body.get("enabled"))
+            if not await labdesk.set_enabled(name, on):
+                raise HTTPException(409, labdesk_mod.RECORD_CHANGED)
+            stop = getattr(labdesk, "stop", None)        # the intake half (task B3): cancels its unfilled entries
+            if not on and stop is not None:
+                await stop(name, "off")
+            engine.journal("strategy_toggled", strategy=name, enabled=on)
+            return {"ok": True, "strategy": name, "enabled": on}
         cfg.strategies[name].enabled = bool(body.get("enabled"))
         config_mod.save(cfg)
         engine.journal("strategy_toggled", strategy=name,
@@ -1525,6 +1551,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
         results = await engine.flatten_strategy(name)
+        if labdesk.is_lab(name):             # its switch is the store record's (off is never refused)
+            await labdesk.set_enabled(name, False)
+            engine.journal("strategy_toggled", strategy=name, enabled=False,
+                           cause="manual_flatten")
+            return {"ok": True, "enabled": False, "results": results}
         cfg.strategies[name].enabled = False
         config_mod.save(cfg)
         engine.journal("strategy_toggled", strategy=name, enabled=False,
@@ -1763,10 +1794,48 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 raise HTTPException(400, f"unknown account {aid!r}")
             if qty > 0:
                 rows.append({"account": aid, "qty": qty})
+        try:                                 # says nothing unless a promoted Lab strategy is on the desk
+            labdesk.check_book(name, rows)
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+        was = cfg.book.get(name)
         cfg.book[name] = rows
         config_mod.save(cfg)
+        if labdesk.is_lab(name) and not labdesk.book_saved(name):   # its book lives in its own file: not written, not kept
+            if was is None:
+                cfg.book.pop(name, None)
+            else:
+                cfg.book[name] = was
+            raise HTTPException(500, labdesk_mod.NOT_SAVED)
         engine.journal("book_updated", strategy=name, assignments=rows)
         return {"ok": True, "book": cfg.book}
+
+    @app.post("/api/lab-limits")
+    async def lab_limits(request: Request):
+        """Set a promoted Lab strategy's limits: {strategy, limits: {max_trades_day, max_qty, max_risk_usd,
+        last_entry_et, flat_et}}. A bad field is a 400 with its sentence; refused (409) 09:20-09:35 ET on
+        weekdays and while it has a round open."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy, limits}")
+        try:
+            return await labdesk.set_limits(str(body.get("strategy") or ""), body.get("limits"))
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/lab-remove")
+    async def lab_remove(request: Request):
+        """Take a promoted Lab strategy off the Desk: {strategy}. Its accounts are unassigned, its record and
+        its limits go, its history stays. Refused (409) while it has a round open."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy}")
+        try:
+            return await labdesk.remove(str(body.get("strategy") or ""))
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
 
     @app.get("/api/research-equity")
     async def research_equity(strategy: str):

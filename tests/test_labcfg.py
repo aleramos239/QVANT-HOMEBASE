@@ -349,3 +349,17 @@ def test_importing_labcfg_loads_nothing_of_the_tester():
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_a_config_bound_to_a_store_reads_and_writes_there(tmp_path, desklab_root):
+    """The fake desk (and any desk handed its own store) never touches the default one: config.save's hook is handed
+    only the config, so the config itself names its store."""
+    other = tmp_path / "other-store"
+    store.put(rec(), other)
+    cfg = desk_cfg()
+    labcfg.bind(cfg, other)
+    assert labcfg.overlay(cfg)["added"] == ["lab_pp_orb"]
+    labcfg.set_limits(cfg, "lab_pp_orb", LabLimits(**LIMITS))
+    labcfg.persist_all(cfg)
+    assert store.get_desk("pp_orb", other)["limits"]["max_trades_day"] == 2
+    assert list(desklab_root.iterdir()) == []

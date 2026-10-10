@@ -151,6 +151,16 @@ def _meta(cfg: AppCfg) -> dict:
     return m
 
 
+def bind(cfg: AppCfg, at) -> None:
+    """Name the store this config's Lab strategies live in (None: the default one, HOMEBASE_DESKLAB_ROOT or
+    ~/.homebase/desklab). persist_all, as config.save's hook, is handed only the config: it writes there."""
+    cfg.__dict__["_lab_at"] = at
+
+
+def _at(cfg: AppCfg, at):
+    return at if at is not None else cfg.__dict__.get("_lab_at")
+
+
 def lab_ids(cfg: AppCfg) -> list[str]:
     return list(_meta(cfg))
 
@@ -287,7 +297,7 @@ def apply(cfg: AppCfg, snap: list, held=None) -> dict:
 
 def overlay(cfg: AppCfg, at=None, *, held=None) -> dict:
     """read_store + apply in one call (the desk's start, before its loop serves anything; tests)."""
-    return apply(cfg, read_store(at), held)
+    return apply(cfg, read_store(_at(cfg, at)), held)
 
 
 # ------------------------------------------------------------------ the sidecar
@@ -313,7 +323,7 @@ def persist_all(cfg: AppCfg, at=None, wait_s: float | None = LOCK_WAIT_S) -> Non
     for name, want in pending(cfg):
         try:
             store.put_desk(name, {**want, "written_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")},
-                           at, wait_s=wait_s)
+                           _at(cfg, at), wait_s=wait_s)
             meta[desk_id(name)]["saved"] = want
         except Exception as e:  # noqa: BLE001 -- the other sidecars are still written
             first = first or e
