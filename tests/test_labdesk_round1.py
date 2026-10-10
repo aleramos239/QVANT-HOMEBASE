@@ -182,6 +182,22 @@ def test_with_a_position_open_and_no_beat_the_rule_speaks_once_for_that_round(tm
     assert d.ld.status_view(LAB)["state"] == "runner_down"
 
 
+def test_a_new_silence_after_a_beat_is_judged_afresh(tmp_path):
+    d = mkdesk(tmp_path)
+    mono = d.ld._mono = Mono()
+    d.ld._t0 = mono.t
+    send(d, entry(1), seq=1)
+    d.ads["a1"].stuck.add(st(d).upper_id)                                          # the broker accepts the cancel, the order stays
+    mono.t += 25
+    run(d.ld._runner_rule())
+    assert st(d).status == "placed" and len(lines(d, "lab_runner_down")) == 1
+    d.ld.heartbeat({"pid": 1, "strategies": {LAB: {"state": "running", "why": None, "mode": "desk"}}})
+    d.ads["a1"].stuck.clear()
+    mono.t += 25                                                                   # the runner goes silent again
+    run(d.ld._runner_rule())
+    assert (st(d).status, st(d).exit_reason) == ("done", "cancelled") and len(lines(d, "lab_runner_down")) == 2
+
+
 # ================================================================ I4: a market entry whose stop is already through
 @pytest.mark.parametrize("side,sl,last,past", [("long", 95.0, 94.0, True), ("long", 95.0, 95.0, True),
                                                ("long", 95.0, 95.25, False), ("short", 105.0, 106.0, True),
