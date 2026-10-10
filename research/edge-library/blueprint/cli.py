@@ -102,6 +102,7 @@ and --json out.
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
   bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
   bp.py pipe portfolio [--account=ID]                                        that takes every queued idea through stages 0-7 by
+  bp.py pipe mix [--market=NQ] [--names=a,b] [--left-out]                    (`mix`: the build-day mix, pipe_mix.py: read-only)
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
                                                                              cards; `approve` / `refuse` = the owner's word on an
@@ -236,7 +237,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,curve,executions}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,mix,curve,executions}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -247,6 +248,7 @@ def _parser() -> _Parser:
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("portfolio", "stage 8: the best mix of the book's strategies for each account, its odds against the portfolio's bar, what is missing (runs nothing)"),
+        ("mix", "the MIX on the build days: the ideas whose picked box fails only steadiness rows, read together on the pipeline's own rows (build days only; never the unseen days)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
@@ -259,6 +261,9 @@ def _parser() -> _Parser:
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
     pipes["pick"].add_argument("--why", metavar="TEXT", help="the owner's reason for the box (kept with the idea)")
     pipes["portfolio"].add_argument("--account", metavar="ID", help="one account: a rule file of the app's prop simulator (default: every account of a book card)")
+    pipes["mix"].add_argument("--market", metavar="NQ|ES|GC", help="one market's mix (default: every market that has two members or more)")
+    pipes["mix"].add_argument("--names", metavar="a,b,c", help="a what-if: these members only (they must be members the rule admits)")
+    pipes["mix"].add_argument("--left-out", action="store_true", dest="left_out", help="list the ideas the rule leaves out, and why")
     pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
     for x in pipes.values():
         x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
@@ -380,6 +385,10 @@ def _pipe(a) -> dict:
             raise J.Refuse(f"the card {where} {'is not there' if isinstance(e, OSError) else 'does not read as JSON'}: {e}") from None
         if card is None:
             raise J.Refuse(f"no card {where}: the pipeline card as JSON")
+    if a.sub == "mix":                              # the mix on the build days (pipe_mix): it reads stores, runs nothing, never opens the unseen days
+        from . import pipe_mix
+        return pipe_mix.command(a.root, market=getattr(a, "market", None), names=[x for x in (getattr(a, "names", None) or "").split(",") if x] or None,
+                                left_out=bool(getattr(a, "left_out", False)))
     if a.sub in ("curve", "executions"):               # the views (pipe_view): they read a store, run nothing
         from . import pipe_view
         return getattr(pipe_view, a.sub)(a.name, a.root)
