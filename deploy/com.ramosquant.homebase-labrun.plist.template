@@ -17,9 +17,11 @@
        in shadow: its orders are written down and nothing is sent. A strategy with accounts booked on the
        Desk (limits set, hosted before its window begins) has its orders sent to the Desk's own guarded
        intake on 127.0.0.1:8850 (/api/lab/*, with the key in homebase/.state/lab.key): the runner itself
-       never talks to a broker. While the Desk's Lab side is off (no homebase/.state/lab_desk.on) those
-       routes refuse it and every strategy stays in shadow. Its OWN process: a strategy's code runs in a
-       sandboxed child of this job, never in the chart service or the trading app. With the chart service
+       never talks to a broker. While the Desk's Lab side is off (no homebase/.state/lab_desk.on) or the
+       key file does not read, those routes refuse it: a strategy with no account still runs in shadow, but
+       one whose Desk sidecar still books accounts is hosted as a desk day that refuses every entry ("The
+       Desk is not answering."): not shadow, and nothing reaches a broker. Its OWN process: a strategy's
+       code runs in a sandboxed child of this job, never in the chart service or the trading app. With the chart service
        or the Desk down it waits and reconnects by itself. Reload this job outside the sessions only: a
        clean stop ends each desk day that has begun. -->
   <key>RunAtLoad</key><true/>

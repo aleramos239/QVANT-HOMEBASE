@@ -6,8 +6,11 @@ Each promoted, enabled strategy (labrun/store.py) gets one sandboxed child (labr
 day builds the tester's own events from the prints -- the session start, each bar's close, each time -- sends them to
 the child, and fills the orders that come back with the tester's own fill law (labrun/shadowfills.py), so a shadow day
 equals a backtest of that day. The door (labrun/door.py) says whether the Desk would refuse an order; in SHADOW the
-order is still filled on paper and the sentence is only written down. NOTHING here places an order, and nothing here
-talks to the desk: the only connection this process opens is the chart service's read-only tick stream.
+order is still filled on paper and the sentence is only written down. NOTHING here places an order. In shadow nothing
+here talks to the desk: the only connection is the chart service's read-only tick stream. With --desk (Step B) a
+strategy whose Desk sidecar books accounts is hosted in DESK MODE (StrategyDay, "DESK MODE"): its orders go to the
+Desk's guarded intake, never to a broker. While the Desk's Lab side is off or its key file does not read, such a day is
+still a desk day -- not shadow -- and refuses every entry ("The Desk is not answering.").
 
 Strategy code is never trusted: it runs in the child only, the child's replies are read with a deadline and a size
 limit, and a child that breaks either is killed and its strategy is stopped for the day. One stuck child costs the
