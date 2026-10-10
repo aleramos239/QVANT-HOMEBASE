@@ -2563,7 +2563,29 @@ class Engine:
         self._lab_unconfirmed(st, x, acts, "the close order is out and the position is still there")
         return ans(False)
 
-    async def _lab_flatten_one(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, reason: str) -> dict:
+    async def _lab_entry_states(self, ad: BrokerAdapter, ids: list, quick: bool) -> dict:
+        """_entry_states for a flatten asked for by hand (3 s at most). quick, for the clock: LAB_CLOCK_POLLS
+        re-reads at most (half a second) -- the clock comes back every 5 s by itself, and every other
+        strategy's tick waits for this one."""
+        if not quick:
+            return await self._entry_states(ad, ids)
+        out: dict = {}
+        for attempt in range(LAB_CLOCK_POLLS + 1):
+            for i in ids:
+                if i in out and out[i][0] in TERMINAL:
+                    continue
+                try:
+                    got = await ad.get_order_state(i) or {}
+                except Exception:  # noqa: BLE001 -- unknown, asked again
+                    got = {}
+                out[i] = (got.get("status"), got.get("filled_qty"))
+            if all(out[i][0] in TERMINAL for i in ids) or attempt == LAB_CLOCK_POLLS:
+                break
+            await self._kill_sleep(KILL_POLL_S)
+        return out
+
+    async def _lab_flatten_one(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, reason: str,
+                               quick: bool = False) -> dict:
         """Close ONE round's own position (called under the strategy's kill lock). Never more than its own filled
         quantity, only on its side, never the account-wide calls, and ONE market order per round, ever.
           1. cancel every entry not known ended; read each back (3 s at most). One that is neither cancelled
@@ -2605,7 +2627,7 @@ class Engine:
         for s, r in zip(ask, res):
             ok = not isinstance(r, Exception) and r.ok
             acts.append(f"cancel entry {ids[s]}: " + ("ok" if ok else str(r if isinstance(r, Exception) else r.error)))
-        states = await self._entry_states(ad, [ids[s] for s in ask]) if ask else {}
+        states = await self._lab_entry_states(ad, [ids[s] for s in ask], quick) if ask else {}
         if st.status not in ("placed", "live"):      # the poll yielded: the round may have ended by itself
             acts.append(f"the round ended on its own ({st.exit_reason})")
             return ans(True)
@@ -2734,7 +2756,7 @@ class Engine:
         self._retry_at[rk] = time.time()
         t = self._perf()
         async with lock:                             # free: taken at once, with no wait
-            res = await self._lab_flatten_one(st, cfg, ad, "flat")
+            res = await self._lab_flatten_one(st, cfg, ad, "flat", quick=True)
         self._save()
         self._lab_save()
         said = self.__dict__.setdefault("_lab_said", {})
@@ -2807,6 +2829,7 @@ LAB_CHECK_RETRY_S = 30.0                       # ... once a round is "check it"
 LAB_SETTLE_S = 2.0                             # a closed round's orders are re-read this often
 LAB_SETTLE_FAST = 5                            # ... for this many reads, then every LAB_CHECK_RETRY_S
 LAB_UNCONFIRMED_S = 5.0                        # a close with no exit fill is given this long
+LAB_CLOCK_POLLS = 2                            # the clock's flatten re-reads an entry this often (250 ms apart)
 # The sentences the owner reads (design, section E). The door's own are repeated here so the engine never
 # imports the runner's code; tests/test_engine_lab.py holds them equal.
 LAB_NOT_ON_DESK = "That strategy is not on the Desk."

@@ -547,6 +547,8 @@ def test_three_rounds_in_a_day_then_the_limit(tmp_path):
     third = trade(eng, ad, exit_px=110.0, by="tp")
     assert list(eng.states) == [f"{LAB}@a1#1", f"{LAB}@a1#2", f"{LAB}@a1"]       # I-3: the open round is last
     assert [eng.states[k] for k in eng.states] == [first, second, third]
+    # what kill_strategy (engine.py) and the chart's bot view (trading.py) build: the open round wins
+    assert {st.account: st for st in eng.day_states(LAB)} == {"a1": third}
     assert [(r["round"], r["exit_reason"], r["pnl"]) for r in eng.lab_rounds(LAB)] == \
         [(1, "tp", 200.0), (2, "sl", -100.0), (3, "tp", 200.0)]
     assert [e["round"] for e in events(tmp_path, "lab_round")] == [1, 2, 3]
@@ -1278,6 +1280,32 @@ def test_the_flat_time_retry_waits_five_seconds_and_sells_once_it_can_read(tmp_p
     ad.net_error = False
     tick(eng)
     assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 1)] and len(events(tmp_path, "clock_flat")) == 1
+
+
+def test_the_clock_never_stands_three_seconds_on_an_entry_the_broker_does_not_end(tmp_path):
+    """A flatten asked for by hand polls the entries for 3 s (12 reads apart). The clock is its own retry loop
+    (every 5 s) and every strategy's tick waits on it: there the wait is half a second at most."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    ad.stuck.add(rnd(eng).upper_id)
+    slept = []
+
+    async def counted(s):
+        slept.append(s)
+        await asyncio.sleep(0)
+
+    eng._kill_sleep = counted
+    clock.set_et(15, 55)
+    tick(eng)
+    assert len(slept) == engine_mod.LAB_CLOCK_POLLS == 2 and rnd(eng).status == "placed" and ad.orders == []
+    assert "check it" in events(tmp_path, "clock_flat_failed")[0]["actions"][-1]
+    slept.clear()
+    assert run(eng.lab_flatten(LAB))["a1"]["ok"] is False and len(slept) == engine_mod.KILL_POLL_N
+    ad.stuck.clear()
+    slept.clear()
+    tick(eng)                                                         # the next retry: it is cancelled now
+    assert (rnd(eng).status, rnd(eng).exit_reason, slept) == ("done", "cancelled", [])
 
 
 def test_a_manual_flatten_whose_fill_is_lost_is_ended_by_the_clock_before_the_flat_time(tmp_path):
