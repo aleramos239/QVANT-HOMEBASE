@@ -155,6 +155,18 @@ def test_a_signature_already_seen_is_refused_under_any_name_and_names_the_earlie
     assert not (root() / "p" / "third_one").exists()
 
 
+def test_a_card_runs_again_only_when_it_names_the_card_it_repeats():
+    """The owner's word to run a card again (2026-10-10): again_of names the card on file; any other name is still the same card."""
+    ticking()
+    add(sig="abc123")
+    refused(lambda: add("fvg_v2", sig="abc123", again_of="some_other"), "same card")                    # names a card that is not the one on file
+    assert add("fvg_v2", sig="abc123", again_of="fvg_open")["status"] == "queued"                       # names it: through
+    rec = lines(root() / "seen.jsonl")[-1]
+    assert rec["name"] == "fvg_v2" and rec["again_of"] == "fvg_open"                                    # and the registry says so
+    refused(lambda: add("fvg_v3", sig="abc123"), "same card")                                           # without the word: refused as ever
+    assert add("fvg_v3", sig="abc123", again_of="fvg_v2")["status"] == "queued"                         # a version of a version names the one on file
+
+
 def test_adds_at_the_same_time_never_both_pass_and_every_line_is_whole():
     import threading
     won, lost = [], []

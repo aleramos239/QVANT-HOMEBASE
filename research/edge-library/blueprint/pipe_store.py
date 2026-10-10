@@ -203,13 +203,17 @@ def add(card: dict, subs: list, root=None, inbox: bool = False, *, sig: str, fam
             was = _json(d / "state.json") or {}
             raise J.Refuse(f"a pipeline card named {name!r} is already on file (added {was.get('added_utc', 'at a time not on file')}, "
                            f"status {was.get('status', 'not on file')}): give the new card another name")
+        same = []
         for n, rec in _parse(text):
             if rec is None:
                 raise J.Refuse(f"{r / SEEN} holds a line that does not read (line {n}): mend it first -- it is the list of every card "
                                "ever added, and a card is not taken as new on a list that cannot be read")
             if rec.get("sig") == sig:
-                raise J.Refuse(f"{name!r} is the same card as {rec.get('name')!r}, added {rec.get('utc')}: the same market, session, sides and "
-                               "ways under another name are the same card, and a card is run once")
+                same.append(rec)
+        if same and card.get("again_of") not in {x.get("name") for x in same}:          # again_of = the owner's word to run a card again (2026-10-10)
+            rec = same[0]
+            raise J.Refuse(f"{name!r} is the same card as {rec.get('name')!r}, added {rec.get('utc')}: the same market, session, sides and "
+                           "ways under another name are the same card, and a card is run once")
         now = _now()
         st = {"name": name, "status": "queued", "stage": None, "stopped_at": None, "why": "", "tries": 0, "picked": None,
               "added_utc": now, "updated_utc": now, "source": card.get("source"), "family": family}
@@ -222,7 +226,7 @@ def add(card: dict, subs: list, root=None, inbox: bool = False, *, sig: str, fam
         except BaseException:
             shutil.rmtree(tmp, ignore_errors=True)
             raise
-        _append(seen, text, {"sig": sig, "name": name, "utc": now})
+        _append(seen, text, {"sig": sig, "name": name, "utc": now, **({"again_of": card["again_of"]} if card.get("again_of") else {})})
     with _log(r / ORDER) as (f, text):
         _append(f, text, {"name": name, "utc": now, "inbox": bool(inbox)})
     return st

@@ -457,3 +457,12 @@ picked box was scored by the new gates from the stores already on disk (no run, 
 
 The four that make money on the unseen days sit 2-5 points under the 40 % eval bar. The bar was not moved. A new version of such an idea
 (a new name, same card) would be a read of the same unseen days again; the owner decides. The book idea is not taken out of the book.
+
+### 17.2 A card run again on the owner's word (2026-10-10)
+The owner said yes to a new version of the four locked ideas that make money on the unseen days (17.1). The pipeline refused: the same market,
+session, sides and ways under another name are the same card, and a card is run once. A card now takes an optional `again_of` (the name of the
+card on file it repeats): `pipe_store.add` lets exactly that signature through when `again_of` names a card of it, and `seen.jsonl` keeps the
+word. Without it the refusal is as before. The four were added as `<name>_v2` at the front of the queue (inbox). Each is a full run under the
+prop gates from stage 0: a new box may be picked (the old box missed the 40 % bar), and when no box holds, the idea stops at stage 1 and the
+unseen days are not opened. When a box is locked, its read of the unseen days is the family's second look at the same days: it is shown by
+the luck count and the read's `relatives` line.

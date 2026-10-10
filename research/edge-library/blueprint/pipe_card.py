@@ -68,7 +68,9 @@ KEYS = ("name", "why", "loser", "source", "market", "session", "sides", "sides_w
 WAY_KEYS = ("family", "main_setting", "values", "fixed", "limits")
 IND_KEYS = ("block", "side", "why")
 SOURCES = ("owner", "video", "claude", "wiki", "paper", "book", "course")
-OPTIONAL = ("ref",)                 # ref: which paper / book / video / course (the owner, 2026-10-08); no part of the signature
+OPTIONAL = ("ref", "again_of")      # ref: which paper / book / video / course (the owner, 2026-10-08); no part of the signature
+                                    # again_of: the name of the card this one runs AGAIN on the owner's word (2026-10-10; pipe_store.add lets
+                                    # the one card of that signature through, and logs it): a card is otherwise run once
 REF_MAX = 300
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,33}$")        # 34 characters: + "_a1" + a later round's "_r5" = the app's 40 (draftstore.NAME_RE)
 LETTERS = string.ascii_lowercase                    # a way's letter in its heat maps' names
@@ -121,6 +123,9 @@ def _whole(card) -> dict:
     ref = card.get("ref")
     if ref is not None and not (isinstance(ref, str) and ref.strip() and len(ref) <= REF_MAX):
         raise J.Refuse(f"ref: one line that names the paper, book, video or course ({REF_MAX} characters at most), or leave it out")
+    again = card.get("again_of")
+    if again is not None and not (isinstance(again, str) and NAME.fullmatch(again)):
+        raise J.Refuse("again_of: the name of the card this one runs again (the owner's word), or leave it out")
     return card
 
 
