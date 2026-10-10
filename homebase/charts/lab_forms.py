@@ -39,14 +39,17 @@ NEED_TARGET = "Give a target, or pick None."
 NEED_DISTANCE = "The distance must be at least one tick."
 LOOKBACK = "Between 2 and 40 bars."
 TRADES = "Between 1 and 5."
-BAD_TIME = "A New York time, like 09:30."
+BAD_TIME = "A New York time from 00:05 to 15:55, like 09:30."
 AFTER_START = "It must be after the start."
+AFTER_RANGE = "It must be after the range ends ({end})."
 AFTER_LAST = "It must be after the last entry, and 15:55 at the latest."
 INCOMPLETE = "The form is incomplete."
 TICK_MULTIPLE = "Use a multiple of the tick ({tick})."
 
 HEADER_NOTE = ('# Made with the Lab\'s form. "Edit in the form" opens it again; a change made by hand here is kept '
                'until then.')
+
+LAST_CANCEL = "No new entry after this time. An entry order not filled by then is cancelled."
 
 # the fields each rule draws, in the order the page shows them (name and rule are not fields)
 RULE_FIELDS = {
@@ -203,7 +206,7 @@ def _check(answers) -> dict:
             raise FormError(key, BAD_TIME)
     start = _rule_start(a)
     if "last_entry" in a and start is not None and a["last_entry"] <= start:
-        raise FormError("last_entry", AFTER_START)
+        raise FormError("last_entry", AFTER_RANGE.format(end=start) if rule == "opening_range" else AFTER_START)
     if "out_by" in a:
         end = a.get("last_entry") if rule != "at_time" else a.get("time")
         if end is not None and a["out_by"] <= end:
@@ -588,8 +591,9 @@ def _field_defs() -> dict:
     return {
         "market": {"label": "Market", "words": "The futures market to trade.", "type": "choice",
                    "choices": list(MARKETS), "default": "NQ"},
-        "side": {"label": "Trade", "words": "Buy, sell, or both.", "type": "choice",
-                 "choices": [s for s, _ in SIDES], "default": "both"},
+        "side": {"label": "Trade", "words": "Buy, sell, or both.",
+                 "words_by_rule": {r: "Buy or sell." if r == "at_time" else "Buy, sell, or both." for r in RULE_FIELDS},
+                 "type": "choice", "choices": [s for s, _ in SIDES], "default": "both"},
         "time": {"label": "Time", "words": "The New York time it acts, like 09:30.", "type": "time",
                  "default": "09:30"},
         "distance": {"label": "Distance (points)", "words": "How far from the price each stop entry sits.",
@@ -606,8 +610,10 @@ def _field_defs() -> dict:
                  "type": "time", "default": "09:30"},
         "trades": {"label": "Trades a day", "words": "Most entries it takes in one day.", "type": "int",
                    "min": 1, "max": 5, "step": 1, "default": 1},
-        "last_entry": {"label": "Last entry", "words": "No new entry after this time. A stop not filled by then is "
-                                                       "cancelled.", "type": "time", "default": "11:00"},
+        "last_entry": {"label": "Last entry", "words": "No new entry after this time.",
+                       "words_by_rule": {"open_straddle": LAST_CANCEL, "opening_range": LAST_CANCEL,
+                                         "bar_breakout": "No new entry after this time."},
+                       "type": "time", "default": "11:00"},
         "stop": {"label": "Stop", "words": "Every entry carries a stop.", "type": "stop",
                  "kinds": [{"id": "points", "label": "Points", "min_ticks": 2, "tick_multiple": True},
                            {"id": "range", "label": "Other side of the range", "rules": ["opening_range"]}],

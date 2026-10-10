@@ -654,6 +654,13 @@ function fmKindValue(sc, rule, field, kind) {
   const hit = [d[rule] && d[rule][field], f && f.default, ...Object.values(d).map((x) => x && x[field])].find((x) => x && x.kind === kind && x.value != null);
   return hit ? hit.value : '';
 }
+/* the words under a field: the rule's own when the schema has some for it (words_by_rule), else the field's */
+function fmWords(sc, rule, field) {
+  const f = fmField(sc, field);
+  if (!f) return '';
+  const own = f.words_by_rule && Object.prototype.hasOwnProperty.call(f.words_by_rule, rule) ? f.words_by_rule[rule] : null;
+  return typeof own === 'string' && own ? own : String(f.words == null ? '' : f.words);
+}
 function fmSuggest(market, rule, taken = []) {
   let base = snake(`${market || ''}_${rule || ''}`) || 'my_strategy';
   if (!/^[a-z]/.test(base)) base = 'my_' + base;
@@ -762,7 +769,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
+  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

@@ -594,7 +594,7 @@ async function formOpen(anchor, edit = null) {
   const d = dialog(`<h2 id="labDlgTitle">${edit ? 'Edit strategy' : 'New strategy'}</h2>`);
   d.classList.add('pl-dlg');
   const ruleOf = () => sc.rules.find((x) => x.id === F.rule) || sc.rules[0];
-  const words = (f) => (f === 'name' ? (edit ? 'A strategy keeps its name.' : FM_NAME_WORDS) : f === 'rule' ? ruleOf().words : sc.fields[f].words);
+  const words = (f) => (f === 'name' ? (edit ? 'A strategy keeps its name.' : FM_NAME_WORDS) : f === 'rule' ? ruleOf().words : C.fmWords(sc, F.rule, f));
   const opt = (v, t, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(t)}</option>`;
   const sel = (f, opts, cur, more = '') => `<select id="fm_${id(f)}" data-fm="${id(f)}"${more} aria-describedby="fh_${id(f)}">${opts.map(([v, t]) => opt(v, t, cur)).join('')}</select>`;
   const kindOf = (f) => C.fmKinds(sc, F.rule, f).find((k) => k.id === (F[f] || {}).kind);

@@ -313,7 +313,7 @@ def test_a_refused_answer_comes_back_under_its_field_with_status_200(tmp_path):
         ("bar_breakout", {"lookback": 1}, "lookback", "Between 2 and 40 bars."),
         ("bar_breakout", {"trades": 9}, "trades", "Between 1 and 5."),
         ("opening_range", {"range_min": 7}, "range_min", "Pick one from the list."),
-        ("open_straddle", {"time": "9:30am"}, "time", "A New York time, like 09:30."),
+        ("open_straddle", {"time": "9:30am"}, "time", "A New York time from 00:05 to 15:55, like 09:30."),
         ("open_straddle", {"last_entry": "09:00"}, "last_entry", "It must be after the start."),
         ("open_straddle", {"out_by": "10:00"}, "out_by", "It must be after the last entry, and 15:55 at the latest."),
         ("open_straddle", {"name": "Bad-Name"}, "name", None),

@@ -112,6 +112,17 @@ def test_the_schema_says_which_rule_a_stop_choice_belongs_to():
                 assert e.value.field == "stop"
 
 
+def test_the_js_tests_use_the_real_schema():
+    """tests/js/labcode.test.mjs reads this file instead of keeping a pasted copy of the schema."""
+    from pathlib import Path
+    fixture = Path(__file__).parent / "js" / "fixtures" / "form_schema.json"
+    want = json.dumps(lab_forms.schema(), sort_keys=True, indent=1)
+    assert fixture.read_text(encoding="utf-8") == want, (
+        "tests/js/fixtures/form_schema.json is out of date. Regenerate it from the worktree root: "
+        "python -c \"import json; from homebase.charts import lab_forms; "
+        "open('tests/js/fixtures/form_schema.json','w').write(json.dumps(lab_forms.schema(), sort_keys=True, indent=1))\"")
+
+
 def test_schema_is_plain_json():
     s = lab_forms.schema()
     assert json.loads(json.dumps(s)) == s
@@ -352,7 +363,7 @@ def without(a: dict, *keys) -> dict:
 PICK = "Pick one from the list."
 STOP = "Every entry needs a stop."
 TARGET = "Give a target, or pick None."
-CLOCK = "A New York time, like 09:30."
+CLOCK = "A New York time from 00:05 to 15:55, like 09:30."
 INCOMPLETE = "The form is incomplete."
 LAST = "It must be after the last entry, and 15:55 at the latest."
 
@@ -540,10 +551,28 @@ def test_the_last_entry_must_come_after_the_start():
             "It must be after the start.")
     # the opening range starts acting when its range is done: 09:30 + 15 minutes
     refused(base("opening_range", range_from="09:30", range_min=15, last_entry="09:45"), "last_entry",
-            "It must be after the start.")
+            "It must be after the range ends (09:45).")
     refused(base("opening_range", range_from="09:30", range_min=15, last_entry="09:40"), "last_entry",
-            "It must be after the start.")
+            "It must be after the range ends (09:45).")
+    refused(base("opening_range", range_from="09:30", range_min=30, last_entry="09:00"), "last_entry",
+            "It must be after the range ends (10:00).")
     assert lab_forms.build(base("opening_range", range_from="09:30", range_min=15, last_entry="09:46"))
+
+
+def test_the_schema_has_the_right_helper_words_for_each_rule():
+    f = lab_forms.schema()["fields"]
+    cancel = "No new entry after this time. An entry order not filled by then is cancelled."
+    assert f["last_entry"]["words_by_rule"] == {"open_straddle": cancel, "opening_range": cancel,
+                                                "bar_breakout": "No new entry after this time."}
+    assert {r: f["side"]["words_by_rule"][r] for r in RULES} == {
+        "open_straddle": "Buy, sell, or both.", "opening_range": "Buy, sell, or both.",
+        "bar_breakout": "Buy, sell, or both.", "at_time": "Buy or sell."}
+    for field in f.values():                     # a rule's own words exist only for rules that draw the field
+        assert set(field.get("words_by_rule", {})) <= set(RULES)
+    for r in lab_forms.schema()["rules"]:
+        for key in ("last_entry", "side"):
+            if key in r["fields"]:
+                assert f[key]["words_by_rule"][r["id"]]
 
 
 def test_out_by_must_come_after_the_last_entry_and_by_1555():
