@@ -938,9 +938,9 @@ test('m4 accountsLock stays; m5 / m17 sentences exist', () => {
 });
 
 test('N2 hiddenEvent: only the named bookkeeping is hidden; anything else, known or not, shows', () => {
-  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_added', 'lab_event', 'lab_event_done']);
-  for (const e of ['lab_event', 'lab_event_done', 'lab_added']) assert.equal(D.hiddenEvent(e), true, e);
-  for (const e of ['lab_event_error', 'lab_intake_error', 'lab_save_error', 'lab_unbooked', 'lab_key_error', 'lab_zzz', 'lab_refused']) assert.equal(D.hiddenEvent(e), false, e);
+  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_event', 'lab_event_done']);
+  for (const e of ['lab_event', 'lab_event_done']) assert.equal(D.hiddenEvent(e), true, e);
+  for (const e of ['lab_added', 'lab_event_error', 'lab_intake_error', 'lab_save_error', 'lab_unbooked', 'lab_key_error', 'lab_zzz', 'lab_refused']) assert.equal(D.hiddenEvent(e), false, e);
   assert.equal(D.hiddenEvent('strategy_toggled'), false);
   assert.equal(D.hiddenEvent(undefined), false);
 });
@@ -952,9 +952,9 @@ test('N2 the plain lines of the Lab events that had none', () => {
   assert.deepEqual(A.lab_unbooked({}, 'NQ ORB', ''), ['The Desk took its accounts off NQ ORB.', 'warn']);
   assert.deepEqual(A.lab_unreadable({}, 'NQ ORB'), ['NQ ORB: the Desk cannot read it. Check it.', 'neg']);
   assert.deepEqual(A.lab_restore_error({}, ''), ["The Desk could not pick up today's Lab trades after the restart. Check it.", 'neg']);
-  assert.deepEqual(A.lab_start_error({}, ''), ['The Lab side did not start on this Desk. Check it.', 'neg']);
-  assert.deepEqual(A.lab_key_error({}, ''), ["The Lab runner's key could not be made. Check it.", 'neg']);
-  assert.deepEqual(A.lab_store_error({}, ''), ['The Desk cannot use the Lab store. Check it.', 'neg']);
+  assert.deepEqual(A.lab_start_error({}, ''), ['Lab strategies did not start on this Desk. Check it.', 'neg']);
+  assert.deepEqual(A.lab_key_error({}, ''), ['The Desk could not set up its link to the Lab runner. Lab strategies cannot send orders. Check it.', 'neg']);
+  assert.deepEqual(A.lab_store_error({}, ''), ["The Desk cannot read the Lab strategies' files. Check it.", 'neg']);
   assert.deepEqual(A.lab_view_error({}, 'NQ ORB'), ['NQ ORB: the Desk had a problem showing it. Check it.', 'neg']);
   assert.deepEqual(A.lab_refresh_error({}, ''), ['The Desk could not read its Lab strategies just now. Check it.', 'neg']);
   assert.deepEqual(A.lab_foreign_key({}, ''), ["A Lab file names something that is not a Lab strategy. Check it.", 'warn']);
@@ -991,4 +991,26 @@ test('final wave M-W: the words an owner reads', () => {
   assert.equal(D.LAB_UNKNOWN, 'Something happened to a Lab strategy: see the Activity log.');
   assert.ok(HTML.includes('return {text: "Something happened to a Lab strategy: see the Activity log.", tone: "warn"};'));
   assert.ok(!HTML.includes("check the Desk's log"));
+});
+
+test('final wave B6: an account added while the day trades through the Desk joins at the next trade', () => {
+  const one = [{ account: 'a1', qty: 1 }], two = [...one, { account: 'a2', qty: 1 }];
+  assert.equal(D.BOOKED_JOINS, 'Booked. It joins at the next trade.');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), one, two), true);
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), two, one), false, 'taking one off');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), one, one), false, 'a size change');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'shadow' }), one, two), false, 'a shadow day: it starts with the next session');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: null }), [], one), false, 'the session has not begun');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }, { enabled: false }), one, two), false);
+  assert.equal(D.bookedJoins(null, one, two), false);
+});
+
+test('final wave B6: the Activity sentences in plain words; a strategy arriving on the Desk is a line', () => {
+  const A = D.activity;
+  assert.deepEqual(A.lab_key_error({}, ''), ['The Desk could not set up its link to the Lab runner. Lab strategies cannot send orders. Check it.', 'neg']);
+  assert.deepEqual(A.lab_store_error({}, ''), ["The Desk cannot read the Lab strategies' files. Check it.", 'neg']);
+  assert.deepEqual(A.lab_start_error({}, ''), ['Lab strategies did not start on this Desk. Check it.', 'neg']);
+  assert.deepEqual(A.lab_added({}, 'NQ ORB'), ['NQ ORB is on the Desk, from the Lab']);
+  assert.equal(D.hiddenEvent('lab_added'), false);
+  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_event', 'lab_event_done']);
 });

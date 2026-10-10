@@ -1518,6 +1518,7 @@ const ACTIVITY = {
   lab_start_error: labAct("lab_start_error"), lab_key_error: labAct("lab_key_error"), lab_store_error: labAct("lab_store_error"),
   lab_view_error: labAct("lab_view_error"), lab_refresh_error: labAct("lab_refresh_error"), lab_foreign_key: labAct("lab_foreign_key"),
   lab_store_busy: labAct("lab_store_busy"), lab_store_owned: labAct("lab_store_owned"), lab_side: labAct("lab_side"),
+  lab_added: labAct("lab_added"),
   timer_gate: (r) => r.gate === true ? [`${actStrat(r)} gate open — trend day (ADX ${fmt(r.adx, 1)})`]
     : r.gate === false ? [`${actStrat(r)} gate closed — chop day (ADX ${fmt(r.adx, 1)}), no trade today`]
     : [`${actStrat(r)} gate unknown — only ${r.bars} daily bars, it will not fire`, "warn"],
@@ -1885,7 +1886,9 @@ function dayHeadline(names) {
   const stale = DESK_STALE ? " Last known state." : "";
   if (!ST.armed) return ["Disarmed.", "Signals are journaled only. Nothing is sent to a broker." + stale];
   if (dow === 0 || dow === 6) return ["Markets are closed.", plural(n, "strategy", "strategies") + " armed." + stale];
-  const flat = hmin((live[0] || nonLab[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
+  const flat = live.some(v => v.cfg.kind === "lab")      // a booked Lab strategy armed: the day ends at the latest armed flat time
+    ? Math.max(...live.map(v => hmin(v.cfg.flat_et) ?? 955))
+    : hmin((live[0] || nonLab[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
   if (now == null) return ["Armed.", plural(n, "strategy", "strategies") + " armed." + stale];
   if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, plural(n, "strategy", "strategies") + " armed." + stale];
   if (now < flat) {
@@ -1906,17 +1909,22 @@ function dayTimeline() {
   const own = strategies.filter(v => v.cfg.kind !== "lab");      // a Lab strategy sets its own times: never the day bar's
   // when no Desk strategy is armed, a Lab strategy WITH an account booked is the bar's (its Flat mark only: it has no cancel time of its own)
   const armedOwn = own.find(v => v.cfg.enabled && !v.cfg.shadow);
-  const labRef = armedOwn ? null : Object.entries(ST.strategies || {}).find(([n, v]) => v.cfg.kind === "lab" && v.cfg.enabled && !v.cfg.shadow && ((ST.book && ST.book[n]) || []).length);
-  const ref = (armedOwn || (labRef && labRef[1]) || own[0] || strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
-  const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(ref.flat_et) ?? 955;
+  const labsOn = Object.entries(ST.strategies || {}).filter(([n, v]) => v.cfg.kind === "lab" && v.cfg.enabled && !v.cfg.shadow && ((ST.book && ST.book[n]) || []).length);
+  const later = (a, b) => ((hmin(b.cfg.flat_et) ?? 955) > (hmin(a.cfg.flat_et) ?? 955) ? b : a);
+  const labRef = armedOwn || !labsOn.length ? null : labsOn.map(([, v]) => v).reduce(later);
+  const ref = (armedOwn || labRef || own[0] || strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
+  // a booked Lab strategy armed: the bar's Flat mark is the latest armed flat time (with none, the reference's, as always)
+  const flatEt = labsOn.length ? [armedOwn, ...own.filter(v => v.cfg.enabled && !v.cfg.shadow), ...labsOn.map(([, v]) => v)].filter(Boolean).reduce(later).cfg.flat_et : ref.flat_et;
+  const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(flatEt) ?? 955;
+  const oneMark = !labRef && cancel === flat;      // the cancel and the flat time are one moment: one label, one tick
   const now = etMin(ST.et_now) ?? 540;
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
     .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
   return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(String(ST.et_now).slice(11, 16))} ET</span></div>
-    <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${labRef ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(ref.flat_et || "15:55")}">
-      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${labRef ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
-      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${labRef ? "" : lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (ref.flat_et || "15:55") + " Flat", "tl-t at-end")}</div>
+    <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${labRef ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(flatEt || "15:55")}">
+      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${labRef || oneMark ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
+      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${labRef || oneMark ? "" : lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (flatEt || "15:55") + (oneMark ? " Cancel unfilled, flat" : " Flat"), "tl-t at-end")}</div>
     </div>`;
 }
 
@@ -2586,6 +2594,7 @@ async function setBook(strategy, assignments) {
   if (lab) {      // a promoted Lab strategy: the Desk's own sentence, no prefix; an account added mid-session starts next session
     if (!r.ok) toast(DeskLab.refusalText(r), 5000);
     else if (DeskLab.bookedNext(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_NEXT, 5000);
+    else if (DeskLab.bookedJoins(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_JOINS, 5000);
     refresh();
     return;
   }
@@ -3432,7 +3441,12 @@ async function flattenStrat(name) {
   if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
   const res = r.results && typeof r.results === "object" ? (lab ? DeskLab.flattenSteps(r.results) : r.results) : null;
   if (!res) return alertBar(`${N} flatten NOT confirmed — the desk sent no account results. Check its positions at the broker now.`);
-  const bad = Object.entries(res).map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
+  const chk = lab && Array.isArray(r.check) ? r.check.map(String) : [];      // a Lab flatten: the Desk names the accounts a person must look at
+  const bad = Object.entries(res).map(([a, steps]) => {
+    const f = stepFailures(steps);
+    if (chk.includes(a) && !f.flatten.length && !f.cancel.length && !f.check.length) f.check.push("its close is not confirmed");
+    return failText(f, " on " + acctShort(a));
+  }).filter(Boolean);
   if (bad.length) return alertBar(`${N} flatten — ${bad.join(" · ")}. ` + (lab && r.enabled !== false ? DeskLab.NOT_OFF + " Flatten what is left at the broker now."
     : "It is switched OFF; flatten what is left at the broker now."));
   if (lab && typeof r.detail === "string" && r.detail) return toast(r.detail, 8000);     // flattened, but the switch did not turn off: the Desk's sentence

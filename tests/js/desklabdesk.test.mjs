@@ -371,7 +371,10 @@ test('the book: an account added while the day runs in shadow says "Booked. It s
   const t = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'shadow', state: 'shadow' }) } });
   await t.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
   assert.deepEqual(t.toasts, ['Booked. It starts with the next session.']);
-  const quiet = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'desk' }) } });
+  const desk = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'desk' }) } });      // final wave: a day through the Desk
+  await desk.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
+  assert.deepEqual(desk.toasts, ['Booked. It joins at the next trade.']);
+  const quiet = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: null }) } });         // the session has not begun
   await quiet.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
   assert.deepEqual(quiet.toasts, []);
 });
@@ -690,9 +693,9 @@ test('I7 / N2 the feed and the "Last event" time leave out only the Lab\'s named
     { ts: 0, et: '2026-10-10T09:57:00-0400', event: 'lab_something_new' }];
   const t = load({ journal });
   const shown = t.api.journalShown(t.ctx.ST.journal);
-  assert.deepEqual(shown.map((r) => r.event), ['lab_store_owned', 'strategy_toggled', 'lab_refused', 'lab_something_new']);
-  assert.match(t.side(), /Last event 09:59/);
-  assert.match(t.api.todayFoot(0), /Last event 09:59/);
+  assert.deepEqual(shown.map((r) => r.event), ['lab_added', 'lab_store_owned', 'strategy_toggled', 'lab_refused', 'lab_something_new']);
+  assert.match(t.side(), /Last event 10:00/);           // final wave: a strategy arriving on the Desk is a line
+  assert.match(t.api.todayFoot(0), /Last event 10:00/);
   // a journal with no Lab line is returned as it is
   const none = [{ event: 'armed_toggled' }, null, 'x'];
   assert.deepEqual(plain(t.api.journalShown(none)), plain(none));
@@ -723,7 +726,7 @@ test('N2 every Lab event the Desk journals is either named as hidden bookkeeping
     assert.ok(hidden !== line, `${ev}: ${hidden ? 'hidden AND has a line' : 'neither hidden nor has a line'}`);
   }
   // the hide list is explicit and small, and every name in it is bookkeeping the owner has no use for
-  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_added', 'lab_event', 'lab_event_done']);
+  assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_event', 'lab_event_done']);
 });
 
 test('N2 each Lab event reaches the real Activity feed as a plain line; an event the page does not know shows a plain fallback', () => {
@@ -744,7 +747,7 @@ test('N2 each Lab event reaches the real Activity feed as a plain line; an event
     assert.doesNotMatch(got.text, /\b(round|rounds|sidecar|intent|overlay|carried)\b/i, ev);
   }
   assert.equal(ctx.line({ event: 'lab_unbooked', ...sample }).text, 'The Desk took Lucid Eval #1, Apex 2 off NQ ORB.');
-  assert.deepEqual(plain(ctx.line({ event: 'lab_key_error', error: 'x' })), { text: "The Lab runner's key could not be made. Check it.", tone: 'neg' });
+  assert.deepEqual(plain(ctx.line({ event: 'lab_key_error', error: 'x' })), { text: 'The Desk could not set up its link to the Lab runner. Lab strategies cannot send orders. Check it.', tone: 'neg' });
   assert.deepEqual(plain(ctx.line({ event: 'lab_zzz_new' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' });
   const bare = mkctx(null);
   assert.deepEqual(plain(bare.line({ event: 'lab_refused', strategy: 'lab_nq_orb', text: 'x' })), { text: "Something happened to a Lab strategy: see the Activity log.", tone: 'warn' }, 'desklab.js missing: still a plain line, never a raw name');
@@ -990,4 +993,61 @@ test('final wave G1: the strategy page shows "Runner down" and the sentence when
   assert.ok(html.includes('<b>Runner down</b>'), html);
   assert.ok(html.includes(`<div class="sd-note">${say}</div>`), html);
   assert.ok(!html.includes('Waiting for the session'));
+});
+
+test('final wave B6: an account added while the day trades through the Desk says it joins at the next trade', async () => {
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'desk' }) }, book: BOOKED0 });
+  await t.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }]);
+  assert.deepEqual(t.toasts, ['Booked. It joins at the next trade.']);
+  const s = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'shadow' }) }, book: BOOKED0 });
+  await s.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }]);
+  assert.deepEqual(s.toasts, ['Booked. It starts with the next session.']);
+});
+
+test('final wave B6: the flatten alert believes the Desk\'s `check` list, also when every step reads plain', async () => {
+  const t = load({ answer: { ok: true, enabled: false, results: { a1: ['This trade had already ended.'] }, check: ['a1'] } });
+  await t.api.flattenStrat('lab_nq_orb');
+  assert.equal(t.alerts.length, 1);
+  assert.match(t.alerts[0], /^NQ ORB flatten — CHECK IT on Lucid Eval #1 — /);
+  assert.match(t.alerts[0], /flatten what is left at the broker now\.$/);
+  assert.deepEqual(t.toasts, []);
+  const ok = load({ answer: { ok: true, enabled: false, results: { a1: ['This trade had already ended.'] } } });
+  await ok.api.flattenStrat('lab_nq_orb');
+  assert.deepEqual(ok.alerts, []);
+  assert.deepEqual(ok.toasts, ['NQ ORB flattened and switched off.']);
+  const both = load({ answer: { ok: true, enabled: false, results: { a1: ['market Sell 1: refused'], a2: ['This trade had already ended.'] }, check: ['a2'] } });
+  await both.api.flattenStrat('lab_nq_orb');
+  assert.equal(both.alerts.length, 1);
+  assert.match(both.alerts[0], /FLATTEN FAILED on Lucid Eval #1/, 'a failed step still alerts, with its words');
+  assert.match(both.alerts[0], /CHECK IT on APEX/, 'and the account the Desk says to check');
+});
+
+test('final wave B6: with two Lab strategies booked, the day ends at the latest flat time, on the bar and in the headline', () => {
+  const offOwn = { nq930: { ...nq930(), cfg: { ...nq930().cfg, enabled: false } } };
+  const strategies = { ...offOwn, lab_a: deskStrat({ state: 'waiting' }, { label: 'A', flat_et: '11:30', cancel_et: '11:30' }),
+    lab_b: deskStrat({ state: 'waiting' }, { label: 'B', flat_et: '14:00', cancel_et: '14:00' }) };
+  const t = load({ strategies, book: { lab_a: [{ account: 'a1', qty: 1 }], lab_b: [{ account: 'a2', qty: 1 }] } });
+  t.ctx.ST.et_now = '2026-10-09T12:00:00-0400';
+  assert.match(t.api.dayTimeline(), /14:00 Flat/);
+  assert.equal(t.api.dayHeadline([])[0], 'In session.');
+  // gc_nfp-like own strategy ON until 10:00 and a booked Lab strategy until 14:00: the day is the Lab one's
+  const g = load({ strategies: { gc: { ...nq930(), cfg: { ...nq930().cfg, cancel_et: '10:00', flat_et: '10:00' } }, lab_b: strategies.lab_b }, book: { lab_b: [{ account: 'a2', qty: 1 }] } });
+  g.ctx.ST.et_now = '2026-10-09T12:00:00-0400';
+  assert.equal(g.api.dayHeadline([])[0], 'In session.');
+  assert.match(g.api.dayTimeline(), /14:00 Flat/);
+  // no Lab strategy armed: the bar and the headline are what they were
+  const n = load({ strategies: { gc: g.ctx.ST.strategies.gc, lab_b: strategies.lab_b } });
+  n.ctx.ST.et_now = '2026-10-09T12:00:00-0400';
+  assert.equal(n.api.dayHeadline([])[0], 'Session closed.');
+});
+
+test('final wave B6 (rehearsal o1): a cancel time equal to the flat time is one label', () => {
+  const t = load({ strategies: { nq930: { ...nq930(), cfg: { ...nq930().cfg, cancel_et: '15:55', flat_et: '15:55' } } } });
+  const bar = t.api.dayTimeline();
+  assert.match(bar, />15:55 Cancel unfilled, flat</);
+  assert.doesNotMatch(bar, />15:55 Flat</);
+  assert.doesNotMatch(bar, />15:55 Cancel unfilled</);
+  const u = load({ strategies: { nq930: nq930() } }).api.dayTimeline();      // the usual 12:55 / 15:55: two labels
+  assert.match(u, />12:55 Cancel unfilled</);
+  assert.match(u, />15:55 Flat</);
 });

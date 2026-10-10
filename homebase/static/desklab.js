@@ -252,10 +252,11 @@
   var CLEAR = "Clear";
   var CLEARED = "Cleared.";
   var BOOKED_NEXT = "Booked. It starts with the next session.";
+  var BOOKED_JOINS = "Booked. It joins at the next trade.";
   var LIVE_NOTE = "It will trade real money on its next order. Every entry carries a stop held at the broker.";
-  // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request) and a strategy
-  // appearing on the Desk (its row says so). Everything else shows -- an event with no words of its own gets LAB_UNKNOWN, never nothing.
-  var HIDDEN_EVENTS = ["lab_event", "lab_event_done", "lab_added"];
+  // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request).
+  // Everything else shows -- an event with no words of its own gets LAB_UNKNOWN, never nothing.
+  var HIDDEN_EVENTS = ["lab_event", "lab_event_done"];
   var LAB_UNKNOWN = "Something happened to a Lab strategy: see the Activity log.";
   var NOT_ANSWERING_DESK = "The Desk is not answering.";
   var NOT_ON_DESK = "That strategy is not on the Desk.";
@@ -525,6 +526,12 @@
     return !!lab && lab.mode_today === "shadow" && !!s.cfg && s.cfg.enabled === true &&
       Array.isArray(before) && Array.isArray(after) && after.length > before.length;
   }
+  // An account added while today's day already trades through the Desk: it joins at the strategy's next trade (ruling, B4).
+  function bookedJoins(s, before, after) {
+    var lab = blockOf(s);
+    return !!lab && lab.mode_today === "desk" && !!s.cfg && s.cfg.enabled === true &&
+      Array.isArray(before) && Array.isArray(after) && after.length > before.length;
+  }
   function flattenAsk(n) {
     return { title: "Flatten " + n + "?", body: "Cancels its orders, closes its own position on every account, and switches it OFF. It trades again from the next session.", action: "Flatten & turn off" };
   }
@@ -631,9 +638,9 @@
     },
     lab_unreadable: function (r, who) { return [who + ": the Desk cannot read it. Check it.", "neg"]; },
     lab_restore_error: function () { return ["The Desk could not pick up today's Lab trades after the restart. Check it.", "neg"]; },
-    lab_start_error: function () { return ["The Lab side did not start on this Desk. Check it.", "neg"]; },
-    lab_key_error: function () { return ["The Lab runner's key could not be made. Check it.", "neg"]; },
-    lab_store_error: function () { return ["The Desk cannot use the Lab store. Check it.", "neg"]; },
+    lab_start_error: function () { return ["Lab strategies did not start on this Desk. Check it.", "neg"]; },
+    lab_key_error: function () { return ["The Desk could not set up its link to the Lab runner. Lab strategies cannot send orders. Check it.", "neg"]; },
+    lab_store_error: function () { return ["The Desk cannot read the Lab strategies' files. Check it.", "neg"]; },
     lab_view_error: function (r, who) { return [who + ": the Desk had a problem showing it. Check it.", "neg"]; },
     lab_refresh_error: function () { return ["The Desk could not read its Lab strategies just now. Check it.", "neg"]; },
     lab_foreign_key: function () { return ["A Lab file names something that is not a Lab strategy. Check it.", "warn"]; },
@@ -644,6 +651,7 @@
     lab_cancel_raced_fill: function (r, who, on) { return [who + ": an entry filled as it was cancelled" + on, "warn"]; },
     lab_open_without_cfg: function (r, who, on) { return [who + " has a trade open but is not on this Desk. Check it.", "neg"]; },
     lab_removed: function (r, who) { return [who + " taken off the Desk"]; },
+    lab_added: function (r, who) { return [who + " is on the Desk, from the Lab"]; },
   };
 
   return {
@@ -658,11 +666,11 @@
     accountsLock: accountsLock, deskNote: deskNote, inShadow: inShadow, limitsRows: limitsRows, limitsFields: limitsFields,
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
-    switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
+    switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, bookedJoins: bookedJoins, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
     deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle,
     switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
     NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF, hiddenEvent: hiddenEvent, HIDDEN_EVENTS: HIDDEN_EVENTS, LAB_UNKNOWN: LAB_UNKNOWN,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,
-    OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, LIVE_NOTE: LIVE_NOTE,
+    OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, BOOKED_JOINS: BOOKED_JOINS, LIVE_NOTE: LIVE_NOTE,
   };
 });

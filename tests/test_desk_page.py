@@ -140,10 +140,11 @@ def test_the_mac_skin_gives_the_warn_caption_its_colour():
 def test_the_activity_list_and_the_last_event_time_leave_out_only_the_named_lab_bookkeeping():
     rule = 'r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)'
     assert HTML.count(rule) == 2
-    assert 'HIDDEN_EVENTS = ["lab_event", "lab_event_done", "lab_added"]' in DESKLAB
+    assert 'HIDDEN_EVENTS = ["lab_event", "lab_event_done"]' in DESKLAB      # final wave: lab_added is a line now
     act = _section("const ACTIVITY = {", "function activityLine(")
-    for ev in ("lab_event", "lab_event_done", "lab_added"):
+    for ev in ("lab_event", "lab_event_done"):
         assert f"{ev}:" not in act, ev          # bookkeeping: never a line
+    assert 'lab_added: labAct("lab_added")' in act
     for ev in ("lab_event_error", "lab_intake_error", "lab_save_error", "lab_carry_fill", "lab_sidecar_replaced", "lab_unbooked", "lab_unreadable",
                "lab_restore_error", "lab_start_error", "lab_key_error", "lab_store_error", "lab_view_error", "lab_open_without_cfg", "lab_side"):
         assert f'{ev}: labAct("{ev}")' in act, ev
