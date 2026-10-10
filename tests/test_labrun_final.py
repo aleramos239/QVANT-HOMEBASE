@@ -240,3 +240,55 @@ def test_a_replayed_event_with_no_results_line_counts_as_refused_only_when_the_d
     else:
         assert day2._refused_run == 1 and day2.orders[-1]["refused"] == "The Desk did not answer."
 
+
+# ================================================================ I1: the Desk's flat time ends the day
+def held(kits, **side):
+    k = kits()
+    k.promote(HOLD)
+    store.put_desk("lab_x", sidecar(HOLD, **side), k.at)
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.take(state(snap(HOLD)))
+    k.r.sync()
+    minute(k, "09:29:01")
+    k.r.take(("desk", "strategy", snap(HOLD, answered=[2], **LIVE)))
+    assert k.stub.ops() == [["entry"]]
+    return k
+
+
+def test_with_the_window_ending_at_16_00_and_the_flat_time_at_15_55_the_eod_flatten_goes_at_15_55(kits):
+    k = held(kits)                                                           # the sidecar's flat_et is 15:55
+    k.clock("15:54:59")
+    assert k.stub.ops() == [["entry"]] and k.r.day("lab_x").state == "running"
+    k.clock("15:55:03")
+    assert k.r.day("lab_x").state == "done" and k.stub.ops() == [["entry"], ["flatten"]]
+    assert k.stub.bodies[1]["intents"] == [{"op": "flatten", "reason": "eod"}]
+    assert k.stub.bodies[1]["t_ns"] == at("15:55:00")
+    assert k.today()["orders"][-1] == {"t": "15:55:00", "text": "Flatten (eod)", "refused": None}
+
+
+def test_an_earlier_flat_time_ends_the_day_there(kits):
+    k = held(kits, limits={**sidecar()["limits"], "flat_et": "14:00"})
+    assert k.r.day("lab_x").end_ns == at("14:00:00")
+    k.clock("14:00:03")
+    assert k.stub.ops() == [["entry"], ["flatten"]] and k.stub.bodies[1]["t_ns"] == at("14:00:00")
+
+
+def test_a_later_flat_time_never_moves_the_windows_end(kits):
+    k = a_short_day(kits)                                                    # window ends 10:00, flat 15:55
+    assert k.r.day("lab_x").end_ns == at("10:00:00")
+    k.clock("10:00:03")
+    assert k.stub.ops() == [["entry"], ["flatten"]] and k.stub.bodies[1]["t_ns"] == at("10:00:00")
+
+
+def test_a_shadow_day_keeps_its_own_windows_end(kits):
+    k = kits()
+    k.promote(HOLD)
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day.mode == "shadow" and day.end_ns == at("16:00:00")
+

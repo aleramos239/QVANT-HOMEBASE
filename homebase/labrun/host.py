@@ -505,7 +505,7 @@ class StrategyDay:
 
     def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None, now_ns: int | None = None,
-                 desk: DeskSide | None = None, send=None, tell=None, resume=None):
+                 desk: DeskSide | None = None, send=None, tell=None, resume=None, flat_et: str | None = None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
         self.promoted = record.get("promoted_utc")
         self.state, self.why, self.detail = "waiting", None, None
@@ -523,7 +523,7 @@ class StrategyDay:
         self._saved_key = None
         self._saved_at = float("-inf")
         self._updated = _utc()
-        self._desk_init(desk, send, tell, resume, now_ns)     # (desk mode's own fields; nothing is read or sent)
+        self._desk_init(desk, send, tell, resume, now_ns, flat_et)    # (desk mode's own fields; nothing read or sent)
         try:
             self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns)
         except _Stop as e:
@@ -578,6 +578,10 @@ class StrategyDay:
         self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"])
         if self._desk is not None:
             self._desk_start()
+        if self._desk is not None and self._flat_et is not None:
+            # desk mode: the day ends at the Desk's flat time when that comes first -- its eod flatten goes out then,
+            # with reason "eod", and no event after it is run (the Desk closes the trade at that time in any case)
+            self._t1 = min(self._t1, et_ns(self.date, self._flat_et))
 
     # ---- the prints and the clock
     def on_ticks(self, rows) -> None:
@@ -833,7 +837,8 @@ class StrategyDay:
     #   * while the Desk's stream says a date that is not the day's, NOTHING is sent for the day -- no entry, no exit,
     #     no stop: the Desk applies an exit whatever date its event carries ("The Desk is on another day.").
     #   * a day that ran in shadow is never turned into a desk day: a tell-log with no event is nothing to pick up.
-    #   * at the strategy's own window end ONE flatten "eod" is sent (the tester's law) for a day that sent an entry.
+    #   * at the strategy's own window end ONE flatten "eod" is sent (the tester's law) for a day that sent an entry --
+    #     or at the Desk's flat time when that comes first (the day ends there: `flat_et`).
     #
     # ShadowFills still takes the prints, the plots and the lines (the bars are built from its tape) but never an
     # order: no model fill exists in desk mode. `flat`, every fill and every trade come from the Desk (DeskSide).
@@ -849,8 +854,9 @@ class StrategyDay:
     #   {"seq", "own": "stop" | "blind" | "again" | "eod", "intents": [...]}   the runner's own request, then its results
     #                                                                     (a stop's line also carries its "t_ns")
     # ==================================================================================================================
-    def _desk_init(self, desk, send, tell, resume, now_ns) -> None:
+    def _desk_init(self, desk, send, tell, resume, now_ns, flat_et=None) -> None:
         self._desk: DeskSide | None = desk
+        self._flat_et = flat_et if desk is not None else None    # the Desk's flat time ("HH:MM" ET) from its sidecar
         self._send = send                            # one event to the Desk, once (DeskClient.send)
         self._tell = tell or (lambda line: None)     # one line to the day's tell-log
         self._born = now_ns or 0                     # the stream's clock as the day was made
@@ -1268,7 +1274,8 @@ class StrategyDay:
 
     def _desk_eod(self) -> None:
         """The strategy's own window is over (StrategyDay._finish): ONE flatten, reason "eod" -- the tester ends every
-        session that way, and the Desk's own flat time may be hours later (or, on a half day, after the close). Sent
+        session that way, and the Desk's own flat time may be hours later (or, on a half day, after the close); when
+        the flat time comes first the day ends there (`_flat_et`), and this flatten goes out at that time. Sent
         for every day that sent an entry, whatever this runner's own view of the brain says just then (it can be
         stale, or down); with nothing open the Desk does nothing with it. It is an exit: asked again as exits are.
         It has a row in the day file, so one that did not go through shows there and not only in the tell-log."""
@@ -1883,13 +1890,16 @@ class Runner:
             h.day.kill()
 
     # ---- the Desk (Step B; every method below is reached only when the runner was given a line to it)
+    def _sidecar(self, rec: dict):
+        try:
+            return store.get_desk(rec["name"], self.at)
+        except (OSError, ValueError):
+            return None
+
     def _book(self, rec: dict) -> list | None:
         """The accounts the Desk's sidecar books for this promotion, when a day may run in desk mode (deskside.booked:
         the sidecar reads, its mark is the record's, its limits read, its book is not empty); else None = shadow."""
-        try:
-            return booked(store.get_desk(rec["name"], self.at), rec)
-        except (OSError, ValueError):
-            return None
+        return booked(self._sidecar(rec), rec)
 
     def _desk_day(self, rec: dict, date: dt.date) -> dict | None:
         """What a new day is given to run in desk mode -- {} for shadow, None for a day that must not be hosted at all.
@@ -1899,8 +1909,10 @@ class Runner:
         (None: _desk_lost); it is never replaced by a shadow day. A tell-log with only its head line says nothing
         (the head is written when a desk day is made, hours before it begins, and the day may then have run in
         shadow): that day, like one with no log, runs in desk mode only when it is made before its window begins
-        (StrategyDay._desk_start decides, and a day that has already begun is never turned into a desk day)."""
-        accounts = self._book(rec)
+        (StrategyDay._desk_start decides, and a day that has already begun is never turned into a desk day).
+        A desk day ends at the sidecar's flat time when that comes before its window's end (StrategyDay `flat_et`)."""
+        car = self._sidecar(rec)
+        accounts = booked(car, rec)
         name, d, mark = rec["name"], date.isoformat(), store.mark_of(rec)
         try:
             lines = store.tells(name, d, self.at) or None
@@ -1925,7 +1937,8 @@ class Runner:
                 side.heard()
             side.on_day(self._desk_date)             # (also for a strategy the Desk's state does not list)
         return {"desk": side, "send": self._desk.send, "resume": lines if was else None, "begun": begun,
-                "tell": lambda line: self._write(store.tell, name, d, line)}     # (`begun` is _host's, not the day's)
+                "tell": lambda line: self._write(store.tell, name, d, line),     # (`begun` is _host's, not the day's)
+                "flat_et": car["limits"]["flat_et"] if accounts else None}      # (booked: the limits read)
 
     def _desk_lost(self, rec: dict, date: dt.date) -> None:
         """A day that began in desk mode (its tell-log holds an event) and cannot be picked up: the Desk's sidecar no
