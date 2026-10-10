@@ -763,6 +763,12 @@ class LabDesk:
             d["digest"].pop(d["answers"].popitem(last=False)[0], None)
 
     @staticmethod
+    def _digest(t_ns, orders: list) -> str:
+        """What makes an event THE SAME event under its seq: its own time and its order intents (as the `lab_event`
+        line holds them, so a restart rebuilds it). The same seq with either one different is another event."""
+        return json.dumps([t_ns, orders], sort_keys=True)
+
+    @staticmethod
     def _dead(d: dict, ids) -> None:
         """Order ids no account took: the newest DEAD_KEPT."""
         d["dead"] += [i for i in ids if i not in d["dead"]]
@@ -1017,7 +1023,7 @@ class LabDesk:
         known = self.is_lab(name)
         d = self._rec(name) if known else None
         orders = [it for it in ev.intents if it["op"] in intents.ORDER_OPS or it["op"] == "stop"]
-        digest = json.dumps(orders, sort_keys=True)
+        digest = self._digest(ev.t_ns, orders)
         why, same, booked = None, False, []
         per, oco, pair = ({}, {}, {})
         try:
@@ -1526,7 +1532,7 @@ class LabDesk:
                         d["answers"].clear()
                         d["digest"].clear()
                     d["seq_max"] = max(d["seq_max"], seq)
-                    digests[(name, seq)] = json.dumps(held, sort_keys=True)
+                    digests[(name, seq)] = self._digest(r.get("t_ns"), held)
                 else:
                     digests.pop((name, seq), None)
             elif ev == "lab_event_done" and whole:

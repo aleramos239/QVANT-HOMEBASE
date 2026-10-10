@@ -243,3 +243,45 @@ def test_a_long_note_is_cut_and_the_engines_own_sentences_are_left_as_they_are(t
     assert row["why"] == NOT_PLACED and row["detail"] == ("entry: " + "y" * 500)[:200]
     s.note = "account not connected"                                               # a note that is already plain: kept
     assert {r["account"]: r for r in d.ld.status_view(LAB)["rounds"]}["a2"]["why"] == "account not connected"
+
+
+# ================================================================ 5: the event's own time is part of what makes it the same event
+def flatten_calls(d):
+    calls, real = [], d.eng.lab_flatten
+
+    async def spy(name, **kw):
+        calls.append(kw)
+        return await real(name, **kw)
+    d.eng.lab_flatten = spy
+    return calls
+
+
+def test_the_same_seq_and_intents_at_another_time_is_another_event(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    calls = flatten_calls(d)
+    b = body(d, [{"op": "flatten", "reason": "time"}], seq=2)
+    first = run(d.ld.event(b))
+    assert run(d.ld.event(dict(b)))["results"] == first["results"] and len(calls) == 1      # the very same event: once
+    later = {**b, "t_ns": b["t_ns"] + 5_000_000_000}                               # a runner that lost its place, 5 s on
+    out = run(d.ld.event(later))
+    assert len(calls) == 2 and out["results"][0]["op"] == "flatten"                # another event: its exit is applied
+    assert run(d.ld.event(dict(b)))["results"] == first["results"] and len(calls) == 2      # the first one's answer is kept
+    assert d.ld.snapshot()["strategies"][LAB]["answered"] == [1, 2]
+
+
+def test_a_restarted_desk_tells_them_apart_by_their_time_too(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1), seq=1)
+    fill_entry(d.eng, d.ads["a1"], st(d), 110.25)
+    b = body(d, [{"op": "flatten", "reason": "time"}], seq=2)
+    first = run(d.ld.event(b))
+    ld2 = restart(d)
+    calls = flatten_calls(d)
+    assert run(ld2.event(dict(b)))["results"] == first["results"] and calls == []  # answered before the restart
+    run(ld2.event({**b, "t_ns": b["t_ns"] + 1}))
+    assert len(calls) == 1
+    again = body(d, [entry(1)], seq=1)                                             # an entry under an answered seq at
+    out = run(ld2.event({**again, "t_ns": again["t_ns"] + 1}))                     # another time: out of date, never sent
+    assert refusal(out) == "This order is out of date." and len(d.ads["a1"].brackets) == 1
