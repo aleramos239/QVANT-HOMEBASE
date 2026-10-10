@@ -141,6 +141,7 @@ import asyncio
 import datetime as dt
 import hashlib
 import inspect
+import json
 import re
 import threading
 import time
@@ -354,7 +355,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         json_body(request)
         try:
             body = await request.json()
-        except ValueError:
+        except (ValueError, RecursionError):                 # not JSON, or nested too deep to read
             raise HTTPException(400, "the body is JSON") from None
         if not isinstance(body, dict):
             raise HTTPException(400, "send a JSON object")
@@ -387,7 +388,12 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         if not isinstance(code, str) or len(code.encode("utf-8", "replace")) > draftstore.MAX_BYTES:
             raise HTTPException(400, f"{{code: the draft's text, at most {draftstore.MAX_BYTES:,} bytes}}")
         got = lab_forms.read(code)
-        return {"answers": got["answers"], "intact": got["intact"]} if got else {"answers": None, "intact": False}
+        out = {"answers": got["answers"], "intact": got["intact"]} if got else {"answers": None, "intact": False}
+        try:
+            json.dumps(out, allow_nan=False)             # the response encoder refuses what json cannot carry
+        except (ValueError, TypeError, RecursionError):
+            out = {"answers": None, "intact": False}
+        return out
 
     @r.put("/drafts/{name}")
     async def save_draft(name: str, request: Request):

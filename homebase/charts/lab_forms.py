@@ -528,6 +528,10 @@ def build(answers: dict) -> str:
     return code
 
 
+def _no_constant(name: str):
+    raise ValueError(f"{name} is not JSON")            # NaN / Infinity / -Infinity: Python reads them, JSON has none
+
+
 def read(code: str) -> dict | None:
     """{"answers", "intact"} from a file the form made, else None. intact: the form would write exactly this text
     for these answers, byte for byte. Reads text only: nothing in `code` is run or imported; it never raises."""
@@ -540,7 +544,7 @@ def read(code: str) -> dict | None:
                 break
         else:
             return None
-        answers = json.loads(lines[i][len("# form: "):])
+        answers = json.loads(lines[i][len("# form: "):], parse_constant=_no_constant)
         if not isinstance(answers, dict):
             return None
     except (ValueError, RecursionError, MemoryError):

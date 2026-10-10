@@ -215,6 +215,15 @@ def test_read_gives_none_without_a_header_or_with_a_header_that_does_not_read():
     assert lab_forms.read(nocode) is None
 
 
+def test_read_gives_none_for_a_header_with_a_non_finite_number():
+    code = lab_forms.build(base("at_time"))
+    for bad in ("NaN", "Infinity", "-Infinity"):
+        for header in ('{"name": %s, "x": 1}' % bad, '{"name": "x", "x": %s}' % bad,
+                       '{"name": "x", "x": [1, {"y": %s}]}' % bad):
+            text = "\n".join("# form: " + header if x.startswith("# form: ") else x for x in code.split("\n"))
+            assert lab_forms.read(text) is None, (bad, header)
+
+
 def test_read_never_runs_the_text(tmp_path):
     marker = tmp_path / "ran"
     evil = lab_forms.build(base("at_time")) + f"\nopen({str(marker)!r}, 'w').write('x')\n"

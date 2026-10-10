@@ -9,7 +9,10 @@ import time
 
 from fastapi.testclient import TestClient
 
+import pytest
+
 from homebase import draftstore
+from homebase.backtest import sandbox
 from homebase.charts import lab_forms, lab_templates, reviewpack
 from homebase.charts.server import create_app
 from tests.backtest_util import D1, nq_archive
@@ -286,6 +289,7 @@ def test_building_never_writes_a_file(tmp_path, drafts_dir):
         assert list(drafts_dir.iterdir()) == [] and c.get("/api/tester/drafts").json() == []
 
 
+@pytest.mark.skipif(not sandbox.available(), reason="the macOS sandbox is not available here")
 def test_a_built_form_draft_backtests_in_the_sandbox(tmp_path):
     with client(tmp_path) as c:
         a = answers_for("bar_breakout", name="form_bars", bar_min=5, lookback=6)
@@ -386,3 +390,24 @@ def test_the_form_posts_keep_the_origin_host_and_json_guards(tmp_path):
             assert c.post(path, json=b, headers={**OK, "host": "evil.example"}).status_code == 403
             assert c.post(path, content="x=1", headers={**OK, "content-type": "text/plain"}).status_code == 415
             assert c.post(path, json=b, headers=OK).status_code == 200
+
+
+def test_read_never_500s_on_a_header_json_cannot_answer(tmp_path, monkeypatch):
+    code = lab_forms.build(answers_for("at_time", name="form_nan"))
+    with client(tmp_path) as c:
+        for bad in ("NaN", "Infinity", "-Infinity"):
+            text = "\n".join('# form: {"name": %s, "x": %s}' % (bad, bad) if x.startswith("# form: ") else x
+                            for x in code.split("\n"))
+            r = c.post(f"{FORM}/read", json={"code": text}, headers=OK)
+            assert r.status_code == 200 and r.json() == {"answers": None, "intact": False}, bad
+        # belt and braces: whatever read() gives that JSON cannot carry is answered as "not a form file"
+        monkeypatch.setattr(lab_forms, "read", lambda _code: {"answers": {"x": float("nan")}, "intact": True})
+        r = c.post(f"{FORM}/read", json={"code": code}, headers=OK)
+        assert r.status_code == 200 and r.json() == {"answers": None, "intact": False}
+
+
+def test_a_body_nested_too_deep_is_a_400_not_a_500(tmp_path):
+    hdr = {**OK, "content-type": "application/json"}
+    with client(tmp_path) as c:
+        for path in (f"{FORM}/build", f"{FORM}/read"):
+            assert c.post(path, content="[" * 200000, headers=hdr).status_code == 400, path
