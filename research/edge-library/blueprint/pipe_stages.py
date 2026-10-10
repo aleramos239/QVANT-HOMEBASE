@@ -209,7 +209,7 @@ WHOLE = ("2.1", "2.2", "2.3", "2.4", OTHERS, "2.6", "2.8")  # the build's lines 
 MINE = {"2.1": ("P1.1", "P3.1"), "2.2": ("P1.2", "P3.2"), "2.3": ("P4.2", "P4.2"), "2.4": ("P1.3", "P3.3"), "2.5": ("P3.6", "P3.6"), "2.6": ("P3.4", "P3.4"),
         "2.7": (None, "P3.5"), "2.8": ("P4.1", "P4.1")}     # a line of the build -> the pipeline's gate of it: (of a raw heat map, of one with an indicator)
 SWITCH = ("days", "cells", "workers", "draws", "box", "build_avg_trade", "test_days")      # what a tiny run hands the toolkit's test switch (records.TEST_RUN)
-BOOK_PROP = ("name", "confirmed", "size", "payout_size", "eval", "payout", "label")        # an account's prop check on a book card
+BOOK_PROP = ("name", "confirmed", "size", "payout_size", "eval", "payout", "label", "stress")        # an account's prop check on a book card
 
 
 # ================================================================ what every stage shares
@@ -784,7 +784,7 @@ def _prop(x: dict, calendar, accounts) -> dict:
     out = {}
     for rid in accounts:
         o = PP.odds(x, calendar, rid)
-        out[rid] = {**{k: o["account"][k] for k in ("name", "confirmed")}, **{k: o[k] for k in ("size", "payout_size", "eval", "payout", "label", "text")}}
+        out[rid] = {**{k: o["account"][k] for k in ("name", "confirmed")}, **{k: o[k] for k in ("size", "payout_size", "eval", "payout", "label", "stress", "text")}}
     return out
 
 

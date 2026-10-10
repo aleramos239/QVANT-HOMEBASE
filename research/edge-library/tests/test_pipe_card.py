@@ -171,6 +171,56 @@ def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
     fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
 
 
+def test_an_ib_touch_card_passes_stage_0_with_the_range_length_as_its_setting():
+    it = {"family": "ib_touch", "main_setting": "ib_min", "values": ["15", "30", "60"], "fixed": {}, "limits": {}}
+    c = card(name="ib_touch_open", why="The first return to the morning range meets the orders resting at its edge.",
+             loser="Breakout traders who hit the edge of the range first.", ways=[it], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("ib_touch_open_a1", "1"), ("ib_touch_open_a5", "5")]      # it has 1-minute bars (ib_n has not)
+    assert subs[0]["spec"]["run"] == {"family": "ib_touch", "params": {"ib_min": ["15", "30", "60"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    passes({**c, "ways": [{**it, "values": [5, 15, 30]}]})                                        # (a number typed as a number is the same choice)
+    assert passes({**c, "ways": [{**it, "limits": {"max_tr": 1}}]})[0]["spec"]["run"]["limits"] == {"max_tr": 1}      # the first edge traded is the only trade
+    passes({**c, "session": "pm", "sides": "short", "sides_why": "The afternoon high of an untested range is the cleaner level to sell.", "ways": [it]})
+    fails({**c, "ways": [{**it, "limits": {"max_tr": 3}}]}, "P0.2")                               # one trade an edge: 1 or 2
+    fails({**c, "ways": [{**it, "values": ["15", "30", "45"]}]}, "P0.2")                          # 45 is not a range length
+    fails({**c, "session": "london", "ways": [it]}, "P0.2")                                       # the New York day sessions only
+    fails({**c, "ways": [{**it, "fixed": {"mode": "fade"}}]}, "P0.2")                             # ib_n's setting, not this family's
+
+
+def test_an_open_fvg_card_passes_stage_0_with_the_candle_length_as_its_setting():
+    of = {"family": "open_fvg", "main_setting": "oc_min", "values": ["5", "15", "30"], "fixed": {}, "limits": {}}
+    c = card(name="open_gap", why="A push through the opening candle that leaves a gap shows one side taking the open.",
+             loser="Traders on the other side of the opening candle, stopped as it breaks.", ways=[of], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("open_gap_a1", "1"), ("open_gap_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "open_fvg", "params": {"oc_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    passes({**c, "ways": [{**of, "values": [5, 15, 30]}]})                                        # (a number typed as a number is the same choice)
+    run = passes({**c, "ways": [{**of, "fixed": {"min_gap": 0.25}, "limits": {"max_tr": 2}}]})[0]["spec"]["run"]
+    assert run["fixed"] == {"min_gap": 0.25} and run["limits"] == {"max_tr": 2}                   # the gap's size is ONE value an idea; max_tr is a limit
+    passes({**c, "session": "pm", "sides": "long", "sides_why": "The afternoon break of the opening candle's high rides the day's drift up.", "ways": [of]})
+    fails({**c, "ways": [{**of, "values": ["5", "15", "60"]}]}, "P0.2")                           # 60 is not a candle length
+    fails({**c, "ways": [{**of, "limits": {"max_tr": 4}}]}, "P0.2")                               # the family's own limit (1 .. 3 signals a session)
+    fails({**c, "ways": [{**of, "fixed": {"mode": "mid"}}]}, "P0.2")                              # fvg's setting, not this family's
+    fails({**c, "session": "london"}, "P0.2")                                                     # the New York day sessions only
+
+
+def test_a_pullback_card_passes_stage_0_with_the_level_as_its_setting_and_a_held_swing_size():
+    pb = {"family": "pullback", "main_setting": "level", "values": ["0.5", "0.62", "0.79"], "fixed": {}, "limits": {}}
+    c = card(name="pullback_open", why="A higher swing high shows buyers in control, and the first pullback is bought.",
+             loser="Traders who chased the move late and are stopped out on the pullback.", ways=[pb], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("pullback_open_a1", "1"), ("pullback_open_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "pullback", "params": {"level": [0.5, 0.62, 0.79]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    held = {**pb, "fixed": {"swing": "30"}, "limits": {"max_tr": 2}}                              # the swing size is ONE value an idea; max_tr is a limit
+    run = passes({**c, "ways": [held]})[0]["spec"]["run"]
+    assert run["fixed"] == {"swing": "30"} and run["limits"] == {"max_tr": 2}
+    passes({**c, "ways": [{**pb, "main_setting": "swing", "values": ["15", "30", "60"], "fixed": {"level": 0.79}}]})      # the swing size can be the heat map's setting too
+    passes({**c, "session": "london", "sides": "long", "sides_why": "The index drifts up, so only the up legs are bought.", "ways": [pb]})
+    fails({**c, "ways": [{**pb, "values": ["0.5", "0.62", "0.95"]}]}, "P0.2")                     # beyond the family's own limit (0.25 .. 0.9)
+    fails({**c, "ways": [{**pb, "fixed": {"swing": "45"}}]}, "P0.2")                              # 45 is not a swing size
+    fails({**c, "ways": [{**pb, "fixed": {"swing": "leg"}}]}, "P0.2")                             # the owner's range definitions are filter blocks, not this family's
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))

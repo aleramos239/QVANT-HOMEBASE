@@ -102,6 +102,7 @@ and --json out.
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
   bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
   bp.py pipe portfolio [--account=ID]                                        that takes every queued idea through stages 0-7 by
+  bp.py pipe mix [--market=NQ] [--names=a,b] [--left-out]                    (`mix`: the build-day mix, pipe_mix.py: read-only)
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
                                                                              cards; `approve` / `refuse` = the owner's word on an
@@ -122,6 +123,15 @@ and --json out.
                                                                              For `pipe`, --root is the PIPELINE's own folder
                                                                              (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
                                                                              never the app's idea folder
+  bp.py taught check <sheet>                                              THE TAUGHT LANE (taught.py): a video's rule run exactly as
+  bp.py taught run <sheet> [--workers=N] [--days=d1,d2]                      taught -- its own entry settings, ONE exit cell with its
+  bp.py taught show <name> | list                                            own stop, target and cap, nine cells (the stop and the
+                                                                             target at 75 / 100 / 125 %), the pipeline's random-entry
+                                                                             control; no heat map, no pick. `check` prints what runs
+                                                                             beside what was taught and what was not run and runs
+                                                                             nothing; `run` is the build days only (--days = a smoke
+                                                                             run, never a verdict). --root = the TAUGHT folder
+                                                                             (HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)
   build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
@@ -236,7 +246,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,curve,executions}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,mix,curve,executions}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -247,9 +257,24 @@ def _parser() -> _Parser:
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("portfolio", "stage 8: the best mix of the book's strategies for each account, its odds against the portfolio's bar, what is missing (runs nothing)"),
+        ("mix", "the MIX on the build days: the ideas whose picked box fails only steadiness rows, read together on the pipeline's own rows (build days only; never the unseen days)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
+    tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
+    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list}")
+    taught = {name: ts.add_parser(name, allow_abbrev=False, help=text) for name, text in (
+        ("check", "validate a rule sheet and print what will run beside what was taught (runs nothing)"),
+        ("run", "run the sheet on the build days (--days = a smoke run on named days, never a verdict)"),
+        ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"))}
+    taught["check"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, or - for stdin")
+    taught["run"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, - for stdin, or the name of a sheet on file")
+    taught["show"].add_argument("name", help="the sheet's name")
+    taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
+    taught["run"].add_argument("--days", help="a smoke run: named build days, d1,d2")
+    for x in taught.values():
+        x.add_argument("--root", metavar="DIR", help="the TAUGHT folder (default HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)")
+        x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     pipes["add"].add_argument("--spec", metavar="-|FILE", help="the pipeline card as JSON: - = on stdin, else a file")
     pipes["add"].add_argument("--inbox", action="store_true", help="the card goes before the queued ones")
     for name in ("show", "approve", "refuse", "rerun", "pick", "curve", "executions"):
@@ -259,6 +284,9 @@ def _parser() -> _Parser:
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
     pipes["pick"].add_argument("--why", metavar="TEXT", help="the owner's reason for the box (kept with the idea)")
     pipes["portfolio"].add_argument("--account", metavar="ID", help="one account: a rule file of the app's prop simulator (default: every account of a book card)")
+    pipes["mix"].add_argument("--market", metavar="NQ|ES|GC", help="one market's mix (default: every market that has two members or more)")
+    pipes["mix"].add_argument("--names", metavar="a,b,c", help="a what-if: these members only (they must be members the rule admits)")
+    pipes["mix"].add_argument("--left-out", action="store_true", dest="left_out", help="list the ideas the rule leaves out, and why")
     pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
     for x in pipes.values():
         x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
@@ -380,6 +408,10 @@ def _pipe(a) -> dict:
             raise J.Refuse(f"the card {where} {'is not there' if isinstance(e, OSError) else 'does not read as JSON'}: {e}") from None
         if card is None:
             raise J.Refuse(f"no card {where}: the pipeline card as JSON")
+    if a.sub == "mix":                              # the mix on the build days (pipe_mix): it reads stores, runs nothing, never opens the unseen days
+        from . import pipe_mix
+        return pipe_mix.command(a.root, market=getattr(a, "market", None), names=[x for x in (getattr(a, "names", None) or "").split(",") if x] or None,
+                                left_out=bool(getattr(a, "left_out", False)))
     if a.sub in ("curve", "executions"):               # the views (pipe_view): they read a store, run nothing
         from . import pipe_view
         return getattr(pipe_view, a.sub)(a.name, a.root)
@@ -387,11 +419,24 @@ def _pipe(a) -> dict:
                                once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False), account=getattr(a, "account", None))
 
 
+def _taught(a) -> dict:
+    """`taught <sub>`: the taught lane (taught.command). --root here is the TAUGHT folder; a sheet is a file, `-` (stdin) or, for `run`, the
+    name of a sheet on file."""
+    from . import taught                            # loaded when a taught command is read, never with this module
+    arg = getattr(a, "sheet", None) or getattr(a, "name", None)
+    if arg == "-":
+        try:
+            arg = json.loads(sys.stdin.read())
+        except ValueError as e:
+            raise J.Refuse(f"the sheet on stdin does not read as JSON: {e}") from None
+    return taught.command(a.sub, arg, a.root, days=_list(getattr(a, "days", None)), workers=getattr(a, "workers", None))
+
+
 def _said(r: dict) -> str:
     """A result for a person: its text -- and the next step, for the commands of an idea's record and of the pipeline."""
     cmd = r.get("command")
     return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith("pipe ")
-                                                                    or "idea" in r) else "")
+                                                                    or str(cmd).startswith("taught ") or "idea" in r) else "")
 
 
 def main(argv=None) -> int:
@@ -434,13 +479,15 @@ def main(argv=None) -> int:
             r = blockcode.toolkit()
         elif a.cmd == "pipe":
             r = _pipe(a)
+        elif a.cmd == "taught":
+            r = _taught(a)
         elif a.cmd in ("heatmap", "mc"):
             from . import quick                      # the two views: they read, and run nothing
             r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:
-        cmd = (f"pipe {a.sub}" if a.cmd == "pipe" else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
+        cmd = (f"{a.cmd} {a.sub}" if a.cmd in ("pipe", "taught") else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
         why = f"{cmd} is not built yet: it is a later step of the toolkit plan ({e})" if a is None and cmd in NOT_BUILT else str(e)
         r = api.refused(cmd, why, getattr(a, "name", None) or getattr(a, "stored", None) if a else None)
     print(json.dumps(r) if "--json" in argv else _said(r))     # one object on one ASCII line: safe for any reader of stdout

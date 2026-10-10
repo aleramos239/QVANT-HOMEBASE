@@ -62,7 +62,7 @@ PRO, FLEX, APEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27
 CAL = SY.weekdays()                                 # 44 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed
 KEYS = {"account", "need", "judged", "rules", "notes", "members", "left_out", "unread", "twins", "skipped", "mixes", "best", "gap", "meets", "paths", "seed", "text"}
-MIX = {"members", "days", "size", "payout_size", "eval", "payout", "table", "rules", "without", "drags", "allowed", "rules_hold", "margin", "meets"}
+MIX = {"members", "days", "size", "payout_size", "eval", "payout", "table", "stress", "rules", "without", "drags", "allowed", "rules_hold", "margin", "meets"}
 NO_GAP = {"eval": 0.0, "payout": 0.0, "rules": [], "drags": []}
 FAMILY = {"up": "fvg", "down": "gap", "drag": "liq", "weak": "pinbar", "steady": "rsi2", "lumpy": "supertrend", "fast": "vwap_z", "slow": "donchian"}      # each its own: no two are kept apart by accident
 
@@ -186,19 +186,23 @@ def test_one_strategy_is_a_mix_of_one_held_against_the_bar():
     assert (slow["eval"], slow["payout"], slow["margin"], slow["meets"]) == (0.0, 0.0, 0.0, False)
 
 
-def test_the_numbers_are_propodds_walks_on_the_live_is_worse_row_cut_at_the_bars_days():
+def test_the_numbers_are_propodds_walks_on_the_plain_row_cut_at_the_bars_days_and_the_stress_is_the_worse_row():
     rules, x = APP.load_rules(PRO), cells(UP)
-    b = build([M("up", UP)])["best"]
+    r = build([M("up", UP)])["best"]
     ev, fu = PO.steps(rules)
-    assert [t["size"] for t in b["table"]] == ev and [t["size"] for t in b["table"] if t["payout"] is not None] == fu
-    for t in b["table"]:
-        net, traded, opn, _ = PO.days(PO.ledger(x, t["size"], rules), rules, CAL)
-        wnet, wopn = PO.worse(net, traded, opn)     # the "live is worse" row
-        idx = PO.draws(len(net), N, PO.horizon(rules), SEED)
-        p, tr, o = wnet[idx], traded[idx], wopn[idx]
-        e, f = PO.eval_walk(p, tr, o, rules), PO.funded_walk(p, o, rules)       # the whole walk, read at the day
-        assert t["eval"] == float(((e["outcome"] == PO.PASS) & (e["day"] <= 5)).mean()), t
-        assert t["payout"] is None or t["payout"] == float(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= 14)).mean()), t
+    for tab, worse in ((r["table"], False), (r["stress"]["table"], True)):         # the plain row is the number; "live is worse" is the stress
+        assert [t["size"] for t in tab] == ev and [t["size"] for t in tab if t["payout"] is not None] == fu
+        for t in tab:
+            net, traded, opn, _ = PO.days(PO.ledger(x, t["size"], rules), rules, CAL)
+            if worse:
+                net, opn = PO.worse(net, traded, opn)     # the "live is worse" row
+            idx = PO.draws(len(net), N, PO.horizon(rules), SEED)
+            p, tr, o = net[idx], traded[idx], opn[idx]
+            e, f = PO.eval_walk(p, tr, o, rules), PO.funded_walk(p, o, rules)       # the whole walk, read at the day
+            assert t["eval"] == float(((e["outcome"] == PO.PASS) & (e["day"] <= 5)).mean()), t
+            assert t["payout"] is None or t["payout"] == float(((f["max_payout_at"] > 0) & (f["max_payout_at"] <= 14)).mean()), t
+    b = r
+    assert r["stress"]["eval"] <= b["eval"] and r["stress"]["payout"] <= b["payout"], "a haircut cannot help"
     assert b["eval"] == max(t["eval"] for t in b["table"]) and b["size"] == next(t["size"] for t in b["table"] if t["eval"] == b["eval"])       # a tie: the smaller
     paid = [t for t in b["table"] if t["payout"] is not None]
     assert b["payout"] == max(t["payout"] for t in paid) and b["payout_size"] == next(t["size"] for t in paid if t["payout"] == b["payout"])
@@ -210,6 +214,7 @@ def test_with_the_prop_checks_day_count_one_strategy_reads_as_the_prop_check_rea
         for rows, rid in ((UP, PRO), (STEADY, PRO), (LUMPY, FLEX), (UP, APEX)):
             b, o = build([M("up", rows)], rid)["best"], PP.odds(cells(rows), CAL, rid, paths=N, seed=SEED)
             assert (b["eval"], b["payout"], b["size"], b["payout_size"], b["table"]) == (o["eval"], o["payout"], o["size"], o["payout_size"], o["table"]), rid
+            assert b["stress"] == o["stress"], rid          # and the stress row is the same walk on both sides
             assert o["eval"] + o["payout"] > 0.0, "(a reading with something in it)"
 
 
@@ -355,21 +360,25 @@ def test_the_mixes_are_ranked_in_order_first_then_nearest_the_bar_on_the_weaker_
     order = [in_order(m) for m in r["mixes"]]
     assert order == sorted(order, reverse=True) and True in order and False in order
     fast = mix(r, "fast")
-    assert r["best"]["members"] == ["up", "down"] and fast["margin"] > r["best"]["margin"] and fast["rules_hold"] is False, "nearer the bar, but out of order: after"
+    # (on the plain row the steady fixtures saturate at the payout cap: "nearer the bar" can only tie with the best -- it is still ranked after)
+    assert r["best"]["members"] == ["up", "down"] and fast["margin"] >= r["best"]["margin"] and fast["rules_hold"] is False, "as near the bar, but out of order: after"
+    assert r["mixes"].index(fast) > r["mixes"].index(r["best"])
 
 
 def test_the_bar_is_or_more_and_the_distance_is_what_is_missing():
-    book = lambda: [M("up", UP), M("down", DOWN)]  # noqa: E731
+    book = lambda: [M("up", UP)]  # noqa: E731   (one strategy: on the plain row a steady pair is 100 % or 0 %, no distance to read)
     was = build(book())["best"]
+    assert 0.2 < was["eval"] < 0.99 and 0.0 < was["payout"] < 0.99
     with with_file(eval={"days": 5, "odds": was["eval"]}, payout={"days": 14, "odds": was["payout"]}):        # exactly at the bar
         r = build(book())
         assert r["meets"] is True and r["gap"] == NO_GAP and r["best"]["margin"] == pytest.approx(1.0)
     more = min(1.0, was["eval"] + 0.125)
-    with with_file(eval={"days": 5, "odds": more}):
+    with with_file(eval={"days": 5, "odds": more}, payout={"days": 14, "odds": was["payout"]}):
         r = build(book())
-        assert r["best"]["members"] == ["up", "down"] and r["meets"] is False and r["gap"] == {**NO_GAP, "eval": pytest.approx(more - was["eval"])}
-        assert r["text"].splitlines()[1].endswith(f"(the bar: {100 * more:.4g} % or more) -- {100 * (more - was['eval']):.1f} points short")
-        assert r["text"].splitlines()[2].endswith("-- at the bar") and r["text"].splitlines()[5] == f"  missing: {100 * (more - was['eval']):.1f} points of eval odds"
+        assert r["best"]["members"] == ["up"] and r["meets"] is False and r["gap"] == {**NO_GAP, "eval": pytest.approx(more - was["eval"])}
+        lines = r["text"].splitlines()
+        assert lines[1].endswith(f"(the bar: {100 * more:.4g} % or more) -- {100 * (more - was['eval']):.1f} points short")
+        assert lines[2].endswith("-- at the bar") and lines[4] == f"  missing: {100 * (more - was['eval']):.1f} points of eval odds"
     with with_file(eval={"days": 3, "odds": 0.6}):                                             # fewer days: a lower chance
         r = build(book())
         assert r["best"]["eval"] < was["eval"] and "within 3 trading days" in r["text"]
@@ -403,7 +412,7 @@ def test_an_account_without_an_eval_is_judged_on_the_payout_odds_alone():
     r = build(book(), APEX)
     pair, up, down = mix(r, "up", "down"), mix(r, "up"), mix(r, "down")
     assert r["judged"] == ["payout"] and r["rules"]["funded_only"] is True and any("no eval to pass" in n and "payout odds alone" in n for n in r["notes"])
-    assert pair["eval"] == up["eval"] == 0.0, "the rule file's eval ($20,000 in 5 days) is out of reach: judged on it, no pair would ever be allowed"
+    assert pair["eval"] < 0.05 and up["eval"] < 0.05, "the rule file's eval ($20,000 in 5 days) is out of reach: judged on it, no pair would ever be allowed"
     assert pair["without"] == {"up": down["payout"], "down": up["payout"]} and pair["payout"] > max(up["payout"], down["payout"]), "the number a member must raise: the payout odds"
     assert pair["drags"] == [] and pair["allowed"] is True and pair["margin"] == pytest.approx(pair["payout"] / 0.75)
     assert r["best"] == pair and pair["meets"] is True and r["gap"] == {**NO_GAP, "eval": None}
@@ -413,7 +422,7 @@ def test_an_account_without_an_eval_is_judged_on_the_payout_odds_alone():
     assert [key(m) for m in r["mixes"]] == sorted(key(m) for m in r["mixes"])
     with with_file(funded_only=[]):                                                            # held to the eval of the rule file on file: nothing is allowed together
         r = build(book(), APEX)
-        assert r["judged"] == ["eval", "payout"] and mix(r, "up", "down")["allowed"] is False and r["meets"] is False and r["gap"]["eval"] == 0.6
+        assert r["judged"] == ["eval", "payout"] and mix(r, "up", "down")["allowed"] is False and r["meets"] is False and 0.5 < r["gap"]["eval"] <= 0.6
     assert build(book(), PRO)["judged"] == ["eval", "payout"] == build(book(), FLEX)["judged"]
 
 
@@ -485,10 +494,11 @@ def test_the_command_line_and_what_it_refuses(tmp_path, capsys):
     lines = text.splitlines()
     assert rc == 0 and lines[0].startswith("THE PORTFOLIO (stage 8): 1 strategy in the book (pf_up).") and "NEXT" not in text
     names = [APP.load_rules(a)["name"] for a in (PRO, FLEX, APEX)]
-    assert [x.strip() for x in lines[1].split("  ") if x.strip()] == ["account", "best mix", "eval in 5 days", "max payout in 14 days", "at the bar"]      # the answer first: one row an account
+    assert [x.strip() for x in lines[1].split("  ") if x.strip()] == ["account", "best mix", "eval in 5 days", "max payout in 14 days", "at the bar", "stress: eval / payout"]      # the answer first: one row an account
     full = RN.command("portfolio", root=root)["accounts"]
     assert [[c.strip() for c in x.split("  ") if c.strip()] for x in lines[2:5]] == [
-        *[[n, "pf_up", f"{100 * a['best']['eval']:.1f} % of 60 %", f"{100 * a['best']['payout']:.1f} % of 75 %", "no"] for n, a in zip(names[:2], full)], [names[2], "none", "-", "-", "no"]]
+        *[[n, "pf_up", f"{100 * a['best']['eval']:.1f} % of 60 %", f"{100 * a['best']['payout']:.1f} % of 75 %", "no",
+           " / ".join(f"{100 * a['best']['stress'][k]:.1f} %" for k in ("eval", "payout"))] for n, a in zip(names[:2], full)], [names[2], "none", "-", "-", "no", "-"]]
     assert [x.split(" [")[0] for x in lines[5:] if not x.startswith(" ")] == names                                 # then each account in full
     assert sum("It is pf_up alone" in x for x in lines) == 2 and "  left out on this account: pf_up -- its entry rule (orb) rests orders on both sides" in text
     with capsys.disabled():
