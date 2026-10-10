@@ -16,8 +16,9 @@
        this job, never in the chart service or the trading app. With the chart service down it waits and
        reconnects by itself. -->
   <key>RunAtLoad</key><true/>
+  <!-- kept alive, and never started again sooner than 30 s after it ended: a runner that keeps failing must not spin -->
   <key>KeepAlive</key><true/>
-  <key>ThrottleInterval</key><integer>10</integer>
+  <key>ThrottleInterval</key><integer>30</integer>
   <!-- nice 10: below the chart service (5): at the 09:30 burst the trading app, then the charts, win the CPU -->
   <key>Nice</key><integer>10</integer>
   <key>StandardOutPath</key><string>__REPO__/homebase/.state/labrun.log</string>

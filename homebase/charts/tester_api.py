@@ -53,7 +53,8 @@
                                           work); pause and the owner's yes or no never are
     GET  /api/tester/desklab             Lab strategies promoted to the Desk (homebase.labrun.store): {strategies: [each
                                           record WITHOUT its code, plus `today` (the day summary of the session day the
-                                          runner is on, or null) and `days` (of the last 10, those this promotion wrote)],
+                                          runner is on, or null) and `days` (of the last 10, those this promotion wrote,
+                                          each cut to {date, state, why, net, match, rebuilt})],
                                           runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat is under
                                           20 s old
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
@@ -168,7 +169,8 @@ CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
 DESKLAB_ACTIONS = ("promote", "remove", "onoff")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
-DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy
+DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
+DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
 PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in the desk's 9:30 window
 PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
@@ -671,7 +673,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             today = store.get_day(name, date.isoformat()) if date is not None else None
             out.append({**{k: v for k, v in rec.items() if k != "source"},
                         "today": today if store.same_promotion(today, rec) else None,
-                        "days": [d for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
+                        "days": [{**{k: d.get(k) for k in DESKLAB_DAY_KEYS}, "rebuilt": d.get("rebuilt") is True}
+                                 for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
         beat = store.get_runner() or {}
         return watch_answer(request, {"strategies": out, "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})

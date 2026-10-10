@@ -2,18 +2,22 @@
 
 The runner of promoted Lab strategies (labrun/host.py), SHADOW only: it reads the chart service's tick stream and
 writes the store. It places no order and opens no other connection; a --charts that is not this machine is refused.
+One runner per store: it holds an exclusive lock on <store root>/runner.lock while it works, and a second one says so
+in one line and exits 1 (two runners would write the same day files).
 """
 from __future__ import annotations
 
 import argparse
+import fcntl
 import sys
 from urllib.parse import urlsplit
 
-from . import host
+from . import host, store
 
 CHARTS = "http://127.0.0.1:8852"
 LOCAL = ("127.0.0.1", "localhost")
 DESK_PORT = 8850                 # the trading app: never ours to talk to
+LOCK_FILE = "runner.lock"        # in the store root; the lock is the open file's, so it goes when the process goes
 
 
 def local_url(url: str) -> str:
@@ -30,6 +34,20 @@ def local_url(url: str) -> str:
     return f"http://{u.netloc}"
 
 
+def only_runner(at=None):
+    """The store's lock, held by the open file this returns (keep it; close it to let go) -- or None when another
+    runner holds it."""
+    d = store.root(at)
+    d.mkdir(parents=True, exist_ok=True)
+    fh = open(d / LOCK_FILE, "a")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        fh.close()
+        return None
+    return fh
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m homebase.labrun")
     ap.add_argument("--charts", default=CHARTS, help="the chart service on this machine")
@@ -39,7 +57,14 @@ def main(argv=None) -> int:
         charts = local_url(a.charts)
     except ValueError as e:
         ap.error(f"--charts {a.charts}: {e}")
-    host.run(charts, a.root)
+    lock = only_runner(a.root)
+    if lock is None:
+        print(f"Another runner already holds this store ({store.root(a.root)}): this one stops.", file=sys.stderr)
+        return 1
+    try:
+        host.run(charts, a.root)
+    finally:
+        lock.close()
     return 0
 
 

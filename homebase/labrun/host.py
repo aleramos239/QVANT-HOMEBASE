@@ -195,7 +195,7 @@ def words(it: dict, tick: float) -> str:
 
     op = it["op"]
     if op == "oco":
-        return "One cancels the other"
+        return "Link the pair: one cancels the other"
     if op == "cancel":
         return "Cancel"
     if op == "flatten":
@@ -209,6 +209,14 @@ def words(it: dict, tick: float) -> str:
     elif it.get("tp") is not None:
         out += f", target {px(it['tp'])}"
     return out
+
+
+def costs_of(record: dict) -> Costs:
+    """The costs the promoted backtest ran with (frozen in the record by store.snapshot), so a shadow day's net is the
+    same sum as its backtest's; the tester's own defaults for a record that does not carry them."""
+    base = Costs()
+    c, s = record.get("commission"), record.get("slippage_ticks")
+    return Costs(c if _num(c) else base.commission_rt, s if _num(s) else base.slippage_ticks)
 
 
 def daily_bars(root: str, d: dt.date, tapes: TapeStore | None = None) -> list:
@@ -344,13 +352,15 @@ class StrategyDay:
     before the date, or a function (root, date) that reads them, asked only if the strategy needs them and only when
     its session event fires (default: the tape store). save(summary): called at every state change and else at most
     once a second. late(t0_ns) -> True when a day whose window starts at t0 can no longer be followed in full: it is
-    stopped before anything runs."""
+    stopped before anything runs. now_ns: the stream's clock as the day is made (the runner's); a day made after its
+    window began is `rebuilt` -- made from prints already held, not followed live from its start."""
 
     def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
-                 start_s: float = START_S, save=None, wall=time.monotonic, late=None):
+                 start_s: float = START_S, save=None, wall=time.monotonic, late=None, now_ns: int | None = None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
         self.promoted = record.get("promoted_utc")
         self.state, self.why, self.detail = "waiting", None, None
+        self.rebuilt = False                         # made by catch-up (the summary says so)
         self.match: dict | None = None               # the daily match's verdict, once the runner has it
         self.fills: ShadowFills | None = None
         self.orders: list[dict] = []                 # the summary's rows, as they happened
@@ -365,7 +375,7 @@ class StrategyDay:
         self._saved_at = float("-inf")
         self._updated = _utc()
         try:
-            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late)
+            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns)
         except _Stop as e:
             self._stopped(str(e), e.detail)
         except Exception as e:  # noqa: BLE001 -- whatever broke, its child must not outlive the attempt
@@ -373,7 +383,7 @@ class StrategyDay:
         self._changed()
 
     # ---- the start
-    def _start(self, record: dict, spawn, daily, start_s: float, late) -> None:
+    def _start(self, record: dict, spawn, daily, start_s: float, late, now_ns) -> None:
         run_dir = proc = None
         try:
             run_dir = Path(tempfile.mkdtemp(prefix="hb-labrun-"))
@@ -402,6 +412,7 @@ class StrategyDay:
         self._t0, self._t1 = et_ns(self.date, w0), et_ns(self.date, w1)
         if late is not None and late(self._t0):
             raise _Stop(TOO_LATE)
+        self.rebuilt = now_ns is not None and now_ns > self._t0
         self._tick = tick_size(root)
         self._limits = {**SHADOW, "last_entry_et": w1[:5], "session_from_et": w0[:5],
                         "point_value": point_value(root) or 0.0, "tick": self._tick}
@@ -414,7 +425,7 @@ class StrategyDay:
         self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
         self._root = root
         self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
-        self.fills = ShadowFills(root, self.date, Costs(), meta["placement_ms"])
+        self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"])
 
     # ---- the prints and the clock
     def on_ticks(self, rows) -> None:
@@ -606,7 +617,7 @@ class StrategyDay:
 
     def summary(self) -> dict:
         """The day summary (contracts.md). `match` is the daily match's verdict, set by the runner; a stopped day
-        says it was not checked."""
+        says it was not checked. `rebuilt` is there (true) only for a day made by catch-up."""
         trades = [{"side": t["side"], "qty": t["qty"], "entry_t": _hms(t["entry_ns"]), "entry_px": t["entry_price"],
                    "exit_t": _hms(t["exit_ns"]), "exit_px": t["exit_price"], "reason": t["exit_reason"], "net": t["net"]}
                   for t in self.trades()]
@@ -616,7 +627,8 @@ class StrategyDay:
         verdict = {"ok": None, "text": "Not checked: it was stopped."} if self.state == "stopped" else self.match
         return {"date": self.date.isoformat(), "sha256": self.sha256, "promoted_utc": self.promoted, "state": self.state,
                 "why": why, "orders": list(self.orders), "trades": trades,
-                "net": round(sum((t["net"] for t in trades), 0.0), 2), "match": verdict, "updated_utc": self._updated}
+                "net": round(sum((t["net"] for t in trades), 0.0), 2), "match": verdict, "updated_utc": self._updated,
+                **({"rebuilt": True} if self.rebuilt else {})}
 
     def _changed(self, now: bool = False) -> None:
         """Hand the summary to save() when it changed: at once on a new state (or `now`), else at most once every
@@ -893,10 +905,11 @@ class Runner:
     # ---- the store
     def sync(self) -> None:
         """Read the store: host each enabled strategy whose market has prints this session (session_today: never a
-        Saturday's or a Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
-        the session's prints first (catch-up) -- unless its day file for the date is final (_is_final). While a
-        backlog is in flight nothing is hosted or stopped: the tape is not whole yet. The first time a strategy is
-        seen, a finished day of today or the session before with no match (or "not checked yet") is matched again."""
+        Saturday's or a Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh
+        day, fed from the session's prints first (catch-up) -- unless its day file for the date is final (_is_final).
+        While a backlog is in flight nothing is hosted or stopped: the tape is not whole yet. The first time a
+        strategy is seen, a finished day of today or the session before with no match (or "not checked yet") is
+        matched again."""
         try:
             recs = [r for r in store.listing(self.at) if r.get("enabled") and isinstance(r.get("root"), str)]
         except OSError as e:
@@ -968,7 +981,7 @@ class Runner:
         # Fail closed: the clock is past the window's start and the prints held begin after it (the stream's backlog
         # is the session from its open; a tape that starts later cannot rebuild the day in full).
         day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
-                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0)
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now)
         h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)

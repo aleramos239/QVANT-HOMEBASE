@@ -9,17 +9,28 @@ One JSON object a line on stdin, one reply a line on stdout (stderr is free text
   {"op": "stop"}                                               -> the child exits 0
 The strategy runs against a LiveCtx: its orders come back as intents and nothing here places an order. A strategy's own
 print() goes to stderr, so it can never corrupt a protocol line.
+
+A source is loaded only inside the sandbox: the host's launcher sets HOMEBASE_SANDBOXED=1 in the child's environment
+(backtest/sandbox.env), as for the tester's own child (backtest/runner.py). Without it `init` answers ok false and the
+child exits 1. HOMEBASE_LABRUN_UNSANDBOXED_TESTS=1 is the one way round it, and only the test suite sets it (for its
+own strategies).
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 import sys
 
 from ..backtest import drafthost
 from ..backtest.engine import Bar
 from ..contracts import point_value, tick_size
 from .livectx import LiveCtx
+
+
+SANDBOXED = "HOMEBASE_SANDBOXED"                           # set by the sandbox's launcher (backtest/sandbox.env)
+UNSANDBOXED_TESTS = "HOMEBASE_LABRUN_UNSANDBOXED_TESTS"    # the test suite's escape, never set by the app
+NOT_SANDBOXED = "it runs only inside the sandbox"
 
 
 def _init(msg: dict):
@@ -81,6 +92,9 @@ def main() -> int:
             if op == "stop":
                 return 0
             if op == "init":
+                if os.environ.get(SANDBOXED) != "1" and os.environ.get(UNSANDBOXED_TESTS) != "1":
+                    reply({"ok": False, "error": NOT_SANDBOXED})     # fail closed: no sandbox, no source is loaded
+                    return 1
                 try:
                     strategy, ctx, meta = _init(msg)
                 except Exception as e:  # noqa: BLE001 -- the owner must see what broke

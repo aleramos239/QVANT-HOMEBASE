@@ -51,7 +51,8 @@ def make_run(tmp_path):
         (d / "status.json").write_text(json.dumps({"id": rid, "status": status}))
         if status == "done":
             (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs or {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0},
-                                                    "qty": 2, "range": RANGE, "report": {"summary": {"all": SUMMARY}}}))
+                                                    "qty": 2, "range": RANGE, "commission": 2.5, "slippage_ticks": 0.0,
+                                                    "report": {"summary": {"all": SUMMARY}}}))
         return rid
     return make
 
@@ -130,6 +131,7 @@ def test_a_good_promote_writes_the_record_and_the_page_reads_it_without_the_code
     assert rec["source"] == code and rec["sha256"] == sha(code) and rec["id"] == "draft_nq_bars" and rec["enabled"] is False
     assert rec["params"] == {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0} and rec["qty"] == 2 and rec["root"] == "NQ"
     assert rec["label"] == "Bar breakout" and rec["notes"] == r.json()["notes"] and rec["promoted_utc"]
+    assert (rec["commission"], rec["slippage_ticks"]) == (2.5, 0.0)             # D1: the costs that backtest ran with
     assert rec["run"] == {"id": rid, "range": RANGE, "net": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31,
                           "max_drawdown": -2100.0}
     got = c.get("/api/tester/desklab", headers=DESK)
@@ -177,7 +179,7 @@ def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts
                                   **mark()}, at)
     (s,) = c.get("/api/tester/desklab").json()["strategies"]
     assert today == "2026-09-28" and s["today"]["n"] == 0
-    assert [d["n"] for d in s["days"]] == list(range(10))                       # ten, newest first
+    assert [d["date"] for d in s["days"]] == [(dt.date(2026, 9, 28) - dt.timedelta(days=i)).isoformat() for i in range(10)]
     now = dt.datetime.now(dt.timezone.utc)
     store.put_runner({"pid": 7, "seen_utc": (now - dt.timedelta(seconds=5)).isoformat(timespec="seconds"), "source": "u",
                       "prices": {"NQ": {"age_s": 0.4, "late": False}}, "hosting": ["nq_bars"]}, at)
@@ -367,3 +369,23 @@ def test_today_is_the_session_day_the_runner_is_on_not_the_wall_clock_date(c, dr
     at_et(monkeypatch, *when)
     (s,) = c.get("/api/tester/desklab").json()["strategies"]
     assert (s["today"] or {}).get("date") == today
+
+
+# ---------------------------------------------------------------- D7: the ten past days are short
+def test_the_past_days_carry_only_what_the_page_reads_and_today_stays_whole(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    full = a_day("2026-09-28", **mark(), net=811.0, why=None, rebuilt=True,
+                 match={"ok": True, "text": "Matched the backtest: 1 of 1 trade."},
+                 orders=[{"t": "10:10:00", "text": "Sell at market, stop 21,520.00", "refused": None}],
+                 trades=[{"side": "short", "qty": 1, "entry_t": "10:10:00", "entry_px": 21500.0, "exit_t": "10:23:51",
+                          "exit_px": 21459.25, "reason": "tp", "net": 811.0}])
+    store.put_day("nq_bars", full)
+    store.put_day("nq_bars", a_day("2026-09-25", **mark(), state="stopped", why="Too slow: no answer in 1 s."))
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"] == full                                                   # today: every row
+    assert s["days"] == [
+        {"date": "2026-09-28", "state": "done", "why": None, "net": 811.0, "rebuilt": True,
+         "match": {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}},
+        {"date": "2026-09-25", "state": "stopped", "why": "Too slow: no answer in 1 s.", "net": 0.0, "rebuilt": False,
+         "match": None}]

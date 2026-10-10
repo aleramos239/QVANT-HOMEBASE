@@ -80,13 +80,19 @@ test('usd: a real minus sign, whole dollars, a plus for a gain', () => {
   assert.equal(D.usd('5'), '—', 'only a number is a number');
 });
 
-test('orderLine: the time and the words; a refused order says why after "Would be refused:"', () => {
+test('orderLine: the time and "would ..." (shadow: nothing was sent); a refused order says why after "Would be refused:"', () => {
+  assert.deepEqual({ ...D.orderLine({ t: '10:10:00', text: 'Sell at market, stop 22,014.25, target 21,954.25', refused: null }) },
+    { t: '10:10:00', text: 'would sell at market, stop 22,014.25, target 21,954.25', refused: false });
   assert.deepEqual({ ...D.orderLine({ t: '09:30:01', text: 'Buy stop 1 at 21000.25', refused: null }) },
-    { t: '09:30:01', text: 'Buy stop 1 at 21000.25', refused: false });
+    { t: '09:30:01', text: 'would buy stop 1 at 21000.25', refused: false });
+  for (const [said, shown] of [['Link the pair: one cancels the other', 'would link the pair: one cancels the other'],
+    ['Cancel', 'would cancel'], ['Flatten (time)', 'would flatten (time)']]) {
+    assert.equal(D.orderLine({ t: '09:30:00', text: said, refused: null }).text, shown);
+  }
   assert.deepEqual({ ...D.orderLine({ t: '09:30:02', text: 'Sell stop 1 at 20990', refused: 'One position at a time.' }) },
-    { t: '09:30:02', text: 'Sell stop 1 at 20990. Would be refused: One position at a time.', refused: true });
+    { t: '09:30:02', text: 'would sell stop 1 at 20990. Would be refused: One position at a time.', refused: true });
   assert.deepEqual({ ...D.orderLine({ t: '09:30:02', text: 'Sell stop 1 at 20990.', refused: 'Too late for a new trade today.' }) }.text,
-    'Sell stop 1 at 20990. Would be refused: Too late for a new trade today.', 'no double full stop');
+    'would sell stop 1 at 20990. Would be refused: Too late for a new trade today.', 'no double full stop');
   assert.deepEqual({ ...D.orderLine({}) }, { t: '', text: '', refused: false });
   assert.deepEqual({ ...D.orderLine(null) }, { t: '', text: '', refused: false });
 });
@@ -101,13 +107,18 @@ test('tradeLine: side, entry to exit, why it ended, and the net', () => {
 
 test('matchLine: the date, the match sentence (or "Not checked yet."), the net', () => {
   assert.deepEqual({ ...D.matchLine(day({ date: '2026-10-08', net: 80, match: { ok: true, text: 'Matched the backtest: 3 of 3 trades.' } })) },
-    { date: '2026-10-08', text: 'Matched the backtest: 3 of 3 trades.', ok: true, net: 80 });
+    { date: '2026-10-08', text: 'Matched the backtest: 3 of 3 trades.', ok: true, net: 80, rebuilt: false });
   assert.deepEqual({ ...D.matchLine(day({ date: '2026-10-07', net: -20, match: { ok: false, text: '1 trade differs.' } })) },
-    { date: '2026-10-07', text: '1 trade differs.', ok: false, net: -20 });
-  assert.deepEqual({ ...D.matchLine(day({ match: null })) }, { date: '2026-10-09', text: 'Not checked yet.', ok: null, net: 0 });
+    { date: '2026-10-07', text: '1 trade differs.', ok: false, net: -20, rebuilt: false });
+  assert.deepEqual({ ...D.matchLine(day({ match: null })) }, { date: '2026-10-09', text: 'Not checked yet.', ok: null, net: 0, rebuilt: false });
+  assert.equal(D.matchLine(day({ rebuilt: true })).rebuilt, true, 'a day rebuilt by catch-up says so');
+  assert.equal(D.matchLine(day({ rebuilt: 'yes' })).rebuilt, false, 'only true is true');
+  // the list of past days is cut to these fields by the chart service: nothing else of a past day is read
+  assert.deepEqual({ ...D.matchLine({ date: '2026-10-08', state: 'done', why: null, net: 80, match: { ok: true, text: 'x' }, rebuilt: true }) },
+    { date: '2026-10-08', text: 'x', ok: true, net: 80, rebuilt: true });
   assert.equal(D.matchLine(day({ match: { ok: null, text: '' } })).text, 'Not checked yet.');
   assert.equal(D.matchLine(day({ match: { ok: 'yes', text: 'x' } })).ok, null, 'only true or false is a verdict');
-  assert.deepEqual({ ...D.matchLine(null) }, { date: '', text: 'Not checked yet.', ok: null, net: null });
+  assert.deepEqual({ ...D.matchLine(null) }, { date: '', text: 'Not checked yet.', ok: null, net: null, rebuilt: false });
 });
 
 test('specLine: market, session, bars, and where it came from', () => {
@@ -148,9 +159,28 @@ test('there is no "Allowed up to" control: a promoted strategy is on the Desk, o
   }
 });
 
+test('rebuiltNote: a day made by catch-up says so beside its state, while it runs or is done', () => {
+  const at = (over, rn = ALIVE, on = true) => D.rebuiltNote(row({ enabled: on, today: day(over) }), rn);
+  assert.equal(at({ state: 'running', rebuilt: true }), "rebuilt from today's prices");
+  assert.equal(at({ state: 'done', rebuilt: true }), "rebuilt from today's prices");
+  assert.equal(at({ state: 'running' }), '');
+  assert.equal(at({ state: 'running', rebuilt: 1 }), '', 'only true is true');
+  assert.equal(at({ state: 'waiting', rebuilt: true }), '');
+  assert.equal(at({ state: 'stopped', rebuilt: true }), '');
+  assert.equal(at({ state: 'running', rebuilt: true }, { alive: false }), '', 'the state line says the runner is not running');
+  assert.equal(at({ state: 'running', rebuilt: true }, ALIVE, false), '', 'off');
+  assert.equal(D.rebuiltNote(row(), ALIVE), '');
+  assert.equal(D.rebuiltNote(null, null), '');
+});
+
 test('the words the page shows, exactly', () => {
   assert.equal(D.TAG_TITLE, 'It writes down its orders. Nothing is sent.');
-  assert.equal(D.NET_TITLE, 'What it would have made today, after costs, 1 contract');
+  assert.equal(D.netTitle(row()), 'What it would have made today, after costs, 1 contract');
+  assert.equal(D.netTitle(row({ qty: 2 })), 'What it would have made today, after costs, 2 contracts', 'the size it was promoted with');
+  assert.equal(D.netTitle(row({ qty: undefined })), 'What it would have made today, after costs');
+  assert.equal(D.netTitle(row({ qty: 0 })), 'What it would have made today, after costs');
+  assert.equal(D.netTitle(null), 'What it would have made today, after costs');
+  assert.equal('NET_TITLE' in D, false);
   assert.equal(D.switchTitle(true), 'ON: it runs in shadow');
   assert.equal(D.switchTitle(false), 'OFF: it does nothing');
   assert.equal(D.NOTE, 'From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.');
@@ -186,6 +216,7 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
   // anything else is a new hole: look at it before adding it here
   const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'today', 'busy ? " disabled" : ""',
     'o.refused ? " warn" : ""', 'm.ok === false ? " warn" : ""', 'orders.join("")', 'trades.join("")',
+    'm.rebuilt ? \'<span class="t dim">rebuilt</span>\' : ""', 'rebuilt ? ` · ${esc(rebuilt)',
     'net == null ? "" : esc(usdS(net))', 'esc(DeskLab.missingText(DESKLAB_OK))', 'DeskLab.figures(w).map(fig).join("")',
     'net != null ? ` · today would be ${esc(usdS(net))', 'days.length ? `<div class="agroup feed static">${days.join("")',
     'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")']);
@@ -215,6 +246,43 @@ test('a hostile name and sentence from the network cannot break out of the page'
   assert.doesNotMatch(ctx.html, /<img/);
   assert.match(ctx.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(ctx.html, /Would be refused: &lt;img/);
+});
+
+test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt" by a day and in the state line', () => {
+  assert.match(LABVIEW, /<div class="sec"><h2>Today, in shadow<\/h2>\$\{today\}<\/div>/);
+  assert.doesNotMatch(LABVIEW, /<h2>Today<\/h2>/);
+  assert.match(LABVIEW, /title="\$\{esc\(DeskLab\.netTitle\(w\)\)\}"/);
+  assert.doesNotMatch(HTML, /DeskLab\.NET_TITLE/);
+  const r = row({ qty: 2, today: day({ state: 'running', rebuilt: true, net: 50,
+    orders: [{ t: '10:10:00', text: 'Sell at market, stop 22,014.25, target 21,954.25', refused: null }] }),
+    days: [{ date: '2026-10-09', state: 'running', why: null, net: 50, match: null, rebuilt: true },
+      { date: '2026-10-08', state: 'done', why: null, net: 80, match: { ok: true, text: 'Matched the backtest: 1 of 1 trade.' }, rebuilt: false }] });
+  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [r], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', shortDay: (s) => s,
+    esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
+    usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
+  vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb"); globalThis.rowHtml = todayLabRow(DESKLAB.strategies[0]);`, ctx);
+  assert.match(ctx.html, /<span class="t">10:10:00<\/span><span class="h">would sell at market, stop 22,014\.25, target 21,954\.25<\/span>/);
+  assert.match(ctx.html, /<b>Running in shadow<\/b> · rebuilt from today&#39;s prices · today would be \+\$50/);
+  assert.equal((ctx.html.match(/<span class="t dim">rebuilt<\/span>/g) || []).length, 1, 'beside the rebuilt day only');
+  assert.match(ctx.html, /2026-10-09<\/span><span class="h">Not checked yet\.<\/span><span class="t dim">rebuilt<\/span>/);
+  assert.match(ctx.rowHtml, /title="What it would have made today, after costs, 2 contracts"/);
+});
+
+test('removeDeskLab renders only once the desk\'s status is in, like its neighbours', async () => {
+  const fn = LABBLOCK.slice(LABBLOCK.indexOf('async function removeDeskLab'), LABBLOCK.indexOf('function openDeskLabInLab'));
+  assert.equal((fn.match(/render\(\)/g) || []).length, 2);
+  assert.equal((fn.match(/if \(ST\) render\(\)/g) || []).length, 2, 'never a bare render()');
+  const run = async (ST) => {
+    let renders = 0;
+    const ctx = vm.createContext({ ST, DEMO: false, FREEZE: false, CHART: '', VIEW: { k: 'lab', name: 'nq_orb' }, DeskLab: D, document: { hidden: true },
+      location: { hash: '' }, history: { replaceState() {} }, switchBounced: () => false, toast() {}, confirmDlg: async () => true,
+      chartPost: async () => ({ ok: true }), render() { if (!ST) throw new Error('render() with no status'); renders += 1; } });
+    vm.runInContext(`${LABBLOCK}\nDESKLAB = { strategies: [{ name: 'nq_orb' }], runner: null };\nglobalThis.go = () => removeDeskLab('nq_orb'); globalThis.left = () => DESKLAB.strategies.length;`, ctx);
+    await ctx.go();
+    return [renders, ctx.left()];
+  };
+  assert.deepEqual(await run(null), [0, 0], 'no status yet: it is removed and nothing renders (or throws)');
+  assert.deepEqual(await run({ strategies: {} }), [2, 0]);
 });
 
 test('the skin treats a Lab page like a watched one, reads the same helpers, and still talks to nobody', () => {

@@ -10,9 +10,11 @@ this module talks to a service. Remove deletes the record only: the days and the
     <root>/runner.json                  the runner's heartbeat
 
 The record carries, besides the code and the run's numbers, `session_window` (["09:25", "16:00"]) and `bar_minutes` (0 =
-none) from the draft's static meta. A day summary carries `promoted_utc` (the record's, copied when the day starts: a day
-file is final for its date only for the promotion that wrote it) and `match` ({"ok": bool | None, "text"}: the daily
-match against the tester, labrun/match.py).
+none) from the draft's static meta, and the `commission` and `slippage_ticks` that backtest ran with (the runner's
+would-be fills and the daily match use them; None = the tester's defaults). A day summary carries `promoted_utc` (the
+record's, copied when the day starts: a day file is final for its date only for the promotion that wrote it), `match`
+({"ok": bool | None, "text"}: the daily match against the tester, labrun/match.py) and, only for a day made from prints
+already held (catch-up), `rebuilt: true`.
 
 Stdlib only (draftstore, for the name rule, is too).
 """
@@ -68,9 +70,10 @@ def _read(f: Path) -> dict | None:
 def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, notes: list,
              now: dt.datetime | None = None) -> dict:
     """What is kept when a draft is promoted: its text as it was backtested, the settings and size of that run, and the
-    run's headline numbers (from the bundle's run.json: inputs, qty, range, report.summary.all), and the window and
-    bar size the page shows (the static meta's; the Strategy defaults when the draft does not say). It lands switched
-    OFF, also when it replaces one that was on: the owner turns it on, on the Desk."""
+    run's headline numbers and costs (from the bundle's run.json: inputs, qty, range, commission, slippage_ticks,
+    report.summary.all), and the window and bar size the page shows (the static meta's; the Strategy defaults when the
+    draft does not say). It lands switched OFF, also when it replaces one that was on: the owner turns it on, on the
+    Desk."""
     now = now or dt.datetime.now(dt.timezone.utc)
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
@@ -79,6 +82,7 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},
             "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": False,
+            "commission": run.get("commission"), "slippage_ticks": run.get("slippage_ticks"),
             "session_window": list(meta.get("session_window") or DEFAULT_WINDOW), "bar_minutes": meta.get("bar_minutes") or 0}
 
 

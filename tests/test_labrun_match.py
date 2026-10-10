@@ -201,6 +201,15 @@ def test_the_tester_is_asked_for_that_one_day_with_the_frozen_code_settings_and_
     assert (t["side"], t["entry_ns"], t["exit_ns"], t["exit_reason"]) == ("long", T0, T0 + 60 * SEC, "tp")
 
 
+def test_the_tester_runs_with_the_costs_the_record_froze_and_the_defaults_when_it_has_none(tmp_path, fake):
+    """D1. The promoted backtest's commission and slippage, so the tester's day and the Desk's are the same sum."""
+    f = fake()
+    match.tester_day(rec(SOURCE, commission=2.5, slippage_ticks=0.0), D1, launch=f, **dirs(tmp_path))
+    match.tester_day(rec(SOURCE), D1, launch=f, **dirs(tmp_path))                   # a record from before they were kept
+    match.tester_day(rec(SOURCE, commission=None, slippage_ticks=None), D1, launch=f, **dirs(tmp_path))
+    assert [(r["commission"], r["slippage_ticks"]) for r in f.requests] == [(2.5, 0.0), (4.0, 1.0), (4.0, 1.0)]
+
+
 def test_the_run_lives_under_the_base_is_cleaned_up_and_the_slot_is_given_back(tmp_path, fake):
     f = fake()
     d = dirs(tmp_path)

@@ -25,7 +25,8 @@
   var TIME_RE = /^\d{1,2}:\d\d$/;
 
   var TAG_TITLE = "It writes down its orders. Nothing is sent.";
-  var NET_TITLE = "What it would have made today, after costs, 1 contract";
+  var NET_WORDS = "What it would have made today, after costs";
+  var REBUILT = "rebuilt from today's prices";
   var NOTE = "From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.";
   var GONE = "That strategy is not on the Desk any more. Promote it again from the Lab.";
   var EMPTY_DAY = "Nothing yet today.";
@@ -100,16 +101,30 @@
     return "shadow";
   }
 
-  // What today would have made, after costs, 1 contract: a number or null.
+  // What today would have made, after costs, at the size it was promoted with: a number or null.
   function todayNet(row) {
     var t = dayOf(row);
     return t ? num(t.net) : null;
   }
+  // The tooltip of that number: "..., after costs, 2 contracts" (the record's size; left out when it has none).
+  function netTitle(row) {
+    var q = num(row && row.qty);
+    return q !== null && q >= 1 ? NET_WORDS + ", " + q + (q === 1 ? " contract" : " contracts") : NET_WORDS;
+  }
+  // A day made by catch-up (promoted or switched on mid-session, or a runner that started again) says so beside its
+  // state, while it runs or is done: "Running in shadow · rebuilt from today's prices". "" otherwise.
+  function rebuiltNote(row, runner) {
+    var t = dayOf(row);
+    if (!t || t.rebuilt !== true || !row || row.enabled !== true || !alive(runner)) return "";
+    return t.state === "running" || t.state === "done" ? REBUILT : "";
+  }
 
-  // One would-be order of the day: its time and its words; a refused one says why after "Would be refused:".
+  // One would-be order of the day: its time and its words, marked the way the page marks a shadow signal ("would ...":
+  // nothing was sent) -- the runner's words with "would" in front; a refused one says why after "Would be refused:".
   function orderLine(o) {
     var r = o && typeof o === "object" ? o : {};
     var said = text(r.text), why = text(r.refused);
+    said = said ? "would " + said.charAt(0).toLowerCase() + said.slice(1) : "";
     return {
       t: text(r.t),
       text: why ? said.replace(/\.+$/, "") + ". Would be refused: " + why : said,
@@ -129,7 +144,8 @@
     return { text: parts.join(" · "), net: num(r.net) };
   }
 
-  // One day of "Matched the backtest": the date, the daily match's sentence, what the day would have made.
+  // One day of "Matched the backtest": the date, the daily match's sentence, what the day would have made, and whether
+  // the day was rebuilt by catch-up. A past day comes cut to {date, state, why, net, match, rebuilt}: no more is read.
   function matchLine(day) {
     var d = day && typeof day === "object" ? day : {};
     var m = d.match && typeof d.match === "object" ? d.match : null;
@@ -138,6 +154,7 @@
       text: (m && text(m.text)) || NOT_CHECKED,
       ok: m && typeof m.ok === "boolean" ? m.ok : null,
       net: num(d.net),
+      rebuilt: d.rebuilt === true,
     };
   }
 
@@ -205,9 +222,10 @@
   }
 
   return {
-    TAG_TITLE: TAG_TITLE, NET_TITLE: NET_TITLE, NOTE: NOTE, GONE: GONE, EMPTY_DAY: EMPTY_DAY, NOT_CHECKED: NOT_CHECKED,
+    TAG_TITLE: TAG_TITLE, NOTE: NOTE, GONE: GONE, EMPTY_DAY: EMPTY_DAY, NOT_CHECKED: NOT_CHECKED,
     ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING,
-    usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, orderLine: orderLine,
+    usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, netTitle: netTitle,
+    rebuiltNote: rebuiltNote, orderLine: orderLine,
     tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, setupRows: setupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
   };

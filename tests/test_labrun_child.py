@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import queue
 import subprocess
 import sys
@@ -106,9 +107,19 @@ class Other(Strategy):
 '''
 
 
+TESTS_ONLY = {"HOMEBASE_LABRUN_UNSANDBOXED_TESTS": "1"}     # the child's escape for this suite's own strategies
+
+
+def env_with(**kw) -> dict:
+    """This process's environment without the two switches the child reads, plus `kw`."""
+    base = {k: v for k, v in os.environ.items() if k not in ("HOMEBASE_SANDBOXED", "HOMEBASE_LABRUN_UNSANDBOXED_TESTS")}
+    return {**base, **kw}
+
+
 class Child:
-    def __init__(self):
+    def __init__(self, env=None):
         self.p = subprocess.Popen([sys.executable, "-m", "homebase.labrun.child"], cwd=REPO, text=True,
+                                  env=env_with(**TESTS_ONLY) if env is None else env,
                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.out: queue.Queue = queue.Queue()
         self.err: str | None = None
@@ -302,3 +313,33 @@ def test_an_event_whose_flat_is_not_a_boolean_is_an_error_reply(child, flat):
                     "updates": []})
     assert r["ok"] is False and "flat" in r["error"]
     assert child.event("session", flat=False) == {"ok": True, "intents": []}
+
+
+# ---------------------------------------------------------------- D6: no sandbox, no source
+def test_outside_the_sandbox_the_child_refuses_to_load_a_source_and_exits_1():
+    c = Child(env=env_with())
+    try:
+        r = c.init(STRADDLE)
+        assert r == {"ok": False, "error": "it runs only inside the sandbox"}
+        assert c.p.wait(timeout=30) == 1
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("switch", [{"HOMEBASE_SANDBOXED": "1"}, TESTS_ONLY])
+def test_inside_the_sandbox_or_with_the_test_suites_escape_it_loads(switch):
+    c = Child(env=env_with(**switch))
+    try:
+        assert c.init(STRADDLE)["ok"] is True
+    finally:
+        c.close()
+
+
+@pytest.mark.parametrize("switch", [{"HOMEBASE_SANDBOXED": "0"}, {"HOMEBASE_SANDBOXED": "true"},
+                                    {"HOMEBASE_LABRUN_UNSANDBOXED_TESTS": "yes"}, {"HOMEBASE_LABRUN_UNSANDBOXED_TESTS": ""}])
+def test_only_the_exact_value_1_opens_either_switch(switch):
+    c = Child(env=env_with(**switch))
+    try:
+        assert c.init(STRADDLE)["ok"] is False and c.p.wait(timeout=30) == 1
+    finally:
+        c.close()

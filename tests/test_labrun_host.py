@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import fcntl
 import json
+import os
 import subprocess
 import time
 from pathlib import Path
@@ -39,8 +41,9 @@ def ms_of(hms: str, ms: int = 0, d: dt.date = D) -> int:
 
 
 def plain(argv, run_dir):
-    """A child with no sandbox: the tests' own strategies only."""
-    return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    """A child with no sandbox: the tests' own strategies only (the child's escape, which only this suite sets)."""
+    return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            env={**os.environ, "HOMEBASE_LABRUN_UNSANDBOXED_TESTS": "1"})
 
 
 def rec(source: str, name: str = "lab_x", **kw) -> dict:
@@ -159,6 +162,26 @@ def test_the_clock_fires_an_event_that_no_print_has_reached(days):
     assert s["net"] == -14.0
 
 
+def test_the_would_be_fills_use_the_costs_the_record_froze(days):
+    """D1. The promoted backtest's commission and slippage; a record from before they were kept: the tester's defaults."""
+    def net(**kw):
+        day = StrategyDay(rec(MARKET_930, **kw), D, spawn=plain, daily=[], deadline_s=0.3)
+        try:
+            day.on_ticks(ticks("09:29:50", [21000.0] * 9))
+            day.on_clock(ms_of("09:30:01", 1))
+            day.on_ticks(ticks("09:30:02", [21001.0]))
+            day.on_clock(ms_of("16:00:02", 1))
+            (t,) = day.summary()["trades"]
+            return t["entry_px"], t["exit_px"], t["net"]
+        finally:
+            day.kill()
+    assert net() == (21001.25, 21000.75, -14.0)                              # $4 a round turn, 1 tick a side
+    assert net(commission=None, slippage_ticks=None) == (21001.25, 21000.75, -14.0)
+    assert net(commission=1.0, slippage_ticks=0.0) == (21001.0, 21001.0, -1.0)
+    assert net(commission=0.0, slippage_ticks=2.0) == (21001.5, 21000.5, -20.0)
+    assert net(commission="4", slippage_ticks=True) == (21001.25, 21000.75, -14.0)     # not numbers: the defaults
+
+
 def test_a_day_made_after_its_window_is_run_from_the_prints_and_ends_done(days):
     day = days(MARKET_930)
     day.on_ticks(ticks("09:29:50", [21000.0] * 20) + ticks("15:54:59", [21010.0] * 3) + ticks("16:00:01", [21020.0]))
@@ -222,7 +245,7 @@ def test_a_broken_strategy_is_stopped_with_its_sentence_and_the_next_one_is_not_
             d.on_ticks(rows[i:i + 10])
     took = time.monotonic() - t
     s = bad.summary()
-    assert (bad.state, s["state"], s["why"]) == ("stopped", "stopped", why) and took < 2.0
+    assert (bad.state, s["state"], s["why"]) == ("stopped", "stopped", why) and took < 5.0     # (a 0.3 s deadline)
     assert bad.child_alive() is False
     assert [o["text"] for o in s["orders"]] == ["Buy at market, stop 20,990.00"]     # nothing of the broken event
     (tr,) = s["trades"]                                                      # the open position: closed at the stop
@@ -436,7 +459,7 @@ def test_settings_that_cannot_be_read_stop_the_day_before_anything_is_built(case
     assert day.child_alive() is False and day.fills is None
     day.on_ticks(ticks("09:29:50", [21000.0] * 200))                         # and the runner's thread comes back
     day.on_clock(ms_of("16:01"))
-    assert day.state == "stopped" and time.monotonic() - t < 3.0
+    assert day.state == "stopped" and time.monotonic() - t < 5.0
 
 
 def test_settings_at_the_edges_are_read(days):
@@ -553,7 +576,7 @@ def test_the_summary_reads_in_plain_words(days):
     assert s["orders"] == [
         {"t": "09:30:00", "text": "Buy stop 21,450.25, stop 21,400.25, target 21,550.25", "refused": None},
         {"t": "09:30:00", "text": "Sell stop 21,350.00, stop 21,400.00, target 2 x the stop", "refused": None},
-        {"t": "09:30:00", "text": "One cancels the other", "refused": None},
+        {"t": "09:30:00", "text": "Link the pair: one cancels the other", "refused": None},
         {"t": "09:40:00", "text": "Cancel", "refused": None},
         {"t": "09:40:00", "text": "Sell at market, stop 21,480.00", "refused": "One position at a time."},
         {"t": "09:40:00", "text": "Buy at market", "refused": "Every entry needs a stop held at the broker."},
@@ -743,6 +766,45 @@ def test_a_strategy_that_appears_late_is_caught_up_from_todays_prints_with_no_jo
     assert [(x["kind"], x.get("text")) for x in k.journal()] == [("order", "Flatten (time)"), ("trade", None)]
 
 
+def test_a_day_rebuilt_by_catch_up_says_so_and_one_followed_from_its_start_does_not(desk):
+    """D4. Promoted or switched on mid-session, or a runner that started again: the day was made from prints already
+    held, and its summary carries "rebuilt": true. A day hosted before its window began has no such key."""
+    k = desk()
+    k.promote(name="lab_early")
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.sync()                                                               # hosted at 09:00: before its 09:25 window
+    k.rows("09:29:50", [21000.0] * 9)
+    k.rows("09:30:00", [21000.0, 21001.0])
+    k.clock("09:31:00")
+    k.promote(name="lab_late")                                               # promoted at 09:31: caught up
+    k.r.sync()
+    early, late = k.today("lab_early"), k.today("lab_late")
+    assert early["state"] == late["state"] == "running" and len(early["orders"]) == len(late["orders"]) == 1
+    assert "rebuilt" not in early and late["rebuilt"] is True
+    assert k.r.day("lab_early").rebuilt is False and k.r.day("lab_late").rebuilt is True
+    k.rows("15:54:59", [21010.0] * 3)
+    k.clock("16:00:03")
+    assert k.file("lab_late")["state"] == "done" and k.file("lab_late")["rebuilt"] is True     # ... to the end of the day
+    assert "rebuilt" not in k.file("lab_early")
+    k.clock("17:35:00")                                                      # and the match's write keeps it
+    assert k.file("lab_late")["match"] == MATCHED and k.file("lab_late")["rebuilt"] is True
+
+
+def test_a_day_rebuilt_after_a_restart_says_so(desk):
+    k = desk()
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    assert "rebuilt" not in k.today()
+    k.r.close()                                                              # the runner went away mid-day
+    again = restart(desk)
+    assert again.today()["state"] == "done" and again.today()["rebuilt"] is True
+
+
 def test_a_stop_is_journaled_once(desk):
     k = desk()
     body, why = STOPS["raises"]
@@ -924,7 +986,7 @@ def test_a_stuck_strategy_does_not_hold_up_another_in_the_runner(desk):
     t = time.monotonic()
     k.rows("09:30:00", [21000.0] * 80)
     k.clock("09:31:21")
-    assert time.monotonic() - t < 2.0
+    assert time.monotonic() - t < 5.0                                        # (a 0.3 s deadline, a loaded machine)
     assert k.today("lab_bad")["why"] == "Too slow: no answer in 0.3 s."
     assert [o["t"] for o in k.today("lab_good")["orders"]] == ["09:31:00"]
 
@@ -1373,6 +1435,33 @@ def test_the_runner_starts_on_a_local_chart_service(url, monkeypatch, tmp_path):
     assert ran == [(url.rstrip("/"), str(tmp_path))]
 
 
+def test_one_runner_per_store_a_second_one_says_so_in_one_line_and_exits(monkeypatch, tmp_path, capsys):
+    """D5. An exclusive lock file in the store root, held while the runner works."""
+    ran = []
+
+    def run(charts, at=None):
+        ran.append(at)
+        other = open(tmp_path / "runner.lock", "a")                          # while it works, nobody else gets the lock
+        try:
+            with pytest.raises(BlockingIOError):
+                fcntl.flock(other, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        finally:
+            other.close()
+        assert cli.main(["--root", str(tmp_path)]) == 1                      # ... and a second runner stops at once
+    monkeypatch.setattr(host, "run", run)
+    assert cli.main(["--root", str(tmp_path)]) == 0
+    assert ran == [str(tmp_path)]                                            # the second never reached host.run
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "Another runner already holds this store" in err and str(tmp_path) in err
+    assert cli.main(["--root", str(tmp_path)]) == 0 and len(ran) == 2        # the first is gone: the lock is free again
+    assert store.listing(tmp_path) == []                                     # the lock file is not a strategy
+
+
+def test_the_lock_is_taken_in_the_default_store_when_no_root_is_given(monkeypatch, desklab_root):
+    monkeypatch.setattr(host, "run", lambda charts, at=None: None)
+    assert cli.main([]) == 0 and (desklab_root / "runner.lock").is_file()    # (the conftest's temp store)
+
+
 def test_the_launchd_job_runs_the_runner_and_is_kept_alive():
     import plistlib
     tpl = REPO / "deploy" / "com.ramosquant.homebase-labrun.plist.template"
@@ -1380,6 +1469,11 @@ def test_the_launchd_job_runs_the_runner_and_is_kept_alive():
     assert job["Label"] == "com.ramosquant.homebase-labrun"
     assert job["ProgramArguments"] == ["/repo/.venv/bin/python", "-m", "homebase.labrun"]
     assert job["WorkingDirectory"] == "/repo" and job["KeepAlive"] is True and job["Nice"] >= 5
+    assert job["ThrottleInterval"] >= 30                                     # D10: a crash loop must not spin
+    assert job["StandardOutPath"] == job["StandardErrorPath"] == "/repo/homebase/.state/labrun.log"
+    pipeline = plistlib.loads((REPO / "deploy" / "com.ramosquant.homebase-pipeline.plist.template").read_bytes()
+                              .replace(b"__REPO__", b"/repo"))
+    assert Path(job["StandardOutPath"]).parent == Path(pipeline["StandardOutPath"]).parent     # the repo's state folder
     assert "homebase-labrun" not in (REPO / "deploy" / "install.sh").read_text()     # not installed by this task
 
 

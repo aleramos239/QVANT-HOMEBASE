@@ -9,6 +9,7 @@ import pytest
 from homebase.labrun import store
 
 BUNDLE = {"run": {"inputs": {"sl_pts": 20.0}, "qty": 2, "range": {"kind": "custom", "start": "2024-03-01", "end": "2024-03-31"},
+                  "commission": 2.5, "slippage_ticks": 2.0,
                   "report": {"summary": {"all": {"net_profit": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31,
                                                  "max_drawdown": -2100.0, "sharpe": 1.0}}}}}
 META = {"name": "Bar breakout", "root": "NQ"}
@@ -33,6 +34,7 @@ def test_snapshot_is_the_record_the_runner_reads():
                  "run": {"id": "20261009-1-draft_nq_x-ab12", "range": BUNDLE["run"]["range"], "net": 1234.5, "trades": 41,
                          "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0},
                  "notes": ["It sets its own size."], "promoted_utc": "2026-10-09T12:00:05+00:00", "enabled": False,
+                 "commission": 2.5, "slippage_ticks": 2.0,                              # D1: the run's costs, frozen
                  "session_window": ["09:25", "16:00"], "bar_minutes": 0}                 # (the Strategy defaults)
 
 
@@ -46,6 +48,7 @@ def test_snapshot_leaves_a_missing_number_none_and_falls_back_to_the_name():
     s = store.snapshot("nq_x", SRC, {"root": "NQ"}, {"run": {"inputs": {}, "qty": 1, "range": {}}}, "r1", [])
     assert s["label"] == "nq_x" and s["run"]["net"] is None and s["run"]["profit_factor"] is None and s["run"]["trades"] is None
     assert s["params"] == {} and s["promoted_utc"] and s["enabled"] is False
+    assert s["commission"] is None and s["slippage_ticks"] is None              # a run that does not say: the defaults, later
 
 
 def test_a_promoted_strategy_lands_off_and_so_does_one_promoted_again_while_it_was_on(tmp_path):

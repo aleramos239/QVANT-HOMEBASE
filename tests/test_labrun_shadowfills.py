@@ -454,7 +454,8 @@ CASES = {"straddle": STRADDLE, "bars": BARS, "time exit": TIME_EXIT, "tp_rr": RR
 
 def plain(argv, run_dir):
     """A child with no sandbox: the tests' own strategies only (never the owner's drafts)."""
-    return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    return subprocess.Popen(argv, cwd=REPO, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                            env={**os.environ, "HOMEBASE_LABRUN_UNSANDBOXED_TESTS": "1"})
 
 
 ACT_AT = ("09:30:00", "09:45:00", "10:00:00", "11:30:00", "12:00:00", "12:30:00", "12:55:00", "13:00:00", "14:00:00",

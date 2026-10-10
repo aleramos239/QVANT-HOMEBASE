@@ -166,8 +166,8 @@ def _unavailable(run: dict, recorded: bool) -> str | None:
 
 def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, timeout_s: float = 600,
                slots: Slots | None = None, launch=None, slot_wait_s: float = SLOT_WAIT_S) -> list[dict]:
-    """The tester on that ONE day with the record's frozen source, settings and size, as a draft backtest runs: the
-    child in the macOS sandbox, holding one of the machine's backtest slots. Its run folder lives under `base`
+    """The tester on that ONE day with the record's frozen source, settings, size and costs, as a draft backtest runs:
+    the child in the macOS sandbox, holding one of the machine's backtest slots. Its run folder lives under `base`
     (never in the Lab's own runs folder) and is removed when the run is read or has failed. Returns the day's trades as
     the engine's rows. MatchUnavailable when the day cannot be read yet (its recording is not in the archive yet
     (stored), a gap, a missing print at a fire time), no slot came free in `slot_wait_s`, the sandbox is not working,
@@ -185,7 +185,9 @@ def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, t
     run_dir = proc = None
     try:
         body = {"strategy": record["id"], "inputs": record.get("params") or {}, "qty": record.get("qty") or 1,
-                "range": {"kind": "custom", "start": d.isoformat(), "end": d.isoformat()}}
+                "range": {"kind": "custom", "start": d.isoformat(), "end": d.isoformat()},
+                # the costs the promoted backtest ran with (the record's); the tester's defaults when it has none
+                **{k: record[k] for k in ("commission", "slippage_ticks") if record.get(k) is not None}}
         try:
             stub = drafthost.stub_class(name, record["source"])
             run_dir = Path(base) / "runs" / runner.prepare(body, Path(base), draft=(stub, record["source"]))
