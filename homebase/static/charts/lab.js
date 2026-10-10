@@ -935,6 +935,12 @@ function viewMenu(anchor) {
   menuEl.setAttribute('role', 'menu');
   anchor.setAttribute('aria-expanded', 'true');
 }
+/* The name a strategy gives itself (its `name`, the one the Desk shows), when it is not the file's: "NQ 5m 9:30 CLOSE" for nq_fair_price_v1. */
+function ownName(file) {
+  const b = S.bufs.get(`d:${file}`), d = S.drafts.find((x) => x.name === file);
+  const v = (b && b.valid && b.valid.ok && b.valid.meta && b.valid.meta.name) || (d && d.meta && d.meta.name);
+  return typeof v === 'string' && v.trim() && v.trim() !== file ? v.trim() : '';
+}
 /* the Strategies list's rows: the saved and unsaved ones, then the locked built-ins */
 function libRows() {
   const unsaved = [...S.bufs.values()].filter((b) => b.kind === 'new');
@@ -943,7 +949,8 @@ function libRows() {
     ...S.drafts.map((d) => {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
-      return { key: `d:${d.name}`, id: d.id, name: d.name, dirty: !!dirty, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
+      const own = ownName(d.name), state = bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft';
+      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, dirty: !!dirty, sub: own ? `${state} · ${d.name}` : state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
   return { rows, builtins };
@@ -956,7 +963,7 @@ function paintLib() {
   const { rows, builtins } = libRows();
   if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
   const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''}${r.lock ? ' title="Read-only"' : ''}>
-        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}"${C.canPick(r) ? ` data-row="${esc(r.key)}"` : ''} aria-label="${C.canPick(r) ? `Move ${esc(r.name)} to a group, or delete it` : `Move ${esc(r.name)} to a group`}" title="${C.canPick(r) ? 'Move to a group, or delete' : 'Move to a group'}" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
@@ -1626,9 +1633,12 @@ function paintHead() {
   else if (dirty) { cls = 'edited'; text = 'Edited'; }
   else if (b.valid && b.valid.ok) { text = C.metaLine(b.valid.meta); tip = b.savedAt ? `Saved ${C.ago(b.savedAt, Date.now())}` : ''; }
   else if (b.code && b.code.trim()) text = 'Checking…';
+  const own = b.kind === 'draft' ? ownName(b.name) : '';
   const name = b.kind === 'new'
     ? `<input class="doc-input" id="edName" value="${esc(b.name)}" placeholder="name" spellcheck="false" autocomplete="off" autocapitalize="off" aria-label="Strategy name"><span class="doc-name"><i>.py</i></span>`
+    : own ? `<span class="doc-name">${esc(own)}</span>`
     : `<span class="doc-name">${esc(ro ? b.id : b.name)}<i>.py</i></span>`;
+  if (own) text = text ? `${b.name}.py · ${text}` : `${b.name}.py`;
   const had = document.activeElement && document.activeElement.id === 'edName';   // typing a name must survive a repaint
   if (!had) doc.innerHTML = `${name}<span class="doc-state ${cls}" id="edState" title="${esc(tip || text)}">${esc(text)}</span>`;
   else { const st = document.getElementById('edState'); if (st) { st.className = `doc-state ${cls}`; st.textContent = text; st.title = tip || text; } }

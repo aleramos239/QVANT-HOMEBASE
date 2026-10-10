@@ -616,3 +616,15 @@ body.lab-pipe-on #labDoc, body.lab-pipe-on #labActs { visibility: hidden; }     
 .pl-acts2 { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin: 0 0 22px; }
 .pl-acts2 .pl-on { font-size: 12px; line-height: 16px; font-weight: 600; color: var(--hb-gain); }
 
+
+/* The editor / chart divider (2026-10-10, owner: "a more noticeable divider"): a 2px line the whole height and a grip that is
+   always there, the accent while it is hovered or dragged. The second selector of each rule outranks the Mac skin's own. */
+#lab .lab-split::before, html.hb-apple #lab #labSplit::before { left: 3.5px; top: 0; bottom: 0; width: 2px; border-radius: 1px;
+  background: color-mix(in srgb, var(--a-label, var(--hb-text, #000)) 24%, transparent); transition: background-color 140ms ease; }
+#lab .lab-split::after, html.hb-apple #lab #labSplit::after { left: 1.5px; width: 6px; height: 48px; top: calc(50% - 24px); border-radius: 3px;
+  opacity: 1; background: color-mix(in srgb, var(--a-label, var(--hb-text, #000)) 42%, transparent); }
+#lab .lab-split:hover::before, #lab .lab-split.drag::before, #lab .lab-split:focus-visible::before,
+html.hb-apple #lab #labSplit:hover::before, html.hb-apple #lab #labSplit.drag::before, html.hb-apple #lab #labSplit:focus-visible::before,
+#lab .lab-split:hover::after, #lab .lab-split.drag::after, #lab .lab-split:focus-visible::after,
+html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::after, html.hb-apple #lab #labSplit:focus-visible::after
+  { background: var(--a-accent, var(--hb-accent)); }
