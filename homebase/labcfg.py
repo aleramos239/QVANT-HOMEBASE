@@ -144,11 +144,9 @@ def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
 def _meta(cfg: AppCfg) -> dict:
     """{desk id: {"name", "rec" (no source), "mark", "limits": LabLimits | None, "saved": the sidecar as last read or
     written (no written_utc) | None, "gone": the record left while a round was open}}. Kept ON the config object, beside
-    its fields: asdict() and == see fields only, so it is never written and never compared."""
-    m = cfg.__dict__.get("_lab")
-    if m is None:
-        m = cfg.__dict__["_lab"] = {}
-    return m
+    its fields: asdict() and == see fields only, so it is never written and never compared. A config that never held
+    a Lab strategy is not touched by a read (config.save's hook asks about every config that is saved)."""
+    return cfg.__dict__.get("_lab") or {}
 
 
 def bind(cfg: AppCfg, at) -> None:
@@ -201,7 +199,7 @@ def set_enabled(cfg: AppCfg, desk_id: str, on: bool) -> None:
 
 def forget(cfg: AppCfg, desk_id: str) -> None:
     """Take a Lab strategy off the config (never one that is not from the Lab)."""
-    if _meta(cfg).pop(desk_id, None) is not None:
+    if (cfg.__dict__.get("_lab") or {}).pop(desk_id, None) is not None:
         cfg.strategies.pop(desk_id, None)
         cfg.book.pop(desk_id, None)
 
@@ -250,7 +248,7 @@ def apply(cfg: AppCfg, snap: list, held=None) -> dict:
     """Bring cfg.strategies / cfg.book in line with what read_store() saw. Memory only. `held(desk_id)` says whether the
     engine holds an open round for it: such a strategy is never removed (it is switched off and kept until the round
     is over). Returns {"added": [...], "removed": [...], "changed": [...]} (desk ids)."""
-    meta = _meta(cfg)
+    meta = cfg.__dict__.setdefault("_lab", {})           # the one place that starts it
     added, removed, changed, seen = [], [], [], set()
     for rec, side in snap:
         did = desk_id(rec["name"])
@@ -318,13 +316,17 @@ def pending(cfg: AppCfg) -> list:
 def persist_all(cfg: AppCfg, at=None, wait_s: float | None = LOCK_WAIT_S) -> None:
     """Write every sidecar whose content changed (config.save's after-save hook, and the desk's own calls). A write that
     fails is not forgotten: it stays pending for the next call, and the first error is raised once the others were tried.
-    Small files, written whole; the wait for the store's lock is bounded, so the desk's loop never stands still on it."""
+    Small files, written whole; the wait for the store's lock is bounded (wait_s, once: when another process holds the
+    store the rest are left for the next call), so the desk's loop never stands still on it."""
     meta, first = _meta(cfg), None
     for name, want in pending(cfg):
         try:
             store.put_desk(name, {**want, "written_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")},
                            _at(cfg, at), wait_s=wait_s)
             meta[desk_id(name)]["saved"] = want
+        except TimeoutError as e:            # the store is held: every other write would wait as long
+            first = first or e
+            break
         except Exception as e:  # noqa: BLE001 -- the other sidecars are still written
             first = first or e
     if first is not None:

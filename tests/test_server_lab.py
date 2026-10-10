@@ -730,3 +730,17 @@ def test_strategy_code_never_runs_in_the_desk_process():
             "print(bad); sys.exit(1 if bad else 0)\n")
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_a_test_alert_on_a_lab_strategy_places_nothing_and_leaves_no_state(client):
+    """The desk's other ways in (alerts, the 9:30 timer, the levels timer, the bar feed) all filter on the kind."""
+    client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
+    set_limits(client)
+    book(client, [("eval1", 1)])
+    r = client.post("/api/test-alert", json={"strategy": LAB})
+    assert r.status_code == 200 and r.json()["result"]["ok"] is False
+    assert client.engine.day_states(LAB) == [] and status(client)["day_status"] == "idle"
+    for ad in client.app.state.adapters.values():
+        assert ad.orders == [] and ad.brackets == []
+    client.app.state.inactive_sweep(dt.datetime(2026, 9, 30, 13, 0, tzinfo=ET))  # the "will not trade today" sweep: nothing to say
+    assert [r for r in journal(client, "inactive_today") if r["strategy"] == LAB] == []

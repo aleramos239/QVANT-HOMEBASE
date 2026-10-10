@@ -363,3 +363,31 @@ def test_a_config_bound_to_a_store_reads_and_writes_there(tmp_path, desklab_root
     labcfg.persist_all(cfg)
     assert store.get_desk("pp_orb", other)["limits"]["max_trades_day"] == 2
     assert list(desklab_root.iterdir()) == []
+
+
+def test_asking_about_a_config_that_never_held_a_lab_strategy_leaves_it_as_it_was():
+    cfg = desk_cfg()
+    before = dict(vars(cfg))
+    assert labcfg.pending(cfg) == [] and labcfg.lab_ids(cfg) == [] and not labcfg.is_lab(cfg, "nq930")
+    assert labcfg.limits_of(cfg, "nq930") is None and labcfg.mark_of(cfg, "nq930") is None
+    labcfg.persist_all(cfg)
+    labcfg.forget(cfg, "nq930")
+    assert vars(cfg) == before                                                   # config.save's hook sees every config saved
+
+
+def test_a_store_held_by_another_writer_costs_one_bounded_wait_not_one_per_sidecar(monkeypatch):
+    cfg = desk_cfg()
+    for n in ("one_a", "two_b", "three_c"):
+        store.put(rec(n))
+    labcfg.overlay(cfg)
+    for n in ("one_a", "two_b", "three_c"):
+        labcfg.set_limits(cfg, labcfg.desk_id(n), LabLimits(**LIMITS))
+    tried = []
+
+    def busy(name, *a, **k):
+        tried.append(name)
+        raise TimeoutError("busy")
+    monkeypatch.setattr(store, "put_desk", busy)
+    with pytest.raises(TimeoutError):
+        labcfg.persist_all(cfg)
+    assert len(tried) == 1 and len(labcfg.pending(cfg)) == 3                     # one wait; all three still to write
