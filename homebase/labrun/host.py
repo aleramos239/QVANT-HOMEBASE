@@ -1312,15 +1312,10 @@ class StrategyDay:
             return
         if side.killed:
             return self.desk_says(KILLED)
-        owed = self._stop_owed
-        if owed is not None and side.stopped is not None:
+        if self._stop_owed is not None and side.stopped is not None:
             self._stop_owed = None                   # it did get there after all
-        elif owed is not None and not self._held():
-            # this day's stop ran out of its ten seconds untaken, and the Desk's stream is back without `stopped`: it
-            # never got there. ONCE more -- the same request if it was never answered (seq, intents, t_ns)
-            self._stop_owed = None
-            self._attempt(owed)
-            self._resave()
+        else:                                        # the Desk's stream is back without `stopped`: it never got there
+            self.ask_owed()
         if side.stopped is not None:
             if not self._stop_sent:                  # the Desk ended the day itself
                 return self.desk_says(STOPPED_TODAY)
@@ -1332,6 +1327,17 @@ class StrategyDay:
                 self._changed(now=True)
         self._desk_verify()
         self._changed()
+
+    def ask_owed(self) -> None:
+        """This day's stop ran out of its ten seconds untaken, and the Desk now speaks without saying it got it (its
+        stream is back without `stopped`, or it answered a heartbeat): ONCE more -- the same request if it was never
+        answered (seq, intents, t_ns). Not while nothing may be sent (_held)."""
+        owed = self._stop_owed
+        if owed is None or self._held():
+            return
+        self._stop_owed = None
+        self._attempt(owed)
+        self._resave()
 
     def desk_says(self, why: str) -> None:
         """The Desk ended this strategy's day itself (killed there; stopped for today -- switched off, "Flatten & turn
@@ -2091,18 +2097,25 @@ class Runner:
             day.on_desk(snap)
 
     def _desk_advice(self, answer) -> None:
-        """The Desk's answer to a heartbeat: advice. Nothing is ever sent because of it; the child of a day in DESK
+        """The Desk's answer to a heartbeat: advice. Nothing is sent because of it but an owed stop's one more try
+        (below), the very request that was not taken; the child of a day in DESK
         MODE is stopped when it says the strategy is killed or stopped -- and only for a day that is the Desk's own
         day (its stream says which that is: a day hosted the evening before is not ended by yesterday's stop). A
-        shadow day never reads it."""
+        shadow day never reads it. A day whose stop is owed (StrategyDay.ask_owed) is given its one more try when the
+        answer names it neither killed nor stopped: the Desk is answering, and the stream may not speak of the day
+        again for minutes."""
         named = answer.get("strategies") if isinstance(answer, dict) else None
         for h in list(self._days.values()) if isinstance(named, dict) else ():
             said = named.get(desk_id(h.day.name))
-            if h.day.desk is None or not isinstance(said, dict) or h.day.state not in ACTIVE:
+            if h.day.desk is None or not isinstance(said, dict) or self._desk_date != h.day.date.isoformat():
                 continue
-            if self._desk_date != h.day.date.isoformat():
+            ended = said.get("killed") is True or isinstance(said.get("stopped"), str)
+            if h.day.owes_stop() and not ended:
+                h.day.ask_owed()
+                self._note(h)
+            if h.day.state not in ACTIVE:
                 continue
-            if said.get("killed") is True or isinstance(said.get("stopped"), str):
+            if ended:
                 h.day.desk_says(KILLED if said.get("killed") is True else STOPPED_TODAY)
                 self._note(h)
 

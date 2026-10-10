@@ -302,3 +302,45 @@ def test_the_install_script_renders_loads_and_removes_the_runner_job():
     assert "com.ramosquant.homebase-labrun" in render                        # rendered from its template
     assert (REPO / "deploy" / "com.ramosquant.homebase-labrun.plist.template").is_file()
 
+
+# ================================================================ B4 minor: a stream that never dropped
+def owed_on_a_live_stream(kits):
+    """It raises at 09:31 with its trade open; the Desk's stream never drops, but its stop gets no answer for its ten
+    seconds: owed. On such a stream the Desk's next snapshot of it can be minutes away."""
+    from tests.test_labrun_host import STOPS, planted
+    k = booked_at_nine(kits, planted(STOPS["raises"][0]), stub=StubDesk("took", *[StubDesk.NO_ANSWER] * 11))
+    minute(k, "09:29:01")                                                    # 09:30: the entry
+    minute(k, "09:30:01")                                                    # 09:31: it raises -> the stop
+    for _ in range(12):
+        k.wall[0] += 1.0
+        k.r.idle()
+    day = k.r.day("lab_x")
+    assert day.owes_stop() and k.stub.ops() == [["entry"]] + [["stop"]] * 11
+    return k, day
+
+
+def beat_answer(**said):
+    return ("desk_beat", {"ok": True, "armed": True, "strategies": {DESK_ID: {"enabled": True, "killed": False,
+                                                                                "stopped": None, **said}}})
+
+
+def test_an_owed_stop_is_asked_once_more_when_the_desk_answers_a_heartbeat_without_it(kits):
+    k, day = owed_on_a_live_stream(kits)
+    k.r.take(beat_answer())
+    assert len(k.stub.bodies) == 13 and k.stub.bodies[12] == k.stub.bodies[1] and not day.owes_stop()
+    k.r.take(beat_answer())
+    assert len(k.stub.bodies) == 13                                          # once
+
+
+@pytest.mark.parametrize("said", [{"stopped": "Strategy error: boom"}, {"killed": True}, None])
+def test_a_heartbeat_answer_that_does_not_say_the_desk_lacks_it_sends_nothing(kits, said):
+    k, day = owed_on_a_live_stream(kits)
+    k.r.take(beat_answer(**said) if said is not None else ("desk_beat", {"ok": True, "armed": True, "strategies": {}}))
+    assert len(k.stub.bodies) == 12
+
+
+def test_a_heartbeat_answer_while_the_desk_is_on_another_day_sends_nothing(kits):
+    k, day = owed_on_a_live_stream(kits)
+    k.r.take(state(date="2024-03-06"))
+    k.r.take(beat_answer())
+    assert len(k.stub.bodies) == 12 and day.owes_stop()
