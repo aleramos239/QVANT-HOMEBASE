@@ -27,6 +27,7 @@ RUNNER_FILE = "runner.json"              # the heartbeat sits beside the records
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HEADLINE = (("net", "net_profit"), ("trades", "trades"), ("win_rate", "win_rate"), ("profit_factor", "profit_factor"),
             ("max_drawdown", "max_drawdown"))        # our key, the report summary's key
+DEFAULT_WINDOW = ["09:25", "16:00"]      # the Strategy's own session_window
 
 
 def root(arg=None) -> Path:
@@ -62,7 +63,8 @@ def _read(f: Path) -> dict | None:
 def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, notes: list,
              now: dt.datetime | None = None) -> dict:
     """What is kept when a draft is promoted: its text as it was backtested, the settings and size of that run, and the
-    run's headline numbers (from the bundle's run.json: inputs, qty, range, report.summary.all)."""
+    run's headline numbers (from the bundle's run.json: inputs, qty, range, report.summary.all), and the window and
+    bar size the page shows (the static meta's; the Strategy defaults when the draft does not say)."""
     now = now or dt.datetime.now(dt.timezone.utc)
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
@@ -70,7 +72,8 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},
-            "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": True}
+            "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": True,
+            "session_window": list(meta.get("session_window") or DEFAULT_WINDOW), "bar_minutes": meta.get("bar_minutes") or 0}
 
 
 def put(rec: dict, at=None) -> dict:

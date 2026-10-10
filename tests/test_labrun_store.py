@@ -32,7 +32,14 @@ def test_snapshot_is_the_record_the_runner_reads():
                  "sha256": hashlib.sha256(SRC.encode("utf-8")).hexdigest(), "params": {"sl_pts": 20.0}, "qty": 2,
                  "run": {"id": "20261009-1-draft_nq_x-ab12", "range": BUNDLE["run"]["range"], "net": 1234.5, "trades": 41,
                          "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0},
-                 "notes": ["It sets its own size."], "promoted_utc": "2026-10-09T12:00:05+00:00", "enabled": True}
+                 "notes": ["It sets its own size."], "promoted_utc": "2026-10-09T12:00:05+00:00", "enabled": True,
+                 "session_window": ["09:25", "16:00"], "bar_minutes": 0}                 # (the Strategy defaults)
+
+
+def test_snapshot_carries_the_session_window_and_the_bar_size_the_page_shows():
+    meta = {**META, "session_window": ["09:30", "11:30"], "bar_minutes": 5}
+    s = store.snapshot("nq_x", SRC, meta, BUNDLE, "r1", [], now=NOW)
+    assert s["session_window"] == ["09:30", "11:30"] and s["bar_minutes"] == 5
 
 
 def test_snapshot_leaves_a_missing_number_none_and_falls_back_to_the_name():

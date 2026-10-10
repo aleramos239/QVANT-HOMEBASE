@@ -121,6 +121,7 @@ def test_a_good_promote_writes_the_record_and_the_page_reads_it_without_the_code
     assert got.status_code == 200 and got.headers["access-control-allow-origin"] == "http://localhost:8850"
     (s,) = got.json()["strategies"]
     assert "source" not in s and s["sha256"] == sha(code) and s["params"]["lookback"] == 8 and s["notes"] == rec["notes"]
+    assert rec["session_window"] == s["session_window"] == ["09:30", "11:30"] and rec["bar_minutes"] == s["bar_minutes"] == 5
     assert s["today"] is None and s["days"] == []
 
 

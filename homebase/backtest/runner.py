@@ -133,10 +133,11 @@ def validate(body, *, draft: tuple | None = None) -> dict:
     return drafthost.stamp(req, src) if src is not None else req
 
 
-def prepare(body, base: Path) -> str:
+def prepare(body, base: Path, *, draft: tuple | None = None) -> str:
     """Validate, create runs/<id>/ (request + queued status), and record the run in the
-    spend log when its range reads the test days (a record, never a gate)."""
-    req = validate(body)
+    spend log when its range reads the test days (a record, never a gate). draft: (stub, source),
+    a draft's text as it was frozen (labrun/match.py), instead of the file as it is now."""
+    req = validate(body, draft=draft)
     now = dt.datetime.now()
     rid = f"{now:%Y%m%d-%H%M%S}-{req['strategy']}-{secrets.token_hex(2)}"
     d = base / "runs" / rid

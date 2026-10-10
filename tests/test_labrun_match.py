@@ -1,0 +1,292 @@
+"""The daily match (labrun/match.py): did the Desk's shadow day equal the backtest of that day? `compare` is pure; the
+backtest itself is run once for real (in the sandbox, on a synthetic archive in tmp_path) and, for the plumbing, through
+a launcher that writes the bundle by hand. Nothing here talks to a service or writes outside tmp_path."""
+from __future__ import annotations
+
+import datetime as dt
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import pytest
+
+from homebase.backtest import sandbox
+from homebase.backtest.runner import read_json, write_json
+from homebase.backtest.slots import Slots
+from homebase.backtest.tape import et_ns
+from homebase.labrun import host, match
+from homebase.labrun.match import MatchUnavailable, compare, match_day
+from tests.backtest_util import D1, ms, nq_archive
+from tests.charts_util import rows
+from tests.test_labrun_host import HEAD, plain, rec
+
+SEC = 1_000_000_000
+TICK = 0.25
+T0 = et_ns(D1, "09:30:02")
+
+
+def trade(**kw) -> dict:
+    """An engine Trade.to_dict() row, with the fields the match reads."""
+    return {"side": "long", "qty": 1, "entry_ns": T0, "entry_price": 21450.25, "exit_ns": T0 + 60 * SEC,
+            "exit_price": 21470.0, "exit_reason": "tp", **kw}
+
+
+# ---------------------------------------------------------------- compare
+def test_no_trades_on_both_sides_is_a_match():
+    assert compare([], [], TICK) == {"ok": True, "text": "No trades, same as the backtest."}
+
+
+def test_trades_that_agree_are_matched_with_a_count():
+    both = [trade(), trade(entry_ns=T0 + 600 * SEC, exit_ns=T0 + 900 * SEC)]
+    assert compare(both, [dict(t) for t in both], TICK) == {"ok": True, "text": "Matched the backtest: 2 of 2 trades."}
+    assert compare([trade()], [trade()], TICK) == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+
+
+@pytest.mark.parametrize("desk, tester, text", [
+    (0, 3, "Did not match: the backtest took 3 trades, the Desk 0."),
+    (2, 3, "Did not match: the backtest took 3 trades, the Desk 2."),
+    (3, 1, "Did not match: the backtest took 1 trade, the Desk 3."),
+])
+def test_a_different_number_of_trades_says_both_counts(desk, tester, text):
+    assert compare([trade()] * desk, [trade()] * tester, TICK) == {"ok": False, "text": text}
+
+
+@pytest.mark.parametrize("change, text", [
+    ({"side": "short"}, "side long on the Desk, short in the backtest."),
+    ({"qty": 2}, "size 1 on the Desk, 2 in the backtest."),
+    ({"entry_ns": T0 + 3 * SEC}, "entry time 09:30:02 on the Desk, 09:30:05 in the backtest."),
+    ({"entry_price": 21451.0}, "entry price 21,450.25 on the Desk, 21,451.00 in the backtest."),
+    ({"exit_ns": T0 + 70 * SEC}, "exit time 09:31:02 on the Desk, 09:31:12 in the backtest."),
+    ({"exit_price": 21471.0}, "exit price 21,470.00 on the Desk, 21,471.00 in the backtest."),
+    ({"exit_reason": "sl"}, "exit tp on the Desk, sl in the backtest."),
+])
+def test_each_field_that_differs_is_named(change, text):
+    got = compare([trade()], [trade(**change)], TICK)
+    assert got == {"ok": False, "text": f"Did not match at trade 1: {text}"}
+
+
+def test_the_first_trade_that_differs_is_named_with_its_number_and_the_first_field_in_order():
+    desk = [trade(), trade(entry_price=21450.25, exit_price=21470.0), trade()]
+    tester = [trade(), trade(entry_price=21451.0, exit_price=21490.0, side="short"), trade(qty=5)]
+    assert compare(desk, tester, TICK)["text"] == "Did not match at trade 2: side long on the Desk, short in the backtest."
+    tester[1]["side"] = "long"
+    assert compare(desk, tester, TICK)["text"] == ("Did not match at trade 2: entry price 21,450.25 on the Desk, "
+                                                   "21,451.00 in the backtest.")
+
+
+def test_times_agree_up_to_two_seconds_and_prices_up_to_two_ticks():
+    edge = trade(entry_ns=T0 + 2 * SEC, exit_ns=T0 + 60 * SEC - 2 * SEC, entry_price=21450.25 + 0.5, exit_price=21470.0 - 0.5)
+    assert compare([trade()], [edge], TICK)["ok"] is True
+    assert compare([edge], [trade()], TICK)["ok"] is True
+    assert compare([trade()], [trade(entry_ns=T0 + 2 * SEC + 1)], TICK)["ok"] is False
+    assert compare([trade()], [trade(exit_ns=T0 + 60 * SEC - 2 * SEC - 1)], TICK)["ok"] is False
+    assert compare([trade()], [trade(entry_price=21450.25 + 0.75)], TICK)["ok"] is False
+    assert compare([trade()], [trade(exit_price=21470.0 - 0.75)], TICK)["ok"] is False
+
+
+def test_two_ticks_is_two_ticks_whatever_the_float_noise():
+    assert compare([trade(entry_price=64.01)], [trade(entry_price=64.01 + 0.02)], 0.01)["ok"] is True
+    assert compare([trade(entry_price=64.01)], [trade(entry_price=64.01 + 0.03)], 0.01)["ok"] is False
+    assert compare([trade(entry_price=64.01)], [trade(entry_price=64.04)], 0.01)["text"].endswith("64.01 on the Desk, 64.04 in the backtest.")
+
+
+def test_a_summary_trade_row_reads_as_an_engine_row():
+    row = {"side": "short", "qty": 2, "entry_t": "09:30:02", "entry_px": 21450.25, "exit_t": "09:31:02", "exit_px": 21440.0,
+           "reason": "sl", "net": -5.0}
+    assert match.from_summary([row], D1) == [{"side": "short", "qty": 2, "entry_ns": T0, "entry_price": 21450.25,
+                                              "exit_ns": T0 + 60 * SEC, "exit_price": 21440.0, "exit_reason": "sl"}]
+
+
+# ---------------------------------------------------------------- the tester on one day
+SOURCE = HEAD + '''class M(Strategy):
+    id = "m"
+    name = "M"
+    root = "NQ"
+    session_independent = True
+
+    def times(self):
+        return ["09:30:00", "15:55"]
+
+    def on_time(self, ctx, et_time):
+        if et_time == "09:30:00":
+            ctx.market("long", sl=ctx.last_price - 10, ref=ctx.last_price)
+        else:
+            ctx.flatten("time")
+'''
+RECORD = rec(SOURCE)
+NEED_SANDBOX = pytest.mark.skipif(not sandbox.available(), reason="no working sandbox-exec on this machine")
+
+
+def dirs(tmp_path) -> dict:
+    return {"base": tmp_path / "match", "archive": tmp_path / "ticks", "cache": tmp_path / "cache", "python": sys.executable}
+
+
+class Fake:
+    """A launcher that writes the finished bundle by hand and starts a harmless process, as runner.launch starts the
+    backtest child. `run` is the request the validated run dir holds; `procs` the children it started."""
+
+    def __init__(self, coverage=None, trades=(), status="done", child="pass"):
+        self.coverage = coverage or {"sessions": 1, "used": 1, "skipped": []}
+        self.trades, self.status, self.child = list(trades), status, child
+        self.procs, self.requests = [], []
+
+    def __call__(self, run_dir, python, archive, cache, slot, extra=()):
+        run_dir = Path(run_dir)
+        self.requests.append(read_json(run_dir / "request.json"))
+        write_json(run_dir / "status.json", {"status": self.status, "error": "boom"})
+        write_json(run_dir / "run.json", {"coverage": self.coverage})
+        write_json(run_dir / "trades.json", [{**{k: v for k, v in t.items() if not k.endswith("_ns")},
+                                              "entry_ms": t["entry_ns"] // 1_000_000, "exit_ms": t["exit_ns"] // 1_000_000}
+                                             for t in self.trades])
+        for f in ("equity.json", "plots.json", "propsim.json"):
+            write_json(run_dir / f, {})
+        self.procs.append(subprocess.Popen([sys.executable, "-c", self.child]))
+        return self.procs[-1]
+
+    def reap(self):
+        for p in self.procs:
+            if p.poll() is None:
+                p.kill()
+            p.wait()
+
+
+@pytest.fixture
+def fake():
+    made = []
+
+    def make(**kw):
+        made.append(Fake(**kw))
+        return made[-1]
+    yield make
+    for f in made:
+        f.reap()
+
+
+def free(slots=None) -> bool:
+    """The machine's backtest slots are all free (the test's own shared dir)."""
+    s = slots or Slots()
+    held = [s.try_acquire() for _ in range(s.cap)]
+    for h in held:
+        if h is not None:
+            h.close()
+    return None not in held
+
+
+def test_the_tester_is_asked_for_that_one_day_with_the_frozen_code_settings_and_size(tmp_path, fake):
+    f = fake(trades=[trade()])
+    record = rec(SOURCE, params={}, qty=3)
+    got = match.tester_day(record, D1, launch=f, **dirs(tmp_path))
+    (req,) = f.requests
+    assert req["strategy"] == "draft_lab_x" and req["qty"] == 3 and req["draft_source"] == SOURCE
+    assert (req["range"]["start"], req["range"]["end"]) == (D1.isoformat(), D1.isoformat())
+    (t,) = got                                                               # (ms in the bundle, ns back out)
+    assert (t["side"], t["entry_ns"], t["exit_ns"], t["exit_reason"]) == ("long", T0, T0 + 60 * SEC, "tp")
+
+
+def test_the_run_lives_under_the_base_is_cleaned_up_and_the_slot_is_given_back(tmp_path, fake):
+    f = fake()
+    d = dirs(tmp_path)
+    match.tester_day(RECORD, D1, launch=f, **d)
+    assert list((d["base"] / "runs").iterdir()) == [] and free() and f.procs[0].poll() is not None
+
+
+@pytest.mark.parametrize("coverage, why", [
+    ({"sessions": 0, "used": 0, "skipped": []}, "the day's prices are not stored yet"),
+    ({"sessions": 1, "used": 0, "skipped": [{"date": "2024-03-05", "reason": "no tape"}]}, "the day's prices are not stored yet"),
+    ({"sessions": 1, "used": 0, "skipped": [{"date": "2024-03-05", "reason": "missing 13:00–16:00 ET"}]},
+     "the stored prices for the day have a gap"),
+])
+def test_a_day_that_cannot_be_read_yet_is_unavailable_with_its_reason(tmp_path, fake, coverage, why):
+    with pytest.raises(MatchUnavailable, match=why):
+        match.tester_day(RECORD, D1, launch=fake(coverage=coverage), **dirs(tmp_path))
+    assert free()
+
+
+def test_a_run_that_fails_is_unavailable_and_its_folder_stays_for_a_look(tmp_path, fake):
+    d = dirs(tmp_path)
+    with pytest.raises(MatchUnavailable, match="the backtest could not run"):
+        match.tester_day(RECORD, D1, launch=fake(status="error"), **d)
+    assert len(list((d["base"] / "runs").iterdir())) == 1 and free()
+
+
+def test_a_launcher_that_cannot_start_is_unavailable_and_leaves_no_run_folder(tmp_path):
+    def broken(*a, **k):
+        raise OSError("no such python")
+    d = dirs(tmp_path)
+    with pytest.raises(MatchUnavailable, match="the backtest could not run"):
+        match.tester_day(RECORD, D1, launch=broken, **d)
+    assert list((d["base"] / "runs").iterdir()) == [] and free()
+
+
+def test_a_run_past_the_timeout_is_stopped_with_the_runners_stop_proc_and_unavailable(tmp_path, fake):
+    f = fake(child="import time; time.sleep(60)")
+    with pytest.raises(MatchUnavailable, match="the backtest took too long"):
+        match.tester_day(RECORD, D1, launch=f, timeout_s=0.3, **dirs(tmp_path))
+    assert f.procs[0].poll() is not None and free()
+
+
+def test_no_free_slot_is_a_busy_tester_and_no_run_is_made(tmp_path, fake):
+    one = Slots(tmp_path / "slots", cap=1)
+    taken = one.try_acquire()
+    f = fake()
+    try:
+        with pytest.raises(MatchUnavailable, match="the tester is busy"):
+            match.tester_day(RECORD, D1, launch=f, slots=one, **dirs(tmp_path))
+    finally:
+        taken.close()
+    assert f.procs == [] and not (dirs(tmp_path)["base"] / "runs").exists()
+
+
+def test_no_sandbox_is_unavailable_and_nothing_is_launched(tmp_path, fake, monkeypatch):
+    monkeypatch.setattr(sandbox, "available", lambda: False)
+    f = fake()
+    with pytest.raises(MatchUnavailable, match="the sandbox is not working"):
+        match.tester_day(RECORD, D1, launch=f, **dirs(tmp_path))
+    assert f.procs == [] and free()
+
+
+@NEED_SANDBOX
+def test_the_real_tester_runs_the_frozen_code_on_one_recorded_day_in_the_sandbox(tmp_path):
+    nq_archive(tmp_path / "ticks")
+    d = dirs(tmp_path)
+    got = match.tester_day(RECORD, D1, **d)
+    (t,) = got
+    assert (t["side"], t["qty"], t["exit_reason"]) == ("long", 1, "eod") and t["entry_ns"] == t["entry_ns"] // 1_000_000 * 1_000_000
+    assert dt.datetime.fromtimestamp(t["entry_ns"] / SEC, host.ET).strftime("%H:%M") == "09:30"
+    assert list((d["base"] / "runs").iterdir()) == [] and free()
+    with pytest.raises(MatchUnavailable, match="the stored prices for the day have a gap"):
+        match.tester_day(RECORD, dt.date(2024, 3, 6), **d)                         # prints stop at 12:59
+    with pytest.raises(MatchUnavailable, match="not stored yet"):
+        match.tester_day(RECORD, dt.date(2024, 3, 7), **d)                         # nothing recorded
+
+
+@NEED_SANDBOX
+def test_a_shadow_day_on_the_recorded_prints_matches_the_real_tester_on_them(tmp_path):
+    """The whole check: the runner's day on the prints of nq_archive's D1, against the tester on the archive."""
+    nq_archive(tmp_path / "ticks")
+    prints = rows(ms(D1, "09:25:00"), [100.0] * 290) + rows(ms(D1, "09:30:01"), [110.0, 112.0, 126.0]) \
+        + rows(ms(D1, "09:31:00"), [120.0] * 1500, step_ms=15_000)
+    shadow = host.run_day(RECORD, [(r["ts_ms"] * 1_000_000, r["price"], r["size"]) for r in prints], D1, spawn=plain)
+    assert len(shadow["trades"]) == 1
+    assert match_day(RECORD, D1, shadow["trades"], **dirs(tmp_path)) == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+    assert match_day(RECORD, D1, [], **dirs(tmp_path))["text"] == "Did not match: the backtest took 1 trade, the Desk 0."
+
+
+# ---------------------------------------------------------------- match_day
+def test_match_day_compares_the_shadow_trades_with_the_testers(tmp_path, fake):
+    kw = dirs(tmp_path)
+    assert match_day(RECORD, D1, [trade()], launch=fake(trades=[trade()]), **kw) == {
+        "ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+    assert match_day(RECORD, D1, [], launch=fake(trades=[trade()]), **kw) == {
+        "ok": False, "text": "Did not match: the backtest took 1 trade, the Desk 0."}
+    got = match_day(RECORD, D1, [trade(entry_price=21460.0)], launch=fake(trades=[trade()]), **kw)
+    assert got["text"] == "Did not match at trade 1: entry price 21,460.00 on the Desk, 21,450.25 in the backtest."
+
+
+@pytest.mark.parametrize("make, text", [
+    (dict(coverage={"sessions": 0}), "Not checked yet: the day's prices are not stored yet."),
+    (dict(status="error"), "Not checked yet: the backtest could not run."),
+])
+def test_match_day_turns_an_unavailable_day_into_not_checked_yet(tmp_path, fake, make, text):
+    assert match_day(RECORD, D1, [], launch=fake(**make), **dirs(tmp_path)) == {"ok": None, "text": text}

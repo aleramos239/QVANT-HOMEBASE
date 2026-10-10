@@ -510,9 +510,9 @@ def test_the_summary_reads_in_plain_words(days):
         {"t": "09:50:00", "text": "Buy limit 21,395.00, stop 21,391.00", "refused": "Limit entries are not built yet."},
         {"t": "09:50:00", "text": "Cancel", "refused": None},
         {"t": "15:55:00", "text": "Flatten (time)", "refused": None}]
-    assert set(s) == {"date", "sha256", "state", "why", "orders", "trades", "net", "match", "updated_utc"}
-    assert (s["date"], s["sha256"], s["state"], s["why"], s["match"]) == ("2024-03-05", rec(STRADDLE)["sha256"], "done",
-                                                                           None, None)
+    assert set(s) == {"date", "sha256", "promoted_utc", "state", "why", "orders", "trades", "net", "match", "updated_utc"}
+    assert (s["date"], s["sha256"], s["promoted_utc"], s["state"], s["why"], s["match"]) == (
+        "2024-03-05", rec(STRADDLE)["sha256"], rec(STRADDLE)["promoted_utc"], "done", None, None)
     assert dt.datetime.fromisoformat(s["updated_utc"]).tzinfo is not None
     assert [set(t) for t in s["trades"]] == [{"side", "qty", "entry_t", "entry_px", "exit_t", "exit_px", "reason", "net"}] * 2
     assert sorted((t["side"], t["entry_t"], t["exit_t"], t["reason"]) for t in s["trades"]) == [
@@ -560,9 +560,28 @@ NO_STREAM = "No prices: the chart service is not answering."
 TOO_LATE = "Started too late to follow today."
 
 
+MATCHED = {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+NOT_YET = {"ok": None, "text": "Not checked yet: the tester is busy."}
+
+
+class Matcher:
+    """The daily match as the runner's worker thread calls it (match.match_day): records the call, answers from its
+    list (the last answer stays), and can be held."""
+
+    def __init__(self, *answers, hold=None):
+        self.answers, self.hold, self.calls = answers or (MATCHED,), hold, []
+
+    def __call__(self, record, date, trades):
+        self.calls.append((record["name"], date, trades))
+        if self.hold is not None:
+            assert self.hold.wait(10)
+        return self.answers[min(len(self.calls), len(self.answers)) - 1]
+
+
 class Desk:
     """A Runner on a temp store, fed by hand: what the tick client and the main loop would hand it. It starts as a
-    connection that has caught up (`live`), unless told otherwise."""
+    connection that has caught up (`live`), unless told otherwise. Its daily match is a Matcher (never the real tester);
+    clock() waits for a match it started to finish and be written."""
 
     def __init__(self, tmp_path, live=True, **kw):
         self.at = tmp_path / "desklab"
@@ -570,6 +589,7 @@ class Desk:
         self.last_clock = None
         self.spawned: list = []
         kw.setdefault("daily", lambda root, d: [])
+        self.matcher = kw.setdefault("matcher", Matcher())
         self.r = Runner(at=self.at, source="http://127.0.0.1:8852", spawn=self.spawn, deadline_s=0.3,
                         wall=lambda: self.wall[0], **kw)
         if live:
@@ -585,6 +605,15 @@ class Desk:
     def clock(self, hms, d=D, ms=0):
         self.last_clock = ms_of(hms, ms, d)
         self.r.on_clock(self.last_clock)
+        self.settle()
+
+    def settle(self):
+        """Every match that has started has answered, and the runner has written it."""
+        end = time.monotonic() + 5
+        while self.r.matching():
+            assert time.monotonic() < end, "a match never answered"
+            self.r.idle()
+            time.sleep(0.002)
 
     def rows(self, start, prices, d=D, root="NQ", step_ms=1000):
         t0 = ms_of(start, d=d)
@@ -983,7 +1012,7 @@ def test_a_finished_day_is_final_a_restart_starts_no_child_and_leaves_the_file(d
         again.clock("17:30:05")
     assert again.spawned == [] and again.r.hosting() == [] and again.r.day("lab_x") is None
     again.r.close()
-    assert f.read_bytes() == before and again.journal() == []
+    assert f.read_bytes() == before and [x["kind"] for x in again.journal()] == ["match"]     # (the first run's)
 
 
 def test_a_stopped_day_is_final_too(desk):
@@ -1276,3 +1305,275 @@ def test_the_daily_bars_are_the_completed_days_before_the_date(tmp_path):
     got = host.daily_bars("NQ", D, TapeStore(base, tmp_path / "cache"))
     assert got == [{"date": "2024-03-01", "h": 105.0, "l": 95.0, "c": 101.0},
                    {"date": "2024-03-04", "h": 115.0, "l": 105.0, "c": 111.0}]
+
+
+# ---------------------------------------------------------------- the finished day is final for its PROMOTION
+def test_the_same_code_promoted_again_is_a_fresh_day_the_same_promotion_is_final(desk):
+    f = a_finished_day(desk)
+    assert json.loads(f.read_text())["promoted_utc"] == rec(MARKET_930)["promoted_utc"]
+    before = f.read_bytes()
+    same = restart(desk)                                                     # the same promotion: final
+    assert same.spawned == [] and f.read_bytes() == before
+    same.r.close()
+    store.put(rec(MARKET_930, promoted_utc="2026-10-09T15:00:00+00:00"), f.parent.parent.parent)   # promoted again
+    again = restart(desk)
+    s = again.today()
+    assert len(again.spawned) == 1 and s["state"] == "done" and s["promoted_utc"] == "2026-10-09T15:00:00+00:00"
+    assert s["sha256"] == rec(MARKET_930)["sha256"]
+
+
+def test_a_day_file_from_before_promoted_utc_was_kept_is_judged_by_its_code_alone(desk):
+    f = a_finished_day(desk)
+    old = json.loads(f.read_text())
+    del old["promoted_utc"]
+    f.write_text(json.dumps(old))
+    before = f.read_bytes()
+    store.put(rec(MARKET_930, promoted_utc="2026-10-09T15:00:00+00:00"), f.parent.parent.parent)
+    again = restart(desk)
+    assert again.spawned == [] and f.read_bytes() == before
+
+
+def test_promoted_again_while_hosted_the_day_is_replaced_even_with_the_same_code_settings_and_size(desk):
+    k = desk()
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    old = k.r.day("lab_x")
+    k.promote(promoted_utc="2026-10-09T15:00:00+00:00")
+    k.r.sync()
+    assert k.r.day("lab_x") is not old and not old.child_alive() and k.today()["promoted_utc"] == "2026-10-09T15:00:00+00:00"
+
+
+# ---------------------------------------------------------------- a day file that cannot be rebuilt
+def test_a_waiting_or_running_day_file_that_cannot_be_rebuilt_is_stopped_and_keeps_what_it_had(desk):
+    k = desk()
+    k.promote()
+    mid = {**FINISHED, "sha256": rec(MARKET_930)["sha256"], "state": "running", "updated_utc": "2026-10-09T10:00:00+00:00"}
+    store.put_day("lab_x", mid, k.at)
+    k.clock("10:00:00")
+    k.rows("09:40:00", [21000.0] * 5)                                        # the oldest print held; the window began 09:25
+    k.r.sync()
+    s = k.file()
+    assert (s["state"], s["why"]) == ("stopped", TOO_LATE) and s["updated_utc"] > mid["updated_utc"]
+    assert {key: s[key] for key in s if key not in ("state", "why", "updated_utc")} == {
+        key: mid[key] for key in mid if key not in ("state", "why", "updated_utc")}   # orders, trades, net: as they were
+    assert k.r.hosting() == [] and not [p for p in k.spawned if p.poll() is None]
+    again = s
+    k.r.sync()
+    k.r.close()
+    assert k.file() == again                                                 # (and not written a second time)
+
+
+# ---------------------------------------------------------------- the daily match
+def a_day(k, hms="16:00:03"):
+    """lab_x on D, from the open to the end of its window (done at 16:00:02 by the clock)."""
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    k.rows("09:30:00", [21000.0, 21001.0])
+    k.rows("15:54:59", [21010.0] * 3)
+    k.clock(hms)
+
+
+def test_a_finished_day_is_matched_ten_minutes_after_its_end_by_the_streams_clock(desk):
+    k = desk()
+    a_day(k)
+    assert k.file()["state"] == "done" and k.matcher.calls == []
+    k.clock("16:09:59")
+    k.wall[0] += 5
+    assert k.matcher.calls == [] and k.file()["match"] is None
+    k.clock("16:10:00")
+    ((name, date, trades),) = k.matcher.calls
+    assert (name, date) == ("lab_x", D) and [t["exit_reason"] for t in trades] == ["time"]    # the engine's rows
+    assert trades[0]["entry_ns"] == at("09:30:01") and trades[0]["side"] == "long"
+    s = k.file()
+    assert s["match"] == MATCHED and s["state"] == "done" and len(s["trades"]) == 1 and s["updated_utc"]
+    last = k.journal()[-1]
+    assert last["kind"] == "match" and (last["ok"], last["text"], last["date"]) == (True, MATCHED["text"], D.isoformat())
+    for hms in ("16:10:30", "16:50:00"):
+        k.clock(hms)
+    assert len(k.matcher.calls) == 1                                         # once
+
+
+def test_the_match_never_blocks_the_tick_loop_and_the_clock_goes_on(desk):
+    from threading import Event
+    hold = Event()
+    k = desk(matcher=Matcher(hold=hold))
+    a_day(k)
+    try:
+        k.last_clock = ms_of("16:10:00")
+        k.r.on_clock(k.last_clock)                                           # (no settle: the match is held)
+        assert k.r.matching() == 1
+        k.r.on_clock(ms_of("16:10:05"))
+        k.rows("16:10:06", [21020.0])
+        k.r.idle()
+        assert k.r.matching() == 1 and k.file()["match"] is None
+    finally:
+        hold.set()
+    k.settle()
+    assert k.file()["match"] == MATCHED
+
+
+def test_not_checked_yet_is_tried_again_every_half_hour_at_most_six_times_then_the_last_text_stays(desk):
+    k = desk(matcher=Matcher(NOT_YET))
+    a_day(k)
+    k.clock("16:10:00")
+    assert len(k.matcher.calls) == 1 and k.file()["match"] == NOT_YET
+    k.clock("16:39:59")
+    assert len(k.matcher.calls) == 1
+    for n, hms in enumerate(("16:40:00", "17:10:00", "17:40:00", "18:10:00", "18:40:00", "19:10:00"), 2):
+        k.clock(hms)
+        assert len(k.matcher.calls) == n                                     # a retry each time, six in all
+    for hms in ("19:40:00", "20:10:00", "23:00:00"):
+        k.clock(hms)
+    assert len(k.matcher.calls) == 7 and k.file()["match"] == NOT_YET
+    assert [x["kind"] for x in k.journal()].count("match") == 7
+
+
+def test_a_retry_that_matches_ends_the_retries(desk):
+    k = desk(matcher=Matcher(NOT_YET, {"ok": False, "text": "Did not match: the backtest took 1 trade, the Desk 0."}))
+    a_day(k)
+    k.clock("16:10:00")
+    k.clock("16:40:00")
+    k.clock("17:10:00")
+    assert len(k.matcher.calls) == 2 and k.file()["match"]["ok"] is False
+
+
+def test_a_match_that_breaks_reads_not_checked_yet_and_is_tried_again(desk):
+    def boom(record, date, trades):
+        raise RuntimeError("a bug nobody planned for")
+    k = desk(matcher=boom)
+    a_day(k)
+    k.clock("16:10:00")
+    assert k.file()["match"] == {"ok": None, "text": "Not checked yet: the check could not run."}
+
+
+def test_a_stopped_day_reads_not_checked_and_is_never_matched(desk):
+    k = desk()
+    body, why = STOPS["raises"]
+    k.promote(planted(body))
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    k.rows("09:30:00", [21000.0] * 80)
+    k.clock("09:32:00")
+    s = k.today()
+    assert s["state"] == "stopped" and s["match"] == {"ok": None, "text": "Not checked: it was stopped."}
+    for hms in ("16:10:00", "17:00:00"):
+        k.clock(hms)
+    assert k.matcher.calls == [] and k.file()["match"] == s["match"]
+
+
+def test_a_day_switched_off_or_not_today_is_never_matched(desk):
+    k = desk()
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    k.r.sync()
+    store.set_enabled("lab_x", False, k.at)
+    k.r.sync()
+    k.clock("16:10:00")
+    assert k.file()["state"] == "off" and k.matcher.calls == []
+
+
+def test_the_match_never_starts_09_20_to_09_35_on_a_weekday(desk):
+    f = a_finished_day(desk)
+    f.write_text(json.dumps({**json.loads(f.read_text()), "match": None}))   # a done day with no match yet
+    k = restart(desk, "09:21:00")
+    assert k.matcher.calls == []
+    for hms in ("09:25:00", "09:34:59"):
+        k.clock(hms)
+        k.r.sync()
+        assert k.matcher.calls == []
+    k.clock("09:35:00")
+    assert [c[:2] for c in k.matcher.calls] == [("lab_x", D)]
+    assert json.loads(f.read_text())["match"] == MATCHED
+
+
+def test_a_restart_matches_a_done_day_of_today_or_the_previous_session_with_no_match_or_not_checked_yet(desk):
+    f = a_finished_day(desk)
+    mon = f.with_name(f"{MON}.json")
+    fri = f.with_name("2024-03-01.json")
+    old = f.with_name("2024-02-27.json")
+    done = json.loads(f.read_text())
+    for path, d, match_ in ((mon, MON, NOT_YET), (fri, dt.date(2024, 3, 1), MATCHED), (old, dt.date(2024, 2, 27), None)):
+        path.write_text(json.dumps({**done, "date": d.isoformat(), "match": match_}))
+    f.write_text(json.dumps({**done, "match": None}))
+    k = restart(desk)
+    k.clock("17:30:05")
+    assert sorted(c[1] for c in k.matcher.calls) == [MON, D]                 # today and the previous session day, no more
+    assert json.loads(f.read_text())["match"] == MATCHED and json.loads(mon.read_text())["match"] == MATCHED
+    assert json.loads(fri.read_text())["match"] == MATCHED and json.loads(old.read_text())["match"] is None
+    (name, date, trades) = [c for c in k.matcher.calls if c[1] == D][0]
+    assert [t["exit_reason"] for t in trades] == ["time"] and trades[0]["entry_ns"] == at("09:30:01")   # from the file's rows
+
+
+def test_a_restart_leaves_alone_a_stopped_day_and_one_that_was_matched(desk):
+    f = a_finished_day(desk)
+    done = json.loads(f.read_text())
+    for change in ({"state": "stopped"}, {"match": MATCHED},
+                   {"match": {"ok": False, "text": "Did not match: the backtest took 1 trade, the Desk 0."}}):
+        f.write_text(json.dumps({**done, **change}))
+        k = restart(desk)
+        k.clock("17:30:05")
+        assert k.matcher.calls == [], change
+        k.r.close()
+
+
+def test_promoted_again_before_the_match_starts_the_old_promotions_match_is_dropped(desk):
+    k = desk()
+    a_day(k)
+    k.promote(promoted_utc="2026-10-09T15:00:00+00:00")                      # at 16:00:03; the old match is due 16:10
+    k.r.sync()
+    assert k.file()["promoted_utc"] == "2026-10-09T15:00:00+00:00" and k.file()["state"] == "done"
+    k.clock("16:10:00")
+    assert len(k.matcher.calls) == 1 and k.matcher.calls[0][0] == "lab_x"    # one match: the new promotion's
+    assert k.file()["promoted_utc"] == "2026-10-09T15:00:00+00:00" and k.file()["match"] == MATCHED
+
+
+def test_a_result_for_a_day_that_was_promoted_again_meanwhile_is_not_written(desk):
+    from threading import Event
+    hold = Event()
+    k = desk(matcher=Matcher(hold=hold))
+    a_day(k)
+    try:
+        k.last_clock = ms_of("16:10:00")
+        k.r.on_clock(k.last_clock)
+        assert k.r.matching() == 1
+        k.promote(promoted_utc="2026-10-09T15:00:00+00:00")
+        k.r.sync()                                                           # a fresh day replaces the finished one
+        mine = k.file()
+    finally:
+        hold.set()
+    k.settle()
+    assert mine["promoted_utc"] == "2026-10-09T15:00:00+00:00" and mine["match"] is None
+    assert k.file()["match"] is None                                         # the old promotion's answer is thrown away
+    k.clock("16:10:05")                                                      # the new day's own match
+    assert len(k.matcher.calls) == 2 and k.file()["match"] == MATCHED
+
+
+def test_a_save_of_the_finished_day_after_its_match_keeps_the_verdict(desk):
+    k = desk(matcher=Matcher(NOT_YET))
+    a_day(k)
+    k.clock("16:10:00")
+    assert k.file()["match"] == NOT_YET
+    k.wall[0] += 10
+    k.r.idle()                                                               # no clock for a while: the day is saved again
+    k.wall[0] += 2
+    k.r.idle()
+    assert k.r.day("lab_x").summary()["match"] == NOT_YET and k.file()["match"] == NOT_YET
+    k.matcher.answers = (MATCHED,)
+    k.clock("16:40:00")                                                      # (the clock is heard again)
+    k.r.idle()
+    assert k.file()["match"] == MATCHED
+    k.wall[0] += 10
+    k.r.idle()
+    k.wall[0] += 2
+    k.r.idle()
+    assert k.file()["match"] == MATCHED and k.file()["state"] == "done"

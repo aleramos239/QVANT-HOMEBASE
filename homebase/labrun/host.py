@@ -15,7 +15,8 @@ others at most one deadline.
 
     StrategyDay   one strategy, one date: the child, the schedule, the would-be fills, the day summary
     run_day       a whole list of prints through one StrategyDay (the tests, the replay check)
-    Runner        the store's strategies on the session's prints: start / catch up / stop, the journal, the heartbeat
+    Runner        the store's strategies on the session's prints: start / catch up / stop, the journal, the heartbeat,
+                  and the daily match (labrun/match.py) of each finished day, in a worker thread
     run           the process: the tick client's thread (labrun/tickclient.py) reads, this thread works
 """
 from __future__ import annotations
@@ -38,13 +39,13 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ..backtest import sandbox
+from ..backtest import sandbox, slots
 from ..backtest.engine import Costs, build_bars
 from ..backtest.runner import DAILY_LOOKBACK
-from ..backtest.tape import ET, TapeStore, effective_session_window, et_ns
+from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
 from ..charts.session import session_date, session_range_ms
 from ..contracts import point_value, tick_size
-from . import door, store
+from . import door, match, store
 from .shadowfills import ShadowFills
 from .tickclient import TickClient
 
@@ -62,6 +63,9 @@ SILENT_S = 5.0                   # no clock from the stream for this long (our o
 SAVE_S = 1.0                     # the day summary is written at most this often between state changes
 BATCH = 200                      # run_day feeds this many prints at a time
 POLL_S = 5.0                     # the store is read, and the heartbeat written, this often
+MATCH_AFTER_NS = 600_000_000_000     # the daily match starts this long after the day's end (by the stream's clock) ...
+MATCH_RETRY_NS = 1_800_000_000_000   # ... and "not checked yet" is tried again this often,
+MATCH_RETRIES = 6                    # at most this many times
 ACTIVE = ("waiting", "running")
 SHADOW = {"max_trades_day": 99, "max_qty": 99, "max_risk_usd": 0}
 
@@ -73,6 +77,7 @@ TOO_MANY = "Too many orders at once."
 BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 TOO_LATE = "Started too late to follow today."
+NOT_CHECKED = "Not checked yet: the check could not run."
 PROBLEM = "Stopped: the runner had a problem."
 NO_STREAM = "No prices: the chart service is not answering."
 #   "Too slow: no answer in N s." (_Child.ask) and "Strategy error: <its message>" / "Strategy error." (strategy_error)
@@ -341,7 +346,9 @@ class StrategyDay:
     def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
+        self.promoted = record.get("promoted_utc")
         self.state, self.why, self.detail = "waiting", None, None
+        self.match: dict | None = None               # the daily match's verdict, once the runner has it
         self.fills: ShadowFills | None = None
         self.orders: list[dict] = []                 # the summary's rows, as they happened
         self._child: _Child | None = None
@@ -576,17 +583,24 @@ class StrategyDay:
     def trade_count(self) -> int:
         return len(self.fills.result.trades) if self.fills is not None else 0
 
+    @property
+    def end_ns(self) -> int:
+        """The end of the day's window (known once the day has started)."""
+        return self._t1
+
     def summary(self) -> dict:
-        """The day summary (contracts.md). `match` is filled by the daily match, not here."""
+        """The day summary (contracts.md). `match` is the daily match's verdict, set by the runner; a stopped day
+        says it was not checked."""
         trades = [{"side": t["side"], "qty": t["qty"], "entry_t": _hms(t["entry_ns"]), "entry_px": t["entry_price"],
                    "exit_t": _hms(t["exit_ns"]), "exit_px": t["exit_price"], "reason": t["exit_reason"], "net": t["net"]}
                   for t in self.trades()]
         why = self.why
         if why is None and self.state in ACTIVE:
             why = NO_STREAM if self._silent else door.PRICES_LATE if self._late.late else None
-        return {"date": self.date.isoformat(), "sha256": self.sha256, "state": self.state, "why": why,
-                "orders": list(self.orders), "trades": trades, "net": round(sum((t["net"] for t in trades), 0.0), 2),
-                "match": None, "updated_utc": self._updated}
+        verdict = {"ok": None, "text": "Not checked: it was stopped."} if self.state == "stopped" else self.match
+        return {"date": self.date.isoformat(), "sha256": self.sha256, "promoted_utc": self.promoted, "state": self.state,
+                "why": why, "orders": list(self.orders), "trades": trades,
+                "net": round(sum((t["net"] for t in trades), 0.0), 2), "match": verdict, "updated_utc": self._updated}
 
     def _changed(self, now: bool = False) -> None:
         """Hand the summary to save() when it changed: at once on a new state (or `now`), else at most once every
@@ -624,15 +638,52 @@ def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, deadli
 class _Hosted:
     day: StrategyDay
     root: str
-    key: tuple                  # the record this day was started from: its code, settings and size
+    key: tuple                  # the record this day was started from: its code, promotion, settings and size
     fed: int = 0                # how many of the market's prints it has had
     orders: int = 0             # how many of its orders, trades and stops are in the journal (or were catch-up)
     trades: int = 0
     stop: bool = False
+    rec: dict | None = None     # ... and the record itself (the daily match runs its code)
+
+
+@dataclass
+class _Match:
+    """One day's daily match, from its scheduling to its last answer."""
+    rec: dict
+    date: dt.date
+    trades: list                # the shadow day's trades, the engine's rows
+    day: StrategyDay | None     # the day (it keeps the verdict on its later saves), None when read back from its file
+    due_ns: int                 # the stream's clock at or after which it starts
+    started: int = 0            # ... and the clock it last started at
+    tries: int = 0              # answers so far that were "not checked yet" and will be asked again
+    running: bool = False
+    over: bool = False
+
+    def end(self) -> None:
+        """No more tries; the day (its whole session's prints) is let go."""
+        self.over, self.day = True, None
+
+
+def _mark(rec: dict) -> tuple:
+    """A promotion: the code and the moment it was promoted (promoting again, even the same code, is a new one)."""
+    return (rec.get("sha256"), rec.get("promoted_utc"))
+
+
+def _same(rec: dict, was: dict) -> bool:
+    """A day file written for this promotion. One from before promoted_utc was kept is judged by its code alone."""
+    return was.get("sha256") == rec.get("sha256") and was.get("promoted_utc") in (None, rec.get("promoted_utc"))
 
 
 def _key(rec: dict) -> tuple:
-    return (rec.get("sha256"), json.dumps(rec.get("params"), sort_keys=True, default=str), rec.get("qty"))
+    return (*_mark(rec), json.dumps(rec.get("params"), sort_keys=True, default=str), rec.get("qty"))
+
+
+def _before(d: dt.date) -> dt.date:
+    """The weekday before d."""
+    d -= dt.timedelta(days=1)
+    while d.weekday() >= 5:
+        d -= dt.timedelta(days=1)
+    return d
 
 
 def _session_ns(d: dt.date, root: str) -> tuple[int, int]:
@@ -647,15 +698,24 @@ class Runner:
     what the tick client hands over, sync(), beat() and idle() every few seconds. `at`: the store's root (default
     ~/.homebase/desklab).
 
+    A finished day's match with the tester (labrun/match.py) starts MATCH_AFTER_NS after its end, by the stream's
+    clock, in a worker thread of its own (never in the 09:20-09:35 ET window on a weekday), and its answer is written
+    into the day file and the journal by this thread. `matcher(record, date, trades) -> {"ok", "text"}` (default: the
+    real tester, in the sandbox); a "not checked yet" is asked again every MATCH_RETRY_NS, MATCH_RETRIES times.
+
     A market's day is the SESSION date of the stream's clock (charts.session.session_date: it rolls at 18:00 ET, as
     the chart service's tape and the tester's archive do), and the prints held are that session's. While a
     connection is still sending its backlog (`connect` seen, `live` not yet) nothing is hosted, finished or clocked:
     the days only take the prints, in order."""
 
     def __init__(self, *, at=None, source: str = "", spawn=None, deadline_s: float = DEADLINE_S, daily=None,
-                 wall=time.monotonic):
+                 wall=time.monotonic, matcher=None):
         self.at, self.source = at, source
         self._spawn, self._deadline, self._daily, self._wall = spawn, deadline_s, daily, wall
+        self._matcher = matcher or self._tester
+        self._matches: dict[tuple, _Match] = {}      # (name, date, promotion) -> its daily match
+        self._results: queue.Queue = queue.Queue()   # the worker threads' answers, read on this thread
+        self._swept: set[str] = set()                # the strategies whose past days were looked at for a match
         self._live = False                           # the current connection has sent its whole backlog
         self._clock_ms: int | None = None            # the stream's clock (heard while live)
         self._clock_wall = wall()                    # when (wall) it was last heard
@@ -664,7 +724,7 @@ class Runner:
         self._tapes: dict[str, tuple] = {}           # root -> that session's prints: (ts_ns, price, size) arrays
         self._late: dict[str, _Late] = {}
         self._days: dict[str, _Hosted] = {}
-        self._final: dict[str, tuple] = {}           # name -> (date, sha256) of a day file found final: never hosted again
+        self._final: dict[str, tuple] = {}           # name -> (date, promotion) of a day file found final: never hosted again
         self._roots: list[str] = []                  # the markets the enabled strategies trade
 
     # ---- what the tests and the status read
@@ -683,6 +743,10 @@ class Runner:
 
     def prints(self, root: str) -> int:
         return len(self._tapes[root][0]) if root in self._tapes else 0
+
+    def matching(self) -> int:
+        """How many daily matches are out in a worker thread and not yet read."""
+        return sum(m.running for m in self._matches.values())
 
     # ---- the stream
     def take(self, item: tuple) -> None:
@@ -707,6 +771,7 @@ class Runner:
         for h in list(self._days.values()):
             h.day.on_clock(now_ms)
             self._note(h)
+        self._start_matches(now_ms)
 
     def on_rows(self, root: str, rows) -> None:
         """Fresh prints [[ts_ms, price, size], ...] of one market, in time order."""
@@ -725,6 +790,7 @@ class Runner:
     def idle(self) -> None:
         """No clock from the stream for SILENT_S of our own time: there are no prices, and every day says so."""
         self._quiet(self._wall() - self._clock_wall > SILENT_S)
+        self._collect()
 
     def _quiet(self, silent: bool) -> None:
         if silent != self._silent:
@@ -779,6 +845,8 @@ class Runner:
             lines.append({**head, "kind": "stop", "why": day.why, "detail": day.detail})
         if not quiet and day.trade_count > h.trades:
             lines += [{**head, "kind": "trade", **t} for t in day.summary()["trades"][h.trades:]]
+        if day.state == "done":
+            self._plan(h.rec, day.date, day.end_ns + MATCH_AFTER_NS, day=day)
         for line in lines:
             self._write(store.journal, day.name, line)
         h.orders, h.trades, h.stop = len(day.orders), day.trade_count, stopped
@@ -795,7 +863,8 @@ class Runner:
         """Read the store: host each enabled strategy whose market has prints this session (never a Saturday's or a
         Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
         the session's prints first (catch-up) -- unless its day file for the date is final (_is_final). While a
-        backlog is in flight nothing is hosted or stopped: the tape is not whole yet."""
+        backlog is in flight nothing is hosted or stopped: the tape is not whole yet. The first time a strategy is
+        seen, a finished day of today or the session before with no match (or "not checked yet") is matched again."""
         try:
             recs = [r for r in store.listing(self.at) if r.get("enabled") and isinstance(r.get("root"), str)]
         except OSError as e:
@@ -807,6 +876,10 @@ class Runner:
         for root in self._roots:                     # a market nobody traded until now
             if root not in self._dates:
                 self._roll(root, session_date(self._clock_ms, root))
+        for rec in recs:
+            if rec["name"] not in self._swept:
+                self._swept.add(rec["name"])
+                self._sweep(rec)
         want = {r["name"]: r for r in recs if self._dates[r["root"]].weekday() < 5 and self.prints(r["root"])}
         for name, h in list(self._days.items()):
             rec = want.get(name)
@@ -820,18 +893,24 @@ class Runner:
             if name not in self._days and not self._is_final(rec):
                 self._host(rec)
 
+    def _day_file(self, rec: dict, date: dt.date) -> dict | None:
+        """The date's day file, when it was written for this promotion (_same)."""
+        try:
+            was = store.get_day(rec["name"], date.isoformat(), self.at)
+        except (OSError, ValueError):
+            return None
+        return was if was is not None and _same(rec, was) else None
+
     def _is_final(self, rec: dict) -> bool:
-        """A day file for the date with the SAME sha256 and state `done` or `stopped` is final: that strategy is not
-        hosted again for that date and the file is never rewritten -- not after a restart, a failure or a late
-        start. Promoted again (another sha256), it starts a fresh day."""
-        name, mark = rec["name"], (self._dates[rec["root"]], rec.get("sha256"))
+        """A day file for the date with the SAME promotion (_same: the code and the moment it was promoted) and state
+        `done` or `stopped` is final: that strategy is not hosted again for that date and the file is never rewritten
+        -- not after a restart, a failure or a late start. Promoted again (even the same code, with other settings or
+        size), it starts a fresh day."""
+        name, mark = rec["name"], (self._dates[rec["root"]], *_mark(rec))
         if self._final.get(name) == mark:
             return True
-        try:
-            was = store.get_day(name, mark[0].isoformat(), self.at)
-        except (OSError, ValueError):
-            was = None
-        if was is None or was.get("sha256") != mark[1] or was.get("state") not in ("done", "stopped"):
+        was = self._day_file(rec, mark[0])
+        if was is None or was.get("state") not in ("done", "stopped"):
             return False
         self._final[name] = mark
         log(f"{name}: {mark[0]} is {was.get('state')} already: left as it is")
@@ -849,6 +928,7 @@ class Runner:
 
         def save(summary: dict) -> None:
             if summary["why"] == TOO_LATE and there:     # never over a day file that exists: it may be a finished day
+                self._too_late(name, date)
                 return
             self._write(store.put_day, name, summary)
 
@@ -856,13 +936,91 @@ class Runner:
         # is the session from its open; a tape that starts later cannot rebuild the day in full).
         day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
                           wall=self._wall, late=lambda t0: now > t0 and oldest > t0)
-        h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts))
+        h = self._days[name] = _Hosted(day, root, _key(rec), fed=len(ts), rec=rec)
         if self._silent:
             day.no_prices(True)
         day.on_ticks(zip(ts, px, size))              # catch-up: the session so far
         day.on_clock(self._clock_ms)
         self._note(h, quiet=True)
         log(f"{name}: {date} {day.state}{' (' + day.why + ')' if day.why else ''}, {h.fed} prints to catch up")
+
+    def _too_late(self, name: str, date: dt.date) -> None:
+        """A day file that is not final (waiting, running) cannot be rebuilt: only its state, its `why` and its time
+        change; its orders, trades and net stay as they were. A finished or stopped one is left as it is."""
+        try:
+            was = store.get_day(name, date.isoformat(), self.at)
+        except (OSError, ValueError):
+            return
+        if was is not None and was.get("state") in ACTIVE:
+            self._write(store.put_day, name, {**was, "state": "stopped", "why": TOO_LATE, "updated_utc": _utc()})
+
+    # ---- the daily match
+    def _plan(self, rec: dict, date: dt.date, due_ns: int, day: StrategyDay | None = None, trades=None) -> None:
+        """Schedule the day's match once per promotion."""
+        key = (rec["name"], date, *_mark(rec))
+        if key not in self._matches:
+            self._matches[key] = _Match(rec, date, day.trades() if trades is None else trades, day, due_ns)
+
+    def _sweep(self, rec: dict) -> None:
+        """A runner that starts again: a finished day of today or the session before, written for this promotion,
+        with no match or "not checked yet", is matched again (from the trades its file holds)."""
+        today = self._dates[rec["root"]]
+        for date in (today, _before(today)):
+            was = self._day_file(rec, date)
+            if was is not None and was.get("state") == "done" and (was.get("match") or {}).get("ok") is None:
+                try:
+                    trades = match.from_summary(was.get("trades") or [], date)
+                except (KeyError, TypeError, ValueError):
+                    continue
+                self._plan(rec, date, 0, trades=trades)
+
+    def _start_matches(self, now_ms: int) -> None:
+        """Answers in; then each match that is due starts in a worker thread -- never 09:20-09:35 ET on a weekday,
+        and never for a day that was promoted again meanwhile (its file is another promotion's)."""
+        self._collect()
+        now = now_ms * 1_000_000
+        due = [m for m in self._matches.values() if not m.over and not m.running and m.due_ns <= now]
+        if not due or slots.in_quiet(dt.datetime.fromtimestamp(now_ms / 1000, ET)):
+            return
+        for m in due:
+            if self._day_file(m.rec, m.date) is None:
+                m.end()
+                continue
+            m.running, m.started = True, now
+            threading.Thread(target=self._match_run, args=(m,), name="labrun-match", daemon=True).start()
+
+    def _match_run(self, m: _Match) -> None:
+        """The worker thread: ask, put the answer where this thread reads it. Nothing else."""
+        try:
+            got = self._matcher(m.rec, m.date, m.trades)
+        except Exception as e:  # noqa: BLE001 -- a bug in the check must not end as a silent thread
+            log(f"{m.rec['name']}: match: {type(e).__name__}: {e}")
+            got = {"ok": None, "text": NOT_CHECKED}
+        self._results.put((m, got))
+
+    def _collect(self) -> None:
+        while True:
+            try:
+                m, got = self._results.get_nowait()
+            except queue.Empty:
+                return
+            m.running, day = False, m.day
+            if got.get("ok") is None and m.tries < MATCH_RETRIES:
+                m.tries, m.due_ns = m.tries + 1, m.started + MATCH_RETRY_NS
+            else:
+                m.end()
+            was = self._day_file(m.rec, m.date)
+            if was is None:                          # promoted again meanwhile: this answer is for another day
+                m.end()
+                continue
+            if day is not None:
+                day.match = got                      # (the day's later saves carry it)
+            self._write(store.put_day, m.rec["name"], {**was, "match": got, "updated_utc": _utc()})
+            self._write(store.journal, m.rec["name"], {"utc": _utc(), "date": m.date.isoformat(), "kind": "match", **got})
+
+    def _tester(self, rec: dict, date: dt.date, trades: list) -> dict:
+        return match.match_day(rec, date, trades, base=store.root(self.at) / rec["name"] / "match", archive=ARCHIVE,
+                               cache=CACHE, python=sys.executable)
 
     def beat(self) -> None:
         """The heartbeat (contracts.md runner status). No clock from the stream: every market reads late, no age.
