@@ -720,11 +720,16 @@ function fmSwitch(sc, st, rule) {
   }
   return next;
 }
-/* a state from the answers a file carries: the rule's defaults under them, and only the keys that belong */
+/* a state from the answers a file carries: the rule's defaults under them, and only the keys that belong.
+   A stop or target of a kind the rule does not offer (a hand-edited header) is the rule's own default instead. */
 function fmFill(sc, answers) {
   if (!answers || typeof answers !== 'object' || !sc || !sc.defaults || !sc.defaults[answers.rule]) return null;
   const s = fmClone(sc.defaults[answers.rule]);
-  for (const k of fmKeys(sc, answers.rule)) if (answers[k] !== undefined) s[k] = fmClone(answers[k]);
+  const keys = fmKeys(sc, answers.rule);
+  for (const k of keys) if (answers[k] !== undefined) s[k] = fmClone(answers[k]);
+  for (const k of ['stop', 'target']) {
+    if (keys.includes(k) && !fmKinds(sc, answers.rule, k).some((x) => x.id === (s[k] || {}).kind)) s[k] = fmClone(sc.defaults[answers.rule][k]);
+  }
   s.rule = answers.rule;
   if (typeof s.name !== 'string') s.name = '';
   return s;

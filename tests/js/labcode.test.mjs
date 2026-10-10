@@ -539,6 +539,29 @@ test('fm: reading a file\'s answers back into a state fills what is missing from
   assert.equal(thin.time, '09:30');
 });
 
+test('fm: a hand-edited header cannot trap the dialog -- a stop or target the rule does not offer starts from the rule\'s own', () => {
+  const straddle = { ...FM.defaults.open_straddle, name: 'x' };
+  // the range stop belongs to the opening range only
+  const s = L.fmFill(FM, { ...straddle, stop: { kind: 'range' } });
+  assert.deepEqual(s.stop, FM.defaults.open_straddle.stop);
+  assert.deepEqual(L.fmErrors(FM, s), {});
+  assert.deepEqual(L.fmAnswers(FM, s).stop, { kind: 'points', value: 50 }, 'the read-back shows it');
+  // a kind nobody offers, a stop that is not an object, a target with no kind
+  assert.deepEqual(L.fmFill(FM, { ...straddle, target: { kind: 'bogus', value: 5 } }).target, FM.defaults.open_straddle.target);
+  assert.deepEqual(L.fmFill(FM, { ...straddle, stop: 'wide' }).stop, FM.defaults.open_straddle.stop);
+  assert.deepEqual(L.fmFill(FM, { ...straddle, target: {} }).target, FM.defaults.open_straddle.target);
+  assert.deepEqual(L.fmFill(FM, { ...straddle, stop: null }).stop, FM.defaults.open_straddle.stop);
+  // what the rule offers is kept, with its number (also a number that is wrong: the server says so)
+  assert.deepEqual(L.fmFill(FM, { ...straddle, stop: { kind: 'points', value: 7 } }).stop, { kind: 'points', value: 7 });
+  assert.deepEqual(L.fmFill(FM, { ...straddle, target: { kind: 'none' } }).target, { kind: 'none' });
+  const orange = { ...FM.defaults.opening_range, name: 'x' };
+  assert.deepEqual(L.fmFill(FM, orange).stop, { kind: 'range' }, 'the opening range keeps its own');
+  // the returned state is its own: changing it leaves the schema\'s defaults alone
+  const t = L.fmFill(FM, { ...straddle, stop: { kind: 'range' } });
+  t.stop.value = '1';
+  assert.equal(FM.defaults.open_straddle.stop.value, 50);
+});
+
 test('fm: the time boxes stop at 15:55 and the server\'s sentences are shown as they come', () => {
   assert.equal(L.FM_LATEST, '15:55');
   assert.equal(L.fmFirstError({ stop: 'Every entry needs a stop.', name: 'bad' }, ['name', 'market', 'stop']), 'bad', 'the first in the order the fields are shown');
