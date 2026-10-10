@@ -8,10 +8,12 @@ from __future__ import annotations
 import pytest
 
 from homebase import labcfg
+from homebase.broker.base import FillEvent
 from homebase.labdesk import Refused
 from homebase.labrun import store
-from tests.labdesk_util import LAB, LIMITS, mkdesk, rec
+from tests.labdesk_util import LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
+from tests.test_engine_lab import tick
 
 WINDOW_PAST_FLAT = "Its window ends after the flat time. Shorten the window to end by 15:55."
 
@@ -75,3 +77,49 @@ def test_a_book_is_refused_when_its_limits_flat_time_is_before_the_window_end(tm
 def test_ends_after_flat(end, flat, past):
     lim = labcfg.LabLimits(3, 2, 300.0, "11:00", flat) if flat else None
     assert labcfg.ends_after_flat({"session_window": ["09:25", end]}, lim) is past
+
+
+# ---------------------------------------------------------------- I2: a fill the Desk adopted from an order read
+def _adopted(tmp_path):
+    """A buy stop that filled with its push lost: the clock's order read (_guard_placed) makes the trade live."""
+    d = mkdesk(tmp_path)
+    assert send(d, entry(1))["ok"] is True
+    s = d.eng.states[f"{LAB}@a1"]
+    ad = d.ads["a1"]
+    ad.order_status[s.upper_id], ad.filled[s.upper_id], ad.net = "Filled", 1, 1
+    ad.order_status[f"{s.upper_id}-sl"] = ad.order_status[f"{s.upper_id}-tp"] = "Working"
+    tick(d.eng)
+    assert (s.status, s.entry_side, s.entry_qty) == ("live", "Buy", 0)        # adopted whole, no fill push counted
+    return d, s, ad
+
+
+def test_an_adopted_entry_reads_filled_to_the_strategy(tmp_path):
+    d, s, ad = _adopted(tmp_path)
+    sent = list(ad.orders)
+    (row,) = d.eng.lab_rounds(LAB)
+    assert row["entry_qty"] == 1 and row["status"] == "live"
+    assert d.ld._brain(LAB)["orders"]["1"]["status"] == "filled"
+    assert d.ld._brain(LAB)["flat"] is False
+    assert ad.orders == sent                                       # reading it sends nothing
+
+
+def test_an_adopted_entry_then_its_target_reads_the_right_exit_and_pnl(tmp_path):
+    d, s, ad = _adopted(tmp_path)
+    eid = s.upper_id
+    ad.order_status[f"{eid}-tp"], ad.order_status[f"{eid}-sl"], ad.net = "Filled", "Canceled", 0
+    run(d.eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=120.0,
+                                raw={"orderId": f"{eid}-tp"})))
+    tick(d.eng)
+    assert (s.status, s.exit_reason, s.exit_fill) == ("done", "tp", 120.0)
+    (row,) = d.eng.lab_rounds(LAB)
+    assert (row["entry_qty"], row["exit_qty"], row["exit_reason"], row["pnl"]) == (1, 1, "tp", s.pnl)
+    b = d.ld._brain(LAB)
+    assert b["orders"]["1"]["status"] == "filled" and b["flat"] is True
+
+
+def test_a_round_with_no_entry_side_still_reads_its_own_count(tmp_path):
+    d = mkdesk(tmp_path)
+    send(d, entry(1))
+    (row,) = d.eng.lab_rounds(LAB)
+    assert (row["entry_side"], row["entry_qty"]) == (None, 0)
+    assert d.ld._brain(LAB)["orders"]["1"]["status"] == "working"

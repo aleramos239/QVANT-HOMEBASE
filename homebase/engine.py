@@ -2574,7 +2574,10 @@ class Engine:
             out.append({"account": st.account, "round": x.get("round"), "status": st.status,
                         "date": (carry or {}).get("date") or st.date, "carried": carry is not None,
                         "iid": dict(x.get("iid") or {}), "qty": st.qty, "entry_side": st.entry_side,
-                        "entry_qty": st.entry_qty, "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
+                        # an entry adopted from an order read (_guard_placed: its fill push was missed) has a side
+                        # and no counted fill: it went in whole, as _close_if_out counts it
+                        "entry_qty": st.qty if st.entry_side and not st.entry_qty else st.entry_qty,
+                        "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
                         "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
                         "pnl": st.pnl, "clean": self._lab_clean(st), "entry_ms": x.get("entry_ms"),
                         "exit_ms": x.get("exit_ms"), "why": x.get("why") or (st.note or None if st.status == "error" else None),
