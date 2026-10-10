@@ -154,3 +154,15 @@ def test_the_root_comes_from_the_env_and_never_the_real_folder(tmp_path, monkeyp
     assert (tmp_path / "env" / "nq_x.json").is_file()
     monkeypatch.delenv(store.ENV_ROOT)
     assert store.root() == store.Path.home() / ".homebase" / "desklab"
+
+
+def test_same_promotion_is_the_code_and_the_moment_it_was_promoted():
+    """B1. The one place that says whether a day file belongs to a record: the runner and the Desk's list both ask it."""
+    r = rec()
+    assert store.same_promotion(day("2026-10-08", promoted_utc=r["promoted_utc"]), r) is True
+    assert store.same_promotion(day("2026-10-08", promoted_utc="2026-10-01T00:00:00+00:00"), r) is False    # promoted again
+    assert store.same_promotion(day("2026-10-08", sha256="cd", promoted_utc=r["promoted_utc"]), r) is False   # other code
+    assert store.same_promotion(day("2026-10-08"), r) is True                   # no promoted_utc: by its code alone
+    assert store.same_promotion(day("2026-10-08", sha256="cd"), r) is False
+    for not_a_day in (None, [], "x", {}):
+        assert store.same_promotion(not_a_day, r) is False

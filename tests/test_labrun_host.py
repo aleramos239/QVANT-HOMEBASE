@@ -1346,6 +1346,51 @@ def test_promoted_again_while_hosted_the_day_is_replaced_even_with_the_same_code
     assert k.r.day("lab_x") is not old and not old.child_alive() and k.today()["promoted_utc"] == "2026-10-09T15:00:00+00:00"
 
 
+def test_the_runner_asks_the_store_whether_a_day_file_is_this_promotions(desk, monkeypatch):
+    """B1. One place for the comparison (store.same_promotion): the runner has no rule of its own."""
+    f = a_finished_day(desk)
+    asked = []
+    monkeypatch.setattr(store, "same_promotion", lambda day, record: asked.append(((day or {}).get("date"), record["name"])) or False)
+    again = restart(desk)                                                    # "not this promotion's": a fresh day
+    assert (D.isoformat(), "lab_x") in asked and len(again.spawned) == 1 and not hasattr(host, "_same")
+    assert json.loads(f.read_text())["state"] == "done"
+
+
+# ---------------------------------------------------------------- B2: the session day the runner is on
+def et_ms(*ymdhm) -> int:
+    return int(dt.datetime(*ymdhm, tzinfo=host.ET).timestamp() * 1000)
+
+
+@pytest.mark.parametrize("when, root, today", [
+    ((2026, 10, 8, 17, 30), "NQ", dt.date(2026, 10, 8)),     # Thursday, the 17:00 hour: still Thursday's session
+    ((2026, 10, 8, 18, 30), "NQ", dt.date(2026, 10, 9)),     # after the 18:00 roll: Friday's
+    ((2026, 10, 9, 17, 59), "NQ", dt.date(2026, 10, 9)),
+    ((2026, 10, 9, 18, 30), "NQ", None),                     # Friday evening: Monday's session has not begun
+    ((2026, 10, 10, 12, 0), "NQ", None),                     # Saturday noon
+    ((2026, 10, 11, 17, 59), "NQ", None),
+    ((2026, 10, 11, 19, 0), "NQ", dt.date(2026, 10, 12)),    # Sunday 19:00 ET: Monday's
+    ((2026, 10, 10, 12, 0), "BTC", None),                    # a 24/7 market has a Saturday session: never hosted
+    ((2026, 10, 11, 19, 0), "BTC", dt.date(2026, 10, 12)),
+])
+def test_session_today_is_the_day_the_runner_hosts_at_that_moment(when, root, today):
+    assert host.session_today(et_ms(*when), root) == today
+
+
+def test_the_runner_hosts_only_on_the_day_session_today_names(desk, monkeypatch):
+    """... and the runner itself asks that helper: with no session to host on, a strategy is not started."""
+    k = desk()
+    k.promote()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 9)
+    monkeypatch.setattr(host, "session_today", lambda now_ms, root: None)
+    k.r.sync()
+    assert k.r.hosting() == [] and k.spawned == []
+    monkeypatch.undo()
+    k.r.sync()
+    assert k.r.hosting() == ["lab_x"]
+
+
 # ---------------------------------------------------------------- a day file that cannot be rebuilt
 def test_a_waiting_or_running_day_file_that_cannot_be_rebuilt_is_stopped_and_keeps_what_it_had(desk):
     k = desk()

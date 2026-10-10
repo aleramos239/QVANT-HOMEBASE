@@ -669,11 +669,6 @@ def _mark(rec: dict) -> tuple:
     return (rec.get("sha256"), rec.get("promoted_utc"))
 
 
-def _same(rec: dict, was: dict) -> bool:
-    """A day file written for this promotion. One from before promoted_utc was kept is judged by its code alone."""
-    return was.get("sha256") == rec.get("sha256") and was.get("promoted_utc") in (None, rec.get("promoted_utc"))
-
-
 def _key(rec: dict) -> tuple:
     return (*_mark(rec), json.dumps(rec.get("params"), sort_keys=True, default=str), rec.get("qty"))
 
@@ -684,6 +679,15 @@ def _before(d: dt.date) -> dt.date:
     while d.weekday() >= 5:
         d -= dt.timedelta(days=1)
     return d
+
+
+def session_today(now_ms: int, root: str | None) -> dt.date | None:
+    """The session day the runner is on at that moment for that market, or None when there is none to host: the
+    session date of the clock (charts.session.session_date: it rolls at 18:00 ET), never a Saturday's or a Sunday's
+    session, and not before that session has begun (a weekend, until Sunday 18:00 ET). The Desk's list reads "today"
+    with this same rule (charts/tester_api.py)."""
+    d = session_date(now_ms, root)
+    return d if d.weekday() < 5 and session_range_ms(d, root)[0] <= now_ms else None
 
 
 def _session_ns(d: dt.date, root: str) -> tuple[int, int]:
@@ -864,8 +868,8 @@ class Runner:
 
     # ---- the store
     def sync(self) -> None:
-        """Read the store: host each enabled strategy whose market has prints this session (never a Saturday's or a
-        Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
+        """Read the store: host each enabled strategy whose market has prints this session (session_today: never a
+        Saturday's or a Sunday's session); a strategy that appears, is switched on or was promoted again gets a fresh day, fed from
         the session's prints first (catch-up) -- unless its day file for the date is final (_is_final). While a
         backlog is in flight nothing is hosted or stopped: the tape is not whole yet. The first time a strategy is
         seen, a finished day of today or the session before with no match (or "not checked yet") is matched again."""
@@ -884,7 +888,8 @@ class Runner:
             if rec["name"] not in self._swept:
                 self._swept.add(rec["name"])
                 self._sweep(rec)
-        want = {r["name"]: r for r in recs if self._dates[r["root"]].weekday() < 5 and self.prints(r["root"])}
+        want = {r["name"]: r for r in recs
+                if session_today(self._clock_ms, r["root"]) == self._dates[r["root"]] and self.prints(r["root"])}
         for name, h in list(self._days.items()):
             rec = want.get(name)
             if rec is None:
@@ -898,15 +903,15 @@ class Runner:
                 self._host(rec)
 
     def _day_file(self, rec: dict, date: dt.date) -> dict | None:
-        """The date's day file, when it was written for this promotion (_same)."""
+        """The date's day file, when it was written for this promotion (store.same_promotion)."""
         try:
             was = store.get_day(rec["name"], date.isoformat(), self.at)
         except (OSError, ValueError):
             return None
-        return was if was is not None and _same(rec, was) else None
+        return was if store.same_promotion(was, rec) else None
 
     def _is_final(self, rec: dict) -> bool:
-        """A day file for the date with the SAME promotion (_same: the code and the moment it was promoted) and state
+        """A day file for the date with the SAME promotion (the code and the moment it was promoted) and state
         `done` or `stopped` is final: that strategy is not hosted again for that date and the file is never rewritten
         -- not after a restart, a failure or a late start. Promoted again (even the same code, with other settings or
         size), it starts a fresh day."""

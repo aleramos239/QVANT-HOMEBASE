@@ -64,6 +64,21 @@ def promote(c, name="nq_bars", run_id="x", **kw):
     return c.post("/api/tester/desklab/promote", json={"name": name, "run_id": run_id}, **kw)
 
 
+def mark(name="nq_bars"):
+    """What a day file of this record's promotion carries."""
+    r = store.get(name)
+    return {"sha256": r["sha256"], "promoted_utc": r["promoted_utc"]}
+
+
+def a_day(date, **kw):
+    return {"date": date, "state": "done", "why": None, "orders": [], "trades": [], "net": 0.0, "match": None,
+            "updated_utc": "x", **kw}
+
+
+def at_et(monkeypatch, *ymdhm):
+    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(*ymdhm, tzinfo=slots.ET))
+
+
 def sentence(r, status=None):
     assert r.json()["ok"] is False, r.text
     if status:
@@ -146,7 +161,8 @@ def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir
     assert promote(c, run_id=make_run(newer, inputs={"lookback": 3})).status_code == 200
     (s,) = c.get("/api/tester/desklab").json()["strategies"]
     assert s["sha256"] == sha(newer) and s["label"] == "Bar breakout two" and s["params"] == {"lookback": 3}
-    assert [d["date"] for d in s["days"]] == ["2026-09-25"]
+    assert s["days"] == []                                                      # B1: another promotion's day is not this one's
+    assert (tmp_path / "desklab" / "nq_bars" / "days" / "2026-09-25.json").is_file()     # ... and it is still kept
     assert (tmp_path / "desklab" / "nq_bars" / "journal.jsonl").is_file()
 
 
@@ -157,7 +173,8 @@ def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts
     promote(c, run_id=make_run())
     today = slots.et_now().date().isoformat()                                  # conftest pins this to 2026-09-28
     for i in range(12):
-        store.put_day("nq_bars", {"date": (dt.date(2026, 9, 28) - dt.timedelta(days=i)).isoformat(), "state": "done", "n": i}, at)
+        store.put_day("nq_bars", {"date": (dt.date(2026, 9, 28) - dt.timedelta(days=i)).isoformat(), "state": "done", "n": i,
+                                  **mark()}, at)
     (s,) = c.get("/api/tester/desklab").json()["strategies"]
     assert today == "2026-09-28" and s["today"]["n"] == 0
     assert [d["n"] for d in s["days"]] == list(range(10))                       # ten, newest first
@@ -263,3 +280,90 @@ def test_promote_checks_the_markets_this_service_really_streams(tmp_path, monkey
     draft(drafts_dir)
     assert sentence(promote(c, run_id=make_run()), 409) == "No live prices for NQ here."
     assert c.get("/api/tester/desklab").json()["strategies"] == []
+
+
+# ---------------------------------------------------------------- B1: a day belongs to ONE promotion
+def test_a_day_another_promotion_wrote_is_never_shown_as_this_ones(c):
+    """The whole-branch review's script (old_day_under_new_code.py): the runner's finished day of the OLD code, then
+    "Promote again" with other code in the evening. The page must not read the old day as the new code's."""
+    today = slots.et_now().date().isoformat()
+    old = {"sha256": "a" * 64, "promoted_utc": "2026-10-08T13:00:00+00:00"}
+    new = {"sha256": "b" * 64, "promoted_utc": "2026-10-09T23:00:00+00:00"}
+    store.put_day("nq_x", a_day(today, **old, net=811.0, match={"ok": True, "text": "Matched the backtest: 1 of 1 trade."},
+                                orders=[{"t": "10:10:00", "text": "Sell at market, stop 21,520.00", "refused": None}]))
+    store.put({"name": "nq_x", "id": "draft_nq_x", "label": "nq_x", "root": "NQ", "source": "# other code", **new,
+               "params": {}, "qty": 1, "run": {}, "notes": [], "enabled": True})
+    (row,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert row["sha256"] == "b" * 64 and row["today"] is None and row["days"] == []
+    store.put_day("nq_x", a_day(today, **new, state="waiting"))                 # the new code's own day
+    (row,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert row["today"]["state"] == "waiting" and [d["date"] for d in row["days"]] == [today]
+
+
+def test_promote_again_shows_no_days_until_the_new_code_has_run(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    for date in ("2026-09-25", "2026-09-28"):
+        store.put_day("nq_bars", a_day(date, **mark()))
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"]["date"] == "2026-09-28" and [d["date"] for d in s["days"]] == ["2026-09-28", "2026-09-25"]
+    newer = CODE.replace("Bar breakout", "Bar breakout two")
+    draft(drafts_dir, newer)
+    promote(c, run_id=make_run(newer))
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"] is None and s["days"] == []
+    store.put_day("nq_bars", a_day("2026-09-28", **mark(), state="running"))    # the runner hosts the new code
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"]["state"] == "running" and [d["date"] for d in s["days"]] == ["2026-09-28"]
+
+
+def test_the_same_code_promoted_again_does_not_show_the_days_of_the_promotion_before(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    was = store.put({**store.get("nq_bars"), "promoted_utc": "2026-09-20T12:00:00+00:00"})    # (promoted a week ago)
+    store.put_day("nq_bars", a_day("2026-09-28", sha256=was["sha256"], promoted_utc=was["promoted_utc"]))
+    assert c.get("/api/tester/desklab").json()["strategies"][0]["today"]["date"] == "2026-09-28"
+    promote(c, run_id=make_run())                                               # the same code, promoted again now
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["sha256"] == was["sha256"] and s["today"] is None and s["days"] == []
+
+
+def test_remove_then_promote_does_not_show_the_old_days(c, drafts_dir, make_run, tmp_path):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    was = store.put({**store.get("nq_bars"), "promoted_utc": "2026-09-20T12:00:00+00:00"})
+    store.put_day("nq_bars", a_day("2026-09-28", sha256=was["sha256"], promoted_utc=was["promoted_utc"]))
+    assert c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}).json()["removed"] is True
+    promote(c, run_id=make_run())
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"] is None and s["days"] == []
+    assert (tmp_path / "desklab" / "nq_bars" / "days" / "2026-09-28.json").is_file()     # the history stays on disk
+
+
+def test_a_day_file_with_no_promoted_utc_is_shown_by_its_code_alone(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    store.put_day("nq_bars", a_day("2026-09-28", sha256=mark()["sha256"]))
+    store.put_day("nq_bars", a_day("2026-09-25", sha256="f" * 64))
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["today"]["date"] == "2026-09-28" and [d["date"] for d in s["days"]] == ["2026-09-28"]
+
+
+# ---------------------------------------------------------------- B2: today is the day the RUNNER is on
+@pytest.mark.parametrize("when, today", [
+    ((2026, 10, 8, 17, 30), "2026-10-08"),       # Thursday 17:30 ET: still Thursday's session
+    ((2026, 10, 8, 18, 30), "2026-10-09"),       # after the 18:00 roll: Friday's
+    ((2026, 10, 8, 23, 59), "2026-10-09"),
+    ((2026, 10, 9, 0, 1), "2026-10-09"),         # midnight changes nothing
+    ((2026, 10, 10, 12, 0), None),               # Saturday noon: no session
+    ((2026, 10, 11, 17, 59), None),              # Sunday before the open
+    ((2026, 10, 11, 19, 0), "2026-10-12"),       # Sunday 19:00 ET: Monday's
+])
+def test_today_is_the_session_day_the_runner_is_on_not_the_wall_clock_date(c, drafts_dir, make_run, monkeypatch, when, today):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    for date in ("2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11", "2026-10-12"):
+        store.put_day("nq_bars", a_day(date, **mark()))
+    at_et(monkeypatch, *when)
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert (s["today"] or {}).get("date") == today

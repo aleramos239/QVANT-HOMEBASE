@@ -52,9 +52,10 @@
                                           start / resume are refused 09:20-09:35 ET on weekdays (they can start heavy
                                           work); pause and the owner's yes or no never are
     GET  /api/tester/desklab             Lab strategies promoted to the Desk (homebase.labrun.store): {strategies: [each
-                                          record WITHOUT its code, plus `today` (its day summary or null) and `days` (the
-                                          last 10)], runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat
-                                          is under 20 s old
+                                          record WITHOUT its code, plus `today` (the day summary of the session day the
+                                          runner is on, or null) and `days` (of the last 10, those this promotion wrote)],
+                                          runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat is under
+                                          20 s old
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
                                           draft's text, its settings and that backtest's headline numbers. Refused (in
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
@@ -155,6 +156,7 @@ from ..backtest.tape import CACHE
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from ..labrun import door, store
+from ..labrun.host import session_today
 from . import DEFAULT_ROOTS, lab_templates, reviewpack, watch
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
@@ -660,12 +662,16 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     @r.get("/desklab")
     def desklab_list(request: Request):
         watch_guard(request)
-        today = slots.et_now().date().isoformat()
+        now_ms = int(slots.et_now().timestamp() * 1000)
         out = []
         for rec in store.listing():
-            name = rec["name"]
+            # `today` is the session day the runner is on for that market (it rolls at 18:00 ET; a weekend has none),
+            # and a day counts only when THIS promotion wrote it: another promotion's day is never shown as this one's
+            name, date = rec["name"], session_today(now_ms, rec.get("root"))
+            today = store.get_day(name, date.isoformat()) if date is not None else None
             out.append({**{k: v for k, v in rec.items() if k != "source"},
-                        "today": store.get_day(name, today), "days": store.days(name, DESKLAB_DAYS)})
+                        "today": today if store.same_promotion(today, rec) else None,
+                        "days": [d for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
         beat = store.get_runner() or {}
         return watch_answer(request, {"strategies": out, "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})

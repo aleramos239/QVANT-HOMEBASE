@@ -120,6 +120,14 @@ def set_enabled(name: str, on: bool, at=None) -> dict | None:
     return put({**rec, "enabled": bool(on)}, at)
 
 
+def same_promotion(day, rec: dict) -> bool:
+    """A day file written for THIS promotion of the record: the same code, promoted at the same moment (promoting
+    again, even the same code, is a new one). A day file from before promoted_utc was kept is judged by its code
+    alone. The one place that says so: the runner (what is final, what is matched) and the Desk's list both ask it."""
+    return (isinstance(day, dict) and day.get("sha256") == rec.get("sha256")
+            and day.get("promoted_utc") in (None, rec.get("promoted_utc")))
+
+
 def day_path(name: str, date: str, at=None) -> Path:
     if not isinstance(date, str) or not DATE_RE.fullmatch(date):
         raise ValueError("date: YYYY-MM-DD")
