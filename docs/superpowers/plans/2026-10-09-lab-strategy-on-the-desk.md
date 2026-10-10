@@ -11,6 +11,17 @@ So: he writes a strategy in the Lab by hand, backtests it and sees its trades on
 same on / off switch, the same "+ Assign an account" picker (paper, a funded demo or eval login, the live
 account), the same "Flatten & turn off". Everything by clicking. No chat.
 
+> **Owner's change, 2026-10-09 (after Step A was built):** "i dont want to 'allowed up to' i just want it to be on
+> desk and its automatically off but i can turn on and add into any account".
+> So: **no unlock ladder.** A promoted strategy lands on the Desk switched OFF. He turns it on with the same switch
+> as nq930 and assigns any account (paper, funded demo, live) with the same picker and the same "Book live"
+> confirm nq930 has. With no account it runs in shadow. What stays: the door (a stop on every entry, one position
+> at a time, the limits), the desk's own flat time, Kill, "Flatten & turn off", and the daily "Matched the
+> backtest" line (now information, not a lock). Wherever this plan says "Allowed up to", "unlock" or "level",
+> read this note instead: sections 1.3, 1.4, 5 and the review lock in 6 are replaced by it; task B3's
+> `/api/lab/level` and the level file in B1 are dropped; the limits are set on the strategy's page before the
+> first account is assigned (no limits set = no account can be assigned).
+
 ## Where each step stands today
 
 | # | Step | Today | To build |
