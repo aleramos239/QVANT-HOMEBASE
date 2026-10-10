@@ -308,7 +308,7 @@ test('switching OFF says what happens to orders and an open position, and never 
   const t = load();
   await t.api.toggleStrat('lab_nq_orb', false);
   assert.deepEqual(t.confirms, []);
-  assert.deepEqual(t.toasts, ['NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time.']);
+  assert.deepEqual(t.toasts, ['NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session.']);
 });
 
 test('a refused switch-on shows the Desk\'s own sentence; a switch-off that did not land is still the red alert', async () => {
@@ -324,7 +324,7 @@ test('a refused switch-on shows the Desk\'s own sentence; a switch-off that did 
 test('Flatten & turn off for a Lab strategy: its own confirm words, the existing route, and its plain steps are not failures', async () => {
   const t = load({ answer: { ok: true, enabled: false, results: { a1: ['cancel entry 7: ok', 'This trade had already ended.', 'nothing of its own is left to close'] } } });
   await t.api.flattenStrat('lab_nq_orb');
-  assert.deepEqual(t.confirms, [{ title: 'Flatten NQ ORB?', body: 'Cancels its orders, closes its own position on every account, and switches it OFF.', action: 'Flatten & turn off', destructive: true }]);
+  assert.deepEqual(t.confirms, [{ title: 'Flatten NQ ORB?', body: 'Cancels its orders, closes its own position on every account, and switches it OFF. It trades again from the next session.', action: 'Flatten & turn off', destructive: true }]);
   assert.deepEqual(t.posts, [{ url: '/api/strategy-flatten', body: { strategy: 'lab_nq_orb' } }]);
   assert.deepEqual(t.alerts, []);
   assert.deepEqual(t.toasts, ['NQ ORB flattened and switched off.']);

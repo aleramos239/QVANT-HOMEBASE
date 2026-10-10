@@ -454,7 +454,7 @@
   function switchOnAccounts(n) { return n + " is ON. Its orders go to its accounts."; }
   function switchOnShadow(n) { return n + " is ON: it runs in shadow."; }
   function switchOnNext(n) { return n + " is ON. It starts with the next session."; }
-  function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time."; }
+  function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session."; }
   // The toast after a switch-on: stopped for today first (the ruling), then with accounts, then shadow.
   function switchOnToast(n, s, book) {
     if (s && startsNext(s)) return switchOnNext(n);
@@ -467,7 +467,7 @@
       Array.isArray(before) && Array.isArray(after) && after.length > before.length;
   }
   function flattenAsk(n) {
-    return { title: "Flatten " + n + "?", body: "Cancels its orders, closes its own position on every account, and switches it OFF.", action: "Flatten & turn off" };
+    return { title: "Flatten " + n + "?", body: "Cancels its orders, closes its own position on every account, and switches it OFF. It trades again from the next session.", action: "Flatten & turn off" };
   }
   // A Lab flatten also answers with plain steps that are not failures ("This trade had already ended.", "nothing of its
   // own is left to close"): they are taken out before the page reads the rest for failures.

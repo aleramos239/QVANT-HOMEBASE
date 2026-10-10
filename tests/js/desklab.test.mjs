@@ -474,6 +474,9 @@ test('deskState: stopped. A real cause reads "Stopped: <why>"; ON and stopped fo
   const at = (why, cfg = {}) => D.deskState(deskStrat({ state: 'stopped', why }, cfg));
   assert.equal(at('Could not pick up where it left off.'), 'Stopped: Could not pick up where it left off.');
   assert.equal(at('Killed today.'), 'Stopped: Killed today.');
+  assert.equal(at('Both entries filled.'), 'Stopped: Both entries filled.', 'a real cause, shown as it comes');
+  assert.equal(D.deskDot(deskStrat({ state: 'stopped', why: 'Both entries filled.' })), 'warn');
+  assert.equal(D.startsNext(deskStrat({ state: 'stopped', why: 'Both entries filled.' })), false);
   assert.equal(at('The strategy raised an error.'), 'Stopped: The strategy raised an error.');
   assert.equal(at('off'), 'Starts with the next session.', 'never "Stopped: off"');
   assert.equal(at('Stopped for today.'), 'Starts with the next session.', 'never "Stopped: Stopped for today."');
@@ -686,14 +689,15 @@ test('refusedLine: the time and the server\'s sentence, with the account when it
     { t: '09:31:02', text: 'The price is already past this entry. (APEX…048)' });
   assert.deepEqual({ ...D.refusedLine({ t: '09:31:02', text: 'It is off.', account: null }, '') }, { t: '09:31:02', text: 'It is off.' });
   assert.deepEqual({ ...D.refusedLine(null, '') }, { t: '', text: '' });
+  assert.equal(D.refusedLine({ t: '09:31:02', text: "The Desk cannot check the last trade's orders.", account: null }, '').text, "The Desk cannot check the last trade's orders.", 'the server\'s sentence, no mapping');
 });
 
 test('the switch and flatten sentences, exactly', () => {
   assert.equal(D.switchOnAccounts('NQ ORB'), 'NQ ORB is ON. Its orders go to its accounts.');
   assert.equal(D.switchOnShadow('NQ ORB'), 'NQ ORB is ON: it runs in shadow.');
   assert.equal(D.switchOnNext('NQ ORB'), 'NQ ORB is ON. It starts with the next session.');
-  assert.equal(D.switchOff('NQ ORB'), 'NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time.');
-  assert.deepEqual({ ...D.flattenAsk('NQ ORB') }, { title: 'Flatten NQ ORB?', body: 'Cancels its orders, closes its own position on every account, and switches it OFF.', action: 'Flatten & turn off' });
+  assert.equal(D.switchOff('NQ ORB'), 'NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session.');
+  assert.deepEqual({ ...D.flattenAsk('NQ ORB') }, { title: 'Flatten NQ ORB?', body: 'Cancels its orders, closes its own position on every account, and switches it OFF. It trades again from the next session.', action: 'Flatten & turn off' });
   assert.equal(D.BOOKED_NEXT, 'Booked. It starts with the next session.');
   assert.equal(D.LIVE_NOTE, 'It will trade real money on its next order. Every entry carries a stop held at the broker.');
   assert.equal(D.CLEARED, 'Cleared.');
