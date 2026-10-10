@@ -171,6 +171,22 @@ def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
     fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
 
 
+def test_an_ib_touch_card_passes_stage_0_with_the_range_length_as_its_setting():
+    it = {"family": "ib_touch", "main_setting": "ib_min", "values": ["15", "30", "60"], "fixed": {}, "limits": {}}
+    c = card(name="ib_touch_open", why="The first return to the morning range meets the orders resting at its edge.",
+             loser="Breakout traders who hit the edge of the range first.", ways=[it], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("ib_touch_open_a1", "1"), ("ib_touch_open_a5", "5")]      # it has 1-minute bars (ib_n has not)
+    assert subs[0]["spec"]["run"] == {"family": "ib_touch", "params": {"ib_min": ["15", "30", "60"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    passes({**c, "ways": [{**it, "values": [5, 15, 30]}]})                                        # (a number typed as a number is the same choice)
+    assert passes({**c, "ways": [{**it, "limits": {"max_tr": 1}}]})[0]["spec"]["run"]["limits"] == {"max_tr": 1}      # the first edge traded is the only trade
+    passes({**c, "session": "pm", "sides": "short", "sides_why": "The afternoon high of an untested range is the cleaner level to sell.", "ways": [it]})
+    fails({**c, "ways": [{**it, "limits": {"max_tr": 3}}]}, "P0.2")                               # one trade an edge: 1 or 2
+    fails({**c, "ways": [{**it, "values": ["15", "30", "45"]}]}, "P0.2")                          # 45 is not a range length
+    fails({**c, "session": "london", "ways": [it]}, "P0.2")                                       # the New York day sessions only
+    fails({**c, "ways": [{**it, "fixed": {"mode": "fade"}}]}, "P0.2")                             # ib_n's setting, not this family's
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))
