@@ -595,3 +595,45 @@ def test_a_reader_dropped_while_its_snapshot_was_held_still_ends(tmp_path):
             await asyncio.wait_for(gen.__anext__(), 1)
     run(go())
     assert d.ld._subs == set()
+
+
+# ================================================================ the page's status block (asked by the page's builder)
+def test_a_carried_row_reaches_the_status_block_with_carried_and_its_date(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"))
+    d.eng.lab_open(LAB)
+    assert d.eng._lab_carry_make((LAB, "a1"), {"date": "2026-09-11", "status": "live", "orders": []}, DATE)
+    send(d, entry(1), seq=1)                                                       # a2 takes it; a1 is kept out by its block
+    rows = d.ld.status_view(LAB)["rounds"]
+    assert [(r["account"], r["carried"], r["date"], r["status"]) for r in rows] == \
+        [("a1", True, "2026-09-11", "error"), ("a2", False, DATE, "placed")]
+    assert rows[0]["why"] == LAST_TRADE
+    assert set(rows[0]) == {"account", "round", "status", "side", "qty", "entry_fill", "exit_fill", "exit_reason", "pnl",
+                            "why", "carried", "date"}
+
+
+def test_a_failed_entrys_broker_words_reach_the_refused_list_with_the_account(tmp_path):
+    d = mkdesk(tmp_path, accounts=("a1", "a2"))
+    send(d, entry(1, sl=None), seq=1)                                              # the desk's own refusal: as it was
+    d.ads["a1"].reject = "Insufficient margin " + "x" * 400
+    d.ads["a2"]._connected = False
+    out = send(d, entry(2), seq=2)
+    assert out["results"][0]["accounts"]["a1"]["detail"].startswith("The broker refused it: Insufficient margin")   # the wire: as it was
+    got = d.ld.status_view(LAB)["refused"]
+    assert got[0] == {"t": "10:00:00", "text": door.NO_STOP, "account": None}
+    assert got[1] == {"t": "10:00:00", "text": "The Desk cannot check this order.", "account": "a1",
+                      "detail": ("Insufficient margin " + "x" * 400)[:200]}
+    assert got[2] == {"t": "10:00:00", "text": "The account is not connected.", "account": "a2"}
+    assert len(got) == 3 and [x.get("detail") for x in lines(d, "lab_refused")] == [None, got[1]["detail"], None]
+    again = restart(d).status_view(LAB)["refused"]                                 # and after a desk restart
+    assert again == got
+
+
+def test_one_account_that_did_not_take_an_entry_is_named_in_the_refused_list(tmp_path):
+    d = mkdesk(tmp_path)
+    d.ads["a1"]._connected = False
+    send(d, entry(1), seq=1)
+    assert d.ld.status_view(LAB)["refused"] == [{"t": "10:00:00", "text": "The account is not connected.", "account": "a1"}]
+    d2 = mkdesk(tmp_path / "off", armed=False, own_store=True)                     # the engine refused the whole call:
+    send(d2, entry(1), seq=1)                                                      # no account was asked, none is named
+    assert d2.ld.status_view(LAB)["refused"] == [{"t": "10:00:00", "text": "The desk is disarmed: written down only.",
+                                                  "account": None}]

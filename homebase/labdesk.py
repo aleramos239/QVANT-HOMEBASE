@@ -605,14 +605,16 @@ class LabDesk:
 
     def _rounds(self, name: str) -> list:
         """Today's rounds, oldest first. engine.lab_rounds (task B2) is asked when it is there; until then each
-        account's one day state is its round 1."""
+        account's one day state is its round 1. An engine row also carries `carried` (True: a block from an earlier
+        day, not one of today's trades -- the page shows it apart, with Clear) and `date` (the day it is from)."""
         ask = getattr(self.engine, "lab_rounds", None)
         rows = ask(name) if ask is not None else [{**vars(st), "round": 1, "why": st.note or None}
                                                   for st in self.engine.day_states(name)]
         return [{"account": r.get("account"), "round": r.get("round"), "status": r.get("status"),
                  "side": r.get("side", r.get("entry_side")), "qty": r.get("qty"), "entry_fill": r.get("entry_fill"),
                  "exit_fill": r.get("exit_fill"), "exit_reason": r.get("exit_reason"), "pnl": r.get("pnl"),
-                 "why": r.get("why")} for r in rows]
+                 "why": r.get("why"),
+                 **({"carried": bool(r["carried"]), "date": r.get("date")} if "carried" in r else {})} for r in rows]
 
     def _state(self, name: str) -> tuple:
         """(state, why) from what the desk itself knows. The runner's states (watching, runner_down, done for today)
@@ -930,11 +932,15 @@ class LabDesk:
                                  tp_px=None if tp is None else float(tp), tp_rr=None if rr is None else float(rr),
                                  ref_px=None if ref is None else float(ref), move=bool(it["move"]))
 
-    def _refused(self, name: str, seq, ids: list, text: str, account: str | None = None) -> None:
-        """One refusal, for the journal and the Desk page."""
+    def _refused(self, name: str, seq, ids: list, text: str, account: str | None = None,
+                 detail: str | None = None) -> None:
+        """One refusal, for the journal and the Desk page: {"t", "text", "account"} and, when the engine's answer for
+        that account carried the venue's own words, "detail" (plain text, 200 characters at most: the page shows it
+        as "The broker refused it: <detail>")."""
+        more = {"detail": detail} if detail else {}
         if self.is_lab(name):
             self._rec(name)["refused"].append({"t": self.engine.now_et().strftime("%H:%M:%S"), "text": text,
-                                               "account": account})
+                                               "account": account, **more})
         else:                                # not a Lab strategy on this Desk: said once a minute per name, at most
             now, last = self._mono(), self._ghost_said.get(name)
             if last is not None and now - last < GHOST_SAY_S:
@@ -942,7 +948,7 @@ class LabDesk:
             if len(self._ghost_said) >= 200:
                 self._ghost_said.clear()
             self._ghost_said[name] = now
-        self._journal("lab_refused", strategy=name, seq=seq, ids=ids, text=text, account=account)
+        self._journal("lab_refused", strategy=name, seq=seq, ids=ids, text=text, account=account, **more)
 
     # ------------------------------------------------------------ one event
     async def event(self, body) -> dict:
@@ -1130,6 +1136,7 @@ class LabDesk:
             self._journal("lab_event_error", strategy=name, seq=ev.seq, op="entry", error=f"{type(e).__name__}: {e}"[:200])
             per, whole, unknown = {a: {"ok": False, "round": None, "reason": door.CANNOT_CHECK} for a in sizes}, None, True
         answers = {a: {"ok": False, "round": None, "reason": s} for a, s in accounts.items() if s is not None}
+        words = {a: str(r["detail"])[:200] for a, r in per.items() if isinstance(r, dict) and r.get("detail")}
         for a, r in per.items():
             r = r if isinstance(r, dict) else {}
             answers[a] = {"ok": r.get("ok") is True, "round": r.get("round"),
@@ -1146,11 +1153,11 @@ class LabDesk:
             self._dead(d, ids)
             if whole is None:
                 d["untaken"] += 1                            # it was offered to its accounts and none took it
-        if not took and (whole is not None or len(set(said.values())) <= 1):
-            self._refused(name, ev.seq, ids, text)           # one sentence for every account
+        if not took and whole is not None:
+            self._refused(name, ev.seq, ids, text)           # the engine refused the whole call: no account was asked
         else:
-            for a, why in said.items():                      # the accounts that sat it out, each with its own
-                self._refused(name, ev.seq, ids, why, a)
+            for a, why in said.items():                      # every account that did not take it, by name, with its
+                self._refused(name, ev.seq, ids, why, a, words.get(a))     # own sentence and the venue's words
         rows = [{"op": "entry", "id": i, "status": "working" if took else "cancelled", "refused": text,
                  "accounts": answers} for i in ids]
         if not took and d["untaken"] >= 2 and d["stopped"] is None:
@@ -1471,7 +1478,8 @@ class LabDesk:
             elif ev == "lab_stopped" and d["stopped"] is None:
                 d["stopped"] = str(r.get("why") or STOPPED_TODAY)
             elif ev == "lab_refused" and isinstance(r.get("text"), str):
-                d["refused"].append({"t": str(r.get("et", ""))[11:19], "text": r["text"], "account": r.get("account")})
+                d["refused"].append({"t": str(r.get("et", ""))[11:19], "text": r["text"], "account": r.get("account"),
+                                     **({"detail": r["detail"][:200]} if isinstance(r.get("detail"), str) and r["detail"] else {})})
         for (name, _), carried_entry in open_events.items():
             if carried_entry:
                 self._rec(name)["entries"] += 1
