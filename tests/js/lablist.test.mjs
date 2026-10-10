@@ -101,6 +101,63 @@ test('deleteTargets: the picked names for a picked row of a pick of two or more,
   assert.deepEqual(L.deleteTargets([], 'd:a'), ['a']);
 });
 
+const dd = (n) => ({ ...d(n), dirty: true });            // a saved strategy with edits not saved
+
+test('pickRange: a row with unsaved edits is never picked by a range (not even at its end), the rest of the range is', () => {
+  const shown = L.shownRows(L.sections([d('a'), dd('b'), d('c'), d('d'), dd('e')], { groups: [], members: {} }), new Set());
+  assert.deepEqual(L.pickRange(shown, 'd:a', 'd:d'), ['d:a', 'd:c', 'd:d']);
+  assert.deepEqual(L.pickRange(shown, 'd:a', 'd:e'), ['d:a', 'd:c', 'd:d']);       // the clicked end is edited: left out
+  assert.equal(L.canPick(dd('b')), true, 'it can still be picked on its own (cmd-click)');
+});
+
+test('rowClick, shift: an open row with unsaved edits starts the range but is not in it; cmd-click can still pick it', () => {
+  const shown = L.shownRows(L.sections([d('a'), dd('b'), d('c'), d('d')], { groups: [], members: {} }), new Set());
+  const got = L.rowClick({ picks: [], anchor: '', cur: 'd:b' }, shown, 'd:d', { shift: true });
+  assert.deepEqual(got, { picks: ['d:c', 'd:d'], anchor: 'd:b', open: false });
+  const cmd = L.rowClick({ picks: ['d:c'], anchor: 'd:c', cur: 'd:b' }, shown, 'd:b', { meta: true });
+  assert.deepEqual(cmd.picks, ['d:b', 'd:c']);
+});
+
+test('rowClick, shift: a locked or unsaved row is not an anchor -- the last pick is, else nothing', () => {
+  const shown = L.shownRows(L.sections(rows, groups), new Set());           // a c e b d n nq930 es_orb
+  // the open row is a built-in (and the anchor a plain click left on it): no range from it
+  const fromLocked = L.rowClick({ picks: [], anchor: 'b:nq930', cur: 'b:nq930' }, shown, 'd:c', { shift: true });
+  assert.deepEqual(fromLocked, { picks: ['d:c'], anchor: 'd:c', open: false });
+  const fromUnsaved = L.rowClick({ picks: [], anchor: 'n:1', cur: 'n:1' }, shown, 'd:b', { shift: true });
+  assert.deepEqual(fromUnsaved, { picks: ['d:b'], anchor: 'd:b', open: false });
+  // a last pick that is a real row is the anchor, whatever is open
+  const lastPick = L.rowClick({ picks: ['d:e'], anchor: 'd:e', cur: 'b:nq930' }, shown, 'd:d', { shift: true });
+  assert.deepEqual(lastPick, { picks: ['d:e', 'd:b', 'd:d'], anchor: 'd:e', open: false });
+});
+
+test('unsavedLine: how many of the strategies about to go have edits not saved; the names when there are at most 3', () => {
+  assert.equal(L.unsavedLine([]), '');
+  assert.equal(L.unsavedLine(['a']), '1 of these has changes you have not saved (a): they will be lost.');
+  assert.equal(L.unsavedLine(['a', 'b']), '2 of these have changes you have not saved (a, b): they will be lost.');
+  assert.equal(L.unsavedLine(['a', 'b', 'c']), '3 of these have changes you have not saved (a, b, c): they will be lost.');
+  assert.equal(L.unsavedLine(['a', 'b', 'c', 'd']), '4 of these have changes you have not saved: they will be lost.');
+});
+
+test('the confirm carries that line when something in it has unsaved edits, escaped, and not otherwise', () => {
+  assert.equal(L.deleteConfirm(['a', 'b']).unsaved, '');
+  assert.equal(L.deleteConfirm(['a', 'b'], ['b']).unsaved, '1 of these has changes you have not saved (b): they will be lost.');
+  assert.doesNotMatch(L.deleteConfirmHtml(['a', 'b']), /not saved/);
+  const html = L.deleteConfirmHtml(['a', 'x<y'], ['x<y']);
+  assert.match(html, /<p class="lb-unsaved">1 of these has changes you have not saved \(x&lt;y\): they will be lost\.<\/p>/);
+  assert.ok(html.indexOf('lb-unsaved') < html.indexOf('class="acts"'));
+  assert.match(L.deleteConfirmHtml(['a'], ['a']), /<h2>Delete a\?<\/h2>[\s\S]*has changes you have not saved \(a\)/);
+  assert.deepEqual(L.deleteConfirm(['a', 'b'], ['zzz']).names, ['a', 'b'], 'a name that is not in the list adds nothing');
+  assert.equal(L.deleteConfirm(['a', 'b'], ['zzz']).unsaved, '');
+});
+
+test('deleteLine: a name already gone is told as "already gone", not counted as deleted', () => {
+  assert.equal(L.deleteLine(2, [], ['a']), 'Deleted 2. Already gone: a.');
+  assert.equal(L.deleteLine(0, [], ['a', 'b']), 'Deleted 0. Already gone: a, b.');
+  assert.equal(L.deleteLine(1, [{ name: 'c', error: 'x' }], ['a']), 'Deleted 1. Already gone: a. Not deleted: c (x)');
+  assert.equal(L.deleteLine(3, []), 'Deleted 3.');
+  assert.equal(L.goneLine(['a']), 'Already gone: a.');
+});
+
 test('the confirm for one strategy is the words the single delete has always had', () => {
   const c = L.deleteConfirm(['nq_orb']);
   assert.equal(c.title, 'Delete nq_orb?');
@@ -173,7 +230,7 @@ import vm from 'node:vm';
 
 const LAB_SRC = readFileSync(new URL('../../homebase/static/charts/lab.js', import.meta.url), 'utf8');
 
-function page({ drafts, groups, refuse = {} }) {
+function page({ drafts, groups, refuse = {}, gone = [] }) {
   const stub = (name) => new Proxy(function () {}, {
     get: (t, k) => (k === Symbol.toPrimitive ? () => '' : k === 'then' ? undefined : stub(`${name}.${String(k)}`)),
     set: () => true, apply: () => stub(`${name}()`), construct: () => stub('new') });
@@ -201,7 +258,7 @@ function page({ drafts, groups, refuse = {} }) {
       made.push(el);
       return el;
     } };
-  const requests = [];
+  const requests = [], gates = {};
   let list = drafts.map((n) => ({ name: n, id: `draft_${n}`, ok: true }));
   const route = (url, method) => {
     let m;
@@ -212,6 +269,7 @@ function page({ drafts, groups, refuse = {} }) {
     if (method === 'GET' && url === '/api/tester/runs') return [200, []];
     if (method === 'DELETE' && (m = /^\/api\/tester\/drafts\/(\w+)$/.exec(url))) {
       if (refuse[m[1]]) return [409, { detail: refuse[m[1]] }];
+      if (gone.includes(m[1])) { list = list.filter((d) => d.name !== m[1]); return [200, { deleted: false }]; }
       list = list.filter((d) => d.name !== m[1]);
       return [200, { deleted: true }];
     }
@@ -223,7 +281,10 @@ function page({ drafts, groups, refuse = {} }) {
     innerWidth: 1400, innerHeight: 900, Event: function () {}, CustomEvent: function () {}, performance: { now: () => 0 },
     matchMedia: () => ({ matches: false, addEventListener() {} }), getComputedStyle: () => ({ getPropertyValue: () => '' }),
     requestAnimationFrame: () => 0, ResizeObserver: function () { return { observe() {}, disconnect() {} }; },
-    fetch: async (url, o) => { const method = (o && o.method) || 'GET'; requests.push(`${method} ${url}`); const [status, body] = route(url, method);
+    fetch: async (url, o) => { const method = (o && o.method) || 'GET'; requests.push(`${method} ${url}`);
+      const g = method === 'DELETE' && /\/drafts\/(\w+)$/.exec(url);
+      if (g && gates[g[1]]) await gates[g[1]];                   // a request that is held until `release()`
+      const [status, body] = route(url, method);
       return { ok: status < 400, status, json: async () => body }; } };
   Object.assign(win, { document, location: ctx.location, localStorage: ctx.localStorage, history: ctx.history, fetch: ctx.fetch });
   vm.createContext(ctx);
@@ -231,11 +292,14 @@ function page({ drafts, groups, refuse = {} }) {
   const flush = async () => { for (let i = 0; i < 12; i++) await new Promise((r) => setImmediate(r)); };
   const lookup = (map) => ({ closest: (sel) => (sel in map ? map[sel] : null), tagName: 'DIV' });
   const fire = (type, e) => { for (const f of on.root[type] || []) f(e); };
-  const keydown = (e) => { for (const h of [...on.doc.filter((x) => x.cap), ...on.doc.filter((x) => !x.cap)]) if (h.t === 'keydown') h.f({ preventDefault() { e.prevented = true; }, repeat: false, ...e }); };
+  const keydown = (e) => { for (const h of [...on.doc.filter((x) => x.cap), ...on.doc.filter((x) => !x.cap)]) if (h.t === 'keydown') h.f({ preventDefault() { e.prevented = true; }, stopImmediatePropagation() { e.stopped = true; }, repeat: false, ...e }); };
   const pointerdown = (insideList) => { for (const h of on.doc) if (h.t === 'pointerdown') h.f({ target: lookup(insideList ? { '#labLib': {} } : {}) }); };
   const row = (key) => ({ dataset: { key } });
   return {
-    S: win.HBLab.state, picks: () => [...win.HBLab.state.picks], lib, requests, made, flush, keydown, pointerdown, fire,
+    S: win.HBLab.state, setList(names) { list = list.filter((d) => names.includes(d.name)); },
+    hold(name) { let release; gates[name] = new Promise((r) => { release = r; }); return release; },
+    edit(name) { const b = win.HBLab.state.bufs.get(`d:${name}`); b.code = `${b.code}# an edit\n`; },
+    picks: () => [...win.HBLab.state.picks], lib, requests, made, flush, keydown, pointerdown, fire,
     clickRow(key, mods = {}) { fire('click', { target: lookup({ '[data-key]': row(key) }), shiftKey: !!mods.shift, metaKey: !!mods.meta, ctrlKey: !!mods.ctrl }); },
     clickMore(id, name, rowKey) { const dataset = { act: 'file', id, name, ...(rowKey ? { row: rowKey } : {}) };
       fire('click', { target: lookup({ '[data-act]': { dataset, getBoundingClientRect: () => ({ left: 5, right: 25, top: 5, bottom: 25 }) } }) }); },
@@ -367,4 +431,116 @@ test('page: folding a group lets go of the rows picked in it', async () => {
   p.fire('click', ev);
   assert.deepEqual(p.picks(), ['d:d']);
   assert.deepEqual(p.picked(), ['d:d']);
+});
+
+/* ---- the fix wave: unsaved edits, anchors, the chart's Delete key, a failed or already-done delete ---- */
+test('page: the confirm tells of the strategies about to go that have changes not saved; a range leaves such a row out', async () => {
+  const p = page({ drafts: ['a', 'b', 'c', 'd', 'e'], groups: G });          // shown: a c | b d e
+  await p.flush();
+  p.clickRow('d:c'); await p.flush();
+  p.edit('c');                                                              // c has changes not saved
+  p.clickRow('d:a'); await p.flush();                                       // another strategy is open now; c's edits stay in its buffer
+  p.clickRow('d:d', { shift: true });
+  assert.deepEqual(p.picks(), ['d:a', 'd:b', 'd:d'], 'the edited c is not in the range');
+  p.clickRow('d:c', { meta: true });                                        // picked by hand
+  assert.deepEqual(p.picks(), ['d:a', 'd:c', 'd:b', 'd:d']);
+  p.clickMore('draft_d', 'd', 'd:d');
+  p.pick(p.menu(), 'delete');
+  const html = p.sheet().innerHTML;
+  assert.match(html, /<h2>Delete 4 strategies\?<\/h2>/);
+  assert.match(html, /<p class="lb-unsaved">1 of these has changes you have not saved \(c\): they will be lost\.<\/p>/);
+  p.press(p.sheet(), 'cancel');
+  p.clickMore('draft_e', 'e', 'd:e');                                       // one that is not picked, with no edits: no such line
+  p.pick(p.menu(), 'delete');
+  assert.doesNotMatch(p.sheet().innerHTML, /not saved/);
+  p.press(p.sheet(), 'cancel');
+});
+
+test('page: the confirm of one strategy with changes not saved says so too', async () => {
+  const p = page({ drafts: ['a', 'b'], groups: G });
+  await p.flush();
+  p.clickRow('d:b'); await p.flush();
+  p.edit('b');
+  p.clickMore('draft_b', 'b', 'd:b');
+  p.pick(p.menu(), 'delete');
+  assert.match(p.sheet().innerHTML, /<h2>Delete b\?<\/h2>[\s\S]*<p class="lb-unsaved">1 of these has changes you have not saved \(b\): they will be lost\.<\/p>/);
+});
+
+test('page: a built-in left open is not where a shift-click range starts', async () => {
+  const p = page({ drafts: ['a', 'b', 'c', 'd', 'e'], groups: G });
+  await p.flush();
+  p.clickRow('b:nq930'); await p.flush();                                   // the built-in (last in the list) is open
+  p.clickRow('d:b', { shift: true });
+  assert.deepEqual(p.picks(), ['d:b'], 'not the saved strategies between it and the clicked row');
+});
+
+test('page: Delete with picked rows stops the event (the chart\'s own Delete must not also run)', async () => {
+  const p = page({ drafts: ['a', 'b', 'c'], groups: G });
+  await p.flush();
+  p.pointerdown(true);
+  p.clickRow('d:a', { meta: true }); p.clickRow('d:b', { meta: true });
+  const e = { key: 'Delete', target: { tagName: 'BODY' } };
+  p.keydown(e);
+  assert.equal(e.prevented, true);
+  assert.equal(e.stopped, true);
+  assert.match(p.sheet().innerHTML, /<h2>Delete 2 strategies\?<\/h2>/);
+});
+
+test('page: a picked row that is gone from the server list stops being picked at the next repaint', async () => {
+  const p = page({ drafts: ['a', 'b', 'c', 'd', 'e'], groups: G });
+  await p.flush();
+  p.clickRow('d:b', { meta: true }); p.clickRow('d:d', { meta: true });
+  p.setList(['a', 'c', 'd', 'e']);                                          // b went in another window
+  p.clickMore('draft_e', 'e', 'd:e');                                       // delete e (not picked): the list is read again
+  p.pick(p.menu(), 'delete');
+  p.press(p.sheet(), 'go');
+  await p.flush();
+  assert.deepEqual(p.S.drafts.map((x) => x.name), ['a', 'c', 'd']);
+  assert.deepEqual(p.picks(), ['d:d'], 'b is no longer picked');
+  assert.deepEqual(p.picked(), ['d:d']);
+});
+
+test('page: a delete while one is running sends nothing: no second sheet, and a sheet left open from before does nothing', async () => {
+  const p = page({ drafts: ['a', 'b', 'c', 'd', 'e'], groups: G });
+  await p.flush();
+  p.clickMore('draft_e', 'e', 'd:e'); p.pick(p.menu(), 'delete');
+  const stale = p.sheet();                                                   // a sheet for e, left open ...
+  p.clickRow('d:a', { meta: true }); p.clickRow('d:b', { meta: true });
+  p.clickMore('draft_a', 'a', 'd:a'); p.pick(p.menu(), 'delete');
+  const release = p.hold('a');                                               // ... while a and b are being deleted (a is held)
+  p.press(p.sheet(), 'go');
+  await p.flush();
+  assert.deepEqual(p.requests.filter((r) => r.startsWith('DELETE')), ['DELETE /api/tester/drafts/a']);
+  const sheetsBefore = p.made.filter((m) => m.className === 'lab-ov').length;
+  p.clickMore('draft_c', 'c', 'd:c'); p.pick(p.menu(), 'delete');            // asked again while it runs: no sheet
+  assert.equal(p.made.filter((m) => m.className === 'lab-ov').length, sheetsBefore);
+  p.press(stale, 'go');                                                      // the old sheet's Delete does nothing either
+  await p.flush();
+  assert.deepEqual(p.requests.filter((r) => r.startsWith('DELETE')), ['DELETE /api/tester/drafts/a']);
+  release();
+  await p.flush();
+  assert.deepEqual(p.requests.filter((r) => r.startsWith('DELETE')), ['DELETE /api/tester/drafts/a', 'DELETE /api/tester/drafts/b']);
+  assert.deepEqual(p.S.drafts.map((x) => x.name), ['c', 'd', 'e']);
+});
+
+test('page: a name the server says is not there is "already gone", not "Deleted"', async () => {
+  const p = page({ drafts: ['a', 'b', 'c'], groups: G, gone: ['a'] });
+  await p.flush();
+  p.clickRow('d:a', { meta: true }); p.clickRow('d:b', { meta: true });
+  p.clickMore('draft_b', 'b', 'd:b'); p.pick(p.menu(), 'delete');
+  p.press(p.sheet(), 'go');
+  await p.flush();
+  assert.equal(p.S.log.at(-1).html, 'Deleted 1. Already gone: a.');
+  assert.deepEqual(p.S.drafts.map((x) => x.name), ['c']);
+  assert.deepEqual(p.picks(), []);
+});
+
+test('page: one strategy already gone says so', async () => {
+  const p = page({ drafts: ['a', 'b'], groups: G, gone: ['b'] });
+  await p.flush();
+  p.clickMore('draft_b', 'b', 'd:b'); p.pick(p.menu(), 'delete');
+  p.press(p.sheet(), 'go');
+  await p.flush();
+  assert.equal(p.S.log.at(-1).html, 'Already gone: b.');
+  assert.deepEqual(p.S.drafts.map((x) => x.name), ['a']);
 });

@@ -160,16 +160,20 @@ function sections(rows, groups) {
 /* ---- picking strategies in the list, and deleting them ----
    A shift-click picks the rows from the last picked (or the open) row to the clicked one, in the order the list shows
    them; a cmd/ctrl-click adds or removes one; a plain click opens the strategy and clears the picks. Only a saved
-   strategy is ever picked: a locked built-in, an unsaved script and anything not shown (a folded group) never is. */
+   strategy is ever picked: a locked built-in, an unsaved script and anything not shown (a folded group) never is.
+   A saved strategy with changes not saved (`dirty` on its row) is picked by cmd-click or deleted alone, never by a range:
+   the confirm tells of the ones that are picked. A locked or unsaved row is not where a range starts. */
 /* the rows as shown, top to bottom: `secs` is sections()' answer; a folded group's rows are not shown */
 const shownRows = (secs, folded) => secs.filter((s) => !folded.has(s.name)).flatMap((s) => s.rows);
 const canPick = (r) => !!r && !r.lock && typeof r.key === 'string' && r.key.startsWith('d:');
+/* the keys a range may take: a saved strategy whose edits are all saved */
+const rangeable = (r) => canPick(r) && !r.dirty;
 /* the pickable keys from `anchor` to `to` (either way round), in shown order. An anchor that is not shown picks `to` alone. */
 function pickRange(shown, anchor, to) {
   const at = (k) => shown.findIndex((r) => r.key === k), j = at(to);
   if (j < 0) return [];
   const i = anchor ? at(anchor) : -1, lo = i < 0 ? j : Math.min(i, j), hi = i < 0 ? j : Math.max(i, j);
-  return shown.slice(lo, hi + 1).filter(canPick).map((r) => r.key);
+  return shown.slice(lo, hi + 1).filter(rangeable).map((r) => r.key);
 }
 const prunePicks = (picks, shown) => shown.filter((r) => canPick(r) && picks.includes(r.key)).map((r) => r.key);
 /* a click on a row. st = {picks, anchor, cur}; mods = {shift, meta}. -> {picks, anchor, open}: `open` is true when the
@@ -177,7 +181,7 @@ const prunePicks = (picks, shown) => shown.filter((r) => canPick(r) && picks.inc
 function rowClick(st, shown, key, mods) {
   const m = mods || {}, row = shown.find((r) => r.key === key);
   if (m.shift) {
-    const from = [st.anchor, st.cur].find((k) => k && shown.some((r) => r.key === k)) || '';
+    const from = [st.anchor, st.cur].find((k) => k && shown.some((r) => r.key === k && canPick(r))) || '';
     return { picks: pickRange(shown, from, key), anchor: from || (canPick(row) ? key : ''), open: false };
   }
   if (m.meta) {
@@ -193,21 +197,31 @@ const deleteItem = (picks, key) => (picks.length >= 2 && picks.includes(key) ? `
 /* the names that item deletes */
 const deleteTargets = (picks, key) => (picks.length >= 2 && picks.includes(key) ? picks : [key]).map(draftName);
 const DELETE_SHOWN = 8;
-function deleteConfirm(names) {
-  if (names.length === 1) return { title: `Delete ${names[0]}?`, names: [], more: '', keep: 'Keep it', go: 'Delete',
+/* the one line about the strategies that go with changes not saved: "2 of these have changes you have not saved (a, b): ...";
+   the names only when there are at most 3. `dirty` = the names among those about to go. */
+function unsavedLine(dirty) {
+  const n = (dirty || []).length;
+  if (!n) return '';
+  return `${n} of these ${n === 1 ? 'has' : 'have'} changes you have not saved${n <= 3 ? ` (${dirty.join(', ')})` : ''}: they will be lost.`;
+}
+function deleteConfirm(names, dirty) {
+  const unsaved = unsavedLine((dirty || []).filter((n) => names.includes(n)));
+  if (names.length === 1) return { title: `Delete ${names[0]}?`, names: [], more: '', keep: 'Keep it', go: 'Delete', unsaved,
     body: 'Its file is removed from your strategies. Past backtests of it stay in Recent runs.' };
   return { title: `Delete ${names.length} strategies?`, names: names.slice(0, DELETE_SHOWN),
-    more: names.length > DELETE_SHOWN ? `and ${names.length - DELETE_SHOWN} more` : '', keep: 'Keep them', go: 'Delete',
+    more: names.length > DELETE_SHOWN ? `and ${names.length - DELETE_SHOWN} more` : '', keep: 'Keep them', go: 'Delete', unsaved,
     body: 'Their files are removed from your strategies. Past backtests of them stay in Recent runs.' };
 }
-function deleteConfirmHtml(names) {
-  const c = deleteConfirm(names);
-  return `<h2>${esc(c.title)}</h2>${c.names.length ? `<ul class="lb-dellist">${c.names.map((n) => `<li>${esc(n)}</li>`).join('')}${c.more ? `<li class="more">${esc(c.more)}</li>` : ''}</ul>` : ''}<p>${esc(c.body)}</p>
+function deleteConfirmHtml(names, dirty) {
+  const c = deleteConfirm(names, dirty);
+  return `<h2>${esc(c.title)}</h2>${c.names.length ? `<ul class="lb-dellist">${c.names.map((n) => `<li>${esc(n)}</li>`).join('')}${c.more ? `<li class="more">${esc(c.more)}</li>` : ''}</ul>` : ''}<p>${esc(c.body)}</p>${c.unsaved ? `<p class="lb-unsaved">${esc(c.unsaved)}</p>` : ''}
     <div class="acts"><button class="btn btn-outline" data-x="cancel">${esc(c.keep)}</button><button class="btn btn-default" data-x="go">${esc(c.go)}</button></div>`;
 }
-/* the log line after a delete of several: how many went, and each that did not with the server's own sentence */
-function deleteLine(done, failed) {
-  return `Deleted ${done}.${failed.length ? ` Not deleted: ${failed.map((f) => `${f.name} (${f.error || 'it could not be deleted'})`).join(', ')}` : ''}`;
+/* the names the server said were not there any more (not counted as deleted) */
+const goneLine = (gone) => `Already gone: ${gone.join(', ')}.`;
+/* the log line after a delete of several: how many went, the ones already gone, and each that did not with the server's own sentence */
+function deleteLine(done, failed, gone) {
+  return `Deleted ${done}.${gone && gone.length ? ` ${goneLine(gone)}` : ''}${failed.length ? ` Not deleted: ${failed.map((f) => `${f.name} (${f.error || 'it could not be deleted'})`).join(', ')}` : ''}`;
 }
 /* Delete / Backspace deletes the picked while the list has the keyboard: never held down, never while a sheet is open
    or something is being typed into */
@@ -874,7 +888,7 @@ function fmFirstError(errors, order) {
 }
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
-  shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, deleteKey, isTyping,
+  shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,

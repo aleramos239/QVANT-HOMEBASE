@@ -790,7 +790,8 @@ function reviewDialog() {
 function deleteDialog(name) { deleteStrategies([name]); }
 function deleteStrategies(names) {
   if (!names.length || S.delBusy) return;
-  const d = dialog(C.deleteConfirmHtml(names));
+  const dirty = names.filter((n) => { const b = S.bufs.get(`d:${n}`); return !!b && isDirty(b); });      // their changes go with them: the sheet says so
+  const d = dialog(C.deleteConfirmHtml(names, dirty));
   d.addEventListener('click', (e) => {
     const x = e.target.closest('[data-x]');
     if (!x) return;
@@ -801,21 +802,27 @@ function deleteStrategies(names) {
 async function deleteNow(names) {
   if (S.delBusy) return;
   S.delBusy = true;
-  const done = [], failed = [];
+  const done = [], gone = [], failed = [];     // gone: the server did not have it any more (told apart: not counted as deleted)
   try {
     for (const name of names) {
       const r = await send('DELETE', `/api/tester/drafts/${encodeURIComponent(name)}`);
       if (!r.ok) { failed.push({ name, error: r.error }); continue; }
-      done.push(name);
+      (r.json && r.json.deleted === true ? done : gone).push(name);
       S.bufs.delete(`d:${name}`);
       if (S.cur === `d:${name}`) { S.cur = null; S.run = null; }
     }
-    S.picks = S.picks.filter((k) => !done.includes(C.draftName(k)));
-    if (S.anchor && done.includes(C.draftName(S.anchor))) S.anchor = '';
+    const out = [...done, ...gone];
+    S.picks = S.picks.filter((k) => !out.includes(C.draftName(k)));
+    if (S.anchor && out.includes(C.draftName(S.anchor))) S.anchor = '';
     await loadLists(); paintAll();
   } finally { S.delBusy = false; }
-  if (names.length === 1) { if (failed.length) log(`<span class="err">${esc(failed[0].error)}</span>`); }
-  else log(failed.length ? `<span class="err">${esc(C.deleteLine(done.length, failed))}</span>` : esc(C.deleteLine(done.length, failed)));
+  if (names.length === 1) {
+    if (failed.length) log(`<span class="err">${esc(failed[0].error)}</span>`);
+    else if (gone.length) log(esc(C.goneLine(gone)));
+  } else {
+    const line = esc(C.deleteLine(done.length, failed, gone));
+    log(failed.length ? `<span class="err">${line}</span>` : line);
+  }
 }
 
 /* ---- groups: the library in sections ----
@@ -936,7 +943,7 @@ function libRows() {
     ...S.drafts.map((d) => {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
-      return { key: `d:${d.name}`, id: d.id, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, dirty: !!dirty, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
   return { rows, builtins };
@@ -1971,6 +1978,7 @@ document.addEventListener('keydown', (e) => {          // (capture: before the m
   if (e.key === 'Escape') { if (!menuEl && !overlay) { S.picks = []; paintLib(); } return; }
   if (!C.deleteKey(e, { picked: S.picks.length, inList: S.listFocus, typing: C.isTyping(e.target), dialog: !!overlay || !!menuEl })) return;
   e.preventDefault();
+  e.stopImmediatePropagation();          // the chart's own Delete (it removes a selected drawing) must not also run
   deleteStrategies(C.deleteTargets(S.picks, S.picks[0]));
 }, true);
 root.addEventListener('keydown', (e) => {
