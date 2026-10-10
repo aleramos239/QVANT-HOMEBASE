@@ -290,7 +290,10 @@ class LabDesk:
     async def refresh(self) -> dict | None:
         """Bring the config in line with the store. None when it was skipped: the views are paused (before the read,
         or by the time it came back), a request is writing, or the desk changed something while the read ran."""
-        if not self.on or self._paused():
+        if not self.on:
+            return None
+        if self._paused():
+            self._refresh_held = True        # (the runner's file stays as old as its last read until one runs: _runner)
             return None
         if labcfg.any_busy(self.cfg):
             return None
@@ -314,6 +317,7 @@ class LabDesk:
             self._seen_utc = seen if seen.tzinfo is not None else seen.replace(tzinfo=dt.timezone.utc)
         except (TypeError, ValueError):
             self._seen_utc = None
+        self._seen_read, self._refresh_held = self._utc(), False     # this refresh ran: the file is as read just now
         for did in out["added"]:
             self._journal("lab_added", strategy=did, mark=labcfg.mark_of(self.cfg, did))
         # a record whose FILE is gone with no round open: its sidecar goes too (the owner's job), so the Lab page is
@@ -598,10 +602,21 @@ class LabDesk:
 
     # ------------------------------------------------------------ the status block
     def _runner(self) -> dict:
-        if self._seen_utc is None:
+        """Is the runner alive? By EITHER of two signs, whichever is fresher: its heartbeat FILE as the last refresh
+        that ran read it, or a heartbeat POST in the last RUNNER_ALIVE_S. The file is read only in refresh(), and no
+        refresh runs while the views are paused (09:29:50-09:30:30 ET, a bot placing): in such a pause the file's age
+        is measured to the last refresh that ran, not to now -- a runner that was alive going into the pause is not
+        called dead at the 9:30 bell for want of a read, and no disk read is added to the pause. One that was dead
+        before the pause stays dead; one that dies in it is found by the first refresh after it."""
+        ages = []
+        if self._seen_utc is not None:
+            upto = self._seen_read if self._refresh_held and self._seen_read is not None else self._utc()
+            ages.append(abs((upto - self._seen_utc).total_seconds()))
+        if self._beat_at is not None:
+            ages.append(max(0.0, self._mono() - self._beat_at))
+        if not ages:
             return {"alive": False, "age_s": None}
-        age = abs((dt.datetime.now(dt.timezone.utc) - self._seen_utc).total_seconds())
-        return {"alive": age <= RUNNER_ALIVE_S, "age_s": round(age, 1)}
+        return {"alive": min(ages) <= RUNNER_ALIVE_S, "age_s": round(min(ages), 1)}
 
     def _rounds(self, name: str) -> list:
         """Today's rounds, oldest first. engine.lab_rounds (task B2) is asked when it is there; until then each
@@ -698,6 +713,10 @@ class LabDesk:
         self._said_tick: tuple | None = None     # (error text, monotonic) of the last lab_intake_error line
         self._orphans_said: set = set()  # (strategy, account) of the lab_open_without_cfg lines
         self._ghost_said: dict = {}      # a name that is not a Lab strategy here -> when its refusal was last journaled
+        self._utc = lambda: dt.datetime.now(dt.timezone.utc)     # the wall clock the runner's file is aged by (tests)
+        self._seen_read: dt.datetime | None = None   # when a refresh last read the runner's file
+        self._refresh_held = False       # the last refresh was skipped for a view pause (the file is as old as that read)
+        self._beat_at: float | None = None           # monotonic: the runner's last heartbeat POST, whatever it named
 
     # ------------------------------------------------------------ small reads (memory only)
     def _lab_kind(self, name) -> bool:
@@ -1231,6 +1250,7 @@ class LabDesk:
                 or not isinstance(named, dict) or len(named) > 200:
             raise ValueError(NOT_READ)
         now, out = self._mono(), {}
+        self._beat_at = now                  # the runner is there (status_view's `runner`), whatever it names
         for name, said in named.items():
             if not isinstance(name, str) or not self.is_lab(name):
                 continue
