@@ -1584,6 +1584,22 @@ def parse_event(body) -> LabEvent:
                     intents=tuple(dict(it) for it in held))
 
 
+BOOKKEEPING = ("lab_event", "lab_event_done")     # the intake's write-ahead pair: for a restart, not for the owner
+
+
+def journal_tail(recs: list, n: int) -> list:
+    """The newest `n` journal records, newest first, without the intake's bookkeeping lines (they stay in the file:
+    _restore reads them). With no such line among them it is recs[-n:][::-1], as the page always had it."""
+    out = []
+    for r in reversed(recs):
+        if isinstance(r, dict) and r.get("event") in BOOKKEEPING:
+            continue
+        out.append(r)
+        if len(out) >= n:
+            break
+    return out
+
+
 def orphans(cfg: AppCfg, engine) -> list:
     """[(strategy, account, status)]: Lab rounds of TODAY that the engine holds open -- placing, placed or live, or a
     placement a restart left unknown -- for a strategy that is not a Lab strategy on this Desk (the Lab side is off,

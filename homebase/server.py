@@ -1176,6 +1176,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             live_box.update(recs=recs, live=live_metrics(recs))
         live = live_box["live"]
         journal = recs[-JOURNAL_TAIL:][::-1]
+        if labdesk.on:                        # the Lab intake's bookkeeping (two lines an event) stays in the file
+            journal = labdesk_mod.journal_tail(recs, JOURNAL_TAIL)     # and out of the page's tail
         return {
             "armed": cfg.armed,
             "chart_trading": asdict(cfg.chart_trading),
