@@ -1,0 +1,12 @@
+/* ---- the trade stepper on the chart (labstep.js, 2026-10-10) ---- */
+.lab-step { position: absolute; z-index: 9; right: 74px; bottom: 46px; display: flex; align-items: center; gap: 2px; height: 36px; padding: 4px; border-radius: var(--hb-bubble-r, 18px);
+  background: var(--a-platter, var(--hb-glass, rgb(255 255 255 / .86))); -webkit-backdrop-filter: var(--a-glass-blur, blur(14px)); backdrop-filter: var(--a-glass-blur, blur(14px));
+  box-shadow: var(--a-platter-shadow, 0 1px 3px rgb(0 0 0 / .18)); color: var(--a-label, var(--hb-fg, #1d1d1f)); pointer-events: auto; }
+.lab-step[hidden] { display: none; }
+.lab-step-b { flex: none; display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.lab-step-b:hover { background: var(--a-fill, var(--hb-fill-hover, rgb(0 0 0 / .07))); }
+.lab-step-b:active { background: var(--a-fill-press, var(--a-fill, rgb(0 0 0 / .12))); }
+.lab-step-b:disabled { opacity: .3; pointer-events: none; }
+.lab-step-b:focus-visible { outline: 2px solid var(--a-accent, var(--hb-accent, #0a84ff)); outline-offset: -2px; }
+.lab-step-t { min-width: 58px; padding: 0 4px; text-align: center; font-size: 12px; line-height: 16px; font-weight: 590; font-variant-numeric: tabular-nums; white-space: nowrap; color: inherit; }
+.lab[data-report="1"] .lab-step { bottom: 46px; }
