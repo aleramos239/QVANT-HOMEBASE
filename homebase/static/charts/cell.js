@@ -316,6 +316,7 @@ class Cell {
      aside (its numbers sit where the bodies are). */
   candleOpts() {
     const o = S.candleOptions(this.R, this.tick);
+    o.priceLineColor = this.lastCol = this.bars.length ? S.lastColor(this.R, this.lastUp()) : '';
     return this.fpHide ? { ...o, upColor: S.CLEAR, downColor: S.CLEAR, borderVisible: false } : o;
   }
 
@@ -348,10 +349,26 @@ class Cell {
   countdownNow() {
     const R = this.R, n = this.bars.length, ms = this.barMs();
     if (!R.countdown || !R.lastLabel || !ms || !n || this.clockEt == null || !this.shown) return null;
-    const last = this.bars[n - 1], left = S.barCloseEt(last, ms, C.ALWAYS_OPEN.has(this.shown.root)) - this.clockEt;
+    const last = this.bars[n - 1], left = S.countdownLeft(last, ms, C.ALWAYS_OPEN.has(this.shown.root), this.clockEt);
     if (left <= 0) return null;
-    const prev = n > 1 ? this.bars[n - 2] : null, up = last.c >= (R.prevClose && prev ? prev.c : last.o);
-    return { text: S.fmtCountdown(left), price: last.c, color: up ? R.bodyUp : R.bodyDown, font: R.scaleFont };
+    const color = S.lastColor(R, this.lastUp());
+    return { text: S.fmtCountdown(left), price: last.c, color, textColor: S.contrastText(color, R.bg), font: R.scaleFont };
+  }
+
+  /* Is the last bar an up bar, by the chart's own rule ("Colour bars based on previous close" or its open)? */
+  lastUp() {
+    const n = this.bars.length, last = this.bars[n - 1], prev = n > 1 ? this.bars[n - 2] : null;
+    return !last || last.c >= (this.R.prevClose && prev ? prev.c : last.o);
+  }
+
+  /* The last-price label and its line in the last bar's colour (S.lastColor): set on the series only when it
+     changes -- a new bar direction, new colours, the body switched off. */
+  syncLastColor() {
+    if (!this.candles) return;
+    const col = this.bars.length ? S.lastColor(this.R, this.lastUp()) : '';
+    if (col === this.lastCol) return;
+    this.lastCol = col;
+    this.candles.applyOptions({ priceLineColor: col });
   }
 
   /* What the calendar layer draws now: the events this chart shows (its Events settings) and where. A tick,
@@ -603,6 +620,7 @@ class Cell {
     const sel = this.dc && this.shown && this.dc.root === this.shown.root ? this.dc.sel : null;
     this.makeChart();
     this.candles.setData(this.candleData());
+    this.syncLastColor();
     this.buildSeries();
     for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
     this.drawMarkers(); this.drawLevels(); this.drawGaps(); this.syncFootprint(); this.syncProfile(); this.syncEth();
@@ -1005,6 +1023,7 @@ class Cell {
     }
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
     if (touched.some((b) => b.big && b.big.length)) this.drawMarkers();
+    this.syncLastColor();
     this.drawLevels(); this.syncFootprint();
     this.legend(this.hover);
     for (const o of this.ov) if (o.onBars) o.onBars();
@@ -1039,6 +1058,7 @@ class Cell {
   resetCandles() {
     const v = this.viewNow();
     this.candles.setData(this.candleData());
+    this.syncLastColor();
     if (v) this.setView(v);
   }
 

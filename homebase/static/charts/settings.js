@@ -88,6 +88,14 @@ const canon = (s) => { const c = parseColor(s); return c ? fmtColor(c) : null; }
 function hexOf(s) { const c = parseColor(s); return c ? fmtColor({ ...c, a: 1 }) : null; }
 function alphaOf(s) { const c = parseColor(s); return c ? c.a : 1; }
 function withAlpha(s, a) { const c = parseColor(s); return c ? fmtColor({ ...c, a }) : null; }
+/* Black or white, whichever reads better on a fill (the last-price label's rule): a light fill takes dark text.
+   A see-through fill is judged as it looks over `under` (the chart's background). */
+function contrastText(fill, under) {
+  const c = parseColor(fill), u = parseColor(under) || { r: 0, g: 0, b: 0, a: 1 };
+  if (!c) return '#FFFFFF';
+  const mix = (k) => c[k] * c.a + u[k] * (1 - c.a);
+  return 0.299 * mix('r') + 0.587 * mix('g') + 0.114 * mix('b') > 150 ? '#000000' : '#FFFFFF';
+}
 
 /* ---- the model ---- */
 const num = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
@@ -160,6 +168,15 @@ function candleOptions(r, tick) {
   };
 }
 
+/* The colour that stands for the last bar, solid: its body's; with the body off (or see-through) its border's,
+   then its wick's, then the scale's text. The last-price label, its line and the countdown all take it, so
+   none of them vanishes with the body (Lightweight Charts would paint them in the body's own, clear colour). */
+function lastColor(r, up) {
+  const picks = [[r.body, up ? r.bodyUp : r.bodyDown], [r.borders, up ? r.borderUp : r.borderDown], [r.wick, up ? r.wickUp : r.wickDown]];
+  for (const [on, col] of picks) if (on && alphaOf(col) >= 0.25 && hexOf(col)) return hexOf(col);
+  return hexOf(r.scaleText) || '#787B86';
+}
+
 function scaleMargins(r) { return { top: r.marginTop / 100, bottom: r.marginBottom / 100 }; }
 
 function legendFlags(r) {
@@ -229,6 +246,20 @@ function outsideRth(etWallS) {
 function barCloseEt(bar, barMs, alwaysOpen) {
   const end = bar.t * 1000 + barMs, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bar.s || '');
   return m ? Math.min(end, Date.UTC(+m[1], +m[2] - 1, +m[3], alwaysOpen ? 18 : 17)) : end;
+}
+/* The time left on the countdown, in ms (0: nothing to show). While the last bar is open: until it closes.
+   Once it has closed and no newer bar came (a quiet minute, a late feed), the clock goes on: until the next bar
+   boundary, for as long as the bar's session is open -- TradingView's countdown never waits for a trade. */
+function countdownLeft(bar, barMs, alwaysOpen, nowEt) {
+  if (!bar || !(barMs > 0) || !Number.isFinite(nowEt)) return 0;
+  const left = barCloseEt(bar, barMs, alwaysOpen) - nowEt;
+  if (left > 0) return left;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bar.s || '');
+  if (!m) return 0;
+  const end = Date.UTC(+m[1], +m[2] - 1, +m[3], alwaysOpen ? 18 : 17), start = bar.t * 1000;
+  if (nowEt >= end) return 0;
+  const next = start + (Math.floor((nowEt - start) / barMs) + 1) * barMs;
+  return Math.min(next, end) - nowEt;
 }
 /* "04:59" under an hour, "1:04:59" from an hour. */
 function fmtCountdown(ms) {
@@ -300,7 +331,7 @@ function clockText(hms, fmt) {
 }
 
 const api = { clockText, FIELDS, DEFAULTS, THEMED, LINE_STYLE, TIMEZONES, PALETTE, CLEAR, parseColor, fmtColor, hexOf, alphaOf,
-  withAlpha, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
+  withAlpha, contrastText, lastColor, countdownLeft, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
   barColorsByPrevClose, splitLabel, legendLabel, titleText, zoneOffsetMs, wallSeconds, outsideRth, barCloseEt,
   fmtCountdown, templateNameError, buildTemplate, applyTemplate };
 if (typeof window !== 'undefined') window.HBSettings = api;

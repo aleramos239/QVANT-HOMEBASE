@@ -176,7 +176,7 @@ class EthBg extends Layer {
 }
 
 /* The time left in the last bar, as a price-axis label just below the last-price label (TradingView's
-   countdown). read() -> {text, price, color, font} | null is asked before every render; the page asks for a
+   countdown). read() -> {text, price, color, textColor, font} | null is asked before every render; the page asks for a
    render once a second. priceAxisViews() returns ONE stable array: Lightweight Charts caches its wrapper by
    the array's identity and calls these methods at every render. */
 class Countdown extends Layer {
@@ -187,7 +187,7 @@ class Countdown extends Layer {
     this.axis = [{
       coordinate: () => { const y = this.y(); return y == null ? -100 : y; },
       text: () => (this.cur ? this.cur.text : ''),
-      textColor: () => this.P.onAccent,
+      textColor: () => (this.cur && this.cur.textColor) || this.P.onAccent,
       backColor: () => (this.cur ? this.cur.color : 'rgba(0,0,0,0)'),
       visible: () => this.y() != null,
       tickVisible: () => false,
