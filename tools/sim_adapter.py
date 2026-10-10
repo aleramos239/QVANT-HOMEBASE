@@ -22,19 +22,26 @@ WHAT IT ASSUMES ABOUT A BROKER (the real ones' behaviour here is NOT proven: eac
 Where the paper account's adapter (homebase/broker/paper.py) shows a behaviour, this one mirrors it.
   A1  A bracket's stop and target exist from the moment the entry is acknowledged, each with its own id (returned in
       raw as sl_order_id / tp_order_id). Until the entry fills they read "Suspended"; then "Working".
-  A2  The entry is a Day order, its stop and target are GTC. Nothing here models a session end: no order expires.
+  A2  The entry is a Day order, its stop and target are GTC. At the first print (or clock) of a new session a Day
+      ENTRY of an earlier one is cancelled, with its held legs (A3); a stop, a target and a closing order never
+      expire. This is the paper book's rule (paperbook._expire, with its session_of). It reads "Canceled", as a
+      vanished paper order does -- a real broker may say "Expired".
   A3  An entry cancelled with NO fill takes its stop and target with it: they read "Canceled" (the paper book's rule).
       The fault `legs_outlive` turns that off: they then stay "Suspended" until each is cancelled by its id.
   A4  An entry cancelled AFTER a part fill keeps its stop and target working, at the size that filled.
   A5  A part-filled entry's stop and target work at the size filled so far, and grow with each further fill.
-  A6  When a bracket's stop or target fills, the other one is cancelled and an unfilled rest of the entry too.
+  A6  When a bracket's stop or target fills, the other one is cancelled. An unfilled rest of a part-filled entry is
+      NOT: it keeps working, and when it fills later nothing protects that contract (the paper book has no part
+      fills and shows nothing here; this is the harder case for the engine, so it is the one rehearsed).
   A7  Finished orders read "Filled", "Canceled" or "Rejected" -- the words the engine calls terminal. An id this
       account never issued reads "Canceled" with filled_qty None (the paper adapter's answer for a vanished order).
   A8  get_order_state: a working order {"status": "Working" | "Suspended", "filled_qty": contracts so far (0 = none)};
       a finished one its filled contracts, or None when none filled.
   A9  Cancelling an order that is not working is refused ("order N is not working on <label>"), as the paper book does.
-  A10 A Stop on the wrong side of the market is not refused: it fills at once on the next print, at the market plus
-      slippage (the tester's law; the paper book refuses such a stop).
+  A10 A Stop whose trigger the last print is already at or through is REFUSED, in the paper book's words ("a buy
+      stop must be above the last price (...)"; with no print yet: "no NQ print yet ..."), when it is placed and
+      when a working one is moved. A held stop or target is checked against its entry's price instead, as there.
+      The tester itself would fill such a stop at the market: here the broker's refusal wins, as on paper.
   A11 A modify moves a price, never a size (the paper book's rule); a stop or target can be moved before its entry fills.
   A12 A Market order with no bracket (the engine's one close order) fills on the next print whatever the position is,
       and cancels nothing: the stop and target it leaves behind keep working until they are cancelled.
@@ -52,9 +59,10 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from homebase.backtest.engine import Costs, Order
+from homebase.backtest.engine import Costs, Order, tick_cmp
 from homebase.broker.base import BrokerAdapter, FillCallback, FillEvent, OrderRequest, OrderResult
 from homebase.broker.paper import root_of
+from homebase.charts.paperbook import session_of     # the paper book's own rule for which session a moment is in
 from homebase.contracts import point_value, tick_size
 from homebase.labrun.shadowfills import ShadowFills
 from homebase.strategies.base import Strategy
@@ -116,6 +124,7 @@ class SimOrder:
     text: str = ""
     live_ns: int = 0                     # it may fill from this time on (the stream's clock) ...
     born: int = 0                        # ... and only on a print that arrived after it was placed (the tape's length then)
+    session: str = ""                    # the session it was placed for (a Day entry ends with it: A2)
 
 
 class SimAdapter(BrokerAdapter):
@@ -135,6 +144,8 @@ class SimAdapter(BrokerAdapter):
         self._skip: dict[str, int] = {}              # after a restart: prints AT that ns still to drop (used before it)
         self._at: dict[str, int] = {}                # market -> the next print to work (an order placed now is born there)
         self._fid = 0
+        self._last: dict[str, float] = {}            # market -> its last print's price (what a new Stop is checked against)
+        self._sess: dict[str, str] = {}              # market -> the session its last print (or the clock) was in
         self._dirty = False              # the book changed since it was last saved
         self._clock_ns = 0
         self._ids = int(first_id)
@@ -156,6 +167,7 @@ class SimAdapter(BrokerAdapter):
         self.pos, self.fills, self._ids = d["pos"], d["fills"], int(d["ids"])
         self._realized, self._used, self._clock_ns = float(d["realized"]), d["used"], int(d["clock_ns"])
         self._fid, self._skip = int(d.get("fid") or 0), {m: int(u[1]) for m, u in self._used.items()}
+        self._last, self._sess = dict(d.get("last") or {}), dict(d.get("sess") or {})
         for o in self.orders.values():
             o.born = 0                   # a new tape: every print it takes is one that came after this order
         self.away = True
@@ -167,7 +179,7 @@ class SimAdapter(BrokerAdapter):
         tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps({
             "orders": [asdict(o) for o in self.orders.values()], "pos": self.pos, "fills": self.fills[-FILLS_KEPT:],
-            "ids": self._ids, "fid": self._fid, "realized": self._realized, "used": self._used, "clock_ns": self._clock_ns}))
+            "ids": self._ids, "fid": self._fid, "last": self._last, "sess": self._sess, "realized": self._realized, "used": self._used, "clock_ns": self._clock_ns}))
         os.replace(tmp, self._path)
 
     def back(self) -> None:
@@ -206,6 +218,41 @@ class SimAdapter(BrokerAdapter):
     async def on_clock(self, now_ms: int) -> None:
         """The stream's clock (it may go back: a replay that starts again)."""
         self._clock_ns = int(now_ms) * 1_000_000
+        for market in {o.market for o in self.orders.values() if o.status in LIVE}:
+            self._session(market, int(now_ms))
+        if self._dirty:
+            self._save()
+
+    def _session(self, market: str, ts_ms: int) -> None:
+        """A2: a new session on this market ends the Day ENTRIES placed for an earlier one (paperbook._expire)."""
+        sess = session_of(ts_ms, market)
+        if self._sess.get(market) == sess:
+            return
+        self._sess[market] = sess
+        for o in list(self.orders.values()):
+            if o.market == market and o.tif == "Day" and o.role == "entry" and o.status in LIVE \
+                    and o.session and o.session < sess:
+                self._end_entry(o)
+                self._dirty = True
+
+    def _end_entry(self, o: SimOrder) -> None:
+        """An entry cancelled (by hand, or by its session's end). A3: with no fill its held legs go with it."""
+        o.status = "Canceled"
+        for leg in self._legs(o.id):
+            if leg.status == "Suspended" and not o.filled and not self.faults.legs_outlive:
+                leg.status = "Canceled"                                             # (A4: after a fill they stay)
+
+    def _stop_refusal(self, market: str, side: str, level) -> Optional[str]:
+        """A10, the paper book's rule and words (paperbook._check_prices): a Stop needs a last print, and its trigger
+        must be on the far side of it."""
+        last, tick = self._last.get(market), tick_size(market) or 0.25
+        if last is None:
+            return f"no {market} print yet — a stop needs a price to check against"
+        if side == "Buy" and tick_cmp(level, last, tick) <= 0:
+            return f"a buy stop must be above the last price ({last:,})"
+        if side == "Sell" and tick_cmp(level, last, tick) >= 0:
+            return f"a sell stop must be below the last price ({last:,})"
+        return None
 
     def now_ns(self) -> int:
         return self._clock_ns
@@ -244,6 +291,8 @@ class SimAdapter(BrokerAdapter):
                     self._at[market] = k + 1                 # an order placed while print k is worked may fill from k + 1
                     if tape.ts[k] > self._clock_ns:
                         self._clock_ns = int(tape.ts[k])
+                    self._session(market, int(tape.ts[k]) // 1_000_000)
+                    self._last[market] = float(tape.px[k])
                     await self._print(market, tape, k)
             finally:
                 self._at.pop(market, None)
@@ -304,13 +353,10 @@ class SimAdapter(BrokerAdapter):
                 if leg.status in LIVE:
                     leg.status, leg.qty = "Working", o.filled
                     leg.born = max(leg.born, k + 1)
-        elif o.role in ("sl", "tp") and o.status == "Filled":    # A6: the other leg, and an unfilled rest of the entry
-            for x in self._legs(o.parent):
+        elif o.role in ("sl", "tp") and o.status == "Filled":    # A6: the other leg. An unfilled rest of the entry
+            for x in self._legs(o.parent):                       # is left working: no broker is known to end it
                 if x is not o and x.status in LIVE:
                     x.status = "Canceled"
-            e = self.orders.get(o.parent or "")
-            if e is not None and e.status in LIVE:
-                e.status = "Canceled"
         return [FillEvent(account_id=self.account_id, symbol=o.symbol, side=o.side, qty=qty, price=px,
                           position_after=net1, ts=ns / 1e9, raw={"orderId": o.id, "role": o.role, "fill": dict(f)})]
 
@@ -333,7 +379,8 @@ class SimAdapter(BrokerAdapter):
                      price=None if price is None else round(round(float(price) / tick) * tick, 6), qty=int(req.qty),
                      status=status, role=role, parent=parent, tif=tif, text=req.text,
                      live_ns=self._clock_ns + self._place_ns,
-                     born=self._at.get(market, len(self._tape(market).ts)))
+                     born=self._at.get(market, len(self._tape(market).ts)),
+                     session=session_of(self._clock_ns // 1_000_000, market))
         self.orders[o.id] = o
         return o
 
@@ -353,6 +400,10 @@ class SimAdapter(BrokerAdapter):
             return OrderResult(ok=False, error=f"the simulated account takes Market, Stop and Limit orders, not {req.order_type}")
         if not self.connected:
             return OrderResult(ok=False, error="adapter not connected")
+        if req.order_type == "Stop":                                                # A10
+            why = self._stop_refusal(root_of(req.symbol), req.side, self._level(req))
+            if why is not None:
+                return OrderResult(ok=False, error=why)
         return None
 
     async def place_order(self, req: OrderRequest) -> OrderResult:
@@ -393,11 +444,10 @@ class SimAdapter(BrokerAdapter):
         o = self.orders.get(str(order_id))
         if o is None or o.status not in LIVE:
             return self._refuse(order_id)                                           # A9
-        o.status = "Canceled"
         if o.role == "entry":
-            for leg in self._legs(o.id):
-                if leg.status == "Suspended" and not o.filled and not self.faults.legs_outlive:
-                    leg.status = "Canceled"                                         # A3 (A4: after a fill they stay)
+            self._end_entry(o)                                                      # A3 / A4
+        else:
+            o.status = "Canceled"
         self._save()
         return OrderResult(ok=True, order_id=o.id, raw={"ok": True, "order_id": o.id, "error": None})
 
@@ -415,7 +465,21 @@ class SimAdapter(BrokerAdapter):
         if qty is not None and int(qty) != int(size):
             return OrderResult(ok=False, error="the simulated account moves an order's price, never its size")   # A11
         tick = tick_size(o.market) or 0.25
-        o.price = round(round(float(level) / tick) * tick, 6)
+        px = round(round(float(level) / tick) * tick, 6)
+        why = None
+        if o.status == "Suspended":                  # a held leg: against its entry's price (paperbook._check_held_leg)
+            p = self.orders.get(o.parent or "")
+            if p is None or p.price is None:
+                why = f"the entry of bracket leg {o.id} has no price to check against — cancel it and place again"
+            elif o.role == "sl" and not (1 if p.side == "Buy" else -1) * tick_cmp(p.price, px, tick) > 0:
+                why = f"the stop loss must be on the losing side of its entry ({p.price:,})"
+            elif o.role == "tp" and not (1 if p.side == "Buy" else -1) * tick_cmp(px, p.price, tick) > 0:
+                why = f"the target must be on the winning side of its entry ({p.price:,})"
+        elif o.type == "Stop":                       # a working stop: against the last print (A10)
+            why = self._stop_refusal(o.market, o.side, px)
+        if why is not None:
+            return OrderResult(ok=False, error=why)
+        o.price = px
         self._save()
         return OrderResult(ok=True, order_id=o.id, raw={"ok": True, "order_id": o.id, "error": None})
 

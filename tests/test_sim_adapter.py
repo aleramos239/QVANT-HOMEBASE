@@ -139,10 +139,75 @@ def test_a_stop_entry_rests_with_its_two_legs_and_fills_at_the_trigger_plus_slip
 def test_a_print_the_account_already_held_never_fills_a_new_order():
     a = Acct()
     a.prints([111.0])
-    r = a.bracket()                                  # a buy stop at 110 with the last print at 111 (assumption A10)
+    r = a.bracket(typ="Market", price=None, sl=105.0, tp=None)     # the last print, 111, is history for it
     assert a.told == []
+    a.prints([112.0])
+    assert a.told == [("Buy", 1, 112.25, r.order_id, 1)]
+
+
+def test_a_stop_the_market_is_already_through_is_refused_in_the_paper_books_words():
+    """Fix round 1, I5a: what the paper book refuses (paperbook._check_prices), this account refuses, in its words.
+    It is the refusal that takes an account out of Lab trading for the day."""
+    a = Acct()
     a.prints([111.0])
-    assert a.told == [("Buy", 1, 111.25, r.order_id, 1)]      # the market plus slippage, on the next print
+    r = a.bracket()                                  # a buy stop at 110 with the last print at 111
+    assert (r.ok, r.order_id, r.error) == (False, None, "a buy stop must be above the last price (111.0)") and a.ad.orders == {}
+    assert a.bracket(price=111.0).error == "a buy stop must be above the last price (111.0)"       # at the price too
+    assert a.bracket(side="Sell", price=111.25, sl=115.0, tp=100.0).error == "a sell stop must be below the last price (111.0)"
+    plain = run(a.ad.place_order(OrderRequest(symbol="NQ", side="Buy", qty=1, order_type="Stop", stop_price=110.0)))
+    assert plain.error == "a buy stop must be above the last price (111.0)"
+    assert a.bracket(price=111.25).ok and a.bracket(side="Sell", price=110.75, sl=115.0, tp=100.0).ok
+    a.prints([112.0, 100.0])
+    assert a.told[0][:3] == ("Buy", 1, 112.25) and len(a.ad.orders) == 6
+    b = SimAdapter("b", None, placement_ms=0)        # with no print yet there is nothing to check a stop against
+    run(b.connect())
+    r = run(b.place_bracket(OrderRequest(symbol="NQ", side="Buy", qty=1, order_type="Stop", price=110.0, stop_price=105.0)))
+    assert r.error == "no NQ print yet — a stop needs a price to check against"
+    assert run(b.place_bracket(OrderRequest(symbol="NQ", side="Buy", qty=1, order_type="Market", stop_price=105.0))).ok
+
+
+def test_a_working_stop_cannot_be_moved_through_the_market_and_a_held_leg_not_past_its_entry():
+    a = Acct()
+    e, sl, tp = ids(a.bracket())                     # buy stop 110, stop 105, target 120; last print 100
+    assert run(a.ad.modify_order(e, "Stop", stop_price=100.0, qty=1)).error == "a buy stop must be above the last price (100.0)"
+    assert run(a.ad.modify_order(sl, "Stop", stop_price=110.0, qty=1)).error == \
+        "the stop loss must be on the losing side of its entry (110.0)"
+    assert run(a.ad.modify_order(tp, "Limit", price=110.0, qty=1)).error == \
+        "the target must be on the winning side of its entry (110.0)"
+    assert (a.ad.orders[e].price, a.ad.orders[sl].price, a.ad.orders[tp].price) == (110.0, 105.0, 120.0)
+    a.prints([110.0])                                # in: the stop works, a sell stop below the last print (110)
+    assert run(a.ad.modify_order(sl, "Stop", stop_price=110.0, qty=1)).error == "a sell stop must be below the last price (110.0)"
+    assert run(a.ad.modify_order(sl, "Stop", stop_price=109.75, qty=1)).ok
+    m = Acct()
+    e, sl, tp = ids(m.bracket(typ="Market", price=None, sl=95.0, tp=None))
+    assert run(m.ad.modify_order(sl, "Stop", stop_price=96.0, qty=1)).error == \
+        f"the entry of bracket leg {sl} has no price to check against — cancel it and place again"
+
+
+def test_a_day_entry_ends_with_its_session_and_a_stop_or_a_close_never_does():
+    """Fix round 1, I5c: the paper book's rule (paperbook._expire, session_of): at the first print of a new
+    session a Day ENTRY of an earlier one is cancelled with its held legs; a position's stop and target (GTC) and
+    a closing order stay."""
+    a = Acct()
+    e1, sl1, tp1 = ids(a.bracket())                  # filled today: its stop and target must outlive the session
+    a.prints([110.0])
+    e2, sl2, tp2 = ids(a.bracket(side="Sell", price=90.0, sl=95.0, tp=80.0))       # rests all day, never filled
+    close = run(a.ad.place_order(OrderRequest(symbol="NQ", side="Sell", qty=1, order_type="Limit", price=150.0)))
+    assert a.ad.orders[e2].tif == "Day" and a.ad.orders[sl1].tif == "GTC" and a.ad.orders[e2].session == "2026-09-14"
+    run(a.ad.on_ticks("NQ", [[ms("16:59:59"), 110.0, 1]]))
+    assert a.state(e2)["status"] == "Working"
+    run(a.ad.on_ticks("NQ", [[ms("17:00:00"), 110.0, 1]]))                          # Tuesday's session has begun
+    assert a.state(e2) == a.state(sl2) == a.state(tp2) == {"status": "Canceled", "filled_qty": None}
+    assert a.state(sl1)["status"] == a.state(tp1)["status"] == "Working" and a.state(close.order_id)["status"] == "Working"
+    run(a.ad.on_ticks("NQ", [[ms("17:00:05"), 89.0, 1]]))                           # ... and the dead entry cannot fill
+    assert a.net() == 0 and a.told[-1][3] == sl1
+
+
+def test_the_clock_alone_ends_a_day_entry_too():
+    a = Acct()
+    e, sl, tp = ids(a.bracket())
+    run(a.ad.on_clock(ms("17:00:00")))
+    assert a.state(e)["status"] == "Canceled" and a.state(sl)["status"] == "Canceled"
 
 
 def test_an_order_goes_live_after_the_placement_delay_by_the_streams_clock():
@@ -262,14 +327,30 @@ def test_the_rest_of_a_part_fill_fills_on_a_later_print_and_the_legs_grow_with_i
     assert a.told[-1] == ("Sell", 3, 105.75, sl, 0)
 
 
-def test_a_stop_that_fills_ends_an_unfilled_rest_of_its_entry():
+def test_a_stop_that_fills_leaves_the_unfilled_rest_of_its_entry_working():
+    """Fix round 1, I5b: nothing shows a broker cancelling it, and a rest that fills later with no stop behind it
+    is the case the engine must survive -- so that is what the simulated account does (assumption A6)."""
     a = Acct()
     a.ad.faults.set({"partial_next": 1})
     e, sl, tp = ids(a.bracket(qty=2))
     a.prints([110.0, 105.0])
-    assert a.net() == 0 and a.state(e) == {"status": "Canceled", "filled_qty": 1}
-    a.prints([112.0])
-    assert a.net() == 0 and len(a.told) == 2
+    assert a.net() == 0 and a.state(e) == {"status": "Working", "filled_qty": 1}
+    assert a.state(sl)["status"] == "Filled" and a.state(tp)["status"] == "Canceled"
+    a.prints([112.0])                                # the rest fills: one contract, and no stop is working for it
+    assert a.net() == 1 and a.told[-1] == ("Buy", 1, 112.25, e, 1) and a.state(e) == {"status": "Filled", "filled_qty": 2}
+    assert [o for o in a.ad.orders.values() if o.status in ("Working", "Suspended")] == []
+
+
+def test_a_cancel_is_on_disk_at_once_and_cancel_all_takes_the_held_legs_too(tmp_path):
+    a = Acct(tmp_path)
+    e, sl, tp = ids(a.bracket())
+    assert run(a.ad.cancel_order_by_id(e)).ok
+    on_disk = {o["id"]: o["status"] for o in json.loads((tmp_path / "sim-sim041.json").read_text())["orders"]}
+    assert on_disk == {e: "Canceled", sl: "Canceled", tp: "Canceled"}                # no print came in between
+    e2, sl2, tp2 = ids(a.bracket())
+    r = run(a.ad.cancel_all())
+    assert r.ok and r.raw == {"cancelled": 3}
+    assert a.state(e2)["status"] == a.state(sl2)["status"] == a.state(tp2)["status"] == "Canceled"
 
 
 def test_a_rejected_entry_leaves_nothing_behind_and_the_next_one_goes():
