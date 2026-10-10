@@ -26,21 +26,37 @@ def rec(name=NAME, promoted=MARK[1], **kw):
             "commission": 4.0, "slippage_ticks": 1.0, "session_window": ["09:25", "16:00"], "bar_minutes": 5, **kw}
 
 
+class Stepper:
+    """The intake's monotonic clock in these tests: every read is 0.3 s after the last, so the rate limit (five
+    entry requests a second) never depends on how fast the machine is. A test of the limit, the hold or the
+    heartbeat rule puts its own clock in (tests.trading_util.Mono)."""
+
+    def __init__(self):
+        self.t = 1000.0
+
+    def __call__(self) -> float:
+        self.t += 0.3
+        return self.t
+
+
 def mkdesk(tmp_path, accounts=("a1",), qty=1, armed=True, at=(10, 0), enabled=True, limits=LIMITS, extra=None,
-           book=None, start=True):
+           book=None, start=True, own_store=False):
     """A desk at `at` ET whose Lab strategy is on, has limits and is booked on `accounts` at `qty` (0: not booked).
-    `extra`: {name: StrategyCfg} of other strategies, `book`: their rows. -> ld, cfg, eng, ads, clock, tmp."""
-    store.put(rec(enabled=enabled))
+    `extra`: {name: StrategyCfg} of other strategies, `book`: their rows. own_store: a second desk in one test gets a
+    store of its own under its tmp_path (one desk owns a store). -> ld, cfg, eng, ads, clock, tmp."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    root = tmp_path / "store" if own_store else None
+    store.put(rec(enabled=enabled), root)
     clock = Clock()
     clock.set_et(*at)
     cfg = AppCfg(armed=armed,
                  accounts={a: AccountCfg(keyring_key="k", account_name=a.upper(), label=a.upper()) for a in accounts},
                  book=dict(book or {}), strategies=dict(extra or {}))
-    labdesk.attach(cfg)
+    labdesk.attach(cfg, root)
     ads = {a: LabAdapter(a) for a in accounts}
-    tmp_path.mkdir(parents=True, exist_ok=True)
     eng = quick(Engine(cfg, ads, now_fn=clock, root=tmp_path))
-    ld = LabDesk(cfg, eng, ads)
+    ld = LabDesk(cfg, eng, ads, at=root)
+    ld._mono = Stepper()                 # never "five requests in one second" because a test machine is fast
     run(ld.refresh())                    # it takes the store and reads every sidecar: from here it may write
     if limits:
         run(ld.set_limits(LAB, limits))
