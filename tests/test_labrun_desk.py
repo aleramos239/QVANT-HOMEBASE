@@ -1214,3 +1214,32 @@ def test_the_chart_service_is_still_never_the_desks_port_also_with_a_desk(monkey
     with pytest.raises(SystemExit) as e:
         cli.main(["--charts", "http://127.0.0.1:8850", "--desk", "http://127.0.0.1:8859"])
     assert e.value.code == 2 and "--charts" in capsys.readouterr().err
+
+
+# ---------------------------------------------------------------- a line that breaks
+def test_a_line_to_the_desk_that_raises_is_no_answer_never_a_broken_day(days):
+    class Broken(StubDesk):
+        def send(self, body, timeout=5.0):
+            self.bodies.append(body)
+            raise RuntimeError("the client itself broke")
+    day, stub, _, _, _ = days(stub=Broken())
+    feed(day, "09:29:50", [21000.0] * 11)
+    assert day.state == "running" and texts(day)[0][1] == "The Desk did not answer." and len(stub.entries()) == 1
+    day.leave()                                                              # ... and a stop through it does not raise
+    assert day.state == "running" and day.pending()
+
+
+def test_a_request_that_waits_for_the_desk_does_not_rewrite_the_day_file_on_every_turn(days):
+    saved = []
+    stub = StubDesk()
+    day, stub, _, _, wall = days(stub=stub, save=saved.append)
+    feed(day, "09:29:50", [21000.0] * 11)
+    stub.script = [StubDesk.NO_ANSWER] * 3
+    feed(day, "09:30:01", [21000.0] * 180)
+    n = len(saved)
+    for _ in range(50):
+        day.tend()                                                           # the same second: nothing is tried
+    assert len(saved) == n
+    wall.t += 1.0
+    day.tend()
+    assert len(saved) == n + 1

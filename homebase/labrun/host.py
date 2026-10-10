@@ -942,6 +942,16 @@ class StrategyDay:
                 entries.append(said)
         self._count(entries)
 
+    def _post(self, body: dict) -> dict:
+        """One request, once (DeskClient.send). A line that breaks instead of answering is "no answer": it never
+        raises into an event or a stop."""
+        try:
+            got = self._send(body)
+        except Exception as e:  # noqa: BLE001
+            log(f"{self.name}: desk: {type(e).__name__}")
+            got = None
+        return got if isinstance(got, dict) else {"ok": False, "left": True, "status": None, "detail": None}
+
     def _now_ref(self) -> int:
         """The stream's clock as far as this day knows it: the newest of the clock as last heard, the newest print,
         and the clock as the day was made."""
@@ -977,7 +987,7 @@ class StrategyDay:
                 texts, gone, bad = [NO_ANSWER] * len(out), [], list(range(len(out)))
                 again = (bad, body)
             else:
-                got = self._send(body)
+                got = self._post(body)
                 self._mine.add(seq)
                 left, ok = got.get("left") is not False, got.get("ok") is True
                 texts, gone, bad = self._desk_answer(out, got)
@@ -1069,7 +1079,7 @@ class StrategyDay:
             self._tell({"seq": seq, "own": r["what"], "intents": r["intents"]})
             r["body"], r["left"], r["write"] = self._body(seq, self._now_ref(), None, r["intents"]), False, None
         seq = r["body"]["seq"]
-        got = self._send(r["body"])                  # the same `seq` and the same intents as the last try of it
+        got = self._post(r["body"])                  # the same `seq` and the same intents as the last try of it
         self._mine.add(seq)
         r["left"] = r["left"] or got.get("left") is not False
         texts, _, bad = self._desk_answer(r["intents"], got)
@@ -1109,8 +1119,7 @@ class StrategyDay:
         """The runner's idle step: ask again what the Desk has not taken -- a cancel, a flatten, the stop -- once a
         second, for ten seconds. Never an entry. What is still not taken then keeps the last sentence on its row:
         "The Desk did not answer.", or the Desk's own."""
-        if not self._retry:
-            return
+        tried = False
         for r in list(self._retry):
             now = self._wall()
             if now < r["next"]:
@@ -1118,11 +1127,13 @@ class StrategyDay:
             done = self._attempt(r)
             if done is None:
                 continue
+            tried = True
             if done or now >= r["until"]:
                 self._retry.remove(r)
             else:
                 r["next"] = now + RETRY_S
-        self._resave()
+        if tried:
+            self._resave()
 
     def pending(self) -> bool:
         return bool(self._retry)
@@ -1845,9 +1856,10 @@ class Runner:
         heartbeat's body said again (the timer posts it only while the runner keeps saying it)."""
         blind = self._wall() - self._clock_wall
         for h in list(self._days.values()):
-            h.day.blind(blind)
-            h.day.tend()
-            self._note(h)
+            if h.day.desk is not None:               # (a shadow day has nothing to ask the Desk)
+                h.day.blind(blind)
+                h.day.tend()
+                self._note(h)
         for day in self._ending:
             day.tend()
         self._ending = [day for day in self._ending if day.pending()]
