@@ -50,6 +50,14 @@ def desk_cfg():
                   strategies={"nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)})
 
 
+@pytest.fixture(autouse=True)
+def _never_the_real_config_file(tmp_path, monkeypatch):
+    """EVERY test of this file: config.save writes under the test's own tmp_path, never the checkout's
+    homebase/config.json (run from the main checkout that is the LIVE desk's config). Four tests here called
+    config.save without the `paths` fixture and wrote the real file; with this a new test cannot forget it."""
+    monkeypatch.setattr(config_mod, "config_path", lambda: tmp_path / "config.json")
+
+
 @pytest.fixture()
 def paths(tmp_path, monkeypatch):
     monkeypatch.setattr("homebase.paths.state_dir", lambda: tmp_path)
