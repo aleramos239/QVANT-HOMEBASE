@@ -246,6 +246,10 @@
   .feed .raw{ flex:0 0 100%; padding:3px 0 0 71px; font-family:var(--font-mono); font-size:11.5px;
     color:var(--muted-foreground); white-space:pre-wrap; overflow-wrap:anywhere; }
   .feed-empty{ color:var(--muted-foreground); font-size:13px; padding:18px 0; }
+  /* a list that only reads (a Lab strategy's orders, trades and days): nothing opens, and an amount never wraps */
+  .feed.static .feed-row{ cursor:default; }
+  .feed.static .t{ white-space:nowrap; }
+  .feed.static .t.net{ flex:0 0 auto; margin-left:auto; }
 
   .clock{ font-family:var(--font-mono); font-size:12px; color:var(--muted-foreground);
     white-space:nowrap; display:inline-block; width:11rem; text-align:right; overflow:hidden; }
@@ -1703,15 +1707,28 @@ async function showWatch(name) {
    sent -- and writes a summary of the day. This page only reads them, and switches or removes one by name. The desk
    itself does not know a Lab strategy yet: nothing here calls its /api/strategy, /api/book or /api/strategy-flatten.
    The words and numbers come from desklab.js (DeskLab). */
-let DESKLAB = {strategies: [], runner: null}, DESKLAB_READ = false, DESKLAB_BUSY = "";
+let DESKLAB = {strategies: [], runner: null}, DESKLAB_OK = null, DESKLAB_BUSY = "";   // DESKLAB_OK: null = no read finished yet, false = the last one failed
 const DESKLAB_NAME = /^[a-z][a-z0-9_]{1,39}$/;
-try {   // the Lab's "On the Desk" link: /#lab=<name> opens that strategy's page
-  const m = /^#lab=([a-z][a-z0-9_]{1,39})$/.exec(location.hash);
-  if (m) VIEW = {k: "lab", name: m[1]};
+/* The Lab's "On the Desk" link is /#lab=<name>. It is used once: the address is cleared, so a reload does not open it again. */
+function labHashName() {
+  try { const m = /^#lab=([a-z][a-z0-9_]{1,39})$/.exec(location.hash); return m ? m[1] : ""; } catch (_) { return ""; }
+}
+function clearLabHash() {
+  try { history.replaceState(null, "", location.pathname + location.search); } catch (_) {}
+}
+try {
+  const n = labHashName();
+  if (n) { VIEW = {k: "lab", name: n}; clearLabHash(); }
 } catch (_) {}
+/* A fault in anything Lab never reaches the desk's own rows: a Lab row or page that throws (or a desklab.js that did not load) is left out. */
+function labSafe(make, fallback) {
+  try { return make(); } catch (_) { return fallback; }
+}
+const LAB_FAULT = "The Lab strategies could not be shown.";
+const labRowsHtml = (rowOf) => labSafe(() => DESKLAB.strategies.map(w => labSafe(() => rowOf(w), "")).join(""), "");
 async function loadDeskLab() {
   if (DEMO || document.hidden) return;
-  let next;
+  let next, ok = true;
   try {
     const r = await fetch(CHART + "/api/tester/desklab");
     if (!r.ok) throw new Error("HTTP " + r.status);
@@ -1720,11 +1737,11 @@ async function loadDeskLab() {
             runner: j.runner && typeof j.runner === "object" ? {alive: j.runner.alive === true} : null};
   } catch (_) {
     // the chart service does not answer: its runner is not reachable either, so no strategy is shown as running
-    next = {strategies: DESKLAB.strategies, runner: null};
+    next = {strategies: DESKLAB.strategies, runner: null}; ok = false;
   }
   const key = (d) => JSON.stringify(d);
-  const changed = !DESKLAB_READ || key(next) !== key(DESKLAB);
-  DESKLAB = next; DESKLAB_READ = true;
+  const changed = DESKLAB_OK !== ok || key(next) !== key(DESKLAB);
+  DESKLAB = next; DESKLAB_OK = ok;
   if (changed && ST && !FREEZE) render();
 }
 async function setDeskLab(name, on) {
@@ -1872,7 +1889,7 @@ function renderSide(names, hiddenCount, issues) {
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
   const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "watch" && k !== "lab") || VIEW.name === n) ? " sel" : "";
-  const labRows = DESKLAB.strategies.map(w => labSideRow(w, sel)).join("");
+  const labRows = labRowsHtml(w => labSideRow(w, sel));
   const watchRows = WATCH.map(w => `<button class="item one${sel("watch", w.name)}" onclick="setView('watch',${jsArg(w.name)})" aria-current="${sel("watch", w.name) ? "page" : "false"}" title="Watch-only: it places no orders">
       <i class="sd shadow"></i><span class="it"><b>${esc(w.name)}</b></span>
       <span class="ir mono dim">${w.net == null ? "" : usdS(w.net)}</span></button>`).join("");
@@ -1896,7 +1913,7 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + DESKLAB.strategies.length + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
+    ${head("strat", "Strategies", names.length + labSafe(() => DESKLAB.strategies.length, 0) + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
     ${SIDE_FOLD.strat ? "" : strat + labRows + watchRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
@@ -1989,13 +2006,13 @@ function todayLabRow(w) {
     <div><div class="n">${esc(nm)}<span class="tag" title="${esc(DeskLab.TAG_TITLE)}">Shadow</span></div>
       <div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>
     <div class="rs">${esc(DeskLab.stateText(w, DESKLAB.runner))}</div>
-    <div class="rp mono" title="${esc(DeskLab.NET_TITLE)}">${esc(usdS(net))}</div>${sw}</div>`;
+    <div class="rp mono dim" title="${esc(DeskLab.NET_TITLE)}">${esc(usdS(net))}</div>${sw}</div>`;
 }
 /* A Lab strategy's page: built from the blocks of a strategy page (title and switch, state, note, figures, Accounts,
    actions). It shows what the strategy would have done today; nothing on it can send an order. */
 function labView(name) {
   const w = DESKLAB.strategies.find(x => x.name === name);
-  if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${DESKLAB_READ ? esc(DeskLab.GONE) : "Loading…"}</div>`;
+  if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${esc(DeskLab.missingText(DESKLAB_OK))}</div>`;
   const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name;
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
@@ -2004,24 +2021,25 @@ function labView(name) {
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
   const levels = DeskLab.LEVELS.map(l => l.on
     ? `<button type="button" class="sel" aria-pressed="true">${esc(l.name)}</button>`
-    : `<button type="button" disabled aria-pressed="false" title="${esc(DeskLab.LEVEL_LOCKED)}">${esc(l.name)}</button>`).join("");
+    : `<button type="button" disabled aria-pressed="false" aria-describedby="labLevelsWhy" title="${esc(DeskLab.LEVEL_LOCKED)}">${esc(l.name)}</button>`).join("");
   const orders = (Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
     `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(o.text)}</span></div>`);
   const trades = (Array.isArray(t.trades) ? t.trades : []).map(DeskLab.tradeLine).map(x =>
-    `<div class="feed-row"><span class="h">${esc(x.text)}</span><span class="t">${esc(usdS(x.net))}</span></div>`);
-  const today = orders.length + trades.length ? `<div class="agroup feed">${orders.join("")}${trades.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.EMPTY_DAY)}</div>`;
+    `<div class="feed-row"><span class="h">${esc(x.text)}</span><span class="t net">${esc(usdS(x.net))}</span></div>`);
+  const today = orders.length + trades.length ? `<div class="agroup feed static">${orders.join("")}${trades.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.EMPTY_DAY)}</div>`;
   const days = (Array.isArray(w.days) ? w.days : []).map(DeskLab.matchLine).map(m =>
-    `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span><span class="t">${esc(usdS(m.net))}</span></div>`);
+    `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span><span class="t net">${esc(usdS(m.net))}</span></div>`);
   const notes = (Array.isArray(w.notes) ? w.notes : []).map(n => `<div class="feed-row"><span class="h">${esc(n)}</span></div>`);
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.stateText(w, DESKLAB.runner))}</b>${net != null ? ` · today would be ${esc(usdS(net))}` : ""}</div>
     <div class="sd-note">${esc(DeskLab.NOTE)}</div>
-    <div class="sec"><h2>Allowed up to</h2><div class="seg" role="group" aria-label="Allowed up to">${levels}</div></div>
+    <div class="sec"><h2>Allowed up to</h2><div class="seg" role="group" aria-label="Allowed up to">${levels}</div>
+      <div class="mcap" id="labLevelsWhy">${esc(DeskLab.LEVELS_WHY)}</div></div>
     <div class="sec"><h2>Today</h2>${today}</div>
-    <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
+    <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>
-    ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed">${notes.join("")}</div></div>` : ""}
+    ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
     <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
       <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy">Open in the Lab</button>
@@ -2072,12 +2090,12 @@ function renderMain(names, issues) {
     const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
     $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
     $("#dayTl").innerHTML = dayTimeline();
-    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("") + DESKLAB.strategies.map(todayLabRow).join("")
+    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("") + labRowsHtml(todayLabRow)
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "watch") $("#viewStrat").innerHTML = watchView(VIEW.name);
-  else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labView(VIEW.name);
+  else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
 function render() {
@@ -3382,6 +3400,10 @@ refresh(); setInterval(refresh, 2500);
 loadWatch(); if (!DEMO) setInterval(loadWatch, 30000);   // a strategy promoted in the Lab shows up here within half a minute
 // a Lab strategy's state moves with the day: asked every 5 s, and only while this page is on screen
 loadDeskLab();
+window.addEventListener("hashchange", () => {      // a link to a Lab strategy opened while the Desk is already open
+  const n = labHashName();
+  if (n) { clearLabHash(); setView("lab", n); }
+});
 if (!DEMO) {
   setInterval(() => { if (!document.hidden) loadDeskLab(); }, 5000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskLab(); });

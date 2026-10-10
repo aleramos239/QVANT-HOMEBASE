@@ -29,6 +29,8 @@
   var NOTE = "From the Lab. It runs on live prices in shadow: it writes down its orders and nothing is sent.";
   var GONE = "That strategy is not on the Desk any more. Promote it again from the Lab.";
   var EMPTY_DAY = "Nothing yet today.";
+  var NOT_ANSWERING = "The chart service is not answering, so this strategy cannot be shown right now.";
+  var LEVELS_WHY = "Paper, Funded demo and Live unlock with the Desk update.";
   var NOT_CHECKED = "Not checked yet.";
   var ACCOUNTS_CAPTION = "Shadow only for now. Accounts unlock with the Desk update.";
   var LEVEL_LOCKED = "Not built yet: accounts unlock with the Desk update.";
@@ -195,6 +197,13 @@
     ];
   }
 
+  // What a strategy's page says when it has no row to show. `read` = how the last read of the list went:
+  // null = none finished yet, false = it failed, true = it worked (so the name really is not on the Desk).
+  function missingText(read) {
+    if (read === true) return GONE;
+    if (read === false) return NOT_ANSWERING;
+    return "Loading\u2026";
+  }
   function switchTitle(on) {
     return on ? "ON: it runs in shadow" : "OFF: it does nothing";
   }
@@ -205,9 +214,9 @@
 
   return {
     TAG_TITLE: TAG_TITLE, NET_TITLE: NET_TITLE, NOTE: NOTE, GONE: GONE, EMPTY_DAY: EMPTY_DAY, NOT_CHECKED: NOT_CHECKED,
-    ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, LEVEL_LOCKED: LEVEL_LOCKED, LEVELS: LEVELS,
+    ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING, LEVELS_WHY: LEVELS_WHY, LEVEL_LOCKED: LEVEL_LOCKED, LEVELS: LEVELS,
     usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, orderLine: orderLine,
     tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, setupRows: setupRows,
-    switchTitle: switchTitle, removeAsk: removeAsk,
+    missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
   };
 });

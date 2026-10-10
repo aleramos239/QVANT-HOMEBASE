@@ -583,16 +583,30 @@ function plWatchSaid(what, name) {
 }
 
 /* ---- Promote to Desk (2026-10-09): the row under a finished run of a draft ----
-   `row` = this draft's record on the Desk (GET /desklab) or null; `sha` = the hash of the open code ('' when it is not known yet);
-   `hasRun` = a finished run of exactly this code is open. Returns {label, hint, disabled, action: 'promote' | 'open' | null},
-   or null where there is no such row (a built-in, or a script not saved yet). The Desk judges the rest when it is asked. */
+   `row` = this draft's record on the Desk (GET /desklab) or null; `sha` = the hash of the open code ('' when it cannot be worked out);
+   `hasRun` = a finished run of this draft is open; `dirty` = unsaved edits. Returns {label, hint, disabled, action: 'promote' | 'open' | null},
+   or null where there is no such row (a built-in, or a script not saved yet).
+
+     on the Desk?            code                      run open, saved     label                  action
+     no                      -                         no, or unsaved      Promote to Desk        none (disabled: run first)
+     no                      -                         yes                 Promote to Desk        promote
+     yes, same code (hash)   -                         -                   On the Desk: shadow    open
+     yes, other code         hash differs              no, or unsaved      Promote again          none (disabled: run first)
+     yes, other code         hash differs              yes                 Promote again          promote ("The Desk runs an older version.")
+     yes                     hash cannot be worked out no, or unsaved      Promote again          none (disabled: run first)
+     yes                     hash cannot be worked out yes                 Promote again          promote ("Promoting again starts it in shadow.")
+
+   The hash only tells "same code" from "other code". It never gates Promote: with a saved draft and a finished run open the row is
+   enabled, and the Desk is the authority -- it refuses a run of other code in words (shown as the error line). */
 function promoteState(state) {
   const { kind, dirty, hasRun, row, sha } = state || {};
   if (kind !== 'draft') return null;
   if (row && sha && row.sha256 === sha) return { label: 'On the Desk: shadow', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
   const label = row ? 'Promote again' : 'Promote to Desk';
   if (dirty || !hasRun) return { label, hint: 'Run a backtest of this exact code first.', disabled: true, action: null };
-  return { label, hint: row ? 'The Desk runs an older version. Promoting again starts it in shadow.' : 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' };
+  const hint = !row ? 'Puts it on the Desk in shadow. It places no orders.'
+    : sha ? 'The Desk runs an older version. Promoting again starts it in shadow.' : 'Promoting again starts it in shadow.';
+  return { label, hint, disabled: false, action: 'promote' };
 }
 /* The lines after a promote went through: that it is on the Desk, then one for each thing the Desk would refuse on an account. */
 function deskSaid(answer) {

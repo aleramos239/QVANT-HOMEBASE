@@ -182,9 +182,9 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
   // anything else is a new hole: look at it before adding it here
   const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'levels', 'today', 'busy ? " disabled" : ""',
     'o.refused ? " warn" : ""', 'm.ok === false ? " warn" : ""', 'orders.join("")', 'trades.join("")',
-    'net == null ? "" : esc(usdS(net))', 'DESKLAB_READ ? esc(DeskLab.GONE) : "Loading…"', 'DeskLab.figures(w).map(fig).join("")',
-    'net != null ? ` · today would be ${esc(usdS(net))', 'days.length ? `<div class="agroup feed">${days.join("")',
-    'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed">${notes.join("")']);
+    'net == null ? "" : esc(usdS(net))', 'esc(DeskLab.missingText(DESKLAB_OK))', 'DeskLab.figures(w).map(fig).join("")',
+    'net != null ? ` · today would be ${esc(usdS(net))', 'days.length ? `<div class="agroup feed static">${days.join("")',
+    'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });
@@ -204,7 +204,7 @@ test('a hostile name and sentence from the network cannot break out of the page'
   const bad = row({ name: 'nq_orb', label: hostile, root: hostile, today: day({ state: 'stopped', why: hostile,
     orders: [{ t: hostile, text: hostile, refused: hostile }], trades: [{ side: 'long', qty: 1, entry_t: hostile, entry_px: 1, exit_t: null, exit_px: null, reason: hostile, net: 1 }] }),
     days: [day({ match: { ok: false, text: hostile } })], notes: [hostile] });
-  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [bad], runner: ALIVE }, DESKLAB_READ: true, DESKLAB_BUSY: '', shortDay: (s) => s,
+  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [bad], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', shortDay: (s) => s,
     esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb");`, ctx);
@@ -238,11 +238,120 @@ test('the row is only for drafts, re-resolved at click time, and an unusable one
   assert.match(LABDESK, /function deskGo\(\) \{\n  const b = buf\(\), st = deskState\(b\);\n  if \(!st \|\| st\.disabled \|\| S\.deskBusy\) return;/);
   assert.match(LABDESK, /if \(!b \|\| b\.kind !== 'draft'\) return null;/);
   assert.match(LABDESK, /title="\$\{esc\(st\.hint\)\}"\$\{st\.disabled \? ' aria-disabled="true"' : ''\}/);
-  assert.match(LAB, /\$\{deskRows\(b\)\}<\/div>`;/, 'the fourth row of the last group of a finished run');
+  assert.match(LAB, /\$\{deskRows\(b\)\}<\/div>/, 'the fourth row of the last group of a finished run');
 });
 
-test('a run remembers the hash of the code it ran, and a promoted draft is marked in the library', () => {
-  assert.match(LAB, /hexSha\(nb\.code\)\.then\(\(h\) => \{ started\.sha = h; paintRes\(\); \}\)/);
+test('Promote is not gated by the hash, and a promoted draft is marked in the library', () => {
+  assert.match(LAB, /hasRun: !!\(r && r\.bundle && r\.rid\)/, 'a finished run is open: that is all the row asks of the run (the hash never gates Promote)');
+  assert.doesNotMatch(LAB, /r\.sha === sha|started\.sha/);
   assert.match(LAB, /desk: !!\(S\.desk && S\.desk\.has\(d\.name\)\)/);
   assert.match(LAB, /<i class="lb-desk" title="On the Desk, in shadow">On the Desk<\/i>/);
+});
+
+
+/* ---- fix round 1 ---- */
+test('missingText: Loading until a read finished, "not answering" after a failed one, "not on the Desk" only after a good one', () => {
+  assert.equal(D.missingText(null), 'Loading…');
+  assert.equal(D.missingText(undefined), 'Loading…');
+  assert.equal(D.missingText(false), 'The chart service is not answering, so this strategy cannot be shown right now.');
+  assert.equal(D.missingText(true), 'That strategy is not on the Desk any more. Promote it again from the Lab.');
+});
+
+test('the page reads the list\'s outcome: only a good read can say the strategy is gone', () => {
+  assert.match(HTML, /let DESKLAB = \{strategies: \[\], runner: null\}, DESKLAB_OK = null,/);
+  assert.match(LABBLOCK, /next = \{strategies: DESKLAB\.strategies, runner: null\}; ok = false;/);
+  assert.match(LABBLOCK, /DESKLAB = next; DESKLAB_OK = ok;/);
+  assert.doesNotMatch(LABVIEW, /DeskLab\.GONE/, 'the page never picks the sentence itself');
+});
+
+test('specLine and the Setup card: session and bars when the record carries them, both shapes', () => {
+  assert.equal(D.specLine(row({ session_window: ['09:25', '16:00'], bar_minutes: 1 })), 'NQ · 09:25-16:00 ET · 1-minute bars · from the Lab');
+  assert.equal(D.specLine(row({ bar_minutes: 0 })), 'NQ · 09:25-16:00 ET · from the Lab', 'bar_minutes 0 = no bars: that part is left out');
+  assert.equal(D.specLine(row({ session_window: undefined, bar_minutes: undefined })), 'NQ · from the Lab');
+  const rows = (r) => Object.fromEntries(D.setupRows(r));
+  assert.deepEqual([rows(row()).Session, rows(row()).Bars], ['09:25-16:00 ET', '1 min']);
+  assert.deepEqual([rows(row({ bar_minutes: 0 })).Session, rows(row({ bar_minutes: 0 })).Bars], ['09:25-16:00 ET', '—']);
+  assert.deepEqual([rows(row({ session_window: undefined, bar_minutes: undefined })).Session, rows(row({ session_window: undefined, bar_minutes: undefined })).Bars], ['—', '—']);
+});
+
+/* the desk's own render path with the Lab part broken: the page still shows nq930 */
+const SLICE = (a, b) => HTML.slice(HTML.indexOf(a), HTML.indexOf(b));
+function renderCtx({ deskLab, view = { k: 'today' } } = {}) {
+  const els = {};
+  const $ = (sel) => (els[sel] = els[sel] || { innerHTML: '', hidden: false });
+  const ST = { armed: true, et_now: '2026-10-09T10:00:00-0400', timer: { strategies: {} }, accounts: {}, journal: [],
+    strategies: { nq930: { cfg: { symbol: 'NQ', kind: 'straddle', offset_pts: 5, sl_pts: 5, tp_pts: 15, enabled: true, shadow: false, cancel_et: '12:55', flat_et: '15:55' }, day_status: 'idle', accounts: [] } } };
+  const ctx = vm.createContext({ $, ST, DEMO: false, CHART: 'http://x', DESK_STALE: false, FREEZE: false, document: { hidden: false }, closeAsgMenus() {}, switchBounced() { return false; },
+    toast() {}, chartPost: async () => ({}), confirmDlg: async () => false, fetch: async () => ({ ok: false }), ...(deskLab ? { DeskLab: deskLab } : {}) });
+  vm.runInContext(SLICE('const esc = (v) =>', 'async function chartPost(') + SLICE('const stratLabel = ', 'const actStrat = ') + SLICE('const fmt = ', 'const usd = ') +
+    'const usd = (v) => v == null ? "—" : (v < 0 ? "-$" : "$") + fmt(Math.abs(v));\n' +
+    SLICE('/* ===== Desk views', 'function render() {') +
+    `\nVIEW = ${JSON.stringify(view)}; DESKLAB = { strategies: [${JSON.stringify(row())}], runner: { alive: true } }; DESKLAB_OK = true;` +
+    '\nglobalThis.go = () => { renderSide(["nq930"], 0, 0); renderMain(["nq930"], 0); };', ctx);
+  return { ctx, els };
+}
+const BROKEN = [['desklab.js did not load (no DeskLab at all)', undefined],
+  ['every DeskLab helper throws', Object.fromEntries(Object.keys(D).map((k) => [k, () => { throw new Error('boom'); }]))]];
+
+test('a Lab part that throws, or a desklab.js that did not load, leaves the desk\'s own rows as they were', () => {
+  for (const [why, dl] of BROKEN) {
+    const { ctx, els } = renderCtx({ deskLab: dl });
+    assert.doesNotThrow(() => ctx.go(), why);
+    assert.match(els['#side'].innerHTML, /setView\('strat','nq930'\)/, why);
+    assert.doesNotMatch(els['#side'].innerHTML, /setView\('lab'/, why);
+    assert.match(els['#stratList'].innerHTML, /setView\('strat','nq930'\)/, `${why}: the Today row`);
+    assert.doesNotMatch(els['#stratList'].innerHTML, /setView\('lab'/, why);
+    assert.match(els['#side'].innerHTML, /Strategies<\/span><i>|Strategies/, why);
+  }
+});
+
+test('the same page with a working DeskLab shows the Lab row next to nq930 (the control for the test above)', () => {
+  const { ctx, els } = renderCtx({ deskLab: D });
+  ctx.go();
+  assert.match(els['#side'].innerHTML, /setView\('strat','nq930'\)/);
+  assert.match(els['#side'].innerHTML, /setView\('lab',&quot;nq_orb&quot;\)/);
+  assert.match(els['#stratList'].innerHTML, /setView\('strat','nq930'\)/);
+  assert.match(els['#stratList'].innerHTML, /setView\('lab',&quot;nq_orb&quot;\)/);
+  assert.match(els['#stratList'].innerHTML, /class="rp mono dim"/, 'the would-be net is dim, like the sidebar\'s');
+});
+
+test('a Lab strategy\'s page that throws says so in one line, and the back link stays', () => {
+  for (const [why, dl] of BROKEN) {
+    const { ctx, els } = renderCtx({ deskLab: dl, view: { k: 'lab', name: 'nq_orb' } });
+    assert.doesNotThrow(() => ctx.go(), why);
+    assert.match(els['#viewStrat'].innerHTML, /The Lab strategies could not be shown\./, why);
+    assert.match(els['#viewStrat'].innerHTML, /setView\('today'\)/, why);
+    assert.match(els['#side'].innerHTML, /setView\('strat','nq930'\)/, why);
+  }
+});
+
+test('the #lab=<name> link is used once, and a link opened while the Desk is open switches to it', () => {
+  assert.match(LABBLOCK, /history\.replaceState\(null, "", location\.pathname \+ location\.search\)/);
+  assert.match(LABBLOCK, /if \(n\) \{ VIEW = \{k: "lab", name: n\}; clearLabHash\(\); \}/);
+  assert.match(HTML, /window\.addEventListener\("hashchange", \(\) => \{[^}]*clearLabHash\(\); setView\("lab", n\);/);
+  // the name is read with the same shape the server accepts
+  const ctx = vm.createContext({ location: { hash: '#lab=nq_orb' } });
+  vm.runInContext(LABBLOCK.slice(LABBLOCK.indexOf('function labHashName'), LABBLOCK.indexOf('function clearLabHash')) + 'globalThis.h = labHashName;', ctx);
+  assert.equal(ctx.h(), 'nq_orb');
+  for (const bad of ['#lab=', '#lab=NQ', '#lab=a', '#lab=nq_orb&x=1', '#lab=../x', '#strategy=nq_orb', '']) {
+    ctx.location.hash = bad;
+    assert.equal(ctx.h(), '', bad);
+  }
+});
+
+test('the Lab lists only read: no pointer cursor, an amount never wraps, and the locked steps have a caption a keyboard reaches', () => {
+  assert.match(HTML, /\.feed\.static \.feed-row\{ cursor:default; \}/);
+  assert.match(HTML, /\.feed\.static \.t\{ white-space:nowrap; \}/);
+  assert.match(HTML, /\.feed\.static \.t\.net\{ flex:0 0 auto; margin-left:auto; \}/);
+  assert.equal((LABVIEW.match(/agroup feed static/g) || []).length, 3, 'today, days, notes: all static');
+  assert.doesNotMatch(LABVIEW, /agroup feed"/);
+  assert.match(LABVIEW, /<div class="mcap" id="labLevelsWhy">\$\{esc\(DeskLab\.LEVELS_WHY\)\}<\/div>/);
+  assert.match(LABVIEW, /aria-describedby="labLevelsWhy" title="\$\{esc\(DeskLab\.LEVEL_LOCKED\)\}"/);
+  assert.equal(D.LEVELS_WHY, 'Paper, Funded demo and Live unlock with the Desk update.');
+});
+
+test('the Lab\'s Promote row ties its hint to a line under the group (aria-describedby), and the hint is read from the same state', () => {
+  assert.match(LAB, /aria-describedby="deskHint" title="\$\{esc\(st\.hint\)\}"/);
+  assert.match(LAB, /<div class="rs-take" id="deskHint">\$\{esc\(st\.hint\)\}<\/div>/);
+  assert.match(LAB, /\$\{deskRows\(b\)\}<\/div>\$\{deskNote\(b\)\}`;/);
 });

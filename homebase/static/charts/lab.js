@@ -181,8 +181,7 @@ async function run() {
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { log(`<span class="err">${esc(pr)}</span>`); return; }
   S.busy = true;
-  const started = S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy, sha: '' };
-  if (nb.kind === 'draft') hexSha(nb.code).then((h) => { started.sha = h; paintRes(); });         // which code this run is of: what Promote to Desk compares
+  S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy };
   paintRes(); paintHead();
   const r = await send('POST', '/api/tester/run', X.body(f));
   if (!r.ok) { S.busy = false; S.run = null; log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
@@ -1515,13 +1514,19 @@ function deskState(b) {
   if (!b || b.kind !== 'draft') return null;
   const dirty = isDirty(b), sha = dirty ? '' : shaNow(b.code);
   const r = S.run && S.run.key === b.key ? S.run : null;
-  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid && sha && r.sha === sha), row: (S.desk && S.desk.get(b.name)) || null, sha });
+  /* the hash only tells the same code on the Desk from other code; it never gates Promote -- the Desk judges the run when it is asked */
+  return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha });
+}
+/* The hint of the row, as a line under the group: what a keyboard or a screen reader reaches (the row's title is for the mouse). */
+function deskNote(b) {
+  const st = deskState(b);
+  return st ? `<div class="rs-take" id="deskHint">${esc(st.hint)}</div>` : '';
 }
 function deskRows(b) {
   const st = deskState(b);
   if (!st) return '';
   const on = !!(S.desk && S.desk.has(b.name));
-  return `<button class="rs-row" data-act="deskgo" data-fk="deskgo" title="${esc(st.hint)}"${st.disabled ? ' aria-disabled="true"' : ''}${S.deskBusy ? ' disabled' : ''}><span>${esc(st.label)}</span><span>›</span></button>`
+  return `<button class="rs-row" data-act="deskgo" data-fk="deskgo" aria-describedby="deskHint" title="${esc(st.hint)}"${st.disabled ? ' aria-disabled="true"' : ''}${S.deskBusy ? ' disabled' : ''}><span>${esc(st.label)}</span><span>›</span></button>`
     + (on ? `<button class="rs-row" data-act="deskoff" data-fk="deskoff" title="Takes it off the Desk. Its history is kept."${S.deskBusy ? ' disabled' : ''}><span>Remove from Desk</span><span>›</span></button>` : '');
 }
 function deskGo() {
@@ -1598,7 +1603,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
-        <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}</div>`;
+        <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}</div>${deskNote(b)}`;
     settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;

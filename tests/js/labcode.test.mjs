@@ -227,14 +227,25 @@ test('promoteState: on the Desk with this same code: open it there', () => {
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'aa' }, sha: 'aa' }) }, open, 'it is on the Desk whether or not a run is open');
 });
 
-test('promoteState: on the Desk with other code: promote again (needs a run of this code first)', () => {
+test('promoteState: on the Desk with other code: promote again, the Desk judges the run', () => {
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: 'aa' }) },
     { label: 'Promote again', hint: 'The Desk runs an older version. Promoting again starts it in shadow.', disabled: false, action: 'promote' });
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: true, hasRun: true, row: { sha256: 'bb' }, sha: '' }) },
     { label: 'Promote again', hint: 'Run a backtest of this exact code first.', disabled: true, action: null });
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'bb' }, sha: 'aa' }).disabled, true);
-  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: '' }).label, 'Promote again', 'a hash that is not known is not the same code');
+});
+
+test('promoteState: the hash never gates Promote (a saved draft with a finished run open is enabled), it only tells the same code from other code', () => {
+  // no hash (no crypto.subtle, or not worked out yet): not on the Desk -> promote; on the Desk -> "Promote again", with its own hint
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: '' }) },
+    { label: 'Promote to Desk', hint: 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' });
+  assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: '' }) },
+    { label: 'Promote again', hint: 'Promoting again starts it in shadow.', disabled: false, action: 'promote' });
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: '' }, sha: '' }).action, 'promote', 'two unknowns are not the same code');
+  // a hash that cannot be worked out never opens the Desk page as if it were the same code
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'bb' }, sha: '' }).action, null);
+  // a restored run (any run open) after a reload allows Promote without a fresh run: hasRun is "a finished run is open", nothing more
+  assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: 'aa' }).disabled, false);
 });
 
 test('promoteState: a built-in strategy (or a script not saved yet) has no such row', () => {
