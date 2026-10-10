@@ -54,7 +54,7 @@ def test_the_plain_card_passes_so_a_refusal_below_is_the_change():
 def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
-    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 33
+    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 34
     assert [n for n, f in F.items() if not f["runs"]] == []                                       # va_reclaim runs too: its cache is built for the range (runner.prepare_family)
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -82,6 +82,9 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     assert F["ib_touch"]["settings"] == [{"name": "ib_min", "default": "60", "values": "5 | 15 | 30 | 60"}] and F["ib_touch"]["bars"] == ["1", "5", "15", "30"]      # the 2026-10-10 entry
     assert F["ib_touch"]["bracket"] is True and F["ib_touch"]["mirror"] is None and F["ib_touch"]["sessions"] == ["nyam", "mid", "pm"]      # it rests orders on both sides, as orb and ib_n
     assert F["ib_touch"]["tried"] == [{"ib_min": "15"}, {"ib_min": "30"}, {"ib_min": "60"}] and F["ib_touch"]["bracket"] is F["ib_n"]["bracket"] is F["orb"]["bracket"]
+    assert {x["name"]: (x["default"], x["values"]) for x in F["open_fvg"]["settings"]} == {"min_gap": (0.1, "a number 0 .. 10"), "oc_min": ("5", "5 | 15 | 30")}      # the 2026-10-10 entry (max_tr is a limit)
+    assert F["open_fvg"]["sessions"] == ["nyam", "mid", "pm"] and F["open_fvg"]["bars"] == ["1", "5", "15"] and F["open_fvg"]["mirror"] is None and not F["open_fvg"]["bracket"]
+    assert F["open_fvg"]["tried"] == [{"oc_min": "5"}, {"oc_min": "15"}, {"oc_min": "30"}] and F["open_fvg"]["does"].startswith("the first fair value gap of the session")
     assert {x["name"]: x["values"] for x in F["rsi2"]["settings"]} == {"th": "a number 1 .. 40", "trend_f": "true | false"}
     assert sorted(B["other_families"]) == sorted(set(fam.REGISTRY) - set(blocks.WRAPPED)) and len(B["other_families"]) == 33
 
@@ -172,7 +175,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 33, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 34, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]

@@ -187,6 +187,23 @@ def test_an_ib_touch_card_passes_stage_0_with_the_range_length_as_its_setting():
     fails({**c, "ways": [{**it, "fixed": {"mode": "fade"}}]}, "P0.2")                             # ib_n's setting, not this family's
 
 
+def test_an_open_fvg_card_passes_stage_0_with_the_candle_length_as_its_setting():
+    of = {"family": "open_fvg", "main_setting": "oc_min", "values": ["5", "15", "30"], "fixed": {}, "limits": {}}
+    c = card(name="open_gap", why="A push through the opening candle that leaves a gap shows one side taking the open.",
+             loser="Traders on the other side of the opening candle, stopped as it breaks.", ways=[of], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("open_gap_a1", "1"), ("open_gap_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "open_fvg", "params": {"oc_min": ["5", "15", "30"]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    passes({**c, "ways": [{**of, "values": [5, 15, 30]}]})                                        # (a number typed as a number is the same choice)
+    run = passes({**c, "ways": [{**of, "fixed": {"min_gap": 0.25}, "limits": {"max_tr": 2}}]})[0]["spec"]["run"]
+    assert run["fixed"] == {"min_gap": 0.25} and run["limits"] == {"max_tr": 2}                   # the gap's size is ONE value an idea; max_tr is a limit
+    passes({**c, "session": "pm", "sides": "long", "sides_why": "The afternoon break of the opening candle's high rides the day's drift up.", "ways": [of]})
+    fails({**c, "ways": [{**of, "values": ["5", "15", "60"]}]}, "P0.2")                           # 60 is not a candle length
+    fails({**c, "ways": [{**of, "limits": {"max_tr": 4}}]}, "P0.2")                               # the family's own limit (1 .. 3 signals a session)
+    fails({**c, "ways": [{**of, "fixed": {"mode": "mid"}}]}, "P0.2")                              # fvg's setting, not this family's
+    fails({**c, "session": "london"}, "P0.2")                                                     # the New York day sessions only
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))
