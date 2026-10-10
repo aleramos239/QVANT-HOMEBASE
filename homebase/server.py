@@ -1498,8 +1498,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             # a promoted Lab strategy has ONE switch, its store record's (the runner hosts by it): nothing of it
             # is in config.json
             on = bool(body.get("enabled"))
-            if not await labdesk.set_enabled(name, on):
-                raise HTTPException(409, labdesk_mod.RECORD_CHANGED)
+            try:
+                if not await labdesk.set_enabled(name, on):
+                    raise HTTPException(409, labdesk_mod.RECORD_CHANGED)
+            except labdesk_mod.Refused as e:
+                raise HTTPException(e.status, str(e)) from None
             stop = getattr(labdesk, "stop", None)        # the intake half (task B3): cancels its unfilled entries
             if not on and stop is not None:
                 await stop(name, "off")
@@ -1551,8 +1554,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if name not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {name!r}")
         results = await engine.flatten_strategy(name)
-        if labdesk.is_lab(name):             # its switch is the store record's (off is never refused)
-            await labdesk.set_enabled(name, False)
+        if labdesk.is_lab(name):             # its switch is the store record's
+            try:
+                await labdesk.set_enabled(name, False)
+            except Exception as e:  # noqa: BLE001 -- the flatten is done: its result is answered whatever the switch did
+                engine.journal("lab_save_error", strategy=name, error=str(e)[:200], cause="manual_flatten")
+                s = cfg.strategies.get(name)
+                return {"ok": True, "enabled": bool(s is not None and s.enabled), "results": results,
+                        "detail": labdesk_mod.SWITCH_NOT_OFF}
             engine.journal("strategy_toggled", strategy=name, enabled=False,
                            cause="manual_flatten")
             return {"ok": True, "enabled": False, "results": results}
@@ -1794,19 +1803,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 raise HTTPException(400, f"unknown account {aid!r}")
             if qty > 0:
                 rows.append({"account": aid, "qty": qty})
-        try:                                 # says nothing unless a promoted Lab strategy is on the desk
-            labdesk.check_book(name, rows)
+        try:
+            if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json
+                await labdesk.set_book(name, rows)
+                engine.journal("book_updated", strategy=name, assignments=rows)
+                return {"ok": True, "book": cfg.book}
+            labdesk.check_book(name, rows)   # says nothing unless a promoted Lab strategy is on the desk
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, str(e)) from None
-        was = cfg.book.get(name)
         cfg.book[name] = rows
         config_mod.save(cfg)
-        if labdesk.is_lab(name) and not labdesk.book_saved(name):   # its book lives in its own file: not written, not kept
-            if was is None:
-                cfg.book.pop(name, None)
-            else:
-                cfg.book[name] = was
-            raise HTTPException(500, labdesk_mod.NOT_SAVED)
         engine.journal("book_updated", strategy=name, assignments=rows)
         return {"ok": True, "book": cfg.book}
 

@@ -55,6 +55,7 @@ def with_lab(cfg):
     store.put_desk("pp_orb", {"mark": ["ab", "2026-10-09T12:00:00+00:00"], "book": [{"account": "main", "qty": 1}], "written_utc": "x",
                               "limits": {"max_trades_day": 2, "max_qty": 1, "max_risk_usd": 300, "last_entry_et": "11:00", "flat_et": "15:55"}})
     assert labcfg.overlay(cfg)["added"] == ["lab_pp_orb"]
+    assert labcfg.take_store(cfg) is True                                        # the one desk that writes this store
     return cfg
 
 
