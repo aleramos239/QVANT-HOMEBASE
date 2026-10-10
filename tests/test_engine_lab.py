@@ -1402,6 +1402,24 @@ def test_a_closed_rounds_stop_is_never_cancelled_while_the_account_holds_a_posit
     assert rows(eng)[0]["clean"] is True
 
 
+def test_an_archived_round_is_never_acted_on_again_whatever_its_orders_read(tmp_path):
+    """I-4. Round 1 is closed, clean and archived; its sell stop then reads Filled (it cannot: it was read ended).
+    The clock must not run the both-filled emergency -- an account-wide flatten -- on a round that is over."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    first = trade(eng, ad, entry=110.0, exit_px=120.0, legs=pair())
+    live = live_round(eng, ad, legs=leg(iid=9))
+    assert eng._archived(first) and not eng._archived(live)
+    ad.order_status[first.lower_id] = "Filled"
+    eng._lab_x(first)["cancelled"] = []
+    ad.net = 1
+    n = len(ad.cancelled)
+    clock.set_et(15, 54)
+    tick(eng)
+    assert (first.status, first.exit_reason) == ("done", "tp") and ad.orders == [] and len(ad.cancelled) == n
+    assert not events(tmp_path, "both_filled_emergency") and live.status == "live"
+
+
 def test_an_entry_that_filled_after_its_round_was_ended_is_never_clean(tmp_path):
     """The account's day lock ends a placed round at once (engine._lock_account); the entry fills anyway."""
     eng, ads, _ = mk(tmp_path)
@@ -1415,3 +1433,170 @@ def test_an_entry_that_filled_after_its_round_was_ended_is_never_clean(tmp_path)
         tick(eng)
     assert rows(eng)[0]["clean"] is False and "never held" in events(tmp_path, "lab_check")[0]["reason"]
     assert eng.lab_open(LAB) == ["a1"]
+
+
+# ------------------------------------------------------------------------------------------------ disk and restarts
+def restart(eng, tmp_path):
+    """A new engine on the same folder, the same config, clock and adapters: what a desk restart keeps."""
+    return quick(Engine(eng.cfg, eng.adapters, now_fn=eng._now, root=tmp_path))
+
+
+def test_construction_never_reads_the_lab_file(tmp_path):
+    clock = Clock()
+    (tmp_path / f"labday-{clock().astimezone(engine_mod.ET).date().isoformat()}.json").mkdir()   # not even a file
+    eng, ads, _ = mk(tmp_path)
+    assert "_lab" not in eng.__dict__                                 # read at the first Lab call, never before
+    assert eng.lab_rounds(LAB) == [] and eng.lab_open(LAB) == []      # ... and that call does not raise either
+
+
+def test_a_restart_between_rounds_keeps_every_round_and_goes_on(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad, exit_px=110.0)
+    live_round(eng, ad, legs=leg(iid=5, rr=2.0, move=True), fill=100.5)
+    before = eng.lab_rounds(LAB)
+    eng2 = restart(eng, tmp_path)
+    assert list(eng2.states) == [f"{LAB}@a1#1", f"{LAB}@a1"]          # I-3 survives the day file
+    assert eng2.lab_rounds(LAB) == before
+    assert [(r["round"], r["status"], r["clean"], r["iid"]) for r in before] == \
+        [(1, "done", True, {"Buy": 1}), (2, "live", False, {"Buy": 5})]
+    st = rnd(eng2)
+    assert (st.sl_px, st.tp_px) == (95.5, 110.5) and eng2.day_status(LAB) == "live" and eng2.lab_open(LAB) == ["a1"]
+    fill_exit(eng2, ad, st, 110.5, "tp")
+    tick(eng2)
+    assert (st.status, st.exit_reason, st.pnl) == ("done", "tp", 200.0)
+    assert go(eng2, leg(iid=6))["accounts"]["a1"] == {"ok": True, "round": 3, "reason": None}
+    assert list(eng2.states) == [f"{LAB}@a1#1", f"{LAB}@a1#2", f"{LAB}@a1"]
+
+
+def test_a_round_caught_placing_by_a_restart_is_never_clean(tmp_path):
+    """Ruling Q-A, second half: the order was in flight; it may be working under an id nobody recorded."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+
+    async def never(req):
+        await asyncio.sleep(3600)
+
+    ad.place_bracket = never
+
+    async def cut_off():
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3), 0.02)
+
+    run(cut_off())
+    assert json.loads((tmp_path / f"day-{eng._today()}.json").read_text())[f"{LAB}@a1"]["status"] == "placing"
+    del ad.place_bracket
+    eng2 = restart(eng, tmp_path)
+    st = rnd(eng2)
+    assert (st.status, st.note) == ("error", PLACING_UNKNOWN)
+    for _ in range(3):
+        tick(eng2)
+    out = go(eng2, leg(iid=2))
+    assert out["accounts"]["a1"] == {"ok": False, "round": None,
+                                     "reason": "The Desk cannot check the last trade's orders."}
+    assert ad.brackets == [] and eng2.lab_open(LAB) == ["a1"]
+    (r,) = eng2.lab_rounds(LAB)
+    assert (r["status"], r["clean"], r["why"]) == ("error", False, "The Desk cannot check the last trade's orders.")
+    (chk,) = events(tmp_path, "lab_check")
+    assert (chk["account"], chk["round"], chk["reason"]) == ("a1", 1, PLACING_UNKNOWN)
+
+
+@pytest.mark.parametrize("damage", ["missing", "garbage", "not_a_dict", "rows_not_dicts"])
+def test_rounds_whose_extras_are_lost_are_not_clean(tmp_path, damage):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad, exit_px=110.0)
+    assert rows(eng)[0]["clean"] is True
+    p = tmp_path / f"labday-{eng._today()}.json"
+    if damage == "missing":
+        p.unlink()
+    else:
+        p.write_text({"garbage": "{not json", "not_a_dict": "[1, 2]", "rows_not_dicts": json.dumps(
+            {f"{LAB}@a1": 7})}[damage])
+    eng2 = restart(eng, tmp_path)                                     # the desk starts all the same
+    (r,) = eng2.lab_rounds(LAB)
+    assert (r["status"], r["round"], r["clean"], r["pnl"]) == ("done", 1, False, 200.0)
+    assert eng2.lab_open(LAB) == ["a1"]
+    for _ in range(3):
+        tick(eng2)
+    assert go(eng2, leg(iid=2))["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+    assert len(ad.brackets) == 1
+
+
+def test_a_live_round_whose_extras_are_lost_still_exits_and_still_flattens(tmp_path):
+    eng, ads, clock = mk(tmp_path, accounts=("a1", "a2"))
+    go(eng, leg())
+    for a in ("a1", "a2"):
+        fill_entry(eng, ads[a], rnd(eng, a), 100.0)
+    (tmp_path / f"labday-{eng._today()}.json").write_text("{")
+    eng2 = restart(eng, tmp_path)
+    fill_exit(eng2, ads["a1"], rnd(eng2, "a1"), 95.0, "sl")           # the broker stop: booked and graded
+    assert (rnd(eng2, "a1").status, rnd(eng2, "a1").exit_reason, rnd(eng2, "a1").pnl) == ("done", "sl", -100.0)
+    clock.set_et(15, 55)
+    tick(eng2)                                                        # the flat time still closes the other one
+    assert [(o.side, o.qty, o.text) for o in ads["a2"].orders] == [("Sell", 1, "homebase:lab-flat")]
+    assert all(not r["clean"] for r in eng2.lab_rounds(LAB))
+
+
+def test_a_close_that_left_before_a_restart_is_not_sent_again_after_it(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    assert run(eng.lab_flatten(LAB, reason="time"))["a1"]["sold"] == 1
+    eng2 = restart(eng, tmp_path)
+    later(clock, 1)
+    assert run(eng2.lab_flatten(LAB))["a1"] == {"ok": True, "sold": 0,
+                                                "actions": ["the close order is out: waiting for its fill"]}
+    clock.set_et(15, 55)
+    tick(eng2)
+    assert len(ad.orders) == 1 and rnd(eng2).status == "live"         # "check it" now; still one order
+    fill_exit(eng2, ad, rnd(eng2), 101.0, by="market")
+    assert (rnd(eng2).status, rnd(eng2).exit_reason) == ("done", "time")
+
+
+def test_a_round_that_cannot_be_written_is_refused_and_nothing_is_sent(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+
+    def full(strict=False):
+        if strict:
+            raise OSError("disk full")
+
+    eng._lab_save = full
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": 1,
+                                     "reason": "The Desk could not write this trade down. Nothing was sent."}
+    assert ads["a1"].brackets == [] and rnd(eng).status == "error"
+    del eng._lab_save
+    assert go(eng, leg())["accounts"]["a1"] == {"ok": True, "round": 2, "reason": None}
+
+
+def test_the_first_lab_action_of_a_new_day_drops_yesterdays_rounds(tmp_path):
+    import datetime as dt
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad)
+    trade(eng, ad)
+    old = eng._state("nq930", "a1")                                   # another strategy's state of that day
+    assert len(eng.states) == 3 and len(eng._lab_mem()) == 2
+    clock.dt += dt.timedelta(days=1)
+    assert eng.lab_rounds(LAB) == [] and eng.lab_open(LAB) == [] and eng.day_status(LAB) == "idle"
+    assert go(eng, leg(iid=9))["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+    assert list(eng.states) == ["nq930@a1", f"{LAB}@a1"] and eng.states["nq930@a1"] is old
+    assert list(eng._lab_mem()) == [f"{LAB}@a1"] and eng._lab_mem()[f"{LAB}@a1"]["round"] == 1
+    assert list(json.loads((tmp_path / f"labday-{eng._today()}.json").read_text())) == [f"{LAB}@a1"]
+
+
+def test_broken_extras_never_raise_into_a_fill(tmp_path):
+    """_lab_move and _lab_grade run inside on_fill: whatever the extras hold, the fill is booked."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(move=True))
+    st = rnd(eng)
+    eng._lab_mem()[f"{LAB}@a1"]["legs"] = {"Buy": {"ref_px": "x", "move": True, "sl_px": 95.0, "tp_px": 110.0}}
+    fill_entry(eng, ad, st, 101.0)
+    assert st.status == "live" and "error" in events(tmp_path, "brackets_moved")[0]
+    assert events(tmp_path, "brackets_moved")[0]["sl"] == 95.0
+    eng._lab_mem()[f"{LAB}@a1"] = None
+    eng._lab_x = lambda s: (_ for _ in ()).throw(RuntimeError("extras gone"))
+    fill_exit(eng, ad, st, 110.0, "tp")
+    assert (st.status, st.exit_reason, st.pnl) == ("done", "exit", 180.0)
