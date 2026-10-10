@@ -213,6 +213,7 @@ html.hb-apple .qty-edit { cursor: default; border-bottom: 1px dashed var(--a-lab
 html.hb-apple .qty-input { width: 46px; height: 22px; padding: 0 5px; border: 0; border-radius: 5px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08);
   font-family: var(--a-font); font-size: 13px; color: var(--a-label); font-variant-numeric: tabular-nums; }
 html.hb-apple .mcap { margin-top: 8px; padding: 0 10px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
+html.hb-apple .mcap.warn { color: var(--a-red-text); }
 
 /* ---- buttons, the page's own classes on the system sizes -------------------------------------------------------------- */
 html.hb-apple .btn { height: 28px; padding: 0 14.5px; border: 0; border-radius: 14px; gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none;

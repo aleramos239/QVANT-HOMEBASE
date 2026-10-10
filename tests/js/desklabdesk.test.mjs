@@ -31,19 +31,20 @@ const nq930 = () => ({ cfg: { symbol: 'NQ', qty: 3, label: 'nq930', enabled: tru
 const ROW = (over = {}) => ({ name: 'nq_orb', label: 'NQ ORB', root: 'NQ', session_window: ['09:25', '16:00'], bar_minutes: 1, qty: 1, enabled: true,
   sha256: 'abcdef0123456789', promoted_utc: '2026-10-09T18:03:00+00:00', today: null, days: [],
   run: { id: 'r1', net: 5000, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100 }, notes: [], ...over });
+const BOOKED0 = { lab_nq_orb: [{ account: 'a1', qty: 1 }] };
 const ACCOUNTS = { a1: { label: 'Lucid Eval #1', env: 'demo', connected: true }, a2: { label: 'APEX2941870000048', env: 'live', connected: true } };
 
 /* The whole Desk-views part of the page (sidebar, rows, strategy page, the Lab part) with a fake document around it. */
 function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book = {}, rows = [ROW()], view = { k: 'today' }, accounts = ACCOUNTS,
-  answer = { ok: true }, confirm = true, readOk = true, demo = false } = {}) {
+  answer = { ok: true }, confirm = true, readOk = true, demo = false, deskLab = D, journal = [] } = {}) {
   const els = {}, posts = [], toasts = [], confirms = [], alerts = [], shown = [], hidden = [], refreshes = [];
   const el = (id) => (els[id] = els[id] || { id, innerHTML: '', textContent: '', value: '', hidden: false, disabled: false, attrs: {},
     setAttribute(k, v) { this.attrs[k] = String(v); }, classList: { contains: () => false } });
   const ctx = vm.createContext({
     console, DOUBLE_CLICK_MS: 400, DEMO: demo, CHART: 'http://x', DESK_STALE: false, window: { AlgoVisibility: AV },
     location: { hash: '', protocol: 'http:', hostname: 'x' }, history: { replaceState() {} }, document: { hidden: false, getElementById: () => null, querySelectorAll: () => [], addEventListener() {}, activeElement: null },
-    $: (sel) => el(sel.replace(/^#/, '')), DeskLab: D,
-    ST: { armed: true, et_now: '2026-10-10T10:00:00-0400', timer: { strategies: {} }, accounts: plain(accounts), book: plain(book), journal: [], strategies: plain(strategies) },
+    $: (sel) => el(sel.replace(/^#/, '')), ...(deskLab ? { DeskLab: deskLab } : {}),
+    ST: { armed: true, et_now: '2026-10-10T10:00:00-0400', timer: { strategies: {} }, accounts: plain(accounts), book: plain(book), journal: plain(journal), strategies: plain(strategies) },
     toast: (t) => toasts.push(t), alertBar: (t) => alerts.push(t),
     confirmDlg: async (title, body, action, destructive) => { confirms.push(plain({ title, body, action, destructive })); return confirm; },
     post: async (url, body) => {
@@ -60,13 +61,14 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     SLICE('const killText = ', 'function killFailures(') + SLICE('const actErr = ', 'const actFail = ') + SLICE('const STEP_OK = ', 'const REFUSED_WHY') +
     SLICE('const SWITCH_AT = {};', 'function cfDone(') +
     'function needsConfirm(kind, turningOn, opts) { return window.AlgoVisibility.switchNeedsConfirm(kind, turningOn, opts); }\n' +
+    SLICE('const labAct = ', 'let FEED_ROWS') +
     SLICE('/* ===== Desk views', 'function render() {') +
     SLICE('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- connect wizard ---- */') +
     SLICE('/* ---- strategy on/off + flatten ----', '/* ---- accounts popup ---- */') +
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' flattenStrat, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
@@ -305,7 +307,7 @@ test('ON again the same day after an OFF: the toast reads "It starts with the ne
 });
 
 test('switching OFF says what happens to orders and an open position, and never asks', async () => {
-  const t = load();
+  const t = load({ book: BOOKED0 });
   await t.api.toggleStrat('lab_nq_orb', false);
   assert.deepEqual(t.confirms, []);
   assert.deepEqual(t.toasts, ['NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session.']);
@@ -511,7 +513,7 @@ test('Enter in a field saves, a held key does not; Escape closes through the pag
 test('Remove asks, posts the desk id to /api/lab-remove, and goes to Today; a refusal is shown as the Desk\'s sentence', async () => {
   const t = load({ view: { k: 'strat', name: 'lab_nq_orb' } });
   await t.api.removeLabStrat('lab_nq_orb');
-  assert.deepEqual(t.confirms, [{ title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept.', action: 'Remove', destructive: false }]);
+  assert.deepEqual(t.confirms, [{ title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.', action: 'Remove', destructive: false }]);
   assert.deepEqual(t.posts, [{ url: '/api/lab-remove', body: { strategy: 'lab_nq_orb' } }]);
   assert.match(t.toasts[0], /^NQ ORB is off the Desk\. Its history is kept/);
   assert.equal(t.api.VIEW.k, 'today');
@@ -565,4 +567,287 @@ test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
 test('Step A is as it was: the chart-service Lab block still never calls the Desk\'s own routes', () => {
   const block = HTML.slice(HTML.indexOf('/* ---- LAB STRATEGIES on the Desk'), HTML.indexOf('function setView('));
   assert.doesNotMatch(block.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|book|status|lab-)/);
+});
+
+/* ======================================================================================================================
+   Task B6, fix round 1 (the page review): each test below failed on 165c236f.
+   ====================================================================================================================== */
+const BOOKED = { lab_nq_orb: [{ account: 'a1', qty: 1 }] };
+const txt = (h) => h.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+test('I2 the broker\'s words come from the refused row, under its reason', () => {
+  const refused = [{ t: '09:31:02', text: 'The Desk cannot check this order.', account: 'a1', detail: 'Insufficient margin' },
+    { t: '09:32:00', text: 'It is off.', account: null }];
+  const t = load({ book: BOOKED, strategies: { lab_nq_orb: deskStrat({ refused, mode_today: 'desk' }) } });
+  const html = t.view();
+  assert.match(html, /<span class="t">09:31:02<\/span><span class="h warn">The Desk cannot check this order\. \(Lucid Eval #1\)<\/span><\/div><div class="feed-row"><span class="h warn">The broker refused it: Insufficient margin<\/span><\/div>/);
+  assert.equal((html.match(/The broker refused it/g) || []).length, 1, 'only the row that carries a detail');
+  const evil = load({ book: BOOKED, strategies: { lab_nq_orb: deskStrat({ refused: [{ t: '1', text: 'x', account: 'a1', detail: '<img src=x onerror=1>' }] }) } }).view();
+  assert.doesNotMatch(evil, /<img/);
+});
+
+test('I1 a trade the Desk says to check shows its sentence with the warn mark, and the dot goes warn', () => {
+  const rounds = [{ account: 'a1', round: 1, status: 'live', side: 'Sell', qty: 1, entry_fill: 21020, exit_fill: null, exit_reason: null, pnl: null,
+    why: 'Check it: the close order was not confirmed. Its stop is still working.', carried: false, date: '2026-10-10' }];
+  const t = load({ book: BOOKED, strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ state: 'in_position', rounds, mode_today: 'desk' }) } });
+  assert.match(t.view(), /<span class="h warn">Lucid Eval #1 · Sell 1 · in at 21,020\.00 · In position · Check it: the close order was not confirmed\. Its stop is still working\.<\/span>/);
+  assert.match(t.side(), /<i class="sd warn"><\/i><span class="it"><b>NQ ORB/);
+});
+
+test('I3 "Check it" has the server\'s sentence under it', () => {
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ state: 'check', why: 'The Desk cannot read its limits.', limits: null }) } });
+  const html = t.view();
+  assert.match(html, /<b>Check it<\/b><\/div>\s*<div class="sd-note">The Desk cannot read its limits\.<\/div>/);
+  const none = load({ strategies: { lab_nq_orb: deskStrat({ state: 'waiting' }) } }).view();
+  assert.doesNotMatch(none, /sd-state"><b>[^<]*<\/b><\/div>\s*<div class="sd-note">The Desk/);
+});
+
+test('R1 a dead runner reads "Runner is not running" on the row, the page and the dot; an open trade stays as the server sends it', () => {
+  const dead = load({ strategies: { lab_nq_orb: deskStrat({ state: 'waiting', runner: { alive: false, age_s: 90 } }) } });
+  assert.match(dead.view(), /<b>Runner is not running<\/b>/);
+  assert.equal(dead.api.stratState('lab_nq_orb', dead.ctx.ST.strategies.lab_nq_orb), 'Runner is not running');
+  assert.equal(dead.api.stratDotCls(dead.ctx.ST.strategies.lab_nq_orb, ''), 'warn');
+  const trade = load({ strategies: { lab_nq_orb: deskStrat({ state: 'in_position', runner: { alive: false, age_s: 90 } }) } });
+  assert.match(trade.view(), /<b>In position<\/b>/);
+});
+
+test('I4 Flatten & turn off: a close order already out is a plain line, never the red alert', async () => {
+  const t = load({ answer: { ok: true, enabled: false, results: { a1: ['the close order is out: waiting for its fill'] } } });
+  await t.api.flattenStrat('lab_nq_orb');
+  assert.deepEqual(t.alerts, []);
+  assert.deepEqual(t.toasts, ['Its close order is already out.']);
+  const real = load({ answer: { ok: true, enabled: false, results: { a1: ['the close order is out: waiting for its fill'], a2: ['market Sell 1: refused'] } } });
+  await real.api.flattenStrat('lab_nq_orb');
+  assert.equal(real.alerts.length, 1, 'a real failure on another account is still the alert');
+  const noround = load({ answer: { ok: true, enabled: false, results: { a1: ['the round ended while the close was sent (tp)', 'check it — x'] } } });
+  await noround.api.flattenStrat('lab_nq_orb');
+  assert.doesNotMatch(noround.alerts.join(' '), /\bround\b/i);
+});
+
+test('I4 the Activity page reads a Lab flatten\'s plain steps as plain, for a Lab strategy only', () => {
+  const HELPERS = SLICE('const fmt = (v, d = 2)', '/* ---- theme ---- */') + SLICE('function acctShort(', 'function liveBookingNote(') + SLICE('const esc = (v) =>', 'async function chartPost(') +
+    SLICE('const killText = ', 'async function doKill(');
+  const ctx = vm.createContext({ console, DeskLab: D, ST: { accounts: { a1: { label: 'Lucid Eval #1', env: 'demo' } }, strategies: { lab_nq_orb: { cfg: { label: 'NQ ORB', kind: 'lab' } }, nq930: { cfg: { label: 'nq930', kind: 'straddle' } } } },
+    $: () => ({ addEventListener() {}, setAttribute() {}, set innerHTML(v) {}, get innerHTML() { return ''; } }), window: { getSelection: () => '' } });
+  vm.runInContext(HELPERS + SLICE('/* ---- readiness, as the page shows it (W4) ----', '/* ---- render ---- */') + '\nglobalThis.line = activityLine;', ctx);
+  const plainOne = { event: 'manual_flatten', strategy: 'lab_nq_orb', results: { a1: ['This trade had already ended.', 'cancel entry 7: ok'] } };
+  assert.deepEqual(plain(ctx.line(plainOne)), { text: 'NQ ORB flattened on 1 account', tone: '' });
+  assert.deepEqual(plain(ctx.line({ event: 'clock_flat', strategy: 'lab_nq_orb', account: 'a1', actions: ['nothing of its own is left to close', 'market Sell 1: ok'] })), { text: 'NQ ORB flattened on Lucid Eval #1 at the end-of-day time', tone: '' });
+  assert.equal(ctx.line({ event: 'manual_flatten', strategy: 'lab_nq_orb', results: { a1: ['the close order is out: waiting for its fill'] } }).tone, '');
+  // another strategy keeps its reading: the same step is a check there
+  assert.equal(ctx.line({ event: 'manual_flatten', strategy: 'nq930', results: { a1: ['This trade had already ended.'] } }).tone, 'neg');
+});
+
+test('I6 with desklab.js missing, a Lab strategy never blanks nq930\'s rows', () => {
+  const t = load({ deskLab: null, strategies: { nq930: nq930(), lab_nq_orb: deskStrat({ state: 'waiting' }) } });
+  assert.doesNotThrow(() => t.ctx.api.renderMain(['nq930', 'lab_nq_orb'], 0));
+  assert.match(t.els.stratList.innerHTML, /toggleStrat\('nq930', false\)/, 'nq930\'s Today row is there');
+  assert.doesNotThrow(() => t.side());
+  assert.match(t.side(), /setView\('strat','nq930'\)/);
+  assert.doesNotThrow(() => t.api.todayRow('lab_nq_orb', t.ctx.ST.strategies.lab_nq_orb));
+  assert.doesNotThrow(() => t.api.stratView('lab_nq_orb'));
+  assert.match(t.api.stratView('lab_nq_orb'), /could not be shown/);
+});
+
+test('I6 every DeskLab call in index.html and the skin is inside a guard that leaves a non-Lab row alone', () => {
+  const calls = [...HTML.matchAll(/DeskLab\.\w+/g)].map((m) => m.index);
+  assert.ok(calls.length > 40);
+  // the shared functions that a non-Lab strategy goes through: no DeskLab call outside labSafe or a kind-lab branch
+  const shared = ['function todayRow(', 'function renderSide(', 'function stratView(', 'const specOf', 'function stratState(', 'const stratDotCls', 'function dayHeadline(', 'function dayTimeline('];
+  for (const name of shared) {
+    const i = HTML.indexOf(name);
+    assert.ok(i >= 0, name);
+    const body = HTML.slice(i, HTML.indexOf('\n}\n', i) + 3 > i + 3 ? HTML.indexOf('\n}\n', i) + 3 : i + 2000);
+    for (const m of body.matchAll(/DeskLab\.\w+/g)) {
+      const before = body.slice(Math.max(0, m.index - 220), m.index);
+      assert.match(before, /labSafe\(|kind === "lab"/, `${name}: ${m[0]} must sit inside labSafe or a kind-lab branch`);
+    }
+  }
+});
+
+test('I7 the feed and the "Last event" time leave out the Lab\'s bookkeeping and every Lab event it has no words for', () => {
+  const journal = [
+    { ts: 3, et: '2026-10-10T10:00:03-0400', event: 'lab_event_done', strategy: 'lab_nq_orb' },
+    { ts: 2, et: '2026-10-10T10:00:02-0400', event: 'lab_event', strategy: 'lab_nq_orb' },
+    { ts: 2, et: '2026-10-10T10:00:02-0400', event: 'lab_store_owned' },
+    { ts: 2, et: '2026-10-10T10:00:01-0400', event: 'lab_added', strategy: 'lab_nq_orb' },
+    { ts: 1, et: '2026-10-10T09:59:00-0400', event: 'strategy_toggled', strategy: 'nq930', enabled: true },
+    { ts: 0, et: '2026-10-10T09:58:00-0400', event: 'lab_refused', strategy: 'lab_nq_orb', text: 'It is off.' }];
+  const t = load({ journal });
+  const shown = t.api.journalShown(t.ctx.ST.journal);
+  assert.deepEqual(shown.map((r) => r.event), ['strategy_toggled', 'lab_refused']);
+  assert.match(t.side(), /Last event 09:59/);
+  assert.match(t.api.todayFoot(0), /Last event 09:59/);
+  // a journal with no Lab line is returned as it is
+  const none = [{ event: 'armed_toggled' }, null, 'x'];
+  assert.deepEqual(plain(t.api.journalShown(none)), plain(none));
+  assert.equal((HTML.match(/r\.event\.indexOf\("lab_"\) === 0 && !ACTIVITY\[r\.event\]/g) || []).length, 2, 'the Activity list and the Last-event time use one rule');
+});
+
+test('c4 the Today headline and the day bar are what they were when a Lab strategy only runs in shadow', () => {
+  const mk = (strategies, book) => load({ strategies, book });
+  const off = { nq930: { ...nq930(), cfg: { ...nq930().cfg, enabled: false } } };
+  const withLab = { ...off, lab_nq_orb: deskStrat({ state: 'shadow' }, { flat_et: '11:30', cancel_et: '11:30' }) };
+  const a = mk(off, {}), b = mk(withLab, {});
+  const friday = (...xs) => xs.forEach((x) => { x.ctx.ST.et_now = '2026-10-09T12:00:00-0400'; });
+  friday(a, b);
+  assert.deepEqual(plain(b.api.dayHeadline([])), plain(a.api.dayHeadline([])), 'a Lab strategy with no account is not "armed"');
+  assert.equal(b.api.dayTimeline(), a.api.dayTimeline(), 'and its times are never the bar\'s');
+  // nq930 and gc_nfp ON: the count is theirs
+  const two = { nq930: nq930(), gc_nfp: { ...nq930(), cfg: { ...nq930().cfg, label: 'gc' } } };
+  const c = mk(two, {}), d = mk({ ...two, lab_nq_orb: deskStrat({ state: 'shadow' }) }, {});
+  friday(c, d);
+  assert.deepEqual(plain(d.api.dayHeadline([])), plain(c.api.dayHeadline([])));
+  // with an account booked it is armed like any other
+  const e = mk({ ...two, lab_nq_orb: deskStrat({ state: 'waiting' }) }, BOOKED);
+  friday(e);
+  assert.match(e.api.dayHeadline([])[1], /^3 armed/);
+  assert.match(c.api.dayHeadline([])[1], /^2 armed/);
+});
+
+test('m1 the switch\'s tooltip says where the orders go, on the page and on the Today row', () => {
+  const none = load();
+  assert.match(none.view(), /aria-checked="true"\s*title="ON: it runs in shadow"/);
+  assert.match(none.api.todayRow('lab_nq_orb', none.ctx.ST.strategies.lab_nq_orb), /title="ON: it runs in shadow"/);
+  const booked = load({ book: BOOKED });
+  assert.match(booked.view(), /title="ON: its orders go to its accounts"/);
+  assert.match(booked.api.todayRow('lab_nq_orb', booked.ctx.ST.strategies.lab_nq_orb), /title="ON: its orders go to its accounts"/);
+  const off = load({ strategies: { lab_nq_orb: deskStrat({ state: 'off' }, { enabled: false }) } });
+  assert.match(off.api.todayRow('lab_nq_orb', off.ctx.ST.strategies.lab_nq_orb), /title="OFF: it does nothing"/);
+  // another strategy's tooltip is as it was
+  assert.match(none.api.todayRow('nq930', none.ctx.ST.strategies.nq930), /title="ON — this strategy runs and executes"/);
+});
+
+test('m2 switching OFF with no account booked says Step A\'s short sentence', async () => {
+  const t = load();
+  await t.api.toggleStrat('lab_nq_orb', false);
+  assert.deepEqual(t.toasts, ['NQ ORB is OFF: it does nothing.']);
+  const booked = load({ book: BOOKED });
+  await booked.api.toggleStrat('lab_nq_orb', false);
+  assert.match(booked.toasts[0], /It trades again from the next session\.$/);
+});
+
+test('m4 under read_only the size edit and the unassign x of a booked account are disabled', () => {
+  const t = load({ book: BOOKED, strategies: { lab_nq_orb: deskStrat({ read_only: true }) } });
+  const html = t.view();
+  assert.doesNotMatch(html, /editQty/);
+  assert.match(html, /<button class="x" disabled style=/);
+  assert.doesNotMatch(html, /onclick="removeAsg/);
+  assert.match(html, /<span class="strats">×1<\/span>/);
+  const ok = load({ book: BOOKED }).view();
+  assert.match(ok, /onclick="editQty\(event,'lab_nq_orb'/);
+  assert.match(ok, /onclick="removeAsg\('lab_nq_orb'/);
+});
+
+test('m5 a save that is out stays out across a close and a re-open: no second POST, and its answer does not close the new dialog', async () => {
+  const t = load();
+  let release;
+  t.ctx.post = (url, body) => { t.posts.push(plain({ url, body })); return new Promise((res) => { release = () => res({ ok: true }); }); };
+  t.api.openLabLimits('lab_nq_orb');
+  const first = t.api.saveLabLimits();
+  t.api.closeLabLimits();
+  t.api.openLabLimits('lab_nq_orb');
+  assert.equal(t.els.llSave.disabled, true, 'the save is still out');
+  await t.api.saveLabLimits();
+  assert.equal(t.posts.length, 1, 'no second POST');
+  t.hidden.length = 0;
+  release();
+  await first;
+  assert.deepEqual(t.hidden, [], 'the first answer does not close the re-opened dialog');
+  assert.equal(t.els.llSave.disabled, false);
+  assert.equal(t.refreshes.length >= 1, true, 'but the new limits are read');
+});
+
+test('m6 Save when the strategy has left the Desk says so and closes', async () => {
+  const t = load();
+  t.api.openLabLimits('lab_nq_orb');
+  delete t.ctx.ST.strategies.lab_nq_orb;
+  await t.api.saveLabLimits();
+  assert.deepEqual(t.posts, []);
+  assert.deepEqual(t.toasts, ['That strategy is not on the Desk.']);
+  assert.deepEqual(t.hidden, ['labLimitsOverlay']);
+});
+
+test('m7 with the chart service down the session start is unknown: a valid early time is posted and the Desk judges', async () => {
+  const t = load({ rows: [] });
+  t.api.openLabLimits('lab_nq_orb');
+  t.el('llLast').value = '08:45';
+  await t.api.saveLabLimits();
+  assert.equal(t.posts.length, 1);
+  assert.equal(t.posts[0].body.limits.last_entry_et, '08:45');
+});
+
+test('I5 through the page: a comma in the risk field sends nothing and says the field\'s sentence', async () => {
+  const t = load();
+  t.api.openLabLimits('lab_nq_orb');
+  t.el('llRisk').value = '300,5';
+  await t.api.saveLabLimits();
+  assert.deepEqual(t.posts, []);
+  assert.equal(t.els.llRiskErr.textContent, 'At risk per trade: a dollar amount above 0.');
+});
+
+test('m10 a flatten with a failed step and a switch that did not turn off says what the answer says', async () => {
+  const t = load({ answer: { ok: true, enabled: true, results: { a1: ['market Sell 1: refused'] }, detail: 'Flattened. Could not switch it off: try the switch again.' } });
+  await t.api.flattenStrat('lab_nq_orb');
+  assert.equal(t.alerts.length, 1);
+  assert.doesNotMatch(t.alerts[0], /It is switched OFF/);
+  assert.match(t.alerts[0], /It could not be switched off: try the switch again\./);
+  const off = load({ answer: { ok: true, enabled: false, results: { a1: ['market Sell 1: refused'] } } });
+  await off.api.flattenStrat('lab_nq_orb');
+  assert.match(off.alerts[0], /It is switched OFF; flatten what is left at the broker now\./);
+});
+
+test('m13 the Remove confirm says its accounts come off', async () => {
+  const t = load();
+  await t.api.removeLabStrat('lab_nq_orb');
+  assert.equal(t.confirms[0].body, 'Its history is kept. Its accounts come off.');
+});
+
+test('m14 in shadow the Today row, the sidebar and the page show what the day would have made, as Step A did', () => {
+  const row = ROW({ today: { date: '2026-10-10', state: 'running', why: null, orders: [], trades: [], net: 120 } });
+  const t = load({ rows: [row] });
+  const s = t.ctx.ST.strategies.lab_nq_orb;
+  const today = t.api.todayRow('lab_nq_orb', s);
+  assert.match(today, /<div class="rp mono dim" title="What it would have made today, after costs, 1 contract">\+\$120<\/div>/);
+  assert.match(t.side(), /<span class="ir mono dim">\+\$120<\/span>/);
+  assert.match(t.view(), /<b>Waiting for the session<\/b> · today would be \+\$120/);
+  const booked = load({ rows: [row], book: BOOKED });
+  assert.doesNotMatch(booked.api.todayRow('lab_nq_orb', booked.ctx.ST.strategies.lab_nq_orb), /would have made/);
+  assert.doesNotMatch(booked.view(), /today would be/);
+  const none = load({ rows: [ROW()] });
+  assert.doesNotMatch(none.side(), /\+\$120/);
+});
+
+test('m16 the warn caption has its colour in the Mac skin, and the skin version is bumped', () => {
+  const css = readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8');
+  assert.match(css, /html\.hb-apple \.mcap\.warn \{ color: var\(--a-red-text\); \}/);
+  const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
+  assert.equal(manifest.version >= 4, true);
+});
+
+test('m17 a second click on Clear while the first is out, or just answered, sends nothing more', async () => {
+  const t = load({ answer: { ok: true, cleared: [1] } });
+  const a = t.api.clearLabBlock('lab_nq_orb', 'a1');
+  const b = t.api.clearLabBlock('lab_nq_orb', 'a1');
+  await Promise.all([a, b]);
+  await t.api.clearLabBlock('lab_nq_orb', 'a1');
+  assert.equal(t.posts.length, 1);
+  await t.api.clearLabBlock('lab_nq_orb', 'a2');
+  assert.equal(t.posts.length, 2, 'another account is its own row');
+  const no = load({ answer: { detail: 'This account has no block to clear.' } });
+  await no.api.clearLabBlock('lab_nq_orb', 'a1');
+  await no.api.clearLabBlock('lab_nq_orb', 'a1');
+  assert.equal(no.posts.length, 2, 'a refusal changes nothing: it can be tried again');
+  const rounds = [{ account: 'a1', round: 1, status: 'error', side: 'Buy', qty: 1, why: 'x', carried: true, date: '2026-10-09' }];
+  const v = load({ strategies: { lab_nq_orb: deskStrat({ rounds }) }, book: BOOKED, answer: { ok: true } });
+  assert.doesNotMatch(v.view(), /clearLabBlock[^>]*disabled/);
+  await v.api.clearLabBlock('lab_nq_orb', 'a1');
+  assert.match(v.view(), /clearLabBlock\(&quot;lab_nq_orb&quot;, &quot;a1&quot;\)" disabled/);
+});
+
+test('the Remove busy guard and a carried row per account: Clear carries the row\'s own account', () => {
+  const rounds = [{ account: 'a1', round: 1, status: 'error', why: 'x', carried: true, date: '2026-10-09' }, { account: 'a2', round: 1, status: 'error', why: 'y', carried: true, date: '2026-10-09' }];
+  const html = load({ strategies: { lab_nq_orb: deskStrat({ rounds }) }, book: { lab_nq_orb: [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }] } }).view();
+  assert.match(html, /clearLabBlock\(&quot;lab_nq_orb&quot;, &quot;a1&quot;\)/);
+  assert.match(html, /clearLabBlock\(&quot;lab_nq_orb&quot;, &quot;a2&quot;\)/);
 });

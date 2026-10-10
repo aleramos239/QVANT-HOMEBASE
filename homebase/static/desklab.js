@@ -272,7 +272,7 @@
   function isObj(v) {
     return !!v && typeof v === "object";
   }
-  // The engine's own words for a trade ("round", "carried") are not the page's: a trade is a trade, an old one is old.
+  // The engine's own words for a trade are not the page's: a trade is a trade, an old one is old.
   function plainWords(t) {
     var keep = function (to) { return function (m) { return m.charAt(0) !== m.charAt(0).toLowerCase() ? to.charAt(0).toUpperCase() + to.slice(1) : to; }; };
     return text(t).replace(/\brounds\b/gi, keep("trades")).replace(/\bround\b/gi, keep("trade"))

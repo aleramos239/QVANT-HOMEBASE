@@ -1620,6 +1620,11 @@ const ACTIVITY = {
     r.placed && !r.placed.ok ? "warn" : ""],
   selftest_order_rest: (r) => [`Self-test order${actOn(r)} (REST) — HTTP ${r.http_status}`],
 };
+/* A Lab strategy's flatten answers with plain steps that are not failures ("This trade had already ended."): read them as plain, for a Lab strategy only. */
+for (const k of ["manual_flatten", "clock_flat", "clock_flat_failed"]) {
+  const f = ACTIVITY[k];
+  ACTIVITY[k] = (r, prev) => f(r && (((ST && ST.strategies) || {})[r.strategy] || {cfg: {}}).cfg.kind === "lab" ? DeskLab.plainRecord(r) : r, prev);
+}
 function activityLine(r, prev) {
   const f = ACTIVITY[r.event];
   if (f) {
@@ -1640,7 +1645,8 @@ function activityRaw(r) {
 let FEED_ROWS = [], FEED_SIG = null, FEED_RAW = false;
 const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|account
 function renderActivity(journal) {
-  FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object");
+  FEED_ROWS = (Array.isArray(journal) ? journal : []).filter(r => r && typeof r === "object" &&
+    !(typeof r.event === "string" && r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]));      // a Lab event the page has no words for shows nothing
   const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
@@ -1829,6 +1835,9 @@ const OPEN_MIN = 570;                                    // 09:30 ET, the cash o
 const lenTxt = (m) => m >= 60 ? `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " min" : ""}` : `${m} min`;
 const usdS = (v) => v == null ? "—" : (v < 0 ? "−$" : v > 0 ? "+$" : "$") + fmt(Math.abs(v), 0);
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
+/* The journal as the Today page and the sidebar read it: the Lab's bookkeeping lines (lab_event, lab_event_done) and every Lab event the page has
+   no words for are left out, so they never become the "Last event" time. Every other line is returned as it is. (The Activity list filters the same way.) */
+const journalShown = (j) => (Array.isArray(j) ? j : []).filter(r => !(r && typeof r.event === "string" && r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]));
 const specOf = (c, name) => c.kind === "lab" ? labSafe(() => DeskLab.deskSpec(c, labRowOf(ST.strategies[name])), String(c.symbol || ""))
   : c.kind === "bars"
   ? `${c.symbol} · ${c.bar_minutes}m bars · ${c.rule}`
@@ -1860,13 +1869,16 @@ const stratDotCls = (s, state) => s.cfg.kind === "lab" ? labSafe(() => DeskLab.d
 /* the one sentence of the day -- two tones: what happens next, then what is armed */
 function dayHeadline(names) {
   const strategies = Object.values(ST.strategies || {});
-  const live = strategies.filter(v => v.cfg.enabled && !v.cfg.shadow);
+  // a Lab strategy with no account booked only runs in shadow: it is not "armed", and its times are never the day's
+  const live = Object.entries(ST.strategies || {}).filter(([n, v]) => v.cfg.enabled && !v.cfg.shadow &&
+    !(v.cfg.kind === "lab" && !((ST.book && ST.book[n]) || []).length)).map(([, v]) => v);
+  const nonLab = strategies.filter(v => v.cfg.kind !== "lab");
   const n = live.length, now = etMin(ST.et_now);
   const dow = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z").getUTCDay();
   const stale = DESK_STALE ? " Last known state." : "";
   if (!ST.armed) return ["Disarmed.", "Signals are journaled only. Nothing is sent to a broker." + stale];
   if (dow === 0 || dow === 6) return ["Markets are closed.", plural(n, "strategy", "strategies") + " armed." + stale];
-  const flat = hmin((live[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
+  const flat = hmin((live[0] || nonLab[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
   if (now == null) return ["Armed.", plural(n, "strategy", "strategies") + " armed." + stale];
   if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, plural(n, "strategy", "strategies") + " armed." + stale];
   if (now < flat) {
@@ -1884,7 +1896,8 @@ function dayHeadline(names) {
 function dayTimeline() {
   const pct = (m) => Math.max(0, Math.min(100, (m - 540) / 420 * 100));
   const strategies = Object.values(ST.strategies || {});
-  const ref = (strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
+  const own = strategies.filter(v => v.cfg.kind !== "lab");      // a Lab strategy sets its own times: never the day bar's
+  const ref = (own.find(v => v.cfg.enabled && !v.cfg.shadow) || own[0] || strategies.find(v => v.cfg.enabled && !v.cfg.shadow) || strategies[0] || {cfg: {}}).cfg;
   const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(ref.flat_et) ?? 955;
   const now = etMin(ST.et_now) ?? 540;
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
@@ -1899,22 +1912,23 @@ function dayTimeline() {
 
 function todayRow(name, s) {
   const c = s.cfg, state = stratState(name, s), p = todayPnl(s);
+  const sh = c.kind === "lab" ? labSafe(() => labShadowNet(name, s), null) : null;      // a Lab strategy with no account: what the day would have made
   const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
-    title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
+    title="${c.kind === "lab" ? esc(labSafe(() => DeskLab.deskSwitchTitle(s, (ST.book && ST.book[name]) || []), "")) : c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="event.stopPropagation();toggleStrat('${name}', ${!c.enabled})"></button>`;
   const go = `setView('strat','${name}')`;
   return `<div class="srow" role="button" tabindex="0" onclick="${go}"
       onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
-    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : c.kind === "lab" ? labShadowTag(name, s) : ""}</div>
+    <div><div class="n">${esc(stratLabel(name))}${c.shadow ? '<span class="tag" title="Signals are journaled only — nothing is placed, even when armed">Shadow</span>' : c.kind === "lab" ? labSafe(() => labShadowTag(name, s), "") : ""}</div>
       <div class="sp mono">${esc(specOf(c, name))}</div></div>
     <div class="rs">${esc(state)}</div>
-    <div class="rp mono${p < 0 ? " neg" : p > 0 ? " pos" : ""}">${usdS(p)}</div>${sw}</div>`;
+    <div class="rp mono${sh ? " dim" : p < 0 ? " neg" : p > 0 ? " pos" : ""}"${sh ? ` title="${esc(sh.title)}"` : ""}>${usdS(sh ? sh.net : p)}</div>${sw}</div>`;
 }
 
 let ISSUE_LVL = "warn";
 function todayFoot(issues) {
   const accts = Object.values(ST.accounts || {}), up = accts.filter(a => a.connected).length;
-  const last = (ST.journal || [])[0], lt = last && last.et ? String(last.et).slice(11, 16) : null;
+  const last = journalShown(ST.journal)[0], lt = last && last.et ? String(last.et).slice(11, 16) : null;
   const out = [];
   if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot${ISSUE_LVL === "bad" ? " bad" : ""}"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
   out.push(`<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`);
@@ -1936,10 +1950,10 @@ function renderSide(names, hiddenCount, issues) {
       <i class="sd shadow"></i><span class="it"><b>${esc(w.name)}</b></span>
       <span class="ir mono dim">${w.net == null ? "" : usdS(w.net)}</span></button>`).join("");
   const strat = names.map(n => {
-    const s = ST.strategies[n], state = stratState(n, s), p = todayPnl(s);
+    const s = ST.strategies[n], state = stratState(n, s), sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(n, s), null) : null, p = sh ? sh.net : todayPnl(s);
     return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
       <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
-      <span class="ir mono${p == null ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
+      <span class="ir mono${p == null || sh ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
@@ -1950,7 +1964,7 @@ function renderSide(names, hiddenCount, issues) {
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
   const more = accts.length > 12
     ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
-  const last = (ST.journal || [])[0];
+  const last = journalShown(ST.journal)[0];
   $("#side").innerHTML = `
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
@@ -2132,13 +2146,20 @@ function labShadowTag(name, s) {       // the "Shadow" tag of a Lab strategy wit
   const book = (ST && ST.book && ST.book[name]) || [];
   return book.length ? "" : `<span class="tag" title="${esc(DeskLab.TAG_TITLE)}">Shadow</span>`;
 }
+/* What the day would have made, for a Lab strategy with no account (the chart service's summary of its shadow day): as Step A showed it. */
+function labShadowNet(name, s) {
+  if (((ST && ST.book && ST.book[name]) || []).length) return null;
+  const row = labRowOf(s), net = row ? DeskLab.todayNet(row) : null;
+  return net == null ? null : {net, title: DeskLab.netTitle(row)};
+}
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
-    title="${esc(DeskLab.switchTitle(on))}"
+    title="${esc(DeskLab.deskSwitchTitle(s, book))}"
     onclick="toggleStrat(${jsArg(name)}, ${!on})"></button>`;
+  const sh = labShadowNet(name, s), stateNote = DeskLab.stateNote(s);
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
   const limits = DeskLab.limitsRows(lab.limits).map(x => `<div class="feed-row"><span class="h">${esc(x.k)}</span><span class="t net">${esc(x.v)}</span></div>`).join("");
   const split = DeskLab.splitRounds(lab.rounds), who = (a) => acctShort(a);
@@ -2146,7 +2167,8 @@ function labDeskView(name, s) {
     `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}</div>` +
     (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : ""));
   const refused = (Array.isArray(lab.refused) ? lab.refused : []).map(x => DeskLab.refusedLine(x, x && x.account ? who(x.account) : "")).map(x =>
-    `<div class="feed-row"><span class="t">${esc(x.t)}</span><span class="h warn">${esc(x.text)}</span></div>`);
+    `<div class="feed-row"><span class="t">${esc(x.t)}</span><span class="h warn">${esc(x.text)}</span></div>` +
+    (x.detail ? `<div class="feed-row"><span class="h warn">${esc(x.detail)}</span></div>` : ""));
   const t = (row && row.today) || {};            // what it writes down in shadow (the chart service's summary of the day)
   const shadowLines = shadow ? [...(Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
       `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(o.text)}</span></div>`),
@@ -2156,11 +2178,11 @@ function labDeskView(name, s) {
   const today = todayAll.length ? `<div class="agroup feed static">${todayAll.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.EMPTY_DAY)}</div>`;
   const old = split.old.map(r => ({r, x: DeskLab.roundLine(r, who(r.account))})).map(({r, x}) =>
     `<div class="feed-row"><span class="h warn">${esc(x.text)}</span>
-      <button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})" title="${esc(x.text)}">${esc(DeskLab.CLEAR)}</button></div>`);
+      <button class="btn btn-outline btn-sm" onclick="clearLabBlock(${jsArg(name)}, ${jsArg(r.account)})"${labClearing(name, r.account) ? " disabled" : ""} title="${esc(x.text)}">${esc(DeskLab.CLEAR)}</button></div>`);
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const days = (row && Array.isArray(row.days) ? row.days : []).map(DeskLab.matchLine).map(m =>
     `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span>${m.rebuilt ? '<span class="t dim">rebuilt</span>' : ""}<span class="t net">${esc(usdS(m.net))}</span></div>`);
-  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name})).join("");
+  const rows = book.map(a => acctRow(a.account, {qty: a.qty, strategy: name, locked: ro})).join("");
   const free = Object.keys(accts).filter(id => !book.some(a => a.account === id));
   const cap = ro ? "" : lock.caption;
   const addForm = !Object.keys(accts).length ? `<div class="mcap">Add an account to run this strategy.</div>`
@@ -2171,7 +2193,8 @@ function labDeskView(name, s) {
         free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg(${jsArg(name)},${jsArg(id)},${+c.qty || 1})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
-    <div class="sd-state"><b>${esc(DeskLab.deskState(s))}</b>${p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
+    <div class="sd-state"><b>${esc(DeskLab.deskState(s))}</b>${sh ? ` · today would be ${esc(usdS(sh.net))}` : p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
+    ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     <div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>
@@ -2186,7 +2209,8 @@ function labDeskView(name, s) {
       <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
-let LAB_LIM = {name: "", busy: false};
+let LAB_LIM = {name: "", tok: 0};       // the open dialog: whose, and which opening of it (a token per open)
+let LAB_TOK = 0, LAB_SAVING = false;     // a save that is out stays out across a close and a re-open
 const LAB_LIM_FIELDS = [["trades", "llTrades"], ["qty", "llQty"], ["risk", "llRisk"], ["last", "llLast"], ["flat", "llFlat"]];
 function labLimErrors(errors) {
   for (const [k, id] of LAB_LIM_FIELDS) {
@@ -2199,40 +2223,48 @@ function labLimKey(e) { if (e.key === "Enter" && !e.repeat) { e.preventDefault()
 function openLabLimits(name) {
   const s = ST && ST.strategies && ST.strategies[name];
   if (!s || !s.lab || DeskLab.readOnly(s)) return;
-  LAB_LIM = {name, busy: false};
+  LAB_LIM = {name, tok: ++LAB_TOK};
   $("#llTitle").textContent = DeskLab.limitsTitle(stratLabel(name));
   const f = DeskLab.limitsFields(s.lab.limits);
   for (const [k, id] of LAB_LIM_FIELDS) $("#" + id).value = f[k];
   labLimErrors({});
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
-  $("#llSave").disabled = false;
+  $("#llSave").disabled = LAB_SAVING;
   showOverlay("labLimitsOverlay");
 }
 function closeLabLimits() {
   hideOverlay("labLimitsOverlay");
-  LAB_LIM = {name: "", busy: false};
+  LAB_LIM = {name: "", tok: 0};
 }
 async function saveLabLimits() {
-  const name = LAB_LIM.name, s = name && ST && ST.strategies && ST.strategies[name];
-  if (!s || LAB_LIM.busy) return;
-  const row = labRowOf(s), w = row && Array.isArray(row.session_window) ? row.session_window[0] : "";
+  const name = LAB_LIM.name, tok = LAB_LIM.tok;
+  if (!name || LAB_SAVING) return;
+  const s = ST && ST.strategies && ST.strategies[name];
+  if (!s) { toast(DeskLab.NOT_ON_DESK, 5000); closeLabLimits(); return; }      // it has left the Desk since the dialog opened
+  const row = labRowOf(s), w = row && Array.isArray(row.session_window) ? row.session_window[0] : "";      // unknown while the chart service is down: the Desk judges that part
   const got = DeskLab.checkLimits(Object.fromEntries(LAB_LIM_FIELDS.map(([k, id]) => [k, $("#" + id).value])), w);
   labLimErrors(got.errors);
   const note = $("#llNote"); note.textContent = ""; note.hidden = true;
   if (!got.body) return;                  // nothing is sent until every field reads
-  LAB_LIM.busy = true; $("#llSave").disabled = true;
+  LAB_SAVING = true; $("#llSave").disabled = true;
   let r, err = null;
   try { r = await post("/api/lab-limits", {strategy: name, limits: got.body}); } catch (e) { err = e || new Error("no answer"); }
-  if (LAB_LIM.name !== name) return;      // closed (or another strategy's) while the Desk answered
-  LAB_LIM.busy = false; $("#llSave").disabled = false;
-  if (!err && r && r.ok === true) { closeLabLimits(); refresh(); return; }
+  LAB_SAVING = false;
+  const ok = !err && r && r.ok === true;
+  if (LAB_LIM.tok !== tok) {              // closed, or opened again, while the Desk answered: that dialog is not this answer's to close or write to
+    if (LAB_LIM.name) $("#llSave").disabled = false;
+    if (ok) refresh();
+    return;
+  }
+  $("#llSave").disabled = false;
+  if (ok) { closeLabLimits(); refresh(); return; }
   note.textContent = DeskLab.refusalText(r, err); note.hidden = false;      // the Desk's own sentence, no prefix
 }
 /* Remove from the Desk: its accounts come off, its limits go, its history stays. Refused while a trade is open ("Flatten it first."). */
 async function removeLabStrat(name) {
   const s = ST && ST.strategies && ST.strategies[name];
   if (!s || DESKLAB_BUSY || DEMO) return;
-  const ask = DeskLab.removeAsk(stratLabel(name));
+  const ask = DeskLab.removeAskDesk(stratLabel(name));
   if (!await confirmDlg(ask.title, ask.body, "Remove", false)) return;
   DESKLAB_BUSY = name; if (ST) render();
   let r, err = null;
@@ -2246,15 +2278,17 @@ async function removeLabStrat(name) {
   loadDeskLab();
 }
 /* Clear an old trade the Desk no longer owns: the Desk does it only when the account is flat and no old order is working, and says why not. */
-const LAB_CLEARING = new Set();
+const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a clear is out, then when it was answered ok
+const labClearing = (name, account) => { const t = LAB_CLEARING.get(name + "@" + account); return t !== undefined && (t === Infinity || Date.now() - t < 3000); };
 async function clearLabBlock(name, account) {
   const key = name + "@" + account;
-  if (LAB_CLEARING.has(key) || DEMO) return;
-  LAB_CLEARING.add(key);
+  if (labClearing(name, account) || DEMO) return;      // one click is one clear; a double click is not two
+  LAB_CLEARING.set(key, Infinity);
   let r, err = null;
   try { r = await post("/api/lab-clear", {strategy: name, account}); } catch (e) { err = e || new Error("no answer"); }
-  LAB_CLEARING.delete(key);
-  toast(!err && r && r.ok === true ? DeskLab.CLEARED : DeskLab.refusalText(r, err), 7000);
+  const ok = !err && r && r.ok === true;
+  if (ok) LAB_CLEARING.set(key, Date.now()); else LAB_CLEARING.delete(key);      // a refusal changes nothing: it can be tried again
+  toast(ok ? DeskLab.CLEARED : DeskLab.refusalText(r, err), 7000);
   refresh();
 }
 
@@ -2522,7 +2556,7 @@ function acctRow(id, extra) {
     <span class="nm">${esc(a.label)}</span>
     ${a.env === "live" ? '<span class="tag-live" title="A live account — real money">LIVE</span>' : ""}
     ${a.env === "paper" ? '<span class="tag-paper" title="A paper account — simulated fills on the live prints, no money">PAPER</span>' : ""}
-    ${extra.qty ? (extra.strategy
+    ${extra.qty ? (extra.strategy && !extra.locked
       ? `<span class="strats qty-edit" title="Click to change size"
            onclick="editQty(event,'${extra.strategy}',${jsArg(id)},${extra.qty})">×${extra.qty}</span>`
       : `<span class="strats">×${extra.qty}</span>`) : ""}
@@ -2530,8 +2564,8 @@ function acctRow(id, extra) {
     <span class="kvi">${usd(a.balance)}</span>
     <span class="kvi ${pnl > 0 ? "pos" : pnl < 0 ? "neg" : ""}">${pnl > 0 ? "+" : ""}${usd(pnl)}</span>
     <button class="btn btn-outline btn-sm" onclick="openCal(${jsArg(a.account || a.label)})">Calendar</button>
-    ${extra.strategy ? `<button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
-      onclick="removeAsg('${extra.strategy}',${jsArg(id)})" title="Unassign">&times;</button>` : ""}
+    ${extra.strategy ? `<button class="x"${extra.locked ? " disabled" : ""} style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
+      ${extra.locked ? "" : `onclick="removeAsg('${extra.strategy}',${jsArg(id)})" `}title="Unassign">&times;</button>` : ""}
   </div>`;
 }
 
@@ -3352,7 +3386,7 @@ async function toggleStrat(name, enabled) {
   if (lab) await refresh(); else refresh();     // a Lab strategy's toast reads the state the Desk answers with
   if (DEMO) return;                        // preview mode: post() already said nothing is sent
   const why = answerWhy(r, err);
-  if (!why) toast(lab ? (enabled ? DeskLab.switchOnToast(N, ST.strategies[name], (ST.book && ST.book[name]) || []) : DeskLab.switchOff(N))
+  if (!why) toast(lab ? (enabled ? DeskLab.switchOnToast(N, ST.strategies[name], (ST.book && ST.book[name]) || []) : DeskLab.switchOffToast(N, (ST.book && ST.book[name]) || []))
     : N + (enabled ? " is ON." : " is OFF — it ignores signals; open positions are untouched."));
   else if (enabled) toast(lab ? DeskLab.refusalText(r, err) : `${N} NOT switched on — ${why}.`, 8000);          // the safe side
   else alertBar(`${N} NOT switched off — ${why}. It may still trade: switch it off again, or Kill.`);
@@ -3389,8 +3423,10 @@ async function flattenStrat(name) {
   const res = r.results && typeof r.results === "object" ? (lab ? DeskLab.flattenSteps(r.results) : r.results) : null;
   if (!res) return alertBar(`${N} flatten NOT confirmed — the desk sent no account results. Check its positions at the broker now.`);
   const bad = Object.entries(res).map(([a, steps]) => failText(stepFailures(steps), " on " + acctShort(a))).filter(Boolean);
-  if (bad.length) return alertBar(`${N} flatten — ${bad.join(" · ")}. It is switched OFF; flatten what is left at the broker now.`);
+  if (bad.length) return alertBar(`${N} flatten — ${bad.join(" · ")}. ` + (lab && r.enabled !== false ? DeskLab.NOT_OFF + " Flatten what is left at the broker now."
+    : "It is switched OFF; flatten what is left at the broker now."));
   if (lab && typeof r.detail === "string" && r.detail) return toast(r.detail, 8000);     // flattened, but the switch did not turn off: the Desk's sentence
+  if (lab && DeskLab.closeOut(r.results)) return toast(DeskLab.CLOSE_OUT, 8000);        // its own close order was already out: nothing more was sent
   toast(`${N} flattened and switched off.`);
 }
 

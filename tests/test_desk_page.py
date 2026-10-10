@@ -87,7 +87,7 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 def test_the_asset_versions_are_bumped():
     assert '<script src="/static/desklab.js?v=2"></script>' in HTML
     assert "desklab.js?v=1" not in HTML
-    assert '"version": 3' in (STATIC / "apple" / "manifest.json").read_text()
+    assert '"version": 4' in (STATIC / "apple" / "manifest.json").read_text()
 
 
 def test_the_old_step_a_caption_is_not_on_the_desks_page_for_a_lab_strategy():
@@ -129,3 +129,26 @@ def test_the_activity_map_has_the_labs_journal_lines():
     act = _section("const ACTIVITY = {", "function activityLine(")
     for ev in ("lab_refused", "lab_runner_down", "lab_runner_back", "lab_stopped", "lab_flatten", "lab_cancelled", "lab_limits_set"):
         assert f'{ev}: labAct("{ev}")' in act, ev
+
+
+# ---- Task B6, fix round 1 -----------------------------------------------------------------------------------
+def test_the_mac_skin_gives_the_warn_caption_its_colour():
+    css = (STATIC / "apple" / "desk.css").read_text()
+    assert "html.hb-apple .mcap.warn { color: var(--a-red-text); }" in css
+
+
+def test_the_activity_list_and_the_last_event_time_leave_out_lab_events_the_page_has_no_words_for():
+    rule = 'r.event.indexOf("lab_") === 0 && !ACTIVITY[r.event]'
+    assert HTML.count(rule) == 2
+    act = _section("const ACTIVITY = {", "function activityLine(")
+    for ev in ("lab_event", "lab_event_done"):
+        assert f"{ev}:" not in act, ev          # bookkeeping: never a line
+
+
+def test_no_visible_lab_line_says_round_sidecar_intent_overlay_or_carried():
+    import re
+    act = _section("const ACTIVITY = {", "function activityLine(")
+    block = DESKLAB[DESKLAB.index("var activity = {"):DESKLAB.index("  return {\n    TAG_TITLE")]
+    for text in re.findall(r'"([^"\n]*)"', block):
+        assert not re.search(r"\b(round|rounds|sidecar|intent|overlay|carried)\b", text, re.I), text
+    assert "plainWords" in DESKLAB
