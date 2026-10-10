@@ -112,28 +112,47 @@ def test_the_schema_says_which_rule_a_stop_choice_belongs_to():
                 assert e.value.field == "stop"
 
 
-SIZES = {"NQ": (15, 50, 150), "ES": (4, 12, 36), "YM": (30, 100, 300), "RTY": (3, 8, 24), "GC": (2, 5, 15),
-         "SI": (0.05, 0.15, 0.45)}
+FACTOR = {"NQ": 1, "ES": 0.25, "YM": 2, "RTY": 0.2, "GC": 0.125, "SI": 0.003}
 
 
-def test_the_schema_has_starting_numbers_that_fit_each_market():
+def test_the_schema_has_starting_numbers_that_fit_each_market_for_every_rule():
     s = lab_forms.schema()
-    assert list(s["sizes"]) == list(SIZES)
-    for market, (distance, stop, target) in SIZES.items():
-        got = s["sizes"][market]
-        assert got == {"distance": distance, "stop": stop, "target_points": target}
+    assert list(s["sizes"]) == list(FACTOR)
+    nq = s["defaults"]
+    for market, factor in FACTOR.items():
         tick = s["ticks"][market]
-        for key, v in got.items():                                  # whole ticks, and a stop of at least two
-            assert abs(v / tick - round(v / tick)) < 1e-9, (market, key)
-        assert got["stop"] >= 2 * tick and got["distance"] >= tick and got["target_points"] >= tick
-        # the same three numbers build a strategy on that market, one rule that uses all of them
-        a = base("open_straddle", market=market, distance=got["distance"], stop={"kind": "points", "value": got["stop"]},
-                 target={"kind": "points", "value": got["target_points"]})
-        assert lab_forms.build(a)
-    assert s["defaults"]["open_straddle"]["market"] == "NQ"        # the defaults stay NQ's
-    nq = s["sizes"]["NQ"]
-    d = s["defaults"]["open_straddle"]
-    assert (d["distance"], d["stop"]["value"]) == (nq["distance"], nq["stop"])
+        assert list(s["sizes"][market]) == list(RULES)
+        for rule in RULES:
+            got, d = s["sizes"][market][rule], nq[rule]
+            # exactly the numbers the rule's NQ default has, and nothing the default has not
+            want = {}
+            if "distance" in d:
+                want["distance"] = (d["distance"], 1)
+            if d["stop"]["kind"] == "points":
+                want["stop"] = (d["stop"]["value"], 2)
+            if d["target"]["kind"] == "points":
+                want["target_points"] = (d["target"]["value"], 1)
+            assert set(got) == set(want), (market, rule)
+            for key, (v, least) in want.items():
+                assert abs(got[key] / tick - round(got[key] / tick)) < 1e-9, (market, rule, key)       # whole ticks
+                assert got[key] >= least * tick - 1e-9, (market, rule, key)                          # and never below the minimum
+                assert abs(got[key] - v * factor) <= tick / 2 + 1e-9 or got[key] == least * tick, (market, rule, key)
+            if market == "NQ":
+                assert got == {k: float(v) for k, (v, _) in want.items()}
+            # the rule's defaults with that market and its numbers build
+            a = {**nq[rule], "name": "my_orb", "market": market}
+            if "distance" in got:
+                a["distance"] = got["distance"]
+            if "stop" in got:
+                a["stop"] = {"kind": "points", "value": got["stop"]}
+            if "target_points" in got:
+                a["target"] = {"kind": "points", "value": got["target_points"]}
+            assert lab_forms.build(a), (market, rule)
+    assert s["sizes"]["ES"]["open_straddle"] == {"distance": 3.75, "stop": 12.5}
+    assert s["sizes"]["SI"]["bar_breakout"] == {"stop": 0.06, "target_points": 0.12}
+    assert s["sizes"]["YM"]["at_time"] == {"stop": 40.0, "target_points": 80.0}
+    assert s["sizes"]["NQ"]["opening_range"] == {}                     # a range stop and a ratio target: no numbers
+    assert s["defaults"]["open_straddle"]["market"] == "NQ"           # the defaults stay NQ's
 
 
 def test_the_js_tests_use_the_real_schema():
@@ -975,12 +994,99 @@ def test_bar_breakout_last_entry_is_inclusive_and_later_closes_do_nothing(play):
     assert res.trades == []
 
 
-def test_bar_breakout_bars_that_began_before_the_start_time_do_not_count(play):
+def rising(first, last="15:50", step=5, up=10.0, start=100.0):
+    """A new high every `step` minutes, one print at :10 seconds each (so every bar's close breaks out)."""
+    t, end, p, rows = _mins(first), _mins(last), start, []
+    while t <= end:
+        rows.append((f"{t // 60:02d}:{t % 60:02d}:10", p))
+        p, t = p + up, t + step
+    return rows
+
+
+def _mins(hhmm: str) -> int:
+    return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+
+def hhmmss(ns: int) -> str:
+    return dt.datetime.fromtimestamp(ns / 1e9, dt.timezone(dt.timedelta(hours=-5))).strftime("%H:%M:%S")
+
+
+def reviewer(**over):
+    """The defaults of the form (5-minute bars, 6 back, 09:30 to 11:00) with room for 5 trades and no target."""
+    return base("bar_breakout", **({"name": "form_run", "trades": 1, "target": {"kind": "none"}} | over))
+
+
+def test_bar_breakout_the_first_bar_that_closes_at_the_start_time_may_enter(play):
+    # a new high every 5 minutes from 08:55: the 09:25-09:30 bar closes at 09:30 with the six bars 08:55-09:25 before it
+    res, strategy = play(reviewer(), rising("08:55"))
+    t = res.trades[0]
+    assert (hhmmss(t.entry_ns), t.side) == ("09:30:10", "long")         # the first print after that close
+    assert strategy.session_window == ("08:50", "16:00") and strategy.bar_window == ("08:55", "16:00")
+    assert len(res.trades) == 1                                          # trades 1: one entry a day
+    assert "FROM_MIN = 40" in lab_forms.build(reviewer())
+
+
+def test_bar_breakout_a_quiet_morning_waits_until_there_are_lookback_bars(play):
+    # the same tape from 09:00: only five bars (09:00-09:25) before the bar that closes at 09:30, so the 09:35 close is first
+    res, _ = play(reviewer(), rising("09:00"))
+    assert hhmmss(res.trades[0].entry_ns) == "09:35:10"
+
+
+def test_bar_breakout_works_with_bigger_bars_and_a_longer_lookback(play):
+    res, strategy = play(reviewer(bar_min=15), rising("07:45", step=15, up=20.0))
+    assert hhmmss(res.trades[0].entry_ns) == "09:30:10"                  # bars from 09:30 - 7 x 15 = 07:45
+    assert strategy.bar_window == ("07:45", "16:00") and strategy.session_window == ("07:40", "16:00")
+    res, strategy = play(reviewer(lookback=20), rising("07:45"))
+    assert hhmmss(res.trades[0].entry_ns) == "09:30:10"                  # bars from 09:30 - 21 x 5 = 07:45
+    assert strategy.bar_window == ("07:45", "16:00")
+    res, strategy = play(reviewer(bar_min=1, lookback=6), rising("09:23", step=1, up=2.0))
+    assert hhmmss(res.trades[0].entry_ns) == "09:30:10"                  # bars from 09:30 - 7 x 1 = 09:23
+
+
+def test_bar_breakout_a_bar_that_closes_before_the_start_time_never_trades(play):
+    flat = [(f"{t // 60:02d}:{t % 60:02d}:10", 100.0) for t in range(_mins("08:55"), _mins("09:20"), 5)]
+    rows = flat + [("09:20:10", 110.0)] + [(f"09:{m:02d}:10", 105.0) for m in range(25, 60, 5)]     # the break closes at 09:25
+    res, _ = play(reviewer(trades=5), rows)
+    assert res.trades == []
+    # the same break one bar later (closing at 09:30, the start time) trades
+    res, _ = play(reviewer(trades=5), flat + [("09:20:10", 100.0), ("09:25:10", 110.0), ("09:30:10", 105.0)])
+    assert hhmmss(res.trades[0].entry_ns) == "09:30:10"
+
+
+def test_bar_breakout_a_bar_that_closes_after_the_last_entry_never_trades(play):
+    flat = [(f"{t // 60:02d}:{t % 60:02d}:10", 100.0) for t in range(_mins("08:55"), _mins("09:50"), 5)]
+    late = flat + [("09:50:10", 110.0), ("10:00:10", 105.0)]                       # the break closes at 09:55
+    res, _ = play(reviewer(trades=5, last_entry="09:50"), late)
+    assert res.trades == []
+    res, _ = play(reviewer(trades=5, last_entry="09:55"), late)                    # closing at the last entry is allowed
+    assert hhmmss(res.trades[0].entry_ns) == "10:00:10"          # on the first print after the 09:55 close
+
+
+def test_bar_breakout_trades_2_means_two_and_the_earlier_bars_set_the_high_and_low(play):
+    res, _ = play(reviewer(trades=2, target={"kind": "points", "value": 5.0}), rising("08:55", up=10.0))
+    assert [hhmmss(t.entry_ns) for t in res.trades] == ["09:30:10", "09:40:10"]      # the 09:35 close finds the first trade still open
     rows = [("09:30:10", 100.0), ("09:35:10", 100.0), ("09:40:10", 101.0), ("09:45:10", 101.0)]
-    res, _ = play(breakout(lookback=2, **{"from": "09:30"}), rows)
-    assert len(res.trades) == 1                      # 09:30 and 09:35 count; the 09:40 bar breaks out
+    # from 09:45 the bar that closes at 09:45 (09:40-09:45) may enter, measured against the two bars before it
+    res, _ = play(breakout(lookback=2, **{"from": "09:45"}), rows)
+    assert [hhmmss(t.entry_ns) for t in res.trades] == ["09:45:10"]
+    # from 09:50 it is too early for that bar, and the 09:45-09:50 bar does not break the 101 high
+    res, _ = play(breakout(lookback=2, **{"from": "09:50"}), rows)
+    assert res.trades == []
+    # from 09:32 the first bar to close at or after it is the 09:35 close, and no earlier close trades
     res, _ = play(breakout(lookback=2, **{"from": "09:32"}), rows)
-    assert res.trades == []                          # the 09:30 bar began before 09:32 and is not used
+    assert [hhmmss(t.entry_ns) for t in res.trades] == ["09:45:10"]
+
+
+def test_bar_breakout_too_many_bars_back_for_that_start_time_is_refused():
+    msg = "Too many bars back for that start time."
+    refused(base("bar_breakout", bar_min=15, lookback=40), "lookback", msg)        # 09:30 - 41 x 15 min = the night before
+    assert lab_forms.build(base("bar_breakout", bar_min=15, lookback=30))          # 09:30 - 31 x 15 min = 01:45
+    # the edge: the first bar may start at 00:05, not before
+    assert lab_forms.build(base("bar_breakout", bar_min=5, lookback=6, **{"from": "00:40", "last_entry": "01:00"}))
+    refused(base("bar_breakout", bar_min=5, lookback=6, **{"from": "00:35", "last_entry": "01:00"}), "lookback", msg)
+    # a lookback that is not a number keeps its own sentence, and a bad time is a time error
+    refused(base("bar_breakout", lookback=41), "lookback", "Between 2 and 40 bars.")
+    refused(base("bar_breakout", **{"from": "9:30"}), "from", CLOCK)
 
 
 def timed(**over):

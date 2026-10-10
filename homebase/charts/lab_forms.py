@@ -43,6 +43,7 @@ BAD_TIME = "A New York time from 00:05 to 15:55, like 09:30."
 AFTER_START = "It must be after the start."
 AFTER_RANGE = "It must be after the range ends ({end})."
 AFTER_LAST = "It must be after the last entry, and 15:55 at the latest."
+TOO_FAR = "Too many bars back for that start time."
 INCOMPLETE = "The form is incomplete."
 TICK_MULTIPLE = "Use a multiple of the tick ({tick})."
 
@@ -144,9 +145,11 @@ def _rule_start(a: dict) -> str | None:
 
 
 def _first_time(a: dict) -> str:
-    """The first time the rule needs data for: the session window opens 5 minutes before it."""
-    return {"open_straddle": a.get("time"), "at_time": a.get("time"), "opening_range": a.get("range_from"),
-            "bar_breakout": a.get("from")}[a["rule"]]
+    """The first time the rule needs data for: the session window opens 5 minutes before it. The bar breakout reads
+    the bars before its start time too: `lookback` of them for the bar that closes at the start, plus that bar."""
+    if a["rule"] == "bar_breakout":
+        return _hhmm(_mins(a["from"]) - (a["lookback"] + 1) * a["bar_min"])
+    return {"open_straddle": a.get("time"), "at_time": a.get("time"), "opening_range": a.get("range_from")}[a["rule"]]
 
 
 def _window(a: dict) -> tuple[str, str]:
@@ -204,6 +207,8 @@ def _check(answers) -> dict:
     for key in (start_key, "last_entry", "out_by"):
         if key in a and not _is_time(a[key]):
             raise FormError(key, BAD_TIME)
+    if rule == "bar_breakout" and _mins(a["from"]) - (a["lookback"] + 1) * a["bar_min"] < _mins(EARLIEST):
+        raise FormError("lookback", TOO_FAR)
     start = _rule_start(a)
     if "last_entry" in a and start is not None and a["last_entry"] <= start:
         raise FormError("last_entry", AFTER_RANGE.format(end=start) if rule == "opening_range" else AFTER_START)
@@ -436,8 +441,8 @@ def _opening_range(a: dict) -> dict:
 
 
 def _breakout(a: dict) -> dict:
-    t0, last = a["from"], a["last_entry"]
-    w1 = _window(a)[1]
+    first, (w0, w1) = _first_time(a), _window(a)
+    gap = lambda t: _mins(t) - _mins(w0)                    # noqa: E731 -- minutes from the session start to a time
     levels = {"both": "hi, lo = max(self.highs[-n:]), min(self.lows[-n:])", "long": "hi = max(self.highs[-n:])",
               "short": "lo = min(self.lows[-n:])"}[a["side"]]
     inner = [levels, *_read_line(_reads(a)), MOVE]
@@ -445,17 +450,18 @@ def _breakout(a: dict) -> dict:
     for i, (cond, s) in enumerate(b for b in branches if b[1] in _sides(a)):
         inner += [("if " if i == 0 else "elif ") + cond + ":",
                   "    " + _order(a, "market", s, "bar.c", "", False, "ref=bar.c"), "    self.taken += 1"]
-    lines = ["if bar.start_ns < self.t_from or self.closed:",
-             "    return  # before the start time, or after the last entry",
-             'n = self.p["lookback"]',
-             'if ctx.flat and self.taken < self.p["trades"] and len(self.highs) >= n:',
+    lines = ['n = self.p["lookback"]',
+             'if self.t_from <= bar.end_ns <= self.t_last and ctx.flat and self.taken < self.p["trades"] and len(self.highs) >= n:',
              *["    " + x for x in inner],
              "self.highs.append(bar.h)", "self.lows.append(bar.l)"]
-    return {"first": t0, "start": [(t0, ["self.t_from = ctx.now_ns"]),
-                                   (last, ["self.closed = True  # no new entry after this"])],
-            "session": ["self.highs, self.lows = [], []", "self.taken, self.t_from, self.closed = 0, 0, False"],
+    consts = [f'FROM_MIN = {gap(a["from"])}  # a bar that closes at {a["from"]} or later may enter: minutes from the session start ({w0})',
+              f'LAST_MIN = {gap(a["last_entry"])}  # ... up to and including the bar that closes at {a["last_entry"]}']
+    return {"first": first, "start": [], "consts": consts,
+            "session": ["self.highs, self.lows, self.taken = [], [], 0",
+                        "self.t_from = ctx.now_ns + FROM_MIN * 60_000_000_000",
+                        "self.t_last = ctx.now_ns + LAST_MIN * 60_000_000_000"],
             "bar": lines,
-            "attrs": [f"bar_minutes = {a['bar_min']}", f'bar_window = ("{t0}", "{w1}")']}
+            "attrs": [f"bar_minutes = {a['bar_min']}", f'bar_window = ("{first}", "{w1}")']}
 
 
 def _at_time(a: dict) -> dict:
@@ -512,8 +518,9 @@ def _body(a: dict) -> str:
     if parts["bar"]:
         out += ["", "    def on_bar(self, ctx, bar):"] + ["        " + x for x in parts["bar"]]
     out += ["", "    def on_time(self, ctx, et_time):"] + ["        " + x for x in _on_time(blocks)]
+    consts = ["", *parts.get("consts", [])] if parts.get("consts") else []
     return "from __future__ import annotations\n\nfrom homebase.strategies.base import Input, Strategy\n" \
-        + "\n".join(out) + "\n"
+        + "\n".join(consts + out) + "\n"
 
 
 def build(answers: dict) -> str:
@@ -609,7 +616,7 @@ def _field_defs() -> dict:
                     "choices": list(BAR_MINS), "default": 5},
         "lookback": {"label": "Look back (bars)", "words": "How many bars back the high and low are taken from.",
                      "type": "int", "min": 2, "max": 40, "step": 1, "default": 6},
-        "from": {"label": "Start at", "words": "The first time it may enter, a New York time like 09:30.",
+        "from": {"label": "Start at", "words": "The first time it may enter. The bars before it set the high and low.",
                  "type": "time", "default": "09:30"},
         "trades": {"label": "Trades a day", "words": "Most entries it takes in one day.", "type": "int",
                    "min": 1, "max": 5, "step": 1, "default": 1},
@@ -647,9 +654,29 @@ def _defaults() -> dict:
     }
 
 
-# a starting distance, points stop and points target that fit each market (whole ticks); the defaults stay NQ's
-SIZES = {"NQ": (15.0, 50.0, 150.0), "ES": (4.0, 12.0, 36.0), "YM": (30.0, 100.0, 300.0), "RTY": (3.0, 8.0, 24.0),
-         "GC": (2.0, 5.0, 15.0), "SI": (0.05, 0.15, 0.45)}
+# a market's size against NQ's: the starting distance, points stop and points target of every rule are its NQ default times this
+SIZE_FACTOR = {"NQ": 1, "ES": 0.25, "YM": 2, "RTY": 0.2, "GC": 0.125, "SI": 0.003}
+
+
+def _sizes() -> dict:
+    """{market: {rule: {"distance"?, "stop"?, "target_points"?}}}: each rule's NQ default times the market's factor,
+    in whole ticks and never below the field's least (a distance and a target: 1 tick, a stop: 2 ticks). A rule has a
+    number only where its NQ default has one (a range stop or a ratio target has none)."""
+    out = {}
+    for m in MARKETS:
+        tick, factor = tick_size(m), SIZE_FACTOR[m]
+        fit = lambda v, least: round(max(least, math.floor(v * factor / tick + 0.5)) * tick, 6)       # noqa: E731
+        out[m] = {}
+        for rule, d in _defaults().items():
+            one = {}
+            if "distance" in d:
+                one["distance"] = fit(d["distance"], 1)
+            if d["stop"]["kind"] == "points":
+                one["stop"] = fit(d["stop"]["value"], 2)
+            if d["target"]["kind"] == "points":
+                one["target_points"] = fit(d["target"]["value"], 1)
+            out[m][rule] = one
+    return out
 
 
 def schema() -> dict:
@@ -657,7 +684,7 @@ def schema() -> dict:
     return {
         "markets": list(MARKETS),
         "ticks": {m: tick_size(m) for m in MARKETS},
-        "sizes": {m: dict(zip(("distance", "stop", "target_points"), SIZES[m])) for m in MARKETS},
+        "sizes": _sizes(),
         "sides": [list(s) for s in SIDES],
         "rules": [{"id": r, "label": RULE_TEXT[r][0], "words": RULE_TEXT[r][1], "fields": list(RULE_FIELDS[r]),
                    "sides": ["long", "short"] if r == "at_time" else [s for s, _ in SIDES]} for r in RULE_FIELDS],

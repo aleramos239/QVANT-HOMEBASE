@@ -649,24 +649,32 @@ function fmSides(sc, rule) {
 /* a choice that asks for a number has limits in the schema (points: min_ticks; a ratio: min / max) */
 const fmHasValue = (k) => !!k && (k.min_ticks != null || k.min != null || k.max != null);
 /* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else any rule's.
-   With a market and the schema's per-market starting numbers, a points choice starts at that market's own. */
+   With a market and the schema's starting numbers, a points choice starts at that market's own for the rule. */
 function fmKindValue(sc, rule, field, kind, market) {
-  const key = FM_SIZE[field], size = kind === 'points' && key ? fmSize(sc, market, key) : null;
+  const key = FM_SIZE[field], size = kind === 'points' && key ? fmSize(sc, market, rule, key) : null;
   if (size != null) return size;
   const f = fmField(sc, field), d = (sc && sc.defaults) || {};
   const hit = [d[rule] && d[rule][field], f && f.default, ...Object.values(d).map((x) => x && x[field])].find((x) => x && x.kind === kind && x.value != null);
   return hit ? hit.value : '';
 }
-/* ---- starting numbers that fit the market: schema.sizes[market] = { distance, stop, target_points } ---- */
+/* ---- starting numbers that fit the market: schema.sizes[market][rule] = { distance?, stop?, target_points? } ---- */
 const FM_SIZE = { stop: 'stop', target: 'target_points' };       // the size each points choice starts at
-const fmSize = (sc, market, key) => { const m = sc && sc.sizes && sc.sizes[market]; return m && typeof m[key] === 'number' ? m[key] : null; };
-/* A copy of the state whose boxes that still hold the `from` market's starting number hold the `to` market's. Only a box that is
-   exactly that number changes: a number typed by hand, a ratio, the range stop and an empty box are left as they are. */
+/* the starting number for a box in a market: the rule's own, or (a rule whose default has none, like a range stop) the first rule's that has one */
+function fmSize(sc, market, rule, key) {
+  const m = sc && sc.sizes && sc.sizes[market];
+  if (!m) return null;
+  const own = m[rule] && m[rule][key];
+  if (typeof own === 'number') return own;
+  const any = Object.values(m).find((x) => x && typeof x[key] === 'number');
+  return any ? any[key] : null;
+}
+/* A copy of the state whose boxes that still hold the `from` market's starting number (for this rule) hold the `to` market's. Only a
+   box that is exactly that number changes: a number typed by hand, a ratio, the range stop and an empty box are left as they are. */
 function fmFit(sc, st, from, to) {
   const next = fmClone(st);
   if (from === to) return next;
   const fit = (raw, key) => {
-    const a = fmSize(sc, from, key), b = fmSize(sc, to, key), v = fmParse(raw);
+    const a = fmSize(sc, from, next.rule, key), b = fmSize(sc, to, next.rule, key), v = fmParse(raw);
     return a != null && b != null && v !== undefined && v === a ? b : raw;
   };
   if ('distance' in next) next.distance = fit(next.distance, 'distance');
@@ -721,7 +729,7 @@ function fmSwitch(sc, st, rule) {
   return next;
 }
 /* a state from the answers a file carries: the rule's defaults under them, and only the keys that belong.
-   A stop or target of a kind the rule does not offer (a hand-edited header) is the rule's own default instead. */
+   A stop, target or side the rule does not offer (a hand-edited header) is the rule's own default instead. */
 function fmFill(sc, answers) {
   if (!answers || typeof answers !== 'object' || !sc || !sc.defaults || !sc.defaults[answers.rule]) return null;
   const s = fmClone(sc.defaults[answers.rule]);
@@ -730,6 +738,7 @@ function fmFill(sc, answers) {
   for (const k of ['stop', 'target']) {
     if (keys.includes(k) && !fmKinds(sc, answers.rule, k).some((x) => x.id === (s[k] || {}).kind)) s[k] = fmClone(sc.defaults[answers.rule][k]);
   }
+  if (keys.includes('side') && !fmSides(sc, answers.rule).some((x) => x[0] === s.side)) s.side = sc.defaults[answers.rule].side;
   s.rule = answers.rule;
   if (typeof s.name !== 'string') s.name = '';
   return s;

@@ -293,27 +293,41 @@ test('fm: the helper words of a field are the rule\'s own when the schema has th
 });
 
 test('fm: a new market gives the starting distance, stop and target of that market, to the boxes that still hold the old ones', () => {
-  const st = L.fmSwitch(FM, L.fmStart(FM, []), 'open_straddle');
-  st.target = { kind: 'points', value: 150 };                       // NQ 15 / 50 / 150 as the form starts, but a points target
+  const st = L.fmFill(FM, { ...FM.defaults.open_straddle, name: 'x', target: { kind: 'points', value: 40 } });   // NQ: 15 / 50 / a points target of 40
   const es = L.fmSetMarket(FM, st, 'ES');
   assert.equal(es.market, 'ES');
-  assert.equal(es.distance, 4);
-  assert.deepEqual(es.stop, { kind: 'points', value: 12 });
-  assert.deepEqual(es.target, { kind: 'points', value: 36 });
+  assert.equal(es.distance, 3.75);
+  assert.deepEqual(es.stop, { kind: 'points', value: 12.5 });
+  assert.deepEqual(es.target, { kind: 'points', value: 10 });
   assert.equal(st.market, 'NQ');
   assert.equal(st.distance, 15, 'the state it was given is not changed');
   assert.deepEqual(L.fmSetMarket(FM, es, 'SI').stop, { kind: 'points', value: 0.15 });
-  assert.equal(L.fmSetMarket(FM, es, 'SI').distance, 0.05);
+  assert.equal(L.fmSetMarket(FM, es, 'SI').distance, 0.045);
   assert.equal(L.fmSetMarket(FM, L.fmSetMarket(FM, es, 'SI'), 'NQ').distance, 15, 'and back again');
-  for (const m of FM.markets) {                                      // every market's own numbers are what the schema says
-    const got = L.fmSetMarket(FM, st, m);
-    assert.deepEqual([got.distance, got.stop.value, got.target.value], [FM.sizes[m].distance, FM.sizes[m].stop, FM.sizes[m].target_points], m);
+  for (const m of FM.markets) {                                      // every market\'s own numbers are what the schema says for the rule
+    const got = L.fmSetMarket(FM, st, m), z = FM.sizes[m].open_straddle;
+    assert.deepEqual([got.distance, got.stop.value], [z.distance, z.stop], m);
+    assert.deepEqual(L.fmErrors(FM, got), {}, `${m}: the numbers pass the page's own tick check`);
   }
-  assert.deepEqual(L.fmErrors(FM, L.fmSetMarket(FM, st, 'SI')), {}, 'and the numbers pass the page\'s own tick check on that market');
+});
+
+test('fm: every rule has its own starting numbers on every market', () => {
+  for (const r of FM.rules) for (const m of FM.markets) {
+    const nq = L.fmFill(FM, { ...FM.defaults[r.id], name: 'x' }), z = FM.sizes[m][r.id], got = L.fmSetMarket(FM, nq, m);
+    if ('distance' in z) assert.equal(got.distance, z.distance, `${r.id} ${m}`);
+    if ('stop' in z) assert.deepEqual(got.stop, { kind: 'points', value: z.stop }, `${r.id} ${m}`);
+    if ('target_points' in z) assert.deepEqual(got.target, { kind: 'points', value: z.target_points }, `${r.id} ${m}`);
+    assert.deepEqual(L.fmErrors(FM, got), {}, `${r.id} ${m}`);
+  }
+  const bb = L.fmSetMarket(FM, L.fmFill(FM, { ...FM.defaults.bar_breakout, name: 'x' }), 'SI');
+  assert.deepEqual([bb.stop.value, bb.target.value], [0.06, 0.12]);
+  // the range stop and the ratio target have no number to move
+  const orr = L.fmSetMarket(FM, L.fmFill(FM, { ...FM.defaults.opening_range, name: 'x' }), 'SI');
+  assert.deepEqual([orr.stop, orr.target], [{ kind: 'range' }, { kind: 'rr', value: 2 }]);
 });
 
 test('fm: a number he typed himself is never changed by a new market', () => {
-  const st = L.fmSwitch(FM, L.fmStart(FM, []), 'open_straddle');
+  const st = L.fmFill(FM, { ...FM.defaults.open_straddle, name: 'x' });
   st.distance = '20'; st.stop = { kind: 'points', value: '60' }; st.target = { kind: 'points', value: '120' };
   const es = L.fmSetMarket(FM, st, 'ES');
   assert.equal(es.distance, '20');
@@ -338,16 +352,21 @@ test('fm: a rule change on another market starts the new rule\'s own boxes at th
   const es = L.fmSetMarket(FM, L.fmStart(FM, []), 'ES');
   const back = L.fmSwitch(FM, L.fmSwitch(FM, es, 'at_time'), 'open_straddle');
   assert.equal(back.market, 'ES');
-  assert.equal(back.distance, 4, 'the straddle\'s distance box is the ES starting number, not NQ\'s');
-  assert.deepEqual(back.stop, { kind: 'points', value: 12 }, 'the stop he carried across is kept as it was');
-  // what the old rule's boxes held and the new rule has too is carried: a stop he typed survives the switch
+  assert.equal(back.distance, 3.75, 'the straddle\'s distance box is the ES starting number, not NQ\'s');
+  assert.deepEqual(back.stop, { kind: 'points', value: 12.5 }, 'the stop he carried across is kept as it was');
+  const bb = L.fmSwitch(FM, es, 'bar_breakout');
+  assert.deepEqual(bb.target, { kind: 'rr', value: 3 }, 'a carried target is kept');
+  const fresh = L.fmSwitch(FM, { ...L.fmFill(FM, { ...FM.defaults.opening_range, name: 'x' }), market: 'ES' }, 'bar_breakout');
+  assert.deepEqual([fresh.stop, fresh.target], [{ kind: 'points', value: 5 }, { kind: 'rr', value: 2 }], 'the range stop is not offered: the new rule\'s own stop at the ES number; the ratio carries');
+  // what he typed in the old rule and the new rule has too is carried: a stop he typed survives the switch
   const typed = L.fmSetMarket(FM, L.fmStart(FM, []), 'ES');
   typed.stop = { kind: 'points', value: '50' };
   assert.deepEqual(L.fmSwitch(FM, typed, 'at_time').stop, { kind: 'points', value: '50' });
-  // a points target picked on another market starts at that market's number
-  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points', 'ES'), 36);
-  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points', 'NQ'), 150);
-  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points'), 40, 'no market given: as before (the bar breakout\'s own)');
+  // a points choice picked on a market starts at that market's number for the rule
+  assert.equal(L.fmKindValue(FM, 'bar_breakout', 'target', 'points', 'ES'), 10);
+  assert.equal(L.fmKindValue(FM, 'open_straddle', 'stop', 'points', 'ES'), 12.5);
+  assert.equal(L.fmKindValue(FM, 'opening_range', 'stop', 'points', 'ES'), 5, 'a rule with no number of its own takes the first rule\'s that has one');
+  assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points'), 40, 'no market given: as before');
   assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'rr', 'ES'), 3, 'a ratio is the same on every market');
 });
 
@@ -551,6 +570,11 @@ test('fm: a hand-edited header cannot trap the dialog -- a stop or target the ru
   assert.deepEqual(L.fmFill(FM, { ...straddle, stop: 'wide' }).stop, FM.defaults.open_straddle.stop);
   assert.deepEqual(L.fmFill(FM, { ...straddle, target: {} }).target, FM.defaults.open_straddle.target);
   assert.deepEqual(L.fmFill(FM, { ...straddle, stop: null }).stop, FM.defaults.open_straddle.stop);
+  // a side the rule does not offer (both on at_time) is the rule's default side
+  assert.equal(L.fmFill(FM, { ...FM.defaults.at_time, name: 'x', side: 'both' }).side, 'long');
+  assert.equal(L.fmFill(FM, { ...FM.defaults.at_time, name: 'x', side: 'short' }).side, 'short');
+  assert.equal(L.fmFill(FM, { ...straddle, side: 'sideways' }).side, 'both');
+  assert.equal(L.fmAnswers(FM, L.fmFill(FM, { ...FM.defaults.at_time, name: 'x', side: 'both' })).side, 'long');
   // what the rule offers is kept, with its number (also a number that is wrong: the server says so)
   assert.deepEqual(L.fmFill(FM, { ...straddle, stop: { kind: 'points', value: 7 } }).stop, { kind: 'points', value: 7 });
   assert.deepEqual(L.fmFill(FM, { ...straddle, target: { kind: 'none' } }).target, { kind: 'none' });

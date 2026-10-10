@@ -92,7 +92,7 @@
    "default": "09:30",
    "label": "Start at",
    "type": "time",
-   "words": "The first time it may enter, a New York time like 09:30."
+   "words": "The first time it may enter. The bars before it set the high and low."
   },
   "last_entry": {
    "default": "11:00",
@@ -341,34 +341,94 @@
  ],
  "sizes": {
   "ES": {
-   "distance": 4.0,
-   "stop": 12.0,
-   "target_points": 36.0
+   "at_time": {
+    "stop": 5.0,
+    "target_points": 10.0
+   },
+   "bar_breakout": {
+    "stop": 5.0,
+    "target_points": 10.0
+   },
+   "open_straddle": {
+    "distance": 3.75,
+    "stop": 12.5
+   },
+   "opening_range": {}
   },
   "GC": {
-   "distance": 2.0,
-   "stop": 5.0,
-   "target_points": 15.0
+   "at_time": {
+    "stop": 2.5,
+    "target_points": 5.0
+   },
+   "bar_breakout": {
+    "stop": 2.5,
+    "target_points": 5.0
+   },
+   "open_straddle": {
+    "distance": 1.9,
+    "stop": 6.3
+   },
+   "opening_range": {}
   },
   "NQ": {
-   "distance": 15.0,
-   "stop": 50.0,
-   "target_points": 150.0
+   "at_time": {
+    "stop": 20.0,
+    "target_points": 40.0
+   },
+   "bar_breakout": {
+    "stop": 20.0,
+    "target_points": 40.0
+   },
+   "open_straddle": {
+    "distance": 15.0,
+    "stop": 50.0
+   },
+   "opening_range": {}
   },
   "RTY": {
-   "distance": 3.0,
-   "stop": 8.0,
-   "target_points": 24.0
+   "at_time": {
+    "stop": 4.0,
+    "target_points": 8.0
+   },
+   "bar_breakout": {
+    "stop": 4.0,
+    "target_points": 8.0
+   },
+   "open_straddle": {
+    "distance": 3.0,
+    "stop": 10.0
+   },
+   "opening_range": {}
   },
   "SI": {
-   "distance": 0.05,
-   "stop": 0.15,
-   "target_points": 0.45
+   "at_time": {
+    "stop": 0.06,
+    "target_points": 0.12
+   },
+   "bar_breakout": {
+    "stop": 0.06,
+    "target_points": 0.12
+   },
+   "open_straddle": {
+    "distance": 0.045,
+    "stop": 0.15
+   },
+   "opening_range": {}
   },
   "YM": {
-   "distance": 30.0,
-   "stop": 100.0,
-   "target_points": 300.0
+   "at_time": {
+    "stop": 40.0,
+    "target_points": 80.0
+   },
+   "bar_breakout": {
+    "stop": 40.0,
+    "target_points": 80.0
+   },
+   "open_straddle": {
+    "distance": 30.0,
+    "stop": 100.0
+   },
+   "opening_range": {}
   }
  },
  "ticks": {
