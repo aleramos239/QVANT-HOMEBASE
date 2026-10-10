@@ -701,6 +701,58 @@ def test_the_write_guard_and_the_fault_route_are_the_real_gates(desk):
     assert [a["account"] for a in view["accounts"]] == [A1, A2, LIVE] and view["store"] == str(c.d.store)
 
 
+# ---------------------------------------------------------------- the copied route bodies follow the real server
+SERVER = (Path(fake_desk.__file__).resolve().parents[1] / "homebase" / "server.py").read_text(encoding="utf-8")
+TOOL = Path(fake_desk.__file__).read_text(encoding="utf-8")
+CALL = __import__("re").compile(r"\b(labdesk|labdesk_mod|engine)\.([A-Za-z_]+)")
+
+
+def body_of(text: str, head: str) -> str:
+    """One function of a module's text: from its `def` line to the next decorator or def at that depth or above."""
+    lines = text.splitlines()
+    i = next(n for n, line in enumerate(lines) if line.strip().startswith(head))
+    depth = len(lines[i]) - len(lines[i].lstrip())
+    out = [lines[i]]
+    for line in lines[i + 1:]:
+        if line.strip() and len(line) - len(line.lstrip()) <= depth and not line.strip().startswith(('"""', "#", ")")):
+            break
+        out.append(line)
+    return "\n".join(out)
+
+
+def calls(text: str) -> set:
+    return {f"{a}.{b}" for a, b in CALL.findall(text)}
+
+
+# what the real route calls that the practice Desk leaves out, and why
+NOT_HERE = {
+    "async def status(": {"labdesk.on"},                # the practice Desk's Lab side is always on
+    "async def arm(": set(),
+    "async def kill(": {"engine.kill_strategy"},        # named in a comment of the real body, not called there
+    "async def strategy_toggle(": set(),
+    "async def strategy_flatten(": set(),
+    "async def set_book(": set(),
+    "async def lab_limits(": set(),
+    "async def lab_remove(": set(),
+    "async def lab_clear(": set(),
+}
+HERE = {"async def status(": "async def status(self)", "async def lab_limits(": "def lab_route(",
+        "async def lab_remove(": "def lab_route(", "async def lab_clear(": "def lab_route("}
+
+
+@pytest.mark.parametrize("head", sorted(NOT_HERE))
+def test_every_labdesk_and_engine_call_of_the_real_route_is_made_by_the_practice_desks_route(head):
+    """The page routes are copies (server.py cannot be imported: it builds the real app). This holds each copy to the
+    real route: every LabDesk / labdesk / engine call the real body makes, the copy makes too. When the real route
+    gains a call, this fails until tools/fake_desk.py follows."""
+    real = calls(body_of(SERVER, head))
+    mine = calls(body_of(TOOL, HERE.get(head, head)))
+    if head.startswith("async def lab_"):                        # the three share one handler; their LabDesk call is
+        mine |= calls(TOOL[TOOL.index("    lab_route(\"/api/lab-limits\""):TOOL.index("    @app.get(\"/fake/lab\")")])   # at its use
+    assert real, head
+    assert real - mine - NOT_HERE[head] == set(), (head, sorted(real - mine))
+
+
 # ---------------------------------------------------------------- what it refuses to start on
 MAIN = fake_desk.main_checkout()
 

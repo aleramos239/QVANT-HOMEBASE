@@ -981,7 +981,7 @@ class LabRig:
                     "lab": labdesk.status_view(name),
                 } for name, s in list(cfg.strategies.items())
             },
-            "journal": recs[-LAB_JOURNAL_TAIL:][::-1],
+            "journal": labdesk_mod.journal_tail(recs, LAB_JOURNAL_TAIL),   # without the intake's bookkeeping lines
         }
 
 
@@ -1208,9 +1208,9 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
             engine.journal("lab_save_error", strategy=name, error=str(e)[:200], cause="manual_flatten")
             s = cfg.strategies.get(name)
             return {"ok": True, "enabled": bool(s is not None and s.enabled), "results": results,
-                    "detail": labdesk_mod.SWITCH_NOT_OFF}
+                    **labdesk.flatten_check(name, results), "detail": labdesk_mod.SWITCH_NOT_OFF}
         engine.journal("strategy_toggled", strategy=name, enabled=False, cause="manual_flatten")
-        return {"ok": True, "enabled": False, "results": results}
+        return {"ok": True, "enabled": False, "results": results, **labdesk.flatten_check(name, results)}
 
     @app.post("/api/book")
     async def set_book(request: Request):
