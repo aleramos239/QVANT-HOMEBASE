@@ -47,3 +47,85 @@ def test_chart_trading_toasts_survive_post_throwing():
         assert "Couldn't reach the desk" in fn
         # the catch must come after the post() call it's guarding
         assert fn.index('post("/api/chart-trading"') < fn.index("catch")
+
+
+# ---- Step B, task B6: a promoted Lab strategy that the Desk itself knows ------------------------------------
+STATIC = Path(__file__).resolve().parent.parent / "homebase" / "static"
+DESKLAB = (STATIC / "desklab.js").read_text()
+
+
+def _section(start, end):
+    i = HTML.index(start)
+    return HTML[i:HTML.index(end, i + 1)]
+
+
+LAB_DESK = _section("/* ---- A Lab strategy the Desk itself knows (Step B, task B6) ----", "function renderMain(")
+
+
+def test_the_limits_dialog_is_static_markup_with_every_field_and_button():
+    markup = _section('<div class="overlay" id="labLimitsOverlay">', '<div class="overlay" id="settingsOverlay">')
+    for needle in ('id="llTitle"', 'id="llTrades"', 'id="llQty"', 'id="llRisk"', 'id="llLast"', 'id="llFlat"', 'id="llNote"',
+                   'id="llSave"', 'id="llCancel"', 'Trades a day', 'Most contracts per account', 'Most at risk per trade',
+                   'No new trade after', 'Flat by', 'Save limits', 'Cancel', 'role="dialog" aria-modal="true"'):
+        assert needle in markup, needle
+    assert HTML.count('id="labLimitsOverlay"') == 1
+    assert "labLimitsOverlay: () => closeLabLimits()" in HTML          # Esc closes it through the page's one path
+    # nothing that repaints writes into it
+    assert "labLimitsOverlay" not in _section("function render() {", "async function refresh() {")
+
+
+def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
+    for needle in ('post("/api/lab-limits"', 'post("/api/lab-remove"', 'post("/api/lab-clear"'):
+        assert needle in LAB_DESK, needle
+    # the switch, the flatten and the book are the Desk's existing routes
+    assert 'post("/api/strategy"' in HTML and 'post("/api/strategy-flatten"' in HTML and 'post("/api/book"' in HTML
+    # a Lab strategy gets no Test fire
+    assert "testFire" not in LAB_DESK
+    assert "Test fire" not in LAB_DESK
+
+
+def test_the_asset_versions_are_bumped():
+    assert '<script src="/static/desklab.js?v=2"></script>' in HTML
+    assert "desklab.js?v=1" not in HTML
+    assert '"version": 3' in (STATIC / "apple" / "manifest.json").read_text()
+
+
+def test_the_old_step_a_caption_is_not_on_the_desks_page_for_a_lab_strategy():
+    assert "ACCOUNTS_CAPTION" not in LAB_DESK
+    assert "Accounts come with the Desk update" not in LAB_DESK
+    assert "LIMITS_CAPTION" in DESKLAB and "Set the limits first. Then assign an account." in DESKLAB
+
+
+def test_one_row_never_two_is_in_the_row_builder():
+    assert "filter(w => !labOnDesk(w))" in _section("const labRowsHtml", "async function loadDeskLab")
+    assert 'Object.prototype.hasOwnProperty.call(strategies, PREFIX + w.name)' in DESKLAB
+
+
+def test_the_switch_flatten_and_book_branch_on_kind_lab_and_leave_the_others_alone():
+    toggle = _section("async function toggleStrat", "async function setStratRr")
+    assert '"It will run and execute on its assigned accounts from the next signal."' in toggle
+    assert 'N + (enabled ? " is ON." : " is OFF — it ignores signals; open positions are untouched.")' in toggle
+    flat = _section("async function flattenStrat", "/* ---- accounts popup ---- */")
+    assert '"Cancels its resting entries, market-flattens its symbol on every account it acted on today, and switches the strategy OFF."' in flat
+    book = _section("async function setBook", "function removeAsg")
+    assert '"Book update failed — " + (r.detail || "unknown")' in book
+    note = _section("function liveBookingNote", "async function pickAsg")
+    assert 'c.kind === "lab"' in note and "DeskLab.LIVE_NOTE" in note
+
+
+def test_the_words_on_the_lab_part_of_the_page_never_say_round_sidecar_intent_or_overlay():
+    import re
+    block = DESKLAB[DESKLAB.index("Step B (task B6)"):DESKLAB.index("  return {\n    TAG_TITLE")]
+    literals = re.findall(r'"([^"\n]*)"', block)
+    assert len(literals) > 60
+    for text in literals:
+        assert not re.search(r"\b(round|rounds|sidecar|intent|overlay)\b", text, re.I), text
+    visible = re.sub(r"<[^>]*>", " ", LAB_DESK)                       # the markup's words, not its attributes
+    for word in ("sidecar", "intent"):
+        assert word not in re.sub(r"//.*|/\*[\s\S]*?\*/", "", visible).lower(), word
+
+
+def test_the_activity_map_has_the_labs_journal_lines():
+    act = _section("const ACTIVITY = {", "function activityLine(")
+    for ev in ("lab_refused", "lab_runner_down", "lab_runner_back", "lab_stopped", "lab_flatten", "lab_cancelled", "lab_limits_set"):
+        assert f'{ev}: labAct("{ev}")' in act, ev
