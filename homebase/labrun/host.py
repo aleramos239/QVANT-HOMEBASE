@@ -821,7 +821,9 @@ class StrategyDay:
             self._tell({"head": 1, "strategy": side.desk_id, "mark": list(side.mark), "date": side.date})
             self._log = read_tells([{"head": 1, "mark": list(side.mark)}], side.mark)
         self._check = self._log
-        if not side.silent():
+        if not side.silent():                        # the Desk's snapshot of this day is in already
+            if side.killed or side.stopped is not None:
+                return self.desk_says(KILLED if side.killed else STOPPED_TODAY)
             self._desk_verify()
 
     def _held(self) -> bool:

@@ -191,6 +191,17 @@ def test_the_desk_is_silent_when_the_stream_is_down_or_nothing_was_heard_for_fif
     assert s.silent() is True
 
 
+def test_what_the_desk_said_before_its_stream_dropped_is_still_told_and_nothing_newer_is_made_up():
+    s = side()
+    s.sent(1, [entry(1), entry(2)])
+    s.take(snap({1: filled(), 2: WORKING}, flat=False, answered=[1]))
+    s.down()                                                                 # before the child's next event
+    assert s.updates() == [up(1, "filled", 110.25, 105.25, 120.25, 1000)] and s.flat is False
+    assert s.updates() == [] and s.working() == [2]                          # order 2: still what was last said
+    s.take({**snap({1: CANCELLED, 2: CANCELLED}, answered=[1]), "mark": ["other", "promotion"]})
+    assert s.updates() == []                                                 # a snapshot that is ignored tells nothing
+
+
 def test_killed_and_stopped_are_read_from_a_snapshot_of_this_day_only():
     s = side()
     s.take(snap(killed=True))

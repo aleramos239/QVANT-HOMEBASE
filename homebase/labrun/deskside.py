@@ -219,7 +219,8 @@ class DeskSide:
     def updates(self) -> list[dict]:
         """One update per order whose status or fill is not what the child was last told, in the order the child
         made them."""
-        brain = self._snap.get("brain") if self._snap is not None and self._valid else None
+        # (the latest snapshot of THIS day, also while the stream is down: what the Desk said happened did happen)
+        brain = self._snap.get("brain") if self._snap is not None else None
         orders = brain.get("orders") if isinstance(brain, dict) and isinstance(brain.get("orders"), dict) else None
         answered = set(self.answered)
         newest = max(answered, default=-1)

@@ -174,7 +174,7 @@ def desk_day(source=ONE, stub=None, *, up=True, accounts=(ACCOUNT,), resume=None
     if up:
         side.take(snap(source, flat=flat) if up is True else up)
     tells = tells if tells is not None else []
-    day = StrategyDay(rec(source), D, spawn=plain, daily=[], deadline_s=kw.pop("deadline_s", 0.3), desk=side,
+    day = StrategyDay(rec(source), D, spawn=kw.pop("spawn", plain), daily=[], deadline_s=kw.pop("deadline_s", 0.3), desk=side,
                       send=stub.send, tell=tells.append, resume=resume, wall=wall, now_ns=now_ns, **kw)
     return day, stub, side, tells, wall
 
