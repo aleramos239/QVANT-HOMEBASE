@@ -236,3 +236,17 @@ def test_the_store_is_the_env_folder_never_the_real_one(c, drafts_dir, make_run,
     assert store.root() == tmp_path / "desklab"
     monkeypatch.delenv(store.ENV_ROOT)
     assert str(store.root()).endswith(".homebase/desklab") and store.root() != tmp_path / "desklab"
+
+
+def test_promote_checks_the_markets_this_service_really_streams(tmp_path, monkeypatch, drafts_dir, make_run):
+    """The chart service hands the router its own markets: one started without NQ has no live prices for an NQ strategy."""
+    from homebase.charts.server import create_app
+    from tests.backtest_util import D1, nq_archive
+    monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
+    monkeypatch.setattr(sandbox, "available", lambda: True)
+    es_only = create_app(roots=["ES"], base=nq_archive(tmp_path / "ticks"), replay=D1, speed=1, start_et=dt.time(9, 30),
+                         state=tmp_path / "state")
+    c = TestClient(es_only, base_url="http://localhost:8852")
+    draft(drafts_dir)
+    assert sentence(promote(c, run_id=make_run()), 409) == "No live prices for NQ here."
+    assert c.get("/api/tester/desklab").json()["strategies"] == []

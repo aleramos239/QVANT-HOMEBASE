@@ -13,14 +13,15 @@ import json
 import math
 import os
 import re
+import signal
 import time
 import traceback
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketClose
 
@@ -70,6 +71,9 @@ PAST_REDRAW_S = 600.0          # a root's charts reload for a repaired PAST sess
                                # by piece (a merge every few minutes), and each reload rebuilds every chart of the root
 REPAIR_SPLICE_MS = 600_000     # the hub tape's ticks this recent (before a repair load began) may still be unflushed/new
 PAPER_POLL_S = 0.25            # the paper runner is asked this often; it runs at most once a second
+LABRUN_QUEUE_MAX = 2000        # live batches a reader of /api/labrun/ticks may fall behind before it is dropped
+LABRUN_CHUNK = 5000            # backlog rows in one of its events
+LABRUN_CLOCK_S = 1.0           # its clock event, which is also its heartbeat
 TIMEFRAMES = [["5s", "time:5"], ["15s", "time:15"], ["30s", "time:30"], ["1m", "time:60"],
               ["2m", "time:120"], ["3m", "time:180"], ["5m", "time:300"], ["10m", "time:600"],
               ["15m", "time:900"], ["30m", "time:1800"], ["1h", "time:3600"], ["4h", "time:14400"],
@@ -440,6 +444,108 @@ class Conn:
             self.dead = True
 
 
+def server_stopping(getsignal=signal.getsignal) -> bool:
+    """True once this process was told to stop. uvicorn waits for every open response before it runs the lifespan's
+    clean-up, and has no timeout here (python -m homebase.charts): a response that never ends would hold the
+    shutdown open for good -- no last recorder flush, backtest children left running. So the one endless response
+    of this service (TickFan.stream) asks, and ends. Read-only: uvicorn's own flag, through the SIGTERM handler it
+    installs (Server.handle_exit; tests/test_charts_labrun_stream.py pins both). No uvicorn: False."""
+    return bool(getattr(getattr(getsignal(signal.SIGTERM), "__self__", None), "should_exit", False))
+
+
+def _sse(data, event: str = "") -> str:
+    return (f"event: {event}\n" if event else "") + f"data: {json.dumps(data, separators=(',', ':'))}\n\n"
+
+
+def _backlog_rows(root: str, tape: list, i: int, j: int) -> str:
+    """Worker thread: one backlog event from today's tape (a list of Tick that only ever grows at its end)."""
+    return _sse({"root": root, "rows": [[t.ts_ms, t.price, t.size] for t in tape[i:j]]})
+
+
+class _TickReader:
+    __slots__ = ("roots", "q", "dropped")
+
+    def __init__(self, roots):
+        self.roots = frozenset(roots)
+        self.q: asyncio.Queue = asyncio.Queue(maxsize=LABRUN_QUEUE_MAX)
+        self.dropped = False
+
+
+class TickFan:
+    """The prints of this service as a read-only stream for the Lab strategy runner (GET /api/labrun/ticks, Server-
+    Sent Events). publish() is called from the tick path and costs it one queue put per reader: nothing is copied,
+    encoded or awaited there, and it cannot raise. A reader that falls LABRUN_QUEUE_MAX batches behind is dropped
+    (its stream ends; it asks again with since_ms). clock: the service's (the replay's, in a replay). tape_of(root):
+    today's tape, the hub's list of Tick, or None."""
+
+    def __init__(self, clock, tape_of, stopping=None):
+        self.clock, self.tape_of = clock, tape_of
+        self.stopping = stopping or (lambda: server_stopping())
+        self.readers: set = set()
+
+    def publish(self, root: str, rows: list) -> None:
+        if not rows or not self.readers:
+            return
+        try:
+            for rd in list(self.readers):
+                if root in rd.roots:
+                    try:
+                        rd.q.put_nowait((root, rows))
+                    except asyncio.QueueFull:
+                        rd.dropped = True
+                        self.readers.discard(rd)
+        except Exception as e:  # noqa: BLE001 — a reader must never break the live tick path
+            log(f"labrun ticks: {type(e).__name__}: {e}")
+
+    async def stream(self, roots: list, since_ms: int, clock_s: float | None = None):
+        """`event: clock` {"now_ms"} first and then every clock_s; the backlog -- each market's prints of the current
+        session with ts_ms >= since_ms, oldest first, at most LABRUN_CHUNK rows an event, built in a worker thread;
+        `event: live` once; then the live batches as they arrive. Rows are [ts_ms, price, size]."""
+        clock_s = LABRUN_CLOCK_S if clock_s is None else clock_s
+        loop = asyncio.get_running_loop()
+        rd = _TickReader(roots)
+        # The live queue first, then how far each tape goes -- in ONE turn of the loop, the turn the tick path cannot
+        # interleave with: a print is in a tape below `n` (the backlog) or is fanned out after this line (the queue).
+        # None is missing and none comes twice.
+        self.readers.add(rd)
+        backlog = [(r, t, len(t)) for r in roots if (t := self.tape_of(r))]
+        try:
+            yield _sse({"now_ms": self.clock()}, "clock")
+            for root, tape, n in backlog:
+                i = bisect_left(tape, since_ms, 0, n, key=lambda t: t.ts_ms)
+                while i < n and not rd.dropped:
+                    j = min(i + LABRUN_CHUNK, n)
+                    yield await asyncio.to_thread(_backlog_rows, root, tape, i, j)
+                    i = j
+            yield _sse({}, "live")
+            ticked = loop.time()
+            while not rd.dropped and not self.stopping():
+                wait = ticked + clock_s - loop.time()
+                if wait <= 0:
+                    ticked = loop.time()
+                    yield _sse({"now_ms": self.clock()}, "clock")
+                    continue
+                try:
+                    root, rows = await asyncio.wait_for(rd.q.get(), wait)
+                except asyncio.TimeoutError:
+                    continue
+                yield _sse({"root": root, "rows": [[int(r["ts_ms"]), float(r["price"]), int(r["size"])] for r in rows]})
+        finally:
+            self.readers.discard(rd)
+
+
+class _TickStream(StreamingResponse):
+    """A StreamingResponse that closes its generator whatever ends it -- the reader hung up, the task was cancelled --
+    so the reader leaves the fan-out at once, not when its queue fills."""
+
+    async def __call__(self, scope, receive, send) -> None:
+        try:
+            await super().__call__(scope, receive, send)
+        finally:
+            with suppress(Exception):
+                await self.body_iterator.aclose()
+
+
 class Throttle:
     """fn() soon after kick(), at most once every `gap_s` (fast-paper: the PAPER accounts' push). The first kick
     after a quiet spell runs it on the loop's next turn -- never inside the caller, so the tick path and a POST
@@ -475,7 +581,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                paper_backtest=None, depth_executor=None, md_connect=None) -> FastAPI:
     if paper_day and not replay:
         raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
-    roots = [r.upper() for r in roots]
+    roots = app_roots = [r.upper() for r in roots]
     sd = Path(state) if state else state_dir() / "charts"
     sd.mkdir(parents=True, exist_ok=True)
     layouts_path = sd / "layouts.json"
@@ -772,6 +878,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         except Exception as e:  # noqa: BLE001 — paper work must never break the live tick path
             log(f"paper ticks: {type(e).__name__}: {e}")
 
+    # the Lab strategy runner's read-only tick stream (GET /api/labrun/ticks); hub and clock: defined below
+    tick_fan = TickFan(lambda: clock(), lambda root: hub.today.get(root))
+
+    def labrun_ticks(root: str, rows: list[dict]) -> None:
+        try:
+            tick_fan.publish(root, rows)
+        except Exception as e:  # noqa: BLE001 — the runner's stream must never break the live tick path
+            log(f"labrun ticks: {type(e).__name__}: {e}")
+
     # the feed is built AFTER reseed/_refill exist (it takes _refill as its
     # callback); every function above only touches feed/hub/clock when called
     feed_other = None           # the second md login's socket (settings "md_other_roots"), live only
@@ -781,6 +896,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 quotes.note(root, rows)
             hub.on_ticks(root, rows)
             paper_ticks(root, rows)
+            labrun_ticks(root, rows)
 
         feed = ReplayFeed(store, roots, replay, on_replay, speed=speed, start_et=start_et)
         clock = feed.now_ms
@@ -803,6 +919,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             kept = recorder.append(root, contract, rows)
             hub.on_ticks(root, kept)
             paper_ticks(root, kept)
+            labrun_ticks(root, kept)
             if kept:
                 try:
                     book.on_ticks(root, kept)
@@ -1129,6 +1246,20 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     async def api_symbols():
         return {"roots": roots, "timeframes": TIMEFRAMES}
 
+    @app.get("/api/labrun/ticks")
+    async def api_labrun_ticks(request: Request, roots: str = "", since_ms: int = 0):
+        """The Lab strategy runner's tick stream (python -m homebase.labrun), Server-Sent Events: TickFan.stream.
+        Read-only, and for a local process only: the Host must be 127.0.0.1 or localhost, and ANY request that
+        carries an Origin -- a browser's -- is refused (the gate the desk keeps on /api/trade/*). A market this
+        service does not chart is left out; no market at all still gets the clock. No broker request is made."""
+        if not netguard.host_allowed(request.headers.get("host"), frozenset(LOCAL_HOSTS)):
+            raise HTTPException(403, "the tick stream answers only as 127.0.0.1 or localhost")
+        if request.headers.get("origin") is not None:
+            raise HTTPException(403, "browser requests are refused")
+        want = dict.fromkeys(r.strip().upper() for r in roots.split(","))
+        return _TickStream(tick_fan.stream([r for r in want if r in app_roots], since_ms),
+                           media_type="text/event-stream", headers={"cache-control": "no-cache"})
+
     def read_json(path: Path) -> dict:
         try:
             v = json.loads(path.read_text())
@@ -1221,7 +1352,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             c.send(msg)
         return len(bt)
 
-    tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None, notify=fan_count)
+    tester = tester_router(browser_write_ok, base, Path(state) / "tester" if state else None, notify=fan_count,
+                           live_roots=roots)      # Promote to Desk asks for live prices: the markets THIS service streams
     app.include_router(tester)
 
     export_rt = export_router(browser_write_ok, base, depth_base or DEPTH_ARCHIVE,
