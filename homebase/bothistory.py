@@ -176,6 +176,7 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
     tick = tick_size(symbol)
     acct: dict[tuple, dict] = {}          # (date, account) -> working run
     day: dict[str, dict] = {}             # date -> strategy-level facts (no account)
+    earlier: list[tuple] = []             # ((date, account), run): a Lab strategy's rounds before the one in `acct`
 
     def run_of(date, account) -> dict:
         return acct.setdefault((date, account), {"legs": [], "qty": None, "entry": None,
@@ -208,7 +209,13 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
         if account is not None and not isinstance(account, str):
             continue                                   # malformed: never a dict key
         ts = _ms(rec)
-        if ev == "placed" and account:
+        if ev == "lab_round" and account:
+            # a Lab strategy trades in rounds, several a day on one account: this line starts a new run, and the
+            # one before it (when there is one) is over. Every other kind never writes it.
+            if (date, account) in acct:
+                earlier.append(((date, account), acct.pop((date, account))))
+            run_of(date, account)["round"] = rec.get("round")
+        elif ev == "placed" and account:
             r = run_of(date, account)
             r["qty"] = _num(rec.get("qty"))
             if "upper" in rec or "lower" in rec:           # a straddle: both entry stops
@@ -273,7 +280,7 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
                     killed(date, a)
 
     out = []
-    for (date, account), r in acct.items():
+    for (date, account), r in earlier + list(acct.items()):
         if not r["resolved"]:
             if date == today:
                 continue                               # still running: no result yet
@@ -294,7 +301,11 @@ def runs(records: Iterable[dict], strategy: str, *, symbol: str, today: str,
         if status in ("error", "skipped") and r["reason"] is not None:
             row["reason"] = r["reason"]
         row["legs"] = r["legs"]
-        if r["legs"]:            # a "placed" landed: the fire-to-ack latency applies
+        if "round" in r:         # a Lab round: which one it was. It is not the 09:30 fire: no fire_ms, no latency_ms
+            row["round"] = r["round"]
+            if r["legs"]:
+                row["placed_ms"] = r["legs"][0]["ts"]
+        elif r["legs"]:          # a "placed" landed: the fire-to-ack latency applies
             fire_ms, placed_ms = _fire_ms(date), r["legs"][0]["ts"]
             row["fire_ms"] = fire_ms
             row["placed_ms"] = placed_ms

@@ -859,7 +859,11 @@ class ChartDesk:
             raise Refused(f"{root}: no front contract ({e})") from None
 
     def _day_state(self, aid: str, name: str):
-        return next((s for s in self.engine.day_states_for_account(aid) if s.strategy == name), None)
+        # the pair's state of today AT ITS PLAIN KEY: a Lab strategy trades in rounds, its open round keeps that key,
+        # and a closed round filed under "#n" or a block carried from an earlier day is never the bot's state (every
+        # other kind has one state a day, at that key: for them this is what it always returned)
+        cur = self.engine.states.get(f"{name}@{aid}")
+        return next((s for s in self.engine.day_states_for_account(aid) if s.strategy == name and s is cur), None)
 
     def _is_chart_order(self, aid: str, oid: str) -> bool:
         return str(oid) in self._chart_ids.get(aid, {})
