@@ -18,11 +18,12 @@ const row = (over = {}) => ({ name: 'nq_orb', label: 'NQ ORB', root: 'NQ', sessi
   run: { id: 'r1', net: 5000, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100 }, notes: [], ...over });
 const day = (over = {}) => ({ date: '2026-10-09', state: 'waiting', why: null, orders: [], trades: [], net: 0, match: null, ...over });
 
-test('stateText: a runner that is not alive comes first, then Off, then the day', () => {
+test('stateText: switched off reads Off whatever else is true; then a runner that is not alive, then the day', () => {
   assert.equal(D.stateText(row(), null), 'Runner is not running');
   assert.equal(D.stateText(row(), { alive: false }), 'Runner is not running');
-  assert.equal(D.stateText(row({ enabled: false, today: day({ state: 'running' }) }), { alive: false }), 'Runner is not running');
+  assert.equal(D.stateText(row({ enabled: false, today: day({ state: 'running' }) }), { alive: false }), 'Off', 'a promoted strategy lands off: it does nothing, runner or not');
   assert.equal(D.stateText(row({ enabled: false, today: day({ state: 'running' }) }), ALIVE), 'Off');
+  assert.equal(D.stateText(row({ enabled: false }), null), 'Off');
 });
 
 test('stateText: one sentence for each state of the day', () => {
@@ -56,6 +57,7 @@ test('dotClass: off, shadow or warn, in step with the words', () => {
   assert.equal(at(row({ today: day({ state: 'running', why: 'Prices are late.' }) })), 'warn');
   assert.equal(at(row(), null), 'warn');
   assert.equal(at(row(), { alive: false }), 'warn');
+  assert.equal(at(row({ enabled: false }), { alive: false }), 'off', 'switched off: no warning for a runner it does not use');
 });
 
 test('todayNet: the day\'s would-be net, or null when there is no number', () => {
@@ -139,9 +141,11 @@ test('setupRows: what the skin\'s Setup card lists', () => {
   assert.equal(D.setupRows(row({ promoted_utc: 'not a date' }))[4][1], '—');
 });
 
-test('the four steps of "Allowed up to": only Shadow is on, the others are locked with a reason', () => {
-  assert.deepEqual(D.LEVELS.map((l) => [l.name, l.on]), [['Shadow', true], ['Paper', false], ['Funded demo', false], ['Live', false]]);
-  assert.equal(D.LEVEL_LOCKED, 'Not built yet: accounts unlock with the Desk update.');
+test('there is no "Allowed up to" control: a promoted strategy is on the Desk, off, and the owner turns it on', () => {
+  for (const k of ['LEVELS', 'LEVELS_WHY', 'LEVEL_LOCKED']) assert.equal(k in D, false, k);
+  for (const src of [HTML, SKIN, readFileSync(new URL('../../homebase/static/desklab.js', import.meta.url), 'utf8')]) {
+    assert.doesNotMatch(src, /Allowed up to|labLevelsWhy|DeskLab\.LEVEL|Funded demo and Live unlock/);
+  }
 });
 
 test('the words the page shows, exactly', () => {
@@ -149,10 +153,10 @@ test('the words the page shows, exactly', () => {
   assert.equal(D.NET_TITLE, 'What it would have made today, after costs, 1 contract');
   assert.equal(D.switchTitle(true), 'ON: it runs in shadow');
   assert.equal(D.switchTitle(false), 'OFF: it does nothing');
-  assert.equal(D.NOTE, 'From the Lab. It runs on live prices in shadow: it writes down its orders and nothing is sent.');
+  assert.equal(D.NOTE, 'From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.');
   assert.equal(D.GONE, 'That strategy is not on the Desk any more. Promote it again from the Lab.');
   assert.equal(D.EMPTY_DAY, 'Nothing yet today.');
-  assert.equal(D.ACCOUNTS_CAPTION, 'Shadow only for now. Accounts unlock with the Desk update.');
+  assert.equal(D.ACCOUNTS_CAPTION, 'Accounts come with the Desk update. Until then it runs in shadow.');
   assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept.' });
 });
 
@@ -180,7 +184,7 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
   const holes = [...LABVIEW.matchAll(/\$\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g)].map((m) => m[1].trim());
   assert.ok(holes.length > 40, 'the page has template holes');
   // anything else is a new hole: look at it before adding it here
-  const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'levels', 'today', 'busy ? " disabled" : ""',
+  const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'today', 'busy ? " disabled" : ""',
     'o.refused ? " warn" : ""', 'm.ok === false ? " warn" : ""', 'orders.join("")', 'trades.join("")',
     'net == null ? "" : esc(usdS(net))', 'esc(DeskLab.missingText(DESKLAB_OK))', 'DeskLab.figures(w).map(fig).join("")',
     'net != null ? ` · today would be ${esc(usdS(net))', 'days.length ? `<div class="agroup feed static">${days.join("")',
@@ -245,7 +249,12 @@ test('Promote is not gated by the hash, and a promoted draft is marked in the li
   assert.match(LAB, /hasRun: !!\(r && r\.bundle && r\.rid\)/, 'a finished run is open: that is all the row asks of the run (the hash never gates Promote)');
   assert.doesNotMatch(LAB, /r\.sha === sha|started\.sha/);
   assert.match(LAB, /desk: !!\(S\.desk && S\.desk\.has\(d\.name\)\)/);
-  assert.match(LAB, /<i class="lb-desk" title="On the Desk, in shadow">On the Desk<\/i>/);
+  assert.match(LAB, /<i class="lb-desk" title="On the Desk page">On the Desk<\/i>/);
+});
+
+test('the Lab says what Promote does now: it lands on the Desk switched off, and the empty state no longer says nothing runs there', () => {
+  assert.doesNotMatch(LAB, /Nothing here ever runs on the desk|On the Desk, in shadow|On the Desk: shadow/);
+  assert.match(LAB, /<p>Backtest it on real tick data in a sandbox, see every trade on the chart, and promote it to the Desk when you like what you see\.<\/p>/);
 });
 
 
@@ -339,15 +348,13 @@ test('the #lab=<name> link is used once, and a link opened while the Desk is ope
   }
 });
 
-test('the Lab lists only read: no pointer cursor, an amount never wraps, and the locked steps have a caption a keyboard reaches', () => {
+test('the Lab lists only read: no pointer cursor, an amount never wraps, and Accounts keeps its locked button with its caption', () => {
   assert.match(HTML, /\.feed\.static \.feed-row\{ cursor:default; \}/);
   assert.match(HTML, /\.feed\.static \.t\{ white-space:nowrap; \}/);
   assert.match(HTML, /\.feed\.static \.t\.net\{ flex:0 0 auto; margin-left:auto; \}/);
   assert.equal((LABVIEW.match(/agroup feed static/g) || []).length, 3, 'today, days, notes: all static');
   assert.doesNotMatch(LABVIEW, /agroup feed"/);
-  assert.match(LABVIEW, /<div class="mcap" id="labLevelsWhy">\$\{esc\(DeskLab\.LEVELS_WHY\)\}<\/div>/);
-  assert.match(LABVIEW, /aria-describedby="labLevelsWhy" title="\$\{esc\(DeskLab\.LEVEL_LOCKED\)\}"/);
-  assert.equal(D.LEVELS_WHY, 'Paper, Funded demo and Live unlock with the Desk update.');
+  assert.match(LABVIEW, /<button class="btn btn-quiet noarrow btn-sm" disabled title="\$\{esc\(DeskLab\.ACCOUNTS_CAPTION\)\}">\+ Assign an account<\/button>\s*<div class="mcap">\$\{esc\(DeskLab\.ACCOUNTS_CAPTION\)\}<\/div>/);
 });
 
 test('the Lab\'s Promote row ties its hint to a line under the group (aria-describedby), and the hint is read from the same state', () => {

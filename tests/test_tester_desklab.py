@@ -112,7 +112,7 @@ def test_a_good_promote_writes_the_record_and_the_page_reads_it_without_the_code
     assert r.json()["notes"] == ["1 order can go out with no stop."]
     assert r.headers["access-control-allow-origin"] == "http://localhost:8850"
     rec = json.loads((tmp_path / "desklab" / "nq_bars.json").read_text())
-    assert rec["source"] == code and rec["sha256"] == sha(code) and rec["id"] == "draft_nq_bars" and rec["enabled"] is True
+    assert rec["source"] == code and rec["sha256"] == sha(code) and rec["id"] == "draft_nq_bars" and rec["enabled"] is False
     assert rec["params"] == {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0} and rec["qty"] == 2 and rec["root"] == "NQ"
     assert rec["label"] == "Bar breakout" and rec["notes"] == r.json()["notes"] and rec["promoted_utc"]
     assert rec["run"] == {"id": rid, "range": RANGE, "net": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31,
@@ -122,7 +122,18 @@ def test_a_good_promote_writes_the_record_and_the_page_reads_it_without_the_code
     (s,) = got.json()["strategies"]
     assert "source" not in s and s["sha256"] == sha(code) and s["params"]["lookback"] == 8 and s["notes"] == rec["notes"]
     assert rec["session_window"] == s["session_window"] == ["09:30", "11:30"] and rec["bar_minutes"] == s["bar_minutes"] == 5
-    assert s["today"] is None and s["days"] == []
+    assert s["today"] is None and s["days"] == [] and s["enabled"] is False     # on the Desk, switched off
+
+
+def test_promoting_again_a_strategy_that_was_on_lands_off(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run()).status_code == 200
+    assert c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}).json()["enabled"] is True
+    newer = CODE.replace("Bar breakout", "Bar breakout two")
+    draft(drafts_dir, newer)
+    assert promote(c, run_id=make_run(newer)).status_code == 200
+    (s,) = c.get("/api/tester/desklab").json()["strategies"]
+    assert s["label"] == "Bar breakout two" and s["enabled"] is False           # new code starts off
 
 
 def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir, make_run, tmp_path):
@@ -198,6 +209,7 @@ def test_other_ways_in_are_refused(c):
 def test_the_desk_page_calls_cross_origin_and_nobody_else_does(c, drafts_dir, make_run, tmp_path):
     draft(drafts_dir)
     promote(c, run_id=make_run())
+    assert c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}).json()["enabled"] is True
     for what in ("promote", "remove", "onoff"):
         pre = c.options(f"/api/tester/desklab/{what}", headers={**DESK, "access-control-request-method": "POST"})
         assert pre.status_code == 204 and pre.headers["access-control-allow-origin"] == "http://localhost:8850"

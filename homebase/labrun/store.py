@@ -69,7 +69,8 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
              now: dt.datetime | None = None) -> dict:
     """What is kept when a draft is promoted: its text as it was backtested, the settings and size of that run, and the
     run's headline numbers (from the bundle's run.json: inputs, qty, range, report.summary.all), and the window and
-    bar size the page shows (the static meta's; the Strategy defaults when the draft does not say)."""
+    bar size the page shows (the static meta's; the Strategy defaults when the draft does not say). It lands switched
+    OFF, also when it replaces one that was on: the owner turns it on, on the Desk."""
     now = now or dt.datetime.now(dt.timezone.utc)
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
@@ -77,7 +78,7 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
             "run": {"id": run_id, "range": run.get("range"), **{ours: summary.get(theirs) for ours, theirs in HEADLINE}},
-            "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": True,
+            "notes": list(notes), "promoted_utc": now.isoformat(timespec="seconds"), "enabled": False,
             "session_window": list(meta.get("session_window") or DEFAULT_WINDOW), "bar_minutes": meta.get("bar_minutes") or 0}
 
 

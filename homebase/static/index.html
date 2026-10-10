@@ -1703,8 +1703,8 @@ async function showWatch(name) {
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#run=" + encodeURIComponent(r.run_id);
 }
 /* ---- LAB STRATEGIES on the Desk (2026-10-09, Step A): drafts promoted from the Lab. Records kept by the chart service
-   (:8852, GET /api/tester/desklab); its runner hosts each one in SHADOW -- it writes down its orders and nothing is
-   sent -- and writes a summary of the day. This page only reads them, and switches or removes one by name. The desk
+   (:8852, GET /api/tester/desklab). A promoted one lands switched OFF; switched on, the runner hosts it in SHADOW -- it
+   writes down its orders and nothing is sent -- and writes a summary of the day. This page only reads them, and switches or removes one by name. The desk
    itself does not know a Lab strategy yet: nothing here calls its /api/strategy, /api/book or /api/strategy-flatten.
    The words and numbers come from desklab.js (DeskLab). */
 let DESKLAB = {strategies: [], runner: null}, DESKLAB_OK = null, DESKLAB_BUSY = "";   // DESKLAB_OK: null = no read finished yet, false = the last one failed
@@ -2019,9 +2019,6 @@ function labView(name) {
     title="${esc(DeskLab.switchTitle(on))}"
     onclick="setDeskLab(${jsArg(w.name)}, ${!on})"></button>`;
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
-  const levels = DeskLab.LEVELS.map(l => l.on
-    ? `<button type="button" class="sel" aria-pressed="true">${esc(l.name)}</button>`
-    : `<button type="button" disabled aria-pressed="false" aria-describedby="labLevelsWhy" title="${esc(DeskLab.LEVEL_LOCKED)}">${esc(l.name)}</button>`).join("");
   const orders = (Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
     `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(o.text)}</span></div>`);
   const trades = (Array.isArray(t.trades) ? t.trades : []).map(DeskLab.tradeLine).map(x =>
@@ -2034,8 +2031,6 @@ function labView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.stateText(w, DESKLAB.runner))}</b>${net != null ? ` · today would be ${esc(usdS(net))}` : ""}</div>
     <div class="sd-note">${esc(DeskLab.NOTE)}</div>
-    <div class="sec"><h2>Allowed up to</h2><div class="seg" role="group" aria-label="Allowed up to">${levels}</div>
-      <div class="mcap" id="labLevelsWhy">${esc(DeskLab.LEVELS_WHY)}</div></div>
     <div class="sec"><h2>Today</h2>${today}</div>
     <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>

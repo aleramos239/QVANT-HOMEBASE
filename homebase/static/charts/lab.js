@@ -682,7 +682,7 @@ function paintLib() {
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
   const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${r.lock ? ' title="Read-only"' : ''}>
-        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk, in shadow">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+        ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}" aria-label="Move ${esc(r.name)} to a group" title="Move to a group" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
@@ -1325,7 +1325,7 @@ function paintEditor() {
   const b = buf();
   if (!b) {
     el.innerHTML = `<div class="lab-welcome"><h2>Write or paste a strategy</h2>
-      <p>Backtest it on real tick data in a sandbox, see every trade on the chart, and request a review when you like what you see. Nothing here ever runs on the desk.</p>
+      <p>Backtest it on real tick data in a sandbox, see every trade on the chart, and promote it to the Desk when you like what you see.</p>
       <div class="acts"><button class="btn btn-default btn-lg" data-act="paste">Paste a script</button><button class="btn btn-outline btn-lg" data-act="new">Start from a template</button></div></div>`;
     paintHead();
     return;
@@ -1476,8 +1476,8 @@ function rangeText(rg) {
   return a.slice(0, 4) === b.slice(0, 4) ? `${d(a)} – ${d(b)}, ${b.slice(0, 4)}` : `${d(a)}, ${a.slice(0, 4)} – ${d(b)}, ${b.slice(0, 4)}`;
 }
 /* ---- Promote to Desk (2026-10-09) ----
-   A draft that was backtested can go on the Desk page, where the runner hosts it in SHADOW: it writes down its orders and nothing is
-   sent. The chart service keeps a frozen copy of the code (POST /desklab/promote) and says what the Desk would refuse; this page only
+   A draft that was backtested can go on the Desk page. It lands there switched off; switched on, the runner hosts it in SHADOW: it
+   writes down its orders and nothing is sent. The chart service keeps a frozen copy of the code (POST /desklab/promote) and says what the Desk would refuse; this page only
    asks, and shows the answer. Which Lab strategies are on the Desk (GET /desklab) is asked when the Strategies list opens and after
    each action -- never on a timer. The pure half (the row's four states, the words) is labcode.js. */
 async function hexSha(text) {        // the sha-256 the Desk keeps of the code it runs; '' where this browser cannot say

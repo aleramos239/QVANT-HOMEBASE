@@ -1,8 +1,8 @@
 /* Pure helpers for a Lab strategy on the Desk page (2026-10-09): the sentences, the dot and the numbers of a promoted
  * strategy, read from what the chart service answers (GET /api/tester/desklab).
  *
- * Display only. A promoted strategy runs in SHADOW: the runner writes down its orders and nothing is sent, and nothing
- * here talks to the desk. These functions return plain TEXT; the page escapes it (esc / jsArg) where it builds markup.
+ * Display only. A promoted strategy lands switched OFF; switched on it runs in SHADOW: the runner writes down its orders
+ * and nothing is sent, and nothing here talks to the desk. These functions return plain TEXT; the page escapes it (esc / jsArg) where it builds markup.
  *
  * `row` = one strategy of that answer (the record without its code, plus `today` and `days`); `runner` = {alive, ...}.
  * What the record does not carry (the session, the bar size) is left out of a line, never made up.
@@ -26,20 +26,12 @@
 
   var TAG_TITLE = "It writes down its orders. Nothing is sent.";
   var NET_TITLE = "What it would have made today, after costs, 1 contract";
-  var NOTE = "From the Lab. It runs on live prices in shadow: it writes down its orders and nothing is sent.";
+  var NOTE = "From the Lab. Switched on, it runs on live prices in shadow: it writes down its orders and nothing is sent.";
   var GONE = "That strategy is not on the Desk any more. Promote it again from the Lab.";
   var EMPTY_DAY = "Nothing yet today.";
   var NOT_ANSWERING = "The chart service is not answering, so this strategy cannot be shown right now.";
-  var LEVELS_WHY = "Paper, Funded demo and Live unlock with the Desk update.";
   var NOT_CHECKED = "Not checked yet.";
-  var ACCOUNTS_CAPTION = "Shadow only for now. Accounts unlock with the Desk update.";
-  var LEVEL_LOCKED = "Not built yet: accounts unlock with the Desk update.";
-  var LEVELS = [
-    { name: "Shadow", on: true },
-    { name: "Paper", on: false },
-    { name: "Funded demo", on: false },
-    { name: "Live", on: false },
-  ];
+  var ACCOUNTS_CAPTION = "Accounts come with the Desk update. Until then it runs in shadow.";
 
   function num(v) {
     return typeof v === "number" && isFinite(v) ? v : null;
@@ -82,10 +74,10 @@
     return t && typeof t === "object" ? t : null;
   }
 
-  // The one line of state. Order: the runner, then the switch, then the day.
+  // The one line of state. Order: the switch (off does nothing, runner or not), then the runner, then the day.
   function stateText(row, runner) {
-    if (!alive(runner)) return "Runner is not running";
     if (!row || row.enabled !== true) return "Off";
+    if (!alive(runner)) return "Runner is not running";
     var t = dayOf(row), why = t ? text(t.why) : "";
     switch (t && t.state) {
       case "running": return why || "Running in shadow";
@@ -99,8 +91,8 @@
 
   // The sidebar dot, in step with the words: off / shadow / warn.
   function dotClass(row, runner) {
-    if (!alive(runner)) return "warn";
     if (!row || row.enabled !== true) return "off";
+    if (!alive(runner)) return "warn";
     var t = dayOf(row), state = t && t.state;
     if (state === "off" || state === "not_today") return "off";
     if (state === "stopped") return "warn";
@@ -214,7 +206,7 @@
 
   return {
     TAG_TITLE: TAG_TITLE, NET_TITLE: NET_TITLE, NOTE: NOTE, GONE: GONE, EMPTY_DAY: EMPTY_DAY, NOT_CHECKED: NOT_CHECKED,
-    ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING, LEVELS_WHY: LEVELS_WHY, LEVEL_LOCKED: LEVEL_LOCKED, LEVELS: LEVELS,
+    ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING,
     usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, orderLine: orderLine,
     tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, setupRows: setupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,

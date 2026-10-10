@@ -217,19 +217,19 @@ test('promoteState: no finished run of this code, or unsaved edits: the row is t
 
 test('promoteState: a finished run, not on the Desk: promote', () => {
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: 'aa' }) },
-    { label: 'Promote to Desk', hint: 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' });
+    { label: 'Promote to Desk', hint: 'Puts it on the Desk, switched off. It places no orders.', disabled: false, action: 'promote' });
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: undefined, sha: '' }).action, 'promote', 'a missing hash does not stop a run that finished');
 });
 
 test('promoteState: on the Desk with this same code: open it there', () => {
-  const open = { label: 'On the Desk: shadow', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
+  const open = { label: 'On the Desk', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'aa' }, sha: 'aa' }) }, open);
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'aa' }, sha: 'aa' }) }, open, 'it is on the Desk whether or not a run is open');
 });
 
 test('promoteState: on the Desk with other code: promote again, the Desk judges the run', () => {
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: 'aa' }) },
-    { label: 'Promote again', hint: 'The Desk runs an older version. Promoting again starts it in shadow.', disabled: false, action: 'promote' });
+    { label: 'Promote again', hint: 'The Desk runs an older version. Promoting again puts this one there, switched off.', disabled: false, action: 'promote' });
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: true, hasRun: true, row: { sha256: 'bb' }, sha: '' }) },
     { label: 'Promote again', hint: 'Run a backtest of this exact code first.', disabled: true, action: null });
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'bb' }, sha: 'aa' }).disabled, true);
@@ -238,9 +238,9 @@ test('promoteState: on the Desk with other code: promote again, the Desk judges 
 test('promoteState: the hash never gates Promote (a saved draft with a finished run open is enabled), it only tells the same code from other code', () => {
   // no hash (no crypto.subtle, or not worked out yet): not on the Desk -> promote; on the Desk -> "Promote again", with its own hint
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: null, sha: '' }) },
-    { label: 'Promote to Desk', hint: 'Puts it on the Desk in shadow. It places no orders.', disabled: false, action: 'promote' });
+    { label: 'Promote to Desk', hint: 'Puts it on the Desk, switched off. It places no orders.', disabled: false, action: 'promote' });
   assert.deepEqual({ ...L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: 'bb' }, sha: '' }) },
-    { label: 'Promote again', hint: 'Promoting again starts it in shadow.', disabled: false, action: 'promote' });
+    { label: 'Promote again', hint: 'Promoting again puts this one there, switched off.', disabled: false, action: 'promote' });
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: true, row: { sha256: '' }, sha: '' }).action, 'promote', 'two unknowns are not the same code');
   // a hash that cannot be worked out never opens the Desk page as if it were the same code
   assert.equal(L.promoteState({ kind: 'draft', dirty: false, hasRun: false, row: { sha256: 'bb' }, sha: '' }).action, null);
@@ -256,8 +256,8 @@ test('promoteState: a built-in strategy (or a script not saved yet) has no such 
 
 test('deskSaid: the lines after a promote, in the words of the page', () => {
   assert.deepEqual(L.deskSaid({ ok: true, notes: ['1 order can go out with no stop.', 'It sets its own size.'] }),
-    ['On the Desk, in shadow. It places no orders.', 'The Desk would refuse: 1 order can go out with no stop.', 'The Desk would refuse: It sets its own size.']);
-  assert.deepEqual(L.deskSaid({ ok: true }), ['On the Desk, in shadow. It places no orders.']);
-  assert.deepEqual(L.deskSaid({ ok: true, notes: 'x' }), ['On the Desk, in shadow. It places no orders.'], 'notes is a list or nothing');
-  assert.deepEqual(L.deskSaid({ ok: true, notes: [1, null, ''] }), ['On the Desk, in shadow. It places no orders.']);
+    ['On the Desk, switched off. Turn it on there to run it in shadow.', 'The Desk would refuse: 1 order can go out with no stop.', 'The Desk would refuse: It sets its own size.']);
+  assert.deepEqual(L.deskSaid({ ok: true }), ['On the Desk, switched off. Turn it on there to run it in shadow.']);
+  assert.deepEqual(L.deskSaid({ ok: true, notes: 'x' }), ['On the Desk, switched off. Turn it on there to run it in shadow.'], 'notes is a list or nothing');
+  assert.deepEqual(L.deskSaid({ ok: true, notes: [1, null, ''] }), ['On the Desk, switched off. Turn it on there to run it in shadow.']);
 });

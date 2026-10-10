@@ -590,28 +590,30 @@ function plWatchSaid(what, name) {
      on the Desk?            code                      run open, saved     label                  action
      no                      -                         no, or unsaved      Promote to Desk        none (disabled: run first)
      no                      -                         yes                 Promote to Desk        promote
-     yes, same code (hash)   -                         -                   On the Desk: shadow    open
+     yes, same code (hash)   -                         -                   On the Desk            open
      yes, other code         hash differs              no, or unsaved      Promote again          none (disabled: run first)
      yes, other code         hash differs              yes                 Promote again          promote ("The Desk runs an older version.")
      yes                     hash cannot be worked out no, or unsaved      Promote again          none (disabled: run first)
-     yes                     hash cannot be worked out yes                 Promote again          promote ("Promoting again starts it in shadow.")
+     yes                     hash cannot be worked out yes                 Promote again          promote ("Promoting again puts this one there, switched off.")
+
+   A promoted strategy lands on the Desk switched OFF (also one promoted again while it was on): the owner turns it on there.
 
    The hash only tells "same code" from "other code". It never gates Promote: with a saved draft and a finished run open the row is
    enabled, and the Desk is the authority -- it refuses a run of other code in words (shown as the error line). */
 function promoteState(state) {
   const { kind, dirty, hasRun, row, sha } = state || {};
   if (kind !== 'draft') return null;
-  if (row && sha && row.sha256 === sha) return { label: 'On the Desk: shadow', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
+  if (row && sha && row.sha256 === sha) return { label: 'On the Desk', hint: 'Open it on the Desk page.', disabled: false, action: 'open' };
   const label = row ? 'Promote again' : 'Promote to Desk';
   if (dirty || !hasRun) return { label, hint: 'Run a backtest of this exact code first.', disabled: true, action: null };
-  const hint = !row ? 'Puts it on the Desk in shadow. It places no orders.'
-    : sha ? 'The Desk runs an older version. Promoting again starts it in shadow.' : 'Promoting again starts it in shadow.';
+  const hint = !row ? 'Puts it on the Desk, switched off. It places no orders.'
+    : sha ? 'The Desk runs an older version. Promoting again puts this one there, switched off.' : 'Promoting again puts this one there, switched off.';
   return { label, hint, disabled: false, action: 'promote' };
 }
-/* The lines after a promote went through: that it is on the Desk, then one for each thing the Desk would refuse on an account. */
+/* The lines after a promote went through: that it is on the Desk and off, then one for each thing the Desk would refuse on an account. */
 function deskSaid(answer) {
   const notes = Array.isArray(answer && answer.notes) ? answer.notes.filter((n) => typeof n === 'string' && n) : [];
-  return ['On the Desk, in shadow. It places no orders.', ...notes.map((n) => `The Desk would refuse: ${n}`)];
+  return ['On the Desk, switched off. Turn it on there to run it in shadow.', ...notes.map((n) => `The Desk would refuse: ${n}`)];
 }
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
