@@ -196,3 +196,53 @@ def test_a_failed_entry_reads_check_with_its_rows_sentence(tmp_path):
     send(d, entry(1))
     (row,) = d.ld.status_view(LAB)["rounds"]
     assert row["why"] and _view(d) == ("check", row["why"])
+
+
+# ---------------------------------------------------------------- G1: the runner up but not connected to the Desk
+NOT_CONNECTED = "The runner is not connected to the Desk."
+
+
+def _runner_file(d):
+    store.put_runner({"pid": 1, "seen_utc": d.ld._utc().isoformat()})
+    run(d.ld.refresh())
+
+
+def test_a_booked_strategy_whose_runner_never_beat_reads_runner_down_even_with_a_fresh_runner_file(tmp_path):
+    d = mkdesk(tmp_path)
+    _runner_file(d)
+    v = d.ld.status_view(LAB)
+    assert v["runner"]["alive"] is True                                # alive by its file alone
+    assert (v["state"], v["why"]) == ("runner_down", NOT_CONNECTED)
+
+
+def test_a_beat_that_names_another_strategy_does_not_connect_this_one(tmp_path):
+    d = mkdesk(tmp_path)
+    d.ld.heartbeat({"pid": 7, "strategies": {}})
+    assert _view(d) == ("runner_down", NOT_CONNECTED)
+
+
+def test_once_the_runner_names_it_the_state_is_the_usual_one(tmp_path):
+    d = mkdesk(tmp_path)
+    d.ld.heartbeat({"pid": 7, "strategies": {LAB: {"state": "waiting", "why": None, "mode": "desk"}}})
+    assert _view(d) == ("waiting", None)
+    d.ld.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "desk"}}})
+    assert _view(d) == ("watching", None)
+
+
+def test_a_disarmed_desk_says_disarmed_first(tmp_path):
+    """Disarmed, nothing goes out whatever the runner does: the desk-wide fact is the one to read."""
+    d = mkdesk(tmp_path, armed=False)
+    assert _view(d) == ("disarmed", None)
+
+
+def test_with_no_account_or_switched_off_the_runner_sentence_is_not_said(tmp_path):
+    shadow = mkdesk(tmp_path / "s", qty=0, own_store=True)
+    assert _view(shadow) == ("shadow", None)
+    off = mkdesk(tmp_path / "o", enabled=False, own_store=True)
+    assert _view(off) == ("off", None)
+
+
+def test_a_trade_that_needs_a_look_still_reads_check_with_the_runner_not_connected(tmp_path):
+    d, s = _live(tmp_path)
+    d.eng._lab_x(s)["blind"] = True
+    assert _view(d)[0] == "check"

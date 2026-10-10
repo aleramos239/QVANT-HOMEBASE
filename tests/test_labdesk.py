@@ -1128,8 +1128,9 @@ def test_a_lab_strategy_cannot_be_booked_on_an_account_with_a_daily_take_rule(tm
 def test_the_status_block_shows_trades_refusals_and_what_the_runner_says(tmp_path):
     d = mkdesk(tmp_path)
     d.ld._mono = Mono()
-    v = d.ld.status_view(LAB)
-    assert (v["state"], v["trades_today"], v["mode_today"], v["refused"]) == ("waiting", 0, None, [])
+    v = d.ld.status_view(LAB)       # booked, and no runner has named it to this Desk yet (final wave G1)
+    assert (v["state"], v["why"], v["trades_today"], v["mode_today"], v["refused"]) == \
+        ("runner_down", "The runner is not connected to the Desk.", 0, None, [])
     beat(d)
     v = d.ld.status_view(LAB)
     assert (v["state"], v["mode_today"]) == ("watching", "desk")

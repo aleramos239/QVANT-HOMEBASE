@@ -84,6 +84,7 @@ CANNOT_READ = "The Desk cannot read it."
 CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
 SWITCHED_OFF = "Lab strategies are switched off on this Desk."
+RUNNER_NOT_CONNECTED = "The runner is not connected to the Desk."
 
 # ---- the intake half (task B3): the runner's orders, the heartbeat rule, the stream back (see THE INTAKE HALF below)
 RATE_N, RATE_WINDOW_S = 5, 1.0           # entries: at most this many requests a second per strategy (trading.py's own)
@@ -1586,6 +1587,9 @@ class LabDesk:
                 state, why = "runner_down", None
             elif state in ("waiting", "disarmed") and d["stopped"] is not None:
                 state, why = "stopped", d["stopped"]
+            elif state == "waiting" and live["beat"] is None and assignments(self.cfg, name):
+                state, why = "runner_down", RUNNER_NOT_CONNECTED      # booked, and no runner has named it to this
+                                                                      # Desk: its file alone is not "waiting" (G1)
             elif state == "waiting" and fresh:
                 told = {"running": "watching", "done": "done", "not_today": "done", "stopped": "stopped"}.get(info.get("state"))
                 if told is not None:

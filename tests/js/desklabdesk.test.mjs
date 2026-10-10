@@ -982,3 +982,12 @@ test('fix 4d "account not connected" in a flatten answer is still the red alert'
   assert.match(t.alerts[0], /account not connected/);
   assert.deepEqual(t.toasts, []);
 });
+
+test('final wave G1: the strategy page shows "Runner down" and the sentence when the runner is not connected to the Desk', () => {
+  const say = 'The runner is not connected to the Desk.';
+  const t = load({ strategies: { lab_nq_orb: deskStrat({ state: 'runner_down', why: say }) }, book: BOOKED0 });
+  const html = t.view();
+  assert.ok(html.includes('<b>Runner down</b>'), html);
+  assert.ok(html.includes(`<div class="sd-note">${say}</div>`), html);
+  assert.ok(!html.includes('Waiting for the session'));
+});

@@ -325,10 +325,11 @@
     if (Object.prototype.hasOwnProperty.call(STATE_WORDS, lab.state)) return STATE_WORDS[lab.state];
     return text(lab.why).trim() || STATE_WORDS.check;   // a state the table has no word for: the server's own sentence
   }
-  // "Check it" always has the server's sentence under it.
+  // "Check it" always has the server's sentence under it; so has "Runner down" when the Desk says why
+  // ("The runner is not connected to the Desk.").
   function stateNote(s) {
     var lab = blockOf(s);
-    return lab && lab.state === "check" ? text(lab.why).trim() : "";
+    return lab && (lab.state === "check" || lab.state === "runner_down") ? text(lab.why).trim() : "";
   }
   // The sidebar dot, in step with the words: off / shadow / live / warn, or "" for a plain ON.
   function deskDot(s) {

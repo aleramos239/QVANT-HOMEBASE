@@ -151,6 +151,9 @@ def test_the_status_states_the_desk_can_tell_without_the_runner(client):
     assert book(client, [("eval1", 1)]).status_code == 200
     assert status(client)["lab"]["state"] == "disarmed"                          # on, an account, the desk disarmed
     client.cfg.armed = True
+    s = status(client)                                                           # no runner has named it (final wave G1)
+    assert (s["lab"]["state"], s["lab"]["why"]) == ("runner_down", "The runner is not connected to the Desk.")
+    client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "waiting", "why": None, "mode": "desk"}}})
     assert status(client)["lab"]["state"] == "waiting"
     st = open_round(client, "eval1", "placed")
     assert status(client)["lab"]["state"] == "working"

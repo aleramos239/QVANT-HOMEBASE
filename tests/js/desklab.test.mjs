@@ -970,3 +970,13 @@ test('fix 3 the risk sentence', () => {
   assert.equal(D.checkLimits({ trades: '2', qty: '1', risk: '1,000', last: '11:00', flat: '15:55' }).errors.risk, 'At risk per trade: a dollar amount above 0, like 300 or 300.50.');
   assert.equal(D.checkLimits({ trades: '0', qty: '1', risk: '300', last: '11:00', flat: '15:55' }).errors.trades, 'Trades a day: a whole number from 1 to 20.', 'the others stay the table\'s');
 });
+
+test('final wave G1: runner_down with the Desk\'s sentence reads "Runner down" and the sentence under it, with the warn dot', () => {
+  const say = 'The runner is not connected to the Desk.';
+  const s = deskStrat({ state: 'runner_down', why: say, runner: { alive: true, age_s: 2 } });     // alive by its file alone
+  assert.equal(D.deskState(s), 'Runner down');
+  assert.equal(D.stateNote(s), say);
+  assert.equal(D.deskDot(s), 'warn');
+  assert.equal(D.stateNote(deskStrat({ state: 'runner_down', why: null })), '', 'the runner rule\'s own runner_down has no sentence');
+  assert.equal(D.stateNote(deskStrat({ state: 'waiting', why: say })), '', 'only check and runner_down carry a sentence');
+});
