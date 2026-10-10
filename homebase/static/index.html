@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
+<script src="/static/desklab.js?v=1"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
@@ -1645,7 +1646,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 let VIEW = {k: "today"};
 try {
   const v = JSON.parse(localStorage.getItem("hb_view") || "null");
-  if (v && ["today", "strat", "activity", "watch"].includes(v.k)) VIEW = v;
+  if (v && ["today", "strat", "activity", "watch", "lab"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
@@ -1697,9 +1698,69 @@ async function showWatch(name) {
   // the Strategy Tester's chart is in the Lab: go there, on this run (the Lab reads #run=<id> and puts it on its chart)
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#run=" + encodeURIComponent(r.run_id);
 }
+/* ---- LAB STRATEGIES on the Desk (2026-10-09, Step A): drafts promoted from the Lab. Records kept by the chart service
+   (:8852, GET /api/tester/desklab); its runner hosts each one in SHADOW -- it writes down its orders and nothing is
+   sent -- and writes a summary of the day. This page only reads them, and switches or removes one by name. The desk
+   itself does not know a Lab strategy yet: nothing here calls its /api/strategy, /api/book or /api/strategy-flatten.
+   The words and numbers come from desklab.js (DeskLab). */
+let DESKLAB = {strategies: [], runner: null}, DESKLAB_READ = false, DESKLAB_BUSY = "";
+const DESKLAB_NAME = /^[a-z][a-z0-9_]{1,39}$/;
+try {   // the Lab's "On the Desk" link: /#lab=<name> opens that strategy's page
+  const m = /^#lab=([a-z][a-z0-9_]{1,39})$/.exec(location.hash);
+  if (m) VIEW = {k: "lab", name: m[1]};
+} catch (_) {}
+async function loadDeskLab() {
+  if (DEMO || document.hidden) return;
+  let next;
+  try {
+    const r = await fetch(CHART + "/api/tester/desklab");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json();
+    next = {strategies: (Array.isArray(j.strategies) ? j.strategies : []).filter(w => w && DESKLAB_NAME.test(String(w.name))),
+            runner: j.runner && typeof j.runner === "object" ? {alive: j.runner.alive === true} : null};
+  } catch (_) {
+    // the chart service does not answer: its runner is not reachable either, so no strategy is shown as running
+    next = {strategies: DESKLAB.strategies, runner: null};
+  }
+  const key = (d) => JSON.stringify(d);
+  const changed = !DESKLAB_READ || key(next) !== key(DESKLAB);
+  DESKLAB = next; DESKLAB_READ = true;
+  if (changed && ST && !FREEZE) render();
+}
+async function setDeskLab(name, on) {
+  if (switchBounced("lab:" + name) || DESKLAB_BUSY) return;      // a double-click is one flip
+  DESKLAB_BUSY = name;
+  const r = await chartPost("/api/tester/desklab/onoff", {name, on});
+  DESKLAB_BUSY = "";
+  if (r && r.ok === true && typeof r.enabled === "boolean") {
+    const w = DESKLAB.strategies.find(x => x.name === name);
+    if (w) w.enabled = r.enabled;
+    toast(`${name} ${r.enabled ? "is ON: it runs in shadow." : "is OFF: it does nothing."}`);
+  } else if (!DEMO) toast(`Could not switch ${name}: ${(r && r.detail) || "no answer"}`, 7000);
+  if (ST) render();
+  loadDeskLab();
+}
+async function removeDeskLab(name) {
+  if (DESKLAB_BUSY) return;
+  const ask = DeskLab.removeAsk(name);
+  if (!await confirmDlg(ask.title, ask.body, "Remove", false)) return;
+  DESKLAB_BUSY = name; render();
+  const r = await chartPost("/api/tester/desklab/remove", {name});
+  DESKLAB_BUSY = "";
+  if (r && r.ok === true) {
+    DESKLAB.strategies = DESKLAB.strategies.filter(w => w.name !== name);
+    if (VIEW.k === "lab" && VIEW.name === name) VIEW = {k: "today"};
+    toast(`${name} is off the Desk. Its history is kept; promote it again from the Lab any time.`);
+  } else toast(`Could not remove ${name}: ${(r && r.detail) || "no answer"}`, 7000);
+  render();
+  loadDeskLab();
+}
+function openDeskLabInLab(name) {      // the Lab page, on this strategy (it reads #strategy=<name>)
+  location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#strategy=" + encodeURIComponent(name);
+}
 function setView(k, name) {
   closeAsgMenus(false);
-  VIEW = k === "strat" || k === "watch" ? {k, name} : {k};
+  VIEW = k === "strat" || k === "watch" || k === "lab" ? {k, name} : {k};
   try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
   if (ST) render();
   const m = document.querySelector(".app-main");
@@ -1810,7 +1871,8 @@ function renderSide(names, hiddenCount, issues) {
     return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
-  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "watch") || VIEW.name === n) ? " sel" : "";
+  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "watch" && k !== "lab") || VIEW.name === n) ? " sel" : "";
+  const labRows = DESKLAB.strategies.map(w => labSideRow(w, sel)).join("");
   const watchRows = WATCH.map(w => `<button class="item one${sel("watch", w.name)}" onclick="setView('watch',${jsArg(w.name)})" aria-current="${sel("watch", w.name) ? "page" : "false"}" title="Watch-only: it places no orders">
       <i class="sd shadow"></i><span class="it"><b>${esc(w.name)}</b></span>
       <span class="ir mono dim">${w.net == null ? "" : usdS(w.net)}</span></button>`).join("");
@@ -1834,8 +1896,8 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
-    ${SIDE_FOLD.strat ? "" : strat + watchRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
+    ${head("strat", "Strategies", names.length + DESKLAB.strategies.length + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
+    ${SIDE_FOLD.strat ? "" : strat + labRows + watchRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
@@ -1909,6 +1971,63 @@ function watchView(name) {
       <button class="btn btn-outline btn-sm" onclick="removeWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off this page. It stays in the Book.">Remove from Desk</button></div>`;
 }
 
+/* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
+function labSideRow(w, sel) {
+  const net = DeskLab.todayNet(w);
+  return `<button class="item one${sel("lab", w.name)}" onclick="setView('lab',${jsArg(w.name)})" aria-current="${sel("lab", w.name) ? "page" : "false"}" title="${esc(DeskLab.stateText(w, DESKLAB.runner))}">
+      <i class="sd ${esc(DeskLab.dotClass(w, DESKLAB.runner))}"></i><span class="it"><b>${esc(DeskLab.label(w))}</b></span>
+      <span class="ir mono dim">${net == null ? "" : esc(usdS(net))}</span></button>`;
+}
+function todayLabRow(w) {
+  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w);
+  const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
+    title="${esc(DeskLab.switchTitle(on))}"
+    onclick="event.stopPropagation();setDeskLab(${jsArg(w.name)}, ${!on})"></button>`;
+  const go = `setView('lab',${jsArg(w.name)})`;
+  return `<div class="srow" role="button" tabindex="0" onclick="${go}"
+      onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();${go}}">
+    <div><div class="n">${esc(nm)}<span class="tag" title="${esc(DeskLab.TAG_TITLE)}">Shadow</span></div>
+      <div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>
+    <div class="rs">${esc(DeskLab.stateText(w, DESKLAB.runner))}</div>
+    <div class="rp mono" title="${esc(DeskLab.NET_TITLE)}">${esc(usdS(net))}</div>${sw}</div>`;
+}
+/* A Lab strategy's page: built from the blocks of a strategy page (title and switch, state, note, figures, Accounts,
+   actions). It shows what the strategy would have done today; nothing on it can send an order. */
+function labView(name) {
+  const w = DESKLAB.strategies.find(x => x.name === name);
+  if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${DESKLAB_READ ? esc(DeskLab.GONE) : "Loading…"}</div>`;
+  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name;
+  const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
+  const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
+    title="${esc(DeskLab.switchTitle(on))}"
+    onclick="setDeskLab(${jsArg(w.name)}, ${!on})"></button>`;
+  const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
+  const levels = DeskLab.LEVELS.map(l => l.on
+    ? `<button type="button" class="sel" aria-pressed="true">${esc(l.name)}</button>`
+    : `<button type="button" disabled aria-pressed="false" title="${esc(DeskLab.LEVEL_LOCKED)}">${esc(l.name)}</button>`).join("");
+  const orders = (Array.isArray(t.orders) ? t.orders : []).map(DeskLab.orderLine).map(o =>
+    `<div class="feed-row"><span class="t">${esc(o.t)}</span><span class="h${o.refused ? " warn" : ""}">${esc(o.text)}</span></div>`);
+  const trades = (Array.isArray(t.trades) ? t.trades : []).map(DeskLab.tradeLine).map(x =>
+    `<div class="feed-row"><span class="h">${esc(x.text)}</span><span class="t">${esc(usdS(x.net))}</span></div>`);
+  const today = orders.length + trades.length ? `<div class="agroup feed">${orders.join("")}${trades.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.EMPTY_DAY)}</div>`;
+  const days = (Array.isArray(w.days) ? w.days : []).map(DeskLab.matchLine).map(m =>
+    `<div class="feed-row"><span class="t">${esc(isDay(m.date) ? shortDay(m.date) : m.date)}</span><span class="h${m.ok === false ? " warn" : ""}">${esc(m.text)}</span><span class="t">${esc(usdS(m.net))}</span></div>`);
+  const notes = (Array.isArray(w.notes) ? w.notes : []).map(n => `<div class="feed-row"><span class="h">${esc(n)}</span></div>`);
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>${sw}</div>
+    <div class="sd-state"><b>${esc(DeskLab.stateText(w, DESKLAB.runner))}</b>${net != null ? ` · today would be ${esc(usdS(net))}` : ""}</div>
+    <div class="sd-note">${esc(DeskLab.NOTE)}</div>
+    <div class="sec"><h2>Allowed up to</h2><div class="seg" role="group" aria-label="Allowed up to">${levels}</div></div>
+    <div class="sec"><h2>Today</h2>${today}</div>
+    <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
+    <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>
+    ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed">${notes.join("")}</div></div>` : ""}
+    <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
+      <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy">Open in the Lab</button>
+      <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
+}
+
 function stratView(name) {
   const s = ST.strategies[name];
   if (!s) return `<div class="feed-empty">That strategy is not on the desk any more.</div>`;
@@ -1946,18 +2065,19 @@ function stratView(name) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "watch";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "watch" && VIEW.k !== "lab";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
     const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
     $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
     $("#dayTl").innerHTML = dayTimeline();
-    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("")
+    $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("") + DESKLAB.strategies.map(todayLabRow).join("")
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "watch") $("#viewStrat").innerHTML = watchView(VIEW.name);
+  else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labView(VIEW.name);
 }
 
 function render() {
@@ -3260,6 +3380,12 @@ async function loadCal() {
 
 refresh(); setInterval(refresh, 2500);
 loadWatch(); if (!DEMO) setInterval(loadWatch, 30000);   // a strategy promoted in the Lab shows up here within half a minute
+// a Lab strategy's state moves with the day: asked every 5 s, and only while this page is on screen
+loadDeskLab();
+if (!DEMO) {
+  setInterval(() => { if (!document.hidden) loadDeskLab(); }, 5000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskLab(); });
+}
 </script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

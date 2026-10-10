@@ -63,7 +63,7 @@
     // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
-    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Research results" for a watched strategy (it has no live trades)
+    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Research results" for a watched strategy (it has no live trades), "Backtest" for a Lab one
     const linksBox = el('div', { class: 'hb-box hb-links-box', id: 'hbLinks' });
     const actsBox = el('div', { class: 'hb-acts', id: 'hbActs' });
     const stratPage = el('div', { class: 'hb-ipage', id: 'hbInspStrat' },
@@ -94,6 +94,13 @@
       const rows = [row('Instrument', String(w.market || '—')), row('Time of day', sess[w.session] || String(w.session || '—')),
         row('Bars', w.bar ? fmtN(w.bar) + ' min' : '—'), row('Entry rule', String(w.family || '—')), row('Stop and target', String(w.cell || '—')),
         row('Tested on', w.start && w.end ? String(w.start) + ' to ' + String(w.end) : '—'), row('Orders', 'None: watch-only')];
+      setupBox.replaceChildren(...rows);
+    }
+
+    /* A LAB strategy (promoted from the Lab; the page's DESKLAB list, helpers in desklab.js): what it is, read-only. It runs in shadow -- it places no orders. */
+    const labbed = () => { try { return VIEW && VIEW.k === 'lab' ? ((DESKLAB.strategies || []).find((w) => w && w.name === VIEW.name) || {}) : null; } catch (_) { return null; } };
+    function setupLab(l) {
+      const rows = l.name && window.DeskLab ? window.DeskLab.setupRows(l).map(([k, v]) => row(k, v)) : [];
       setupBox.replaceChildren(...rows);
     }
 
@@ -168,9 +175,9 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
-          const w = watched();
-          figsH.textContent = w ? 'Research results' : 'Live results';
-          if (w) setupWatch(w); else setup(name);
+          const w = watched(), l = labbed();
+          figsH.textContent = w ? 'Research results' : l ? 'Backtest' : 'Live results';
+          if (w) setupWatch(w); else if (l) setupLab(l); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');
