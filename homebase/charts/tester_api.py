@@ -20,7 +20,8 @@
                                           intact: the code under the header was not edited by hand)
     PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
     DELETE /api/tester/drafts/{name}     remove it: the file moves to <drafts dir>/.trash (never unlinked); 409 while the
-                                          Desk holds a promoted copy of it (ON_THE_DESK)
+                                          Desk holds a promoted copy of it (ON_THE_DESK); 500 when the filesystem
+                                          refuses the move (NOT_TRASHED: the file stays where it was)
     POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under
                                           ~/.homebase/review-requests; never runs, imports or promotes anything
     GET  /api/tester/groups              the Lab's strategy groups {groups: [names, in order], members: {strategy
@@ -181,6 +182,7 @@ WATCH_ACTIONS = ("promote", "remove", "show")
 DESKLAB_ACTIONS = ("promote", "remove", "onoff")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
+NOT_TRASHED = "It could not be moved to the trash."   # the move failed (an OSError): nothing was deleted
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
@@ -424,6 +426,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 return {"deleted": draftstore.delete(name)}
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
+        except OSError:                           # the filesystem refused the move: the file is where it was
+            raise HTTPException(500, NOT_TRASHED) from None
 
     @r.post("/drafts/{name}/review-request")
     async def request_review(name: str, request: Request):

@@ -113,6 +113,28 @@ def test_a_draft_on_the_desk_is_not_deleted(tmp_path, drafts_dir):
         assert c.delete("/api/tester/drafts/nq_bars", headers=OK).json() == {"deleted": True}
 
 
+@pytest.mark.parametrize("which", ["link", "unlink"])
+def test_a_move_to_the_trash_that_fails_is_a_sentence_and_the_file_stays(tmp_path, drafts_dir, monkeypatch, which):
+    """A hard link or an unlink that the filesystem refuses: the page gets the plain sentence (not a bare 500), and the
+    strategy's file is still where it was."""
+    import os
+    real = getattr(os, which)
+
+    def refuse(*a, **k):
+        if any(str(drafts_dir) in str(x) for x in a):
+            raise PermissionError(1, "Operation not permitted")
+        return real(*a, **k)
+
+    with client(tmp_path) as c:
+        c.put("/api/tester/drafts/nq_bars", json={"code": lab_templates.BAR_BREAKOUT}, headers=OK)
+        monkeypatch.setattr(os, which, refuse)
+        r = c.delete("/api/tester/drafts/nq_bars", headers=OK)
+        assert r.status_code == 500 and r.json()["detail"] == "It could not be moved to the trash."
+        assert (drafts_dir / "nq_bars.py").read_text() == lab_templates.BAR_BREAKOUT
+        monkeypatch.setattr(os, which, real)
+        assert c.delete("/api/tester/drafts/nq_bars", headers=OK).json() == {"deleted": True}   # and it still works after
+
+
 def test_a_bad_name_is_still_a_400_on_delete(tmp_path):
     with client(tmp_path) as c:
         assert c.delete("/api/tester/drafts/Bad-Name", headers=OK).status_code == 400
