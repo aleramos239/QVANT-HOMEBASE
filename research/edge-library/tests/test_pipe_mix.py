@@ -28,6 +28,8 @@ from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import pipe_mix as M  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
 
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py)
+
 import blueprint_synth as SY  # noqa: E402
 import library as LB  # noqa: E402
 

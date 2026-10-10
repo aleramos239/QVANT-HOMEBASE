@@ -49,6 +49,10 @@ some should just be for the individual strategy that will pass"). The map gets a
   reshuffle_box(b, rng=None)      STAGE 4 -> row P4.1 for the one box: its average trade is at the floor in `proof.reshuffle` of the
                                   reshuffled runs (the same runs as line 2.8's)
   random(p_beat, tries, what)     (above) `what` names the random tables the share was read against
+PROP GATES (pipeline.json gates.mode "prop", the owner 2026-10-10; pipe_rules.prop_gates): of the rows below only P3.2 (an average trade ABOVE
+$0 after costs: a floor of 0 is read strictly) and P3.3 (enough trades for an average) still ask on the build days, with the eval odds read by
+the stage (pipe_stages._holding); every other row of variant mode is still read and printed as a LABEL (label(): passed None, `held` = what it
+said, `label` = HELD / MISSED). A label asks nothing, so no consumer's `passed is False` sees it. gates.variant lays its numbers over `variant`.
 THE COMPARISONS: a share of boxes is "over" (strict) · an average trade "at or above" · trades "or more" · an indicator "higher"
 than the raw table (strict) · the other markets "at least" · the reshuffled runs "or more" · the random bar "above" (strict).
 EVERY NUMBER IS READ: pipe_rules.need / floor / random_bar (templates/pipeline.json) and, where a gate IS a line of the law
@@ -79,6 +83,36 @@ def _fig(v, held=(), unit: str = "") -> str:
 def _pct(v) -> str:
     """A share as a percent with up to four decimals: the bar of one try is told from the bar of the next."""
     return f"{100 * v:.4f}".rstrip("0").rstrip(".") + " %"
+
+
+GATE_ROWS = ("P3.2", "P3.3")                       # prop mode: the rows of a box that still ask on the build days (average trade above $0, enough trades)
+
+
+def _met(v, floor: float) -> bool:
+    """An average trade against a floor: `floor` or more -- and ABOVE $0 when the floor is $0 (line 2.1's "profitable"): a box that nets nothing does not make money."""
+    return v is not None and bool(v > 0 if floor == 0 else v >= floor)
+
+
+def _at_least(floor: float) -> str:
+    """The need of an average trade in words: "above $0" for a floor of nothing, else the floor in dollars."""
+    return "above $0" if floor == 0 else _fig(floor, (floor,), "$")
+
+
+def label(row: dict) -> dict:
+    """A row that asks nothing, shown as it was read: passed None, `held` = what it said (True / False / None), `label` = HELD / MISSED / n/a, and the
+    text says it in front -- `P3.7 PASS ...` reads `P3.7 held (a label, asks nothing) ...`."""
+    held = row.get("passed")
+    word = "n/a" if held is None else "held" if held else "missed"
+    mark = {None: "n/a ", True: "PASS", False: "FAIL"}[held]
+    head = f"{row['line']} {mark} "
+    rest = row["text"][len(head):] if row["text"].startswith(head) else row["text"]
+    return {**row, "passed": None, "held": held, "label": word.upper() if held is not None else "n/a",
+            "text": f"{row['line']} {word} (a label, asks nothing) {rest}"}
+
+
+def labels(rows: list, gate=GATE_ROWS) -> list:
+    """The rows of a box as the gates read them: in mode "prop" every row that is not one of `gate` becomes a label; in mode "law" the rows as they are."""
+    return list(rows) if not PR.prop_gates() else [r if r["line"] in gate else label(r) for r in rows]
 
 
 def _boxes(t: dict) -> tuple:
@@ -152,17 +186,20 @@ def variant_map(t: dict) -> dict:
     ids = list(t.get("ids") or range(len(net)))
     with np.errstate(all="ignore"):
         at = np.where(n > 0, net / np.where(n > 0, n, 1.0), -np.inf)
-    ok = (at >= floor) & (n >= need["region_trades"])
+    ok = ((at > floor) if floor == 0 else (at >= floor)) & (n >= need["region_trades"])
     cells, q, (k, m) = [ids[i] for i in np.flatnonzero(ok)], int(ok.sum()), _boxes(t)
     rows = [L._row("P1.1", bool(x["share"] > need["map_share"]), x["share"], need["map_share"],
                    f"{L._pc(x['share'])} of boxes profitable ({k} of {m}; need over {L._pc(need['map_share'])})", profitable=k, variants=m),
             L._row("P1.2", q >= need["region_boxes"], q, need["region_boxes"],
-                   f"{q} of {m} boxes have an average trade of {_fig(floor, (floor,), '$')} or more with {_fig(need['region_trades'])} or more trades "
+                   f"{q} of {m} boxes have an average trade {'above $0' if floor == 0 else 'of ' + _fig(floor, (floor,), '$') + ' or more'} with {_fig(need['region_trades'])} or more trades "
                    f"(need at least {need['region_boxes']})", boxes=m, floor=floor, trades=need["region_trades"])]
-    bad = [r["line"] for r in rows if not r["passed"]]
+    if PR.prop_gates():                             # the share of boxes profitable is a label: one box that makes money is enough to look at
+        rows[0] = label(rows[0])
+    bad = [r["line"] for r in rows if r["passed"] is False]       # (a label, passed None, asks nothing)
+    head = (f"pass: {q} of {m} boxes make money after costs with enough trades" if PR.prop_gates() else
+            f"pass: over {L._pc(need['map_share'])} of boxes profitable and {q} boxes at the floor with enough trades")
     return {"result": "fail" if bad else "pass", "avg_trade": x["avg_trade"], "qualifying": q, "cells": cells, "lines": rows,
-            "text": f"fail: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} missed" if bad else
-            f"pass: over {L._pc(need['map_share'])} of boxes profitable and {q} boxes at the floor with enough trades"}
+            "text": f"fail: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} missed" if bad else head}
 
 
 def holding(n: int, q: int, missed: dict) -> dict:
@@ -171,7 +208,9 @@ def holding(n: int, q: int, missed: dict) -> dict:
     of the boxes miss it}: the row says them, the most missed first."""
     need = PR.need("variant", "pick_boxes")
     said = ", ".join(f"{k} by {v}" for k, v in sorted(missed.items(), key=lambda kv: (-kv[1], kv[0])))
-    return L._row("P1.3", n >= need, n, need, f"{n} of its {q} boxes at the floor hold{'s' * (n == 1)} every line a box is held to on the build days "
+    what = (f"make{'s' * (n == 1)} money after costs with enough trades and {L._pc(PR.need('prop', 'eval'))} eval odds or more on the build days" if PR.prop_gates() else
+            f"hold{'s' * (n == 1)} every line a box is held to on the build days")
+    return L._row("P1.3", n >= need, n, need, f"{n} of its {q} boxes at the floor {what} "
                   f"(need at least {need})" + (f"; the lines missed: {said}" if said else ""), boxes=q, missed=dict(missed))
 
 
@@ -228,10 +267,11 @@ def variant_rows(b: dict, others: list) -> list:
     n, count = float(np.asarray(b["n"], np.float64).sum()), need["region_trades"]
     side, markets = strict_extra(b, others)
     side = {**side, "text": side["text"].replace(", all variants together", "")}       # (line 2.6's words say "all variants together": this is one box)
-    return [L._row("P3.2", at is not None and bool(at >= floor), at, floor, f"no trade (need an average trade of {_fig(floor, (floor,), '$')})" if at is None else
-                   f"average trade {_fig(at, (floor,), '$')} (need {_fig(floor, (floor,), '$')})"),
-            L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-            side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]
+    want = _at_least(floor)
+    return labels([L._row("P3.2", _met(at, floor), at, floor, f"no trade (need an average trade {want if floor == 0 else 'of ' + want})" if at is None else
+                          f"average trade {_fig(at, (floor,), '$')} (need {want})"),
+                   L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
+                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)])
 
 
 def _consistent(b: dict, need: dict) -> list:
@@ -302,7 +342,9 @@ def reshuffle_box(b: dict, rng=None) -> dict:
     tot, cnt = MC.reshuffle(b["net"], b["n"], rng)
     floor = PR.floor(b["root"], PR.need("variant", "floor_part"))
     with np.errstate(all="ignore"):
-        ok = np.where(cnt > 0, tot[0] / np.where(cnt > 0, cnt, 1.0), -np.inf) >= floor
+        at = np.where(cnt > 0, tot[0] / np.where(cnt > 0, cnt, 1.0), -np.inf)
+    ok = (at > floor) if floor == 0 else (at >= floor)
     share, need = float(ok.mean()), PR.need("proof", "reshuffle")
     return L._row("P4.1", bool(share >= need), share, need,
-                  f"the box's average trade is {_fig(floor, (floor,), '$')} or more in {L._pc(share)} of {len(ok):,} reshuffled runs (need {L._pc(need)} or more)", runs=len(ok))
+                  f"the box's average trade is {_at_least(floor) if floor == 0 else _fig(floor, (floor,), '$') + ' or more'} in {L._pc(share)} of {len(ok):,} reshuffled runs "
+                  f"(need {L._pc(need)} or more)", runs=len(ok))

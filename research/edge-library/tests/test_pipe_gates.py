@@ -29,13 +29,15 @@ W = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(W))
 import pytest  # noqa: E402
 
+import pipe_law  # noqa: E402
 from blueprint import lines as L  # noqa: E402
 from blueprint import mc as MC  # noqa: E402
 from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import pipe_rules as P  # noqa: E402
 from blueprint import rules as R  # noqa: E402
 
-FILE = P.FILE
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_prop_gates.py reads mode "prop"
+FILE = pipe_law.file()
 
 @pytest.fixture
 def asked(monkeypatch):

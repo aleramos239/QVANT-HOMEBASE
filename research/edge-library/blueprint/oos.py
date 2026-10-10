@@ -24,6 +24,11 @@ refuses as ever, the lock has to match, --confirm is asked, the read is claimed 
 labelled as one. What was waived is never silent: the claim's line in the one-read log, test.json and the result carry
 `relatives` -- [{name, kind, utc, verdict}] of every relative with a read (an empty list: none) -- and the text says so in
 one line. Without the keyword there is no such key.
+`only` (start, test, run: a keyword of the code, NOT of `bp.py test` and not of the chat tool) is THE PIPELINE'S PROP GATE (the owner,
+2026-10-10, pipeline.json gates.mode "prop"): a tuple of the ids that decide the verdict -- a line of 4.1-4.9, and/or "box" = the default
+variant's own trades on the test days net above $0. With it every other line is still read, kept and printed, and none refuses: the verdict
+and the status are PROVEN ON HISTORY when the ids hold, whatever 4.1-4.9 say, and test.json carries `gates` {only, box (the box's net on the
+test days), labels (the lines that were not asked and missed)}. Without the keyword every line 4.1-4.9 decides, as the law has it.
 
 THE ORDER OF WORK
   start()   every refusal above; then THE READ IS CLAIMED (ideastore.claim_read: state "claimed"; of two claims at the same
@@ -69,6 +74,8 @@ import os
 import subprocess
 from pathlib import Path
 
+import numpy as np
+
 import judge as J
 
 from . import api
@@ -105,7 +112,7 @@ def _who(r: dict) -> str:
 
 
 def start(name, confirm=False, second_look=False, root=None, workers=None, out=None, ledger=None, days=None, block=None, tester=None, early_look=False,
-          relatives_ok=False) -> dict:
+          relatives_ok=False, only=None) -> dict:
     """EVERY REFUSAL OF THE TEST, THEN THE CLAIM -> the arguments of run() (JSON: a job keeps them). Module docstring.
     out, ledger, days, block, workers = runner.run_test's; tester = the tester's base folder the default variant's run goes
     to (the app's own for the app's own idea folder). early_look = the owner's early look at an idea that is NOT frozen
@@ -175,7 +182,7 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
     return {"idea": name, "read": {**read, "utc": line.get("utc")}, "rng": rng, "second_look": look, "second_of": [r["name"] for r in rel] if look else [], **said,
             "root": None if root is None else str(root), "workers": workers, "out": None if out is None else str(out),
             "ledger": None if ledger is None else str(ledger), "days": days, "block": block, "tester": None if tester is None else str(tester),
-            "test": bool(test), "early_look": early}
+            "test": bool(test), "early_look": early, **({"only": [str(x) for x in only]} if only else {})}
 
 
 def _show(name: str, lock: dict, trades: list, t: dict, rng: dict, marks: list, root, tester) -> dict:
@@ -201,7 +208,7 @@ def _show(name: str, lock: dict, trades: list, t: dict, rng: dict, marks: list, 
 
 
 def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=None, out=None, ledger=None, days=None, block=None, tester=None, test=False,
-        early_look=False, progress=None, relatives=None) -> dict:
+        early_look=False, progress=None, relatives=None, only=None) -> dict:
     """THE READ ITSELF, with what start() returned (module docstring) -> the result: every line 4.1-4.9 as pass or fail with
     its number, the verdict, the status. Beyond the agreed keys: verdict, passed, failed, second_look, label,
     second_look_of, lock, version, range, home, unit, days, table, stores, default, read, notes, dry_run (false: a read
@@ -236,6 +243,13 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
         rows = [{**x, "text": x["text"] + "".join(f" [{m}]" for m in marks), **({"second_look": True} if look else {}), **({api.EARLY_LOOK: True} if early else {})}
                 for x in rows]
     failed = [x["line"] for x in rows if x["passed"] is not True]
+    gate = None
+    if only and not early:                          # THE PIPELINE'S PROP GATE (module docstring): the ids in `only` decide, every other line is a label
+        decide, got_box = {str(x) for x in only}, t.get("box") or {}
+        box = float(np.sum(got_box["trades"])) if len(got_box.get("trades", ())) else None
+        miss = [x["line"] for x in rows if x["line"] not in decide and x["passed"] is not True]
+        failed = [x["line"] for x in rows if x["line"] in decide and x["passed"] is not True] + (["box"] if "box" in decide and not (box is not None and box > 0) else [])
+        gate = {"only": sorted(decide), "box": box, "labels": miss}
     if early:                                       # NO VERDICT OF THE LAW: an early look passes nothing, fails nothing and moves no status
         verdict, status = f"{EARLY}: " + ("every line 4.1-4.9 holds" if not failed else f"fails {', '.join(failed)}"), IS.status(name, root)
     else:
@@ -247,6 +261,7 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
                    days={"start": rng["start"], "end": rng["end"], "sessions": len(cal), "named": list(days) if days else None,
                          "parts": [{"name": p["name"], "start": p["start"], "end": p["end"], "sessions": int(p["days"].sum())} for p in t["parts"]]},
                    table={"store": t["store"], "variants": len(t["ids"])}, stores=got["stores"], read={**read, "state": "judged", "verdict": label},
+                   **({"gates": gate} if gate else {}),
                    default={"cell": lock["default"], "trades": None, "run_id": None, "note": None})
     if early:
         r.update({api.EARLY_LOOK: True, "held": not failed, "build_failed": lock["build_failed"], "code_check": lock["code_check"]})
@@ -272,7 +287,11 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
             f"store {t['store']}",
             *[x["text"] for x in rows],
             (f"RESULT: {label} -- no pass and no fail of the law: an early look proves nothing, and for {name} the test days are no longer unseen." if early else
-             f"RESULT: {label}: " + ("every line 4.1-4.9 is true -- approved for a real eval." if not failed else
+             f"RESULT: {label}: " + (("every line 4.1-4.9 is true -- approved for a real eval." if not gate else
+                                      f"the line{'s' * (len(gate['only']) != 1)} asked ({', '.join(gate['only'])}) hold{'s' * (len(gate['only']) == 1)}"
+                                      + (f"; the box made ${gate['box']:,.0f} on the test days" if gate["box"] is not None else "")
+                                      + (f"; not asked, and missed: {', '.join(gate['labels'])}" if gate["labels"] else "; every other line holds too"))
+                                     if not failed else
                                      f"fails {', '.join(failed)}. A FAIL IS FINAL: the idea is not re-tuned and re-tested on this period.")),
             *[f"NOTE: {x}." for x in r["notes"]],
             *([f"{len(relatives)} relative{'s' * (len(relatives) != 1)} of this idea {'was' if len(relatives) == 1 else 'were'} read on these days before it "

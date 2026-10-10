@@ -33,6 +33,7 @@ W = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(W), str(Path(__file__).resolve().parent)]
 import judge as J  # noqa: E402
 from blueprint import pipe_prop as PP  # noqa: E402
+import pipe_law  # noqa: E402
 from blueprint import pipe_rules as P  # noqa: E402
 from blueprint import propodds as PO  # noqa: E402
 
@@ -40,7 +41,8 @@ import blueprint_synth as SY  # noqa: E402
 import library as LB  # noqa: E402
 
 PS = PO.app()
-FILE = P.FILE
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py)
+FILE = pipe_law.file()
 PRO_FREE, FLEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
 CAL = SY.weekdays("2024-01-01", "2024-10-04")        # 200 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed

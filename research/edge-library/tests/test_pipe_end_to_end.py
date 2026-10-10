@@ -61,6 +61,8 @@ from blueprint import oos as OOS  # noqa: E402
 from blueprint import pipe_card as PC  # noqa: E402
 from blueprint import pipe_prop as PP  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
+
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_prop_gates.py reads mode "prop"
 from blueprint import pipe_runner as RN  # noqa: E402
 from blueprint import pipe_stages as ST  # noqa: E402
 from blueprint import pipe_store as PS  # noqa: E402

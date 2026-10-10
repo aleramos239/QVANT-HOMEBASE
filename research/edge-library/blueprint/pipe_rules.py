@@ -11,6 +11,11 @@ typed in code. A change of a number is a change of the pipeline's rules (the own
   random_bar(tries)    the share of the random tables an idea must beat on its `tries`-th try: 1 - alpha / max(1, tries) --
                        the law's ladder of line 2.3 (95 %, 97.5 %, 98.3 %, 98.75 %, 99 %), carried on past its fifth round
   floor(root, part)    `part` of the market's cost floor of line 2.2, in dollars a trade: floor("NQ", 0.5) -> 35.0
+  gates()              "prop" (the shipped default, the owner 2026-10-10: only three things ask -- the picked box makes money on the build days,
+                       its eval odds are prop.eval or more, it still makes money on the unseen days; every other line is a LABEL) or "law"
+                       (every line asks, the pipeline as it was). A file without `gates` reads "law". In "prop" the file's `gates.variant`
+                       numbers are laid over `variant`, so need("variant") says what the mode asks; any other word: R.RuleError
+  prop_gates()         gates() == "prop"
 
 THE TWO FILES NEVER DISAGREE. A number that pipeline.json and rules.json both carry is checked when the file loads (check):
 raw.strict.share = line 2.1 · raw.strict.trades = line 2.4 · proof.reshuffle = line 2.8 · the random bar = line 2.3 in each
@@ -28,6 +33,7 @@ from . import rules as R
 
 FILE = R.T / "pipeline.json"
 MODES = ("map", "variant")
+GATES = ("law", "prop")
 DECIMALS = 3                                        # the law prints the ladder of 2.3 to three decimals (98.3 % for 98.33 %)
 
 
@@ -58,6 +64,11 @@ def _all() -> dict:
         raise R.RuleError("the pipeline's numbers and the blueprint's do not agree: " + "; ".join(bad))
     if p.get("mode", MODES[0]) not in MODES:
         raise R.RuleError(f"pipeline.json mode = {p['mode']!r}: the pipeline runs in one of {', '.join(MODES)}")
+    g = (p.get("gates") or {}).get("mode", GATES[0])
+    if g not in GATES:
+        raise R.RuleError(f"pipeline.json gates.mode = {g!r}: the gates are one of {', '.join(GATES)}")
+    if g == "prop":                                 # the numbers the prop gates ask, over the file's variant block (a copy: the file stays as written)
+        p["variant"] = {**p["variant"], **(p["gates"].get("variant") or {})}
     return {k: v for k, v in p.items() if not k.startswith("_")}
 
 
@@ -75,6 +86,16 @@ def need(*keys):
 def mode() -> str:
     """"variant" (judge ONE picked box after a loose check of the map) or "map" (judge the whole map); a file without a mode is "map"."""
     return _all().get("mode", MODES[0])
+
+
+def gates() -> str:
+    """"prop" (only the three gates of the owner's 2026-10-10 word ask; the rest are labels) or "law" (every line asks); a file without `gates` is "law"."""
+    return (_all().get("gates") or {}).get("mode", GATES[0])
+
+
+def prop_gates() -> bool:
+    """Is the pipeline asking only the three gates of mode "prop" (module docstring)?"""
+    return gates() == "prop"
 
 
 def random_bar(tries: int) -> float:

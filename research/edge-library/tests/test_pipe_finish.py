@@ -59,6 +59,8 @@ from blueprint import oos as OOS  # noqa: E402
 from blueprint import pipe_card as PC  # noqa: E402
 from blueprint import pipe_prop as PP  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
+
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py)
 from blueprint import pipe_runner as RN  # noqa: E402
 from blueprint import pipe_stages as ST  # noqa: E402
 from blueprint import pipe_store as PS  # noqa: E402
@@ -647,7 +649,9 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     b = c["book"]
     assert list(b) == ["name", "sub", "family", "source", "ref", "why", "market", "session", "bar", "filter", "rule", "label", "prop", "hours", "trades", "days_traded",
                        "win_days_month", "winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor",
-                       "net", "tries", "relatives_read", "stages", "utc"]
+                       "net", "equity", "fees", "gates", "tries", "relatives_read", "stages", "utc"]      # (equity, fees, gates: 2026-10-10)
+    # where the box stands: days of +300 +500 -200 +700 -200 -100 from a start of $0 -- equity 300, 800, 600, 1,300, 1,100, 1,000: $300 under its high of $1,300
+    assert b["equity"]["state"] == "in drawdown" and b["equity"]["below_high"] == 300.0 and b["fees"] == {} and b["gates"] == "law"
     assert (b["name"], b["sub"], b["family"], b["source"], b["why"]) == (N7, SUB7, "orb", "owner", CARD7["why"])
     assert (b["market"], b["session"], b["bar"], b["filter"], b["tries"], b["relatives_read"]) == ("NQ", "nyam", "15", None, 4, 2)      # two related ideas were read before it
     assert b["rule"] == {"spec": SPEC7, "default": CELL7, "lock": SY.LOCK}                     # the frozen rule

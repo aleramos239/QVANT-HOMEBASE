@@ -273,6 +273,19 @@ def test_proven_on_history_is_a_lead_with_every_test_line_passed():
     assert ideastore.status(NAME) == "shelved"                    # NOT PROVEN: never re-tuned and re-tested
 
 
+def test_a_read_with_gates_is_proven_when_the_lines_it_asked_held_whatever_the_others_said():
+    """The pipeline's prop gates (2026-10-10): test.json carries `gates` and its own `passed`; the 4.x lines it did not ask are labels."""
+    ideastore.create(NAME)
+    build(1)
+    asked = {"only": ["box"], "box": 900.0, "labels": ["4.5"]}
+    ideastore.write_test(NAME, result("test", 4, fail=("4.5",), passed=True, gates=asked))
+    assert ideastore.status(NAME) == "proven_on_history"          # 4.5 missed and was not asked; the box made money
+    ideastore.write_test(NAME, result("test", 4, fail=("4.5",), passed=False, gates={**asked, "box": -50.0}))
+    assert ideastore.status(NAME) == "shelved"                    # the box lost: the one line asked failed
+    ideastore.write_test(NAME, result("test", 4, fail=("4.5",), passed=True))
+    assert ideastore.status(NAME) == "shelved"                    # no `gates`: every line decides, as the law has it
+
+
 def test_proven_live_needs_the_lines_that_are_read_on_live_trades():
     ideastore.create(NAME)
     build(1)

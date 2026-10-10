@@ -27,7 +27,8 @@ A phase is passed when every line the law has for it is in the result and none f
 "a phase is passed only when every line is true"; passed null = the line does not apply, which is no failure):
     idea                until the build passes
     lead                every 2.x line passed in the latest finished round
-    proven_on_history   a lead whose test.json passed every 4.x line
+    proven_on_history   a lead whose test.json passed every 4.x line (a test.json with `gates` -- the pipeline's prop gates,
+                        2026-10-10 -- passed when the lines it asked held: its own `passed` says so)
     proven_live         ... and whose eval.json passed every 6.x line, with 6.1 to 6.5 (the lines read on live
                         trades) each TRUE: "not read yet" is never a pass
     shelved             not passed after round 5, or a finished test that did not pass (NOT PROVEN: it is not
@@ -378,8 +379,8 @@ def _status(d: Path) -> str:
     test = _json(d / "test.json")
     if not _finished(test) or _early(test):         # an early look proves nothing and shelves nothing
         return "lead"
-    if not _passed(test, 4):
-        return "shelved"
+    if not (test.get("passed") is True if isinstance(test.get("gates"), dict) else _passed(test, 4)):      # `gates` = the pipeline's prop gates (2026-10-10): the
+        return "shelved"                            # lines it asked decided, the result says so in `passed`, and every other 4.x line is a label
     ev = _json(d / "eval.json")
     return "proven_live" if _finished(ev) and _passed(ev, 6) else "proven_on_history"
 

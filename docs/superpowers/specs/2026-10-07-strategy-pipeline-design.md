@@ -411,3 +411,36 @@ the proof (stage 4) or at the lock's worse fills. Now stage 1's card keeps `cand
 passed, from the middle outward by prop odds) and a failed card of stage 4 or 5 carries `next_box`; the runner asks `pipe_stages.next_box` for the
 next candidate, keeps the failed box's cards aside (`pipe_store.shelve`), and runs stages 2 on again, with `tries` + 1 (the random bar rises) and at
 most `variant.box_tries` (5) boxes. `bp.py pipe near` lists what stopped closest to a line. The evening session is in `card.sessions`.
+
+## 17. As built: the prop gates (decided 2026-10-10, after the Matteo Conti interview)
+The owner watched a 54-minute interview with Matteo Conti on passing prop firms and said: "update it so we go off what he says." Conti's rules
+for choosing and running a strategy are few: it makes money after costs, it passes the eval often enough (he quotes 40 % or more), it still makes
+money on days it was not built on, you run the one at a new high, and you weigh the eval fee against the expected cheque. The pipeline's own
+rule file now asks only for those. The owner's three answers: A (the full change: only three gates ask, every other line becomes a label),
+stay on LucidPro 50K (account unchanged, open losses counted: "its EOD but it still counts open losses"), and run the stopped ideas again.
+
+`pipeline.json` gets `gates.mode` ("prop" is the shipped default, "law" is the file as it was, the by-hand blueprint is untouched) and a `gates.variant`
+overlay on `variant` (region_boxes 1, pick_boxes 1, floor_part 0.0). Three things ask:
+1. the picked box makes money after costs on the build days: an average trade above $0 (P3.2) over at least `variant.trades` trades (P3.3, kept
+   as the sample-size part of "makes money");
+2. its eval odds are `prop.eval` (40 %) or more within `prop.days` (30) on the pipeline's account, the PLAIN row, open losses counted
+   (`_holding`, so the pick among boxes and row P1.3 already hold it);
+3. it still makes money on the unseen days: the default box's own net on the test days is above $0 (`oos.test(only=("box",))`; line 4.2, which
+   was about the average of all variants, is now a label).
+
+Every other line is read and printed with `passed: None`, `held` and a `label` (HELD / MISSED): P1.1 (share of profitable boxes), the sides, the
+other markets, P3.7-P3.10, stage 4's proof, the lock's 3.3-3.8, the worse fills (lock `labelled`), lines 4.1-4.9. Stage 4 therefore always
+passes. The CODE CHECK (1.1-1.4) and the PRICE CHECK (P2.5) stay hard: they say the code is right, not that the idea is good. The book card adds
+`equity` (at a new high / in drawdown, Conti's "run the one at new highs") and `fees` (the eval's fee against the expected cheque).
+The ideastore's `_status` honours `test["passed"]` when the result carries `gates`, so the Lab shows the same verdict as the pipeline.
+
+Not changed: build days 2021-09-22 to 2025-06-30, test days from 2025-07-01, costs, tick fills, flat by 15:58, the code check, the price check.
+Tests: `tests/test_pipe_prop_gates.py` (new); the older pipeline tests that count law numbers run against the law file
+(`tests/pipe_law.py`, the `PIPE_GATES = "law"` marker in `conftest.py`).
+
+### 17.1 What happens to the ideas on file
+All 156 stopped ideas were queued again (`pipe rerun`, furthest first); their old stage cards are kept under `stages_old`. The eight ideas that
+had already read the unseen days are the exception: their sub-idea is frozen (lock.json), a frozen idea is never built again (line 3.2), and an
+idea's own read is one read (spec 14). They stop at stage 0 with "is frozen". For them the number the new gate 3 would give is read off the
+store already on disk (no run, no second read); a new version of such an idea (a new name, same card) would be a new read of the same unseen
+days, which the owner decides.

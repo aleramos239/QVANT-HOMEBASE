@@ -23,6 +23,9 @@ THEN (start() refuses, run() works):
      (pipeline.json "mode": "variant") has picked its box already, at the end of stage 1; that cell is the default instead of the
      middle survivor, and default_rule says so. It has to be a judged variant that makes money on build AND with worse fills:
      else refused (_choose).
+     `labels=(...)` (likewise a keyword of the CODE: the pipeline's prop gates, pipeline.json gates.mode "prop", the owner 2026-10-10): the
+     lines named in it are READ AND KEPT but refuse nothing -- any of 3.3 .. 3.8, and "worse" (the default need not make money with
+     worse fills: the picked box is the default whether or not it is a survivor). lock.json says so in `labelled`, and the lines are in its hash.
   3. lock.json, written through the app's idea store (ideastore.write_lock):
        name, version, locked_utc, round, store
        spec          the card and the settings, as the frozen round ran them        plan   what a build of the card ran
@@ -191,7 +194,7 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
                        f"exactly before anything counts (line 1.6: bp.py code-check {name} --store=<a fresh run> --same-as={key}, then --looked)")
 
 
-def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=(), default=None) -> dict:
+def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=(), default=None, labels=()) -> dict:
     """EVERYTHING OF THE FREEZE THAT NEEDS NO RUN -> the arguments of run() (JSON: a job keeps them). An idea that is frozen
     already comes back as {"idea", "root", "frozen": True}: run() then only shows its lock. Refused here: module docstring,
     and what the runner refuses before a pass (the no-start window, the ledger's cap, another run in the store folder)."""
@@ -248,18 +251,23 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     return {"idea": name, "root": None if root is None else str(root), "frozen": False, "round_": n, "heavy": not rows[0]["skipped"], "workers": workers,
             "out": None if out is None else str(out), "ledger": None if ledger is None else str(ledger), "days": days, "cells": cells, "block": block,
             "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade"), **({"waived": waived} if waived else {}),
-            **({"default": str(default)} if default else {})}
+            **({"default": str(default)} if default else {}), **({"labels": [str(x) for x in labels]} if labels else {})}
 
 
-def _choose(rows: list, ids: list, worse: dict, pick, addr: str) -> tuple:
+def _choose(rows: list, ids: list, worse: dict, pick, addr: str, labels=()) -> tuple:
     """The default variant -> (cell | None, the survivors, default_rule). No `pick`: the middle survivor (records.middle) and the
     judge's tie rule, a cell of None when nothing survives (the caller refuses). `pick` = the pipeline's own choice (module docstring,
-    step 2): it must be a judged variant AND a survivor, else J.Refuse; the survivors are those the middle would be taken from."""
+    step 2): it must be a judged variant AND a survivor, else J.Refuse; the survivors are those the middle would be taken from.
+    `labels` holding "worse": a pick that makes money on build but not with worse fills is the default all the same (said in default_rule)."""
     default, surv = REC.middle(rows, ids, worse)
     if pick is None:
         return default, surv, J.TIE_RULE
     if pick not in ids:
         raise J.Refuse(f"the box {pick} that the pipeline picked is no judged variant of {addr}: it cannot be the default variant")
+    if pick not in surv and "worse" in set(labels or ()):
+        return pick, surv, (f"picked by the pipeline, not by the toolkit: {pick}, the middle (by prop odds, never the best) of the boxes that make money after costs on the build "
+                            f"days with enough trades and enough eval odds; it does NOT make money with worse fills, a label that asks nothing (the toolkit's own default, "
+                            f"the middle survivor, would be {default})")
     if pick not in surv:
         raise J.Refuse(f"the box {pick} that the pipeline picked is not a variant that makes money on build AND on build with worse fills (it needs both; "
                        f"{len(surv)} variant{'s' * (len(surv) != 1)} of {addr} do): it cannot be the default variant")
@@ -268,7 +276,7 @@ def _choose(rows: list, ids: list, worse: dict, pick, addr: str) -> tuple:
 
 
 def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, draws=None,
-        progress=None, box=None, build_avg_trade=None, waived=None, default=None) -> dict:
+        progress=None, box=None, build_avg_trade=None, waived=None, default=None, labels=None) -> dict:
     """THE FREEZE ITSELF, with what start() returned: the worse-fills table of the home on the build days (when it is not
     stored), the default variant, lock.json (module docstring), the Lab's copies -> the result: lines 3.1 and 3.2, the
     lock's hash, the default and the test range. Beyond the agreed keys: lock (lock.json as it is on file), hash, default,
@@ -303,14 +311,15 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
     if gone:
         raise J.Refuse(f"the worse-fills table {_where(folder, worse[0]['key'])} lacks the variant {gone[0]}: it is not the home table's")
     wnet = {c: float(J.cellx(wst, c, sess, u)["net"].sum()) for c in ids}
-    default, surv, rule = _choose(rows, ids, wnet, default, u["addr"])
+    default, surv, rule = _choose(rows, ids, wnet, default, u["addr"], labels)
     if default is None:
         raise J.Refuse(f"no variant of {u['addr']} makes money on build AND on build with worse fills ({RUN.worse_words(wst['meta']['worse'])}): there is "
                        "no default variant, so there is nothing to freeze (line 3.1)")
     said, box = box == "said", [fn(T.box(st, u, default, days)) for fn in L.BOX]      # lines 3.3-3.8: the default variant on its own
-    if not said and not all(x["passed"] for x in box):          # (said: TEST ONLY, module docstring)
+    asked = [x for x in box if not x["passed"] and x["line"] not in set(labels or ())]      # (labels: the pipeline's prop gates, module docstring: read, kept, ask nothing)
+    if not said and asked:                          # (said: TEST ONLY, module docstring)
         raise J.Refuse(f"the default variant {default} of {u['addr']} does not meet every line read on it before the freeze -- "
-                       + "; ".join(x["text"] for x in box if not x["passed"])
+                       + "; ".join(x["text"] for x in asked)
                        + " -- nothing is frozen: back to the build (a new round when one is left, it counts; otherwise the idea is shelved)")
     from . import propodds                          # (phase 5's module: loaded here, never with this one -- cli.py)
     prop = propodds.look(J.cellx(st, default, sess, u), T.build_days(u, days))       # shown, never a pass line
@@ -332,6 +341,8 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
             "test_range": {m: _range(m, m == h["market"], **_reads(filt)) for m in markets}}
+    if labels:                                        # lines that were read and kept and asked nothing (run(labels=): the pipeline's prop gates): in the hash
+        lock["labelled"] = sorted(str(x) for x in labels)
     if waived:                                        # build lines that failed and were not asked (start(waive=): the pipeline's 2.5): written down, in the hash
         lock["waived"] = list(waived)
     lock = json.loads(json.dumps(lock))               # as it will read from disk (plain JSON: a number that is not is refused here)
@@ -352,7 +363,9 @@ def _result(name: str, root, lock: dict, already: bool, saved: list, stores: lis
     nv, ns = len(lock["variants"]), len(lock["survivors"])
     who = "the 1 variant that makes money" if ns == 1 else f"the {ns} variants that make money"
     mine = lock["default_rule"] != J.TIE_RULE                    # the pipeline picked the default (freeze.run(default=))
-    short = ("picked by the pipeline: the middle of the boxes at the floor with enough trades, by build net, never the best; it makes money on build and with worse fills"
+    short = (("picked by the pipeline: the middle of the boxes that make money after costs with enough trades and enough eval odds, never the best; lines "
+              f"{', '.join(lock['labelled'])} are labels and ask nothing" if lock.get("labelled") else
+              "picked by the pipeline: the middle of the boxes at the floor with enough trades, by build net, never the best; it makes money on build and with worse fills")
              if mine else f"the middle of {who} on build and on build with worse fills; never the best")
     how = f"{short} ({ns} of {nv} variants make money on both)" if mine else f"the middle, by build net, of {who} on build and on build with worse fills ({ns} of {nv})"
     rows = [L._row("3.1", True, nv, None, f"saved: the rule ({lock['spec']['run']['family']}, home {REC._nice(h)}"

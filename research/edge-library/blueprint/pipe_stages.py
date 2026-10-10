@@ -122,6 +122,17 @@ mode the map gets a LOOSE check and ONE box is picked right after it; every hard
           nothing (waive=, lock.json `waived`; the owner, 2026-10-08: the hard rules are the picked variant's); any other False line is still a CODE PROBLEM
   stages 6 and 7  unchanged. A stage of variant mode on an idea whose stage 1 picked no box (_cell) is refused: `bp.py pipe rerun <name>`.
 
+PROP GATES (pipeline.json gates.mode "prop", the shipped default since 2026-10-10; the owner, after the Matteo Conti interview: "go off what he says").
+Variant mode as above, with THREE things that ask and every other line a LABEL (pipe_gates.label: passed None, `held`, `label` HELD / MISSED):
+  1. the picked box makes money on the build days after costs: P3.2 (an average trade ABOVE $0) and P3.3 (the trades an average needs)
+  2. its eval odds on the pipeline's account -- the PLAIN row, open losses counted, within prop.days -- are prop.eval (40 %) or more: read in
+     _holding, so the boxes the pick is made among, and row P1.3, already hold it
+  3. it still makes money on the unseen days: oos.test(only=("box",)) -- the default box's own net on the test days above $0
+The map's own share of profitable boxes (P1.1), the sides, the other markets, P3.7-P3.10, the proof of stage 4 (P4.1, P4.2), the lock's 3.3-3.8, the
+worse fills (lock `labelled`) and lines 4.1-4.9 are read and printed and ask nothing; stage 4 therefore always passes, stage 5 is "locked" when the
+code check and the build's own rows stand, and the book card adds `equity` (at a new high or in drawdown) and `fees` (an eval's fee against the
+expected cheque). The CODE CHECK (1.1-1.4) and the PRICE CHECK (P2.5) stay hard: they say the code is right. Mode "law" is the file as it was.
+
 THE PRICE CHECK (P2.5). The middle box of the heat map (records.middle: the middle of the boxes that made money; when none
 did, the box with the most trades, and the row says so) is run again for its prices (runner.cell_trades: a store keeps
 none), held against the store (the same number of trades and the same net, or the code changed since), and every trade's
@@ -208,6 +219,7 @@ WHOLE = ("2.1", "2.2", "2.3", "2.4", OTHERS, "2.6", "2.8")  # the build's lines 
                                                     # in variant mode they are shown and ask nothing (the picked box is judged by the stages and by the lock's lines 3.3-3.8)
 MINE = {"2.1": ("P1.1", "P3.1"), "2.2": ("P1.2", "P3.2"), "2.3": ("P4.2", "P4.2"), "2.4": ("P1.3", "P3.3"), "2.5": ("P3.6", "P3.6"), "2.6": ("P3.4", "P3.4"),
         "2.7": (None, "P3.5"), "2.8": ("P4.1", "P4.1")}     # a line of the build -> the pipeline's gate of it: (of a raw heat map, of one with an indicator)
+LOCK_LABELS = ("3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "worse")      # mode "prop": what the lock reads and keeps but does not ask (freeze.lock(labels=))
 SWITCH = ("days", "cells", "workers", "draws", "box", "build_avg_trade", "test_days")      # what a tiny run hands the toolkit's test switch (records.TEST_RUN)
 BOOK_PROP = ("name", "confirmed", "size", "payout_size", "eval", "payout", "label", "stress")        # an account's prop check on a book card
 
@@ -324,11 +336,13 @@ def _middle(rows: list, cells: list):
 def _box_rows(t: dict, cell: str, days=None) -> list:
     """EVERY LINE A BOX IS HELD TO ON THE BUILD DAYS, read before the pick: stage 3's rows of variant mode (pipe_gates.variant_rows; the other
     markets are shown there, so none is read here) and the lock's lines 3.3-3.8 (lines.BOX off tables.box, as freeze.lock reads its default)."""
-    return G.variant_rows(_one_box(t, cell), []) + [fn(T.box(t["_st"], t["_u"], cell, days)) for fn in L.BOX]
+    return G.variant_rows(_one_box(t, cell), []) + G.labels([fn(T.box(t["_st"], t["_u"], cell, days)) for fn in L.BOX], gate=())
 
 
 def _holding(t: dict, cells: list, days=None) -> tuple:
-    """(the boxes of `cells` that hold every row of _box_rows, {line: how many of `cells` miss it})."""
+    """(the boxes of `cells` that hold every row of _box_rows, {line: how many of `cells` miss it}). In mode "prop" the rows that ask are P3.2 and
+    P3.3 (the others are labels: passed None), and the boxes that hold them must also have the eval odds of pipeline.json prop.eval or more
+    (the PLAIN row of _odds, `>=`: the owner's "40 % or more"); the boxes that miss it are counted under "eval odds"."""
     good, missed = [], {}
     for c in cells:
         bad = [x["line"] for x in _box_rows(t, c, days) if x["passed"] is False]
@@ -336,13 +350,24 @@ def _holding(t: dict, cells: list, days=None) -> tuple:
             missed[k] = missed.get(k, 0) + 1
         if not bad:
             good.append(c)
+    if PR.prop_gates() and good:
+        bar, got = PR.need("prop", "eval"), _odds(t, good, days)
+        keep = [c for c in good if got[c]["eval"] >= bar]
+        if len(keep) < len(good):
+            missed["eval odds"] = len(good) - len(keep)
+        good = keep
     return good, missed
 
 
 def _odds(t: dict, cells: list, days=None) -> dict:
     """{box: THE PROP CHECK of its build trades on the pipeline's account (pipe_prop.odds, as row P5.9 reads the locked box)}."""
     own, cal = PR.need("prop", "account"), T.build_days(t["_u"], days)
-    return {c: PP.odds(J.cellx(t["_st"], c, t["_u"]["sess"], t["_u"]), cal, own) for c in cells}
+    seen = t.setdefault("_odds", {})                # a box's odds are read once a table: the pick asks again for the boxes the gate has already read
+    for c in cells:
+        key = (c, own, str(days))
+        if key not in seen:
+            seen[key] = PP.odds(J.cellx(t["_st"], c, t["_u"]["sess"], t["_u"]), cal, own)
+    return {c: seen[(c, own, str(days))] for c in cells}
 
 
 def _outward(rows: list, odds: dict) -> list:
@@ -489,11 +514,15 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) ->
         cell = cands[0]["cell"]
         odds = {a: cands[0][a] for a in ("account", "eval", "payout", "size", "payout_size")}
         more = min(len(cands), PR.need("variant", "box_tries")) - 1
-        said += (f"; if this box does not hold at the proof or cannot be locked, the next of {more} more box{'es' * (more != 1)} that hold{'s' * (more == 1)} every line "
-                 "is tried, each one more try of the random bar") if more > 0 else ""
-        how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 else
-               f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that hold every line "
-               "a box is held to on the build days (never the best)")
+        said += ((f"; if this box does not hold at the proof or cannot be locked, the next of {more} more box{'es' * (more != 1)} that hold{'s' * (more == 1)} every line "
+                  "is tried, each one more try of the random bar") if not PR.prop_gates() else
+                 f"; the other {more} box{'es' * (more != 1)} that hold{'s' * (more == 1)} the gates {'is' if more == 1 else 'are'} kept as the next picks") if more > 0 else ""
+        what = (f"make money after costs with enough trades and have {L._pc(PR.need('prop', 'eval'))} eval odds or more" if PR.prop_gates() else
+                "hold every line a box is held to on the build days")
+        how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 and not PR.prop_gates() else
+               f"the one box of its {res[i]['qualifying']} that makes money after costs with enough trades and has {L._pc(PR.need('prop', 'eval'))} eval odds or more" if len(good) == 1 else
+               f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that {what} "
+               "(never the best)")
     box = _box_card(t, cell)
     return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- {how}: "
                  f"average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
@@ -762,8 +791,9 @@ def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, s
     (G.reshuffle_box); only when it holds, (b) the same box of the random-entry control tables -- the same exit cell, the same days, the same
     number of trades a day (tables.built(box=): judge.c1_table on that one cell) -- is beaten above the bar of the idea's `tries`."""
     cell = _cell(picked)
+    prop = PR.prop_gates()                          # the proof is shown, not asked (module docstring, PROP GATES)
     rows = [G.reshuffle_box(_one_box(_table(specs[0], plan, kw), cell))]
-    if rows[0]["passed"] is False:
+    if rows[0]["passed"] is False and not prop:
         return _card(4, t0, False, "fail", rows, f"the reshuffled runs of the picked box {cell} do not hold, so the random entries are not run: {rows[0]['text']}", picked, tries, rules, next_box=True)
     why = _run(specs[:1], kw, "pools", progress)    # the control pool of the home's market and bar size: read where it stands, run only when it is not there
     if why:
@@ -771,6 +801,9 @@ def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, s
     with _draws(kw["draws"]):
         c1 = _table(specs[0], plan, kw, None, control=True, box=cell)["controls"].get("c1") or {}
     rows.append({**G.random(c1.get("p_beat"), tries, "random-entry runs of the same box"), "seeds": c1.get("seeds"), "replicates": c1.get("replicates")})
+    if prop:
+        rows = [G.label(x) for x in rows]
+        return _card(4, t0, True, "pass", rows, f"the proof of the picked box {cell} is shown and asks nothing: " + "; ".join(x["text"] for x in rows), picked, tries, rules)
     ok = rows[1]["passed"] is True
     return _card(4, t0, ok, "pass" if ok else "fail", rows, f"the proof holds for the picked box {cell}: " + "; ".join(x["text"] for x in rows) if ok else
                  f"the proof fails for the picked box {cell}: {rows[1]['text']}", picked, tries, rules, **({} if ok else {"next_box": True}))
@@ -863,10 +896,11 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
             return _card(5, t0, False, "other markets", rows, f"{sub}{with_} does not hold on its other markets, which the build is the first to run with the "
                          f"indicator on: {bad[0]['text']}", picked, tries, needs(rows))
         try:
-            r = FRZ.lock(sub, **_cmd(kw), **({"waive": waive} if waive else {}), **({"default": pick} if variant else {}))
+            r = FRZ.lock(sub, **_cmd(kw), **({"waive": waive} if waive else {}), **({"default": pick} if variant else {}),
+                         **({"labels": LOCK_LABELS} if PR.prop_gates() else {}))
         except J.Refuse:
             got = _box(u, kw, pick) if variant else _box(u, kw)
-            if got is None or (got[0] is not None and all(x["passed"] for x in got[1])):
+            if got is None or (got[0] is not None and all(x["passed"] is not False for x in got[1])):
                 raise                               # not the box: the lock's own word goes up to the runner
             default, rows = got
             nb = {"next_box": True} if variant else {}     # variant mode: the verdict is this box's, and another box that holds may be tried (next_box)
@@ -879,10 +913,14 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
                          + ("" if variant else " -- no second box: the idea stops"), picked, tries, needs(rows), default=default, **nb)
     lock = r["lock"]
     home, default = lock["home"], lock["default"]
-    rows = [x for x in r["lines"] if x["line"] in {b["line"] for b in lock["box"]}]
+    rows = G.labels([x for x in r["lines"] if x["line"] in {b["line"] for b in lock["box"]}], gate=())      # (mode "prop": 3.3-3.8 are labels)
     st, _ = T._open(Path(home["folder"]), home["key"])
     prop = _prop(J.cellx(st, default, home["session"], u), T.build_days(u, kw["days"]), [own])
     p = prop[own]
+    if PR.prop_gates():                             # the worse fills the lock did not ask for: said, so the card shows what was set aside
+        ok = default in set(lock.get("survivors") or ())
+        rows.append(G.label(L._row("P5.10", ok, None, None, f"the box {default} " + ("makes money" if ok else "does NOT make money") + " on the build days with worse fills "
+                                   "(2 ticks + 250 ms)")))
     rows.append(L._row("P5.9", None, None, {k: rules["prop"][k] for k in ("days", "eval", "payout")}, p["text"], account=own,
                        **{k: p[k] for k in ("label", "eval", "payout", "size", "payout_size")}))
     shown_whole = list(lock.get("waived") or [])
@@ -910,19 +948,28 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     if not again:
         with _switch(name, ctx):
             r = OOS.test(sub, confirm=True, root=kw["root"], workers=kw["workers"], out=PS.runs_test(ctx.get("root")), ledger=kw["ledger"],
-                         days=(ctx.get("tiny") or {}).get("test_days"), relatives_ok=not rules["test"]["one_read_a_slot"])
+                         days=(ctx.get("tiny") or {}).get("test_days"), relatives_ok=not rules["test"]["one_read_a_slot"],
+                         **({"only": ("box",)} if PR.prop_gates() else {}))
     rows, rng, rel = r["lines"], r.get("range") or {}, list(r.get("relatives") or [])        # rel: the related ideas read on these days before this one
     rules.update(lines={x["line"]: x["need"] for x in rows}, range=rng)
+    gate = r.get("gates")                           # mode "prop": the read was asked for the box alone (oos.run(only=)); 4.1-4.9 are labels
+    if gate:
+        net = gate.get("box")
+        rows = [L._row("P6.1", None if net is None else bool(net > 0), net, 0, "the picked box " + ("has no trade on the unseen days" if net is None else
+                       f"made {REC._usd(net)} on the unseen days (need above $0)"), box=net), *G.labels(rows, gate=())]
+        rules["gates"] = gate
     head = (f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
             + (f" ({len(rel)} related idea{'s' * (len(rel) != 1)} read on these days before it)" if rel else ""))
     if r.get("passed") is not True:
-        bad = [x for x in rows if x["passed"] is not True]
+        bad = [x for x in rows if x["passed"] is False] if gate else [x for x in rows if x["passed"] is not True]
         return _card(6, t0, False, "not proven", rows, f"{head}: NOT PROVEN, it fails {', '.join(x['line'] for x in bad)} ({bad[0]['text'] if bad else r.get('verdict')}). "
                      "A fail is final: no re-tune, no second read", picked, tries, rules, relatives=rel)
     got = PO.handed(sub, kw["root"])                # what the freeze and the read leave for the prop simulator: the read's own store and days
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
-    return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, every line 4.1-4.9 holds; on those days the box {was['default']} is a "
+    holds = (f"the box {was['default']} makes money on those days (the one line asked; lines 4.1-4.9 are labels"
+             + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
+    return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}; on those days the box {was['default']} is a "
                  f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"], relatives=rel)
 
 
@@ -943,11 +990,42 @@ def _facts(x: dict, calendar, fast) -> dict:
     total, pf = float(net.sum()), L._pf(net)
     at = sorted(dt.datetime.fromtimestamp(int(m) / 1000, S.ET).strftime("%H:%M") for m in x["entry_ms"])
     share = lambda v: float(v) / total if L._profitable(total) else None  # noqa: E731
-    return {"hours": [at[0], at[-1]] if at else None, "trades": len(net), "days_traded": len(by),
+    return {"hours": [at[0], at[-1]] if at else None, "trades": len(net), "days_traded": len(by), "equity": _equity(days, day),
             "winning_months": [sum(bool(L._profitable(v)) for v in months.values()), len(months)],
             "biggest_day_share": share(day.max()) if len(day) else None, "fast_profit_share": share(net[dur <= fast].sum()),
             "worst_day": float(day.min()) if len(day) else None, "worst_drawdown": L._drawdown(day, opn),
             "avg_trade": total / len(net) if len(net) else None, "profit_factor": None if pf in (None, float("inf")) else pf, "net": total}
+
+
+def _equity(days: list, day) -> dict | None:
+    """WHERE THE BOX STANDS NOW (the owner, 2026-10-10, off the interview: "run the strategy that is making new highs, not the one in drawdown"): its
+    equity day by day over the unseen days, at one contract, from a start of $0 -> {state: "at a new high" | "in drawdown", below_high (dollars under
+    its best equity so far; 0 at a high), sessions_since_high (session days since its last high), last_day (ISO), sessions}. None: no day."""
+    if not len(day):
+        return None
+    eq = np.concatenate([[0.0], np.cumsum(np.asarray(day, np.float64))])
+    peak = np.maximum.accumulate(eq)
+    below, at = float(peak[-1] - eq[-1]), np.flatnonzero(eq >= peak)
+    return {"state": "at a new high" if below <= 0 else "in drawdown", "below_high": max(below, 0.0), "sessions_since_high": int(len(eq) - 1 - at[-1]),
+            "last_day": dt.date.fromordinal(int(days[-1])).isoformat(), "sessions": len(day)}
+
+
+def _fees(prop: dict) -> dict:
+    """THE FEE LINE of a book card (the owner, 2026-10-10: "fees paid against payout expected"; a label, asks nothing), for each account of `prop`
+    whose eval fee is in pipeline.json prop.fees and whose rule file names a first cheque: {account id: {fee, eval, payout, evals_per_pass, cost_per_pass,
+    first_cheque (the cap), expected_first_cheque (cap x the payout odds), net_per_pass (expected cheque - cost of the evals it takes to pass one)}}."""
+    fees, out = PR.need("prop").get("fees") or {}, {}        # (a file of mode "law" as it was has none: no fee line)
+    for rid, p in prop.items():
+        fee, e, q = fees.get(rid), p.get("eval"), p.get("payout")
+        cap = PO.app().load_rules(rid).get("payout_cap")
+        if fee is None or not e or cap is None:
+            continue
+        cost, cheque = fee / e, cap * (q or 0.0)
+        out[rid] = {"fee": fee, "eval": e, "payout": q, "evals_per_pass": 1 / e, "cost_per_pass": cost, "first_cheque": cap, "expected_first_cheque": cheque,
+                    "net_per_pass": cheque - cost,
+                    "text": f"an eval costs ${fee:,.0f}; at {e:.0%} it takes {1 / e:.1f} to pass one (${cost:,.0f}); a passed account's first cheque is up to ${cap:,.0f} and the "
+                            f"box reaches it {0 if q is None else q:.0%} of the time, ${cheque:,.0f} expected: {'+' if cheque >= cost else '-'}${abs(cheque - cost):,.0f} a passed account"}
+    return out
 
 
 def _win_days(x: dict, calendar, account: str, size) -> float | None:
@@ -981,6 +1059,7 @@ def stage7(name: str, ctx: dict, progress=None) -> dict:
             "label": prop[own]["label"], "prop": {a: {k: p.get(k) for k in BOOK_PROP} for a, p in prop.items()},
             **{k: facts[k] for k in ("hours", "trades", "days_traded")}, "win_days_month": _win_days(x, got["calendar"], own, prop[own]["size"]),
             **{k: facts[k] for k in ("winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor", "net")},
+            "equity": facts["equity"], "fees": _fees(prop), "gates": PR.gates(),
             "tries": tries, "relatives_read": len(six.get("relatives") or []),
             "stages": {str(n): {"passed": c.get("passed"), "result": c.get("result"), "text": (str(c.get("text") or "").splitlines() or [""])[0]}
                        for n, c in cards.items() if n in NAMES and n < max(NAMES)},
