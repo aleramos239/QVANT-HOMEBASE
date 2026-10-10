@@ -1259,7 +1259,8 @@ class Engine:
                     cfg = self.cfg.strategies.get(st.strategy)
                     ad = self.adapters.get(st.account)
                     if cfg is None or ad is None or st.date != self._today() \
-                            or st.status == "idle" or self._archived(st):
+                            or st.status == "idle" or self._archived(st) \
+                            or (cfg.kind == "lab" and self._lab_close_sent(st)):
                         continue
                     flat, acts[key] = await self._flatten_state(st, cfg, ad)
                     if flat and st.status in ("placing", "placed", "live"):
@@ -1334,6 +1335,8 @@ class Engine:
 
     async def _kill_one(self, cfg: StrategyCfg, account: str,
                         st: Optional[DayState]) -> dict:
+        if cfg.kind == "lab" and st is not None and self._lab_hands_off(st):
+            return await self._lab_kill_readonly(st, cfg, account)
         if st is None or st.status == "idle":
             return {"ok": True, "note": "the bot has not acted on this account today — nothing to do"}
         if st.status == "done" and st.exit_reason == "killed":
@@ -1892,8 +1895,11 @@ class Engine:
 
     @staticmethod
     def _lab_blank(n: int) -> dict:
-        return {"round": n, "iid": {}, "legs": {}, "move": False, "closing": None, "closing_ms": None,
-                "gone_ms": None, "cancelled": [], "clean": False, "check": False, "unconfirmed": False,
+        # close_sent_ms: THE fact that this round's one market-out was sent (written to disk before it leaves;
+        # never judged by `closing`, which is only the reason text). close_ok / close_id: the broker accepted it.
+        return {"round": n, "iid": {}, "legs": {}, "move": False, "closing": None, "close_sent_ms": None,
+                "close_ok": False, "close_id": None, "gone_ms": None, "cancelled": [], "clean": False,
+                "check": False, "unconfirmed": False, "blind": False, "carry": None,
                 "placed_ms": None, "entry_ms": None, "exit_ms": None, "why": None}
 
     def _lab_round_no(self, st: DayState) -> int:
@@ -2008,8 +2014,8 @@ class Engine:
             if x.get("unconfirmed"):              # every contract that went in is out: the close is confirmed
                 x["unconfirmed"], x["why"] = False, None
             self._lab_save()
-            if x.get("closing"):
-                return str(x["closing"])
+            if x.get("close_sent_ms"):
+                return str(x.get("closing") or "flat")
             sl, tp = self._lab_levels(st, x)
             if px is None or (sl is None and tp is None):
                 return "exit"
@@ -2332,7 +2338,7 @@ class Engine:
             return
         self._retry_at[f"settle:{key}"] = time.time()
         tries[key] = tries.get(key, 0) + 1
-        work_e, work_b, unread = [], [], []
+        work_e, work_b, unread, filled_b = [], [], [], []
         for i, side in ((st.upper_id, "Buy"), (st.lower_id, "Sell")):
             if not i:
                 continue
@@ -2357,10 +2363,18 @@ class Engine:
                 status = None
             if status in WORKING:
                 work_b.append(i)
+            elif status == "Filled":
+                filled_b.append(i)
             elif status not in TERMINAL:
                 unread.append(i)
         if self._archived(st) or st.status not in ("done", "error") or x.get("clean"):
             return                                   # it moved on while the reads ran
+        if (x.get("close_ok") and filled_b) or len(filled_b) > 1:
+            # the close was accepted AND a stop / target filled, or both of them did: the account may hold the
+            # other side now, with no stop. Never clean; a person looks.
+            return self._lab_mark_check(
+                st, x, f"exit orders filled: {', '.join(filled_b)}" + (" and the close order" if x.get("close_ok") else ""),
+                why=LAB_EXIT_TWICE)
         if not (work_e or work_b or unread):
             x["clean"], x["why"] = True, None
             tries.pop(key, None)
@@ -2537,7 +2551,7 @@ class Engine:
             return {"ok": ok, "sold": 0, "actions": acts}
 
         now = self._lab_ms()
-        if not x.get("closing"):                     # it read flat with every entry ended: nothing was sent
+        if not x.get("close_sent_ms"):               # it read flat with every entry ended: nothing was sent
             if now - int(x.get("gone_ms") or now) < LAB_UNCONFIRMED_S * 1000:
                 acts.append("the account is already flat")
                 return ans(True)
@@ -2550,10 +2564,10 @@ class Engine:
             return ans(False)
         if st.status not in ("placed", "live"):
             return ans(True)                         # its exit fill closed it meanwhile
-        waited = now - int(x.get("closing_ms") or now) >= LAB_UNCONFIRMED_S * 1000
+        waited = now - int(x.get("close_sent_ms") or now) >= LAB_UNCONFIRMED_S * 1000
         if net == 0:
             if x.get("unconfirmed") or waited:
-                await self._lab_finish(st, cfg, ad, x, acts, str(x["closing"]), cancel=True)
+                await self._lab_finish(st, cfg, ad, x, acts, str(x.get("closing") or "flat"), cancel=True)
             else:
                 acts.append("the account is already flat")
             return ans(True)
@@ -2601,6 +2615,7 @@ class Engine:
         -> {"ok", "sold": contracts, "actions"}"""
         acts: list[str] = []
         x = self._lab_x(st)
+        reason = str(reason or "flat")               # never empty: it becomes the round's exit reason
 
         def ans(ok: bool, sold: int = 0) -> dict:
             return {"ok": ok, "sold": sold, "actions": acts}
@@ -2611,11 +2626,12 @@ class Engine:
 
         if st.status not in ("placed", "live"):
             return ans(True)
-        if x.get("closing") or x.get("gone_ms"):
+        if x.get("close_sent_ms") or x.get("gone_ms"):
             return await self._lab_close_retry(st, cfg, ad, x, acts)
         ids = {"Buy": st.upper_id, "Sell": st.lower_id}                     # 1
         held = {"Buy": 0, "Sell": 0}
         ask = []
+        bound = False                                # own quantity is the broker's count for a part fill: a lower bound
         for s in ("Buy", "Sell"):
             if not ids[s] or s in x["cancelled"]:
                 continue
@@ -2637,7 +2653,7 @@ class Engine:
             if status == "Filled":
                 held[s] = int(st.qty or 0)
             elif status in TERMINAL and filled:
-                held[s] = int(filled)
+                held[s], bound = int(filled), True
             elif status in TERMINAL and st.entry_side == s and st.entry_qty:
                 doubt.append(f"entry {ids[s]} {status.lower()}, its filled quantity is not known")
             elif status in TERMINAL:
@@ -2682,12 +2698,16 @@ class Engine:
             return ans(True)
         if (net > 0) != (side == "Buy"):
             return unsure(f"the account's {net:+d} {cfg.symbol} is not on its side")
+        if bound and abs(net) != own:
+            # a fill push without its order id is not counted (broker/tradovate.py _count_fill): selling the
+            # count and cancelling the stop could leave a contract with nothing behind it
+            return unsure(f"the entry was cancelled part filled: {own} counted, the account holds {net:+d} {cfg.symbol}")
         qty, out_side = min(abs(net), own), ("Sell" if side == "Buy" else "Buy")     # 4
-        x["closing"], x["closing_ms"] = reason, self._lab_ms()
+        x["closing"], x["close_sent_ms"] = reason, self._lab_ms()
         try:
             self._lab_save(strict=True)              # on disk first: a restart must not send it a second time
         except Exception as e:  # noqa: BLE001 -- nothing was sent
-            x["closing"] = x["closing_ms"] = None
+            x["closing"] = x["close_sent_ms"] = None
             return unsure(f"the close could not be written down ({e})")
         try:
             r = await ad.place_order(OrderRequest(symbol=cfg.symbol, side=out_side, qty=qty,
@@ -2698,6 +2718,11 @@ class Engine:
         if not r.ok:
             self._lab_unconfirmed(st, x, acts, "the market-out reported failure")
             return ans(False)
+        x["close_ok"], x["close_id"] = True, r.order_id
+        self._lab_save()
+        if st.status not in ("placed", "live"):      # the send yielded: the round's own stop / target ended it
+            acts.append(f"the round ended while the close was sent ({st.exit_reason})")
+            return ans(True, qty)                    # nothing is cancelled; the settle sees a double exit
         await self._cancel_brackets(st, ad, acts)                           # 5
         return ans(True, qty)
 
@@ -2708,6 +2733,7 @@ class Engine:
         cfg = self.cfg.strategies.get(name)
         if cfg is None or cfg.kind != LAB:
             return {}
+        reason = str(reason or "flat")
         self._lab_prune()
         async with self._kill_lock(name):
             rounds = {st.account: st for st in self.day_states(name)     # read INSIDE the lock
@@ -2732,6 +2758,43 @@ class Engine:
                 self._lab_save()
                 self.journal("lab_flatten", strategy=name, reason=reason, results=results)
         return results
+
+    # --- hooks 6 and 8: a Kill never sends a second market order for a round whose close is out ------
+    def _lab_close_sent(self, st: DayState) -> bool:
+        """An open round whose ONE market-out has been sent (accepted, refused or unknown)."""
+        return st.status in ("placed", "live") and bool(self._lab_x(st).get("close_sent_ms"))
+
+    def _lab_hands_off(self, st: DayState) -> bool:
+        """A round the per-strategy Kill must not run _kill_state on: its close is out, or it read flat with its
+        entries ended (a position on the account now is not its own), or it is filed away (I-4)."""
+        if self._archived(st):
+            return True
+        x = self._lab_x(st)
+        return st.status in ("placed", "live") and bool(x.get("close_sent_ms") or x.get("gone_ms"))
+
+    async def _lab_kill_readonly(self, st: DayState, cfg: StrategyCfg, account: str) -> dict:
+        """The per-strategy Kill on such a round: cancel its unfilled entries, read, and say "check it". Never a
+        market order (the one close is out already), never _kill_state."""
+        acts: list[str] = []
+        if self._archived(st):
+            return {"ok": False, "actions": ["check it — an earlier trade of this strategy is not resolved on this "
+                                             "account; nothing is sent"]}
+        ad = self.adapters.get(account)
+        if ad is None:
+            return {"ok": False, "error": "account not connected", "actions": acts}
+        x = self._lab_x(st)
+        for s, i in (("Buy", st.upper_id), ("Sell", st.lower_id)):
+            if not i or s in x["cancelled"] or (st.entry_side == s and st.qty and st.entry_qty >= st.qty):
+                continue
+            try:
+                r = await ad.cancel_order_by_id(i)
+            except Exception as e:  # noqa: BLE001
+                r = OrderResult(ok=False, error=str(e))
+            acts.append(f"cancel entry {i}: " + ("ok" if r.ok else str(r.error)))
+        await self._lab_close_retry(st, cfg, ad, x, acts)        # reads only; ends the round if the account is flat
+        if st.status in ("placed", "live") and not any(a.startswith("check it") for a in acts):
+            acts.append("check it — its close order is already out; nothing more is sold")
+        return {"ok": st.status not in ("placed", "live"), "acted": True, "actions": acts}
 
     # --- hook 5: the Desk's "Flatten & turn off" --------------------------------------------------
     async def _lab_flatten_strategy(self, name: str) -> dict:
@@ -2786,7 +2849,7 @@ class Engine:
         if check_it:
             self._journal_needs_check(st, cfg, now)
         late = now >= _hhmm(cfg.flat_et)
-        closing = bool(x.get("closing") or x.get("gone_ms"))
+        closing = bool(x.get("close_sent_ms") or x.get("gone_ms"))
         if st.status == "placed" and not late and not closing:
             if ad.connected:       # a dead socket's cache is stale; reconnect reconciles
                 await self._guard_placed(st, cfg, ad, check_position=False, event="entry_found_by_check",
@@ -2842,6 +2905,7 @@ LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share
 LAB_ONE_AT_A_TIME = "One position at a time."
 LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
+LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."
 LAB_BAD_ORDER = "The Desk cannot check this order."
 LAB_NO_STOP = "Every entry needs a stop held at the broker."
 LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."

@@ -1628,3 +1628,201 @@ def test_broken_extras_never_raise_into_a_fill(tmp_path):
     eng._lab_x = lambda s: (_ for _ in ()).throw(RuntimeError("extras gone"))
     fill_exit(eng, ad, st, 110.0, "tp")
     assert (st.status, st.exit_reason, st.pnl) == ("done", "exit", 180.0)
+
+
+# ================================================================================================ fix round 1
+def markets(ad):
+    return [(o.side, o.qty, o.text) for o in ad.orders if o.order_type == "Market"]
+
+
+# ------------------------------------------------------------------------------------------------ C1
+@pytest.mark.parametrize("refused", [False, True])
+def test_c1_an_empty_reason_never_switches_the_one_close_guard_off(tmp_path, refused):
+    """The guard is a fact of its own (close_sent_ms), written when the order is sent -- never the reason text."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.fail_market = refused
+    run(eng.lab_flatten(LAB, reason=""))
+    ad.fail_market = False
+    run(eng.lab_flatten(LAB, reason=""))
+    run(eng.lab_flatten(LAB, reason=None))
+    clock.set_et(15, 56)
+    tick(eng)
+    later(clock, 31)
+    tick(eng)
+    assert markets(ad) == [("Sell", 1, "homebase:lab-flat")]
+    x = eng._lab_x(st)
+    assert x["close_sent_ms"] and x["closing"] == "flat"            # an empty reason is "flat"
+    if not refused:
+        fill_exit(eng, ad, st, 101.0, by="market")
+        assert (st.status, st.exit_reason) == ("done", "flat")
+
+
+# ------------------------------------------------------------------------------------------------ C3
+def test_c3_a_stop_and_a_close_that_both_filled_is_never_clean(tmp_path):
+    """The stop fills between the net read and the close's arrival: the account is left short with no stop. The
+    round must say so, and no new trade may follow."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    real = ad.place_order
+
+    async def race(req):
+        r = await real(req)
+        ad.order_status[f"{st.upper_id}-sl"], ad.order_status[f"{st.upper_id}-tp"] = "Filled", "Canceled"
+        ad.net -= 2                                                 # the stop's 1 and the close's 1: short 1
+        return r
+
+    ad.place_order = race
+    assert run(eng.lab_flatten(LAB, reason="time"))["a1"]["sold"] == 1
+    ad.place_order = real
+    assert eng._lab_x(st)["close_id"] == "plain" and eng._lab_x(st)["close_ok"] is True
+    for px, oid in ((95.0, f"{st.upper_id}-sl"), (95.25, "plain")):
+        run(eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=px, raw={"orderId": oid})))
+    assert st.status == "done" and ad.net == -1
+    for _ in range(3):
+        tick(eng)
+    (r,) = eng.lab_rounds(LAB)
+    assert (r["clean"], r["why"]) == (False, "Check it: this trade's exit may have filled twice.")
+    (chk,) = events(tmp_path, "lab_check")
+    assert chk["round"] == 1 and "filled" in chk["reason"]
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["ok"] is False and len(ad.brackets) == 1
+    assert eng.lab_open(LAB) == ["a1"]
+
+
+def test_c3_a_stop_and_a_target_that_both_filled_is_never_clean(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    fill_exit(eng, ad, st, 110.0, "tp")
+    ad.order_status[f"{st.upper_id}-sl"] = "Filled"                 # the broker's one-cancels-other did not hold
+    for _ in range(2):
+        tick(eng)
+    assert rows(eng)[0]["why"] == "Check it: this trade's exit may have filled twice." and not rows(eng)[0]["clean"]
+
+
+def test_c3_a_round_that_ended_while_its_close_was_sent_keeps_its_orders_alone(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    real = ad.place_order
+
+    async def stopped_out_meanwhile(req):
+        r = await real(req)
+        fill_exit(None, ad, st, 95.0, "sl", push=False)             # the broker's book: the stop filled
+        await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=95.0,
+                                    raw={"orderId": f"{st.upper_id}-sl"}))
+        return r
+
+    ad.place_order = stopped_out_meanwhile
+    out = run(eng.lab_flatten(LAB))["a1"]
+    assert st.status == "done" and ad.cancelled == []               # no cancel after the round ended
+    assert "ended" in out["actions"][-1]
+
+
+# ------------------------------------------------------------------------------------------------ C4
+def test_c4_a_kill_after_an_accepted_close_sends_nothing_more(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    run(eng.lab_flatten(LAB, reason="time"))                        # accepted; not filled yet: the net is still +1
+    assert markets(ad) == [("Sell", 1, "homebase:lab-flat")]
+    out = run(eng.kill_strategy(LAB))["a1"]
+    assert markets(ad) == [("Sell", 1, "homebase:lab-flat")]        # never a second market order
+    assert out["ok"] is False and "check it" in out["actions"][-1] and st.status == "live"
+    assert eng.killed_today(LAB)
+    fill_exit(eng, ad, st, 101.0, by="market")                      # the close fills: booked as usual
+    assert (st.status, st.exit_reason, st.pnl) == ("done", "time", 20.0)
+
+
+def test_c4_a_kill_after_a_refused_close_sends_nothing(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.fail_market = True
+    run(eng.lab_flatten(LAB))
+    ad.fail_market = False
+    n = len(ad.cancelled)
+    out = run(eng.kill_strategy(LAB))["a1"]
+    assert len(ad.orders) == 1 and out["ok"] is False and "check it" in out["actions"][-1]
+    assert ad.cancelled[n:] == [] and st.status == "live"           # its stop still works
+    clock.set_et(15, 56)
+    later(clock, 31)
+    tick(eng)
+    assert len(ad.orders) == 1
+
+
+def test_c4_a_kill_of_a_round_that_read_flat_never_sells_a_manual_position(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.net = 0
+    run(eng.lab_flatten(LAB))                                       # read flat: its position is gone; nothing sent
+    ad.net = 1                                                      # the owner buys 1 by hand
+    run(eng.kill_strategy(LAB))
+    assert ad.orders == []
+
+
+def test_c4_a_kill_with_no_close_sent_closes_the_round_as_before(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    out = run(eng.kill_strategy(LAB))["a1"]
+    assert out["ok"] is True and markets(ad) == [("Sell", 1, "homebase:kill")]
+    assert (st.status, st.exit_reason) == ("done", "killed")
+
+
+def test_c4_the_global_kill_sends_no_second_market_order_for_a_close_in_flight(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    run(eng.lab_flatten(LAB))                                       # accepted, the net still reads +1
+    out = run(eng.flatten_today())
+    assert out == {} and markets(ad) == [("Sell", 1, "homebase:lab-flat")]
+    assert st.status == "live"                                      # the Kill's own account sweep is the backstop
+
+
+def test_hook_kill_one_never_reaches_the_lab_for_another_kind(kinds):
+    """The eighth hook (fix round 1, C4)."""
+    for kind, eng, ad, name, account, seen in kinds:
+        st = enter(eng, name, account, 24510.0 if kind != "bars" else 30035.0)
+        ad.net = st.qty
+        ad.order_status = {st.upper_id: "Filled", **({st.lower_id: "Canceled"} if st.lower_id else {})}
+        out = run(eng.kill_strategy(name))
+        assert out[account]["ok"] is True and out[account]["acted"] is True, kind
+        assert [(o.side, o.qty, o.text) for o in ad.orders] == [("Sell", st.qty, "homebase:kill")]
+        assert (st.status, st.exit_reason) == ("done", "killed") and seen["lab"] == []
+
+
+# ------------------------------------------------------------------------------------------------ S5, S8
+def test_s8_the_flatten_closes_only_what_is_still_in(tmp_path):
+    """2 in, 1 out again by its stop, and 1 the owner holds by hand: the flatten sells 1, not 2."""
+    eng, ads, _ = mk(tmp_path, qty=2)
+    ad = ads["a1"]
+    go(eng, leg(), {"a1": 2})
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 100.0, qty=2)
+    run(eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=95.0,
+                              raw={"orderId": f"{st.upper_id}-sl"})))
+    assert (st.status, st.exit_qty) == ("live", 1)
+    ad.net = 2                                                      # its last 1, and 1 by hand
+    assert run(eng.lab_flatten(LAB))["a1"]["sold"] == 1
+    assert markets(ad) == [("Sell", 1, "homebase:lab-flat")]
+
+
+def test_s5_a_filled_count_that_may_lag_is_not_trusted_against_the_net(tmp_path):
+    """3 asked, 2 in, 1 fill seen. The broker's count for a cancelled entry is a lower bound: the flatten must not
+    sell 1, call it closed and cancel the stop of the contract that is left."""
+    eng, ads, _ = mk(tmp_path, qty=3)
+    ad = ads["a1"]
+    go(eng, leg(), {"a1": 3})
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 100.0, qty=1)
+    ad.net = 2                                                      # a second fill's push carried no order id
+    out = run(eng.lab_flatten(LAB))["a1"]
+    assert out["ok"] is False and out["sold"] == 0 and "check it" in out["actions"][-1]
+    assert markets(ad) == [] and ad.order_status[f"{st.upper_id}-sl"] == "Working"
+    ad.net = 1                                                      # the count and the net agree: it closes
+    eng2_out = run(eng.lab_flatten(LAB))["a1"]
+    assert eng2_out["sold"] == 1
