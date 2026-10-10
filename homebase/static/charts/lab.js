@@ -955,7 +955,7 @@ function libRows() {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
       const own = ownName(d.name), state = bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft';
-      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: own ? `${state} · ${d.name}` : state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true, desk: S.deskBuiltins.has(s.id) }));
   return { rows, builtins };
@@ -967,8 +967,8 @@ function paintLib() {
   if (!el) return;
   const { rows, builtins } = libRows();
   if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
-  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''}${r.lock ? ' title="Read-only"' : r.locked ? ' title="On the Desk: locked. Open it and press the lock to edit."' : ''}>
-        ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''} title="${esc([r.title ? `${r.name}.py` : '', r.lock ? 'Read-only' : r.locked ? 'On the Desk: locked. Open it and press the lock to edit.' : ''].filter(Boolean).join(' · '))}">
+        ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk && !S.groups ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}"${C.canPick(r) ? ` data-row="${esc(r.key)}"` : ''} aria-label="${C.canPick(r) ? `Move ${esc(r.name)} to a group, or delete it` : `Move ${esc(r.name)} to a group`}" title="${C.canPick(r) ? 'Move to a group, or delete' : 'Move to a group'}" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
