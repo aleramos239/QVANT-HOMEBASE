@@ -77,7 +77,7 @@ TOO_MANY = "Too many orders at once."
 BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 TOO_LATE = "Started too late to follow today."
-NOT_CHECKED = "Not checked yet: the check could not run."
+NOT_CHECKED = "Not checked yet: the check failed."
 PROBLEM = "Stopped: the runner had a problem."
 NO_STREAM = "No prices: the chart service is not answering."
 #   "Too slow: no answer in N s." (_Child.ask) and "Strategy error: <its message>" / "Strategy error." (strategy_error)
@@ -814,6 +814,10 @@ class Runner:
                     h.day.kill()
                 del self._days[name]
         self._dates[root] = d
+        old = _before(_before(d))                    # the matches that are over and more than two sessions old go
+        for key, m in list(self._matches.items()):
+            if m.over and m.rec["root"] == root and m.date < old:
+                del self._matches[key]
         self._late.pop(root, None)
         if root in self._tapes:
             ts, px, size = self._tapes[root]
@@ -965,9 +969,10 @@ class Runner:
         """A runner that starts again: a finished day of today or the session before, written for this promotion,
         with no match or "not checked yet", is matched again (from the trades its file holds)."""
         today = self._dates[rec["root"]]
+        match.clean(store.root(self.at) / rec["name"] / "match")
         for date in (today, _before(today)):
             was = self._day_file(rec, date)
-            if was is not None and was.get("state") == "done" and (was.get("match") or {}).get("ok") is None:
+            if was is not None and was.get("state") == "done" and (not was.get("match") or match.retry(was["match"])):
                 try:
                     trades = match.from_summary(was.get("trades") or [], date)
                 except (KeyError, TypeError, ValueError):
@@ -990,13 +995,15 @@ class Runner:
             threading.Thread(target=self._match_run, args=(m,), name="labrun-match", daemon=True).start()
 
     def _match_run(self, m: _Match) -> None:
-        """The worker thread: ask, put the answer where this thread reads it. Nothing else."""
+        """The worker thread: ask, put the answer where this thread reads it. Nothing else. Whatever happens it puts
+        one (a failure reads "not checked yet" and counts as a try), so `running` never stays set."""
+        got = {"ok": None, "text": NOT_CHECKED}
         try:
             got = self._matcher(m.rec, m.date, m.trades)
-        except Exception as e:  # noqa: BLE001 -- a bug in the check must not end as a silent thread
+        except BaseException as e:  # noqa: BLE001 -- a bug in the check must not end as a silent thread
             log(f"{m.rec['name']}: match: {type(e).__name__}: {e}")
-            got = {"ok": None, "text": NOT_CHECKED}
-        self._results.put((m, got))
+        finally:
+            self._results.put((m, got))
 
     def _collect(self) -> None:
         while True:
@@ -1005,7 +1012,7 @@ class Runner:
             except queue.Empty:
                 return
             m.running, day = False, m.day
-            if got.get("ok") is None and m.tries < MATCH_RETRIES:
+            if match.retry(got) and m.tries < MATCH_RETRIES:
                 m.tries, m.due_ns = m.tries + 1, m.started + MATCH_RETRY_NS
             else:
                 m.end()

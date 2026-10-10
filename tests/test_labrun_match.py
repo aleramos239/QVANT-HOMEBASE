@@ -127,7 +127,7 @@ class Fake:
     backtest child. `run` is the request the validated run dir holds; `procs` the children it started."""
 
     def __init__(self, coverage=None, trades=(), status="done", child="pass"):
-        self.coverage = coverage or {"sessions": 1, "used": 1, "skipped": []}
+        self.coverage = coverage or {"sessions": 1, "used": 1, "skipped": [], "no_trade": []}
         self.trades, self.status, self.child = list(trades), status, child
         self.procs, self.requests = [], []
 
@@ -203,11 +203,12 @@ def test_a_day_that_cannot_be_read_yet_is_unavailable_with_its_reason(tmp_path, 
     assert free()
 
 
-def test_a_run_that_fails_is_unavailable_and_its_folder_stays_for_a_look(tmp_path, fake):
+def test_a_run_that_fails_is_unavailable_and_its_folder_is_removed_after_the_error_is_logged(tmp_path, fake, capsys):
     d = dirs(tmp_path)
     with pytest.raises(MatchUnavailable, match="the backtest could not run"):
         match.tester_day(RECORD, D1, launch=fake(status="error"), **d)
-    assert len(list((d["base"] / "runs").iterdir())) == 1 and free()
+    assert list((d["base"] / "runs").iterdir()) == [] and free()
+    assert "boom" in capsys.readouterr().err                                 # (the child's own words, for the log)
 
 
 def test_a_launcher_that_cannot_start_is_unavailable_and_leaves_no_run_folder(tmp_path):
@@ -290,3 +291,99 @@ def test_match_day_compares_the_shadow_trades_with_the_testers(tmp_path, fake):
 ])
 def test_match_day_turns_an_unavailable_day_into_not_checked_yet(tmp_path, fake, make, text):
     assert match_day(RECORD, D1, [], launch=fake(**make), **dirs(tmp_path)) == {"ok": None, "text": text}
+
+
+# ---------------------------------------------------------------- a day the tester could not really run
+def with_no_trade(reason: str) -> dict:
+    return {"sessions": 1, "used": 1, "skipped": [], "no_trade": [{"date": D1.isoformat(), "reason": reason}]}
+
+
+@pytest.mark.parametrize("shadow", [[], [trade()]])
+def test_a_strategy_that_failed_in_the_backtest_is_a_mismatch_never_no_trades(tmp_path, fake, shadow):
+    f = fake(coverage=with_no_trade("strategy error: division by zero"))
+    with pytest.raises(match.StrategyFailed):
+        match.tester_day(RECORD, D1, launch=f, **dirs(tmp_path))
+    got = match_day(RECORD, D1, shadow, launch=fake(coverage=with_no_trade("strategy error: boom")), **dirs(tmp_path))
+    assert got == {"ok": False, "text": "Did not match: the strategy failed in the backtest."}
+
+
+def test_a_missing_print_at_a_fire_time_is_a_gap_in_the_prices_not_a_quiet_day(tmp_path, fake):
+    with pytest.raises(MatchUnavailable, match="the day's prices have a gap"):
+        match.tester_day(RECORD, D1, launch=fake(coverage=with_no_trade("no print before 09:30")), **dirs(tmp_path))
+    got = match_day(RECORD, D1, [], launch=fake(coverage=with_no_trade("no print before 09:30")), **dirs(tmp_path))
+    assert got == {"ok": None, "text": "Not checked yet: the day's prices have a gap."}
+
+
+def test_a_strategys_own_skip_with_no_trades_is_a_real_no_trade_day(tmp_path, fake):
+    f = fake(coverage=with_no_trade("outside the range today"))
+    assert match_day(RECORD, D1, [], launch=f, **dirs(tmp_path)) == {"ok": True, "text": "No trades, same as the backtest."}
+    assert match_day(RECORD, D1, [trade()], launch=fake(coverage=with_no_trade("outside the range today")),
+                     **dirs(tmp_path))["text"] == "Did not match: the backtest took 0 trades, the Desk 1."
+
+
+def test_a_day_the_strategy_does_not_trade_is_not_checked_and_not_retried(tmp_path, fake):
+    nq_archive(tmp_path / "ticks")                                           # the day IS recorded; the run has no session
+    none = {"sessions": 0, "used": 0, "skipped": [], "no_trade": []}
+    with pytest.raises(match.DoesNotTrade):
+        match.tester_day(RECORD, D1, launch=fake(coverage=none), **dirs(tmp_path))
+    assert match_day(RECORD, D1, [], launch=fake(coverage=none), **dirs(tmp_path)) == {
+        "ok": None, "text": "Not checked: it does not trade that day."}
+    assert not match.retry(match_day(RECORD, D1, [], launch=fake(coverage=none), **dirs(tmp_path)))
+    got = match_day(RECORD, dt.date(2024, 3, 7), [], launch=fake(coverage=none), **dirs(tmp_path))   # nothing recorded
+    assert got["text"] == "Not checked yet: the day's prices are not stored yet." and match.retry(got)
+
+
+def test_only_a_not_checked_yet_is_asked_again():
+    assert match.retry({"ok": None, "text": "Not checked yet: the tester is busy."})
+    assert not match.retry({"ok": None, "text": "Not checked: it was stopped."})
+    assert not match.retry({"ok": True, "text": "Matched the backtest: 1 of 1 trade."})
+    assert not match.retry({"ok": False, "text": "Did not match: the strategy failed in the backtest."})
+
+
+RAISES = SOURCE.replace('ctx.market("long", sl=ctx.last_price - 10, ref=ctx.last_price)', 'raise RuntimeError("boom")')
+OFF_TODAY = SOURCE.replace("    def times(self):", "    def trades_on(self, d):\n        return False\n\n    def times(self):")
+
+
+@NEED_SANDBOX
+def test_the_real_tester_reports_a_strategy_that_raises_and_one_that_does_not_trade_today(tmp_path):
+    nq_archive(tmp_path / "ticks")
+    assert match_day(rec(RAISES), D1, [], **dirs(tmp_path)) == {
+        "ok": False, "text": "Did not match: the strategy failed in the backtest."}
+    assert match_day(rec(OFF_TODAY), D1, [], **dirs(tmp_path)) == {
+        "ok": None, "text": "Not checked: it does not trade that day."}
+    assert list((dirs(tmp_path)["base"] / "runs").iterdir()) == [] and free()
+
+
+# ---------------------------------------------------------------- run folders
+def test_a_folder_is_removed_only_from_inside_the_match_runs_folder(tmp_path):
+    base = tmp_path / "match"
+    inside, outside = base / "runs" / "r1", tmp_path / "elsewhere"
+    inside.mkdir(parents=True)
+    outside.mkdir()
+    (outside / "keep.txt").write_text("x")
+    match.drop(outside, base)
+    match.drop(base / "runs" / ".." / ".." / "elsewhere", base)
+    match.drop(base / "runs", base)                                          # not even the runs folder itself
+    link = base / "runs" / "link"
+    link.symlink_to(outside)
+    match.drop(link, base)
+    assert (outside / "keep.txt").exists() and base.joinpath("runs").is_dir() and inside.is_dir()
+    match.drop(inside, base)
+    assert not inside.exists()
+
+
+def test_run_folders_older_than_seven_days_are_cleaned_and_nothing_else(tmp_path):
+    import os
+    base = tmp_path / "match"
+    old, new, other = base / "runs" / "old", base / "runs" / "new", tmp_path / "other"
+    for d in (old, new, other):
+        d.mkdir(parents=True)
+    (base / "runs" / "spends.txt").write_text("a file stays")
+    link = base / "runs" / "oldlink"
+    link.symlink_to(other)
+    for d in (old, other):
+        os.utime(d, (1, 1))
+    os.utime(link, (1, 1), follow_symlinks=False)
+    match.clean(base, now=8 * 86400 + 1)
+    assert not old.exists() and new.is_dir() and other.is_dir() and (base / "runs" / "spends.txt").exists()
+    match.clean(base / "nowhere")                                            # no folder: nothing to do

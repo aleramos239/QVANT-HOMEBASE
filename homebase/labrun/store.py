@@ -9,6 +9,11 @@ this module talks to a service. Remove deletes the record only: the days and the
     <root>/<name>/journal.jsonl         the runner's notes, one JSON line each
     <root>/runner.json                  the runner's heartbeat
 
+The record carries, besides the code and the run's numbers, `session_window` (["09:25", "16:00"]) and `bar_minutes` (0 =
+none) from the draft's static meta. A day summary carries `promoted_utc` (the record's, copied when the day starts: a day
+file is final for its date only for the promotion that wrote it) and `match` ({"ok": bool | None, "text"}: the daily
+match against the tester, labrun/match.py).
+
 Stdlib only (draftstore, for the name rule, is too).
 """
 from __future__ import annotations

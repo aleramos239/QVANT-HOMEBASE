@@ -1449,7 +1449,7 @@ def test_a_match_that_breaks_reads_not_checked_yet_and_is_tried_again(desk):
     k = desk(matcher=boom)
     a_day(k)
     k.clock("16:10:00")
-    assert k.file()["match"] == {"ok": None, "text": "Not checked yet: the check could not run."}
+    assert k.file()["match"] == {"ok": None, "text": "Not checked yet: the check failed."}
 
 
 def test_a_stopped_day_reads_not_checked_and_is_never_matched(desk):
@@ -1577,3 +1577,77 @@ def test_a_save_of_the_finished_day_after_its_match_keeps_the_verdict(desk):
     k.wall[0] += 2
     k.r.idle()
     assert k.file()["match"] == MATCHED and k.file()["state"] == "done"
+
+
+class Dies(BaseException):
+    """Not an Exception: what `except Exception` does not catch."""
+
+
+def test_a_matcher_that_dies_hard_still_answers_and_counts_as_a_try(desk):
+    calls = []
+
+    def dies(record, date, trades):
+        calls.append(date)
+        raise Dies("gone")
+    k = desk(matcher=dies)
+    a_day(k)
+    k.clock("16:10:00")                                                      # (settle would hang if `running` stuck)
+    assert k.r.matching() == 0 and k.file()["match"] == {"ok": None, "text": "Not checked yet: the check failed."}
+    k.clock("16:40:00")
+    assert len(calls) == 2                                                   # asked again, as any "not checked yet"
+
+
+def test_a_day_that_is_not_checked_for_good_is_not_asked_again_not_even_after_a_restart(desk):
+    never = {"ok": None, "text": "Not checked: it does not trade that day."}
+    k = desk(matcher=Matcher(never))
+    a_day(k)
+    for hms in ("16:10:00", "16:40:00", "17:10:00"):
+        k.clock(hms)
+    assert len(k.matcher.calls) == 1 and k.file()["match"] == never
+    k.r.close()
+    again = restart(desk)
+    again.clock("17:30:05")
+    assert again.matcher.calls == []
+
+
+def test_the_old_matches_of_a_market_are_dropped_when_it_rolls_two_sessions_on(desk):
+    k = desk()
+    a_day(k)
+    k.clock("16:10:00")
+    assert len(k.r._matches) == 1 and k.file()["match"] == MATCHED
+    k.clock("18:01:00")                                                      # the Wednesday session begins
+    k.clock("18:01:00", WED)                                                 # Thursday
+    assert len(k.r._matches) == 1                                            # Tuesday is two sessions old: kept
+    k.clock("18:01:00", dt.date(2024, 3, 7))                                 # Friday
+    assert k.r._matches == {}
+
+
+def test_a_match_that_is_still_out_is_never_dropped_by_a_roll(desk):
+    from threading import Event
+    hold = Event()
+    k = desk(matcher=Matcher(hold=hold))
+    a_day(k)
+    try:
+        k.r.on_clock(ms_of("16:10:00"))
+        for d in (D, WED, dt.date(2024, 3, 7), dt.date(2024, 3, 8)):
+            k.r.on_clock(ms_of("18:01:00", d=d))
+        assert len(k.r._matches) == 1 and k.r.matching() == 1
+    finally:
+        hold.set()
+    k.settle()
+    assert k.file()["match"] == MATCHED
+
+
+def test_run_folders_over_a_week_old_are_removed_when_the_runner_first_sees_the_strategy(desk, tmp_path):
+    import os
+    k = desk()
+    k.promote()
+    runs = k.at / "lab_x" / "match" / "runs"
+    old, new = runs / "old", runs / "new"
+    for d in (old, new):
+        d.mkdir(parents=True)
+    os.utime(old, (1, 1))
+    k.clock("09:00:00")
+    k.open()
+    k.r.sync()
+    assert not old.exists() and new.is_dir()

@@ -18,20 +18,31 @@ import datetime as dt
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from ..backtest import drafthost, runner, sandbox
 from ..backtest.slots import Slots
-from ..backtest.tape import ET, et_ns
+from ..backtest.tape import ET, TapeStore, et_ns
 from ..contracts import tick_size
 
 TIME_NS = 2_000_000_000          # two trades agree on a time within this
 TICKS = 2                        # ... and on a price within this many ticks
 EPS = 1e-9                       # (64.01 + 0.02 is not 64.03)
+KEEP_RUNS_S = 7 * 86400          # a run folder left behind (the runner went away mid-run) is cleaned after this
+PENDING = "Not checked yet"      # the start of every text that is asked again later
 
 
 class MatchUnavailable(Exception):
     """The day cannot be checked yet; str(e) is the reason in plain words."""
+
+
+class StrategyFailed(Exception):
+    """The strategy raised in the backtest of that day: the Desk's day and the tester's cannot be the same."""
+
+
+class DoesNotTrade(Exception):
+    """The day is recorded but the strategy does not trade it (its trades_on says no): nothing to check."""
 
 
 def _hms(ns: int) -> str:
@@ -83,22 +94,70 @@ def from_summary(trades: list[dict], date) -> list[dict]:
              "exit_ns": et_ns(d, t["exit_t"]), "exit_price": t["exit_px"], "exit_reason": t["reason"]} for t in trades]
 
 
-def _unavailable(run: dict) -> str | None:
-    """Why a finished run says the day was not read, in plain words (None: it was read)."""
+def retry(verdict: dict) -> bool:
+    """True for a verdict that is only "not checked yet": the runner asks again. A day that is not checked for good
+    (stopped, does not trade) and a real answer are not."""
+    return verdict.get("ok") is None and str(verdict.get("text")).startswith(PENDING)
+
+
+def _log(msg: str) -> None:
+    print(f"[labrun] match: {msg}", file=sys.stderr, flush=True)
+
+
+def drop(run_dir, base) -> None:
+    """Remove one run folder -- only when it is a real folder directly inside <base>/runs (never the runs folder
+    itself, a link, or anything outside it)."""
+    runs, d = Path(base).resolve() / "runs", Path(run_dir)
+    if d.is_symlink() or d.parent.resolve() != runs or not d.is_dir():
+        return
+    shutil.rmtree(d, ignore_errors=True)
+
+
+def clean(base, now: float | None = None) -> None:
+    """Remove the run folders in <base>/runs that are older than a week (a run the runner never got to remove)."""
+    runs = Path(base) / "runs"
+    now = time.time() if now is None else now
+    try:
+        found = list(runs.iterdir())
+    except OSError:
+        return
+    for d in found:
+        try:
+            if d.is_dir() and not d.is_symlink() and now - d.stat().st_mtime > KEEP_RUNS_S:
+                drop(d, base)
+        except OSError:
+            continue
+
+
+def _unavailable(run: dict, recorded: bool) -> str | None:
+    """Why a finished run did not really read the day, in plain words (None: it did). recorded: the archive holds the
+    day. A strategy that raised is not a reason, it is raised as StrategyFailed (and a day it does not trade as
+    DoesNotTrade)."""
     cov = run.get("coverage") or {}
     skipped = cov.get("skipped") or []
+    if not cov.get("sessions") and recorded and not skipped:
+        raise DoesNotTrade
     if not cov.get("sessions") or any(s.get("reason") == "no tape" for s in skipped):
         return "the day's prices are not stored yet"
-    return "the stored prices for the day have a gap" if skipped else None
+    if skipped:
+        return "the stored prices for the day have a gap"
+    reasons = [str(n.get("reason")) for n in cov.get("no_trade") or []]
+    if any(r.startswith("strategy error") for r in reasons):
+        raise StrategyFailed
+    if any(r.startswith(runner.HOLE_REASONS) for r in reasons):
+        return "the day's prices have a gap"
+    return None
 
 
 def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, timeout_s: float = 600,
                slots: Slots | None = None, launch=None) -> list[dict]:
     """The tester on that ONE day with the record's frozen source, settings and size, as a draft backtest runs: the
     child in the macOS sandbox, holding one of the machine's backtest slots. Its run folder lives under `base`
-    (never in the Lab's own runs folder). Returns the day's trades as the engine's rows. MatchUnavailable when the day
-    cannot be read yet (no prices, a gap), no slot is free, the sandbox is not working, the run takes longer than
-    `timeout_s` (it is stopped) or fails. launch: runner.launch (the tests', a stand-in)."""
+    (never in the Lab's own runs folder) and is removed when the run is read or has failed. Returns the day's trades as
+    the engine's rows. MatchUnavailable when the day cannot be read yet (no prices, a gap, a missing print at a fire
+    time), no slot is free, the sandbox is not working, the run takes longer than `timeout_s` (it is stopped) or
+    fails; StrategyFailed when the strategy raised that day; DoesNotTrade when it does not trade that day.
+    launch: runner.launch (the tests', a stand-in)."""
     d = date if isinstance(date, dt.date) else dt.date.fromisoformat(date)
     name, launch = record["name"], launch or runner.launch
     slot = (slots or Slots()).try_acquire()
@@ -113,8 +172,6 @@ def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, t
             run_dir = Path(base) / "runs" / runner.prepare(body, Path(base), draft=(stub, record["source"]))
             proc = launch(run_dir, python, archive, cache, slot, ("--no-lock",))
         except (ValueError, OSError) as e:           # a draft that cannot be read, a child that cannot start
-            if run_dir is not None:
-                shutil.rmtree(run_dir, ignore_errors=True)
             if isinstance(e, sandbox.SandboxUnavailable):
                 raise MatchUnavailable("the sandbox is not working") from None
             raise MatchUnavailable("the backtest could not run") from None
@@ -125,25 +182,33 @@ def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, t
             raise MatchUnavailable("the backtest took too long") from None
         try:
             got = runner.read_bundle(run_dir)
-        except ValueError:                           # the run's status is not `done`; its folder stays for a look
+        except ValueError:
+            err = (runner.read_json(run_dir / "status.json", {}) or {}).get("error")
+            _log(f"{name} {d}: the run failed: {str(err)[-300:]}")
             raise MatchUnavailable("the backtest could not run") from None
-        why = _unavailable(got["run"] or {})
+        recorded = bool(TapeStore(archive, cache).sessions(record["root"], d, d))
+        why = _unavailable(got["run"] or {}, recorded)
         if why:
-            shutil.rmtree(run_dir, ignore_errors=True)
             raise MatchUnavailable(why)
-        shutil.rmtree(run_dir, ignore_errors=True)
         return [{**{k: v for k, v in t.items() if k not in ("entry_ms", "exit_ms")},
                  "entry_ns": t["entry_ms"] * 1_000_000, "exit_ns": t["exit_ms"] * 1_000_000} for t in got["trades"] or []]
     finally:
         slot.close()
         if proc is not None:
             runner.finish_proc(proc)
+        if run_dir is not None:
+            drop(run_dir, base)
 
 
 def match_day(record: dict, date, shadow_trades: list[dict], **kw) -> dict:
     """The day's verdict: compare(shadow_trades, tester_day(record, date, **kw)). A day that cannot be read yet is
-    {"ok": None, "text": "Not checked yet: <why>."}."""
+    {"ok": None, "text": "Not checked yet: <why>."}; a strategy that raised in the backtest never matches; a day it
+    does not trade is not checked, for good."""
     try:
         return compare(shadow_trades, tester_day(record, date, **kw), tick_size(record["root"]))
     except MatchUnavailable as e:
-        return {"ok": None, "text": f"Not checked yet: {e}."}
+        return {"ok": None, "text": f"{PENDING}: {e}."}
+    except StrategyFailed:
+        return {"ok": False, "text": "Did not match: the strategy failed in the backtest."}
+    except DoesNotTrade:
+        return {"ok": None, "text": "Not checked: it does not trade that day."}
