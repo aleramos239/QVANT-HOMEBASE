@@ -347,6 +347,11 @@
       default: return "warn";
     }
   }
+  // The Desk's note when the strategy's window runs past its flat time (lab.note, the Desk's own words), or "".
+  function windowNote(s) {
+    var lab = blockOf(s);
+    return lab ? text(lab.note).trim() : "";
+  }
   function readOnly(s) {
     var lab = blockOf(s);
     return !!lab && lab.read_only === true;
@@ -662,7 +667,7 @@
     tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, setupRows: setupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
     // Step B: the strategy the Desk itself knows
-    deskId: deskId, onDesk: onDesk, deskState: deskState, deskDot: deskDot, startsNext: startsNext, readOnly: readOnly,
+    deskId: deskId, onDesk: onDesk, deskState: deskState, deskDot: deskDot, startsNext: startsNext, readOnly: readOnly, windowNote: windowNote,
     accountsLock: accountsLock, deskNote: deskNote, inShadow: inShadow, limitsRows: limitsRows, limitsFields: limitsFields,
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,

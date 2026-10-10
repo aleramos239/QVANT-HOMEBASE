@@ -1360,7 +1360,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
             if labdesk.is_lab(name):
                 await labdesk.set_book(name, rows)
                 engine.journal("book_updated", strategy=name, assignments=rows)
-                return {"ok": True, "book": labdesk.book_view()}
+                note = labdesk.window_note(name) if rows else None      # as the real route: a note, never a refusal
+                return {"ok": True, "book": labdesk.book_view(), **({"note": note} if note else {})}
             labdesk.check_book(name, rows)
         except labdesk_mod.Refused as e:
             raise refused(e) from None

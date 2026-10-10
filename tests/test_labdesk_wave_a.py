@@ -15,68 +15,61 @@ from tests.labdesk_util import DATE, LAB, LIMITS, entry, mkdesk, rec, send
 from tests.test_engine import run
 from tests.test_engine_lab import fill_entry, tick
 
-WINDOW_PAST_FLAT = "Its window ends after the flat time. Shorten the window to end by 15:55."
+NOTE_1600 = ("Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes "
+             "before the test's, so that day will not match.")
 
 
-# ---------------------------------------------------------------- I1: the window must end by the flat time
-def test_the_sentence_is_labcfgs_own():
-    assert labcfg.SAY_WINDOW == WINDOW_PAST_FLAT
-
-
-def test_a_window_to_1600_takes_no_limits_with_the_sentence(tmp_path):
+# ---------------------------------------------------------------- I1: a window past the flat time books, with one note
+def test_a_window_to_1600_takes_limits_and_an_account_and_carries_the_note(tmp_path):
     d = mkdesk(tmp_path, limits=None, window=("09:25", "16:00"))
-    with pytest.raises(ValueError) as e:
-        run(d.ld.set_limits(LAB, LIMITS))
-    assert str(e.value) == WINDOW_PAST_FLAT
-    assert labcfg.limits_of(d.cfg, LAB) is None and store.get_desk("pp") is None
-
-
-def test_a_window_to_1600_takes_no_account_with_the_sentence(tmp_path):
-    d = mkdesk(tmp_path, limits=None, window=("09:25", "16:00"))
-    with pytest.raises(Refused) as e:
-        run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
-    assert str(e.value) == WINDOW_PAST_FLAT and e.value.status == 409
-    assert not d.cfg.book.get(LAB)
-    d.ld.check_book(LAB, [])                     # taking accounts off is never refused for it
-
-
-def test_a_window_to_1555_books(tmp_path):
-    d = mkdesk(tmp_path, window=("09:25", "15:55"))
+    got = run(d.ld.set_limits(LAB, LIMITS))
+    assert got["ok"] is True and got["note"] == NOTE_1600
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
     assert d.cfg.book[LAB] == [{"account": "a1", "qty": 1}]
-    assert labcfg.limits_of(d.cfg, LAB).flat_et == "15:55"
+    assert d.ld.window_note(LAB) == NOTE_1600
+    v = d.ld.status_view(LAB)
+    assert v["note"] == NOTE_1600 and v["limits"]["flat_et"] == "15:55"
+    assert d.cfg.strategies[LAB].flat_et == "15:55"                    # the cap and the flat time are as they were
 
 
-def test_a_window_that_ends_before_the_flat_time_books(tmp_path):
-    d = mkdesk(tmp_path, window=("09:25", "12:00"))
-    assert d.cfg.book[LAB] == [{"account": "a1", "qty": 1}]
-
-
-def test_flat_1530_with_a_window_to_1555_is_refused(tmp_path):
+def test_a_window_to_1555_carries_no_note(tmp_path):
     d = mkdesk(tmp_path, limits=None, window=("09:25", "15:55"))
-    with pytest.raises(ValueError) as e:
-        run(d.ld.set_limits(LAB, {**LIMITS, "flat_et": "15:30"}))
-    assert str(e.value) == WINDOW_PAST_FLAT
-    run(d.ld.set_limits(LAB, {**LIMITS, "flat_et": "15:55"}))      # at the window's end: fine
+    got = run(d.ld.set_limits(LAB, LIMITS))
+    assert got == {"ok": True, "strategy": LAB, "limits": {**LIMITS, "max_risk_usd": 300.0}}
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
+    assert d.ld.window_note(LAB) is None and "note" not in d.ld.status_view(LAB)
 
 
-def test_a_book_is_refused_when_its_limits_flat_time_is_before_the_window_end(tmp_path):
-    """Limits kept from a window that ended earlier (the record changed under them): no account."""
-    d = mkdesk(tmp_path, qty=0, window=("09:25", "15:00"), limits={**LIMITS, "flat_et": "15:00"})
-    store.put(rec(session_window=["09:25", "15:55"]))
-    run(d.ld.refresh())
-    assert labcfg.record_of(d.cfg, LAB)["session_window"] == ["09:25", "15:55"]
-    assert labcfg.limits_of(d.cfg, LAB).flat_et == "15:00"
-    with pytest.raises(Refused) as e:
-        d.ld.check_book(LAB, [{"account": "a1", "qty": 1}])
-    assert str(e.value) == WINDOW_PAST_FLAT
+def test_a_window_that_ends_before_the_flat_time_carries_no_note(tmp_path):
+    d = mkdesk(tmp_path, window=("09:25", "12:00"))
+    assert d.cfg.book[LAB] == [{"account": "a1", "qty": 1}] and d.ld.window_note(LAB) is None
 
 
-@pytest.mark.parametrize("end, flat, past", [("16:00", None, True), ("15:55", None, False), ("15:00", None, False),
-                                              ("15:55", "15:30", True), ("15:55", "15:55", False),
-                                              ("15:00", "15:30", False)])
-def test_ends_after_flat(end, flat, past):
+def test_flat_1530_with_a_window_to_1555_books_with_its_own_numbers(tmp_path):
+    d = mkdesk(tmp_path, limits={**LIMITS, "flat_et": "15:30"}, window=("09:25", "15:55"))
+    assert d.cfg.book[LAB] == [{"account": "a1", "qty": 1}]
+    assert d.ld.window_note(LAB) == ("Its window runs to 15:55 but the Desk closes at 15:30. A trade still open then is "
+                                     "closed 25 minutes before the test's, so that day will not match.")
+
+
+def test_with_no_limits_the_default_flat_time_is_the_window_end_cut_at_1555(tmp_path):
+    d = mkdesk(tmp_path, limits=None, window=("09:25", "16:00"))
+    assert d.cfg.strategies[LAB].flat_et == "15:55"
+    assert d.ld.window_note(LAB) == NOTE_1600
+
+
+@pytest.mark.parametrize("end, flat, minutes", [("16:00", None, 5), ("15:55", None, None), ("15:00", None, None),
+                                                 ("15:55", "15:30", 25), ("15:55", "15:55", None),
+                                                 ("15:00", "15:30", None), ("15:56", None, 1)])
+def test_window_note(end, flat, minutes):
     lim = labcfg.LabLimits(3, 2, 300.0, "11:00", flat) if flat else None
-    assert labcfg.ends_after_flat({"session_window": ["09:25", end]}, lim) is past
+    got = labcfg.window_note({"session_window": ["09:25", end]}, lim)
+    if minutes is None:
+        assert got is None
+    else:
+        word = "minute" if minutes == 1 else "minutes"
+        assert got == (f"Its window runs to {end} but the Desk closes at {flat or '15:55'}. A trade still open then is "
+                       f"closed {minutes} {word} before the test's, so that day will not match.")
 
 
 # ---------------------------------------------------------------- I2: a fill the Desk adopted from an order read

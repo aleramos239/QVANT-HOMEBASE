@@ -449,8 +449,6 @@ class LabDesk:
         self._must_own()
         rec = labcfg.record_of(self.cfg, name)
         limits = labcfg.parse_limits(body, rec)
-        if labcfg.ends_after_flat(rec, limits):         # the Desk would close a trade before the backtest does
-            raise ValueError(labcfg.SAY_WINDOW)
         if self._in_quiet():
             raise Refused(NOT_NOW)
         why = self._open_why(name)
@@ -462,7 +460,18 @@ class LabDesk:
         was = labcfg.limits_of(self.cfg, name)
         await self._commit(name, limits, rows)
         self._journal("lab_limits_set", strategy=name, limits=asdict(limits), previous=asdict(was) if was else None)
-        return {"ok": True, "strategy": name, "limits": asdict(limits)}
+        note = labcfg.window_note(rec, limits)
+        return {"ok": True, "strategy": name, "limits": asdict(limits), **({"note": note} if note else {})}
+
+    def window_note(self, name: str) -> str | None:
+        """The window-past-the-flat-time note of a Lab strategy (labcfg.window_note), or None. Memory only; never
+        raises: it rides along an answer that is already a success."""
+        try:
+            if not self.is_lab(name):
+                return None
+            return labcfg.window_note(labcfg.record_of(self.cfg, name) or {}, labcfg.limits_of(self.cfg, name))
+        except Exception:  # noqa: BLE001
+            return None
 
     # ------------------------------------------------------------ the book
     def check_book(self, name: str, rows: list) -> None:
@@ -476,8 +485,6 @@ class LabDesk:
         mine = self.is_lab(name)
         if mine:
             limits = labcfg.limits_of(self.cfg, name)
-            if rows and labcfg.ends_after_flat(labcfg.record_of(self.cfg, name) or {}, limits):
-                raise Refused(labcfg.SAY_WINDOW)     # final wave I1: the live trade would close before the backtest's
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)
             for r in rows:
@@ -712,7 +719,8 @@ class LabDesk:
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
                     "runner": self._runner(), "rounds": self._rounds(name),
                     "refused": took["refused"],
-                    "read_only": self._read_only()}                  # another desk owns the store
+                    "read_only": self._read_only(),                  # another desk owns the store
+                    **({"note": note} if (note := self.window_note(name)) else {})}     # its window runs past the flat time
         except Exception as e:  # noqa: BLE001 -- the page gets the plain sentence, the journal the detail (once)
             key = (name, f"{type(e).__name__}: {e}"[:200])
             if key not in self._said_view and len(self._said_view) < 100:

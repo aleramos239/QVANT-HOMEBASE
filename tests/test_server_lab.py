@@ -264,27 +264,28 @@ def test_limits_are_set_shown_and_kept_in_the_sidecar(client):
     assert store.get_desk("pp_orb")["limits"]["max_qty"] == 3
 
 
-WINDOW_PAST_FLAT = "Its window ends after the flat time. Shorten the window to end by 15:55."
+NOTE_1600 = ("Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes "
+             "before the test's, so that day will not match.")
 
 
-def test_a_window_to_1600_takes_no_limits_and_no_account_with_one_sentence(client):
-    """Final wave I1: the Desk is flat by 15:55 at the latest, so a window that ends later would close the live trade
-    before the backtest's every such day. The route answers the sentence as it is; the page shows it as it is."""
+def test_a_window_to_1600_books_and_its_answers_carry_one_note(client):
+    """Final wave I1 (the lead's second ruling): never a refusal. The limits and the book answers carry one plain
+    note, and so does the status block (the page's Limits panel shows it)."""
     store.put(rec(session_window=["09:25", "16:00"]))
     asyncio.run(client.labdesk.refresh())
     r = set_limits(client)
-    assert r.status_code == 400 and r.json()["detail"] == WINDOW_PAST_FLAT
-    assert status(client)["lab"]["limits"] is None and store.get_desk("pp_orb") is None
+    assert r.status_code == 200 and r.json()["note"] == NOTE_1600
     r = book(client, [("eval1", 1)])
-    assert r.status_code == 409 and r.json()["detail"] == WINDOW_PAST_FLAT
-    assert not client.cfg.book.get(LAB) and journal(client, "book_updated") == []
+    assert r.status_code == 200 and r.json()["note"] == NOTE_1600 and r.json()["book"][LAB] == [{"account": "eval1", "qty": 1}]
+    assert status(client)["lab"]["note"] == NOTE_1600 and status(client)["cfg"]["flat_et"] == "15:55"
+    r = book(client, [])                                                         # taking it off: nothing to note
+    assert r.status_code == 200 and "note" not in r.json()
 
 
-def test_a_flat_time_before_the_window_end_is_refused_and_at_it_is_kept(client):
-    r = set_limits(client, flat_et="15:30")
-    assert r.status_code == 400 and r.json()["detail"] == WINDOW_PAST_FLAT
-    assert set_limits(client).status_code == 200
-    assert book(client, [("eval1", 1)]).status_code == 200
+def test_a_window_to_1555_answers_with_no_note(client):
+    assert "note" not in set_limits(client).json()
+    r = book(client, [("eval1", 1)])
+    assert r.status_code == 200 and "note" not in r.json() and "note" not in status(client)["lab"]
 
 
 @pytest.mark.parametrize("change, sentence", [

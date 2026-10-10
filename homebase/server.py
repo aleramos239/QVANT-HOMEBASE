@@ -1845,7 +1845,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json
                 await labdesk.set_book(name, rows)
                 engine.journal("book_updated", strategy=name, assignments=rows)
-                return {"ok": True, "book": labdesk.book_view()}
+                note = labdesk.window_note(name) if rows else None      # its window runs past the flat time: a note, never a refusal
+                return {"ok": True, "book": labdesk.book_view(), **({"note": note} if note else {})}
             labdesk.check_book(name, rows)   # says nothing unless a promoted Lab strategy is on the desk
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, str(e)) from None

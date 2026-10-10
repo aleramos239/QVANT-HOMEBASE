@@ -478,18 +478,14 @@ test('the Desk\'s own refusal is shown in the dialog as its sentence, with no pr
   assert.equal(down.els.llNote.textContent, 'The Desk is not answering.');
 });
 
-test('final wave I1: a window that ends after the flat time -- the Desk\'s sentence in the dialog\'s own line, and as the book\'s toast', async () => {
-  const say = 'Its window ends after the flat time. Shorten the window to end by 15:55.';
-  const t = load({ answer: { detail: say } });
-  t.api.openLabLimits('lab_nq_orb');
-  await t.api.saveLabLimits();
-  assert.equal(t.els.llNote.textContent, say);
-  assert.equal(t.els.llNote.hidden, false);
-  assert.deepEqual(t.hidden, [], 'the dialog stays open');
-  for (const id of ['llTradesErr', 'llQtyErr', 'llRiskErr', 'llLastErr', 'llFlatErr']) assert.equal(t.els[id].hidden, true, id);
-  const b = load({ answer: { ok: false, detail: say } });
-  await b.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
-  assert.deepEqual(b.toasts, [say]);
+test('final wave I1: a window that runs past the flat time -- the Desk\'s note under the Limits panel, small and warn; none without it', () => {
+  const say = "Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes before the test's, so that day will not match.";
+  const html = load({ strategies: { lab_nq_orb: deskStrat({ note: say }) }, book: BOOKED0 }).view();
+  assert.ok(html.includes(`<div class="mcap warn">${say.replace("'", '&#39;')}</div>`), 'the note as the Desk sends it, escaped');
+  const at = html.indexOf('<h2>Limits</h2>');
+  assert.ok(at >= 0 && html.indexOf('mcap warn', at) > at && html.indexOf('mcap warn', at) < html.indexOf('<h2>Today', at), 'inside the Limits panel');
+  const none = load({ strategies: { lab_nq_orb: deskStrat() }, book: BOOKED0 }).view();
+  assert.doesNotMatch(none, /Desk closes at/);
 });
 
 test('the session start the checks use is the strategy\'s own, when the chart service knows it', async () => {
@@ -575,8 +571,8 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=4"><\/script>/);
-  assert.doesNotMatch(HTML, /desklab\.js\?v=[123]\b/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=5"><\/script>/);
+  assert.doesNotMatch(HTML, /desklab\.js\?v=[1234]\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
 });

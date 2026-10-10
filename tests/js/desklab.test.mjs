@@ -1014,3 +1014,11 @@ test('final wave B6: the Activity sentences in plain words; a strategy arriving 
   assert.equal(D.hiddenEvent('lab_added'), false);
   assert.deepEqual(D.HIDDEN_EVENTS.slice().sort(), ['lab_event', 'lab_event_done']);
 });
+
+test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing', () => {
+  const say = "Its window runs to 16:00 but the Desk closes at 15:55. A trade still open then is closed 5 minutes before the test's, so that day will not match.";
+  assert.equal(D.windowNote(deskStrat({ note: say })), say);
+  assert.equal(D.windowNote(deskStrat()), '');
+  assert.equal(D.windowNote(deskStrat({ note: 7 })), '');
+  assert.equal(D.windowNote(null), '');
+});

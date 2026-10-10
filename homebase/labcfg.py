@@ -79,7 +79,6 @@ SAY_QTY = "Contracts: a whole number from 1 to 10."
 SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
 SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
-SAY_WINDOW = "Its window ends after the flat time. Shorten the window to end by 15:55."
 
 
 def desk_id(name: str) -> str:
@@ -129,13 +128,22 @@ def window(rec: dict) -> tuple[str, str]:
     return store.DEFAULT_WINDOW[0], store.DEFAULT_WINDOW[1]
 
 
-def ends_after_flat(rec: dict, limits: LabLimits | None) -> bool:
-    """Does the record's window end AFTER the strategy's flat time (its limits', or with none set the default:
-    the window's end cut at 15:55)? Then the Desk would close a trade before the backtest does, and the daily match
-    could never agree: such a strategy takes no account and no limits (SAY_WINDOW). A window that ends at or before
-    the flat time is fine."""
+def _minutes(hhmm: str) -> int:
+    return int(hhmm[:2]) * 60 + int(hhmm[3:])
+
+
+def window_note(rec: dict, limits: LabLimits | None) -> str | None:
+    """The one plain note when the record's window ends AFTER the strategy's flat time (its limits', or with none set
+    the default: the window's end cut at 15:55). Never a refusal (final wave I1, the lead's ruling): the default window
+    (09:25-16:00) is the tape's, not the trading window, and only a trade still open at the flat time differs from the
+    backtest. None when the window ends at or before the flat time."""
     end = window(rec)[1]
-    return end > (limits.flat_et if limits else min(end, FLAT_LATEST))     # "HH:MM" strings compare as times
+    flat = limits.flat_et if limits else min(end, FLAT_LATEST)
+    if end <= flat:                                                       # "HH:MM" strings compare as times
+        return None
+    n = _minutes(end) - _minutes(flat)
+    return (f"Its window runs to {end} but the Desk closes at {flat}. A trade still open then is closed "
+            f"{n} minute{'' if n == 1 else 's'} before the test's, so that day will not match.")
 
 
 def parse_limits(body, rec: dict) -> LabLimits:

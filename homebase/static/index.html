@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=4"></script>
+<script src="/static/desklab.js?v=5"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
@@ -2180,6 +2180,7 @@ function labDeskView(name, s) {
   const sh = labShadowNet(name, s), stateNote = DeskLab.stateNote(s);
   const fig = (f) => `<div class="f"><div class="k">${esc(f.k)}</div><div class="v mono">${esc(f.v)}</div></div>`;
   const limits = DeskLab.limitsRows(lab.limits).map(x => `<div class="feed-row"><span class="h">${esc(x.k)}</span><span class="t net">${esc(x.v)}</span></div>`).join("");
+  const winNote = DeskLab.windowNote(s);          // its window runs past the flat time: a note, never a refusal
   const split = DeskLab.splitRounds(lab.rounds), who = (a) => acctShort(a);
   const trades = split.today.map(r => DeskLab.roundLine(r, who(r.account))).map(x =>
     `<div class="feed-row"><span class="h${x.bad ? " warn" : ""}">${esc(x.text)}</span>${x.net == null ? "" : `<span class="t net">${esc(usdS(x.net))}</span>`}</div>` +
@@ -2215,7 +2216,7 @@ function labDeskView(name, s) {
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
-    <div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>
+    <div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
