@@ -107,3 +107,30 @@ def test_the_store_reads_the_trade_list_into_auto_limits():
     snap = store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}, "trades": trades}, "r1", [])
     assert snap["auto_limits"] == {"max_trades_day": 2}
     assert "auto_limits" not in store.snapshot("pp", "x", {"root": "NQ"}, {"run": {"qty": 4}}, "r1", [])
+
+
+def test_the_runner_derives_the_same_limits_as_the_desk():
+    from dataclasses import asdict
+
+    from homebase.labrun import deskside
+    cases = [own_rec(), own_rec(session_window=["09:25", "16:00"]), own_rec(session_window=["09:25", "11:30"]), own_rec(qty=40),
+             own_rec(session_window=["15:55", "15:55"]), own_rec(auto_limits={"max_trades_day": 20}),
+             own_rec(auto_limits={"max_trades_day": 21}), own_rec(auto_limits={"max_trades_day": True}),
+             own_rec(auto_limits=None), own_rec(qty=None), own_rec(session_window=None), rec()]
+    for r in cases:
+        want = labcfg.derive_limits(r)
+        got = deskside.own_limits(r)
+        assert got == (asdict(want) if want else None), r
+
+
+def test_the_runner_books_a_strategy_with_its_own_limits_and_lets_typed_ones_win():
+    from homebase.labrun import deskside
+    r = own_rec()
+    book = [{"account": "main", "qty": 2}]
+    s = {"mark": store.mark_of(r), "limits": None, "book": book}
+    assert deskside.booked(s, r) == ["main"]
+    assert deskside.limits_of(s, r)["flat_et"] == "15:55"
+    assert deskside.booked(s, rec()) is None                               # no auto_limits on the record: no limits, no book
+    typed = {**s, "limits": LIMITS}
+    assert deskside.limits_of(typed, r) == LIMITS
+    assert deskside.booked({**s, "limits": {**LIMITS, "flat_et": "16:30"}}, r) is None     # typed and unreadable: not the own ones

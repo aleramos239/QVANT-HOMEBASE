@@ -51,7 +51,7 @@ from ..charts.session import session_date, session_range_ms
 from ..contracts import point_value, tick_size
 from . import door, match, store
 from .deskclient import DeskClient
-from .deskside import DeskSide, booked, desk_id
+from .deskside import DeskSide, booked, desk_id, limits_of
 from .intents import ORDER_OPS, well_formed   # (the desk checks a runner's event with the same rule: labrun/intents.py)
 from .shadowfills import ShadowFills
 from .tickclient import TickClient
@@ -1947,7 +1947,7 @@ class Runner:
             side.on_day(self._desk_date)             # (also for a strategy the Desk's state does not list)
         return {"desk": side, "send": self._desk.send, "resume": lines if was else None, "begun": begun,
                 "tell": lambda line: self._write(store.tell, name, d, line),     # (`begun` is _host's, not the day's)
-                "flat_et": car["limits"]["flat_et"] if accounts else None}      # (booked: the limits read)
+                "flat_et": limits_of(car, rec)["flat_et"] if accounts else None}      # (booked: the limits read)
 
     def _desk_lost(self, rec: dict, date: dt.date) -> None:
         """A day that began in desk mode (its tell-log holds an event) and cannot be picked up: the Desk's sidecar no

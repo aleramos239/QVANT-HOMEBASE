@@ -85,13 +85,49 @@ def limits_read(limits, rec: dict) -> bool:
             and start <= last < flat)
 
 
+def _before(hhmm: str) -> str:
+    m = max(0, int(hhmm[:2]) * 60 + int(hhmm[3:]) - 1)
+    return f"{m // 60:02d}:{m % 60:02d}"
+
+
+def own_limits(rec: dict) -> dict | None:
+    """The limits a strategy carries itself, as the Desk derives them (labcfg.derive_limits; a test runs both over the
+    same cases): its tested size, the most trades it took in one day of its backtest, any entry inside its window,
+    flat when the window ends (never later than 15:55), no dollar cap (0 = not set). None for a record without
+    `auto_limits` (an older promotion), or one that does not read."""
+    a = rec.get("auto_limits") if isinstance(rec, dict) else None
+    if not isinstance(a, dict):
+        return None
+    n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
+    if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
+        return None
+    start, end = w if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW
+    flat = min(end, FLAT_LATEST)
+    last = _before(flat)
+    if not start <= last < flat:
+        return None
+    return {"max_trades_day": n, "max_qty": min(qty, 10), "max_risk_usd": 0.0, "last_entry_et": last, "flat_et": flat}
+
+
+def limits_of(side, rec: dict) -> dict | None:
+    """The limits a sidecar's day runs under: the ones the owner typed, when they read; the strategy's own when none
+    were typed (the same order the Desk reads them in); None otherwise (typed limits that do not read are no limits)."""
+    if not isinstance(side, dict):
+        return None
+    raw = side.get("limits")
+    if raw is None:
+        return own_limits(rec)
+    return raw if limits_read(raw, rec) else None
+
+
 def booked(side, rec: dict) -> list | None:
     """The accounts a strategy trades on, in the order of the Desk's book, when its sidecar lets a day run in desk
-    mode: it reads, it was written for THIS promotion of the record, its limits read, and its book is not empty.
-    None for anything else (the day is hosted in shadow): an unreadable sidecar or unreadable limits are no book."""
+    mode: it reads, it was written for THIS promotion of the record, its limits read (typed, or its own), and its book
+    is not empty. None for anything else (the day is hosted in shadow): an unreadable sidecar or unreadable limits are
+    no book."""
     if not isinstance(side, dict) or not isinstance(rec, dict) or side.get("mark") != store.mark_of(rec):
         return None
-    if not limits_read(side.get("limits"), rec) or not isinstance(side.get("book"), list):
+    if limits_of(side, rec) is None or not isinstance(side.get("book"), list):
         return None
     out = []
     for r in side["book"]:
