@@ -54,7 +54,7 @@ def test_the_plain_card_passes_so_a_refusal_below_is_the_change():
 def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
-    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 30
+    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 32
     assert [n for n, f in F.items() if not f["runs"]] == []                                       # va_reclaim runs too: its cache is built for the range (runner.prepare_family)
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -74,6 +74,11 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     assert F["ib"]["sessions"] == ["nyam", "mid", "pm"] and F["ib"]["mirror"] == "mode" and F["gap"]["sessions"] == ["nyam"]
     assert {x["name"]: x["values"] for x in F["noise_band"]["settings"]} == {"anchor": "rth | globex", "k": "a number 0.05 .. 3"}      # (max_tr and dir are limits)
     assert F["noise_band"]["mirror"] == "dir" and F["noise_band"]["sessions"] == ["nyam", "mid", "pm"] and F["noise_band"]["tried"][0] == {"k": 0.2, "dir": "long"}
+    assert {x["name"]: x["values"] for x in F["ifvg"]["settings"]} == {"age": "a whole number 5 .. 240", "min_gap": "a number 0 .. 10"}      # the 2026-10-09 entries
+    assert F["ifvg"]["mirror"] is None and F["ifvg"]["bars"] == ["1", "5", "15", "30"] and F["ifvg"]["tried"] == [{"min_gap": 0.1}, {"min_gap": 0.25}, {"min_gap": 0.5}]
+    assert F["sfp"]["settings"] == [{"name": "swing", "default": "60", "values": "15 | 30 | 60"}] and F["sfp"]["bars"] == ["1", "5", "15"]
+    assert F["sfp"]["mirror"] is None and F["sfp"]["tried"] == [{"swing": "15"}, {"swing": "30"}, {"swing": "60"}]
+    assert F["ifvg"]["sessions"] == F["sfp"]["sessions"] == list(RM.DAY_PASSES) and not F["ifvg"]["bracket"] and not F["sfp"]["bracket"]
     assert {x["name"]: x["values"] for x in F["rsi2"]["settings"]} == {"th": "a number 1 .. 40", "trend_f": "true | false"}
     assert sorted(B["other_families"]) == sorted(set(fam.REGISTRY) - set(blocks.WRAPPED)) and len(B["other_families"]) == 33
 
@@ -164,7 +169,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 30, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 32, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]

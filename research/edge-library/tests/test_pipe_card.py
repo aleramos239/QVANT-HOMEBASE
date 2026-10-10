@@ -141,6 +141,36 @@ def test_a_noise_band_card_passes_stage_0_with_one_side_a_held_anchor_and_a_cap(
     fails({**c, "ways": [{**nb, "fixed": {"anchor": "asia"}}]}, "P0.2")
 
 
+def test_an_ifvg_card_passes_stage_0_with_a_held_age_one_side_and_a_cap():
+    iv = {"family": "ifvg", "main_setting": "min_gap", "values": ["0.1", "0.25", "0.5"], "fixed": {}, "limits": {}}
+    c = card(name="ifvg_open", why="Traders caught inside a gap that fails must get out.", loser="Traders who bought inside the gap.", ways=[iv],
+             indicators=[{"block": "htf60", "side": "with", "why": "A failed gap with the hourly trend has more room."}])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("ifvg_open_a1", "1"), ("ifvg_open_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "ifvg", "params": {"min_gap": [0.1, 0.25, 0.5]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    held = {**iv, "fixed": {"age": 20}, "limits": {"max_tr": 2}}                                 # the age is ONE value an idea; max_tr is a limit
+    run = passes({**c, "ways": [held]})[0]["spec"]["run"]
+    assert run["fixed"] == {"age": 20} and run["limits"] == {"max_tr": 2}
+    passes({**c, "sides": "short", "sides_why": "The index falls faster than it rises, so the failed up gap is the cleaner one.", "ways": [iv]})
+    passes({**c, "ways": [{**iv, "main_setting": "age", "values": [10, 30, 60]}]})                # the age can be the heat map's setting too
+    fails({**c, "ways": [{**iv, "fixed": {"age": 3}}]}, "P0.2")                                   # under the family's own limit (5 .. 240)
+    fails({**c, "ways": [{**iv, "fixed": {"mode": "go"}}]}, "P0.2")                               # fvg's setting, not this family's
+
+
+def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
+    sf = {"family": "sfp", "main_setting": "swing", "values": ["15", "30", "60"], "fixed": {}, "limits": {}}
+    c = card(name="sfp_open", why="Stops behind a small swing are taken and the move fails.", loser="Traders who chase the break of the swing.", ways=[sf],
+             indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("sfp_open_a1", "1"), ("sfp_open_a5", "5")]
+    assert subs[0]["spec"]["run"]["params"] == {"swing": ["15", "30", "60"]} and subs[0]["spec"]["card"]["main_setting"] == "swing"      # the engine names its choices in text
+    passes({**c, "ways": [{**sf, "values": [15, 30, 60]}]})                                       # (a number typed as a number is the same choice)
+    passes({**c, "ways": [{**sf, "limits": {"max_tr": 1}}]})
+    passes({**c, "session": "london", "sides": "long", "sides_why": "London sweeps the Asian lows before the day's rise.", "ways": [sf]})
+    fails({**c, "ways": [{**sf, "values": ["15", "30", "45"]}]}, "P0.2")                          # 45 is not a swing size
+    fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))
