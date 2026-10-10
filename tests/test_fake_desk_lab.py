@@ -701,6 +701,59 @@ def test_the_write_guard_and_the_fault_route_are_the_real_gates(desk):
     assert [a["account"] for a in view["accounts"]] == [A1, A2, LIVE] and view["store"] == str(c.d.store)
 
 
+def test_what_else_the_page_reads_is_answered_in_the_real_shape(desk):
+    c = desk
+    live = c.get("/api/strategy-live", params={"strategy": LAB})
+    assert live.status_code == 200 and isinstance(live.json(), dict)
+    assert c.get("/api/strategy-live", params={"strategy": "nq930"}).status_code == 404
+    assert c.get("/api/research-equity", params={"strategy": LAB}).json() == {"points": None}
+    assert c.get("/api/logins").json() == {"logins": []}
+    assert c.get("/api/calendar", params={"month": "2026-09"}).json() == {
+        "account": "", "month": "2026-09", "days": {}, "total": 0.0, "history_since": None}
+
+
+def test_the_background_loops_work_the_prints_the_clock_and_the_settle_by_themselves(tmp_path):
+    """What `python -m tools.fake_desk --lab` runs: the pump (the tick client's queue), the engine's clock, the
+    sibling watch and LabDesk's own loop -- here inside the test client, with the queue filled by hand."""
+    import queue
+    import time
+    inbox: queue.Queue = queue.Queue()
+    store.put(rec(), tmp_path / "desklab")
+    clock = StreamClock()
+    clock.heard(at("10:00:00"))
+    app = create_lab_desk(tmp_path / "desklab", tmp_path / "engine", key=KEY, clock=clock, inbox=inbox)
+    H = {"X-Homebase-Key": KEY}
+
+    def until(fn, what, wait_s=8.0):
+        end = time.monotonic() + wait_s
+        while time.monotonic() < end:
+            got = fn()
+            if got:
+                return got
+            time.sleep(0.05)
+        pytest.fail(f"never: {what}")
+
+    with TestClient(app, base_url="http://127.0.0.1:8859") as c:
+        until(lambda: c.post("/api/lab-limits", json={"strategy": LAB, "limits": LIMITS}).status_code == 200, "the limits")
+        assert c.post("/api/book", json={"strategy": LAB, "assignments": [{"account": A1, "qty": 1}]}).status_code == 200
+        t = at("10:00:01")
+        inbox.put(("clock", t))
+        inbox.put(("ticks", "NQ", [[t, 100.0, 1]]))
+        until(lambda: c.get("/fake/lab", headers=H).json()["et_now"].endswith("10:00:01-04:00"), "the clock")
+        ev = {"strategy": LAB, "date": DATE, "mark": list(MARK), "seq": 1, "t_ns": t * 10 ** 6,
+              "state": {"last_price": 100.0, "last_ms": t, "prices_late": False},
+              "intents": [entry(1, price=110.0, sl=105.0, tp=120.0)]}
+        assert c.post("/api/lab/intent", json=ev, headers=H).json()["results"][0]["accounts"][A1]["ok"] is True
+        inbox.put(("ticks", "NQ", [[t + 1000, 110.0, 1]]))
+        until(lambda: c.get("/api/status").json()["strategies"][LAB]["lab"]["state"] == "in_position", "the fill")
+        inbox.put(("ticks", "NQ", [[t + 2000, 120.5, 1]]))
+        row = until(lambda: [x for x in c.get("/api/lab/state", headers=H).json()["strategies"][LAB]["rounds"]
+                             if x["status"] == "done" and x["clean"]], "the trade over and its orders read ended")
+        assert (row[0]["exit_reason"], row[0]["pnl"]) == ("tp", 195.0)
+        assert c.get("/api/status").json()["accounts"][A1]["realized_pnl"] == 195.0
+    app.state.labdesk.close()
+
+
 # ---------------------------------------------------------------- the copied route bodies follow the real server
 SERVER = (Path(fake_desk.__file__).resolve().parents[1] / "homebase" / "server.py").read_text(encoding="utf-8")
 TOOL = Path(fake_desk.__file__).read_text(encoding="utf-8")

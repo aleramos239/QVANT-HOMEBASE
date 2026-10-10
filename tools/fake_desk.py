@@ -1255,6 +1255,27 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
     lab_route("/api/lab-clear", "{strategy, account}",
               lambda b: labdesk.clear_block(str(b.get("strategy") or ""), str(b.get("account") or "")))
 
+    # ---- what else the page reads: the real function where there is one, else an empty answer of the real shape
+    @app.get("/api/strategy-live")
+    async def strategy_live(strategy: str):
+        """server.py `strategy_live`: metrics.strategy_live_detail on this Desk's own journal."""
+        from homebase.metrics import strategy_live_detail
+        if strategy not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {strategy!r}")
+        return strategy_live_detail(rig.root / "journal.jsonl", strategy, cfg)
+
+    @app.get("/api/research-equity")
+    async def research_equity(strategy: str):
+        return {"points": None}                      # (the real answer for a strategy with no research file)
+
+    @app.get("/api/logins")
+    async def logins():
+        return {"logins": []}                        # no login exists here: the keyring is never read
+
+    @app.get("/api/calendar")
+    async def calendar(month: str, account: str = ""):
+        return {"account": account, "month": month, "days": {}, "total": 0.0, "history_since": None}
+
     @app.get("/fake/lab")
     async def fake_lab_view(request: Request):
         desk_api.runner_gate(request)

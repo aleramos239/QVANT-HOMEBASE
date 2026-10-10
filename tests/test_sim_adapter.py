@@ -360,6 +360,35 @@ def test_what_the_engine_does_about_a_fill_is_in_the_book_before_the_next_print(
     assert a.told == [("Buy", 110.25), ("Sell", 108.75)]
 
 
+def test_an_order_placed_while_a_print_is_worked_may_fill_on_the_next_print_of_the_same_batch():
+    a = Acct()
+    e, sl, tp = ids(a.bracket())
+    placed = []
+
+    async def on_fill(ev):                           # what a both-legs emergency does: a market order, in the callback
+        a.told.append((ev.side, ev.price, ev.raw["orderId"]))
+        if ev.raw["orderId"] == e:
+            req = OrderRequest(symbol="NQ", side="Sell", qty=1, order_type="Market")
+            placed.append((await a.ad.place_order(req)).order_id)
+    run(a.ad.observe_fills(on_fill))
+    a.prints([110.0, 111.0, 112.0])                  # one batch
+    assert a.told == [("Buy", 110.25, e), ("Sell", 110.75, placed[0])] and a.net() == 0
+
+
+def test_a_fill_is_told_before_the_next_order_is_tried_on_the_same_print():
+    a = Acct()
+    first, second = a.bracket(), a.bracket()         # two buy stops at 110: one print reaches both
+
+    async def on_fill(ev):                           # the engine's reaction to the first: the other is cancelled
+        a.told.append(ev.raw["orderId"])
+        if ev.raw["orderId"] == first.order_id:
+            assert (await a.ad.cancel_order_by_id(second.order_id)).ok
+    run(a.ad.observe_fills(on_fill))
+    a.prints([110.0, 111.0])
+    assert a.told == [first.order_id] and a.net() == 1
+    assert a.state(second.order_id) == {"status": "Canceled", "filled_qty": None}
+
+
 def test_the_metrics_and_the_account_wide_calls():
     a = Acct()
     e, sl, tp = ids(a.bracket())
@@ -402,6 +431,35 @@ def test_the_book_comes_back_from_its_file_and_a_print_is_never_used_twice(tmp_p
     assert int(r.order_id) > int(tp)                                                # ids go on where they were
     run(b.on_ticks("NQ", [[ms("10:00:03"), 106.0, 1]]))
     assert told == [("Buy", 106.25)]
+
+
+def test_after_a_restart_a_print_from_before_an_order_was_placed_never_fills_it(tmp_path):
+    a = Acct(tmp_path)
+    a.prints([111.0])                                # 10:00:01, before the order: it never counted for it
+    a.prints([100.0])
+    r = a.bracket()                                  # a buy stop at 110, resting since 10:00:02
+    b = SimAdapter("sim041", tmp_path, label="SIM 41", placement_ms=0)
+    run(b.connect())
+    session = [[ms("10:00:00"), 100.0, 1], [ms("10:00:01"), 111.0, 1], [ms("10:00:02"), 100.0, 1]]
+    run(b.on_ticks("NQ", session))                   # the stream starts over from the session's first print
+    assert run(b.get_order_state(r.order_id)) == {"status": "Working", "filled_qty": 0} and b.fills == []
+    run(b.on_ticks("NQ", session + [[ms("10:00:03"), 110.0, 1]]))
+    assert run(b.get_order_state(r.order_id))["status"] == "Filled" and len(b.fills) == 1
+
+
+def test_after_a_restart_an_old_print_never_fills_a_stop_that_was_moved_since(tmp_path):
+    a = Acct(tmp_path)
+    e, sl, tp = ids(a.bracket())
+    a.prints([110.0, 108.0, 112.0])                  # in at 110.25; 108 was above its stop then
+    assert run(a.ad.modify_order(sl, "Stop", stop_price=109.0, qty=1)).ok          # ... and the stop was raised after it
+    b = SimAdapter("sim041", tmp_path, label="SIM 41", placement_ms=0)
+    run(b.connect())
+    t0 = ms("10:00:00")
+    session = [[t0 + i * 1000, p, 1] for i, p in enumerate([100.0, 110.0, 108.0, 112.0])]
+    run(b.on_ticks("NQ", session))                   # the stream starts over: 108 is history, not a new print
+    assert run(b.get_net_position("NQ")) == 1 and run(b.get_order_state(sl))["status"] == "Working"
+    run(b.on_ticks("NQ", [[t0 + 4000, 109.0, 1]]))
+    assert run(b.get_net_position("NQ")) == 0 and b.fills[-1]["price"] == 108.75
 
 
 def test_with_no_folder_nothing_is_written(tmp_path):
