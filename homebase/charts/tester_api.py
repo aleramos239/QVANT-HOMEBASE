@@ -71,6 +71,8 @@
                                           session_independent, a market this service does not stream, a sandbox that does
                                           not work. Reads text only: no draft runs, no order goes anywhere
     POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
+                                          (promote and remove answer 409 "Take its accounts off on the Desk first."
+                                          while the desk's sidecar, <name>.desk.json, holds book rows)
     POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
                                           (the desklab routes answer the desk page's exact origins, like /watch)
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
@@ -177,6 +179,7 @@ CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
 DESKLAB_ACTIONS = ("promote", "remove", "onoff")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
+DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
@@ -783,8 +786,19 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         if not sandbox.available():
             raise HTTPException(503, "The sandbox is not working, so it cannot run.")
         notes = door.read_source(source)
-        store.put(store.snapshot(name, source, meta, {"run": run}, run_id, notes))
+        with store.write_lock():             # the check and the write are one step: the desk may book an account now
+            if store.booked(name):
+                raise HTTPException(409, DESKLAB_TAKE_OFF)
+            store.put(store.snapshot(name, source, meta, {"run": run}, run_id, notes))
         return {"ok": True, "name": name, "notes": notes}
+
+    def desklab_remove(name: str) -> dict:
+        """Refused while accounts are assigned on the Desk (the desk's sidecar holds book rows); the sidecar itself
+        is the desk's and is never written here."""
+        with store.write_lock():
+            if store.booked(name):
+                raise HTTPException(409, DESKLAB_TAKE_OFF)
+            return {"ok": True, "removed": store.remove(name), "name": name}
 
     def desklab_onoff(name: str, on: bool) -> dict:
         if store.set_enabled(name, on) is None:
@@ -820,7 +834,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 if what == "promote":
                     done = await asyncio.to_thread(desklab_promote, name, body["run_id"])
                 elif what == "remove":
-                    done = {"ok": True, "removed": await asyncio.to_thread(store.remove, name), "name": name}
+                    done = await asyncio.to_thread(desklab_remove, name)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)

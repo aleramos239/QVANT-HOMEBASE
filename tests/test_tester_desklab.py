@@ -389,3 +389,84 @@ def test_the_past_days_carry_only_what_the_page_reads_and_today_stays_whole(c, d
          "match": {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}},
         {"date": "2026-09-25", "state": "stopped", "why": "Too slow: no answer in 1 s.", "net": 0.0, "rebuilt": False,
          "match": None}]
+
+
+# ---- Step B (B1): while accounts are assigned on the Desk (the desk's sidecar holds book rows), the Lab page can neither
+# ---- promote the strategy again nor remove it. The desk writes the sidecar; this service only reads it.
+TAKE_OFF = "Take its accounts off on the Desk first."
+
+
+def sidecar(name="nq_bars", book=({"account": "main", "qty": 1},)):
+    r = store.get(name)
+    store.put_desk(name, {"mark": store.mark_of(r) if r else [None, None], "limits": None, "book": list(book), "written_utc": "x"})
+
+
+def test_promote_again_is_refused_while_accounts_are_assigned_on_the_desk(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run()).status_code == 200
+    first = store.get("nq_bars")
+    sidecar()
+    newer = CODE.replace("Bar breakout", "Bar breakout two")
+    draft(drafts_dir, newer)
+    r = promote(c, run_id=make_run(newer))
+    assert sentence(r, 409) == TAKE_OFF
+    assert store.get("nq_bars") == first                                        # the record on the Desk is untouched
+    sidecar(book=())                                                            # the accounts were taken off
+    assert promote(c, run_id=make_run(newer)).status_code == 200
+    assert store.get("nq_bars")["label"] == "Bar breakout two" and store.get("nq_bars")["enabled"] is False
+    assert store.get_desk("nq_bars")["written_utc"] == "x"                      # the sidecar is the desk's: never written here
+
+
+def test_the_other_promote_refusals_still_come_first(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run()).status_code == 200
+    sidecar()
+    assert sentence(promote(c, run_id=make_run(code=CODE + "# older\n"))) == CHANGED     # its own sentence, not the Desk's
+
+
+def test_a_first_promote_with_a_sidecar_left_from_before_and_no_accounts_goes_through(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    store.put_desk("nq_bars", {"mark": ["old", "old"], "limits": {"max_qty": 1}, "book": [], "written_utc": "x"})
+    assert promote(c, run_id=make_run()).status_code == 200
+
+
+def test_remove_is_refused_while_accounts_are_assigned_on_the_desk(c, drafts_dir, make_run):
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    sidecar()
+    r = c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}, headers=DESK)
+    assert sentence(r, 409) == TAKE_OFF and r.headers["access-control-allow-origin"] == "http://localhost:8850"
+    assert store.get("nq_bars") is not None
+    assert c.post("/api/tester/desklab/onoff", json={"name": "nq_bars", "on": True}).json()["enabled"] is True   # the switch still works
+    sidecar(book=())
+    assert c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}).json() == {"ok": True, "removed": True, "name": "nq_bars"}
+    assert store.get("nq_bars") is None and store.get_desk("nq_bars") is not None    # the sidecar is the desk's to remove
+
+
+def test_promote_checks_the_sidecar_and_writes_the_record_under_one_lock(c, drafts_dir, make_run, monkeypatch):
+    """The desk may book an account at the same instant: the check and the write are one step for it."""
+    draft(drafts_dir)
+    seen = []
+    real_booked, real_put = store.booked, store.put
+
+    def held():
+        try:                                                                    # from another thread: is the lock held?
+            import threading
+            out = []
+
+            def probe():
+                try:
+                    with store.write_lock(wait_s=0.0):
+                        out.append(False)
+                except TimeoutError:
+                    out.append(True)
+            t = threading.Thread(target=probe)
+            t.start()
+            t.join(5)
+            return out[0]
+        except Exception:  # noqa: BLE001
+            return None
+    monkeypatch.setattr(store, "booked", lambda *a, **k: (seen.append(("booked", held())), real_booked(*a, **k))[1])
+    monkeypatch.setattr(store, "put", lambda *a, **k: (seen.append(("put", held())), real_put(*a, **k))[1])
+    assert promote(c, run_id=make_run()).status_code == 200
+    assert seen == [("booked", True), ("put", True)]
