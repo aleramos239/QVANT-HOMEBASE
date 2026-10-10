@@ -109,7 +109,8 @@ html.hb-apple #labLib .lb-item { -webkit-appearance: none; appearance: none; dis
   border: 0; border-radius: 8px; background: transparent; box-shadow: none; color: var(--a-label-vibrant); font-size: 13px; line-height: 16px; font-weight: 400; text-align: left; cursor: default; transition: none; }
 html.hb-apple #labLib .lb-item:hover { background: transparent; }
 html.hb-apple #labLib .lb-item:active { background: var(--a-hover); }
-html.hb-apple #labLib .lb-item.sel, html.hb-apple #labLib .lb-item.picked { background: var(--a-sel); color: var(--a-label-vibrant); box-shadow: none; }   /* .picked: rows chosen for a delete */
+html.hb-apple #labLib .lb-item.picked { background: color-mix(in srgb, var(--a-sel) 55%, transparent); color: var(--a-label-vibrant); box-shadow: none; }   /* rows chosen for a delete: the selection's soft tint, so they are told from the open row */
+html.hb-apple #labLib .lb-item.sel { background: var(--a-sel); color: var(--a-label-vibrant); box-shadow: none; }   /* after .picked: a picked row that is open shows as open */
 html.hb-apple #labLib .lb-item svg.lb-ico { display: none; }
 /* the row's symbol: a document for your own scripts, a lock for the read-only built-ins */
 html.hb-apple #labLib .lb-item::before { content: ""; flex: none; width: 39px; height: 18px; background: currentColor;
