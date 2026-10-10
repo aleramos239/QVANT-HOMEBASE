@@ -17,7 +17,7 @@
                                           sentence}} (status 200: a refusal is an answer; a name already on file or a
                                           built-in's is refused unless replace). Builds TEXT only: nothing is written or run
     POST /api/tester/drafts/form/read    {code} -> {answers: {...} | null, intact} (null: not a file the form made;
-                                          intact: it is exactly what the form writes for those answers)
+                                          intact: the code under the header was not edited by hand)
     PUT  /api/tester/drafts/{name}       {code} -> save <name>.py (draftstore.write: name, size and syntax checked)
     DELETE /api/tester/drafts/{name}     remove it
     POST /api/tester/drafts/{name}/review-request   {run_id?, note?} -> writes a review package (text only) under

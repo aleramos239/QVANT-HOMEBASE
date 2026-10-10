@@ -222,22 +222,51 @@ def test_the_file_has_the_header_and_the_same_answers_give_the_same_bytes():
     assert "class MyOrb(Strategy):" in code
 
 
-def test_intact_means_the_form_would_write_this_exact_file():
+def rehashed(code: str) -> str:
+    """The same file with its `# code:` line made right for the lines under it (what an older form wrote)."""
+    lines = code.split("\n")
+    i = next(n for n, x in enumerate(lines) if x.startswith("# code: "))
+    lines[i] = "# code: " + hashlib.sha256("\n".join(lines[i + 1:]).encode("utf-8")).hexdigest()
+    return "\n".join(lines)
+
+
+def test_intact_means_the_code_under_the_header_is_the_code_the_header_hashes():
     a = base("bar_breakout", side="long")
     code = lab_forms.build(a)
     assert lab_forms.read(code) == {"answers": a, "intact": True}
+    # a hand edit of the code flips it, whatever the edit is
     assert lab_forms.read(code.replace("from __future__", "from __futurE__"))["intact"] is False
     assert lab_forms.read(code + "# a note\n") == {"answers": a, "intact": False}
-    # the docstring above the header is part of the file too: a hand edit there still reads, but is not intact
-    mine = code.replace(f'"""{lab_forms.sentence(a)}"""', '"""Mine now.\n\nSecond line."""', 1)
-    assert lab_forms.read(mine) == {"answers": a, "intact": False}
-    # so is the header: a hand-edited answers line is not what the form wrote for those answers
-    other = code.replace('"side": "long"', '"side": "short"')
-    assert lab_forms.read(other) == {"answers": {**a, "side": "short"}, "intact": False}
     assert lab_forms.read(code.replace("\n", "\r\n"))["intact"] is False
-    # answers the form would refuse are not intact either (and reading them does not raise)
+    assert lab_forms.read(code.replace("self.taken += 1", "self.taken += 2"))["intact"] is False
+    # an edit of the docstring, the note or the `# form:` line is not an edit of the code: the form simply opens with those answers
+    mine = code.replace(f'"""{lab_forms.sentence(a)}"""', '"""Mine now.\n\nSecond line."""', 1)
+    assert lab_forms.read(mine) == {"answers": a, "intact": True}
+    other = code.replace('"side": "long"', '"side": "short"')
+    assert lab_forms.read(other) == {"answers": {**a, "side": "short"}, "intact": True}
+    assert lab_forms.read(code.replace("# Made", "# Made again"))["intact"] is True
+    # even answers the form would refuse now: it still reads them (the dialog says what is wrong)
     bad = code.replace('"lookback": 6', '"lookback": 600')
-    assert lab_forms.read(bad) == {"answers": {**a, "lookback": 600}, "intact": False}
+    assert lab_forms.read(bad) == {"answers": {**a, "lookback": 600}, "intact": True}
+
+
+def test_a_file_from_an_older_form_is_intact_when_its_code_matches_its_hash():
+    """The body differs from today's template, but nobody edited it by hand: its hash is right."""
+    a = base("at_time")
+    code = lab_forms.build(a)
+    older = rehashed(code.replace("flat for the day", "flat for the day (older wording)"))
+    assert older != code and "older wording" in older
+    assert lab_forms.read(older) == {"answers": a, "intact": True}
+    # one more character changed after that and it is a hand edit again
+    assert lab_forms.read(older.replace("(older wording)", "(older wording!)"))["intact"] is False
+    # and Update rewrites it with today's template
+    assert lab_forms.build(lab_forms.read(older)["answers"]) == code
+
+
+def test_a_header_with_no_real_hash_is_not_intact():
+    code = lab_forms.build(base("at_time"))
+    zeros = "\n".join("# code: " + "0" * 64 if x.startswith("# code: ") else x for x in code.split("\n"))
+    assert lab_forms.read(zeros) == {"answers": base("at_time"), "intact": False}
 
 
 def test_read_never_raises_on_hostile_text():
@@ -246,14 +275,14 @@ def test_read_never_raises_on_hostile_text():
     deep = "\n".join(("# form: " + "[" * 100000) if x.startswith("# form: ") else x for x in lines)
     assert lab_forms.read(deep) is None
     assert lab_forms.read(code + "\n# \ud800\n") == {"answers": base("at_time"), "intact": False}
-    assert lab_forms.read(code.replace("# Made", "# \ud800 Made")) == {"answers": base("at_time"), "intact": False}
+    assert lab_forms.read(code.replace("# Made", "# \ud800 Made")) == {"answers": base("at_time"), "intact": True}   # not in the code
     assert lab_forms.read(code.encode()) is None and lab_forms.read(b"\xff\xfe") is None
     assert lab_forms.read(None) is None and lab_forms.read(5) is None
     big = lab_forms.read(code + "# x\n" * 1_000_000)
     assert big == {"answers": base("at_time"), "intact": False}
     assert lab_forms.read("x" * 5_000_000) is None
     huge_int = code.replace('"time": "09:30"', '"time": "09:30", "n": ' + "9" * 5000)
-    assert lab_forms.read(huge_int) is None or lab_forms.read(huge_int)["intact"] is False
+    assert lab_forms.read(huge_int) is None or lab_forms.read(huge_int)["intact"] is True
 
 
 def test_read_gives_none_without_a_header_or_with_a_header_that_does_not_read():
@@ -291,7 +320,7 @@ def test_read_gives_none_for_answers_that_are_not_clean_json():
                    '{"a": [' + ", ".join(["0"] * 1000) + "]}"):
         assert lab_forms.read(_with_header(header)) is None, header
     ok_deep = '{"a": ' + "[" * 15 + "]" * 15 + "}"
-    assert lab_forms.read(_with_header(ok_deep)) == {"answers": {"a": [[[[[[[[[[[[[[[]]]]]]]]]]]]]]]}, "intact": False}
+    assert lab_forms.read(_with_header(ok_deep)) == {"answers": {"a": [[[[[[[[[[[[[[[]]]]]]]]]]]]]]]}, "intact": True}
     code = lab_forms.build(base("at_time"))
     assert lab_forms.read(code) == {"answers": base("at_time"), "intact": True}
     accents = lab_forms.read(_with_header('{"name": "caf\u00e9"}'))

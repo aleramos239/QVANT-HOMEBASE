@@ -9,7 +9,7 @@ homebase/strategies/base.py) with a header that lets the form read its answers b
     # code: <sha256 hex of every line after this one>
 
 build() validates and writes the file (FormError names the field and says why, in one sentence), read() finds the
-answers again and says whether the code under the header is still the one the form wrote, sentence() describes the
+answers again and says whether the code under the header has been left as it was written (its hash still fits), sentence() describes the
 strategy in plain words, schema() gives the page everything it needs to draw the form.
 """
 from __future__ import annotations
@@ -562,8 +562,10 @@ def _clean_json(value) -> bool:
 
 
 def read(code: str) -> dict | None:
-    """{"answers", "intact"} from a file the form made, else None. intact: the form would write exactly this text
-    for these answers, byte for byte. Reads text only: nothing in `code` is run or imported; it never raises."""
+    """{"answers", "intact"} from a file the form made, else None. intact: the sha256 on the `# code:` line is the
+    sha256 of every line after it, so nobody has edited the code by hand (whatever today's template would write: a
+    file an older form made is intact too, and Update rewrites it). An edit of the docstring, the note or the
+    `# form:` line does not change it. Reads text only: nothing in `code` is run or imported; it never raises."""
     if not isinstance(code, str):
         return None
     try:
@@ -579,8 +581,9 @@ def read(code: str) -> dict | None:
     except (ValueError, RecursionError, MemoryError):
         return None
     try:
-        intact = build(answers) == code
-    except Exception:                       # noqa: BLE001 -- answers the form would not write: not intact
+        body = "\n".join(lines[i + 2:])
+        intact = hashlib.sha256(body.encode("utf-8")).hexdigest() == lines[i + 1][len("# code: "):len("# code: ") + 64]
+    except (UnicodeEncodeError, MemoryError):          # a lone surrogate in the code: not a file the form wrote
         intact = False
     return {"answers": answers, "intact": intact}
 
