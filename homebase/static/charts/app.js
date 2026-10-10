@@ -501,7 +501,7 @@ function placeMenu() {
 function fixedBox(el) {
   for (let a = el.parentElement; a && a !== document.body; a = a.parentElement) {
     const s = getComputedStyle(a);
-    if ([s.transform, s.filter, s.backdropFilter, s.webkitBackdropFilter, s.perspective].some((v) => v && v !== 'none')) return a;
+    if ([s.transform, s.translate, s.filter, s.backdropFilter, s.webkitBackdropFilter, s.perspective].some((v) => v && v !== 'none')) return a;
   }
   return null;
 }
@@ -1187,6 +1187,33 @@ async function postExport(path, body) {
 }
 
 /* ---- dialogs ---- */
+/* The dialogs that preview on the chart while open: the chart behind them is not dimmed. */
+const SEE_THROUGH = new Set(['settings', 'indicator-settings', 'drawstyle']);
+
+/* A dialog moves by its title bar (TradingView's): drag it aside to see the chart. Its offset is the CSS
+   `translate` property, which leaves the open/close animation's `transform` alone; at least 80 px of the title
+   bar stays on screen, so it can always be grabbed again. Every dialog opens centred. */
+function dragByHead(box, head) {
+  let at = null, dx = 0, dy = 0;
+  head.addEventListener('pointerdown', (e) => {
+    if (e.button !== 0 || e.target.closest('button')) return;
+    at = { x: e.clientX - dx, y: e.clientY - dy, r: box.getBoundingClientRect(), dx, dy };
+    head.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  head.addEventListener('pointermove', (e) => {
+    if (!at) return;
+    const r = at.r, left = r.left - at.dx, top = r.top - at.dy;   // where the box sits with no offset
+    dx = Math.min(window.innerWidth - 80 - left, Math.max(80 - r.width - left, e.clientX - at.x));
+    dy = Math.min(window.innerHeight - 40 - top, Math.max(-top, e.clientY - at.y));
+    box.style.translate = `${Math.round(dx)}px ${Math.round(dy)}px`;
+    if (menuAnchor && box.contains(menuAnchor)) placeMenu();   // an open popover follows its anchor
+  });
+  const drop = () => { at = null; };
+  head.addEventListener('pointerup', drop);
+  head.addEventListener('pointercancel', drop);
+}
+
 function openDialog(title, cls) {
   closeMenu();
   closeHotkeyBox();
@@ -1205,6 +1232,8 @@ function openDialog(title, cls) {
   box.appendChild(head);
   back.appendChild(box);
   back.addEventListener('pointerdown', (e) => { if (e.target === back) closeDialog(); });
+  if (SEE_THROUGH.has(cls)) back.classList.add('clear');   // a live preview has to be seen: no scrim over the chart
+  dragByHead(box, head);
   $('#dialogRoot').appendChild(back);
   dlg = { back, box, focus: document.activeElement };
   M.materialize(back);

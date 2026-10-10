@@ -397,6 +397,7 @@ html.hb-apple .toast-x { border-radius: 10px; color: var(--a-label-2); }
 
 /* ---- dialogs: the system sheet (radius 20, padding 20, a 15 semibold title, 28 capsule buttons, the accent for the default) -------- */
 html.hb-apple .backdrop { background: var(--a-scrim); }
+html.hb-apple .backdrop.clear { background: transparent; }
 html.hb-apple .dialog { border: 0; border-radius: 20px; background: color-mix(in srgb, var(--a-pane) 95%, transparent); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-sheet-shadow);
   color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .dialog.confirm.live { box-shadow: 0 0 0 1.5px var(--a-red), var(--a-sheet-shadow); }
@@ -448,7 +449,7 @@ html.hb-apple .set-num, html.hb-apple .sw-hex, html.hb-apple .field input[type="
 html.hb-apple .field { gap: 12px; padding: 5px 20px; font-size: 13px; line-height: 16px; }
 html.hb-apple .field input[type="number"]:focus, html.hb-apple .sw-hex:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple .swatch { width: 24px; height: 24px; padding: 3px; border-radius: 6px; background: var(--a-fill); box-shadow: none; }
-html.hb-apple .swatch i { border-radius: 3.5px; }
+html.hb-apple .swatch i { border-radius: 3.5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a-label) 28%, transparent); }
 html.hb-apple .swatch:hover, html.hb-apple .swatch.open { box-shadow: none; background: var(--a-fill-press); }
 html.hb-apple .seg { max-width: 100%; padding: 0; border-radius: 6px; background: var(--a-fill); }
 html.hb-apple .seg button { position: relative; height: 24px; padding: 0 9px; border-radius: 6px; background: transparent; box-shadow: none; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; }

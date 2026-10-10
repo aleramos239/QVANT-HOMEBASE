@@ -423,6 +423,7 @@ html.hb-apple .lab-page .menu-row:hover .menu-i { background: none; color: var(-
 html.hb-apple .lab-page .menu-row:hover .menu-del, html.hb-apple .lab-page .menu-row:hover .menu-star { color: inherit; }
 html.hb-apple .lab-page .menu-empty { padding: 4px 9px; color: var(--a-label-2); }
 html.hb-apple .lab-page .backdrop { background: var(--a-scrim); }
+html.hb-apple .lab-page .backdrop.clear { background: transparent; }
 html.hb-apple .lab-page .dialog { border: 0; border-radius: 26px; background: var(--a-window); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--a-sheet-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .lab-page .dialog .menu { background: var(--a-window); }
 html.hb-apple .lab-page .dlg-head { padding: 20px 14px 10px 20px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }

@@ -278,3 +278,46 @@ test('clockText: the Time format setting (24h default, 12h AM/PM)', () => {
   assert.equal(S2.clockText('garbage', '12h'), 'garbage');
   assert.equal(S.DEFAULTS.timeFormat, '24h');
 });
+
+/* 2026-10-09, the owner: "the countdown to bar close sometimes doesn't show" -- white text on his white up
+   candles, and nothing at all between a bar's close and the next bar's first trade. */
+test('the countdown runs on the clock: past a closed bar it counts to the next boundary while the session is open', () => {
+  const et = (d, h, m = 0, s = 0) => Date.UTC(2026, 8, d, h, m, s);
+  const bar = { t: et(22, 9, 30) / 1000, s: '2026-09-22' };
+  assert.equal(S.countdownLeft(bar, 60000, false, et(22, 9, 30, 20)), 40000);       // the bar is open: until its close
+  assert.equal(S.countdownLeft(bar, 60000, false, et(22, 9, 31, 0)), 60000);        // just closed, no new bar yet: the next minute
+  assert.equal(S.countdownLeft(bar, 60000, false, et(22, 9, 41, 15)), 45000);       // a feed 10 minutes late: still the clock's minute
+  assert.equal(S.countdownLeft(bar, 300000, false, et(22, 9, 37)), 180000);         // 5m bars step from the bar's own start
+  const lastBar = { t: et(22, 16, 59) / 1000, s: '2026-09-22' };
+  assert.equal(S.countdownLeft(lastBar, 60000, false, et(22, 16, 59, 30)), 30000);
+  assert.equal(S.countdownLeft(lastBar, 60000, false, et(22, 17, 0, 0)), 0);        // the session closed: nothing
+  assert.equal(S.countdownLeft(lastBar, 60000, false, et(23, 9, 30)), 0);           // next day, no new bar: nothing
+  assert.equal(S.countdownLeft(lastBar, 60000, true, et(22, 17, 0, 30)), 30000);    // a 24/7 root closes at 18:00
+  assert.equal(S.countdownLeft({ t: et(22, 15) / 1000, s: '2026-09-22' }, 4 * 3600000, false, et(22, 16, 30)), 1800000);   // never past the close
+  assert.equal(S.countdownLeft({ t: et(22, 9) / 1000 }, 3600000, false, et(22, 10, 5)), 0);   // no session known: only its own bar
+  assert.equal(S.countdownLeft({ t: et(22, 9) / 1000 }, 3600000, false, et(22, 9, 5)), 55 * 60000);
+  for (const bad of [[null, 60000, 1], [bar, 0, 1], [bar, 60000, NaN]]) assert.equal(S.countdownLeft(bad[0], bad[1], false, bad[2]), 0);
+});
+
+test('the last bar\'s colour: the body\'s, then the border\'s, then the wick\'s -- never a clear one', () => {
+  const r = S.resolve({ bodyUp: '#FFFFFF', bodyDown: '#757575', borderUp: '#111111', borderDown: '#222222', wickUp: '#333333' }, DARK);
+  assert.equal(S.lastColor(r, true), '#FFFFFF');
+  assert.equal(S.lastColor(r, false), '#757575');
+  assert.equal(S.lastColor({ ...r, body: false }, true), '#111111');                       // Body off: the border's
+  assert.equal(S.lastColor({ ...r, body: false }, false), '#222222');
+  assert.equal(S.lastColor({ ...r, body: false, borders: false }, true), '#333333');       // then the wick's
+  assert.equal(S.lastColor({ ...r, body: false, borders: false, wick: false }, true), '#8C8C8C');   // then the scale's text
+  assert.equal(S.lastColor({ ...r, bodyUp: 'rgba(255,255,255,.1)' }, true), '#111111');    // a see-through body does not count
+  assert.equal(S.lastColor({ ...r, bodyUp: 'rgba(8,153,129,.5)' }, true), '#089981');      // half see-through: its solid colour
+});
+
+test('text on a fill: dark on a light fill, white on a dark one (the countdown on white candles)', () => {
+  assert.equal(S.contrastText('#FFFFFF'), '#000000');
+  assert.equal(S.contrastText('#757575'), '#FFFFFF');
+  assert.equal(S.contrastText('#089981'), '#FFFFFF');
+  assert.equal(S.contrastText('#F23645'), '#FFFFFF');
+  assert.equal(S.contrastText('#FFEB3B'), '#000000');
+  assert.equal(S.contrastText('rgba(255,255,255,.2)', '#0F0F0F'), '#FFFFFF');   // mostly the dark chart behind it
+  assert.equal(S.contrastText('rgba(0,0,0,.2)', '#FFFFFF'), '#000000');
+  assert.equal(S.contrastText('teal'), '#FFFFFF');
+});
