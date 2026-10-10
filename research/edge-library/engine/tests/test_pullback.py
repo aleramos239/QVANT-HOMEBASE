@@ -6,12 +6,14 @@ THE RULE UNDER TEST (the owner's request of 2026-10-10; traders call it the opti
     UP LEG     = a newly known swing high H strictly above the swing high known before it; its START = the lowest low of the swing bars after
                  that earlier swing high up to and including H's bar. DOWN LEG = the mirror. The latest leg replaces any earlier one.
     PRICE      = H - level x (H - start), rounded to the tick toward the start (the mirror for a down leg)
-    ORDER      = a LIMIT with the leg at that price, placed at the close the leg becomes known and only then; not when a bar since H's swing
-                 bar began has traded at or beyond the price. It stays until it fills, a bar trades beyond H, a newer leg comes, or the
-                 session's last 5 minutes. One leg, at most one entry. The leg's start goes with the order as its structure level.
+    LIVE       = a leg is live from the close it becomes known until: its order fills (one entry a leg); a bar trades beyond H; a bar AFTER
+                 the bar that made H (the first of them) trades at or beyond the price while no order of the leg works (the pullback
+                 happened without us: also before the leg was known, outside the session, while another trade was open); a newer leg comes.
+    ORDER      = while a leg is live and has no working order, a LIMIT with the leg at that price is asked for at every close inside the
+                 session (the Template decides). The leg's start goes with the order as its structure level.
     entries inside the idea's session, up to max_tr a session, one position at a time; flat 15:58.
 Synthetic days with EXACT numbers cover each behaviour (a quiet day at 15000 with single minutes changed and the quiet price stepped; every
-up-leg case is also run upside down as a down leg); seeded random days check the orders and the first trade of a day against an independent
+up-leg case is also run upside down as a down leg); seeded random days check the live leg and the first trade of a day against an independent
 restatement of the rule at every bar size, session, swing size and level; the swing lines are compared with sfp's, which they restate; the
 real BUILD days check the invariants (window, one position, flat 15:58) at 1 worker. No net, win rate or profit factor is read.
 """
@@ -137,32 +139,53 @@ def minute(t):
     return (t["entry_ms"] - ns("00:00") // 1_000_000) // 60_000 * 60
 
 
-def closes(params, bars, tape=None, **kw):
-    """What the family wants at every tf close of the day, in and out of the session: [(second, None | (side, price, start))]."""
-    seen = []
+def watch(params, bars, tape=None, **kw):
+    """The live leg after every tf close of the day, in and out of the session -> (every close as (second, None | (side, price, start)),
+    every leg at the close it became live as (second, side, price, start))."""
+    seen, born = [], []
 
     class Look(PB.Pullback):
+        def fam_day(self, ctx):
+            super().fam_day(ctx)
+            self.was = None
+
         def fam_update(self, ctx):
             super().fam_update(ctx)
-            g = self.go
-            seen.append((sec_of(ctx), None if g is None else (side_of(g[0]), g[1], g[2])))
+            g = self.leg
+            row = None if g is None else (side_of(g[0]), g[2], g[3])
+            seen.append((sec_of(ctx), row))
+            if g is not None and g is not self.was:
+                born.append((sec_of(ctx), *row))
+            self.was = g
 
     run(params, bars, Look, tape, **kw)
-    return seen
+    return seen, born
+
+
+def closes(params, bars, tape=None, **kw):
+    """The live leg at every tf close of the day: [(second, None | (side, price, start))]."""
+    return watch(params, bars, tape, **kw)[0]
 
 
 def legs(params, bars, tape=None, **kw):
-    """Every leg that asks for an order, all day: [(second it became known, side, price, start)]."""
-    return [(s, *g) for s, g in closes(params, bars, tape, **kw) if g is not None]
+    """Every leg that became live, all day: [(second it became known, side, price, start)]."""
+    return watch(params, bars, tape, **kw)[1]
+
+
+def live(params, bars, at, tape=None, **kw):
+    """The live leg after the tf close at second `at` (None = no leg is live)."""
+    return dict(closes(params, bars, tape, **kw))[at]
 
 
 class Sig(PB.Pullback):
-    """Logs every order the family wants inside its session and places none (so no trade ever blocks the next): (second, side, price, start)."""
+    """Logs every order the family asks for inside its session and places none (so no order ever works and no trade blocks the next):
+    (second, side, price, start) at every close a leg is live."""
     seen: list = []
 
     def fam_signal(self, ctx):
-        if self.go is not None:
-            type(self).seen.append((sec_of(ctx), side_of(self.go[0]), self.go[1], self.go[2]))
+        g = self.leg
+        if g is not None:
+            type(self).seen.append((sec_of(ctx), side_of(g[0]), g[2], g[3]))
 
 
 def wants(params, bars, tape=None, **kw):
@@ -315,23 +338,56 @@ def test_a_bar_that_is_a_higher_high_and_a_lower_low_at_once_is_no_order_and_rep
     assert legs(p, dn) == [first, (sec(7), sd(not flip), mp(15025.0, flip), mp(15040.0, flip))]
 
 
-# ---- (ii) the pullback has already happened: no order -----------------------------------------------------------------------------------------------
+# ---- (ii) the pullback happened without us: the bars AFTER the bar that made the high -------------------------------------------------------------------
 
-def test_a_bar_at_or_beyond_the_entry_price_since_h_s_swing_bar_began_gives_no_order(flip):
+def leg0(flip, at=None):
+    """The base day's leg as legs() shows it."""
+    return (sec(10) if at is None else at, sd(flip), mp(15010.0, flip), 15000.0)
+
+
+def test_a_bar_at_or_beyond_the_entry_price_after_the_high_and_before_the_leg_is_known_kills_it(flip):
     # in the swing bar after H's: exactly at the price = nothing; one tick short of it = the order
     assert legs({}, base({"09:50": lo(15010.0)}, flip=flip)) == [] and orders({}, base({"09:50": lo(15010.0)}, flip=flip)) == []
     assert legs({}, base({"09:50": lo(15009.0)}, flip=flip)) == []
-    assert legs({}, base({"09:50": lo(15010.25)}, flip=flip)) == [(sec(10), sd(flip), mp(15010.0, flip), 15000.0)]
-    # in H's own swing bar, before the high was made: the bars cannot say which came first, so the leg gives nothing
-    assert legs({}, base({"09:32": lo(15010.0)}, flip=flip)) == []
-    assert legs({}, base({"09:32": lo(15010.25)}, flip=flip)) == [(sec(10), sd(flip), mp(15010.0, flip), 15000.0)]
-    # the last minute before H's swing bar began does not count (the whole base day was at 15000 until 09:29)
-    assert legs({}, base({"09:29": lo(14999.0)}, flip=flip)) == [(sec(10), sd(flip), mp(15009.5, flip), mp(14999.0, flip))]
+    assert legs({}, base({"09:50": lo(15010.25)}, flip=flip)) == [leg0(flip)]
+    # in H's own swing bar, the minute after the one that made the high (09:35): it counts too
+    assert legs({}, base({"09:36": lo(15010.0)}, flip=flip)) == [] and legs({}, base({"09:36": lo(15010.25)}, flip=flip)) == [leg0(flip)]
     # the level decides: the same day asks for 15015 at level 0.25, where the price has been since 09:30
     assert legs({"level": 0.25}, base(flip=flip)) == []
     assert legs({"level": 0.25}, base({}, {"09:30": 15016.0}, flip)) == [(sec(10), sd(flip), mp(15015.0, flip), 15000.0)]
     # a leg that gave nothing is not offered when the price comes back later
     assert trades({}, base({"09:50": lo(15010.0), "10:10": lo(15005.0)}, flip=flip)) == []
+
+
+def test_the_bars_up_to_the_one_that_made_the_high_do_not_count(flip):
+    # a dip to the entry price EARLIER in H's own swing bar (09:32, the high comes at 09:35) is part of the rise: a leg like any other
+    assert orders({}, base({"09:32": lo(15010.0)}, flip=flip)) == [(*leg0(flip), True)]
+    # ... also when that dip is the leg's own start: the leg rose inside H's own swing bar, from 14990 to 15020; half way back = 15005
+    g = base({"09:32": lo(14990.0), "10:05": lo(15004.75)}, flip=flip)
+    assert orders({}, g) == [(sec(10), sd(flip), mp(15005.0, flip), mp(14990.0, flip), True)]
+    assert [(minute(t), t["entry_price"]) for t in trades({}, g)] == [(sec(10, 5), mp(15005.0, flip))]
+    # the last minute before H's swing bar began (the leg's start, 14999, lies in the 09:15 bar)
+    assert legs({}, base({"09:29": lo(14999.0)}, flip=flip)) == [(sec(10), sd(flip), mp(15009.5, flip), mp(14999.0, flip))]
+
+
+def test_the_bar_that_made_the_high_is_a_bar_of_the_idea_s_own_size(flip):
+    # the high is made at 09:35. A dip to the entry price at 09:37 is AFTER the 1-minute bar that made it, but INSIDE the 5-minute bar
+    # (09:35-09:40) and the 15-minute bar (09:30-09:45) that made it: the bar itself is not counted (what came first inside it is unknown)
+    g = base({"09:37": lo(15010.0)}, flip=flip)
+    assert legs({"tf": "1"}, g) == [] and legs({"tf": "5"}, g) == [leg0(flip)] and legs({"tf": "15"}, g) == [leg0(flip)]
+    g = base({"09:40": lo(15010.0)}, flip=flip)                                        # the next 5-minute bar
+    assert legs({"tf": "1"}, g) == [] and legs({"tf": "5"}, g) == [] and legs({"tf": "15"}, g) == [leg0(flip)]
+    g = base({"09:45": lo(15010.0)}, flip=flip)                                        # the next 15-minute bar
+    assert legs({"tf": "1"}, g) == [] and legs({"tf": "5"}, g) == [] and legs({"tf": "15"}, g) == []
+
+
+def test_of_several_bars_at_the_high_the_first_one_counts(flip):
+    two = {"09:41": hi(15020.0)}                                                       # 09:35 and 09:41 both trade 15020
+    assert legs({}, base({**two, "09:38": lo(15010.0)}, flip=flip)) == []              # a dip between them is after the FIRST: it counts
+    assert legs({}, base({**two, "09:38": lo(15010.25)}, flip=flip)) == [leg0(flip)]
+    assert legs({}, base({**two, "09:33": lo(15010.0)}, flip=flip)) == [leg0(flip)]    # ... and one before the first does not
+    # the first bar at the high INSIDE H's own swing bar: an older bar at the very same price (08:35, an earlier swing high) is not it
+    assert legs({}, base({"08:35": hi(15020.0)}, flip=flip)) == [leg0(flip)]
 
 
 # ---- (iii) the life of the order ---------------------------------------------------------------------------------------------------------------------
@@ -389,23 +445,58 @@ def test_a_swing_that_makes_no_leg_leaves_the_order_alone(flip):
     assert [(minute(t), t["entry_price"]) for t in trades({}, g)] == [(sec(10, 40), mp(15010.0, flip))]
 
 
-def test_the_order_goes_in_the_last_five_minutes_of_the_session(flip):
+def test_the_order_goes_in_the_last_five_minutes_of_the_session_and_the_leg_lives_on(flip):
     assert [minute(t) for t in trades({}, base({"10:54": lo(15009.75)}, flip=flip))] == [sec(10, 54)]
     late = base({"10:55": lo(15009.75), "11:20": lo(15009.75)}, flip=flip)
     assert trades({}, late) == [] and resting({}, late)[sec(10, 54)] == (mp(15010.0, flip),) and resting({}, late)[sec(10, 56)] == ()
-    # a leg known at 11:00 is in the morning's last 5 minutes and before the midday session's first close: nobody trades it
+    # the Template's cancel does not end the leg by itself ...
+    assert live({}, base(flip=flip), sec(10, 58)) == leg0(flip)[1:] and len(orders({}, base(flip=flip))) == 1
+    # ... a bar at the entry price does, now that no order works (10:57; the 10:55 minute itself is such a bar too)
+    g = base({"10:57": lo(15010.0)}, flip=flip)
+    assert live({}, g, sec(10, 57)) == leg0(flip)[1:] and live({}, g, sec(10, 58)) is None
+    assert live({}, late, sec(10, 55)) == leg0(flip)[1:] and live({}, late, sec(10, 56)) is None
+    # while the order works, a bar AT the price (no fill: the limit needs one tick through) leaves the leg alone
+    g = base({"10:20": lo(15010.0)}, flip=flip)
+    assert live({}, g, sec(10, 30)) == leg0(flip)[1:] and resting({}, g)[sec(10, 30)] == (mp(15010.0, flip),)
+
+
+def test_a_leg_that_outlives_a_session_gets_its_order_in_the_next_one(flip):
+    # one instance that trades every session of the day in turn (the tester's own way, hold_to = session): the morning's order is cancelled at
+    # 10:55, the leg is still live, and the midday session's first close (11:01) places it again
+    p = {"sess": "all", "hold_to": "session"}
+    g = base({"11:20": lo(15009.75)}, flip=flip)
+    assert orders(p, g) == [(*leg0(flip), True), (*leg0(flip, sec(11, 1)), True)]
+    assert [(minute(t), t["entry_price"]) for t in trades(p, g)] == [(sec(11, 20), mp(15010.0, flip))]
+    # ... unless the price got there in between, with no order working
+    g = base({"10:57": lo(15010.0), "11:20": lo(15009.75)}, flip=flip)
+    assert orders(p, g) == [(*leg0(flip), True)] and trades(p, g) == []
+    # a leg known at 11:00 (the morning's end): the morning idea cannot trade it, the midday idea places it at its first close
     g = day({"10:05": hi(15010.0), "10:35": hi(15020.0), "11:20": lo(15009.75)}, {"10:30": 15015.0}, flip)
-    assert legs({}, g) == [(sec(11), sd(flip), mp(15010.0, flip), 15000.0)]
-    assert orders({}, g) == [] and orders({"sess": "mid"}, g) == [] and trades({"sess": "mid"}, g) == []
+    assert legs({}, g) == [leg0(flip, sec(11))] and orders({}, g) == []
+    assert orders({"sess": "mid"}, g) == [(*leg0(flip, sec(11, 1)), True)] and [minute(t) for t in trades({"sess": "mid"}, g)] == [sec(11, 20)]
 
 
-def test_a_fill_and_a_bar_beyond_h_inside_one_bar_is_still_a_counted_trade(flip):
-    # a 5-minute idea: 10:01 fills the limit, 10:03 trades beyond H. At the 10:05 close the leg is dropped; the fill must be seen first
+def test_a_fill_and_a_bar_beyond_h_inside_one_bar_is_a_trade_the_fill_ends_the_leg(flip):
+    # a 5-minute idea: 10:01 fills the limit, 10:03 trades beyond H. At the 10:05 close the leg is over by its fill
     g = base({"10:01": lo(15009.75), "10:03": hi(15020.25)}, flip=flip)
     st, res = run({"tf": "5", "exit_bars": 1, "max_tr": 1}, g)
     assert len(res.trades) == 1 and st.n_ent == 1
     t = res.trades[0]
     assert (minute(t), t["exit_reason"]) == (sec(10, 1), "bars") and t["exit_ms"] < ns("10:06") // 1_000_000
+
+
+def test_a_fill_and_a_newer_leg_at_one_close_the_fill_is_counted_first(flip):
+    # the buy limit rests at 15010; swing lows of 15013 (09:45 bar) and 15011 (10:15 bar). The minutes 10:31-10:46 never printed, so the swing bar
+    # 10:30-10:45 holds one minute; the 10:47 minute fills the limit. At its close (10:48) the fill is seen AND the 10:15 bar's lower low
+    # becomes known: a newer leg, which clears the family's orders -- after the fill has been counted (the trade leaves one bar later, by exit_bars)
+    g = base({"09:50": lo(15013.0), "10:20": lo(15011.0), "10:47": lo(15009.75)}, {"10:15": 15012.0}, flip)
+    t = tape_of(g)
+    keep = ~((t.ts >= ns("10:31")) & (t.ts < ns("10:47")))
+    hole = S.Tape(t.root, t.date, t.contract, t.ts[keep], t.px[keep], t.size[keep])
+    st, res = run({"exit_bars": 1, "max_tr": 1}, None, tape=hole)
+    assert len(res.trades) == 1 and st.n_ent == 1 and (st.ph if flip else st.pl)[1] == mp(15011.0, flip)       # (the 10:15 swing was known by then)
+    x = res.trades[0]
+    assert (minute(x), x["exit_reason"]) == (sec(10, 47), "bars") and x["exit_ms"] < ns("10:49") // 1_000_000
 
 
 # ---- (iv) one leg, at most one entry -------------------------------------------------------------------------------------------------------------------
@@ -417,34 +508,65 @@ def test_a_leg_gives_one_entry(flip):
     assert len(orders({"exit_bars": 2}, g)) == 1
 
 
-def test_a_leg_known_while_a_trade_is_open_is_not_offered_again(flip):
-    # 10:02 fills the first leg's limit (15010). From 10:15 the quiet price is 15022 and 10:20 makes a swing high of 15025, known 10:45: a second
-    # leg from 15009.75 (the fill's low) to 15025, half way back 15017.375 -> 15017.25. 10:53 trades through that price.
-    g = base({"10:02": lo(15009.75), "10:20": hi(15025.0), "10:53": lo(15017.0)}, {"10:15": 15022.0}, flip)
-    second = (sec(10, 45), sd(flip), mp(15017.25, flip), mp(15009.75, flip))
-    assert legs({}, g) == [(sec(10), sd(flip), mp(15010.0, flip), 15000.0), second]
-    # the trade leaves 2 bars after its fill: flat at 10:45, the second leg's order is placed and fills
-    assert orders({"exit_bars": 2}, g)[1] == (*second, True) and [minute(t) for t in trades({"exit_bars": 2}, g)] == [sec(10, 2), sec(10, 53)]
-    # the trade leaves at 10:52: it was open at 10:45, so the second leg was never placed -- and is not placed afterwards
-    assert len(orders({"exit_bars": 50}, g)) == 1 and [minute(t) for t in trades({"exit_bars": 50}, g)] == [sec(10, 2)]
+def two_legs(flip, **more):
+    """10:02 fills the first leg's limit (15010). From 10:15 the quiet price is 15022 and 10:20 makes a swing high of 15025, known 10:45: a second
+    leg from 15009.75 (the fill's low) to 15025, half way back 15017.375 -> 15017.25. -> (the bars, the second leg as legs() shows it)."""
+    g = base({"10:02": lo(15009.75), "10:20": hi(15025.0), **more}, {"10:15": 15022.0}, flip)
+    return g, (sec(10, 45), sd(flip), mp(15017.25, flip), mp(15009.75, flip))
 
 
-def test_a_leg_known_outside_the_session_is_not_offered_inside_it(flip):
-    # the base day 45 minutes earlier: the leg is known at 09:15, before the 09:30 session
+def test_a_leg_known_while_a_trade_is_open_gets_its_order_when_that_trade_has_ended(flip):
+    g, second = two_legs(flip, **{"10:53": lo(15017.0)})                               # 10:53 trades through the second leg's price
+    assert legs({}, g) == [leg0(flip), second]
+    # the first trade leaves 2 bars after its fill: flat at 10:45, the second leg's order is placed at once and fills
+    assert orders({"exit_bars": 2}, g)[1:] == [(*second, True)] and [minute(t) for t in trades({"exit_bars": 2}, g)] == [sec(10, 2), sec(10, 53)]
+    # it leaves at the 10:47 close instead: open at 10:45 (no order), the order is placed at the first close after it has ended, 10:48
+    assert orders({"exit_bars": 45}, g)[1:] == [(sec(10, 48), *second[1:], True)]
+    assert [minute(t) for t in trades({"exit_bars": 45}, g)] == [sec(10, 2), sec(10, 53)]
+
+
+def test_a_leg_is_killed_when_the_price_gets_there_while_another_trade_is_open(flip):
+    g, second = two_legs(flip, **{"10:46": lo(15017.25), "10:53": lo(15017.0)})        # 10:46 touches the price: the first trade is still open
+    assert legs({}, g) == [leg0(flip), second]
+    assert live({"exit_bars": 45}, g, sec(10, 46)) == second[1:] and live({"exit_bars": 45}, g, sec(10, 47)) is None
+    assert len(orders({"exit_bars": 45}, g)) == 1 and [minute(t) for t in trades({"exit_bars": 45}, g)] == [sec(10, 2)]
+    # (the same touch with the second order already working -- the first trade left at 10:04 -- leaves the leg alone: the fill comes at 10:53)
+    assert [minute(t) for t in trades({"exit_bars": 2}, g)] == [sec(10, 2), sec(10, 53)]
+
+
+def test_a_leg_known_before_the_session_opens_gets_its_order_at_the_first_close_inside(flip):
+    # the base day 45 minutes earlier: the leg is known at 09:15, before the 09:30 session. 09:40 trades through its price
     g = day({"08:20": hi(15010.0), "08:50": hi(15020.0), "09:40": lo(15009.75)}, {"08:45": 15015.0}, flip)
-    assert legs({}, g) == [(sec(9, 15), sd(flip), mp(15010.0, flip), 15000.0)]
-    assert orders({}, g) == [] and trades({}, g) == []
-    assert orders({"sess": "pre"}, g) == [(sec(9, 15), sd(flip), mp(15010.0, flip), 15000.0, True)]       # an 08:25-09:30 idea takes it
-    # known exactly at 09:30, the session's start: that close is not inside the session
+    assert legs({}, g) == [leg0(flip, sec(9, 15))]
+    assert orders({}, g) == [(*leg0(flip, sec(9, 31)), True)] and [minute(t) for t in trades({}, g)] == [sec(9, 40)]
+    assert orders({"tf": "5"}, g) == [(*leg0(flip, sec(9, 35)), True)] and [minute(t) for t in trades({"tf": "5"}, g)] == [sec(9, 40)]
+    # a 15-minute idea's first close inside is 09:45: the 09:40 pullback came first, with no order working -- the leg is gone
+    assert orders({"tf": "15"}, g) == [] and trades({"tf": "15"}, g) == []
+    assert orders({"sess": "pre"}, g) == [(*leg0(flip, sec(9, 15)), True)]             # an 08:25-09:30 idea places it at 09:15
+    # known exactly at 09:30, the session's start: that close is not inside the session, the next one is
     g = day({"08:35": hi(15010.0), "09:05": hi(15020.0), "09:40": lo(15009.75)}, {"09:00": 15015.0}, flip)
-    assert legs({}, g) == [(sec(9, 30), sd(flip), mp(15010.0, flip), 15000.0)] and orders({}, g) == [] and trades({}, g) == []
+    assert legs({}, g) == [leg0(flip, sec(9, 30))] and orders({}, g) == [(*leg0(flip, sec(9, 31)), True)]
+    assert [minute(t) for t in trades({}, g)] == [sec(9, 40)]
 
 
-def test_dir_runs_one_side_only_and_a_switched_off_leg_is_not_offered_again(flip):
+def test_a_leg_dies_before_the_session_when_the_price_reaches_the_entry(flip):
+    e = {"08:20": hi(15010.0), "08:50": hi(15020.0), "09:40": lo(15009.75)}
+    g = day({**e, "09:20": lo(15010.0)}, {"08:45": 15015.0}, flip)                     # known 09:15; 09:20 trades AT the entry price
+    assert legs({}, g) == [leg0(flip, sec(9, 15))] and live({}, g, sec(9, 20)) == leg0(flip)[1:] and live({}, g, sec(9, 21)) is None
+    assert orders({}, g) == [] and trades({}, g) == []
+    g = day({**e, "09:20": lo(15010.25)}, {"08:45": 15015.0}, flip)                    # one tick short of it: still live at the open
+    assert orders({}, g) == [(*leg0(flip, sec(9, 31)), True)] and len(trades({}, g)) == 1
+    # a bar beyond H before the session ends it as well
+    g = day({**e, "09:20": hi(15020.25)}, {"08:45": 15015.0}, flip)
+    assert live({}, g, sec(9, 21)) is None and trades({}, g) == []
+
+
+def test_dir_runs_one_side_only(flip):
     assert PB.Pullback.defaults()["dir"] == "both"
     g = base({"10:05": lo(15009.75)}, flip=flip)
     assert [x[4] for x in orders({"dir": sd(flip)}, g)] == [True] and len(trades({"dir": sd(flip)}, g)) == 1
-    assert [x[4] for x in orders({"dir": sd(not flip)}, g)] == [False] and trades({"dir": sd(not flip)}, g) == []
+    off = orders({"dir": sd(not flip)}, g)                                             # asked at every close while the leg lives, never placed
+    assert [x[0] for x in off] == list(range(sec(10), sec(10, 6), 60)) and not any(x[4] for x in off) and trades({"dir": sd(not flip)}, g) == []
     assert [x[4] for x in orders({}, g)] == [True]
 
 
@@ -472,7 +594,7 @@ def test_max_tr_defaults_to_three_and_caps_the_entries_of_a_session(flip):
     bars, want = stairs(5, flip)
     assert want[:2] == [(sec(4), 15010.0, 15000.0), (sec(5), 15029.75, 15009.75)]      # (the arithmetic of the staircase, by hand)
     full = [(s, sd(flip), mp(px, flip), mp(st, flip)) for s, px, st in want]
-    assert wants({"sess": "london"}, bars) == full
+    assert legs({"sess": "london"}, bars) == full
     p = {k: v for k, v in BASE.items() if k != "max_tr"}
     cls = type("Spy", (Spy,), {"log": []})
     st = cls({**p, "sess": "london", "exit_bars": 1})                                  # the default max_tr (3); each trade leaves one bar after its fill
@@ -496,7 +618,7 @@ def test_one_position_at_a_time(flip):
 def test_a_leg_is_unknown_until_the_swing_bar_after_h_has_closed(flip):
     c = dict(closes({}, base(flip=flip)))
     assert all(c[s] is None for s in range(sec(9, 31), sec(10), 60)) and c[sec(10)] == (sd(flip), mp(15010.0, flip), 15000.0)
-    assert all(c[s] is None for s in c if s > sec(10))                                 # ... and it asks for its order at that one close only
+    assert orders({}, base(flip=flip)) == [(*leg0(flip), True)]                        # its order is placed at that close
     # a pullback at 09:50, before the leg is known, is no entry (and the leg then gives nothing: the price has been there)
     assert trades({}, base({"09:50": lo(15009.75)}, flip=flip)) == []
 
@@ -507,7 +629,8 @@ def test_the_swing_size_sets_when_a_leg_is_known(flip):
     g = day({"06:10": hi(15010.0), "08:10": hi(15020.0)}, {"08:00": 15015.0}, flip)
     for swing, known in (("15", sec(8, 30)), ("30", sec(9, 0)), ("60", sec(10, 0))):
         assert legs({"swing": swing}, g) == [(known, sd(flip), mp(15010.0, flip), 15000.0)], swing
-    assert orders({"swing": "60"}, g) == [(sec(10), sd(flip), mp(15010.0, flip), 15000.0, True)] and orders({"swing": "15"}, g) == []
+    assert orders({"swing": "60"}, g) == [(sec(10), sd(flip), mp(15010.0, flip), 15000.0, True)]
+    assert orders({"swing": "15"}, g) == [(*leg0(flip, sec(9, 31)), True)]             # known 08:30 and still live at the open
     assert PB.Pullback.defaults()["swing"] == "15"
 
 
@@ -583,7 +706,7 @@ def test_a_future_bar_cannot_change_an_earlier_order_or_leg():
         tape = tape_of(bars)
         p = {"sess": sess, "swing": swing, "level": level}
         cl, od = closes(p, bars, tape=tape), orders(p, bars, tape=tape)
-        known = [s for s, g in cl if g is not None]
+        known = [x[0] for x in legs(p, bars, tape=tape)]
         for cut in known[:6] + [x[0] for x in od] + [sec(9, 44, 30)]:    # the decision AT the cut stands whatever prints from that second on
             dirty = garble(tape, ns("00:00") + cut * S.NS)
             assert [x for x in closes(p, bars, tape=dirty) if x[0] <= cut] == [x for x in cl if x[0] <= cut], (seed, cut)
@@ -600,7 +723,7 @@ def test_an_entry_is_never_before_its_decision_plus_the_order_delay():
             p = {"sess": sess, "swing": swing, "level": level, "tf": tf, "exit_bars": 3}
             cls = type("Spy", (Spy,), {"log": []})
             _, res = run(p, bars, cls)
-            assert all((t - ns("00:00")) % (int(swing) * 60 * S.NS) == 0 for t, *_ in cls.log)          # orders at the end of a swing bar only
+            assert all((t - ns("00:00")) % (int(tf) * 60 * S.NS) == 0 for t, *_ in cls.log)             # orders at a close of the idea's bars only
             for t in res.trades:
                 dec = [x[0] for x in cls.log if x[4] and x[1] == t["side"] and x[2] == t["order_price"] and x[0] <= t["entry_ns"]]
                 assert t["entry_price"] == t["order_price"] and dec and t["entry_ns"] >= max(dec) + LAT
@@ -648,66 +771,82 @@ def swing_bars(bars, w):
 
 
 def ref_legs(bars, sw, w, j, level):
-    """The legs swing bar j makes when it becomes known, from the written rule alone, in exact arithmetic:
-    [(side, H, start, entry price, the price has been there already)]."""
+    """The legs swing bar j makes when it becomes known, from the written rule alone, in exact arithmetic: [(side, H, start, entry price)]."""
     def is_hi(i):
         return 0 < i < len(sw) - 1 and sw[i][0] > sw[i - 1][0] and sw[i][0] > sw[i + 1][0]
 
     def is_lo(i):
         return 0 < i < len(sw) - 1 and sw[i][1] < sw[i - 1][1] and sw[i][1] < sw[i + 1][1]
     lv, tk, out = Fraction(str(level)), Fraction(str(TICK)), []
-    since = bars[j * w:(j + 2) * w]                                   # H's own swing bar and the one after it: everything up to the decision
     if is_hi(j):
         prev = [i for i in range(j) if is_hi(i)]
         if prev and sw[j][0] > sw[prev[-1]][0]:
             end, start = sw[j][0], min(sw[i][1] for i in range(prev[-1] + 1, j + 1))
-            px = float(math.floor((Fraction(end) - lv * (Fraction(end) - Fraction(start))) / tk) * tk)
-            out.append(("long", end, start, px, min(b[2] for b in since) <= px))
+            out.append(("long", end, start, float(math.floor((Fraction(end) - lv * (Fraction(end) - Fraction(start))) / tk) * tk)))
     if is_lo(j):
         prev = [i for i in range(j) if is_lo(i)]
         if prev and sw[j][1] < sw[prev[-1]][1]:
             end, start = sw[j][1], max(sw[i][0] for i in range(prev[-1] + 1, j + 1))
-            px = float(math.ceil((Fraction(end) + lv * (Fraction(start) - Fraction(end))) / tk) * tk)
-            out.append(("short", end, start, px, max(b[1] for b in since) >= px))
+            out.append(("short", end, start, float(math.ceil((Fraction(end) + lv * (Fraction(start) - Fraction(end))) / tk) * tk)))
     return out
 
 
-def ref_wants(bars, tf, sess, w, level):
-    """Every order the rule asks for inside the session, as (second, side, price, start): at each close everything is worked out again."""
+def ref_walk(bars, tf, sess, w, level, fills):
+    """One day walked close by close from the written rule alone (every minute has a bar: no holes).
+    fills False = no order is ever placed (class Sig): -> every close inside the session at which a live leg asks for its order, as
+                  (second, side, price, start).
+    fills True  = the order is placed, cancelled and filled as the rule says: -> the first trade of the day as (the minute it fills in,
+                  side, price), or None (the stop is 1000 points away: only the first trade is compared)."""
     s0, s1 = S.SESS[sess]
-    sw, out = swing_bars(bars, w), []
-    for m in range(w, len(bars) + 1, w):                              # a leg can become known at the end of a swing bar only (tf divides it)
-        j, end = m // w - 2, m * 60                                   # the swing bar whose neighbour has just ended
-        if j < 1:
-            continue
-        lg = ref_legs(bars, sw, w, j, level)
-        if len(lg) == 1 and not lg[0][4] and s0 < end <= s1 and end < s1 - 300:
-            out.append((end, lg[0][0], lg[0][3], lg[0][2]))
-    return out
-
-
-def ref_first_trade(bars, tf, sess, w, level):
-    """The first trade of the day as (the minute it fills in, side, price) or None, from the written rule: the order's whole life is walked
-    close by close (the stop is 1000 points away: the first trade as good as always stays open to 15:58, and only the first is compared)."""
-    s0, s1 = S.SESS[sess]
-    sw, order = swing_bars(bars, w), None                             # order = (side, price, H, the minute it was placed at)
-    for m in range(tf, len(bars) + 1, tf):                            # the tf bar of the minutes [m - tf, m) closes at minute m
-        end, ch = m * 60, range(m - tf, m)
-        if order is not None:
-            side, px, h, m0 = order
-            for i in ch:                                              # it worked through this bar, up to the session's last 5 minutes
-                if i >= m0 and i * 60 < s1 - 300 and (bars[i][2] <= px - TICK if side == "long" else bars[i][1] >= px + TICK):
-                    return i * 60, side, px
-            if end >= s1 - 300 or (max(bars[i][1] for i in ch) > h if side == "long" else min(bars[i][2] for i in ch) < h):
-                order = None                                          # the last 5 minutes; a bar beyond H
-        j = m // w - 2
+    sw = swing_bars(bars, w)
+    tfb = [(max(b[1] for b in bars[k:k + tf]), min(b[2] for b in bars[k:k + tf])) for k in range(0, len(bars), tf)]     # tf bar t = the minutes [t x tf, (t + 1) x tf)
+    leg, since, asks = None, None, []                                 # leg = (side, H, price, start); since = the minute its order has worked from
+    for m in range(tf, len(bars) + 1, tf):                            # the tf bar m // tf - 1 closes at minute m
+        end, (bh, bl) = m * 60, tfb[m // tf - 1]
+        if leg is not None:
+            side, h, px, _ = leg
+            up = side == "long"
+            if since is not None:
+                for i in range(max(since, m - tf), m):                # the order worked through this bar, up to the session's last 5 minutes
+                    if i * 60 < s1 - 300 and (bars[i][2] <= px - TICK if up else bars[i][1] >= px + TICK):
+                        return i * 60, side, px
+                if end > s1 - 300:
+                    since = None                                      # the Template cancelled it inside this bar
+            if (bh > h) if up else (bl < h):
+                leg = since = None                                    # a bar beyond H
+            elif since is None and ((bl <= px) if up else (bh >= px)):
+                leg = None                                            # at the price with no order working: the pullback happened without us
+        j = m // w - 2                                                # the swing bar whose neighbour has just ended
         if m % w == 0 and j >= 1:
             lg = ref_legs(bars, sw, w, j, level)
             if lg:
-                order = None                                          # the latest leg replaces any earlier one
-                if len(lg) == 1 and not lg[0][4] and s0 < end <= s1 and end < s1 - 300:
-                    order = (lg[0][0], lg[0][3], lg[0][1], m)
-    return None
+                leg = since = None                                    # the latest leg replaces any earlier one
+                if len(lg) == 1:
+                    side, h, start, px = lg[0]
+                    up = side == "long"
+                    x = next(t for t in range(j * w // tf, (j + 1) * w // tf) if tfb[t][0 if up else 1] == h)       # the FIRST tf bar at the extreme
+                    after = tfb[x + 1:m // tf]
+                    if not (min(a[1] for a in after) <= px if up else max(a[0] for a in after) >= px):
+                        leg = (side, h, px, start)
+        if leg is not None and since is None and s0 < end <= s1 and end < s1 - 300:
+            if fills:
+                since = m
+            else:
+                asks.append((end, leg[0], leg[2], leg[3]))
+    return None if fills else asks
+
+
+def ref_wants(bars, tf, sess, w, level):
+    return ref_walk(bars, tf, sess, w, level, False)
+
+
+def ref_first_trade(bars, tf, sess, w, level):
+    return ref_walk(bars, tf, sess, w, level, True)
+
+
+def asked(rows):
+    """The legs among the asks of a day (a leg asks at every close it is live): how many different ones."""
+    return sum(1 for a, b in zip([None] + rows, rows) if a is None or a[1:] != b[1:])
 
 
 LEVELS = (0.5, 0.62, 0.79)
@@ -732,7 +871,7 @@ def test_the_orders_and_the_first_trade_equal_the_written_rule_on_random_days(tf
         first = ref_first_trade(bars, tf, sess, swing, level)
         tr = trades(p, bars)
         assert [(minute(t), t["side"], t["entry_price"]) for t in tr[:1]] == ([] if first is None else [first]), (i, first)
-        n += len(want)
+        n += asked(want)
     if (sess, swing) == ("asia", 60):
         assert n == 0                                                # the first 60-minute leg is known at 05:00, after the session
     elif swing == 15:
@@ -745,7 +884,7 @@ def test_the_random_days_give_orders_and_fills_at_every_swing_size_and_bar_size(
             n = k = 0
             for sess in SESSIONS:
                 for i, bars in enumerate(random_days(swing)):
-                    n += len(ref_wants(bars, tf, sess, swing, LEVELS[i % 3]))
+                    n += asked(ref_wants(bars, tf, sess, swing, LEVELS[i % 3]))
                     k += ref_first_trade(bars, tf, sess, swing, LEVELS[i % 3]) is not None
             assert n >= 50 and k >= 8, (swing, tf, n, k)
 
