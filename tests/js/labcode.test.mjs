@@ -264,7 +264,7 @@ test('deskSaid: the lines after a promote, in the words of the page', () => {
 
 
 /* ---- the strategy form's pure half (fm*): the schema is the server's, the page knows no rule by name ---- */
-const FM = JSON.parse("{\"markets\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"ticks\":{\"NQ\":0.25,\"ES\":0.25,\"YM\":1.0,\"RTY\":0.1,\"GC\":0.1,\"SI\":0.005},\"sides\":[[\"both\",\"Both\"],[\"long\",\"Long only\"],[\"short\",\"Short only\"]],\"rules\":[{\"id\":\"open_straddle\",\"label\":\"Stop straddle\",\"words\":\"At a time of day, a buy stop above the price and a sell stop below it. The first one to fill cancels the other.\",\"fields\":[\"market\",\"side\",\"time\",\"distance\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"opening_range\",\"label\":\"Opening range\",\"words\":\"Measure the high and low of the first minutes, then a buy stop above the range and a sell stop below it.\",\"fields\":[\"market\",\"side\",\"range_from\",\"range_min\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"bar_breakout\",\"label\":\"Bar breakout\",\"words\":\"Buy when a bar closes above the highs of the last few bars, sell when it closes below their lows.\",\"fields\":[\"market\",\"side\",\"bar_min\",\"lookback\",\"from\",\"last_entry\",\"trades\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"at_time\",\"label\":\"At a time\",\"words\":\"Buy or sell at the market at a time of day.\",\"fields\":[\"market\",\"side\",\"time\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"long\",\"short\"]}],\"fields\":{\"market\":{\"label\":\"Market\",\"words\":\"The futures market to trade.\",\"type\":\"choice\",\"choices\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"default\":\"NQ\"},\"side\":{\"label\":\"Trade\",\"words\":\"Buy, sell, or both.\",\"type\":\"choice\",\"choices\":[\"both\",\"long\",\"short\"],\"default\":\"both\"},\"time\":{\"label\":\"Time\",\"words\":\"The New York time it acts, like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"distance\":{\"label\":\"Distance (points)\",\"words\":\"How far from the price each stop entry sits.\",\"type\":\"number\",\"min_ticks\":1,\"tick_multiple\":true,\"default\":15.0},\"range_from\":{\"label\":\"Range starts\",\"words\":\"Where the range starts, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"range_min\":{\"label\":\"Range length (minutes)\",\"words\":\"How many minutes the range is measured over.\",\"type\":\"choice\",\"choices\":[5,15,30],\"default\":15},\"bar_min\":{\"label\":\"Bar size (minutes)\",\"words\":\"How long each bar is.\",\"type\":\"choice\",\"choices\":[1,5,15],\"default\":5},\"lookback\":{\"label\":\"Look back (bars)\",\"words\":\"How many bars back the high and low are taken from.\",\"type\":\"int\",\"min\":2,\"max\":40,\"step\":1,\"default\":6},\"from\":{\"label\":\"Start at\",\"words\":\"The first time it may enter, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"trades\":{\"label\":\"Trades a day\",\"words\":\"Most entries it takes in one day.\",\"type\":\"int\",\"min\":1,\"max\":5,\"step\":1,\"default\":1},\"last_entry\":{\"label\":\"Last entry\",\"words\":\"No new entry after this time. A stop not filled by then is cancelled.\",\"type\":\"time\",\"default\":\"11:00\"},\"stop\":{\"label\":\"Stop\",\"words\":\"Every entry carries a stop.\",\"type\":\"stop\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":2,\"tick_multiple\":true},{\"id\":\"range\",\"label\":\"Other side of the range\"}],\"default\":{\"kind\":\"points\",\"value\":50.0}},\"target\":{\"label\":\"Target\",\"words\":\"Where to take profit, or none.\",\"type\":\"target\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":1,\"tick_multiple\":true},{\"id\":\"rr\",\"label\":\"x the stop\",\"min\":0.25,\"max\":20,\"step\":0.25},{\"id\":\"none\",\"label\":\"None\"}],\"default\":{\"kind\":\"rr\",\"value\":3.0}},\"out_by\":{\"label\":\"Out by\",\"words\":\"Anything still open is closed at this time. 15:55 at the latest.\",\"type\":\"time\",\"default\":\"15:55\"}},\"defaults\":{\"open_straddle\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"open_straddle\",\"time\":\"09:30\",\"distance\":15.0,\"stop\":{\"kind\":\"points\",\"value\":50.0},\"target\":{\"kind\":\"rr\",\"value\":3.0}},\"opening_range\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"opening_range\",\"range_from\":\"09:30\",\"range_min\":15,\"stop\":{\"kind\":\"range\"},\"target\":{\"kind\":\"rr\",\"value\":2.0}},\"bar_breakout\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"bar_breakout\",\"bar_min\":5,\"lookback\":6,\"from\":\"09:30\",\"trades\":1,\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}},\"at_time\":{\"market\":\"NQ\",\"side\":\"long\",\"out_by\":\"15:55\",\"rule\":\"at_time\",\"time\":\"09:30\",\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}}}}");
+const FM = JSON.parse("{\"markets\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"ticks\":{\"NQ\":0.25,\"ES\":0.25,\"YM\":1.0,\"RTY\":0.1,\"GC\":0.1,\"SI\":0.005},\"sides\":[[\"both\",\"Both\"],[\"long\",\"Long only\"],[\"short\",\"Short only\"]],\"rules\":[{\"id\":\"open_straddle\",\"label\":\"Stop straddle\",\"words\":\"At a time of day, a buy stop above the price and a sell stop below it. The first one to fill cancels the other.\",\"fields\":[\"market\",\"side\",\"time\",\"distance\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"opening_range\",\"label\":\"Opening range\",\"words\":\"Measure the high and low of the first minutes, then a buy stop above the range and a sell stop below it.\",\"fields\":[\"market\",\"side\",\"range_from\",\"range_min\",\"stop\",\"target\",\"last_entry\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"bar_breakout\",\"label\":\"Bar breakout\",\"words\":\"Buy when a bar closes above the highs of the last few bars, sell when it closes below their lows.\",\"fields\":[\"market\",\"side\",\"bar_min\",\"lookback\",\"from\",\"last_entry\",\"trades\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"both\",\"long\",\"short\"]},{\"id\":\"at_time\",\"label\":\"At a time\",\"words\":\"Buy or sell at the market at a time of day.\",\"fields\":[\"market\",\"side\",\"time\",\"stop\",\"target\",\"out_by\"],\"sides\":[\"long\",\"short\"]}],\"fields\":{\"market\":{\"label\":\"Market\",\"words\":\"The futures market to trade.\",\"type\":\"choice\",\"choices\":[\"NQ\",\"ES\",\"YM\",\"RTY\",\"GC\",\"SI\"],\"default\":\"NQ\"},\"side\":{\"label\":\"Trade\",\"words\":\"Buy, sell, or both.\",\"type\":\"choice\",\"choices\":[\"both\",\"long\",\"short\"],\"default\":\"both\"},\"time\":{\"label\":\"Time\",\"words\":\"The New York time it acts, like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"distance\":{\"label\":\"Distance (points)\",\"words\":\"How far from the price each stop entry sits.\",\"type\":\"number\",\"min_ticks\":1,\"tick_multiple\":true,\"default\":15.0},\"range_from\":{\"label\":\"Range starts\",\"words\":\"Where the range starts, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"range_min\":{\"label\":\"Range length (minutes)\",\"words\":\"How many minutes the range is measured over.\",\"type\":\"choice\",\"choices\":[5,15,30],\"default\":15},\"bar_min\":{\"label\":\"Bar size (minutes)\",\"words\":\"How long each bar is.\",\"type\":\"choice\",\"choices\":[1,5,15],\"default\":5},\"lookback\":{\"label\":\"Look back (bars)\",\"words\":\"How many bars back the high and low are taken from.\",\"type\":\"int\",\"min\":2,\"max\":40,\"step\":1,\"default\":6},\"from\":{\"label\":\"Start at\",\"words\":\"The first time it may enter, a New York time like 09:30.\",\"type\":\"time\",\"default\":\"09:30\"},\"trades\":{\"label\":\"Trades a day\",\"words\":\"Most entries it takes in one day.\",\"type\":\"int\",\"min\":1,\"max\":5,\"step\":1,\"default\":1},\"last_entry\":{\"label\":\"Last entry\",\"words\":\"No new entry after this time. A stop not filled by then is cancelled.\",\"type\":\"time\",\"default\":\"11:00\"},\"stop\":{\"label\":\"Stop\",\"words\":\"Every entry carries a stop.\",\"type\":\"stop\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":2,\"tick_multiple\":true},{\"id\":\"range\",\"label\":\"Other side of the range\",\"rules\":[\"opening_range\"]}],\"default\":{\"kind\":\"points\",\"value\":50.0}},\"target\":{\"label\":\"Target\",\"words\":\"Where to take profit, or none.\",\"type\":\"target\",\"kinds\":[{\"id\":\"points\",\"label\":\"Points\",\"min_ticks\":1,\"tick_multiple\":true},{\"id\":\"rr\",\"label\":\"x the stop\",\"min\":0.25,\"max\":20,\"step\":0.25},{\"id\":\"none\",\"label\":\"None\"}],\"default\":{\"kind\":\"rr\",\"value\":3.0}},\"out_by\":{\"label\":\"Out by\",\"words\":\"Anything still open is closed at this time. 15:55 at the latest.\",\"type\":\"time\",\"default\":\"15:55\"}},\"defaults\":{\"open_straddle\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"open_straddle\",\"time\":\"09:30\",\"distance\":15.0,\"stop\":{\"kind\":\"points\",\"value\":50.0},\"target\":{\"kind\":\"rr\",\"value\":3.0}},\"opening_range\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"opening_range\",\"range_from\":\"09:30\",\"range_min\":15,\"stop\":{\"kind\":\"range\"},\"target\":{\"kind\":\"rr\",\"value\":2.0}},\"bar_breakout\":{\"market\":\"NQ\",\"side\":\"both\",\"out_by\":\"15:55\",\"last_entry\":\"11:00\",\"rule\":\"bar_breakout\",\"bar_min\":5,\"lookback\":6,\"from\":\"09:30\",\"trades\":1,\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}},\"at_time\":{\"market\":\"NQ\",\"side\":\"long\",\"out_by\":\"15:55\",\"rule\":\"at_time\",\"time\":\"09:30\",\"stop\":{\"kind\":\"points\",\"value\":20.0},\"target\":{\"kind\":\"points\",\"value\":40.0}}}}");
 const FM_TAKEN = ['nq_open_straddle', 'my_strategy'];
 
 test('fm: the fields shown for a rule are the schema\'s, in its order, after name, market and the rule', () => {
@@ -284,7 +284,10 @@ test('fm: a rule\'s answer keys are name, rule and its fields (nothing else belo
 
 test('fm: which stop and target choices and which sides a rule offers', () => {
   assert.deepEqual(L.fmKinds(FM, 'at_time', 'target').map((k) => k.id), ['points', 'rr', 'none']);
-  assert.deepEqual(L.fmKinds(FM, 'open_straddle', 'stop').map((k) => k.id), ['points', 'range'], 'the schema as it is today names no restriction: the server answers for the rest');
+  // the real schema: "Other side of the range" belongs to the opening range only
+  assert.deepEqual(L.fmKinds(FM, 'opening_range', 'stop').map((k) => k.id), ['points', 'range']);
+  for (const r of ['open_straddle', 'bar_breakout', 'at_time']) assert.deepEqual(L.fmKinds(FM, r, 'stop').map((k) => k.id), ['points'], r);
+  for (const r of FM.rules) assert.deepEqual(L.fmKinds(FM, r.id, 'target').map((k) => k.id), ['points', 'rr', 'none'], 'a target choice with no rules list is offered to every rule');
   // a choice the schema limits to some rules is offered to those rules only
   const limited = { fields: { stop: { kinds: [{ id: 'points' }, { id: 'range', rules: ['opening_range'] }] } } };
   assert.deepEqual(L.fmKinds(limited, 'opening_range', 'stop').map((k) => k.id), ['points', 'range']);
@@ -340,6 +343,20 @@ test('fm: changing the rule keeps name, market, side, stop, target and out by, a
   // a copy, not the same object
   b.stop.value = 'x';
   assert.equal(a.stop.value, '33');
+});
+
+test('fm: from the opening range with the range stop, any other rule starts from its own default stop and shows no error', () => {
+  const a = L.fmFill(FM, { ...FM.defaults.opening_range, name: 'n' });
+  assert.deepEqual(a.stop, { kind: 'range' });
+  for (const r of ['open_straddle', 'bar_breakout', 'at_time']) {
+    const b = L.fmSwitch(FM, a, r);
+    assert.deepEqual(b.stop, FM.defaults[r].stop, r);
+    assert.deepEqual(L.fmErrors(FM, b), {}, r);
+    assert.equal(L.fmKinds(FM, r, 'stop').some((k) => k.id === b.stop.kind), true, 'the kind it lands on is one the rule offers');
+  }
+  // and the other way round a points stop is kept
+  const p = L.fmSwitch(FM, L.fmStart(FM, []), 'bar_breakout');
+  assert.deepEqual(L.fmSwitch(FM, p, 'opening_range').stop, p.stop);
 });
 
 test('fm: a rule change drops a shared answer the new rule does not take', () => {
@@ -460,6 +477,7 @@ test('fm: the time boxes stop at 15:55 and the server\'s sentences are shown as 
 import { readFileSync } from 'node:fs';
 const LABJS = readFileSync(new URL('../../homebase/static/charts/lab.js', import.meta.url), 'utf8');
 const CODEJS = readFileSync(new URL('../../homebase/static/charts/labcode.js', import.meta.url), 'utf8');
+const CSS = readFileSync(new URL('../../homebase/static/charts/lab.css', import.meta.url), 'utf8');
 const FMSEC = LABJS.slice(LABJS.indexOf('/* ---- the strategy form: "Fill in a form"'), LABJS.indexOf('function reviewDialog()'));
 const FMPURE = CODEJS.slice(CODEJS.indexOf('/* ---- the strategy form ("Fill in a form"): the pure half'), CODEJS.indexOf('\nconst api = {'));
 
@@ -481,7 +499,7 @@ test('form sheet: only the three form routes, and the page names no rule', () =>
 test('form sheet: asked at most every 400 ms, never while an answer is out; Make it waits for the answer to this very form', () => {
   assert.match(FMSEC, /timer = setTimeout\(ask, 400\)/);
   assert.match(FMSEC, /if \(!d\.isConnected \|\| flying\) return;/);
-  assert.match(FMSEC, /const ready = \(\) => !making && !flying && !timer && !!built && built\.ver === ver/);
+  assert.match(FMSEC, /const ready = \(\) => !making && !stale && !failed && !flying && !timer && !!built && built\.ver === ver/);
   assert.match(FMSEC, /edit \? \{ answers, replace: true \} : \{ answers \}/);
   assert.match(FMSEC, /openScript\(built\.code, built\.name\)/);
   assert.equal((FMSEC.match(/'\/api\/tester\/drafts\/form\/read'/g) || []).length, 1, 'one place asks for the read, cached by code');
@@ -491,7 +509,7 @@ test('form sheet: nothing is rebuilt under a focused box -- only the part under 
   assert.equal((FMSEC.match(/\.innerHTML = /g) || []).length, 2, 'the sheet once, and the part below the rule: nothing else is redrawn');
   assert.match(FMSEC, /rest\.innerHTML = restHtml\(\)/);
   assert.match(FMSEC, /h\.textContent = e\[f\] \|\| words\(f\)/, 'helper words and errors are patched in place');
-  assert.match(FMSEC, /say\.textContent = first \|\| lastSay/);
+  assert.match(FMSEC, /say\.textContent = first \|\| \(failed \? FM_FAILED : lastSay\)/);
   assert.match(FMSEC, /max="\$\{C\.FM_LATEST\}"/, 'the time boxes stop at 15:55');
 });
 
@@ -502,8 +520,60 @@ test('form sheet: every value from the network reaches the page escaped', () => 
   assert.doesNotMatch(FMSEC, /insertAdjacentHTML\([^)]*(?:got|answers|r\.json)|outerHTML|document\.write/);
 });
 
+test('form sheet: a schema value goes into markup only through esc() or the [a-z0-9_] helper; every other hole is one of the page\'s own', () => {
+  assert.match(FMSEC, /const id = C\.fmId;/);
+  const holes = [...FMSEC.matchAll(/\$\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/g)].map((m) => m[1].trim());
+  const own = new Set(["edit ? 'Edit strategy' : 'New strategy'", "edit ? 'Update' : 'Make it'", 'String(v) === String(cur) ? \' selected\' : \'\'', 'more', 'desc', 'kind',
+    "opts.map(([v, t]) => opt(v, t, cur)).join('')", "edit ? ' readonly' : ''", 'C.FM_LATEST', "sel(f, C.fmKinds(sc, F.rule, f).map((x) => [x.id, x.label]), (F[f] || {}).kind, ' data-part=\"kind\"')",
+    "C.fmHasValue(k) ? '' : ' hidden'", "def.type === 'int' ? 'numeric' : 'decimal'", 'control(f)', "['name', 'market', 'rule'].map(field).join('')", 'restHtml()']);
+  const loose = holes.filter((h) => !/^(esc|id)\(/.test(h) && !own.has(h));
+  assert.deepEqual(loose, [], 'a hole that is neither escaped, nor the id helper, nor one of the page\'s own pieces');
+  assert.equal(holes.filter((h) => h === 'f' || h === 'v' || h === 'cur').length, 0, 'no bare schema value in a hole');
+  assert.ok(holes.filter((h) => h === 'id(f)').length >= 14, 'every id, for and data- attribute is written through the helper');
+  assert.doesNotMatch(FMSEC, /querySelector(All)?\(`[^`]*\$\{f\}/, 'nor in a selector');
+});
+
+test('form sheet (fix round 1): dimmed and busy while a newer build is pending; a failed or silent request says so and can be retried; a stale Update changes nothing', () => {
+  assert.match(FMSEC, /const pending = !!\(timer \|\| flying\);/);
+  assert.match(FMSEC, /say\.setAttribute\('aria-busy', 'true'\)/);
+  assert.match(FMSEC, /say\.removeAttribute\('aria-busy'\)/);
+  assert.match(FMSEC, /const FM_FAILED = 'The form could not be checked\. Try again\.';/);
+  assert.match(FMSEC, /data-x="retry" hidden>Try again<\/button>/);
+  assert.match(FMSEC, /ms = 10000/);
+  assert.match(FMSEC, /finally \{ flying = false; \}/, 'a request is never still out');
+  assert.match(FMSEC, /const FM_STALE = 'The code changed while the form was open\. Open the form again\.';/);
+  assert.match(FMSEC, /if \(b\.code !== edit\.code\) \{ stale = true; paintState\(\); return; \}/);
+  assert.match(FMSEC, /serverErr = C\.fmKeepErrors\(serverErr, served, C\.fmAnswers\(sc, F\)\)/);
+  assert.match(CODEJS + LABJS, /data-act="new" data-fk="new-welcome">Start from a template/, 'the empty state\'s button gets the keyboard back too');
+  assert.match(CSS, /p\.fm-say\[aria-busy="true"\] \{ color: var\(--pl-ink2\); \}/);
+});
+
 test('form sheet: Enter submits nothing and a held key presses nothing twice', () => {
   assert.doesNotMatch(FMSEC, /<form\b/);
   assert.match(FMSEC, /e\.repeat && \(e\.key === 'Enter' \|\| e\.key === ' '\)/);
   assert.match(FMSEC, /if \(e\.detail === 0\) swallowRepeats\(\)/);
+});
+
+
+test('fm: a schema value written into markup is cut down to [a-z0-9_]', () => {
+  assert.equal(L.fmId('last_entry'), 'last_entry');
+  assert.equal(L.fmId('range_min'), 'range_min');
+  assert.equal(L.fmId('a"><img src=x onerror=alert(1)>'), 'aimgsrcxonerroralert1');
+  assert.equal(L.fmId("x' onfocus='y"), 'xonfocusy');
+  assert.equal(L.fmId(null), '');
+  assert.equal(L.fmId(42), '42');
+  for (const f of Object.keys(FM.fields)) assert.equal(L.fmId(f), f, `${f} is already that shape`);
+  for (const r of FM.rules) assert.equal(L.fmId(r.id), r.id);
+});
+
+test('fm: a server error stays only under a box whose value is what was sent', () => {
+  const asked = { name: 'a', distance: 15, stop: { kind: 'points', value: 50 }, out_by: '15:55' };
+  const errs = { name: 'That name is taken.', stop: 'Every entry needs a stop.', out_by: 'It must be after the last entry, and 15:55 at the latest.', form: 'The form is incomplete.' };
+  assert.deepEqual(L.fmKeepErrors(errs, asked, { ...asked }), errs, 'nothing changed: all stay');
+  assert.deepEqual(L.fmKeepErrors(errs, asked, { ...asked, name: 'b' }), { stop: errs.stop, out_by: errs.out_by, form: errs.form });
+  assert.deepEqual(L.fmKeepErrors(errs, asked, { ...asked, stop: { kind: 'points', value: 51 } }).stop, undefined, 'a nested value is compared whole');
+  assert.deepEqual(L.fmKeepErrors(errs, asked, { ...asked, stop: { kind: 'points', value: 50 } }).stop, errs.stop);
+  assert.deepEqual(L.fmKeepErrors(errs, asked, { name: 'a', distance: 15 }), { name: errs.name, form: errs.form }, 'a box that is gone from the form has no error to show');
+  assert.deepEqual(L.fmKeepErrors({}, asked, asked), {});
+  assert.deepEqual(L.fmKeepErrors(errs, null, asked), { form: errs.form }, 'no record of what was sent: only what is not a box stays');
 });

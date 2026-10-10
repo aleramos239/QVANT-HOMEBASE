@@ -610,7 +610,7 @@ def _field_defs() -> dict:
                                                        "cancelled.", "type": "time", "default": "11:00"},
         "stop": {"label": "Stop", "words": "Every entry carries a stop.", "type": "stop",
                  "kinds": [{"id": "points", "label": "Points", "min_ticks": 2, "tick_multiple": True},
-                           {"id": "range", "label": "Other side of the range"}],
+                           {"id": "range", "label": "Other side of the range", "rules": ["opening_range"]}],
                  "default": {"kind": "points", "value": 50.0}},
         "target": {"label": "Target", "words": "Where to take profit, or none.", "type": "target",
                    "kinds": [{"id": "points", "label": "Points", "min_ticks": 1, "tick_multiple": True},

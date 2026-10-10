@@ -742,6 +742,14 @@ function fmAnswers(sc, st) {
   }
   return out;
 }
+/* A schema value that is written into markup (an id, a for, a data- attribute): cut down to [a-z0-9_], the shape every field id has. */
+const fmId = (x) => String(x == null ? '' : x).replace(/[^a-z0-9_]/g, '');
+/* The server errors that may still be shown: a box keeps its error only while its value is what was sent (a corrected box shows none). */
+function fmKeepErrors(errors, asked, now) {
+  const out = {};
+  for (const [k, v] of Object.entries(errors || {})) if (JSON.stringify(asked ? asked[k] : undefined) === JSON.stringify(now ? now[k] : undefined)) out[k] = v;
+  return out;
+}
 /* the sentence to show for a set of errors: the first of the fields in the order they are drawn, then any other key */
 function fmFirstError(errors, order) {
   const e = errors || {}, keys = [...order.filter((k) => e[k]), ...Object.keys(e).filter((k) => !order.includes(k) && e[k])];
@@ -754,7 +762,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError,
+  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

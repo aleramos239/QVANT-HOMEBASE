@@ -562,7 +562,21 @@ function swallowRepeats() {
   document.addEventListener('keydown', eat, true);
   document.addEventListener('keyup', off, true);
 }
-/* edit: null for a new strategy, else { key, answers, wanted? } of the open draft. Resolves true when the sheet opened. */
+const FM_FAILED = 'The form could not be checked. Try again.';
+const FM_STALE = 'The code changed while the form was open. Open the form again.';
+/* a POST that never stays out for ever: after 10 s it is cut off and counts as no answer */
+function timed(path, body, ms = 10000) {
+  const ctl = new AbortController();
+  let t = 0;
+  const late = new Promise((res) => { t = setTimeout(() => { ctl.abort(); res({ ok: false, status: 0, json: null, error: 'No answer' }); }, ms); });
+  return Promise.race([call(path, { method: 'POST', body: JSON.stringify(body), signal: ctl.signal }), late]).finally(() => clearTimeout(t));
+}
+/* the button that opened a sheet, found again by its own data-fk after a repaint */
+const backTo = (anchor, kind) => {
+  const fk = anchor && anchor.dataset && anchor.dataset.fk;
+  return (fk && [...root.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === fk)) || root.querySelector(`[data-act="${kind}"]`);
+};
+/* edit: null for a new strategy, else { key, answers, code, wanted? } of the open draft. Resolves true when the sheet opened. */
 async function formOpen(anchor, edit = null) {
   const r = await send('GET', '/api/tester/drafts/form');
   const sc = r.ok && r.json && Array.isArray(r.json.rules) && r.json.rules.length ? r.json : null;
@@ -572,78 +586,91 @@ async function formOpen(anchor, edit = null) {
     log(`<span class="err">${esc(!sc ? (r.status === 404 ? 'The chart service is from before the form: restart it once to use it.' : `Could not load the form: ${r.error || 'it came back empty'}`) : 'The form does not know this strategy’s entry rule.')}</span>`);
     return false;
   }
-  const back = anchor && anchor.isConnected ? anchor : root.querySelector(`[data-act="${edit ? 'more' : 'new'}"]`);
+  const back = anchor && anchor.isConnected ? anchor : backTo(anchor, edit ? 'more' : 'new');
   if (back && !overlay) back.focus({ preventScroll: true });       // the sheet hands the keyboard back to what opened it
-  let F = F0, touched = !!edit, built = null, serverErr = {}, lastSay = '', flying = false, making = false, timer = 0, ver = 0;
+  let F = F0, touched = !!edit, built = null, serverErr = {}, served = null, failed = false, stale = false, lastSay = '', flying = false, making = false, timer = 0, ver = 0;
+  const id = C.fmId;       // a schema value that goes into markup (an id, a for, a data- attribute) is cut down to [a-z0-9_] first
   const taken = takenNames();
   const d = dialog(`<h2 id="labDlgTitle">${edit ? 'Edit strategy' : 'New strategy'}</h2>`);
   d.classList.add('pl-dlg');
   const ruleOf = () => sc.rules.find((x) => x.id === F.rule) || sc.rules[0];
   const words = (f) => (f === 'name' ? (edit ? 'A strategy keeps its name.' : FM_NAME_WORDS) : f === 'rule' ? ruleOf().words : sc.fields[f].words);
   const opt = (v, t, cur) => `<option value="${esc(v)}"${String(v) === String(cur) ? ' selected' : ''}>${esc(t)}</option>`;
-  const sel = (f, opts, cur, more = '') => `<select id="fm_${f}" data-fm="${f}"${more} aria-describedby="fh_${f}">${opts.map(([v, t]) => opt(v, t, cur)).join('')}</select>`;
+  const sel = (f, opts, cur, more = '') => `<select id="fm_${id(f)}" data-fm="${id(f)}"${more} aria-describedby="fh_${id(f)}">${opts.map(([v, t]) => opt(v, t, cur)).join('')}</select>`;
   const kindOf = (f) => C.fmKinds(sc, F.rule, f).find((k) => k.id === (F[f] || {}).kind);
   const control = (f) => {
-    const desc = ` aria-describedby="fh_${f}"`;
+    const desc = ` aria-describedby="fh_${id(f)}"`;
     if (f === 'name') return `<input id="fm_name" data-fm="name" value="${esc(F.name)}"${edit ? ' readonly' : ''} spellcheck="false" autocomplete="off" autocapitalize="off"${desc}>`;
     if (f === 'rule') return sel(f, sc.rules.map((x) => [x.id, x.label]), F.rule);
     const def = sc.fields[f];
     if (f === 'side') return sel(f, C.fmSides(sc, F.rule), F.side);
     if (def.type === 'choice') return sel(f, (def.choices || []).map((c) => [c, c]), F[f]);
-    if (def.type === 'time') return `<input type="time" id="fm_${f}" data-fm="${f}" value="${esc(F[f])}" max="${C.FM_LATEST}" step="60"${desc}>`;
+    if (def.type === 'time') return `<input type="time" id="fm_${id(f)}" data-fm="${id(f)}" value="${esc(F[f])}" max="${C.FM_LATEST}" step="60"${desc}>`;
     if (def.type === 'stop' || def.type === 'target') {
       const k = kindOf(f);
       return `<div class="pl-two">${sel(f, C.fmKinds(sc, F.rule, f).map((x) => [x.id, x.label]), (F[f] || {}).kind, ' data-part="kind"')}
-        <input id="fm_${f}_v" class="fm-v" data-fm="${f}" data-part="value" value="${esc((F[f] || {}).value == null ? '' : F[f].value)}" inputmode="decimal" aria-label="${esc(def.label)} amount" aria-describedby="fh_${f}" spellcheck="false" autocomplete="off"${C.fmHasValue(k) ? '' : ' hidden'}></div>`;
+        <input id="fm_${id(f)}_v" class="fm-v" data-fm="${id(f)}" data-part="value" value="${esc((F[f] || {}).value == null ? '' : F[f].value)}" inputmode="decimal" aria-label="${esc(def.label)} amount" aria-describedby="fh_${id(f)}" spellcheck="false" autocomplete="off"${C.fmHasValue(k) ? '' : ' hidden'}></div>`;
     }
-    return `<input id="fm_${f}" data-fm="${f}" value="${esc(F[f] == null ? '' : F[f])}" inputmode="${def.type === 'int' ? 'numeric' : 'decimal'}" spellcheck="false" autocomplete="off"${desc}>`;
+    return `<input id="fm_${id(f)}" data-fm="${id(f)}" value="${esc(F[f] == null ? '' : F[f])}" inputmode="${def.type === 'int' ? 'numeric' : 'decimal'}" spellcheck="false" autocomplete="off"${desc}>`;
   };
-  const field = (f) => `<div class="bp-f pl-f"><label for="fm_${f}">${esc(f === 'name' ? 'Name' : f === 'rule' ? 'Entry rule' : sc.fields[f].label)}</label>${control(f)}<small id="fh_${f}">${esc(words(f))}</small></div>`;
+  const field = (f) => `<div class="bp-f pl-f"><label for="fm_${id(f)}">${esc(f === 'name' ? 'Name' : f === 'rule' ? 'Entry rule' : sc.fields[f].label)}</label>${control(f)}<small id="fh_${id(f)}">${esc(words(f))}</small></div>`;
   const restHtml = () => C.fmShown(sc, F.rule).slice(3).map(field).join('');
   d.innerHTML = `<h2 id="labDlgTitle">${edit ? 'Edit strategy' : 'New strategy'}</h2>
     <div class="pl-body" tabindex="-1"><div class="bp-form">${['name', 'market', 'rule'].map(field).join('')}<div class="bp-form" id="fmRest">${restHtml()}</div></div></div>
     <div class="pl-foot"><p class="fm-say" id="fmSay" role="status" aria-live="polite"></p>
+      <button class="btn btn-ghost btn-sm fm-retry" data-x="retry" hidden>Try again</button>
       <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go" aria-describedby="fmSay" disabled>${edit ? 'Update' : 'Make it'}</button></div></div>`;
-  const rest = $('#fmRest', d), say = $('#fmSay', d), go = $('[data-x="go"]', d);
+  const rest = $('#fmRest', d), say = $('#fmSay', d), go = $('[data-x="go"]', d), retry = $('[data-x="retry"]', d);
   const errors = () => ({ ...serverErr, ...C.fmErrors(sc, F) });          // what the page can see wins over an older answer
-  const ready = () => !making && !flying && !timer && !!built && built.ver === ver && !Object.keys(C.fmErrors(sc, F)).length;
+  const ready = () => !making && !stale && !failed && !flying && !timer && !!built && built.ver === ver && !Object.keys(C.fmErrors(sc, F)).length;
   /* everything that changes while a box has focus is changed where it stands */
   const paintState = () => {
     const e = errors(), order = C.fmShown(sc, F.rule);
     for (const f of order) {
-      const h = $(`#fh_${f}`, d);
+      const h = $(`#fh_${id(f)}`, d);
       if (!h) continue;
       h.textContent = e[f] || words(f);
       h.classList.toggle('pl-bad', !!e[f]);
-      for (const c of d.querySelectorAll(`[data-fm="${f}"]`)) { c.classList.toggle('bad', !!e[f]); c.setAttribute('aria-invalid', String(!!e[f])); }
+      for (const c of d.querySelectorAll(`[data-fm="${id(f)}"]`)) { c.classList.toggle('bad', !!e[f]); c.setAttribute('aria-invalid', String(!!e[f])); }
     }
-    const first = C.fmFirstError(e, order);
+    const first = stale ? FM_STALE : C.fmFirstError(e, order);
     if (built && built.ver === ver) lastSay = built.sentence;
-    say.textContent = first || lastSay;
-    say.classList.toggle('bad', !!first);
+    say.textContent = first || (failed ? FM_FAILED : lastSay);
+    say.classList.toggle('bad', !!first || failed);
+    const pending = !!(timer || flying);          // the words under it may describe an older form: kept, shown dim, and said to be on their way
+    if (pending) say.setAttribute('aria-busy', 'true'); else say.removeAttribute('aria-busy');
+    retry.hidden = !failed || !!first;
     go.disabled = !ready();
   };
   const ask = async () => {
     timer = 0;
     if (!d.isConnected || flying) return;           // an answer on its way asks again when it lands, if the form changed since
-    if (Object.keys(C.fmErrors(sc, F)).length) { built = null; paintState(); return; }
+    if (Object.keys(C.fmErrors(sc, F)).length) {            // not sent: an older answer's errors stay only under boxes that are as they were
+      built = null; failed = false;
+      serverErr = C.fmKeepErrors(serverErr, served, C.fmAnswers(sc, F));
+      paintState();
+      return;
+    }
     const mine = ver, answers = C.fmAnswers(sc, F);
-    flying = true; paintState();
-    const a = await send('POST', '/api/tester/drafts/form/build', edit ? { answers, replace: true } : { answers });
-    flying = false;
+    flying = true; failed = false; paintState();
+    let a;
+    try { a = await timed('/api/tester/drafts/form/build', edit ? { answers, replace: true } : { answers }); }
+    catch (_) { a = { ok: false, json: null }; }
+    finally { flying = false; }            // whatever happened, a request is never still "out"
     if (!d.isConnected) return;
     const j = a.ok && a.json && typeof a.json === 'object' ? a.json : null;
     if (mine === ver) {
-      built = null; serverErr = {};
+      built = null; serverErr = {}; served = null;
       if (j && j.ok === true && typeof j.code === 'string') built = { ver: mine, code: j.code, name: String(j.name || ''), sentence: String(j.sentence || '') };
-      else if (j && j.errors && typeof j.errors === 'object') serverErr = Object.fromEntries(Object.entries(j.errors).filter(([, v]) => typeof v === 'string'));
-      else serverErr = { form: a.error || 'The chart service did not answer.' };
+      else if (j && j.ok === false && j.errors && typeof j.errors === 'object') { serverErr = Object.fromEntries(Object.entries(j.errors).filter(([, v]) => typeof v === 'string')); served = answers; }
+      else failed = true;                     // no answer, a refusal of the request, or something this page does not read
     }
     paintState();
     if (mine !== ver && !timer) ask();           // changed meanwhile and the 400 ms have passed: ask now
   };
   const touch = (f) => {
     ver++;
+    failed = false;
     if (f === 'rule' || f === 'market') serverErr = {}; else delete serverErr[f];
     clearTimeout(timer);
     timer = setTimeout(ask, 400);
@@ -656,7 +683,7 @@ async function formOpen(anchor, edit = null) {
     if (f === 'rule') { F = C.fmSwitch(sc, F, t.value); suggest(); rest.innerHTML = restHtml(); }
     else if (f === 'stop' || f === 'target') {
       if (t.dataset.part === 'kind') {
-        const k = C.fmKinds(sc, F.rule, f).find((x) => x.id === t.value), v = $(`#fm_${f}_v`, d);
+        const k = C.fmKinds(sc, F.rule, f).find((x) => x.id === t.value), v = $(`#fm_${id(f)}_v`, d);
         F[f] = C.fmHasValue(k) ? { kind: t.value, value: C.fmKindValue(sc, F.rule, f, t.value) } : { kind: t.value };
         v.value = F[f].value == null ? '' : F[f].value; v.hidden = !C.fmHasValue(k);
       } else F[f] = { ...F[f], value: t.value };
@@ -673,7 +700,18 @@ async function formOpen(anchor, edit = null) {
     const x = e.target.closest('[data-x]');
     if (!x) return;
     if (x.dataset.x === 'cancel') return closeDialog();
+    if (x.dataset.x === 'retry') {
+      if (flying) return;
+      d.focus({ preventScroll: true });           // the button goes away: the keyboard stays in the sheet
+      clearTimeout(timer); timer = 0; failed = false;
+      return ask();
+    }
     if (x.dataset.x !== 'go' || !ready()) return;
+    if (edit) {                                   // the draft is replaced only if it is the code the form read
+      const b = S.bufs.get(edit.key);
+      if (!b || b.kind === 'builtin') { closeDialog(); return log('<span class="err">That strategy is not open any more.</span>'); }
+      if (b.code !== edit.code) { stale = true; paintState(); return; }
+    }
     making = true; go.disabled = true;
     if (e.detail === 0) swallowRepeats();           // pressed with the keyboard: a held key goes nowhere
     if (!edit) {
@@ -681,9 +719,7 @@ async function formOpen(anchor, edit = null) {
       openScript(built.code, built.name);
       return log('Made from the form. Run it to see how it would have done.');
     }
-    const b = S.bufs.get(edit.key);
-    if (!b || b.kind === 'builtin') { closeDialog(); return log('<span class="err">That strategy is not open any more.</span>'); }
-    replaceCode(b, built.code);
+    replaceCode(S.bufs.get(edit.key), built.code);
     closeDialog();
     log('Updated from the form. Run it again.');
   });
@@ -696,10 +732,11 @@ async function formOpen(anchor, edit = null) {
 }
 /* "Edit in the form…": a strategy the form made opens in it; one changed by hand asks first */
 async function formEdit(anchor, b) {
-  const got = await formRead(b.code);
+  const code = b.code;            // what the form reads, and what Update may replace
+  const got = await formRead(code);
   if (!got) return log('<span class="err">This strategy was not made with the form.</span>');
-  if (got.intact) return formOpen(anchor, { key: b.key, answers: got.answers });
-  const back = anchor && anchor.isConnected ? anchor : root.querySelector('[data-act="more"]');
+  if (got.intact) return formOpen(anchor, { key: b.key, answers: got.answers, code });
+  const back = anchor && anchor.isConnected ? anchor : backTo(anchor, 'more');
   if (back) back.focus({ preventScroll: true });
   const d = dialog(`<h2>Edit in the form</h2><p>This strategy was changed by hand. Updating it from the form replaces the code with the form's version.</p>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Cancel</button><button class="btn btn-default" data-x="go">Open the form</button></div>`);
@@ -709,7 +746,7 @@ async function formEdit(anchor, b) {
     if (!x) return;
     if (x.dataset.x === 'cancel') return closeDialog();
     x.disabled = true;
-    if (!(await formOpen(anchor, { key: b.key, answers: got.answers, wanted: () => d.isConnected })) && d.isConnected) closeDialog();
+    if (!(await formOpen(anchor, { key: b.key, answers: got.answers, code, wanted: () => d.isConnected })) && d.isConnected) closeDialog();
   });
 }
 
@@ -1519,7 +1556,7 @@ function paintEditor() {
   if (!b) {
     el.innerHTML = `<div class="lab-welcome"><h2>Write or paste a strategy</h2>
       <p>Backtest it on real tick data in a sandbox, see every trade on the chart, and promote it to the Desk when you like what you see.</p>
-      <div class="acts"><button class="btn btn-default btn-lg" data-act="paste">Paste a script</button><button class="btn btn-outline btn-lg" data-act="new">Start from a template</button></div></div>`;
+      <div class="acts"><button class="btn btn-default btn-lg" data-act="paste">Paste a script</button><button class="btn btn-outline btn-lg" data-act="new" data-fk="new-welcome">Start from a template</button></div></div>`;
     paintHead();
     return;
   }

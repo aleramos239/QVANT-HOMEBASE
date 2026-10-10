@@ -92,6 +92,26 @@ def test_schema_carries_what_the_page_needs_to_check_a_number():
             assert field["tick_multiple"] is True and field["min_ticks"] >= 1
 
 
+def test_the_schema_says_which_rule_a_stop_choice_belongs_to():
+    """A choice with a `rules` list is offered to those rules only; one without is offered to every rule."""
+    s = lab_forms.schema()
+    stop = {k["id"]: k for k in s["fields"]["stop"]["kinds"]}
+    assert stop["range"]["rules"] == ["opening_range"] and "rules" not in stop["points"]
+    assert all("rules" not in k for k in s["fields"]["target"]["kinds"])
+    for r in s["rules"]:
+        offered = {k["id"] for k in s["fields"]["stop"]["kinds"] if r["id"] in k.get("rules", [r["id"]])}
+        assert offered == ({"points", "range"} if r["id"] == "opening_range" else {"points"})
+        base = s["defaults"][r["id"]] | {"name": "my_orb"}
+        for kind in stop:
+            ans = base | {"stop": {"kind": "range"} if kind == "range" else {"kind": "points", "value": 50.0}}
+            if kind in offered:
+                assert lab_forms.build(ans)
+            else:
+                with pytest.raises(lab_forms.FormError) as e:
+                    lab_forms.build(ans)
+                assert e.value.field == "stop"
+
+
 def test_schema_is_plain_json():
     s = lab_forms.schema()
     assert json.loads(json.dumps(s)) == s
