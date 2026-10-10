@@ -48,6 +48,11 @@ window.HBIcons = {
   cursor: svg('<path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z"/>'),
   trend: svg('<circle cx="5" cy="19" r="2"/><circle cx="19" cy="5" r="2"/><path d="M6.5 17.5 17.5 6.5"/>'),
   hline: svg('<circle cx="12" cy="12" r="3"/><line x1="3" x2="9" y1="12" y2="12"/><line x1="15" x2="21" y1="12" y2="12"/>'),
+  // 2026-10-09: a ray (one end fixed, running on), an extended line (running on both ways), a vertical line, a Fib retracement
+  ray: svg('<circle cx="5" cy="19" r="2"/><path d="M6.5 17.5 21 3"/>'),
+  xline: svg('<circle cx="12" cy="12" r="2"/><path d="M3 21l7.5-7.5"/><path d="M13.5 10.5 21 3"/>'),
+  vline: svg('<circle cx="12" cy="12" r="3"/><line x1="12" x2="12" y1="3" y2="9"/><line x1="12" x2="12" y1="15" y2="21"/>'),
+  fib: svg('<path d="M3 5h18"/><path d="M3 10h13"/><path d="M3 14.5h18"/><path d="M3 19h9"/>'),
   rect: svg('<rect width="20" height="12" x="2" y="6" rx="2"/>'),
   measure: svg('<path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z"/><path d="m14.5 12.5 2-2"/><path d="m11.5 9.5 2-2"/><path d="m8.5 6.5 2-2"/><path d="m17.5 15.5 2-2"/>'),
   trash: svg('<path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>'),

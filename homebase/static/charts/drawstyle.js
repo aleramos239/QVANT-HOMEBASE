@@ -9,31 +9,55 @@
 'use strict';
 
 const LINE_STYLES = ['solid', 'dashed', 'dotted'];
-/* Where the optional text label sits: trend / hline are relative to the line, rect is inside the
-   box (spec: "above/below/middle" for lines, "inside top/middle/bottom" for a rectangle). */
-const LABEL_POS = { trend: ['above', 'below', 'middle'], hline: ['above', 'below', 'middle'], rect: ['top', 'middle', 'bottom'] };
+/* The straight two-point lines: a trend line stops at its points (unless it is told to extend), a
+   ray runs on past its second point, an extended line runs on both ways. */
+const LINE_TYPES = ['trend', 'ray', 'xline'];
+const isLine = (t) => LINE_TYPES.includes(t);
+/* Where the optional text label sits: lines are relative to the line, a rectangle is inside the
+   box (spec: "above/below/middle" for lines, "inside top/middle/bottom" for a rectangle), a
+   vertical line beside it at the top / middle / bottom of the pane. */
+const LINE_POS = ['above', 'below', 'middle'], BOX_POS = ['top', 'middle', 'bottom'];
+const LABEL_POS = { trend: LINE_POS, ray: LINE_POS, xline: LINE_POS, hline: LINE_POS, rect: BOX_POS, vline: BOX_POS };
+const LABEL_ALIGN = ['left', 'center', 'right'];      // a horizontal line's label, along the line
 const MAX_TEXT = 200;
+const MAX_FIB_LEVELS = 16, FIB_MIN = -10, FIB_MAX = 10;
+const TEXT = ['text', 'fontSize', 'textColor', 'bold', 'labelPos'];
 /* Exactly the style fields each drawing type takes (check_style in server.py mirrors this list);
    long/short keep their existing look (colour, via the drawing's own top-level `color`) and take
    no style object of their own. */
 const FIELDS = {
-  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'text', 'fontSize', 'textColor', 'bold', 'labelPos'],
-  hline: ['width', 'lineStyle', 'axisLabel', 'text', 'fontSize', 'textColor', 'bold', 'labelPos'],
-  rect: ['width', 'lineStyle', 'fillColor', 'text', 'fontSize', 'textColor', 'bold', 'labelPos'],
+  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats'],
+  ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  xline: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  hline: ['width', 'lineStyle', 'axisLabel', ...TEXT, 'labelAlign'],
+  vline: ['width', 'lineStyle', ...TEXT, 'timeLabel'],
+  rect: ['width', 'lineStyle', 'fillColor', ...TEXT, 'border', 'midline', 'quarters', 'midStyle', 'extendRight', 'priceLabels'],
+  fib: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'reverse', 'fontSize'],
   long: [], short: [],
 };
+/* The Fibonacci levels a fresh retracement carries: {v: the ratio, on: drawn, color}. 0 sits on the
+   SECOND point (where the drag ended) and 1 on the first, so the levels count the pullback. */
+const FIB_LEVELS = [[0, '#787B86'], [0.236, '#F23645'], [0.382, '#FF9800'], [0.5, '#4CAF50'], [0.618, '#089981'],
+  [0.786, '#00BCD4'], [1, '#787B86'], [1.618, '#2962FF']].map(([v, color]) => ({ v, on: v !== 1.618, color }));
+const LINE_DEF = { width: 2, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'above',
+  priceLabel: false, stats: false };
 const DEFAULTS = {
-  trend: { width: 2, lineStyle: 'solid', extendLeft: false, extendRight: false, text: '', fontSize: 12,
-    textColor: '#2962FF', bold: false, labelPos: 'above' },
+  trend: { ...LINE_DEF, extendLeft: false, extendRight: false },
+  ray: { ...LINE_DEF },
+  xline: { ...LINE_DEF },
   // width 1 / solid / axisLabel on is today's look (the hline price line, unstyled) -- an old
   // drawing with no `style` at all must render exactly as it did before this plan
   hline: { width: 1, lineStyle: 'solid', axisLabel: true, text: '', fontSize: 12,
-    textColor: '#2962FF', bold: false, labelPos: 'above' },
+    textColor: '#2962FF', bold: false, labelPos: 'above', labelAlign: 'center' },
+  vline: { width: 1, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'top', timeLabel: true },
   // no fillColor here on purpose: unset means "follow the theme" (P.accentSoft -- .10 light,
   // .20 dark), exactly like an old rect drawn before this plan. A fixed default would have been
   // wrong in dark theme (review finding): normalize() below omits the key entirely rather than
   // filling in one theme's value.
-  rect: { width: 1, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'top' },
+  rect: { width: 1, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'top',
+    border: true, midline: false, quarters: false, midStyle: 'dashed', extendRight: false, priceLabels: false },
+  fib: { width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, levels: FIB_LEVELS, showLevels: true, showPrices: true,
+    fill: true, reverse: false, fontSize: 11 },
   long: {}, short: {},
 };
 /* Canvas dash patterns (ctx.setLineDash), keyed the same as lineStyle. */
@@ -53,15 +77,23 @@ function isColor(v) {
   return !!m && +m[1] <= 255 && +m[2] <= 255 && +m[3] <= 255;
 }
 
+function isValidLevel(l) {
+  return !!l && typeof l === 'object' && typeof l.v === 'number' && Number.isFinite(l.v) && l.v >= FIB_MIN && l.v <= FIB_MAX
+    && typeof l.on === 'boolean' && (l.color === undefined || isColor(l.color));
+}
 function isValidField(type, key, v) {
   switch (key) {
     case 'width': return Number.isInteger(v) && v >= 1 && v <= 4;
-    case 'lineStyle': return LINE_STYLES.includes(v);
-    case 'extendLeft': case 'extendRight': case 'axisLabel': case 'bold': return typeof v === 'boolean';
+    case 'lineStyle': case 'midStyle': return LINE_STYLES.includes(v);
+    case 'extendLeft': case 'extendRight': case 'axisLabel': case 'bold': case 'priceLabel': case 'stats': case 'timeLabel':
+    case 'border': case 'midline': case 'quarters': case 'priceLabels': case 'showLevels': case 'showPrices': case 'fill': case 'reverse':
+      return typeof v === 'boolean';
     case 'fillColor': case 'textColor': return isColor(v);
     case 'text': return typeof v === 'string' && v.length <= MAX_TEXT;
     case 'fontSize': return Number.isInteger(v) && v >= 10 && v <= 28;
     case 'labelPos': return (LABEL_POS[type] || []).includes(v);
+    case 'labelAlign': return LABEL_ALIGN.includes(v);
+    case 'levels': return Array.isArray(v) && v.length >= 1 && v.length <= MAX_FIB_LEVELS && v.every(isValidLevel);
     default: return false;
   }
 }
@@ -81,6 +113,8 @@ function normalize(type, style) {
     if (key === 'fillColor' && def[key] == null) continue;
     out[key] = def[key];
   }
+  // a retracement's levels: its own copies, ascending, each {v, on, color} and nothing else
+  if (out.levels) out.levels = out.levels.map((l) => ({ v: l.v, on: l.on, color: isColor(l.color) ? l.color : '#787B86' })).sort((a, b) => a.v - b.v);
   return out;
 }
 
@@ -108,20 +142,70 @@ function extendLine(x0, y0, x1, y1, paneW, left, right) {
   return flip ? [rx, ry, lx, ly] : [lx, ly, rx, ry];
 }
 
+/* The two pixel ends of a straight line as it is DRAWN: a trend line as extendLine above (its two
+   switches); a ray runs on from its SECOND point, away from the first, to the pane's edge; an
+   extended line runs to the edge both ways. A vertical one (x0 === x1) runs to the top / bottom of
+   the pane (paneH) instead, the way it points. */
+function lineEnds(type, x0, y0, x1, y1, paneW, paneH, style) {
+  if (type === 'trend') return extendLine(x0, y0, x1, y1, paneW, !!(style && style.extendLeft), !!(style && style.extendRight));
+  if (type !== 'ray' && type !== 'xline') return [x0, y0, x1, y1];
+  if (x0 === x1) {
+    if (y0 === y1) return [x0, y0, x1, y1];
+    const down = y1 > y0, far = down ? paneH : 0, near = down ? 0 : paneH;
+    return [x0, type === 'xline' ? near : y0, x1, far];
+  }
+  const right = x1 > x0;
+  return type === 'xline' ? extendLine(x0, y0, x1, y1, paneW, true, true) : extendLine(x0, y0, x1, y1, paneW, !right, right);   // a ray: only its far side
+}
+
+/* A retracement level's price: 0 on the second point (b), 1 on the first (a); `reverse` swaps them. */
+function fibPrice(a, b, v, reverse) { return reverse ? a + (b - a) * v : b + (a - b) * v; }
+/* The levels that are drawn, ascending by ratio. */
+function fibLevels(style) { return ((style && style.levels) || []).filter((l) => l.on); }
+/* "0.618" / "1" / "1.618": a ratio as the chart writes it. */
+function fibText(v) { return String(Math.round(v * 1000) / 1000); }
+
+/* ---- which intervals a drawing shows on (2026-10-09) ----
+   d.vis = {min, max}: bar lengths in SECONDS, either may be null (no bound). A chart whose bars are
+   not time bars (tick, volume, range) shows every drawing: it has no interval to compare. */
+const VIS_MAX_S = 31 * 86400;
+function normalizeVis(v) {
+  if (!v || typeof v !== 'object') return null;
+  const ok = (x) => Number.isInteger(x) && x >= 1 && x <= VIS_MAX_S;
+  const min = ok(v.min) ? v.min : null, max = ok(v.max) ? v.max : null;
+  if (min == null && max == null) return null;
+  if (min != null && max != null && min > max) return null;
+  return { min, max };
+}
+function shownOn(vis, spec) {
+  const v = normalizeVis(vis), m = /^time:(\d+)$/.exec(String(spec));
+  if (!v || !m) return true;
+  const n = +m[1];
+  return (v.min == null || n >= v.min) && (v.max == null || n <= v.max);
+}
+
 /* Where a text label sits, in pixels, given the drawing's already-computed handle points (as
    handlePoints() in drawings.js returns them) and the pane's width (hline centres on the pane,
    like the measure box does). Returns {x, y, baseline: 'top'|'middle'|'bottom'} -- the caller sets
    textAlign itself (always 'center' here). Null when there is nothing to anchor to. */
-function labelAnchor(type, hs, pos, paneWidth) {
+function labelAnchor(type, hs, pos, paneWidth, align = 'center', paneHeight = 0) {
   if (!hs || !hs.length) return null;
   const GAP = 8;
   if (type === 'hline') {
-    const y = hs[0][1], x = paneWidth / 2;
-    if (pos === 'below') return { x, y: y + GAP, baseline: 'top' };
-    if (pos === 'middle') return { x, y, baseline: 'middle' };
-    return { x, y: y - GAP, baseline: 'bottom' };
+    // along the line: left / centre / right of the pane (`align`, also the text's own alignment)
+    const y = hs[0][1], x = align === 'left' ? GAP : align === 'right' ? paneWidth - GAP : paneWidth / 2;
+    if (pos === 'below') return { x, y: y + GAP, baseline: 'top', align };
+    if (pos === 'middle') return { x, y, baseline: 'middle', align };
+    return { x, y: y - GAP, baseline: 'bottom', align };
   }
-  if (type === 'trend') {
+  if (type === 'vline') {
+    // beside the line, to its right, at the top / middle / bottom of the pane
+    const x = hs[0][0] + GAP;
+    if (pos === 'bottom') return { x, y: paneHeight - GAP - 14, baseline: 'bottom', align: 'left' };
+    if (pos === 'middle') return { x, y: paneHeight / 2, baseline: 'middle', align: 'left' };
+    return { x, y: GAP, baseline: 'top', align: 'left' };
+  }
+  if (isLine(type)) {
     const [[x0, y0], [x1, y1]] = hs, mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
     if (pos === 'below') return { x: mx, y: my + GAP, baseline: 'top' };
     if (pos === 'middle') return { x: mx, y: my, baseline: 'middle' };
@@ -156,8 +240,9 @@ function shouldStartRuler(tool, shiftKey) { return tool === 'cursor' && !!shiftK
    mid-drag goes back to the pointer's own price on the very next move. */
 function snapEndpointPrice(otherPrice, proposedPrice, shiftHeld) { return shiftHeld ? otherPrice : proposedPrice; }
 
-const api = { LINE_STYLES, LABEL_POS, FIELDS, DEFAULTS, MAX_TEXT, isColor, isValidField, normalize, starting,
-  dashFor, extendLine, labelAnchor, toolbarAnchor, shouldStartRuler, snapEndpointPrice };
+const api = { LINE_STYLES, LINE_TYPES, isLine, LABEL_POS, LABEL_ALIGN, FIELDS, DEFAULTS, FIB_LEVELS, MAX_FIB_LEVELS, MAX_TEXT, VIS_MAX_S,
+  isColor, isValidField, normalize, starting, dashFor, extendLine, lineEnds, fibPrice, fibLevels, fibText, normalizeVis, shownOn,
+  labelAnchor, toolbarAnchor, shouldStartRuler, snapEndpointPrice };
 if (typeof window !== 'undefined') window.HBDrawStyle = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

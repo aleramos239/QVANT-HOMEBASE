@@ -1348,7 +1348,7 @@ def test_check_drawings_caps_the_list():
 def test_a_bad_drawings_body_is_a_400_and_saves_nothing(tmp_path):
     with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         assert client.put("/api/drawings/NQ", json=[H1]).status_code == 200
-        r = client.put("/api/drawings/NQ", json=[{**H1, "type": "fib"}])
+        r = client.put("/api/drawings/NQ", json=[{**H1, "type": "spiral"}])      # not a drawing type ("fib" is one since 2026-10-09)
         assert r.status_code == 400 and "type" in r.json()["detail"]
         nan = '[{"id": "a", "type": "hline", "points": [{"p": NaN}]}]'
         assert client.put("/api/drawings/NQ", content=nan,
@@ -2082,3 +2082,88 @@ def test_todays_thin_hours_reach_the_page_only_from_a_reading_newer_than_the_tap
         reading(clock[0] - 30_000)                                    # the tick job's next run ended: read after it
         want = "2026-09-24T13:46:30+00:00"
         assert today() == {"NQ": spans}
+
+
+# ---- 2026-10-09: ray, extended line, vertical line, Fib retracement; more settings; which intervals a drawing shows on ----
+T0_MS = 1790000000000
+RAY = {"id": "n1", "type": "ray", "points": [{"t": T0_MS, "p": 30900.25}, {"t": T0_MS + 600000, "p": 30950.0}]}
+XLINE = {"id": "n2", "type": "xline", "points": [{"t": T0_MS, "p": 30900.25}, {"t": T0_MS + 600000, "p": 30950.0}]}
+VLINE = {"id": "n3", "type": "vline", "points": [{"t": T0_MS}]}
+FIB = {"id": "n4", "type": "fib", "points": [{"t": T0_MS, "p": 30800.0}, {"t": T0_MS + 600000, "p": 30950.0}]}
+
+
+def test_the_new_tools_are_kept_with_exactly_their_own_points():
+    got = check_drawings([RAY, XLINE, {**VLINE, "points": [{"t": T0_MS, "p": 123.0, "junk": 1}]}, FIB])
+    assert [d["type"] for d in got] == ["ray", "xline", "vline", "fib"]
+    assert got[2]["points"] == [{"t": T0_MS}]                       # a vertical line is a time: a price sent with it is dropped
+    assert got[0]["points"] == RAY["points"] and got[3]["points"] == FIB["points"]
+    for bad in ([{**VLINE, "points": [{"p": 1.0}]}], [{**VLINE, "points": [{"t": 1.5}]}], [{**VLINE, "points": []}],
+                [{**RAY, "points": [RAY["points"][0]]}], [{**FIB, "points": [{"t": T0_MS}, {"t": T0_MS, "p": 1.0}]}]):
+        with pytest.raises(ValueError):
+            check_drawings(bad)
+
+
+def test_the_new_settings_roundtrip_and_only_on_the_tool_they_belong_to():
+    styled = [
+        {**RAY, "style": {"priceLabel": True, "stats": True, "width": 3}},
+        {**VLINE, "style": {"timeLabel": False, "text": "CPI", "labelPos": "middle"}},
+        {**RECT, "style": {"border": False, "midline": True, "quarters": True, "midStyle": "dotted", "extendRight": True, "priceLabels": True}},
+        {**HLINE, "style": {"labelAlign": "right"}},
+        {**FIB, "style": {"levels": [{"v": 0, "on": True}, {"v": 0.705, "on": True, "color": "#112233"}, {"v": 1, "on": False}],
+                          "showLevels": False, "showPrices": True, "fill": False, "reverse": True, "extendRight": True, "fontSize": 14}},
+    ]
+    got = check_drawings(styled)
+    assert [d["style"] for d in got] == [s["style"] for s in styled]
+    for kind, style in (("trend", {"midline": True}), ("ray", {"extendRight": True}), ("xline", {"extendLeft": True}),
+                        ("rect", {"levels": [{"v": 0.5, "on": True}]}), ("hline", {"timeLabel": True}), ("vline", {"axisLabel": True}),
+                        ("fib", {"text": "x"}), ("vline", {"labelPos": "above"}), ("trend", {"labelAlign": "left"})):
+        base = {"trend": TREND, "ray": RAY, "xline": XLINE, "rect": RECT, "hline": HLINE, "vline": VLINE, "fib": FIB}[kind]
+        with pytest.raises(ValueError):
+            check_drawings([{**base, "style": style}])
+
+
+NEW_STYLE_BAD = [
+    ("priceLabel not a bool", "trend", {"priceLabel": 1}), ("stats not a bool", "ray", {"stats": "yes"}),
+    ("midStyle unknown", "rect", {"midStyle": "wavy"}), ("border not a bool", "rect", {"border": 0}),
+    ("labelAlign unknown", "hline", {"labelAlign": "middle"}),
+    ("levels empty", "fib", {"levels": []}), ("levels not a list", "fib", {"levels": {"v": 0.5}}),
+    ("levels too many", "fib", {"levels": [{"v": 0.5, "on": True}] * 17}),
+    ("level ratio a string", "fib", {"levels": [{"v": "0.5", "on": True}]}),
+    ("level ratio out of range", "fib", {"levels": [{"v": 11, "on": True}]}),
+    ("level without on", "fib", {"levels": [{"v": 0.5}]}), ("level on not a bool", "fib", {"levels": [{"v": 0.5, "on": 1}]}),
+    ("level colour a name", "fib", {"levels": [{"v": 0.5, "on": True, "color": "red"}]}),
+    ("fib fontSize too small", "fib", {"fontSize": 9}),
+]
+
+
+@pytest.mark.parametrize("why,kind,style", NEW_STYLE_BAD, ids=[b[0] for b in NEW_STYLE_BAD])
+def test_check_style_refuses_the_new_settings_when_they_do_not_read(why, kind, style):
+    base = {"trend": TREND, "ray": RAY, "rect": RECT, "hline": HLINE, "fib": FIB}[kind]
+    with pytest.raises(ValueError):
+        check_drawings([{**base, "style": style}])
+
+
+def test_a_levels_junk_key_is_dropped_but_its_own_fields_are_kept():
+    got = check_drawings([{**FIB, "style": {"levels": [{"v": 0.5, "on": True, "color": "#112233", "junk": 9}]}}])
+    assert got[0]["style"]["levels"] == [{"v": 0.5, "on": True, "color": "#112233"}]
+
+
+def test_vis_says_which_intervals_a_drawing_shows_on():
+    keep = check_drawings([{**TREND, "vis": {"min": 300, "max": 3600}}, {**HLINE, "vis": {"min": 3600, "max": None}},
+                           {**RECT, "vis": {"min": None, "max": 300}}, {**FIB, "vis": {"min": None, "max": None}}])
+    assert [d.get("vis") for d in keep] == [{"min": 300, "max": 3600}, {"min": 3600, "max": None}, {"min": None, "max": 300}, None]
+    for bad in ({"min": 3600, "max": 300}, {"min": 0, "max": None}, {"min": 1.5}, {"min": True}, {"min": 60, "junk": 1}, "all",
+                {"min": 31 * 86400 + 1}):
+        with pytest.raises(ValueError):
+            check_drawings([{**TREND, "vis": bad}])
+
+
+def test_the_new_drawings_roundtrip_over_the_wire(tmp_path):
+    body = [{**RAY, "style": {"priceLabel": True}}, VLINE, {**FIB, "vis": {"min": 300, "max": None}},
+            {**RECT, "style": {"midline": True, "extendRight": True}}]
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.put("/api/drawings/NQ", json=body).status_code == 200
+        assert client.get("/api/drawings/NQ").json() == body
+        r = client.put("/api/drawings/NQ", json=[{**FIB, "style": {"levels": []}}])
+        assert r.status_code == 400 and "levels" in r.json()["detail"]
+        assert client.get("/api/drawings/NQ").json() == body          # the refused write changed nothing
