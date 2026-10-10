@@ -171,6 +171,23 @@ def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
     fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
 
 
+def test_a_pullback_card_passes_stage_0_with_the_level_as_its_setting_and_a_held_swing_size():
+    pb = {"family": "pullback", "main_setting": "level", "values": ["0.5", "0.62", "0.79"], "fixed": {}, "limits": {}}
+    c = card(name="pullback_open", why="A higher swing high shows buyers in control, and the first pullback is bought.",
+             loser="Traders who chased the move late and are stopped out on the pullback.", ways=[pb], indicators=[])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("pullback_open_a1", "1"), ("pullback_open_a5", "5")]
+    assert subs[0]["spec"]["run"] == {"family": "pullback", "params": {"level": [0.5, 0.62, 0.79]}, "fixed": {}, "filters": [], "exits": "standard", "limits": {}}
+    held = {**pb, "fixed": {"swing": "30"}, "limits": {"max_tr": 2}}                              # the swing size is ONE value an idea; max_tr is a limit
+    run = passes({**c, "ways": [held]})[0]["spec"]["run"]
+    assert run["fixed"] == {"swing": "30"} and run["limits"] == {"max_tr": 2}
+    passes({**c, "ways": [{**pb, "main_setting": "swing", "values": ["15", "30", "60"], "fixed": {"level": 0.79}}]})      # the swing size can be the heat map's setting too
+    passes({**c, "session": "london", "sides": "long", "sides_why": "The index drifts up, so only the up legs are bought.", "ways": [pb]})
+    fails({**c, "ways": [{**pb, "values": ["0.5", "0.62", "0.95"]}]}, "P0.2")                     # beyond the family's own limit (0.25 .. 0.9)
+    fails({**c, "ways": [{**pb, "fixed": {"swing": "45"}}]}, "P0.2")                              # 45 is not a swing size
+    fails({**c, "ways": [{**pb, "fixed": {"swing": "leg"}}]}, "P0.2")                             # the owner's range definitions are filter blocks, not this family's
+
+
 def test_every_heat_map_is_a_card_the_toolkit_takes():
     for s in passes(ways(WAY, MID, ORB)):
         rows, plan = REC.card_lines(REC._spec(REC._name(s["name"]), copy.deepcopy(s["spec"])))
