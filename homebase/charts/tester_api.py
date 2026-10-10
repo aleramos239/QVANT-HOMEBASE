@@ -390,8 +390,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         got = lab_forms.read(code)
         out = {"answers": got["answers"], "intact": got["intact"]} if got else {"answers": None, "intact": False}
         try:
-            json.dumps(out, allow_nan=False)             # the response encoder refuses what json cannot carry
-        except (ValueError, TypeError, RecursionError):
+            json.dumps(out, ensure_ascii=False, allow_nan=False).encode("utf-8")   # exactly as the response encodes it
+        except (ValueError, TypeError, RecursionError):        # UnicodeEncodeError is a ValueError
             out = {"answers": None, "intact": False}
         return out
 

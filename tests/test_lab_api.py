@@ -411,3 +411,19 @@ def test_a_body_nested_too_deep_is_a_400_not_a_500(tmp_path):
     with client(tmp_path) as c:
         for path in (f"{FORM}/build", f"{FORM}/read"):
             assert c.post(path, content="[" * 200000, headers=hdr).status_code == 400, path
+
+
+def test_read_answers_200_for_a_header_the_response_cannot_encode(tmp_path, monkeypatch):
+    code = lab_forms.build(answers_for("at_time", name="form_sur"))
+    def with_header(h):
+        return "\n".join("# form: " + h if x.startswith("# form: ") else x for x in code.split("\n"))
+    nothing = {"answers": None, "intact": False}
+    with client(tmp_path) as c:
+        for h in ('{"name": "\\ud800"}', '{"\\ud800": 1}', '{"a": [{"b": "\\udc00"}]}', '{"t": 1e999}', '{"t": -1e999}'):
+            r = c.post(f"{FORM}/read", json={"code": with_header(h)}, headers=OK)
+            assert r.status_code == 200 and r.json() == nothing, h
+        # the route's own guard, with read() itself fooled: it encodes exactly as the response will
+        for bad in ({"name": "\ud800"}, {"\ud800": 1}, {"t": float("inf")}):
+            monkeypatch.setattr(lab_forms, "read", lambda _c, bad=bad: {"answers": bad, "intact": True})
+            r = c.post(f"{FORM}/read", json={"code": code}, headers=OK)
+            assert r.status_code == 200 and r.json() == nothing, bad

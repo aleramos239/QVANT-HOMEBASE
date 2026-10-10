@@ -532,6 +532,32 @@ def _no_constant(name: str):
     raise ValueError(f"{name} is not JSON")            # NaN / Infinity / -Infinity: Python reads them, JSON has none
 
 
+def _clean_json(value) -> bool:
+    """Only what a response can carry: finite numbers, strings that encode as UTF-8 (keys and values), at most
+    20 levels deep and 1,000 values. Walked with a stack: a hostile header cannot recurse."""
+    stack, seen = [(value, 0)], 0
+    while stack:
+        v, depth = stack.pop()
+        seen += 1
+        if seen > 1000 or depth > 20:
+            return False
+        if isinstance(v, float):
+            if not math.isfinite(v):
+                return False
+        elif isinstance(v, str):
+            try:
+                v.encode("utf-8")
+            except UnicodeEncodeError:
+                return False
+        elif isinstance(v, dict):
+            for k, x in v.items():
+                stack.append((k, depth + 1))
+                stack.append((x, depth + 1))
+        elif isinstance(v, list):
+            stack.extend((x, depth + 1) for x in v)
+    return True
+
+
 def read(code: str) -> dict | None:
     """{"answers", "intact"} from a file the form made, else None. intact: the form would write exactly this text
     for these answers, byte for byte. Reads text only: nothing in `code` is run or imported; it never raises."""
@@ -545,7 +571,7 @@ def read(code: str) -> dict | None:
         else:
             return None
         answers = json.loads(lines[i][len("# form: "):], parse_constant=_no_constant)
-        if not isinstance(answers, dict):
+        if not isinstance(answers, dict) or not _clean_json(answers):
             return None
     except (ValueError, RecursionError, MemoryError):
         return None

@@ -224,6 +224,25 @@ def test_read_gives_none_for_a_header_with_a_non_finite_number():
             assert lab_forms.read(text) is None, (bad, header)
 
 
+def _with_header(header: str) -> str:
+    code = lab_forms.build(base("at_time"))
+    return "\n".join("# form: " + header if x.startswith("# form: ") else x for x in code.split("\n"))
+
+
+def test_read_gives_none_for_answers_that_are_not_clean_json():
+    for header in ('{"name": "\\ud800"}', '{"\\udfff": 1}', '{"a": {"b": ["x", {"c": "\\ud83d"}]}}',
+                   '{"name": "x", "t": 1e999}', '{"t": -1e999}', '{"a": [[1e999]]}',
+                   '{"a": ' + "[" * 21 + "]" * 21 + "}",
+                   '{"a": [' + ", ".join(["0"] * 1000) + "]}"):
+        assert lab_forms.read(_with_header(header)) is None, header
+    ok_deep = '{"a": ' + "[" * 15 + "]" * 15 + "}"
+    assert lab_forms.read(_with_header(ok_deep)) == {"answers": {"a": [[[[[[[[[[[[[[[]]]]]]]]]]]]]]]}, "intact": False}
+    code = lab_forms.build(base("at_time"))
+    assert lab_forms.read(code) == {"answers": base("at_time"), "intact": True}
+    accents = lab_forms.read(_with_header('{"name": "caf\u00e9"}'))
+    assert accents is not None and accents["answers"] == {"name": "caf\u00e9"}
+
+
 def test_read_never_runs_the_text(tmp_path):
     marker = tmp_path / "ran"
     evil = lab_forms.build(base("at_time")) + f"\nopen({str(marker)!r}, 'w').write('x')\n"
