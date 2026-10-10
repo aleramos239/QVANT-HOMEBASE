@@ -9,6 +9,7 @@ import datetime as dt
 import hashlib
 import itertools
 import json
+import keyword
 import sys
 from array import array
 
@@ -68,6 +69,27 @@ def test_schema_defaults_build_for_every_rule():
         assert f["label"] and f["words"] and f["type"] in ("time", "number", "int", "choice", "stop", "target")
         if f["type"] == "choice":
             assert f["choices"]
+
+
+def test_schema_carries_what_the_page_needs_to_check_a_number():
+    s = lab_forms.schema()
+    assert s["ticks"] == {"NQ": 0.25, "ES": 0.25, "YM": 1.0, "RTY": 0.1, "GC": 0.1, "SI": 0.005}
+    f = s["fields"]
+    assert (f["lookback"]["min"], f["lookback"]["max"], f["lookback"]["step"]) == (2, 40, 1)
+    assert (f["trades"]["min"], f["trades"]["max"], f["trades"]["step"]) == (1, 5, 1)
+    assert f["distance"]["tick_multiple"] is True and f["distance"]["min_ticks"] == 1
+    kinds = {k["id"]: k for k in f["stop"]["kinds"]}
+    assert kinds["points"]["tick_multiple"] is True and kinds["points"]["min_ticks"] == 2
+    assert "tick_multiple" not in kinds["range"]
+    kinds = {k["id"]: k for k in f["target"]["kinds"]}
+    assert kinds["points"]["tick_multiple"] is True and kinds["points"]["min_ticks"] == 1
+    assert (kinds["rr"]["min"], kinds["rr"]["max"], kinds["rr"]["step"]) == (0.25, 20, 0.25)
+    assert "tick_multiple" not in kinds["rr"] and kinds["none"] == {"id": "none", "label": "None"}
+    for field in f.values():                       # every number the page draws says how to check it
+        if field["type"] in ("int",):
+            assert {"min", "max", "step"} <= set(field)
+        if field["type"] == "number":
+            assert field["tick_multiple"] is True and field["min_ticks"] >= 1
 
 
 def test_schema_is_plain_json():
@@ -145,13 +167,38 @@ def test_the_file_has_the_header_and_the_same_answers_give_the_same_bytes():
     assert "class MyOrb(Strategy):" in code
 
 
-def test_a_hand_edit_of_the_body_flips_intact_but_the_docstring_does_not():
-    a = base("bar_breakout")
+def test_intact_means_the_form_would_write_this_exact_file():
+    a = base("bar_breakout", side="long")
     code = lab_forms.build(a)
+    assert lab_forms.read(code) == {"answers": a, "intact": True}
     assert lab_forms.read(code.replace("from __future__", "from __futurE__"))["intact"] is False
     assert lab_forms.read(code + "# a note\n") == {"answers": a, "intact": False}
-    assert lab_forms.read(code.replace(f'"""{lab_forms.sentence(a)}"""', '"""Mine now.\n\nSecond line."""', 1)) \
-        == {"answers": a, "intact": True}
+    # the docstring above the header is part of the file too: a hand edit there still reads, but is not intact
+    mine = code.replace(f'"""{lab_forms.sentence(a)}"""', '"""Mine now.\n\nSecond line."""', 1)
+    assert lab_forms.read(mine) == {"answers": a, "intact": False}
+    # so is the header: a hand-edited answers line is not what the form wrote for those answers
+    other = code.replace('"side": "long"', '"side": "short"')
+    assert lab_forms.read(other) == {"answers": {**a, "side": "short"}, "intact": False}
+    assert lab_forms.read(code.replace("\n", "\r\n"))["intact"] is False
+    # answers the form would refuse are not intact either (and reading them does not raise)
+    bad = code.replace('"lookback": 6', '"lookback": 600')
+    assert lab_forms.read(bad) == {"answers": {**a, "lookback": 600}, "intact": False}
+
+
+def test_read_never_raises_on_hostile_text():
+    code = lab_forms.build(base("at_time"))
+    lines = code.split("\n")
+    deep = "\n".join(("# form: " + "[" * 100000) if x.startswith("# form: ") else x for x in lines)
+    assert lab_forms.read(deep) is None
+    assert lab_forms.read(code + "\n# \ud800\n") == {"answers": base("at_time"), "intact": False}
+    assert lab_forms.read(code.replace("# Made", "# \ud800 Made")) == {"answers": base("at_time"), "intact": False}
+    assert lab_forms.read(code.encode()) is None and lab_forms.read(b"\xff\xfe") is None
+    assert lab_forms.read(None) is None and lab_forms.read(5) is None
+    big = lab_forms.read(code + "# x\n" * 1_000_000)
+    assert big == {"answers": base("at_time"), "intact": False}
+    assert lab_forms.read("x" * 5_000_000) is None
+    huge_int = code.replace('"time": "09:30"', '"time": "09:30", "n": ' + "9" * 5000)
+    assert lab_forms.read(huge_int) is None or lab_forms.read(huge_int)["intact"] is False
 
 
 def test_read_gives_none_without_a_header_or_with_a_header_that_does_not_read():
@@ -181,18 +228,46 @@ def test_the_class_name_comes_from_the_draft_name_and_never_shadows_the_imports(
     draftstore.check_source(lab_forms.build(base("at_time", name="input")))
 
 
+def test_a_draft_named_like_a_python_keyword_or_constant_still_builds():
+    names = [k.lower() for k in keyword.kwlist]
+    ok = []
+    for n in names:
+        try:
+            draftstore.validate_name(n)
+        except ValueError:
+            continue
+        ok.append(n)
+    assert {"true", "false", "none", "class", "return"} <= set(ok)
+    for n in ok + ["nq_true", "exception", "int", "object"]:
+        for rule in RULES:
+            code = lab_forms.build(base(rule, name=n))
+            draftstore.check_source(code)
+            assert draftstore.static_meta(code)["class"].isidentifier()
+            assert not keyword.iskeyword(draftstore.static_meta(code)["class"])
+
+
+def test_build_checks_its_own_output_and_raises_a_plain_error_for_its_own_bug(monkeypatch):
+    monkeypatch.setattr(lab_forms, "_class_name", lambda name: "True")
+    with pytest.raises(RuntimeError) as e:
+        lab_forms.build(base("at_time"))
+    assert not isinstance(e.value, ValueError)
+
+
 # ---------------------------------------------------------------- the sentence
 
 def test_the_sentences_in_the_brief():
     a = base("open_straddle", market="NQ", time="09:30", distance=15.0, stop={"kind": "points", "value": 50.0},
              target={"kind": "rr", "value": 3.0}, side="both", out_by="15:55")
     assert lab_forms.sentence(a) == ("NQ: at 09:30 a buy stop 15 points above and a sell stop 15 points below. "
-                                     "Stop 50 points, target 3 x the stop. One trade a day. Out by 15:55.")
+                                     "Stop 50 points, target 3 x the stop. One trade a day. "
+                                     "Unfilled orders are cancelled at 11:00. Out by 15:55.")
     a = base("opening_range", market="ES", range_from="09:30", range_min=15, stop={"kind": "range"},
              target={"kind": "rr", "value": 2.0}, side="both", out_by="15:55")
     assert lab_forms.sentence(a) == ("ES: after the first 15 minutes from 09:30, a buy stop above the range and a "
                                      "sell stop below it. Stop at the other side of the range, target 2 x the stop. "
-                                     "One trade a day. Out by 15:55.")
+                                     "One trade a day. Unfilled orders are cancelled at 11:00. Out by 15:55.")
+    a = base("open_straddle", side="long", last_entry="12:55", out_by="15:50")
+    assert lab_forms.sentence(a).endswith("One trade a day. Unfilled orders are cancelled at 12:55. Out by 15:50.")
     a = base("bar_breakout", side="long", bar_min=5, lookback=6, trades=2, stop={"kind": "points", "value": 20.0},
              target={"kind": "points", "value": 40.0}, last_entry="11:00", out_by="11:30")
     assert lab_forms.sentence(a) == ("NQ, long only: buys when a 5-minute bar closes above the last 6 bars' high, "
@@ -240,8 +315,7 @@ def test_a_name_that_is_not_a_draft_name_gets_the_draftstores_message():
             draftstore.validate_name(bad)
         except ValueError as e:
             refused(base("at_time", name=bad), "name", str(e))
-    refused(without(base("at_time"), "name"), "name", "name: 2-40 characters of a-z, 0-9 and '_', starting with a "
-            "letter (e.g. nq_orb_15)")
+    refused(without(base("at_time"), "name"), "name", INCOMPLETE)         # a missing key is the form's, not the name's
 
 
 @pytest.mark.parametrize("key,bad", [("market", "CL"), ("market", None), ("market", "nq"), ("market", []),
@@ -266,9 +340,91 @@ def test_every_entry_needs_a_stop(stop):
 
 
 def test_a_huge_number_still_makes_a_readable_draft():
-    code = lab_forms.build(base("open_straddle", distance=1e300, stop={"kind": "points", "value": 1e308}))
+    code = lab_forms.build(base("open_straddle", distance=1e300, stop={"kind": "points", "value": 1e300}))
     draftstore.check_source(code)
-    assert {i["key"]: i["default"] for i in draftstore.static_meta(code)["inputs"]}["sl_pts"] == 1e308
+    assert {i["key"]: i["default"] for i in draftstore.static_meta(code)["inputs"]}["sl_pts"] == 1e300
+
+
+NASTY = [10 ** 400, -(10 ** 400), float("nan"), float("inf"), -float("inf"), "5", "", True, False, None, [], {}, [1],
+         {"kind": "points"}, 1e308, -1e308, 1e-320, 0, -1, 10 ** 30, 2 ** 1024]
+
+
+def nasty_fields():
+    """(rule, how to put a bad value into the base answers) for every numeric and time field of every rule."""
+    for rule in RULES:
+        a = base(rule)
+        for key, v in a.items():
+            if key in ("stop", "target"):
+                if v["kind"] in ("points", "rr"):
+                    yield rule, key + ".value", lambda bad, a=a, key=key: {**a, key: {**a[key], "value": bad}}
+                yield rule, key, lambda bad, a=a, key=key: {**a, key: bad}
+                yield rule, key + ".kind", lambda bad, a=a, key=key: {**a, key: {**a[key], "kind": bad}}
+            elif key not in ("name",):
+                yield rule, key, lambda bad, a=a, key=key: {**a, key: bad}
+
+
+@pytest.mark.parametrize("bad", NASTY, ids=repr)
+def test_no_arithmetic_error_escapes_build_for_any_json_shaped_value(bad):
+    n = 0
+    for rule, field, put in nasty_fields():
+        answers = put(bad)
+        try:
+            code = lab_forms.build(answers)
+        except lab_forms.FormError as e:
+            assert e.sentence and e.field
+        else:
+            draftstore.check_source(code)
+            assert lab_forms.read(code)["intact"] is True
+        try:
+            lab_forms.sentence(answers)
+        except lab_forms.FormError:
+            pass
+        n += 1
+    assert n > 40
+
+
+def test_a_number_too_big_for_a_float_gets_the_fields_own_sentence():
+    refused(base("open_straddle", distance=10 ** 400), "distance", "The distance must be at least one tick.")
+    refused(base("open_straddle", stop={"kind": "points", "value": 10 ** 400}), "stop", STOP)
+    refused(base("open_straddle", target={"kind": "rr", "value": 10 ** 400}), "target", TARGET)
+    refused(base("bar_breakout", lookback=10 ** 400), "lookback", "Between 2 and 40 bars.")
+    refused(base("bar_breakout", trades=-(10 ** 400)), "trades", "Between 1 and 5.")
+    refused(base("opening_range", range_min=10 ** 400), "range_min", PICK)
+    refused(base("bar_breakout", bar_min=10 ** 400), "bar_min", PICK)
+
+
+def test_a_time_is_ascii_digits_only():
+    for bad in ("0\u0669:00", "\u06f0\u06f9:30", "09:3\u0660", "\uff10\uff19:30"):
+        refused(base("at_time", time=bad), "time", CLOCK)
+        refused(base("open_straddle", last_entry=bad), "last_entry", CLOCK)
+        refused(base("at_time", out_by=bad), "out_by", CLOCK)
+    refused(base("open_straddle", time="09:30", last_entry="0\u0669:00", out_by="15:55"), "last_entry", CLOCK)
+
+
+TICK = "Use a multiple of the tick ({}).".format
+
+
+@pytest.mark.parametrize("market,tick,bad,good", [("NQ", "0.25", 15.1, 15.25), ("ES", "0.25", 7.3, 7.5),
+                                                   ("YM", "1", 7.5, 8.0), ("RTY", "0.1", 5.05, 5.1),
+                                                   ("GC", "0.1", 5.05, 5.1), ("SI", "0.005", 0.012, 0.015)])
+def test_distance_stop_and_target_points_are_whole_ticks_of_the_market(market, tick, bad, good):
+    sentence = TICK(tick)
+    refused(base("open_straddle", market=market, distance=bad), "distance", sentence)
+    assert lab_forms.build(base("open_straddle", market=market, distance=good))
+    refused(base("open_straddle", market=market, stop={"kind": "points", "value": bad + 5}), "stop", sentence)
+    assert lab_forms.build(base("open_straddle", market=market, stop={"kind": "points", "value": good + 5}))
+    refused(base("open_straddle", market=market, target={"kind": "points", "value": bad + 5}), "target", sentence)
+    assert lab_forms.build(base("open_straddle", market=market, target={"kind": "points", "value": good + 5}))
+    # a rr target is a ratio, not a price distance
+    assert lab_forms.build(base("open_straddle", market=market, target={"kind": "rr", "value": 1.3}))
+
+
+def test_the_tick_sentence_comes_after_the_fields_existing_checks():
+    refused(base("open_straddle", stop={"kind": "points", "value": 0.3}), "stop", STOP)          # under 2 ticks first
+    refused(base("open_straddle", distance=0.1), "distance", "The distance must be at least one tick.")
+    refused(base("open_straddle", target={"kind": "points", "value": 0.1}), "target", TARGET)
+    refused(base("open_straddle", market="YM", distance=15.5, stop={"kind": "points", "value": 30.5}),
+            "stop", TICK("1"))                                      # the table's order: stop before distance
 
 
 def test_the_stop_floor_is_two_ticks_of_the_market():
@@ -362,12 +518,23 @@ def test_out_by_must_come_after_the_last_entry_and_by_1555():
                                      ({**base("at_time"), "last_entry": "11:00"}, "last_entry"),
                                      ({**base("opening_range"), "distance": 5.0}, "distance"),
                                      ({**base("open_straddle"), "bogus": 1}, "bogus"),
-                                     (without(base("opening_range"), "target"), "target")])
+                                     ({**base("open_straddle"), 1: 2}, "1"),
+                                     (without(base("opening_range"), "target"), "target"),
+                                     (without(base("opening_range"), "stop"), "stop"),
+                                     (without(base("opening_range"), "market"), "market"),
+                                     (without(base("opening_range"), "side"), "side")])
 def test_a_key_that_does_not_belong_or_is_missing_is_an_incomplete_form(a, field):
-    if field == "target":
-        refused(a, "target", TARGET)           # a missing target is the target's own sentence
-    else:
-        refused(a, field, INCOMPLETE)
+    refused(a, field, INCOMPLETE)
+
+
+def test_a_key_problem_is_reported_before_any_value_is_looked_at():
+    bad_values = {"name": "Bad Name", "market": "XX", "side": "up", "stop": None, "target": None, "distance": 0,
+                  "time": "x", "last_entry": "x", "out_by": "x"}
+    refused({**base("open_straddle"), **bad_values, "bogus": 1}, "bogus", INCOMPLETE)
+    refused(without({**base("open_straddle"), **bad_values}, "last_entry"), "last_entry", INCOMPLETE)
+    refused(without({**base("open_straddle"), **bad_values}, "name", "out_by"), "name", INCOMPLETE)   # table order
+    refused({**base("at_time"), **{k: v for k, v in bad_values.items() if k in base("at_time")}, "lookback": 6},
+            "lookback", INCOMPLETE)
 
 
 def test_something_that_is_not_a_dict_is_an_incomplete_form():
@@ -396,8 +563,7 @@ def test_the_first_failing_field_wins_in_the_tables_order():
     refused({**b, "from": "x", "last_entry": "x", "out_by": "x"}, "from", CLOCK)
     refused({**b, "last_entry": "09:00", "out_by": "x"}, "out_by", CLOCK)
     refused({**b, "last_entry": "09:00", "out_by": "09:00"}, "last_entry", "It must be after the start.")
-    refused({**b, "out_by": "11:00", "bogus": 1}, "out_by", LAST)
-    refused({**b, "bogus": 1}, "bogus", INCOMPLETE)
+    refused({**b, "out_by": "11:00"}, "out_by", LAST)
 
 
 def _name_error(name) -> ValueError:
@@ -532,16 +698,16 @@ def test_opening_range_both_sides_stop_at_the_other_side_of_the_range(play):
     res, _ = play(ranged(), RANGE_ROWS + [("09:50:00", 111.0), ("10:00:00", 140.0), ("10:30:00", 90.0)])
     t, = res.trades                                  # 90 at 10:30 would fill the sell stop at 97.75
     assert (t.side, t.order_price, t.entry_price) == ("long", 110.25, 111.25)
-    assert (t.sl, t.tp) == (99.0, 135.75)            # the range's low, moved by the 1.0 gap; 2 x the stop from the fill
-    assert (t.exit_reason, t.exit_price) == ("tp", 135.75)
+    assert (t.sl, t.tp) == (98.0, 137.75)            # the range's low exactly (not moved by the 1.0 gap); 2 x that from the fill
+    assert (t.exit_reason, t.exit_price) == ("tp", 137.75)
 
 
 def test_opening_range_short_only(play):
-    res, _ = play(ranged(side="short"), RANGE_ROWS + [("09:50:00", 97.0), ("10:00:00", 70.0), ("10:30:00", 130.0)])
+    res, _ = play(ranged(side="short"), RANGE_ROWS + [("09:50:00", 97.0), ("10:00:00", 69.0), ("10:30:00", 130.0)])
     t, = res.trades                                  # 130 at 10:30 would fill a buy stop at 110.25
     assert (t.side, t.order_price, t.entry_price) == ("short", 97.75, 96.75)
-    assert (t.sl, t.tp) == (109.0, 72.25)
-    assert (t.exit_reason, t.exit_price) == ("tp", 72.25)
+    assert (t.sl, t.tp) == (110.0, 70.25)            # the range's high exactly
+    assert (t.exit_reason, t.exit_price) == ("tp", 70.25)
 
 
 def test_opening_range_long_only_and_points_stop(play):
@@ -558,8 +724,55 @@ def test_opening_range_a_longer_range_and_a_later_start(play):
             ("10:50:00", 109.0), ("11:00:00", 140.0)]
     res, strategy = play(a, rows)
     t, = res.trades
-    assert (t.order_price, t.entry_price, t.sl, t.tp) == (108.25, 109.25, 101.0, 125.75)
+    assert (t.order_price, t.entry_price, t.sl, t.tp) == (108.25, 109.25, 100.0, 127.75)
     assert strategy.session_window == ("09:55", "16:00") and strategy.bar_window == ("10:00", "10:30")
+
+
+def test_the_range_stop_is_at_the_other_side_of_the_range_whatever_the_fill_gap(play):
+    # NQ: a 5-point gap through the buy stop (110.25) fills at 115.50; the stop is still the range's low, 98.0
+    res, _ = play(ranged(), RANGE_ROWS + [("09:50:00", 115.0), ("10:00:00", 200.0)])
+    t, = res.trades
+    assert (t.order_price, t.entry_price, t.sl) == (110.25, 115.25, 98.0)
+    assert t.tp == 115.25 + 2.0 * (115.25 - 98.0)                  # rr 2 taken from the FILL and that stop
+    # a points target is measured from the entry price (the stop price), 20 points, not from the gapped fill
+    res, strategy = play(ranged(target={"kind": "points", "value": 20.0}),
+                         RANGE_ROWS + [("09:50:00", 115.0), ("10:00:00", 200.0)])
+    assert (res.trades[0].sl, res.trades[0].tp, res.trades[0].exit_price) == (98.0, 130.25, 130.25)
+    assert "ctx.move_brackets_to_fill = False" in lab_forms.build(ranged())
+    assert "ctx.move_brackets_to_fill = True" in lab_forms.build(ranged(stop={"kind": "points", "value": 10.0}))
+
+
+def test_the_range_stop_is_exact_to_the_tick_on_silver_too(play):
+    rows = [("09:29:59", 30.0), ("09:31:00", 30.0), ("09:40:00", 30.1), ("09:44:59", 30.05), ("09:50:00", 30.2),
+            ("10:00:00", 31.0)]
+    res, _ = play(ranged(market="SI"), rows)
+    t, = res.trades
+    assert t.order_price == pytest.approx(30.105) and t.entry_price == pytest.approx(30.205)
+    assert t.sl == pytest.approx(30.0, abs=1e-9)                    # the low of the range, to the tick
+    assert t.tp == pytest.approx(30.205 + 2 * 0.205, abs=1e-9)
+    res, _ = play(ranged(market="SI", side="short"), [("09:29:59", 30.0), ("09:31:00", 30.0), ("09:40:00", 30.1),
+                                                        ("09:44:59", 30.05), ("09:50:00", 29.9), ("10:00:00", 29.0)])
+    assert res.trades[0].sl == pytest.approx(30.1, abs=1e-9)        # the high of the range
+
+
+@pytest.mark.parametrize("market,px", [("NQ", 100.0), ("SI", 30.0)])
+def test_a_flat_opening_range_takes_no_trade_with_the_range_stop(play, market, px):
+    rows = [("09:29:59", px), ("09:31:00", px), ("09:44:59", px), ("09:50:00", px + 4 * (0.25 if market == "NQ" else 0.005)),
+            ("10:00:00", px * 2)]
+    res, _ = play(ranged(market=market), rows)
+    assert res.trades == [] and res.skip == "the opening range is too small"
+    for side in ("long", "short"):
+        assert play(ranged(market=market, side=side), rows)[0].skip == "the opening range is too small"
+    # the same flat range with a points stop trades: the guard is the range stop's own
+    res, _ = play(ranged(market=market, stop={"kind": "points", "value": 5.0 if market == "NQ" else 0.05}), rows)
+    assert res.skip is None
+
+
+def test_a_one_tick_range_is_just_enough_for_the_range_stop(play):
+    rows = [("09:29:59", 100.0), ("09:31:00", 100.0), ("09:44:59", 100.25), ("09:50:00", 101.0), ("10:00:00", 140.0)]
+    res, _ = play(ranged(), rows)
+    t, = res.trades                                  # entry 100.50, stop 100.00: two ticks apart
+    assert (t.order_price, t.sl) == (100.5, 100.0) and res.skip is None
 
 
 def test_opening_range_with_no_price_in_the_range_skips_the_day(play):

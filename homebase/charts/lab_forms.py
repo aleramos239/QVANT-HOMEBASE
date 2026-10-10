@@ -14,8 +14,10 @@ strategy in plain words, schema() gives the page everything it needs to draw the
 """
 from __future__ import annotations
 
+import builtins
 import hashlib
 import json
+import keyword
 import math
 import re
 
@@ -41,6 +43,7 @@ BAD_TIME = "A New York time, like 09:30."
 AFTER_START = "It must be after the start."
 AFTER_LAST = "It must be after the last entry, and 15:55 at the latest."
 INCOMPLETE = "The form is incomplete."
+TICK_MULTIPLE = "Use a multiple of the tick ({tick})."
 
 HEADER_NOTE = ('# Made with the Lab\'s form. "Edit in the form" opens it again; a change made by hand here is kept '
                'until then.')
@@ -75,15 +78,28 @@ class FormError(ValueError):
 # ---------------------------------------------------------------- small helpers
 
 def _num(v) -> bool:
-    """A finite number (a bool, a string or None is not one)."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)
+    """A finite number a float can hold (a bool, a string or None is not one; neither is an int past float range)."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(v))
+    except OverflowError:
+        return False
 
 
 def _whole(v):
     """v as an int when it is a whole number (6 or 6.0), else None."""
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v != int(v):
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
         return None
-    return int(v)
+    if isinstance(v, int):
+        return v
+    return int(v) if math.isfinite(v) and v == int(v) else None
+
+
+def _on_tick(v, tick: float) -> bool:
+    """v is a whole number of ticks (within 1e-9 of a price)."""
+    q = v / tick
+    return math.isfinite(q) and abs(q - round(q)) * tick <= 1e-9
 
 
 def _n(x) -> str:
@@ -104,7 +120,7 @@ def _hhmm(minutes: int) -> str:
 
 
 def _is_time(v) -> bool:
-    return isinstance(v, str) and re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", v) is not None \
+    return isinstance(v, str) and re.fullmatch(r"(?:[01][0-9]|2[0-3]):[0-5][0-9]", v, re.ASCII) is not None \
         and EARLIEST <= v <= LATEST
 
 
@@ -142,6 +158,13 @@ def _check(answers) -> dict:
     if not isinstance(answers, dict):
         raise FormError("form", INCOMPLETE)
     a = dict(answers)
+    if isinstance(a.get("rule"), str) and a["rule"] in RULE_FIELDS:       # the keys come before any value
+        keys = ["name", "rule", *RULE_FIELDS[a["rule"]]]
+        for key in keys:
+            if key not in a:
+                raise FormError(key, INCOMPLETE)
+        for key in sorted((k for k in a if k not in keys), key=str):
+            raise FormError(str(key), INCOMPLETE)
     try:
         draftstore.validate_name(a.get("name"))
     except ValueError as e:
@@ -157,8 +180,11 @@ def _check(answers) -> dict:
         raise FormError("side", PICK_SIDE)
     _check_stop(a.get("stop"), rule, tick)
     _check_target(a.get("target"), tick)
-    if "distance" in a and not (_num(a["distance"]) and a["distance"] >= tick):
-        raise FormError("distance", NEED_DISTANCE)
+    if "distance" in a:
+        if not (_num(a["distance"]) and a["distance"] >= tick):
+            raise FormError("distance", NEED_DISTANCE)
+        if not _on_tick(a["distance"], tick):
+            raise FormError("distance", TICK_MULTIPLE.format(tick=_n(tick)))
     for key, low, high, sentence in (("lookback", 2, 40, LOOKBACK), ("trades", 1, 5, TRADES)):
         if key in a:
             n = _whole(a[key])
@@ -182,12 +208,6 @@ def _check(answers) -> dict:
         end = a.get("last_entry") if rule != "at_time" else a.get("time")
         if end is not None and a["out_by"] <= end:
             raise FormError("out_by", AFTER_LAST)
-    keys = ["name", "rule", *RULE_FIELDS[rule]]
-    for key in keys:
-        if key not in a:
-            raise FormError(key, INCOMPLETE)
-    for key in sorted(set(a) - set(keys)):
-        raise FormError(key, INCOMPLETE)
     return a
 
 
@@ -201,6 +221,8 @@ def _check_stop(stop, rule: str, tick: float) -> None:
     elif kind == "points":
         if set(stop) != {"kind", "value"} or not _num(stop["value"]) or stop["value"] < round(2 * tick, 6):
             raise FormError("stop", NEED_STOP)
+        if not _on_tick(stop["value"], tick):
+            raise FormError("stop", TICK_MULTIPLE.format(tick=_n(tick)))
     else:
         raise FormError("stop", NEED_STOP)
 
@@ -217,6 +239,8 @@ def _check_target(target, tick: float) -> None:
         ok = False
     if not ok:
         raise FormError("target", NEED_TARGET)
+    if kind == "points" and not _on_tick(target["value"], tick):
+        raise FormError("target", TICK_MULTIPLE.format(tick=_n(tick)))
 
 
 # ---------------------------------------------------------------- plain words
@@ -254,7 +278,8 @@ def _sentence(a: dict) -> str:
                     "rr": f"target {_n(t.get('value', 0))} x the stop"}[t["kind"]]
     trades = a.get("trades", 1)
     count = "One trade a day." if trades == 1 else f"Up to {trades} trades a day."
-    return f"{head}{what} {stop_words}, {target_words}. {count} Out by {a['out_by']}."
+    cancel = f" Unfilled orders are cancelled at {a['last_entry']}." if rule in ("open_straddle", "opening_range") else ""
+    return f"{head}{what} {stop_words}, {target_words}. {count}{cancel} Out by {a['out_by']}."
 
 
 def _label(a: dict) -> str:
@@ -276,7 +301,8 @@ def _label(a: dict) -> str:
 
 def _class_name(name: str) -> str:
     cls = "".join(p.capitalize() for p in name.split("_") if p)
-    return cls + "Draft" if cls in ("Input", "Strategy") else cls
+    taken = keyword.iskeyword(cls) or hasattr(builtins, cls) or cls in ("Input", "Strategy")
+    return cls + "Draft" if taken else cls
 
 
 def _inputs(a: dict, tick: float) -> list[tuple]:
@@ -351,13 +377,18 @@ def _sides(a: dict) -> list[str]:
     return ["long", "short"] if a["side"] == "both" else [a["side"]]
 
 
-def _stops_block(a: dict, prices: str) -> list[str]:
+MOVE = "ctx.move_brackets_to_fill = True  # the stop and target follow the fill"
+STAY = "ctx.move_brackets_to_fill = False  # the stop stays at the other side of the range"
+
+
+def _stops_block(a: dict, prices: str, guard: list[str] = ()) -> list[str]:
     """Stop entries for each wanted side (an OCO pair when both), remembered in self.entries. `prices` is the line
-    that sets up (buy stop) and dn (sell stop); the far side of the range is lo for a buy and hi for a sell."""
+    that sets up (buy stop) and dn (sell stop); the far side of the range is lo for a buy and hi for a sell. A stop
+    at the other side of the range is an absolute price: it is not moved to the fill like a stop of N points."""
     names = {"long": "buy", "short": "sell"}
     entry = {"long": "up", "short": "dn"}
     far = {"long": "lo", "short": "hi"}
-    lines = [prices, "ctx.move_brackets_to_fill = True  # the stop and target follow the fill"]
+    lines = [prices, *guard, STAY if a["stop"]["kind"] == "range" else MOVE]
     for s in _sides(a):
         lines.append(f"{names[s]} = " + _order(a, "stop_entry", s, entry[s], far[s], True))
     if a["side"] == "both":
@@ -390,7 +421,11 @@ def _opening_range(a: dict) -> dict:
     lines = [f"# the range is done: a stop entry one tick beyond {where}",
              "if not self.highs:", '    ctx.skip("no prices in the opening range")', "    return",
              levels, *_read_line(_reads(a))]
-    lines += _stops_block(a, ups)
+    guard = []
+    if by_range:                          # a stop less than 2 ticks from the entry is no stop: no trade today
+        gap = "up - lo" if long_ else "hi - dn"
+        guard = [f"if round(({gap}) / ctx.tick) < 2:", '    ctx.skip("the opening range is too small")', "    return"]
+    lines += _stops_block(a, ups, guard)
     return {"first": a["range_from"], "start": [(end, lines)],
             "session": ["self.highs, self.lows, self.entries = [], [], []"],
             "bar": ["self.highs.append(bar.h)", "self.lows.append(bar.l)"],
@@ -402,7 +437,7 @@ def _breakout(a: dict) -> dict:
     w1 = _window(a)[1]
     levels = {"both": "hi, lo = max(self.highs[-n:]), min(self.lows[-n:])", "long": "hi = max(self.highs[-n:])",
               "short": "lo = min(self.lows[-n:])"}[a["side"]]
-    inner = [levels, *_read_line(_reads(a)), "ctx.move_brackets_to_fill = True  # the stop and target follow the fill"]
+    inner = [levels, *_read_line(_reads(a)), MOVE]
     branches = [("bar.c > hi", "long"), ("bar.c < lo", "short")]
     for i, (cond, s) in enumerate(b for b in branches if b[1] in _sides(a)):
         inner += [("if " if i == 0 else "elif ") + cond + ":",
@@ -425,8 +460,7 @@ def _at_time(a: dict) -> dict:
     lines = [f"# {'buy' if side == 'long' else 'sell'} at the market; the stop and target are measured from the price",
              "px = ctx.last_price", "if px is None:", f'    ctx.skip("no print before {t}")', "    return",
              *_read_line(_reads(a)),
-             "ctx.move_brackets_to_fill = True  # the stop and target follow the fill",
-             _order(a, "market", side, "px", "", False, "ref=px")]
+             MOVE, _order(a, "market", side, "px", "", False, "ref=px")]
     return {"first": t, "start": [(t, lines)], "session": [], "bar": None, "attrs": []}
 
 
@@ -480,32 +514,41 @@ def _body(a: dict) -> str:
 
 
 def build(answers: dict) -> str:
-    """The draft file's text for these answers; FormError when an answer cannot be used."""
+    """The draft file's text for these answers; FormError when an answer cannot be used. The file is checked
+    with the draft store's own checks before it is returned: a failure there is this generator's bug (RuntimeError)."""
     a = _check(answers)
     body = _body(a)
-    return (f'"""{_sentence(a)}"""\n{HEADER_NOTE}\n# form: {json.dumps(a, sort_keys=True)}\n'
+    code = (f'"""{_sentence(a)}"""\n{HEADER_NOTE}\n# form: {json.dumps(a, sort_keys=True)}\n'
             f'# code: {hashlib.sha256(body.encode("utf-8")).hexdigest()}\n{body}')
+    try:
+        draftstore.check_source(code)
+        draftstore.static_meta(code)
+    except ValueError as e:
+        raise RuntimeError(f"the form wrote a draft the draft store refuses (a bug in the form): {e}") from None
+    return code
 
 
 def read(code: str) -> dict | None:
-    """{"answers", "intact"} from a file the form made, else None. intact: the code under the header is still the
-    one the form wrote. Reads text only: nothing in `code` is run or imported."""
+    """{"answers", "intact"} from a file the form made, else None. intact: the form would write exactly this text
+    for these answers, byte for byte. Reads text only: nothing in `code` is run or imported; it never raises."""
     if not isinstance(code, str):
         return None
-    lines = code.replace("\r\n", "\n").split("\n")
-    for i in range(len(lines) - 1):
-        if lines[i].startswith("# form: ") and re.fullmatch(r"# code: [0-9a-f]{64}", lines[i + 1]):
-            break
-    else:
+    try:
+        lines = code.split("\n")
+        for i in range(len(lines) - 1):
+            if lines[i].startswith("# form: ") and re.fullmatch(r"# code: [0-9a-f]{64}\r?", lines[i + 1]):
+                break
+        else:
+            return None
+        answers = json.loads(lines[i][len("# form: "):])
+        if not isinstance(answers, dict):
+            return None
+    except (ValueError, RecursionError, MemoryError):
         return None
     try:
-        answers = json.loads(lines[i][len("# form: "):])
-    except ValueError:
-        return None
-    if not isinstance(answers, dict):
-        return None
-    body = "\n".join(lines[i + 2:])
-    intact = hashlib.sha256(body.encode("utf-8")).hexdigest() == lines[i + 1][len("# code: "):]
+        intact = build(answers) == code
+    except Exception:                       # noqa: BLE001 -- answers the form would not write: not intact
+        intact = False
     return {"answers": answers, "intact": intact}
 
 
@@ -520,7 +563,7 @@ def _field_defs() -> dict:
         "time": {"label": "Time", "words": "The New York time it acts, like 09:30.", "type": "time",
                  "default": "09:30"},
         "distance": {"label": "Distance (points)", "words": "How far from the price each stop entry sits.",
-                     "type": "number", "min_ticks": 1, "default": 15.0},
+                     "type": "number", "min_ticks": 1, "tick_multiple": True, "default": 15.0},
         "range_from": {"label": "Range starts", "words": "Where the range starts, a New York time like 09:30.",
                        "type": "time", "default": "09:30"},
         "range_min": {"label": "Range length (minutes)", "words": "How many minutes the range is measured over.",
@@ -536,11 +579,11 @@ def _field_defs() -> dict:
         "last_entry": {"label": "Last entry", "words": "No new entry after this time. A stop not filled by then is "
                                                        "cancelled.", "type": "time", "default": "11:00"},
         "stop": {"label": "Stop", "words": "Every entry carries a stop.", "type": "stop",
-                 "kinds": [{"id": "points", "label": "Points", "min_ticks": 2},
+                 "kinds": [{"id": "points", "label": "Points", "min_ticks": 2, "tick_multiple": True},
                            {"id": "range", "label": "Other side of the range"}],
                  "default": {"kind": "points", "value": 50.0}},
         "target": {"label": "Target", "words": "Where to take profit, or none.", "type": "target",
-                   "kinds": [{"id": "points", "label": "Points", "min_ticks": 1},
+                   "kinds": [{"id": "points", "label": "Points", "min_ticks": 1, "tick_multiple": True},
                              {"id": "rr", "label": "x the stop", "min": 0.25, "max": 20, "step": 0.25},
                              {"id": "none", "label": "None"}],
                  "default": {"kind": "rr", "value": 3.0}},
