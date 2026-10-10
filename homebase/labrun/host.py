@@ -46,6 +46,7 @@ from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_win
 from ..charts.session import session_date, session_range_ms
 from ..contracts import point_value, tick_size
 from . import door, match, store
+from .intents import ORDER_OPS, well_formed   # (the desk checks a runner's event with the same rule: labrun/intents.py)
 from .shadowfills import ShadowFills
 from .tickclient import TickClient
 
@@ -54,7 +55,6 @@ DEADLINE_S = 1.0                 # a child's answer to one event
 START_S = 5.0                    # ... and to its first line (the interpreter starts, the draft loads)
 MAX_REPLY = 64 * 1024            # one reply line, bytes
 MAX_ORDERS = 20                  # order intents in one event
-ORDER_OPS = ("entry", "oco", "cancel", "flatten")
 CLOCK_GRACE_NS = 1_000_000_000   # an event this far behind the clock fires without a print
 END_GRACE_NS = 2_000_000_000     # the clock this far past the window's end ends the day (prints still on their way)
 LATE_NS = 2_000_000_000          # a print that arrives this far behind the clock ...
@@ -123,34 +123,6 @@ def _num(v) -> bool:
 
 def _int(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool)
-
-
-def _opt(v) -> bool:
-    return v is None or _num(v)
-
-
-def well_formed(it) -> bool:
-    """An intent as contracts.md writes it. The child is our code, but what it prints is not trusted."""
-    if not isinstance(it, dict):
-        return False
-    op = it.get("op")
-    if op == "entry":
-        return (_int(it.get("id")) and it.get("kind") in ("market", "stop", "limit") and it.get("side") in ("long", "short")
-                and (_num(it.get("price")) if it["kind"] != "market" else it.get("price") is None)
-                and _int(it.get("qty")) and 1 <= it["qty"] <= 10_000 and isinstance(it.get("move"), bool)
-                and all(_opt(it.get(k)) for k in ("sl", "tp", "tp_rr", "ref")))
-    if op == "oco":
-        return isinstance(it.get("ids"), list) and bool(it["ids"]) and all(_int(i) for i in it["ids"])
-    if op == "cancel":
-        return _int(it.get("id"))
-    if op in ("flatten", "skip"):
-        return isinstance(it.get("reason"), str)
-    if op == "plot":
-        return isinstance(it.get("name"), str) and _int(it.get("t_ms")) and _num(it.get("value"))
-    if op == "hline":
-        return (isinstance(it.get("name"), str) and _num(it.get("price")) and isinstance(it.get("role"), str)
-                and _int(it.get("t_ms")))
-    return False
 
 
 _HHMM = re.compile(r"\d{2}:\d{2}")
