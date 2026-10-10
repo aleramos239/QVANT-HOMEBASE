@@ -116,7 +116,7 @@ test('the page routes /ws tester_show to HBTesterUI.show, and the handler plans 
 test('a click in List of trades plans through showPlan too, and never touches a trade-ready chart', () => {
   const tl = src('testerlayer.js');
   const jump = tl.slice(tl.indexOf('async function runJump('), tl.indexOf('/* ====='));
-  assert.match(tl, /runJump\(\{ U: window\.HBTesterUI, page: PAGE, tester: window\.HBTester, cat: window\.HBCatalog, chartFacts \}, i, target, opts\)/);
+  assert.match(tl, /runJump\(\{ U: window\.HBTesterUI, page: PAGE, tester: window\.HBTester, cat: window\.HBCatalog, chartFacts, windowJumps: WINDOW_JUMPS \}, i, target, opts\)/);
   assert.match(jump, /showPlan\(cells\.map\(env\.chartFacts\), cells\.indexOf\(page\.cur\(\)\), root, \{ avoidSelected \}\)/);
   assert.match(jump, /avoidSelected = false/);                                  // a click may use the selected chart
   assert.match(jump, /if \(env\.chartFacts\(cell\)\.tradeReady\) \{ page\.sbNote/);

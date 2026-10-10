@@ -373,7 +373,7 @@ function followSpec(src, s) {
 }
 /* The ONE way the page changes a chart's interval: that chart, then (with the option on) the others. */
 function setSpec(cell, s) {
-  if (cell.cfg.spec !== s) cell.update({ spec: s });
+  if (cell.cfg.spec !== s || cell.windowAt != null) cell.update({ spec: s });   // a window re-picked: the latest bars again
   followSpec(cell, s);
 }
 function setTfSync(on) {

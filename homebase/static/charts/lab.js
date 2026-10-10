@@ -364,6 +364,8 @@ async function frameWhenLoaded(rid) {
     jumpTo(ti);
   }
 }
+// the Lab's chart keeps the interval the viewer picked: a trade too old for its scroll-back loads as a window, never as a coarser interval
+if (window.HBTesterLayer && window.HBTesterLayer.setWindowJumps) window.HBTesterLayer.setWindowJumps(true);
 const jumpTo = (i) => { const t = navTrades()[i]; return t && window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: dayContext(t) }); };
 const NAV_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
 const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });

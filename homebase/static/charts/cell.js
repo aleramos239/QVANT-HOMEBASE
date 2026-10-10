@@ -173,6 +173,8 @@ class Cell {
     this.capped = false;   // this.bars hit the 200,000-bar client cap: scroll-back has stopped asking
     this.reaching = null;   // a reach() in progress: {ms, onStep, timer, resolve}, or null
     this.loadWaiters = [];  // whenLoaded() promises awaiting the next onHistory()/onError()
+    this.windowAt = null;   // showWindow(): the chart holds the sessions ending at this ms, not the latest bars (no live updates)
+    this.winReq = null;     // a showWindow() in progress: {before, tries, timer, resolve}, or null
     this.paneUid = [null];   // pane index -> the uid of the indicator in its own pane (0: the price pane)
     this.magnetXhair = false;   // the rail's magnet is on with a tool picked (MagnetOHLC crosshair)
     this.R = S.resolve(cfg.settings || {}, palette());   // the chart's settings, concrete for the theme
@@ -486,6 +488,7 @@ class Cell {
      incoming chunk is trimmed, never the chart's own bars). done or capped: the label at the first bar
      ("Start of data" / "History limit reached"), and scroll-back stops asking. */
   onOlder(m) {
+    if (this.winReq && m.before === this.winReq.before) { this.onWindow(m); return; }
     if (!this.back.take(m) || !this.chart || this.inflight.length) return;
     // the bars as the server knows them (its repaired study values, and the 200,000-bar cap, count these): the
     // known holes' empty slots are the page's own, laid out afresh below
@@ -523,6 +526,56 @@ class Cell {
      true from onHistory() (the answer landed) or false from onError() once nothing else is in flight (the
      change was refused). */
   whenLoaded() { return new Promise((res) => this.loadWaiters.push(res)); }
+
+  /* A window (2026-10-10, owner: "it doesnt let me go to 1 minute"): show the sessions that END at endMs instead
+     of the latest bars. A trade of 2022 can never be reached on 1m by scrolling back from today (the 200,000-bar
+     cap is about six months of 1m), so the chart takes the chunk the server's `older` answers for `before` =
+     endMs (the same request as scroll-back, the same answer) as ITS bars: the interval stays what the viewer
+     picked. Scroll-back from its first bar goes on as usual; live updates are held off (windowAt) until the
+     next history -- any change of symbol or interval, or a re-pick of the interval -- brings the latest bars
+     back. true once the window is on the chart; false when it was refused, replaced, or the chart is gone. */
+  showWindow(endMs) {
+    if (this.winReq) this.winReq.resolve(false);
+    return new Promise((resolve) => {
+      const w = this.winReq = { before: endMs, tries: 0, timer: 0,
+        resolve: (ok) => { clearTimeout(w.timer); if (this.winReq === w) this.winReq = null; resolve(ok); } };
+      const go = () => {
+        if (this.winReq !== w) return;
+        if (++w.tries > 40) { w.resolve(false); return; }
+        // a sub in flight answers with its own history: this asks again once that has landed
+        if (!this.chart || this.inflight.length || !this.bars.length) { w.timer = setTimeout(go, 300); return; }
+        if (!this.host.send({ op: 'older', id: this.id, before: endMs, fp: this.has.fp, big: this.has.big })) { w.resolve(false); return; }
+        w.timer = setTimeout(go, 8000);       // no answer at all: ask once more (the guard above ends it)
+      };
+      w.go = go;
+      go();
+    });
+  }
+  onWindow(m) {
+    const w = this.winReq;
+    if (!w) return;
+    clearTimeout(w.timer);
+    if (m.error || !Array.isArray(m.bars) || !m.bars.length) {
+      // "busy": the server was already building a chunk for this chart -- ask again shortly
+      if (m.error === 'busy' && w.tries < 8) { w.timer = setTimeout(w.go, 1000); return; }
+      w.resolve(false);
+      return;
+    }
+    this.winReq = null;
+    this.windowAt = w.before;
+    this.back.reset(); this.capped = false;
+    this.back.done = !!m.done;
+    this.sessions = m.sessions || [];
+    this.keys = new Set(Object.keys(m.studies || {}));
+    this.profile = null; this.devel = false;
+    this.bars = []; this.realT = new Map();
+    m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; });
+    for (const b of this.slotted(m.bars)) this.append(b);
+    this.build(null);
+    this.message('Showing the days around ' + new Date(w.before).toISOString().slice(0, 10) + ' — not live. Pick the interval again for the latest bars.');
+    this.host.onLoaded(this);
+    w.resolve(true);
+  }
 
   /* Load older history until the first bar starts at or before ms (a tester trade). It rides the scroll-back
      guard (one request at a time, the pauses after errors) and asks again every 700 ms until the answer lands.
@@ -615,7 +668,7 @@ class Cell {
     Object.assign(this.cfg, patch);
     this.title();
     this.host.changed();
-    const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec, need = this.need();
+    const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec && !(this.windowAt != null && ('spec' in patch || 'root' in patch)), need = this.need();
     const loaded = (this.has.fp || !need.fp) && (this.has.big || !need.big);
     if (same && this.chart && !this.inflight.length && loaded && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
       this.lastGood = this.cfgNow();
@@ -632,6 +685,8 @@ class Cell {
     if (entry) this.lastGood = entry.cfg;
     if (this.inflight.length) return;
     this.has = entry ? entry.has : { fp: true, big: true };   // no sub of ours: a replay's history, which carries both
+    this.windowAt = null;
+    if (this.winReq) this.winReq.resolve(false);   // a window asked for before this history is not the one wanted now
     this.back.reset();
     this.capped = false;
     const s = this.shown, view = entry && entry.view && s && s.root === m.root && s.spec === m.spec ? entry.view : null;
@@ -1077,7 +1132,7 @@ class Cell {
   /* Ignored while a sub is in flight: the bars on screen may belong to a
      stream this chart is leaving, and the answer's history carries it all. */
   onUpdate(m) {
-    if (!this.chart || this.inflight.length) return;
+    if (!this.chart || this.inflight.length || this.windowAt != null) return;   // a window is a past, not the live stream
     const touched = [];
     const vals = (i, live) => { const o = {}; for (const k in m.studies) o[k] = live ? m.studies[k].live : m.studies[k].closed[i]; return o; };
     m.closed.forEach((b, i) => { b.sv = vals(i, false); if (i === 0 && this.devel) this.replaceLast(b); else this.append(b); touched.push(b); });
@@ -1239,6 +1294,7 @@ class Cell {
     // teardown() is not enough (a rebuild keeps the chart): a pending reach() must not keep polling a cell
     // that is gone for good.
     if (this.reaching) this.reaching.resolve(false);
+    if (this.winReq) this.winReq.resolve(false);
     // ... nor may a whenLoaded() (a jump() awaiting this cell's load) wait on a cell that will never load.
     const w = this.loadWaiters; this.loadWaiters = []; w.forEach((f) => f(false));
     this.teardown();

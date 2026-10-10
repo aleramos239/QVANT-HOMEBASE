@@ -316,6 +316,53 @@ test('runJump: never touches a replaying chart or one with accounts', async () =
   assert.match(env.notes.at(-1), /replaying/);
 });
 
+/* ---------------------------------------------------------------- the Lab keeps the viewer's interval (2026-10-10) */
+
+test('windowEnd / windowCovers: a window ends an hour past the exit; held bars or a wider window cover the trade', () => {
+  assert.equal(X.windowEnd(T0, 0), 6000 + 3600000);
+  assert.equal(X.windowEnd(T0, 7200000), 6000 + 7200000);
+  const live = { bars: [{ ms: 1000 }], windowAt: null }, win = { bars: [{ ms: 1000 }], windowAt: 6000 + 3600000 };
+  assert.equal(X.windowCovers(live, T0, 0, 0), true);
+  assert.equal(X.windowCovers({ ...live, bars: [{ ms: 5500 }] }, T0, 0, 0), false);
+  assert.equal(X.windowCovers(win, T0, 0, 0), true);
+  assert.equal(X.windowCovers(win, T0, 0, 7200000), false);           // the frame wants more after the exit than the window holds
+  assert.equal(X.windowCovers({ bars: [], windowAt: null }, T0, 0, 0), false);
+});
+
+test('runJump with windowJumps: the chart keeps its interval and the trade is loaded as a window', async () => {
+  const asked = [];
+  const b = nqCell({ cfg: { root: 'NQ', spec: 'time:60' }, bars: [{ ms: 90000 }], windowAt: null,
+    showWindow: async (end) => { asked.push(end); b.bars = [{ ms: 1000 }, { ms: 5000 }, { ms: 9000 }]; b.windowAt = end; return true; } });
+  const env = fakeEnv([nqCell(), b], { windowJumps: true, tester: { reachSpec: () => 'time:300' } });   // reachSpec would say 5m
+  await X.runJump(env, 0, b, { select: false, avoidSelected: true });
+  assert.equal(b.cfg.spec, 'time:60', 'never switched to a coarser interval');
+  assert.deepEqual(asked, [6000 + 3600000]);
+  assert.equal(b.focused >= 1, true);
+});
+
+test('runJump with windowJumps: a chart that already holds the trade is not reloaded', async () => {
+  let asked = 0;
+  const b = nqCell({ showWindow: async () => { asked++; return true; } });
+  await X.runJump(fakeEnv([nqCell(), b], { windowJumps: true }), 0, b, { select: false, avoidSelected: true });
+  assert.equal(asked, 0);
+  assert.equal(b.focused >= 1, true);
+});
+
+test('runJump with windowJumps: a window the server refuses says so and leaves the interval alone', async () => {
+  const b = nqCell({ bars: [{ ms: 90000 }], showWindow: async () => false });
+  const env = fakeEnv([nqCell(), b], { windowJumps: true });
+  await X.runJump(env, 0, b, { select: false, avoidSelected: true });
+  assert.equal(b.cfg.spec, 'time:60');
+  assert.match(env.notes.at(-1), /could not be loaded/);
+});
+
+test('runJump without windowJumps: an unreachable trade still switches interval (the Charts page, ruling S20)', async () => {
+  const updates = [];
+  const b = nqCell({ update: (p) => updates.push(p) });
+  await X.runJump(fakeEnv([nqCell(), b], { tester: { reachSpec: () => 'time:300' } }), 0, b, { select: false, avoidSelected: true });
+  assert.deepEqual(updates, [{ root: 'NQ', spec: 'time:300' }]);
+});
+
 /* ---------------------------------------------------------------- a trade in its context (the Lab) */
 
 test('focusTradeView: no context is the tight zoom every caller always got', () => {

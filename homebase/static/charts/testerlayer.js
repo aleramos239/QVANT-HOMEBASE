@@ -307,6 +307,15 @@ async function settleFocus(cell, t, { isCurrent = () => true, wait = sleep, trie
   }
 }
 
+/* A window (cell.showWindow) around trade t: ends an hour after its exit (or `after` past it, when the frame asks for more);
+   it is what a jump uses instead of a coarser interval. windowCovers: the chart already holds the trade -- the latest
+   bars back to the frame's start, or an earlier window that runs on past the exit. */
+const windowEnd = (t, after) => t.exit_ms + Math.max(3600000, after || 0);
+function windowCovers(cell, t, back, after) {
+  if (!cell.bars || !cell.bars.length || cell.bars[0].ms > t.entry_ms - back) return false;
+  return cell.windowAt == null || cell.windowAt >= t.exit_ms + (after || 0);
+}
+
 /* The jump itself, with everything it touches passed in (env) so it can be exercised without a page:
    env = {U (HBTesterUI), page, tester (reachSpec), cat (specLabel), wait}. `target` names the chart (Claude's
    show, already planned); without it the chart comes from showPlan (`avoidSelected`: Claude's rule, else a
@@ -331,7 +340,10 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
   const gone = () => !page.cells().includes(cell);
   const again = () => (!replanned && current() ? runJump(env, i, null, { select: false, avoidSelected, replanned: true, contextMs }) : undefined);
   if (select) page.select(cell);
-  const spec = tester.reachSpec(cell.cfg.spec, t.entry_ms, page.clockMs());
+  // windowJumps (the Lab): the interval is the viewer's -- a trade too old for its scroll-back is loaded as a
+  // window around it, never answered by switching to a coarser interval
+  const win = env.windowJumps === true && typeof cell.showWindow === 'function';
+  const spec = win ? cell.cfg.spec : tester.reachSpec(cell.cfg.spec, t.entry_ms, page.clockMs());
   if (rootOf(cell) !== root || spec !== cell.cfg.spec) {
     const specChanged = spec !== cell.cfg.spec;
     const waiting = cell.whenLoaded();
@@ -346,7 +358,14 @@ async function runJump(env, i, target = null, { select = true, avoidSelected = f
   const day = t.date;
   const note = (firstMs) => page.sbNote(`Loading history back to ${day}… (at ${new Date(firstMs).toISOString().slice(0, 10)})`);
   // with context, the history before the entry is wanted too; the trade itself is still what must be reachable
-  const back = contextOf(contextMs).before;
+  const { before: back, after: ahead } = contextOf(contextMs);
+  if (win && !windowCovers(cell, t, back, ahead)) {
+    page.sbNote(`Loading ${cat.specLabel(cell.cfg.spec)} bars around ${day}…`);
+    const got = await cell.showWindow(windowEnd(t, ahead));
+    if (!current()) return;
+    if (gone()) return again();
+    if (!got) { page.sbNote(`${day} could not be loaded on ${cat.specLabel(cell.cfg.spec)} bars`); return; }
+  }
   const ok = (await cell.reach(t.entry_ms - back, note)) || (back ? await cell.reach(t.entry_ms, note) : false);
   if (!current()) return;
   if (gone()) return again();
@@ -883,6 +902,8 @@ function chartFacts(c) {
     tradeReady: !onBacktest && (!tr || !!(c.cfg && c.cfg.algo) || !!(tr.accounts && tr.accounts.length)) };
 }
 
+let WINDOW_JUMPS = false;   // setWindowJumps(): the Lab's chart keeps the viewer's interval (see runJump)
+function setWindowJumps(on) { WINDOW_JUMPS = on === true; }
 let PAGE = null;   // the page interface (same singleton every overlay() call hands us): jump()'s own home
 function overlay(cell, page) {
   PAGE = page;
@@ -897,10 +918,10 @@ function overlay(cell, page) {
    names it instead, and select: false leaves the selection alone. */
 function jump(i, target = null, opts = {}) {
   if (!PAGE) return Promise.resolve();
-  return runJump({ U: window.HBTesterUI, page: PAGE, tester: window.HBTester, cat: window.HBCatalog, chartFacts }, i, target, opts);
+  return runJump({ U: window.HBTesterUI, page: PAGE, tester: window.HBTester, cat: window.HBCatalog, chartFacts, windowJumps: WINDOW_JUMPS }, i, target, opts);
 }
 
-const api = { overlay, jump, runJump, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
+const api = { overlay, jump, runJump, setWindowJumps, windowCovers, windowEnd, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
   showPlan, claudeAvoidsSelected, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
   boxGeometry, fillSides, thinLabels, tradeTip, LABEL_MIN_PX, MIN_BOX_W };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;
