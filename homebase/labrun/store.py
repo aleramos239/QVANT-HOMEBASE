@@ -8,6 +8,13 @@ this module talks to a service. Remove deletes the record only: the days and the
     <root>/<name>/days/<YYYY-MM-DD>.json   one day summary (written whole by the runner)
     <root>/<name>/journal.jsonl         the runner's notes, one JSON line each
     <root>/runner.json                  the runner's heartbeat
+    <root>/<name>.desk.json             the DESK's sidecar (Step B): {"mark": [sha256, promoted_utc], "limits": {...} | None,
+                                        "book": [{"account", "qty"}], "written_utc"}. Written by the desk process only
+                                        (the runner and the chart service read it); listing() skips it (its stem is not
+                                        a strategy name)
+
+One writer at a time, across processes, for put, set_enabled, remove and put_desk: write_lock() is a flock on the root
+folder itself (no lock file: the folder holds records, sidecars, the heartbeat and each strategy's history, nothing else).
 
 The record carries, besides the code and the run's numbers, `session_window` (["09:25", "16:00"]) and `bar_minutes` (0 =
 none) from the draft's static meta, and the `commission` and `slippage_ticks` that backtest ran with (the runner's
@@ -20,11 +27,15 @@ Stdlib only (draftstore, for the name rule, is too).
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
 import re
+import threading
+import time
 from pathlib import Path
 
 from ..draftstore import NAME_RE
@@ -35,6 +46,7 @@ DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 HEADLINE = (("net", "net_profit"), ("trades", "trades"), ("win_rate", "win_rate"), ("profit_factor", "profit_factor"),
             ("max_drawdown", "max_drawdown"))        # our key, the report summary's key
 DEFAULT_WINDOW = ["09:25", "16:00"]      # the Strategy's own session_window
+DESK_SUFFIX = ".desk.json"               # the desk's sidecar beside the record
 
 
 def root(arg=None) -> Path:
@@ -50,6 +62,52 @@ def _name(name) -> str:
 
 def _file(name, at=None) -> Path:
     return root(at) / f"{_name(name)}.json"
+
+
+def _desk_file(name, at=None) -> Path:
+    return root(at) / f"{_name(name)}{DESK_SUFFIX}"
+
+
+_held = threading.local()                # this thread's locks: {root: depth}, so a writer may call another writer
+
+
+@contextlib.contextmanager
+def write_lock(at=None, wait_s: float | None = None):
+    """One writer at a time in this store, across processes and threads (flock on the root folder). A thread that
+    holds it may take it again (Promote checks the sidecar, then writes the record, under one lock). wait_s None waits
+    for its turn; a number gives up after that long with TimeoutError -- for a caller that must not stand still."""
+    d = root(at)
+    held = _held.__dict__.setdefault("roots", {})
+    key = str(d)
+    if key in held:
+        held[key] += 1
+        try:
+            yield
+        finally:
+            held[key] -= 1
+        return
+    d.mkdir(parents=True, exist_ok=True)
+    fd = os.open(d, os.O_RDONLY)
+    try:
+        if wait_s is None:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+        else:
+            until = time.monotonic() + wait_s
+            while True:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break
+                except BlockingIOError:
+                    if time.monotonic() >= until:
+                        raise TimeoutError("the Lab store is being written by another process") from None
+                    time.sleep(0.005)
+        held[key] = 1
+        try:
+            yield
+        finally:
+            del held[key]
+    finally:
+        os.close(fd)                                 # closing the file gives the lock back
 
 
 def _write(f: Path, obj) -> None:
@@ -87,7 +145,9 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
 
 
 def put(rec: dict, at=None) -> dict:
-    _write(_file(rec.get("name"), at), rec)
+    f = _file(rec.get("name"), at)
+    with write_lock(at):
+        _write(f, rec)
     return rec
 
 
@@ -97,12 +157,14 @@ def get(name: str, at=None) -> dict | None:
 
 def remove(name: str, at=None) -> bool:
     """True when it was on the Desk. Only the record goes: the days and the journal are the history. A file that is not
-    there is not an error: the page may be a step behind."""
-    try:
-        _file(name, at).unlink()
-        return True
-    except FileNotFoundError:
-        return False
+    there is not an error: the page may be a step behind. The desk's sidecar is not touched: it is the desk's."""
+    f = _file(name, at)
+    with write_lock(at):
+        try:
+            f.unlink()
+            return True
+        except FileNotFoundError:
+            return False
 
 
 def listing(at=None) -> list:
@@ -117,11 +179,52 @@ def listing(at=None) -> list:
     return sorted(out, key=lambda s: str(s.get("promoted_utc") or ""), reverse=True)
 
 
-def set_enabled(name: str, on: bool, at=None) -> dict | None:
-    rec = get(name, at)
-    if rec is None:
-        return None
-    return put({**rec, "enabled": bool(on)}, at)
+def mark_of(rec: dict) -> list:
+    """What names ONE promotion of a record: its code and the moment it was promoted (see same_promotion)."""
+    return [rec.get("sha256"), rec.get("promoted_utc")]
+
+
+def set_enabled(name: str, on: bool, at=None, mark=None) -> dict | None:
+    """The switch. None when the strategy is not on the Desk, or -- with a `mark` -- when the record is no longer that
+    promotion (it was promoted again since the caller looked): nothing is written then. Read and write under one lock,
+    so a Promote at the same instant is never half undone."""
+    f = _file(name, at)
+    with write_lock(at):
+        rec = _read(f)
+        if rec is None or (mark is not None and list(mark) != mark_of(rec)):
+            return None
+        rec = {**rec, "enabled": bool(on)}
+        _write(f, rec)
+        return rec
+
+
+def get_desk(name: str, at=None) -> dict | None:
+    """The desk's sidecar for a promoted strategy; None when there is none or it does not read."""
+    return _read(_desk_file(name, at))
+
+
+def put_desk(name: str, obj: dict, at=None, wait_s: float | None = None) -> dict:
+    """Written by the desk process only. wait_s: see write_lock."""
+    f = _desk_file(name, at)
+    with write_lock(at, wait_s):
+        _write(f, obj)
+    return obj
+
+
+def remove_desk(name: str, at=None) -> bool:
+    f = _desk_file(name, at)
+    with write_lock(at):
+        try:
+            f.unlink()
+            return True
+        except FileNotFoundError:
+            return False
+
+
+def booked(name: str, at=None) -> bool:
+    """True while the desk's sidecar holds book rows: accounts are assigned to this strategy on the Desk."""
+    side = get_desk(name, at)
+    return bool(side and isinstance(side.get("book"), list) and side["book"])
 
 
 def same_promotion(day, rec: dict) -> bool:

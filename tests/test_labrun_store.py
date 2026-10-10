@@ -179,3 +179,108 @@ def test_every_test_works_in_a_temp_store_without_asking(desklab_root):
     store.put_day("nq_x", day("2026-10-08"))
     store.put_runner({"pid": 1})
     assert sorted(x.name for x in desklab_root.iterdir()) == ["nq_x", "nq_x.json", "runner.json"]
+
+
+# ---- Step B (B1): the desk's sidecar (limits, book, mark), the write lock, the on/off switch's mark check
+SIDE = {"mark": ["ab", "2026-10-09T12:00:00+00:00"], "limits": None, "book": [{"account": "main", "qty": 1}],
+        "written_utc": "2026-10-10T00:00:00+00:00"}
+
+
+def test_the_sidecar_round_trips_and_is_never_listed_as_a_strategy(tmp_path):
+    assert store.get_desk("nq_x", tmp_path) is None and store.remove_desk("nq_x", tmp_path) is False
+    store.put(rec(), tmp_path)
+    assert store.put_desk("nq_x", SIDE, tmp_path) == SIDE
+    assert (tmp_path / "nq_x.desk.json").is_file() and not list(tmp_path.glob(".*.tmp"))
+    assert store.get_desk("nq_x", tmp_path) == SIDE
+    assert [s["name"] for s in store.listing(tmp_path)] == ["nq_x"]            # the sidecar is not a record
+    assert store.remove("nq_x", tmp_path) is True                               # the record goes; the sidecar is the desk's
+    assert store.get_desk("nq_x", tmp_path) == SIDE
+    assert store.remove_desk("nq_x", tmp_path) is True and store.get_desk("nq_x", tmp_path) is None
+    (tmp_path / "nq_x.desk.json").write_text("{not json")
+    assert store.get_desk("nq_x", tmp_path) is None                             # a file that does not read: no sidecar
+
+
+def test_booked_is_a_sidecar_with_book_rows(tmp_path):
+    assert store.booked("nq_x", tmp_path) is False
+    store.put_desk("nq_x", {**SIDE, "book": []}, tmp_path)
+    assert store.booked("nq_x", tmp_path) is False
+    store.put_desk("nq_x", SIDE, tmp_path)
+    assert store.booked("nq_x", tmp_path) is True
+
+
+@pytest.mark.parametrize("bad", ["", "Bad", "../x", "x", 5, None, "runner"])
+def test_bad_names_raise_for_the_sidecar_too(tmp_path, bad):
+    for call in (lambda: store.get_desk(bad, tmp_path), lambda: store.put_desk(bad, SIDE, tmp_path),
+                 lambda: store.remove_desk(bad, tmp_path), lambda: store.booked(bad, tmp_path)):
+        with pytest.raises(ValueError):
+            call()
+
+
+def test_mark_of_is_the_code_and_the_moment_it_was_promoted():
+    assert store.mark_of(rec()) == ["ab", "2026-10-09T12:00:00+00:00"]
+    assert store.mark_of({}) == [None, None]
+
+
+def test_set_enabled_with_a_mark_refuses_a_record_promoted_again(tmp_path):
+    store.put(rec(enabled=False), tmp_path)
+    old = store.mark_of(store.get("nq_x", tmp_path))
+    assert store.set_enabled("nq_x", True, tmp_path, mark=old)["enabled"] is True
+    assert store.set_enabled("nq_x", True, tmp_path, mark=tuple(old))["enabled"] is True      # a tuple is the same mark
+    store.put(rec(promoted="2026-10-10T08:00:00+00:00", enabled=False), tmp_path)             # promoted again: lands off
+    assert store.set_enabled("nq_x", True, tmp_path, mark=old) is None                        # the old mark: refused
+    assert store.get("nq_x", tmp_path)["enabled"] is False                                    # and nothing was written
+    assert store.set_enabled("nq_x", True, tmp_path)["enabled"] is True                       # no mark: as before
+    assert store.set_enabled("nq_none", True, tmp_path, mark=old) is None
+
+
+def test_a_thread_may_take_the_write_lock_twice_and_it_leaves_no_file_behind(tmp_path):
+    with store.write_lock(tmp_path):
+        with store.write_lock(tmp_path):                                        # the same thread: no deadlock
+            store.put(rec(), tmp_path)                                          # put takes it again itself
+            store.put_desk("nq_x", SIDE, tmp_path)
+            assert store.set_enabled("nq_x", False, tmp_path)["enabled"] is False
+            assert store.remove("nq_x", tmp_path) is True and store.remove_desk("nq_x", tmp_path) is True
+    assert list(tmp_path.iterdir()) == [] and store.listing(tmp_path) == []     # the lock is the folder itself
+
+
+def test_a_second_writer_waits_for_the_lock_and_a_bounded_wait_gives_up(tmp_path):
+    import threading
+    inside, release, got = threading.Event(), threading.Event(), []
+
+    def holder():
+        with store.write_lock(tmp_path):
+            inside.set()
+            release.wait(5)
+
+    t = threading.Thread(target=holder)
+    t.start()
+    assert inside.wait(5)
+    with pytest.raises(TimeoutError):                                           # held by another thread: a bounded wait ends
+        store.put_desk("nq_x", SIDE, tmp_path, wait_s=0.05)
+    assert store.get_desk("nq_x", tmp_path) is None                             # and nothing was written
+
+    def writer():
+        store.put_desk("nq_x", SIDE, tmp_path)                                  # no bound: it waits its turn
+        got.append(True)
+
+    w = threading.Thread(target=writer)
+    w.start()
+    w.join(0.1)
+    assert got == []                                                            # still waiting
+    release.set()
+    t.join(5), w.join(5)
+    assert got == [True] and store.get_desk("nq_x", tmp_path) == SIDE
+
+
+def test_the_lock_is_held_across_processes(tmp_path):
+    """flock on the root folder: the chart service (Promote) and the desk (the sidecar) are two processes."""
+    import subprocess
+    import sys
+    code = ("import sys; from homebase.labrun import store\n"
+            "try:\n    store.put_desk('nq_x', {'book': []}, sys.argv[1], wait_s=0.05)\n    print('wrote')\n"
+            "except TimeoutError:\n    print('busy')\n")
+    with store.write_lock(tmp_path):
+        out = subprocess.run([sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, timeout=30)
+    assert out.stdout.strip() == "busy", out.stderr
+    out = subprocess.run([sys.executable, "-c", code, str(tmp_path)], capture_output=True, text=True, timeout=30)
+    assert out.stdout.strip() == "wrote", out.stderr
