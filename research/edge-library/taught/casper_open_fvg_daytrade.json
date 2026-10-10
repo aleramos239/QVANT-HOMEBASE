@@ -1,0 +1,36 @@
+{
+ "name": "casper_open_fvg_daytrade",
+ "source": {
+  "video": "WEhmadJArQo",
+  "title": "The Best FVG Trading Strategy (That Actually Works)",
+  "channel": "Jesse Rogers / Casper Trading",
+  "url": "https://youtu.be/WEhmadJArQo"
+ },
+ "market": "NQ",
+ "bars": ["5"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "open_fvg",
+  "settings": {"oc_min": "15", "min_gap": 0.1},
+  "words": "Mark the first 15-minute candle after the 09:30 open. On 5-minute bars, when a fair value gap forms through that candle's high (long) or low (short), put a limit order at the gap; the stop sits beyond the first candle of the gap pattern; the target is 2R."
+ },
+ "exits": {"stop": "struct", "target_r": 2.0, "max_trades": 1},
+ "taught": [
+  "[5:00-7:50] the day trade uses the first 15-minute candle of the session (09:30-09:45)",
+  "[5:00-7:50] on 5-minute bars a fair value gap forms through that candle's high (long) or low (short)",
+  "[5:00-7:50] a limit order at the gap",
+  "[5:00-7:50] the stop goes beyond the first candle of the fair value gap pattern",
+  "[5:00-7:50] the target is 2R"
+ ],
+ "not_run": [
+  "The stop is bar 1's far extreme (the engine's structure level of open_fvg: an up gap's bar-1 low, a down gap's bar-1 high), put exactly on the extreme with no extra tick. The video's 'the first candle in the fair value gap pattern' is read as the same candle, the oldest of the three bars of the gap; the video does not say how far beyond it, nor that it is the far extreme.",
+  "The limit rests at the gap's near edge, with the push, and may fill late: it stays until it fills, until a bar closes beyond the gap's far edge, or until 5 minutes before the end of the nyam pass (10:55). The video does not say how long the order waits.",
+  "'A gap forms through the candle': the engine counts the gap when its middle bar trades at the candle's level and closes beyond it; the gap's own zone may lie above, around or below the level. The video's wording may mean the gap sits on the level.",
+  "One trade a day is max_trades 1 = one SIGNAL in the nyam pass (09:30-11:00): the first gap that counts, on either side, whether or not its limit ever fills; gaps after 11:00 are not traded. The video does not say how long in the day it waits.",
+  "The 1-minute SCALP of the same video (a gap on 1-minute bars through the first 5-minute candle, price back into the gap, the candle engulfed, stop one tick beyond the retest, 3R) is NOT this sheet.",
+  "The market is not named in the notes of the video: NQ is the lane's home market here.",
+  "Flat time: the engine flattens at 15:58 ET; the video says nothing. Costs: the engine's own (1 tick of slippage, $4 a round turn)."
+ ],
+ "control": "random"
+}

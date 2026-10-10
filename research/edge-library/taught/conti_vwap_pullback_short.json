@@ -1,0 +1,38 @@
+{
+ "name": "conti_vwap_pullback_short",
+ "source": {
+  "video": "wm4A6qo0g3I",
+  "title": "Ex-Market Maker Shows the Exact VWAP Setup That Gets Traders Funded",
+  "channel": "Matteo Conti (IQCapital)",
+  "url": "https://youtu.be/wm4A6qo0g3I"
+ },
+ "market": "NQ",
+ "bars": ["5", "15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "short",
+ "entry": {
+  "family": "vwap_trend_pull",
+  "settings": {"x": 0.1, "max_loss": 2},
+  "words": "Short when the 15-minute trend is down -- the close is below the VWAP anchored at the 09:30 open, the VWAP is lower than 15 minutes ago, and the price is down at least 0.1 % over the last hour -- and a green candle (the pullback) comes: enter at the next bar's open by market order."
+ },
+ "exits": {"stop_pts": 80, "target_pts": 50, "exit_bars": 0, "max_trades": 4},
+ "taught": [
+  "[notes section 2; screen [14:18]-[15:20]] SHORT trend = the mirror: the close below VWAP, VWAP lower than 15 minutes ago, price down at least 0.1 % over the last hour; VWAP anchored at the 09:30 ET cash open",
+  "[notes section 2; screen [24:26]-[25:26]] trigger: the first green candle (a pullback) once the trend is true; the distance to VWAP does not matter; entry at the next bar open by market order",
+  "[notes section 2] no trades 09:30-10:30 ET, no new trades after 15:30 ET, everything flat at 15:55 ET",
+  "[notes section 2] short: stop 80 points, target 50 points",
+  "[notes section 2] one position at a time, at most 4 trades a day, stop for the day after 2 losses (he says '2 losses' and '2 losses in a row')",
+  "[notes section 2] the 0.1 % threshold and the cap of 4 trades were tuned in sample (his words): the lane runs them as he gives them, untuned"
+ ],
+ "not_run": [
+  "Capped per session, not per day: the engine runs nyam, mid and pm as three independent passes, so the cap of 4 trades and the stop after 2 losses count inside each pass (a day can hold up to 12 trades and 6 losses); no single pass covers 10:30-15:30, so an honest per-day cap cannot be had here.",
+  "'Stop for the day after 2 losses' is the family's max_loss = 2 LOSING trades of the pass (any two, not two in a row) -- the video says both '2 losses' and '2 losses in a row'.",
+  "One position at a time holds inside a pass only: a trade of the nyam pass can still be open when the mid or pm pass enters.",
+  "On 15-minute bars the family reads the VWAP slope against 3 bars ago = 45 minutes; the video says 15 minutes (one 15-minute bar). On 5-minute bars 3 bars = 15 minutes, as taught.",
+  "Flat time: the engine flattens at 15:58 ET (13:13 on half days); the video says 15:55.",
+  "'First green candle once the trend is true': the family takes the first up bar after a bar that was not up while the state holds (a new pullback); the video does not say first after what.",
+  "The VWAP is the family's own: volume-weighted typical price (h + l + c) / 3 of the 1-minute bars from 09:30; the video does not say which price or which bars it uses.",
+  "Costs and the order of a stop and a target inside one bar: the engine's own (1 tick of slippage, $4 a round turn, tick replay); the video says nothing."
+ ],
+ "control": "random"
+}
