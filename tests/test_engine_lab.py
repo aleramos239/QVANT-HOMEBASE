@@ -3030,3 +3030,279 @@ def test_t1_no_order_id_of_a_carried_pair_is_on_the_blocks_state(tmp_path):
     run(eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=90.0, raw={"orderId": "a1-102"})))
     assert (block.status, block.exit_reason) == ("error", "carried") and sent(ad) == before
     assert not events(tmp_path, "both_filled_emergency")
+
+
+# ================================================================================================ fix round 4
+def edit_file(tmp_path, eng, which, change):
+    p = tmp_path / f"{which}-{eng._today()}.json"
+    d = json.loads(p.read_text())
+    change(d)
+    p.write_text(json.dumps(d))
+
+
+# ------------------------------------------------------------------------------------------------ O-1
+@pytest.mark.parametrize("how", ["lab_cancel", "lab_flatten", "clock"])
+def test_o1_a_cancelled_mark_from_the_file_is_a_hint_never_a_fact(tmp_path, how):
+    """The reviewer's O-1: one damaged field says both entries of a pair were cancelled; both still work. Nothing
+    may end the round or cancel a stop on the file's word."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    up, dn = rnd(eng).upper_id, rnd(eng).lower_id
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d[f"{LAB}@a1"].update(cancelled=["Buy", "Sell"]))
+    eng2.lab_open(LAB)
+    st = rnd(eng2)
+    ad.stuck = {up, dn}                                            # a cancel is accepted and the order keeps working
+    if how == "clock":
+        clock.set_et(15, 56)
+        tick(eng2)
+        assert "check it" in events(tmp_path, "clock_flat_failed")[0]["actions"][-1]
+    else:
+        out = run(getattr(eng2, how)(LAB))["a1"]
+        assert out["ok"] is False
+    assert st.status == "placed" and ad.orders == []
+    assert set(ad.cancelled) == {up, dn}                           # the entries are asked again; no stop, no target
+    assert not events(tmp_path, "lab_cancelled") and rows(eng2)[0]["cancelled"] == []
+    tick(eng2)
+    fill_entry(eng2, ad, st, 111.0, side="Buy")                    # the buy stop then fills: its stop is there
+    assert (st.status, st.entry_side) == ("live", "Buy") and ad.order_status[f"{up}-sl"] == "Working"
+
+
+def test_o1_a_true_cancelled_mark_is_read_again_after_a_restart(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    assert run(eng.lab_cancel(LAB, 4))["a1"]["state"] == "cancelled" and rows(eng)[0]["cancelled"] == ["Sell"]
+    eng2 = restart(eng, tmp_path)
+    assert rows(eng2)[0]["cancelled"] == []                        # from the file it is only a hint ...
+    n = len(ad.cancelled)
+    tick(eng2)
+    assert rows(eng2)[0]["cancelled"] == ["Sell"] and len(ad.cancelled) == n      # ... until the broker is read
+    ad.order_status[rnd(eng2).upper_id] = "Working"
+    eng3 = damaged_restart(eng2, tmp_path, lambda d: d[f"{LAB}@a1"].update(cancelled=["Buy", "Sell"]))
+    tick(eng3)
+    assert rows(eng3)[0]["cancelled"] == ["Sell"] and rnd(eng3).status == "placed"   # the false one is dropped
+
+
+# ------------------------------------------------------------------------------------------------ O-2
+def test_o2_the_day_roll_never_touches_a_state_of_another_kind(tmp_path):
+    """The reviewer's O-2: the labday file names another kind's key, and that state has a damaged number."""
+    es = StrategyCfg(symbol="ES", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
+    eng, ads, clock = mk(tmp_path, extra={"es930": es}, book={"es930": [{"account": "a1", "qty": 1}]})
+    alert = {"strategy": "es930", "upper": 5010.0, "lower": 4990.0}
+    assert run(eng.handle_alert(dict(alert)))["ok"]
+    eng.lab_open(LAB)
+    edit_file(tmp_path, eng, "labday", lambda d: d.update({"es930@a1": {}}))
+    edit_file(tmp_path, eng, "day", lambda d: d["es930@a1"].update(qty=-1))
+    eng2 = restart(eng, tmp_path)
+    before = (eng2.states["es930@a1"], eng2.states["es930@a1"].status, eng2.day_status("es930"))
+    eng2.lab_open(LAB)
+    eng2.lab_rounds(LAB)
+    tick(eng2)
+    assert (eng2.states["es930@a1"], eng2.states["es930@a1"].status, eng2.day_status("es930")) == before
+    assert before[1:] == ("placed", "placed") and list(eng2.states) == ["es930@a1"]
+    assert run(eng2.handle_alert(dict(alert)))["ok"] is False and len(ads["a1"].brackets) == 2   # one a day, still
+    (f,) = events(tmp_path, "lab_foreign_key")
+    assert f["key"] == "es930@a1"
+    eng3 = restart(eng2, tmp_path)
+    eng3.lab_open(LAB)
+    assert len(events(tmp_path, "lab_foreign_key")) == 1 and "es930@a1" not in eng3._lab_mem()
+
+
+# ------------------------------------------------------------------------------------------------ O-3
+def every_path(eng2, ad, st, clock):
+    """Every engine path that can meet a damaged state after the first Lab call (the reviewer's fuzz sequence)."""
+    eng2.lab_open(LAB)
+    eng2.lab_rounds(LAB)
+    tick(eng2)
+    for side, px, oid in (("Sell", 95.0, f"{st.upper_id}-sl"), ("Buy", 100.0, st.upper_id)):
+        run(eng2.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side=side, qty=1, price=px, raw={"orderId": oid})))
+    run(eng2.lab_cancel(LAB))
+    run(eng2.lab_flatten(LAB))
+    run(eng2.reconcile_account("a1"))
+    clock.set_et(15, 56)
+    tick(eng2)
+    run(eng2.kill_strategy(LAB))
+    run(eng2.flatten_strategy(LAB))
+    run(eng2.flatten_today())
+    run(eng2.sibling_tick())
+    tick(eng2)
+    eng2.lab_rounds(LAB)
+    run(eng2.lab_clear_block(LAB, "a1"))
+
+
+@pytest.mark.parametrize("field", ["tp_pts", "sl_pts", "sl_sell_pts", "take_usd", "take_px", "strategy"])
+@pytest.mark.parametrize("value", ["x", [], {}, [1], float("inf"), None, 5, True])
+def test_o3_no_damaged_field_of_a_lab_state_raises_after_the_first_lab_call(tmp_path, field, value):
+    """The two classes the reviewer's fuzz found: a levels field on_fill leans on for every kind (tp_pts and its
+    neighbours), and a strategy field that is not a string (or cannot even be a dict key)."""
+    if field != "strategy" and value in (None, 5, True) and not (value is True):
+        pytest.skip("a valid value for a number field")
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    edit_file(tmp_path, eng, "day", lambda d: d[f"{LAB}@a1"].update({field: value}))
+    eng2 = restart(eng, tmp_path)
+    before = (len(ad.orders), len(ad.brackets))
+    every_path(eng2, ad, st, clock)                                 # no call raises
+    assert not events(tmp_path, "clock_error") and (len(ad.orders), len(ad.brackets)) == before
+    assert not [s for s in eng2.states.values() if s.status == "placing"]
+    (r,) = eng2.lab_rounds(LAB)
+    assert r["carried"] is True and r["why"] == "The Desk cannot read yesterday's record for this account."
+
+
+def test_o3_the_entry_fill_of_a_state_with_a_damaged_levels_field_is_not_reached(tmp_path):
+    """The reviewer's o3: tp_pts = "x" raised inside on_fill at the entry fill, with the pair's other entry left."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    up, dn = rnd(eng).upper_id, rnd(eng).lower_id
+    edit_file(tmp_path, eng, "day", lambda d: d[f"{LAB}@a1"].update(tp_pts="x"))
+    eng2 = restart(eng, tmp_path)
+    assert eng2.lab_open(LAB) == ["a1"] and f"{LAB}@a1" not in eng2.states       # a block from the first Lab call
+    ad.order_status[up], ad.filled[up], ad.net = "Filled", 1, 1
+    run(eng2.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Buy", qty=1, price=111.0, raw={"orderId": up})))
+    assert sorted(eng2.lab_rounds(LAB)[0]["orders"])[:2] == [up, f"{up}-sl"]      # what the owner has to check
+
+
+# ------------------------------------------------------------------------------------------------ L-1
+@pytest.mark.parametrize("lost", [False, True])
+def test_l1_a_placed_round_whose_record_was_lost_still_finds_a_fill_whose_push_was_missed(tmp_path, lost):
+    """Ruling L-1: the one clock action a lost PLACED round keeps is the engine's own read-then-adopt backstop,
+    exactly as a healthy placed round has it. It adopts the fill and cancels the pair's other entry."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    up, dn = rnd(eng).upper_id, rnd(eng).lower_id
+    eng2 = damaged_restart(eng, tmp_path, (lambda d: d.pop(f"{LAB}@a1")) if lost else (lambda d: None))
+    eng2.lab_open(LAB)
+    st = rnd(eng2)
+    ad.order_status[up], ad.filled[up], ad.net = "Filled", 1, 1    # the buy stop fills; no push reaches the Desk
+    tick(eng2)
+    assert (st.status, st.entry_side) == ("live", "Buy")
+    assert ad.cancelled == [dn] and ad.order_status[dn] == "Canceled" and ad.orders == []
+    assert events(tmp_path, "entry_found_by_check")[0]["account"] == "a1"
+    if lost:                                                        # ... and everything else stays hands off
+        clock.set_et(15, 56)
+        tick(eng2)
+        assert ad.cancelled == [dn] and ad.orders == [] and st.status == "live"
+        assert not [e for e in events(tmp_path) if e["event"].startswith("clock_flat")]
+
+
+def test_l1_the_backstop_of_a_lost_round_stops_at_the_flat_time_and_without_a_connection(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    up, dn = rnd(eng).upper_id, rnd(eng).lower_id
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d.pop(f"{LAB}@a1"))
+    ad.order_status[up], ad.filled[up], ad.net = "Filled", 1, 1
+    ad._connected = False
+    tick(eng2)
+    assert rnd(eng2).status == "placed" and ad.cancelled == []     # a dead socket's cache is stale
+    ad._connected = True
+    clock.set_et(15, 56)
+    tick(eng2)
+    assert rnd(eng2).status == "placed" and ad.cancelled == []     # past the flat time: hands off, as ruled
+
+
+# ------------------------------------------------------------------------------------------------ CLEAR + mutants
+@pytest.mark.parametrize("status,refused", [("Working", True), ("Suspended", True), ("PendingNew", True),
+                                            ("SomethingNew", True), ("Canceled", False), ("Filled", False),
+                                            ("Expired", False), (None, False), ("raises", False)])
+def test_clear_is_refused_on_any_readable_status_that_is_not_ended(tmp_path, status, refused):
+    eng, ad, clock, st = unresolved_day_one(tmp_path)
+    next_day(clock)
+    eng.lab_open(LAB)
+    ad.net = 0
+    ad.order_status = {"a1-101": "Filled", "a1-101-tp": "Canceled"}
+    if status == "raises":
+        real = ad.get_order_status
+
+        async def read(i):
+            if i == "a1-101-sl":
+                raise RuntimeError("read failed")
+            return await real(i)
+
+        ad.get_order_status = read
+    elif status is not None:
+        ad.order_status["a1-101-sl"] = status
+    out = run(eng.lab_clear_block(LAB, "a1"))
+    if refused:
+        assert out == {"ok": False, "reason": "An old order of this trade is still working. Cancel it first.",
+                       "orders": ["a1-101-sl"]}
+        assert eng.lab_open(LAB) == ["a1"]
+    else:
+        assert out["ok"] is True and eng.lab_open(LAB) == []
+
+
+def test_an_entry_that_cannot_be_read_is_not_an_ended_entry(tmp_path):
+    """R-C's read: unread is not ended (the mutant read it as ended)."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    eid = rnd(eng).upper_id
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d[f"{LAB}@a1"].update(closing="time", close_sent_ms=0))
+    ad.order_status.pop(eid)                                        # the broker no longer answers for the entry
+    ad.stuck = {eid}
+    clock.set_et(15, 56)
+    tick(eng2)
+    assert rnd(eng2).status == "placed" and f"{eid}-sl" not in ad.cancelled
+    assert "status unknown" in events(tmp_path, "clock_flat_failed")[0]["actions"][-1]
+
+
+def test_a_part_filled_entry_is_read_before_a_round_is_ended_on_a_flat_account(tmp_path):
+    """R-C's read skips only an entry whose every contract was seen filled. 1 of 2 in, the rest still working,
+    a close that may be out, the account flat: nothing is ended and the stop stays."""
+    eng, ads, clock = mk(tmp_path, qty=2)
+    ad = ads["a1"]
+    go(eng, leg(), {"a1": 2})
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 100.0, qty=1)
+    eid = st.upper_id
+    eng2 = damaged_restart(eng, tmp_path, lambda d: d[f"{LAB}@a1"].update(closing="time", close_sent_ms=0))
+    ad.stuck = {eid}
+    ad.net = 0                                                      # its 1 was closed by hand; the rest still works
+    clock.set_et(15, 56)
+    tick(eng2)
+    assert rnd(eng2).status == "live" and f"{eid}-sl" not in ad.cancelled
+    assert "is not ended at the broker" in events(tmp_path, "clock_flat_failed")[0]["actions"][-1]
+
+
+def test_m2_two_lagging_position_reads_are_still_not_three(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ghost_close(eng, ad)
+    fill_exit(eng, ad, st, 101.0, by="market")
+    for k in ("sl", "tp"):
+        ad.order_status[f"{st.upper_id}-{k}"] = "Canceled"
+    lag, real = [1, 1], ad.get_net_position
+
+    async def late(symbol):
+        return lag.pop() if lag else await real(symbol)
+
+    ad.get_net_position = late
+    for _ in range(4):
+        later(clock, 3)
+        tick(eng)
+    assert (rows(eng)[0]["clean"], rows(eng)[0]["why"]) == (True, None)
+
+
+@pytest.mark.parametrize("truth", ["Working", "Filled"])
+def test_o1_a_round_is_never_ended_as_cancelled_without_reading_its_entries(tmp_path, truth):
+    """R-C inside _lab_end_unfilled itself: even a mark this process believes is read back before the round is
+    ended. Both sides are marked cancelled; the buy stop in fact still works, or has filled."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    up = st.upper_id
+    ad.order_status[st.lower_id] = "Canceled"
+    eng._lab_x(st)["cancelled"] = ["Buy", "Sell"]                  # a belief, wrong for the buy stop
+    if truth == "Filled":
+        ad.order_status[up], ad.filled[up], ad.net = "Filled", 1, 1
+    out = run(eng.lab_cancel(LAB))["a1"]
+    assert out["ok"] is False and "check it" in out["actions"][-1]
+    assert st.status == "placed" and ad.cancelled == [] and not events(tmp_path, "lab_cancelled")
+    assert ad.order_status[f"{up}-sl"] == "Suspended"              # its stop is there for the fill

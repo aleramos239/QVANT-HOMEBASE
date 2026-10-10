@@ -1897,6 +1897,11 @@ class Engine:
                 x[k], bad = typ(), True
         if any(v not in ("Buy", "Sell") for v in x.get("cancelled") or []):
             x["cancelled"], bad = [v for v in x["cancelled"] if v in ("Buy", "Sell")], True
+        # O-1: what a file says was cancelled is a hint. `cancelled` holds only what THIS process read at the
+        # broker; every path that skips an "already cancelled" entry therefore asks the broker again after a start
+        hint = x.get("cancelled_hint") if isinstance(x.get("cancelled_hint"), list) else []
+        x["cancelled_hint"] = sorted({v for v in list(x.get("cancelled") or []) + hint if v in ("Buy", "Sell")})
+        x["cancelled"] = []
         if any(not isinstance(v, dict) for v in (x.get("legs") or {}).values()):
             x["legs"], bad = {k: v for k, v in x["legs"].items() if isinstance(v, dict)}, True
         for leg in (x.get("legs") or {}).values():
@@ -1989,6 +1994,8 @@ class Engine:
                 "close_ok": False, "close_id": None, "gone_ms": None, "cancelled": [], "clean": False,
                 "check": False, "unconfirmed": False, "blind": False, "carry": None,
                 "lost": False, "lost_said": False, "net_bad": 0, "net_bad_ms": None,
+                # sides a FILE said were cancelled: a hint, never a fact, until the broker is read (_lab_hints)
+                "cancelled_hint": [],
                 "placed_ms": None, "entry_ms": None, "exit_ms": None, "why": None}
 
     def _lab_round_no(self, st: DayState) -> int:
@@ -2195,12 +2202,17 @@ class Engine:
             return isinstance(v, int) and not isinstance(v, bool) and v >= 0
 
         return (isinstance(rec, dict) and isinstance(rec.get("strategy"), str) and isinstance(rec.get("account"), str)
+                and isinstance(rec.get("date"), str)
                 and rec.get("status") in ("idle", "placing", "placed", "live", "done", "error")
+                and all(rec.get(k) is None or isinstance(rec[k], str) for k in ("exit_reason", "note", "take_src"))
                 and count(rec.get("qty")) and count(rec.get("entry_qty", 0)) and count(rec.get("exit_qty", 0))
                 and rec.get("entry_side") in (None, "Buy", "Sell")
                 and all(rec.get(k) is None or isinstance(rec[k], str) for k in LAB_ID_FIELDS)
+                # every number on_fill, _close_if_out, _gross_pnl, _fee and _set_take_px do arithmetic on, for any
+                # kind: the levels fields too (tp_pts makes _set_take_px compute a take price at the entry fill)
                 and all(num(rec.get(k)) for k in ("entry_fill", "exit_fill", "entry_anchor", "sl_px", "tp_px", "tp_rr",
-                                                  "upper_px", "lower_px", "pnl")))
+                                                  "upper_px", "lower_px", "pnl", "sl_pts", "sl_sell_pts", "tp_pts",
+                                                  "take_usd", "take_px")))
 
     def _lab_roll_day(self, today: str) -> None:
         mem = self._lab_mem()
@@ -2209,6 +2221,8 @@ class Engine:
         unread: dict = {}                             # (strategy, account) -> a record that does not read
 
         def lab(name) -> bool:
+            if not isinstance(name, str):            # O-3: a damaged name (a list, a number) is not a Lab strategy,
+                return False                         # and is never used as a dict key here
             cfg = self.cfg.strategies.get(name)
             return cfg is not None and cfg.kind == LAB
 
@@ -2269,13 +2283,20 @@ class Engine:
 
         changed = False
         for k, st in list(self.states.items()):
-            if not (lab(st.strategy) or k in mem):
+            pair = pair_of(k)
+            if not lab(pair[0]):
+                # O-2: the Lab section never looks at, changes or deletes a state of another kind, whatever a
+                # labday file names. A state is the Lab section's by its KEY (what _state built it under)
+                if k in mem:
+                    del mem[k]
+                    self.journal("lab_foreign_key", key=k, note="the Lab file named a state that is not a Lab strategy's")
                 continue
-            if st.date != today:                      # 1. what this engine still holds of an earlier day
+            if st.date != today and isinstance(st.date, str):    # 1. what this engine still holds of an earlier day
                 take(k, asdict(st), mem.get(k), st.date)
-            elif self._lab_carried(st) or self._lab_rec_ok(asdict(st)):
+            elif st.date == today and (self._lab_carried(st) or (
+                    self._lab_rec_ok(asdict(st)) and (st.strategy, st.account) == pair)):
                 continue
-            else:                                     # G1: a state of TODAY whose numbers do not read (a damaged
+            else:                                     # G1: a state of TODAY whose fields do not read (a damaged
                 blind(k, asdict(st), today)           # day file): out of on_fill's way, a block from here on
             del self.states[k]
             changed = True
@@ -2285,8 +2306,8 @@ class Engine:
             date, lab_old, day_old = self._lab_last_files(today)
             for k, rec in day_old.items():
                 pair = pair_of(k)
-                if not (lab(pair[0]) or k in lab_old) or pair in unread:
-                    continue
+                if not lab(pair[0]) or pair in unread:
+                    continue                          # (O-2: never a row of another kind)
                 d = rec.get("date") if isinstance(rec, dict) else None
                 if d != date:
                     try:
@@ -2445,8 +2466,8 @@ class Engine:
                     status = await ad.get_order_status(i)
                 except Exception:  # noqa: BLE001 -- an order that does not read does not stop a clear by hand
                     status = None
-                if status in WORKING and i not in working:
-                    working.append(i)
+                if status is not None and status not in TERMINAL and i not in working:
+                    working.append(i)            # any status that reads and is not ended: it could still fill
         if working:                                  # it could still fill, into a trade that is not this one's
             return {"ok": False, "reason": LAB_OLD_ORDER_WORKING, "orders": sorted(working)}
         cleared = []
@@ -2996,22 +3017,55 @@ class Engine:
             await self._kill_sleep(KILL_POLL_S)
         return st.status != "placing"
 
-    async def _lab_end_unfilled(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, acts: list) -> None:
-        """Every entry of the round ended with no fill: the round is done / "cancelled". Its stop and target died
-        with their entries; they are cancelled for good measure ONLY when the account's net in the market reads
-        zero (a fill push can be missed: never take a stop from a position), as the kill does."""
+    async def _lab_hints(self, st: DayState, ad: BrokerAdapter, x: dict) -> None:
+        """O-1: the sides a file said were cancelled, read at the broker (every 5 s until each one reads). Ended
+        with no fill: it becomes a fact again. Anything else that reads: the hint is dropped. Reads only."""
+        hints = [s for s in x.get("cancelled_hint") or [] if s in ("Buy", "Sell")]
+        key = f"hint:{st.strategy}@{st.account}"
+        if not hints or not ad.connected or time.time() - self._retry_at.get(key, 0.0) < LAB_FLAT_RETRY_S:
+            return
+        self._retry_at[key] = time.time()
+        for s in hints:
+            i = st.upper_id if s == "Buy" else st.lower_id
+            if i:
+                try:
+                    got = await ad.get_order_state(i) or {}
+                except Exception:  # noqa: BLE001 -- unread: asked again
+                    continue
+                status, filled = got.get("status"), got.get("filled_qty")
+                if status is None:
+                    continue
+                if status in TERMINAL and status != "Filled" and not filled \
+                        and not (st.entry_side == s and st.entry_qty) and s not in x["cancelled"]:
+                    x["cancelled"].append(s)
+            if s in x["cancelled_hint"]:
+                x["cancelled_hint"].remove(s)
+        self._lab_save()
+
+    async def _lab_end_unfilled(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, acts: list) -> bool:
+        """Every entry of the round ended with no fill: the round is done / "cancelled". R-C: first every entry is
+        READ ended with no fill at the broker, here, whatever the caller or a file believes; one that is not:
+        "check it", nothing is ended and nothing cancelled (False). Its stop and target died with their entries;
+        they are cancelled for good measure ONLY when the account's net in the market reads zero (a fill push
+        can be missed: never take a stop from a position), as the kill does. True = the round was ended."""
+        x = self._lab_x(st)
+        if not await self._lab_entries_ended(st, ad, x, acts, unfilled=True):
+            return False
+        if self._archived(st) or st.status not in ("placed", "live"):
+            return False                             # the read yielded: it moved on by itself
         st.status, st.exit_reason = "done", "cancelled"
-        self._lab_stamp(st, self._lab_x(st))
+        self._lab_stamp(st, x)
         self._save()
         try:
             net = int(await ad.get_net_position(cfg.symbol) or 0)
         except Exception as e:  # noqa: BLE001 -- unreadable is NOT flat
             acts.append(f"position unreadable ({e}) — stop/target left alone")
-            return
+            return True
         if net:
             acts.append(f"the account holds {net:+d} {cfg.symbol} — stop/target left alone")
-            return
+            return True
         await self._cancel_brackets(st, ad, acts)
+        return True
 
     async def _lab_cancel_one(self, st: DayState, cfg: StrategyCfg, iid: Optional[int], why: str) -> dict:
         acts: list[str] = []
@@ -3066,7 +3120,9 @@ class Engine:
         ended = (not self._archived(st) and st.status == "placed"
                  and all(s in x["cancelled"] for s in ("Buy", "Sell") if ids[s]))
         if ended:
-            await self._lab_end_unfilled(st, cfg, ad, acts)
+            ended = await self._lab_end_unfilled(st, cfg, ad, acts)
+            if not ended and st.status == "placed":  # an entry did not read ended with no fill after all
+                seen = {s: "working" for s in seen}
         self._lab_save()
         if done_now or ended:
             self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
@@ -3131,7 +3187,8 @@ class Engine:
         if cancel:
             await self._cancel_brackets(st, ad, acts)
 
-    async def _lab_entries_ended(self, st: DayState, ad: BrokerAdapter, x: dict, acts: list) -> bool:
+    async def _lab_entries_ended(self, st: DayState, ad: BrokerAdapter, x: dict, acts: list,
+                                 unfilled: bool = False) -> bool:
         """R-C: before a round is ended, or its stop / target cancelled, on a position read: every entry of the
         round must READ ended at the broker, now (only one whose every contract was seen filled here is not asked:
         it can fill no more). One that does not: "check it", and the caller ends and cancels nothing. A cancel that
@@ -3146,6 +3203,9 @@ class Engine:
             if got.get("status") not in TERMINAL:
                 acts.append(f"check it — entry {i} is not ended at the broker ({got.get('status') or 'status unknown'}); "
                             "nothing is ended or cancelled")
+                return False
+            if unfilled and (got.get("status") == "Filled" or got.get("filled_qty")):
+                acts.append(f"check it — entry {i} filled ({got.get('status')}); nothing is ended or cancelled")
                 return False
         return True
 
@@ -3284,7 +3344,8 @@ class Engine:
             return unsure("both entries filled")
         side = "Buy" if held["Buy"] else "Sell" if held["Sell"] else None
         if side is None:                             # nothing of this round ever filled
-            await self._lab_end_unfilled(st, cfg, ad, acts)
+            if not await self._lab_end_unfilled(st, cfg, ad, acts):
+                return ans(False)
             self._lab_save()
             self.journal("lab_cancelled", strategy=st.strategy, account=st.account, round=x.get("round"),
                          sides=list(x["cancelled"]), iids=list((x.get("iid") or {}).values()), why=reason,
@@ -3501,8 +3562,16 @@ class Engine:
         x = self._lab_x(st)
         if self._lab_stamp(st, x):
             self._lab_save()
-        if x.get("lost"):                            # R-B: this trade's record was lost -- the clock does nothing
-            return                                   # with it: no backstop, no flat time, no cancel, no settle
+        if x.get("lost"):
+            # R-B: this trade's record was lost. The clock does nothing of the Lab's with it: no flat time, no
+            # capped flatten, no cancel, no settle. L-1: ONE thing stays, and it is the engine's own -- while it is
+            # placed, before the flat time and with the adapter connected, the order-status backstop that adopts a
+            # fill whose push was missed and cancels the pair's other entry, exactly as a healthy placed round has it
+            if st.status == "placed" and now < _hhmm(cfg.flat_et) and ad.connected:
+                await self._guard_placed(st, cfg, ad, check_position=False, event="entry_found_by_check",
+                                         note="fill push missed — entry found by the order-status check")
+            return
+        await self._lab_hints(st, ad, x)             # O-1: what the file said was cancelled, read at the broker
         key = f"{st.strategy}@{st.account}"
         check_it = self.needs_check(st)              # killed today and still placed / live: a human's job
         if check_it:
