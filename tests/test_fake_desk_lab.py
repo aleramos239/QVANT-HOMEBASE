@@ -1039,6 +1039,19 @@ def test_a_link_into_a_forbidden_place_is_refused_and_so_is_a_link_to_a_place_th
     assert refused_folder(ok / "scratch", main=repo, home=home) is None
 
 
+def test_a_forbidden_folder_that_does_not_exist_yet_is_refused_without_regard_to_case(tmp_path):
+    """Where nothing exists there is no identity to compare: the spelling decides, and it decides without case (on a
+    disk that ignores case the two spellings WILL be one folder once it is made)."""
+    home, main = tmp_path / "nohome", tmp_path / "norepo"        # neither exists
+    assert refused_folder(home / ".homebase" / "desklab", main=main, home=home) is not None
+    assert refused_folder(home / ".HOMEBASE" / "desklab", main=main, home=home) is not None
+    assert refused_folder(tmp_path / "NoHome" / ".HomeBase", main=main, home=home) is not None
+    assert refused_folder(tmp_path / "NOREPO" / "homebase" / ".state", main=main, home=home) is not None
+    assert refused_folder(tmp_path / "norepo" / ".claude" / "worktrees" / "t" / "s", main=main, home=home) is None
+    assert refused_folder(tmp_path / "norepo" / ".CLAUDE" / "worktrees" / "t" / "s", main=main, home=home) is not None   # exact
+    assert refused_folder(tmp_path / "elsewhere", main=main, home=home) is None
+
+
 def test_the_real_folders_of_this_machine_are_refused_too():
     """The same rule on the real paths (a pure question: nothing is opened or made)."""
     home = Path.home()
