@@ -1188,3 +1188,230 @@ def test_the_global_kill_sends_one_market_out_with_three_closed_rounds(tmp_path)
     out = run(eng.flatten_today())
     assert list(out) == [f"{LAB}@a1"]
     assert [(o.side, o.qty, o.text) for o in ad.orders] == [("Sell", 2, "homebase:flat")]
+
+
+# ------------------------------------------------------------------------------------------------ the clock
+def test_the_clock_finds_an_entry_whose_fill_push_was_missed(tmp_path):
+    """Also the fill that beat a cancel: the position goes live with its broker stop at the next tick."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    ad.order_status[st.upper_id], ad.filled[st.upper_id], ad.net = "Filled", 1, 1
+    assert run(eng.lab_cancel(LAB, 3))["a1"]["state"] == "filled" and st.status == "placed"
+    tick(eng)
+    assert (st.status, st.entry_side) == ("live", "Buy") and st.lower_id in ad.cancelled
+    assert events(tmp_path, "entry_found_by_check")[0]["strategy"] == LAB
+    assert not [c for c in ad.cancelled if c.endswith(("-sl", "-tp")) and c.startswith(st.upper_id)]
+
+
+def test_the_flat_time_closes_a_live_round_with_no_runner(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.net = 3                                                        # 2 of them are the owner's
+    clock.set_et(15, 54)
+    tick(eng)
+    assert ad.orders == [] and st.status == "live"                    # not yet
+    clock.set_et(15, 55)
+    tick(eng)
+    assert [(o.side, o.qty, o.text) for o in ad.orders] == [("Sell", 1, "homebase:lab-flat")]
+    (ev,) = events(tmp_path, "clock_flat")
+    assert (ev["strategy"], ev["account"], ev["actions"][0]) == (LAB, "a1", "market Sell 1: ok")
+    fill_exit(eng, ad, st, 102.0, by="market")
+    assert (st.status, st.exit_reason, st.pnl) == ("done", "flat", 40.0)
+    for _ in range(3):
+        later(clock, 6)
+        tick(eng)
+    assert len(ad.orders) == 1 and len(events(tmp_path, "clock_flat")) == 1 and rows(eng)[0]["clean"] is True
+    never_account_wide(ad)
+
+
+def test_the_flat_time_cancels_an_unfilled_round(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    clock.set_et(15, 55)
+    tick(eng)
+    assert (rnd(eng).status, rnd(eng).exit_reason) == ("done", "cancelled") and ad.orders == []
+    assert events(tmp_path, "clock_flat") and events(tmp_path, "lab_cancelled")[0]["why"] == "flat"
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True
+
+
+def test_a_close_refused_at_the_flat_time_is_not_sent_again_on_the_next_ticks(tmp_path):
+    """Ruling Q-C, on the clock."""
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.fail_market = True
+    clock.set_et(15, 55)
+    tick(eng)
+    ad.fail_market = False
+    for _ in range(5):
+        later(clock, 31)
+        tick(eng)
+    assert len(ad.orders) == 1 and ad.cancelled == [] and st.status == "live"      # its stop still works
+    failed = events(tmp_path, "clock_flat_failed")
+    assert failed[0]["actions"] == ["market Sell 1: market rejected by test",
+                                    "check it — the close order was not confirmed; its stop is still working"]
+    assert len(failed) == 2 and not events(tmp_path, "clock_flat")    # the refusal, then one "still check it"
+    assert rows(eng)[0]["why"] == "Check it: the close order was not confirmed. Its stop is still working."
+    ad.net = 0                                                        # the stop is hit; nobody tells the engine
+    later(clock, 31)
+    tick(eng)
+    assert (st.status, st.exit_reason) == ("done", "flat") and len(ad.orders) == 1
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True
+
+
+def test_the_flat_time_retry_waits_five_seconds_and_sells_once_it_can_read(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    ad.net_error = True
+    clock.set_et(15, 55)
+    run(eng.clock_tick())
+    run(eng.clock_tick())                                             # inside the 5 s: no second read
+    assert ad.net_reads == 1 and ad.orders == []
+    assert len(events(tmp_path, "clock_flat_failed")) == 1
+    ad.net_error = False
+    tick(eng)
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 1)] and len(events(tmp_path, "clock_flat")) == 1
+
+
+def test_a_manual_flatten_whose_fill_is_lost_is_ended_by_the_clock_before_the_flat_time(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    run(eng.flatten_strategy(LAB))
+    ad.net = 0
+    later(clock, 6)
+    tick(eng)
+    assert (st.status, st.exit_reason) == ("done", "manual_flat") and len(ad.orders) == 1
+    assert events(tmp_path, "lab_exit_unconfirmed")
+
+
+def test_the_clock_never_waits_for_the_kill_lock(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    live_round(eng, ad)
+    clock.set_et(15, 55)
+
+    async def held():
+        async with eng._kill_lock(LAB):                               # a kill or a flatten is running
+            await asyncio.wait_for(eng.clock_tick(), 1.0)
+            assert ad.orders == []
+        eng._retry_at.clear()
+        await eng.clock_tick()
+
+    run(held())
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 1)]
+
+
+def test_a_killed_check_it_round_is_not_flattened_and_its_entries_are_cancelled_once(tmp_path):
+    eng, ads, clock = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    ad.stuck.add(st.upper_id)
+    out = run(eng.kill_strategy(LAB))
+    assert out["a1"]["ok"] is False and st.status == "placed" and eng.needs_check(st)
+    n = len(ad.cancelled)
+    clock.set_et(15, 55)
+    tick(eng)
+    tick(eng)
+    assert ad.orders == [] and st.status == "placed"
+    assert ad.cancelled[n:] == [st.upper_id] and len(events(tmp_path, "killed_run_entries_cancelled")) == 1
+    assert events(tmp_path, "killed_run_needs_check")
+
+
+def test_a_lab_tick_that_raises_never_stops_another_strategys_clock(tmp_path):
+    es = StrategyCfg(symbol="ES", qty=1, offset_pts=2.0, sl_pts=1.0, tp_pts=3.0, enabled=True)
+    eng, ads, clock = mk(tmp_path, extra={"es930": es}, book={"es930": [{"account": "a1", "qty": 1}]})
+    ad = ads["a1"]
+    live_round(eng, ad)
+    assert run(eng.handle_alert({"strategy": "es930", "upper": 5002.0, "lower": 4998.0}))["ok"]
+    other = eng._state("es930", "a1")
+    run(eng.on_fill(FillEvent(account_id="a1", symbol="ESZ6", side="Buy", qty=1, price=5002.0,
+                              raw={"orderId": other.upper_id})))
+    assert other.status == "live"
+
+    async def boom(*a, **kw):
+        raise RuntimeError("lab broke")
+
+    eng._lab_flatten_one = boom
+    clock.set_et(15, 56)
+    tick(eng)
+    assert (other.status, other.exit_reason) == ("done", "flat")      # es930's own 15:55 flat still ran
+    (err,) = events(tmp_path, "clock_error")
+    assert (err["strategy"], err["error"]) == (LAB, "lab broke")
+
+
+def test_the_clock_runs_the_both_filled_emergency_for_a_sibling_that_filled_unseen(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    ad.stuck.add(st.lower_id)
+    fill_entry(eng, ad, st, 110.0, side="Buy")
+    ad.order_status[st.lower_id] = "Filled"                           # the sell stop filled; no push
+    ad.net = 0
+    tick(eng)
+    assert (st.status, st.exit_reason) == ("error", "both_filled")
+    assert events(tmp_path, "both_filled_emergency")[0]["found_by"] == "sibling_check"
+    assert rows(eng)[0]["clean"] is False
+
+
+def test_a_closed_rounds_working_entry_is_cancelled_again_until_it_ends(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    run(eng.lab_cancel(LAB))
+    assert st.status == "done"
+    ad.order_status[st.upper_id] = "Working"                          # the broker shows it working after all
+    ad.stuck.add(st.upper_id)
+    n = len(ad.cancelled)
+    tick(eng)
+    assert ad.cancelled[n:] == [st.upper_id] and rows(eng)[0]["clean"] is False
+    assert rows(eng)[0]["why"] == "The Desk cannot check the last trade's orders."
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+    ad.stuck.clear()
+    tick(eng)                                                         # cancelled again: now it takes
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True and len(events(tmp_path, "lab_check")) == 1
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["ok"] is True
+
+
+def test_a_closed_rounds_stop_is_never_cancelled_while_the_account_holds_a_position(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    st = live_round(eng, ad)
+    st.status, st.exit_reason = "done", "killed"                      # ended with its stop still at the broker
+    ad.net = 1
+    n = len(ad.cancelled)
+    for _ in range(3):
+        tick(eng)
+    assert ad.cancelled[n:] == [] and rows(eng)[0]["clean"] is False
+    assert "left working" in events(tmp_path, "lab_check")[0]["actions"][0]
+    ad.net = 0                                                        # flat: the leftovers may go
+    tick(eng)
+    assert ad.cancelled[n:] == ["a1-101-sl", "a1-101-tp"]
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True
+
+
+def test_an_entry_that_filled_after_its_round_was_ended_is_never_clean(tmp_path):
+    """The account's day lock ends a placed round at once (engine._lock_account); the entry fills anyway."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    run(eng._lock_account("a1", "day_lock", why="test"))
+    assert (st.status, st.exit_reason) == ("done", "day_lock")
+    ad.order_status[st.upper_id], ad.filled[st.upper_id] = "Filled", 1
+    for _ in range(3):
+        tick(eng)
+    assert rows(eng)[0]["clean"] is False and "never held" in events(tmp_path, "lab_check")[0]["reason"]
+    assert eng.lab_open(LAB) == ["a1"]

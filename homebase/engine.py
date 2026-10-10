@@ -2722,12 +2722,68 @@ class Engine:
         return results
 
     # --- hook 7: the clock, for the open round only -----------------------------------------------
+    async def _lab_tick_flat(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, x: dict, key: str) -> None:
+        """The clock's capped flatten: every LAB_FLAT_RETRY_S (a "check it" close: LAB_CHECK_RETRY_S), and only
+        when the strategy's kill lock is free -- a Kill or a flatten in progress is never waited for here, so
+        another strategy's tick on this account is not held up behind it."""
+        gap = LAB_CHECK_RETRY_S if x.get("unconfirmed") else LAB_FLAT_RETRY_S
+        rk = f"flat:{key}"
+        lock = self._kill_lock(st.strategy)
+        if time.time() - self._retry_at.get(rk, 0.0) < gap or lock.locked():
+            return
+        self._retry_at[rk] = time.time()
+        t = self._perf()
+        async with lock:                             # free: taken at once, with no wait
+            res = await self._lab_flatten_one(st, cfg, ad, "flat")
+        self._save()
+        self._lab_save()
+        said = self.__dict__.setdefault("_lab_said", {})
+        told = ("ok", x.get("round")) if res["ok"] else ("failed", x.get("round"), tuple(res["actions"]))
+        if said.get(rk) == told or (res["ok"] and not res["actions"]):
+            return                                   # said already: one line per round that closed, one per new failure
+        said[rk] = told
+        self.journal("clock_flat" if res["ok"] else "clock_flat_failed", strategy=st.strategy,
+                     account=st.account, actions=res["actions"],
+                     flat_ms=round((self._perf() - t) * 1000, 1))      # timing only
+
     async def _lab_tick(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, now: dt.time) -> None:
+        """One clock tick of a Lab strategy's OPEN round (an archived one is never acted on: I-4).
+          placed, before flat_et      the order-status backstop for a missed fill push (_guard_placed)
+          placed or live at flat_et   the capped flatten (never a "check it" run of a killed strategy)
+          a close already under way   read again every 5 s, also before flat_et; never a second order
+          live with exit fills        is the trade over? (_close_if_out)
+          live or done, a sibling     is the other entry really gone? (_guard_sibling)
+          done or error               are its orders all ended? (_lab_settle)"""
         if self._archived(st) or st.status == "idle":
             return
         x = self._lab_x(st)
         if self._lab_stamp(st, x):
             self._lab_save()
+        key = f"{st.strategy}@{st.account}"
+        check_it = self.needs_check(st)              # killed today and still placed / live: a human's job
+        if check_it:
+            self._journal_needs_check(st, cfg, now)
+        late = now >= _hhmm(cfg.flat_et)
+        closing = bool(x.get("closing") or x.get("gone_ms"))
+        if st.status == "placed" and not late and not closing:
+            if ad.connected:       # a dead socket's cache is stale; reconnect reconciles
+                await self._guard_placed(st, cfg, ad, check_position=False, event="entry_found_by_check",
+                                         note="fill push missed — entry found by the order-status check")
+        elif st.status in ("placed", "live") and (closing or (late and not check_it)):
+            await self._lab_tick_flat(st, cfg, ad, x, key)
+        elif st.status == "placed" and late:
+            # a killed "check it" run: its entries are still cancelled at the flat time (once); it is never
+            # flattened by the clock (as the clock above does for every other kind)
+            k = (st.date, st.strategy, st.account)
+            if k not in self._check_it_cancelled:
+                self._check_it_cancelled.add(k)
+                acts = []
+                for oid in (st.upper_id, st.lower_id):
+                    if oid:
+                        r = await ad.cancel_order_by_id(oid)
+                        acts.append(f"cancel {oid}: " + ("ok" if r.ok else str(r.error)))
+                self.journal("killed_run_entries_cancelled", strategy=st.strategy, account=st.account,
+                             actions=acts)
         if st.status == "live" and st.exit_qty and ad.connected:
             await self._close_if_out(st, cfg, ad)   # out, and the rest of the entry was cancelled
         if st.status in ("live", "done") and st.entry_side and ad.connected:
