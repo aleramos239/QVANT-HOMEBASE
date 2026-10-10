@@ -188,6 +188,7 @@ test('the words the page shows, exactly', () => {
   assert.equal(D.EMPTY_DAY, 'Nothing yet today.');
   assert.equal(D.ACCOUNTS_CAPTION, 'Accounts come with the Desk update. Until then it runs in shadow.');
   assert.deepEqual({ ...D.removeAsk('nq_orb') }, { title: 'Remove nq_orb from the Desk?', body: 'Its history is kept.' });
+  assert.deepEqual({ ...D.removeAskDesk('NQ ORB') }, { title: 'Remove NQ ORB from the Desk?', body: 'Its history is kept. Its accounts come off.' });
 });
 
 /* ---- the page (index.html): what it may call, and that nothing from the network reaches a template raw ---- */
@@ -545,7 +546,7 @@ test('inShadow: the day\'s mode when the server says, else no book rows', () => 
 test('limitsRows: the five rows with the table\'s words; a dash for limits not set', () => {
   assert.deepEqual(D.limitsRows(LIM).map((r) => `${r.k}=${r.v}`), ['Trades a day=2', 'Most contracts per account=1', 'Most at risk per trade=$300',
     'No new trade after=11:00 ET', 'Flat by=15:55 ET']);
-  assert.deepEqual(D.limitsRows({ ...LIM, max_risk_usd: 1250.5 })[2].v, '$1,251');
+  assert.deepEqual(D.limitsRows({ ...LIM, max_risk_usd: 1250.5 })[2].v, '$1,250.50');
   assert.deepEqual(D.limitsRows(null).map((r) => r.v), ['—', '—', '—', '—', '—']);
   assert.deepEqual(D.limitsRows(undefined).map((r) => r.v), ['—', '—', '—', '—', '—']);
   assert.deepEqual(D.limitsRows({}).map((r) => r.v), ['—', '—', '—', '—', '—']);
@@ -563,7 +564,7 @@ test('checkLimits: good fields give the body that is posted, exactly what the fi
   const got = D.checkLimits(F());
   assert.deepEqual({ ...got.errors }, {});
   assert.deepEqual({ ...got.body }, LIM);
-  assert.deepEqual({ ...D.checkLimits(F({ trades: ' 20 ', qty: '10', risk: '$1,250.50', last: '09:30', flat: '09:31' })).body },
+  assert.deepEqual({ ...D.checkLimits(F({ trades: ' 20 ', qty: '10', risk: '$1250.50', last: '09:30', flat: '09:31' })).body },
     { max_trades_day: 20, max_qty: 10, max_risk_usd: 1250.5, last_entry_et: '09:30', flat_et: '09:31' });
 });
 
@@ -590,7 +591,7 @@ test('checkLimits: "At risk per trade: a dollar amount above 0."', () => {
   for (const bad of ['', '0', '0.00', '-5', 'lots', '1e3', '$', '12abc', '1000000001', 'Infinity']) {
     assert.equal(D.checkLimits(F({ risk: bad })).errors.risk, say, JSON.stringify(bad));
   }
-  for (const good of ['0.01', '300', '$300', '1,250.5', '1000000000']) assert.equal(D.checkLimits(F({ risk: good })).errors.risk, undefined, good);
+  for (const good of ['0.01', '300', '$300', '1250.5', '300.99', '1000000000']) assert.equal(D.checkLimits(F({ risk: good })).errors.risk, undefined, good);
 });
 
 test('checkLimits: "No new trade after: a time like 11:00, before the flat time."', () => {
@@ -600,7 +601,10 @@ test('checkLimits: "No new trade after: a time like 11:00, before the flat time.
   assert.equal(D.checkLimits(F({ last: '16:00', flat: '15:55' })).errors.last, say);
   assert.equal(D.checkLimits(F({ last: '09:24' }), '09:25').errors.last, say, 'before the session starts');
   assert.equal(D.checkLimits(F({ last: '09:25' }), '09:25').errors.last, undefined, 'at the start is allowed');
-  assert.equal(D.checkLimits(F({ last: '09:24' })).errors.last, say, 'the default session start is 09:25');
+  assert.equal(D.checkLimits(F({ last: '08:45' })).errors.last, undefined, 'the start is not known (the chart service is down): the Desk is the judge');
+  assert.equal(D.checkLimits(F({ last: '08:45' }), '').errors.last, undefined);
+  assert.equal(D.checkLimits(F({ last: '08:45' }), 'junk').errors.last, undefined);
+  assert.equal(D.checkLimits(F({ last: '15:55', flat: '15:55' })).errors.last, say, 'before the flat time still holds without a start');
   assert.equal(D.checkLimits(F({ last: '09:00' }), '08:30').errors.last, undefined, 'the strategy\'s own start');
   assert.equal(D.checkLimits(F({ last: '15:54' })).errors.last, undefined);
 });
@@ -686,9 +690,9 @@ test('splitRounds: today\'s trades and the old blocks are apart; an old trade is
 
 test('refusedLine: the time and the server\'s sentence, with the account when it names one', () => {
   assert.deepEqual({ ...D.refusedLine({ t: '09:31:02', text: 'The price is already past this entry.', account: 'a1' }, 'APEX…048') },
-    { t: '09:31:02', text: 'The price is already past this entry. (APEX…048)' });
-  assert.deepEqual({ ...D.refusedLine({ t: '09:31:02', text: 'It is off.', account: null }, '') }, { t: '09:31:02', text: 'It is off.' });
-  assert.deepEqual({ ...D.refusedLine(null, '') }, { t: '', text: '' });
+    { t: '09:31:02', text: 'The price is already past this entry. (APEX…048)', detail: '' });
+  assert.deepEqual({ ...D.refusedLine({ t: '09:31:02', text: 'It is off.', account: null }, '') }, { t: '09:31:02', text: 'It is off.', detail: '' });
+  assert.deepEqual({ ...D.refusedLine(null, '') }, { t: '', text: '', detail: '' });
   assert.equal(D.refusedLine({ t: '09:31:02', text: "The Desk cannot check the last trade's orders.", account: null }, '').text, "The Desk cannot check the last trade's orders.", 'the server\'s sentence, no mapping');
 });
 
@@ -718,6 +722,15 @@ test('flattenSteps: a Lab flatten\'s own plain steps are not failures', () => {
   assert.deepEqual({ ...D.flattenSteps({ a: ['the account is already flat', 'check it — x; nothing sold; stops left working'] }) }, { a: ['the account is already flat', 'check it — x; nothing sold; stops left working'] });
   assert.equal(D.flattenSteps(null), null);
   assert.deepEqual(D.flattenSteps({ a: 'not a list' }), { a: 'not a list' });
+  assert.deepEqual({ ...D.flattenSteps({ a: ['the close order is out: waiting for its fill'] }) }, { a: [] }, 'a close already out is a plain line, not a failure');
+  assert.deepEqual({ ...D.flattenSteps({ a: ['the round ended while the close was sent (tp)'] }) }, { a: ['the trade ended while the close was sent (tp)'] }, 'the engine\'s word for a trade');
+  assert.equal(D.closeOut({ a: ['market Sell 1: ok'], b: ['the close order is out: waiting for its fill'] }), true);
+  assert.equal(D.closeOut({ a: ['market Sell 1: ok'] }), false);
+  assert.equal(D.closeOut(null), false);
+  assert.deepEqual(D.plainSteps(['This trade had already ended.', 'cancel entry 7: ok']), ['cancel entry 7: ok']);
+  assert.deepEqual(D.plainSteps(null), null);
+  assert.deepEqual(D.plainRecord({ event: 'manual_flatten', results: { a: ['This trade had already ended.'] }, actions: ['nothing of its own is left to close'] }),
+    { event: 'manual_flatten', results: { a: [] }, actions: [] });
 });
 
 test('deskSpec: market, the session when the Lab row knows it, and where it came from', () => {
@@ -753,6 +766,7 @@ test('the activity lines of the Lab\'s journal events, in simple words', () => {
   assert.deepEqual(A.lab_flatten({ results: { a1: { ok: true, actions: ['market Sell 1: ok'] } } }, 'NQ ORB', ''), ['NQ ORB flattened on 1 account']);
   assert.deepEqual(A.lab_flatten({ results: { a1: { ok: true }, a2: { ok: true } } }, 'NQ ORB', ''), ['NQ ORB flattened on 2 accounts']);
   assert.deepEqual(A.lab_flatten({ results: { a1: { ok: false, actions: ['check it — x'] } } }, 'NQ ORB', ''), ['NQ ORB flatten — check it on 1 account', 'neg']);
+  assert.deepEqual(A.lab_flatten({ results: { a1: { ok: true }, a2: { ok: false }, a3: { ok: true } } }, 'NQ ORB', ''), ['NQ ORB flatten — check it on 1 account', 'neg'], 'only the accounts that failed are counted');
   assert.deepEqual(A.lab_flatten({ results: {} }, 'NQ ORB', ''), ['NQ ORB flatten — nothing was open']);
   assert.deepEqual(A.lab_cancelled({ ended: true }, 'NQ ORB', ' on APEX…048'), ['NQ ORB entry cancelled on APEX…048']);
   assert.deepEqual(A.lab_cancelled({ ended: false, part: 1 }, 'NQ ORB', ' on A'), ['NQ ORB entry cancelled on A — part of it had filled', 'warn']);
@@ -762,8 +776,8 @@ test('the activity lines of the Lab\'s journal events, in simple words', () => {
   assert.deepEqual(A.lab_limits_set({ limits: { ...LIM, max_trades_day: 1, max_qty: 3 } }, 'NQ ORB', '')[0], 'NQ ORB limits set: 1 trade a day, up to 3 contracts, $300 at risk, no new trade after 11:00, flat by 15:55');
   assert.deepEqual(A.lab_limits_set({}, 'NQ ORB', ''), ['NQ ORB limits set']);
   assert.deepEqual(A.lab_check({ reason: 'x' }, 'NQ ORB', ' on A'), ['NQ ORB needs a check on A — x', 'neg']);
-  assert.deepEqual(A.lab_carry({ date: '2026-10-09' }, 'NQ ORB', ' on A'), ['NQ ORB: a trade from 2026-10-09 is still unchecked on A', 'warn']);
-  assert.deepEqual(A.lab_carry_cleared({ date: '2026-10-09', why: 'by hand' }, 'NQ ORB', ' on A'), ['NQ ORB: the old trade from 2026-10-09 was cleared on A']);
+  assert.deepEqual(A.lab_carry({ date: '2026-10-09' }, 'NQ ORB', ' on A'), ['NQ ORB: an old trade from Oct 9 needs a check on A.', 'warn']);
+  assert.deepEqual(A.lab_carry_cleared({ date: '2026-10-09', why: 'by hand' }, 'NQ ORB', ' on A'), ['NQ ORB: the old trade from Oct 9 was cleared on A']);
   assert.deepEqual(A.lab_exit_unconfirmed({}, 'NQ ORB', ' on A'), ['NQ ORB: the close was not confirmed on A. Its stop is still working.', 'neg']);
   assert.deepEqual(A.lab_cancel_raced_fill({}, 'NQ ORB', ' on A'), ['NQ ORB: an entry filled as it was cancelled on A', 'warn']);
   assert.deepEqual(A.lab_open_without_cfg({}, 'NQ ORB', ' on A'), ['NQ ORB has a trade open but is not on this Desk. Check it.', 'neg']);
@@ -780,4 +794,145 @@ test('bookedNext: an account added while the day runs in shadow starts with the 
   assert.equal(D.bookedNext(deskStrat({ mode_today: null }), [], one), false, 'the session has not begun: nothing to wait for');
   assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }, { enabled: false }), [], one), false, 'switched off: it starts when it is switched on');
   assert.equal(D.bookedNext(null, [], one), false);
+});
+
+/* ======================================================================================================================
+   Step B, task B6, fix round 1 (the page review): each test below failed on 165c236f.
+   ====================================================================================================================== */
+const R = (over = {}) => ({ account: 'a1', round: 1, status: 'done', side: 'Buy', qty: 2, entry_fill: 21000.25, exit_fill: 21010.5, exit_reason: 'tp', pnl: 205, why: null, carried: false, date: '2026-10-10', ...over });
+
+test('I1 roundLine: a trade that is live or done and carries a sentence shows it, with the warn mark', () => {
+  const sure = "Check it: the close order was not confirmed. Its stop is still working.";
+  const live = D.roundLine(R({ status: 'live', exit_fill: null, exit_reason: null, pnl: null, why: sure }), 'A');
+  assert.equal(live.bad, true);
+  assert.equal(live.text, 'A · Buy 2 · in at 21,000.25 · In position · ' + sure);
+  const done = D.roundLine(R({ why: "Check it: this trade's exit may have filled twice." }), 'A');
+  assert.equal(done.bad, true);
+  assert.match(done.text, /at the target · Check it: this trade's exit may have filled twice\.$/);
+  assert.equal(done.net, 205);
+  const placed = D.roundLine(R({ status: 'placed', entry_fill: null, exit_fill: null, exit_reason: null, pnl: null, why: "The Desk cannot check the last trade's orders." }), 'A');
+  assert.equal(placed.bad, true);
+  assert.match(placed.text, /Order working · The Desk cannot check the last trade's orders\.$/);
+  assert.equal(D.roundLine(R(), 'A').bad, false, 'no sentence, no mark');
+  assert.equal(D.roundLine(R({ why: '   ' }), 'A').bad, false);
+});
+
+test('I1 deskDot: the dot goes warn while a trade carries a sentence or an old trade is not cleared', () => {
+  const rows = (...r) => deskStrat({ state: 'in_position', rounds: r });
+  assert.equal(D.deskDot(deskStrat({ state: 'in_position', rounds: [R({ status: 'live', why: null })] })), 'live');
+  assert.equal(D.deskDot(rows(R({ status: 'live', why: 'Check it: the close order was not confirmed. Its stop is still working.' }))), 'warn');
+  assert.equal(D.deskDot(deskStrat({ state: 'waiting', rounds: [R({ why: 'Check it: x' })] })), 'warn');
+  assert.equal(D.deskDot(deskStrat({ state: 'waiting', rounds: [R({ carried: true, status: 'error', why: 'x', date: '2026-10-09' })] })), 'warn');
+  assert.equal(D.deskDot(deskStrat({ state: 'waiting', rounds: [R()] })), '');
+  assert.equal(D.needsLook(deskStrat({ rounds: [R({ why: 'x' })] })), true);
+  assert.equal(D.needsLook(deskStrat({ rounds: [R()] })), false);
+  assert.equal(D.needsLook(null), false);
+});
+
+test('I3 stateNote: "Check it" has the server\'s sentence under it, always', () => {
+  assert.equal(D.stateNote(deskStrat({ state: 'check', why: 'The Desk cannot read its limits.' })), 'The Desk cannot read its limits.');
+  assert.equal(D.stateNote(deskStrat({ state: 'check', why: 'The Desk cannot read it.' })), 'The Desk cannot read it.');
+  assert.equal(D.stateNote(deskStrat({ state: 'check', why: null })), '');
+  assert.equal(D.stateNote(deskStrat({ state: 'waiting', why: null })), '');
+  assert.equal(D.stateNote(deskStrat({ state: 'working', why: null })), '');
+  assert.equal(D.deskState(deskStrat({ state: 'check', why: 'The Desk cannot read it.' })), 'Check it', 'the word stays the table\'s');
+});
+
+test('R1 deskState: ON and the runner not alive while it only waits / watches / runs in shadow reads "Runner is not running"', () => {
+  const at = (state, runner, cfg = {}, why = null) => deskStrat({ state, runner, why }, cfg);
+  for (const state of ['shadow', 'waiting', 'watching']) {
+    assert.equal(D.deskState(at(state, { alive: false, age_s: 60 })), 'Runner is not running', state);
+    assert.equal(D.deskDot(at(state, { alive: false, age_s: 60 })), 'warn', state);
+    assert.equal(D.deskState(at(state, { alive: true, age_s: 1 })) === 'Runner is not running', false, state);
+  }
+  assert.equal(D.deskState(at('waiting', { alive: false, age_s: null })), 'Runner is not running', 'never heard from');
+  for (const state of ['working', 'in_position', 'runner_down', 'check', 'done', 'disarmed']) {
+    assert.equal(D.deskState(at(state, { alive: false })) === 'Runner is not running', false, `${state} stays as the server sends it`);
+  }
+  assert.equal(D.deskState(at('stopped', { alive: false }, {}, 'off')), 'Starts with the next session.');
+  assert.equal(D.deskState(at('off', { alive: false }, { enabled: false })), 'Off', 'switched off: nothing is expected to run');
+  assert.equal(D.deskState(at('waiting', undefined)), 'Waiting for the session', 'no runner block: no claim');
+});
+
+test('c3 deskDot: a day stopped by refused entries is not a calm dot', () => {
+  const stopped = (refused) => deskStrat({ state: 'stopped', why: 'Stopped for today.', refused });
+  assert.equal(D.deskDot(stopped([])), '');
+  assert.equal(D.deskDot(stopped([{ t: '09:31:02', text: 'The price is already past this entry.', account: null }])), 'warn');
+  assert.equal(D.deskState(stopped([{ t: '09:31:02', text: 'x' }])), 'Starts with the next session.', 'the words stay');
+});
+
+test('I5 checkLimits: the risk field is never changed; a comma, a third decimal or a sign is refused with the field\'s sentence', () => {
+  const say = 'At risk per trade: a dollar amount above 0.';
+  for (const bad of ['300,5', '1,5', '2,50', '1,000', '1,250.5', '300.999', '300.', '.5', '-5', '+5', '1 000', '$ 300', '$$300', '1e3', '0x10']) {
+    assert.equal(D.checkLimits(F({ risk: bad })).errors.risk, say, JSON.stringify(bad));
+  }
+  assert.equal(D.checkLimits(F({ risk: '300.5' })).body.max_risk_usd, 300.5);
+  assert.equal(D.checkLimits(F({ risk: '$300' })).body.max_risk_usd, 300);
+  assert.equal(D.checkLimits(F({ risk: ' 300 ' })).body.max_risk_usd, 300);
+  for (const bad of ['1e2', '1 0', '+2', '-2', '2.0', '٣']) {
+    assert.equal(D.checkLimits(F({ trades: bad })).errors.trades, 'Trades a day: a whole number from 1 to 20.', bad);
+    assert.equal(D.checkLimits(F({ qty: bad })).errors.qty, 'Contracts: a whole number from 1 to 10.', bad);
+  }
+});
+
+test('m8 limitsRows: a limit is shown as it is, never rounded up', () => {
+  assert.equal(D.limitsRows({ ...LIM, max_risk_usd: 300.999 })[2].v, '$300.99');
+  assert.equal(D.limitsRows({ ...LIM, max_risk_usd: 300.5 })[2].v, '$300.50');
+  assert.equal(D.limitsRows({ ...LIM, max_risk_usd: 300 })[2].v, '$300');
+  assert.equal(D.limitsRows({ ...LIM, max_risk_usd: 0.004 })[2].v, '$0.004', 'more than nothing is never "$0"');
+  assert.equal(D.limitsRows({ ...LIM, max_risk_usd: 1234.5 })[2].v, '$1,234.50');
+  assert.match(D.activity.lab_limits_set({ limits: { ...LIM, max_risk_usd: 300.999 } }, 'N', '')[0], /\$300\.99 at risk/);
+});
+
+test('m1 deskSwitchTitle: the tooltip says where the orders go', () => {
+  const one = [{ account: 'a1', qty: 1 }];
+  assert.equal(D.deskSwitchTitle(deskStrat(), one), 'ON: its orders go to its accounts');
+  assert.equal(D.deskSwitchTitle(deskStrat(), []), 'ON: it runs in shadow');
+  assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), one), 'OFF: it does nothing');
+  assert.equal(D.deskSwitchTitle(deskStrat({}, { enabled: false }), []), 'OFF: it does nothing');
+});
+
+test('m2 switchOffToast: with no account the toast is Step A\'s; the long one only when an account is booked', () => {
+  assert.equal(D.switchOffToast('NQ ORB', []), 'NQ ORB is OFF: it does nothing.');
+  assert.equal(D.switchOffToast('NQ ORB', undefined), 'NQ ORB is OFF: it does nothing.');
+  assert.equal(D.switchOffToast('NQ ORB', [{ account: 'a', qty: 1 }]), 'NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session.');
+});
+
+test('m3 roundLine: a line with no side says "1 contract", and a zero is left out', () => {
+  assert.equal(D.roundLine(R({ side: null, status: 'placed', entry_fill: null, exit_fill: null, exit_reason: null, pnl: null, qty: 1 }), 'A').text, 'A · 1 contract · Order working');
+  assert.equal(D.roundLine(R({ side: null, status: 'placed', entry_fill: null, exit_fill: null, exit_reason: null, pnl: null, qty: 2 }), 'A').text, 'A · 2 contracts · Order working');
+  assert.equal(D.roundLine(R({ side: null, carried: true, status: 'error', qty: 0, why: 'x', date: '2026-10-08' }), 'A').text, 'A · Oct 8 · x');
+  assert.equal(D.roundLine(R({ side: 'Buy', qty: 1 }), 'A').text.startsWith('A · Buy 1 · '), true);
+});
+
+test('m9 / m11: the flatten line counts only the accounts that failed; an old trade reads "needs a check"', () => {
+  assert.deepEqual(D.activity.lab_flatten({ results: { a: { ok: false }, b: { ok: false }, c: { ok: true } } }, 'N', ''), ['N flatten — check it on 2 accounts', 'neg']);
+  assert.deepEqual(D.activity.lab_carry({ date: 'junk' }, 'N', ' on A'), ['N: an old trade from junk needs a check on A.', 'warn']);
+});
+
+test('I7 the Activity lines: none says round, sidecar, intent, overlay or carried; the engine\'s words are made plain', () => {
+  const A = D.activity;
+  assert.deepEqual(A.lab_check({ reason: "a kill of a round whose stop order the Desk does not know" }, 'N', ' on A'), ['N needs a check on A — a kill of a trade whose stop order the Desk does not know', 'neg']);
+  assert.equal(A.lab_check({ reason: 'the rounds are carried' }, 'N', '')[0], 'N needs a check — the trades are old');
+  assert.deepEqual(A.lab_sidecar_replaced({}, 'N', ''), ['N: its limits were saved again']);
+  assert.deepEqual(A.lab_event_error({}, 'N', ''), ['N: the Desk had a problem with an order. Check it.', 'neg']);
+  assert.deepEqual(A.lab_intake_error({}, '', ''), ['The Desk had a problem with a Lab order. Check it.', 'neg']);
+  assert.deepEqual(A.lab_carry_fill({}, 'N', ' on A'), ['N: an old order filled on A', 'warn']);
+  assert.deepEqual(A.lab_save_error({}, 'N', ''), ['N: could not save. Try again.', 'neg']);
+  for (const k of Object.keys(A)) {
+    const out = A[k]({ reason: 'round carried sidecar', date: '2026-10-09', text: 'x', why: 'y', results: { a: { ok: false } }, limits: LIM, qty: 1, round: 1 }, 'N', ' on A')[0];
+    assert.doesNotMatch(out, /\b(round|rounds|sidecar|intent|overlay|carried)\b/i, k);
+  }
+  assert.equal('lab_event' in A, false, 'bookkeeping: never shown');
+  assert.equal('lab_event_done' in A, false);
+});
+
+test('I1 / m3 plain words: the engine\'s "round" and "carried" never reach a trade line', () => {
+  assert.equal(D.roundLine(R({ status: 'error', why: 'the round ended' }), 'A').text, 'A · Buy 2 · the trade ended');
+});
+
+test('m4 accountsLock stays; m5 / m17 sentences exist', () => {
+  assert.equal(D.NOT_ON_DESK, 'That strategy is not on the Desk.');
+  assert.equal(D.CLOSE_OUT, 'Its close order is already out.');
+  assert.equal(D.NOT_OFF, 'It could not be switched off: try the switch again.');
 });

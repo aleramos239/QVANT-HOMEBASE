@@ -253,6 +253,10 @@
   var BOOKED_NEXT = "Booked. It starts with the next session.";
   var LIVE_NOTE = "It will trade real money on its next order. Every entry carries a stop held at the broker.";
   var NOT_ANSWERING_DESK = "The Desk is not answering.";
+  var NOT_ON_DESK = "That strategy is not on the Desk.";
+  var CLOSE_OUT = "Its close order is already out.";
+  var NOT_OFF = "It could not be switched off: try the switch again.";
+  var RUNNER_DOWN = "Runner is not running";
   var BROKER_REFUSED = "The broker refused it: ";
   var SAY_TRADES = "Trades a day: a whole number from 1 to 20.";
   var SAY_QTY = "Contracts: a whole number from 1 to 10.";
@@ -260,7 +264,6 @@
   var SAY_LAST = "No new trade after: a time like 11:00, before the flat time.";
   var SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55.";
   var FLAT_LATEST = "15:55";
-  var DEFAULT_START = "09:25";                         // the Strategy's own default session start
   var HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 
   function deskId(name) {
@@ -268,6 +271,13 @@
   }
   function isObj(v) {
     return !!v && typeof v === "object";
+  }
+  // The engine's own words for a trade ("round", "carried") are not the page's: a trade is a trade, an old one is old.
+  function plainWords(t) {
+    var keep = function (to) { return function (m) { return m.charAt(0) !== m.charAt(0).toLowerCase() ? to.charAt(0).toUpperCase() + to.slice(1) : to; }; };
+    return text(t).replace(/\brounds\b/gi, keep("trades")).replace(/\bround\b/gi, keep("trade"))
+      .replace(/\bcarried\b/gi, keep("old")).replace(/\bsidecar\b/gi, keep("limits file"))
+      .replace(/\bintents\b/gi, keep("orders")).replace(/\bintent\b/gi, keep("order"));
   }
   // ONE ROW, NEVER TWO: true when the Desk's own strategies hold lab_<name> for this chart-service row.
   function onDesk(strategies, w) {
@@ -285,10 +295,24 @@
     var lab = blockOf(s);
     return !!lab && lab.state === "stopped" && !!s.cfg && s.cfg.enabled === true && stopQuiet(lab);
   }
+  // An open trade or an old trade that is not cleared, or a trade that carries a sentence: the owner is to look.
+  function needsLook(s) {
+    var lab = blockOf(s);
+    return !!lab && Array.isArray(lab.rounds) && lab.rounds.some(function (r) {
+      return isObj(r) && (r.carried === true || text(r.why).trim() !== "");
+    });
+  }
+  // ON, the runner is not alive, and the state is one that only waits for the runner: nothing will run (Step A's words).
+  function runnerDead(s) {
+    var lab = blockOf(s);
+    return !!lab && !!s.cfg && s.cfg.enabled === true && isObj(lab.runner) && lab.runner.alive !== true &&
+      (lab.state === "shadow" || lab.state === "waiting" || lab.state === "watching");
+  }
   // The one line of state, from lab.state / lab.why exactly as the server sends them.
   function deskState(s) {
     var lab = blockOf(s);
     if (!lab) return STATE_WORDS.check;
+    if (runnerDead(s)) return RUNNER_DOWN;
     if (lab.state === "stopped") {
       if (startsNext(s)) return NEXT_SESSION;
       var why = text(lab.why).trim();
@@ -297,16 +321,22 @@
     if (Object.prototype.hasOwnProperty.call(STATE_WORDS, lab.state)) return STATE_WORDS[lab.state];
     return text(lab.why).trim() || STATE_WORDS.check;   // a state the table has no word for: the server's own sentence
   }
+  // "Check it" always has the server's sentence under it.
+  function stateNote(s) {
+    var lab = blockOf(s);
+    return lab && lab.state === "check" ? text(lab.why).trim() : "";
+  }
   // The sidebar dot, in step with the words: off / shadow / live / warn, or "" for a plain ON.
   function deskDot(s) {
     var lab = blockOf(s);
     if (!lab) return "warn";
+    if (needsLook(s) || runnerDead(s)) return "warn";
     switch (lab.state) {
       case "off": return "off";
       case "shadow": return "shadow";
       case "waiting": case "watching": case "done": return "";
       case "working": case "in_position": return "live";
-      case "stopped": return startsNext(s) ? "" : "warn";
+      case "stopped": return startsNext(s) && !(Array.isArray(lab.refused) && lab.refused.length) ? "" : "warn";
       default: return "warn";
     }
   }
@@ -335,13 +365,20 @@
   }
 
   // ---- limits
+  // A dollar limit as it is: whole dollars, else to the cent, never rounded up (a limit shown above what it is would mislead).
+  function money(n) {
+    if (Math.floor(n) === n) return dollars(n);
+    var cents = Math.floor(n * 100 + 1e-9) / 100;
+    if (cents === 0) return "$" + String(n);
+    return "$" + cents.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
   function limitsRows(limits) {
     var l = isObj(limits) ? limits : {};
     var trades = num(l.max_trades_day), qty = num(l.max_qty), risk = num(l.max_risk_usd);
     return [
       { k: "Trades a day", v: trades === null ? DASH : String(trades) },
       { k: "Most contracts per account", v: qty === null ? DASH : String(qty) },
-      { k: "Most at risk per trade", v: risk === null ? DASH : dollars(Math.round(risk)) },
+      { k: "Most at risk per trade", v: risk === null ? DASH : money(risk) },
       { k: "No new trade after", v: HHMM.test(text(l.last_entry_et)) ? l.last_entry_et + " ET" : DASH },
       { k: "Flat by", v: HHMM.test(text(l.flat_et)) ? l.flat_et + " ET" : DASH },
     ];
@@ -367,8 +404,8 @@
     var trades = whole(f.trades, 1, 20), qty = whole(f.qty, 1, 10);
     if (trades === null) errors.trades = SAY_TRADES; else body.max_trades_day = trades;
     if (qty === null) errors.qty = SAY_QTY; else body.max_qty = qty;
-    var rt = text(f.risk).trim().replace(/^\$/, "").replace(/,/g, ""), risk = null;
-    if (/^\d+(\.\d+)?$/.test(rt)) {
+    var rt = text(f.risk).trim().replace(/^\$/, ""), risk = null;
+    if (/^\d+(\.\d{1,2})?$/.test(rt)) {
       risk = Number(rt);
       if (!(isFinite(risk) && risk > 0 && risk <= 1e9)) risk = null;
     }
@@ -377,8 +414,8 @@
     if (!HHMM.test(last)) errors.last = SAY_LAST; else body.last_entry_et = last;
     if (!HHMM.test(flat) || flat > FLAT_LATEST) errors.flat = SAY_FLAT; else body.flat_et = flat;
     if (!errors.last && !errors.flat) {
-      var from = HHMM.test(text(start)) ? start : DEFAULT_START;
-      if (!(from <= last && last < flat)) errors.last = SAY_LAST;
+      var from = HHMM.test(text(start)) ? start : "";      // not known when the chart service is down: the Desk judges that part
+      if (!((from === "" || from <= last) && last < flat)) errors.last = SAY_LAST;
     }
     return { errors: errors, body: Object.keys(errors).length ? null : body };
   }
@@ -411,9 +448,9 @@
   // why[, carried, date, detail]}. `who` = the account's short name. detail = the broker's words, under a failed entry.
   function roundLine(r, who) {
     if (!isObj(r)) return { text: "", net: null, bad: false, detail: "", carried: false };
-    var carried = r.carried === true, why = text(r.why).trim(), status = text(r.status);
+    var carried = r.carried === true, why = plainWords(r.why).trim(), status = text(r.status);
     var side = text(r.side) || text(r.entry_side), q = num(r.qty);
-    var head = (side + (q !== null ? " " + q : "")).trim();
+    var head = side ? (side + (q !== null ? " " + q : "")) : (q !== null && q > 0 ? plur(q, "contract", "contracts") : "");
     var inPx = price(r.entry_fill), outPx = price(r.exit_fill);
     var parts = [text(who), head], bad = false, net = null, detail = "";
     if (carried) {
@@ -424,15 +461,18 @@
       bad = true;
       var d = text(r.detail).trim();
       if (d) detail = d.indexOf(BROKER_REFUSED) === 0 ? d : BROKER_REFUSED + d;
-    } else if (status === "done") {
-      parts.push(inPx && outPx ? inPx + " to " + outPx : inPx ? "in at " + inPx : "", exitWord(r.exit_reason));
-      net = num(r.pnl);
-    } else if (status === "live") {
-      parts.push(inPx ? "in at " + inPx : "", STATE_WORDS.in_position);
-    } else if (status === "placed" || status === "placing") {
-      parts.push(STATE_WORDS.working);
     } else {
-      parts.push(status.replace(/_/g, " "));
+      if (status === "done") {
+        parts.push(inPx && outPx ? inPx + " to " + outPx : inPx ? "in at " + inPx : "", exitWord(r.exit_reason));
+        net = num(r.pnl);
+      } else if (status === "live") {
+        parts.push(inPx ? "in at " + inPx : "", STATE_WORDS.in_position);
+      } else if (status === "placed" || status === "placing") {
+        parts.push(STATE_WORDS.working);
+      } else {
+        parts.push(status.replace(/_/g, " "));
+      }
+      if (why) { parts.push(why); bad = true; }      // a trade the Desk says to check: the sentence, with the warn mark
     }
     return { text: parts.filter(Boolean).join(" · "), net: net, bad: bad, detail: detail, carried: carried };
   }
@@ -445,15 +485,28 @@
     });
     return out;
   }
+  // `detail` = what the broker said, plain text, under the reason: "The broker refused it: <detail>".
   function refusedLine(x, who) {
-    var r = isObj(x) ? x : {}, said = text(r.text);
-    return { t: text(r.t), text: said && who ? said + " (" + who + ")" : said };
+    var r = isObj(x) ? x : {}, said = text(r.text), d = text(r.detail).trim();
+    return { t: text(r.t), text: said && who ? said + " (" + who + ")" : said,
+      detail: d ? (d.indexOf(BROKER_REFUSED) === 0 ? d : BROKER_REFUSED + d) : "" };
   }
 
   // ---- the sentences of the switch, the flatten and the book
   function switchOnAccounts(n) { return n + " is ON. Its orders go to its accounts."; }
   function switchOnShadow(n) { return n + " is ON: it runs in shadow."; }
   function switchOnNext(n) { return n + " is ON. It starts with the next session."; }
+  function deskSwitchTitle(s, book) {
+    var on = !!s && !!s.cfg && s.cfg.enabled === true;
+    return on ? (Array.isArray(book) && book.length > 0 ? "ON: its orders go to its accounts" : "ON: it runs in shadow") : switchTitle(false);
+  }
+  // With no account booked there are no orders and no position: Step A's short sentence.
+  function switchOffToast(n, book) {
+    return Array.isArray(book) && book.length > 0 ? switchOff(n) : n + " is OFF: it does nothing.";
+  }
+  function removeAskDesk(name) {
+    return { title: "Remove " + name + " from the Desk?", body: "Its history is kept. Its accounts come off." };
+  }
   function switchOff(n) { return n + " is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session."; }
   // The toast after a switch-on: stopped for today first (the ruling), then with accounts, then shadow.
   function switchOnToast(n, s, book) {
@@ -471,15 +524,30 @@
   }
   // A Lab flatten also answers with plain steps that are not failures ("This trade had already ended.", "nothing of its
   // own is left to close"): they are taken out before the page reads the rest for failures.
-  var FLATTEN_PLAIN = ["This trade had already ended.", "nothing of its own is left to close"];
+  var CLOSE_WAIT = "the close order is out: waiting for its fill";
+  var FLATTEN_PLAIN = ["This trade had already ended.", "nothing of its own is left to close", CLOSE_WAIT];
+  function plainSteps(list) {
+    return Array.isArray(list) ? list.filter(function (x) { return FLATTEN_PLAIN.indexOf(String(x).trim()) < 0; }).map(plainWords) : list;
+  }
   function flattenSteps(results) {
     if (!isObj(results)) return results;
     var out = {};
-    Object.keys(results).forEach(function (a) {
-      var steps = results[a];
-      out[a] = Array.isArray(steps) ? steps.filter(function (x) { return FLATTEN_PLAIN.indexOf(String(x).trim()) < 0; }) : steps;
-    });
+    Object.keys(results).forEach(function (a) { out[a] = plainSteps(results[a]); });
     return out;
+  }
+  // Did any account answer that its close order is already out?
+  function closeOut(results) {
+    return isObj(results) && Object.keys(results).some(function (a) {
+      return Array.isArray(results[a]) && results[a].some(function (x) { return String(x).trim() === CLOSE_WAIT; });
+    });
+  }
+  // A journal record of a Lab flatten with its plain steps taken out, for the Activity page.
+  function plainRecord(r) {
+    var o = {};
+    Object.keys(r).forEach(function (k) { o[k] = r[k]; });
+    if (isObj(r.results)) o.results = flattenSteps(r.results);
+    if (Array.isArray(r.actions)) o.actions = plainSteps(r.actions);
+    return o;
   }
 
   // ---- the Desk strategy's line under its name and its Setup card
@@ -521,8 +589,8 @@
     lab_flatten: function (r, who) {
       var res = isObj(r.results) ? Object.keys(r.results).map(function (k) { return r.results[k]; }) : [];
       if (!res.length) return [who + " flatten — nothing was open"];
-      var n = res.length, bad = res.some(function (x) { return !x || x.ok === false; });
-      return bad ? [who + " flatten — check it on " + plur(n, "account", "accounts"), "neg"] : [who + " flattened on " + plur(n, "account", "accounts")];
+      var bad = res.filter(function (x) { return !x || x.ok === false; }).length;
+      return bad ? [who + " flatten — check it on " + plur(bad, "account", "accounts"), "neg"] : [who + " flattened on " + plur(res.length, "account", "accounts")];
     },
     lab_cancelled: function (r, who, on) {
       return num(r.part) ? [who + " entry cancelled" + on + " — part of it had filled", "warn"] : [who + " entry cancelled" + on];
@@ -532,16 +600,21 @@
       if (!isObj(l)) return [who + " limits set"];
       var t = num(l.max_trades_day), q = num(l.max_qty), k = num(l.max_risk_usd);
       return [who + " limits set: " + plur(t, "trade", "trades") + " a day, up to " + plur(q, "contract", "contracts") + ", " +
-        dollars(Math.round(k)) + " at risk, no new trade after " + text(l.last_entry_et) + ", flat by " + text(l.flat_et)];
+        money(k) + " at risk, no new trade after " + text(l.last_entry_et) + ", flat by " + text(l.flat_et)];
     },
     lab_round: function (r, who, on) {
       var q = num(r.qty), n = num(r.round);
       return [who + " trade" + (n !== null ? " " + n : "") + " started" + on + (q !== null ? " (" + plur(q, "contract", "contracts") + ")" : "")];
     },
     lab_settled: function (r, who, on) { return [who + ": every order of the last trade has ended" + on]; },
-    lab_check: function (r, who, on) { return [who + " needs a check" + on + " — " + clip(r.reason), "neg"]; },
-    lab_carry: function (r, who, on) { return [who + ": a trade from " + text(r.date) + " is still unchecked" + on, "warn"]; },
-    lab_carry_cleared: function (r, who, on) { return [who + ": the old trade from " + text(r.date) + " was cleared" + on]; },
+    lab_check: function (r, who, on) { return [who + " needs a check" + on + " — " + clip(plainWords(r.reason)), "neg"]; },
+    lab_carry: function (r, who, on) { return [who + ": an old trade from " + (shortDate(r.date) || text(r.date)) + " needs a check" + on + ".", "warn"]; },
+    lab_carry_cleared: function (r, who, on) { return [who + ": the old trade from " + (shortDate(r.date) || text(r.date)) + " was cleared" + on]; },
+    lab_carry_fill: function (r, who, on) { return [who + ": an old order filled" + on, "warn"]; },
+    lab_sidecar_replaced: function (r, who) { return [who + ": its limits were saved again"]; },
+    lab_event_error: function (r, who) { return [who + ": the Desk had a problem with an order. Check it.", "neg"]; },
+    lab_intake_error: function (r, who) { return [who ? who + ": the Desk had a problem with an order. Check it." : "The Desk had a problem with a Lab order. Check it.", "neg"]; },
+    lab_save_error: function (r, who) { return [who + ": could not save. Try again.", "neg"]; },
     lab_exit_unconfirmed: function (r, who, on) { return [who + ": the close was not confirmed" + on + ". Its stop is still working.", "neg"]; },
     lab_cancel_raced_fill: function (r, who, on) { return [who + ": an entry filled as it was cancelled" + on, "warn"]; },
     lab_open_without_cfg: function (r, who, on) { return [who + " has a trade open but is not on this Desk. Check it.", "neg"]; },
@@ -561,7 +634,9 @@
     checkLimits: checkLimits, limitsTitle: limitsTitle, refusalText: refusalText, roundLine: roundLine, splitRounds: splitRounds,
     refusedLine: refusedLine, switchOnAccounts: switchOnAccounts, switchOnShadow: switchOnShadow, switchOnNext: switchOnNext,
     switchOff: switchOff, switchOnToast: switchOnToast, bookedNext: bookedNext, flattenAsk: flattenAsk, flattenSteps: flattenSteps, deskSpec: deskSpec,
-    deskSetupRows: deskSetupRows, activity: activity,
+    deskSetupRows: deskSetupRows, activity: activity, needsLook: needsLook, stateNote: stateNote, deskSwitchTitle: deskSwitchTitle,
+    switchOffToast: switchOffToast, removeAskDesk: removeAskDesk, plainSteps: plainSteps, plainRecord: plainRecord, closeOut: closeOut,
+    NOT_ON_DESK: NOT_ON_DESK, CLOSE_OUT: CLOSE_OUT, NOT_OFF: NOT_OFF,
     OTHER_DESK: OTHER_DESK, LIMITS_CAPTION: LIMITS_CAPTION, EDIT_LIMITS: EDIT_LIMITS, SAVE_LIMITS: SAVE_LIMITS, CANCEL: CANCEL,
     OLD_TITLE: OLD_TITLE, CLEAR: CLEAR, CLEARED: CLEARED, BOOKED_NEXT: BOOKED_NEXT, LIVE_NOTE: LIVE_NOTE,
   };

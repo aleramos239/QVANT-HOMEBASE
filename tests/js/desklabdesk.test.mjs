@@ -450,7 +450,7 @@ test('Save with a wrong field sends nothing and says, under that field, the tabl
 test('Save posts exactly what the fields say to /api/lab-limits, by the strategy\'s desk id, and closes on success', async () => {
   const t = load({ answer: { ok: true, strategy: 'lab_nq_orb', limits: LIM } });
   t.api.openLabLimits('lab_nq_orb');
-  fill(t, { llTrades: ' 3 ', llQty: '2', llRisk: '$1,250.50', llLast: '10:30', llFlat: '15:30' });
+  fill(t, { llTrades: ' 3 ', llQty: '2', llRisk: '$1250.50', llLast: '10:30', llFlat: '15:30' });
   await t.api.saveLabLimits();
   assert.deepEqual(t.posts, [{ url: '/api/lab-limits', body: { strategy: 'lab_nq_orb', limits: { max_trades_day: 3, max_qty: 2, max_risk_usd: 1250.5, last_entry_et: '10:30', flat_et: '15:30' } } }]);
   assert.deepEqual(t.hidden, ['labLimitsOverlay']);
