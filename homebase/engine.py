@@ -383,7 +383,7 @@ class Engine:
     def day_status(self, strategy: str) -> str:
         """Aggregate day status across the book, for the one-per-day rule
         and the timer: idle only when NOTHING has happened yet today."""
-        stats = {s.status for s in self.day_states(strategy)}
+        stats = {s.status for s in self.day_states(strategy) if not self._archived(s)}
         for s in ("error", "live", "placing", "placed", "done"):
             if s in stats:
                 return s
@@ -705,7 +705,8 @@ class Engine:
     async def _place(self, name: str, cfg: StrategyCfg, account: str, qty: int,
                      upper: float, lower: float, source: str,
                      t0: float | None = None, leg: AccountLeg | None = None,
-                     sl_pts: float | None = None, sl_sell_pts: float | None = None) -> dict:
+                     sl_pts: float | None = None, sl_sell_pts: float | None = None,
+                     reqs: tuple[OrderRequest, OrderRequest] | None = None) -> dict:
         locked = self.account_locked(account)
         if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
             self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
@@ -727,7 +728,7 @@ class Engine:
         # the acks is held instead of dropped (on_fill -> _replay_early)
         st.status = "placing"
         self._save()     # durable before the legs go out: a restart mid-flight sees a day that acted
-        buy, sell = self._legs(cfg, upper, lower, qty, st.sl_pts, st.tp_pts, st.sl_sell_pts)
+        buy, sell = reqs or self._legs(cfg, upper, lower, qty, st.sl_pts, st.tp_pts, st.sl_sell_pts)
         rtt: dict = {}
 
         async def timed_leg(name: str, req: OrderRequest) -> OrderResult:
@@ -928,6 +929,8 @@ class Engine:
         trigger. Once the whole entry is in, move both brackets there. A fill
         at the trigger moves nothing; a failed move leaves the trigger
         brackets working — still protected, just not re-priced."""
+        if cfg.kind == "lab":
+            return await self._lab_move(st, cfg, ad)
         st.brackets_moved = True                  # once per trade
         if st.entry_fill is None:
             return {"moved": False, "error": "no fill price"}
@@ -1000,6 +1003,8 @@ class Engine:
 
     def _grade_exit(self, st: DayState, px: Optional[float]) -> str:
         cfg = self.cfg.strategies[st.strategy]
+        if cfg.kind == "lab":
+            return self._lab_grade(st, px)
         if px is None:
             return "exit"
         if st.tp_pts is not None and st.sl_pts is not None and st.entry_fill is not None:
@@ -1210,6 +1215,8 @@ class Engine:
         Symbol-scoped per account: another strategy holding the same symbol
         on the same account would be flattened too."""
         cfg = self.cfg.strategies.get(name)
+        if cfg is not None and cfg.kind == "lab":
+            return await self._lab_flatten_strategy(name)
         states = {st.account: st for st in self.day_states(name)}
 
         async def account(a: str) -> Optional[list]:
@@ -1252,7 +1259,7 @@ class Engine:
                     cfg = self.cfg.strategies.get(st.strategy)
                     ad = self.adapters.get(st.account)
                     if cfg is None or ad is None or st.date != self._today() \
-                            or st.status == "idle":
+                            or st.status == "idle" or self._archived(st):
                         continue
                     flat, acts[key] = await self._flatten_state(st, cfg, ad)
                     if flat and st.status in ("placing", "placed", "live"):
@@ -1738,6 +1745,8 @@ class Engine:
             ad = self.adapters.get(st.account)
             if cfg is None or ad is None or st.date != self._today():
                 return
+            if cfg.kind == "lab":
+                return await self._lab_tick(st, cfg, ad, now)
             # A run of a strategy KILLED today that is still placed/live is a
             # "check it" run (the kill could not attribute its position): a
             # human's job. Its stop/target stay working; it is never promoted
@@ -1812,3 +1821,252 @@ class Engine:
         for g in got.values():
             if isinstance(g, BaseException):         # the journal itself failed: the clock loop says so
                 raise g
+
+    # ==================================================================================================
+    # THE LAB SECTION (Step B, task B2): several trades a day, for kind "lab" ONLY.
+    #
+    # A promoted Lab strategy trades in ROUNDS. The open round of a (strategy, account) pair keeps the
+    # plain key "strategy@account", so everything above works on it unchanged; a round that is over AND
+    # clean is archived under "strategy@account#n" and never acted on again. Seven hooks above reach
+    # this section, each only for cfg.kind == "lab" (or, for _archived, a state the plain key no longer
+    # holds -- never true of another kind's state). Nothing here is reached by a straddle, bars or
+    # levels strategy.
+    #
+    #   I-1  one open round per pair, at the plain key
+    #   I-2  a new round only when the last one is terminal AND clean: every order id it placed reads
+    #        terminal at the broker. Otherwise no new entry on that account, and it says so
+    #   I-3  the open (or last) round is the last-inserted state of its pair
+    #   I-4  an archived round is never acted on again
+    #
+    # What a round needs beyond its DayState (the strategy's own order ids, its legs, how it is being
+    # closed, whether its orders were checked) lives in self._lab, saved to labday-<date>.json beside
+    # the day file. It is read at the first Lab call, never at construction: a missing or unreadable
+    # file cannot stop the desk from starting, and a round whose extras are lost is never clean.
+    # ==================================================================================================
+    def _archived(self, st: DayState) -> bool:
+        """A closed Lab round filed under "strategy@account#n". False for every state the plain key holds --
+        so for every state of every other kind."""
+        return self.states.get(f"{st.strategy}@{st.account}") is not st
+
+    # --- the extras ---------------------------------------------------------------------------------
+    def _lab_path(self):
+        return self._root / f"labday-{self._today()}.json"
+
+    def _lab_mem(self) -> dict:
+        """{state key: extras}, read from today's file at the first Lab call. Never raises."""
+        mem = self.__dict__.get("_lab")
+        if mem is None:
+            mem = {}
+            try:
+                p = self._lab_path()
+                if p.exists():
+                    data = json.loads(p.read_text())
+                    if isinstance(data, dict):
+                        mem = {str(k): v for k, v in data.items() if isinstance(v, dict)}
+            except Exception as e:  # noqa: BLE001 -- lost extras mean "not clean", never a crash
+                print(f"homebase engine: reading the Lab rounds file failed: {e!r}", file=sys.stderr)
+            self._lab = mem
+        return mem
+
+    def _lab_save(self, strict: bool = False) -> None:
+        """Write the extras whole (a temp file, then a rename). strict: raise when it cannot be written (a new
+        round must be on disk before its order leaves); otherwise say so on stderr and go on."""
+        try:
+            p = self._lab_path()
+            tmp = p.with_name(p.name + ".tmp")
+            tmp.write_text(json.dumps(self._lab_mem(), indent=2) + "\n")
+            tmp.replace(p)
+        except Exception as e:  # noqa: BLE001
+            if strict:
+                raise
+            print(f"homebase engine: writing the Lab rounds file failed: {e!r}", file=sys.stderr)
+
+    def _lab_ms(self) -> int:
+        return int(self._now().timestamp() * 1000)
+
+    def _lab_key(self, st: DayState) -> Optional[str]:
+        key = f"{st.strategy}@{st.account}"
+        if self.states.get(key) is st:
+            return key
+        return next((k for k, s in self.states.items() if s is st), None)
+
+    @staticmethod
+    def _lab_blank(n: int) -> dict:
+        return {"round": n, "iid": {}, "legs": {}, "move": False, "closing": None, "closing_ms": None,
+                "gone_ms": None, "cancelled": [], "clean": False, "check": False, "unconfirmed": False,
+                "placed_ms": None, "entry_ms": None, "exit_ms": None, "why": None}
+
+    def _lab_round_no(self, st: DayState) -> int:
+        """A round's number when its extras do not say: an archived one from its key, the open one after them."""
+        key = self._lab_key(st) or ""
+        tail = key.rsplit("#", 1)[-1] if "#" in key else ""
+        if self._archived(st) and tail.isdigit():
+            return int(tail)
+        return 1 + sum(1 for s in self.states.values()
+                       if s is not st and s.strategy == st.strategy and s.account == st.account
+                       and s.date == st.date and self._archived(s))
+
+    def _lab_x(self, st: DayState) -> dict:
+        """The round's extras. A round that acted and has none (the file was lost) gets a blank set that can
+        never be clean: its orders cannot be checked."""
+        mem = self._lab_mem()
+        key = self._lab_key(st)
+        x = mem.get(key) if key is not None else None
+        if x is None:
+            x = self._lab_blank(self._lab_round_no(st))
+            if st.status != "idle":
+                x["check"], x["why"] = True, LAB_CANNOT_CHECK
+            if key is not None:
+                mem[key] = x
+        for k, v in self._lab_blank(0).items():          # a file written by an older build: fill what it lacks
+            if k not in x:
+                x[k] = v
+        return x
+
+    def _lab_stamp(self, st: DayState, x: dict) -> bool:
+        """When the entry and the exit were first seen here (there is no hook inside on_fill). True = changed."""
+        changed = False
+        if st.entry_side and not x.get("entry_ms"):
+            x["entry_ms"], changed = self._lab_ms(), True
+        if st.status in ("done", "error") and not x.get("exit_ms"):
+            x["exit_ms"], changed = self._lab_ms(), True
+        return changed
+
+    def _lab_levels(self, st: DayState, x: dict) -> tuple:
+        """(stop, target) of the round's trade: the state's own, else the filled leg's as it was sent."""
+        leg = (x.get("legs") or {}).get(st.entry_side or "") or {}
+        return (st.sl_px if st.sl_px is not None else leg.get("sl_px"),
+                st.tp_px if st.tp_px is not None else leg.get("tp_px"))
+
+    # --- hook 3: the brackets after the fill (the tester's law, backtest/engine.py _fill) ---------
+    async def _lab_move(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter) -> dict:
+        """With `move` and a ref the stop shifts by fill - ref, and so does a target that has no RR; with an RR
+        the target is fill +/- rr x |fill - stop| (the moved stop). Only an order whose price changed by half a
+        tick or more, and whose id is known, is modified. st.sl_px / st.tp_px end as the levels that REST at the
+        broker. Never raises (on_fill journals what it returns as `brackets_moved`), and always returns both
+        `sl` and `tp` (metrics reads them together)."""
+        st.brackets_moved = True                  # once per trade
+        out = {"fill": None, "sl": st.sl_px, "tp": st.tp_px, "moved": False}
+        try:
+            x = self._lab_x(st)
+            leg = (x.get("legs") or {}).get(st.entry_side or "") or {}
+            sl0, tp0 = self._lab_levels(st, x)
+            rr = leg.get("tp_rr") if leg else st.tp_rr
+            st.sl_px, st.tp_px, st.tp_rr = sl0, tp0, rr
+            out.update(sl=sl0, tp=tp0)
+            if self._lab_stamp(st, x):
+                self._lab_save()
+            if st.entry_fill is None:
+                self._save()
+                return {**out, "error": "no fill price"}
+            fill = float(st.entry_fill)
+            out["fill"] = round(fill, 6)
+            sign = 1 if st.entry_side == "Buy" else -1
+            tick = tick_size(cfg.symbol) or 0.25
+            sl, tp = sl0, tp0
+            if leg.get("move") and leg.get("ref_px") is not None:
+                d = fill - float(leg["ref_px"])
+                sl = None if sl is None else _to_tick(sl + d, tick)
+                if rr is None:
+                    tp = None if tp is None else _to_tick(tp + d, tick)
+            if rr is not None and sl is not None:
+                tp = _to_tick(fill + sign * float(rr) * abs(fill - sl), tick)
+            sl_id, tp_id = ((st.up_sl_id, st.up_tp_id) if st.entry_side == "Buy"
+                            else (st.dn_sl_id, st.dn_tp_id))
+            jobs, errs = [], []
+            for name, new, old, oid in (("sl", sl, sl0, sl_id), ("tp", tp, tp0, tp_id)):
+                if new is None or (old is not None and abs(new - old) < tick / 2):
+                    continue
+                if not oid:
+                    errs.append(f"{name}: order id unknown")
+                    continue
+                jobs.append((name, new, ad.modify_order(oid, "Stop", stop_price=new, qty=st.qty) if name == "sl"
+                             else ad.modify_order(oid, "Limit", price=new, qty=st.qty)))
+            if not jobs and not errs:
+                self._save()
+                return {**out, "moved": "not needed — levels unchanged"}
+            res = await asyncio.gather(*(j[2] for j in jobs), return_exceptions=True)
+            for (name, new, _), r in zip(jobs, res):
+                if not isinstance(r, Exception) and r.ok:
+                    setattr(st, f"{name}_px", new)
+                else:
+                    errs.append(f"{name}: {r if isinstance(r, Exception) else r.error}")
+            self._save()
+            return {**out, "sl": st.sl_px, "tp": st.tp_px, "moved": not errs,
+                    **({"error": "; ".join(errs)} if errs else {})}
+        except Exception as e:  # noqa: BLE001 -- the fill is already in; the brackets rest where they were
+            return {**out, "error": f"{type(e).__name__}: {e}"[:200]}
+
+    # --- hook 4: why the trade ended ------------------------------------------------------------------
+    def _lab_grade(self, st: DayState, px: Optional[float]) -> str:
+        """The reason the round is being closed for (a flatten) when there is one; else "sl" or "tp" by the
+        nearer level that exists; else "exit". Never raises: it runs inside on_fill."""
+        try:
+            x = self._lab_x(st)
+            if not x.get("exit_ms"):
+                x["exit_ms"] = self._lab_ms()
+            if x.get("unconfirmed"):              # every contract that went in is out: the close is confirmed
+                x["unconfirmed"], x["why"] = False, None
+            self._lab_save()
+            if x.get("closing"):
+                return str(x["closing"])
+            sl, tp = self._lab_levels(st, x)
+            if px is None or (sl is None and tp is None):
+                return "exit"
+            if sl is None or tp is None:
+                return "sl" if tp is None else "tp"
+            return "tp" if abs(px - tp) <= abs(px - sl) else "sl"
+        except Exception as e:  # noqa: BLE001
+            print(f"homebase engine: grading a Lab exit failed: {e!r}", file=sys.stderr)
+            return "exit"
+
+    # --- hooks 5 and 7: filled in by the next commits (no Lab round can exist before lab_enter does) ---
+    async def _lab_flatten_strategy(self, name: str) -> dict:
+        return {}
+
+    async def _lab_tick(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, now: dt.time) -> None:
+        return None
+
+    # --- (the Lab methods end here) ---
+
+
+# ---- the Lab section, module level --------------------------------------------------------------------
+LAB = "lab"                                    # StrategyCfg.kind
+LAB_FLAT_TEXT = "homebase:lab-flat"            # the capped market-out's order text
+LAB_FLAT_RETRY_S = 5.0                         # the flat time's retry (cancels and reads only)
+LAB_CHECK_RETRY_S = 30.0                       # ... once a round is "check it"
+LAB_SETTLE_S = 2.0                             # a closed round's orders are re-read this often
+LAB_SETTLE_FAST = 5                            # ... for this many reads, then every LAB_CHECK_RETRY_S
+LAB_UNCONFIRMED_S = 5.0                        # a close with no exit fill is given this long
+# The sentences the owner reads (design, section E). The door's own are repeated here so the engine never
+# imports the runner's code; tests/test_engine_lab.py holds them equal.
+LAB_NOT_ON_DESK = "That strategy is not on the Desk."
+LAB_OFF = "It is off."
+LAB_KILLED = "Killed today."
+LAB_DISARMED = "The desk is disarmed: written down only."
+LAB_NOT_CONNECTED = "The account is not connected."
+LAB_ACCOUNT_STOPPED = "This account is stopped for the day."
+LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
+LAB_ONE_AT_A_TIME = "One position at a time."
+LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
+LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
+LAB_BAD_ORDER = "The Desk cannot check this order."
+LAB_NO_STOP = "Every entry needs a stop held at the broker."
+LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."
+LAB_NOT_A_PAIR = "Only a buy-stop and sell-stop pair can be linked."
+LAB_TOO_LATE = "Too late for a new trade today."
+LAB_NOT_WRITTEN = "The Desk could not write this trade down. Nothing was sent."
+
+
+@dataclass
+class LabLeg:
+    """One entry of a Lab strategy, as the engine places it. Duck-types rules.Signal for _place_one."""
+    iid: int                            # the strategy's own order id
+    side: str                           # "Buy" | "Sell"
+    entry: str                          # "Market" | "Stop"
+    entry_price: Optional[float]
+    sl_px: float
+    tp_px: Optional[float]              # None = no target order
+    tp_rr: Optional[float]
+    ref_px: Optional[float]
+    move: bool = False                  # move_brackets_to_fill
