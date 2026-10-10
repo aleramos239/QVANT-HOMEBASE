@@ -2801,7 +2801,8 @@ def test_rb_a_placed_round_whose_record_was_lost_is_hands_off_and_keeps_its_stop
     st = rnd(eng2)
     assert sent(ad) == before and st.status == "placed" and ad.order_status[f"{eid}-sl"] == "Suspended"
     (chk,) = events(tmp_path, "lab_check")
-    assert chk["reason"] == "this trade's record was lost: nothing is sent or cancelled for it" and chk["account"] == "a1"
+    assert chk["reason"] == ("this trade's record was lost: nothing is sent or cancelled for it by the strategy's own "
+                             "controls; the desk-wide Kill still works") and chk["account"] == "a1"
     (r,) = eng2.lab_rounds(LAB)
     assert (r["clean"], r["why"]) == (False, "The Desk cannot check the last trade's orders.")
     assert eng2.lab_open(LAB) == ["a1"]

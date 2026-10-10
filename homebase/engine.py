@@ -2025,7 +2025,8 @@ class Engine:
             x["lost_said"], x["check"], x["clean"], x["why"] = True, True, False, LAB_CANNOT_CHECK
             try:
                 self.journal("lab_check", strategy=st.strategy, account=st.account, round=x.get("round"),
-                             reason="this trade's record was lost: nothing is sent or cancelled for it", actions=[])
+                             reason="this trade's record was lost: nothing is sent or cancelled for it by the "
+                                    "strategy's own controls; the desk-wide Kill still works", actions=[])
                 self._lab_save()
             except Exception as e:  # noqa: BLE001 -- never out of a read
                 print(f"homebase engine: journal lab_check failed: {e!r}", file=sys.stderr)
