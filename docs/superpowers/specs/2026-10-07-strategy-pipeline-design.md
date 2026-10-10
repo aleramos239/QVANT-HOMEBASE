@@ -403,3 +403,10 @@ such boxes, and picks the middle one by its odds to pass the eval on `prop.accou
 luck count has run a while). Dry run on the 20 ideas on file that had passed stage 1: 14 have no such box, 5 get another box (4 of them had already
 read the unseen days: final), 1 keeps its box. So the change mostly stops an idea a few stages earlier; it found one idea to run again
 (nq_noise_pm_long). The indicators left the card with it (none was tried in variant mode), and `bp.py pipe luck` is section 4's running count.
+
+### 16.3 The next box, the near misses, the evening session (decided 2026-10-09, later)
+The owner: "i want to make it so we dont have to worry about missing a strategy under our nose." After 16.2 an idea could still stop on ONE box at
+the proof (stage 4) or at the lock's worse fills. Now stage 1's card keeps `candidates` (every box that holds every build line, of every map that
+passed, from the middle outward by prop odds) and a failed card of stage 4 or 5 carries `next_box`; the runner asks `pipe_stages.next_box` for the
+next candidate, keeps the failed box's cards aside (`pipe_store.shelve`), and runs stages 2 on again, with `tries` + 1 (the random bar rises) and at
+most `variant.box_tries` (5) boxes. `bp.py pipe near` lists what stopped closest to a line. The evening session is in `card.sessions`.

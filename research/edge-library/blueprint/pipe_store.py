@@ -15,6 +15,7 @@ every card ever added. It stores what it is given and reads it back: it checks n
         order.jsonl                  the queue: {name, utc, inbox}, one line an add
         pause                        there = the runner stops after the stage in hand
         book/<name>.json             the book card of an idea the owner approved
+        portfolios/<account>.json    the portfolio builder's last answer for an account (pipe_portfolio.py: `bp.py pipe portfolio`)
         runner.lock, runner.log      the runner's (pipe_runner.py)
 
     root(arg=None) -> Path                              the pipeline root
@@ -33,6 +34,8 @@ every card ever added. It stores what it is given and reads it back: it checks n
                                                         why, picked None; tries 0) and its name goes last in the queue (order.jsonl, not the
                                                         inbox). Refused while it is running, awaits the owner or is in the book. The card,
                                                         the stores (runs/), the ledger and seen.jsonl are not touched
+    shelve(name, since, root=None) -> count             the stage cards of stage `since` and later go to stages_old/<UTC stamp>/ (never deleted):
+                                                        the next box of an idea runs its stages again (pipe_stages.next_box)
     stages(name, root=None) -> {n: card}                every stage card on file, by stage number
     order(root=None) -> [names]                         the queue: the ideas whose status is queued or running, the inbox's
                                                         first, then by the time they were added
@@ -47,6 +50,7 @@ every card ever added. It stores what it is given and reads it back: it checks n
     ledger(name, root=None) -> Path                     p/<name>/ledger.csv
     book(root=None) -> [book cards]                     by name
     write_book(name, card, root=None) -> Path           book/<name>.json
+    write_portfolio(account, data, root=None) -> Path   portfolios/<account>.json (an account id that is no file name: J.Refuse)
 
 HOW IT WRITES. A JSON file is written whole or not at all: a temp file beside it, flushed to the disk, then put in its
 place (a reader never sees half a file; a write that dies leaves the old one). A line on a .jsonl is appended under an
@@ -275,6 +279,29 @@ def clear_owner_pick(name, root=None) -> bool:
     return False
 
 
+def _aside(d: Path, cards: list, now: str) -> int:
+    """Move these stage cards of an idea to stages_old/<UTC stamp>/ (never deleted; two sets in one second keep both) -> how many."""
+    if not cards:
+        return 0
+    stamp = dt.datetime.fromisoformat(now).astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    to, k = d / "stages_old" / stamp, 1
+    while to.exists():
+        k += 1
+        to = d / "stages_old" / f"{stamp}-{k}"
+    to.mkdir(parents=True)
+    for p in cards:
+        os.replace(p, to / p.name)
+    return len(cards)
+
+
+def shelve(name, since: int, root=None) -> int:
+    """The stage cards of stage `since` and later go to stages_old/<UTC stamp>/ (never deleted) -> how many. The pipeline's NEXT BOX: the cards
+    of the box that did not hold are kept aside, and the stages after the pick run again for the next one (pipe_stages.next_box)."""
+    d = _dir(name, root)
+    with _locked(d):
+        return _aside(d, sorted(p for p in (d / "stages").glob("*.json") if p.stem.isdigit() and int(p.stem) >= int(since)), _now())
+
+
 def reset(name, root=None) -> dict:
     """The idea starts again from stage 0 (module docstring) -> its state."""
     r, d = _at(root), _dir(name, root)
@@ -284,16 +311,8 @@ def reset(name, root=None) -> dict:
                "book": "is in the book"}.get(st.get("status"))
         if why:
             raise J.Refuse(f"{name} {why}: an idea is run again only after it stopped (or was refused); nothing was moved")
-        now, cards = _now(), sorted(p for p in (d / "stages").glob("*") if p.is_file())
-        if cards:
-            stamp = dt.datetime.fromisoformat(now).astimezone(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            to, k = d / "stages_old" / stamp, 1
-            while to.exists():                       # two re-runs in one second keep both sets
-                k += 1
-                to = d / "stages_old" / f"{stamp}-{k}"
-            to.mkdir(parents=True)
-            for p in cards:
-                os.replace(p, to / p.name)
+        now = _now()
+        _aside(d, sorted(p for p in (d / "stages").glob("*") if p.is_file()), now)
         st = {**st, "status": "queued", "stage": None, "stopped_at": None, "why": None, "tries": 0, "picked": None, "name": name, "updated_utc": now}
         _write(d / "state.json", st)
     with _log(r / ORDER) as (f, text):
@@ -403,3 +422,10 @@ def book(root=None) -> list:
 
 def write_book(name, card, root=None) -> Path:
     return _write(_at(root) / "book" / f"{_name(name)}.json", card)
+
+
+def write_portfolio(account, data, root=None) -> Path:
+    """The portfolio builder's answer for one account (a rule file's id of the app's prop simulator), replacing the last one."""
+    if not isinstance(account, str) or not account or Path(account).name != account or account.startswith("."):
+        raise J.Refuse(f"{account!r} is no account id: a portfolio is saved under its account's id")
+    return _write(_at(root) / "portfolios" / f"{account}.json", data)

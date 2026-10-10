@@ -35,18 +35,28 @@ const FIELDS = [
   choice('timeFormat', '24h', ['24h', '12h']),
   bool('ethBg', false), color('ethBgColor', 'rgba(120,123,134,.08)'),
   // Status line
-  bool('title', true), choice('titleMode', 'both', ['ticker', 'description', 'both']),
-  bool('ohlc', true), bool('barChange', true), bool('volume', true),
+  bool('logo', true), bool('title', true), choice('titleMode', 'both', ['ticker', 'description', 'both']),
+  bool('ohlc', true), bool('barChange', true), bool('volume', true), bool('dayChange', false),
   bool('indTitles', true), bool('indArgs', true), bool('indValues', true),
   // Scales and lines · PRICE SCALE
+  choice('scaleMode', 'normal', ['normal', 'log', 'percent', 'indexed']), bool('invertScale', false),
   bool('scalePriceOnly', false), bool('lastLabel', true), bool('lastLine', true), choice('lastLineStyle', 'dotted', STYLES),
+  color('lastLineColor'), int('lastLineWidth', 1, 1, 4),   // the line's colour: null follows the last bar's
   bool('countdown', true), int('marginTop', 10, 0, 40), int('marginBottom', 15, 0, 40),
+  // Scales and lines · PRICE LABELS AND LINES (TradingView's): the previous session's close, the high and low on screen
+  choice('prevDay', 'hidden', ['hidden', 'line', 'both']), color('prevDayColor', '#787B86'), choice('prevDayStyle', 'dotted', STYLES),
+  choice('highLow', 'hidden', ['hidden', 'labels', 'both']), color('highLowColor', '#787B86'),
+  choice('indLabels', 'value', ['both', 'value', 'hidden']),   // an indicator's label on the price scale
   // Scales and lines · TIME SCALE
+  bool('dayOfWeek', true), choice('dateFormat', 'dmy', ['dmy', 'mdy', 'iso', 'dmy_num', 'mdy_num']),
   int('rightOffset', 6, 0, 100),
   // Canvas · CHART BASIC STYLES
-  color('bg'), bool('vertGrid', true), color('vertGridColor'), bool('horzGrid', true), color('horzGridColor'),
+  color('bg'), choice('bgType', 'solid', ['solid', 'gradient']), color('bg2'),   // gradient: bg at the top, bg2 at the bottom
+  bool('vertGrid', true), color('vertGridColor'), choice('vertGridStyle', 'solid', STYLES),
+  bool('horzGrid', true), color('horzGridColor'), choice('horzGridStyle', 'solid', STYLES),
+  color('paneSep'),
   color('crossColor'), choice('crossStyle', 'dashed', STYLES), int('crossWidth', 1, 1, 4),
-  bool('watermark', true), color('watermarkColor'),
+  bool('watermark', true), color('watermarkColor'), choice('watermarkText', 'both', ['both', 'ticker', 'interval', 'description']),
   // Canvas · SCALES
   color('scaleText'), int('scaleFont', 12, 10, 16), color('scaleLines'),
   // Events (the economic calendar)
@@ -58,7 +68,7 @@ const FIELDS = [
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
 /* The colours that follow the theme while never changed, and the HBCell.palette() key each takes. */
 const THEMED = { bodyUp: 'up', bodyDown: 'down', borderUp: 'up', borderDown: 'down', wickUp: 'up', wickDown: 'down',
-  bg: 'bg', vertGridColor: 'grid', horzGridColor: 'grid', crossColor: 'cross', watermarkColor: 'watermark',
+  bg: 'bg', bg2: 'bg', paneSep: 'border', vertGridColor: 'grid', horzGridColor: 'grid', crossColor: 'cross', watermarkColor: 'watermark',
   scaleText: 'text2', scaleLines: 'border' };
 
 /* ---- colours ---- */
@@ -88,6 +98,14 @@ const canon = (s) => { const c = parseColor(s); return c ? fmtColor(c) : null; }
 function hexOf(s) { const c = parseColor(s); return c ? fmtColor({ ...c, a: 1 }) : null; }
 function alphaOf(s) { const c = parseColor(s); return c ? c.a : 1; }
 function withAlpha(s, a) { const c = parseColor(s); return c ? fmtColor({ ...c, a }) : null; }
+/* Black or white, whichever reads better on a fill (the last-price label's rule): a light fill takes dark text.
+   A see-through fill is judged as it looks over `under` (the chart's background). */
+function contrastText(fill, under) {
+  const c = parseColor(fill), u = parseColor(under) || { r: 0, g: 0, b: 0, a: 1 };
+  if (!c) return '#FFFFFF';
+  const mix = (k) => c[k] * c.a + u[k] * (1 - c.a);
+  return 0.299 * mix('r') + 0.587 * mix('g') + 0.114 * mix('b') > 150 ? '#000000' : '#FFFFFF';
+}
 
 /* ---- the model ---- */
 const num = (v) => (typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v) : NaN);
@@ -139,8 +157,10 @@ function resolve(over, palette) {
 function chartOptions(r) {
   const cross = () => ({ color: r.crossColor, style: LINE_STYLE[r.crossStyle], width: r.crossWidth });
   return {
-    layout: { background: { type: 'solid', color: r.bg }, textColor: r.scaleText, fontSize: r.scaleFont },
-    grid: { vertLines: { visible: r.vertGrid, color: r.vertGridColor }, horzLines: { visible: r.horzGrid, color: r.horzGridColor } },
+    layout: { background: r.bgType === 'gradient' ? { type: 'gradient', topColor: r.bg, bottomColor: r.bg2 } : { type: 'solid', color: r.bg },
+      textColor: r.scaleText, fontSize: r.scaleFont, panes: { separatorColor: r.paneSep } },
+    grid: { vertLines: { visible: r.vertGrid, color: r.vertGridColor, style: LINE_STYLE[r.vertGridStyle] },
+      horzLines: { visible: r.horzGrid, color: r.horzGridColor, style: LINE_STYLE[r.horzGridStyle] } },
     crosshair: { vertLine: cross(), horzLine: cross() },
     timeScale: { rightOffset: r.rightOffset, borderColor: r.scaleLines },
     rightPriceScale: { borderColor: r.scaleLines },
@@ -156,14 +176,58 @@ function candleOptions(r, tick) {
     wickVisible: r.wick, wickUpColor: r.wickUp, wickDownColor: r.wickDown,
     priceFormat: { type: 'price', precision: p == null ? Cat.decimals(tick) : p,
       minMove: p == null ? tick : Number((10 ** -p).toFixed(p)) },
-    lastValueVisible: r.lastLabel, priceLineVisible: r.lastLine, priceLineStyle: LINE_STYLE[r.lastLineStyle],
+    // the line in a colour of its own is the chart's own price line (HBCell syncRefLines): the series' line takes
+    // the label's colour with it, and the label keeps the last bar's
+    lastValueVisible: r.lastLabel, priceLineVisible: r.lastLine && r.lastLineColor == null, priceLineStyle: LINE_STYLE[r.lastLineStyle],
+    priceLineWidth: r.lastLineWidth,
   };
+}
+
+/* The price pane's scale: Lightweight Charts' PriceScaleMode numbers (regular, logarithmic, percent, indexed to 100). */
+const SCALE_MODE = { normal: 0, log: 1, percent: 2, indexed: 3 };
+function priceScaleOptions(r) { return { mode: SCALE_MODE[r.scaleMode] ?? 0, invertScale: !!r.invertScale }; }
+
+/* The previous session's close: the close of the last real bar before the last bar's session (bars carry `s`,
+   their session date); null when the chart holds no earlier session. */
+function prevSessionClose(bars) {
+  const n = bars ? bars.length : 0;
+  if (!n) return null;
+  const s = bars[n - 1].s;
+  for (let i = n - 2; i >= 0; i--) if (bars[i].s !== s && !bars[i].blank) return bars[i].c;
+  return null;
+}
+
+/* The highest high and the lowest low among bars[from..to] (empty slots skipped): {hi, hiAt, lo, loAt} or null. */
+function highLow(bars, from, to) {
+  const a = Math.max(0, Math.ceil(from)), b = Math.min(bars.length - 1, Math.floor(to));
+  let out = null;
+  for (let i = a; i <= b; i++) {
+    const x = bars[i];
+    if (x.blank) continue;
+    if (!out) out = { hi: x.h, hiAt: i, lo: x.l, loAt: i };
+    else { if (x.h > out.hi) { out.hi = x.h; out.hiAt = i; } if (x.l < out.lo) { out.lo = x.l; out.loAt = i; } }
+  }
+  return out;
+}
+
+/* The watermark's words for its setting: "NQ, 1m", "NQ", "1m" or the instrument's name. */
+function watermarkText(root, name, interval, mode) {
+  return mode === 'ticker' ? root : mode === 'interval' ? interval : mode === 'description' ? (name || root) : `${root}, ${interval}`;
+}
+
+/* The colour that stands for the last bar, solid: its body's; with the body off (or see-through) its border's,
+   then its wick's, then the scale's text. The last-price label, its line and the countdown all take it, so
+   none of them vanishes with the body (Lightweight Charts would paint them in the body's own, clear colour). */
+function lastColor(r, up) {
+  const picks = [[r.body, up ? r.bodyUp : r.bodyDown], [r.borders, up ? r.borderUp : r.borderDown], [r.wick, up ? r.wickUp : r.wickDown]];
+  for (const [on, col] of picks) if (on && alphaOf(col) >= 0.25 && hexOf(col)) return hexOf(col);
+  return hexOf(r.scaleText) || '#787B86';
 }
 
 function scaleMargins(r) { return { top: r.marginTop / 100, bottom: r.marginBottom / 100 }; }
 
 function legendFlags(r) {
-  return { title: r.title, titleMode: r.titleMode, ohlc: r.ohlc, change: r.barChange, volume: r.volume,
+  return { logo: r.logo, title: r.title, titleMode: r.titleMode, ohlc: r.ohlc, change: r.barChange, volume: r.volume, dayChange: r.dayChange,
     indTitles: r.indTitles, indArgs: r.indArgs, indValues: r.indValues };
 }
 
@@ -194,6 +258,17 @@ function titleText(root, name, interval, mode) {
 }
 
 /* ---- time ---- */
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+/* A day as the Date format setting spells it, with the day of the week in front when asked: wall-clock seconds
+   (the axis' own) -> "Tue 22 Sep '26", "Sep 22, 2026", "2026-09-22", "22/09/2026", "09/22/2026". */
+function dateText(wallS, fmt, dow) {
+  const d = new Date(wallS * 1000), y = d.getUTCFullYear(), m = d.getUTCMonth(), day = d.getUTCDate(), p2 = (n) => String(n).padStart(2, '0');
+  const text = fmt === 'mdy' ? `${MONTHS[m]} ${day}, ${y}` : fmt === 'iso' ? `${y}-${p2(m + 1)}-${p2(day)}`
+    : fmt === 'dmy_num' ? `${p2(day)}/${p2(m + 1)}/${y}` : fmt === 'mdy_num' ? `${p2(m + 1)}/${p2(day)}/${y}`
+      : `${day} ${MONTHS[m]} '${String(y).slice(2)}`;
+  return dow ? `${DAYS[d.getUTCDay()]} ${text}` : text;
+}
 const FMT = new Map(), OFF = new Map();
 /* A zone's UTC offset in ms at an instant (IANA name), cached per hour (these zones change offset on the hour). */
 function zoneOffsetMs(zone, ms) {
@@ -229,6 +304,20 @@ function outsideRth(etWallS) {
 function barCloseEt(bar, barMs, alwaysOpen) {
   const end = bar.t * 1000 + barMs, m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bar.s || '');
   return m ? Math.min(end, Date.UTC(+m[1], +m[2] - 1, +m[3], alwaysOpen ? 18 : 17)) : end;
+}
+/* The time left on the countdown, in ms (0: nothing to show). While the last bar is open: until it closes.
+   Once it has closed and no newer bar came (a quiet minute, a late feed), the clock goes on: until the next bar
+   boundary, for as long as the bar's session is open -- TradingView's countdown never waits for a trade. */
+function countdownLeft(bar, barMs, alwaysOpen, nowEt) {
+  if (!bar || !(barMs > 0) || !Number.isFinite(nowEt)) return 0;
+  const left = barCloseEt(bar, barMs, alwaysOpen) - nowEt;
+  if (left > 0) return left;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(bar.s || '');
+  if (!m) return 0;
+  const end = Date.UTC(+m[1], +m[2] - 1, +m[3], alwaysOpen ? 18 : 17), start = bar.t * 1000;
+  if (nowEt >= end) return 0;
+  const next = start + (Math.floor((nowEt - start) / barMs) + 1) * barMs;
+  return Math.min(next, end) - nowEt;
 }
 /* "04:59" under an hour, "1:04:59" from an hour. */
 function fmtCountdown(ms) {
@@ -300,7 +389,7 @@ function clockText(hms, fmt) {
 }
 
 const api = { clockText, FIELDS, DEFAULTS, THEMED, LINE_STYLE, TIMEZONES, PALETTE, CLEAR, parseColor, fmtColor, hexOf, alphaOf,
-  withAlpha, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
+  withAlpha, contrastText, lastColor, countdownLeft, priceScaleOptions, prevSessionClose, highLow, watermarkText, dateText, normalize, overrides, resolve, chartOptions, candleOptions, scaleMargins, legendFlags, barColor,
   barColorsByPrevClose, splitLabel, legendLabel, titleText, zoneOffsetMs, wallSeconds, outsideRth, barCloseEt,
   fmtCountdown, templateNameError, buildTemplate, applyTemplate };
 if (typeof window !== 'undefined') window.HBSettings = api;

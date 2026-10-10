@@ -10,7 +10,7 @@
   var H = document.documentElement, manifest = null;
   try {
     var x = new XMLHttpRequest();
-    x.open('GET', '/static/apple/manifest.json', false);
+    x.open('GET', '/static/apple/manifest.json?t=' + Date.now(), false);   // never a cached copy: its version names the files' own
     x.send();
     if (x.status === 200) manifest = JSON.parse(x.responseText);
   } catch (e) { manifest = null; }
@@ -19,7 +19,10 @@
   var shared = manifest.shared || {};
   H.classList.add('hb-apple');
   H.setAttribute('data-hb-tab', tab);
-  var css = (shared.css || []).concat(t.css || []), js = (shared.js || []).concat(t.js || []);
+  // the manifest's version rides on every file's address, so a browser never keeps an old skin after a change
+  // (the pages send no cache headers; the Mac app reads its files past the cache by itself)
+  var v = '?v=' + encodeURIComponent(manifest.version || 1), withV = function (u) { return u + v; };
+  var css = (shared.css || []).concat(t.css || []).map(withV), js = (shared.js || []).concat(t.js || []).map(withV);
   css.forEach(function (href) { document.write('<link rel="stylesheet" href="' + href + '">'); });
   document.addEventListener('DOMContentLoaded', function () {
     js.forEach(function (src) {

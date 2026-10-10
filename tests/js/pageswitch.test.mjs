@@ -17,7 +17,7 @@ for (const [file, cur] of [['charts.html', 'charts'], ['backtest.html', 'backtes
     assert.match(nav, new RegExp(`data-page="${cur}" aria-current="page"`));
     assert.doesNotMatch(html, /tbDesk/);
     assert.doesNotMatch(html, /\?v=31/, 'every asset is bumped');
-    assert.match(html, /charts\.css\?v=33/);
+    assert.match(html, /charts\.css\?v=35/);
   });
 }
 

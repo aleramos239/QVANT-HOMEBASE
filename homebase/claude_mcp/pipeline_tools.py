@@ -216,9 +216,9 @@ _CARD = {
         "source": {"type": "string", "enum": ["owner", "video", "claude", "wiki", "paper", "book", "course"],
                    "description": "Where the idea came from. claude = you thought of it."},
         "market": {"type": "string", "enum": ["NQ", "ES", "GC"], "description": "ONE market."},
-        "session": {"type": "string", "enum": ["asia", "london", "pre", "nyam", "mid", "pm"],
+        "session": {"type": "string", "enum": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"],
                     "description": "ONE time of day: asia, london, pre (pre-market), nyam (New York morning), mid "
-                                   "(midday) or pm (afternoon)."},
+                                   "(midday), pm (afternoon) or eve (the evening before, 18:00-23:59 ET)."},
         "sides": {"type": "string", "enum": ["both", "long", "short"], "description": "Both sides, or one."},
         "sides_why": {"type": "string", "description": "Why one side only. Needed when sides is long or short."},
         "ways": {"type": "array", "minItems": 1, "maxItems": 3, "items": _WAY,
@@ -239,8 +239,8 @@ SPECS = [
           "with their settings, and a card uses only those. THE CARD: name; "
           "why (one sentence: why it should make money) and loser (one sentence: who is on the losing side); source "
           "(owner, video, claude, wiki, paper, book or course) and, optionally, ref (which paper, book, video or course, "
-          "one line); ONE market (NQ, ES or GC); ONE session (asia, london, pre, nyam, mid or "
-          "pm); sides (both, or long / short with sides_why); ways: 1 to 3 ways to enter, each a family, ONE main "
+          "one line); ONE market (NQ, ES or GC); ONE session (asia, london, pre, nyam, mid, pm "
+          "or eve); sides (both, or long / short with sides_why); ways: 1 to 3 ways to enter, each a family, ONE main "
           "setting of it and EXACTLY 3 values (its other settings go under fixed). A card names NO indicator: none "
           "is tried. The bars are always 1 and 5 minutes and the stops "
           "and targets are the standard table: a card does not choose them. The same idea (the same market, session, "

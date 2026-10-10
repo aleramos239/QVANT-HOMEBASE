@@ -176,7 +176,7 @@ class EthBg extends Layer {
 }
 
 /* The time left in the last bar, as a price-axis label just below the last-price label (TradingView's
-   countdown). read() -> {text, price, color, font} | null is asked before every render; the page asks for a
+   countdown). read() -> {text, price, color, textColor, font} | null is asked before every render; the page asks for a
    render once a second. priceAxisViews() returns ONE stable array: Lightweight Charts caches its wrapper by
    the array's identity and calls these methods at every render. */
 class Countdown extends Layer {
@@ -187,7 +187,7 @@ class Countdown extends Layer {
     this.axis = [{
       coordinate: () => { const y = this.y(); return y == null ? -100 : y; },
       text: () => (this.cur ? this.cur.text : ''),
-      textColor: () => this.P.onAccent,
+      textColor: () => (this.cur && this.cur.textColor) || this.P.onAccent,
       backColor: () => (this.cur ? this.cur.color : 'rgba(0,0,0,0)'),
       visible: () => this.y() != null,
       tickVisible: () => false,
@@ -200,6 +200,54 @@ class Countdown extends Layer {
     if (!this.cur || !this.series) return null;
     const y = this.series.priceToCoordinate(this.cur.price);
     return y == null ? null : y + Math.round((this.cur.font * 4) / 3) + 2;   // one axis label below the last price
+  }
+}
+
+/* The high and the low on screen (TradingView's "High and low"): a word at each bar, a price-axis label each and,
+   when asked, a dotted line from the bar to the axis. read() -> {color, textColor, lines, hi: {price, text, x},
+   lo: {price, text, x}} | null is asked before every render (the visible range decides it). */
+class HighLow extends Layer {
+  constructor(P, read) {
+    super(P);
+    this.read = read;
+    this.cur = null;
+    const view = (k) => ({
+      coordinate: () => { const y = this.yOf(k); return y == null ? -100 : y; },
+      text: () => (this.cur ? this.cur[k].text : ''),
+      textColor: () => (this.cur ? this.cur.textColor : this.P.onAccent),
+      backColor: () => (this.cur ? this.cur.color : 'rgba(0,0,0,0)'),
+      visible: () => this.yOf(k) != null,
+      tickVisible: () => false,
+    });
+    this.axis = [view('hi'), view('lo')];
+  }
+  priceAxisViews() { return this.axis; }
+  updateAllViews() { this.cur = this.chart ? this.read() : null; }
+  yOf(k) {
+    if (!this.cur || !this.series) return null;
+    const y = this.series.priceToCoordinate(this.cur[k].price);
+    return y == null ? null : y;
+  }
+  draw(target) {
+    const cur = this.cur;
+    if (!cur) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.font = '11px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = ctx.strokeStyle = cur.color;
+      ctx.lineWidth = 1;
+      for (const [k, word, dy, base] of [['hi', 'High', -6, 'bottom'], ['lo', 'Low', 6, 'top']]) {
+        const y = this.yOf(k), x = cur[k].x;
+        if (y == null || x == null) continue;
+        const w = ctx.measureText(word).width / 2 + 2;
+        ctx.textBaseline = base;
+        ctx.fillText(word, Math.max(w, Math.min(mediaSize.width - w, x)), y + dy);
+        if (!cur.lines) continue;
+        ctx.setLineDash([1, 3]);
+        ctx.beginPath(); ctx.moveTo(x, Math.round(y) + 0.5); ctx.lineTo(mediaSize.width, Math.round(y) + 0.5); ctx.stroke();
+        ctx.setLineDash([]);
+      }
+    });
   }
 }
 
@@ -286,5 +334,5 @@ class Start extends Layer {
   }
 }
 
-window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown, EventFlags, Start };
+window.HBLayers = { Footprint, Profile, Gaps, Layer, EthBg, Countdown, HighLow, EventFlags, Start };
 })();

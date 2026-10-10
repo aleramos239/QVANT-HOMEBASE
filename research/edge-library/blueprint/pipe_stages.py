@@ -106,6 +106,11 @@ mode the map gets a LOOSE check and ONE box is picked right after it; every hard
           in `picked` as `cell` (the box id) and `variant` (its main-setting value) next to sub / bar / way / filter, and on the card as `box`.
           No map with enough such boxes: the idea stops here, and row P1.3 says which lines the boxes miss. The owner's own pick
           (bp.py pipe pick) is still any box at the floor
+          THE NEXT BOX (next_box; the owner, 2026-10-09): the card also keeps `candidates` -- every box that holds, of every map that passed, in
+          the order they are tried (_outward: from the middle outward by prop odds; the moved-on map's first). A stage that says no to the PICKED
+          BOX and not to the idea (its card's `next_box`: stage 4's proof; stage 5's "no box" with worse fills or "box failed") does not stop the
+          idea while a candidate is left: the runner makes the next one the pick, counts one more try (the random bar rises) and runs stages 2 on
+          again -- at most `variant.box_tries` boxes an idea. The unseen days are still read ONCE, for the first box that is locked
   stage2  the same checks; P2.5 reads the PICKED box (_prices(picked=))
   stage3  _stage3_variant: NO indicator is tried (the card's list is ignored and the text says so; the code for them is kept). Rows P3.2 (average
           trade at the floor), P3.3 (trades), P3.4 (each side makes money, the card's sides), P3.6 (other markets, shown) on the picked box
@@ -340,12 +345,19 @@ def _odds(t: dict, cells: list, days=None) -> dict:
     return {c: PP.odds(J.cellx(t["_st"], c, t["_u"]["sess"], t["_u"]), cal, own) for c in cells}
 
 
-def _pick(rows: list, odds: dict):
-    """THE PICK: the MIDDLE of the boxes of `odds` ({box: (its odds to pass the eval, its payout odds)}) by those odds -- never the best -- then
-    by the judge's tie rule (net to the cent, variant order); an even count takes the lower of the two middle ones. None: no box."""
+def _outward(rows: list, odds: dict) -> list:
+    """THE ORDER THE BOXES ARE TRIED IN: the boxes of `odds` ({box: (its odds to pass the eval, its payout odds)}) ranked by those odds, then by
+    the judge's tie rule (net to the cent, variant order) -- and read FROM THE MIDDLE OUTWARD: the middle one first (an even count: the lower of
+    the two middle ones), then the next lower, the next higher, and so on. The best box is never first."""
     by = {r["id"]: r for r in rows}
     order = sorted(odds, key=lambda c: (*odds[c], round(by[c]["net"], 2), by[c]["vi"], by[c]["xi"]))
-    return order[(len(order) - 1) // 2] if order else None
+    m = (len(order) - 1) // 2
+    return [order[i] for k in range(len(order)) for i in (m - k, m + k)[:1 + (k > 0)] if 0 <= i < len(order)]
+
+
+def _pick(rows: list, odds: dict):
+    """THE PICK: the first box of _outward -- the MIDDLE of the boxes by prop odds, never the best. None: no box."""
+    return (_outward(rows, odds) or [None])[0]
 
 
 def _one_box(t: dict, cell: str) -> dict:
@@ -462,15 +474,23 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) ->
             return _card(1, t0, False, "fail", rows, f"the owner's pick {owner['cell']} is not one of the {res[i]['qualifying']} boxes at the floor of {s['name']}: the idea is "
                          "stopped; name another box (bp.py pipe pick <name> <cell> --why=TEXT) or take it away (bp.py pipe pick <name> --clear), then bp.py pipe rerun <name>",
                          None, len(res), rules, tables=tables)
-        cell, odds = owner["cell"], None
+        cell, odds, cands = owner["cell"], None, []
         how = f"chosen by the owner ({owner['why']}), one of its {res[i]['qualifying']} boxes at the floor"
     else:
         if gate[i]["passed"] is False:
             return _card(1, t0, False, "fail", rows, f"no heat map has a box to pick: {s['name']} -- {gate[i]['text']}: the idea is dropped{said}", None, len(res), rules, tables=tables)
-        got = _odds(t, good, kw["days"])
-        cell = _pick(trows, {c: (o["eval"], o["payout"]) for c, o in got.items()})
-        o = got[cell]
-        odds = {"account": o["account"]["id"], **{k: o[k] for k in ("eval", "payout", "size", "payout_size")}}
+        cands, o = [], None
+        for k in sorted(ok, key=lambda k: (len(held[k][0]), res[k]["qualifying"], res[k]["avg_trade"], -k), reverse=True):      # this map's boxes first, then the other maps'
+            got = _odds(tabs[k], held[k][0], kw["days"])
+            for c in _outward(J.table(tabs[k]["_st"], tabs[k]["_u"]), {c: (x["eval"], x["payout"]) for c, x in got.items()}):
+                o = o or got[c]
+                cands.append({"sub": subs[k][0]["name"], "bar": subs[k][0]["bar"], "way": subs[k][0]["way"], "cell": c, "account": got[c]["account"]["id"],
+                              **{a: got[c][a] for a in ("eval", "payout", "size", "payout_size")}})
+        cell = cands[0]["cell"]
+        odds = {a: cands[0][a] for a in ("account", "eval", "payout", "size", "payout_size")}
+        more = min(len(cands), PR.need("variant", "box_tries")) - 1
+        said += (f"; if this box does not hold at the proof or cannot be locked, the next of {more} more box{'es' * (more != 1)} that hold{'s' * (more == 1)} every line "
+                 "is tried, each one more try of the random bar") if more > 0 else ""
         how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 else
                f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that hold every line "
                "a box is held to on the build days (never the best)")
@@ -479,7 +499,39 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) ->
                  f"average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
                  f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone{said}",
                  {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"], **({"by": "owner"} if owner else {})},
-                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"], "holding": len(good), "odds": odds})
+                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"], "holding": len(good), "odds": odds}, candidates=cands, tried=[])
+
+
+def next_box(name: str, ctx: dict, failed: dict):
+    """THE NEXT BOX (the owner, 2026-10-09: "i want to make it so we dont have to worry about missing a strategy under our nose"). `failed` = the
+    card of a stage that said NO TO THE PICKED BOX and not to the idea (its `next_box`: stage 4's proof, stage 5's "no box" / "box failed"). The
+    next of stage 1's `candidates` that was not tried yet becomes the pick -- at most `variant.box_tries` boxes an idea -- and stage 1's card is
+    returned with it: `picked`, `box`, `tries` + 1 (every box is one more try of the random bar, pipe_rules.random_bar) and `tried` (the boxes
+    that did not hold, each with the stage and the row that said so). None: no box is left, the owner named the box himself, or the idea's stage
+    1 knows no candidates (it ran before this existed) -- then the stage's own verdict stands. The runner writes the card and runs stages 2 on
+    again for the new box (pipe_runner._step); nothing is run or written here."""
+    one = PS.stages(name, ctx.get("root")).get(1) or {}
+    was, cands = one.get("picked") or {}, one.get("candidates") or []
+    if not _variant() or was.get("by") == "owner" or not cands:
+        return None
+    why = next((x["text"] for x in failed.get("lines") or [] if x.get("passed") is False), None) or str(failed.get("text") or "").splitlines()[0]
+    tried = [*(one.get("tried") or []), {"sub": was["sub"], "cell": was["cell"], "stage": failed["stage"], "why": why}]
+    left = [c for c in cands if (c["sub"], c["cell"]) not in {(x["sub"], x["cell"]) for x in tried}]
+    cap = PR.need("variant", "box_tries")
+    if not left or len(tried) >= cap:
+        return None
+    nxt, kw = left[0], _kw(name, ctx)
+    _, plan, specs = _idea(nxt["sub"], kw)
+    box = _box_card(_table(specs[0], plan, kw), nxt["cell"])
+    tab = next(x for x in one["tables"] if x["sub"] == nxt["sub"])
+    usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
+    head = str(one.get("text") or "").split(" THE PICK:")[0]
+    return {**one, "picked": {"sub": nxt["sub"], "bar": nxt["bar"], "way": nxt["way"], "filter": None, "cell": nxt["cell"], "variant": box["variant"]},
+            "tries": one["tries"] + 1, "tried": tried,
+            "box": {**box, "qualifying": tab["qualifying"], "holding": tab["holding"], "odds": {a: nxt[a] for a in ("account", "eval", "payout", "size", "payout_size")}},
+            "text": f"{head} THE PICK: box {nxt['cell']} of {nxt['sub']} -- box {len(tried) + 1} of at most {min(cap, len(cands))} that hold every line a box is held to on the "
+                    f"build days: {was['cell']} did not hold at stage {failed['stage']} ({why}): average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
+                    f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone, at the random bar of try {one['tries'] + 1}"}
 
 
 def _left_out(t: dict):
@@ -712,7 +764,7 @@ def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, s
     cell = _cell(picked)
     rows = [G.reshuffle_box(_one_box(_table(specs[0], plan, kw), cell))]
     if rows[0]["passed"] is False:
-        return _card(4, t0, False, "fail", rows, f"the reshuffled runs of the picked box {cell} do not hold, so the random entries are not run: {rows[0]['text']}", picked, tries, rules)
+        return _card(4, t0, False, "fail", rows, f"the reshuffled runs of the picked box {cell} do not hold, so the random entries are not run: {rows[0]['text']}", picked, tries, rules, next_box=True)
     why = _run(specs[:1], kw, "pools", progress)    # the control pool of the home's market and bar size: read where it stands, run only when it is not there
     if why:
         return _error(4, t0, why, rows, picked, tries, rules)
@@ -721,7 +773,7 @@ def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, s
     rows.append({**G.random(c1.get("p_beat"), tries, "random-entry runs of the same box"), "seeds": c1.get("seeds"), "replicates": c1.get("replicates")})
     ok = rows[1]["passed"] is True
     return _card(4, t0, ok, "pass" if ok else "fail", rows, f"the proof holds for the picked box {cell}: " + "; ".join(x["text"] for x in rows) if ok else
-                 f"the proof fails for the picked box {cell}: {rows[1]['text']}", picked, tries, rules)
+                 f"the proof fails for the picked box {cell}: {rows[1]['text']}", picked, tries, rules, **({} if ok else {"next_box": True}))
 
 
 # ================================================================ stage 5: pick one box and lock
@@ -817,13 +869,14 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
             if got is None or (got[0] is not None and all(x["passed"] for x in got[1])):
                 raise                               # not the box: the lock's own word goes up to the runner
             default, rows = got
+            nb = {"next_box": True} if variant else {}     # variant mode: the verdict is this box's, and another box that holds may be tried (next_box)
             if default is None:
-                return _card(5, t0, False, "no box", rows, (f"the picked box {pick} of {sub} does not make money with normal AND with worse fills: it cannot be locked, and the idea stops"
+                return _card(5, t0, False, "no box", rows, (f"the picked box {pick} of {sub} does not make money with normal AND with worse fills: it cannot be locked"
                              if variant else f"no box of {sub}{with_} makes money with normal AND with worse fills: there is no middle box to lock, and the idea stops"),
-                             picked, tries, rules)
+                             picked, tries, rules, **nb)
             return _card(5, t0, False, "box failed", rows, f"{the_box} {default} of {sub}{with_} does not meet "
                          f"{', '.join(x['line'] for x in rows if not x['passed'])}: " + "; ".join(x["text"] for x in rows if not x["passed"])
-                         + " -- no second box: the idea stops", picked, tries, needs(rows), default=default)
+                         + ("" if variant else " -- no second box: the idea stops"), picked, tries, needs(rows), default=default, **nb)
     lock = r["lock"]
     home, default = lock["home"], lock["default"]
     rows = [x for x in r["lines"] if x["line"] in {b["line"] for b in lock["box"]}]
