@@ -941,3 +941,21 @@ def test_persist_all_writes_nothing_once_the_desk_let_go():
     labcfg.release_store(cfg)
     labcfg.persist_all(cfg)
     assert store.get_desk("pp_orb") is None
+
+
+def test_a_sidecar_write_checks_the_lease_again_once_it_has_the_stores_lock(monkeypatch):
+    import contextlib
+    cfg = desk_cfg()
+    store.put(rec())
+    labcfg.overlay(cfg)
+    labcfg.set_limits(cfg, "lab_pp_orb", LabLimits(**LIMITS))
+    real = store.write_lock
+
+    @contextlib.contextmanager
+    def let_go_while_waiting(at=None, wait_s=None):
+        labcfg.release_store(cfg)                                                # the desk shuts down while the write waits
+        with real(at, wait_s):
+            yield
+    monkeypatch.setattr(store, "write_lock", let_go_while_waiting)
+    labcfg.persist_all(cfg)
+    assert store.get_desk("pp_orb") is None

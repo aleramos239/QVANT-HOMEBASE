@@ -1584,7 +1584,8 @@ def test_with_the_lab_side_off_the_desk_is_what_it_was_before_this_task(paths, d
     store.put_desk("pp_orb", {"mark": MARK, "limits": LIMITS, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
     before = tree(desklab_root)
     touched = []
-    for fn in ("listing", "names", "get", "get_desk", "get_runner", "desk_lock", "put_desk", "set_enabled", "remove", "remove_desk"):
+    for fn in ("listing", "names", "get", "get_desk", "get_runner", "desk_lock", "put_desk", "set_enabled", "remove", "remove_desk",
+               "has_record_file", "desk_names", "booked", "write_lock"):
         real = getattr(store, fn)
         monkeypatch.setattr(store, fn, lambda *a, _fn=fn, _real=real, **k: (touched.append(_fn), _real(*a, **k))[1])
     hooks = list(config_mod._after_save)
@@ -1645,6 +1646,10 @@ def test_a_desk_with_the_lab_side_off_built_directly_is_inert(tmp_path):
     assert asyncio.run(ld.set_enabled(LAB, False)) is False
     ld.close()
     assert "_lab" not in vars(cfg) and labcfg.store_state(cfg) is None
+    seen = desk_cfg()
+    labcfg.overlay(seen)                                                         # even on a config something else overlaid
+    off = LabDesk(seen, engine, {}, on=False)
+    assert LAB in seen.strategies and not off.is_lab(LAB) and off.status_view(LAB) is None and off.book_view() is seen.book
 
 
 # ---- N1 (the reviewer's probe G)
@@ -1826,12 +1831,13 @@ def test_an_account_removed_while_a_lab_write_is_in_flight_does_not_come_back(tm
         config_mod.save(cfg)
         done()
         await t
+        assert cfg.book[LAB] == [{"account": "eval1", "qty": 1}]                 # at once: eval2 did not come back with the write
         await ld.refresh()
     try:
         asyncio.run(go())
     finally:
         done()
-    assert cfg.book[LAB] == [{"account": "eval1", "qty": 1}]                     # eval2 did not come back with the write
+    assert cfg.book[LAB] == [{"account": "eval1", "qty": 1}]
     got = store.get_desk("pp_orb")
     assert got["book"] == [{"account": "eval1", "qty": 1}] and got["limits"]["max_trades_day"] == 5
     assert [(r["accounts"], r["why"]) for r in jl(tmp_path, "lab_unbooked")] == [(["eval2"], "account removed")]
