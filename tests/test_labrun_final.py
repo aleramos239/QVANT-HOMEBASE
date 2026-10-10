@@ -292,3 +292,13 @@ def test_a_shadow_day_keeps_its_own_windows_end(kits):
     day = k.r.day("lab_x")
     assert day.mode == "shadow" and day.end_ns == at("16:00:00")
 
+
+# ================================================================ G2: the install script installs the runner job
+def test_the_install_script_renders_loads_and_removes_the_runner_job():
+    text = (REPO / "deploy" / "install.sh").read_text()
+    labels = re.search(r"^LABELS=\(([^)]*)\)", text, re.M).group(1).split()
+    assert "com.ramosquant.homebase-labrun" in labels                        # in LABELS: loaded, and removed
+    render = next(line for line in text.splitlines() if line.startswith("for l in com.ramosquant.homebase "))
+    assert "com.ramosquant.homebase-labrun" in render                        # rendered from its template
+    assert (REPO / "deploy" / "com.ramosquant.homebase-labrun.plist.template").is_file()
+

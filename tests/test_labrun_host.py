@@ -1474,7 +1474,8 @@ def test_the_launchd_job_runs_the_runner_and_is_kept_alive():
     pipeline = plistlib.loads((REPO / "deploy" / "com.ramosquant.homebase-pipeline.plist.template").read_bytes()
                               .replace(b"__REPO__", b"/repo"))
     assert Path(job["StandardOutPath"]).parent == Path(pipeline["StandardOutPath"]).parent     # the repo's state folder
-    assert "homebase-labrun" not in (REPO / "deploy" / "install.sh").read_text()     # not installed by this task
+    assert "com.ramosquant.homebase-labrun" in (REPO / "deploy" / "install.sh").read_text()   # installed (final wave G2:
+    # tests/test_labrun_final.py pins where)
 
 
 def test_the_daily_bars_are_the_completed_days_before_the_date(tmp_path):
