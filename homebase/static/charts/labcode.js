@@ -157,6 +157,66 @@ function sections(rows, groups) {
   return [...out, rest];
 }
 
+/* ---- picking strategies in the list, and deleting them ----
+   A shift-click picks the rows from the last picked (or the open) row to the clicked one, in the order the list shows
+   them; a cmd/ctrl-click adds or removes one; a plain click opens the strategy and clears the picks. Only a saved
+   strategy is ever picked: a locked built-in, an unsaved script and anything not shown (a folded group) never is. */
+/* the rows as shown, top to bottom: `secs` is sections()' answer; a folded group's rows are not shown */
+const shownRows = (secs, folded) => secs.filter((s) => !folded.has(s.name)).flatMap((s) => s.rows);
+const canPick = (r) => !!r && !r.lock && typeof r.key === 'string' && r.key.startsWith('d:');
+/* the pickable keys from `anchor` to `to` (either way round), in shown order. An anchor that is not shown picks `to` alone. */
+function pickRange(shown, anchor, to) {
+  const at = (k) => shown.findIndex((r) => r.key === k), j = at(to);
+  if (j < 0) return [];
+  const i = anchor ? at(anchor) : -1, lo = i < 0 ? j : Math.min(i, j), hi = i < 0 ? j : Math.max(i, j);
+  return shown.slice(lo, hi + 1).filter(canPick).map((r) => r.key);
+}
+const prunePicks = (picks, shown) => shown.filter((r) => canPick(r) && picks.includes(r.key)).map((r) => r.key);
+/* a click on a row. st = {picks, anchor, cur}; mods = {shift, meta}. -> {picks, anchor, open}: `open` is true when the
+   strategy is to be opened (a plain click only) */
+function rowClick(st, shown, key, mods) {
+  const m = mods || {}, row = shown.find((r) => r.key === key);
+  if (m.shift) {
+    const from = [st.anchor, st.cur].find((k) => k && shown.some((r) => r.key === k)) || '';
+    return { picks: pickRange(shown, from, key), anchor: from || (canPick(row) ? key : ''), open: false };
+  }
+  if (m.meta) {
+    if (!canPick(row)) return { picks: st.picks, anchor: st.anchor, open: false };
+    const had = st.picks.includes(key);
+    return { picks: prunePicks(had ? st.picks.filter((k) => k !== key) : [...st.picks, key], shown), anchor: key, open: false };
+  }
+  return { picks: [], anchor: key, open: true };
+}
+const draftName = (key) => String(key).slice(2);
+/* the row menu's item: "Delete N strategies…" on a picked row while two or more are picked, else "Delete…" */
+const deleteItem = (picks, key) => (picks.length >= 2 && picks.includes(key) ? `Delete ${picks.length} strategies…` : 'Delete…');
+/* the names that item deletes */
+const deleteTargets = (picks, key) => (picks.length >= 2 && picks.includes(key) ? picks : [key]).map(draftName);
+const DELETE_SHOWN = 8;
+function deleteConfirm(names) {
+  if (names.length === 1) return { title: `Delete ${names[0]}?`, names: [], more: '', keep: 'Keep it', go: 'Delete',
+    body: 'Its file is removed from your strategies. Past backtests of it stay in Recent runs.' };
+  return { title: `Delete ${names.length} strategies?`, names: names.slice(0, DELETE_SHOWN),
+    more: names.length > DELETE_SHOWN ? `and ${names.length - DELETE_SHOWN} more` : '', keep: 'Keep them', go: 'Delete',
+    body: 'Their files are removed from your strategies. Past backtests of them stay in Recent runs.' };
+}
+function deleteConfirmHtml(names) {
+  const c = deleteConfirm(names);
+  return `<h2>${esc(c.title)}</h2>${c.names.length ? `<ul class="lb-dellist">${c.names.map((n) => `<li>${esc(n)}</li>`).join('')}${c.more ? `<li class="more">${esc(c.more)}</li>` : ''}</ul>` : ''}<p>${esc(c.body)}</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">${esc(c.keep)}</button><button class="btn btn-default" data-x="go">${esc(c.go)}</button></div>`;
+}
+/* the log line after a delete of several: how many went, and each that did not with the server's own sentence */
+function deleteLine(done, failed) {
+  return `Deleted ${done}.${failed.length ? ` Not deleted: ${failed.map((f) => `${f.name} (${f.error || 'it could not be deleted'})`).join(', ')}` : ''}`;
+}
+/* Delete / Backspace deletes the picked while the list has the keyboard: never held down, never while a sheet is open
+   or something is being typed into */
+function deleteKey(e, ctx) {
+  return (e.key === 'Delete' || e.key === 'Backspace') && !e.repeat && !e.ctrlKey && !e.altKey
+    && ctx.picked > 0 && !!ctx.inList && !ctx.typing && !ctx.dialog;
+}
+const isTyping = (el) => !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable === true);
+
 /* ---- the blueprint toolkit: the tools every chat has, as the Lab lists them and fills them in ---- */
 const BP_TITLES = { blueprint_blocks: 'Blocks', blueprint_card: 'Idea card', blueprint_code_check: 'Code check', blueprint_build: 'Build',
   blueprint_lock: 'Pick and lock', blueprint_test: 'Out-of-sample test', blueprint_sim: 'Simulator: one strategy',
@@ -814,6 +874,7 @@ function fmFirstError(errors, order) {
 }
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, INDENT,
+  shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, deleteKey, isTyping,
   bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,

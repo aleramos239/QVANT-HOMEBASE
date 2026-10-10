@@ -281,6 +281,13 @@ body.lab-page { background: var(--lab-win) !important; font-size: 13px; line-hei
 .lb-item .it { flex-direction: row; align-items: baseline; gap: 8px; }
 .lb-item .it small { font-size: 11px; margin-left: auto; }
 .lb-item svg.lb-ico { width: 15px; height: 15px; opacity: .7; }
+/* a row picked for a delete (shift- or cmd-click): the soft selection tint; the open row keeps its solid one on top */
+.lb-item { -webkit-user-select: none; user-select: none; }
+.lb-item.picked { background: var(--hb-accent-soft); }
+.lb-item.picked .it b { font-weight: 600; }
+.lab-dlg ul.lb-dellist { margin: 8px 0 12px; max-height: 40vh; overflow-y: auto; }
+.lb-dellist li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.lb-dellist li.more { color: var(--hb-fg2); font-weight: 400; }
 .lb-item.sel { color: #fff; background: linear-gradient(180deg, #525256 0%, #323236 100%); box-shadow: inset 0 1px 0 rgb(255 255 255 / .28), inset 0 -1px 0 rgb(0 0 0 / .25), 0 1px 2px rgb(0 0 0 / .2), 0 6px 14px -4px rgb(72 72 74 / .55); }
 .lb-item.sel .it b { color: #fff; font-weight: 500; } .lb-item.sel .it small { color: rgb(255 255 255 / .74); } .lb-item.sel svg.lb-ico { opacity: 1; }
 :root[data-theme="dark"] .lb-item.sel { color: #1c1c1e; background: linear-gradient(180deg, #e8e8ec, #d1d1d6); box-shadow: inset 0 1px 0 rgb(255 255 255 / .8), 0 6px 14px -4px rgb(0 0 0 / .55); }

@@ -16,7 +16,10 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBusy: false };
+  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBusy: false,
+  picks: [], anchor: '', listFocus: false, delBusy: false };
+/* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
+   list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
    pipeline's three: 'pq' (its Queue), 'pb' (its Book), 'pg' (its Guide). */
 const VIEWS = [['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pg', 'Guide']];
@@ -782,20 +785,37 @@ function reviewDialog() {
   });
 }
 
-function deleteDialog(name) {
-  const d = dialog(`<h2>Delete ${esc(name)}?</h2><p>Its file is removed from your strategies. Past backtests of it stay in Recent runs.</p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Keep it</button><button class="btn btn-default" data-x="go">Delete</button></div>`);
-  d.addEventListener('click', async (e) => {
+/* Delete one strategy or several: one sheet, then one request per name, one after the other. A refusal is the server's own
+   sentence. The files go to the trash folder beside the strategies (the server moves them; nothing is unlinked). */
+function deleteDialog(name) { deleteStrategies([name]); }
+function deleteStrategies(names) {
+  if (!names.length || S.delBusy) return;
+  const d = dialog(C.deleteConfirmHtml(names));
+  d.addEventListener('click', (e) => {
     const x = e.target.closest('[data-x]');
     if (!x) return;
     closeDialog();
-    if (x.dataset.x !== 'go') return;
-    const r = await send('DELETE', `/api/tester/drafts/${encodeURIComponent(name)}`);
-    if (!r.ok) return log(`<span class="err">${esc(r.error)}</span>`);
-    S.bufs.delete(`d:${name}`);
-    if (S.cur === `d:${name}`) { S.cur = null; S.run = null; }
-    await loadLists(); paintAll();
+    if (x.dataset.x === 'go') deleteNow(names);
   });
+}
+async function deleteNow(names) {
+  if (S.delBusy) return;
+  S.delBusy = true;
+  const done = [], failed = [];
+  try {
+    for (const name of names) {
+      const r = await send('DELETE', `/api/tester/drafts/${encodeURIComponent(name)}`);
+      if (!r.ok) { failed.push({ name, error: r.error }); continue; }
+      done.push(name);
+      S.bufs.delete(`d:${name}`);
+      if (S.cur === `d:${name}`) { S.cur = null; S.run = null; }
+    }
+    S.picks = S.picks.filter((k) => !done.includes(C.draftName(k)));
+    if (S.anchor && done.includes(C.draftName(S.anchor))) S.anchor = '';
+    await loadLists(); paintAll();
+  } finally { S.delBusy = false; }
+  if (names.length === 1) { if (failed.length) log(`<span class="err">${esc(failed[0].error)}</span>`); }
+  else log(failed.length ? `<span class="err">${esc(C.deleteLine(done.length, failed))}</span>` : esc(C.deleteLine(done.length, failed)));
 }
 
 /* ---- groups: the library in sections ----
@@ -810,6 +830,10 @@ function foldGroup(el) {
   saveFolded();
   el.setAttribute('aria-expanded', String(!shut));       // in place, without a repaint: the chevron turns
   el.closest('.lb-g').classList.toggle('folded', shut);
+  if (S.picks.length && S.view === 'lib') {              // rows that are folded away are no longer picked (the repaint is only for that)
+    const keep = C.prunePicks(S.picks, shownList());
+    if (keep.length !== S.picks.length) { S.picks = keep; paintLib(); }
+  }
 }
 /* every change answers the whole new state */
 async function regroup(path, body) {
@@ -819,10 +843,12 @@ async function regroup(path, body) {
 }
 /* a row's ⋯: the one group this strategy is listed under */
 function fileMenu(el) {
-  const { id, name } = el.dataset, to = [...S.groups.groups, ''], cur = S.groups.members[id] || '';
+  const { id, name, row } = el.dataset, to = [...S.groups.groups, ''], cur = S.groups.members[id] || '';
+  const targets = row ? C.deleteTargets(S.picks, row) : [];       // a saved strategy's row also deletes: itself, or every picked one when it is picked
   menu(el, `${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? '<small>✓</small>' : ''}</button>`).join('')}<hr>` : ''}
-    <button class="row" data-pick="new"><span>New group…</span></button>`,
+    <button class="row" data-pick="new"><span>New group…</span></button>${row ? `<hr><button class="row" data-pick="delete"><span>${esc(C.deleteItem(S.picks, row))}</span></button>` : ''}`,
   async (pick) => {
+    if (pick === 'delete') return deleteStrategies(targets);
     if (pick === 'new') return nameGroup('', id, name);
     if (to[pick] === cur) return;
     const r = await regroup('/move', { strategy: id, group: to[pick] });
@@ -902,9 +928,8 @@ function viewMenu(anchor) {
   menuEl.setAttribute('role', 'menu');
   anchor.setAttribute('aria-expanded', 'true');
 }
-function paintLib() {
-  const el = $('#labLib .in');
-  if (!el) return;
+/* the Strategies list's rows: the saved and unsaved ones, then the locked built-ins */
+function libRows() {
   const unsaved = [...S.bufs.values()].filter((b) => b.kind === 'new');
   const rows = [
     ...unsaved.map((b) => ({ key: b.key, name: b.name || 'Untitled', sub: 'Not saved yet', dot: 'off', flag: '' })),
@@ -914,10 +939,19 @@ function paintLib() {
       return { key: `d:${d.name}`, id: d.id, name: d.name, sub: bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft', dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
   const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true }));
-  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${r.lock ? ' title="Read-only"' : ''}>
+  return { rows, builtins };
+}
+/* the rows as the list shows them, top to bottom (a folded group's rows are not shown) */
+const shownList = () => { const { rows, builtins } = libRows(); return S.groups ? C.shownRows(C.sections([...rows, ...builtins], S.groups), folded) : [...rows, ...builtins]; };
+function paintLib() {
+  const el = $('#labLib .in');
+  if (!el) return;
+  const { rows, builtins } = libRows();
+  if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
+  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''}${r.lock ? ' title="Read-only"' : ''}>
         ${r.lock ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.name)}</b><small>${esc(r.sub)}</small>${r.desk ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
-  const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}" aria-label="Move ${esc(r.name)} to a group" title="Move to a group" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
+  const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}"${C.canPick(r) ? ` data-row="${esc(r.key)}"` : ''} aria-label="${C.canPick(r) ? `Move ${esc(r.name)} to a group, or delete it` : `Move ${esc(r.name)} to a group`}" title="${C.canPick(r) ? 'Move to a group, or delete' : 'Move to a group'}" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
     if (!s.name && !s.rows.length) return '';
     const shut = folded.has(s.name), n = s.rows.length;
@@ -1887,7 +1921,16 @@ function act(name, el) {
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
   const lib = e.target.closest('[data-key]');
-  if (lib) { const k = lib.dataset.key; if (k.startsWith('d:')) selectDraft(k.slice(2)); else if (k.startsWith('b:')) selectBuiltin(k.slice(2)); else { S.cur = k; S.run = null; paintAll(); } return; }
+  if (lib) {
+    const k = lib.dataset.key;
+    S.listFocus = true;
+    const go = S.view === 'lib' ? C.rowClick({ picks: S.picks, anchor: S.anchor, cur: S.cur }, shownList(), k, { shift: e.shiftKey, meta: e.metaKey || e.ctrlKey }) : { picks: [], anchor: k, open: true };
+    S.picks = go.picks; S.anchor = go.anchor;
+    if (!go.open) { paintLib(); return; }                        // a shift- or cmd-click picks rows and opens nothing
+    if (k.startsWith('d:')) selectDraft(k.slice(2)); else if (k.startsWith('b:')) selectBuiltin(k.slice(2)); else { S.cur = k; S.run = null; paintAll(); }
+    paintLib();
+    return;
+  }
   const a = e.target.closest('[data-act]');
   if (a) act(a.dataset.act, a);
 });
@@ -1920,6 +1963,16 @@ root.addEventListener('input', (e) => {
   }
 });
 root.addEventListener('scroll', (e) => { if (e.target.id === 'edTa') syncScroll(); }, true);
+/* The list has the keyboard from a touch on it until a touch elsewhere. Escape lets go of the picks; Delete / Backspace deletes them. */
+document.addEventListener('pointerdown', (e) => { S.listFocus = !!(e.target.closest && e.target.closest('#labLib')); }, true);
+document.addEventListener('focusin', (e) => { if (e.target.closest && !e.target.closest('.lab-menu, .lab-ov')) S.listFocus = !!e.target.closest('#labLib'); }, true);
+document.addEventListener('keydown', (e) => {          // (capture: before the menu and sheet close themselves on Escape)
+  if (S.view !== 'lib' || !S.picks.length) return;
+  if (e.key === 'Escape') { if (!menuEl && !overlay) { S.picks = []; paintLib(); } return; }
+  if (!C.deleteKey(e, { picked: S.picks.length, inList: S.listFocus, typing: C.isTyping(e.target), dialog: !!overlay || !!menuEl })) return;
+  e.preventDefault();
+  deleteStrategies(C.deleteTargets(S.picks, S.picks[0]));
+}, true);
 root.addEventListener('keydown', (e) => {
   if (inChart(e) || pipeOn()) return;        // (a pipeline view has the middle: the editor's keys save and run nothing from behind it)
   const b = buf(), t = e.target, mod = e.metaKey || e.ctrlKey;
