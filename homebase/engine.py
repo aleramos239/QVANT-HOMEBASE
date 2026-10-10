@@ -2020,12 +2020,403 @@ class Engine:
             print(f"homebase engine: grading a Lab exit failed: {e!r}", file=sys.stderr)
             return "exit"
 
-    # --- hooks 5 and 7: filled in by the next commits (no Lab round can exist before lab_enter does) ---
+    # --- the rounds: what the Desk reads -----------------------------------------------------------
+    def _lab_prune(self) -> None:
+        """The first Lab action of a new day: yesterday's archived rounds and extras go."""
+        today = self._today()
+        if self.__dict__.get("_lab_day") == today:
+            return
+        self._lab_day = today
+        mem = self._lab_mem()
+        for k in [k for k, s in self.states.items() if s.date != today and self._archived(s)]:
+            del self.states[k]
+        for k in [k for k in mem if k not in self.states or self.states[k].date != today]:
+            del mem[k]
+
+    def _lab_mark_check(self, st: DayState, x: dict, reason: str, *, why: Optional[str] = None,
+                        actions: Optional[list] = None) -> None:
+        """This round's orders cannot be checked: it is never clean today, so the account takes no new Lab trade.
+        Journaled once (`lab_check`)."""
+        if x.get("check"):
+            return
+        x["check"], x["clean"], x["why"] = True, False, why or LAB_CANNOT_CHECK
+        self._lab_save()
+        try:
+            self.journal("lab_check", strategy=st.strategy, account=st.account, round=x.get("round"),
+                         reason=reason, actions=actions or [])
+        except Exception as e:  # noqa: BLE001
+            print(f"homebase engine: journal lab_check failed: {e!r}", file=sys.stderr)
+
+    def _lab_stuck(self, st: DayState, x: dict) -> bool:
+        """A round that can never be clean: its extras were lost, its placement outcome is unknown, both of its
+        entries filled, or a kill's market-out reported failure."""
+        if not x.get("check"):
+            if st.note == PLACING_UNKNOWN:
+                self._lab_mark_check(st, x, PLACING_UNKNOWN)
+            elif st.status == "error" and st.exit_reason == "both_filled":
+                self._lab_mark_check(st, x, "both entries filled")
+            elif st.note == MARKET_OUT_FAILED:
+                self._lab_mark_check(st, x, MARKET_OUT_FAILED)
+        return bool(x.get("check"))
+
+    def _lab_clean(self, st: DayState) -> bool:
+        """I-2: may a new round follow this one? Idle: yes. Otherwise only once its orders were read terminal."""
+        if st.status == "idle":
+            return True
+        x = self._lab_x(st)
+        if self._lab_stuck(st, x) or x.get("unconfirmed"):
+            return False
+        return bool(x.get("clean"))
+
+    def lab_rounds(self, name: str) -> list[dict]:
+        """Today's rounds of a Lab strategy, oldest first: one row per round per account. Memory only."""
+        out = []
+        for st in self.day_states(name):
+            if st.status == "idle":
+                continue
+            x = self._lab_x(st)
+            if self._lab_stamp(st, x):
+                self._lab_save()
+            sl, tp = self._lab_levels(st, x)
+            out.append({"account": st.account, "round": x.get("round"), "status": st.status,
+                        "iid": dict(x.get("iid") or {}), "qty": st.qty, "entry_side": st.entry_side,
+                        "entry_qty": st.entry_qty, "entry_fill": st.entry_fill, "exit_qty": st.exit_qty,
+                        "exit_fill": st.exit_fill, "exit_reason": st.exit_reason, "sl": sl, "tp": tp,
+                        "pnl": st.pnl, "clean": self._lab_clean(st), "entry_ms": x.get("entry_ms"),
+                        "exit_ms": x.get("exit_ms"), "why": x.get("why") or (st.note or None if st.status == "error" else None),
+                        "cancelled": list(x.get("cancelled") or []), "closing": x.get("closing"),
+                        "placed_ms": x.get("placed_ms")})
+        out.sort(key=lambda r: (r["placed_ms"] or 0, r["round"] or 0, r["account"]))
+        return out
+
+    def lab_open(self, name: str) -> list[str]:
+        """Accounts with a round of this strategy that is placing, placed or live, or whose orders are not checked."""
+        return sorted({st.account for st in self.day_states(name)
+                       if st.status in ("placing", "placed", "live") or not self._lab_clean(st)})
+
+    # --- lab_enter ------------------------------------------------------------------------------------
+    @staticmethod
+    def _lab_num(v) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
+
+    def _lab_bad_legs(self, legs) -> Optional[str]:
+        """The sentence for a set of legs the engine will not place; None when it will. One entry, or one buy
+        stop and one sell stop; every entry with a stop on its losing side."""
+        if not isinstance(legs, (list, tuple)) or not 1 <= len(legs) <= 2:
+            return LAB_BAD_ORDER
+        num = self._lab_num
+        for g in legs:
+            if not all(hasattr(g, k) for k in ("iid", "side", "entry", "entry_price", "sl_px", "tp_px", "tp_rr",
+                                               "ref_px", "move")):
+                return LAB_BAD_ORDER
+            if not isinstance(g.iid, int) or isinstance(g.iid, bool) or g.side not in ("Buy", "Sell") \
+                    or g.entry not in ("Market", "Stop"):
+                return LAB_BAD_ORDER
+            if g.entry == "Stop" and not (num(g.entry_price) and g.entry_price > 0):
+                return LAB_BAD_ORDER
+            if g.entry == "Market" and g.entry_price is not None:
+                return LAB_BAD_ORDER
+            if not (num(g.sl_px) and g.sl_px > 0):
+                return LAB_NO_STOP
+            if (g.tp_px is not None and not num(g.tp_px)) or (g.ref_px is not None and not num(g.ref_px)) \
+                    or (g.tp_rr is not None and not (num(g.tp_rr) and g.tp_rr > 0)):
+                return LAB_BAD_ORDER
+            if g.tp_rr is not None and g.tp_px is None:      # the first target is sent priced; the fill re-prices it
+                return LAB_BAD_ORDER
+            sign = 1 if g.side == "Buy" else -1
+            base = g.ref_px if g.ref_px is not None else g.entry_price
+            if base is not None:
+                if not sign * (base - g.sl_px) > 0:
+                    return LAB_WRONG_SIDE
+                if g.tp_px is not None and not sign * (g.tp_px - base) > 0:
+                    return LAB_BAD_ORDER
+        if len(legs) == 2:
+            a, b = legs
+            if {a.side, b.side} != {"Buy", "Sell"} or a.entry != "Stop" or b.entry != "Stop" or a.iid == b.iid:
+                return LAB_NOT_A_PAIR
+            buy, sell = (a, b) if a.side == "Buy" else (b, a)
+            if not buy.entry_price > sell.entry_price:
+                return LAB_BAD_ORDER
+        return None
+
+    def _lab_market_taken(self, name: str, cfg: StrategyCfg, account: str) -> Optional[str]:
+        """Design A5, at placement: the symbol of another strategy that is booked on this account, or busy on it
+        today, in the same market (the engine's own substring rule, on_fill's exit match)."""
+        mine = str(cfg.symbol).upper()
+        for other, so in self.cfg.strategies.items():
+            theirs = str(so.symbol).upper()
+            if other == name or not mine or not theirs or not (mine in theirs or theirs in mine):
+                continue
+            if any(a.get("account") == account for a in assignments(self.cfg, other)) or any(
+                    s.strategy == other and s.status in ("placing", "placed", "live")
+                    for s in self.day_states_for_account(account)):
+                return so.symbol
+        return None
+
+    def _lab_archive(self, key: str, st: DayState) -> None:
+        """A terminal, clean round leaves the plain key (I-3: the next state made for the pair is inserted last)."""
+        mem = self._lab_mem()
+        x = mem.pop(key, None)
+        n = int((x or {}).get("round") or self._lab_round_no(st))
+        new = f"{key}#{n}"
+        while new in self.states:                     # never write over a round
+            n += 1
+            new = f"{key}#{n}"
+        del self.states[key]
+        self.states[new] = st
+        if x is not None:
+            mem[new] = x
+
+    def _lab_open_round(self, name: str, cfg: StrategyCfg, account: str, qty, legs: list,
+                        max_rounds: int, source: str) -> tuple:
+        """Steps 1-4 of lab_enter for one account, in ONE run with no await: the checks, the archive of the last
+        round and the new round written to disk can never be interleaved with another entry, a fill or a kill.
+        -> (the new round's state | None, the answer when there is none)"""
+        def out(reason: str, n=None, said: bool = True) -> tuple:
+            if said:
+                self.journal("place_skipped", strategy=name, account=account, reason=reason)
+            return None, {"ok": False, "round": n, "reason": reason}
+
+        if not isinstance(qty, int) or isinstance(qty, bool) or qty < 1 or "#" in str(account) \
+                or not any(a.get("account") == account for a in assignments(self.cfg, name)):
+            return out(LAB_BAD_ORDER)
+        if self.account_locked(account):                                    # 1
+            return out(LAB_ACCOUNT_STOPPED)
+        ad = self.adapters.get(account)
+        if ad is None or not ad.connected:
+            return out(LAB_NOT_CONNECTED)
+        rules = self.rules_for(account)
+        if rules.day_take or rules.target_take:     # check_takes needs a price for every live state on the account
+            return out(LAB_TAKE_RULE)
+        taken = self._lab_market_taken(name, cfg, account)                  # 2
+        if taken is not None:
+            return out(f"Another strategy trades {taken} on this account.")
+        key, today = f"{name}@{account}", self._today()                     # 3
+        cur = self.states.get(key)
+        if cur is not None and cur.date == today and cur.status != "idle":
+            if cur.status in ("placing", "placed", "live"):
+                return out(LAB_ONE_AT_A_TIME)
+            if not self._lab_clean(cur):
+                return out(LAB_CANNOT_CHECK)
+        n = 1 + max([int(self._lab_x(s).get("round") or 0) for s in self.day_states(name)
+                     if s.account == account and s.status != "idle"], default=0)
+        if n > max_rounds:
+            return out(f"Daily limit reached ({max_rounds} trade{'' if max_rounds == 1 else 's'}).")
+        if cur is not None and cur.date == today and cur.status != "idle":
+            self._lab_archive(key, cur)
+        else:
+            self.states.pop(key, None)              # an idle or older state: the new one must be the pair's last
+            self._lab_mem().pop(key, None)
+        st = self._state(name, account)                                     # 4
+        st.qty, st.status = qty, "placing"
+        x = self._lab_mem()[key] = self._lab_blank(n)
+        x["iid"] = {g.side: g.iid for g in legs}
+        x["legs"] = {g.side: asdict(g) for g in legs}
+        x["move"] = any(g.move for g in legs)
+        x["placed_ms"] = self._lab_ms()
+        try:                                        # durable BEFORE the order leaves
+            self._save()
+            self._lab_save(strict=True)
+            self.journal("lab_round", strategy=name, account=account, round=n, qty=qty, source=source,
+                         iid=x["iid"], legs=list(x["legs"].values()))
+        except Exception as e:  # noqa: BLE001 -- nothing was sent
+            st.status, st.exit_reason, st.note = "error", "error", f"not written: {e}"[:200]
+            x["clean"] = True
+            print(f"homebase engine: a Lab round could not be written: {e!r}", file=sys.stderr)
+            return None, {"ok": False, "round": n, "reason": LAB_NOT_WRITTEN}
+        return st, {"ok": True, "round": n, "reason": None}
+
+    async def _lab_enter_one(self, name: str, cfg: StrategyCfg, account: str, qty, legs: list,
+                             max_rounds: int, source: str, t0: float) -> dict:
+        st, ans = self._lab_open_round(name, cfg, account, qty, legs, max_rounds, source)
+        if st is None:
+            return ans
+        x = self._lab_x(st)
+        try:                                                                # 5
+            if len(legs) == 1:
+                got = await self._place_one(name, cfg, account, qty, legs[0], source, t0)
+            else:
+                buy, sell = legs if legs[0].side == "Buy" else legs[::-1]
+                reqs = tuple(OrderRequest(symbol=cfg.symbol, side=g.side, qty=qty, order_type=g.entry,
+                                          price=g.entry_price, stop_price=g.sl_px, tp_price=g.tp_px,
+                                          text="homebase:entry") for g in (buy, sell))
+                got = await self._place(name, cfg, account, qty, buy.entry_price, sell.entry_price, source, t0,
+                                        reqs=reqs)
+        except Exception as e:  # noqa: BLE001 -- the outcome is unknown
+            got = e
+        if st.status == "placing":                                          # 6: never left as "placing"
+            st.status, st.exit_reason = "error", "error"
+            st.note = f"placement did not finish: {got}"[:200]
+            self._lab_mark_check(st, x, st.note)
+            self._save()
+        if st.status == "error":
+            words = str(st.note or "")
+            if any(i for i in (st.upper_id, st.lower_id, st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id)):
+                pass                                # ids are known: the clock reads them (_lab_settle)
+            elif words == "account not connected":  # refused before anything left
+                x["clean"] = True
+            elif len(legs) == 2:                    # _place cancels the survivor and keeps no id: unreadable
+                self._lab_mark_check(st, x, f"a pair's placement failed ({words}); the other leg's id is not kept")
+            elif any(w in words.lower() for w in LAB_UNKNOWN_WORDS):
+                self._lab_mark_check(st, x, f"the entry's outcome is unknown ({words})")
+            elif not x.get("check"):                # rejected: nothing is at the broker
+                x["clean"] = True
+            self._lab_stamp(st, x)
+            self._lab_save()
+        if isinstance(got, dict) and got.get("ok"):
+            return ans
+        if st.status == "error" and st.note == "account not connected":
+            return {"ok": False, "round": ans["round"], "reason": LAB_NOT_CONNECTED}
+        if isinstance(got, dict) and "rejected: " in str(got.get("reason")):
+            return {"ok": False, "round": ans["round"],
+                    "reason": "The broker refused it: " + str(got["reason"]).split("rejected: ", 1)[1]}
+        if isinstance(got, dict) and str(got.get("reason", "")).startswith("account stopped"):
+            return {"ok": False, "round": ans["round"], "reason": LAB_ACCOUNT_STOPPED}
+        return {"ok": False, "round": ans["round"], "reason": LAB_BAD_ORDER}
+
+    async def lab_enter(self, name: str, legs: list, sizes: dict, *, max_rounds: int,
+                        source: str = "lab") -> dict:
+        """A Lab strategy's entry (one LabLeg, or a buy-stop / sell-stop pair) on every account in `sizes`
+        ({account: contracts}), each as a new ROUND: one position at a time per account, a new round only after
+        the last one's orders were read terminal, the round on disk before its order leaves. The accounts go
+        side by side. Disarmed: journaled only (`dry_run`), no state.
+        -> {"armed": bool, "accounts": {account: {"ok", "round", "reason"}}} (+ "reason" when all were refused)"""
+        sizes = dict(sizes or {})
+
+        def refused(reason: str, armed: Optional[bool] = None) -> dict:
+            return {"armed": bool(self.cfg.armed) if armed is None else armed, "reason": reason,
+                    "accounts": {a: {"ok": False, "round": None, "reason": reason} for a in sizes}}
+
+        cfg = self.cfg.strategies.get(name)
+        if cfg is None or cfg.kind != LAB:
+            return refused(LAB_NOT_ON_DESK)
+        if not cfg.enabled:
+            return refused(LAB_OFF)
+        if self.killed_today(name):
+            return refused(LAB_KILLED)
+        bad = self._lab_bad_legs(legs)
+        if bad is not None:
+            return refused(bad)
+        if self.now_et().time() >= _hhmm(cfg.flat_et):
+            return refused(LAB_TOO_LATE)
+        legs = list(legs)
+        if not self.cfg.armed or cfg.shadow:
+            ev = "shadow_signal" if (self.cfg.armed and cfg.shadow) else "dry_run"
+            for a, q in sizes.items():
+                self.journal(ev, strategy=name, source=source, account=a, qty=q, legs=[asdict(g) for g in legs])
+            return refused(LAB_DISARMED, armed=False)
+        self._lab_prune()
+        t0 = time.time()
+        order = list(sizes)
+        outs = await asyncio.gather(*(self._lab_enter_one(name, cfg, a, sizes[a], legs, max_rounds, source, t0)
+                                      for a in order), return_exceptions=True)
+        return {"armed": True,
+                "accounts": {a: (o if isinstance(o, dict) else {"ok": False, "round": None, "reason": LAB_BAD_ORDER})
+                             for a, o in zip(order, outs)}}
+
+    # --- a closed round's orders (I-2) -------------------------------------------------------------
+    async def _lab_settle(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter) -> None:
+        """Read every order id a terminal round placed. All terminal -> the round is clean (`lab_settled`) and a
+        new one may follow. A working ENTRY leftover is cancelled (a later fill would be a new entry); a working
+        stop / target only when the account's net in the market reads zero -- protection is never taken from a
+        position. An entry that filled on a side the round never held, or anything unread: not clean, `lab_check`."""
+        x = self._lab_x(st)
+        if st.status not in ("done", "error") or x.get("clean") or not ad.connected:
+            return
+        if self._lab_stuck(st, x) or x.get("unconfirmed"):
+            return
+        key = self._lab_key(st) or f"{st.strategy}@{st.account}"
+        tries = self.__dict__.setdefault("_lab_tries", {})
+        gap = LAB_SETTLE_S if tries.get(key, 0) < LAB_SETTLE_FAST else LAB_CHECK_RETRY_S
+        if tries.get(key) and time.time() - self._retry_at.get(f"settle:{key}", 0.0) < gap:
+            return
+        self._retry_at[f"settle:{key}"] = time.time()
+        tries[key] = tries.get(key, 0) + 1
+        work_e, work_b, unread = [], [], []
+        for i, side in ((st.upper_id, "Buy"), (st.lower_id, "Sell")):
+            if not i:
+                continue
+            try:
+                got = await ad.get_order_state(i) or {}
+            except Exception:  # noqa: BLE001 -- unread, asked again
+                got = {}
+            status, filled = got.get("status"), got.get("filled_qty")
+            if status == "Filled" or (status in TERMINAL and filled):
+                if st.entry_side != side:
+                    return self._lab_mark_check(st, x, f"entry {i} filled ({status}) on a side this round never held")
+            elif status in WORKING:
+                work_e.append(i)
+            elif status not in TERMINAL:
+                unread.append(i)
+        for i in (st.up_sl_id, st.up_tp_id, st.dn_sl_id, st.dn_tp_id):
+            if not i:
+                continue
+            try:
+                status = await ad.get_order_status(i)
+            except Exception:  # noqa: BLE001
+                status = None
+            if status in WORKING:
+                work_b.append(i)
+            elif status not in TERMINAL:
+                unread.append(i)
+        if self._archived(st) or st.status not in ("done", "error") or x.get("clean"):
+            return                                   # it moved on while the reads ran
+        if not (work_e or work_b or unread):
+            x["clean"], x["why"] = True, None
+            tries.pop(key, None)
+            self.__dict__.get("_lab_said", {}).pop(f"settle:{key}", None)
+            self._lab_stamp(st, x)
+            self._lab_save()
+            self.journal("lab_settled", strategy=st.strategy, account=st.account, round=x.get("round"))
+            return
+        acts: list[str] = []
+        for i in work_e:
+            try:
+                r = await ad.cancel_order_by_id(i)
+            except Exception as e:  # noqa: BLE001 -- asked again on the next read
+                r = OrderResult(ok=False, error=str(e))
+            acts.append(f"cancel entry {i}: " + ("ok" if r.ok else str(r.error)))
+        if work_b:
+            try:
+                net = int(await ad.get_net_position(cfg.symbol) or 0)
+            except Exception as e:  # noqa: BLE001 -- unreadable is NOT flat
+                net = None
+                acts.append(f"position unreadable ({e}) — stop/target left working")
+            if net == 0:
+                await self._cancel_brackets(st, ad, acts)
+            elif net is not None:
+                acts.append(f"the account holds {net:+d} {cfg.symbol} — stop/target left working")
+        acts += [f"order {i}: status unknown" for i in unread]
+        said = self.__dict__.setdefault("_lab_said", {})
+        if said.get(f"settle:{key}") != acts:
+            said[f"settle:{key}"] = acts
+            x["why"] = LAB_CANNOT_CHECK
+            self._lab_save()
+            self.journal("lab_check", strategy=st.strategy, account=st.account, round=x.get("round"),
+                         reason="orders of the last trade are not all ended", actions=acts)
+
+    # --- hook 5: filled in by the flatten commit ---
     async def _lab_flatten_strategy(self, name: str) -> dict:
         return {}
 
+    # --- hook 7: the clock, for the open round only -----------------------------------------------
     async def _lab_tick(self, st: DayState, cfg: StrategyCfg, ad: BrokerAdapter, now: dt.time) -> None:
-        return None
+        if self._archived(st) or st.status == "idle":
+            return
+        x = self._lab_x(st)
+        if self._lab_stamp(st, x):
+            self._lab_save()
+        if st.status == "live" and st.exit_qty and ad.connected:
+            await self._close_if_out(st, cfg, ad)   # out, and the rest of the entry was cancelled
+        if st.status in ("live", "done") and st.entry_side and ad.connected:
+            other = "Sell" if st.entry_side == "Buy" else "Buy"
+            if (st.lower_id if st.entry_side == "Buy" else st.upper_id) and other not in x["cancelled"]:
+                status = await self._guard_sibling(st, cfg, ad)
+                if status in TERMINAL and status != "Filled":
+                    x["cancelled"].append(other)     # read ended: never asked again
+                    self._lab_save()
+        if st.status in ("done", "error"):
+            await self._lab_settle(st, cfg, ad)
 
     # --- (the Lab methods end here) ---
 
@@ -2056,6 +2447,9 @@ LAB_WRONG_SIDE = "The stop must sit on the losing side of the entry."
 LAB_NOT_A_PAIR = "Only a buy-stop and sell-stop pair can be linked."
 LAB_TOO_LATE = "Too late for a new trade today."
 LAB_NOT_WRITTEN = "The Desk could not write this trade down. Nothing was sent."
+# A refused entry whose words say the answer never came: the order may exist at the broker (broker/tradovate.py
+# place_bracket: "incl. a timeout, where the OSO may exist"). Such a round is never clean.
+LAB_UNKNOWN_WORDS = ("oso failed", "timeout", "timed out", "unreachable", "outcome unknown")
 
 
 @dataclass

@@ -56,6 +56,9 @@ class LabAdapter(FakeAdapter):
         oid = str(order_id)
         if r.ok and oid not in self.stuck and self.order_status.get(oid) in ("Working", "Suspended"):
             self.order_status[oid] = "Canceled"
+            for k in ("sl", "tp"):               # an unfilled entry takes its held stop / target with it
+                if self.order_status.get(f"{oid}-{k}") == "Suspended":
+                    self.order_status[f"{oid}-{k}"] = "Canceled"
         return r
 
     async def get_order_state(self, order_id):
@@ -281,3 +284,484 @@ def test_archived_is_false_at_the_plain_key_and_true_under_a_round_key(tmp_path)
     eng.states[f"{LAB}@a1#1"] = old
     new = eng._state(LAB, "a1")
     assert eng._archived(old) is True and eng._archived(new) is False
+
+
+# ------------------------------------------------------------------------------------------------ driving a round
+def leg(iid=1, side="Buy", entry="Stop", px=100.0, sl=95.0, tp=110.0, rr=None, ref="px", move=False) -> LabLeg:
+    return LabLeg(iid=iid, side=side, entry=entry, entry_price=px if entry == "Stop" else None, sl_px=sl,
+                  tp_px=tp, tp_rr=rr, ref_px=px if ref == "px" else ref, move=move)
+
+
+def pair(buy=110.0, sell=90.0, dist=5.0, tp=10.0):
+    return [leg(3, "Buy", px=buy, sl=buy - dist, tp=buy + tp), leg(4, "Sell", px=sell, sl=sell + dist, tp=sell - tp)]
+
+
+def go(eng, legs, sizes=None, max_rounds=3):
+    legs = legs if isinstance(legs, list) else [legs]
+    return run(eng.lab_enter(LAB, legs, sizes or {a: 1 for a in eng.adapters}, max_rounds=max_rounds))
+
+
+def rnd(eng, a="a1"):
+    return eng.states[f"{LAB}@{a}"]
+
+
+def fill_entry(eng, ad, st, px, side="Buy", qty=None):
+    """The broker fills (part of) an entry: its order book says so, then the push arrives."""
+    oid = st.upper_id if side == "Buy" else st.lower_id
+    q = qty or st.qty
+    ad.filled[oid] = ad.filled.get(oid, 0) + q
+    if ad.filled[oid] >= st.qty:
+        ad.order_status[oid] = "Filled"
+    for k in ("sl", "tp"):
+        if ad.order_status.get(f"{oid}-{k}") == "Suspended":
+            ad.order_status[f"{oid}-{k}"] = "Working"
+    ad.net += q if side == "Buy" else -q
+    run(eng.on_fill(FillEvent(account_id=ad.account_id, symbol="NQZ6", side=side, qty=q, price=px,
+                              raw={"orderId": oid})))
+
+
+def fill_exit(eng, ad, st, px, by="tp", push=True):
+    """The stop or the target fills (the other is cancelled by the broker), or a market order closes it."""
+    eid = st.upper_id if st.entry_side == "Buy" else st.lower_id
+    q = st.entry_qty - st.exit_qty
+    if by in ("sl", "tp"):
+        ad.order_status[f"{eid}-{by}"] = "Filled"
+        other = f"{eid}-{'tp' if by == 'sl' else 'sl'}"
+        if other in ad.order_status:
+            ad.order_status[other] = "Canceled"
+    ad.net -= q if st.entry_side == "Buy" else -q
+    if push:
+        run(eng.on_fill(FillEvent(account_id=ad.account_id, symbol="NQZ6",
+                                  side="Sell" if st.entry_side == "Buy" else "Buy", qty=q, price=px,
+                                  raw={"orderId": f"{eid}-{by}" if by in ("sl", "tp") else "plain"})))
+
+
+def tick(eng):
+    eng._retry_at.clear()                        # the throttles use the wall clock
+    run(eng.clock_tick())
+
+
+def trade(eng, ad, a="a1", entry=100.0, exit_px=110.0, by="tp", legs=None, max_rounds=3):
+    """One whole round on one account: enter, fill, exit, and the clock checks its orders."""
+    out = go(eng, legs or leg(), {a: 1}, max_rounds=max_rounds)
+    assert out["accounts"][a]["ok"], out
+    st = rnd(eng, a)
+    fill_entry(eng, ad, st, entry)
+    fill_exit(eng, ad, st, exit_px, by)
+    tick(eng)
+    return st
+
+
+def rows(eng, **want):
+    return [r for r in eng.lab_rounds(LAB) if all(r[k] == v for k, v in want.items())]
+
+
+# ------------------------------------------------------------------------------------------------ lab_enter
+def test_the_engine_says_the_doors_own_sentences():
+    from homebase.labrun import door
+    assert (engine_mod.LAB_ONE_AT_A_TIME, engine_mod.LAB_NO_STOP, engine_mod.LAB_WRONG_SIDE, engine_mod.LAB_NOT_A_PAIR,
+            engine_mod.LAB_BAD_ORDER, engine_mod.LAB_TOO_LATE) == \
+        (door.ONE_AT_A_TIME, door.NO_STOP, door.WRONG_SIDE, door.NOT_A_PAIR, door.CANNOT_CHECK, door.TOO_LATE)
+
+
+def test_disarmed_journals_only_and_creates_no_state(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), armed=False)
+    out = go(eng, leg())
+    assert out["armed"] is False
+    assert out["accounts"] == {a: {"ok": False, "round": None, "reason": "The desk is disarmed: written down only."}
+                               for a in ("a1", "a2")}
+    assert eng.states == {} and all(ad.brackets == [] for ad in ads.values())
+    dry = events(tmp_path, "dry_run")
+    assert [(e["strategy"], e["account"], e["qty"]) for e in dry] == [(LAB, "a1", 1), (LAB, "a2", 1)]
+    assert dry[0]["legs"][0]["sl_px"] == 95.0 and eng.lab_rounds(LAB) == [] and eng.lab_open(LAB) == []
+    assert not (tmp_path / f"labday-{eng._today()}.json").exists()
+
+
+@pytest.mark.parametrize("how,reason", [("unknown", "That strategy is not on the Desk."),
+                                        ("not_lab", "That strategy is not on the Desk."),
+                                        ("off", "It is off."), ("killed", "Killed today."),
+                                        ("late", "Too late for a new trade today.")])
+def test_a_strategy_that_may_not_trade_is_refused_whole(tmp_path, how, reason):
+    eng, ads, clock = mk(tmp_path, extra={"nq930": StrategyCfg(symbol="ES", qty=1, offset_pts=1.0, sl_pts=1.0,
+                                                              tp_pts=1.0, enabled=True)})
+    name = LAB
+    if how == "unknown":
+        name = "lab_nope"
+    elif how == "not_lab":
+        name = "nq930"
+    elif how == "off":
+        eng.cfg.strategies[LAB] = lab_cfg(enabled=False)
+    elif how == "killed":
+        eng.kill_today(LAB)
+    else:
+        clock.set_et(15, 55)
+    out = run(eng.lab_enter(name, [leg()], {"a1": 1}, max_rounds=3))
+    assert out["accounts"] == {"a1": {"ok": False, "round": None, "reason": reason}} and out["reason"] == reason
+    assert ads["a1"].brackets == [] and eng.states == {}
+
+
+@pytest.mark.parametrize("legs,reason", [
+    ([leg(sl=None)], "Every entry needs a stop held at the broker."),
+    ([leg(sl=float("nan"))], "Every entry needs a stop held at the broker."),
+    ([leg(sl=101.0)], "The stop must sit on the losing side of the entry."),
+    ([leg(side="Sell", sl=99.0, tp=90.0)], "The stop must sit on the losing side of the entry."),
+    ([leg(tp=99.0)], "The Desk cannot check this order."),                       # a target behind the entry
+    ([leg(tp=None, rr=2.0)], "The Desk cannot check this order."),               # an RR target with no first price
+    ([leg(entry="Limit")], "The Desk cannot check this order."),
+    ([leg(side="long")], "The Desk cannot check this order."),
+    ([leg(entry="Stop", px=None)], "The Desk cannot check this order."),
+    ([], "The Desk cannot check this order."),
+    ([leg(1), leg(2), leg(3)], "The Desk cannot check this order."),
+    ([leg(3, "Buy", px=110.0, sl=105.0, tp=120.0), leg(4, "Buy", px=111.0, sl=105.0, tp=120.0)],
+     "Only a buy-stop and sell-stop pair can be linked."),
+    ([leg(3, "Buy", px=110.0, sl=105.0, tp=120.0), leg(4, "Sell", entry="Market", sl=120.0, tp=None, ref=None)],
+     "Only a buy-stop and sell-stop pair can be linked."),
+    ([leg(3, "Buy", px=90.0, sl=85.0, tp=95.0), leg(4, "Sell", px=110.0, sl=115.0, tp=105.0)],
+     "The Desk cannot check this order."),                                       # the buy stop under the sell stop
+])
+def test_a_leg_the_engine_cannot_place_safely_is_refused_before_anything_exists(tmp_path, legs, reason):
+    eng, ads, _ = mk(tmp_path)
+    out = run(eng.lab_enter(LAB, legs, {"a1": 1}, max_rounds=3))
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": reason}
+    assert ads["a1"].brackets == [] and eng.states == {}
+
+
+def test_a_round_is_on_disk_before_its_order_leaves(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    seen = {}
+    real = ad.place_bracket
+
+    async def spy(req):
+        day = json.loads((tmp_path / f"day-{eng._today()}.json").read_text())
+        lab = json.loads((tmp_path / f"labday-{eng._today()}.json").read_text())
+        seen.update(status=day[f"{LAB}@a1"]["status"], qty=day[f"{LAB}@a1"]["qty"], extras=lab[f"{LAB}@a1"],
+                    journal=[e["event"] for e in events(tmp_path)])
+        return await real(req)
+
+    ad.place_bracket = spy
+    out = go(eng, leg(iid=7, move=True))
+    assert out == {"armed": True, "accounts": {"a1": {"ok": True, "round": 1, "reason": None}}}
+    assert (seen["status"], seen["qty"]) == ("placing", 1)
+    assert seen["extras"]["round"] == 1 and seen["extras"]["iid"] == {"Buy": 7} and seen["extras"]["clean"] is False
+    assert seen["extras"]["legs"]["Buy"]["sl_px"] == 95.0 and seen["extras"]["move"] is True
+    assert seen["journal"] == ["lab_round"]
+    st = rnd(eng)
+    assert (st.status, st.upper_id, st.up_sl_id, st.up_tp_id) == ("placed", "a1-101", "a1-101-sl", "a1-101-tp")
+    placed = events(tmp_path, "placed")[0]
+    assert (placed["kind"], placed["side"], placed["entry"], placed["sl"], placed["tp"]) == \
+        ("bars", "Buy", "Stop", 95.0, 110.0)                       # ruling Q17: the line keeps kind "bars"
+    assert eng.day_status(LAB) == "placed" and eng.lab_open(LAB) == ["a1"]
+
+
+def test_the_requests_a_single_entry_and_a_pair_send(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), qty=2)
+    go(eng, leg(entry="Market", sl=95.0, tp=None, ref=100.0), {"a1": 2})
+    assert ads["a1"].brackets == [OrderRequest(symbol="NQ", side="Buy", qty=2, order_type="Market", price=None,
+                                               stop_price=95.0, tp_price=None, text="homebase:entry")]
+    assert rnd(eng, "a1").up_tp_id is None and rnd(eng, "a1").up_sl_id == "a1-101-sl"
+    go(eng, pair(), {"a2": 2})
+    assert ads["a2"].brackets == [
+        OrderRequest(symbol="NQ", side="Buy", qty=2, order_type="Stop", price=110.0, stop_price=105.0,
+                     tp_price=120.0, text="homebase:entry"),
+        OrderRequest(symbol="NQ", side="Sell", qty=2, order_type="Stop", price=90.0, stop_price=95.0,
+                     tp_price=80.0, text="homebase:entry")]
+    st = rnd(eng, "a2")
+    assert (st.status, st.upper_id, st.lower_id, st.upper_px, st.lower_px) == ("placed", "a2-101", "a2-102", 110.0, 90.0)
+    assert rows(eng, account="a2")[0]["iid"] == {"Buy": 3, "Sell": 4}
+
+
+def test_a_trade_from_entry_to_target_books_its_price_and_pnl(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    st = trade(eng, ads["a1"], entry=100.0, exit_px=110.0, by="tp")
+    assert (st.status, st.exit_reason, st.entry_fill, st.exit_fill, st.pnl) == ("done", "tp", 100.0, 110.0, 200.0)
+    assert [e["event"] for e in events(tmp_path)][:6] == \
+        ["lab_round", "placed", "entry_fill", "brackets_moved", "exit_fill", "day_booked"]
+    assert events(tmp_path, "lab_settled")[0]["round"] == 1
+    (r,) = eng.lab_rounds(LAB)
+    assert (r["account"], r["round"], r["status"], r["entry_side"], r["entry_fill"], r["exit_fill"], r["exit_reason"],
+            r["pnl"], r["sl"], r["tp"], r["clean"], r["why"]) == \
+        ("a1", 1, "done", "Buy", 100.0, 110.0, "tp", 200.0, 95.0, 110.0, True, None)
+    assert r["entry_ms"] and r["exit_ms"] and eng.lab_open(LAB) == []
+    assert eng.book("a1").closed_net == 196.0                          # the account's day: gross less the $4 fee
+
+
+def test_a_stop_with_no_target_is_graded_a_stop_out_not_a_target(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    st = trade(eng, ads["a1"], entry=100.0, exit_px=95.0, by="sl", legs=leg(tp=None))
+    assert (st.status, st.exit_reason, st.tp_px, st.up_tp_id, st.pnl) == ("done", "sl", None, None, -100.0)
+    moved = events(tmp_path, "brackets_moved")[0]
+    assert (moved["sl"], moved["tp"]) == (95.0, None)                  # both keys, always (metrics reads them together)
+    assert rows(eng)[0]["clean"] is True                               # three ids, all terminal
+
+
+def oracle_levels(side, entry, sl, tp, rr, move, fill):
+    """What the Strategy Tester's own fill law makes of the same order (backtest/engine.py _fill)."""
+    import datetime as dt
+    from homebase.backtest.engine import Costs, Ctx, _Sim
+    sim = _Sim("NQ", dt.date(2026, 9, 14), [0, 1, 2], [fill, fill, fill], 0, 3, Costs(slippage_ticks=0.0), 0)
+    ctx = sim._ctx = Ctx(sim, 1, [])
+    ctx.move_brackets_to_fill = move
+    o = ctx.stop_entry("long" if side == "Buy" else "short", entry, sl=sl, tp=tp, tp_rr=rr)
+    sim._fill(o, 1)
+    return o.fill_px, o.fill_sl, o.fill_tp
+
+
+@pytest.mark.parametrize("side,entry,sl,tp,fill", [("Buy", 100.0, 95.0, 110.0, 101.5), ("Sell", 100.0, 105.0, 90.0, 98.75)])
+@pytest.mark.parametrize("move", [False, True])
+@pytest.mark.parametrize("rr", [None, 2.0])
+def test_the_brackets_after_the_fill_are_the_testers(tmp_path, side, entry, sl, tp, fill, move, rr):
+    """Move to the fill x target by RR, all four, long and short: the levels that rest at the broker, and the
+    orders that were modified to get there, are what the tester computes."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg(side=side, px=entry, sl=sl, tp=tp, rr=rr, move=move))
+    st = rnd(eng)
+    fill_entry(eng, ad, st, fill, side=side)
+    want_fill, want_sl, want_tp = oracle_levels(side, entry, sl, tp, rr, move, fill)
+    assert (st.entry_fill, st.sl_px, st.tp_px) == (want_fill, want_sl, want_tp)
+    oid = st.upper_id if side == "Buy" else st.lower_id
+    assert ad.modified == ([(f"{oid}-sl", "Stop", want_sl)] if want_sl != sl else []) + \
+                          ([(f"{oid}-tp", "Limit", want_tp)] if want_tp != tp else [])
+    moved = events(tmp_path, "brackets_moved")[0]
+    assert (moved["fill"], moved["sl"], moved["tp"]) == (want_fill, want_sl, want_tp)
+    assert bool(ad.modified) == (move or rr is not None)               # absolute levels: nothing to move
+
+
+def test_a_modify_the_broker_refuses_leaves_the_levels_that_rest_there(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ads["a1"].fail_modify = True
+    go(eng, leg(move=True))
+    st = rnd(eng)
+    fill_entry(eng, ads["a1"], st, 101.0)
+    assert (st.status, st.sl_px, st.tp_px) == ("live", 95.0, 110.0)
+    moved = events(tmp_path, "brackets_moved")[0]
+    assert moved["moved"] is False and "modify rejected by test" in moved["error"] and moved["sl"] == 95.0
+
+
+def test_three_rounds_in_a_day_then_the_limit(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    first = trade(eng, ad, exit_px=110.0, by="tp")
+    second = trade(eng, ad, exit_px=95.0, by="sl")
+    third = trade(eng, ad, exit_px=110.0, by="tp")
+    assert list(eng.states) == [f"{LAB}@a1#1", f"{LAB}@a1#2", f"{LAB}@a1"]       # I-3: the open round is last
+    assert [eng.states[k] for k in eng.states] == [first, second, third]
+    assert [(r["round"], r["exit_reason"], r["pnl"]) for r in eng.lab_rounds(LAB)] == \
+        [(1, "tp", 200.0), (2, "sl", -100.0), (3, "tp", 200.0)]
+    assert [e["round"] for e in events(tmp_path, "lab_round")] == [1, 2, 3]
+    assert len(ad.brackets) == 3 and eng.book("a1").closes == 3
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "Daily limit reached (3 trades)."}
+    assert len(ad.brackets) == 3 and list(eng.states)[-1] == f"{LAB}@a1" and rnd(eng) is third
+    assert eng.day_status(LAB) == "done"
+
+
+def test_day_status_ignores_archived_rounds(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    ad.reject = "margin"
+    go(eng, leg())
+    assert rnd(eng).status == "error" and eng.day_status(LAB) == "error"
+    ad.reject = None
+    go(eng, leg())                                                    # round 1 (error, clean) is archived
+    assert [s.status for s in eng.day_states(LAB)] == ["error", "placed"]
+    assert eng.day_status(LAB) == "placed"                            # the open round, not the archived error
+
+
+def test_two_accounts_fill_at_their_own_prices(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), qty=2)
+    out = go(eng, leg(rr=2.0, tp=110.0), {"a1": 1, "a2": 2})
+    assert {a: r["round"] for a, r in out["accounts"].items()} == {"a1": 1, "a2": 1}
+    fill_entry(eng, ads["a1"], rnd(eng, "a1"), 100.25)
+    fill_entry(eng, ads["a2"], rnd(eng, "a2"), 101.0)
+    assert (rnd(eng, "a1").qty, rnd(eng, "a1").entry_fill, rnd(eng, "a1").tp_px) == (1, 100.25, 110.75)
+    assert (rnd(eng, "a2").qty, rnd(eng, "a2").entry_fill, rnd(eng, "a2").tp_px) == (2, 101.0, 113.0)
+    fill_exit(eng, ads["a1"], rnd(eng, "a1"), 110.75, "tp")
+    assert (rnd(eng, "a1").status, rnd(eng, "a1").pnl, rnd(eng, "a2").status) == ("done", 210.0, "live")
+    assert eng.day_status(LAB) == "live" and eng.lab_open(LAB) == ["a1", "a2"]   # a1: not checked yet
+    tick(eng)
+    assert eng.lab_open(LAB) == ["a2"]
+
+
+def test_one_position_at_a_time(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    go(eng, leg())
+    for _ in range(2):                                                # placed, then live
+        out = go(eng, leg(iid=2))
+        assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "One position at a time."}
+        if rnd(eng).status == "placed":
+            fill_entry(eng, ads["a1"], rnd(eng), 100.0)
+    assert len(ads["a1"].brackets) == 1 and list(eng.states) == [f"{LAB}@a1"]
+
+
+def test_a_finished_round_whose_orders_are_not_checked_yet_blocks_the_next(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 100.0)
+    fill_exit(eng, ad, st, 110.0, "tp")                               # done, and no clock tick yet
+    out = go(eng, leg(iid=2))
+    assert out["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+    assert len(ad.brackets) == 1 and rnd(eng) is st
+    tick(eng)
+    assert go(eng, leg(iid=2))["accounts"]["a1"] == {"ok": True, "round": 2, "reason": None}
+
+
+def test_a_rejected_entry_sits_the_trade_out_and_the_next_one_goes(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    ads["a1"].reject = "Order rejected: not enough margin"
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": 1,
+                                     "reason": "The broker refused it: Order rejected: not enough margin"}
+    assert out["accounts"]["a2"]["ok"] is True
+    st = rnd(eng, "a1")
+    assert (st.status, st.upper_id) == ("error", None) and rows(eng, account="a1")[0]["clean"] is True
+    assert eng.lab_open(LAB) == ["a2"]
+    ads["a1"].reject = None
+    assert go(eng, leg(iid=2), {"a1": 1})["accounts"]["a1"] == {"ok": True, "round": 2, "reason": None}
+
+
+@pytest.mark.parametrize("words", ["OSO failed: timeout", "paper book unreachable: ReadTimeout"])
+def test_a_refusal_whose_outcome_is_unknown_blocks_the_account(tmp_path, words):
+    """The broker's answer never came: the order may be working under an id nobody has."""
+    eng, ads, _ = mk(tmp_path)
+    ads["a1"].reject = words
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is False
+    ads["a1"].reject = None
+    tick(eng)
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+    assert rows(eng)[0]["clean"] is False and eng.lab_open(LAB) == ["a1"]
+    assert events(tmp_path, "lab_check")[0]["strategy"] == LAB
+
+
+def test_a_pair_with_one_leg_rejected_is_never_clean(tmp_path):
+    """Ruling Q-A: the survivor is cancelled, but its id is not kept: its end cannot be checked."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    ad.fail_leg = "Sell"
+    out = go(eng, pair())
+    assert out["accounts"]["a1"] == {"ok": False, "round": 1, "reason": "The broker refused it: rejected by test"}
+    st = rnd(eng)
+    assert (st.status, st.upper_id, st.lower_id) == ("error", None, None) and ad.cancelled == ["a1-101"]
+    ad.fail_leg = None
+    for _ in range(3):
+        tick(eng)
+    assert go(eng, leg(iid=9))["accounts"]["a1"] == \
+        {"ok": False, "round": None, "reason": "The Desk cannot check the last trade's orders."}
+    assert len(ad.brackets) == 1
+    (r,) = eng.lab_rounds(LAB)
+    assert (r["status"], r["clean"], r["why"]) == ("error", False, "The Desk cannot check the last trade's orders.")
+    (chk,) = events(tmp_path, "lab_check")
+    assert (chk["strategy"], chk["account"], chk["round"]) == (LAB, "a1", 1) and "leg" in chk["reason"]
+    assert eng.lab_open(LAB) == ["a1"]
+
+
+def test_a_fill_that_beats_the_ack_is_held_and_replayed(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    real = ad.place_bracket
+
+    async def filled_first(req):
+        r = await real(req)
+        ad.order_status[r.order_id], ad.net = "Filled", 1
+        await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Buy", qty=1, price=100.5,
+                                    raw={"orderId": r.order_id}))
+        return r
+
+    ad.place_bracket = filled_first
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is True
+    assert (rnd(eng).status, rnd(eng).entry_fill) == ("live", 100.5)
+
+
+def test_a_partial_fill_cancels_the_sibling_at_once_and_moves_the_brackets_when_whole(tmp_path):
+    eng, ads, _ = mk(tmp_path, qty=2)
+    ad = ads["a1"]
+    go(eng, [leg(3, "Buy", px=110.0, sl=105.0, tp=120.0, move=True), leg(4, "Sell", px=90.0, sl=95.0, tp=80.0)],
+       {"a1": 2})
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 110.0, qty=1)
+    assert (st.status, st.entry_qty) == ("live", 1) and ad.cancelled == [st.lower_id] and ad.modified == []
+    fill_entry(eng, ad, st, 111.0, qty=1)                             # the average fill is 110.5
+    assert (st.entry_qty, st.entry_fill, st.sl_px, st.tp_px) == (2, 110.5, 105.5, 120.5)
+    assert ad.modified == [("a1-101-sl", "Stop", 105.5), ("a1-101-tp", "Limit", 120.5)]
+    run(eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=120.5, raw={"orderId": "a1-101-tp"})))
+    assert st.status == "live" and events(tmp_path, "exit_part")
+    ad.net = 1
+    fill_exit(eng, ad, st, 120.5, "tp")
+    assert (st.status, st.exit_qty, st.exit_reason, st.pnl) == ("done", 2, "tp", 400.0)
+    tick(eng)
+    assert rows(eng)[0]["clean"] is True and rows(eng)[0]["cancelled"] == ["Sell"]
+
+
+def test_both_legs_filled_is_the_emergency_and_never_clean(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, pair())
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 110.0, side="Buy")
+    ad.stuck.add(st.lower_id)                                         # the sibling's cancel did not take
+    ad.order_status[st.lower_id] = "Working"
+    fill_entry(eng, ad, st, 90.0, side="Sell")
+    assert (st.status, st.exit_reason) == ("error", "both_filled")
+    assert events(tmp_path, "both_filled_emergency")
+    for _ in range(3):
+        tick(eng)
+    assert go(eng, leg(iid=9))["accounts"]["a1"]["reason"] == "The Desk cannot check the last trade's orders."
+    assert rows(eng)[0]["clean"] is False and eng.day_status(LAB) == "error"
+
+
+# ------------------------------------------------------------------------------------------------ who sits out
+def test_a_stopped_or_unconnected_account_sits_out_and_uses_no_round(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2", "a3"))
+    eng.book("a1").locked = "day_lock"
+    ads["a2"]._connected = False
+    out = go(eng, leg())
+    assert out["accounts"] == {"a1": {"ok": False, "round": None, "reason": "This account is stopped for the day."},
+                               "a2": {"ok": False, "round": None, "reason": "The account is not connected."},
+                               "a3": {"ok": True, "round": 1, "reason": None}}
+    assert list(eng.states) == [f"{LAB}@a3"]
+    assert [(e["account"], e["reason"]) for e in events(tmp_path, "place_skipped")] == \
+        [("a1", "This account is stopped for the day."), ("a2", "The account is not connected.")]
+    eng.book("a1").locked = None
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+
+
+def test_an_account_the_strategy_is_not_booked_on_is_never_traded(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    eng.cfg.book[LAB] = [{"account": "a1", "qty": 1}]
+    out = go(eng, leg(), {"a1": 1, "a2": 1, "a1#1": 1, "zz": 1})
+    assert [a for a, r in out["accounts"].items() if r["ok"]] == ["a1"]
+    assert ads["a2"].brackets == [] and list(eng.states) == [f"{LAB}@a1"]
+    assert go(eng, leg(), {"a1": 0})["accounts"]["a1"]["reason"] == "The Desk cannot check this order."
+
+
+def test_one_strategy_per_market_per_account(tmp_path):
+    """Design A5, at placement: another strategy booked in this market on the account -> it sits the trade out."""
+    other = StrategyCfg(symbol="MNQ", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), extra={"mnq930": other},
+                     book={"mnq930": [{"account": "a1", "qty": 1}]})
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "Another strategy trades MNQ on this account."}
+    assert out["accounts"]["a2"]["ok"] is True and ads["a1"].brackets == []
+    eng.cfg.strategies["mnq930"].symbol = "ES"                        # another market: no conflict
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True
+
+
+def test_an_account_with_a_daily_take_rule_sits_out(tmp_path):
+    """Ruling Q-B: a live Lab round would switch the take watcher off for that account (check_takes needs a price
+    for every live state). So the two never share an account."""
+    take = tl.strat(day_take=1500.0, symbol="ES")                    # another market: only the take rule is in the way
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), extra={"lv_atr_take": take},
+                     book={"lv_atr_take": [{"account": "a1", "qty": 4}]})
+    assert eng.rules_for("a1").day_take == 1500.0 and not eng.rules_for("a2").day_take
+    out = go(eng, leg())
+    assert out["accounts"]["a1"] == {"ok": False, "round": None,
+                                     "reason": "This account has a daily take rule. A Lab strategy cannot share it."}
+    assert out["accounts"]["a2"] == {"ok": True, "round": 1, "reason": None}
+    assert ads["a1"].brackets == [] and list(eng.states) == [f"{LAB}@a2"]
+    eng.cfg.strategies["lv_atr_take"] = tl.strat(day_take=0.0, target_take=True, symbol="ES")
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is False
+    eng.cfg.strategies["lv_atr_take"] = tl.strat(day_take=0.0, target_take=False, symbol="ES")     # no take rule: it trades
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
