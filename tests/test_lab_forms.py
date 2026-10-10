@@ -38,6 +38,20 @@ def base(rule: str, /, **over) -> dict:
     return a
 
 
+def fitted(rule: str, market: str, **over) -> dict:
+    """The rule's defaults on `market`, with that market's own starting numbers (the NQ ones are nonsense on silver)."""
+    a = base(rule, market=market)
+    z = lab_forms.schema()["sizes"][market][rule]
+    if "distance" in z:
+        a["distance"] = z["distance"]
+    if "stop" in z:
+        a["stop"] = {"kind": "points", "value": z["stop"]}
+    if "target_points" in z:
+        a["target"] = {"kind": "points", "value": z["target_points"]}
+    a.update(over)
+    return a
+
+
 def every_answer():
     for rule in RULES:
         for side, stop, target in itertools.product(SIDES[rule], STOPS[rule], TARGETS):
@@ -155,6 +169,45 @@ def test_the_schema_has_starting_numbers_that_fit_each_market_for_every_rule():
     assert s["defaults"]["open_straddle"]["market"] == "NQ"           # the defaults stay NQ's
 
 
+def bound(market, field):
+    return {"NQ": (500, 1500), "GC": (200, 600), "SI": (10, 30), "YM": (2000, 6000)}[market][field == "target"]
+
+
+@pytest.mark.parametrize("market", ["NQ", "GC", "SI", "YM"])
+def test_a_distance_stop_or_target_beyond_the_markets_bound_is_refused(market):
+    tick = lab_forms.schema()["ticks"][market]
+    cases = {"distance": lambda v: fitted("open_straddle", market, distance=v),
+             "stop": lambda v: fitted("open_straddle", market, stop={"kind": "points", "value": v}),
+             "target": lambda v: fitted("open_straddle", market, target={"kind": "points", "value": v})}
+    for field, make in cases.items():
+        top = bound(market, field)
+        assert lab_forms.build(make(float(top))), (market, field)                     # the bound itself is allowed
+        sentence = f"Too far for this market: at most {top} points."
+        refused(make(round(top + tick, 6)), field, sentence)
+        refused(make(top * 10.0), field, sentence)
+        # the tick-multiple sentence comes first, then the bound
+        refused(make(top + tick / 2), field, f"Use a multiple of the tick ({lab_forms._n(tick)}).")
+    # the other rules have the same bound on their points stop and target
+    assert lab_forms.build(fitted("bar_breakout", market, stop={"kind": "points", "value": float(bound(market, "stop"))}))
+    refused(fitted("bar_breakout", market, stop={"kind": "points", "value": bound(market, "stop") + tick}), "stop",
+            f"Too far for this market: at most {bound(market, 'stop')} points.")
+    refused(fitted("at_time", market, target={"kind": "points", "value": bound(market, "target") + tick}), "target",
+            f"Too far for this market: at most {bound(market, 'target')} points.")
+
+
+def test_the_schema_carries_the_bound_and_every_starting_number_is_inside_it():
+    s = lab_forms.schema()
+    f = s["fields"]
+    assert f["distance"]["max_ticks"] == 2000
+    assert {k["id"]: k.get("max_ticks") for k in f["stop"]["kinds"]} == {"points": 2000, "range": None}
+    assert {k["id"]: k.get("max_ticks") for k in f["target"]["kinds"]} == {"points": 6000, "rr": None, "none": None}
+    for market, rules in s["sizes"].items():
+        tick = s["ticks"][market]
+        for rule, got in rules.items():
+            for key, v in got.items():
+                assert v <= (6000 if key == "target_points" else 2000) * tick + 1e-9, (market, rule, key)
+
+
 def test_the_js_tests_use_the_real_schema():
     """tests/js/labcode.test.mjs reads this file instead of keeping a pasted copy of the schema."""
     from pathlib import Path
@@ -198,7 +251,7 @@ def test_every_combination_builds_a_valid_clean_draft(a):
 @pytest.mark.parametrize("market", lab_forms.MARKETS)
 @pytest.mark.parametrize("rule", RULES)
 def test_every_market_builds_with_its_own_root(market, rule):
-    a = base(rule, market=market, stop={"kind": "points", "value": 5.0})
+    a = fitted(rule, market)
     code = lab_forms.build(a)
     draftstore.check_source(code)
     assert draftstore.static_meta(code)["root"] == market and lab_forms.sentence(a).startswith(market)
@@ -470,10 +523,12 @@ def test_every_entry_needs_a_stop(stop):
     refused(base("open_straddle", stop=stop), "stop", STOP)
 
 
-def test_a_huge_number_still_makes_a_readable_draft():
-    code = lab_forms.build(base("open_straddle", distance=1e300, stop={"kind": "points", "value": 1e300}))
+def test_the_biggest_number_the_form_takes_still_makes_a_readable_draft():
+    code = lab_forms.build(base("open_straddle", distance=500.0, stop={"kind": "points", "value": 500.0}))
     draftstore.check_source(code)
-    assert {i["key"]: i["default"] for i in draftstore.static_meta(code)["inputs"]}["sl_pts"] == 1e300
+    assert {i["key"]: i["default"] for i in draftstore.static_meta(code)["inputs"]}["sl_pts"] == 500.0
+    refused(base("open_straddle", distance=1e300), "distance", "Too far for this market: at most 500 points.")
+    refused(base("open_straddle", stop={"kind": "points", "value": 1e300}), "stop", "Too far for this market: at most 500 points.")
 
 
 NASTY = [10 ** 400, -(10 ** 400), float("nan"), float("inf"), -float("inf"), "5", "", True, False, None, [], {}, [1],
@@ -540,14 +595,14 @@ TICK = "Use a multiple of the tick ({}).".format
                                                    ("GC", "0.1", 5.05, 5.1), ("SI", "0.005", 0.012, 0.015)])
 def test_distance_stop_and_target_points_are_whole_ticks_of_the_market(market, tick, bad, good):
     sentence = TICK(tick)
-    refused(base("open_straddle", market=market, distance=bad), "distance", sentence)
-    assert lab_forms.build(base("open_straddle", market=market, distance=good))
-    refused(base("open_straddle", market=market, stop={"kind": "points", "value": bad + 5}), "stop", sentence)
-    assert lab_forms.build(base("open_straddle", market=market, stop={"kind": "points", "value": good + 5}))
-    refused(base("open_straddle", market=market, target={"kind": "points", "value": bad + 5}), "target", sentence)
-    assert lab_forms.build(base("open_straddle", market=market, target={"kind": "points", "value": good + 5}))
+    refused(fitted("open_straddle", market, distance=bad), "distance", sentence)
+    assert lab_forms.build(fitted("open_straddle", market, distance=good))
+    refused(fitted("open_straddle", market, stop={"kind": "points", "value": bad + 5}), "stop", sentence)
+    assert lab_forms.build(fitted("open_straddle", market, stop={"kind": "points", "value": good + 5}))
+    refused(fitted("open_straddle", market, target={"kind": "points", "value": bad + 5}), "target", sentence)
+    assert lab_forms.build(fitted("open_straddle", market, target={"kind": "points", "value": good + 5}))
     # a rr target is a ratio, not a price distance
-    assert lab_forms.build(base("open_straddle", market=market, target={"kind": "rr", "value": 1.3}))
+    assert lab_forms.build(fitted("open_straddle", market, target={"kind": "rr", "value": 1.3}))
 
 
 def test_the_tick_sentence_comes_after_the_fields_existing_checks():
@@ -561,8 +616,8 @@ def test_the_tick_sentence_comes_after_the_fields_existing_checks():
 def test_the_stop_floor_is_two_ticks_of_the_market():
     for market, ok, low in (("NQ", 0.5, 0.25), ("ES", 0.5, 0.25), ("YM", 2.0, 1.0), ("RTY", 0.2, 0.1),
                             ("GC", 0.2, 0.1), ("SI", 0.01, 0.005)):
-        assert lab_forms.build(base("open_straddle", market=market, stop={"kind": "points", "value": ok}))
-        refused(base("open_straddle", market=market, stop={"kind": "points", "value": low}), "stop", STOP)
+        assert lab_forms.build(fitted("open_straddle", market, stop={"kind": "points", "value": ok}))
+        refused(fitted("open_straddle", market, stop={"kind": "points", "value": low}), "stop", STOP)
 
 
 @pytest.mark.parametrize("rule", ["open_straddle", "bar_breakout", "at_time"])
@@ -1075,6 +1130,33 @@ def test_bar_breakout_trades_2_means_two_and_the_earlier_bars_set_the_high_and_l
     # from 09:32 the first bar to close at or after it is the 09:35 close, and no earlier close trades
     res, _ = play(breakout(lookback=2, **{"from": "09:32"}), rows)
     assert [hhmmss(t.entry_ns) for t in res.trades] == ["09:45:10"]
+
+
+def test_the_lookback_setting_can_only_go_down_from_the_answer():
+    """A larger lookback would need bars from before the window the form built: it would delay "from 09:30"."""
+    for answered in (2, 6, 20, 40):
+        a = reviewer(lookback=answered, bar_min=1, **{"from": "10:00", "last_entry": "11:00"})
+        meta = {i["key"]: i for i in draftstore.static_meta(lab_forms.build(a))["inputs"]}
+        assert (meta["lookback"]["min"], meta["lookback"]["max"], meta["lookback"]["default"]) == (2, answered, answered)
+    assert 'Input("lookback", "Lookback (bars)", "int", 6, 2, 6, 1)' in lab_forms.build(reviewer())
+    words = lab_forms.schema()["fields"]["lookback"]["words"]
+    assert words == "How many bars back it looks. To look further back, change it here in the form."
+
+
+def test_every_smaller_lookback_still_enters_at_the_start_time(play):
+    a = reviewer(lookback=12)
+    rows = rising("08:25")                                       # a full tape: every bar closes above the ones before
+    for n in range(2, 13):
+        name = f"form_run_{n}"
+        cls = drafthost.register_source(name, lab_forms.build({**a, "name": name}))
+        try:
+            res = run_session(cls({"lookback": n}), tape(rows), Costs(4.0, 1.0), qty=1)
+        finally:
+            strategies.REGISTRY.pop(draftstore.draft_id(name), None)
+            sys.modules.pop(f"homebase_draft_{name}", None)
+        assert hhmmss(res.trades[0].entry_ns) == "09:30:10", n
+    with pytest.raises(ValueError):                              # one more than the answer is refused by the settings
+        cls({"lookback": 13})
 
 
 def test_bar_breakout_too_many_bars_back_for_that_start_time_is_refused():

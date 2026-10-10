@@ -83,6 +83,7 @@
   "distance": {
    "default": 15.0,
    "label": "Distance (points)",
+   "max_ticks": 2000,
    "min_ticks": 1,
    "tick_multiple": true,
    "type": "number",
@@ -112,7 +113,7 @@
    "min": 2,
    "step": 1,
    "type": "int",
-   "words": "How many bars back the high and low are taken from."
+   "words": "How many bars back it looks. To look further back, change it here in the form."
   },
   "market": {
    "choices": [
@@ -177,6 +178,7 @@
     {
      "id": "points",
      "label": "Points",
+     "max_ticks": 2000,
      "min_ticks": 2,
      "tick_multiple": true
     },
@@ -201,6 +203,7 @@
     {
      "id": "points",
      "label": "Points",
+     "max_ticks": 6000,
      "min_ticks": 1,
      "tick_multiple": true
     },

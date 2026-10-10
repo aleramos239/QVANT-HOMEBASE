@@ -365,9 +365,85 @@ test('fm: a rule change on another market starts the new rule\'s own boxes at th
   // a points choice picked on a market starts at that market's number for the rule
   assert.equal(L.fmKindValue(FM, 'bar_breakout', 'target', 'points', 'ES'), 10);
   assert.equal(L.fmKindValue(FM, 'open_straddle', 'stop', 'points', 'ES'), 12.5);
-  assert.equal(L.fmKindValue(FM, 'opening_range', 'stop', 'points', 'ES'), 5, 'a rule with no number of its own takes the first rule\'s that has one');
+  assert.equal(L.fmKindValue(FM, 'opening_range', 'stop', 'points', 'ES'), 12.5, 'a rule with no number of its own takes the first rule\'s (in the schema\'s rules order) that has one');
   assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'points'), 40, 'no market given: as before');
   assert.equal(L.fmKindValue(FM, 'open_straddle', 'target', 'rr', 'ES'), 3, 'a ratio is the same on every market');
+});
+
+const fmSteps = (st, steps) => steps.reduce((s, [what, to]) => (what === 'market' ? L.fmSetMarket(FM, s, to) : L.fmSwitch(FM, s, to)), st);
+const fmStop = (st) => st.stop && st.stop.value;
+
+test('fm: the starting numbers fit the market and the rule on ANY click order', () => {
+  const fresh = () => L.fmStart(FM, []);                                              // NQ stop straddle: 15 / 50
+  // the reviewer\'s two orders: rule then market, and SI straddle -> Bar breakout -> NQ
+  assert.equal(fmStop(fmSteps(fresh(), [['rule', 'bar_breakout']])), 20, 'NQ: the straddle\'s 50 is not the bar breakout\'s');
+  assert.equal(fmStop(fmSteps(fresh(), [['rule', 'bar_breakout'], ['market', 'SI']])), 0.06);
+  assert.equal(fmStop(fmSteps(fresh(), [['market', 'SI'], ['rule', 'bar_breakout'], ['market', 'NQ']])), 20);
+  // the reverse orders
+  assert.equal(fmStop(fmSteps(fresh(), [['market', 'SI'], ['rule', 'bar_breakout']])), 0.06);
+  assert.equal(fmStop(fmSteps(fresh(), [['market', 'SI'], ['rule', 'at_time'], ['rule', 'open_straddle']])), 0.15);
+  // every rule x rule x market x market, both orders: the boxes are the new rule\'s numbers for the new market and nothing is out of bounds
+  for (const a of FM.rules) for (const b of FM.rules) for (const m1 of FM.markets) for (const m2 of FM.markets) {
+    const start = L.fmSetMarket(FM, L.fmFill(FM, { ...FM.defaults[a.id], name: 'x' }), m1);
+    for (const steps of [[['rule', b.id], ['market', m2]], [['market', m2], ['rule', b.id]]]) {
+      const got = fmSteps(start, steps), z = FM.sizes[m2][b.id], tag = `${a.id}@${m1} ${JSON.stringify(steps)}`;
+      assert.equal(got.market, m2, tag);
+      if ('stop' in z && got.stop.kind === 'points') assert.equal(got.stop.value, z.stop, tag);
+      if ('target_points' in z && got.target.kind === 'points') assert.equal(got.target.value, z.target_points, tag);
+      if ('distance' in z && 'distance' in got) assert.equal(got.distance, z.distance, tag);
+      assert.deepEqual(L.fmErrors(FM, got), {}, tag);
+    }
+  }
+  // a number he typed that is no starting number of the market is never changed, on any step
+  const typed = fresh();
+  typed.stop = { kind: 'points', value: '60' }; typed.distance = '20';
+  const moved = fmSteps(typed, [['rule', 'bar_breakout'], ['market', 'YM'], ['rule', 'open_straddle'], ['market', 'NQ']]);
+  assert.equal(fmStop(moved), '60');
+  assert.equal(moved.distance, 15, 'the distance box belongs to the straddle: it starts again each time the rule has one');
+});
+
+test('fm: the fallback number is the first rule\'s in the schema\'s rules order, whatever order the objects are in', () => {
+  const rev = (o) => Object.fromEntries(Object.entries(o).reverse());
+  const FR = { ...FM, defaults: rev(FM.defaults), sizes: Object.fromEntries(Object.entries(FM.sizes).reverse().map(([m, r]) => [m, rev(r)])) };
+  assert.equal(FM.rules[0].id, 'open_straddle');
+  for (const sc of [FM, FR]) {
+    assert.equal(L.fmKindValue(sc, 'opening_range', 'stop', 'points', 'NQ'), 50);
+    assert.equal(L.fmKindValue(sc, 'opening_range', 'stop', 'points'), 50);
+    assert.equal(L.fmKindValue(sc, 'opening_range', 'target', 'points', 'NQ'), 40);
+    assert.equal(L.fmKindValue(sc, 'opening_range', 'stop', 'points', 'SI'), 0.15);
+    const orr = L.fmFill(sc, { ...sc.defaults.opening_range, name: 'x' });
+    orr.stop = { kind: 'points', value: 50 };
+    assert.equal(L.fmSetMarket(sc, orr, 'ES').stop.value, 12.5);
+  }
+});
+
+test('fm: reading a file back uses the FILE\'s market for every starting number', () => {
+  const si = (extra) => L.fmFill(FM, { ...FM.defaults.open_straddle, market: 'SI', name: 'x', distance: 0.045, ...extra });
+  assert.deepEqual(si({ stop: { kind: 'range' } }).stop, { kind: 'points', value: 0.15 }, 'the straddle\'s SI stop, not the NQ 50');
+  assert.deepEqual(si({ target: { kind: 'bogus' } }).target, { kind: 'rr', value: 3 });
+  const thin = L.fmFill(FM, { name: 'x', rule: 'bar_breakout', market: 'SI' });          // a file that holds only a market
+  assert.deepEqual([thin.stop, thin.target], [{ kind: 'points', value: 0.06 }, { kind: 'points', value: 0.12 }]);
+  assert.equal(L.fmFill(FM, { name: 'x', rule: 'open_straddle', market: 'GC' }).distance, 1.9);
+  assert.deepEqual(L.fmFill(FM, { name: 'x', rule: 'open_straddle', market: 'NQ' }).stop, { kind: 'points', value: 50 });
+  assert.equal(L.fmFill(FM, { name: 'x', rule: 'open_straddle', market: 'CL' }).distance, 15, 'a market with no numbers: the defaults');
+  // what the file holds is what the form shows
+  assert.equal(si({ stop: { kind: 'points', value: 0.3 } }).stop.value, 0.3);
+});
+
+test('fm: a number too far for the market is caught on the page with the server\'s sentence', () => {
+  const st = (market, over) => ({ ...L.fmFill(FM, { ...FM.defaults.open_straddle, name: 'x' }), market, ...over });
+  const pts = (v) => ({ kind: 'points', value: v });
+  assert.deepEqual(L.fmErrors(FM, st('NQ', { stop: pts(500) })), {});
+  assert.deepEqual(L.fmErrors(FM, st('NQ', { stop: pts(500.25) })), { stop: 'Too far for this market: at most 500 points.' });
+  assert.deepEqual(L.fmErrors(FM, st('NQ', { distance: '501' })), { distance: 'Too far for this market: at most 500 points.' });
+  assert.deepEqual(L.fmErrors(FM, st('NQ', { target: pts(1500.25) })), { target: 'Too far for this market: at most 1500 points.' });
+  assert.deepEqual(L.fmErrors(FM, st('SI', { stop: pts(10.005), distance: 0.05 })), { stop: 'Too far for this market: at most 10 points.' });
+  assert.deepEqual(L.fmErrors(FM, st('GC', { stop: pts(200.1), distance: 2 })), { stop: 'Too far for this market: at most 200 points.' });
+  assert.deepEqual(L.fmErrors(FM, st('YM', { stop: pts(2001), distance: 30 })), { stop: 'Too far for this market: at most 2000 points.' });
+  // the tick sentence still comes first
+  assert.deepEqual(L.fmErrors(FM, st('NQ', { stop: pts(500.1) })), { stop: 'Use a multiple of the tick (0.25).' });
+  // the old NQ default on silver is out of bounds now
+  assert.ok(L.fmErrors(FM, st('SI', {})).stop);
 });
 
 test('fm: a rule\'s answer keys are name, rule and its fields (nothing else belongs)', () => {
@@ -446,9 +522,11 @@ test('fm: from the opening range with the range stop, any other rule starts from
     assert.deepEqual(L.fmErrors(FM, b), {}, r);
     assert.equal(L.fmKinds(FM, r, 'stop').some((k) => k.id === b.stop.kind), true, 'the kind it lands on is one the rule offers');
   }
-  // and the other way round a points stop is kept
+  // and the other way round a points stop is kept: a number he typed as it is, a starting number as the first rule\'s (the opening range has none)
   const p = L.fmSwitch(FM, L.fmStart(FM, []), 'bar_breakout');
-  assert.deepEqual(L.fmSwitch(FM, p, 'opening_range').stop, p.stop);
+  assert.deepEqual(L.fmSwitch(FM, p, 'opening_range').stop, { kind: 'points', value: 50 });
+  p.stop = { kind: 'points', value: '33' };
+  assert.deepEqual(L.fmSwitch(FM, p, 'opening_range').stop, { kind: 'points', value: '33' });
 });
 
 test('fm: a rule change drops a shared answer the new rule does not take', () => {

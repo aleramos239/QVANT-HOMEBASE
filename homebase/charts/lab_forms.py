@@ -29,6 +29,7 @@ SIDES = (("both", "Both"), ("long", "Long only"), ("short", "Short only"))
 RANGE_MINS = (5, 15, 30)
 BAR_MINS = (1, 5, 15)
 EARLIEST, LATEST = "00:05", "15:55"        # a time the form accepts; a session opens 5 minutes before its first time
+MAX_TICKS, MAX_TARGET_TICKS = 2000, 6000   # a distance or points stop / a points target may not be further than this many ticks
 PAD = 5                                    # minutes the session window reaches before the first time and past out_by
 
 PICK = "Pick one from the list."
@@ -44,6 +45,7 @@ AFTER_START = "It must be after the start."
 AFTER_RANGE = "It must be after the range ends ({end})."
 AFTER_LAST = "It must be after the last entry, and 15:55 at the latest."
 TOO_FAR = "Too many bars back for that start time."
+TOO_FAR_POINTS = "Too far for this market: at most {n} points."
 INCOMPLETE = "The form is incomplete."
 TICK_MULTIPLE = "Use a multiple of the tick ({tick})."
 
@@ -128,6 +130,11 @@ def _is_time(v) -> bool:
         and EARLIEST <= v <= LATEST
 
 
+def _too_far(ticks: int, tick: float) -> str:
+    """The sentence for a number past the bound: the bound in points, written like the tick sentence writes numbers."""
+    return TOO_FAR_POINTS.format(n=_n(round(ticks * tick, 6)))
+
+
 def _hi(v: float) -> float:
     """The top of a points Input: room to tune, and never below the answer."""
     top = float(v) * 10
@@ -191,6 +198,8 @@ def _check(answers) -> dict:
             raise FormError("distance", NEED_DISTANCE)
         if not _on_tick(a["distance"], tick):
             raise FormError("distance", TICK_MULTIPLE.format(tick=_n(tick)))
+        if a["distance"] > MAX_TICKS * tick + 1e-9:
+            raise FormError("distance", _too_far(MAX_TICKS, tick))
     for key, low, high, sentence in (("lookback", 2, 40, LOOKBACK), ("trades", 1, 5, TRADES)):
         if key in a:
             n = _whole(a[key])
@@ -231,6 +240,8 @@ def _check_stop(stop, rule: str, tick: float) -> None:
             raise FormError("stop", NEED_STOP)
         if not _on_tick(stop["value"], tick):
             raise FormError("stop", TICK_MULTIPLE.format(tick=_n(tick)))
+        if stop["value"] > MAX_TICKS * tick + 1e-9:
+            raise FormError("stop", _too_far(MAX_TICKS, tick))
     else:
         raise FormError("stop", NEED_STOP)
 
@@ -249,6 +260,8 @@ def _check_target(target, tick: float) -> None:
         raise FormError("target", NEED_TARGET)
     if kind == "points" and not _on_tick(target["value"], tick):
         raise FormError("target", TICK_MULTIPLE.format(tick=_n(tick)))
+    if kind == "points" and target["value"] > MAX_TARGET_TICKS * tick + 1e-9:
+        raise FormError("target", _too_far(MAX_TARGET_TICKS, tick))
 
 
 # ---------------------------------------------------------------- plain words
@@ -319,7 +332,7 @@ def _inputs(a: dict, tick: float) -> list[tuple]:
     if "distance" in a:
         out.append(("distance", "Distance (pts)", "float", float(a["distance"]), tick, _hi(a["distance"]), tick))
     if "lookback" in a:
-        out.append(("lookback", "Lookback (bars)", "int", a["lookback"], 2, 40, 1))
+        out.append(("lookback", "Lookback (bars)", "int", a["lookback"], 2, a["lookback"], 1))      # the bars before the start are built for this many
     if "trades" in a:
         out.append(("trades", "Trades a day", "int", a["trades"], 1, 5, 1))
     stop, target = a["stop"], a["target"]
@@ -607,14 +620,14 @@ def _field_defs() -> dict:
         "time": {"label": "Time", "words": "The New York time it acts, like 09:30.", "type": "time",
                  "default": "09:30"},
         "distance": {"label": "Distance (points)", "words": "How far from the price each stop entry sits.",
-                     "type": "number", "min_ticks": 1, "tick_multiple": True, "default": 15.0},
+                     "type": "number", "min_ticks": 1, "max_ticks": MAX_TICKS, "tick_multiple": True, "default": 15.0},
         "range_from": {"label": "Range starts", "words": "Where the range starts, a New York time like 09:30.",
                        "type": "time", "default": "09:30"},
         "range_min": {"label": "Range length (minutes)", "words": "How many minutes the range is measured over.",
                       "type": "choice", "choices": list(RANGE_MINS), "default": 15},
         "bar_min": {"label": "Bar size (minutes)", "words": "How long each bar is.", "type": "choice",
                     "choices": list(BAR_MINS), "default": 5},
-        "lookback": {"label": "Look back (bars)", "words": "How many bars back the high and low are taken from.",
+        "lookback": {"label": "Look back (bars)", "words": "How many bars back it looks. To look further back, change it here in the form.",
                      "type": "int", "min": 2, "max": 40, "step": 1, "default": 6},
         "from": {"label": "Start at", "words": "The first time it may enter. The bars before it set the high and low.",
                  "type": "time", "default": "09:30"},
@@ -625,11 +638,11 @@ def _field_defs() -> dict:
                                          "bar_breakout": "No new entry after this time."},
                        "type": "time", "default": "11:00"},
         "stop": {"label": "Stop", "words": "Every entry carries a stop.", "type": "stop",
-                 "kinds": [{"id": "points", "label": "Points", "min_ticks": 2, "tick_multiple": True},
+                 "kinds": [{"id": "points", "label": "Points", "min_ticks": 2, "max_ticks": MAX_TICKS, "tick_multiple": True},
                            {"id": "range", "label": "Other side of the range", "rules": ["opening_range"]}],
                  "default": {"kind": "points", "value": 50.0}},
         "target": {"label": "Target", "words": "Where to take profit, or none.", "type": "target",
-                   "kinds": [{"id": "points", "label": "Points", "min_ticks": 1, "tick_multiple": True},
+                   "kinds": [{"id": "points", "label": "Points", "min_ticks": 1, "max_ticks": MAX_TARGET_TICKS, "tick_multiple": True},
                              {"id": "rr", "label": "x the stop", "min": 0.25, "max": 20, "step": 0.25},
                              {"id": "none", "label": "None"}],
                  "default": {"kind": "rr", "value": 3.0}},

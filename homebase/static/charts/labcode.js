@@ -647,35 +647,42 @@ function fmSides(sc, rule) {
   return r && Array.isArray(r.sides) ? all.filter((s) => r.sides.includes(s[0])) : all;
 }
 /* a choice that asks for a number has limits in the schema (points: min_ticks; a ratio: min / max) */
-const fmHasValue = (k) => !!k && (k.min_ticks != null || k.min != null || k.max != null);
-/* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else any rule's.
-   With a market and the schema's starting numbers, a points choice starts at that market's own for the rule. */
+const fmHasValue = (k) => !!k && (k.min_ticks != null || k.min != null || k.max != null || k.max_ticks != null);
+/* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else the first rule's
+   (in the schema's rules order). With a market and the schema's starting numbers, a points choice starts at that market's own. */
 function fmKindValue(sc, rule, field, kind, market) {
   const key = FM_SIZE[field], size = kind === 'points' && key ? fmSize(sc, market, rule, key) : null;
   if (size != null) return size;
   const f = fmField(sc, field), d = (sc && sc.defaults) || {};
-  const hit = [d[rule] && d[rule][field], f && f.default, ...Object.values(d).map((x) => x && x[field])].find((x) => x && x.kind === kind && x.value != null);
+  const hit = [d[rule] && d[rule][field], f && f.default, ...fmRuleIds(sc).map((r) => d[r] && d[r][field])].find((x) => x && x.kind === kind && x.value != null);
   return hit ? hit.value : '';
 }
-/* ---- starting numbers that fit the market: schema.sizes[market][rule] = { distance?, stop?, target_points? } ---- */
+/* ---- starting numbers that fit the market: schema.sizes[market][rule] = { distance?, stop?, target_points? } ----
+   Whichever of the schema's objects comes first, "the first rule" is the first in the schema's `rules` list. */
 const FM_SIZE = { stop: 'stop', target: 'target_points' };       // the size each points choice starts at
+const fmRuleIds = (sc) => ((sc && sc.rules) || []).map((r) => r.id);
 /* the starting number for a box in a market: the rule's own, or (a rule whose default has none, like a range stop) the first rule's that has one */
 function fmSize(sc, market, rule, key) {
   const m = sc && sc.sizes && sc.sizes[market];
   if (!m) return null;
   const own = m[rule] && m[rule][key];
   if (typeof own === 'number') return own;
-  const any = Object.values(m).find((x) => x && typeof x[key] === 'number');
-  return any ? any[key] : null;
+  const first = fmRuleIds(sc).find((r) => m[r] && typeof m[r][key] === 'number');
+  return first ? m[first][key] : null;
 }
-/* A copy of the state whose boxes that still hold the `from` market's starting number (for this rule) hold the `to` market's. Only a
-   box that is exactly that number changes: a number typed by hand, a ratio, the range stop and an empty box are left as they are. */
-function fmFit(sc, st, from, to) {
+/* every rule's starting number for a box in a market: a box holding one of these was never typed by hand */
+function fmStarts(sc, market, key) {
+  const m = sc && sc.sizes && sc.sizes[market];
+  return m ? fmRuleIds(sc).map((r) => m[r] && m[r][key]).filter((x) => typeof x === 'number') : [];
+}
+/* A copy of the state whose distance, points stop and points target that hold ANY rule's starting number for the `from` market hold
+   `rule`'s starting number for the `to` market instead. Only such a box changes: a number typed by hand, a ratio, the range stop and
+   an empty box are left as they are. */
+function fmFit(sc, st, from, to, rule = st.rule) {
   const next = fmClone(st);
-  if (from === to) return next;
   const fit = (raw, key) => {
-    const a = fmSize(sc, from, next.rule, key), b = fmSize(sc, to, next.rule, key), v = fmParse(raw);
-    return a != null && b != null && v !== undefined && v === a ? b : raw;
+    const b = fmSize(sc, to, rule, key), v = fmParse(raw);
+    return b != null && v !== undefined && fmStarts(sc, from, key).includes(v) ? b : raw;
   };
   if ('distance' in next) next.distance = fit(next.distance, 'distance');
   for (const f of ['stop', 'target']) {
@@ -683,7 +690,7 @@ function fmFit(sc, st, from, to) {
   }
   return next;
 }
-/* the market changed: the boxes still holding the old market's starting numbers take the new market's */
+/* the market changed: the boxes still holding a starting number of the old market take the rule's starting number for the new one */
 function fmSetMarket(sc, st, market) {
   const next = fmFit(sc, st, st.market, market);
   next.market = market;
@@ -717,7 +724,7 @@ function fmStart(sc, taken = []) {
 function fmSwitch(sc, st, rule) {
   const d = sc && sc.defaults && sc.defaults[rule];
   if (!d) return st;
-  const keys = fmKeys(sc, rule), next = fmFit(sc, d, d.market, st.market);      // the rule's own boxes start at this market's numbers
+  const keys = fmKeys(sc, rule), next = fmFit(sc, d, d.market, st.market, rule);      // the rule's own boxes start at this market's numbers
   next.market = d.market;
   next.rule = rule;
   for (const k of FM_KEEP) {
@@ -726,19 +733,19 @@ function fmSwitch(sc, st, rule) {
     if ((k === 'stop' || k === 'target') && !fmKinds(sc, rule, k).some((x) => x.id === (st[k] || {}).kind)) continue;
     next[k] = fmClone(st[k]);
   }
-  return next;
+  return fmFit(sc, next, st.market, st.market, rule);        // a carried stop or target that is a starting number becomes this rule's
 }
 /* a state from the answers a file carries: the rule's defaults under them, and only the keys that belong.
    A stop, target or side the rule does not offer (a hand-edited header) is the rule's own default instead. */
 function fmFill(sc, answers) {
   if (!answers || typeof answers !== 'object' || !sc || !sc.defaults || !sc.defaults[answers.rule]) return null;
-  const s = fmClone(sc.defaults[answers.rule]);
+  const d = sc.defaults[answers.rule], s = fmFit(sc, d, d.market, answers.market, answers.rule), own = fmClone(s);      // the file's market, not NQ's
   const keys = fmKeys(sc, answers.rule);
   for (const k of keys) if (answers[k] !== undefined) s[k] = fmClone(answers[k]);
   for (const k of ['stop', 'target']) {
-    if (keys.includes(k) && !fmKinds(sc, answers.rule, k).some((x) => x.id === (s[k] || {}).kind)) s[k] = fmClone(sc.defaults[answers.rule][k]);
+    if (keys.includes(k) && !fmKinds(sc, answers.rule, k).some((x) => x.id === (s[k] || {}).kind)) s[k] = fmClone(own[k]);
   }
-  if (keys.includes('side') && !fmSides(sc, answers.rule).some((x) => x[0] === s.side)) s.side = sc.defaults[answers.rule].side;
+  if (keys.includes('side') && !fmSides(sc, answers.rule).some((x) => x[0] === s.side)) s.side = d.side;
   s.rule = answers.rule;
   if (typeof s.name !== 'string') s.name = '';
   return s;
@@ -755,6 +762,7 @@ function fmNumberError(spec, raw, tick) {
   if (v === undefined) return 'Type a number.';
   if (spec.min_ticks && t && v < spec.min_ticks * t - 1e-9) return `Use at least ${fmNum(spec.min_ticks * t)}.`;
   if (spec.tick_multiple && t) { const q = v / t; if (Math.abs(q - Math.round(q)) > 1e-9) return `Use a multiple of the tick (${fmNum(t)}).`; }
+  if (spec.max_ticks && t && v > spec.max_ticks * t + 1e-9) return `Too far for this market: at most ${fmNum(spec.max_ticks * t)} points.`;
   const bad = (spec.min != null && v < spec.min) || (spec.max != null && v > spec.max) || (spec.type === 'int' && !Number.isInteger(v));
   if (!bad) return '';
   return spec.min != null && spec.max != null ? `Between ${spec.min} and ${spec.max}.` : spec.type === 'int' ? 'Use a whole number.' : spec.min != null ? `Use at least ${spec.min}.` : `Use at most ${spec.max}.`;
@@ -811,7 +819,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
+  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
