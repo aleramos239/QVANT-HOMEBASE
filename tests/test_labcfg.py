@@ -646,6 +646,11 @@ def test_only_the_desk_that_took_the_store_writes_sidecars(desklab_root):
     labcfg.persist_all(b)
     assert store.get_desk("pp_orb") is None                                      # the second desk reads only
     labcfg.persist_all(a)
+    assert store.get_desk("pp_orb") is None and not labcfg.ready(a)              # a holds the lock but owes its re-read (round 3, N1)
+    labcfg.overlay(a)                                                            # the re-read: what it held as a reader gives way
+    assert labcfg.ready(a) and labcfg.limits_of(a, "lab_pp_orb") is None
+    labcfg.set_limits(a, "lab_pp_orb", LabLimits(**LIMITS))
+    labcfg.persist_all(a)
     assert store.get_desk("pp_orb")["limits"]["max_trades_day"] == 2
     assert (labcfg.store_state(a), labcfg.store_state(b), labcfg.store_state(c)) == ("owner", "busy", None)
     labcfg.release_store(a)                                                      # the first desk ends
@@ -808,14 +813,17 @@ def test_a_reader_follows_the_owners_sidecar_and_takes_over_with_what_is_on_disk
     assert store.get_desk("pp_orb")["book"] == [{"account": "eval1", "qty": 2}] and labcfg.pending(reader) == []
 
 
-def test_a_reload_never_undoes_what_the_owner_has_not_written_yet():
+def test_a_reload_re_reads_every_strategy_also_one_this_desk_holds_differently():
+    """Fix round 3, N2: a reload is for a desk that did not own the store until now. It has changed nothing on disk, so
+    it has nothing to keep: what it holds differently in memory (its own rule dropped a row in its view) gives way."""
     cfg = desk_cfg()
     store.put(rec())
     store.put_desk("pp_orb", side(book=[{"account": "main", "qty": 1}]))
     labcfg.overlay(cfg)
-    cfg.book["lab_pp_orb"] = []                                                  # changed in memory, the write still pending
+    cfg.book["lab_pp_orb"] = []                                                  # its memory differs from the disk
+    assert labcfg.pending(cfg) != []
     labcfg.apply(cfg, labcfg.read_store(), reload=True)
-    assert cfg.book["lab_pp_orb"] == [] and labcfg.pending(cfg) != []
+    assert cfg.book["lab_pp_orb"] == [{"account": "main", "qty": 1}] and labcfg.pending(cfg) == []
 
 
 # ---- C: a record FILE that is there but does not read is not a record that is gone
@@ -847,7 +855,7 @@ def test_a_record_file_the_desk_never_read_is_said_once_and_is_not_an_orphan():
     store.put_desk("garbage", side(book=[{"account": "eval1", "qty": 1}]))
     snap = labcfg.read_store()
     assert labcfg.apply(cfg, snap) == {"added": [], "removed": [], "changed": []}
-    assert labcfg.orphans(cfg, snap) == [] and labcfg.unusable(cfg) == ["garbage"]
+    assert labcfg.orphans(cfg, snap) == []
     assert [n["strategy"] for n in notes(cfg, "lab_unreadable")] == ["lab_garbage"]
     labcfg.overlay(cfg)
     assert notes(cfg) == []
@@ -869,6 +877,67 @@ def test_orphans_ask_about_every_name_not_only_the_ones_the_desk_knows():
     cfg = desk_cfg()
     store.put_desk("old_one", side(book=[{"account": "eval1", "qty": 1}]))       # the record went; the desk restarted
     snap = labcfg.read_store()
-    labcfg.apply(cfg, snap)
+    labcfg.apply(cfg, snap, reload=True)
     assert labcfg.orphans(cfg, snap, held=lambda did: did == "lab_old_one") == []
     assert labcfg.orphans(cfg, snap, held=lambda did: False) == ["old_one"] and labcfg.orphans(cfg, snap) == ["old_one"]
+
+
+# =====================================================================================================================
+# Fix round 3
+# =====================================================================================================================
+# ---- M1: an account that leaves the desk is remembered, and its rows are stripped after any re-read
+def test_the_rows_of_an_account_that_left_the_desk_are_stripped_after_a_reload_and_said():
+    store.put(rec())
+    store.put_desk("pp_orb", side(book=[{"account": "main", "qty": 1}, {"account": "eval1", "qty": 1}, {"account": "other_pool", "qty": 1}]))
+    cfg = desk_cfg()
+    labcfg.overlay(cfg)
+    notes(cfg)
+    cfg.book["lab_pp_orb"] = [r for r in cfg.book["lab_pp_orb"] if r["account"] != "eval1"]     # the server's own strip ...
+    cfg.accounts.pop("eval1")                                                    # ... and the account leaves the pool
+    labcfg.note_accounts(cfg)                                                    # (config.save's hook does this)
+    assert notes(cfg) == []                                                      # nothing more to strip: nothing said
+    labcfg.apply(cfg, labcfg.read_store(), reload=True)                          # a re-read brings the row back from disk ...
+    assert cfg.book["lab_pp_orb"] == [{"account": "main", "qty": 1}, {"account": "other_pool", "qty": 1}]     # ... and it goes again
+    assert notes(cfg, "lab_unbooked") == [{"strategy": "lab_pp_orb", "accounts": ["eval1"], "why": "account removed"}]
+    labcfg.persist_all(cfg)
+    assert store.get_desk("pp_orb")["book"] == [{"account": "main", "qty": 1}, {"account": "other_pool", "qty": 1}]
+
+
+def test_an_account_that_was_never_on_this_desk_is_not_a_removed_one():
+    store.put(rec())
+    store.put_desk("pp_orb", side(book=[{"account": "other_pool", "qty": 1}]))
+    cfg = desk_cfg()
+    for _ in range(2):
+        labcfg.overlay(cfg)
+        labcfg.note_accounts(cfg)
+    assert cfg.book["lab_pp_orb"] == [{"account": "other_pool", "qty": 1}] and notes(cfg) == []
+
+
+# ---- M7: a sidecar file that is there and does not read
+def test_a_sidecar_that_is_there_and_does_not_read_freezes_like_limits_that_do_not_parse():
+    store.put(rec())
+    f = store.root() / "pp_orb.desk.json"
+    f.write_text("{not json")
+    store.put(rec("list_one"))
+    (store.root() / "list_one.desk.json").write_text("[1, 2]")
+    cfg = desk_cfg()
+    labcfg.overlay(cfg)
+    for did in ("lab_pp_orb", "lab_list_one"):
+        assert labcfg.frozen(cfg, did) and labcfg.blind(cfg, did) and labcfg.limits_of(cfg, did) is None and did not in cfg.book
+    assert labcfg.pending(cfg) == []
+    labcfg.persist_all(cfg)
+    assert f.read_text() == "{not json" and (store.root() / "list_one.desk.json").read_text() == "[1, 2]"
+    want = labcfg.sidecar(cfg, "lab_pp_orb", LabLimits(**LIMITS), [])
+    labcfg.commit(cfg, "lab_pp_orb", LabLimits(**LIMITS), [], want)              # he saved limits: no longer blind
+    assert not labcfg.frozen(cfg, "lab_pp_orb") and not labcfg.blind(cfg, "lab_pp_orb")
+
+
+# ---- M6: nothing is written for a desk that let the store go
+def test_persist_all_writes_nothing_once_the_desk_let_go():
+    cfg = desk_cfg()
+    store.put(rec())
+    labcfg.overlay(cfg)
+    labcfg.set_limits(cfg, "lab_pp_orb", LabLimits(**LIMITS))
+    labcfg.release_store(cfg)
+    labcfg.persist_all(cfg)
+    assert store.get_desk("pp_orb") is None

@@ -69,12 +69,16 @@ def plain_rounds(engine):
     return engine
 
 
-def make_client(cfg=None):
+def make_client(cfg=None, lab=True, own=True):
+    """The desk with its Lab side ON (it is opt-in per desk: fix round 3, R1). own: one refresh has run, so it holds the
+    store -- only a refresh takes it, and re-reads every sidecar in the same pass."""
     cfg = cfg or desk_cfg()
     adapters = {aid: SeededFakeAdapter(aid) for aid in cfg.accounts}
-    app = create_app(cfg, adapters, background=False, adapter_factory=lambda aid, a: FakeAdapter(aid))
+    app = create_app(cfg, adapters, background=False, adapter_factory=lambda aid, a: FakeAdapter(aid), lab=lab)
     app.state.engine.now_et = lambda: WED_10
     plain_rounds(app.state.engine)
+    if lab and own:
+        asyncio.run(app.state.labdesk.refresh())
     return app
 
 
@@ -509,13 +513,17 @@ def test_readiness_of_the_other_strategies_is_what_it_was(client):
 
 
 # ---------------------------------------------------------------- the refresh (LabDesk on a real engine, no HTTP)
-def make_desk(tmp_path, cfg=None, paused=lambda: False):
+def make_desk(tmp_path, cfg=None, paused=lambda: False, own=True):
+    """own: its first refresh has run (as run() does at the start), so it holds the store if no other desk does."""
     cfg = cfg or desk_cfg()
     adapters = {aid: FakeAdapter(aid) for aid in cfg.accounts}
     tmp_path.mkdir(parents=True, exist_ok=True)
     engine = plain_rounds(Engine(cfg, adapters, now_fn=lambda: WED_10.astimezone(dt.timezone.utc), root=tmp_path))
     labdesk.attach(cfg)
-    return LabDesk(cfg, engine, adapters, paused=paused), cfg, engine
+    ld = LabDesk(cfg, engine, adapters, paused=paused)
+    if own:
+        asyncio.run(ld.refresh())
+    return ld, cfg, engine
 
 
 def jl(tmp_path, event):
@@ -686,7 +694,7 @@ def test_the_desk_starts_with_a_store_it_cannot_read(paths, monkeypatch):
     def boom(*a, **k):
         raise OSError("the store folder is gone")
     monkeypatch.setattr(labcfg, "read_store", boom)
-    app = make_client()
+    app = make_client(own=False)
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         d = c.get("/api/status").json()
         assert set(d["strategies"]) == {"nq930"} and d["strategies"]["nq930"]["lab"] is None
@@ -982,9 +990,12 @@ def test_a_desk_that_is_only_built_never_takes_the_store(paths, desklab_root):
     """Importing homebase.server builds a desk (and so does every test that builds one and never starts it): none of
     them may take the real desk's lock, or leave a file in the store."""
     store.put(rec())
-    app = make_client()
+    app = make_client(own=False)
     with TestClient(app, base_url="http://127.0.0.1:8850") as c:
         c.get("/api/status")
+        for r in (set_limits(c), book(c, []), c.post("/api/strategy", json={"strategy": LAB, "enabled": True}),
+                  c.post("/api/lab-remove", json={"strategy": LAB})):           # a change never takes it either (N1)
+            assert r.status_code == 409
     assert not (desklab_root / "desk.lock").exists() and not labcfg.owns(app.state.cfg)
 
 
@@ -1048,9 +1059,9 @@ def test_a_record_that_goes_while_a_round_is_open_keeps_the_strategy_and_the_sid
 
 
 def test_a_sidecar_left_from_before_the_desk_started_is_removed_and_one_just_promoted_is_not(tmp_path):
-    store.put_desk("old_one", {"mark": MARK, "limits": LIMITS, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
     ld, cfg, _ = make_desk(tmp_path)
     assert ld.owner() is True
+    store.put_desk("old_one", {"mark": MARK, "limits": LIMITS, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
     assert store.booked("old_one") is True                                       # the Lab page would refuse Promote
     snap = labcfg.read_store()                                                   # a read from before ...
     store.put(rec("old_one"))                                                    # ... he promotes it again
@@ -1085,7 +1096,9 @@ def test_broken_records_never_stop_the_refresh_or_the_others(tmp_path):
     said = {r["strategy"]: r["error"] for r in jl(tmp_path, "lab_unreadable")}     # once each, with the detail
     assert sorted(said) == ["lab_a_list", "lab_garbage", "lab_int_root", "lab_wrong_name"] and len(jl(tmp_path, "lab_unreadable")) == 4
     assert "no market" in said["lab_int_root"] and "does not read" in said["lab_garbage"]
-    assert labcfg.unusable(cfg) == ["a_list", "garbage", "int_root", "wrong_name"]
+    v = ld.status_view("lab_good_one")                                           # M7: its sidecar file is there and does not read
+    assert (v["state"], v["why"]) == ("check", CANNOT_READ_LIMITS)
+    assert (root / "good_one.desk.json").read_text() == "[]"
 
 
 def test_a_strategy_whose_record_stops_reading_shows_check_and_cannot_be_switched_on(client, monkeypatch):
@@ -1447,7 +1460,7 @@ def test_the_read_only_line_shows_only_on_a_reader_with_a_lab_strategy(tmp_path)
     asyncio.run(second.refresh())
     assert lab_checks_of(cfg2, e2) == [READ_ONLY_LINE] and lab_checks_of(cfg1, e1) == []
     assert compute_readiness(WED_10, cfg2, e2, {}, None, None, None)["checks"].count(READ_ONLY_LINE) == 1
-    built, cfg3, e3 = make_desk(tmp_path / "three")                              # a desk that never asked: no line
+    built, cfg3, e3 = make_desk(tmp_path / "three", own=False)                   # a desk that never asked: no line
     assert lab_checks_of(cfg3, e3) == [] and built.status_view(LAB)["read_only"] is False
 
 
@@ -1508,7 +1521,7 @@ def test_removing_an_unusable_record_gives_up_on_a_held_store(tmp_path, monkeypa
 def test_after_a_restart_a_round_the_engine_restored_keeps_the_sidecar_of_a_record_that_went(tmp_path):
     side = {"mark": MARK, "limits": {**LIMITS, "max_risk_usd": 300.0}, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"}
     store.put_desk("pp_orb", side)                                               # the record went; then the desk restarted
-    ld, cfg, engine = make_desk(tmp_path)
+    ld, cfg, engine = make_desk(tmp_path, own=False)
     st = engine._state(LAB, "eval1")                                             # the day file gave the engine its round back
     st.status = "live"
     for _ in range(2):
@@ -1552,3 +1565,387 @@ def test_the_desks_shutdown_gives_the_store_back(paths):
         c.tmp = paths
         assert set_limits(c, max_trades_day=4).status_code == 200
     assert store.get_desk("pp_orb")["limits"]["max_trades_day"] == 4
+
+
+# =====================================================================================================================
+# Fix round 3
+# =====================================================================================================================
+SWITCHED_OFF = "Lab strategies are switched off on this Desk."
+
+
+def tree(root):
+    """Every file under a folder with its bytes and its stamps: nothing read is fine, nothing written is the claim."""
+    return {str(f.relative_to(root)): (f.read_bytes(), f.stat().st_mtime_ns) for f in sorted(root.rglob("*")) if f.is_file()}
+
+
+# ---- R1: the Lab side is opt-in per desk
+def test_with_the_lab_side_off_the_desk_is_what_it_was_before_this_task(paths, desklab_root, monkeypatch):
+    store.put(rec(enabled=True))
+    store.put_desk("pp_orb", {"mark": MARK, "limits": LIMITS, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
+    before = tree(desklab_root)
+    touched = []
+    for fn in ("listing", "names", "get", "get_desk", "get_runner", "desk_lock", "put_desk", "set_enabled", "remove", "remove_desk"):
+        real = getattr(store, fn)
+        monkeypatch.setattr(store, fn, lambda *a, _fn=fn, _real=real, **k: (touched.append(_fn), _real(*a, **k))[1])
+    hooks = list(config_mod._after_save)
+    app = make_client(lab=False)
+    assert config_mod._after_save == hooks                                       # no after-save work registered by it
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        d = c.get("/api/status").json()
+        assert set(d["strategies"]) == {"nq930"} and "lab" not in d["strategies"]["nq930"]
+        assert "lab" not in json.dumps(d).lower().replace("label", "")           # no Lab key or id anywhere in the status
+        assert d["book"] == {"nq930": [{"account": "main", "qty": 3}]}
+        asyncio.run(app.state.labdesk.refresh())                                 # even asked to: nothing
+        assert asyncio.run(asyncio.wait_for(app.state.labdesk.run(), 1)) is None  # its task ends at once
+        for r in (set_limits(c), c.post("/api/lab-remove", json={"strategy": LAB}), c.post("/api/lab-limits", json={"strategy": "nq930", "limits": LIMITS})):
+            assert r.status_code == 409 and r.json()["detail"] == SWITCHED_OFF
+        r = c.post("/api/book", json={"strategy": "nq930", "assignments": [{"account": "main", "qty": 2}, {"account": "eval1", "qty": 1}]})
+        assert r.status_code == 200 and r.json() == {"ok": True, "book": {"nq930": [{"account": "main", "qty": 2}, {"account": "eval1", "qty": 1}]}}
+        assert c.post("/api/book", json={"strategy": LAB, "assignments": []}).status_code == 404        # not a strategy here
+        assert c.post("/api/strategy", json={"strategy": LAB, "enabled": True}).status_code == 404
+        assert c.post("/api/strategy-flatten", json={"strategy": LAB}).status_code == 404
+        r = c.post("/api/strategy", json={"strategy": "nq930", "enabled": False})
+        assert r.json() == {"ok": True, "strategy": "nq930", "enabled": False}
+        assert c.post("/api/strategy-flatten", json={"strategy": "nq930"}).json() == {"ok": True, "enabled": False, "results": {}}
+        assert c.post("/api/accounts/remove", json={"account": "eval2"}).status_code == 200
+        assert not [x for x in c.get("/api/status").json()["readiness"]["checks"] if "Lab" in x["label"]]
+    assert touched == [] and tree(desklab_root) == before                        # the store was never read, never written
+    assert not (desklab_root / "desk.lock").exists() and labcfg.store_state(app.state.cfg) is None
+    assert "_lab" not in vars(app.state.cfg) and set(app.state.cfg.strategies) == {"nq930"}
+    assert "lab_" not in (paths / "config.json").read_text()
+
+
+def test_the_flag_is_a_file_in_this_checkouts_state_folder(paths):
+    """lab=None (as the real desk is started): on only when <state_dir>/lab_desk.on exists. state_dir is per checkout,
+    so a desk run from another worktree or copy never has it."""
+    store.put(rec())
+    assert labdesk.FLAG_FILE == "lab_desk.on" and labdesk.flagged(paths) is False
+    adapters = {aid: SeededFakeAdapter(aid) for aid in desk_cfg().accounts}
+    off = create_app(desk_cfg(), adapters, background=False)                     # no file: off
+    assert off.state.labdesk.on is False and LAB not in off.state.cfg.strategies
+    (paths / "lab_desk.on").write_text("")
+    assert labdesk.flagged(paths) is True
+    on = create_app(desk_cfg(), adapters, background=False)                      # the file is there: on
+    assert on.state.labdesk.on is True and LAB in on.state.cfg.strategies
+    assert create_app(desk_cfg(), adapters, background=False, lab=False).state.labdesk.on is False     # a test may say so
+    (paths / "lab_desk.on").unlink()
+    assert create_app(desk_cfg(), adapters, background=False, lab=True).state.labdesk.on is True
+
+
+def test_a_desk_with_the_lab_side_off_built_directly_is_inert(tmp_path):
+    store.put(rec())
+    cfg = desk_cfg()
+    engine = Engine(cfg, {}, now_fn=lambda: WED_10.astimezone(dt.timezone.utc), root=tmp_path)
+    ld = LabDesk(cfg, engine, {}, on=False)
+    assert asyncio.run(ld.refresh()) is None and ld.owner() is False and not ld.is_lab(LAB) and ld.status_view(LAB) is None
+    ld.check_book("nq930", [{"account": "main", "qty": 1}])
+    assert ld.book_view() is cfg.book                                            # the status's book: the very same object
+    for coro in (ld.set_limits(LAB, LIMITS), ld.remove(LAB), ld.set_book(LAB, [])):
+        assert refused(coro) == (SWITCHED_OFF, 409)
+    assert asyncio.run(ld.set_enabled(LAB, False)) is False
+    ld.close()
+    assert "_lab" not in vars(cfg) and labcfg.store_state(cfg) is None
+
+
+# ---- N1 (the reviewer's probe G)
+def test_nothing_is_written_between_taking_the_store_and_re_reading_it(tmp_path):
+    store.put(rec())
+    store.put_desk("pp_orb", {"mark": MARK, "limits": {**L3, "max_risk_usd": 300.0}, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
+    old, _, _ = make_desk(tmp_path / "old")
+    pause = [False]
+    new, new_cfg, _ = make_desk(tmp_path / "new", paused=lambda: pause[0])
+    assert new.owner() is False and new_cfg.book[LAB] == [{"account": "eval1", "qty": 1}]
+    pause[0] = True                                                              # the chart views pause (a bot is placing)
+    asyncio.run(old.set_book(LAB, [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 2}]))
+    old.close()                                                                  # the old desk ends
+    assert asyncio.run(new.refresh()) is None                                    # paused: no read ...
+    assert not labcfg.owns(new_cfg) and labcfg.store_state(new_cfg) == "busy"    # ... so the lock is not taken either
+    assert refused(new.set_limits(LAB, {**L3, "max_trades_day": 3})) == (OTHER_DESK, 409)
+    assert store.get_desk("pp_orb")["book"] == [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 2}]
+    pause[0] = False
+    asyncio.run(new.refresh())                                                   # takes it and re-reads in the same pass
+    assert new.owner() is True and new_cfg.book[LAB] == [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 2}]
+    assert asyncio.run(new.set_limits(LAB, {**L3, "max_trades_day": 3}))["ok"] is True
+    assert store.get_desk("pp_orb")["book"] == [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 2}]   # eval2 is still booked
+
+
+def test_a_take_over_whose_re_read_was_thrown_away_still_owes_it(tmp_path, monkeypatch):
+    """The lock is taken at the start of the refresh; if its read is then thrown away (the views paused meanwhile) the
+    desk holds the store but may write nothing until a refresh has re-read every sidecar."""
+    store.put(rec())
+    store.put_desk("pp_orb", {"mark": MARK, "limits": {**L3, "max_risk_usd": 300.0}, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
+    old, _, _ = make_desk(tmp_path / "old")
+    pause = [False]
+    new, new_cfg, _ = make_desk(tmp_path / "new", paused=lambda: pause[0])
+    asyncio.run(old.set_book(LAB, [{"account": "eval2", "qty": 2}]))
+    old.close()
+    real = labcfg.read_store
+    monkeypatch.setattr(labcfg, "read_store", lambda *a, **k: (pause.__setitem__(0, True), real(*a, **k))[1])
+    assert asyncio.run(new.refresh()) is None                                    # the views paused during the read
+    monkeypatch.setattr(labcfg, "read_store", real)
+    assert labcfg.owns(new_cfg) and new.owner() is False                         # it holds the lock; it is not the owner yet
+    assert refused(new.set_limits(LAB, L3)) == (OTHER_DESK, 409)
+    assert refused(new.set_book(LAB, [])) == (OTHER_DESK, 409) and refused(new.remove(LAB)) == (OTHER_DESK, 409)
+    new_cfg.book[LAB] = []                                                       # even a change of memory is not written:
+    config_mod.save(new_cfg)                                                     # the hook writes nothing before the re-read
+    assert store.get_desk("pp_orb")["book"] == [{"account": "eval2", "qty": 2}]
+    assert new.status_view(LAB)["read_only"] is True
+    pause[0] = False
+    asyncio.run(new.refresh())
+    assert new.owner() is True and new_cfg.book[LAB] == [{"account": "eval2", "qty": 2}]
+    assert new.status_view(LAB)["read_only"] is False and len(jl(tmp_path / "new", "lab_store_owned")) == 1
+
+
+def test_only_a_refresh_takes_the_store(tmp_path):
+    store.put(rec())
+    ld, cfg, _ = make_desk(tmp_path, own=False)
+    assert ld.owner() is False
+    for coro in (ld.set_limits(LAB, LIMITS), ld.set_book(LAB, []), ld.set_enabled(LAB, True), ld.remove(LAB)):
+        assert refused(coro) == (NOT_SAVED, 409)                                 # nobody else has it: "try again", not "another desk"
+    assert asyncio.run(ld.set_enabled(LAB, False)) is True                       # (OFF needs no store)
+    config_mod.save(cfg)
+    assert labcfg.store_state(cfg) is None and not (store.root() / "desk.lock").exists()
+    asyncio.run(ld.refresh())
+    assert ld.owner() is True and asyncio.run(ld.set_limits(LAB, LIMITS))["ok"] is True
+
+
+# ---- N2 (the reviewer's probe H)
+def reader_beside_a_desk_of_another_pool(tmp_path):
+    store.put(rec())
+    store.put_desk("pp_orb", {"mark": MARK, "limits": {**L3, "max_risk_usd": 300.0}, "book": [{"account": "eval1", "qty": 2}], "written_utc": "x"})
+    dev, _, _ = make_desk(tmp_path / "dev", no_accounts_cfg())                   # another pool: it owns the store
+    real, real_cfg, _ = make_desk(tmp_path / "real")                             # the real desk: a reader
+    return dev, real, real_cfg
+
+
+def test_h1_what_a_take_over_drops_is_dropped_from_the_disk_it_just_read_and_is_journaled(tmp_path):
+    dev, real, cfg = reader_beside_a_desk_of_another_pool(tmp_path)
+    asyncio.run(dev.set_limits(LAB, {**L3, "max_qty": 1}))                       # allowed: eval1 is not in the dev desk's pool
+    asyncio.run(real.refresh())                                                  # the reader drops eval1 in its view
+    assert config_mod.assignments(cfg, LAB) == [] and jl(tmp_path / "real", "lab_unbooked") == []
+    assert store.get_desk("pp_orb")["book"] == [{"account": "eval1", "qty": 2}]
+    dev.close()
+    asyncio.run(real.refresh())                                                  # takes the store
+    assert real.owner() is True
+    u = jl(tmp_path / "real", "lab_unbooked")
+    assert [(r["strategy"], r["accounts"], r["why"]) for r in u] == [(LAB, ["eval1"], "above the size cap")]   # said, once
+    got = store.get_desk("pp_orb")
+    assert got["book"] == [] and got["limits"]["max_qty"] == 1
+    asyncio.run(real.refresh())
+    assert len(jl(tmp_path / "real", "lab_unbooked")) == 1
+
+
+def test_h2_the_previous_owners_last_save_wins_over_what_the_reader_last_read(tmp_path):
+    dev, real, cfg = reader_beside_a_desk_of_another_pool(tmp_path)
+    asyncio.run(dev.set_limits(LAB, {**L3, "max_qty": 1}))
+    asyncio.run(real.refresh())                                                  # the reader: cap 1, eval1 dropped in its view
+    asyncio.run(dev.set_limits(LAB, {**L3, "max_qty": 3}))                       # the owner's LAST save: the cap is 3 again
+    dev.close()                                                                  # ... and it ends before the reader's next read
+    asyncio.run(real.refresh())
+    assert real.owner() is True
+    got = store.get_desk("pp_orb")
+    assert got["limits"]["max_qty"] == 3 and got["book"] == [{"account": "eval1", "qty": 2}]
+    assert labcfg.limits_of(cfg, LAB).max_qty == 3 and config_mod.assignments(cfg, LAB) == [{"account": "eval1", "qty": 2}]
+    assert jl(tmp_path / "real", "lab_unbooked") == []
+
+
+# ---- N3 (the reviewer's page probe)
+def test_the_page_never_sees_or_echoes_a_row_of_an_account_it_cannot_act_on(paths):
+    store.put(rec())
+    other = {"account": "eval9", "qty": 1}                                       # an account that is not in this desk's pool
+    store.put_desk("pp_orb", {"mark": MARK, "limits": {**LIMITS, "max_qty": 2}, "book": [other, {"account": "eval1", "qty": 1}],
+                              "written_utc": "x"})
+    app = make_client()
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        c.tmp = paths
+        d = c.get("/api/status").json()
+        rows = d["book"][LAB]
+        assert rows == [{"account": "eval1", "qty": 1}] and "eval9" not in d["accounts"]
+        assert d["book"]["nq930"] == [{"account": "main", "qty": 3}]             # every other strategy: its rows as they are
+        # resize, the way the page does it: every row it holds goes back
+        r = c.post("/api/book", json={"strategy": LAB, "assignments": [{**x, "qty": 2} for x in rows]})
+        assert r.status_code == 200 and r.json()["book"][LAB] == [{"account": "eval1", "qty": 2}]
+        assert other in store.get_desk("pp_orb")["book"]
+        # assign another account
+        rows = c.get("/api/status").json()["book"][LAB]
+        r = c.post("/api/book", json={"strategy": LAB, "assignments": rows + [{"account": "eval2", "qty": 1}]})
+        assert r.status_code == 200 and r.json()["book"][LAB] == [{"account": "eval1", "qty": 2}, {"account": "eval2", "qty": 1}]
+        assert other in store.get_desk("pp_orb")["book"]
+        # the x on a row
+        r = c.post("/api/book", json={"strategy": LAB, "assignments": [x for x in r.json()["book"][LAB] if x["account"] != "eval1"]})
+        assert r.status_code == 200 and c.get("/api/status").json()["book"][LAB] == [{"account": "eval2", "qty": 1}]
+        assert store.get_desk("pp_orb")["book"] == [{"account": "eval2", "qty": 1}, other]
+        # a row the page could never have got from the status is still a 400, and changes nothing
+        r = c.post("/api/book", json={"strategy": LAB, "assignments": [other]})
+        assert r.status_code == 400 and store.get_desk("pp_orb")["book"] == [{"account": "eval2", "qty": 1}, other]
+        assert c.post("/api/book", json={"strategy": LAB, "assignments": []}).status_code == 200
+        assert c.get("/api/status").json()["book"][LAB] == [] and store.get_desk("pp_orb")["book"] == [other]
+        assert app.state.cfg.book[LAB] == [other]                                # the desk keeps it; the page does not see it
+        r = c.post("/api/book", json={"strategy": "nq930", "assignments": [{"account": "main", "qty": 2}]})
+        assert r.status_code == 200 and r.json()["book"] == {"nq930": [{"account": "main", "qty": 2}], LAB: []}   # nor in this answer
+
+
+# ---- M1
+def test_an_account_removed_on_a_reader_is_stripped_when_it_takes_the_store(paths):
+    store.put(rec())
+    store.put_desk("pp_orb", {"mark": MARK, "limits": {**LIMITS, "max_risk_usd": 300.0}, "book": [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 1}],
+                              "written_utc": "x"})
+    other = store.desk_lock()                                                    # another desk holds the store
+    app = make_client()
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        c.tmp = paths
+        assert app.state.labdesk.owner() is False
+        assert c.post("/api/accounts/remove", json={"account": "eval1"}).status_code == 200
+        assert len(store.get_desk("pp_orb")["book"]) == 2                        # a reader writes nothing
+        asyncio.run(app.state.labdesk.refresh())
+        assert config_mod.assignments(app.state.cfg, LAB) == [{"account": "eval2", "qty": 1}] and journal(c, "lab_unbooked") == []
+        store.desk_unlock(other)                                                 # the other desk ends
+        asyncio.run(app.state.labdesk.refresh())                                 # take-over: re-read, then the strip
+        assert app.state.labdesk.owner() is True
+        assert store.get_desk("pp_orb")["book"] == [{"account": "eval2", "qty": 1}]
+        u = journal(c, "lab_unbooked")
+        assert [(r["strategy"], r["accounts"], r["why"]) for r in u] == [(LAB, ["eval1"], "account removed")]
+        asyncio.run(app.state.labdesk.refresh())
+        assert len(journal(c, "lab_unbooked")) == 1 and app.state.cfg.book[LAB] == [{"account": "eval2", "qty": 1}]
+
+
+def test_an_account_removed_while_a_lab_write_is_in_flight_does_not_come_back(tmp_path, monkeypatch):
+    monkeypatch.setattr(labdesk, "REQ_WAIT_S", 2.0)
+    store.put(rec())
+    ld, cfg, _ = make_desk(tmp_path)
+    asyncio.run(ld.set_limits(LAB, LIMITS))
+    asyncio.run(ld.set_book(LAB, [{"account": "eval1", "qty": 1}, {"account": "eval2", "qty": 1}]))
+    done = hold_the_store()
+
+    async def go():
+        t = asyncio.create_task(ld.set_limits(LAB, {**LIMITS, "max_trades_day": 5}))    # its rows are read: eval1, eval2
+        await asyncio.sleep(0.05)                                                # ... and it waits for the store
+        for name in list(cfg.book):                                              # server._drop_account_locked, for eval2
+            cfg.book[name] = [a for a in cfg.book[name] if a.get("account") != "eval2"]
+        cfg.accounts.pop("eval2")
+        config_mod.save(cfg)
+        done()
+        await t
+        await ld.refresh()
+    try:
+        asyncio.run(go())
+    finally:
+        done()
+    assert cfg.book[LAB] == [{"account": "eval1", "qty": 1}]                     # eval2 did not come back with the write
+    got = store.get_desk("pp_orb")
+    assert got["book"] == [{"account": "eval1", "qty": 1}] and got["limits"]["max_trades_day"] == 5
+    assert [(r["accounts"], r["why"]) for r in jl(tmp_path, "lab_unbooked")] == [(["eval2"], "account removed")]
+
+
+def test_an_account_that_comes_back_is_no_longer_stripped(tmp_path):
+    store.put(rec())
+    ld, cfg, _ = make_desk(tmp_path)
+    asyncio.run(ld.set_limits(LAB, LIMITS))
+    gone = cfg.accounts.pop("eval2")
+    config_mod.save(cfg)
+    cfg.accounts["eval2"] = gone                                                 # "the account is back on your login"
+    cfg.book[LAB] = [{"account": "eval2", "qty": 1}]                             # ... with its booking
+    config_mod.save(cfg)
+    asyncio.run(ld.refresh())
+    assert cfg.book[LAB] == [{"account": "eval2", "qty": 1}] and store.get_desk("pp_orb")["book"] == [{"account": "eval2", "qty": 1}]
+
+
+# ---- M2, M8
+def test_removing_an_unusable_record_names_the_accounts_its_sidecar_held(paths):
+    store.put(rec("bad_one", root=None))
+    store.put_desk("bad_one", {"mark": MARK, "limits": LIMITS, "book": [{"account": "main", "qty": 1}, {"account": "eval9", "qty": 2}],
+                               "written_utc": "x"})
+    app = make_client()
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        c.tmp = paths
+        assert c.post("/api/lab-remove", json={"strategy": "lab_bad_one"}).status_code == 200
+        last = journal(c, "lab_removed")[-1]
+        assert (last["strategy"], last["why"], last["unusable"], last["unbooked"]) == ("lab_bad_one", "removed", True, ["main", "eval9"])
+
+
+def test_a_good_record_the_desk_has_not_read_yet_is_not_removed_as_unusable(tmp_path):
+    ld, cfg, _ = make_desk(tmp_path)
+    store.put(rec())                                                             # promoted under 2 s ago: not overlaid yet
+    store.put_desk("pp_orb", {"mark": MARK, "limits": LIMITS, "book": [], "written_utc": "x"})
+    assert LAB not in cfg.strategies
+    assert refused(ld.remove(LAB)) == (NOT_ON_DESK, 404)
+    assert store.get("pp_orb") is not None and store.get_desk("pp_orb") is not None
+    asyncio.run(ld.refresh())
+    assert asyncio.run(ld.remove(LAB)) == {"ok": True, "removed": LAB}           # once it is on the Desk: the usual Remove
+
+
+# ---- M5, M6
+def test_a_close_that_raises_never_breaks_the_desks_shutdown(paths, monkeypatch):
+    store.put(rec())
+    app = make_client()
+
+    def boom(self):
+        raise RuntimeError("cannot close")
+    monkeypatch.setattr(LabDesk, "close", boom)
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        assert c.get("/api/status").status_code == 200                           # leaving the block must not raise
+
+
+def test_a_write_that_reaches_its_thread_after_the_desk_let_go_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.setattr(labdesk, "REQ_WAIT_S", 2.0)
+    store.put(rec())
+    ld, cfg, _ = make_desk(tmp_path)
+    done = hold_the_store()
+
+    async def go():
+        t = asyncio.create_task(ld.set_limits(LAB, LIMITS))
+        await asyncio.sleep(0.05)                                                # it waits for the store ...
+        ld.close()                                                               # ... the desk shuts down ...
+        done()                                                                   # ... and only then does the write get its turn
+        with pytest.raises(Refused, match="Could not save it"):
+            await t
+    try:
+        asyncio.run(go())
+    finally:
+        done()
+    assert store.get_desk("pp_orb") is None and labcfg.limits_of(cfg, LAB) is None
+
+
+# ---- M7
+def test_a_sidecar_file_that_is_there_and_does_not_read_is_never_written_over_unasked(paths):
+    store.put(rec(enabled=True))
+    f = store.root() / "pp_orb.desk.json"
+    f.write_text("{this is not json")
+    app = make_client()
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        c.tmp = paths
+        s = status(c)
+        assert (s["lab"]["state"], s["lab"]["why"], s["lab"]["limits"]) == ("check", CANNOT_READ_LIMITS, None)
+        assert LAB not in c.get("/api/status").json()["book"]
+        assert book(c, [("eval1", 1)]).json()["detail"] == SET_FIRST
+        assert book(c, []).status_code == 200
+        client_cfg = app.state.cfg
+        client_cfg.book["nq930"] = [{"account": "main", "qty": 1}]
+        config_mod.save(client_cfg)                                              # any save, any refresh ...
+        for _ in range(2):
+            asyncio.run(app.state.labdesk.refresh())
+        assert f.read_text() == "{this is not json"                              # ... the file is as it was
+        assert journal(c, "lab_sidecar_replaced") == []
+        assert set_limits(c).status_code == 200                                  # he saves limits again: now it is replaced, and said
+        assert store.get_desk("pp_orb")["limits"]["max_trades_day"] == 2 and store.get_desk("pp_orb")["book"] == []
+        said = journal(c, "lab_sidecar_replaced")
+        assert len(said) == 1 and said[0]["strategy"] == LAB
+        assert status(c)["lab"]["state"] == "shadow"
+        set_limits(c, max_trades_day=3)
+        assert len(journal(c, "lab_sidecar_replaced")) == 1                      # only that once
+
+
+def test_a_sidecar_without_permissions_is_the_same(tmp_path):
+    store.put(rec())
+    store.put_desk("pp_orb", {"mark": MARK, "limits": LIMITS, "book": [{"account": "eval1", "qty": 1}], "written_utc": "x"})
+    f = store.root() / "pp_orb.desk.json"
+    before = f.read_bytes()
+    f.chmod(0o000)
+    try:
+        ld, cfg, _ = make_desk(tmp_path)
+        asyncio.run(ld.refresh())
+        v = ld.status_view(LAB)
+        assert (v["state"], v["why"]) == ("check", CANNOT_READ_LIMITS) and config_mod.assignments(cfg, LAB) == []
+    finally:
+        f.chmod(0o600)
+    assert f.read_bytes() == before

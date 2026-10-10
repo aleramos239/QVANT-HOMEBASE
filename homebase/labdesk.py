@@ -3,13 +3,24 @@ strategy, keeps its limits and its book, switches it, removes it and says what i
 the runner's orders, the stream, the heartbeat rule) is added to this class later; until then nothing here, and nothing
 that calls it, can send an order.
 
+THE LAB SIDE IS OPT-IN PER DESK. server.create_app(..., lab=None) turns it on only when the file
+
+    <state_dir>/lab_desk.on            (homebase/.state/lab_desk.on of the checkout the desk runs from; any content)
+
+exists: flagged(state_dir()), read once, when the app is built. state_dir is per checkout, so a desk run from another
+worktree or a copy never has it. The lead creates the file once, in the live checkout, at go-live (and removes it to
+switch the Lab side off at the next desk start). Tests pass lab=True / lab=False. With the Lab side OFF (LabDesk(...,
+on=False), attach() never called) the desk never reads the store, never tries its lock, overlays no Lab strategy, has no
+`lab` key in its status, and answers the two Lab routes with "Lab strategies are switched off on this Desk.".
+
     attach(cfg)            the desk's start: overlay the promoted strategies on the config, register the sidecar writer
                            as config.save's after-save hook. Never raises: a Lab problem never stops the desk.
-    LabDesk.owner()        ONE desk owns a store (labcfg.take_store: <store>/desk.lock). Asked when the desk starts to
-                           run or first changes something -- never by a desk that is only built. A desk that is not the
-                           owner reads only: it writes no sidecar, follows the owner's, and refuses limits, book,
-                           switching ON and Remove (switching OFF is never refused). It asks again on every refresh
-                           and takes over, from what is on disk, once the lock is free.
+    LabDesk.owner()        ONE desk owns a store (labcfg.take_store: <store>/desk.lock) -- the second line of defence
+                           for two flagged desks. The lock is taken ONLY inside refresh(), which then re-reads every
+                           sidecar in the same pass; a desk that holds the lock but still owes that re-read is not the
+                           owner yet and writes nothing. A desk that is not the owner reads only: it writes no sidecar,
+                           follows the owner's, and refuses limits, book, switching ON and Remove (switching OFF is
+                           never refused). It asks again on every refresh.
     LabDesk.refresh()      every 2 s (run()): the store is read in a thread, the config is changed on the loop. Skipped
                            while the chart views are paused (a bot is placing, the seconds around a fire) and while a
                            request is writing. It never waits for the store's lock.
@@ -48,6 +59,7 @@ from .labrun import store
 
 log = logging.getLogger(__name__)
 
+FLAG_FILE = "lab_desk.on"                # in the checkout's state folder: this desk's Lab side is on (see the top)
 REFRESH_S = 2.0                          # the store is re-read this often
 REQ_WAIT_S = 2.0                         # a request waits this long, at most, for the store's lock (in a thread)
 RUNNER_ALIVE_S = 20                      # the runner is alive while its heartbeat is at most this old
@@ -66,6 +78,7 @@ READ_ONLY_HERE = "Another Desk is running on this store: Lab strategies are read
 CANNOT_READ = "The Desk cannot read it."
 CANNOT_READ_LIMITS = "The Desk cannot read its limits."
 SWITCH_NOT_OFF = "Flattened. Could not switch it off: try the switch again."
+SWITCHED_OFF = "Lab strategies are switched off on this Desk."
 
 
 class Refused(Exception):
@@ -74,6 +87,15 @@ class Refused(Exception):
     def __init__(self, sentence: str, status: int = 409):
         super().__init__(sentence)
         self.status = status
+
+
+def flagged(state_dir) -> bool:
+    """Is this desk's Lab side switched on? The ONE place the flag is read: the file <state_dir>/lab_desk.on exists.
+    Anything that goes wrong reading it means off."""
+    try:
+        return (state_dir / FLAG_FILE).is_file()
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def readiness_line(cfg: AppCfg) -> dict | None:
@@ -101,10 +123,12 @@ def attach(cfg: AppCfg, at=None) -> None:
 
 
 class LabDesk:
-    def __init__(self, cfg: AppCfg, engine, adapters: dict, *, paused: Callable[[], bool] | None = None, at=None):
+    def __init__(self, cfg: AppCfg, engine, adapters: dict, *, paused: Callable[[], bool] | None = None, at=None,
+                 on: bool = True):
         self.cfg, self.engine, self.adapters = cfg, engine, adapters
+        self.on = bool(on)               # False: this desk's Lab side is switched off -- every method is inert
         self._paused = paused or (lambda: False)
-        if at is not None:
+        if at is not None and self.on:
             labcfg.bind(cfg, at)
         self._at = cfg.__dict__.get("_lab_at")
         self._gen = 0                    # bumped by every change the desk itself makes: a store read that began
@@ -113,47 +137,62 @@ class LabDesk:
         self._said: tuple | None = None  # (error text, monotonic) of the last lab_refresh_error line
         self._said_busy = False          # lab_store_busy / lab_store_error are journaled once each
         self._said_err = False
-        self._reload = False             # the store was just taken: the next refresh starts from what is on disk
         self._said_view: set = set()     # (strategy, error) of the lab_view_error lines
 
     # ------------------------------------------------------------ one desk owns the store
     def owner(self) -> bool:
-        """True for the one desk that writes this store's sidecars. Asking TRIES the lock (run() and every refresh
-        ask): a desk that did not get it -- another desk holds it, or the lock could not be tried -- says so once and
-        takes over when it is free (`lab_store_owned`)."""
-        before = labcfg.store_state(self.cfg)
-        got = labcfg.take_store(self.cfg, self._at)
+        """True for the one desk that may write this store's sidecars: it holds the lock AND has re-read every sidecar
+        since it took it. Asking never takes the lock: only refresh() does."""
+        return self.on and labcfg.ready(self.cfg)
+
+    def _try_store(self) -> None:
+        """Inside refresh() only, right before the read that will re-read every sidecar: take the store if nobody
+        holds it. A desk that does not get it -- another desk holds it, or the lock could not be tried -- says so
+        once and asks again on the next refresh."""
+        if labcfg.owns(self.cfg):
+            return
+        labcfg.take_store(self.cfg, self._at)
         state = labcfg.store_state(self.cfg)
-        if got and before != "owner":
-            self._reload = True
-            if before in ("busy", "unknown"):
-                self._journal("lab_store_owned", store=str(store.root(self._at)), was=before)
-        elif state == "busy" and not self._said_busy:
+        if state == "busy" and not self._said_busy:
             self._said_busy = True
             self._journal("lab_store_busy", store=str(store.root(self._at)))
         elif state == "unknown" and not self._said_err:
             self._said_err = True
             self._journal("lab_store_error", store=str(store.root(self._at)), error=labcfg.store_error(self.cfg))
-        return got
 
     def close(self) -> None:
         """Give the store back (the desk is shutting down; the OS does the same when the process ends)."""
-        labcfg.release_store(self.cfg)
+        if self.on:
+            labcfg.release_store(self.cfg)
 
     def _must_own(self) -> None:
-        """For limits, the book, switching ON and Remove. A desk that never asked takes the store here (the first to
-        act owns it). One that was refused it takes over only in a refresh, which re-reads the sidecars first: until
-        then the answer stays a refusal."""
-        if labcfg.owns(self.cfg):
+        """For limits, the book, switching ON and Remove. Nothing here takes the store: a desk becomes the owner only
+        in a refresh, which re-reads every sidecar under its own lock first. Until then the answer is a refusal --
+        "Another Desk is running on this store." while another desk holds it or the take-over's re-read is still owed."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
+        if labcfg.ready(self.cfg):
             return
-        if labcfg.store_state(self.cfg) is None and self.owner():
-            return
-        raise Refused(OTHER_DESK if labcfg.store_state(self.cfg) == "busy" else NOT_SAVED)
+        raise Refused(OTHER_DESK if labcfg.store_state(self.cfg) == "busy" or labcfg.owns(self.cfg) else NOT_SAVED)
+
+    def _read_only(self) -> bool:
+        """What the status block says: this desk cannot change a Lab strategy now (another desk holds the store, the
+        lock could not be tried, or the take-over's re-read is still owed). A desk that never asked says nothing."""
+        return labcfg.store_state(self.cfg) in ("busy", "unknown") or (labcfg.owns(self.cfg) and not labcfg.ready(self.cfg))
 
     # ------------------------------------------------------------ small reads (memory only)
     def is_lab(self, name) -> bool:
         s = self.cfg.strategies.get(name)
-        return s is not None and getattr(s, "kind", "") == LAB and labcfg.is_lab(self.cfg, name)
+        return self.on and s is not None and getattr(s, "kind", "") == LAB and labcfg.is_lab(self.cfg, name)
+
+    def book_view(self) -> dict:
+        """The book as /api/status shows it. For a Lab strategy only the rows of accounts in this desk's pool: the page
+        must never see, or send back, a row it cannot act on (the others stay in cfg.book and in the sidecar). Every
+        other strategy's rows as they are; with the Lab side off, cfg.book itself."""
+        if not self.on or not labcfg.lab_ids(self.cfg):
+            return self.cfg.book
+        return {name: ([r for r in rows if r.get("account") in self.cfg.accounts] if labcfg.is_lab(self.cfg, name) else rows)
+                for name, rows in self.cfg.book.items()}
 
     def _open(self, name: str) -> list[str]:
         """Accounts with a round of this strategy the engine still acts on. engine.lab_open (task B2) adds the rounds
@@ -182,7 +221,7 @@ class LabDesk:
         """Journal what the overlay had to say (labcfg.take_notes). A desk that reads only dropped nothing on disk:
         its `lab_unbooked` notes are about its own view and are not journaled, and its `lab_removed` lines name no
         accounts. `dropped`: the sidecars this refresh removed ({store name: removed})."""
-        own = labcfg.owns(self.cfg)
+        own = labcfg.ready(self.cfg)
         for event, fields in labcfg.take_notes(self.cfg):
             if event == "lab_unbooked" and not own:
                 continue
@@ -203,7 +242,7 @@ class LabDesk:
         sidecar. True when it was removed."""
         try:
             with store.write_lock(self._at, 0.0):
-                if store.has_record_file(sname, self._at):
+                if not labcfg.owns(self.cfg) or store.has_record_file(sname, self._at):
                     return False
                 return store.remove_desk(sname, self._at)
         except Exception:  # noqa: BLE001 -- held, or it cannot be removed: the next refresh tries again
@@ -212,20 +251,25 @@ class LabDesk:
     async def refresh(self) -> dict | None:
         """Bring the config in line with the store. None when it was skipped: the views are paused (before the read,
         or by the time it came back), a request is writing, or the desk changed something while the read ran."""
-        if self._paused():
+        if not self.on or self._paused():
             return None
-        self.owner()                         # a desk that reads only asks for the store again, every time
         if labcfg.any_busy(self.cfg):
             return None
-        gen = self._gen
+        self._try_store()                    # the ONLY place the store is taken: right before the read below, so the
+        gen = self._gen                      # sidecars are re-read under this desk's own lock in the same pass
         snap, beat = await asyncio.to_thread(self._read)
         if gen != self._gen or self._paused() or labcfg.any_busy(self.cfg):
-            return None
-        own = labcfg.owns(self.cfg)
+            return None                      # (a store taken above stays taken; its re-read is still owed)
+        taking = labcfg.owns(self.cfg) and not labcfg.ready(self.cfg)
+        if taking:                           # what it noted while it did not own the store was about its own view:
+            labcfg.drop_notes(self.cfg, "lab_unbooked")      # the re-read says again, for the journal, what really goes
         held = lambda did: bool(self._open(did))  # noqa: E731
-        # a reader follows the owner's sidecars; a desk that just got the store starts from what is on disk
-        out = labcfg.apply(self.cfg, snap, held=held, reload=self._reload or not own)
-        self._reload = False
+        # a reader follows the owner's sidecars; the pass that makes this desk the owner re-reads EVERY one of them
+        out = labcfg.apply(self.cfg, snap, held=held, reload=not labcfg.ready(self.cfg))
+        own = labcfg.ready(self.cfg)
+        if taking and own and (self._said_busy or self._said_err):
+            self._journal("lab_store_owned", store=str(store.root(self._at)))
+            self._said_busy = self._said_err = False
         try:
             seen = dt.datetime.fromisoformat((beat or {}).get("seen_utc"))
             self._seen_utc = seen if seen.tzinfo is not None else seen.replace(tzinfo=dt.timezone.utc)
@@ -249,9 +293,10 @@ class LabDesk:
 
     async def run(self, interval_s: float = REFRESH_S) -> None:
         """The background task. An error is journaled (the same one once a minute at most) and never ends it."""
+        if not self.on:
+            return
         while True:
             try:
-                self.owner()
                 await self.refresh()
             except Exception as e:  # noqa: BLE001 -- the next round tries again
                 msg, now = str(e)[:200], time.monotonic()
@@ -300,20 +345,36 @@ class LabDesk:
         nothing = m["saved"] is None and want["limits"] is None and not want["book"]
         if want == m["saved"] or nothing or (m["frozen"] and limits is None):
             # nothing to write: the sidecar already says so, there is nothing to say, or it holds limits the desk
-            # cannot read and is left as it is until he saves limits again
+            # cannot read (or the file itself does not read) and is left as it is until he saves limits again
             labcfg.commit(cfg, name, limits, rows, None)
             return
+        never_read = labcfg.blind(cfg, name)
 
         def work():
             with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
                 store.put_desk(sname, labcfg.stamped(want), at)
-        await self._write(name, work, lambda _: labcfg.commit(cfg, name, limits, rows, want))
+
+        def keep(_):
+            labcfg.commit(cfg, name, limits, rows, want)
+            labcfg.strip_removed(cfg, name)  # an account that left the desk while this was being written stays out
+        await self._write(name, work, keep)
+        if never_read:                       # he saved limits over a sidecar file the desk could not read
+            self._journal("lab_sidecar_replaced", strategy=name)
+
+    def _still_mine(self) -> None:
+        """In a writer's thread, under the store's write lock: the desk may have let the store go (it is shutting
+        down) while this write waited its turn. Then nothing is written."""
+        if not labcfg.owns(self.cfg):
+            raise RuntimeError("the desk no longer holds the store")
 
     # ------------------------------------------------------------ limits
     async def set_limits(self, name: str, body) -> dict:
-        """ValueError: a bad field, with its sentence. Refused: not a Lab strategy (404), another desk owns the store,
-        the 9:30 window, a round open, an account booked for more than the new cap, or the sidecar could not be
-        written. Nothing changes on a refusal."""
+        """ValueError: a bad field, with its sentence. Refused: the Lab side is off, not a Lab strategy (404), another
+        desk owns the store, the 9:30 window, a round open, an account booked for more than the new cap, or the
+        sidecar could not be written. Nothing changes on a refusal."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
         self._need(name)
         self._must_own()
         limits = labcfg.parse_limits(body, labcfg.record_of(self.cfg, name))
@@ -333,7 +394,7 @@ class LabDesk:
     def check_book(self, name: str, rows: list) -> None:
         """Before a book write of ANY strategy: raises Refused with the sentence. `rows` is what the route will
         write ([{account, qty}], sizes above 0). With no Lab strategy on the desk it says nothing."""
-        if not labcfg.lab_ids(self.cfg):
+        if not self.on or not labcfg.lab_ids(self.cfg):
             return
         s = self.cfg.strategies.get(name)
         if s is None:
@@ -368,7 +429,10 @@ class LabDesk:
 
     async def set_book(self, name: str, rows: list) -> None:
         """A Lab strategy's book (it lives in its sidecar, never in config.json): the checks, then the file, then the
-        desk's memory. Refused with the sentence; nothing changes then."""
+        desk's memory. `rows` are the new rows FOR THIS DESK'S POOL; the rows of accounts that are not in the pool are
+        kept as they are, unposted. Refused with the sentence; nothing changes then."""
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
         self._need(name)
         self._must_own()
         self.check_book(name, rows)
@@ -402,9 +466,10 @@ class LabDesk:
 
     # ------------------------------------------------------------ remove
     async def _remove_unusable(self, name: str) -> dict:
-        """A store name whose record FILE is there but is not a strategy on this desk (it does not read, or names no
+        """A store name whose record FILE is there but FAILS to load as a strategy (it does not read, or names no
         market): its sidecar and its record go, the history stays. So a record the Lab page refuses to touch ("Take its
-        accounts off on the Desk first.") always has a way out here."""
+        accounts off on the Desk first.") always has a way out here. A GOOD record this desk simply has not read yet
+        (promoted a moment ago) is not one of these: it is refused, and is removed the usual way once it is on the Desk."""
         sname = labcfg.store_name(name)
         try:
             store.has_record_file(sname, self._at)       # (also: is it a name the store takes at all?)
@@ -415,27 +480,41 @@ class LabDesk:
             raise Refused(FLATTEN_FIRST)
         at = self._at
 
-        def work() -> bool:
+        def work():
             with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
                 if not store.has_record_file(sname, at):
-                    return False
+                    return None
+                rec = store.get(sname, at)
+                try:
+                    good = rec is not None and rec.get("name") == sname and labcfg.usable(rec) \
+                        and labcfg.strategy_cfg(rec, None) is not None
+                except Exception:  # noqa: BLE001 -- it cannot be made a strategy: that is what "unusable" means
+                    good = False
+                if good:
+                    return None
+                side = store.get_desk(sname, at)
+                held = [r.get("account") for r in (side or {}).get("book") or [] if isinstance(r, dict)] \
+                    if isinstance(side, dict) else []
                 store.remove_desk(sname, at)
                 store.remove(sname, at)
-                return True
+                return held
         self._gen += 1
         try:
-            there = await asyncio.shield(asyncio.to_thread(work))
+            held = await asyncio.shield(asyncio.to_thread(work))
         except Exception as e:  # noqa: BLE001
             self._journal("lab_save_error", strategy=name, error=f"{type(e).__name__}: {e}"[:200])
             raise Refused(NOT_SAVED) from None
         finally:
             self._gen += 1
-        if not there:
+        if held is None:
             raise Refused(NOT_ON_DESK, 404)
-        self._journal("lab_removed", strategy=name, why="removed", unusable=True)
+        self._journal("lab_removed", strategy=name, why="removed", unusable=True, unbooked=held)
         return {"ok": True, "removed": name}
 
     async def remove(self, name: str) -> dict:
+        if not self.on:
+            raise Refused(SWITCHED_OFF)
         if not self.is_lab(name) and labcfg.store_name(name) is not None and name not in self.cfg.strategies:
             return await self._remove_unusable(name)
         self._need(name)
@@ -449,6 +528,7 @@ class LabDesk:
 
         def work():
             with store.write_lock(at, REQ_WAIT_S):
+                self._still_mine()
                 began.append(True)
                 store.remove_desk(sname, at)
                 store.remove(sname, at)
@@ -519,7 +599,7 @@ class LabDesk:
                     "trades_today": 0, "mode_today": None,           # the intake half (B3) fills these
                     "runner": self._runner(), "rounds": self._rounds(name),
                     "refused": [],                                   # ... and this
-                    "read_only": labcfg.store_state(self.cfg) in ("busy", "unknown")}    # another desk owns the store
+                    "read_only": self._read_only()}                  # another desk owns the store
         except Exception as e:  # noqa: BLE001 -- the page gets the plain sentence, the journal the detail (once)
             key = (name, f"{type(e).__name__}: {e}"[:200])
             if key not in self._said_view and len(self._said_view) < 100:
@@ -527,4 +607,4 @@ class LabDesk:
                 self._journal("lab_view_error", strategy=name, error=key[1])
             return {"name": sname, "mark": None, "limits": None, "state": "check", "why": CANNOT_READ,
                     "trades_today": 0, "mode_today": None, "runner": {"alive": False, "age_s": None}, "rounds": [], "refused": [],
-                    "read_only": labcfg.store_state(self.cfg) in ("busy", "unknown")}
+                    "read_only": self._read_only()}

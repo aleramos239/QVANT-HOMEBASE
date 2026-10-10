@@ -485,9 +485,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                *, background: bool = True,
                adapter_factory=build_adapter, feed_factory=build_feed,
                login_budget: LoginBudget | None = None,
-               paper_client: httpx.AsyncClient | None = None) -> FastAPI:
+               paper_client: httpx.AsyncClient | None = None,
+               lab: bool | None = None) -> FastAPI:
     cfg = cfg or config_mod.load()
-    labdesk_mod.attach(cfg)      # promoted Lab strategies join the config in memory (never config.json); never raises
+    # The Lab side (promoted Lab strategies on this desk) is opt-in per desk: None = on only when the file
+    # <state_dir>/lab_desk.on exists (labdesk.py's docstring). Off: the store is never read, nothing below is a Lab path.
+    lab_on = labdesk_mod.flagged(state_dir()) if lab is None else bool(lab)
+    if lab_on:
+        labdesk_mod.attach(cfg)  # promoted Lab strategies join the config in memory (never config.json); never raises
     adapters: dict[str, BrokerAdapter] = adapters if adapters is not None else {}
     engine = Engine(cfg, adapters)
     acct_status: dict[str, dict] = {}
@@ -562,7 +567,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     # trading from the chart (spec 2026-09-26): views, guards, journaling
     desk = ChartDesk(cfg, engine, adapters, acct_status, timer_status=timer.status)
     # promoted Lab strategies (kind "lab"): limits, book checks, the switch, Remove, the status block (labdesk.py)
-    labdesk = labdesk_mod.LabDesk(cfg, engine, adapters, paused=desk.views_paused)
+    labdesk = labdesk_mod.LabDesk(cfg, engine, adapters, paused=desk.views_paused, on=lab_on)
     feed_box: dict = {"feed": None, "retry_at": 0.0, "error": None}
 
     def _bars_strategies() -> dict[str, config_mod.StrategyCfg]:
@@ -1072,14 +1077,16 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                      asyncio.create_task(_inactive_loop()),
                      asyncio.create_task(_sibling_loop()),
                      asyncio.create_task(_feed_loop()),
-                     asyncio.create_task(desk.run()),
-                     asyncio.create_task(labdesk.run())]
+                     asyncio.create_task(desk.run())]
+            if labdesk.on:
+                tasks.append(asyncio.create_task(labdesk.run()))
         try:
             yield
         finally:
             for t in tasks:
                 t.cancel()
-            labdesk.close()                  # the Lab store's desk lock goes back (the desk that starts next owns it)
+            with contextlib.suppress(Exception):
+                labdesk.close()              # the Lab store's desk lock goes back (the desk that starts next owns it)
             await _feed_close("shutdown")
             for ad in adapters.values():
                 with contextlib.suppress(Exception):
@@ -1161,7 +1168,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "feed": feed_status(),
             "accounts": accounts,
             "notices": notices[::-1],      # newest first, one line each, page wording
-            "book": cfg.book,
+            "book": labdesk.book_view(),   # cfg.book; for a Lab strategy only the rows of this desk's accounts
             "strategies": {
                 name: {
                     "cfg": {"symbol": s.symbol, "qty": s.qty,
@@ -1183,7 +1190,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     "killed": engine.killed_today(name),
                     "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
                                  for st in engine.day_states(name)],
-                    "lab": labdesk.status_view(name),      # None unless kind "lab"
+                    **({"lab": labdesk.status_view(name)} if labdesk.on else {}),   # None unless kind "lab"
                 } for name, s in cfg.strategies.items()
             },
             "journal": journal,
@@ -1811,14 +1818,14 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             if labdesk.is_lab(name):         # its book lives in its own file beside its record, never in config.json
                 await labdesk.set_book(name, rows)
                 engine.journal("book_updated", strategy=name, assignments=rows)
-                return {"ok": True, "book": cfg.book}
+                return {"ok": True, "book": labdesk.book_view()}
             labdesk.check_book(name, rows)   # says nothing unless a promoted Lab strategy is on the desk
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, str(e)) from None
         cfg.book[name] = rows
         config_mod.save(cfg)
         engine.journal("book_updated", strategy=name, assignments=rows)
-        return {"ok": True, "book": cfg.book}
+        return {"ok": True, "book": labdesk.book_view()}     # cfg.book itself unless a Lab strategy is on the desk
 
     @app.post("/api/lab-limits")
     async def lab_limits(request: Request):

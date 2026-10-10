@@ -30,9 +30,18 @@ The load path holds the routes' rules, at the first appearance and on every appl
 
 One desk owns a store: take_store() (an exclusive lock on <store>/desk.lock, for the life of the process). Only the
 owner writes sidecars; a config that never took the store, or could not, reads only -- and then its limits and book
-FOLLOW the owner's sidecar (apply(reload=True)), so that a reader which later gets the lock takes over with what is on
-disk, not with what it read at its start. A lock that could not even be tried (an OSError) is "unknown", not "another
-desk": both are tried again.
+FOLLOW the owner's sidecar (apply(reload=True)). Holding the lock is not yet owning: a desk that just took it OWES a
+re-read of every sidecar (ready() is False, nothing is written) until one apply(reload=True) has run, so it takes over
+with what is on disk -- the previous owner's last save -- and never with what it read before. A reload re-reads EVERY
+strategy: a desk that did not own the store has changed nothing on disk and has nothing to keep. A lock that could not
+even be tried (an OSError) is "unknown", not "another desk": both are tried again.
+
+An account that leaves the desk's pool is remembered (note_accounts, asked by config.save's hook and by every apply):
+its rows are stripped again after any re-read and after any write that was in flight when it left, so they never come
+back from disk. An account that was never in this desk's pool is not a removed one.
+
+A sidecar FILE that is there and does not read is not "no sidecar": the strategy has no limits and no book in memory,
+and the file is left as it is until he saves limits again (the same as limits that do not parse).
 
 A record is GONE only when its file is absent from the store. A file that is there and does not read (permissions, too
 many open files, garbage) is a record the desk cannot read: the strategy stays, switched off, and its sidecar is never
@@ -237,13 +246,18 @@ def take_store(cfg: AppCfg, at=None) -> bool:
     if fd is None:
         d["_lab_store"] = "busy"
         return False
-    d["_lab_lease"], d["_lab_store"] = _Lease(fd), "owner"
+    d["_lab_lease"], d["_lab_store"], d["_lab_owed"] = _Lease(fd), "owner", True
     return True
 
 
 def owns(cfg: AppCfg) -> bool:
     got = cfg.__dict__.get("_lab_lease")
     return got is not None and got.fd is not None
+
+
+def ready(cfg: AppCfg) -> bool:
+    """The desk may write: it holds the store AND has re-read every sidecar since it took it (apply(reload=True))."""
+    return owns(cfg) and not cfg.__dict__.get("_lab_owed")
 
 
 def store_state(cfg: AppCfg) -> str | None:
@@ -269,6 +283,14 @@ def _note(cfg: AppCfg, event: str, **fields) -> None:
     q = cfg.__dict__.setdefault("_lab_notes", [])
     q.append((event, fields))
     del q[:-NOTES_KEPT]
+
+
+def drop_notes(cfg: AppCfg, event: str) -> None:
+    """Forget the queued notes of one kind (a desk that takes the store over: what it noted as a reader was about its
+    own view; the take-over's re-read says again, for the journal, everything that is really dropped)."""
+    q = cfg.__dict__.get("_lab_notes")
+    if q:
+        q[:] = [n for n in q if n[0] != event]
 
 
 def take_notes(cfg: AppCfg) -> list:
@@ -315,6 +337,12 @@ def frozen(cfg: AppCfg, desk_id: str) -> bool:
     return bool(m and m["frozen"])
 
 
+def blind(cfg: AppCfg, desk_id: str) -> bool:
+    """Its sidecar FILE is there and does not read: frozen, and a limits save will replace a file the desk never read."""
+    m = _meta(cfg).get(desk_id)
+    return bool(m and m.get("blind"))
+
+
 def unreadable(cfg: AppCfg, desk_id: str) -> bool:
     """Its record no longer reads: it is kept as it last read, switched off."""
     m = _meta(cfg).get(desk_id)
@@ -334,7 +362,7 @@ def any_busy(cfg: AppCfg) -> bool:
 def set_limits(cfg: AppCfg, desk_id: str, limits: LabLimits | None) -> None:
     """Memory only (persist_all writes them): the limits, and the strategy rebuilt from them."""
     m = _meta(cfg)[desk_id]
-    m["limits"], m["frozen"] = limits, False
+    m["limits"], m["frozen"], m["blind"] = limits, False, False
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
 
 
@@ -363,8 +391,14 @@ def read_store(at=None) -> dict:
     for name in files:
         rec = store.get(name, at)
         if rec is not None and rec.get("name") == name:      # the file name must match the record (as store.listing)
-            recs.append(({k: v for k, v in rec.items() if k != "source"}, store.get_desk(name, at)))
+            side = store.get_desk(name, at)
+            if side is None and name in sides:               # the sidecar FILE is there and does not read
+                side = BLIND
+            recs.append(({k: v for k, v in rec.items() if k != "source"}, side))
     return {"records": recs, "files": files, "sidecars": sides}
+
+
+BLIND = {"unreadable sidecar": True}     # read_store's stand-in for a sidecar file that is there and does not read
 
 
 def _records(snap) -> list:
@@ -417,14 +451,16 @@ def _first(cfg: AppCfg, meta: dict, did: str, rec: dict, side) -> bool:
     """The limits and the book come from the sidecar: for a strategy the desk did not know (this once), and -- reload --
     on every read for a desk that does not own the store. Everything that can raise comes before the first change, so a
     record that cannot be read leaves nothing behind. True when its StrategyCfg changed."""
-    side = side if isinstance(side, dict) else None
+    cannot = side is BLIND                   # the file is there and does not read: not "no sidecar"
+    side = side if isinstance(side, dict) and not cannot else None
     mark = store.mark_of(rec)
     raw = side.get("limits") if side else None
     limits = _limits_from(raw, rec)
     s = strategy_cfg(rec, limits)
     rows = _shaped(side.get("book")) if side else []
     meta[did] = {"name": rec["name"], "rec": rec, "mark": mark, "gone": False, "bad": False, "busy": False,
-                 "limits": limits, "frozen": raw is not None and limits is None, "saved": _saved(side)}
+                 "limits": limits, "frozen": cannot or (raw is not None and limits is None), "blind": cannot,
+                 "saved": {"unreadable": True} if cannot else _saved(side)}
     changed = cfg.strategies.get(did) != s
     cfg.strategies[did] = s
     if rows and side.get("mark") != mark:    # the sidecar of another promotion: the accounts go, the limits stay
@@ -473,6 +509,40 @@ def _cannot_read(cfg: AppCfg, m: dict | None, did: str, mark, e: Exception) -> b
     return False
 
 
+def note_accounts(cfg: AppCfg) -> None:
+    """Remember the accounts that LEFT this desk's pool since it was last asked (config.save's hook asks right after an
+    account is removed; every apply asks too). Memory only; a config with no Lab strategy is not touched. One that
+    comes back is forgotten again."""
+    d = cfg.__dict__
+    if "_lab" not in d:
+        return
+    now, seen = set(cfg.accounts), d.get("_lab_accounts")
+    gone = d.setdefault("_lab_left", set())
+    if seen is not None:
+        gone |= seen - now
+    gone -= now
+    d["_lab_accounts"] = now
+
+
+def strip_removed(cfg: AppCfg, only: str | None = None) -> None:
+    """Take the rows of accounts that left the desk out of the Lab books it holds (noted `lab_unbooked`, why "account
+    removed"). The server strips them itself when it removes an account; this is for the rows that come back: from
+    disk on a re-read, or with a Lab write that was in flight when the account left."""
+    gone = cfg.__dict__.get("_lab_left")
+    if not gone:
+        return
+    for did in _meta(cfg):
+        rows = cfg.book.get(did)
+        drop = [r for r in rows or [] if r.get("account") in gone] if only in (None, did) else []
+        if drop:
+            _unbook(cfg, did, drop, "account removed")
+            keep = [r for r in rows if r not in drop]
+            if keep:
+                cfg.book[did] = keep
+            else:
+                cfg.book.pop(did, None)
+
+
 def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
     """The routes' rules over the rows of the accounts THIS desk has: no limits, no book; no row above the cap. A row
     of an account that is not in this desk's pool is not this desk's to judge: it stays exactly as it is."""
@@ -497,16 +567,14 @@ def _enforce(cfg: AppCfg, did: str, m: dict) -> None:
 def apply(cfg: AppCfg, snap, held=None, reload: bool = False) -> dict:
     """Bring cfg.strategies / cfg.book in line with what read_store() saw. Memory only. `held(desk_id)` says whether the
     engine holds an open round for it: such a strategy is never removed (it is switched off and kept until the round
-    is over). `reload`: also take the limits and the book of the strategies the desk already knows from their sidecars
-    (a desk that does not own the store follows the owner's; one that just got the store starts from what is on disk)
-    -- never over a change of its own that is still waiting to be written. Returns {"added": [...], "removed": [...],
+    is over). `reload`: take the limits and the book of EVERY strategy from its sidecar, also the ones the desk already
+    knows -- for a desk that does not own the store (it follows the owner's) and for the one pass that makes a desk the
+    owner (it starts from what is on disk; after it ready() is True). Returns {"added": [...], "removed": [...],
     "changed": [...]} (desk ids); what else there is to say (a dropped book, a record that does not read, the accounts
     that went with a record) goes to take_notes()."""
     meta = cfg.__dict__.setdefault("_lab", {})           # the one place that starts it
     added, removed, changed, seen = [], [], [], set()
-    queue = cfg.__dict__.setdefault("_lab_notes", [])
-    said0 = len(queue)
-    had = {did: {r.get("account") for r in cfg.book.get(did) or [] if isinstance(r, dict)} for did in meta} if reload else {}
+    note_accounts(cfg)
     for rec, side in _records(snap):
         if not isinstance(rec, dict) or not isinstance(rec.get("name"), str):
             continue
@@ -516,8 +584,7 @@ def apply(cfg: AppCfg, snap, held=None, reload: bool = False) -> dict:
             if not usable(rec):
                 raise ValueError("the record names no market")
             if did in meta:
-                again = reload and not meta[did]["busy"] and not (owns(cfg) and pending(cfg, did))
-                if _first(cfg, meta, did, rec, side) if again else _known(cfg, meta[did], did, rec):
+                if _first(cfg, meta, did, rec, side) if reload else _known(cfg, meta[did], did, rec):
                     changed.append(did)
             elif did not in cfg.strategies:              # (an id the desk uses for something not from the Lab is left alone)
                 _first(cfg, meta, did, rec, side)
@@ -548,30 +615,16 @@ def apply(cfg: AppCfg, snap, held=None, reload: bool = False) -> dict:
         removed.append(did)
     for did, m in meta.items():
         _enforce(cfg, did, m)
-    if reload:                                           # a reload reads every row again: say only what LEFT the desk's
-        kept = []                                        # memory, not again what was dropped (and said) the first time
-        for event, f in queue[said0:]:
-            if event == "lab_unbooked" and f.get("strategy") in had:
-                left = [a for a in f.get("accounts") or [] if a in had[f["strategy"]]]
-                if not left:
-                    continue
-                f = {**f, "accounts": left}
-            kept.append((event, f))
-        queue[said0:] = kept
-    cfg.__dict__["_lab_unusable"] = sorted(n for n in files if isinstance(n, str) and desk_id(n) not in meta
-                                           and desk_id(n) not in cfg.strategies)
+    strip_removed(cfg)                                   # (after the re-read: a row of an account that left never comes back)
+    if reload and owns(cfg):
+        cfg.__dict__["_lab_owed"] = False                # every sidecar was re-read under this desk's own lock
     return {"added": added, "removed": removed, "changed": changed}
 
 
-def unusable(cfg: AppCfg) -> list:
-    """Store names whose record file is there but is not a strategy on this desk (it does not read, or names no
-    market), as of the last apply(). Remove takes them off the store: there is no dead end."""
-    return list(cfg.__dict__.get("_lab_unusable") or [])
-
-
 def overlay(cfg: AppCfg, at=None, *, held=None) -> dict:
-    """read_store + apply in one call (the desk's start, before its loop serves anything; tests)."""
-    return apply(cfg, read_store(_at(cfg, at)), held)
+    """read_store + apply in one call (the desk's start, before its loop serves anything; tests). A config that holds
+    the store and still owes its re-read gets it here."""
+    return apply(cfg, read_store(_at(cfg, at)), held, reload=bool(cfg.__dict__.get("_lab_owed")))
 
 
 def orphans(cfg: AppCfg, snap, held=None) -> list:
@@ -580,7 +633,7 @@ def orphans(cfg: AppCfg, snap, held=None) -> list:
     Desk. A record file that is there but does not read is NOT an orphan. `held(desk_id)` is asked for every name, also
     one the desk does not know (after a restart the engine may have restored a round of a strategy whose record went).
     Ask after apply() of the same read. Empty for a desk that reads only."""
-    if not owns(cfg) or not isinstance(snap, dict):
+    if not ready(cfg) or not isinstance(snap, dict):
         return []
     there = _files(snap)
     mine = {m["name"] for m in _meta(cfg).values()}
@@ -600,7 +653,7 @@ def commit(cfg: AppCfg, desk_id: str, limits: LabLimits | None, book: list, save
     m = _meta(cfg)[desk_id]
     m["limits"], m["frozen"] = limits, m["frozen"] and limits is None
     if saved is not None:
-        m["saved"] = saved
+        m["saved"], m["blind"] = saved, False
     cfg.strategies[desk_id] = strategy_cfg(m["rec"], limits)
     if book or desk_id in cfg.book:          # (no rows and no key: the book stays without a key for it)
         cfg.book[desk_id] = [{"account": r["account"], "qty": int(r["qty"])} for r in book]
@@ -629,12 +682,15 @@ def persist_all(cfg: AppCfg, at=None, wait_s: float | None = 0.0) -> None:
     that owns the store writes. It never waits for the store's lock unless told to (wait_s): on a miss the sidecars stay
     pending for the next call (TimeoutError; the rest are not tried, they would miss too). Any other failure is raised
     once the others were tried. What was written and what the desk remembers as written change together, under the lock."""
-    if not owns(cfg):
+    note_accounts(cfg)                       # (the hook runs right after an account was removed: remember it)
+    if not ready(cfg):                       # not the owner, or the re-read it owes since it took the store is not done
         return
     meta, root, first = _meta(cfg), _at(cfg, at), None
     for name, want in pending(cfg):
         try:
             with store.write_lock(root, wait_s):
+                if not owns(cfg):            # the desk let the store go meanwhile: nothing more is written for it
+                    return
                 store.put_desk(name, stamped(want), root)
                 meta[desk_id(name)]["saved"] = want
         except TimeoutError as e:            # the store is held: every other write would miss as well
