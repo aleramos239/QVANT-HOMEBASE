@@ -1467,7 +1467,7 @@ def test_the_launchd_job_runs_the_runner_and_is_kept_alive():
     tpl = REPO / "deploy" / "com.ramosquant.homebase-labrun.plist.template"
     job = plistlib.loads(tpl.read_bytes().replace(b"__REPO__", b"/repo"))
     assert job["Label"] == "com.ramosquant.homebase-labrun"
-    assert job["ProgramArguments"] == ["/repo/.venv/bin/python", "-m", "homebase.labrun"]
+    assert job["ProgramArguments"] == ["/repo/.venv/bin/python", "-m", "homebase.labrun", "--desk", "http://127.0.0.1:8850"]
     assert job["WorkingDirectory"] == "/repo" and job["KeepAlive"] is True and job["Nice"] >= 5
     assert job["ThrottleInterval"] >= 30                                     # D10: a crash loop must not spin
     assert job["StandardOutPath"] == job["StandardErrorPath"] == "/repo/homebase/.state/labrun.log"

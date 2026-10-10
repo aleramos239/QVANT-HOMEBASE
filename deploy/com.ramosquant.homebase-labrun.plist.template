@@ -8,13 +8,20 @@
     <string>__REPO__/.venv/bin/python</string>
     <string>-m</string>
     <string>homebase.labrun</string>
+    <string>--desk</string>
+    <string>http://127.0.0.1:8850</string>
   </array>
   <key>WorkingDirectory</key><string>__REPO__</string>
-  <!-- the runner of promoted Lab strategies (homebase/labrun/host.py), SHADOW only: it reads the chart
-       service's tick stream on 127.0.0.1:8852 and writes ~/.homebase/desklab. It places no order and never
-       talks to the trading app on :8850. Its OWN process: a strategy's code runs in a sandboxed child of
-       this job, never in the chart service or the trading app. With the chart service down it waits and
-       reconnects by itself. -->
+  <!-- the runner of promoted Lab strategies (homebase/labrun/host.py): it reads the chart service's tick
+       stream on 127.0.0.1:8852 and writes ~/.homebase/desklab. A strategy with NO account on the Desk runs
+       in shadow: its orders are written down and nothing is sent. A strategy with accounts booked on the
+       Desk (limits set, hosted before its window begins) has its orders sent to the Desk's own guarded
+       intake on 127.0.0.1:8850 (/api/lab/*, with the key in homebase/.state/lab.key): the runner itself
+       never talks to a broker. While the Desk's Lab side is off (no homebase/.state/lab_desk.on) those
+       routes refuse it and every strategy stays in shadow. Its OWN process: a strategy's code runs in a
+       sandboxed child of this job, never in the chart service or the trading app. With the chart service
+       or the Desk down it waits and reconnects by itself. Reload this job outside the sessions only: a
+       clean stop ends each desk day that has begun. -->
   <key>RunAtLoad</key><true/>
   <!-- kept alive, and never started again sooner than 30 s after it ended: a runner that keeps failing must not spin -->
   <key>KeepAlive</key><true/>
