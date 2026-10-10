@@ -1055,6 +1055,8 @@ def test_a_sidecar_left_from_before_the_desk_started_is_removed_and_one_just_pro
     snap = labcfg.read_store()                                                   # a read from before ...
     store.put(rec("old_one"))                                                    # ... he promotes it again
     assert ld._drop_orphan("old_one") is False and store.get_desk("old_one") is not None
+    (store.root() / "old_one.json").write_text("{not json")                      # a record file that does not read is there too
+    assert ld._drop_orphan("old_one") is False and store.get_desk("old_one") is not None
     store.remove("old_one")
     assert labcfg.orphans(cfg, snap) == ["old_one"]
     asyncio.run(ld.refresh())
@@ -1358,12 +1360,13 @@ def test_a_desk_that_takes_the_store_over_starts_from_what_the_owner_last_wrote(
     asyncio.run(first.set_limits(LAB, {**L3, "max_trades_day": 7}))
     asyncio.run(second.refresh())                                                # the reader follows the owner's sidecar
     assert cfg2.book[LAB] == [{"account": "eval1", "qty": 2}] and labcfg.limits_of(cfg2, LAB).max_trades_day == 7
-    first.close()
-    asyncio.run(second.refresh())
-    assert second.owner() is True
+    asyncio.run(first.set_book(LAB, [{"account": "eval2", "qty": 1}]))           # the owner's LAST change, then it ends,
+    first.close()                                                                # with no read by the other in between
+    asyncio.run(second.refresh())                                                # the refresh that takes the store re-reads
+    assert second.owner() is True and cfg2.book[LAB] == [{"account": "eval2", "qty": 1}]
     asyncio.run(second.set_limits(LAB, {**L3, "max_trades_day": 9}))             # its first write keeps the owner's booking
     got = store.get_desk("pp_orb")
-    assert got["book"] == [{"account": "eval1", "qty": 2}] and got["limits"]["max_trades_day"] == 9
+    assert got["book"] == [{"account": "eval2", "qty": 1}] and got["limits"]["max_trades_day"] == 9
 
 
 def test_the_owners_book_write_keeps_the_rows_of_accounts_it_does_not_have(tmp_path):

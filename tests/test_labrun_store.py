@@ -418,6 +418,22 @@ def test_has_record_file_is_about_the_file_not_about_reading_it(tmp_path):
         store.has_record_file("../x", tmp_path)
 
 
+def test_a_record_file_the_store_cannot_even_look_at_counts_as_there(tmp_path, monkeypatch):
+    """Fail closed: only "no such file" means it is gone (the desk removes a sidecar on the strength of this answer)."""
+    def denied(path, *a, **k):
+        raise PermissionError(13, "Permission denied")
+    monkeypatch.setattr(store.os, "lstat", denied)
+    assert store.has_record_file("nq_x", tmp_path) is True
+
+
+def test_a_desk_lock_whose_flock_fails_for_another_reason_raises(tmp_path, monkeypatch):
+    def eio(fd, op):
+        raise OSError(5, "Input/output error")
+    monkeypatch.setattr(store.fcntl, "flock", eio)
+    with pytest.raises(OSError, match="Input/output"):
+        store.desk_lock(tmp_path)
+
+
 def test_a_desk_lock_that_cannot_be_tried_raises_and_is_not_another_desk(tmp_path):
     (tmp_path / "a-file").write_text("x")
     with pytest.raises(OSError):
