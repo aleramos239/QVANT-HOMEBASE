@@ -84,7 +84,7 @@ function cell(spec = 'time:60') {
     host: { send: (m) => { c.sent.push(m); return true; }, changed() {}, onLoaded() {} },
     inflight: [], has: { fp: false, big: false }, replay: null, chart: null, shown: null, keys: new Set(), ov: [],
     bars: [], realT: new Map(), loadWaiters: [], noteOn: false, capped: false, reaching: null, hover: null, lines: [],
-    R: { timezone: 'exchange', prevClose: false }, P: {}, sessions: [],
+    R: { timezone: 'exchange', prevClose: false, prevDay: 'hidden', lastLine: true, lastLineColor: null }, P: {}, sessions: [], refLines: {},
     back: { reset() {}, done: false, take: () => true },
     gaps: { set(idx, bands) { c.set = { idx, bands }; } }, start: { set() {} }, lg: { badge: {} },
     title() {}, message() {}, viewNow: () => null, build() { c.chart = c.fakeChart; c.drawGaps(); },
