@@ -630,3 +630,493 @@ def test_a_carried_row_is_never_a_trade_and_never_makes_the_day_not_flat(days):
     day.on_desk(snap(orders={1: WORKING}, flat=True, answered=[2], rounds=[old]))
     feed(day, "09:30:01", [21000.0] * 60)
     assert day.trades() == [] and day.summary()["trades"] == [] and plots(day)["status working"][0][1] == 1.0
+
+
+# ================================================================ the runner: which days run in desk mode
+from homebase.labrun import store  # noqa: E402
+from tests.labrun_desk_util import LIMITS, sidecar, state  # noqa: E402
+from tests.test_labrun_host import Desk as Kit  # noqa: E402  (a Runner on a temp store, fed by hand)
+
+
+@pytest.fixture
+def kit(tmp_path):
+    """A Runner with a line to a stub Desk. kit(desk=None) is a runner started without --desk."""
+    made = []
+
+    def make(desk="stub", **kw):
+        stub = StubDesk() if desk == "stub" else desk
+        k = Kit(tmp_path, **({"desk": stub} if stub is not None else {}), **kw)
+        k.stub = stub
+        made.append(k)
+        return k
+    yield make
+    for k in made:
+        k.r._nap = lambda s: None
+        k.r.close()
+        assert not [p for p in k.spawned if p.poll() is None]
+
+
+def booked(k, source=ONE, **kw):
+    k.promote(source)
+    store.put_desk("lab_x", sidecar(source, **kw), k.at)
+
+
+def before_the_window(k, source=ONE, up=True):
+    """09:00: the session's prints so far, the Desk's stream up, the strategy hosted."""
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    if up:
+        k.r.take(state(snap(source)))
+    k.r.sync()
+    return k.r.day("lab_x")
+
+
+def minute(k, start, px=21000.0, n=60):
+    """A minute of prints, one a second, then the stream's clock at the last (what the tick client hands over)."""
+    k.rows(start, [px] * n)
+    h, m, s = (int(x) for x in start.split(":"))
+    total = h * 3600 + m * 60 + s + n - 1
+    k.clock(f"{total // 3600:02d}:{total % 3600 // 60:02d}:{total % 60:02d}")
+
+
+def test_a_runner_without_a_desk_never_makes_a_desk_client_reads_no_key_and_hosts_in_shadow(kit, monkeypatch, tmp_path):
+    class Never:
+        def __init__(self, *a, **k):
+            raise AssertionError("a DeskClient was made by a runner that has no desk")
+    monkeypatch.setattr(host, "DeskClient", Never)
+    k = kit(desk=None)
+    booked(k)                                                                # accounts are booked: still shadow
+    day = before_the_window(k, up=False)
+    k.r.take(state(snap()))                                                  # (nothing reads what a desk would say)
+    k.r.take(("desk_beat", {"ok": True, "strategies": {DESK_ID: {"killed": True, "stopped": "x"}}}))
+    k.rows("09:29:50", [21000.0] * 11)
+    k.clock("09:30:01")
+    k.r.idle()
+    k.r.beat()
+    assert day.mode == "shadow" and day.desk is None and day.state == "running"
+    assert day.fills.working_entries == 1                                    # the tape's model holds the order
+    assert not store.tell_path("lab_x", DATE, k.at).exists() and "mode" not in k.today()
+    ran = []
+
+    class Loop(Exception):
+        pass
+
+    def tick_client(charts, roots, put):
+        ran.append(charts)
+        raise Loop()                                                         # (the process itself is not started here)
+    monkeypatch.setattr(host, "TickClient", tick_client)
+    with pytest.raises(Loop):
+        host.run("http://127.0.0.1:8852", tmp_path / "other")                # no desk: Never() was not called
+    assert ran == ["http://127.0.0.1:8852"]
+
+
+def test_with_a_desk_a_booked_strategy_hosted_before_its_window_runs_in_desk_mode(kit):
+    k = kit()
+    booked(k)
+    day = before_the_window(k)
+    assert day.mode == "desk" and day.desk.accounts == [ACCOUNT] and day.desk.desk_id == DESK_ID
+    assert store.tells("lab_x", DATE, k.at) == [{"head": 1, "strategy": DESK_ID, "mark": mark_of(ONE), "date": DATE}]
+    minute(k, "09:29:01")                                                    # .. 09:30:00
+    assert k.stub.ops() == [["entry"]] and day.fills.working_entries == 0
+    s = k.today()
+    assert s["mode"] == "desk" and s["state"] == "running" and "rebuilt" not in s
+    assert [o["text"] for o in s["orders"]] == ["Buy stop 21,005.00, stop 20,995.00, target 2 x the stop"]
+    assert [x["kind"] for x in k.journal()] == ["order"]                     # the journal, as in shadow
+    assert [t.get("seq") for t in store.tells("lab_x", DATE, k.at)[1:]] == [1, 1, 2, 2, 2]
+
+
+SHADOW_SIDECARS = {
+    "no sidecar": None,
+    "another promotion's": lambda: sidecar(mark=["x", "2026-10-01T00:00:00+00:00"]),
+    "no account": lambda: sidecar(accounts=()),
+    "no limits": lambda: sidecar(limits=None),
+    "limits that do not read": lambda: sidecar(limits={**LIMITS, "flat_et": "17:00"}),
+    "a book that is not one": lambda: sidecar(book="a1"),
+}
+
+
+@pytest.mark.parametrize("case", list(SHADOW_SIDECARS))
+def test_anything_but_a_whole_booking_is_shadow_exactly_as_today(kit, case):
+    k = kit()
+    k.promote(ONE)
+    if SHADOW_SIDECARS[case] is not None:
+        store.put_desk("lab_x", SHADOW_SIDECARS[case](), k.at)
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    assert day.mode == "shadow" and day.fills.working_entries == 1 and k.stub.bodies == []
+    assert "mode" not in k.today() and not store.tell_path("lab_x", DATE, k.at).exists()
+
+
+def test_a_sidecar_that_cannot_be_read_is_no_book(kit):
+    k = kit()
+    k.promote(ONE)
+    (k.at / "lab_x.desk.json").write_text('{"mark": ["half a fi')
+    day = before_the_window(k)
+    assert day.mode == "shadow"
+
+
+def test_a_day_made_after_its_window_began_is_shadow_today_and_the_heartbeat_says_so(kit):
+    k = kit()
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:29:50", [21000.0] * 11)
+    k.clock("09:30:05")
+    k.r.take(state(snap()))
+    booked(k)                                                                # booked at 09:30:05: the window began 09:25
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day.mode == "shadow" and day.rebuilt is True and day.fills.working_entries == 1
+    assert k.stub.bodies == [] and not store.tell_path("lab_x", DATE, k.at).exists()
+    k.r.beat()
+    assert k.stub.said[-1]["strategies"] == {DESK_ID: {"state": "running", "why": None, "mode": "shadow"}}
+    for _ in range(3):
+        k.r.sync()
+    assert k.r.day("lab_x") is day and len(k.spawned) == 1                   # it stays: the next session starts it
+
+
+def test_an_account_assigned_before_the_window_begins_starts_the_day_again_in_desk_mode(kit):
+    k = kit()
+    k.promote(ONE)
+    first = before_the_window(k)
+    assert first.mode == "shadow"
+    store.put_desk("lab_x", sidecar(), k.at)                                 # 09:00: the owner books an account
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day is not first and day.mode == "desk" and first.child_alive() is False
+    minute(k, "09:29:01")
+    assert k.stub.ops() == [["entry"]]
+
+
+def test_an_account_assigned_after_the_window_began_changes_nothing_today(kit):
+    k = kit()
+    k.promote(ONE)
+    first = before_the_window(k)
+    minute(k, "09:24:02")                                                    # 09:25:01: the window has begun
+    store.put_desk("lab_x", sidecar(), k.at)
+    k.r.sync()
+    minute(k, "09:29:01")
+    assert k.r.day("lab_x") is first and first.mode == "shadow" and len(k.spawned) == 1 and k.stub.bodies == []
+    k.r.beat()
+    assert k.stub.said[-1]["strategies"][DESK_ID]["mode"] == "shadow"
+
+
+def test_every_account_taken_off_mid_day_ends_the_desk_day_done_and_no_shadow_day_takes_its_place(kit):
+    k = kit()
+    booked(k)
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    store.put_desk("lab_x", sidecar(accounts=()), k.at)                      # the Desk allows it only when it is flat
+    k.r.sync()
+    assert day.state == "done" and day.child_alive() is False and k.today()["state"] == "done"
+    for _ in range(3):
+        minute(k, "09:30:01")
+        k.r.sync()
+    assert len(k.spawned) == 1 and k.r.hosting() == [] and k.stub.ops() == [["entry"]]     # no stop either
+    assert k.today()["mode"] == "desk"
+
+
+def test_accounts_taken_off_before_the_day_began_make_it_a_shadow_day(kit):
+    k = kit()
+    booked(k)
+    first = before_the_window(k)
+    store.put_desk("lab_x", sidecar(accounts=()), k.at)
+    k.r.sync()
+    day = k.r.day("lab_x")
+    assert day is not first and day.mode == "shadow" and day.state == "waiting"
+    store.put_desk("lab_x", sidecar(accounts=("a2",)), k.at)                 # ... and booked again, still before 09:25
+    k.r.sync()
+    assert k.r.day("lab_x").mode == "desk" and k.r.day("lab_x").desk.accounts == ["a2"]
+    assert [t.get("head") for t in store.tells("lab_x", DATE, k.at)] == [1]  # one head line: it was never begun
+
+
+def test_the_book_is_read_again_and_only_decides_the_lead_account(kit):
+    k = kit()
+    booked(k, accounts=("a1", "a2"))
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    k.r.take(("desk", "strategy", snap(orders={1: filled()}, answered=[2],
+                                       rounds=[rnd(account="a1", pnl=10.0), rnd(account="a2", pnl=20.0)])))
+    assert [t["net"] for t in day.trades()] == [10.0]
+    store.put_desk("lab_x", sidecar(accounts=("a2", "a1")), k.at)
+    k.r.sync()
+    assert k.r.day("lab_x") is day and [t["net"] for t in day.trades()] == [20.0] and len(k.spawned) == 1
+
+
+# ---------------------------------------------------------------- the heartbeat
+def test_the_heartbeat_names_every_hosted_strategy_by_its_desk_id_with_its_mode(kit):
+    k = kit()
+    booked(k)
+    k.promote(MARKET_930, name="lab_y")                                      # no account: shadow
+    before_the_window(k)
+    k.r.beat()
+    import os
+    assert k.stub.said[-1] == {"pid": os.getpid(), "strategies": {
+        DESK_ID: {"state": "waiting", "why": None, "mode": "desk"},
+        "lab_lab_y": {"state": "waiting", "why": None, "mode": "shadow"}}}
+    n = len(k.stub.said)
+    k.r.idle()                                                               # said again on every turn of the loop:
+    assert len(k.stub.said) == n + 1 and k.stub.said[-1] is k.stub.said[-2]  # the timer posts only what is fresh
+    k.r.take(("desk_down",))
+    minute(k, "09:29:01")
+    k.r.beat()
+    assert k.stub.said[-1]["strategies"][DESK_ID] == {"state": "running", "why": "The Desk is not answering.", "mode": "desk"}
+    assert k.stub.bodies == []                                               # ... and no entry left
+    assert store.get_runner(k.at)["hosting"] == ["lab_x", "lab_y"]           # the runner's own file, as before
+
+
+def test_the_heartbeats_answer_is_advice_it_never_sends_and_it_stops_a_child_the_desk_killed(kit):
+    k = kit()
+    booked(k)
+    k.promote(MARKET_930, name="lab_y")
+    day = before_the_window(k)
+    other = k.r.day("lab_y")
+    minute(k, "09:29:01")
+    n = len(k.stub.bodies)
+    k.r.take(("desk_beat", {"ok": True, "armed": True, "strategies": {
+        DESK_ID: {"enabled": True, "killed": False, "stopped": None},
+        "lab_lab_y": {"enabled": True, "killed": True, "stopped": None}}}))
+    assert day.state == "running" and other.state == "stopped" and k.today("lab_y")["why"] == "Killed today."
+    k.r.take(("desk_beat", {"ok": True, "armed": False, "strategies": {DESK_ID: {"enabled": False, "killed": False,
+                                                                                "stopped": "off"}}}))
+    assert day.state == "stopped" and k.today()["why"] == "Stopped for today." and len(k.stub.bodies) == n
+    assert [x["kind"] for x in k.journal()] == ["order", "stop"]
+
+
+def test_yesterdays_stop_never_ends_a_day_hosted_the_evening_before(kit):
+    """18:00 ET: the session rolls and tomorrow's day is hosted, while the Desk's own day is still today's. Its
+    "stopped" is about today."""
+    k = kit()
+    booked(k)
+    day = before_the_window(k, up=False)
+    k.r.take(state(snap(stopped="off", date="2024-03-04"), date="2024-03-04"))        # the Desk's day: the 4th
+    k.r.take(("desk_beat", {"ok": True, "strategies": {DESK_ID: {"enabled": True, "killed": True, "stopped": "off"}}}))
+    assert day.state == "waiting" and day.desk.silent() is True and k.stub.bodies == []
+    k.r.take(state(snap()))                                                  # midnight: the Desk's day is ours
+    assert day.state == "waiting" and day.desk.silent() is False
+
+
+# ---------------------------------------------------------------- the Desk has ended the day
+@pytest.mark.parametrize("word, why", [({"stopped": "off"}, "Stopped for today."), ({"killed": True}, "Killed today.")])
+@pytest.mark.parametrize("booking", ["booked", "no account"])
+def test_a_strategy_the_desk_has_stopped_is_not_hosted_in_any_mode_and_its_day_file_says_so(kit, word, why, booking):
+    k = kit()
+    k.promote(ONE)
+    if booking == "booked":
+        store.put_desk("lab_x", sidecar(), k.at)
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:20:00", [21000.0] * 2)
+    k.r.take(state(snap(**word)))
+    for _ in range(3):
+        k.r.sync()
+    assert k.spawned == [] and k.r.day("lab_x") is None
+    s = k.file()
+    assert (s["state"], s["why"], s["orders"], s["trades"]) == ("stopped", why, [], [])
+    assert [(x["kind"], x["why"]) for x in k.journal()] == [("stop", why)] and k.stub.bodies == []
+
+
+def test_what_an_earlier_runner_wrote_of_the_day_stays_when_the_desk_has_stopped_it(kit):
+    k = kit()
+    booked(k)
+    was = {"date": DATE, "sha256": mark_of(ONE)[0], "promoted_utc": mark_of(ONE)[1], "state": "running", "why": None,
+           "orders": [{"t": "09:30:00", "text": "Buy at market", "refused": None}], "trades": [], "net": 0.0,
+           "match": None, "updated_utc": "x", "mode": "desk"}
+    store.put_day("lab_x", was, k.at)
+    k.r.take(state(snap(stopped="Both entries filled.")))
+    k.clock("09:00:00")
+    k.open()
+    k.rows("09:40:00", [21000.0] * 2)
+    k.clock("09:40:05")
+    k.r.sync()
+    s = k.file()
+    assert (s["state"], s["why"], s["orders"], s["mode"]) == ("stopped", "Stopped for today.", was["orders"], "desk")
+    assert k.spawned == []
+
+
+def test_a_shadow_day_is_stopped_too_when_the_desk_says_the_strategy_is_stopped_today(kit):
+    k = kit()
+    k.promote(ONE)
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    k.r.take(("desk", "strategy", {**snap(stopped="off"), "mark": ["x", "y"]}))      # another promotion's: no
+    k.r.take(("desk", "strategy", {**snap(stopped="off"), "date": "2024-03-04"}))    # another day's: no
+    assert day.state == "running"
+    k.r.take(("desk", "strategy", snap(stopped="off")))
+    assert day.state == "stopped" and k.today()["why"] == "Stopped for today." and k.stub.bodies == []
+
+
+# ---------------------------------------------------------------- the stream, as the runner hands it on
+def test_the_runner_hands_each_snapshot_to_its_day_and_says_when_the_stream_is_down(kit):
+    k = kit()
+    booked(k)
+    day = before_the_window(k, up=False)
+    assert day.desk.silent() is True
+    k.r.take(state(snap(flat=False)))
+    assert day.desk.silent() is False and day.desk.flat is False
+    k.r.take(("desk", "strategy", {**snap(flat=True), "strategy": "lab_other"}))     # another strategy's
+    assert day.desk.flat is False
+    k.r.take(("desk", "strategy", snap(flat=True)))
+    assert day.desk.flat is True
+    k.wall[0] += 14.0
+    k.r.take(("desk", "heartbeat", {"ts": 1.0}))                             # the stream is alive
+    k.wall[0] += 14.0
+    assert day.desk.silent() is False
+    k.r.take(("desk_down",))
+    assert day.desk.silent() is True
+    k.r.take(state())                                                        # back, and it does not list us
+    assert day.desk.silent() is True
+    k.r.take(state(snap()))
+    assert day.desk.silent() is False
+
+
+def test_a_day_made_while_the_stream_is_down_knows_it(kit):
+    k = kit()
+    booked(k)
+    k.r.take(state(snap()))
+    k.r.take(("desk_down",))
+    day = before_the_window(k, up=False)
+    assert day.mode == "desk" and day.desk.silent() is True
+    minute(k, "09:29:01")
+    assert k.stub.bodies == [] and k.today()["orders"][0]["refused"] == "The Desk is not answering."
+
+
+# ---------------------------------------------------------------- the runner's own stops and its idle step
+def test_a_runner_that_shuts_down_ends_each_begun_desk_day_and_no_other(kit):
+    k = kit()
+    booked(k)
+    k.promote(MARKET_930, name="lab_y")
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    k.r._nap = lambda s: None
+    k.r.close()
+    assert k.stub.ops() == [["entry"], ["stop"]]
+    assert k.stub.bodies[-1]["intents"] == [{"op": "stop", "why": "Stopped for today.", "flatten": False}]
+    assert (k.file()["state"], k.file()["why"]) == ("stopped", "Stopped for today.")
+    assert k.file("lab_y")["state"] == "running"                             # the shadow day: as it always was
+
+
+def test_a_shutdown_asks_again_for_ten_seconds_and_leaves_the_day_to_be_picked_up_if_the_desk_never_answers(kit):
+    k = kit()
+    booked(k)
+    before_the_window(k)
+    minute(k, "09:29:01")
+    k.stub.script = [StubDesk.NO_ANSWER] * 99
+    naps = []
+
+    def nap(s):
+        naps.append(s)
+        k.wall[0] += s
+    k.r._nap = nap
+    k.r.close()
+    assert naps == [1.0] * 10 and len(k.stub.bodies) == 1 + 1 + 10
+    assert len({json.dumps(b) for b in k.stub.bodies[1:]}) == 1              # the same stop, the same seq
+    assert k.file()["state"] == "running"                                    # not final: the next runner picks it up
+
+
+def test_switched_off_the_stop_is_sent_and_asked_again_from_the_idle_step(kit):
+    k = kit()
+    booked(k)
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    k.stub.script = [StubDesk.NO_ANSWER]
+    store.set_enabled("lab_x", False, k.at)
+    k.r.sync()
+    assert day.state == "off" and k.r.day("lab_x") is None and k.stub.ops() == [["entry"], ["stop"]]
+    k.wall[0] += 1.0
+    k.r.idle()
+    assert k.stub.ops() == [["entry"], ["stop"], ["stop"]] and k.stub.bodies[1] == k.stub.bodies[2]
+    assert k.stub.bodies[1]["intents"] == [{"op": "stop", "why": "off", "flatten": False}]
+    k.wall[0] += 5.0
+    k.r.idle()
+    assert len(k.stub.bodies) == 3
+
+
+def test_twenty_seconds_without_a_clock_from_the_tick_stream_cancels_the_unfilled_entries(kit):
+    k = kit()
+    booked(k)
+    before_the_window(k)
+    minute(k, "09:29:01")
+    k.wall[0] += 19.0
+    k.r.idle()
+    assert k.stub.ops() == [["entry"]]
+    k.wall[0] += 1.5
+    k.r.idle()
+    k.r.idle()
+    assert k.stub.ops() == [["entry"], ["cancel"]]
+
+
+# ---------------------------------------------------------------- the daily match of a desk day
+def a_desk_day_with_a_trade(k, qty=1, **round_kw):
+    booked(k)
+    day = before_the_window(k)
+    minute(k, "09:29:01")
+    k.r.take(("desk", "strategy", snap(orders={1: filled()}, answered=[2], rounds=[rnd(qty=qty, **round_kw)])))
+    k.rows("15:59:58", [21030.0] * 2)
+    k.clock("16:00:03")
+    assert day.state == "done"
+    return day
+
+
+def test_a_desk_days_match_compares_the_lead_accounts_real_trades_at_the_desks_size(kit):
+    k = kit()
+    a_desk_day_with_a_trade(k, qty=2)
+    k.clock("17:35:00")
+    ((name, date, trades),) = k.matcher.calls
+    assert trades == [{"side": "long", "qty": 2, "entry_ns": at("09:30:30"), "entry_price": 21005.25,
+                       "exit_ns": at("09:40:00"), "exit_price": 21025.25, "exit_reason": "tp", "net": 400.0}]
+    assert k.file()["match"] == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}       # (the stub matcher's)
+    assert k.file()["trades"][0]["qty"] == 2
+
+
+def test_the_tester_is_run_at_the_size_the_desk_traded_and_judged_by_the_shadow_matchs_own_rule():
+    from homebase.labrun import match
+    r = rec(ONE)
+    assert host.sized(r, [{"qty": 3}])["qty"] == 3 and host.sized(r, [])["qty"] == 1 and host.sized(r, [{"qty": 0}]) is r
+    real = [{"side": "long", "qty": 1, "entry_ns": at("09:30:30"), "entry_price": 21005.25, "exit_ns": at("09:40:00"),
+             "exit_price": 21025.25, "exit_reason": "tp", "net": 400.0}]
+    tester = [{**real[0], "entry_price": 21005.75, "entry_ns": at("09:30:31"), "net": 380.0}]     # 2 ticks, 1 s
+    assert match.compare(real, tester, 0.25) == {"ok": True, "text": "Matched the backtest: 1 of 1 trade."}
+    far = [{**real[0], "entry_price": 21006.0}]                              # 3 ticks: the first difference
+    assert match.compare(real, far, 0.25)["text"] == \
+        "Did not match at trade 1: entry price 21,005.25 on the Desk, 21,006.00 in the backtest."
+
+
+def test_a_trade_that_filled_after_the_day_ended_is_in_the_match(kit):
+    k = kit()
+    day = a_desk_day_with_a_trade(k, exit_=None, reason=None, pnl=None, status="live")
+    assert day.trades() == []
+    k.r.take(("desk", "strategy", snap(orders={1: filled()}, answered=[2], rounds=[rnd(reason="flat", exit_t="15:55:01")])))
+    assert k.today()["trades"][0]["reason"] == "flat"                        # the day file, within a second
+    k.clock("17:35:00")
+    assert [t["exit_reason"] for t in k.matcher.calls[0][2]] == ["flat"] and k.file()["trades"][0]["reason"] == "flat"
+
+
+def test_a_desk_day_with_a_trade_whose_price_the_desk_does_not_hold_is_not_compared(kit):
+    k = kit()
+    a_desk_day_with_a_trade(k, exit_=None, reason="flat", pnl=None)
+    k.clock("17:35:00")
+    k.settle()
+    k.r.idle()
+    assert k.matcher.calls == [] and k.file()["match"] == {"ok": None, "text": "Not checked: a trade's fills are not known."}
+    assert k.file()["unpriced"] == 1
+
+
+def test_a_restart_matches_a_finished_desk_day_from_its_file_at_the_desks_size(kit):
+    k = kit()
+    a_desk_day_with_a_trade(k, qty=2)
+    k.r._nap = lambda s: None
+    k.r.close()
+    again = kit(live=False)
+    again.r.sync()
+    again.r.take(("connect",))
+    again.open()
+    again.rows("16:59:58", [21015.0] * 2)
+    again.r.take(("live",))
+    again.clock("17:36:00")
+    again.r.sync()
+    again.clock("17:36:05")
+    ((name, date, trades),) = again.matcher.calls
+    assert [(t["qty"], t["exit_reason"]) for t in trades] == [(2, "tp")] and again.spawned == []
+    m = next(iter(again.r._matches.values()))
+    assert m.rec["qty"] == 2

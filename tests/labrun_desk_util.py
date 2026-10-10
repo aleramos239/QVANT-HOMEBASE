@@ -106,6 +106,10 @@ class StubDesk:
     def __init__(self, *script):
         self.bodies: list[dict] = []
         self.script = list(script)
+        self.said: list[dict] = []                   # every heartbeat body the runner handed over (DeskClient.say)
+
+    def say(self, body: dict) -> None:
+        self.said.append(body)
 
     def take(self, body: dict) -> dict:
         rows = []
@@ -187,5 +191,19 @@ def plots(day) -> dict:
     return day.fills.result.plots
 
 
-__all__ = ["ACCOUNT", "D", "DATE", "DESK_ID", "EVERY", "NAME", "ONE", "REPLACE", "StubDesk", "Wall", "at", "desk_day",
+LIMITS = {"max_trades_day": 3, "max_qty": 2, "max_risk_usd": 300, "last_entry_et": "11:00", "flat_et": "15:55"}
+
+
+def sidecar(source=ONE, accounts=(ACCOUNT,), **kw) -> dict:
+    """The Desk's sidecar for the strategy (labcfg: mark, limits, book)."""
+    return {"mark": mark_of(source), "limits": dict(LIMITS), "book": [{"account": a, "qty": 1} for a in accounts],
+            "written_utc": "2026-10-10T08:00:00+00:00", **kw}
+
+
+def state(*snaps, date=DATE) -> tuple:
+    """The stream's first event, as DeskClient puts it on the runner's queue."""
+    return ("desk", "state", {"date": date, "armed": True, "strategies": {s["strategy"]: s for s in snaps}})
+
+
+__all__ = ["LIMITS", "sidecar", "state", "ACCOUNT", "D", "DATE", "DESK_ID", "EVERY", "NAME", "ONE", "REPLACE", "StubDesk", "Wall", "at", "desk_day",
            "feed", "filled", "mark_of", "ms_of", "plots", "rec", "rnd", "snap", "ticks"]
