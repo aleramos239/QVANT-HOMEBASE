@@ -644,11 +644,17 @@ def _defaults() -> dict:
     }
 
 
+# a starting distance, points stop and points target that fit each market (whole ticks); the defaults stay NQ's
+SIZES = {"NQ": (15.0, 50.0, 150.0), "ES": (4.0, 12.0, 36.0), "YM": (30.0, 100.0, 300.0), "RTY": (3.0, 8.0, 24.0),
+         "GC": (2.0, 5.0, 15.0), "SI": (0.05, 0.15, 0.45)}
+
+
 def schema() -> dict:
     """Everything the page needs to draw the form with no knowledge of the rules."""
     return {
         "markets": list(MARKETS),
         "ticks": {m: tick_size(m) for m in MARKETS},
+        "sizes": {m: dict(zip(("distance", "stop", "target_points"), SIZES[m])) for m in MARKETS},
         "sides": [list(s) for s in SIDES],
         "rules": [{"id": r, "label": RULE_TEXT[r][0], "words": RULE_TEXT[r][1], "fields": list(RULE_FIELDS[r]),
                    "sides": ["long", "short"] if r == "at_time" else [s for s, _ in SIDES]} for r in RULE_FIELDS],

@@ -112,6 +112,30 @@ def test_the_schema_says_which_rule_a_stop_choice_belongs_to():
                 assert e.value.field == "stop"
 
 
+SIZES = {"NQ": (15, 50, 150), "ES": (4, 12, 36), "YM": (30, 100, 300), "RTY": (3, 8, 24), "GC": (2, 5, 15),
+         "SI": (0.05, 0.15, 0.45)}
+
+
+def test_the_schema_has_starting_numbers_that_fit_each_market():
+    s = lab_forms.schema()
+    assert list(s["sizes"]) == list(SIZES)
+    for market, (distance, stop, target) in SIZES.items():
+        got = s["sizes"][market]
+        assert got == {"distance": distance, "stop": stop, "target_points": target}
+        tick = s["ticks"][market]
+        for key, v in got.items():                                  # whole ticks, and a stop of at least two
+            assert abs(v / tick - round(v / tick)) < 1e-9, (market, key)
+        assert got["stop"] >= 2 * tick and got["distance"] >= tick and got["target_points"] >= tick
+        # the same three numbers build a strategy on that market, one rule that uses all of them
+        a = base("open_straddle", market=market, distance=got["distance"], stop={"kind": "points", "value": got["stop"]},
+                 target={"kind": "points", "value": got["target_points"]})
+        assert lab_forms.build(a)
+    assert s["defaults"]["open_straddle"]["market"] == "NQ"        # the defaults stay NQ's
+    nq = s["sizes"]["NQ"]
+    d = s["defaults"]["open_straddle"]
+    assert (d["distance"], d["stop"]["value"]) == (nq["distance"], nq["stop"])
+
+
 def test_the_js_tests_use_the_real_schema():
     """tests/js/labcode.test.mjs reads this file instead of keeping a pasted copy of the schema."""
     from pathlib import Path

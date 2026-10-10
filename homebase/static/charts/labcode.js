@@ -648,11 +648,38 @@ function fmSides(sc, rule) {
 }
 /* a choice that asks for a number has limits in the schema (points: min_ticks; a ratio: min / max) */
 const fmHasValue = (k) => !!k && (k.min_ticks != null || k.min != null || k.max != null);
-/* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else any rule's */
-function fmKindValue(sc, rule, field, kind) {
+/* the number a stop or target choice starts from: this rule's default if it has that choice, else the field's, else any rule's.
+   With a market and the schema's per-market starting numbers, a points choice starts at that market's own. */
+function fmKindValue(sc, rule, field, kind, market) {
+  const key = FM_SIZE[field], size = kind === 'points' && key ? fmSize(sc, market, key) : null;
+  if (size != null) return size;
   const f = fmField(sc, field), d = (sc && sc.defaults) || {};
   const hit = [d[rule] && d[rule][field], f && f.default, ...Object.values(d).map((x) => x && x[field])].find((x) => x && x.kind === kind && x.value != null);
   return hit ? hit.value : '';
+}
+/* ---- starting numbers that fit the market: schema.sizes[market] = { distance, stop, target_points } ---- */
+const FM_SIZE = { stop: 'stop', target: 'target_points' };       // the size each points choice starts at
+const fmSize = (sc, market, key) => { const m = sc && sc.sizes && sc.sizes[market]; return m && typeof m[key] === 'number' ? m[key] : null; };
+/* A copy of the state whose boxes that still hold the `from` market's starting number hold the `to` market's. Only a box that is
+   exactly that number changes: a number typed by hand, a ratio, the range stop and an empty box are left as they are. */
+function fmFit(sc, st, from, to) {
+  const next = fmClone(st);
+  if (from === to) return next;
+  const fit = (raw, key) => {
+    const a = fmSize(sc, from, key), b = fmSize(sc, to, key), v = fmParse(raw);
+    return a != null && b != null && v !== undefined && v === a ? b : raw;
+  };
+  if ('distance' in next) next.distance = fit(next.distance, 'distance');
+  for (const f of ['stop', 'target']) {
+    if (next[f] && next[f].kind === 'points') next[f].value = fit(next[f].value, FM_SIZE[f]);
+  }
+  return next;
+}
+/* the market changed: the boxes still holding the old market's starting numbers take the new market's */
+function fmSetMarket(sc, st, market) {
+  const next = fmFit(sc, st, st.market, market);
+  next.market = market;
+  return next;
 }
 /* the words under a field: the rule's own when the schema has some for it (words_by_rule), else the field's */
 function fmWords(sc, rule, field) {
@@ -682,7 +709,8 @@ function fmStart(sc, taken = []) {
 function fmSwitch(sc, st, rule) {
   const d = sc && sc.defaults && sc.defaults[rule];
   if (!d) return st;
-  const next = fmClone(d), keys = fmKeys(sc, rule);
+  const keys = fmKeys(sc, rule), next = fmFit(sc, d, d.market, st.market);      // the rule's own boxes start at this market's numbers
+  next.market = d.market;
   next.rule = rule;
   for (const k of FM_KEEP) {
     if (st[k] === undefined || (k !== 'name' && !keys.includes(k))) continue;
@@ -769,7 +797,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
   plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
-  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
+  FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
   plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

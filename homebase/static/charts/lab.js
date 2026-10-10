@@ -680,16 +680,19 @@ async function formOpen(anchor, edit = null) {
   const onEdit = (e) => {
     const t = e.target, f = t.dataset && t.dataset.fm;
     if (!f || (t.tagName === 'SELECT') !== (e.type === 'change')) return;      // a box counts as it is typed, a list when it is chosen
-    if (f === 'rule') { F = C.fmSwitch(sc, F, t.value); suggest(); rest.innerHTML = restHtml(); }
+    if (f === 'rule' || f === 'market') {         // a market change gives the boxes still at the old market's starting numbers the new one's
+      F = f === 'rule' ? C.fmSwitch(sc, F, t.value) : C.fmSetMarket(sc, F, t.value);
+      suggest(); rest.innerHTML = restHtml();
+    }
     else if (f === 'stop' || f === 'target') {
       if (t.dataset.part === 'kind') {
         const k = C.fmKinds(sc, F.rule, f).find((x) => x.id === t.value), v = $(`#fm_${id(f)}_v`, d);
-        F[f] = C.fmHasValue(k) ? { kind: t.value, value: C.fmKindValue(sc, F.rule, f, t.value) } : { kind: t.value };
+        F[f] = C.fmHasValue(k) ? { kind: t.value, value: C.fmKindValue(sc, F.rule, f, t.value, F.market) } : { kind: t.value };
         v.value = F[f].value == null ? '' : F[f].value; v.hidden = !C.fmHasValue(k);
       } else F[f] = { ...F[f], value: t.value };
     } else {
       F[f] = t.value;
-      if (f === 'name') touched = true; else if (f === 'market') suggest();
+      if (f === 'name') touched = true;
     }
     touch(f);
   };
