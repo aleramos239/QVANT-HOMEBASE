@@ -815,7 +815,9 @@ def test_every_account_taken_off_mid_day_ends_the_desk_day_done_and_no_shadow_da
     for _ in range(3):
         minute(k, "09:30:01")
         k.r.sync()
-    assert len(k.spawned) == 1 and k.r.hosting() == [] and k.stub.ops() == [["entry"]]     # no stop either
+    assert len(k.spawned) == 1 and k.r.hosting() == [] and k.stub.ops() == [["entry"], ["stop"]]
+    assert k.stub.bodies[1]["intents"] == [{"op": "stop", "why": "Stopped for today.", "flatten": False}]   # (R3: one
+    # stop that keeps the position, once)
     assert k.today()["mode"] == "desk"
 
 
