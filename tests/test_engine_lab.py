@@ -3612,3 +3612,29 @@ def test_the_roll_for_a_strategy_that_returns_is_bounded(tmp_path):
     e3.cfg.strategies[X] = cfg.strategies[X]
     assert e3.lab_open(X) == [] and rolls3 == [None, [X]]
     assert len(carried()) == 3 and e3.lab_rounds(X) == []
+
+
+# ------------------------------------------------------------------------------------------------ B7, item 10
+def test_a_second_flatten_of_a_round_its_own_exit_fill_closed_meanwhile_says_so(tmp_path):
+    """The close order is out; he presses Flatten again and the exit fill lands while the position is being read:
+    nothing more is sent, and the answer says what happened in the same words as the flatten's other paths."""
+    eng, ads, _ = mk(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    st = rnd(eng)
+    fill_entry(eng, ad, st, 100.0)
+    first = run(eng.lab_flatten(LAB, reason="time"))["a1"]
+    assert first["sold"] == 1 and st.status == "live"
+    real = ad.get_net_position
+
+    async def net(symbol):
+        if st.status == "live":                                     # its own close fills right now
+            ad.net -= 1
+            await eng.on_fill(FillEvent(account_id="a1", symbol="NQZ6", side="Sell", qty=1, price=99.5,
+                                        raw={"orderId": "plain"}))
+        return await real(symbol)
+
+    ad.get_net_position = net
+    out = run(eng.lab_flatten(LAB, reason="time"))["a1"]
+    assert out == {"ok": True, "sold": 0, "actions": ["This trade had already ended."]}
+    assert (st.status, st.exit_reason) == ("done", "time") and len(ad.orders) == 1      # ONE close order, ever

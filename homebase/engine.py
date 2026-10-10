@@ -3264,7 +3264,8 @@ class Engine:
             acts.append(f"check it — position unreadable ({e}); stops left working")
             return ans(False)
         if st.status not in ("placed", "live"):
-            return ans(True)                         # its exit fill closed it meanwhile
+            acts.append("This trade had already ended.")     # its exit fill closed it meanwhile
+            return ans(True)
         waited = now - int(x.get("close_sent_ms") or now) >= LAB_UNCONFIRMED_S * 1000
         if net == 0:
             if x.get("unconfirmed") or waited:
