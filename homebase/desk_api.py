@@ -272,6 +272,118 @@ def trade_router(desk) -> APIRouter:
     return r
 
 
+# ---- the runner's door (Step B, task B3): /api/lab/* -------------------------------------------------
+# A promoted Lab strategy's orders reach the desk through these four routes and nowhere else. They have their
+# OWN gate and their OWN key (lab.key): the chart service's key (desk.key) must never be able to send a
+# strategy order, and the runner's key must never be able to trade from the chart. The routes also pass
+# WriteGuard (it skips only /api/trade/): both gates apply. Everything they do is LabDesk's (labdesk.py).
+from .labdesk import SWITCHED_OFF as LAB_SWITCHED_OFF  # noqa: E402 -- here, with the one section that uses them
+from .labdesk import Refused as LabRefused  # noqa: E402
+
+LAB_KEY_FILE = "lab.key"
+LAB_HEARTBEAT_S = 5.0             # the stream says it is alive this often (the runner calls 15 s of silence "down")
+
+
+def runner_gate(request: Request) -> None:
+    """The gate of /api/lab/*: the Host exactly 127.0.0.1 or localhost (403), no Origin at all (403: browsers
+    send one, the runner does not), X-Homebase-Key equal to the key in lab.key (401); 503 when that key
+    could not be read or made at the start (`lab_key_error` in the journal)."""
+    local_host_only(request)
+    if request.headers.get("origin") is not None:
+        raise HTTPException(403, "browser requests are refused — only the Lab runner sends strategy orders")
+    key = getattr(request.app.state, "lab_key", None)
+    if not key:
+        raise HTTPException(503, "the runner's key is not available — see lab_key_error in the journal")
+    got = request.headers.get("x-homebase-key", "")
+    if not hmac.compare_digest(got.encode(), key.encode()):
+        raise HTTPException(401, "bad or missing X-Homebase-Key")
+
+
+async def lab_stream(labdesk, *, heartbeat_s: float = LAB_HEARTBEAT_S, poll_s: float = PAUSE_POLL_S):
+    """The stream back to the runner (design C5): `state` first (every Lab strategy's whole snapshot), then one
+    `strategy` event per snapshot that changed, and a heartbeat when nothing was sent for heartbeat_s. Level
+    triggered: every event is a whole snapshot, so a reader that reconnects needs nothing replayed. It
+    subscribes BEFORE the first snapshot, so no change in between is lost. No snapshot is built while a non-Lab
+    strategy is placing (the 9:30 orders): the first state waits for the acks. Ends when the desk dropped this
+    reader (it fell behind): the runner reconnects."""
+    q = labdesk.subscribe()
+    loop = asyncio.get_running_loop()
+    started = False
+    last = loop.time()
+    try:
+        while True:
+            if not started and not labdesk.held():
+                started = True
+                yield sse("state", labdesk.snapshot())
+                last = loop.time()
+                continue
+            wait = heartbeat_s - (loop.time() - last)
+            if not started:
+                wait = min(wait, poll_s)
+            try:
+                event, data = await asyncio.wait_for(q.get(), max(wait, 0.0))
+            except asyncio.TimeoutError:
+                if loop.time() - last >= heartbeat_s:
+                    yield sse("heartbeat", {"ts": time.time()})
+                    last = loop.time()
+                continue
+            if event is None:
+                return
+            if started:                # before the first state: that state carries it
+                yield sse(event, data)
+                last = loop.time()
+    finally:
+        labdesk.unsubscribe(q)
+
+
+def labdesk_router(labdesk) -> APIRouter:
+    """POST /intent (one event of one strategy), GET /stream, POST /heartbeat, GET /state: for the Lab runner
+    only (runner_gate). With the desk's Lab side off every one of them answers 409, behind the gate."""
+    r = APIRouter()
+
+    def check(request: Request) -> None:
+        runner_gate(request)
+        if not labdesk.on:
+            raise HTTPException(409, LAB_SWITCHED_OFF)
+
+    @r.post("/intent")
+    async def lab_intent(request: Request):
+        check(request)
+        body = await read_json(request, BODY_MAX)
+        try:
+            return await labdesk.event(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        except LabRefused as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @r.post("/heartbeat")
+    async def lab_heartbeat(request: Request):
+        check(request)
+        body = await read_json(request, BODY_MAX)
+        try:
+            return labdesk.heartbeat(body)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        except LabRefused as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @r.get("/state")
+    async def lab_state(request: Request):
+        check(request)
+        if labdesk.held():                  # no snapshot is built while the 9:30 orders are placing
+            return JSONResponse({"error": PAUSED}, 503)
+        return labdesk.snapshot()
+
+    @r.get("/stream")
+    async def lab_stream_route(request: Request):
+        check(request)
+        return EventStreamResponse(lab_stream(labdesk), media_type="text/event-stream",
+                                   headers={"Cache-Control": "no-cache"})
+
+    return r
+
+
 def same_origin_json(request: Request, allowed: frozenset) -> None:
     """The desk page's own POSTs: an allowed Host (P4 — the Origin check
     alone compares Origin to Host, and a rebound page has both = its own

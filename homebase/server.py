@@ -397,6 +397,9 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     lab_line = labdesk_mod.readiness_line(cfg)   # only on a desk that reads another desk's Lab store
     if lab_line is not None:
         checks.append(lab_line)
+    lab_line = labdesk_mod.orphan_line(cfg, engine)   # only when a Lab round is open for a strategy this desk lacks
+    if lab_line is not None:
+        checks.append(lab_line)
     if cfg.armed:
         checks.append({"level": "info", "label": "Mode",
                        "detail": "ARMED — signals place real orders"})
@@ -1067,6 +1070,11 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         _app.state.desk_key, key_err = desk_api.ensure_key(state_dir() / desk_api.KEY_FILE)
         if key_err:
             engine.journal("desk_key_error", error=key_err)
+        # the Lab runner's OWN key (never the chart service's): /api/lab/* answers 503 without it
+        _app.state.lab_key, lab_key_err = desk_api.ensure_key(state_dir() / desk_api.LAB_KEY_FILE)
+        if lab_key_err:
+            engine.journal("lab_key_error", error=lab_key_err)
+        labdesk.start()                      # says whether the Lab side is on; never raises
         tasks = []
         if background:
             tasks = [asyncio.create_task(_clock_loop()),
@@ -1119,6 +1127,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     app.state.desk = desk
     app.state.labdesk = labdesk
     app.include_router(desk_api.trade_router(desk), prefix="/api/trade")
+    app.include_router(desk_api.labdesk_router(labdesk), prefix="/api/lab")   # the Lab runner's door (its own gate and key)
     app.include_router(desk_api.settings_router(desk))
     # Task 5b: every write needs an allowed Host/Origin and a JSON body (main app only)
     app.add_middleware(desk_api.WriteGuard, hosts=lambda: cfg.allowed_hosts)
@@ -1851,6 +1860,19 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             raise HTTPException(400, "{strategy}")
         try:
             return await labdesk.remove(str(body.get("strategy") or ""))
+        except labdesk_mod.Refused as e:
+            raise HTTPException(e.status, str(e)) from None
+
+    @app.post("/api/lab-clear")
+    async def lab_clear(request: Request):
+        """Clear the block a Lab strategy carries on one account from an earlier day: {strategy, account}. Only with
+        the account's position in that market at exactly 0 and no known order of that trade still working; it sends
+        nothing. Refused (409) with the sentence."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{strategy, account}")
+        try:
+            return await labdesk.clear_block(str(body.get("strategy") or ""), str(body.get("account") or ""))
         except labdesk_mod.Refused as e:
             raise HTTPException(e.status, str(e)) from None
 
