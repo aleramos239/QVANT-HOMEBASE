@@ -441,11 +441,14 @@ def test_a_stop_entry_the_market_is_already_through_is_refused(tmp_path, it, las
     assert len(placed(d)) == (0 if past else 1)
 
 
-def test_a_pair_with_one_leg_already_through_sends_neither(tmp_path):
+@pytest.mark.parametrize("last", [110.5, 89.5])                                    # the buy leg's turn, then the sell leg's
+def test_a_pair_with_one_leg_already_through_sends_neither(tmp_path, last):
     d = mkdesk(tmp_path)
-    out = send(d, pair(buy=110.0, sell=90.0), last=110.5)
+    out = send(d, pair(buy=110.0, sell=90.0), last=last)
     assert refusal(out, 0) == refusal(out, 1) == "The price is already past this entry." and placed(d) == []
     assert out["results"][2]["refused"] is None
+    assert out["results"][0]["accounts"] == out["results"][1]["accounts"] == {
+        "a1": {"ok": False, "round": None, "reason": "The price is already past this entry."}}
 
 
 # ---------------------------------------------------------------- C3 row 9: the 9:30 orders go first (ruling Q5)
@@ -926,7 +929,7 @@ def test_the_rule_never_waits_for_an_event_that_is_being_applied(tmp_path):
 
     async def go():
         async with d.ld._lock(LAB):
-            await d.ld._runner_rule()
+            await asyncio.wait_for(d.ld._runner_rule(), 1)                         # it comes back at once
             assert d.ld._alive(LAB)["down"] is False and d.ads["a1"].cancelled == []
         await d.ld._runner_rule()
         assert d.ld._alive(LAB)["down"] is True

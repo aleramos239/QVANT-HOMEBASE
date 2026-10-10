@@ -1,7 +1,7 @@
-"""The desk's side of a promoted Lab strategy (Step B). This file is the CONFIG half (task B1): the desk knows the
-strategy, keeps its limits and its book, switches it, removes it and says what it is doing. The INTAKE half (task B3:
-the runner's orders, the stream, the heartbeat rule) is added to this class later; until then nothing here, and nothing
-that calls it, can send an order.
+"""The desk's side of a promoted Lab strategy (Step B). The CONFIG half (task B1) comes first: the desk knows the
+strategy, keeps its limits and its book, switches it, removes it and says what it is doing; nothing in it can send an
+order. The INTAKE half (task B3, from "THE INTAKE HALF" on: LabDesk.event, heartbeat, snapshot, subscribe, stop, the
+start lines) is the ONE door through which the runner's orders reach the engine: read its own header before changing it.
 
 THE LAB SIDE IS OPT-IN PER DESK. server.create_app(..., lab=None) turns it on only when the file
 
@@ -731,6 +731,15 @@ class LabDesk:
             b["orders"].setdefault(str(i), {"status": "cancelled"})
         return b
 
+    def _brain_now(self, name: str) -> dict | None:
+        """The brain for an event's answer. One that cannot be built is None (the stream's next snapshot carries it):
+        an event that was applied is always answered."""
+        try:
+            return self._brain(name)
+        except Exception as e:  # noqa: BLE001
+            self._say_tick(e)
+            return None
+
     def _now_ms(self) -> int:
         return int(self.engine.now_et().timestamp() * 1000)
 
@@ -863,10 +872,6 @@ class LabDesk:
                 if why is None and self._past(ev.intents[i], last):
                     why = PRICE_PAST
                 per[i][a] = why
-            for i in entries:                # a lone leg of a pair never goes out: both carry the first leg's sentence
-                j = pair.get(i)
-                if j is not None and i < j and (per[i][a] or per[j][a]):
-                    per[i][a] = per[j][a] = per[i][a] or per[j][a]
         return per, oco, pair
 
     @staticmethod
@@ -937,7 +942,7 @@ class LabDesk:
                 d["answers"].clear()
             hit = d["answers"].get(ev.seq)                   # 4: answered already -- the same answer, nothing applied
             if hit is not None:
-                return {**hit, "brain": self._brain(name)}
+                return {**hit, "brain": self._brain_now(name)}
             if why is None and ev.entries and ev.seq <= d["seq_max"]:
                 why = OUT_OF_DATE                            # an earlier event the desk never answered: its orders are old
         if why is None and limited:
@@ -987,6 +992,8 @@ class LabDesk:
                     ids = [ev.intents[j]["id"] for j in unit]
                     no, accounts = why, {}
                     if no is None:
+                        # (a lone leg of a pair never goes out: an account takes both legs or neither, and says the
+                        # first refused leg's sentence)
                         accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None)
                                     for r in booked}
                         sizes = {r["account"]: int(r["qty"]) for r in booked if accounts[r["account"]] is None}
@@ -1020,7 +1027,7 @@ class LabDesk:
             self._journal("lab_event_done", strategy=name, seq=ev.seq, mark=list(ev.mark), results=out,
                           **({"entries": d["entries"], "untaken": d["untaken"], "dead": list(d["dead"])} if known else {}))
         self._publish_safe()
-        return {**answer, "brain": self._brain(name)}
+        return {**answer, "brain": self._brain_now(name)}
 
     def _no_entry(self, name: str, ev, d, ids: list, why: str | None, accounts: dict) -> list:
         """An entry (or a pair) the desk itself refused: it never reached the engine. `why`: one sentence for every
