@@ -51,6 +51,19 @@
                                           the toolkit ok false with its own reason, without its command line. add /
                                           start / resume are refused 09:20-09:35 ET on weekdays (they can start heavy
                                           work); pause and the owner's yes or no never are
+    GET  /api/tester/desklab             Lab strategies promoted to the Desk (homebase.labrun.store): {strategies: [each
+                                          record WITHOUT its code, plus `today` (its day summary or null) and `days` (the
+                                          last 10)], runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat
+                                          is under 20 s old
+    POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
+                                          draft's text, its settings and that backtest's headline numbers. Refused (in
+                                          words) for a draft not in the Lab, a run that is not a finished run of it, code
+                                          that changed since, code that cannot be read, one that is not
+                                          session_independent, a market this service does not stream, a sandbox that does
+                                          not work. Reads text only: no draft runs, no order goes anywhere
+    POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
+    POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
+                                          (the desklab routes answer the desk page's exact origins, like /watch)
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -117,6 +130,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import hashlib
 import inspect
 import re
 import threading
@@ -130,7 +144,7 @@ from fastapi.responses import JSONResponse
 
 from .. import arsenal, draftstore, ideastore, netguard, strategies
 from ..backtest import drafthost
-from ..backtest import propsim
+from ..backtest import propsim, sandbox, slots
 from ..backtest.grid import GridManager, LooksCorrupt
 from ..backtest.runner import RunManager, _run_propsim, default_base, read_json
 from ..backtest.stats import montecarlo
@@ -140,7 +154,8 @@ from ..backtest.slots import Slots
 from ..backtest.tape import CACHE
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
-from . import lab_templates, reviewpack, watch
+from ..labrun import door, store
+from . import DEFAULT_ROOTS, lab_templates, reviewpack, watch
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -149,6 +164,9 @@ PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long:
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
 WATCH_ACTIONS = ("promote", "remove", "show")
+DESKLAB_ACTIONS = ("promote", "remove", "onoff")
+DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
+DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
 PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in the desk's 9:30 window
 PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
@@ -215,7 +233,7 @@ def check_focus(focus) -> dict | None:
 
 def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 grids: GridManager, wfs: WalkForwardManager,
-                notify: Callable[[dict], int] | None = None) -> APIRouter:
+                notify: Callable[[dict], int] | None = None, live_roots=DEFAULT_ROOTS) -> APIRouter:
     r = APIRouter(prefix="/api/tester", dependencies=[Depends(host_ok)])
 
     def known(rid: str):
@@ -637,6 +655,114 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
+    # ---- Lab strategies on the Desk (labrun/store.py): a frozen copy of a draft, kept as a record. Text and files only:
+    # ---- nothing here runs a draft's code, places an order or talks to the desk (the runner process reads the store).
+    @r.get("/desklab")
+    def desklab_list(request: Request):
+        watch_guard(request)
+        today = slots.et_now().date().isoformat()
+        out = []
+        for rec in store.listing():
+            name = rec["name"]
+            out.append({**{k: v for k, v in rec.items() if k != "source"},
+                        "today": store.get_day(name, today), "days": store.days(name, DESKLAB_DAYS)})
+        beat = store.get_runner() or {}
+        return watch_answer(request, {"strategies": out, "runner": {
+            "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
+
+    def runner_alive(seen) -> bool:
+        try:
+            t = dt.datetime.fromisoformat(seen)
+        except (TypeError, ValueError):
+            return False
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=dt.timezone.utc)
+        return abs((dt.datetime.now(dt.timezone.utc) - t).total_seconds()) <= DESKLAB_ALIVE_S
+
+    @r.options("/desklab/{what}")
+    def desklab_preflight(what: str, request: Request):
+        """The desk page's CORS preflight: for its exact origins only."""
+        o = request.headers.get("origin")
+        if what not in DESKLAB_ACTIONS or o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
+
+    def desklab_promote(name: str, run_id: str) -> dict:
+        """The refusals, in order; then the record. Reads text and small files only (draftstore, static_meta, read_source)."""
+        try:
+            source = draftstore.read(name)
+        except (FileNotFoundError, ValueError, OSError):
+            raise HTTPException(404, "That strategy is not in the Lab.") from None
+        run_first = HTTPException(409, "Run a backtest of this strategy first.")
+        try:
+            d = manager.dir(run_id)
+        except KeyError:
+            raise run_first from None
+        status, req, run = (read_json(d / f, None) for f in ("status.json", "request.json", "run.json"))
+        if not isinstance(status, dict) or status.get("status") != "done" or not isinstance(run, dict) \
+                or not isinstance(req, dict) or req.get("strategy") != draftstore.draft_id(name):
+            raise run_first
+        if req.get("draft_sha256") != hashlib.sha256(source.encode("utf-8")).hexdigest():
+            raise HTTPException(409, "The code changed since this backtest. Run it again, then promote.")
+        try:
+            meta = draftstore.static_meta(source)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        if meta.get("session_independent") is not True:
+            raise HTTPException(409, "It must not carry anything from one day to the next (set session_independent = True).")
+        if meta["root"] not in live_roots:
+            raise HTTPException(409, f"No live prices for {meta['root']} here.")
+        if not sandbox.available():
+            raise HTTPException(503, "The sandbox is not working, so it cannot run.")
+        notes = door.read_source(source)
+        store.put(store.snapshot(name, source, meta, {"run": run}, run_id, notes))
+        return {"ok": True, "name": name, "notes": notes}
+
+    def desklab_onoff(name: str, on: bool) -> dict:
+        if store.set_enabled(name, on) is None:
+            raise HTTPException(404, "That strategy is not on the Desk.")
+        return {"ok": True, "name": name, "enabled": on}
+
+    @r.post("/desklab/{what}")
+    async def desklab_write(what: str, request: Request):
+        """promote {name, run_id}: a draft that was backtested goes on the Desk, frozen. remove {name}: its record goes
+        (the history stays). onoff {name, on}: the runner hosts it or leaves it be. A refusal the page may read is answered
+        with its own words ({ok: false, detail})."""
+        watch_guard(request)
+        try:
+            write_ok(request)
+            json_body(request)
+            if what not in DESKLAB_ACTIONS:
+                raise HTTPException(404, f"unknown desklab action {what!r}")
+            try:
+                body = await request.json()
+            except ValueError:
+                raise HTTPException(400, "the body is JSON") from None
+            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}}[what]
+            if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
+                    or not draftstore.NAME_RE.fullmatch(body["name"]):
+                raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
+                    ", the backtest's run id" if what == "promote" else ", on: true or false" if what == "onoff" else ""))
+            name = body["name"]
+            if what == "promote" and not isinstance(body["run_id"], str):
+                raise HTTPException(400, "run_id: the backtest's run id")
+            if what == "onoff" and not isinstance(body["on"], bool):
+                raise HTTPException(400, "on: true or false")
+            try:
+                if what == "promote":
+                    done = await asyncio.to_thread(desklab_promote, name, body["run_id"])
+                elif what == "remove":
+                    done = {"ok": True, "removed": await asyncio.to_thread(store.remove, name), "name": name}
+                else:
+                    done = await asyncio.to_thread(desklab_onoff, name, body["on"])
+            except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)
+                raise HTTPException(400, str(e)) from None
+            return watch_answer(request, done)
+        except HTTPException as e:
+            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
+
     @r.post("/show")
     async def show(request: Request):
         """Ask every open chart page to load a finished run (or heat-map cell) into the Strategy Tester
@@ -969,11 +1095,12 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
 
 def tester_router(write_ok: Callable[[Request], None], archive: Path,
-                  state: Path | None = None, notify: Callable[[dict], int] | None = None) -> APIRouter:
+                  state: Path | None = None, notify: Callable[[dict], int] | None = None,
+                  live_roots=DEFAULT_ROOTS) -> APIRouter:
     """Production (state None): homebase/.state/tester + the ~/futures_derived tape
     cache. A test passes its tmp dir and gets the runs AND the cache under it."""
     base = Path(state) if state else default_base()
     cache = base / "tape" if state else CACHE
     return make_router(write_ok, RunManager(base, archive=archive, cache=cache),
                        GridManager(base, archive=archive, cache=cache),
-                       WalkForwardManager(base, archive=archive, cache=cache), notify=notify)
+                       WalkForwardManager(base, archive=archive, cache=cache), notify=notify, live_roots=live_roots)
