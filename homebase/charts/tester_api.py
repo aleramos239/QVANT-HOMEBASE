@@ -79,7 +79,7 @@
                                           (promote and remove answer 409 "Take its accounts off on the Desk first."
                                           while the desk's sidecar, <name>.desk.json, holds book rows)
     POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
-                                          (the desklab routes answer the desk page's exact origins, like /watch)
+                                          (the desklab routes answer the desk page's exact origins)
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -174,7 +174,7 @@ from ..claude_mcp.client import ToolError
 from ..labrun import door, store
 from .desk import DESK_URL
 from ..labrun.host import session_today
-from . import DEFAULT_ROOTS, lab_forms, lab_templates, reviewpack, watch
+from . import DEFAULT_ROOTS, lab_forms, lab_templates, reviewpack
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -182,7 +182,6 @@ LAB_WAIT_S = 20          # the longest a blueprint tool started from the Lab wai
 PIPE_CACHE_S = 2.0       # the pipeline's Queue / Book answer is kept this long: a page asks every 5 s, and several may be open
 pipe_clock = time.monotonic      # ... by this clock (a test moves it)
 CURVE_CACHE_S = 30.0     # an idea's equity curve is kept this long
-WATCH_ACTIONS = ("promote", "remove", "show")
 def desk_strategy_ids() -> list[str]:
     """The built-in strategies the Desk itself runs (its status' strategies that are not Lab ones), by id. [] when it does not
     answer: the Lab page then simply shows no built-in as being on the Desk."""
@@ -688,7 +687,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(400, "{name}")
         return await executions_shown(body["name"])
 
-    # ---- the Desk's watch list: Book strategies promoted from the Lab (watch.py). Records only: nothing here trades. ----
+    # ---- the Desk page's cross-origin guard and answer, shared by the desklab routes below (the watch list was removed 2026-10-10) ----
     def watch_guard(request: Request) -> None:
         bad = desk_origin_refusal(request.headers)
         if bad is not None:
@@ -696,57 +695,6 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     def watch_answer(request: Request, body: dict, status: int = 200):
         return _cors(JSONResponse(body, status_code=status), request)
-
-    @r.get("/watch")
-    def watch_list(request: Request):
-        watch_guard(request)
-        return watch_answer(request, {"strategies": watch.listing()})
-
-    @r.options("/watch/{what}")
-    def watch_preflight(what: str, request: Request):
-        """The desk page's CORS preflight: for its exact origins only."""
-        o = request.headers.get("origin")
-        if what not in WATCH_ACTIONS or o not in DESK_ORIGINS:
-            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
-        return Response(status_code=204, headers={
-            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
-            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
-
-    @r.post("/watch/{what}")
-    async def watch_write(what: str, request: Request):
-        """promote {name}: a strategy that is IN THE BOOK goes on the Desk's watch list, with a snapshot of its card and
-        curve. remove {name}: it leaves the list. show {name}: its executions on the chart. A refusal the desk page may
-        read is answered with its own words ({ok: false, detail})."""
-        watch_guard(request)
-        try:
-            write_ok(request)
-            json_body(request)
-            if what not in WATCH_ACTIONS:
-                raise HTTPException(404, f"unknown watch action {what!r}")
-            try:
-                body = await request.json()
-            except ValueError:
-                raise HTTPException(400, "the body is JSON") from None
-            name = body.get("name") if isinstance(body, dict) else None
-            if not isinstance(body, dict) or set(body) != {"name"} or not isinstance(name, str) or not watch.NAME_RE.fullmatch(name):
-                raise HTTPException(400, "{name: a Book strategy's name}")
-            if what == "remove":
-                return watch_answer(request, {"ok": True, "removed": watch.remove(name), "name": name})
-            if what == "show":
-                return watch_answer(request, await executions_shown(name))
-
-            def promote() -> dict:
-                try:
-                    card = next((c for c in box.pipeline_state()["book"] if isinstance(c, dict) and c.get("name") == name), None)
-                except ToolError as e:
-                    raise HTTPException(503, str(e)) from None
-                if card is None:
-                    raise HTTPException(409, f"{name} is not in the Book: only a strategy that passed every stage and was approved can be promoted")
-                return watch.put(watch.snapshot(card, curve_of(name)))
-            snap = await asyncio.to_thread(promote)
-            return watch_answer(request, {"ok": True, "name": name, "promoted_utc": snap["promoted_utc"]})
-        except HTTPException as e:
-            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
 
     # ---- Lab strategies on the Desk (labrun/store.py): a frozen copy of a draft, kept as a record. Text and files only:
     # ---- nothing here runs a draft's code, places an order or talks to the desk (the runner process reads the store).
