@@ -24,3 +24,10 @@ homebase/config.json.*
 research/**/*.tape
 research/edge-library/runs_void/
 research/prop-portfolio/2026-09-30-es/out/a3p3_real_part.jsonl
+
+# research: pipeline runtime locks and the c1o cell tables (96-116 MB each, two are over GitHub's 100 MB limit; rebuilt by the pipeline)
+research/edge-library/runs_bp/*.lock
+research/edge-library/runs_bp/c1o-*/cells.npz
+
+# merge leftovers
+*.orig
