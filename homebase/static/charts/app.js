@@ -1664,6 +1664,10 @@ function drawToolbarButtons(cell, root, d) {
     const gear = btn('gear', 'Settings');
     gear.onclick = () => drawingSettingsDialog(cell, d);
     wrap.append(w, ls, gear);
+  } else {
+    const gear = btn('gear', 'Settings');
+    gear.onclick = () => positionDialog(cell, drawings.list(root).find((x) => x.id === d.id) || d);
+    wrap.append(gear);
   }
   const lock = btn(d.locked ? 'lock' : 'lockOpen', d.locked ? 'Unlock' : 'Lock');
   lock.setAttribute('aria-pressed', String(!!d.locked));
