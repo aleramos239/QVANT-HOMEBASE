@@ -17,6 +17,7 @@ settings files and the two report scripts, so the next test is "take it from the
 | `by_year.py --prop` | the same page plus each cell's prop sim (the pipeline's account and days, plain row, stress row); `--cells` keeps your order |
 | `sizing_sweep.py` | the prop sim of each cell at EVERY whole micro (1 .. the account's maximum): eval odds by day, bust, payout, stress; a grid by dollars of risk a trade |
 | `eval_scan.py` | the prop sim of EVERY cell of one or more stores, on the build days and on a 75 / 25 split of them (first 75 % to pick, last 25 % to check); sizes capped by --risk-cap dollars a trade (raise the cap past one target = the account's profit target, or the scan misses the size where one win passes) |
+| `test_read.py` | THE ONE READ of the test days (2025-07-01 .. last complete session) for one manual spec, on the owner's word and with `--confirm`: claimed in the app's one-read log first, the engine's test switch (runner.run_test: table, worse fills, random pool), then cells' trades / net / profit factor at `--size` micros, the average of all cells and the prop sim of `--box` at every size. Labelled MANUAL-LANE READ: no card, no lock, no lines 4.1-4.9; cannot prove an idea. The card route refuses a time stop, this one takes the spec as written |
 
 Only `engine/families/orb830.py`, `run_idea.py` and `blueprint/runner.py` (the `own` allow-list) are new or changed: no hashed engine file moved,
 so no earlier store or lock is marked "written by other code".
