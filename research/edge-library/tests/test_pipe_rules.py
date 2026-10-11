@@ -48,8 +48,9 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     assert P.need("raw", "low", "share") == 0.5 and P.need("raw", "low") == {"share": 0.5, "floor_part": 0.5, "trades": 300}
     assert P.need("raw", "strict") == {"share": 0.6, "floor_part": 1.0, "trades": 200}
     assert P.need("indicator") == {"share": 0.6, "floor_part": 1.0, "trades": 200, "other_markets": None}   # None: shown, asks nothing (the owner, 2026-10-08)
-    assert P.need("card") == {"ways": [1, 3], "values": 3, "indicators": [0, 5], "bars": ["1", "5"], "markets": ["NQ", "ES", "GC"],
-                              "sessions": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]}      # the evening session too (the owner, 2026-10-09)
+    assert P.need("card") == {"ways": [1, 3], "values": 3, "indicators": [0, 5], "bars": ["1", "5"], "bars_allowed": ["1", "5", "15", "30"],
+                              "markets": ["NQ", "ES", "GC"],
+                              "sessions": ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]}      # the evening session too (the owner, 2026-10-09); bars_allowed 2026-10-11
     assert P.need("proof") == {"reshuffle": 0.75, "random_alpha": 0.05} and P.need("box", "best_days_share") == 0.01
     assert P.need("box") == {"best_days_share": 0.01, "fast_seconds": 5, "month_days": 21}         # ... and the book card's two numbers (stage 7)
     assert P.need("prop") == {"account": "lucid-pro-50k-no-dll@2026-10-11", "days": 30, "eval": 0.4, "payout": 0.5,        # (the owner, 2026-10-10: the eval bar is 40 %;

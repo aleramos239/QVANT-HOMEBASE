@@ -31,7 +31,7 @@ test('flags: one per event time, merged when closer than a flag, coloured by the
   const late = { ...OIL, title: 'Late', t_ms: at(10, 36) };
   const flags = E.layout([OIL, CPI, CORE, IFO, late], x, 2000);
   assert.deepEqual(flags.map((f) => [f.x, f.events.map((e) => e.title), f.color, f.line]), [
-    [240, ['German ifo Business Climate'], '#FF9800', false],
+    [240, ['German ifo Business Climate'], '#FF9800', true],                // an orange folder has its line too
     [510, ['CPI m/m', 'Core CPI m/m'], '#F23645', true],
     [630, ['Crude Oil Inventories', 'Late'], '#F7C600', false],      // 6 px apart: one flag
   ]);

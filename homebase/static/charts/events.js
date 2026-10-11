@@ -18,7 +18,7 @@ function shown(events, s) {
 
 /* The flags along the time axis, left to right: [{x, t_ms, events, color, line}]. Events at one time share a
    flag, and a flag closer than FLAG px to the previous one joins it (zoomed out). color: the highest impact's;
-   line: a High event is in it. xOf(t_ms) -> px | null (null: no place on this chart); off-pane flags go. */
+   line: a High or Medium event is in it (drawn in color). xOf(t_ms) -> px | null (null: no place on this chart); off-pane flags go. */
 function layout(events, xOf, width) {
   const pts = [];
   for (const e of events) {
@@ -36,7 +36,7 @@ function layout(events, xOf, width) {
   for (const g of out) {
     const top = g.events.reduce((a, b) => ((RANK[b.impact] || 0) > (RANK[a.impact] || 0) ? b : a));
     g.color = COLORS[top.impact] || COLORS.Holiday;
-    g.line = g.events.some((e) => e.impact === 'High');
+    g.line = g.events.some((e) => e.impact === 'High' || e.impact === 'Medium');   // red and orange folders: a line, in the flag's colour
   }
   return out;
 }

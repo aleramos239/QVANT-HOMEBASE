@@ -223,7 +223,9 @@ test('styleLineKeys: a Style tab per plotted line for the drawn indicators, none
   assert.deepEqual(C.styleLineKeys('sma'), ['main']);
   assert.deepEqual(C.styleLineKeys('vwma'), ['main']);
   assert.deepEqual(C.styleLineKeys('cumdelta'), ['main']);
-  for (const id of ['delta', 'levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap', 'volume']) {
+  assert.deepEqual(C.styleLineKeys('volume'), ['up', 'down']);       // 2026-10-11: the up and the down bar colour
+  assert.deepEqual(C.styleLineKeys('delta'), ['up', 'down']);
+  for (const id of ['levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap']) {
     assert.equal(C.styleLineKeys(id), null, id);
   }
   assert.equal(C.styleLineKeys('nope'), null);
@@ -803,15 +805,18 @@ test('technical indicators: wire keys, labels and style keys come from the defin
   assert.equal(k('keltner'), 'keltner:20:20:1.5');
   assert.equal(k('supertrend'), 'supertrend:10:3');
   assert.equal(k('orb', { minutes: 30 }), 'orb:30');
+  // a session range is two typed times (2026-10-11); a chart saved with a named session reads as its times
+  assert.equal(k('sess', { from: '00:00', to: '03:00' }), 'sess:asia', 'exactly a named session keeps its own key');
   assert.equal(k('sess', { session: 'asia' }), 'sess:asia');
-  assert.equal(k('sess', { session: 'nonsense' }), 'sess:london', 'a bad choice falls back to the default');
+  assert.equal(k('sess', {}), 'sess:120:300', 'nothing typed: the first default box, London 02:00-05:00');
+  assert.equal(k('sess', { from: '03:00', to: '08:30' }), 'sess:180:510', 'any other pair is a window of your own');
   // 2026-10-11: a start time, evening / own windows, gaps, week / month levels, an open at a time
   assert.equal(k('orb', { minutes: 5, start: '03:00' }), 'orb:5:180');
   assert.equal(k('orb', { minutes: 5, start: '20:00' }), 'orb:5:1200');
   assert.equal(k('orb', { minutes: 15, start: '9:30' }), 'orb:15', 'the old key for the old default');
   assert.equal(k('sess', { session: 'evening' }), 'sess:1080:180');
-  assert.equal(k('sess', { session: 'custom', from: '10:00', to: '11:30' }), 'sess:600:690');
-  assert.equal(k('sess', { session: 'custom', from: '10:00', to: '10:00' }), 'sess:1080:180', 'a window with no length falls back');
+  assert.equal(k('sess', { from: '10:00', to: '11:30' }), 'sess:600:690');
+  assert.equal(k('sess', { from: '10:00', to: '10:00' }), 'sess:1080:180', 'a window with no length falls back');
   assert.equal(k('fvg', {}), 'fvg:0.25:14');
   assert.equal(k('fvg', { min: 0.5, length: 20 }), 'fvg:0.5:20');
   assert.equal(k('wk', {}), 'wk');
@@ -901,4 +906,136 @@ test('order-flow settings that did nothing below the server floor start at it; o
   assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).minSeconds, 3);
   assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5 });     // defaults untouched
   assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5 });
+});
+
+test('starred indicators: Favorites is a group of whatever is starred, not a catalog group', () => {
+  assert.equal(C.FAV_GROUP, 'Favorites');
+  assert.ok(!C.GROUPS.includes(C.FAV_GROUP), 'no catalog entry lives in a group of that name');
+  assert.deepEqual(C.filter('', C.FAV_GROUP, []), []);
+  assert.deepEqual(C.filter('', C.FAV_GROUP, ['ema', 'orb']).map((d) => d.id).sort(), ['ema', 'orb']);
+  assert.deepEqual(C.filter('ema', C.FAV_GROUP, ['ema', 'orb']).map((d) => d.id), ['ema'], 'the search still narrows it');
+  assert.ok(C.filter('', 'All', []).length > 10, 'the other groups ignore the stars');
+});
+
+test('starred ids: junk is dropped, an emptied list stays empty, nothing stored gives the default', () => {
+  const valid = ['trend', 'hline', 'fib'];
+  assert.deepEqual(C.parseIdList(null, valid, ['trend']), ['trend']);
+  assert.deepEqual(C.parseIdList('not json', valid, ['trend']), ['trend']);
+  assert.deepEqual(C.parseIdList('[]', valid, ['trend']), [], 'unstarred everything');
+  assert.deepEqual(C.parseIdList('["fib","nope","fib",3,"trend"]', valid, []), ['fib', 'trend']);
+  assert.deepEqual(C.toggleId(['a'], 'b'), ['a', 'b']);
+  assert.deepEqual(C.toggleId(['a', 'b'], 'a'), ['b']);
+});
+
+test('tool groups: every group tool is a rail tool, once, and the default favorites are in a group', () => {
+  const all = C.TOOL_GROUPS.flatMap(([, tools]) => tools);
+  assert.equal(new Set(all).size, all.length, 'no tool is in two groups');
+  for (const t of C.TOOL_FAV_DEFAULT) assert.ok(all.includes(t), t);
+  assert.equal(C.toolGroupOf('fib'), 1);
+  assert.equal(C.toolGroupOf('cursor'), -1);
+});
+
+// ---- 2026-10-11: line opacity / type / axis value, volume + delta colours, reference levels, legend option ----
+test('a line style keeps opacity, type and axis value only when they are set and valid', () => {
+  const plain = C.clampStyle('ema', { main: { color: '#112233', width: 2, dash: 'solid', visible: true } });
+  assert.deepEqual(plain.main, { color: '#112233', width: 2, dash: 'solid', visible: true }, 'untouched stays as it was');
+  const set = C.clampStyle('ema', { main: { color: '#112233', width: 2, dash: 'solid', visible: true, alpha: 40, shape: 'curved', tag: false } });
+  assert.deepEqual(set.main, { color: '#112233', width: 2, dash: 'solid', visible: true, alpha: 40, shape: 'curved', tag: false });
+  const junk = C.clampStyle('ema', { main: { color: '#112233', alpha: 3, shape: 'wavy', tag: 'no' } });
+  assert.equal(junk.main.alpha, undefined);
+  assert.equal(junk.main.shape, undefined);
+  assert.equal(junk.main.tag, undefined);
+  assert.equal(C.clampStyle('ema', { main: { alpha: 100 } }).main.alpha, undefined, '100 % is solid: left out');
+});
+
+test('lineColor applies the opacity to the hex', () => {
+  assert.equal(C.lineColor({ color: '#FF0000' }), '#FF0000');
+  assert.equal(C.lineColor({ color: '#FF0000', alpha: 100 }), '#FF0000');
+  assert.equal(C.lineColor({ color: '#FF0000', alpha: 50 }), 'rgba(255,0,0,0.5)');
+  assert.equal(C.lineColor({ color: 'nope', alpha: 50 }), 'rgba(120,123,134,0.5)');
+});
+
+test('volume and delta have an up and a down colour, half see-through as the palette had them', () => {
+  for (const id of ['volume', 'delta']) {
+    const st = C.defaultStyle(id, []);
+    assert.deepEqual(Object.keys(st), ['up', 'down']);
+    assert.equal(st.up.alpha, 50);
+    assert.equal(C.styleControls(id), 'color');
+    // opaque is a choice here (the default is 50), so it is kept
+    assert.equal(C.clampStyle(id, { up: { color: '#00FF00', alpha: 100 }, down: {} }).up.alpha, undefined, '100 is left out ...');
+  }
+  assert.equal(C.styleControls('ema'), 'line');
+});
+
+test('instance options: the legend, and reference levels only for a study that has them', () => {
+  assert.equal(C.clampOpts('ema', {}), null);
+  assert.deepEqual(C.clampOpts('ema', { legend: false, refs: [1, 2], refColor: '#112233' }), { legend: false }, 'EMA has no levels');
+  assert.deepEqual(C.refsOf('rsi'), [70, 30]);
+  assert.equal(C.clampOpts('rsi', { refs: [70, 30] }), null, 'the defaults are not stored');
+  assert.deepEqual(C.clampOpts('rsi', { refs: [80, null], refColor: '#112233' }), { refs: [80, null], refColor: '#112233' });
+  assert.equal(C.clampOpts('rsi', { refs: [80] }), null, 'a wrong length is dropped');
+  assert.equal(C.clampOpts('rsi', { refs: ['a', 30] }), null);
+  assert.equal(C.clampOpts('rsi', { refColor: 'red' }), null);
+});
+
+test('a saved chart brings its instance options back', () => {
+  const m = C.migrate({ root: 'NQ', spec: 'time:60', indicators: [
+    { id: 'rsi', params: {}, visible: true, opts: { refs: [75, 25], legend: false } },
+    { id: 'ema', params: {}, visible: true, opts: { junk: 1 } }] });
+  assert.deepEqual(m.indicators[0].opts, { legend: false, refs: [75, 25] });
+  assert.equal(m.indicators[1].opts, undefined);
+});
+
+test('a timeframe is typed: 15m, 1h, 90s, 1D; a bare number is minutes; up to a day', () => {
+  assert.equal(C.parseTf('15m'), 900);
+  assert.equal(C.parseTf('1h'), 3600);
+  assert.equal(C.parseTf(' 90s '), 90);
+  assert.equal(C.parseTf('4H'), 14400);
+  assert.equal(C.parseTf('1D'), 86400);
+  assert.equal(C.parseTf('45'), 2700, 'a bare number is minutes');
+  assert.equal(C.parseTf('1.5h'), 5400);
+  for (const bad of ['', 'abc', '0m', '2d', '-5m', '15 x']) assert.equal(C.parseTf(bad), null, bad);
+  assert.equal(C.fmtTf(900), '15m');
+  assert.equal(C.fmtTf(5400), '90m');
+  assert.equal(C.fmtTf(90), '90s');
+  assert.equal(C.fmtTf(86400), '1D');
+});
+
+test('an indicator on its own timeframe: key, label, and "Chart" is no key at all', () => {
+  const ema = (tf) => C.instance('ema', { length: 20, ...(tf === undefined ? {} : { tf }) });
+  assert.equal(C.serverKey(ema()), 'ema:20');
+  assert.equal(C.serverKey(ema('0')), 'ema:20');
+  assert.equal(C.serverKey(ema('3600')), 'ema:20@3600');
+  assert.equal(C.serverKey(ema('15m')), 'ema:20@900', 'typed text is turned into seconds');
+  assert.equal(C.serverKey(ema('nonsense')), 'ema:20');
+  assert.equal(C.label(ema('3600')), 'EMA 20 · 1h');
+  assert.equal(C.label(ema()), 'EMA 20');
+  assert.equal('tf' in ema('0').params, false, 'the chart own bars store nothing');
+  assert.equal(C.serverKey(C.instance('rsi', { tf: '300' })), 'rsi:14@300');
+  assert.equal(C.serverKey(C.instance('vwap', { tf: '300' })), 'vwap', 'an anchored study has no timeframe');
+});
+
+test('session range: boxes, each on or off, four defaults, one key per box that is on', () => {
+  const inst = C.instance('sess', {});
+  assert.deepEqual(inst.params.boxes.map((b) => `${b.name} ${b.from}-${b.to} ${b.on}`),
+    ['London 02:00-05:00 true', 'Asia 20:00-00:00 true', 'NY AM 09:30-11:00 true', 'NY PM 13:30-16:00 true']);
+  assert.deepEqual(C.serverKeys([inst]), ['sess:120:300', 'sess:1200:0', 'sess:nyam', 'sess:810:960']);
+  // a box switched off asks the server for nothing and draws nothing
+  const off = C.instance('sess', { boxes: [{ name: 'A', from: '03:00', to: '04:00', on: false }, { name: 'B', from: '10:00', to: '11:30' }] });
+  assert.deepEqual(C.serverKeys([off]), ['sess:600:690']);
+  assert.deepEqual(C.sessBoxes(off).map((b) => b.name), ['B']);
+  assert.equal(C.label(off), 'B');
+  assert.equal(C.label(C.instance('sess', { boxes: [] })), 'Session range');
+  // each box has a colour of its own by place unless one was picked; bad times and a ninth box are dropped
+  const many = C.instance('sess', { boxes: [{ from: '01:00', to: '02:00' }, { from: '03:00', to: '04:00', color: '#112233' }, { from: 'x', to: '2' },
+    ...Array.from({ length: 12 }, () => ({ from: '05:00', to: '06:00' }))] });
+  assert.equal(many.params.boxes.length, C.SESS_BOX_MAX);
+  const sb = C.sessBoxes(many);
+  assert.equal(sb[0].color, C.SESS_BOX_COLORS[0]);
+  assert.equal(sb[1].color, '#112233');
+  // one old window (from / to) is one box
+  const old = C.instance('sess', { from: '04:15', to: '07:00' });
+  assert.deepEqual(old.params.boxes, [{ name: '', from: '04:15', to: '07:00', on: true }]);
+  // no style rows of its own: the boxes carry their colours
+  assert.equal(C.styleLineKeys('sess'), null);
 });

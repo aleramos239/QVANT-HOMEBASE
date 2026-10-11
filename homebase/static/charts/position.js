@@ -109,14 +109,17 @@ function rr(d) {
 
 /* The box's texts: the target and stop labels ("Target 30,950.00 · +50.00 (0.16%) · 200 ticks · +$1,000")
    and the centre label's first line ("RR 1:2 · Qty 1"). The target is a gain and the stop a loss, for a short
-   as for a long. The "· $…" part needs the point value (pv). */
-function labels(d, pv, tick) {
-  const [E, T, S] = d.points, qty = d.qty || 1;
+   as for a long. The "· $…" part needs the point value (pv). `show` ({price, points, ticks, money}, each
+   default true) leaves a part out: the Tool labels settings. */
+function labels(d, pv, tick, show = {}) {
+  const [E, T, S] = d.points, qty = d.qty || 1, on = (k) => show[k] !== false;
   const part = (name, px, gain) => {
     const dist = Math.abs(D.roundToTick(px - E.p, tick)), s = gain ? '+' : MINUS, n = Math.round(dist / tick);
     const pct = E.p ? (dist / Math.abs(E.p) * 100).toFixed(2) : '0.00';
-    const bits = [`${name} ${Cat.fmtPrice(px, tick)}`, `${s}${Cat.fmtPrice(dist, tick)} (${pct}%)`, `${n} tick${n === 1 ? '' : 's'}`];
-    if (pv != null) bits.push(s + fmtUsd(dist * pv * qty));
+    const bits = [on('price') ? `${name} ${Cat.fmtPrice(px, tick)}` : name];
+    if (on('points')) bits.push(`${s}${Cat.fmtPrice(dist, tick)} (${pct}%)`);
+    if (on('ticks')) bits.push(`${n} tick${n === 1 ? '' : 's'}`);
+    if (pv != null && on('money')) bits.push(s + fmtUsd(dist * pv * qty));
     return bits.join(' · ');
   };
   return { target: part('Target', T.p, true), stop: part('Stop', S.p, false),
@@ -163,27 +166,48 @@ function validate(type, entry, target, stop, qty, tick) {
   return '';
 }
 
+/* True when pt is over the box or within `pad` px above / below it (where its target and stop labels sit):
+   the hover test of "show the labels on hover". */
+function near(d, pt, geo, pad) {
+  const hs = handles(d, geo);
+  if (!hs) return false;
+  const [[x0], [, yT], [, yS], [x1]] = hs;
+  return pt.x >= Math.min(x0, x1) - pad && pt.x <= Math.max(x0, x1) + pad
+    && pt.y >= Math.min(yT, yS) - pad && pt.y <= Math.max(yT, yS) + pad;
+}
+
 /* ---------------- page only: the canvas drawing ---------------- */
 /* One box on the price pane (media coordinates), TradingView's look: the profit and loss zones (no borders),
    the entry line across the box, the outcome's dashed path, a 1px outline when selected, and three labels
    centred on the box (target outside the profit zone, stop outside the loss zone, the centre two lines on the
    entry line), each kept inside the pane. P = HBCell.palette(); pctx = {tick, pv, bars, size: {width,
-   height}, font, selected}. The handle dots are drawn by the drawings primitive. */
+   height}, font, selected, labels?: false (the box's labels are hidden: only shown on hover), parts?: {target,
+   stop, rr, result, price, points, ticks, money} (each default true: what the labels show)}. The handle dots
+   are drawn by the drawings primitive. */
+/* A box's own label switches (style key) over the Tool labels settings' (the parts keys of `labels`/drawPosition). */
+const PART_KEYS = [['target', 'showTarget'], ['stop', 'showStop'], ['rr', 'showRR'], ['result', 'showResult'],
+  ['price', 'showPrice'], ['points', 'showPoints'], ['ticks', 'showTicks'], ['money', 'showMoney']];
+
 function drawPosition(ctx, d, geo, P, pctx) {
   const hs = handles(d, geo);
   if (!hs) return;
   const [[x0, yE], [, yT], [, yS], [x1]] = hs, long = d.type === 'long';
   const left = Math.min(x0, x1), w = Math.max(1, Math.abs(x1 - x0)), top = Math.min(yT, yS), bot = Math.max(yT, yS);
-  ctx.fillStyle = P.profitZone;
+  const st = d.style && typeof d.style === 'object' ? d.style : {};     // the box's look (2026-10-11): all optional
+  ctx.fillStyle = typeof st.profitColor === 'string' ? st.profitColor : P.profitZone;
   ctx.fillRect(left, Math.min(yE, yT), w, Math.abs(yT - yE));
-  ctx.fillStyle = P.lossZone;
+  ctx.fillStyle = typeof st.lossColor === 'string' ? st.lossColor : P.lossZone;
   ctx.fillRect(left, Math.min(yE, yS), w, Math.abs(yS - yE));
-  ctx.strokeStyle = P.text2;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = typeof st.entryColor === 'string' ? st.entryColor : P.text2;     // the entry line (its own look, 2026-10-11)
+  ctx.lineWidth = Number.isInteger(st.width) && st.width >= 1 && st.width <= 8 ? st.width : 1;
+  ctx.setLineDash(st.lineStyle === 'dashed' ? [6, 4] : st.lineStyle === 'dotted' ? [2, 3] : []);
   const ye = Math.round(yE) + 0.5;
   ctx.beginPath(); ctx.moveTo(left, ye); ctx.lineTo(left + w, ye); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = P.text2;
+  ctx.lineWidth = 1;
   const out = outcome(d, pctx.bars, pctx.pv, pctx.tick);
-  if (out.path) {
+  if (out.path && st.showPath !== false) {
     const ax = geo.x(out.path.a.t), bx = geo.x(out.path.b.t), ay = geo.y(out.path.a.p), by = geo.y(out.path.b.p);
     if (ax != null && bx != null && ay != null && by != null) {
       ctx.setLineDash([4, 4]);
@@ -192,26 +216,31 @@ function drawPosition(ctx, d, geo, P, pctx) {
     }
   }
   if (pctx.selected) ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(bot - top));
-  const lab = labels(d, pctx.pv, pctx.tick), cx = left + w / 2, GAP = 4;
-  ctx.font = pctx.font;
+  if (st.showLabels === false || pctx.labels === false) return;
+  const parts = { ...(pctx.parts || {}) };      // the settings' parts, then this box's own (each only when it was set)
+  for (const [k, key] of PART_KEYS) if (typeof st[key] === 'boolean') parts[k] = st[key];
+  const lab = labels(d, pctx.pv, pctx.tick, parts), cx = left + w / 2, GAP = 4;
+  const fs = Number.isInteger(st.fontSize) && st.fontSize >= 10 && st.fontSize <= 28 ? st.fontSize : null, lh = fs ? fs + 4 : 16;
+  ctx.font = (st.bold === true ? 'bold ' : '') + (fs ? pctx.font.replace(/\d+(\.\d+)?px/, `${fs}px`) : pctx.font);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const label = (lines, bg, yAt) => {   // yAt(height) -> the label's top before clamping
-    const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * 16 + 4;
+    const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * lh + 4;
     const bx = Math.max(2, Math.min(cx - bw / 2, pctx.size.width - bw - 2));
     const by = Math.max(2, Math.min(yAt(bh), pctx.size.height - bh - 2));
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-    ctx.fillStyle = P.onAccent;
-    lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 10 + i * 16));
+    ctx.fillStyle = typeof st.textColor === 'string' ? st.textColor : P.onAccent;
+    lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 2 + lh / 2 + i * lh));
   };
-  label([lab.target], P.up, (h) => (long ? top - GAP - h : bot + GAP));
-  label([lab.stop], P.down, (h) => (long ? bot + GAP : top - GAP - h));
-  label([lab.center, out.text], P.text2, (h) => yE - h / 2);
+  if (parts.target !== false) label([lab.target], P.up, (h) => (long ? top - GAP - h : bot + GAP));
+  if (parts.stop !== false) label([lab.stop], P.down, (h) => (long ? bot + GAP : top - GAP - h));
+  const mid = [...(parts.rr !== false ? [lab.center] : []), ...(parts.result !== false ? [out.text] : [])];
+  if (mid.length) label(mid, P.text2, (h) => yE - h / 2);
 }
 
 const api = { WIDTH_BARS, RISK_PANE, MIN_RISK_TICKS, QTY_MAX, MINUS, isPosition, risk, create, handles, hitTest,
-  setHandle, fmtUsd, fmtPnl, rr, labels, outcome, validate, drawPosition };
+  setHandle, near, fmtUsd, fmtPnl, rr, labels, outcome, validate, drawPosition };
 if (typeof window !== 'undefined') window.HBPosition = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -64,12 +64,41 @@ const TA_RANGE = [TA_LINE('hi', 'High', TA_GREY, 1, 'solid', TA_LVL), TA_LINE('l
   TA_LINE('ote2', 'OTE 79%', TA_BLUE, 1, 'dotted', TA_LVL)];
 const hhmmMin = (t) => { const m = /^(\d{1,2}):(\d{2})$/.exec(String(t)); return m ? +m[1] * 60 + +m[2] : 0; };
 // a custom or evening session's wire key: its start and end as minutes of the ET day (an end before the start crosses midnight)
+/* The named sessions an older chart saved (its `session` param) are the times typed now ... */
+const SESS_PRESETS = { asia: ['00:00', '03:00'], london: ['03:00', '08:25'], pre: ['08:25', '09:30'], nyam: ['09:30', '11:00'],
+  evening: ['18:00', '03:00'] };
+/* ... and times that are exactly one of them keep that session's own key (what the server has always computed for it);
+   any other pair is a window of your own. */
 const sessKey = (p) => {
-  if (p.session === 'evening') return 'sess:1080:180';
-  if (p.session !== 'custom') return `sess:${p.session}`;
+  const named = Object.keys(SESS_PRESETS).find((n) => n !== 'evening' && SESS_PRESETS[n][0] === p.from && SESS_PRESETS[n][1] === p.to);
+  if (named) return `sess:${named}`;
   const a = hhmmMin(p.from), b = hhmmMin(p.to);
   return a === b ? 'sess:1080:180' : `sess:${a}:${b}`;      // a window with no length falls back to the evening session
 };
+/* A Session range holds a list of boxes, each its own window you can switch on and off. A new one starts with the four
+   sessions people watch (ET); each box takes a colour of its own by place in the list unless you pick one. */
+const SESS_BOX_DEFAULTS = [{ name: 'London', from: '02:00', to: '05:00' }, { name: 'Asia', from: '20:00', to: '00:00' },
+  { name: 'NY AM', from: '09:30', to: '11:00' }, { name: 'NY PM', from: '13:30', to: '16:00' }];
+const SESS_BOX_COLORS = ['#2962FF', '#FF9800', '#089981', '#E91E63', '#9C27B0', '#00BCD4', '#F23645', '#8D6E63'];
+const SESS_BOX_MAX = 8;
+function clampBoxes(v) {
+  const out = [];
+  for (const b of Array.isArray(v) ? v : []) {
+    if (!b || typeof b !== 'object' || out.length >= SESS_BOX_MAX) continue;
+    const from = typeof b.from === 'string' && normalizeHHMM(b.from), to = typeof b.to === 'string' && normalizeHHMM(b.to);
+    if (!from || !to) continue;
+    const box = { name: typeof b.name === 'string' ? b.name.trim().slice(0, 14) : '', from, to, on: b.on !== false };
+    if (typeof b.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(b.color)) box.color = b.color;
+    out.push(box);
+  }
+  return out;
+}
+/* The boxes an instance draws: the switched-on ones, each with its wire key and colour. */
+function sessBoxes(inst) {
+  const list = (inst.params && Array.isArray(inst.params.boxes)) ? inst.params.boxes : [];
+  return list.map((b, i) => ({ ...b, index: i, key: sessKey(b), color: b.color || SESS_BOX_COLORS[i % SESS_BOX_COLORS.length] }))
+    .filter((b) => b.on !== false);
+}
 const TA_DEFS = [
   { id: 'rsi', group: 'Momentum', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
     label: (p) => `RSI ${p.length}`, desc: 'Relative strength: how strongly the last N bars closed up versus down, 0 to 100',
@@ -124,14 +153,10 @@ const TA_DEFS = [
     desc: 'High, low and middle of the first N minutes from a start time, all day',
     lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', TA_LVL),
       TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
-  { id: 'sess', group: 'Ranges', name: 'Session range', key: sessKey,
-    params: [{ key: 'session', label: 'Session', type: 'choice', def: 'london',
-      choices: [['asia', 'Asia 00:00-03:00'], ['london', 'London 03:00-08:25'], ['pre', 'Pre-market 08:25-09:30'], ['nyam', 'NY morning 09:30-11:00'],
-        ['evening', 'Evening 18:00-03:00'], ['custom', 'Your own times']] },
-      { key: 'from', label: 'Your own: from (ET)', type: 'time', def: '18:00' },
-      { key: 'to', label: 'Your own: to (ET)', type: 'time', def: '03:00' }],
-    label: (p) => (p.session === 'custom' ? `Range ${p.from}-${p.to}` : `${{ asia: 'Asia', london: 'London', pre: 'Pre-market', nyam: 'NY morning', evening: 'Evening' }[p.session] || 'Session'} range`),
-    desc: 'High and low of a session, or of a window of your own, held for the day',
+  { id: 'sess', group: 'Ranges', name: 'Session range', key: (p) => { const b = (p.boxes || []).find((x) => x.on !== false); return b ? sessKey(b) : null; },
+    params: [{ key: 'boxes', label: 'Boxes', type: 'boxes', def: SESS_BOX_DEFAULTS }],
+    label: (p) => { const on = (p.boxes || []).filter((b) => b.on !== false); return on.length ? on.map((b) => b.name || `${b.from}-${b.to}`).join(' · ') : 'Session range'; },
+    desc: 'High and low of each time window you type (ET), as many as you like, each on or off',
     lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
   // ---- structure: the same definitions the strategy blocks read (engine/levels.py, ranges.py, zones.py) ----
   { id: 'swing', group: 'Structure', name: 'Swing high / low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
@@ -243,6 +268,30 @@ const CATALOG = [
   ...FLOW.catalog,
   ...TA_DEFS,
 ];
+/* A study may be read on a longer timeframe (2026-10-11; server studies.HTF, wire key "ema:20@3600"): the window and
+   smoothing ones take a Timeframe input, "Chart" (0) = the chart's own bars. */
+const HTF_IDS = ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema'];
+/* The timeframe is typed, any length from a second to a day: "15m", "1h", "90s", "4h", "1D" (a bare number is minutes). */
+function parseTf(text) {
+  const m = /^\s*(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?\s*$/i.exec(String(text == null ? '' : text));
+  if (!m) return null;
+  const unit = (m[2] || 'm').toLowerCase(), n = Number(m[1]);
+  const sec = Math.round(n * (unit[0] === 's' ? 1 : unit[0] === 'm' ? 60 : unit[0] === 'h' ? 3600 : 86400));
+  return sec >= 1 && sec <= 86400 ? sec : null;
+}
+function fmtTf(sec) {
+  const n = Number(sec);
+  if (!(n > 0)) return '';
+  if (n % 86400 === 0) return `${n / 86400}D`;
+  if (n % 3600 === 0) return `${n / 3600}h`;
+  if (n % 60 === 0) return `${n / 60}m`;
+  return `${n}s`;
+}
+for (const id of HTF_IDS) {
+  const d = CATALOG.find((x) => x.id === id);
+  if (d) d.params.push({ key: 'tf', label: 'Timeframe', type: 'tf', def: '0', omitDefault: true });
+}
+const tfSec = (p) => { const n = p && /^\d+$/.test(String(p.tf)) ? Number(p.tf) : 0; return n >= 1 && n <= 86400 ? n : 0; };
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
 /* The starred intervals (the toolbar row), from their stored JSON: valid specs only, each once, in the
@@ -326,12 +375,27 @@ function normalizeHHMM(text) {
 }
 
 function clampParams(id, params) {
-  const d = def(id), src = params && typeof params === 'object' ? params : {}, out = {};
+  const d = def(id);
+  let src = params && typeof params === 'object' ? params : {};
+  const out = {};
   if (!d) return out;
+  // a session range saved with a named session: those are the times now typed
+  if (id === 'sess' && SESS_PRESETS[src.session]) src = { ...src, from: SESS_PRESETS[src.session][0], to: SESS_PRESETS[src.session][1] };
+  // a session range saved with one window (from / to) is one box
+  if (id === 'sess' && !Array.isArray(src.boxes) && (src.from || src.to)) src = { ...src, boxes: [{ name: '', from: src.from || '03:00', to: src.to || '08:25', on: true }] };
   for (const p of d.params) {
     const v = src[p.key];
+    if (p.type === 'boxes') { out[p.key] = clampBoxes(Array.isArray(v) ? v : p.def); continue; }
+    if (p.type === 'tf') {      // typed ("15m"), kept as seconds; "Chart" is no key at all
+      const s = typeof v === 'string' || typeof v === 'number' ? (/^\d+$/.test(String(v)) ? Number(v) : parseTf(v)) : null;
+      if (s && s >= 1 && s <= 86400) out[p.key] = String(s);
+      continue;
+    }
     if (p.type === 'bool') out[p.key] = typeof v === 'boolean' ? v : p.def;
-    else if (p.type === 'choice') out[p.key] = p.choices.some(([c]) => c === v) ? v : p.def;
+    else if (p.type === 'choice') {
+      const pick = p.choices.some(([c]) => c === v) ? v : p.def;
+      if (!(p.omitDefault && pick === p.def)) out[p.key] = pick;     // the timeframe: "Chart" is no key at all, as before it existed
+    }
     else if (p.type === 'time') out[p.key] = (typeof v === 'string' && normalizeHHMM(v)) || p.def;
     else {
       let n = v === null || v === '' || typeof v === 'boolean' ? NaN : Number(v);
@@ -362,13 +426,14 @@ function instance(id, params, extra) {
    indicator with no per-line style (levels, footprint, profile, big prints, imbalance, heatmap, volume --
    canvas-drawn or a single fixed colour not worth a Style tab). */
 const STYLE_LINES = { vwap: ['main', 'band1', 'band2', 'band3'], ema: ['main'], sma: ['main'], vwma: ['main'],
-  adx: ['adx', 'pdi', 'mdi'], cumdelta: ['main'] };
-// delta has no Style tab: it draws a per-bar up/down-coloured histogram, not a single line -- style-able
-// the same way would need its own up/down fields, not this one-colour-per-key shape (spec: "unless trivial").
-function styleLineKeys(id) {
+  adx: ['adx', 'pdi', 'mdi'], cumdelta: ['main'], volume: ['up', 'down'], delta: ['up', 'down'] };
+/* volume and delta are histograms coloured by the bar's side: their two "lines" are the up and the down colour, and the
+   Style tab shows a colour and an opacity for them, no width or dash (a style row's controls: see styleControls). */
+const COLOR_ONLY = new Set(['volume', 'delta']);
+function styleControls(id) { return COLOR_ONLY.has(id) ? 'color' : 'line'; }
+function styleLineKeys(id) { if (id === 'sess') return null;   // its boxes carry their own colours
   const t = TA_BY_ID[id];
-  return STYLE_LINES[id] || (t && t.lines.length ? t.lines.map((l) => l.part) : null);   // a study drawn as markers only has no line style
-}
+  return STYLE_LINES[id] || (t && t.lines.length ? t.lines.map((l) => l.part) : null); }   // a study drawn as markers only has no line style
 
 const VWAP_DEFAULT = '#9C27B0';   // cell.js palette().vwap -- today's single-VWAP purple, kept as the first colour
 const UP_DEFAULT = '#089981', DOWN_DEFAULT = '#F23645';   // palette().up/.down -- theme-independent
@@ -386,7 +451,7 @@ function cycleColor(id, siblings) {
   return rest[(n - 1) % rest.length];
 }
 
-function lineStyle(color, width, dash) { return { color, width, dash, visible: true }; }
+function lineStyle(color, width, dash, alpha) { return alpha == null ? { color, width, dash, visible: true } : { color, width, dash, visible: true, alpha }; }
 
 /* A fresh per-line style {color, width (1-4), dash ('solid'|'dashed'|'dotted'), visible} for every line of a
    NEW instance of `id`, or null when `id` has no Style tab. `siblings`: see cycleColor. */
@@ -395,6 +460,7 @@ function defaultStyle(id, siblings) {
   if (!keys) return null;
   const color = cycleColor(id, siblings);
   switch (id) {
+    case 'volume': case 'delta': return { up: lineStyle(UP_DEFAULT, 1, 'solid', 50), down: lineStyle(DOWN_DEFAULT, 1, 'solid', 50) };
     case 'vwap': return { main: lineStyle(color, 2, 'solid'), band1: lineStyle(color, 1, 'dashed'),
       band2: lineStyle(color, 1, 'dashed'), band3: lineStyle(color, 1, 'dashed') };
     case 'adx': return { adx: lineStyle(color, 2, 'solid'), pdi: lineStyle(UP_DEFAULT, 1, 'solid'),
@@ -410,12 +476,48 @@ function defaultStyle(id, siblings) {
   }
 }
 
+/* The optional extras of a line's style (2026-10-11): alpha (10-100 %, 100 = solid, left out), shape (line | steps |
+   curved; left out = the indicator's own), tag (its value on the price axis; left out = the indicator's own). They are
+   in the object only when set, so a style nobody touched is stored exactly as before. */
+const SHAPES = ['line', 'steps', 'curved'];
 function clampLineStyle(v, fallback) {
   const o = v && typeof v === 'object' ? v : {};
-  return { color: typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color) ? o.color : fallback.color,
+  const out = { color: typeof o.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.color) ? o.color : fallback.color,
     width: [1, 2, 3, 4].includes(+o.width) ? +o.width : fallback.width,
     dash: DASH_STYLES.includes(o.dash) ? o.dash : fallback.dash,
     visible: typeof o.visible === 'boolean' ? o.visible : fallback.visible };
+  const base = fallback.alpha == null ? 100 : fallback.alpha;
+  const a = o.alpha === null || o.alpha === '' || typeof o.alpha === 'boolean' ? NaN : Math.round(Number(o.alpha));
+  const alpha = Number.isFinite(a) && a >= 10 && a <= 100 ? a : base;
+  if (alpha !== 100) out.alpha = alpha;
+  if (SHAPES.includes(o.shape)) out.shape = o.shape;
+  if (typeof o.tag === 'boolean') out.tag = o.tag;
+  return out;
+}
+/* A line's colour with its opacity applied: '#RRGGBB' alone at 100 %, else 'rgba(r,g,b,a)'. */
+function lineColor(st) {
+  const hex = st && typeof st.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(st.color) ? st.color : '#787B86';
+  const a = st && Number.isFinite(st.alpha) ? Math.min(100, Math.max(10, st.alpha)) : 100;
+  if (a >= 100) return hex;
+  return `rgba(${parseInt(hex.slice(1, 3), 16)},${parseInt(hex.slice(3, 5), 16)},${parseInt(hex.slice(5, 7), 16)},${a / 100})`;
+}
+
+/* An instance's other options (2026-10-11), `opts`, left out when nothing is changed: legend:false (no values in
+   the legend row), and for a study with reference levels (RSI 70/30 ...) refs: one value per level, null = that
+   level not drawn, and refColor. A value that is not what the dialog can make is dropped; nothing left = null. */
+const HEX6 = /^#[0-9a-fA-F]{6}$/;
+function refsOf(id) { const t = TA_BY_ID[id]; return t && Array.isArray(t.refs) ? t.refs : null; }
+function clampOpts(id, o) {
+  const src = o && typeof o === 'object' ? o : {}, out = {}, refs = refsOf(id);
+  if (src.legend === false) out.legend = false;
+  if (refs) {
+    if (Array.isArray(src.refs) && src.refs.length === refs.length && src.refs.every((n) => n === null || (typeof n === 'number' && Number.isFinite(n)))) {
+      const r = src.refs.map((n) => (n === null ? null : Math.min(1e6, Math.max(-1e6, n))));
+      if (r.some((n, i) => n !== refs[i])) out.refs = r;
+    }
+    if (typeof src.refColor === 'string' && HEX6.test(src.refColor)) out.refColor = src.refColor;
+  }
+  return Object.keys(out).length ? out : null;
 }
 
 /* `style` (as persisted, or straight from the Style tab) clamped to `id`'s line keys, or null: no style tab,
@@ -461,6 +563,10 @@ function vwapServerKey(p) {
 }
 
 function serverKey(inst) {
+  const key = baseServerKey(inst), sec = HTF_IDS.includes(inst.id) ? tfSec(inst.params) : 0;
+  return key && sec ? `${key}@${sec}` : key;
+}
+function baseServerKey(inst) {
   const p = inst.params || {};
   switch (inst.id) {
     case 'vwap': return vwapServerKey(p);
@@ -471,9 +577,10 @@ function serverKey(inst) {
   }
 }
 
-/* The studies the server computes for these instances. A "bk:" key is computed in the page from the book samples
-   (flowdefs.js): it is never asked of the server. */
-function serverKeys(list) { return [...new Set((list || []).map(serverKey).filter((k) => k && !k.startsWith('bk:')))]; }
+// a session range asks for the window of every box that is on; any other indicator for its one key
+const keysOf = (inst) => (inst.id === 'sess' ? sessBoxes(inst).map((b) => b.key) : [serverKey(inst)]);
+/* A "bk:" key is computed in the page from the book samples (flowdefs.js): it is never asked of the server. */
+function serverKeys(list) { return [...new Set((list || []).flatMap(keysOf).filter((k) => k && !k.startsWith('bk:')))]; }
 
 /* A saved chart config of any vintage as {root, spec, indicators}. The spec is
    normalised as the server answers it (a Build-1 "tick:0750" is "tick:750"). */
@@ -501,6 +608,8 @@ function migrate(cfg) {
       if (movable(x.id)) o.pane = placement(x);
       const st = clampStyle(x.id, x.style);   // absent/malformed: no `style` -- renders as it always has
       if (st) o.style = st;
+      const op = clampOpts(x.id, x.opts);
+      if (op) o.opts = op;
       return o;
     });
     return { root, spec, indicators };
@@ -568,6 +677,10 @@ function migrateLayout(v) {
 }
 
 function label(inst) {
+  const l = baseLabel(inst), sec = HTF_IDS.includes(inst.id) ? tfSec(inst.params) : 0;
+  return sec ? `${l} · ${fmtTf(sec)}` : l;       // "EMA 20 · 1h": read on that timeframe
+}
+function baseLabel(inst) {
   const d = def(inst.id), p = inst.params || {};
   if (!d) return String(inst.id);
   switch (inst.id) {
@@ -631,6 +744,10 @@ function legendValues(inst, bar, colors, tick) {
     case 'adx': return [{ text: n2(v && v.adx), color: colors.text }, { text: n2(v && v.pdi), color: colors.up },
       { text: n2(v && v.mdi), color: colors.down }];
     case 'cumdelta': return [{ text: fmtSigned(v), color: colors.cum }];
+    case 'sess': {      // each box on: its high and low in its colour
+      return sessBoxes(inst).flatMap((b) => { const bv = bar && bar.sv ? bar.sv[b.key] : null;
+        return [{ text: n2(bv && bv.hi), color: b.color }, { text: n2(bv && bv.lo), color: b.color }]; });
+    }
     default: {
       const t = TA_BY_ID[inst.id];
       if (!t) return [];
@@ -811,17 +928,46 @@ function statusDrops(avail, items) {
   return out.sort((a, b) => a - b);
 }
 
-function filter(query, group = 'All') {
+/* `favs`: the starred indicator ids, for the Favorites group (which is no catalog group: it is whatever is starred). */
+function filter(query, group = 'All', favs = []) {
   const q = String(query || '').trim().toLowerCase();
-  return CATALOG.filter((d) => (group === 'All' || d.group === group)
+  return CATALOG.filter((d) => (group === 'All' || (group === FAV_GROUP ? favs.includes(d.id) : d.group === group))
     && (!q || d.name.toLowerCase().includes(q) || d.group.toLowerCase().includes(q) || d.id.includes(q)));
 }
 
+/* ---- starred indicators and drawing tools (2026-10-11) ----
+   Both are lists of ids kept per browser. The Favorites group of the indicators dialog is what is starred there; the tools
+   rail shows the starred tools in a row of their own and the rest in these popup groups (a group's button shows the tool
+   last used from it). Order = the order they were starred. */
+const FAV_GROUP = 'Favorites';
+const TOOL_GROUPS = [
+  ['Lines and shapes', ['trend', 'ray', 'xline', 'arrow', 'channel', 'hline', 'vline', 'rect']],
+  ['Fib and positions', ['fib', 'long', 'short', 'measure']],
+  ['Notes and marks', ['note', 'avwap', 'alert']],
+];
+const TOOL_FAV_DEFAULT = ['trend', 'hline', 'rect', 'fib', 'long', 'short'];
+/* A stored JSON list of ids: only ids `valid` knows, each once; junk or nothing stored -> `fallback`. A stored empty list is kept
+   (the user unstarred everything). */
+function parseIdList(text, valid, fallback) {
+  let a = null;
+  try { a = JSON.parse(text); } catch (_) { a = null; }
+  if (!Array.isArray(a)) return [...fallback];
+  const out = [];
+  for (const id of a) if (typeof id === 'string' && valid.includes(id) && !out.includes(id)) out.push(id);
+  return out;
+}
+/* Star / unstar one id: a new list, a newly starred one last. */
+function toggleId(list, id) { return list.includes(id) ? list.filter((x) => x !== id) : [...list, id]; }
+/* Which tool group holds a tool (an index into TOOL_GROUPS), -1 for the cursor or an unknown one. */
+function toolGroupOf(tool) { return TOOL_GROUPS.findIndex(([, tools]) => tools.includes(tool)); }
+
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
-  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
+  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
-  styleLineKeys, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM };
+  styleLineKeys, styleControls, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
+  SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
+  FAV_GROUP, TOOL_GROUPS, TOOL_FAV_DEFAULT, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

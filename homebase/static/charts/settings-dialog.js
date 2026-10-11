@@ -116,6 +116,18 @@ const TABS = [
       { label: 'Text size', select: { key: 'scaleFont', choices: FONT_SIZES, parse: asNumber } },
       { label: 'Lines colour', colors: [['scaleLines', '']] },
     ]],
+    ['TOOL LABELS', [
+      { label: 'Show the numbers on tools', select: { key: 'toolLabels', choices: [
+        ['hover', 'On hover or when selected'], ['always', 'Always'], ['never', 'Never']] } },
+      { label: 'Long / short: target label', check: 'posTarget' },
+      { label: 'Long / short: stop label', check: 'posStop' },
+      { label: 'Long / short: risk:reward and quantity', check: 'posRR' },
+      { label: 'Long / short: result (entered, closed, open)', check: 'posResult' },
+      { label: 'Target and stop show the price', check: 'posPrice' },
+      { label: 'Target and stop show the distance and %', check: 'posPoints' },
+      { label: 'Target and stop show the ticks', check: 'posTicks' },
+      { label: 'Target and stop show the dollars', check: 'posMoney' },
+    ]],
   ] },
   { id: 'events', label: 'Events', icon: 'calendar', sections: [
     ['ECONOMIC CALENDAR', [
@@ -124,7 +136,9 @@ const TABS = [
       { label: 'Low', check: 'evLow', dot: '#F7C600' },
       { label: 'Holiday', check: 'evHoliday', dot: '#9598A1' },
       { label: 'Currencies', chips: 'evCountries' },
-      { label: 'Vertical lines for high impact', check: 'evLines' },
+      { label: 'Vertical lines for high and medium impact', check: 'evLines', select: [
+        { key: 'evLineStyle', choices: LINE, name: 'Event line style' },
+        { key: 'evLineWidth', choices: WIDTHS, parse: asNumber, name: 'Event line width' }] },
     ]],
     ['NEWS', [
       { label: 'News on chart', select: { key: 'newsOnChart', choices: [

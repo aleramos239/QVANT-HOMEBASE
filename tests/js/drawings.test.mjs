@@ -742,7 +742,8 @@ test('the vertical-line tool places with one click; ray, extended line and Fib p
     const d = R.store.list('NQ')[0];
     assert.equal(d.type, tool);
     assert.deepEqual(d.points, [{ t: bars[0].ms, p: 900 }, { t: bars[4].ms, p: 860 }], tool);
-    assert.deepEqual(Object.keys(d.style).sort(), [...DS.FIELDS[tool]].sort(), `${tool}: exactly its own style fields`);
+    // the optional fields (no entry in DEFAULTS: the line ends' marks) are in a style only once they are set
+    assert.deepEqual(Object.keys(d.style).sort(), DS.FIELDS[tool].filter((k) => k in DS.DEFAULTS[tool]).sort(), `${tool}: exactly its own style fields`);
     R.done();
   }
 });
@@ -848,4 +849,12 @@ test('undo and redo: every change is a step, a quiet one is not, a new change dr
   assert.equal(st.undo('NQ'), false);
   st.add('NQ', A);
   assert.equal(st.canRedo('NQ'), false);
+});
+
+test('fillOf: a box fills with its own colour at the theme\'s soft opacity unless a fill was picked', () => {
+  const P = { accentSoft: 'rgba(41,98,255,.20)' };
+  assert.equal(D.fillOf({}, '#00C853', P), 'rgba(0,200,83,0.2)');
+  assert.equal(D.fillOf({ fillColor: '#112233' }, '#00C853', P), '#112233');
+  assert.equal(D.fillOf({}, 'red', P), P.accentSoft, 'not a plain hex: the theme blue');
+  assert.equal(D.fillOf({}, '#2962FF', { accentSoft: 'rgba(41,98,255,.10)' }), 'rgba(41,98,255,0.1)');
 });

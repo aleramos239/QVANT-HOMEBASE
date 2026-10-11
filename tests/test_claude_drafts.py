@@ -104,6 +104,20 @@ def test_names_never_shadow_a_stdlib_or_homebase_module(bad):
         draftstore.validate_name(bad)
 
 
+def test_shadow_names_skip_hidden_directories(tmp_path, monkeypatch):
+    """`.state` holds ~100k tester run files; walking it made every cold listing take seconds. Nothing in a hidden
+    directory can be imported, so its names are not collected; a real package's modules and sub-packages still are."""
+    (tmp_path / "pkg" / "sub").mkdir(parents=True)
+    (tmp_path / "pkg" / "sub" / "deepmod.py").write_text("")
+    (tmp_path / "topmod.py").write_text("")
+    (tmp_path / ".state" / "tester" / "runs" / "cell_7").mkdir(parents=True)
+    (tmp_path / ".state" / "tester" / "runs" / "hiddenmod.py").write_text("")
+    monkeypatch.setattr(draftstore, "_HOMEBASE_DIR", tmp_path)
+    got = draftstore._shadow_names() - draftstore._STDLIB
+    assert {"pkg", "sub", "deepmod", "topmod"} <= got
+    assert not got & {".state", "tester", "runs", "cell_7", "hiddenmod"}
+
+
 def test_a_pathological_source_is_a_value_error():
     with pytest.raises(ValueError):
         draftstore.check_source("x = " + "-" * 199_000 + "1\n")

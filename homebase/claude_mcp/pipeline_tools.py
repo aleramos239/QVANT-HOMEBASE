@@ -139,6 +139,8 @@ def _setting(s: dict, tried: list) -> dict:
         out.update(kind="whole" if m.group(1) else "number", min=_num(m.group(2)), max=_num(m.group(3)))
     elif words == "true | false":
         out.update(kind="bool")
+    elif words.startswith("text"):                  # "text (a clock time HH:MM ...)": the form takes what is typed
+        out.update(kind="text")
     elif words:
         out.update(kind="choice", choices=[c.strip() for c in words.split(" | ") if c.strip()])
     return out
@@ -222,12 +224,18 @@ _CARD = {
         "sides": {"type": "string", "enum": ["both", "long", "short"], "description": "Both sides, or one."},
         "sides_why": {"type": "string", "description": "Why one side only. Needed when sides is long or short."},
         "ways": {"type": "array", "minItems": 1, "maxItems": 3, "items": _WAY,
-                 "description": "1 to 3 ways to enter. Each is run on 1-minute and on 5-minute bars."},
+                 "description": "1 to 3 ways to enter. Each is run on the card's bars (1 and 5 minutes unless bars says "
+                                "otherwise)."},
         "indicators": {"type": "array", "maxItems": 5, "items": _INDICATOR,
                        "description": "Leave it out: no indicator is tried (the pipeline picks one box of the heat map "
                                       "and judges that box alone). A list a card still carries is taken and not used."},
         "ref": {"type": "string", "description": "Optional: WHICH paper, book, video or course (one line, 300 characters "
-                                                 "at most), e.g. 'Zarattini & Aziz 2023 (SSRN 4416622)'."}},
+                                                 "at most), e.g. 'Zarattini & Aziz 2023 (SSRN 4416622)'."},
+        "again_of": {"type": "string", "description": "Only on the owner's word: the name of an earlier card that this one "
+                                                      "runs again (the same card is otherwise refused as a duplicate)."},
+        "bars": {"type": "array", "minItems": 1, "items": {"type": "string", "enum": ["1", "5", "15", "30"]},
+                 "description": "Optional: the bar sizes (minutes) the card is run on, from 1, 5, 15, 30. Left out: 1 and 5. "
+                                "A family that only runs on 15 or 30 (blueprint_blocks lists each family's bars) needs it."}},
     "required": ["name", "why", "loser", "source", "market", "session", "sides", "ways"],
     "additionalProperties": False}
 
@@ -242,8 +250,10 @@ SPECS = [
           "one line); ONE market (NQ, ES or GC); ONE session (asia, london, pre, nyam, mid, pm "
           "or eve); sides (both, or long / short with sides_why); ways: 1 to 3 ways to enter, each a family, ONE main "
           "setting of it and EXACTLY 3 values (its other settings go under fixed). A card names NO indicator: none "
-          "is tried. The bars are always 1 and 5 minutes and the stops "
-          "and targets are the standard table: a card does not choose them. The same idea (the same market, session, "
+          "is tried. The bars are 1 and 5 minutes unless the card lists `bars` (1, 5, 15, 30) and the stops "
+          "and targets are the standard table: a card does not choose them. Every family also takes, under fixed: "
+          "an entry window (w_start, w_end as HH:MM), a day rule (days: rel0830, rel1000, tier1, nfp, cpi, fomc, mon..fri, "
+          "month_end, opex ...) and an indicator gate (gate + g_n, g_m, g_s, g_lvl, g_side); blueprint_blocks lists them. The same idea (the same market, session, "
           "sides and ways) cannot be added twice, not under another name either. Nothing is chosen after the run "
           "starts: every choice is on the card. A card with a line missing is refused with the lines that fail, and "
           "nothing is saved. The runner tests it when it is started (pipeline_control).",

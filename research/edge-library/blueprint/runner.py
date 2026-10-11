@@ -216,6 +216,8 @@ def code(family=None) -> dict:
     files = ["l2sim.py", "l2ref.py"] + ([] if family is None else ["families/blocks.py", f"families/{RM.registry().MODULE_OF[family]}.py"])
     if family is not None:
         files += ["flowtab.py", "bpfeat.py", "levels.py", "zones.py", "indicators.py"]          # the delta blocks, the Level-2 blocks, the liquidity levels, the zone blocks and the batch 4 indicators readers
+        if RM.registry().MODULE_OF[family] == "flex":                                            # the open layer's own code: its families only (the older stamps stay as they were)
+            files += ["flexind.py", "families/_flex.py"]
     return {f: _sha(str(S.L / f)) for f in dict.fromkeys(files)}
 
 

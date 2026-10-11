@@ -49,7 +49,8 @@ REFUSED = (                                         # (what, why) -- what versio
 def _values(kind: tuple) -> str:
     """A setting's values in words, from the class's schema entry: ('choice', (...)) | ('int', lo, hi) | ('float', lo, hi) | ('bool',)."""
     return (" | ".join(str(v) for v in kind[1]) if kind[0] == "choice" else f"a whole number {kind[1]:g} .. {kind[2]:g}" if kind[0] == "int" else
-            f"a number {kind[1]:g} .. {kind[2]:g}" if kind[0] == "float" else "true | false" if kind[0] == "bool" else str(kind))
+            f"a number {kind[1]:g} .. {kind[2]:g}" if kind[0] == "float" else "true | false" if kind[0] == "bool" else
+            "text (a clock time HH:MM of the Globex day; empty = none)" if kind[0] == "str" else str(kind))
 
 
 def _does(name: str) -> str:
@@ -61,13 +62,24 @@ def _does(name: str) -> str:
     return rest if sep and len(head) <= 30 else said
 
 
+OPEN_KEYS = ("w_start", "w_end", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side")     # families/_flex.py KEYS: the open layer, on every family
+
+
+def open_settings() -> list:
+    """The open layer's settings (families/_flex.py: an entry window, a day rule, an indicator gate), as families() words a family's own:
+    [{name, default, values}]. Every wrapped family takes them (under `fixed`, or one as the main setting)."""
+    cls = next(iter(RUN._blocks().WRAPPED.values()))
+    sc, d = cls.schema(), cls.defaults()
+    return [{"name": k, "default": d[k], "values": _values(sc[k])} for k in OPEN_KEYS if k in sc]
+
+
 def families() -> list:
     """Every bar-based family an idea's settings may name: {name, does, why (the library's reason), settings [{name,
     default, values}], tried (the values the library ran), markets, bars, sessions (the ones it trades in), bracket (it
     rests entry orders on both sides: worse fills add the late cancel), mirror (a setting whose values are opposite ideas:
     held at ONE value under `fixed`), runs, why_not}."""
     fam, blocks = RM.registry(), RUN._blocks()
-    skip = RI._reserved(blocks) | set(S.Template.DEFAULTS) | set(HIDDEN)
+    skip = RI._reserved(blocks) | set(S.Template.DEFAULTS) | set(HIDDEN) | set(OPEN_KEYS)       # the open layer is said once (open_settings)
     out = []
     for name in sorted(blocks.WRAPPED):
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -96,6 +108,7 @@ def blocks() -> dict:
                    "by_market": {root: [S.cell_id(x) for x in R.exit_menu(root)] for root in m["stops"]["pts"]},
                    "open": {"cells": m["open"]["cells"], "stops": m["open"]["stops"], "targets_r": m["open"]["targets_r"],
                             "cell_ids": [S.cell_id(x) for x in R.exit_cells("open", "NQ")]}},
+         "open_settings": open_settings(),
          "sessions": [{"name": s, "words": J.SESS_PLAIN[s], "runs": True} for s in RM.DAY_PASSES], "bars": list(fam.TFS),
          "markets": [{"market": k, "floor": R.need("2.2", k), "point_value": v["point_value"], "tick": v["tick"]} for k, v in c["contract"].items()],
          "random_tables": {"seeds": ctl["seeds"], "draws": ctl["draws"]},
@@ -116,7 +129,7 @@ def blocks() -> dict:
                 break
             does = f"{does}; {part}" if does else part
         sets = "; ".join(f"{x['name']} = {x['values']} (default {x['default']}" + (", ONE value: its values are opposite ideas" if x["name"] == f["mirror"] else "") + ")"
-                         for x in f["settings"]) or "none of its own"
+                         for x in f["settings"] if x["name"] not in OPEN_KEYS) or "none of its own"      # the open layer's nine are said once, below
         ran = ", ".join(f"{k} " + " / ".join(dict.fromkeys(str(v[k]) for v in f["tried"])) for k in f["tried"][0] if k != f["mirror"])
         return [f"  {f['name']:<{wide}s}  " + ("" if f["runs"] else "NOT YET -- ") + does,
                 f"  {'':<{wide}s}  settings: {sets}" + (f"; the library ran {ran}" if ran else "")
@@ -128,6 +141,9 @@ def blocks() -> dict:
             "the toolkit's own.",
             f"ENTRY TRIGGERS (settings.family; ONE an idea): {sum(f['runs'] for f in F)} run on the build days, {sum(not f['runs'] for f in F)} cannot yet",
             *[ln for f in F for ln in family(f)],
+            "EVERY ENTRY TRIGGER ALSO TAKES (the open layer, 2026-10-11; under `fixed`, or one of them as the main setting; all OFF by default):",
+            *[f"  {x['name']:<8s}  {x['values'] if x['name'] != 'days' else 'a day rule: ' + x['values'].replace(' | ', ', ')} (default {x['default'] or 'none'})"
+              for x in B["open_settings"]],
             "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7; a card may name two, line 0.2: each runs alone and both together, and the pair is kept only if each wins alone AND the pair beats each one)",
             *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"]
               + (" [NQ only; its test days end 2026-07-07, where the vendor's Level 2 history ends]" if f["block"] in eng.L2_BLOCKS else "") for f in filters],

@@ -8,17 +8,37 @@ const S = require('../../homebase/static/charts/drawstyle.js');
 test('every drawing type has a default style with exactly its own fields', () => {
   for (const type of ['trend', 'hline']) {
     const d = S.normalize(type, {});
-    assert.deepEqual(Object.keys(d).sort(), [...S.FIELDS[type]].sort());
+    // an optional field (no default: the end marks of a trend line) is left out until it is set
+    assert.deepEqual(Object.keys(d).sort(), S.FIELDS[type].filter((k) => k in S.DEFAULTS[type]).sort());
     assert.deepEqual(d, S.DEFAULTS[type]);
   }
   // rect's fillColor has no built-in default (unset = follow the theme's own accentSoft): the
   // review finding this fixes is exactly that a fixed default here was wrong in dark theme
   const rect = S.normalize('rect', {});
-  assert.deepEqual(Object.keys(rect).sort(), S.FIELDS.rect.filter((k) => k !== 'fillColor').sort());
+  assert.deepEqual(Object.keys(rect).sort(), S.FIELDS.rect.filter((k) => k !== 'fillColor' && k !== 'hoverLabels').sort());
   assert.deepEqual(rect, S.DEFAULTS.rect);
   assert.equal('fillColor' in S.DEFAULTS.rect, false);
   assert.deepEqual(S.normalize('long', {}), {});
-  assert.deepEqual(S.normalize('short', { width: 3 }), {});   // long/short take no style fields at all
+  assert.deepEqual(S.normalize('short', { junk: 3, textSize: 3 }), {});   // a position box takes only its own fields
+});
+
+test('optional style fields stay out until they are set, and only valid ones stay', () => {
+  assert.equal('startCap' in S.normalize('trend', {}), false);
+  assert.deepEqual(S.normalize('trend', { startCap: 'arrow', endCap: 'circle' }).startCap, 'arrow');
+  assert.equal('endCap' in S.normalize('trend', { endCap: 'star' }), false);
+  assert.equal('startCap' in S.normalize('xline', { startCap: 'arrow' }), false, 'an extended line has no ends');
+  assert.equal(S.normalize('trend', { width: 8 }).width, 8);
+  assert.equal(S.normalize('trend', { width: 9 }).width, S.DEFAULTS.trend.width);
+  // a position box: zone colours, label size, whether the labels show, its entry line, label parts -- nothing else
+  assert.deepEqual(S.normalize('long', { profitColor: '#00FF00', lossColor: 'rgba(255,0,0,0.3)', fontSize: 14, showLabels: false, width: 3, junk: 1 }),
+    { profitColor: '#00FF00', lossColor: 'rgba(255,0,0,0.3)', fontSize: 14, showLabels: false, width: 3 });
+  assert.deepEqual(S.normalize('short', { profitColor: 'green', fontSize: 5, showLabels: 'no', width: 9, entryColor: 'red', showTicks: 1 }), {});
+  assert.deepEqual(S.normalize('long', { entryColor: '#112233', lineStyle: 'dashed', textColor: '#FFFFFF', bold: true, hoverLabels: false,
+    showTarget: false, showMoney: false, showPath: false }),
+  { entryColor: '#112233', lineStyle: 'dashed', textColor: '#FFFFFF', bold: true, hoverLabels: false, showTarget: false, showMoney: false, showPath: false });
+  // the numbers of a line or a rectangle: on hover, or always, per tool
+  assert.equal(S.normalize('trend', { hoverLabels: true }).hoverLabels, true);
+  assert.equal('hoverLabels' in S.normalize('hline', { hoverLabels: true }), false);
 });
 
 test('normalize falls back to the default field-by-field, never throws on junk', () => {
@@ -78,7 +98,8 @@ test('starting() merges a preset over the built-in default, still normalized', (
   assert.equal(S.starting('trend', { width: 4 }).lineStyle, S.DEFAULTS.trend.lineStyle);   // untouched fields stay default
   assert.equal(S.starting('trend', { width: 99 }).width, S.DEFAULTS.trend.width);          // an invalid preset field is dropped
   assert.equal(S.starting('trend', { junk: 1 }).width, S.DEFAULTS.trend.width);
-  assert.deepEqual(S.starting('long', { width: 4 }), {});
+  assert.deepEqual(S.starting('long', { width: 4 }), { width: 4 });
+  assert.deepEqual(S.starting('long', { junk: 4 }), {});
 });
 
 test('dashFor: solid/dashed/dotted map to canvas dash arrays, anything else is solid', () => {
@@ -185,7 +206,8 @@ test('the new tools take exactly their own fields, and an old drawing keeps its 
   assert.equal(S.normalize('hline', {}).labelAlign, 'center');
   assert.equal(S.normalize('hline', { labelAlign: 'sideways' }).labelAlign, 'center');
   assert.equal(S.normalize('vline', {}).timeLabel, true);
-  assert.deepEqual(S.normalize('long', { width: 3 }), {});
+  assert.deepEqual(S.normalize('long', { width: 3 }), { width: 3 });   // the entry line's own width
+  assert.deepEqual(S.normalize('long', { extendLeft: true }), {});
   assert.equal(S.isValidField('rect', 'midStyle', 'wavy'), false);
   assert.equal(S.isValidField('trend', 'stats', 1), false);
 });

@@ -129,6 +129,12 @@ a { color: inherit; }
 .rail-btn[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
 .rail-btn.arm { color: var(--down); background: var(--down-soft); }
 .rail-sep { width: 28px; height: 1px; margin: 4px 0; background: var(--border); }
+/* starred tools: a row of their own under the cursor; then one button per tool group (its corner opens the group's popup) */
+.rail-favs, .rail-groups { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rail-favs { padding-bottom: 4px; border-bottom: 1px solid var(--border); margin-bottom: 0; width: 36px; }
+.rail-groups { padding-top: 0; }
+.menu-tools .menu-star { opacity: .55; }
+.menu-tools .menu-i:hover .menu-star, .menu-tools .menu-star.on { opacity: 1; }
 .rail-split { position: relative; }
 /* the magnet's mode flyout: a 6px triangle in the button's bottom-right corner */
 .rail-corner { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; border-radius: 0 0 4px 0; color: var(--text-2); }
@@ -312,6 +318,13 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .dlg-desc { color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dlg-grp { color: var(--text-2); font-size: 12px; }
 .dlg-row .ic { width: 16px; height: 16px; color: var(--accent); }
+/* the star on an indicator row: faint until it is starred (gold), so what can be starred is visible without a hover */
+.dlg-star { flex: none; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--text-2); opacity: .45; cursor: pointer; }
+.dlg-star .ic { color: inherit; }
+.dlg-row:hover .dlg-star, .dlg-star:focus-visible { opacity: 1; }
+.dlg-star:hover { background: var(--hover); }
+.dlg-star.on { opacity: 1; color: #F7C600; }
+.dlg-star.on svg { fill: currentColor; }
 .dlg-empty { padding: 12px 20px; color: var(--text-2); }
 @media (max-width: 560px) { .dlg-groups { display: none; } }
 .dlg-fields { padding: 4px 0; }
@@ -391,6 +404,17 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .set-num { width: 72px; height: 32px; padding: 0 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
   font-variant-numeric: tabular-nums; }
 .set-select:focus, .set-num:focus { border-color: var(--accent); }
+.pos-look { display: inline-flex; align-items: center; gap: 8px; }
+.tf-colors { max-height: 52vh; overflow: auto; padding: 4px 20px; }
+/* under a line's row (2026-10-11): opacity, type and axis value, smaller and wrapping at a narrow dialog */
+.set-sub { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 6px 12px; padding: 2px 0 8px; }
+.set-more { width: 28px; height: 28px; padding: 0; display: grid; place-items: center; color: var(--text-2); }
+.set-more .ic { width: 16px; height: 16px; }
+.set-more[aria-expanded="true"] { color: var(--accent); }
+.set-mini { display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12px; white-space: nowrap; }
+.set-mini input[type="checkbox"] { width: 14px; height: 14px; margin: 0; accent-color: var(--accent); }
+.set-range { width: 96px; accent-color: var(--accent); }
+.set-sub .set-select { height: 28px; font-size: 13px; }
 .set-foot { flex: none; display: flex; align-items: center; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
 .set-foot .grow { flex: 1; }
 .btn-solid { background: var(--text); color: var(--panel); }
@@ -550,6 +574,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .hb-news-src { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px;
   background: var(--hover); color: var(--text-2); }
 .hb-news-src.truth { background: var(--paper-soft); color: var(--paper); }
+.hb-news-src.ff-high { background: #F23645; color: #fff; }       /* ForexFactory's folder colours */
+.hb-news-src.ff-medium { background: #FF9800; color: #fff; }
 .hb-news-title { flex: 1; min-width: 0; padding: 0; border: 0; background: none; text-align: left; font-size: 13px;
   color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .hb-news-title:hover { text-decoration: underline; }
@@ -1018,6 +1044,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .bp-table tr.sel td { background: var(--accent-soft); }
 .dialog.settings-small { width: min(460px, 92vw); max-height: 80vh; }
 .dialog.settings-small .dlg-fields { max-height: 60vh; overflow: auto; scrollbar-width: thin; }
+.dialog.small .dlg-fields { max-height: 60vh; overflow: auto; scrollbar-width: thin; }   /* a long position dialog scrolls, Ok stays in view */
 .menu-tester-runs { width: 360px; }
 .tst-run-row { display: flex; align-items: center; gap: 8px; white-space: normal; }
 .tst-run-row .menu-t { white-space: normal; }
@@ -1322,3 +1349,13 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .obj-type { font-size: 14px; }
 .obj-sub { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12px; }
 .obj-btn { height: 28px; padding: 0 10px; font-size: 13px; }
+
+/* Session range: one row a box */
+.boxes { display: flex; flex-direction: column; gap: 6px; }
+.box-row { display: flex; align-items: center; gap: 6px; }
+.box-name { flex: 1 1 90px; min-width: 0; }
+.box-time { width: 62px; text-align: center; }
+.box-to { color: var(--text-2, #787B86); font-size: 12px; }
+.box-del { padding: 0 8px; }
+.box-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.box-note { margin-top: 2px; }

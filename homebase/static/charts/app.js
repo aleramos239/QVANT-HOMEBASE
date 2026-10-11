@@ -226,6 +226,11 @@ function hostFor(id) {
     onSelectionChanged(cell, d) { syncDrawToolbar(cell, d); },
     onAlert(cell, d, price) { alertWentOff(cell, d, price); },
     styleDefault(type) { return drawStyleDefaults.get(type) || null; },
+    colorFor(cell) {                                                  // the colour set for the timeframe it is drawn on
+      const s = cell.spec(), c = tfColors[s];
+      if (c) sbNote(`Drawn on ${C.specLabel(s)}: its colour (rail: Colours by timeframe)`);
+      return c || null;
+    },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
     // 2026-09-28 three-tabs plan: HBReplayUI/HBTradeUI/HBDeskClient/T (HBTrade) may not be loaded at
@@ -1264,6 +1269,17 @@ function trapTab(e) {   // Tab stays inside the open dialog
 
 /* TradingView's Indicators dialog: search, groups, click a name to add it
    (with defaults) to the selected chart; the dialog stays open. */
+/* The starred indicators (per browser; a blocked store just means none): the dialog's Favorites group. */
+const IND_FAVS_KEY = 'hb_ind_favs';
+function loadIndFavs() {
+  try { return C.parseIdList(localStorage.getItem(IND_FAVS_KEY), C.CATALOG.map((d) => d.id), []); } catch (_) { return []; }
+}
+let indFavs = loadIndFavs();
+function toggleIndFav(id) {
+  indFavs = C.toggleId(indFavs, id);
+  try { localStorage.setItem(IND_FAVS_KEY, JSON.stringify(indFavs)); } catch (_) { /* stays for this page */ }
+}
+
 function indicatorsDialog() {
   const c = cur();
   if (!c) return;
@@ -1275,9 +1291,9 @@ function indicatorsDialog() {
   const body = mk('div', 'dlg-body'), groups = mk('div', 'dlg-groups'), list = mk('div', 'dlg-list');
   body.append(groups, list);
   box.append(search, body);
-  let group = 'All';
+  let group = indFavs.length ? C.FAV_GROUP : 'All';      // the starred ones first, once there are any
   const render = () => {
-    const q = input.value.trim(), hits = C.filter(q, group);
+    const q = input.value.trim(), hits = C.filter(q, group, indFavs);
     const had = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;   // keyboard focus
     list.replaceChildren(...hits.map((d) => {
       const row = mk('button', 'dlg-row has-desc');
@@ -1290,6 +1306,14 @@ function indicatorsDialog() {
       row.append(txt);
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
+      const star = mk('span', 'dlg-star' + (indFavs.includes(d.id) ? ' on' : ''));       // starred: it joins the Favorites group
+      star.setAttribute('role', 'button');
+      star.title = star.classList.contains('on') ? 'Remove from favorites' : 'Add to favorites';
+      star.setAttribute('aria-label', star.title);
+      star.setAttribute('aria-pressed', String(star.classList.contains('on')));
+      star.replaceChildren(icon('star'));
+      star.onclick = (e) => { e.stopPropagation(); toggleIndFav(d.id); renderGroups(); render(); };
+      row.append(star);
       row.onclick = () => {
         const saved = indicatorDefaults.get(d.id);   // "Save as default" in the settings dialog's Template ▾
         const inst = C.instance(d.id, saved && saved.params);
@@ -1300,14 +1324,16 @@ function indicatorsDialog() {
       };
       return row;
     }));
-    if (!hits.length) list.appendChild(mk('div', 'dlg-empty', 'No indicators match'));
+    if (!hits.length) {
+      list.appendChild(mk('div', 'dlg-empty', group === C.FAV_GROUP && !q ? 'Star an indicator (the star on its row) and it is here.' : 'No indicators match'));
+    }
     const again = had && [...list.children].find((x) => x.dataset.id === had);
     if (again) again.focus();
   };
   const renderGroups = () => {
     const had = groups.contains(document.activeElement);
-    groups.replaceChildren(...C.GROUPS.map((g) => {
-      const b = mk('button', 'dlg-group' + (g === group ? ' active' : ''), g);
+    groups.replaceChildren(...[C.FAV_GROUP, ...C.GROUPS].map((g) => {
+      const b = mk('button', 'dlg-group' + (g === group ? ' active' : ''), g === C.FAV_GROUP ? `★ ${g} (${indFavs.length})` : g);
       b.type = 'button';
       b.onclick = () => { group = g; renderGroups(); render(); };
       return b;
@@ -1326,7 +1352,7 @@ function indicatorsDialog() {
    (indicator-settings-dialog.js). Nothing to show for an indicator with no params and no Style tab. */
 function settingsDialog(cell, uid) {
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
-  if (!d || (!d.params.length && !C.styleLineKeys(inst.id))) return;
+  if (!d) return;     // every indicator has its legend option, so every one has a dialog (2026-10-11)
   const box = openDialog(d.name, 'settings indicator-settings');
   const ctl = window.HBIndicatorSettings.mount(box, {
     cell, uid,
@@ -1402,6 +1428,83 @@ function positionDialog(cell, d) {
     form.appendChild(row);
     inputs[key] = ctl;
   }
+  // the box's look (2026-10-11): its two zone colours, its label size, whether the labels show; unset = the theme's own
+  const look = { ...DS.normalize(d.type, d.style) };
+  for (const [key, label, fallback] of [['profitColor', 'Profit zone', cell.P.profitZone], ['lossColor', 'Loss zone', cell.P.lossZone],
+    ['entryColor', 'Entry line', cell.P.text2], ['textColor', 'Label text', cell.P.onAccent]]) {
+    const row = mk('div', 'field'), lab = mk('label', '', label), box2 = mk('span', 'pos-look');
+    const b = mk('button', 'swatch'), dot = mk('i'), reset = mk('button', 'btn btn-ghost', 'Theme');
+    b.type = 'button'; reset.type = 'button';
+    b.setAttribute('aria-label', `${label} colour`);
+    b.append(dot);
+    const paint = () => { dot.style.background = look[key] || fallback; };
+    b.onclick = () => colorSwatchMenu(b, () => look[key] || fallback, (c) => { look[key] = c; paint(); });
+    reset.onclick = () => { delete look[key]; paint(); };
+    paint();
+    box2.append(b, reset);
+    row.append(lab, box2);
+    form.appendChild(row);
+  }
+  {
+    const row = mk('div', 'field'), lab = mk('label', '', 'Label size'), ctl = mk('input');
+    ctl.type = 'number'; ctl.min = '10'; ctl.max = '28'; ctl.step = '1'; ctl.placeholder = '12';
+    ctl.value = look.fontSize ? String(look.fontSize) : '';
+    ctl.id = 'pos-fontSize';
+    lab.htmlFor = ctl.id;
+    ctl.onchange = () => {
+      const n = Math.round(Number(ctl.value));
+      if (ctl.value.trim() === '' || !Number.isFinite(n)) { delete look.fontSize; ctl.value = ''; return; }
+      look.fontSize = Math.max(10, Math.min(28, n));
+      ctl.value = String(look.fontSize);
+    };
+    row.append(lab, ctl);
+    form.appendChild(row);
+    const row2 = mk('div', 'field'), lab2 = mk('label', '', 'Show the labels'), cb = mk('input');
+    cb.type = 'checkbox'; cb.checked = look.showLabels !== false; cb.id = 'pos-showLabels';
+    lab2.htmlFor = cb.id;
+    cb.onchange = () => { if (cb.checked) delete look.showLabels; else look.showLabels = false; };
+    row2.append(lab2, cb);
+    form.appendChild(row2);
+    // 2026-10-11: the entry line's width and style, bold labels, when the labels show, and what they say. A part you
+    // never touch follows Settings > Canvas > Tool labels; one you set stays as set for this box.
+    const field = (label, ctl, id) => { const r = mk('div', 'field'), l = mk('label', '', label); if (id) { ctl.id = id; l.htmlFor = id; } r.append(l, ctl); form.appendChild(r); };
+    const num = mk('input');
+    num.type = 'number'; num.min = '1'; num.max = '8'; num.step = '1'; num.placeholder = '1';
+    num.value = look.width ? String(look.width) : '';
+    num.onchange = () => {
+      const n = Math.round(Number(num.value));
+      if (num.value.trim() === '' || !Number.isFinite(n)) { delete look.width; num.value = ''; return; }
+      look.width = Math.max(1, Math.min(8, n));
+      num.value = String(look.width);
+    };
+    field('Entry line width', num, 'pos-width');
+    const sty = mk('select');
+    for (const [v, text] of [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) { const o = mk('option', '', text); o.value = v; sty.append(o); }
+    sty.value = look.lineStyle || 'solid';
+    sty.onchange = () => { if (sty.value === 'solid') delete look.lineStyle; else look.lineStyle = sty.value; };
+    field('Entry line style', sty, 'pos-lineStyle');
+    const bold = mk('input');
+    bold.type = 'checkbox'; bold.checked = look.bold === true;
+    bold.onchange = () => { if (bold.checked) look.bold = true; else delete look.bold; };
+    field('Bold labels', bold, 'pos-bold');
+    const mode = mk('select');
+    for (const [v, text] of [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']]) { const o = mk('option', '', text); o.value = v; mode.append(o); }
+    mode.value = typeof look.hoverLabels === 'boolean' ? (look.hoverLabels ? 'hover' : 'always') : '';
+    mode.onchange = () => { if (mode.value === '') delete look.hoverLabels; else look.hoverLabels = mode.value === 'hover'; };
+    field('Labels appear', mode, 'pos-hoverLabels');
+    const R = cell.R || {};
+    for (const [key, label, setting] of [['showTarget', 'Target label', 'posTarget'], ['showStop', 'Stop label', 'posStop'],
+      ['showRR', 'Risk:reward and quantity', 'posRR'], ['showResult', 'Result (entered, closed, open)', 'posResult'],
+      ['showPrice', 'Price in the target and stop', 'posPrice'], ['showPoints', 'Distance and % in the target and stop', 'posPoints'],
+      ['showTicks', 'Ticks in the target and stop', 'posTicks'], ['showMoney', 'Dollars in the target and stop', 'posMoney'],
+      ['showPath', 'The played-out path (entry to exit)', null]]) {
+      const c = mk('input');
+      c.type = 'checkbox';
+      c.checked = typeof look[key] === 'boolean' ? look[key] : (setting ? R[setting] !== false : true);
+      c.onchange = () => { look[key] = c.checked; };
+      field(label, c, `pos-${key}`);
+    }
+  }
   const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
   cancel.type = 'button';
   ok.type = 'button';
@@ -1422,6 +1525,8 @@ function positionDialog(cell, d) {
     const next = { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
       { t: now.points[2].t, p: stop }] };
     if (vis) next.vis = vis; else delete next.vis;       // no rule = shown everywhere: nothing stored
+    const lookNow = DS.normalize(d.type, look);
+    if (Object.keys(lookNow).length) next.style = lookNow; else delete next.style;
     drawings.replace(root, next);
   };
   form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { if (e.repeat) return; ok.click(); } });   // S7
@@ -1548,7 +1653,7 @@ function drawToolbarButtons(cell, root, d) {
   if (!isPosDrawing(d)) {
     const style = DS.normalize(d.type, d.style);
     const w = mk('input', 'dtb-num');
-    w.type = 'number'; w.min = '1'; w.max = '4'; w.step = '1'; w.value = String(style.width);
+    w.type = 'number'; w.min = '1'; w.max = '8'; w.step = '1'; w.value = String(style.width);
     w.title = 'Width'; w.setAttribute('aria-label', 'Width');
     w.onchange = () => { patchDrawing(root, d.id, { style: { width: Number(w.value) } }); w.value = String(DS.normalize(d.type, (drawings.list(root).find((x) => x.id === d.id) || {}).style).width); };
     const ls = mk('select', 'dtb-select');
@@ -1559,6 +1664,10 @@ function drawToolbarButtons(cell, root, d) {
     const gear = btn('gear', 'Settings');
     gear.onclick = () => drawingSettingsDialog(cell, d);
     wrap.append(w, ls, gear);
+  } else {
+    const gear = btn('gear', 'Settings');
+    gear.onclick = () => positionDialog(cell, drawings.list(root).find((x) => x.id === d.id) || d);
+    wrap.append(gear);
   }
   const lock = btn(d.locked ? 'lock' : 'lockOpen', d.locked ? 'Unlock' : 'Lock');
   lock.setAttribute('aria-pressed', String(!!d.locked));
@@ -1622,8 +1731,9 @@ function drawingSettingsDialog(cell, d0) {
   const orig = drawings.list(root).find((x) => x.id === d0.id);
   if (!orig) return;
   const type = orig.type, has = (k) => DS.FIELDS[type].includes(k);
-  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis), alert: orig.alert };
-  let work = { ...atOpen, style: { ...atOpen.style } }, tab = 'style', done = false;
+  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis), alert: orig.alert,
+    points: orig.points.map((p) => ({ ...p })) };
+  let work = { ...atOpen, style: { ...atOpen.style }, points: atOpen.points.map((p) => ({ ...p })) }, tab = 'style', done = false;
   const title = (type === 'hline' && orig.alert ? 'Price alert' : DRAW_NAMES[type]) || 'Drawing';
   const before = drawings.list(root);           // the list as it was: one undo step for everything this dialog does
   const box = openDialog(title, 'drawstyle');
@@ -1631,7 +1741,7 @@ function drawingSettingsDialog(cell, d0) {
   body.append(tabs, pane);
   box.append(body, foot);
 
-  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style, vis: work.vis, ...(work.alert ? { alert: work.alert } : {}) }, true); }
+  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style, vis: work.vis, points: work.points, ...(work.alert ? { alert: work.alert } : {}) }, true); }
   function set(patch) { work = { ...work, ...patch }; preview(); }
   function setStyle(patch, repaint = true) { work = { ...work, style: DS.normalize(type, { ...work.style, ...patch }) }; preview(); if (repaint) renderPane(); }
 
@@ -1717,7 +1827,35 @@ function drawingSettingsDialog(cell, d0) {
     return rows;
   }
 
-  const TABS = [['style', 'Style'], ...(has('text') && type !== 'note' ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []), ['vis', 'Visibility']];
+  /* The prices of the drawing's points, typed (rounded to the tick): its Coordinates tab. A vertical line and an anchored
+     VWAP sit on a bar, not a price, so they have none. */
+  const hasPrices = type !== 'vline' && type !== 'avwap';
+  function coordRows() {
+    const tick = cell.tick || 0.01, D = window.HBDrawings, names = type === 'hline' ? ['Price'] : orig.points.map((_, i) => `Point ${i + 1} price`);
+    const rows = [mk('div', 'set-cap', 'PRICES')];
+    work.points.forEach((pt, i) => {
+      const n = mk('input', 'set-num');
+      n.type = 'number';
+      n.step = String(tick);
+      n.value = String(pt.p);
+      n.style.width = '120px';
+      n.setAttribute('aria-label', names[i]);
+      n.onchange = () => {
+        const v = Number(n.value);
+        if (n.value === '' || !Number.isFinite(v)) { n.value = String(work.points[i].p); return; }
+        const p = D.roundToTick(v, tick);
+        n.value = String(p);
+        work = { ...work, points: work.points.map((q, j) => (j === i ? { ...q, p } : q)) };
+        preview();
+      };
+      rows.push(row(names[i], n));
+    });
+    rows.push(mk('div', 'set-note', 'Prices snap to the tick. Move the points with the mouse for the times.'));
+    return rows;
+  }
+
+  const TABS = [['style', 'Style'], ...(has('text') && type !== 'note' ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []),
+    ...(hasPrices ? [['coords', 'Coordinates']] : []), ['vis', 'Visibility']];
   function renderTabs() {
     tabs.replaceChildren(...TABS.map(([id, label]) => {
       const b = mk('button', 'set-tab' + (id === tab ? ' active' : ''), label);
@@ -1735,20 +1873,30 @@ function drawingSettingsDialog(cell, d0) {
       rows.push(row('Text colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
       rows.push(row('Bold', sw('bold')));
       rows.push(row('Border', colorCtl(() => work.color, (c) => set({ color: c }))));
-      rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+      rows.push(row('Fill', colorCtl(() => window.HBDrawings.fillOf(work.style, work.color, cell.P), (c) => setStyle({ fillColor: c }))));
     } else if (tab === 'style') {
       rows.push(mk('div', 'set-cap', 'LINE'));
       rows.push(row(type === 'fib' ? 'Trend colour' : 'Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
-      rows.push(row('Width', numberCtl(work.style.width, 1, 4, (v) => setStyle({ width: v }))));
+      rows.push(row('Width', numberCtl(work.style.width, 1, 8, (v) => setStyle({ width: v }))));
       rows.push(row('Style', selectCtl(work.style.lineStyle, LINE_CHOICES, (v) => setStyle({ lineStyle: v }))));
       if (type === 'channel') {
-        rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+        rows.push(row('Fill', colorCtl(() => window.HBDrawings.fillOf(work.style, work.color, cell.P), (c) => setStyle({ fillColor: c }))));
         rows.push(row('Middle line', sw('midline')));
+      }
+      if (has('startCap')) {
+        const capChoices = [['none', 'None'], ['arrow', 'Arrow'], ['circle', 'Dot']];
+        rows.push(row('Start mark', selectCtl(work.style.startCap || 'none', capChoices, (v) => setStyle({ startCap: v }))));
+        rows.push(row('End mark', selectCtl(work.style.endCap || 'none', capChoices, (v) => setStyle({ endCap: v }))));
       }
       if (has('extendLeft')) rows.push(row('Extend left', sw('extendLeft')));
       if (has('extendRight') && type !== 'rect') rows.push(row('Extend right', sw('extendRight')));
       if (has('priceLabel')) rows.push(row('Price tag at its end', sw('priceLabel')));
       if (has('stats')) rows.push(row('Its move, in points and bars', sw('stats')));
+      if (has('hoverLabels') && (has('stats') || has('priceLabel'))) {
+        rows.push(row('Show its numbers', selectCtl(typeof work.style.hoverLabels === 'boolean' ? (work.style.hoverLabels ? 'hover' : 'always') : '',
+          [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']],
+          (v) => setStyle({ hoverLabels: v === '' ? undefined : v === 'hover' }))));
+      }
       if (type === 'hline') rows.push(row('Price label', sw('axisLabel')));
       if (type === 'hline' && work.alert) {
         const bars = cell.bars, last = bars.length ? bars[bars.length - 1].c : orig.points[0].p;
@@ -1772,12 +1920,15 @@ function drawingSettingsDialog(cell, d0) {
         rows.push(row('Extend right', sw('extendRight')));
         rows.push(mk('div', 'set-cap', 'FILL'));
         // unset (follows the theme) previews as the theme's own accentSoft, never a fixed default
-        rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+        rows.push(row('Fill', colorCtl(() => window.HBDrawings.fillOf(work.style, work.color, cell.P), (c) => setStyle({ fillColor: c }))));
         rows.push(mk('div', 'set-cap', 'INSIDE'));
         rows.push(row('Middle line (50%)', sw('midline')));
         rows.push(row('Quarter lines (25%, 75%)', sw('quarters')));
         rows.push(row('Their style', selectCtl(work.style.midStyle, LINE_CHOICES, (v) => setStyle({ midStyle: v }))));
         rows.push(row('Prices on its edges', sw('priceLabels')));
+        rows.push(row('Show them', selectCtl(typeof work.style.hoverLabels === 'boolean' ? (work.style.hoverLabels ? 'hover' : 'always') : '',
+          [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']],
+          (v) => setStyle({ hoverLabels: v === '' ? undefined : v === 'hover' }))));
       }
       if (type === 'fib') {
         rows.push(mk('div', 'set-cap', 'LEVELS'));
@@ -1789,6 +1940,8 @@ function drawingSettingsDialog(cell, d0) {
       }
     } else if (tab === 'levels') {
       rows.push(mk('div', 'set-cap', 'LEVELS'), ...levelRows());
+    } else if (tab === 'coords') {
+      rows.push(...coordRows());
     } else if (tab === 'vis') {
       rows.push(...visRows());
     } else {
@@ -1829,7 +1982,7 @@ function drawingSettingsDialog(cell, d0) {
     closeDialog();
   };
   foot.append(tpl, grow, cancel, ok);
-  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style, vis: atOpen.vis, ...(atOpen.alert ? { alert: atOpen.alert } : {}) }, true); };
+  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style, vis: atOpen.vis, points: atOpen.points, ...(atOpen.alert ? { alert: atOpen.alert } : {}) }, true); };
 
   renderTabs();
   renderPane();
@@ -2073,8 +2226,110 @@ function chartTemplateMenu(cell, at) {
 function setTool(t) {
   tool = t;
   for (const b of document.querySelectorAll('#rail [data-tool]')) b.setAttribute('aria-pressed', String(b.dataset.tool === t));
+  syncRailGroups();
   for (const c of cells) if (c.dc) c.dc.toolChanged();
   syncCrosshair();
+}
+
+/* ---- starred tools and tool groups on the rail (2026-10-11) ----
+   The rail's tool buttons stay in the page (setTool and the keys act on them); starring one moves it into the favorites
+   row under the cursor, and the rest wait out of sight in a pool. A group button is the tool last used from that group;
+   its corner opens a popup of the group's tools (click = pick, star = favorite). */
+const TOOL_FAVS_KEY = 'hb_tool_favs', TOOL_LAST_KEY = 'hb_tool_last';
+let toolFavs = [], toolLast = {}, railTools = new Map(), railGroupBtns = [];
+function loadToolPrefs() {
+  const ids = [...railTools.keys()];
+  try { toolFavs = C.parseIdList(localStorage.getItem(TOOL_FAVS_KEY), ids, C.TOOL_FAV_DEFAULT); } catch (_) { toolFavs = [...C.TOOL_FAV_DEFAULT]; }
+  try { toolLast = JSON.parse(localStorage.getItem(TOOL_LAST_KEY)) || {}; } catch (_) { toolLast = {}; }
+  if (!toolLast || typeof toolLast !== 'object' || Array.isArray(toolLast)) toolLast = {};
+}
+function saveToolPrefs() {
+  try { localStorage.setItem(TOOL_FAVS_KEY, JSON.stringify(toolFavs)); localStorage.setItem(TOOL_LAST_KEY, JSON.stringify(toolLast)); } catch (_) { /* stays for this page */ }
+}
+const groupTool = (gi) => {
+  const tools = C.TOOL_GROUPS[gi][1], t = toolLast[gi];
+  return tools.includes(t) && railTools.has(t) ? t : tools.find((x) => railTools.has(x)) || tools[0];
+};
+function renderRail() {
+  const favs = $('#railFavs'), pool = $('#railPool');
+  for (const [id, btn] of railTools) (toolFavs.includes(id) ? favs : pool).appendChild(btn);
+  // the favorites row keeps the order they were starred in
+  for (const id of toolFavs) if (railTools.has(id)) favs.appendChild(railTools.get(id));
+  favs.hidden = !favs.children.length;
+  railGroupBtns.forEach((b, gi) => {
+    const t = groupTool(gi), name = C.TOOL_GROUPS[gi][0], label = railTools.get(t) ? railTools.get(t).title : t;
+    b.main.firstChild.innerHTML = I[t] || '';
+    b.main.title = `${name}: ${label}`;
+    b.main.setAttribute('aria-label', b.main.title);
+    b.main.setAttribute('aria-pressed', String(C.toolGroupOf(tool) === gi));
+  });
+}
+/* Pressed state of the group buttons follows the current tool (setTool). */
+function syncRailGroups() {
+  railGroupBtns.forEach((b, gi) => b.main.setAttribute('aria-pressed', String(C.toolGroupOf(tool) === gi)));
+}
+function pickTool(t) {
+  const gi = C.toolGroupOf(t);
+  if (gi >= 0) { toolLast[gi] = t; saveToolPrefs(); renderRail(); }
+  setTool(t === tool && t !== 'cursor' ? 'cursor' : t);
+}
+function groupMenu(gi) {
+  const m = openMenu(railGroupBtns[gi].corner, 'menu-tools', { right: true });
+  m.appendChild(mk('div', 'menu-h', C.TOOL_GROUPS[gi][0]));
+  for (const t of C.TOOL_GROUPS[gi][1]) {
+    const src = railTools.get(t);
+    if (!src) continue;
+    const it = menuItem(src.title, '', () => { closeMenu(); pickTool(t); }, t === tool);
+    it.prepend(icon(t));
+    const st = mk('span', 'menu-star' + (toolFavs.includes(t) ? ' on' : ''));
+    st.setAttribute('role', 'button');
+    st.title = toolFavs.includes(t) ? 'Remove from favorites' : 'Add to favorites';
+    st.setAttribute('aria-label', st.title);
+    st.setAttribute('aria-pressed', String(toolFavs.includes(t)));
+    st.replaceChildren(icon('star'));
+    st.onclick = (e) => {                       // stars a tool without picking it; the popup stays and repaints
+      e.stopPropagation();
+      toolFavs = C.toggleId(toolFavs, t);
+      saveToolPrefs();
+      renderRail();
+      const on = toolFavs.includes(t);
+      st.classList.toggle('on', on);
+      st.title = on ? 'Remove from favorites' : 'Add to favorites';
+      st.setAttribute('aria-label', st.title);
+      st.setAttribute('aria-pressed', String(on));
+    };
+    it.appendChild(st);
+    m.appendChild(it);
+  }
+}
+/* Builds the favorites row, the group buttons and the pool around the rail's existing tool buttons (so the page's HTML
+   is the one list of tools). Runs before the buttons are wired. */
+function initRail() {
+  const rail = $('#rail');
+  for (const b of rail.querySelectorAll('[data-tool]')) if (b.dataset.tool !== 'cursor') railTools.set(b.dataset.tool, b);
+  loadToolPrefs();
+  const favs = mk('div', 'rail-favs'), pool = mk('div', 'rail-pool'), groups = mk('div', 'rail-groups'), cursor = rail.querySelector('[data-tool="cursor"]');
+  favs.id = 'railFavs';
+  pool.id = 'railPool';
+  pool.hidden = true;
+  C.TOOL_GROUPS.forEach(([name], gi) => {
+    const box = mk('div', 'rail-split'), main = mk('button', 'rail-btn'), corner = mk('button', 'rail-corner');
+    main.type = corner.type = 'button';
+    main.appendChild(mk('span', 'icw'));
+    main.dataset.group = String(gi);
+    corner.title = `${name}: more tools`;
+    corner.setAttribute('aria-label', corner.title);
+    corner.setAttribute('aria-haspopup', 'menu');
+    corner.setAttribute('aria-expanded', 'false');
+    main.onclick = () => pickTool(groupTool(gi));
+    corner.onclick = () => toggleMenu(corner, () => groupMenu(gi));
+    box.append(main, corner);
+    groups.appendChild(box);
+    railGroupBtns.push({ main, corner });
+  });
+  cursor.after(favs, groups);
+  rail.appendChild(pool);
+  renderRail();
 }
 
 function sbNote(text) {
@@ -2152,7 +2407,65 @@ function objectsDialog() {
   }
   const done = button('btn btn-solid', 'Done');
   done.onclick = closeDialog;
-  foot.append(mk('span', 'grow'), done);
+  const byTf = button('btn btn-ghost', 'Colours by timeframe…');
+  byTf.onclick = () => { closeDialog(); tfColorsDialog(); };
+  foot.append(byTf, mk('span', 'grow'), done);
+  render();
+  box.append(list, foot);
+}
+
+/* ---- colours by the timeframe a drawing is drawn on (2026-10-11) ----
+   A new drawing takes the colour set here for the chart's timeframe (a line drawn on the 1h is orange, on the 5m blue ...),
+   and keeps it wherever it is looked at. Per browser (localStorage); a timeframe with no colour leaves the usual blue. */
+const TF_COLORS_KEY = 'hb_tf_colors';
+// far apart in hue, and next to each other in the list (the next timeframe up) far apart again
+const TF_PALETTE = ['#F23645', '#00B8D4', '#FFC400', '#7C4DFF', '#00C853', '#FF4081', '#FF6D00', '#2962FF', '#AEEA00', '#795548',
+  '#D500F9', '#00796B', '#455A64', '#B71C1C'];
+const tfSpecs = () => C.INTERVAL_GROUPS.flatMap(([, s]) => s).filter((s) => /^time:\d+$/.test(s));
+function loadTfColors() {
+  let raw = null;
+  try { raw = localStorage.getItem(TF_COLORS_KEY); } catch (_) { raw = null; }
+  if (raw == null) {      // never set: ON, one colour per timeframe (Clear all turns it off)
+    const out = {};
+    tfSpecs().forEach((s, i) => { out[s] = TF_PALETTE[i % TF_PALETTE.length]; });
+    return out;
+  }
+  try {
+    const o = JSON.parse(raw), out = {};
+    for (const [k, v] of Object.entries(o && typeof o === 'object' ? o : {})) if (/^time:\d+$/.test(k) && DS.isColor(v)) out[k] = v;
+    return out;
+  } catch (_) { return {}; }
+}
+let tfColors = loadTfColors();
+function saveTfColors() { try { localStorage.setItem(TF_COLORS_KEY, JSON.stringify(tfColors)); } catch (_) { /* stays for this page */ } }
+
+function tfColorsDialog() {
+  const box = openDialog('Colours by timeframe', 'small');
+  const specs = tfSpecs();
+  const list = mk('div', 'tf-colors'), foot = mk('div', 'dlg-foot');
+  box.append(mk('div', 'dlg-msg', 'A new drawing takes the colour of the timeframe it is drawn on and keeps it, so a line from the 1h reads differently on the 5m. Pick any colour per timeframe; None = the usual blue.'));
+  function render() {
+    list.replaceChildren(...specs.map((s) => {
+      const row = mk('div', 'field'), lab = mk('label', '', C.specLabel(s)), ctl = mk('span', 'pos-look');
+      const sw = button('swatch'), dot = mk('i'), clear = button('btn btn-ghost', 'None');
+      sw.setAttribute('aria-label', `${C.specLabel(s)} colour`);
+      sw.append(dot);
+      const paint = () => { dot.style.background = tfColors[s] || 'transparent'; clear.hidden = !tfColors[s]; };
+      sw.onclick = () => colorSwatchMenu(sw, () => tfColors[s] || '#2962FF', (c) => { tfColors[s] = c; saveTfColors(); paint(); });
+      clear.onclick = () => { delete tfColors[s]; saveTfColors(); paint(); };
+      paint();
+      ctl.append(sw, clear);
+      row.append(lab, ctl);
+      return row;
+    }));
+  }
+  const fill = button('btn btn-ghost', 'Fill with a palette');
+  fill.onclick = () => { specs.forEach((s, i) => { tfColors[s] = TF_PALETTE[i % TF_PALETTE.length]; }); saveTfColors(); render(); };
+  const none = button('btn btn-ghost', 'Clear all');
+  none.onclick = () => { tfColors = {}; saveTfColors(); render(); };
+  const done = button('btn btn-solid', 'Done');
+  done.onclick = closeDialog;
+  foot.append(fill, none, mk('span', 'grow'), done);
   render();
   box.append(list, foot);
 }
@@ -2203,6 +2516,7 @@ async function loadCalendar() {
   } catch (_) { return; }
   for (const c of cells) c.redrawEvents();
   renderNextEvent();
+  if (window.HBNewsUI) window.HBNewsUI.refresh();      // the News tab lists the US red and orange folders
 }
 
 /* Now in epoch ms: a replay's clock in a replay (so its "Next" matches its charts), else the browser's. */
@@ -2446,8 +2760,21 @@ async function init() {
   $('#tbGrid').onclick = () => toggleMenu($('#tbGrid'), gridMenu);
   $('#tbSettings').onclick = () => chartSettings();
   $('#tbTheme').onclick = toggleTheme;
+  initRail();
+  {   // the rail's own button for the colours by timeframe, beside the objects list (both pages share this file)
+    const anchor = $('#railObjects');
+    if (anchor) {
+      const b = mk('button', 'rail-btn');
+      b.type = 'button'; b.id = 'railTfColors';
+      b.title = 'Colours by timeframe: a drawing takes the colour of the timeframe it is drawn on';
+      b.setAttribute('aria-label', 'Colours by timeframe');
+      b.append(icon('paintbrush'));
+      b.onclick = tfColorsDialog;
+      anchor.after(b);
+    }
+  }
   for (const b of document.querySelectorAll('#rail [data-tool]')) {
-    b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
+    b.onclick = () => { if (b.dataset.tool !== 'cursor') pickTool(b.dataset.tool); else setTool('cursor'); };
   }
   $('#railClear').onclick = clearDrawings;
   const objects = $('#railObjects');
@@ -2465,7 +2792,7 @@ async function init() {
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
     openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; }, dialogOpen: () => !!dlg,
-    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings,
+    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings, events: () => calendar,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
     // a chart's trade config changed (HBTradeUI.setCellTrade): an account-list change is a layout change (Unsaved);

@@ -540,6 +540,21 @@ edge could "stand alone" and mixing looked worse. Since this date, in the PIPELI
 No gate number changed (`prop.eval`, `prop.payout`, `portfolio.*` stay as they were). The by-hand route (`propodds.look`, line 5.5, the eval card)
 still reads the worse row: it is the law's own text and the owner has not moved it. The lock's worse FILLS (line 3.x) are another thing and stay.
 
+**2026-10-11, the owner: "use any timeframe, any indicator in any setting, any time window, everything".** Cards can say more; no gate
+number changed (design: `docs/superpowers/specs/2026-10-11-pipeline-flex-cards-design.md`):
+- **Bars.** A card may name its own bar sizes (`bars`, a list of 1, 5, 15, 30; absent = 1 and 5 as before), so the families that only run
+  on 15- or 30-minute bars (vault break, overnight-range break) are cards. An old card's signature is unchanged.
+- **Every family** takes an entry window (`w_start`, `w_end`), a day rule (`days`: release days, weekdays, month end ...) and an indicator
+  gate (`gate`, `g_n`, `g_m`, `g_s`, `g_lvl`, `g_side`: rsi, ema distance, ema cross, macd, z-score, stoch, roc, cci, vwap deviation, adx,
+  atr / band-width rank, efficiency ratio), all OFF by default; a family without them is trade for trade what it was.
+- **Four new entry rules:** `ind_signal` (an indicator crosses a line), `win_break` (any window's range, broken on a close; market, retest
+  limit or fade), `win_bracket` (OCO stops beyond that range), `win_candle` (the candle of any start, followed or faded).
+- **Not done:** a window that crosses a session pass (entries are tagged by the pass of the entry minute, and a card is judged on its own
+  session's trades: the 08:30 `orb_close` cards are judged on entries before 09:30 only), indicator carry-in from the day before,
+  bar sizes 2 / 3 / 10 / 60, YM / RTY / SI, exits outside the table.
+- **Luck.** More free settings are more places for a lucky box. The three asks (makes money, 40 % eval odds, unseen net > 0) and the tries
+  bar are what they were; read `bp.py pipe luck` before trusting a pass of a flex card.
+
 ## 14. The taught lane (2026-10-10): a rule run exactly as a video taught it
 
 The pipeline puts every idea through ONE entry rule and a fixed table of stops and targets; a video's own stop, target, cap and window were replaced by the table. The taught lane (`bp.py taught`, `blueprint/taught.py`, sheets in `taught/`) is the other way: no heat map, no pick, no search.

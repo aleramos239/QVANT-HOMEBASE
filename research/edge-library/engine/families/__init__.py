@@ -231,6 +231,11 @@ def load(reload: bool = False) -> dict:
     for name in sorted(set(WEAK_FAMILIES) | set(MIRROR) | set(PENALTY_SESS) | set(CARD_NOTES)):
         if name not in LIBRARY and name not in ERRORS:
             ERRORS[name] = "named in the ORCHESTRATOR DECISIONS overlay (families/__init__.py) but not registered as a library family"
+    try:                                             # the open layer (2026-10-11): nine settings on every wrapped family, off by default
+        from . import _flex
+        _flex.apply()
+    except Exception as e:                           # noqa: BLE001 - a broken layer must not hide the families it sits on
+        ERRORS["_flex"] = f"open layer failed: {type(e).__name__}: {e}"
     return REGISTRY
 
 

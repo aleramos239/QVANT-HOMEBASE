@@ -8,6 +8,10 @@ Wire keys: "sma:50", "sma:50:hl2" (length + optional source, sma/ema only; defau
 "vwma:15", "vwap", "vwap:rth", "vwap:week", "vwap:month", "vwap:t0200" (anchor eth/rth/week/month/tHHMM;
 "vwap" alone is "eth"), "adx:14", "cumdelta", "levels". ("profile" is not a Study — see Profile.) The technical
 studies (rsi, macd, bb, atr, stoch, supertrend, donchian, keltner, tema, mfi, er, orb, sess) are in studies_ta.py.
+
+A key may end in "@<seconds>" (2026-10-11): the study is computed on bars of that longer timeframe -- "ema:20@3600" is
+the 20-period EMA of 1-hour bars -- and read on every chart bar (see HTF). Only the window / smoothing studies take it
+(HTF_OK); an anchored one (vwap, levels, orb, sess ...) has no meaning on another timeframe.
 """
 from __future__ import annotations
 
@@ -243,14 +247,78 @@ class Levels(Study):
         return (sess, h, l, c, prev, onh, onl, ropen), val
 
 
+class HTF(Study):
+    """A study read on a longer timeframe. The chart's bars are gathered into bars of `seconds` (aligned to the trading
+    day's 18:00 ET start; a day or more = the trading date), the inner study is stepped over the FINISHED ones, and
+    its value on every chart bar is what it reads with the higher bar so far (the developing one). Nothing from a
+    later chart bar is ever used, so a past value is what it showed when that bar was live. State is immutable, so
+    preview() never commits a developing bar."""
+
+    def __init__(self, inner: Study, seconds: int):
+        self.inner = inner
+        self.sec = int(seconds)
+        super().__init__()
+
+    def initial(self):
+        return (self.inner.initial(), None, None)
+
+    def _key(self, bar):
+        if self.sec >= 86400:
+            return (bar.session, 0)
+        import datetime as dt
+        from .studies_ta import ET
+        et = dt.datetime.fromtimestamp(bar.t / 1000, ET)
+        since_open = (et.hour * 3600 + et.minute * 60 + et.second - 18 * 3600) % 86400      # seconds since the day opened (18:00 ET)
+        return (bar.session, since_open // self.sec)
+
+    @staticmethod
+    def _merge(agg, bar):
+        from .bars import Bar
+        if agg is None:
+            return Bar(t=bar.t, session=bar.session, o=bar.o, h=bar.h, l=bar.l, c=bar.c, v=bar.v, buy=bar.buy, sell=bar.sell, n=bar.n)
+        return Bar(t=agg.t, session=agg.session, o=agg.o, h=max(agg.h, bar.h), l=min(agg.l, bar.l), c=bar.c, v=agg.v + bar.v,
+                   buy=agg.buy + bar.buy, sell=agg.sell + bar.sell, n=agg.n + bar.n)
+
+    def step(self, st, bar):
+        inner_state, key, agg = st
+        k = self._key(bar)
+        if agg is not None and k == key:
+            agg = self._merge(agg, bar)
+        else:
+            if agg is not None:                      # the higher bar that just ended joins the inner study's history
+                inner_state, _ = self.inner.step(inner_state, agg)
+            agg = self._merge(None, bar)
+        _, value = self.inner.step(inner_state, agg)
+        return (inner_state, k, agg), value
+
+
+HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema")
+HTF_MAX_S = 86400       # any timeframe from a second to a day: the page's box takes "15m", "1h", "90s"
 REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
             "cumdelta": CumDelta, "levels": Levels}
 LENGTHS = range(1, 1001)        # the length a windowed study may be given
 
 
+def split_timeframe(key: str) -> tuple[str, int]:
+    """("ema:20", 3600) from "ema:20@3600"; a key with no "@" is (key, 0). ValueError on a timeframe that is not one of
+    HTF_SECONDS or on a study that cannot take one."""
+    base, at, tf = str(key).partition("@")
+    if not at:
+        return base, 0
+    name = base.split(":")[0]
+    if name not in HTF_OK:
+        raise ValueError(f"bad study {key!r}: {name} has no timeframe option")
+    if not tf.isdecimal() or not 1 <= int(tf) <= HTF_MAX_S:
+        raise ValueError(f"bad study {key!r}: the timeframe is 1 to {HTF_MAX_S} seconds")
+    return base, int(tf)
+
+
 def make(key: str, tick_size: float = 0.25) -> Study:
     """A Study from its wire key. ValueError on anything malformed: an
     unknown name, a length outside LENGTHS, or a parameter too many."""
+    base, sec = split_timeframe(key)
+    if sec:
+        return HTF(make(base, tick_size), sec)
     name, *args = str(key).split(":")
     if name in TA_NAMES:
         return make_ta(name, args, tick_size)
