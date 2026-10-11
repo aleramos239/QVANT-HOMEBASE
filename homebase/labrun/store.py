@@ -133,7 +133,8 @@ def _read(f: Path) -> dict | None:
 OWN_TRADES_DAY = 20            # a backtest with no trade list or no trades: the strategy is not held to fewer than the Desk allows
 
 
-OWN_SIZE_MOST = 10        # the most contracts the Desk sends in one order (labcfg.LabLimits.max_qty's own top)
+OWN_SIZE_MOST = 100       # the most contracts one order may carry: the tester's own largest size. Not a risk cap (owner,
+                          # 2026-10-11: "remove the 10 micro cap"): the size set on each account is what limits an order
 
 
 def auto_limits(trades) -> dict | None:
