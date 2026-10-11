@@ -345,14 +345,14 @@ def test_the_add_tool_teaches_a_chat_how_to_write_a_card():
     for what in ("Call blueprint_blocks first: it lists the entry rules (families) with their settings, and a card uses only those",
                  "ONE market (NQ, ES or GC)", "ONE session (asia, london, pre, nyam, mid, pm or eve)", "sides (both, or long / short with sides_why)",
                  "1 to 3 ways to enter, each a family, ONE main setting of it and EXACTLY 3 values", "A card names NO indicator: none is tried.",
-                 "The bars are always 1 and 5 minutes", "a card does not choose them",
+                 "The bars are 1 and 5 minutes unless the card lists `bars`", "a card does not choose them",
                  "The same idea (the same market, session, sides and ways) cannot be added twice, not under another name either.",
                  "Nothing is chosen after the run starts: every choice is on the card.",
                  "A card with a line missing is refused with the lines that fail, and nothing is saved."):
         assert what in said, what
     assert c["required"] == ["name", "why", "loser", "source", "market", "session", "sides", "ways"] and c["additionalProperties"] is False
     p = c["properties"]
-    assert list(p) == [*CARD, "ref"], "the card's fields, as the toolkit names them and in its order; ref (which paper / book / course) is optional, last"
+    assert list(p) == [*CARD, "ref", "again_of", "bars"], "the card's fields, as the toolkit names them and in its order; then its optional ones (ref, again_of, bars)"
     assert p["market"]["enum"] == ["NQ", "ES", "GC"] and p["session"]["enum"] == ["asia", "london", "pre", "nyam", "mid", "pm", "eve"]
     assert p["sides"]["enum"] == ["both", "long", "short"] and p["source"]["enum"] == ["owner", "video", "claude", "wiki", "paper", "book", "course"]
     way, ind = p["ways"]["items"], p["indicators"]["items"]
@@ -771,8 +771,8 @@ def test_the_real_toolkit_answers_these_tools_as_the_fake_does(monkeypatch, proo
         "Refused (pipeline add): the card is not whole: P0.1 FAIL it does not say why it should make money (why, one sentence); "
         "P0.2 FAIL way a: min_gap has 1 values (need 3, each once); P0.3 FAIL indicator 1: block 'nope' is no filter block (`bp.py blocks` lists them)",
         "Nothing was run."]
-    with pytest.raises(blueprint_tools.Refused, match=r"unknown fields \['bars'\]: a pipeline card is \{name, why, loser"):
-        b.call("pipeline_add", {"card": card(name="with_bars", bars=["1"])})
+    with pytest.raises(blueprint_tools.Refused, match=r"unknown fields \['bar_sizes'\]: a pipeline card is \{name, why, loser"):
+        b.call("pipeline_add", {"card": card(name="with_bars", bar_sizes=["1"])})
     text = b.call("pipeline_add", {"card": card(name="fvg_pm", session="pm", indicators=[]), "inbox": True})
     assert "fvg_pm is in the queue: place 1 of 2 (inbox: it goes first)." in text.splitlines()
     out = b.call("pipeline_status", {}).splitlines()

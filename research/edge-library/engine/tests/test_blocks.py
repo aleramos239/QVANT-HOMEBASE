@@ -24,6 +24,7 @@ import l2sim as S
 import library as LB
 import run_idea as RI
 import run_menus as RM
+from families import _flex as FM
 from families import blocks as B
 from families import port1, port2, round1
 
@@ -204,11 +205,11 @@ def test_blocks_registers_ib_n_and_wraps_every_bar_based_library_family():
     assert [v["ib_min"] for v in lib["variants"]] == ["5", "15", "30", "60"] and lib["roots"] == ("NQ", "ES", "GC")
     assert B.IbN.SCREEN_TFS == ("5", "15", "30") and B.IbN.defaults()["mode"] == "break" and B.IbN.defaults()["ib_min"] == "60"
     want = {n for n, e in families.REGISTRY.items() if n in families.LIBRARY and not e[0].FEATURES
-            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks", "fvg", "liq", "noise", "ifvg", "sfp", "ib_touch", "open_fvg", "pullback", "orb830")}
+            and not RM.is_time_fired(e[0]) and families.MODULE_OF[n] in ("port1", "port2", "port3", "round1", "timed", "blocks", "fvg", "liq", "noise", "ifvg", "sfp", "ib_touch", "open_fvg", "pullback", "orb830", "flex")}
     assert set(B.WRAPPED) == want and {"orb", "ib", "ib_n", "donchian", "first_bar_mom", "vwap_trend_pull", "vol_spike_break"} <= want
     for name, cls in B.WRAPPED.items():
         base = families.REGISTRY[name][0]
-        assert cls.__mro__[1] is B.Blocks and cls.__mro__[2] is base and cls.BASE == name
+        assert cls.__mro__[1] is FM.FlexMods and cls.__mro__[2] is B.Blocks and cls.__mro__[3] is base and cls.BASE == name     # the open layer sits in front
         assert pickle.loads(pickle.dumps(cls)) is cls and cls.__module__ == "families.blocks"     # workers import it by name
         d = cls.defaults()
         assert {k: d[k] for k in base.defaults()} == base.defaults()                              # nothing of the family changes

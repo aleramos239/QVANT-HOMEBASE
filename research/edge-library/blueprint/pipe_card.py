@@ -218,7 +218,8 @@ def _way(w, mk, ss, lim: dict, cbars: list | None = None) -> tuple:
     F = _families().get(fam) if isinstance(fam, str) else None
     if F is None:
         return f"family {fam!r} is no entry trigger: one of {', '.join(sorted(_families()))}", None, None, None
-    own, n, bars = [s["name"] for s in F["settings"]], len(v) if isinstance(v, list) else 0, [b for b in cbars if b in F["bars"]]
+    own = [s["name"] for s in F["settings"]] + [k for k in BL.OPEN_KEYS if k in F["schema"]]          # the open layer's nine are every family's
+    n, bars = len(v) if isinstance(v, list) else 0, [b for b in cbars if b in F["bars"]]
     kind = F["schema"].get(ms) if isinstance(ms, str) else None
     v = [_typed(kind, x) for x in v] if isinstance(v, list) else []
     sess = F["sessions"]
