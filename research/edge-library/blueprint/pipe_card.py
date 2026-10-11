@@ -200,8 +200,7 @@ def _own_sessions(fam: str, F: dict, fixed: dict, ms, values: list, bars: list) 
         at = lambda extra, tf: [s for s in RM.DAY_PASSES if cls({**base, **extra, "tf": tf, "sess": s}).sessions()]  # noqa: E731
         if at({}, str(cls.SCREEN_TFS[0])) != F["sessions"]:
             return F["sessions"]
-        tf = str((bars or cls.SCREEN_TFS)[0])
-        per = [set(at({**fixed, ms: x}, tf)) for x in values]
+        per = [set(at({**fixed, ms: x}, str(tf))) for tf in (bars or cls.SCREEN_TFS[:1]) for x in values]    # every bar size, every value
         return [s for s in RM.DAY_PASSES if all(s in p for p in per)]
     except Exception:                                # noqa: BLE001 - a value the class refuses is the toolkit's row to write
         return F["sessions"]
