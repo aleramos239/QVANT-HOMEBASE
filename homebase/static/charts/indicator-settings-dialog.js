@@ -478,6 +478,8 @@ function mount(box, host) {
   });
   cancel.onclick = () => host.cancel();
   ok.onclick = () => {
+    const f = document.activeElement;
+    if (f && f !== ok && pane.contains(f) && f.blur) f.blur();      // a timeframe or time still being typed is taken first
     flush();
     done = true;
     const patch = current();
