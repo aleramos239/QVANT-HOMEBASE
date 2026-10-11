@@ -114,6 +114,7 @@ function applyLive(m) {
   const s = of(m.root);
   s.addRows(m.samples);
   s.addEpisodes(m.episodes);
+  if (m.reset) s.liveEnd = null;       // a snapshot greeting, even an empty one, never joins the span before it
   let lo = Infinity, hi = -Infinity;
   for (const r of Array.isArray(m.samples) ? m.samples : []) {
     if (Array.isArray(r) && Number.isFinite(r[0])) { if (r[0] < lo) lo = r[0]; if (r[0] > hi) hi = r[0]; }

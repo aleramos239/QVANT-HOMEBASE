@@ -29,7 +29,7 @@ CLOSE_RATIO = 2.0
 MEDIAN_WINDOW_S = 60
 MIN_MEDIAN_SAMPLES = 10          # no episode opens before this many seconds of books
 SAMPLE_MS = 1000
-GAP_MS = 10_000                  # more silence than this between two stamps is a feed gap (see the module doc)
+GAP_MS = 60_000                  # more silence than this between two stamps is a feed gap (see the module doc)
 BUY, SELL = 1, -1
 
 TUNING = {

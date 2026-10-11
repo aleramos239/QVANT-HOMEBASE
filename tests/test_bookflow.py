@@ -215,15 +215,24 @@ def test_a_print_after_a_feed_gap_closes_open_levels_too_and_the_median_window_r
     tr = BookTracker(TICK)
     warm(tr, 12)
     ev, last = _rest_30s(tr)
-    ev = tr.on_print(last + 60_000, 100.0 - 2 * TICK, 5, SELL)
+    ev = tr.on_print(last + 600_000, 100.0 - 2 * TICK, 5, SELL)
     e = eps(ev)
     assert len(e) == 1 and e[0]["end"] == "faded" and e[0]["t1"] == last and e[0]["tr"] == 0
     # no median until 10 s of books after the gap: a big level there opens nothing
     ev = []
     for s in range(5):
-        ev += tr.on_book(last + 61_000 + s * 1000, *book(big={('b', 3): 300}))
+        ev += tr.on_book(last + 601_000 + s * 1000, *book(big={('b', 3): 300}))
     assert eps(ev) == []
     assert tr._eps == {}
+
+def test_a_quiet_book_under_a_minute_is_not_a_feed_gap():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, last = _rest_30s(tr)
+    walls = book(big={('b', 2): 200})
+    ev = tr.on_book(last + 40_000, *walls)                      # a quiet overnight book: 40 s with no change at all
+    assert [x for x in eps(ev) if x["end"] != "open"] == []     # the resting level is still there, not faded
+
 
 def test_a_short_gap_is_not_a_feed_gap():
     tr = BookTracker(TICK)

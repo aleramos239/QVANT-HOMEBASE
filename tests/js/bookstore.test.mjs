@@ -67,6 +67,13 @@ test('live cover runs through quiet seconds: a message after a 2 s silence exten
   assert.deepEqual(cov('ES').slice(-2), [[T0 + 600_000, T0 + 602_000], [T0 + 604_000, T0 + 605_000]]);
 });
 
+test('an empty reset greeting ends the live span: the next message never joins the one before the restart', () => {
+  S.applyLive({ root: 'GC', reset: true, samples: [row(0), row(1)] });
+  S.applyLive({ root: 'GC', reset: true, samples: [] });                            // the service restarted, the book is still empty
+  S.applyLive({ root: 'GC', samples: [row(30)] });                                  // 28 s on: under GAP_OK_MS, still not joined
+  assert.deepEqual(S.covered('GC'), [[T0, T0 + 2000], [T0 + 30_000, T0 + 31_000]]);
+});
+
 test('change listeners fire once per applied message and can be removed', () => {
   let n = 0;
   const off = S.onChange(() => { n++; });
