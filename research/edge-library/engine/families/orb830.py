@@ -46,6 +46,7 @@ RELEASE = 30600                                     # 08:30 ET
 NY = ("nyam", "mid", "pm")
 END_0830 = 39600                                    # the 08:30 session's window ends 11:00 ET
 LONDON_END = 30300                                  # the 02:00 / 03:00 candle sessions end 08:25 ET (the engine's own london end)
+EVE_END = -60                                       # the 18:00 / 20:00 candle sessions end 23:59 ET of the evening before (the engine's own eve end)
 LAST_BUILD_DAY = "2025-06-30"                       # the 16:00 VWAP reads the prior session's tape: the build switch opens to here only
 TFS = ("1", "5", "15")
 STRUCT_TGT_R = (0.0, 0.5, 0.75, 1.0, 2.0, 3.0)      # the standard targets: none, then x the stop
@@ -182,25 +183,31 @@ class OpenCandle(Template):
     """open_candle (module docstring). The signal bar is the session's first tf bar (sn == 1)."""
     DEFAULTS = {"k": 0.0, "body_r": 0.0, "vol_m": 0.0, "body_pts": 0.0, "max_tr": 1, "start": "0830"}
     SCHEMA = {"k": ("float", 0, 10), "body_r": ("float", 0, 1), "vol_m": ("float", 0, 50), "body_pts": ("float", 0, 1000),
-              "start": ("choice", ("0830", "0200", "0300"))}
-    OPENS = {"0830": RELEASE, "0200": 7200, "0300": 10800}      # ET seconds after 00:00 of the candle's open
+              "start": ("choice", ("0830", "0200", "0300", "1800", "2000"))}
+    OPENS = {"0830": RELEASE, "0200": 7200, "0300": 10800, "1800": -21600, "2000": -14400}      # ET seconds after 00:00 of the candle's open
+    EVE_STARTS = ("1800", "2000")                               # the evening BEFORE the trade date (negative seconds), session "eve"
+    WARM = 1                                                    # the signal is the session's FIRST bar: an evening restarts the bars at 18:00, so the library's 3-bar warm-up cannot apply
     SCREEN_TFS = TFS
     FEATURES = ()
 
     def _sid(self) -> str:
-        return "pre" if self.p["start"] == "0830" else "london"
+        return "pre" if self.p["start"] == "0830" else "eve" if self.p["start"] in self.EVE_STARTS else "london"
 
     def fam_filter(self, ids):
         return [s for s in ids if s == self._sid()]
 
     def fam_sessions(self):
-        return {"pre": (RELEASE, END_0830)} if self.p["start"] == "0830" else {"london": (self.OPENS[self.p["start"]], LONDON_END)}
+        s = self.p["start"]
+        if s == "0830":
+            return {"pre": (RELEASE, END_0830)}
+        return {"eve": (self.OPENS[s], EVE_END)} if s in self.EVE_STARTS else {"london": (self.OPENS[s], LONDON_END)}
 
     def fam_signal(self, ctx):
-        if self.sn != 1 or not self.atr_p:
+        k = float(self.p["k"])
+        if self.sn != 1 or (not self.atr_p and (k > 0 or self.p["start"] not in self.EVE_STARTS)):      # an evening candle restarts the bars: no ATR yet, and none is needed at k = 0
             return
         o, h, l, c = self.O[-1], self.H[-1], self.L[-1], self.C[-1]
-        if c == o or h - l < float(self.p["k"]) * self.atr_p:
+        if c == o or (k > 0 and h - l < k * self.atr_p):
             return
         body = abs(c - o)
         if body < float(self.p["body_r"]) * (h - l) or body < float(self.p["body_pts"]):
@@ -217,7 +224,7 @@ class OpenCandle(Template):
 
 
 # entry windows, ET seconds after 00:00 [first, last]: the smoke's "entries outside the window" count
-ENTRY_WINDOWS = {"orb_close": (RELEASE + 5 * 60, 57480 - 1), "open_candle": (7200 + 60, 57480 - 1)}
+ENTRY_WINDOWS = {"orb_close": (RELEASE + 5 * 60, 57480 - 1), "open_candle": (-21600 + 60, 57480 - 1)}
 
 FAMILIES = {
     "orb_close": (OrbClose, {}, False,
@@ -231,7 +238,7 @@ FAMILIES = {
                    "complexity": 6,
                    "variants": [{"or_min": "5"}, {"or_min": "15"}, {"or_min": "30"}]}),
     "open_candle": (OpenCandle, {}, False,
-                    "open_candle: the tf candle that opens at 08:30 ET (the data release; start 0200 / 0300 = the London opens) is "
+                    "open_candle: the tf candle that opens at 08:30 ET (the data release; start 0200 / 0300 = the London opens, 1800 / 2000 = the evening candles of the Globex day before the trade date) is "
                     "followed at its close in its own direction (green long, red short); optional size gates, all off at 0: range >= k x ATR, "
                     "body >= body_r of its range, volume >= vol_m x the median of the same bar over 14 dates, body >= body_pts points; one trade "
                     "a session, flat 15:58",
