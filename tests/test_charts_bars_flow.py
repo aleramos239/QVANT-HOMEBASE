@@ -78,3 +78,38 @@ def test_copy_keeps_the_developing_state_and_never_shares_it():
     c = cur.copy()
     c.add(T(0, 101.0, 4), TS)
     assert cur.wire(TS)["sw"] == [] and c.wire(TS)["sw"] == [[BASE, 100.0, 101.0, 7, BUY]]
+
+
+def _oracle_bubbles(ticks):
+    """Bubbles straight from the definition: second x price x side totals of >= 3, the 60 largest, in time order."""
+    tot = {}
+    for tk in ticks:
+        key = (tk.ts_ms // 1000, round(tk.price, 6), 1 if tk.side > 0 else -1)
+        tot[key] = tot.get(key, 0) + tk.size
+    rows = [[s, px, q, side] for (s, px, side), q in tot.items() if q >= 3]
+    rows.sort(key=lambda r: (-r[2], r[0], r[1], r[3]))
+    return sorted(rows[:BUB_CAP], key=lambda r: (r[0], r[1], r[3]))
+
+
+def test_a_developing_bar_holds_only_the_current_second_and_wires_what_the_definition_says():
+    from homebase.charts.bars import Bar
+
+    rng = random.Random(11)
+    ticks, t = [], 0
+    for _ in range(4000):                          # ~100 s, 40 levels, so far more than 60 bubbles pile up
+        t += rng.choice([0, 0, 5, 20, 60])
+        ticks.append(T(t, 100.0 + rng.randint(0, 39) * TS, rng.randint(1, 6), rng.choice([BUY, SELL])))
+    bar = Bar.open_at(BASE, "2025-10-09", ticks[0].price)
+    folded = False
+    for i, tk in enumerate(ticks):
+        bar.add(tk, TS)
+        assert {k[0] for k in bar._bd} <= {tk.ts_ms // 1000}               # only the current second develops
+        folded = folded or bool(bar.bub)
+        assert len(bar.bub) <= BUB_CAP
+        if i % 97 == 0 or i == len(ticks) - 1:
+            assert bar.wire(TS)["bub"] == _oracle_bubbles(ticks[: i + 1])   # equal to the definition, before sealing
+    assert folded and len(bar._bd) < 100
+    before = bar.wire(TS)
+    bar.seal(TS)
+    assert bar.wire(TS) == before and bar._bd == {}                        # sealing changes nothing on the wire
+    assert bar.bub == _oracle_bubbles(ticks) and len(bar.bub) == BUB_CAP

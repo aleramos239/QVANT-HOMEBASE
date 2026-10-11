@@ -77,6 +77,7 @@ class Bar:
     bub: list = field(default_factory=list)    # bubbles: [sec, price, size, side], sealed (see seal())
     _bd: dict = field(default_factory=dict, repr=False, compare=False)   # developing bubbles: (sec, tick, side) -> size
     _g: object = field(default=None, repr=False, compare=False)          # the sweep group in progress
+    _bs: int = field(default=0, repr=False, compare=False)               # the latest second in _bd
 
     @classmethod
     def open_at(cls, t: int, session: str, price: float) -> "Bar":
@@ -111,7 +112,15 @@ class Bar:
             self.big.append([tk.ts_ms, p, q, tk.side])
         if tk.ts_ms > self.te:
             self.te = tk.ts_ms
-        bk = (tk.ts_ms // 1000, k, 1 if tk.side > 0 else -1)
+        sec = tk.ts_ms // 1000
+        if sec > self._bs:
+            # a second is past: fold it into the capped list, so _bd holds only the current second (wire() and the
+            # bar's memory stay small however long the bar develops)
+            if self._bd:
+                self.bub = self._bubbles(tick_size, sec)
+                self._bd = {x: n for x, n in self._bd.items() if x[0] >= sec}
+            self._bs = sec
+        bk = (sec, k, 1 if tk.side > 0 else -1)
         self._bd[bk] = self._bd.get(bk, 0) + q
         g = self._g
         if g is not None and g[0] == tk.ts_ms and g[1] == tk.side:
@@ -134,10 +143,15 @@ class Bar:
         self.bub = self._bubbles(tick_size)
         self._bd = {}
 
-    def _bubbles(self, tick_size: float) -> list:
-        rows = [list(x) for x in self.bub]
-        rows += [[s, round(k * tick_size, 6), q, side] for (s, k, side), q in self._bd.items() if q >= BUB_MIN]
-        return _cap_bubbles(rows)
+    def _bubbles(self, tick_size: float, below: int | None = None) -> list:
+        """The sealed rows plus the developing seconds (those before `below`, when given) at >= BUB_MIN, capped.
+        A late print for a second already folded adds to its row."""
+        acc = {(r[0], r[1], r[3]): r[2] for r in self.bub}
+        for (s, k, side), q in self._bd.items():
+            if q >= BUB_MIN and (below is None or s < below):
+                key = (s, round(k * tick_size, 6), side)
+                acc[key] = acc.get(key, 0) + q
+        return _cap_bubbles([[s, px, q, side] for (s, px, side), q in acc.items()])
 
     def copy(self) -> "Bar":
         return Bar(self.t, self.session, self.o, self.h, self.l, self.c, self.v,
@@ -145,7 +159,7 @@ class Bar:
                    {k: list(c) for k, c in self.fp.items()},
                    [list(x) for x in self.big], self.closed, self.te, self.span,
                    [list(x) for x in self.sw], [list(x) for x in self.bub], dict(self._bd),
-                   list(self._g) if self._g else None)
+                   list(self._g) if self._g else None, self._bs)
 
     def merge(self, other: "Bar") -> None:
         """Absorb the NEXT bar in time (resampling)."""
@@ -168,6 +182,7 @@ class Bar:
         self.bub = _cap_bubbles([list(x) for x in self.bub] + [list(x) for x in other.bub])
         for bk, q in other._bd.items():
             self._bd[bk] = self._bd.get(bk, 0) + q
+        self._bs = max(self._bs, other._bs)
         self._g = list(other._g) if other._g else None
 
     def wire(self, tick_size: float, fp: bool = True, big: bool = True, flow: bool = True) -> dict:
