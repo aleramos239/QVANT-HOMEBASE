@@ -22,7 +22,7 @@ from typing import Optional
 from ..contracts import tick_size as contract_tick_size
 from .bookflow import BookTracker
 from .depthgrid import (BUSY, Busy, DepthHistory, HistoryPool, Paused, _members, _parse_member,  # noqa: F401
-                        _worker_reason, _OFFSET_MS)
+                        _worker_reason, _worker_soon, _OFFSET_MS)
 from .session import session_range_ms
 from .store import TickStore
 
@@ -30,7 +30,7 @@ MAX_SPAN_MS = 48 * 3_600_000       # a window is at most two sessions
 MAX_POINTS = 20_000                # samples per response, after averaging
 MAX_EPISODES = 6_000
 TODAY_TTL_S = 20.0
-CACHE_DAYS = 4
+CACHE_DAYS = 8                     # replayed sessions kept: a 48 h window touches 2-3, so one scroll-back no longer evicts the next
 REORDER_MS = 60_000                # a stray older depth line is put back in order up to this far; older is dropped
 
 
@@ -114,11 +114,12 @@ def _average(rows: list, step: int) -> list:
 
 class BookHistory:
     def __init__(self, depth_base: Path, tick_base: Path, quiet=lambda: None, tick_of=contract_tick_size,
-                 now=time.time):
+                 now=time.time, soon=lambda: None):
         self.depth = DepthHistory(depth_base, tick_of)
         self.ticks = TickStore(tick_base)
         self.tick_of = tick_of
         self.quiet = quiet
+        self.soon = soon      # why a replay must not start now: a paused window opens within PAUSE_AHEAD_S (or is open)
         self._now = now
         self._cache: OrderedDict = OrderedDict()   # path -> (stamp, computed_at, samples, episodes)
 
@@ -130,7 +131,7 @@ class BookHistory:
         if hit is not None and (hit[0] == stamp or now_s - hit[1] < TODAY_TTL_S):
             self._cache.move_to_end(path)
             return hit[2], hit[3]
-        why = self.quiet()
+        why = self.quiet() or self.soon()     # a replay takes long: not one that would run into a paused window
         if why:
             raise Paused(why)
         s = self.ticks.load(root, d)
@@ -189,7 +190,7 @@ def child_book(depth_base: str, tick_base: str, root: str, frm: int, to: int, no
     key = (depth_base, tick_base)
     h = _BOOKS.get(key)
     if h is None:
-        h = _BOOKS[key] = BookHistory(Path(depth_base), Path(tick_base), quiet=_worker_reason)
+        h = _BOOKS[key] = BookHistory(Path(depth_base), Path(tick_base), quiet=_worker_reason, soon=_worker_soon)
     return h.window(root, frm, to, now_ms)
 
 

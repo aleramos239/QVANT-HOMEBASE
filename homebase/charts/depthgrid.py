@@ -58,6 +58,7 @@ MAX_SPAN_MS = 72 * 3_600_000   # one request covers at most 3 days (a handful of
 MAX_BYTES = 2 * 1024 * 1024    # the response's JSON, at most
 CACHE_FILES = 4                # decoded files kept in the worker (int32 arrays: ~14 MB for a full NQ day)
 RELEASE = (dt.time(8, 29, 30), dt.time(8, 31))   # weekdays: the 08:30 ET data releases
+PAUSE_AHEAD_S = 30             # a replay that would start within this long of a paused window is not started
 BUSY = "busy — try again in a moment"
 _READ_CHUNK = 1 << 16
 
@@ -78,6 +79,11 @@ def paused_reason(ts_s: float) -> Optional[str]:
     if t.weekday() < 5 and RELEASE[0] <= t.time() < RELEASE[1]:
         return "paused for the 8:30 data release"
     return None
+
+
+def paused_soon(ts_s: float, ahead_s: float = PAUSE_AHEAD_S) -> Optional[str]:
+    """Why a long job must not start at epoch time ts_s: a paused window is open now or opens within ahead_s."""
+    return paused_reason(ts_s) or paused_reason(ts_s + ahead_s)
 
 
 def _members(raw: bytes, base: int = 0):
@@ -272,6 +278,10 @@ _OFFSET_MS = [0.0]                       # (in the worker) the service clock min
 
 def _worker_reason() -> Optional[str]:
     return paused_reason((time.time() * 1000 + _OFFSET_MS[0]) / 1000)
+
+
+def _worker_soon() -> Optional[str]:
+    return paused_soon((time.time() * 1000 + _OFFSET_MS[0]) / 1000)
 
 
 def child_grid(base: str, root: str, frm: int, to: int, cols: int, now_ms: int, offset_ms: float) -> bytes:

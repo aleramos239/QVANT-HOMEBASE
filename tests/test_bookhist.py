@@ -159,3 +159,40 @@ def test_depth_lines_puts_a_stray_older_line_back_and_drops_a_far_late_one(tmp_p
     p = write_depth(tmp_path, seq)
     got = [x[0] for x in bh.depth_lines(p)]
     assert got == sorted(x[0] for x in seq if x is not far)
+
+
+# ---- final fix pass
+
+def test_a_replay_that_would_run_into_a_paused_window_is_refused_up_front(tmp_path):
+    d, t = scenario(tmp_path)
+    state = {"soon": None}
+    h = bh.BookHistory(d, t, tick_of=lambda r: TICK, soon=lambda: state["soon"])
+    state["soon"] = "paused for the 8:30 data release"
+    try:
+        h.window("NQ", T0, T0 + 60_000, T0 + 3_600_000)
+    except bh.Paused as e:
+        assert "8:30" in str(e)
+    else:
+        raise AssertionError("expected Paused")
+    state["soon"] = None                                       # a cold replay starts normally; a cached answer needs no check
+    assert len(json.loads(h.window("NQ", T0, T0 + 60_000, T0 + 3_600_000))["samples"]) == 60
+    state["soon"] = "paused for the 9:30 window"
+    assert len(json.loads(h.window("NQ", T0, T0 + 60_000, T0 + 3_600_000))["samples"]) == 60
+
+def test_paused_soon_looks_thirty_seconds_ahead_by_the_same_windows():
+    from zoneinfo import ZoneInfo
+    from homebase.charts.depthgrid import paused_soon
+
+    def at(y, mo, d, h, mi, s):
+        return dt.datetime(y, mo, d, h, mi, s, tzinfo=ZoneInfo("America/New_York")).timestamp()
+    assert paused_soon(at(2026, 10, 12, 8, 29, 25))                  # Monday: the release opens in 5 s
+    assert paused_soon(at(2026, 10, 12, 8, 30, 10))                  # already open
+    assert paused_soon(at(2026, 10, 12, 9, 19, 45))                  # 9:20 in 15 s
+    assert paused_soon(at(2026, 10, 12, 9, 25, 0))                   # already open
+    assert paused_soon(at(2026, 10, 12, 8, 28, 50)) is None          # 40 s early
+    assert paused_soon(at(2026, 10, 12, 9, 19, 20)) is None
+    assert paused_soon(at(2026, 10, 12, 8, 31, 0)) is None           # the release is over
+    assert paused_soon(at(2026, 10, 10, 8, 29, 40)) is None          # Saturday: no release
+
+def test_the_book_worker_keeps_eight_days():
+    assert bh.CACHE_DAYS == 8
