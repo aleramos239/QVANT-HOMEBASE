@@ -98,9 +98,9 @@ def test_absorption_flag_when_volume_is_eaten_but_the_level_holds():
     tr.on_book(t, *book(big={('b', 1): 100}))
     ev = tr.on_book(t + 3500, *book(big={('b', 1): 100}))
     assert eps(ev)[-1]["ab"] is None
-    ev = tr.on_print(t + 4000, big_px, 150, SELL)                # 1.5x shown, not yet 2x
+    ev = tr.on_print(t + 4000, big_px, 60, SELL)                 # 0.6x shown, not yet 1x
     assert [e for e in eps(ev) if e["ab"]] == []
-    ev = tr.on_print(t + 4100, big_px, 100, SELL)                # 250 traded >= 2 x 100 and >= 8 x median; still shows size
+    ev = tr.on_print(t + 4100, big_px, 60, SELL)                 # 120 traded >= 1 x 100 and >= 4 x median; still shows size
     flagged = [e for e in eps(ev) if e["ab"] is not None]
     assert flagged and flagged[0]["ab"] == t + 4100 and flagged[0]["end"] == "open"
 
