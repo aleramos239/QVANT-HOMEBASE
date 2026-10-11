@@ -14,6 +14,7 @@ import math
 import os
 import re
 import signal
+import threading
 import time
 import traceback
 from contextlib import asynccontextmanager, suppress
@@ -1250,6 +1251,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
             tasks.append(asyncio.create_task(backtest_job()))
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
+        # the Desk's first results ask is ~16 prop sims cold (25-90 s); done here, once, in a daemon thread (never blocks
+        # a stop), it is a cache hit. Saved runs only: nothing is started.
+        threading.Thread(target=tester.warm, name="desklab-warm", daemon=True).start()
         try:
             yield
         finally:

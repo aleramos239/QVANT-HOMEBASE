@@ -573,5 +573,7 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return api.result(cmd, name, status=st["status"], state=st, saved=[str(file)] if sub == "approve" else [],
                           text=f"{name} is in the book ({file})" if sub == "approve" else f"{name} is refused: {st['why']}")
     if sub == "_loop":                              # the detached child of start(): no command of the pipeline's users
+        with contextlib.suppress(OSError):          # every worker pool it spawns inherits this: the app and the chart
+            os.nice(10)                             # service answer first when they compete for the cores (was nice 0)
         return api.result(cmd, exit=loop({"root": root, "tiny": None}, once=once), text=f"the runner of {PS.root(root)} ended")
     raise J.Refuse(f"pipe {sub}: no command of the pipeline ({', '.join(SUBS)})")
