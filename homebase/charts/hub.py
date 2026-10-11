@@ -46,6 +46,7 @@ BUILD_BUDGET_S = 2.0    # a subscribe or scroll-back chunk spends at most this l
                         # must never block the connection until every session is built, only until it can
                         # answer. Checked between sessions, never mid-build, so one still-building session
                         # is always finished and included.
+TAP_LOG_MS = 60_000     # a raising tap is logged at most this often
 
 
 def sessions_back(spec: BarSpec) -> int:
@@ -204,6 +205,8 @@ class Hub:
         self.minutes: dict[str, Minutes] = {}
         self._minutes_lock = threading.Lock()
         self.taps: list = []                # each (root, Tick) -> None, called for every live print, after its side is known
+        self.log = lambda _m: None          # where a raising tap is reported (the service sets it), once a minute per tap
+        self._tap_logged: dict = {}         # tap -> when it was last reported
 
     # ------------------------------------------------------------ today's tape
     def start_today(self, root: str, d: dt.date, ticks: list[Tick], info: dict | None = None) -> None:
@@ -249,7 +252,13 @@ class Hub:
             tk = from_row(r, self.clf[root])
             self.today[root].append(tk)
             for tap in self.taps:
-                tap(root, tk)
+                try:
+                    tap(root, tk)
+                except Exception as e:  # noqa: BLE001 -- a tap must never stop the bars (or the taps after it)
+                    now = self.now_ms()
+                    if now - self._tap_logged.get(tap, -TAP_LOG_MS) >= TAP_LOG_MS:
+                        self._tap_logged[tap] = now
+                        self.log(f"tap {getattr(tap, '__qualname__', tap)} ({root}): {type(e).__name__}: {e}")
             for s in streams:
                 for b in s.builder.add(tk):
                     s.commit(b)

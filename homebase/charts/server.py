@@ -1016,6 +1016,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         depth = Depth(feed, rec_roots, log=log, wall_ms=lambda: int(clock()),    # the service's clock, like the tick hub
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
+    hub.log = log
     # the book indicators' live side (booklive.py): the same book lines the recorder writes and the hub's classified
     # prints, through one BookTracker per root; live service only (a replay has no book)
     booklive = BookLive(log=log)

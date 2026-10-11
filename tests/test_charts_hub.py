@@ -849,3 +849,22 @@ def test_drain_updates_follow_the_union_of_the_subscribers_flow_flags(tmp_path):
     hub.on_ticks("NQ", today[20:40])
     out = dict(hub.drain())
     assert "sw" in out[("conn", "c1")]["live"] and "bub" in out[("conn", "c2")]["live"]
+
+
+def test_a_raising_tap_stops_neither_the_next_tap_nor_the_bars_and_logs_once_a_minute(tmp_path):
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, keys=("vwap",))
+    logs, seen = [], []
+    hub.log = logs.append
+
+    def bad(root, tk):
+        raise RuntimeError("boom")
+    hub.taps.extend([bad, lambda root, tk: seen.append(tk.ts_ms)])
+    hub.on_ticks("NQ", today[:40])
+    assert len(seen) == 40                                       # the tap after the raising one saw every print
+    assert s.builder.cur is not None and s.builder.cur.n == 40   # and the bars were built from all of them
+    assert len(logs) == 1 and "boom" in logs[0]
+    clock[0] += 61_000
+    hub.on_ticks("NQ", today[40:50])
+    assert len(logs) == 2
