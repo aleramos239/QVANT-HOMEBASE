@@ -192,3 +192,43 @@ def test_a_one_sided_book_line_keeps_the_missing_side_and_updates_the_other():
     assert [e for e in eps(mid) if e["s"] == "a" and (e["end"] != "open" or e["id"] not in shown)] == []
     ask = [e for e in eps(tr.finish()) if e["s"] == "a"]
     assert len(ask) == 1 and shown[ask[0]["id"]] == ("a", ask[0]["t0"])   # same id and t0 as when first shown
+
+
+def _rest_30s(tr, t0=12_000):
+    """A 200-lot bid two ticks under the touch for 30 s, a line a second; returns (events, last stamp)."""
+    ev = []
+    for s in range(31):
+        ev += tr.on_book(t0 + s * 1000, *book(big={('b', 2): 200}))
+    return ev, t0 + 30_000
+
+def test_a_feed_gap_closes_open_levels_as_faded_at_the_last_stamp_never_pulled():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, last = _rest_30s(tr)
+    assert eps(ev) and eps(ev)[-1]["end"] == "open"
+    ev = tr.on_book(last + 600_000, *book())                    # the feed was down 10 minutes; the level is not there
+    e = [x for x in eps(ev) if x["end"] != "open"]
+    assert len(e) == 1 and e[0]["end"] == "faded" and e[0]["t1"] == last
+    assert all(x["end"] != "pulled" for x in eps(ev))
+
+def test_a_print_after_a_feed_gap_closes_open_levels_too_and_the_median_window_restarts():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, last = _rest_30s(tr)
+    ev = tr.on_print(last + 60_000, 100.0 - 2 * TICK, 5, SELL)
+    e = eps(ev)
+    assert len(e) == 1 and e[0]["end"] == "faded" and e[0]["t1"] == last and e[0]["tr"] == 0
+    # no median until 10 s of books after the gap: a big level there opens nothing
+    ev = []
+    for s in range(5):
+        ev += tr.on_book(last + 61_000 + s * 1000, *book(big={('b', 3): 300}))
+    assert eps(ev) == []
+    assert tr._eps == {}
+
+def test_a_short_gap_is_not_a_feed_gap():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, last = _rest_30s(tr)
+    ev = tr.on_book(last + 5_000, *book())                      # 5 s of nothing, then the level is gone: still pulled
+    e = [x for x in eps(ev) if x["end"] != "open"]
+    assert len(e) == 1 and e[0]["end"] == "pulled" and e[0]["t1"] == last + 5_000

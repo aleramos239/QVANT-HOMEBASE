@@ -12,6 +12,8 @@ Output is a list of plain dicts (JSON-ready), from every call:
                                when it is flagged as absorbing, and when it ends
 An episode is "big" when its level shows >= OPEN_RATIO x the median level size of the last MEDIAN_WINDOW_S
 seconds of books (both sides pooled, top 10 each), and stays one until it falls under CLOSE_RATIO x.
+A silence of more than GAP_MS between two stamps is a feed gap, not a market: every open level ends as faded at the
+last stamp before it and the median window restarts (a level cannot be "pulled" by a book line minutes later).
 A side with no levels at all on a book line (an empty or one-sided snapshot) says nothing about that side's
 open episodes: they are left as they were. A missing level on a non-empty side reads as size 0.
 
@@ -27,6 +29,7 @@ CLOSE_RATIO = 2.0
 MEDIAN_WINDOW_S = 60
 MIN_MEDIAN_SAMPLES = 10          # no episode opens before this many seconds of books
 SAMPLE_MS = 1000
+GAP_MS = 10_000                  # more silence than this between two stamps is a feed gap (see the module doc)
 BUY, SELL = 1, -1
 
 TUNING = {
@@ -106,13 +109,13 @@ class BookTracker:
 
     def on_book(self, ts: int, bids: list, offers: list) -> list:
         bids, offers = [list(r) for r in bids[:LEVELS]], [list(r) for r in offers[:LEVELS]]
-        out = self._roll(ts)
+        out = self._roll(ts) + self._gap(ts)
         self._sec, self._last, self._ts = ts - ts % SAMPLE_MS, (bids, offers), ts
         out += self._update(ts, bids, offers)
         return out
 
     def on_print(self, ts: int, price: float, size: int, side: int) -> list:
-        out = self._roll(ts)
+        out = self._roll(ts) + self._gap(ts)
         self._ts = ts if self._ts is None else max(self._ts, ts)
         i = self._idx(price)
         for (s, k), ep in list(self._eps.items()):
@@ -137,6 +140,19 @@ class BookTracker:
         for key, ep in list(self._eps.items()):
             out += self._close(ep, t, "faded")
             del self._eps[key]
+        return out
+
+    def _gap(self, ts: int) -> list:
+        """The stream was silent for more than GAP_MS: end every open level as faded at the last stamp and start the
+        median window over. Same input, same output, live or replayed."""
+        if self._ts is None or ts - self._ts <= GAP_MS:
+            return []
+        out = []
+        for key, ep in list(self._eps.items()):
+            out += self._close(ep, self._ts, "faded")
+            del self._eps[key]
+        self._win.clear()
+        self._med = 0.0
         return out
 
     # ---- the samples
