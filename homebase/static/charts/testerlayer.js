@@ -123,7 +123,8 @@ function hlineStyle(item, P) {
 const hlinePrice = (v) => Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 });
 const ET_CLOCK = typeof Intl !== 'undefined' ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/New_York',
   hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' }) : null;
-const etClock = (ms) => (ET_CLOCK && Number.isFinite(ms) ? ET_CLOCK.format(new Date(ms)) : '');
+const appClock = (t) => (typeof HBClock !== 'undefined' ? HBClock.text(t) : t);   // the app's one clock format
+const etClock = (ms) => (ET_CLOCK && Number.isFinite(ms) ? appClock(ET_CLOCK.format(new Date(ms))) : '');
 
 /* The full text of a level (hover, and the pre-2026-09-29 label): its name and price. */
 function hlineLabel(item) { return `${item.name} · ${hlinePrice(item.price)}`; }

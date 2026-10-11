@@ -33,9 +33,11 @@ function isTrump(item) {
   return !!item && (item.source === 'truth' || (Array.isArray(item.tags) && item.tags.includes('trump')));
 }
 
-/* "08:31" / "08:31:05" ET, 24h. "-" for anything unparseable -- a bad ms must never throw on the page. */
+/* "08:31" / "08:31:05" ET, in the app's one clock format. "-" for anything unparseable -- a bad ms must never throw on the page. */
 function etTime(ms, withSeconds = false) {
-  return Number.isFinite(ms) ? (withSeconds ? ET_TIME_SEC : ET_TIME).format(new Date(ms)) : '—';
+  if (!Number.isFinite(ms)) return '—';
+  const t = (withSeconds ? ET_TIME_SEC : ET_TIME).format(new Date(ms));
+  return typeof HBClock !== 'undefined' ? HBClock.text(t) : t;
 }
 
 /* ---- the panel's item store: merge/dedupe by id, newest first, capped ---- */

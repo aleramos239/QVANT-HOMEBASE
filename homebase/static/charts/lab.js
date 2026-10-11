@@ -16,13 +16,13 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', bp: null, bpIdea: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plWatch: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
+  view: 'lib', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
   picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set() };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
-/* view: what the sidebar lists -- 'lib' (strategies), 'bp' (the blueprint's tools), 'tk' (its blocks, with their code), and the strategy
-   pipeline's three: 'pq' (its Queue), 'pb' (its Book), 'pg' (its Guide). */
-const VIEWS = [['lib', 'Strategies'], ['bp', 'Blueprint'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pg', 'Guide']];
+/* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's two:
+   'pq' (its Queue), 'pb' (its Book). A stored view that is no longer one of these opens Strategies. */
+const VIEWS = [['lib', 'Strategies'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book']];
 const PIPE_VIEWS = PIPE_TABS.map(([v]) => v), VIEW_IDS = [...VIEWS, ...PIPE_TABS].map(([v]) => v);
 const pipeOn = () => PIPE_VIEWS.includes(S.view);      // a pipeline view is open: the middle of the page is its own
 try { const v = localStorage.getItem('hb_lab_view'); if (VIEW_IDS.includes(v)) S.view = v; } catch (_) { /* private mode: strategies */ }
@@ -60,14 +60,7 @@ async function loadLists() {
     if (g.status === 409 && !S.log.some((l) => l.html === why)) log(why);
   }
   paintLib();
-  if (S.view === 'bp') loadBlueprint();
-  else if (S.view === 'tk') loadToolkit();
-}
-/* The blueprint toolkit: the tools every chat has and the ideas on file, as the chart service lists them. */
-async function loadBlueprint() {
-  const r = await send('GET', '/api/tester/blueprint');
-  S.bp = r.ok ? r.json : { error: r.status === 404 ? 'The chart service is from before the toolkit: restart it once to see the tools here.' : r.error };
-  paintLib();
+  if (S.view === 'tk') loadToolkit();
 }
 /* The arsenal: every tool we have with its code, read from the code itself (homebase/arsenal.py), so a new tool is here with its code. */
 async function loadToolkit() {
@@ -245,9 +238,9 @@ function applyPanels(save = true) {
   const pipe = pipeOn();
   for (const k of PANELS) root.dataset[k] = P[k] && !(pipe && k !== 'lib') ? '1' : '0';
   root.dataset.pipe = pipe ? '1' : '0';
+  root.dataset.view = S.view;        // lab.css: with nothing open, the Arsenal shows its own line where the welcome and the empty result would be
   root.style.setProperty('--lab-code', String(split));
   root.style.setProperty('--lab-chart', String(100 - split));
-  document.body.classList.toggle('lab-chart-on', P.chart && !pipe);
   document.body.classList.toggle('lab-pipe-on', pipe);
   for (const x of document.querySelectorAll('#labPanels [data-panel]')) { x.setAttribute('aria-pressed', String(!!P[x.dataset.panel])); x.disabled = pipe && x.dataset.panel !== 'lib'; }
   paintRes();
@@ -310,6 +303,7 @@ async function showRunOnChart(rid, focus = null) {
   setReport(true);
   soloChart();
   shownRid = rid;
+  paintNav();
   for (let k = 0; k < 6; k++) {          // this page's own socket may not be up yet (the page just loaded)
     const o = await send('POST', '/api/tester/show', focus ? { run_id: rid, focus } : { run_id: rid });
     if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); return false; }
@@ -376,18 +370,26 @@ function navTrades() {
   const b = window.HBTesterUI && window.HBTesterUI.bundle;
   return shownRid && b && b.run && b.run.id === shownRid ? b.trades || [] : [];
 }
+/* The stepper on the chart: previous, "3 of 42" and the trade in a few words, next. It shows only while a finished run with
+   trades is on the chart (paintRes calls this, so it goes with the run). The words after the count are their own span: where the
+   chart is narrow the page shows the count alone. */
 function paintNav() {
-  const el = document.getElementById('labNavText');
-  if (!el) return;
+  const nav = document.getElementById('labNav'), el = document.getElementById('labNavText');
+  if (!nav || !el) return;
   const ts = navTrades(), n = ts.length, t = ti != null ? ts[ti] : null;
-  const [prev, next] = document.querySelectorAll('#labNav [data-nav]');
-  if (prev) prev.disabled = !n || ti == null || ti <= 0;
-  if (next) next.disabled = !n || (ti != null && ti >= n - 1);
-  if (!n) { el.textContent = S.run && S.run.bundle && shownRid === S.run.rid ? 'No trades in this run' : 'Run a backtest to see its trades'; return; }
-  if (!t) { el.innerHTML = `<b>${n}</b> trade${n === 1 ? '' : 's'}`; return; }
-  const net = Number(t.net) || 0, amt = `${net > 0 ? '+' : net < 0 ? MINUS : ''}$${Math.abs(Math.round(net)).toLocaleString('en-US')}`;
-  el.innerHTML = `<b>${ti + 1}</b> of ${n} · ${t.side === 'long' ? 'Long' : 'Short'} <span class="${net > 0 ? 'pos' : 'neg'}">${amt}</span> · ${esc(NAV_DAY.format(new Date(t.entry_ms)))}`;
-  el.title = `Trade ${ti + 1} of ${n} · ${NAV_DATE.format(new Date(t.entry_ms))} ET`;
+  nav.hidden = !n;
+  if (!n) return;
+  const [prev, next] = nav.querySelectorAll('[data-nav]');
+  if (prev) prev.disabled = ti == null || ti <= 0;
+  if (next) next.disabled = ti != null && ti >= n - 1;
+  let html = `<span><b>${n}</b> trade${n === 1 ? '' : 's'}</span>`;
+  if (t) {
+    const net = Number(t.net) || 0, amt = `${net > 0 ? '+' : net < 0 ? MINUS : ''}$${Math.abs(Math.round(net)).toLocaleString('en-US')}`;
+    html = `<span><b>${ti + 1}</b> of ${n}</span><span class="lab-nav-d"> · ${t.side === 'long' ? 'Long' : 'Short'} <span class="${net > 0 ? 'pos' : 'neg'}">${amt}</span> · ${esc(NAV_DAY.format(new Date(t.entry_ms)))}</span>`;
+    const at = NAV_DATE.format(new Date(t.entry_ms));
+    el.title = `Trade ${ti + 1} of ${n} · ${window.HBClock ? window.HBClock.within(at) : at} ET`;      // the app's one clock format
+  }
+  if (el.innerHTML !== html) el.innerHTML = html;        // (the text is a live region: the same words are not written twice)
 }
 function stepTrade(d) {
   const n = navTrades().length;
@@ -397,10 +399,12 @@ function stepTrade(d) {
   jumpTo(ti);
 }
 document.getElementById('labNav')?.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (b) stepTrade(Number(b.dataset.nav)); });
-// a trade picked in the full report's list moves the stepper too
+// a trade picked in the full report's list moves the stepper too; and a run the tester has just been handed brings it up
 if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
   const i = window.HBTesterUI.selected;
-  if (i != null && i !== ti && i < navTrades().length) { ti = i; paintNav(); }
+  if (i != null && i !== ti && i < navTrades().length) ti = i;
+  if (ti != null && ti >= navTrades().length) ti = null;      // another run's count
+  paintNav();
 });
 // a run Claude put on the chart (the tester was handed it over the socket, not through showOnChart): the stepper walks it too
 window.addEventListener('hb:tester-show', (e) => {
@@ -938,12 +942,12 @@ const ICON_CHEV = '<svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="
 /* ---- the view switcher (2026-10-09) ----
    Six views used to sit in two rows of segmented buttons. Now the sidebar's head is ONE button that names the view
    on show; it opens a short menu in two groups -- the library of strategies, and the pipeline that tests ideas. */
-const VIEW_GROUPS = [['Library', VIEWS, { lib: 'Your saved scripts and the built-in ones', bp: 'Ideas built from the blueprint blocks', tk: 'Every block, chat tool, skill and script, read-only' }],
-  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage', pg: 'How the pipeline works, step by step' }]];
+const VIEW_GROUPS = [['Library', VIEWS, { lib: 'Your saved scripts and the built-in ones', tk: 'Every block, chat tool, skill and script, read-only' }],
+  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage' }]];
 const ICON_UPDOWN = '<svg class="lb-ud" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.2 5 2.2l3 3M2 8.8l3 3 3-3"/></svg>';
 function viewName(v) { const t = [...VIEWS, ...PIPE_TABS].find(([id]) => id === v); return t ? t[1] : 'Strategies'; }
 function viewSwitch() {
-  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Blueprint, Arsenal, Queue, Book and Guide"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
+  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Arsenal, Queue and Book"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
 }
 function viewMenu(anchor) {
   const html = VIEW_GROUPS.map(([group, views, why]) => `<h6>${group}</h6>${views.map(([v, t]) =>
@@ -998,7 +1002,6 @@ function paintLib() {
   const top = el.scrollTop;
   const seg = viewSwitch();
   if (pipeOn()) { paintPipe(el, `<div class="lb-top lb-sw">${seg}</div>`, top); return; }      // its list here, its page in the middle
-  if (S.view === 'bp') { el.innerHTML = `<div class="lb-top lb-sw">${seg}</div>${blueprintList()}`; el.scrollTop = top; return; }
   if (S.view === 'tk') {
     el.innerHTML = `<div class="lb-top lb-sw">${seg}</div>${toolkitHead()}<div id="tkList">${toolkitList()}</div>`;
     el.scrollTop = top;
@@ -1058,78 +1061,12 @@ function codeSheet(id) {
   });
 }
 
-/* ---- the blueprint toolkit in the sidebar ----
-   The ideas on file and every tool of the blueprint, in the order of its phases. A tool opens as a sheet: its inputs
-   as a form, Run, and the tool's own answer in plain words -- the same answer a chat gets, because the chart service
-   runs the same tool. Nothing here judges anything, and nothing here can reach the desk. */
-function blueprintList() {
-  const B = S.bp;
-  if (!B) return '<div class="lb-empty">Loading the toolkit…</div>';
-  if (B.error) return `<div class="lb-empty">${esc(B.error)}</div>`;
-  const idea = (i) => `<button class="lb-item bp-row${S.bpIdea === i.name ? ' sel' : ''}" data-act="bpidea" data-name="${esc(i.name)}" title="Where it stands and what is next">
-      ${ICON_DOC}<span class="it"><b>${esc(i.name)}</b><small>${esc(C.bpIdeaLine(i))}</small></span><span></span></button>`;
-  const tool = (t) => `<button class="lb-item bp-row" data-act="bptool" data-tool="${esc(t.name)}" title="${esc(t.description.slice(0, 180))}">
-      ${ICON_PLAY}<span class="it"><b>${esc(C.bpTitle(t.name))}</b><small>${esc(C.bpPhase(t.phase))}</small></span><span></span></button>`;
-  return `<div class="lb-sh">Ideas</div>${B.ideas.length ? B.ideas.map(idea).join('') : '<div class="lb-empty">No idea yet. Start with Blocks, then write an Idea card.</div>'}
-    <div class="lb-sh">Tools, in order</div>${B.tools.map(tool).join('')}
-    <div class="lb-empty bp-note">Every tool follows BLUEPRINT.md and saves in the app. The same tools run in any chat.</div>`;
-}
-function bpField(f, v) {
-  const id = `bpF_${f.key}`, lab = `<label for="${id}">${esc(f.key.replace(/_/g, ' '))}${f.required ? '' : ' <i>optional</i>'}</label>`;
-  const help = f.help ? `<small>${esc(f.help)}</small>` : '';
-  if (f.kind === 'bool') return `<div class="bp-f bp-check"><input type="checkbox" id="${id}" data-bp="${esc(f.key)}"${v ? ' checked' : ''}>${lab}${help}</div>`;
-  if (f.kind === 'choice') return `<div class="bp-f">${lab}<select id="${id}" data-bp="${esc(f.key)}"><option value="">Default</option>${f.options.map((o) => `<option${o === v ? ' selected' : ''}>${esc(o)}</option>`).join('')}</select>${help}</div>`;
-  if (f.kind === 'json') return `<div class="bp-f">${lab}<textarea id="${id}" data-bp="${esc(f.key)}" spellcheck="false" rows="7">${esc(v == null ? f.starter : v)}</textarea>${help}</div>`;
-  const list = f.key === 'name' && S.bp && S.bp.ideas.length ? ' list="bpIdeas"' : '';
-  return `<div class="bp-f">${lab}<input id="${id}" data-bp="${esc(f.key)}" value="${esc(v == null ? '' : v)}"${f.kind === 'int' || f.kind === 'number' ? ' inputmode="decimal"' : ''}${list} spellcheck="false" autocomplete="off"${f.kind === 'list' ? ' placeholder="name, name"' : ''}>${help}</div>`;
-}
-function toolSheet(name, preset = {}, runNow = false) {
-  const t = S.bp && S.bp.tools && S.bp.tools.find((x) => x.name === name);
-  if (!t) return;
-  const fields = C.bpFields(t.inputs), start = { ...(S.bpIdea && fields.some((f) => f.key === 'name') ? { name: S.bpIdea } : {}), ...preset };
-  const once = name === 'blueprint_test' ? '<p class="err bp-once">The test days are read ONCE for an idea. A read cannot be taken back, and a fail is final.</p>' : '';
-  const d = dialog(`<h2>${esc(C.bpTitle(name))}</h2><p><b>${esc(C.bpPhase(t.phase))}.</b> ${esc(t.description.charAt(0).toUpperCase() + t.description.slice(1))}</p>${once}
-    <div class="bp-form">${fields.map((f) => bpField(f, start[f.key])).join('')}</div>
-    <datalist id="bpIdeas">${S.bp.ideas.map((i) => `<option value="${esc(i.name)}">`).join('')}</datalist>
-    <p class="err" id="bpErr" role="alert" hidden></p>
-    <div class="acts"><button class="btn btn-outline" data-x="cancel">Close</button><button class="btn btn-default" data-x="go">Run</button></div>
-    <pre class="bp-out" id="bpOut" tabindex="0" aria-live="polite" hidden></pre>`);
-  d.classList.add('wide');
-  const err = $('#bpErr', d), out = $('#bpOut', d), goBtn = $('[data-x="go"]', d);
-  let busy = false;
-  const go = async () => {
-    if (busy) return;
-    const values = {};
-    for (const x of d.querySelectorAll('[data-bp]')) values[x.dataset.bp] = x.type === 'checkbox' ? x.checked : x.value;
-    const got = C.bpArgs(fields, values);
-    for (const x of d.querySelectorAll('[data-bp]')) x.classList.toggle('bad', !!got.error && x.dataset.bp === got.key);
-    err.hidden = !got.error;
-    if (got.error) { err.textContent = got.error; const x = d.querySelector(`[data-bp="${got.key}"]`); if (x) x.focus(); return; }
-    busy = true; goBtn.disabled = true; goBtn.textContent = 'Running…';
-    out.hidden = false; out.textContent = 'Running…'; out.classList.remove('bad');
-    const r = await send('POST', '/api/tester/blueprint/run', { tool: name, args: got.args });
-    busy = false; goBtn.disabled = false;
-    if (!d.isConnected) return;                       // the sheet was closed while the tool ran: its answer is saved in the app
-    const text = r.ok ? r.json.text : r.error;
-    out.textContent = text; out.classList.toggle('bad', !r.ok || r.json.ok === false);
-    const job = r.ok ? C.bpJob(text) : '', jf = d.querySelector('[data-bp="job_id"]');
-    if (job && jf) jf.value = job;                    // a job that is still going: Run again keeps waiting on it
-    goBtn.textContent = job && jf ? 'Keep waiting' : 'Run again';
-    if (got.args.name) S.bpIdea = got.args.name;
-    loadBlueprint();
-  };
-  d.addEventListener('click', (e) => { const x = e.target.closest('[data-x]'); if (x) { if (x.dataset.x === 'go') go(); else closeDialog(); } });
-  d.addEventListener('keydown', (e) => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.repeat) { e.preventDefault(); go(); } });
-  const first = d.querySelector('[data-bp]');
-  if (runNow) go(); else if (first) first.focus();
-}
-
 /* ---- the strategy pipeline in the sidebar ----
-   Three views: the Queue (every idea and where it stands), the Book (the finishers) and the Guide (six steps and the ladder of stages).
+   Two views: the Queue (every idea and where it stands) and the Book (the finishers).
    While one of them is open the MIDDLE of the page is theirs (#labPipe): the editor, the chart and the result are hidden, not rebuilt
    (applyPanels shows them as switched off and leaves P, the person's own choice, alone), so leaving the view brings everything back as
-   it was. The sidebar keeps the list (the ideas, the strategies) or, beside the Guide, three lines of what is happening now.
-   ONE answer of the chart service feeds all three (GET /api/tester/pipeline), asked again every 5 s while one of them is on screen.
+   it was. The sidebar keeps the list (the ideas, the strategies).
+   ONE answer of the chart service feeds both (GET /api/tester/pipeline), asked again every 5 s while one of them is on screen.
    The page judges nothing: a status, a reason and a number are shown as they came (the pure half, C.pl*, only picks words and marks).
    What it can post: an idea card, start / pause / resume, and the owner's yes or no for an idea that passed every stage. Nothing here
    can skip a stage or change a pass line, and nothing here can reach the desk. */
@@ -1170,7 +1107,7 @@ function setView(v) {
   plSelect();
   applyPanels(false);           // the middle is the pipeline's while one of its views is open, and the editor's again after (it also sets the timer)
   paintLib();
-  if (S.view === 'bp') loadBlueprint(); else if (S.view === 'tk') loadToolkit(); else if (S.view === 'lib') loadDesk();
+  if (S.view === 'tk') loadToolkit(); else if (S.view === 'lib') loadDesk();
 }
 /* What is selected in each list: the one that was, while it is still there, else the first; and the selected idea's own page. */
 function plSelect() {
@@ -1184,7 +1121,7 @@ function plSelect() {
   if (S.view === 'pb') {
     const card = (A.book || []).find((c) => c && c.name === S.plCard);
     if (card) loadCurve(card.name, String(card.utc || ''));
-    if (!S.plWatch) loadWatch();
+    if (!S.desk) loadDesk();      // the "On the Desk" badge reads the promoted Lab strategies
   }
 }
 /* One idea in full (GET /pipeline/idea/<name>): asked again when its row in the Queue changed, or when the last try got no answer.
@@ -1205,7 +1142,7 @@ async function loadIdea(name) {
 function plBookRowLine(card) {
   const l = C.plBookLine(card);
   if (l.net === '—' && !l.rest) return '';
-  return `<span class="pl-res"><b class="${l.tone}">${esc(l.net)}</b>${l.rest ? `<span>${esc(l.rest)}</span>` : ''}${S.plWatch && S.plWatch.has(card.name) ? '<i title="On the Desk page, watch-only">On the Desk</i>' : ''}</span>`;
+  return `<span class="pl-res"><b class="${l.tone}">${esc(l.net)}</b>${l.rest ? `<span>${esc(l.rest)}</span>` : ''}${S.desk && S.desk.has(card.name) ? '<i title="A promoted Lab strategy of this name is on the Desk">On the Desk</i>' : ''}</span>`;
 }
 /* An idea's equity curve and first numbers (GET /pipeline/curve/<name>): asked once per name and row change; the old one stays on the page meanwhile. */
 let plCurveSeq = 0;
@@ -1219,14 +1156,6 @@ async function loadCurve(name, key = '') {
   const ok = r.ok && !!r.json;
   S.plCurve = { name, key, loading: false, data: ok ? r.json : null, error: ok ? '' : String(r.error || 'no answer') };
   if (plOpen()) paintLib();
-}
-/* Which Book strategies are on the Desk's watch list (GET /watch). */
-async function loadWatch() {
-  const r = await send('GET', '/api/tester/watch');
-  if (!r.ok || !r.json) return;
-  const next = new Set((r.json.strategies || []).map((x) => x && x.name).filter(Boolean)), was = S.plWatch;
-  S.plWatch = next;
-  if ((!was || was.size !== next.size || [...next].some((n) => !was.has(n))) && plOpen()) paintLib();
 }
 /* The curve as a picture: the running total by traded day, a soft fill to the $0 line, the last value marked; its two ends dated. */
 const EQ_W = 640, EQ_H = 180, EQ_PAD = 8;
@@ -1243,14 +1172,11 @@ function plCurveFig(cv) {
     <figcaption><span>${esc(cv.start || '')}</span><span>${cv.period === 'test' ? 'the days it had never seen' : 'the build days'} · 1 contract, after costs</span><span>${esc(cv.end || '')}</span></figcaption></figure>`;
 }
 /* What a strategy did, on top of its page: the tiles, the curve, and what can be done with it. */
-function plResults(name, canPromote) {
+function plResults(name, canShow) {
   const L = S.plCurve && S.plCurve.name === name ? S.plCurve : null, cv = L && L.data;
-  const busy = S.plExec === name, watched = !!(S.plWatch && S.plWatch.has(name));
-  const acts = `<div class="pl-acts2"><button class="btn btn-outline" data-act="plexec" data-name="${esc(name)}" data-fk="exec"${busy || S.plBusy ? ' disabled' : ''}>${busy ? 'Opening the chart…' : 'Show executions on chart'}</button>
-    ${canPromote ? (watched
-      ? `<span class="pl-on" role="status">On the Desk page, watch-only</span><button class="btn btn-outline" data-act="plunwatch" data-name="${esc(name)}" data-fk="unwatch"${S.plBusy ? ' disabled' : ''}>Remove from Desk</button>`
-      : `<button class="btn btn-default" data-act="plpromote" data-name="${esc(name)}" data-fk="promote"${S.plBusy ? ' disabled' : ''}>Promote to strategy</button>`) : ''}</div>`;
-  if (!cv) return `${L && L.error ? `<p class="pp-note" role="status">${esc(L.error)}</p>` : '<p class="pp-note" role="status">Loading its results…</p>'}${L && L.error ? '' : ''}${canPromote ? acts : ''}`;
+  const busy = S.plExec === name;
+  const acts = `<div class="pl-acts2"><button class="btn btn-outline" data-act="plexec" data-name="${esc(name)}" data-fk="exec"${busy || S.plBusy ? ' disabled' : ''}>${busy ? 'Opening the chart…' : 'Show executions on chart'}</button></div>`;
+  if (!cv) return `${L && L.error ? `<p class="pp-note" role="status">${esc(L.error)}</p>` : '<p class="pp-note" role="status">Loading its results…</p>'}${L && L.error ? '' : ''}${canShow ? acts : ''}`;
   return `<div class="pl-tiles">${C.plCurveTiles(cv).map((t) => `<div class="pl-tile"><span>${esc(t.k)}</span><b class="${t.tone}">${esc(t.v)}</b></div>`).join('')}</div>
     ${plCurveFig(cv)}${acts}`;
 }
@@ -1284,29 +1210,18 @@ async function showExecutions(name) {
   const shown = await showRunOnChart(j.run_id, j.end ? { date: j.end } : null);
   log(esc(C.plExecSaid(name, j, shown)));
 }
-async function watchDo(what, name) {
-  if (!name || S.plBusy) return;
-  S.plBusy = true; paintLib();
-  const r = await send('POST', `/api/tester/watch/${what}`, { name });
-  S.plBusy = false;
-  const j = r.json || {};
-  await loadWatch();
-  if (!r.ok || j.ok === false) { pipeSaid(String(j.detail || r.error || 'It did not work.'), true); return; }
-  pipeSaid(C.plWatchSaid(what, name), false);
-}
 const plKv = (rows) => `<div class="rs-group pl-grp">${rows.map(([k, v]) => `<div class="pl-kv"><span>${esc(k)}</span><b>${esc(v)}</b></div>`).join('')}</div>`;
 const plChip = (label, tone) => `<span class="rs-chip pl-chip ${tone}">${esc(label)}</span>`;
 const plStage = (n, name, mark, text, lines) => `<section class="pl-stage"><header><b><span>Stage ${n}</span> ${esc(name)}</b><span class="pl-mark ${mark.tone}">${esc(mark.text)}</span></header>
     ${text ? `<p>${esc(text)}</p>` : ''}
     ${(lines || []).length ? `<ul class="pl-lines">${lines.map((x) => { const k = C.plMark(x.passed); return `<li class="${k.tone}"><i>${esc(k.text)}</i><span>${esc(x.text)}</span></li>`; }).join('')}</ul>` : ''}</section>`;
 
-/* -- the sidebar: a list, or (beside the Guide) what is happening now -- */
+/* -- the sidebar: a list -- */
 function pipeSide() {
   const L = S.pl;
   if (!L) return '<div class="lb-empty" role="status">Loading…</div>';
   if (!L.data) return `<div class="lb-empty" role="status">${esc(L.error)}</div>`;
   const A = L.data;
-  if (S.view === 'pg') return `<div class="pl-head">${C.plSummary(A).map((t, i) => `<p class="${i ? 'pl-quiet' : 'pl-count'}">${esc(t)}</p>`).join('')}</div>`;
   if (S.view === 'pb') {
     const book = A.book || [];
     if (!book.length) return '<div class="lb-empty">No strategies yet.</div>';
@@ -1335,7 +1250,7 @@ function pipeMain() {
   if (!L.data) return `<div class="pp"><p class="pp-lead" role="status">${esc(L.error)}</p></div>`;
   const stale = L.stale ? '<p class="pp-note pl-stale" role="status">Can’t reach the app. Showing the last known state.</p>' : '';
   const said = S.plSaid ? `<div class="pl-said${S.plSaid.bad ? ' bad' : ''}" role="status"><pre>${esc(S.plSaid.text)}</pre><button class="hb-ib" data-act="plhide" data-fk="hide" aria-label="Hide this message" title="Hide">×</button></div>` : '';
-  return `<div class="pp">${stale}${said}${S.view === 'pq' ? queueMain(L.data) : S.view === 'pb' ? bookMain(L.data) : guideMain(L.data)}</div>`;
+  return `<div class="pp">${stale}${said}${S.view === 'pq' ? queueMain(L.data) : bookMain(L.data)}</div>`;
 }
 /* The Queue's page: the count and the ONE button on top, always; under them the selected idea in full -- why it stopped (the ONE
    line), its card in words, every stage that ran with PASS / FAIL / — and its lines as the server wrote them. An idea that passed
@@ -1345,7 +1260,7 @@ function queueMain(A) {
   const bar = `<div class="pp-bar"><p class="pl-count">${esc(C.plCount(A.counts)).replace(/(\d) /g, '$1 ')}</p>
     <div class="pl-ctl"><button class="btn btn-default" data-act="plctl" data-fk="ctl"${c.enabled && !S.plBusy ? '' : ' disabled'}>${esc(c.label)}</button><span class="pl-quiet">${esc(c.line)}</span></div></div>`;
   const idle = !(A.runner && (A.runner.running || A.runner.paused));       // nothing to count and nothing to start: the one line says it
-  if (!ideas.length) return `${idle ? '' : bar}<div class="pp-empty"><p>No ideas yet. Add one from the Guide, or tell Claude your idea in any chat.</p>
+  if (!ideas.length) return `${idle ? '' : bar}<div class="pp-empty"><p>No ideas yet. Press Write an idea, or tell Claude your idea in any chat.</p>
     <button class="btn btn-outline" data-act="pladd" data-fk="add">Write an idea</button></div>`;
   const D = S.plDetail && S.plDetail.name === S.plIdea ? S.plDetail : null;
   if (!S.plIdea) return `${bar}<div class="pp-empty"><p>Pick an idea on the left to see how it did.</p></div>`;
@@ -1379,18 +1294,6 @@ function bookMain(A) {
     <h3>Accounts</h3>${full.accounts.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('') || '<p class="pp-note">None on this card.</p>'}
     <h3>Stages</h3>${full.stages.map((s) => plStage(s.n, s.name, s.mark, s.text)).join('') || '<p class="pp-note">None on this card.</p>'}</article>`;
 }
-/* The Guide's page: six steps, each one sentence and one button that is grey until its step makes sense (the reason is written under
-   it), then the ladder of the eight stages with the ideas that are at each one now. */
-function guideMain(A) {
-  const step = (s) => `<li class="pl-step"><span class="pl-num" aria-hidden="true">${s.n}</span><div><b>${esc(s.title)}</b><p>${esc(s.words)}</p>
-      ${s.button ? `<button class="btn ${s.primary && s.enabled ? 'btn-default' : 'btn-outline'}" data-act="plstep" data-n="${s.n}" data-fk="step:${s.n}"${s.enabled && !(s.n === 2 && S.plBusy) ? '' : ' disabled'}${s.reason ? ` aria-describedby="plWhy${s.n}"` : ''}>${esc(s.button)}</button>` : `<p class="pl-now" role="status">${esc(s.status)}</p>`}
-      ${s.reason ? `<small class="pl-help" id="plWhy${s.n}">${esc(s.reason)}</small>` : ''}</div></li>`;
-  const rung = (s) => `<li><span class="pl-num" aria-hidden="true">${s.n}</span><div><div class="pl-rt"><b>${esc(s.name)}</b><i class="${s.ideas ? 'on' : ''}">${esc(s.count)}</i></div><p>${esc(s.words)}</p></div></li>`;
-  return `<h2>From an idea to the Book</h2><p class="pp-lead">Six steps. The computer does the testing. You look at the end.</p>
-    <ol class="pl-steps">${C.plGuide(A).map(step).join('')}</ol>
-    <h3>The eight stages</h3><p class="pp-note">Every idea climbs them one by one and stops at the first it fails. On the right: the ideas at each one now.</p>
-    <ol class="pl-ladder" start="0">${C.plLadder(A).map(rung).join('')}</ol>`;
-}
 /* Both halves painted: only what changed is put in the page, the scroll stays (a new selection starts at the top) and so does the keyboard. */
 let plPage = '', plMain = null;
 function paintPipe(side, head, sideTop) {
@@ -1399,7 +1302,7 @@ function paintPipe(side, head, sideTop) {
   side.innerHTML = head + pipeSide();
   side.scrollTop = sideTop;
   if (main) {
-    const html = pipeMain(), page = `${S.view}:${S.view === 'pq' ? S.plIdea : S.view === 'pb' ? S.plCard : ''}`, top = page === plPage ? main.scrollTop : 0;
+    const html = pipeMain(), page = `${S.view}:${S.view === 'pq' ? S.plIdea : S.plCard}`, top = page === plPage ? main.scrollTop : 0;
     if (plMain !== html) { main.innerHTML = html; plMain = html; }
     main.scrollTop = top;
     plPage = page;
@@ -1407,14 +1310,6 @@ function paintPipe(side, head, sideTop) {
   const back = fk ? [...root.querySelectorAll('[data-fk]')].find((x) => x.dataset.fk === fk && !x.disabled) : null;
   if (back && back !== document.activeElement) back.focus({ preventScroll: true });
   S.plFk = back ? '' : fk;        // a button that is grey while its action runs gets the keyboard back when it is done
-}
-function guideStep(n) {
-  const A = S.pl && S.pl.data, s = A && C.plGuide(A).find((x) => x.n === n);
-  if (!s || !s.enabled) return;
-  if (n === 1) addSheet();
-  else if (n === 2) pipeActions(s.actions);
-  else if (n === 4) setView('pq');
-  else if (n === 5) { S.plIdea = s.name; setView('pq'); }
 }
 function pickIdea(name) { S.plIdea = name; S.plArmed = ''; paintLib(); loadIdea(name); }
 function pickCard(name) { S.plCard = name; plSelect(); paintLib(); }
@@ -1480,7 +1375,7 @@ function refuseSheet(name) {
   });
 }
 
-/* The add-idea form (the Guide's step 1), a sheet. Its lists are the server's (`rules`, `indicators`, `sessions`: the research
+/* The add-idea form (the Queue's Write an idea), a sheet. Its lists are the server's (`rules`, `indicators`, `sessions`: the research
    toolkit's own block list): an entry rule that runs on the chosen market, its main setting from that rule's settings, three values
    to start from (what the library ran, or the default and its neighbours), each checked against the setting's limits as it is typed,
    and only the times of day the rule runs in. The button is grey until the card could pass, with what is missing written under it.
@@ -1588,7 +1483,7 @@ function addSheet() {
       S.plSaid = { text: r.text || 'Added.', bad: false };
       S.plWant = name;
       setView('pq'); loadPipeline(true);
-      const tab = root.querySelector('[data-v="pq"]'); if (tab) tab.focus({ preventScroll: true });
+      const tab = root.querySelector('[data-fk="viewmenu"]'); if (tab) tab.focus({ preventScroll: true });
       return;
     }
     if (!d.isConnected) return pipeSaid(r.text, true);
@@ -1889,7 +1784,8 @@ function paintRes() {
   const el = $('#labRes .in');
   if (!el) return;
   const b = buf(), top = el.scrollTop;
-  if (!b) { el.innerHTML = '<div class="rs-empty"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
+  paintNav();
+  if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const r = S.run && S.run.key === b.key ? S.run : null, settings = settingsHtml(b);
   let main = '', settingsDone = false;
   if (r && !r.bundle && (S.busy || (r.st && r.st.status === 'queued'))) {
@@ -1953,17 +1849,12 @@ function act(name, el) {
   else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
   else if (name === 'plidea') pickIdea(el.dataset.name);
   else if (name === 'plbook') pickCard(el.dataset.name);
-  else if (name === 'plstep') guideStep(Number(el.dataset.n));
   else if (name === 'plapprove') approveIdea();
   else if (name === 'plrefuse') refuseSheet(S.plIdea);
   else if (name === 'pladd') addSheet();
   else if (name === 'plhide') { S.plSaid = null; paintLib(); }
   else if (name === 'plexec') showExecutions(el.dataset.name);
-  else if (name === 'plpromote') watchDo('promote', el.dataset.name);
-  else if (name === 'plunwatch') watchDo('remove', el.dataset.name);
   else if (name === 'tkblock') codeSheet(el.dataset.id);
-  else if (name === 'bptool') toolSheet(el.dataset.tool);
-  else if (name === 'bpidea') { S.bpIdea = el.dataset.name; paintLib(); toolSheet('blueprint_status', { name: el.dataset.name }, true); }
 }
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
@@ -2050,7 +1941,6 @@ root.dataset.report = '0';
 document.addEventListener('visibilitychange', plSync);
 applyPanels(false);
 paintAll();
-paintNav();
 setTimeout(() => { if (P.chart) soloChart(); }, 1800);
 // Bar Replay lives in the same bottom panel: asking for it brings the panel back
 document.getElementById('tbReplay')?.addEventListener('click', () => setReport(true));
@@ -2062,8 +1952,10 @@ async function takeDeskAsk() {
   const name = r.ok && r.json && typeof r.json.name === 'string' ? r.json.name : '';
   if (!name) return;
   const run = r.json && typeof r.json.run === 'string' && /^[0-9a-z_-]+$/.test(r.json.run) ? r.json.run : '';   // the Desk's "Show on chart"
-  if (!S.drafts.some((d) => d.name === name)) await loadLists();
-  if (S.drafts.some((d) => d.name === name)) selectDraft(name);
+  const builtin = r.json && r.json.builtin === true;          // a Desk straddle's tester twin (nq930, gc_nfpcpi), not a draft
+  if (builtin ? !S.builtins.some((x) => x.id === name) : !S.drafts.some((d) => d.name === name)) await loadLists();
+  if (builtin) { if (S.builtins.some((x) => x.id === name)) selectBuiltin(name); }
+  else if (S.drafts.some((d) => d.name === name)) selectDraft(name);
   if (run) showRunOnChart(run).then((ok) => log(ok ? 'Its run on the unseen days is on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.'));
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') takeDeskAsk(); });

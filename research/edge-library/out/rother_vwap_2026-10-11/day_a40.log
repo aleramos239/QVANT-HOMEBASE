@@ -1,0 +1,228 @@
+2026-10-11T17:31:36+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers)
+2026-10-11T17:31:36+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 1-60 of 948 (36 instances)
+2026-10-11T17:31:40+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 61-120 of 948 (36 instances)
+2026-10-11T17:31:43+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 121-180 of 948 (36 instances)
+2026-10-11T17:31:47+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 181-240 of 948 (36 instances)
+2026-10-11T17:31:51+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 241-300 of 948 (36 instances)
+2026-10-11T17:31:55+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 301-360 of 948 (36 instances)
+2026-10-11T17:31:58+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 361-420 of 948 (36 instances)
+2026-10-11T17:32:02+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 421-480 of 948 (36 instances)
+2026-10-11T17:32:05+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 481-540 of 948 (36 instances)
+2026-10-11T17:32:09+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 541-600 of 948 (36 instances)
+2026-10-11T17:32:12+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 601-660 of 948 (36 instances)
+2026-10-11T17:32:15+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 661-720 of 948 (36 instances)
+2026-10-11T17:32:19+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 721-780 of 948 (36 instances)
+2026-10-11T17:32:22+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 781-840 of 948 (36 instances)
+2026-10-11T17:32:26+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 841-900 of 948 (36 instances)
+2026-10-11T17:32:30+00:00 taught rother_vwap_day_a40: pass 1 of 4, ES 1-minute bars (rother_vwap_day_a40-ES-tf1; 4 workers): days 901-948 of 948 (36 instances)
+2026-10-11T17:32:33+00:00 bp_build rother_vwap_day_a40-ES-tf1: 9 cells, 13,428 trades, 56.3 s of tape (wall 56 s, 4 workers)
+2026-10-11T17:32:33+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers)
+2026-10-11T17:32:33+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 1-60 of 948 (36 instances)
+2026-10-11T17:32:35+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 61-120 of 948 (36 instances)
+2026-10-11T17:32:38+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 121-180 of 948 (36 instances)
+2026-10-11T17:32:40+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 181-240 of 948 (36 instances)
+2026-10-11T17:32:43+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 241-300 of 948 (36 instances)
+2026-10-11T17:32:46+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 301-360 of 948 (36 instances)
+2026-10-11T17:32:48+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 361-420 of 948 (36 instances)
+2026-10-11T17:32:51+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 421-480 of 948 (36 instances)
+2026-10-11T17:32:53+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 481-540 of 948 (36 instances)
+2026-10-11T17:32:56+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 541-600 of 948 (36 instances)
+2026-10-11T17:32:58+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 601-660 of 948 (36 instances)
+2026-10-11T17:33:00+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 661-720 of 948 (36 instances)
+2026-10-11T17:33:03+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 721-780 of 948 (36 instances)
+2026-10-11T17:33:05+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 781-840 of 948 (36 instances)
+2026-10-11T17:33:08+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 841-900 of 948 (36 instances)
+2026-10-11T17:33:11+00:00 taught rother_vwap_day_a40: pass 2 of 4, ES 5-minute bars (rother_vwap_day_a40-ES-tf5; 4 workers): days 901-948 of 948 (36 instances)
+2026-10-11T17:33:13+00:00 bp_build rother_vwap_day_a40-ES-tf5: 9 cells, 11,844 trades, 39.77 s of tape (wall 40 s, 4 workers)
+2026-10-11T17:33:13+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers)
+2026-10-11T17:33:13+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 1-60 of 948 (360 instances)
+2026-10-11T17:33:35+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 61-120 of 948 (360 instances)
+2026-10-11T17:33:57+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 121-180 of 948 (360 instances)
+2026-10-11T17:34:20+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 181-240 of 948 (360 instances)
+2026-10-11T17:34:42+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 241-300 of 948 (360 instances)
+2026-10-11T17:35:05+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 301-360 of 948 (360 instances)
+2026-10-11T17:35:27+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 361-420 of 948 (360 instances)
+2026-10-11T17:35:50+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 421-480 of 948 (360 instances)
+2026-10-11T17:36:13+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 481-540 of 948 (360 instances)
+2026-10-11T17:36:35+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 541-600 of 948 (360 instances)
+2026-10-11T17:36:58+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 601-660 of 948 (360 instances)
+2026-10-11T17:37:21+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 661-720 of 948 (360 instances)
+2026-10-11T17:37:44+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 721-780 of 948 (360 instances)
+2026-10-11T17:38:06+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 781-840 of 948 (360 instances)
+2026-10-11T17:38:29+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 841-900 of 948 (360 instances)
+2026-10-11T17:38:51+00:00 taught rother_vwap_day_a40: pass 3 of 4, ES 1-minute bars (rother_vwap_day_a40__ctl-ES-tf1; 4 workers): days 901-948 of 948 (360 instances)
+2026-10-11T17:39:11+00:00 null_bp rother_vwap_day_a40__ctl-ES-tf1: 90 cells, 1,691,399 trades, 352.05 s of tape (wall 356 s, 4 workers)
+2026-10-11T17:39:11+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers)
+2026-10-11T17:39:11+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 1-60 of 948 (360 instances)
+2026-10-11T17:39:27+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 61-120 of 948 (360 instances)
+2026-10-11T17:39:44+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 121-180 of 948 (360 instances)
+2026-10-11T17:40:01+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 181-240 of 948 (360 instances)
+2026-10-11T17:40:18+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 241-300 of 948 (360 instances)
+2026-10-11T17:40:34+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 301-360 of 948 (360 instances)
+2026-10-11T17:40:51+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 361-420 of 948 (360 instances)
+2026-10-11T17:41:08+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 421-480 of 948 (360 instances)
+2026-10-11T17:41:25+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 481-540 of 948 (360 instances)
+2026-10-11T17:41:42+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 541-600 of 948 (360 instances)
+2026-10-11T17:41:59+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 601-660 of 948 (360 instances)
+2026-10-11T17:42:16+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 661-720 of 948 (360 instances)
+2026-10-11T17:42:33+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 721-780 of 948 (360 instances)
+2026-10-11T17:42:50+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 781-840 of 948 (360 instances)
+2026-10-11T17:43:07+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 841-900 of 948 (360 instances)
+2026-10-11T17:43:23+00:00 taught rother_vwap_day_a40: pass 4 of 4, ES 5-minute bars (rother_vwap_day_a40__ctl-ES-tf5; 4 workers): days 901-948 of 948 (360 instances)
+2026-10-11T17:43:38+00:00 null_bp rother_vwap_day_a40__ctl-ES-tf5: 90 cells, 1,677,806 trades, 261.29 s of tape (wall 266 s, 4 workers)
+rother_vwap_day_a40: vwap_touch (anchor day, away 40, near 3), both sides, 1 and 5-minute bars, stop 2.5 / target 3 points, up to 5 trades a session pass over 4 passes (london nyam mid pm); the sheet leaves out 9 things the video says (listed below); verdict: 1-minute bars make -$33 a trade on 1,492 trades and hold 1 of 10 lines (misses P3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1, P4.2); the neighbours average -$33 a trade; 5-minute bars make -$35 a trade on 1,316 trades and hold 1 of 10 lines (misses P3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1, P4.2); the neighbours average -$34 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 1-MINUTE BARS ===
+
+                                                    the taught cell (stop 2.5 / target 3)  average of the 9 cells
+trades                                                                              1,492                   1,492
+net                                                                              -$49,480                -$48,862
+win rate                                                                           38.1 %                  39.2 %
+average trade                                                                        -$33                    -$33
+profit factor                                                                        0.63                    0.63
+average win                                                                          $146                    $146
+average loss                                                                        -$144                   -$148
+average win / average loss                                                           1.02                    1.02
+worst drawdown, daily                                                             $49,813                 $49,377
+worst drawdown, open losses counted                                               $49,971                 $49,520
+Sharpe                                                                              -4.23                   -4.24
+months won                                                                         13.0 %                  13.5 %
+best month, share of the profit                                                    44.7 %                  42.4 %
+longest run of losing days                                                              9                    13.6
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                      2.7 %                   2.7 %
+prop payout odds (stress, "live is worse", beside)                          0.6 % (0.1 %)           0.6 % (0.1 %)
+prop eval odds, stress                                                              0.6 %                   0.7 %
+
+The neighbours (the 8 others): average trade -$33, they hold 1.0 of 10 lines on average (the taught cell holds 1).
+
+THE NINE CELLS: average trade (lines held)
+           target 2.25     target 3  target 3.75
+stop 2     -$29 (1/10)  -$30 (1/10)  -$32 (1/10)
+stop 2.5   -$32 (1/10)  -$33 (1/10)  -$34 (1/10)
+stop 3.25  -$34 (1/10)  -$35 (1/10)  -$35 (1/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 FAIL average trade -$33 (need above $0)
+  P3.3 PASS 1,492 trades (need 200)
+  P3.4 missed (a label, asks nothing) long -$24,490, short -$24,991 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (75 of 1492) the box makes -$60,430 (need above $0)
+  P3.8 missed (a label, asks nothing) 6 of 46 months won, 13.04 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2023-11 is 44.67 % of the profit of the months won (need 10 % or less)
+  P3.10 missed (a label, asks nothing) longest run of losing days: 9 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 0.63 over 1,492 trades (need 1.2 or more)
+  3.4 FAIL default variant: net -$49,480 / worst drawdown $49,971 = -0.99, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe -4.23 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $4,997 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 0 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$54,339 without its best 1 % of days (10 of 948 session days; they made $4,858 of -$49,480; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 0 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 FAIL beats 18.2 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*         81   -$1,974       -$24  40.7 %  0.71    $2,006
+2022         583  -$20,357       -$35  37.9 %  0.61   $20,818
+2023         227   -$7,970       -$35  37.0 %  0.61    $8,728
+2024         271   -$8,734       -$32  38.0 %  0.63    $9,500
+2025*        330  -$10,445       -$32  38.8 %  0.64   $11,066
+combined   1,492  -$49,480       -$33  38.1 %  0.63   $49,813
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*         81   -$2,312       -$29  39.9 %  0.66    $2,473
+2022         583  -$19,785       -$34  39.2 %  0.62   $20,376
+2023         227   -$7,440       -$33  38.9 %  0.63    $7,982
+2024         271   -$8,187       -$30  39.6 %  0.65    $8,783
+2025*        330  -$11,139       -$34  39.0 %  0.62   $11,842
+combined   1,492  -$48,862       -$33  39.2 %  0.63   $49,377
+
+=== 5-MINUTE BARS ===
+
+                                                    the taught cell (stop 2.5 / target 3)  average of the 9 cells
+trades                                                                              1,316                   1,316
+net                                                                              -$45,564                -$45,193
+win rate                                                                           37.7 %                  38.7 %
+average trade                                                                        -$35                    -$34
+profit factor                                                                        0.61                    0.61
+average win                                                                          $146                    $146
+average loss                                                                        -$144                   -$148
+average win / average loss                                                           1.01                    1.02
+worst drawdown, daily                                                             $45,892                 $45,756
+worst drawdown, open losses counted                                               $46,050                 $45,872
+Sharpe                                                                              -4.19                   -4.16
+months won                                                                         17.4 %                  16.9 %
+best month, share of the profit                                                    42.4 %                  35.5 %
+longest run of losing days                                                              9                    12.2
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                      2.4 %                   2.7 %
+prop payout odds (stress, "live is worse", beside)                          0.6 % (0.0 %)           0.6 % (0.1 %)
+prop eval odds, stress                                                              0.4 %                   0.7 %
+
+The neighbours (the 8 others): average trade -$34, they hold 1.0 of 10 lines on average (the taught cell holds 1).
+
+THE NINE CELLS: average trade (lines held)
+           target 2.25     target 3  target 3.75
+stop 2     -$31 (1/10)  -$33 (1/10)  -$33 (1/10)
+stop 2.5   -$33 (1/10)  -$35 (1/10)  -$35 (1/10)
+stop 3.25  -$36 (1/10)  -$37 (1/10)  -$37 (1/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 FAIL average trade -$35 (need above $0)
+  P3.3 PASS 1,316 trades (need 200)
+  P3.4 missed (a label, asks nothing) long -$24,254, short -$21,310 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (66 of 1316) the box makes -$55,200 (need above $0)
+  P3.8 missed (a label, asks nothing) 8 of 46 months won, 17.39 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2024-06 is 42.41 % of the profit of the months won (need 10 % or less)
+  P3.10 missed (a label, asks nothing) longest run of losing days: 9 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 0.61 over 1,316 trades (need 1.2 or more)
+  3.4 FAIL default variant: net -$45,564 / worst drawdown $46,050 = -0.99, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe -4.19 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $4,605 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 0 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$50,135 without its best 1 % of days (10 of 948 session days; they made $4,571 of -$45,564; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 0 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 FAIL beats 6.68 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*         72   -$1,850       -$26  40.3 %  0.70    $1,878
+2022         493  -$17,110       -$35  38.1 %  0.62   $17,853
+2023         205   -$9,170       -$45  33.7 %  0.52    $9,343
+2024         246   -$7,209       -$29  39.0 %  0.66    $7,970
+2025*        300  -$10,225       -$34  38.0 %  0.62   $10,840
+combined   1,316  -$45,564       -$35  37.7 %  0.61   $45,892
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*         72   -$2,253       -$31  38.9 %  0.64    $2,441
+2022         493  -$16,583       -$34  39.4 %  0.62   $17,512
+2023         205   -$8,230       -$40  36.4 %  0.56    $8,362
+2024         246   -$7,459       -$30  39.6 %  0.65    $8,047
+2025*        300  -$10,668       -$36  38.4 %  0.60   $11,469
+combined   1,316  -$45,193       -$34  38.7 %  0.61   $45,756
+
+NOT RUN (the person who wrote the sheet)
+  - Day VWAP: the video's day VWAP starts 18:00 ET. The engine's morning instance reads the trade date's bars from 00:00 ET, so the day VWAP here starts at 00:00 ET (the first six evening hours are missing).
+  - London VWAP: no clock time was said; 03:00 ET (08:00 London, 02:00 Central) is my reading.
+  - 'Which VWAP is most respected' is a look at the chart with no rule: each VWAP is run alone as its own sheet.
+  - 'Away' is not a number in the video: the setting is mine (ticks away from VWAP before a return counts); three values are run as three sheets and none is picked.
+  - Skipping sideways days has no rule and is not run (no filter). The Bookmap liquidity check is not run (he says to skip it: 'just take the trade').
+  - The 'bad feeling' early exit and the swing-low liquidity sweep trade are not run.
+  - The limit order is re-priced at every bar close of the sheet's bar size (1 or 5 minutes), not continuously. A limit fills on a one-tick trade-through (a touch to the tick is no fill): his own fills may be easier.
+  - max_trades 5 a pass is mine (the video gives no cap); sessions are separate passes, so a cap counts inside each pass.
+  - The video's market is ES; costs are the engine's own (1 tick of slippage on market and stop fills, $4 a round turn).
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 5 counts inside each pass (4 passes: london, nyam, mid, pm), so a day can hold up to 20 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

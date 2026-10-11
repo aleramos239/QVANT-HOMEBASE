@@ -63,12 +63,18 @@
     // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
-    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Research results" for a watched strategy (it has no live trades), "Backtest" for a Lab one
+    const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Backtest" for a Lab one
+    // a Lab strategy's research (the page's own .labres blocks): its saved run on the unseen days, and the prop sim
+    const unseenH = el('div', { class: 'hb-isec-h', text: 'Unseen days (OOS)' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
+    const propH = el('div', { class: 'hb-isec-h', text: 'Prop sim' }), propBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbProp' });
+    const unseenSec = el('section', { class: 'hb-isec' }, unseenH, unseenBox), propSec = el('section', { class: 'hb-isec' }, propH, propBox);
+    unseenSec.hidden = propSec.hidden = true;
     const linksBox = el('div', { class: 'hb-box hb-links-box', id: 'hbLinks' });
     const actsBox = el('div', { class: 'hb-acts', id: 'hbActs' });
     const stratPage = el('div', { class: 'hb-ipage', id: 'hbInspStrat' },
       el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Setup' }), setupBox),
       el('section', { class: 'hb-isec' }, figsH, figsBox),
+      unseenSec, propSec,
       el('section', { class: 'hb-isec hb-isec-links' }, el('div', { class: 'hb-isec-h', text: 'More' }), linksBox),
       actsBox);
     insp.append(deskPage, stratPage);
@@ -84,23 +90,22 @@
     const status_ = () => { try { return ST; } catch (_) { return null; } };          // the page's own state (read only)
     const viewOf = () => (vStrat && !vStrat.hidden) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
-    const hm = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || '')); return m ? String(parseInt(m[1], 10)) + ':' + m[2] : ''; };
+    const hm = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || '')); const s = m ? String(parseInt(m[1], 10)) + ':' + m[2] : ''; return s && window.HBClock ? window.HBClock.text(s) : s; };
     const row = (k, v) => el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: k }), el('span', { class: 'hb-row-v', text: v }));
-
-    /* A WATCHED strategy (promoted from the Lab's Book; the page's WATCH list): what it is, read-only. It has no desk setup -- it places no orders. */
-    const watched = () => { try { return VIEW && VIEW.k === 'watch' ? ((WATCH || []).find((w) => w && w.name === VIEW.name) || {}) : null; } catch (_) { return null; } };
-    function setupWatch(w) {
-      const sess = { asia: 'Asia', london: 'London', pre: 'Pre-market', nyam: 'NY morning', mid: 'Midday', pm: 'Afternoon', eve: 'Evening' };
-      const rows = [row('Instrument', String(w.market || '—')), row('Time of day', sess[w.session] || String(w.session || '—')),
-        row('Bars', w.bar ? fmtN(w.bar) + ' min' : '—'), row('Entry rule', String(w.family || '—')), row('Stop and target', String(w.cell || '—')),
-        row('Tested on', w.start && w.end ? String(w.start) + ' to ' + String(w.end) : '—'), row('Orders', 'None: watch-only')];
-      setupBox.replaceChildren(...rows);
-    }
 
     /* A LAB strategy (promoted from the Lab; the page's DESKLAB list, helpers in desklab.js): what it is, read-only. It runs in shadow -- it places no orders. */
     const labbed = () => { try { return VIEW && VIEW.k === 'lab' ? ((DESKLAB.strategies || []).find((w) => w && w.name === VIEW.name) || {}) : null; } catch (_) { return null; } };
     function setupLab(l) {
       const rows = l.name && window.DeskLab ? window.DeskLab.setupRows(l).map(([k, v]) => row(k, v)) : [];
+      setupBox.replaceChildren(...rows);
+    }
+
+    /* A GROUP (the page's DESKGROUPS, words in desklab.js): its kind, how many strategies, the account it is scored on. Display only. */
+    const groupped = () => { try { return VIEW && VIEW.k === 'group' ? ((DESKGROUPS.groups || []).find((g) => g && g.id === VIEW.name) || null) : null; } catch (_) { return null; } };
+    function setupGroup(g) {
+      let res = null;
+      try { res = DESKGRES[g.id] || null; } catch (_) {}
+      const rows = window.DeskLab ? window.DeskLab.groupSetupRows(g, res).map(([k, v]) => row(k, v)) : [];
       setupBox.replaceChildren(...rows);
     }
 
@@ -192,9 +197,19 @@
           const t = $('.sd-title', vStrat), sd = $('.sd-state b', vStrat);
           let name = '';
           try { name = (VIEW && VIEW.name) || ''; } catch (_) {}
-          const w = watched(), l = labbed(), dl = deskLabbed(name);
-          figsH.textContent = w ? 'Research results' : l || dl ? 'Backtest' : 'Live results';
-          if (w) setupWatch(w); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
+          const res = $(':scope > .labres', vStrat);
+          if (res) {
+            const u = $('.labres-unseen', res), p = $('.labres-prop', res);
+            if (u) { unseenH.textContent = u.dataset.h || ''; unseenBox.replaceChildren(u); }
+            if (p) { propH.textContent = p.dataset.h || ''; propBox.replaceChildren(p); }
+            unseenSec.dataset.for = res.dataset.for || '';
+            res.remove();
+          }
+          unseenSec.hidden = propSec.hidden = !name || unseenSec.dataset.for !== name;      // never one strategy's research under another
+          const l = labbed(), dl = deskLabbed(name);
+          const grp = groupped();
+          figsH.textContent = grp ? (figs && figs.dataset.h) || 'Combined' : l || dl ? 'Backtest' : 'Live results';
+          if (grp) setupGroup(grp); else if (l) setupLab(l); else if (dl) setupDeskLab(name, dl); else setup(name);
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');

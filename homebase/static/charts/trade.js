@@ -65,7 +65,7 @@ function rootOf(symbol) {
   return m ? m[1] : s;
 }
 function botName(key) { return BOT_NAMES[key] || key; }
-function etTime(ms) { return Number.isFinite(ms) ? ET.format(new Date(ms)) : '—'; }
+function etTime(ms) { if (!Number.isFinite(ms)) return '—'; const t = ET.format(new Date(ms)); return typeof HBClock !== 'undefined' ? HBClock.text(t) : t; }   // the app's one clock format
 function px(v) { return v == null || !Number.isFinite(v) ? '—' : v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6 }); }
 
 /* ---- orders ---- */

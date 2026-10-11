@@ -55,15 +55,35 @@ test('askSpan: never past the limit, nothing for an unknown limit or an empty sp
   assert.equal(E.askSpan(100, NaN, 5000), null);
 });
 
-test('askSpan: a zoomed-out view asks only for the newest 48 h before its end', () => {
-  const DAY = 86_400_000, end = T0 + 10 * 60_000;
+test('askSpan: a zoomed-out view asks only for the newest 48 h of OPEN market time before its end', () => {
+  const DAY = 86_400_000, HOUR = 3_600_000, end = Date.UTC(2026, 9, 7, 18, 30);           // Wednesday 14:30 ET, no weekend inside
   const span = E.askSpan(end - 69 * DAY, end, Date.now());
-  assert.deepEqual(span, [end - 48 * 3_600_000, end]);
+  assert.equal(span[1], end);
+  assert.ok(span[0] < end - 48 * HOUR && span[0] >= end - 50 * HOUR - 15 * 60_000, 'two daily halts push it back about 2 h');
   const S = require('../../homebase/static/charts/bookstore.js');
   S.clear();
-  assert.ok(S.missing('NQ', span[0], span[1], end).length <= Math.ceil(48 / 5) + 1);    // at most 11 chunks of 5 h
+  assert.ok(S.missing('NQ', span[0], span[1], end).length <= Math.ceil(50 / 5) + 1);   // at most 11 chunks of 5 h
   assert.deepEqual(E.askSpan(end - DAY, end, Date.now()), [end - DAY, end]);            // a day: untouched
-  assert.deepEqual(E.askSpan(end - 69 * DAY, end + 5 * DAY, end), [end - 48 * 3_600_000, end]);   // measured from the limit
+  assert.deepEqual(E.askSpan(end - 69 * DAY, end + 5 * DAY, end), span);                // measured from the limit
+});
+
+test('askSpan: a Sunday evening still reaches two trading days back (the weekend closure is not counted)', () => {
+  const HOUR = 3_600_000, end = Date.UTC(2026, 9, 11, 23, 40);                         // Sunday 19:40 ET
+  const span = E.askSpan(0, end, Date.now());
+  const et = (ms) => new Date(ms).toLocaleString('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', hourCycle: 'h23' });
+  assert.match(et(span[0]), /^Wed/);                                                    // Friday and Thursday are inside
+  assert.ok(end - span[0] > 4 * 24 * HOUR - 4 * HOUR);                                  // about 3.5 clock days
+});
+
+test('marketOpen: Friday 17:00 ET to Sunday 18:00 ET and the daily 17:00 hour are closed', () => {
+  const at = (d, h, m = 0) => Date.UTC(2026, 9, d, h + 4, m);                           // October = EDT (UTC-4)
+  assert.equal(E.marketOpen(at(9, 16, 59)), true);          // Fri 16:59
+  assert.equal(E.marketOpen(at(9, 17)), false);             // Fri 17:00
+  assert.equal(E.marketOpen(at(10, 12)), false);            // Saturday
+  assert.equal(E.marketOpen(at(11, 17, 59)), false);        // Sun 17:59
+  assert.equal(E.marketOpen(at(11, 18)), true);             // Sun 18:00
+  assert.equal(E.marketOpen(at(7, 17, 30)), false);         // Wed halt
+  assert.equal(E.marketOpen(at(7, 18)), true);              // Wed 18:00
 });
 
 /* ---- the overlay, on a fake chart (the browser half of the module) ---- */
@@ -131,13 +151,15 @@ test('overlay: the visible span is asked of the store, up to now', () => {
   o.destroy();
 });
 
-test('overlay: 100k one-minute bars in view ask for the newest 48 h only', () => {
+test('overlay: 100k one-minute bars in view ask for the newest 48 h of open market time only', () => {
   const t0 = T0 - 70 * 86_400_000, end = t0 + 100_000 * 60_000;     // 69 days ending 1 day before T0 (a past)
   const r = rig({ n: 100_000, bar: 60_000, t0 });
   const o = r.M.overlay(r.cell);
   assert.equal(r.calls.ensure.length, 1);
-  assert.deepEqual(r.calls.ensure[0], ['NQ', end - 48 * 3_600_000, end]);
-  assert.ok(r.S.missing('NQ', r.calls.ensure[0][1], r.calls.ensure[0][2], end).length <= 11);
+  const [root, from, to] = r.calls.ensure[0];
+  assert.equal(root, 'NQ'); assert.equal(to, end);
+  assert.ok(from >= end - 7 * 86_400_000 && from <= end - 48 * 3_600_000, 'back 48 open hours: a weekend and halts may push it older');
+  assert.ok(r.S.missing('NQ', from, to, end).length <= Math.ceil((to - from) / 18_000_000) + 1);   // 5 h chunks
   o.destroy();
 });
 

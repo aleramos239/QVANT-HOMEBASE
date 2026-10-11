@@ -226,6 +226,88 @@ def test_strategy_flatten_disables(client):
     assert client.app.state.cfg.strategies["nq930"].enabled is False
 
 
+def test_account_flatten_clears_that_account_only_and_leaves_the_desk_as_it_was(client, tmp_path):
+    """The Desk's per-account Flatten: the Kill's two account-wide steps on ONE account. Nothing is
+    disarmed, no strategy is switched off, and no other account is touched."""
+    app = client.app
+    app.state.cfg.accounts["other"] = AccountCfg(keyring_key="k2", account_name="OTHER")
+    other = app.state.adapters["other"] = SeededFakeAdapter("other")
+    client.post("/api/arm", json={"armed": True})
+    r = client.post("/api/account-flatten", json={"account": "main"}).json()
+    assert r["ok"] is True and r["account"] == "main"
+    assert r["results"] == {"main": {"cancel_all": {"ok": True, "error": None},
+                                     "flatten_all": {"ok": True, "error": None}}}
+    ad = client.adapter
+    assert ad.cancel_all_calls == 1 and ad.flatten_calls == 1
+    assert other.cancel_all_calls == 0 and other.flatten_calls == 0
+    assert app.state.cfg.armed is True
+    assert app.state.cfg.strategies["nq930"].enabled is True
+    import json as _j
+    rows = [_j.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    row = next(x for x in rows if x["event"] == "account_flatten")
+    assert row["account"] == "main" and row["results"] == r["results"]["main"]
+
+
+def test_account_flatten_refuses_an_unknown_or_unconnected_account(client):
+    assert client.post("/api/account-flatten", json={"account": "nope"}).status_code == 404
+    client.app.state.cfg.accounts["gone"] = AccountCfg(keyring_key="k3", account_name="GONE")
+    r = client.post("/api/account-flatten", json={"account": "gone"})      # in the config, no adapter
+    assert r.status_code == 409 and "not connected" in r.json()["detail"]
+
+
+def test_account_flatten_ends_todays_run_on_that_account_with_the_proven_calls_first(client):
+    """A strategy's footprint on the account goes first, by the same per-order calls the Kill uses
+    (engine.flatten_today), and only then the account-wide sweep."""
+    engine, order = client.app.state.engine, []
+    real = engine.flatten_today
+
+    async def spy(**kw):
+        order.append(("strategies", kw))
+        return await real(**kw)
+
+    engine.flatten_today = spy
+    ad = client.adapter
+    sweep = ad.cancel_all
+
+    async def cancel_all():
+        order.append(("sweep", None))
+        return await sweep()
+
+    ad.cancel_all = cancel_all
+    r = client.post("/api/account-flatten", json={"account": "main"}).json()
+    assert [o[0] for o in order] == ["strategies", "sweep"]
+    assert order[0][1] == {"account": "main", "reason": "manual_flat"}
+    assert r["strategies"] == {}                       # nothing was working today
+
+
+def test_account_flatten_never_runs_alongside_a_kill(client):
+    import asyncio
+    app = client.app
+    kill = _kill_endpoint(app)
+    flat = next(r.endpoint for r in app.routes if getattr(r, "path", None) == "/api/account-flatten")
+    engine, active, peak = app.state.engine, 0, 0
+
+    async def slow(**kw):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0.05)
+        active -= 1
+        return {}
+
+    engine.flatten_today = slow
+
+    class Req:
+        async def json(self):
+            return {"account": "main"}
+
+    async def both():
+        return await asyncio.gather(kill(), flat(Req()))
+
+    asyncio.run(both())
+    assert peak == 1
+
+
 def test_accounts_remove_unassigns_and_drops(client):
     r = client.post("/api/accounts/remove", json={"account": "main"}).json()
     assert r["ok"] is True
@@ -576,8 +658,11 @@ def _readiness(now_et_hhmm, *, armed=True, timer_stage=None, feed=None, power=No
 def test_readiness_power_levels():
     by, ready = _readiness((9, 0), power={"ac": False, "pct": 18, "discharging": True})
     assert by["Power"]["level"] == "bad" and not ready
-    by, ready = _readiness((9, 0), power={"ac": False, "pct": 60, "discharging": True})
+    by, ready = _readiness((9, 0), power={"ac": False, "pct": 40, "discharging": True})
     assert by["Power"]["level"] == "warn" and ready
+    # on battery with plenty left is a fact, not a warning: the shield stays quiet (owner 2026-10-10)
+    by, ready = _readiness((9, 0), power={"ac": False, "pct": 80, "discharging": True})
+    assert by["Power"]["level"] == "info" and ready and "80%" in by["Power"]["detail"]
     by, _ = _readiness((9, 0), power={"ac": True, "pct": 60, "discharging": False})
     assert by["Power"]["level"] == "ok"
 

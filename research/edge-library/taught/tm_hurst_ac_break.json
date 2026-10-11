@@ -1,0 +1,68 @@
+{
+ "name": "tm_hurst_ac_break",
+ "source": {
+  "video": "O4ASr0fh7O8",
+  "title": "This Guy QUIT His Job for PROP TRADING. So I STOLE His Strategy",
+  "channel": "IQCapital",
+  "url": "https://www.youtube.com/watch?v=O4ASr0fh7O8"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "long",
+ "entry": {
+  "family": "hurst_ac_break",
+  "settings": {
+   "h_min": 50.0,
+   "ac_max": -0.1,
+   "h_win": 20,
+   "h_k": 5,
+   "ac_win": 20,
+   "ac_lag": 5,
+   "brk_n": 5,
+   "atr_n": 20,
+   "stop_atr": 4.0,
+   "use_h": "on",
+   "use_ac": "on",
+   "trail": "on"
+  },
+  "words": "Buy when the Hurst proxy is above 50, the autocorrelation (price direction now vs 5 bars ago, over the last 20 bars) is -0.1 or lower, and the bar closes above the highest high of the previous 5 bars; market order at that close; target 5 x ATR(20) fixed, stop 4 x ATR(20) trailing with the highest high, both set from the ATR at entry."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.25,
+  "max_trades": 20
+ },
+ "taught": [
+  "[1:49] 15-minute bars, exclusively on NQ / MNQ (ES, MES and a little BTC similar); 30 minutes or higher should also work",
+  "[4:55-5:04] condition 1: the adapted Hurst exponent is greater than 50 (scale 0-100)",
+  "[8:39-8:45] condition 2: the autocorrelation coefficient is -0.1 or less (price direction now vs 5 bars ago, over the last 20 bars)",
+  "[9:50-10:42] trigger: price closes above the previous five-bar high (the current bar not counted) while both conditions hold: the long entry",
+  "[11:05-11:10] the long entry is a market order at the close of the bar",
+  "[11:43-14:24] objective exit: target 5 x ATR(20) from the entry, fixed",
+  "[14:30-15:25] stop 4 x ATR(20) below the entry, a TRAILING stop that moves up with the highest high reached in the trade",
+  "[21:08-21:11] both are calculated right when the entry is taken"
+ ],
+ "not_run": [
+  "The Hurst proxy formula is not given (it is in the seller's indicator); this sheet's is the uncentered variance ratio of 5-bar to 1-bar changes over 20 bars, x 100 (50 = random walk, a straight line = 100). It does not know the direction of the trend.",
+  "The autocorrelation is read on 1-bar close changes at lag 5 over 20 bars (the video glosses over the lag and the series).",
+  "The evening session 18:00-23:59 ET is NOT run: the engine refuses one window across midnight. The video's chart is 24 hours; this runs 00:00-15:58 ET only, one position at a time, flat 15:58 (house rule).",
+  "The indicators restart at 00:00 ET, so the first signal of a day is at 06:30 ET (26 fifteen-minute bars).",
+  "Position size by ATR (the firm's per-trade loss cap) is not run: 1 contract a cell; sizing is read afterwards.",
+  "His real exits and his scale-ins on pullbacks are discretionary and are not run.",
+  "The short side is not shown in the video and is not run.",
+  "The ATR is the simple mean of the last 20 true ranges (TradingView's ta.atr is Wilder's RMA: a small difference), frozen at the signal bar.",
+  "The control's random entries use the same 4 ATR stop and 5 ATR target as plain brackets WITHOUT the trailing stop (the lane's random entries have no trailing); the filter-off sheet (tm_break_only) is the like-for-like control.",
+  "No cap on trades a day is taught; max_trades 20 is the engine's bound for the one instance."
+ ],
+ "control": "random"
+}

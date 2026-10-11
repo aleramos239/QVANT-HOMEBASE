@@ -18,6 +18,7 @@ function load(stored = null) {
   const ctx = vm.createContext({
     localStorage: { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) },
     $: (sel) => (sel === '#noticeStrip' ? strip : null),
+    hbClock: (t) => t,                  // the page's clock helper: 24-hour, as these tests read it
   });
   vm.runInContext(BLOCK + '\nglobalThis.renderNotices = renderNotices;', ctx);
   return { ctx, strip, store };

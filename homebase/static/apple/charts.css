@@ -48,14 +48,14 @@ html.hb-apple #pgSw.hb-seg > a:hover { background: var(--a-hover); }
 html.hb-apple #pgSw.hb-seg > a[aria-current="page"] { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 
 /* ---- toolbar: Order / DOM (text toggles on one platter), the settings gear ------------------------------------------ */
-html.hb-apple #tbOrder.hb-tbtn, html.hb-apple #tbDom.hb-tbtn { height: 36px; margin: 0; padding: 0 14px; border-radius: 18px; background: transparent; color: var(--a-label);
+html.hb-apple #tbOrder.hb-tbtn, html.hb-apple #tbDom.hb-tbtn { height: 36px; margin: 0; padding: 0 14px; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label);
   font-size: 13px; line-height: 16px; font-weight: 400; transform: none; transition: none; }
 html.hb-apple #tbOrder.hb-tbtn .icw, html.hb-apple #tbDom.hb-tbtn .icw { display: none; }
 html.hb-apple #tbOrder.hb-tbtn .tb-label, html.hb-apple #tbDom.hb-tbtn .tb-label { display: inline; }
 html.hb-apple #tbOrder.hb-tbtn[aria-pressed="true"], html.hb-apple #tbDom.hb-tbtn[aria-pressed="true"] { font-weight: 510; }
 html.hb-apple .hb-c-panels { gap: 0; }
 html.hb-apple .hb-c-panels > .hb-tbtn + .hb-tbtn { margin-left: -6px; }
-html.hb-apple #tbSettings.hb-tbtn { width: 40px; height: 36px; margin: 0; padding: 0; border: 0; border-radius: 18px; background: transparent; box-shadow: none; color: var(--a-label); transform: none; transition: none; }
+html.hb-apple #tbSettings.hb-tbtn { width: 40px; height: 36px; margin: 0; padding: 0; border: 0; border-radius: var(--hb-bubble-r); background: transparent; box-shadow: none; color: var(--a-label); transform: none; transition: none; }
 
 /* ---- the controls row: system controls on the window, large size (28, capsule), 8 apart, 20 from the edge -------------- */
 html.hb-apple body > .toolbar { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px 4px 20px; margin: 0; border: 0; background: transparent;
@@ -64,7 +64,7 @@ html.hb-apple body > .toolbar .tb-sep { display: none; }
 html.hb-apple body > .toolbar .tb-spacer { flex: 1 1 8px; min-width: 0; }
 /* push / pull-down buttons */
 html.hb-apple #tbSymbol, html.hb-apple #tbIndicators, html.hb-apple #tbGrid, html.hb-apple #tbIntervals {
-  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; margin: 0; padding: 0 14.5px; border: 0; border-radius: 14px;
+  flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; margin: 0; padding: 0 14.5px; border: 0; border-radius: var(--hb-bubble-r);
   background: var(--a-fill); color: var(--a-label); box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; filter: none;
   transform: none; transition: background-color 100ms ease; }
 html.hb-apple #tbSymbol:hover, html.hb-apple #tbIndicators:hover, html.hb-apple #tbGrid:hover, html.hb-apple #tbIntervals:hover { background: var(--a-fill); filter: none; color: var(--a-label); }
@@ -81,25 +81,24 @@ html.hb-apple #tbIntervals .ic, html.hb-apple #tbGrid .icw.sm .ic { width: 12px;
 html.hb-apple #tbGrid .thumb { width: 17px; height: 13px; gap: 1.5px; color: var(--a-label); }
 html.hb-apple #tbGrid .thumb i { border-width: 1.25px; border-radius: 1.5px; }
 /* the interval switch: a segmented control (grey capsule track; the chosen segment filled with the accent) */
-html.hb-apple body > .toolbar #tbFavs { flex: none; display: inline-flex; align-items: center; gap: 0; height: 28px; margin: 0; padding: 0; border: 0; border-radius: 14px; isolation: auto;
+html.hb-apple body > .toolbar #tbFavs { flex: none; display: inline-flex; align-items: center; gap: 0; height: 28px; margin: 0; padding: 0; border: 0; border-radius: var(--hb-bubble-r); isolation: auto;
   background: var(--a-fill); box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; overflow: visible; }
-html.hb-apple body > .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 40px; margin: 0; padding: 0 11px; border: 0; border-radius: 14px; background: transparent; box-shadow: none;
+html.hb-apple body > .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 40px; margin: 0; padding: 0 11px; border: 0; border-radius: var(--hb-bubble-r); background: transparent; box-shadow: none;
   color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; font-variant-numeric: normal; transform: none; transition: none; z-index: auto; }
 html.hb-apple body > .toolbar #tbFavs .tb-btn:hover { background: transparent; color: var(--a-label); }
 html.hb-apple body > .toolbar #tbFavs .tb-btn:active { background: var(--a-track); }
 html.hb-apple body > .toolbar #tbFavs .tb-btn + .tb-btn::before { content: ""; position: absolute; left: -.5px; top: 6px; width: 1px; height: 16px; background: var(--a-sep); }
-html.hb-apple[data-theme] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple[data-theme] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 html.hb-apple body > .toolbar #tbFavs .tb-btn.active::before, html.hb-apple body > .toolbar #tbFavs .tb-btn.active + .tb-btn::before { display: none; }
-html.hb-apple.hb-inactive[data-theme] body:not(.lab-page) > .toolbar #tbFavs .tb-btn.active { background: var(--a-track); color: var(--a-label); }
 /* the layout tabs: text tabs at the row's trailing end, the open one on the grey pill; "+" adds one */
 html.hb-apple body > .toolbar #tabStrip { flex: 0 1 auto; min-width: 0; height: 28px; display: flex; align-items: center; gap: 2px; margin: 0; padding: 0; max-width: 46%; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 html.hb-apple #tabStrip .tab-btn { flex: none; height: 24px; max-width: 160px; margin: 0; padding: 0 10px; gap: 6px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2);
   font-size: 13px; line-height: 16px; font-weight: 400; transition: none; }
 html.hb-apple #tabStrip .tab-btn:hover { background: var(--a-hover); color: var(--a-label); }
-html.hb-apple #tabStrip .tab-btn.active { background: var(--a-sel); color: var(--a-label); font-weight: 510; }
+html.hb-apple #tabStrip .tab-btn.active { background: var(--a-track); color: var(--a-label); font-weight: 510; }
 html.hb-apple #tabStrip .tab-btn.drag-over { box-shadow: inset 2px 0 0 var(--a-accent); }
 html.hb-apple #tabStrip .tab-dot { width: 6px; height: 6px; background: var(--a-label-3); }
-html.hb-apple #tabStrip .tab-add { flex: none; width: 28px; height: 28px; margin: 0 0 0 2px; border-radius: 14px; background: transparent; color: var(--a-label-2); }
+html.hb-apple #tabStrip .tab-add { flex: none; width: 28px; height: 28px; margin: 0 0 0 2px; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label-2); }
 html.hb-apple #tabStrip .tab-add:hover { background: var(--a-hover); color: var(--a-label); }
 html.hb-apple #tabStrip .tab-add:active { background: var(--a-fill-press); }
 html.hb-apple #tabStrip .tab-add .icw { width: 15px; height: 15px; background: currentColor; -webkit-mask: var(--sf-plus) center / 13px 13px no-repeat; mask: var(--sf-plus) center / 13px 13px no-repeat; }
@@ -123,7 +122,7 @@ html.hb-apple .hb-lg-name b { flex: none; font-size: 13px; line-height: 16px; fo
 html.hb-apple .hb-lg-name span { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 11px; line-height: 14px; font-weight: 400; color: var(--a-label-2); }
 html.hb-apple .hb-lg-name span:empty { display: none; }
 html.hb-apple .lg-logo { transform: scale(.8); transform-origin: 0 50%; margin-right: -4px; }
-html.hb-apple .legend .badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2);
+html.hb-apple .legend .badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2);
   font-size: 10px; line-height: 13px; font-weight: 590; letter-spacing: normal; }
 html.hb-apple .lg-msg { font-size: 11px; line-height: 14px; font-weight: 400; color: var(--a-label-2); }
 html.hb-apple .lg-msg.err { color: var(--a-red-text); }
@@ -142,10 +141,10 @@ html.hb-apple .ev-tip, html.hb-apple .rail-tip { border-radius: 6px; font-size: 
 
 /* the drawing tools: one vertical capsule of glass, 36 wide; 28 buttons; the chosen tool on the grey pill */
 html.hb-apple #rail { position: absolute; left: 8px; top: 8px; z-index: 9; flex: none; align-self: auto; width: 36px; height: auto; display: flex; flex-direction: column; align-items: center;
-  gap: 4px; padding: 4px 0; margin: 0; border: 0; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+  gap: 4px; padding: 4px 0; margin: 0; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
   box-shadow: var(--a-platter-shadow); max-height: calc(100% - 16px); overflow-x: hidden; overflow-y: auto; scrollbar-width: none; }
 html.hb-apple #rail::-webkit-scrollbar { display: none; }
-html.hb-apple #rail .rail-btn { flex: none; width: 28px; height: 28px; border-radius: 14px; background: transparent; color: var(--a-label); transform: none; transition: background-color 120ms ease; }
+html.hb-apple #rail .rail-btn { flex: none; width: 28px; height: 28px; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label); transform: none; transition: background-color 120ms ease; }
 html.hb-apple #rail .rail-btn .ic { width: 17px; height: 17px; stroke-width: 1.6; }
 html.hb-apple #rail .rail-btn:hover { background: var(--a-hover); color: var(--a-label); }
 html.hb-apple #rail .rail-btn:active { background: var(--a-track); transform: none; }
@@ -190,7 +189,7 @@ html.hb-apple .op-form { gap: 11px; padding: 8px 11px 11px; }
 html.hb-apple .opanel.off .op-form { opacity: .5; }
 /* Sell / Buy keep the page's own colours; only their shape is the system's (large, 28) */
 html.hb-apple .op-tiles { gap: 8px; }
-html.hb-apple .op-tile { height: 28px; border-radius: 14px; line-height: 16px; filter: none; }
+html.hb-apple .op-tile { height: 28px; border-radius: var(--hb-bubble-r); line-height: 16px; filter: none; }
 html.hb-apple .op-tile:hover { filter: none; }
 html.hb-apple .op-tlbl { font-size: 13px; line-height: 16px; font-weight: 590; letter-spacing: normal; text-transform: none; }
 /* order type: a regular segmented control (24, radius 6), accent on the chosen segment */
@@ -199,9 +198,8 @@ html.hb-apple .op-type { position: relative; flex: 1 1 auto; min-width: 0; heigh
   font-size: 13px; line-height: 16px; font-weight: 400; }
 html.hb-apple .op-type:hover { color: var(--a-label); }
 html.hb-apple .op-type + .op-type::before { content: ""; position: absolute; left: -.5px; top: 5px; width: 1px; height: 14px; background: var(--a-sep); }
-html.hb-apple .op-type.on { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple .op-type.on { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 html.hb-apple .op-type.on::before, html.hb-apple .op-type.on + .op-type::before { display: none; }
-html.hb-apple.hb-inactive .op-type.on { background: var(--a-track); color: var(--a-label); }
 /* grouped boxes: 3 % fill, radius 10, rows with hairlines inset 10 */
 html.hb-apple .op-fields, html.hb-apple .op-units, html.hb-apple .op-coll { gap: 0; padding: 0 10px; border: 0; border-radius: 10px; background: var(--a-group); }
 html.hb-apple .op-field { position: relative; grid-template-columns: minmax(0, 1fr) 104px; gap: 8px; min-height: 37px; }
@@ -213,7 +211,7 @@ html.hb-apple .op-in, html.hb-apple .tr-qty { height: 24px; padding: 0 7px; bord
   box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; }
 html.hb-apple .op-in:focus, html.hb-apple .op-sel:focus, html.hb-apple .tr-qty:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple .op-units .op-swrow { position: relative; min-height: 33px; }
-html.hb-apple .op-units .op-note { margin: -5px 0 0; padding: 0 0 8px; }
+html.hb-apple .op-units .op-note { margin: -3px 0 0; padding: 0 0 7px; text-align: right; }
 html.hb-apple .op-sub { font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .op-note, html.hb-apple .op-none { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .op-note.warn, html.hb-apple .op-why { font-size: 11px; line-height: 14px; color: var(--a-orange); }
@@ -232,7 +230,7 @@ html.hb-apple .set-link { font-size: 13px; line-height: 16px; color: var(--a-acc
 html.hb-apple .op-chips.flash { background: color-mix(in srgb, var(--a-accent) 10%, transparent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--a-accent) 10%, transparent); }
 html.hb-apple .op-foot { padding: 2px 11px 14px; }
 /* Send: extra large (36, capsule); its colour is the page's own (the side it sends) */
-html.hb-apple .op-send { min-height: 36px; padding: 4px 16px; border-radius: 18px; font-size: 13px; line-height: 16px; font-weight: 590; color: #fff; }
+html.hb-apple .op-send { min-height: 36px; padding: 4px 16px; border-radius: var(--hb-bubble-r); font-size: 13px; line-height: 16px; font-weight: 590; color: #fff; }
 /* the page's own send buttons are white on the Sell red / Buy blue: the shared control reset (color: inherit) must not turn them ink */
 html.hb-apple .tr-sell, html.hb-apple .tr-buy { color: #fff; }
 html.hb-apple .op-sendwrap.live::before { border-radius: 21px; }
@@ -266,7 +264,7 @@ html.hb-apple #bpanel.open .bp-bar { border-bottom-color: var(--a-sep); }
 html.hb-apple #bpanel .bp-tabs { height: 24px; gap: 2px; align-items: center; }
 html.hb-apple #bpanel .bp-tab { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2); font-size: 13px; line-height: 16px; font-weight: 400; transition: none; }
 html.hb-apple #bpanel .bp-tab:hover { color: var(--a-label); }
-html.hb-apple #bpanel .bp-tab[aria-selected="true"] { background: var(--a-sel); color: var(--a-label); font-weight: 510; }
+html.hb-apple #bpanel .bp-tab[aria-selected="true"] { background: var(--a-track); color: var(--a-label); font-weight: 510; }
 html.hb-apple #bpanel .bp-toggle { width: 24px; height: 24px; border-radius: 6px; color: var(--a-label-2); }
 html.hb-apple #bpanel .bp-toggle:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple #bpanel .bp-toggle .ic { width: 13px; height: 13px; stroke-width: 2.2; }
@@ -294,13 +292,13 @@ html.hb-apple .bp-act:active { background: var(--a-fill-press); }
 html.hb-apple .bp-fq-bar { gap: 8px; padding: 8px 20px; font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 html.hb-apple .bp-fq-compare { padding: 8px 20px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .hb-news-bar { gap: 6px; padding: 8px 20px; border-bottom: 1px solid var(--a-sep); }
-html.hb-apple .hb-news-chip { height: 20px; padding: 0 9px; border: 0; border-radius: 10px; background: var(--a-fill); color: var(--a-label-2); font-size: 11px; line-height: 14px; }
+html.hb-apple .hb-news-chip { height: 20px; padding: 0 9px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); font-size: 11px; line-height: 14px; }
 html.hb-apple .hb-news-chip:hover { color: var(--a-label); }
-html.hb-apple .hb-news-chip[aria-pressed="true"] { background: var(--a-accent-on); color: var(--a-on-accent); }
+html.hb-apple .hb-news-chip[aria-pressed="true"] { background: var(--a-track); color: var(--a-label); }
 html.hb-apple .hb-news-row { gap: 8px; min-height: 24px; padding: 4px 20px; border: 0; font-size: 13px; line-height: 16px; }
 html.hb-apple .hb-news-row:hover { background: var(--a-hover); }
 html.hb-apple .hb-news-time { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
-html.hb-apple .hb-news-src, html.hb-apple .hb-news-tag { height: 16px; padding: 0 6px; border-radius: 8px; font-size: 10px; line-height: 16px; font-weight: 590; }
+html.hb-apple .hb-news-src, html.hb-apple .hb-news-tag { height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); font-size: 10px; line-height: 16px; font-weight: 590; }
 html.hb-apple .hb-news-title { font-size: 13px; line-height: 16px; color: var(--a-label); }
 
 /* pop-up buttons (a native select, drawn as the system pop-up: 24, radius 6, the up-down chevron) */
@@ -379,8 +377,8 @@ html.hb-apple .grid-pick:hover { background: var(--a-hover); color: var(--a-labe
 html.hb-apple .grid-pick.active { background: var(--a-sel); color: var(--a-label); }
 html.hb-apple .grid-pick .thumb i { border-width: 1.25px; border-radius: 2px; }
 /* the per-drawing toolbar: a small platter of glass */
-html.hb-apple .draw-toolbar { padding: 4px; gap: 2px; border: 0; border-radius: 17px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
-html.hb-apple .dtb-btn { width: 26px; height: 26px; border-radius: 13px; color: var(--a-label); }
+html.hb-apple .draw-toolbar { padding: 4px; gap: 2px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple .dtb-btn { width: 26px; height: 26px; border-radius: var(--hb-bubble-r); color: var(--a-label); }
 html.hb-apple .dtb-btn:hover, html.hb-apple .dtb-btn.open, html.hb-apple .dtb-btn[aria-pressed="true"] { background: var(--a-track); }
 html.hb-apple .dtb-btn.danger:hover { background: color-mix(in srgb, var(--a-red) 14%, transparent); color: var(--a-red-text); }
 html.hb-apple .dtb-sep { background: var(--a-sep); }
@@ -389,7 +387,7 @@ html.hb-apple .dtb-swatch i { border-radius: 8px; }
 html.hb-apple .dtb-num { height: 22px; border: 0; border-radius: 6px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge); font-size: 11px; }
 /* toasts */
 html.hb-apple .toasts { top: calc(var(--a-toolbar) + 8px); right: 16px; gap: 8px; }
-html.hb-apple .toast { padding: 9px 9px 9px 13px; border: 0; border-radius: 13px; background: var(--c-popover); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+html.hb-apple .toast { padding: 9px 9px 9px 13px; border: 0; border-radius: var(--hb-bubble-r); background: var(--c-popover); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
   box-shadow: var(--a-menu-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; }
 html.hb-apple .toast.err { box-shadow: var(--a-menu-shadow), inset 3px 0 0 var(--a-red); }
 html.hb-apple .toast.warn { box-shadow: var(--a-menu-shadow), inset 3px 0 0 var(--a-orange); background: var(--c-popover); font-weight: 590; }
@@ -402,10 +400,10 @@ html.hb-apple .dialog { border: 0; border-radius: 20px; background: color-mix(in
   color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .dialog.confirm.live { box-shadow: 0 0 0 1.5px var(--a-red), var(--a-sheet-shadow); }
 html.hb-apple .dlg-head { padding: 18px 16px 12px 20px; font-size: 15px; line-height: 20px; font-weight: 590; letter-spacing: normal; color: var(--a-label); }
-html.hb-apple .dlg-x { width: 24px; height: 24px; border-radius: 12px; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .dlg-x { width: 24px; height: 24px; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); }
 html.hb-apple .dlg-x:hover { background: var(--a-fill-hover); color: var(--a-label); }
 html.hb-apple .dlg-x .ic { width: 12px; height: 12px; stroke-width: 2.6; }
-html.hb-apple .dlg-search { height: 28px; gap: 6px; margin: 0 20px 12px; padding: 0 10px; border: 0; border-radius: 14px; background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); }
+html.hb-apple .dlg-search { height: 28px; gap: 6px; margin: 0 20px 12px; padding: 0 10px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-field); box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); }
 html.hb-apple .dlg-search:focus-within { outline: 3.5px solid var(--a-focus); outline-offset: 0; border: 0; }
 html.hb-apple .dlg-search .icw { width: 15px; height: 14px; background: var(--a-label-2); -webkit-mask: var(--sf-search) center / 15px auto no-repeat; mask: var(--sf-search) center / 15px auto no-repeat; }
 html.hb-apple .dlg-search .icw svg { display: none; }
@@ -451,14 +449,14 @@ html.hb-apple .field input[type="number"]:focus, html.hb-apple .sw-hex:focus { o
 html.hb-apple .swatch { width: 24px; height: 24px; padding: 3px; border-radius: 6px; background: var(--a-fill); box-shadow: none; }
 html.hb-apple .swatch i { border-radius: 3.5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a-label) 28%, transparent); }
 html.hb-apple .swatch:hover, html.hb-apple .swatch.open { box-shadow: none; background: var(--a-fill-press); }
-html.hb-apple .seg { max-width: 100%; padding: 0; border-radius: 6px; background: var(--a-fill); }
+html.hb-apple .seg { max-width: 100%; padding: 2px; border-radius: var(--hb-bubble-r); background: var(--a-platter); box-shadow: 0 0 0 .5px var(--a-sep); }
 html.hb-apple .seg button { position: relative; height: 24px; padding: 0 9px; border-radius: 6px; background: transparent; box-shadow: none; color: var(--a-label); font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; }
 html.hb-apple .seg button + button::before { content: ""; position: absolute; left: -.5px; top: 5px; width: 1px; height: 14px; background: var(--a-sep); }
-html.hb-apple .seg button.on, html.hb-apple .seg button.sel { background: var(--a-accent-on); color: var(--a-on-accent); font-weight: 510; box-shadow: none; }
+html.hb-apple .seg button.on, html.hb-apple .seg button.sel { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 html.hb-apple .seg button.on::before, html.hb-apple .seg button.on + button::before, html.hb-apple .seg button.sel::before, html.hb-apple .seg button.sel + button::before { display: none; }
 html.hb-apple .field:has(> .seg) { flex-wrap: wrap; row-gap: 6px; justify-content: space-between; }
 /* buttons in dialogs and menus: large (28, capsule); the default one carries the accent */
-html.hb-apple .btn { flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: 14px; gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none;
+html.hb-apple .btn { flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: var(--hb-bubble-r); gap: 5px; background: var(--a-fill); color: var(--a-label); box-shadow: none;
   font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; transition: background-color 100ms ease; opacity: 1; }
 html.hb-apple .btn:hover { background: var(--a-fill); color: var(--a-label); opacity: 1; }
 html.hb-apple .btn:active { background: var(--a-fill-press); transform: none; }

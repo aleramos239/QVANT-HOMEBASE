@@ -13,6 +13,7 @@ const HTML = readFileSync(new URL('../../homebase/static/index.html', import.met
 const SKIN = readFileSync(new URL('../../homebase/static/apple/desk.js', import.meta.url), 'utf8');
 
 const ALIVE = { alive: true, seen_utc: '2026-10-09T14:00:00+00:00', prices: {} };
+const DESKRES = {};      // the research answer (GET /api/tester/desklab/results): none yet
 const row = (over = {}) => ({ name: 'nq_orb', label: 'NQ ORB', root: 'NQ', session_window: ['09:25', '16:00'], bar_minutes: 1, qty: 1, enabled: true,
   sha256: 'abcdef0123456789', promoted_utc: '2026-10-09T18:03:00+00:00', today: null, days: [],
   run: { id: 'r1', net: 5000, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100 }, notes: [], ...over });
@@ -126,6 +127,8 @@ test('specLine: market, session, bars, and where it came from', () => {
   assert.equal(D.specLine(row({ bar_minutes: 5, session_window: ['9:30', '11:00'] })), 'NQ · 9:30-11:00 ET · 5-minute bars · from the Lab');
   assert.equal(D.specLine(row({ session_window: undefined, bar_minutes: undefined })), 'NQ · from the Lab', 'what the record does not carry is left out');
   assert.equal(D.specLine(row({ session_window: ['x', 'y'], bar_minutes: 0 })), 'NQ · from the Lab');
+  assert.equal(D.specLine(row({ session_window: ['-20:00', '16:00'], bar_minutes: 5 })), 'NQ · 20:00 the evening before-16:00 ET · 5-minute bars · from the Lab');
+  assert.equal(D.specLine(row({ session_window: ['-x', '16:00'], bar_minutes: 0 })), 'NQ · from the Lab');
   assert.equal(D.specLine({}), 'from the Lab');
 });
 
@@ -200,7 +203,8 @@ const code = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '');
 test('the page asks the chart service for the Lab strategies and never the desk\'s own API about them', () => {
   assert.ok(LABBLOCK.length > 500 && LABVIEW.length > 500, 'the Lab section and its page are there');
   const urls = [...new Set([...code(LABBLOCK).matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
-  assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/onoff', '/api/tester/desklab/open', '/api/tester/desklab/remove']);
+  assert.deepEqual(urls, ['/api/tester/desklab', '/api/tester/desklab/onoff', '/api/tester/desklab/open', '/api/tester/desklab/remove',
+    '/api/tester/desklab/results']);      // results: a read of saved runs (the unseen days' run, the prop sim)
   assert.doesNotMatch(code(LABBLOCK + LABVIEW), /\/api\/(strategy|book|status)|[^t]post\(/, 'the desk does not know a Lab strategy in this step');
   assert.doesNotMatch(code(LABVIEW), /flattenStrat|toggleStrat|testFire|pickAsg|toggleAsgMenu|openRes|openLive/);
 });
@@ -215,12 +219,16 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
   const holes = [...LABVIEW.matchAll(/\$\{([^}]*(?:\{[^}]*\}[^}]*)*)\}/g)].map((m) => m[1].trim());
   assert.ok(holes.length > 40, 'the page has template holes');
   // anything else is a new hole: look at it before adding it here
-  const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'today', 'busy ? " disabled" : ""',
+  const flags = new Set(['sel("lab", w.name)', 'sel("lab", w.name) ? "page" : "false"', 'on', '!on', 'go', 'sw', 'today', 'busy ? " disabled" : ""', 'hasRun ? "" : " disabled"',
     'o.refused ? " warn" : ""', 'm.ok === false ? " warn" : ""', 'orders.join("")', 'trades.join("")',
     'm.rebuilt ? \'<span class="t dim">rebuilt</span>\' : ""', 'rebuilt ? ` · ${esc(rebuilt)',
     'net == null ? "" : esc(usdS(net))', 'esc(DeskLab.missingText(DESKLAB_OK))', 'DeskLab.figures(w).map(fig).join("")',
     'net != null ? ` · today would be ${esc(usdS(net))', 'days.length ? `<div class="agroup feed static">${days.join("")',
-    'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")']);
+    'notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")',
+    // the research blocks (labResHtml): pieces built from escaped holes
+    'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
+    // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
+    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends)']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });
@@ -240,13 +248,32 @@ test('a hostile name and sentence from the network cannot break out of the page'
   const bad = row({ name: 'nq_orb', label: hostile, root: hostile, today: day({ state: 'stopped', why: hostile,
     orders: [{ t: hostile, text: hostile, refused: hostile }], trades: [{ side: 'long', qty: 1, entry_t: hostile, entry_px: 1, exit_t: null, exit_px: null, reason: hostile, net: 1 }] }),
     days: [day({ match: { ok: false, text: hostile } })], notes: [hostile] });
-  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [bad], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', shortDay: (s) => s,
+  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [bad], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', DESKRES, shortDay: (s) => s,
     esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb");`, ctx);
   assert.doesNotMatch(ctx.html, /<img/);
   assert.match(ctx.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(ctx.html, /Would be refused: &lt;img/);
+});
+
+test('the research blocks: the unseen days and the prop sim, every word escaped, and a view name the skin can check', () => {
+  const hostile = '<img src=x onerror=alert(1)>';
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const head = { account: hostile, eval_pass_p: 0.41, bust_p: 0.59, median_days_to_pass: 14, funded_payout_p: 0.3, funded_expected_cheque: 602 };
+  const res = { nq_orb: { unseen: { range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66, profit_factor: 1.18, max_drawdown: -12397 },
+    prop: { build: head, unseen: null } } };
+  const ctx = vm.createContext({ DeskLab: D, DESKRES: res, esc, hostile });
+  vm.runInContext(`${LABVIEW.slice(LABVIEW.indexOf('function labResHtml('), LABVIEW.indexOf('function todayLabRow('))}
+    globalThis.html = labResHtml("nq_orb", "lab_nq_orb"); globalThis.none = labResHtml("nq_other", hostile);`, ctx);
+  assert.match(ctx.html, /^<div class="labres" data-for="lab_nq_orb">/);
+  assert.match(ctx.html, /<div class="figs labres-unseen" data-h="Unseen days \(OOS\)"><div class="f"><div class="k">Days<\/div><div class="v mono">Jul 2025 – Oct 2026<\/div><\/div>/);
+  assert.match(ctx.html, /<div class="k">Net<\/div><div class="v mono">\+\$16,342<\/div>/);
+  assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">Build<\/div><div class="v mono">Unseen<\/div><\/div>/);
+  assert.match(ctx.html, /<div class="k">Passes the eval<\/div><div class="v mono">41%<\/div><div class="v mono">—<\/div>/);
+  assert.doesNotMatch(ctx.html + ctx.none, /<img/);
+  assert.match(ctx.html, /Prop sim · &lt;img/);
+  assert.equal((ctx.none.match(/<div class="labres-note">Reading…<\/div>/g) || []).length, 2, 'before the first answer both blocks say so');
 });
 
 test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt" by a day and in the state line', () => {
@@ -258,7 +285,7 @@ test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt
     orders: [{ t: '10:10:00', text: 'Sell at market, stop 22,014.25, target 21,954.25', refused: null }] }),
     days: [{ date: '2026-10-09', state: 'running', why: null, net: 50, match: null, rebuilt: true },
       { date: '2026-10-08', state: 'done', why: null, net: 80, match: { ok: true, text: 'Matched the backtest: 1 of 1 trade.' }, rebuilt: false }] });
-  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [r], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', shortDay: (s) => s,
+  const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [r], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', DESKRES, shortDay: (s) => s,
     esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
     usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb"); globalThis.rowHtml = todayLabRow(DESKLAB.strategies[0]);`, ctx);
@@ -286,10 +313,11 @@ test('removeDeskLab renders only once the desk\'s status is in, like its neighbo
   assert.deepEqual(await run({ strategies: {} }), [2, 0]);
 });
 
-test('the skin treats a Lab page like a watched one, reads the same helpers, and still talks to nobody', () => {
+test('the skin treats a Lab page as its own kind, reads the same helpers, and still talks to nobody', () => {
   assert.match(SKIN, /VIEW\.k === 'lab'/);
   assert.match(SKIN, /DeskLab\.setupRows/);
   assert.match(SKIN, /'Backtest'/);
+  assert.doesNotMatch(SKIN, /watch-only|WATCH\b|setupWatch|'Research results'/, 'no watched-strategy page any more');
   assert.doesNotMatch(SKIN, /\bfetch\(|XMLHttpRequest|WebSocket/);
 });
 
@@ -1053,4 +1081,107 @@ test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing',
   assert.equal(D.windowNote(deskStrat()), '');
   assert.equal(D.windowNote(deskStrat({ note: 7 })), '');
   assert.equal(D.windowNote(null), '');
+});
+
+test('results: the saved run on the unseen days and the prop sim of both runs, in words', () => {
+  const head = { account: 'LucidFlex 50K', eval_pass_p: 0.3688, bust_p: 0.6312, median_days_to_pass: 13, funded_payout_p: 0.3326, funded_expected_cheque: 602.3 };
+  const unseen = { id: 'r', range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66.2, profit_factor: 1.183, max_drawdown: -12397 };
+  const full = D.results({ unseen, prop: { build: { ...head, eval_pass_p: 0.41 }, unseen: head } });
+  assert.equal(full.unseen.title, 'Unseen days (OOS)');
+  assert.deepEqual(full.unseen.rows.map((r) => [r.k, r.v]), [['Days', 'Jul 2025 – Oct 2026'], ['Net', '+$16,342'], ['Win rate', '66%'],
+    ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397']]);
+  assert.equal(full.unseen.note, '');
+  assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
+  assert.deepEqual(full.prop.head, ['Build', 'Unseen']);
+  assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
+    ['Days to pass', '13', '13'], ['Gets a payout', '33%', '33%'], ['Expected cheque', '$602', '$602']]);
+  // no run saved on the unseen days: it says so, and that column is dashes
+  const build = D.results({ unseen: null, prop: { build: head, unseen: null } });
+  assert.deepEqual(build.unseen.rows, []);
+  assert.equal(build.unseen.note, 'Not run on the unseen days yet. It starts by itself.');
+  const going = D.results({ unseen: null, unseen_state: 'pending', prop: { build: head, unseen: null } });
+  assert.equal(going.unseen.note, 'Reading the unseen days now. This shows here when it is done.');
+  assert.deepEqual(going.unseen.rows, []);
+  assert.equal(D.results({ unseen: null, unseen_state: 'failed', prop: { build: head, unseen: null } }).unseen.note,
+    'The unseen-days run did not finish. Run it again from the Lab.');
+  assert.equal(D.results({ unseen, unseen_state: 'done', prop: { build: head, unseen: head } }).unseen.note, '', 'a result needs no note');
+  // a Desk straddle (nq930, gc_nfp) is read by hand: nothing "starts by itself", and a changed Desk setting says why the run is gone
+  assert.equal(D.results({ unseen: null, unseen_state: 'none', manual: true, prop: { build: head, unseen: null } }).unseen.note,
+    "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.");
+  assert.deepEqual(build.prop.rows.map((r) => r.unseen), ['—', '—', '—', '—', '—']);
+  // the build run is gone: no prop sim to show
+  const none = D.results({ unseen: null, prop: { build: null, unseen: null } });
+  assert.deepEqual(none.prop.rows, []);
+  assert.equal(none.prop.title, 'Prop sim');
+  assert.equal(none.prop.note, 'No prop sim: its backtest run is not saved any more.');
+  // before the first answer, and for an answer that is not one
+  for (const bad of [undefined, null, 'x']) {
+    const w = D.results(bad);
+    assert.deepEqual([w.unseen.rows, w.unseen.note, w.prop.rows, w.prop.note], [[], 'Reading…', [], 'Reading…']);
+  }
+  assert.deepEqual(D.results({ unseen: { range: {} }, prop: {} }).unseen.rows.map((r) => r.v), ['—', '—', '—', '—', '—', '—']);
+});
+
+test('curve: the unseen run\'s running total, or nothing', () => {
+  const c = D.curve({ curve: { days: ['2025-07-01', '2025-07-02', '2026-10-09'], vals: [100, -40, 3249.5] } });
+  assert.deepEqual([c.title, c.vals, c.total, c.ends], ['Unseen days, after costs', [100, -40, 3249.5], 3249.5, ['Jul 2025', 'Oct 2026']]);
+  for (const bad of [undefined, null, {}, { curve: null }, { curve: { days: ['2025-07-01'], vals: [1] } },
+    { curve: { days: ['2025-07-01', '2025-07-02'], vals: [1] } }, { curve: { days: ['2025-07-01', '2025-07-02'], vals: [1, 'x'] } }]) {
+    assert.equal(D.curve(bad), null);
+  }
+});
+
+// ---- Desk groups (2026-10-11): the words, and the page's markup for a group ---------------------------------------------
+const GROUP_PAGE = HTML.slice(HTML.indexOf('/* ---- DESK GROUPS (2026-10-11)'), HTML.indexOf('const hmin = (t) =>'));
+
+test('a group page: the combined figures, the prop rows that fit its kind, and the members left out', () => {
+  const res = { members: [{ strategy: 'lab_nq_a', label: 'NQ A', state: 'done', build: { net: 500 }, unseen: { net: 700 } },
+      { strategy: 'lab_nq_c', label: 'NQ C', state: 'pending', build: { net: 10 }, unseen: null }],
+    left_out: [{ strategy: 'lab_nq_c', why: 'no unseen-days run yet' }, { strategy: 'nq930', why: 'built in: it has no unseen-days run to add' }],
+    build: { net: 200, trades: 2, win_rate: 50, profit_factor: 1.5, max_drawdown: -100, days: 1, best_day: 200, worst_day: 200, together_days: 0, curve: { days: ['2024-01-02'], vals: [200] } },
+    unseen: { net: 500, trades: 3, win_rate: 66.7, profit_factor: 1.4, max_drawdown: -300, days: 2, best_day: 800, worst_day: -300, together_days: 1,
+      curve: { days: ['2025-07-01', '2025-07-02'], vals: [800, 500] } },
+    prop: { build: null, unseen: { account: 'LucidPro 50K', eval_pass_p: 0.4, bust_p: 0.6, median_days_to_pass: 5, funded_payout_p: 0.3, funded_expected_cheque: 500 } } };
+  const ev = D.groupPage({ id: 'g1', name: 'Eval', kind: 'eval', members: ['lab_nq_a', 'lab_nq_c', 'nq930'] }, res);
+  assert.equal(ev.lead, '3 strategies · Eval');
+  assert.deepEqual(ev.figs.rows[0], { k: 'Net', build: '+$200', unseen: '+$500' });
+  assert.deepEqual(ev.prop.rows.map((r) => r.k), ['Passes the eval', 'Busts the eval', 'Days to pass'], 'an eval group leads with the eval odds');
+  assert.equal(ev.prop.title, 'Prop sim · LucidPro 50K');
+  assert.deepEqual(ev.days.rows.map((r) => r.k), ['Days traded', 'Best day', 'Worst day', 'Days 2+ traded']);
+  assert.equal(ev.curve.total, 500);
+  assert.deepEqual(ev.members.map((m) => [m.label, m.build, m.unseen, m.state]), [['NQ A', '+$500', '+$700', ''], ['NQ C', '+$10', '—', 'Reading the unseen days…']]);
+  assert.deepEqual(ev.leftOut.map((x) => [x.label, x.why]), [['NQ C', 'no unseen-days run yet'], ['nq930', 'built in: it has no unseen-days run to add']]);
+  const fu = D.groupPage({ id: 'g2', name: 'Funded', kind: 'funded', members: [] }, res);
+  assert.deepEqual(fu.prop.rows.map((r) => r.k), ['Gets a payout', 'Expected cheque']);
+  assert.equal(D.groupPage({ id: 'g3', name: 'T', kind: 'together', members: [] }, res).prop.rows.length, 5);
+  assert.equal(fu.empty, true);
+});
+
+test('a group page before its first answer says so, and a hostile name or sentence is escaped', () => {
+  const wait = D.groupPage({ id: 'g1', name: 'Eval', kind: 'eval', members: ['lab_a'] }, undefined);
+  assert.equal(wait.figs.note, 'Reading…');
+  assert.deepEqual([wait.figs.rows, wait.members, wait.leftOut, wait.curve], [[], [], [], null]);
+  const hostile = '<img src=x onerror=alert(1)>';
+  const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const ctx = vm.createContext({ DeskLab: D, esc, usdS: D.usd, fmt: (v) => String(v), ST: { strategies: {}, accounts: {} },
+    DESKGROUPS: { groups: [{ id: 'g1', name: hostile, kind: 'eval', members: [hostile] }], ok: true },
+    DESKGRES: { g1: { members: [{ strategy: hostile, label: hostile, state: 'done', build: { net: 1 }, unseen: { net: 1 } }],
+      left_out: [{ strategy: hostile, why: hostile }], build: null, unseen: null, prop: { build: null, unseen: null } } },
+    eqPlot: () => '' });
+  vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));
+    const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
+    ${GROUP_PAGE.slice(GROUP_PAGE.indexOf('const GROUP_FAULT'), GROUP_PAGE.indexOf('async function deleteGroup('))}
+    globalThis.html = groupView("g1"); globalThis.gone = groupView("g9");`, ctx);
+  assert.doesNotMatch(ctx.html, /<img/);
+  assert.match(ctx.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(ctx.gone, /That group is not there any more/);
+});
+
+test('the group writes go to the chart service by name, and a group id is only a JS string literal in a handler', () => {
+  const urls = [...new Set([...GROUP_PAGE.matchAll(/["'`](\/api\/[^"'`$?]*)/g)].map((m) => m[1]))].sort();
+  assert.deepEqual(urls, ['/api/tester/deskgroups', '/api/tester/deskgroups/', '/api/tester/deskgroups/results']);
+  assert.doesNotMatch(GROUP_PAGE.replace(/\/\*[\s\S]*?\*\//g, ''), /\/api\/(strategy|book|status)/, 'a group never talks to the desk');
+  const handlers = [...GROUP_PAGE.matchAll(/on(?:click|keydown)="([^"]*)"/g)].map((m) => m[1]);
+  assert.ok(handlers.length >= 4);
+  for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
 });

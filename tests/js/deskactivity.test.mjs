@@ -40,6 +40,7 @@ function load(st = {}) {
     ST: { accounts: {}, ...st },
     $: (sel) => els[sel.replace(/^#/, '')] || null,
     window: { getSelection: () => '' },
+    hbClock: (t) => t,                  // the page's clock helper: 24-hour, as these tests read it
   });
   vm.runInContext(HELPERS + BLOCK + `
     globalThis.api = { activityLine, activityRaw, renderActivity, readinessShown, outOfTodaysFire,

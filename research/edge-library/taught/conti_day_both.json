@@ -1,0 +1,56 @@
+{
+ "name": "conti_day_both",
+ "source": {
+  "video": "wm4A6qo0g3I",
+  "title": "Ex-Market Maker Shows the Exact VWAP Setup That Gets Traders Funded",
+  "channel": "Matteo Conti (IQCapital)",
+  "url": "https://youtu.be/wm4A6qo0g3I"
+ },
+ "market": "NQ",
+ "bars": [
+  "5",
+  "1",
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "vwap_trend_both",
+  "settings": {
+   "x": 0.1,
+   "max_loss": 2,
+   "slope_min": 15,
+   "short_tgt_x": 1.25
+  },
+  "words": "Long when the trend is true -- the close above the VWAP anchored at the 09:30 open, the VWAP higher than 15 minutes ago, and the price up at least 0.1 % over the last hour -- and a red candle (the pullback) comes; short is the mirror: the close below the VWAP, the VWAP lower than 15 minutes ago, the price down at least 0.1 % over the last hour, and a green candle comes. Enter at the next bar's open by market order."
+ },
+ "exits": {
+  "stop_pts": 80,
+  "target_pts": 40,
+  "exit_bars": 0,
+  "max_trades": 4
+ },
+ "taught": [
+  "[14:18]-[16:00] LONG trend = the close above VWAP, VWAP higher than 15 minutes ago, price up at least 0.1 % over the last hour (4 bars of 15 minutes); SHORT = the mirror; VWAP anchored at the 09:30 ET cash open",
+  "[17:01]-[18:04] trigger: the first red candle (a pullback) once the long trend is true, the first green candle once the short trend is true; the distance to VWAP does not matter; entry at the next bar open by market order",
+  "[16:00]-[23:00] no trades 09:30-10:30 ET, no new trades after 15:30 ET, everything flat at 15:55 ET",
+  "[21:02]-[22:01] long: stop 80 points, target 40 points; short: stop 80 points, target 50 points",
+  "[22:01] one position at a time, at most 4 trades a day (BOTH sides together), stop for the day after 2 losing trades IN A ROW (owner 2026-10-10: 2 in a row)",
+  "[20:00, 23:00] the 0.1 % threshold and the cap of 4 trades were tuned in sample (his words): the lane runs them as he gives them, untuned"
+ ],
+ "not_run": [
+  "The short target is 1.25 x the long target (stop 80 x 0.5 = 40 long, x 0.625 = 50 short), so the nine cells scale both targets together; the video's own cell is the centre.",
+  "The trigger candle is read on the bar size of the run (1, 5 and 15 minutes: the owner asked for all three; the video loads the 5-minute and the 15-minute chart). The state is read on that same bar's close, not on a separate 15-minute chart: on 5-minute bars the 'VWAP higher than 15 minutes ago' is exact; on 1- and 15-minute bars it is the same 15 minutes read on that bar's closes.",
+  "'First red candle once the trend is true': the first down bar after a bar that was not down, while the state holds (a new pullback; it can fire again later the same day within the cap). The video does not say first after what.",
+  "The VWAP is the family's own: volume-weighted typical price (high + low + close) / 3 of the 1-minute bars from 09:30; the video does not say which price or which bars.",
+  "Flat time: the engine flattens at 15:58 ET (13:13 on half days); the video says 15:55.",
+  "Costs and the order of a stop and a target inside one bar: the engine's own (1 tick of slippage, $4 a round turn, tick replay); the video says nothing.",
+  "The random control gives BOTH sides the cell's target (40 points) and the cell's stop; the rule's shorts take 50. It also goes pass by pass (nyam, mid, pm), matched by day, and does not wait for the 10:30-15:30 window or share the day cap: read the random line as a rough guide only."
+ ],
+ "control": "random",
+ "window": "10:30-15:30"
+}

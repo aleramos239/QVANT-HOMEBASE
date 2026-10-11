@@ -14,9 +14,10 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=8"></script>
+<script src="/static/desklab.js?v=15"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
+<script src="/static/hbclock.js?v=1"></script>
 <style>
   /* Page chrome — same language as the TradeCopier app: B&W chrome, the only
      hues are --pos/--neg for P&L-grade data, shadcn tokens for everything. */
@@ -336,6 +337,8 @@
     color:var(--foreground); border:1px solid var(--input); border-radius:var(--radius-md);
     padding:8px 10px; font-size:13.5px; font-family:var(--font-sans); }
   .field input:focus{ outline:2px solid var(--ring); outline-offset:1px; }
+  .grp-sel{ background:var(--background); color:var(--foreground); border:1px solid var(--input); border-radius:var(--radius-md);
+            padding:6px 8px; font:inherit; font-size:12.5px; max-width:200px; }
   .modal .row-btns{ display:flex; justify-content:flex-end; gap:10px; margin-top:16px; }
 
   /* connect wizard */
@@ -536,7 +539,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=8">
+<link rel="stylesheet" href="/static/apple.css?v=9">
 <link rel="stylesheet" href="/static/hb.css?v=7">
 <script src="/static/apple/web.js?v=2" data-tab="desk"></script>
 </head>
@@ -774,6 +777,7 @@
       <button class="cal-nav" onclick="closeSettings()" title="Close" aria-label="Close">&times;</button>
     </div>
     <div id="settingsBody">
+      <div id="settingsClock"></div>
       <div id="settingsTrading"></div>
       <div id="settingsMarketData"></div>
     </div>
@@ -781,7 +785,7 @@
 </div>
 
 <div class="overlay" id="acctOverlay">
-  <div class="modal" style="width:780px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="acctTitle">
+  <div class="modal" style="width:880px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="acctTitle">
     <div class="cal-head">
       <span style="font-weight:600" id="acctTitle">Accounts</span>
       <span style="font-size:12px;color:var(--muted-foreground)" id="acctCount"></span>
@@ -805,6 +809,27 @@
     <p class="mcap" style="margin:0 0 8px">Hiding is display only — it never changes whether an
       algo trades. An algo that's live (on AND booked to an account) always shows here.</p>
     <div id="algoList"></div>
+  </div>
+</div>
+
+<div class="overlay" id="groupOverlay">
+  <div class="modal" style="width:640px;max-width:94vw" role="dialog" aria-modal="true" tabindex="-1" inert aria-labelledby="groupTitle">
+    <div class="cal-head">
+      <span style="font-weight:600" id="groupTitle">Manage groups</span>
+      <span style="font-size:12px;color:var(--muted-foreground)" id="groupCount"></span>
+      <span class="spacer" style="flex:1"></span>
+      <button class="cal-nav" onclick="closeGroupMgr()" title="Close" aria-label="Close">&times;</button>
+    </div>
+    <p class="mcap" style="margin:0 0 10px">A group is display only: it switches nothing on and books no account. A strategy is in one
+      group. The same code tried two ways (an eval and a funded account) is two strategies, each in its own group.</p>
+    <div class="field" style="margin-bottom:6px"><label for="groupNewName">New group</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Eval — Lucid 50K"
+          onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addGroup()}">
+        <select id="groupNewKind" aria-label="What the group is for" class="grp-sel"></select>
+        <button class="btn btn-default btn-sm" onclick="addGroup()">Add group</button>
+      </div></div>
+    <div id="groupList"></div>
   </div>
 </div>
 
@@ -931,7 +956,7 @@ $("#themeToggle").onclick = () => {
 const OVERLAYS = [];   // the open dialogs, topmost last: {el, trigger}
 const OVERLAY_CLOSE = {confirmOverlay: () => cfDone(false), labLimitsOverlay: () => closeLabLimits(), settingsOverlay: () => closeSettings(),
   connectOverlay: () => closeConnect(), resOverlay: () => closeRes(), acctOverlay: () => closeAccts(),
-  algoOverlay: () => closeAlgoMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
+  algoOverlay: () => closeAlgoMgr(), groupOverlay: () => closeGroupMgr(), liveOverlay: () => closeLive(), checksOverlay: () => closeChecks(),
   calOverlay: () => closeCal()};
 const FOCUSABLE = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), " +
   "textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
@@ -1191,6 +1216,23 @@ function killReport(r, lateSecs) {
   toast((n ? `Kill sent — orders cancelled and positions flattened on ${n} account${n === 1 ? "" : "s"}; the desk is disarmed.`
            : "Kill sent — the desk is disarmed (no connected account to flatten).") + late, 6000);
 }
+/* One account, flat: every working order on it cancelled and every position on it closed. The desk stays
+   armed and the strategies stay on; what they had working on this account today is over for today. */
+async function flattenAcct(id) {
+  const N = acctShort(id);
+  if (!await confirmDlg("Flatten " + N + "?",
+      "Cancels every working order and market-flattens every position on this account only. The desk stays armed and your strategies stay on. Anything they had working on this account today is over for today.",
+      "Flatten account", true)) return;
+  let r, err = null;
+  try { r = await post("/api/account-flatten", {account: id}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return;
+  const why = answerWhy(r, err);
+  if (why) return alertBar(`${N} flatten NOT confirmed — ${why}. Check its positions at the broker now.`);
+  const bad = r.results && typeof r.results === "object" ? killFailures(r.results) : [`${N} (the desk sent no result)`];
+  if (bad.length) return alertBar(`Flatten FAILED on ${bad.join(" · ")}. Flatten it at the broker now.`);
+  toast(`${N}: orders cancelled and positions flattened.`);
+}
 const killRunning = () => toast(`Kill already running — sent ${Math.round((Date.now() - KILL_AT) / 1000)} s ago; ` +
   "waiting for the desk. Nothing more sent.");
 async function doKill() {
@@ -1404,7 +1446,7 @@ function renderNotices(list) {
   el.hidden = !fresh.length;
   if (!fresh.length) { el.innerHTML = ""; return; }
   el.innerHTML = `<div class="list">` + fresh.map(n =>
-      `<div><span class="t">${esc(String(n.et || "").slice(11, 16))}</span>${esc(n.text)}</div>`).join("") +
+      `<div><span class="t">${esc(hbClock(String(n.et || "").slice(11, 16)))}</span>${esc(n.text)}</div>`).join("") +
     `</div><button type="button" class="x" title="Dismiss — these won't show again" aria-label="Dismiss notices">&times;</button>`;
   el.querySelector("button.x").addEventListener("click", () => {
     for (const n of fresh) NOTICES_SEEN.add(noticeKey(n));
@@ -1594,6 +1636,11 @@ const ACTIVITY = {
       : [`${actStrat(r)} kill finished${actOn(r)} once its orders were acknowledged`];
   },
   strategy_kill_failed: (r) => [`${actStrat(r)} kill FAILED${actOn(r)} — ${actErr(r.error)}`, "neg"],
+  account_flatten: (r) => {
+    const bad = killFailures({[r.account]: r.results});
+    return bad.length ? [`Flatten FAILED on ${bad.join(" · ")}`, "neg"] : [`${acctShort(r.account)}: orders cancelled and positions flattened`];
+  },
+  routine_reconnects: (r) => [`Routine reconnect · ${r.accounts} account${r.accounts === 1 ? "" : "s"}` + (r.times > 1 ? ` · ${r.times} times since ${hbClock(String(r.since).slice(11, 16))}` : "")],
   manual_flatten: (r) => {
     if (r.source === "chart") return r.ok ? [`Chart: flattened ${r.contract || ""}${actOn(r)}`]
       : [`Chart: FLATTEN FAILED${actOn(r)}${r.contract ? ` (${r.contract})` : ""} — ${actErr(r.error)}`, "neg"];
@@ -1651,6 +1698,23 @@ function activityRaw(r) {
   return [event, ...Object.entries(rest).map(([k, v]) =>
     `${k}=${typeof v === "object" ? JSON.stringify(v) : v}`)].join("  ");
 }
+/* A routine reconnect -- the desk rebuilding a broker connection on the token it already holds, about hourly, every account in
+   turn -- is not news: a run of them reads as ONE line (Raw shows each), and "Last event" never points at one. */
+const routineRow = (r) => !!r && r.event === "broker_connected" && r.mode === "reconnect";
+function foldRoutine(rows) {
+  const out = [];
+  for (let i = 0; i < rows.length; i++) {
+    if (!routineRow(rows[i])) { out.push(rows[i]); continue; }
+    let j = i;
+    while (j + 1 < rows.length && routineRow(rows[j + 1])) j++;
+    const run = rows.slice(i, j + 1), secs = (r) => Date.parse(r.et) / 1000;      // newest first
+    const times = 1 + run.filter((r, k) => k > 0 && secs(run[k - 1]) - secs(r) > 120).length;
+    out.push({event: "routine_reconnects", ts: run[0].ts, et: run[0].et, since: run[run.length - 1].et,
+              accounts: new Set(run.map(r => r.account)).size, times, rows: run});
+    i = j;
+  }
+  return out;
+}
 let FEED_ROWS = [], FEED_SIG = null, FEED_RAW = false;
 const FEED_OPEN = new Set();   // rows opened to their raw line, by ts|et|event|account
 function renderActivity(journal) {
@@ -1659,12 +1723,12 @@ function renderActivity(journal) {
   const sig = JSON.stringify([FEED_ROWS, FEED_RAW, [...FEED_OPEN]]);
   if (sig === FEED_SIG) return;           // nothing changed: leave the rows (and a hovered tooltip) alone
   FEED_SIG = sig;
-  $("#feed").innerHTML = FEED_ROWS.map((r, i) => {
-    const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(i + 1).find(o => o.event === r.event) : null;
+  $("#feed").innerHTML = (FEED_RAW ? FEED_ROWS : foldRoutine(FEED_ROWS)).map((r) => {
+    const prev = r.event === "chart_trading_set" ? FEED_ROWS.slice(FEED_ROWS.indexOf(r) + 1).find(o => o.event === r.event) : null;
     const {text, tone} = activityLine(r, prev);
-    const raw = activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
+    const raw = r.rows ? r.rows.map(o => String(o.et || "").slice(11, 19) + "  " + activityRaw(o)).join("\n") : activityRaw(r), key = `${r.ts}|${r.et}|${r.event}|${r.account || ""}`, open = FEED_RAW || FEED_OPEN.has(key);
     return `<div class="feed-row${open ? " open" : ""}" data-k="${esc(key)}" title="${esc(raw)}">` +
-      `<span class="t">${esc(String(r.et || "").slice(11, 19))}</span>` +
+      `<span class="t">${esc(hbClock(String(r.et || "").slice(11, 19)))}</span>` +
       `<span class="h${tone ? " " + tone : ""}">${esc(text)}</span>` +
       (open ? `<span class="raw">${esc(raw)}</span>` : "") + `</div>`;
   }).join("") || '<div class="feed-empty">Waiting for events…</div>';
@@ -1701,7 +1765,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 let VIEW = {k: "today"};
 try {
   const v = JSON.parse(localStorage.getItem("hb_view") || "null");
-  if (v && ["today", "strat", "activity", "watch", "lab"].includes(v.k)) VIEW = v;
+  if (v && ["today", "strat", "activity", "lab", "group"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
@@ -1711,47 +1775,6 @@ function toggleSide(k) {
   SIDE_FOLD[k] = !SIDE_FOLD[k];
   try { localStorage.setItem(SIDE_FOLD_KEY, JSON.stringify(SIDE_FOLD)); } catch (_) { /* stays for this page */ }
   render();
-}
-/* ---- WATCHED strategies (2026-10-09): Book strategies promoted from the Lab. Records kept by the chart service
-   (:8852, GET /api/tester/watch): each shows its numbers and equity curve here and places NO orders -- the desk's
-   engine never reads them. Remove takes one off this page; it stays in the Book and can be promoted again. */
-let WATCH = [], WATCH_READ = false, WATCH_BUSY = "";
-const WATCH_NAME = /^[a-z][a-z0-9_]{1,33}$/;
-async function loadWatch() {
-  if (DEMO) return;
-  try {
-    const r = await fetch(CHART + "/api/tester/watch");
-    if (!r.ok) return;
-    const j = await r.json();
-    const next = (Array.isArray(j.strategies) ? j.strategies : []).filter(w => w && WATCH_NAME.test(String(w.name)));
-    const key = (a) => JSON.stringify(a.map(w => [w.name, w.promoted_utc]));
-    const changed = !WATCH_READ || key(next) !== key(WATCH);
-    WATCH = next; WATCH_READ = true;
-    if (changed && ST && !FREEZE) render();
-  } catch (_) { /* the chart service is not up: the list stays as it was */ }
-}
-async function removeWatch(name) {
-  if (WATCH_BUSY) return;
-  WATCH_BUSY = name; render();
-  const r = await chartPost("/api/tester/watch/remove", {name});
-  WATCH_BUSY = "";
-  if (r && r.ok) {
-    WATCH = WATCH.filter(w => w.name !== name);
-    if (VIEW.k === "watch" && VIEW.name === name) VIEW = {k: "today"};
-    toast(`${name} is off the Desk. It stays in the Book; promote it again from the Lab any time.`);
-  } else toast(`Could not remove ${name}: ${(r && r.detail) || "no answer"}`);
-  render();
-}
-async function showWatch(name) {
-  if (WATCH_BUSY) return;
-  WATCH_BUSY = name; render();
-  toast("Opening its executions in the Lab…");
-  const r = await chartPost("/api/tester/watch/show", {name});
-  WATCH_BUSY = "";
-  render();
-  if (!r || r.ok === false || !r.run_id) { toast(`Could not open the chart: ${(r && r.detail) || "no answer"}`, 7000); return; }
-  // the Strategy Tester's chart is in the Lab: go there, on this run (the Lab reads #run=<id> and puts it on its chart)
-  location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#run=" + encodeURIComponent(r.run_id);
 }
 /* ---- LAB STRATEGIES on the Desk (2026-10-09, Step A): drafts promoted from the Lab. Records kept by the chart service
    (:8852, GET /api/tester/desklab). A promoted one lands switched OFF; switched on, the runner hosts it in SHADOW -- it
@@ -1780,6 +1803,23 @@ const LAB_FAULT = "The Lab strategies could not be shown.";
    (the Lab side off, or just promoted) this row and labView still draw it, unchanged. */
 const labOnDesk = (w) => labSafe(() => DeskLab.onDesk(ST && ST.strategies, w), true);
 const labRowsHtml = (rowOf) => labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).map(w => labSafe(() => rowOf(w), "")).join(""), "");
+/* The research beside a Lab strategy: its saved run on the unseen days and the prop sim of its runs (chart service, GET
+   /api/tester/desklab/results). Saved runs only: asking runs nothing and reads no test day. The first answer of a service
+   takes a few seconds (it scores each run once), so one ask is out at a time; what was shown stays when one fails. */
+let DESKRES = {}, DESKRES_BUSY = false;
+async function loadDeskRes() {
+  if (DEMO || document.hidden || DESKRES_BUSY) return;
+  DESKRES_BUSY = true;
+  try {
+    const r = await fetch(CHART + "/api/tester/desklab/results");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(), next = j && j.results && typeof j.results === "object" ? j.results : {};
+    const changed = JSON.stringify(next) !== JSON.stringify(DESKRES);
+    DESKRES = next;
+    if (changed && ST && !FREEZE) render();
+  } catch (_) { /* the chart service does not answer: keep what was shown */ }
+  finally { DESKRES_BUSY = false; }
+}
 async function loadDeskLab() {
   if (DEMO || document.hidden) return;
   let next, ok = true;
@@ -1826,19 +1866,154 @@ async function removeDeskLab(name) {
   if (ST) render();
   loadDeskLab();
 }
-async function openDeskLabInLab(name) {      // the Lab page, on this strategy
+function deskLabRun(name) {               // the id of its saved run on the unseen days, or null
+  const u = DESKRES[name] && DESKRES[name].unseen;
+  return u && typeof u.id === "string" ? u.id : null;
+}
+async function openDeskLabInLab(name, withRun) {      // the Lab page, on this strategy (withRun: and its unseen-days run on the chart)
   // The Mac app turns this link into a tab switch and drops the #strategy part, so the chart service is told first:
   // the Lab page takes the ask when it is shown (in a browser the link itself carries it).
-  if (!DEMO) await chartPost("/api/tester/desklab/open", {name});
+  const run = withRun ? deskLabRun(name) : null;
+  if (!DEMO) await chartPost("/api/tester/desklab/open", run ? {name, run} : {name});
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#strategy=" + encodeURIComponent(name);
+}
+/* A built-in Desk strategy (nq930, gc_nfp) has no Lab copy: the tester holds a twin of it (DESKRES[name].twin, read from the chart service),
+   so "Open in the Lab" opens that twin, built-in. "Remove from Desk" hides its card (Manage algos' own switch, display only), and is
+   locked for as long as the strategy can trade, has orders or a position today, or needs a check -- the same rule as Manage algos. */
+async function openBuiltinInLab(name, withRun) {
+  const twin = DESKRES[name] && DESKRES[name].twin;
+  if (typeof twin !== "string" || !twin) return;
+  const run = withRun ? deskLabRun(name) : null;
+  if (!DEMO) await chartPost("/api/tester/desklab/open", run ? {name: twin, builtin: true, run} : {name: twin, builtin: true});
+  location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#builtin=" + encodeURIComponent(twin);
+}
+function hideInfo(name) {
+  try {
+    const row = window.AlgoVisibility && ST
+      ? window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts).find(r => r.name === name) : null;
+    return row ? {locked: !!row.locked, reason: row.lockReason || ""} : {locked: false, reason: ""};
+  } catch (_) { return {locked: false, reason: ""}; }
+}
+async function removeBuiltin(name) {
+  const info = hideInfo(name);
+  if (info.locked) return toast(`${stratLabel(name)} is still on the Desk: ${info.reason}. Switch it off first.`, 7000);
+  if (!await confirmDlg("Remove " + stratLabel(name) + " from the Desk?",
+      "Takes it off the Desk's list. It trades nothing and keeps its settings and history. Bring it back from Manage algos.", "Remove", false)) return;
+  toggleAlgoHidden(name, true);
+  toast(`${stratLabel(name)} is off the Desk's list. Bring it back from Manage algos.`);
 }
 function setView(k, name) {
   closeAsgMenus(false);
-  VIEW = k === "strat" || k === "watch" || k === "lab" ? {k, name} : {k};
+  VIEW = k === "strat" || k === "lab" || k === "group" ? {k, name} : {k};
   try { localStorage.setItem("hb_view", JSON.stringify(VIEW)); } catch (_) {}
   if (ST) render();
+  if (k === "group") loadDeskGroupRes();
   const m = document.querySelector(".app-main");
   if (m) m.scrollTop = 0;
+}
+
+/* ---- DESK GROUPS (2026-10-11): named sets of strategies that run together (an eval group, a funded group ...), kept by the chart
+   service (GET /api/tester/deskgroups). Display and bookkeeping only: a group never switches a strategy on or books an account. A
+   strategy is in ONE group at most; the same code tried two ways (say for an eval and for a funded account) is two strategies, each
+   in its own group. A group's combined results are its members' SAVED runs put together as one account's trades
+   (GET /api/tester/deskgroups/results, asked only while a group's page is open). The words are DeskLab.groupPage. ---- */
+let DESKGROUPS = {groups: [], ok: null}, DESKGROUPS_BUSY = false;       // ok: null = no read finished yet
+let DESKGRES = {}, DESKGRES_BUSY = false;
+const GROUP_ID = /^g\d{1,4}$/;
+const groupOf = (id) => DESKGROUPS.groups.find(g => g.id === id) || null;
+function takeGroups(list) {      // only well-formed groups are kept; a wrong shape is dropped, never thrown on
+  return (Array.isArray(list) ? list : []).filter(g => g && typeof g === "object" && GROUP_ID.test(String(g.id)) && typeof g.name === "string")
+    .map(g => ({id: g.id, name: g.name, kind: ["eval", "funded", "together"].includes(g.kind) ? g.kind : "together",
+      members: (Array.isArray(g.members) ? g.members : []).filter(m => typeof m === "string")}));
+}
+async function loadDeskGroups() {
+  if (DEMO || document.hidden || DESKGROUPS_BUSY) return;
+  DESKGROUPS_BUSY = true;
+  try {
+    const r = await fetch(CHART + "/api/tester/deskgroups");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(), next = takeGroups(j && j.groups);
+    const changed = DESKGROUPS.ok !== true || JSON.stringify(next) !== JSON.stringify(DESKGROUPS.groups);
+    DESKGROUPS = {groups: next, ok: true};
+    if (changed && ST && !FREEZE) render();
+    if (VIEW.k === "group") loadDeskGroupRes();
+  } catch (_) { /* the chart service does not answer: keep what was shown */ }
+  finally { DESKGROUPS_BUSY = false; }
+}
+async function loadDeskGroupRes() {
+  if (DEMO || document.hidden || DESKGRES_BUSY || VIEW.k !== "group") return;
+  DESKGRES_BUSY = true;
+  try {
+    const r = await fetch(CHART + "/api/tester/deskgroups/results");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const j = await r.json(), next = j && j.results && typeof j.results === "object" ? j.results : {};
+    const changed = JSON.stringify(next) !== JSON.stringify(DESKGRES);
+    DESKGRES = next;
+    if (changed && ST && !FREEZE) render();
+  } catch (_) { /* keep what was shown */ }
+  finally { DESKGRES_BUSY = false; }
+}
+/* One change to the groups: create {name, kind} | rename {id, name} | kind {id, kind} | delete {id} | move {strategy, group|null}.
+   The service answers with all the groups; a refusal says why in words and changes nothing. */
+async function groupPost(action, body) {
+  const r = await chartPost("/api/tester/deskgroups/" + action, body);
+  if (r && r.ok === true && Array.isArray(r.groups)) {
+    DESKGROUPS = {groups: takeGroups(r.groups), ok: true};
+    if (VIEW.k === "group" && !groupOf(VIEW.name)) VIEW = {k: "today"};
+    if (ST) render();
+    renderGroupMgr(true);
+    loadDeskGroupRes();
+    return true;
+  }
+  if (!DEMO) toast(String((r && r.detail) || "The group could not be changed."), 6000);
+  renderGroupMgr(true);          // put the controls back as they were
+  return false;
+}
+/* A group's page (VIEW {k: "group", name: <id>}): its members' saved runs put together -- the unseen days first (curve), the build days
+   beside them, the prop sim on LucidPro -- then the members and any left out of the sum, with why. Nothing here runs a backtest. */
+const GROUP_FAULT = "The group could not be shown.";
+function openGroupMember(id) {      // a member's own page: the Desk's if it holds it, else the Lab strategy's
+  id = String(id);
+  if (ST && ST.strategies && ST.strategies[id]) setView("strat", id);
+  else if (id.indexOf("lab_") === 0) setView("lab", id.slice(4));
+  else setView("today");
+}
+function groupView(id) {
+  const g = groupOf(id);
+  if (!g) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${esc(DeskLab.GROUP_MISSING)}</div>`;
+  const p = DeskLab.groupPage(g, DESKGRES[g.id]);
+  const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
+  const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
+  const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
+  const two = (b) => b.rows.length ? f("", b.head, true) + b.rows.map(r => f(r.k, [r.build, r.unseen])).join("") : note(b.note);
+  const days = p.days.rows.length ? p.days.rows.map(r => f(r.k, [r.v])).join("") : note(p.figs.note);
+  const members = p.members.map(m => `<div class="feed-row" role="button" tabindex="0" onclick="openGroupMember(${jsArg(m.strategy)})"
+      onkeydown="if(event.target===event.currentTarget&&(event.key==='Enter'||event.key===' ')){event.preventDefault();openGroupMember(${jsArg(m.strategy)})}">
+      <span class="h">${esc(m.label)}${m.state ? ` · <span class="dim">${esc(m.state)}</span>` : ""}</span>
+      <span class="t dim">${esc(m.build)}</span><span class="t net">${esc(m.unseen)}</span></div>`);
+  const out = p.leftOut.map(x => `<div class="feed-row"><span class="h">${esc(x.label)}</span><span class="t dim">${esc(x.why)}</span></div>`);
+  const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends)}</div>` : "";
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
+    <div class="sd-state"><b>${esc(p.kind)}</b> · ${esc(p.kindNote)}</div>
+    <div class="sd-note">${esc(p.note)}</div>
+    ${p.empty ? `<div class="eq-empty">${esc(DeskLab.EMPTY_GROUP)}</div>` : ""}
+    ${curve}
+    <div class="figs labres-prop grp-figs" data-h="Combined, after costs">${two(p.figs)}</div>
+    <div class="labres" data-for="${esc(g.id)}">
+      <div class="sec"><h2>${esc(p.days.title)}</h2><div class="figs labres-unseen" data-h="${esc(p.days.title)}">${days}</div></div>
+      <div class="sec"><h2>${esc(p.prop.title)}</h2><div class="figs labres-prop" data-h="${esc(p.prop.title)}">${two(p.prop)}</div></div></div>
+    ${members.length ? `<div class="sec"><h2>Strategies</h2><div class="agroup feed static">
+      <div class="feed-row"><span class="h dim">Strategy</span><span class="t dim">Build</span><span class="t dim">Unseen</span></div>${members.join("")}</div></div>` : ""}
+    ${out.length ? `<div class="sec"><h2>Left out of the sum</h2><div class="agroup feed static">${out.join("")}</div></div>` : ""}
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openGroupMgr()">Manage groups</button>
+      <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})" title="The strategies stay on the Desk, in no group.">Delete group</button></div>`;
+}
+async function deleteGroup(id) {
+  const g = groupOf(id);
+  if (!g) return;
+  if (!await confirmDlg(`Delete ${g.name}?`, "Its strategies stay on the Desk and go back under Strategies. Nothing is switched off.", "Delete", false)) return;
+  if (await groupPost("delete", {id})) toast(`${g.name} is deleted. Its strategies are in no group.`);
 }
 
 const hmin = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || "")); return m ? +m[1] * 60 + +m[2] : null; };
@@ -1849,6 +2024,9 @@ const usdS = (v) => v == null ? "—" : (v < 0 ? "−$" : v > 0 ? "+$" : "$") + 
 const plural = (n, a, b) => `${n} ${n === 1 ? a : b}`;
 /* The journal as the Today page and the sidebar read it: the Lab's named bookkeeping lines (DeskLab.HIDDEN_EVENTS: lab_event, lab_event_done, lab_added)
    are left out, so they never become the "Last event" time. Every other line is returned as it is. (The Activity list filters the same way.) */
+/* A time of day as the app shows it: "HH:MM" or "HH:MM:SS" in, the owner's clock format out (hbclock.js; unchanged without it). */
+const hbClock = (hms) => typeof HBClock !== "undefined" ? HBClock.text(hms) : hms;
+const journalNews = (j) => journalShown(j).filter(r => !routineRow(r));      // "Last event": never a routine reconnect
 const journalShown = (j) => (Array.isArray(j) ? j : []).filter(r => !(r && typeof r.event === "string" && r.event.indexOf("lab_") === 0 && typeof DeskLab !== "undefined" && DeskLab.hiddenEvent(r.event)));
 const specOf = (c, name) => c.kind === "lab" ? labSafe(() => DeskLab.deskSpec(c, labRowOf(ST.strategies[name])), String(c.symbol || ""))
   : c.kind === "bars"
@@ -1925,10 +2103,10 @@ function dayTimeline() {
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
     .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
-  return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(String(ST.et_now).slice(11, 16))} ET</span></div>
+  return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(hbClock(String(ST.et_now).slice(11, 16)))} ET</span></div>
     <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${labRef ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(flatEt || "15:55")}">
       <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${labRef || oneMark ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
-      <div class="tl-labels">${lab(OPEN_MIN, "9:30 Open", "tl-t strong at-start")}${labRef || oneMark ? "" : lab(cancel, (ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, (flatEt || "15:55") + (oneMark ? " Cancel unfilled, flat" : " Flat"), "tl-t at-end")}</div>
+      <div class="tl-labels">${lab(OPEN_MIN, hbClock("9:30") + " Open", "tl-t strong at-start")}${labRef || oneMark ? "" : lab(cancel, hbClock(ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, hbClock(flatEt || "15:55") + (oneMark ? " Cancel unfilled, flat" : " Flat"), "tl-t at-end")}</div>
     </div>`;
 }
 
@@ -1950,7 +2128,7 @@ function todayRow(name, s) {
 let ISSUE_LVL = "warn";
 function todayFoot(issues) {
   const accts = Object.values(ST.accounts || {}), up = accts.filter(a => a.connected).length;
-  const last = journalShown(ST.journal)[0], lt = last && last.et ? String(last.et).slice(11, 16) : null;
+  const last = journalNews(ST.journal)[0], lt = last && last.et ? hbClock(String(last.et).slice(11, 16)) : null;
   const out = [];
   if (issues) out.push(`<button class="foot-b warn" onclick="openChecks()"><i class="dot${ISSUE_LVL === "bad" ? " bad" : ""}"></i>${issues === 1 ? "1 thing needs" : issues + " things need"} a look <u>›</u></button>`);
   out.push(`<button class="foot-b" onclick="openAccts()">${up} of ${accts.length} accounts connected <u>›</u></button>`);
@@ -1966,38 +2144,52 @@ function renderSide(names, hiddenCount, issues) {
     return `<div class="sh${shut ? " shut" : ""}"><button class="sh-t" onclick="toggleSide('${k}')" aria-expanded="${!shut}" title="${shut ? "Show" : "Hide"} ${title}">
       <svg class="sh-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5.5l6.5 6.5L9 18.5"/></svg><span>${title}</span>${shut && n ? `<i>${n}</i>` : ""}</button>${action}</div>`;
   };
-  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "watch" && k !== "lab") || VIEW.name === n) ? " sel" : "";
-  const labRows = labRowsHtml(w => labSideRow(w, sel));
-  const watchRows = WATCH.map(w => `<button class="item one${sel("watch", w.name)}" onclick="setView('watch',${jsArg(w.name)})" aria-current="${sel("watch", w.name) ? "page" : "false"}" title="Watch-only: it places no orders">
-      <i class="sd shadow"></i><span class="it"><b>${esc(w.name)}</b></span>
-      <span class="ir mono dim">${w.net == null ? "" : usdS(w.net)}</span></button>`).join("");
-  const strat = names.map(n => {
+  const sel = (k, n) => VIEW.k === k && ((k !== "strat" && k !== "lab" && k !== "group") || VIEW.name === n) ? " sel" : "";
+  /* every strategy's row by its id (a Desk name, or lab_<name> for a Lab one the Desk does not hold yet), so a group can take it */
+  const rowOf = {};
+  for (const n of names) {
     const s = ST.strategies[n], state = stratState(n, s), sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(n, s), null) : null, p = sh ? sh.net : todayPnl(s);
-    return `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
+    rowOf[n] = `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
       <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
       <span class="ir mono${p == null || sh ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
+  }
+  const labIds = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).map(w => {
+    const id = "lab_" + w.name;
+    rowOf[id] = labSafe(() => labSideRow(w, sel), "");
+    return id;
+  }), []);
+  const inGroup = new Set(DESKGROUPS.groups.flatMap(g => g.members));
+  const freeNames = names.filter(n => !inGroup.has(n)), freeLab = labIds.filter(id => !inGroup.has(id));
+  const strat = freeNames.map(n => rowOf[n]).join(""), labRows = freeLab.map(id => rowOf[id] || "").join("");
+  const groupBlocks = DESKGROUPS.groups.map(g => {
+    const k = "g:" + g.id, rows = g.members.map(id => rowOf[id]).filter(Boolean);
+    const opened = sel("group", g.id) !== "";
+    const open = `<button class="sh-btn" title="Open ${esc(g.name)}" aria-label="Open ${esc(g.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('group',${jsArg(g.id)})">›</button>`;
+    return head(k, esc(g.name), rows.length, open) + (SIDE_FOLD[k] ? "" : rows.join("") || `<div class="side-more">No strategy yet</div>`);
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
   const shown = SIDE_ALL ? accts : accts.slice(0, 12);
   const shortId = (t) => { t = String(t); return /^[A-Za-z0-9]{12,}$/.test(t) ? t.slice(0, 4) + " ··" + t.slice(-4) : t; };
-  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts()" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
+  const acctRows = shown.map(([id, a]) => `<button class="item one" onclick="openAccts(${jsArg(id)})" title="${esc((a.label || id) + " · " + (a.env === "live" ? "Live" : a.env === "paper" ? "Paper" : "Demo") + (a.connected ? "" : " · offline"))}">
       <i class="sd ${a.connected ? "ok" : "warn"}"></i><span class="it"><b>${esc(shortId(a.label || id))}${a.env === "live" ? '<span class="tag-live">Live</span>' : ""}${a.connected ? "" : '<span class="tag">offline</span>'}</b></span>
       <span class="ir mono${a.connected ? "" : " dim"}">${a.connected && a.balance != null ? "$" + fmt(a.balance, 0) : ""}</span></button>`).join("");
   const more = accts.length > 12
     ? `<button class="side-more" onclick="SIDE_ALL=!SIDE_ALL;render()">${SIDE_ALL ? "Show fewer" : `Show ${accts.length - 12} more`}</button>` : "";
-  const last = journalShown(ST.journal)[0];
+  const last = journalNews(ST.journal)[0];
   $("#side").innerHTML = `
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("strat", "Strategies", names.length + labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).length, 0) + WATCH.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
-    ${SIDE_FOLD.strat ? "" : strat + labRows + watchRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
+    ${head("groups", "Groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Manage groups" aria-label="Manage groups" onclick="openGroupMgr()">⋯</button>`)}
+    ${SIDE_FOLD.groups ? "" : groupBlocks || `<button class="side-more" onclick="openGroupMgr()">New group…</button>`}
+    ${head("strat", "Strategies", freeNames.length + freeLab.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
+    ${SIDE_FOLD.strat ? "" : strat + labRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
     ${SIDE_FOLD.act ? "" : `<button class="item${sel("activity")}" onclick="setView('activity')" aria-current="${sel("activity") ? "page" : "false"}">
-      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(String(last.et).slice(11, 16)) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`}`;
+      <i class="sd ${issues ? (ISSUE_LVL === "bad" ? "bad" : "warn") : "off"}"></i><span class="it"><b>${last && last.et ? "Last event " + esc(hbClock(String(last.et).slice(11, 16))) : "Journal"}</b><small>${issues ? plural(issues, "thing needs", "things need") + " a look" : "Every alert, order and fill"}</small></span><span></span></button>`}`;
 }
 
 /* ---- strategy detail ---- */
@@ -2012,21 +2204,25 @@ function loadEq(name) {
   }).catch(() => { EQ[name] = {days: e && e.days || {}, t: Date.now()}; });
 }
 /* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
-function eqPlot(vals, label, total, aria) {
+/* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
+   hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
+function eqPlot(vals, label, total, aria, ends) {
   const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
   const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
   let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
-  for (let i = 1; i < vals.length; i++) {
-    const mx = (X(i - 1) + X(i)) / 2;
-    d += ` C ${mx.toFixed(1)} ${Y(vals[i - 1]).toFixed(1)} ${mx.toFixed(1)} ${Y(vals[i]).toFixed(1)} ${X(i).toFixed(1)} ${Y(vals[i]).toFixed(1)}`;
-  }
-  const zero = lo < 0 && hi > 0 ? `<line class="eq-zero" x1="0" y1="${Y(0).toFixed(1)}" x2="1000" y2="${Y(0).toFixed(1)}"/>` : "";
+  for (let i = 1; i < vals.length; i++) d += ` H ${X(i).toFixed(1)} V ${Y(vals[i]).toFixed(1)}`;
+  const mid = lo < 0 && hi > 0 ? 0 : (lo + hi) / 2;                       // zero when the curve crosses it, else halfway
+  const ticks = [hi, mid, lo].filter((v, i, a) => a.indexOf(v) === i && (v === hi || v === lo || Math.min(Y(v) - Y(hi), Y(lo) - Y(v)) >= 22));
+  const axis = (v) => (v < 0 ? "−$" : "$") + fmt(Math.abs(Math.round(v)), 0);
+  const grid = ticks.map(v => `<line class="${v === 0 && lo < 0 ? "eq-zero" : "eq-grid"}" x1="0" y1="${Y(v).toFixed(1)}" x2="1000" y2="${Y(v).toFixed(1)}"/>`).join("");
   return `<div class="eq"><div class="lb"><span>${esc(label)}</span><b class="mono">${usdS(total)}</b></div>
     <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
       <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-      <line class="eq-grid" x1="0" y1="26" x2="1000" y2="26"/><line class="eq-grid" x1="0" y1="101" x2="1000" y2="101"/><line class="eq-grid" x1="0" y1="176" x2="1000" y2="176"/>${zero}
+      ${grid}
       <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
-    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div></div>`;
+    ${ticks.map(v => `<span class="eq-y" style="top:${(Y(v) / 190 * 100).toFixed(1)}%">${axis(v)}</span>`).join("")}
+    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div>
+    ${ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : ""}</div>`;
 }
 const shortDay = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
 function eqChart(name) {
@@ -2037,33 +2233,7 @@ function eqChart(name) {
   if (ks.length < 2) return `<div class="eq-empty">Not enough live days yet for a curve.</div>`;
   let cum = 0;
   const vals = ks.map(k => (cum += (days[k].net || 0), cum));
-  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day");
-}
-
-/* A watched strategy's page: what it did on the days it was judged on, and the two things that can be done with it. */
-function watchView(name) {
-  const w = WATCH.find(x => x.name === name);
-  if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${WATCH_READ ? "That strategy is not on the Desk any more. Promote it again from the Lab's Book." : "Loading…"}</div>`;
-  const pts = (Array.isArray(w.curve) ? w.curve : []).filter(p => Array.isArray(p) && typeof p[2] === "number");
-  const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
-  const pct = (v) => v == null ? "—" : Math.round(v * 100) + "%";
-  const num = (v, d) => v == null ? "—" : Number(v).toFixed(d);
-  const money = (v) => v == null ? "—" : (v < 0 ? "−$" : "$") + fmt(Math.abs(v), 0);      // whole dollars, like the other figures here
-  const where = w.period === "test" ? "the days it had never seen" : "the build days";
-  const chart = pts.length >= 2
-    ? eqPlot([0, ...pts.map(p => p[2])], `After costs, 1 contract · ${shortDay(pts[0][0])} to ${shortDay(pts[pts.length - 1][0])}`, w.net, "Cumulative net P&L by traded day, one contract after costs")
-    : `<div class="eq-empty">Not enough traded days for a curve.</div>`;
-  const busy = WATCH_BUSY === name;
-  const sub = [w.market, w.session, w.bar ? w.bar + "-minute bars" : "", w.family].filter(Boolean).join(" · ");
-  return `<button class="back" onclick="setView('today')">‹ Today</button>
-    <div class="sd-top"><div><h1 class="sd-title">${esc(w.name)}</h1><div class="sp mono">${esc(sub)}</div></div></div>
-    <div class="sd-state"><b>Watching</b> · places no orders</div>
-    <div class="sd-note">${esc("Promoted from the Lab's Book. These are its results on " + where + ", from the research engine, not live trades. Nothing here can send an order.")}</div>
-    ${chart}
-    <div class="figs">${fig("Net", usdS(w.net))}${fig("Win rate", pct(w.win_rate))}${fig("Trades", w.trades == null ? "—" : w.trades)}${fig("Avg per trade", usdS(w.avg_trade), "After costs, per trade")}${fig("Profit factor", num(w.profit_factor, 2))}${fig("Worst day", money(w.worst_day))}${fig("Deepest drawdown", money(w.max_drawdown == null ? null : -Math.abs(w.max_drawdown)))}${fig("Days traded", w.days == null ? "—" : w.days)}</div>
-    ${w.why ? `<div class="sec"><h2>Why it should work</h2><p class="watch-why">${esc(w.why)}</p></div>` : ""}
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="showWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Every entry and exit, on the Lab's chart">Show executions on chart</button>
-      <button class="btn btn-outline btn-sm" onclick="removeWatch(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off this page. It stays in the Book.">Remove from Desk</button></div>`;
+  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day", [shortDay(ks[0]), shortDay(ks[ks.length - 1])]);
 }
 
 /* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
@@ -2072,6 +2242,29 @@ function labSideRow(w, sel) {
   return `<button class="item one${sel("lab", w.name)}" onclick="setView('lab',${jsArg(w.name)})" aria-current="${sel("lab", w.name) ? "page" : "false"}" title="${esc(DeskLab.stateText(w, DESKLAB.runner))}">
       <i class="sd ${esc(DeskLab.dotClass(w, DESKLAB.runner))}"></i><span class="it"><b>${esc(DeskLab.label(w))}</b></span>
       <span class="ir mono dim">${net == null ? "" : esc(usdS(net))}</span></button>`;
+}
+/* A Lab strategy's research, as two blocks of a strategy page: its saved run on the unseen days and the prop sim of its runs
+   (DESKRES; the words and numbers are DeskLab.results). The skin moves them into the inspector; `view` is the page's own name
+   for that strategy, so the skin never shows one strategy's blocks under another. */
+function labResHtml(lab, view) {
+  let v;
+  try { v = DeskLab.results(DESKRES[lab]); } catch (_) { return ""; }
+  const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
+  const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
+  const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
+  const unseen = v.unseen.rows.length ? v.unseen.rows.map(r => f(r.k, [r.v])).join("") : note(v.unseen.note);
+  const prop = v.prop.rows.length ? f("", v.prop.head, true) + v.prop.rows.map(r => f(r.k, [r.build, r.unseen])).join("") : note(v.prop.note);
+  return `<div class="labres" data-for="${esc(view)}">
+    <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen" data-h="${esc(v.unseen.title)}">${unseen}</div></div>
+    <div class="sec"><h2>${esc(v.prop.title)}</h2><div class="figs labres-prop" data-h="${esc(v.prop.title)}">${prop}</div></div></div>`;
+}
+/* The unseen run's running total as a curve in the page's own content (the Desk's eqPlot), under its Matched-the-backtest block:
+   nothing while there is no run (the inspector's block says why). */
+function labCurveHtml(lab) {
+  let c;
+  try { c = DeskLab.curve(DESKRES[lab]); } catch (_) { return ""; }
+  if (!c) return "";
+  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends)}</div>`;
 }
 function todayLabRow(w) {
   const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w);
@@ -2091,7 +2284,7 @@ function todayLabRow(w) {
 function labView(name) {
   const w = DESKLAB.strategies.find(x => x.name === name);
   if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${esc(DeskLab.missingText(DESKLAB_OK))}</div>`;
-  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name;
+  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name, hasRun = !!(DESKRES[w.name] && DESKRES[w.name].unseen && DESKRES[w.name].unseen.id);
   const rebuilt = DeskLab.rebuiltNote(w, DESKLAB.runner);
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
@@ -2113,10 +2306,13 @@ function labView(name) {
     <div class="sec"><h2>Today, in shadow</h2>${today}</div>
     <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>
+    ${labCurveHtml(w.name)}
+    ${labResHtml(w.name, w.name)}
     ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
     <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
       <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy">Open in the Lab</button>
+      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
       <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
 
@@ -2129,8 +2325,15 @@ function stratView(name) {
     : c.self_fire ? "The app computes and fires this signal itself." : "Self-fire is off: nothing fires this strategy.")
     + (c.shadow ? " Shadow: signals are journaled, nothing is placed — even when armed." : "");
   const fig = (k, v, title) => `<div class="f"${title ? ` title="${esc(title)}"` : ""}><div class="k">${k}</div><div class="v mono">${v}</div></div>`;
+  // the same trades as the curve above it, so the three add up: before fees - fees = after fees (the curve's total)
+  const eqd = Object.values((EQ[name] && EQ[name].days) || {}), sum = (k) => eqd.reduce((a, d) => a + (d[k] || 0), 0);
+  const money = eqd.length
+    ? fig("Before fees", usdS(sum("gross")), "Every closed trade of this strategy, on every account, before commissions") +
+      fig("Fees (est.)", usdS(sum("net") - sum("gross")), "An estimate: $3.10 a contract, in and out") +
+      fig("After fees", usdS(sum("net")), "The total the curve shows")
+    : fig("Before fees", usdS(lv ? lv.net : 0), "Every closed trade of this strategy, on every account, before commissions");
   const figs = lv && lv.trades
-    ? `<div class="figs">${fig("Gross", usdS(lv.net), "Before commissions (the desk's journal pnl is gross)")}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Gross, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
+    ? `<div class="figs">${money}${fig("Win rate", lv.win_rate + "%")}${fig("Trades", lv.trades)}${fig("Avg per trade", usd(lv.avg_trade), "Before fees, per trade")}${fig("Avg slip", (lv.avg_slip_pts ?? "—") + " pts")}</div>`
     : `<div class="eq-empty">No live trades yet.</div>`;
   const links = `<div class="qlinks">${s.research && s.research.rows ? `<button class="btn btn-quiet btn-sm" onclick="openRes('${name}')">Backtest metrics</button>` : ""}
     <button class="btn btn-quiet btn-sm" onclick="openLive('${name}')">Live calendar</button></div>`;
@@ -2144,6 +2347,10 @@ function stratView(name) {
         free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg('${name}',${jsArg(id)},${c.qty})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "")
     : `<div class="mcap">Add an account to run this strategy.</div>`;
   const test = (ST && !ST.armed && c.enabled) ? `<button class="btn btn-outline btn-sm" onclick="testFire('${name}')">Test fire · dry</button>` : "";
+  // the Desk's own straddles: the tester twin that mirrors them (its saved runs are the unseen metrics), and whether the card may be hidden
+  const twin = DESKRES[name] && typeof DESKRES[name].twin === "string" ? DESKRES[name].twin : "";
+  const hasRun = !!(DESKRES[name] && DESKRES[name].unseen && DESKRES[name].unseen.id);
+  const hide = hideInfo(name);
   const sw = `<button class="switch" role="switch" aria-label="${esc(stratLabel(name))} on or off" aria-checked="${c.enabled}"
     title="${c.enabled ? "ON — this strategy runs and executes" : "OFF — ignores all signals"}"
     onclick="toggleStrat('${name}', ${!c.enabled})"></button>`;
@@ -2152,8 +2359,13 @@ function stratView(name) {
     <div class="sd-state"><b>${esc(state)}</b>${p != null ? ` · today ${usdS(p)}` : ""}</div>
     <div class="sd-note">${esc(execTxt)}</div>
     ${eqChart(name)}${figs}${links}
-    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>${test}</div>`;
+    ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
+    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${addForm}</div>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
+      ${twin ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
+      <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
+      <button class="btn btn-outline btn-sm" onclick="removeBuiltin(${jsArg(name)})"${hide.locked ? " disabled" : ""} title="${esc(hide.locked ? hide.reason + ". Switch it off first." : "Takes it off the Desk's list. Bring it back from Manage algos; its settings and history stay.")}">Remove from Desk</button>${test}</div>
+    ${hide.locked ? `<div class="mcap">Remove from Desk: ${esc(hide.reason)}. Switch it off first.</div>` : ""}`;
 }
 
 /* ---- A Lab strategy the Desk itself knows (Step B, task B6) ----
@@ -2176,6 +2388,7 @@ function labShadowNet(name, s) {
 }
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
+  const hasRun = !!(DESKRES[lab.name || ""] && DESKRES[lab.name || ""].unseen && DESKRES[lab.name || ""].unseen.id);
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
@@ -2225,10 +2438,12 @@ function labDeskView(name, s) {
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
-    <div class="figs">${DeskLab.figures(row).map(fig).join("")}</div>` : ""}
+    ${labCurveHtml(row.name)}
+    <div class="figs">${DeskLab.figures(row).map(fig).join("")}</div>${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy">Open in the Lab</button>
+      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
       <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
@@ -2317,7 +2532,7 @@ async function clearLabBlock(name, account) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "watch" && VIEW.k !== "lab";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -2328,13 +2543,13 @@ function renderMain(names, issues) {
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
-  else if (VIEW.k === "watch") $("#viewStrat").innerHTML = watchView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
+  else if (VIEW.k === "group") $("#viewStrat").innerHTML = labSafe(() => groupView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${GROUP_FAULT}</div>`);
 }
 
 function render() {
   const s = ST;
-  $("#clock").textContent = String(s.et_now).slice(11, 19) + " ET";
+  $("#clock").textContent = hbClock(String(s.et_now).slice(11, 19)) + " ET";
   renderMaster();
   renderChartTrading(s.chart_trading);
   if ($("#settingsOverlay").classList.contains("open")) renderSettings();
@@ -2371,6 +2586,7 @@ function render() {
     .sort((a, b) => (s.strategies[b].cfg.enabled ? 1 : 0) - (s.strategies[a].cfg.enabled ? 1 : 0));   // switched-on first
   if (VIEW.k === "lab" && labSafe(() => DeskLab.onDesk(s.strategies, {name: VIEW.name}), false)) VIEW = {k: "strat", name: "lab_" + VIEW.name};   // the Desk knows it now: its own page
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
+  if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
   renderSide(names, algoVis.filter(a => !a.visible).length, probs.length);
   renderMain(names, probs.length);
@@ -2380,6 +2596,7 @@ function render() {
     if (!document.getElementById("qedit")) FREEZE = false;
   }
   if ($("#algoOverlay").classList.contains("open")) renderAlgoMgr();
+  renderGroupMgr();
 
   renderActivity(s.journal);
   renderNotices(s.notices);
@@ -2657,7 +2874,7 @@ function acctShort(id) {
 /* a strategy's fire moment for display ("9:30", "8:30"): its cfg.fire_et, 9:30 when the desk does not say */
 function fireHM(strategy) {
   const f = String(((((ST && ST.strategies) || {})[strategy]) || {}).cfg?.fire_et || "09:30:00");
-  return String(parseInt(f.slice(0, 2), 10)) + ":" + f.slice(3, 5);
+  return hbClock(String(parseInt(f.slice(0, 2), 10)) + ":" + f.slice(3, 5));
 }
 function liveBookingNote(strategy, account) {
   const c = ((((ST && ST.strategies) || {})[strategy]) || {}).cfg || {};
@@ -3189,7 +3406,21 @@ function renderMarketData() {
   if (apply) apply.onclick = applyMd;
 }
 
+/* The clock: one format for the Desk, the Charts and the Lab (hbclock.js keeps the choice with the chart service). */
+function renderClock() {
+  const root = $("#settingsClock");
+  if (!root || typeof HBClock === "undefined" || root.dataset.f === HBClock.format) return;
+  const f = root.dataset.f = HBClock.format;
+  root.innerHTML = `<div class="slabel">CLOCK</div>
+    <div class="seg">${[["12h", "12-hour · 3:55 PM"], ["24h", "24-hour · 15:55"]].map(([v, t]) =>
+      `<button type="button" class="${v === f ? "sel" : ""}" data-clock="${v}" aria-pressed="${v === f}">${t}</button>`).join("")}</div>
+    <p class="wnote">One clock for the Desk, the Charts and the Lab.</p>`;
+  for (const b of root.querySelectorAll("button[data-clock]")) b.onclick = async () => {
+    if (!await HBClock.set(b.dataset.clock)) toast("Changed on this page. The Charts and the Lab follow once the chart service answers.");
+  };
+}
 function renderSettings() {
+  renderClock();
   buildTrading();                                  // once; patched in place from then on
   renderChartTrading(ST && ST.chart_trading);      // the switch + limits as the desk has them now
   renderMarketData();  // rebuilds only its own container, and only when its inputs changed
@@ -3472,7 +3703,7 @@ async function flattenStrat(name) {
 }
 
 /* ---- accounts popup ---- */
-function openAccts() {
+function openAccts(focus) {
   const accts = (ST && ST.accounts) || {};
   const ids = Object.keys(accts);
   $("#acctCount").textContent = ids.length ? ids.length + " connected login" +
@@ -3486,9 +3717,12 @@ function openAccts() {
         const running = runningOn(id);
         // replacer FUNCTIONS, never strings: a replacement string reads $&, $`, $$ … specially, and an
         // account id is the broker's text -- "$`" in one used to splice the row into itself (second review)
-        return acctRow(id, {}).replace('<span class="spacer"></span>',
+        return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${id === focus ? " acct-focus" : ""}">`)
+          .replace('<span class="spacer"></span>',
           () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
-          .replace("</div>", () => `<button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
+          .replace("</div>", () => `<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
+            title="Cancel every working order and close every position on this account">Flatten</button>
+            <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
             title="Rebuild this account's broker connection">Reconnect</button>
             <button class="x" style="border:none;background:none;color:var(--muted-foreground);cursor:pointer;font-size:14px"
             onclick="removeAcct(${jsArg(id)})" title="Remove this account">&times;</button></div>`);
@@ -3497,6 +3731,8 @@ function openAccts() {
   renderPaper();
   loadPaper();
   showOverlay("acctOverlay");
+  const at = $("#acctList2 .acct-focus");
+  if (at && at.scrollIntoView) at.scrollIntoView({block: "nearest"});
 }
 function closeAccts() { hideOverlay("acctOverlay"); }
 async function removeAcct(id) {
@@ -3546,6 +3782,58 @@ function renderAlgoMgr() {
 }
 function openAlgoMgr() { renderAlgoMgr(); showOverlay("algoOverlay"); }
 function closeAlgoMgr() { hideOverlay("algoOverlay"); }
+
+/* ---- group manager popup: add, rename, retype and delete groups, and say which group each strategy is in. Every change is one
+   write to the chart service (groupPost) and a repaint from its answer; nothing here touches a strategy or an account. ---- */
+function groupKindOptions(cur) {
+  return DeskLab.GROUP_KINDS.map(k => `<option value="${esc(k.k)}"${k.k === cur ? " selected" : ""}>${esc(k.label)}</option>`).join("");
+}
+function renderGroupMgr(force) {
+  const ov = $("#groupOverlay");
+  if (!ov || !ST || !ov.classList.contains("open")) return;
+  const a = document.activeElement;
+  if (!force && a && ov.contains(a) && a.matches("#groupList input, #groupList select")) return;      // never wipe a field being used
+  const kindSel = $("#groupNewKind");
+  if (!kindSel.options.length) kindSel.innerHTML = groupKindOptions("eval");
+  const groups = DESKGROUPS.groups;
+  $("#groupCount").textContent = groups.length + " group" + (groups.length === 1 ? "" : "s");
+  const known = [];                    // every strategy a group may take: [id, label]
+  for (const n of Object.keys(ST.strategies || {})) known.push([n, stratLabel(n)]);
+  for (const w of labSafe(() => DESKLAB.strategies.filter(x => !labOnDesk(x)), [])) known.push(["lab_" + w.name, labSafe(() => DeskLab.label(w), w.name)]);
+  const have = new Set(known.map(k => k[0]));
+  for (const g of groups) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
+  const glist = groups.map(g => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
+      <input class="grp-sel" value="${esc(g.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(g.name)}" style="flex:1;min-width:0;max-width:none"
+        onchange="renameGroup(${jsArg(g.id)}, this.value)">
+      <select class="grp-sel" aria-label="What ${esc(g.name)} is for" onchange="groupPost('kind', {id: ${jsArg(g.id)}, kind: this.value})">${groupKindOptions(g.kind)}</select>
+      <span class="hint" style="font-size:11.5px;white-space:nowrap">${g.members.length} in it</span>
+      <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})">Delete</button></div>`).join("");
+  const slist = known.map(([id, label]) => {
+    const cur = groups.find(g => g.members.includes(id));
+    return `<div class="acct" style="padding:7px 0;gap:8px;align-items:center">
+      <span class="nm" style="font-size:13px;flex:1;min-width:0">${esc(label)}</span>
+      <select class="grp-sel" aria-label="Group of ${esc(label)}" onchange="moveToGroup(${jsArg(id)}, this.value)">
+        <option value="">${esc(DeskLab.NO_GROUP)}</option>${groups.map(g => `<option value="${esc(g.id)}"${cur && cur.id === g.id ? " selected" : ""}>${esc(g.name)}</option>`).join("")}
+      </select></div>`;
+  }).join("");
+  $("#groupList").innerHTML = (groups.length ? `<div class="mcap" style="margin:8px 0 2px">Groups</div>${glist}` : "")
+    + (known.length ? `<div class="mcap" style="margin:12px 0 2px">Strategies</div>${slist}` : `<div class="mcap" style="padding:14px 0">No strategies on the Desk yet.</div>`);
+}
+function openGroupMgr() { renderGroupMgr(true); showOverlay("groupOverlay"); renderGroupMgr(true); }
+function closeGroupMgr() { hideOverlay("groupOverlay"); }
+async function addGroup() {
+  const name = $("#groupNewName").value.trim();
+  if (!name) { toast("Give the group a name."); $("#groupNewName").focus(); return; }
+  if (await groupPost("create", {name, kind: $("#groupNewKind").value})) {
+    $("#groupNewName").value = "";
+    toast(`${name} is added. Pick its strategies below.`);
+  }
+}
+const renameGroup = (id, name) => groupPost("rename", {id, name: String(name).trim()});
+const moveToGroup = (strategy, group) => groupPost("move", {strategy, group: group || null});
+$("#groupOverlay").addEventListener("click", (e) => {
+  if (e.target === e.currentTarget) closeGroupMgr();
+});
 /* "Show on home page" never asks, either way, under the desk's one confirm policy (S6):
    hiding a card is display only and changes nothing that trades -- switchNeedsConfirm(
    "visibility", ...) is false both ways -- and a card that could trade is locked visible. */
@@ -3663,17 +3951,25 @@ async function loadCal() {
      "history starts today — equity snapshots began when the app first ran");
 }
 
+if (typeof HBClock !== "undefined") {
+  HBClock.on(() => { FEED_SIG = null; if (ST) render(); });      // every time on the page is printed again
+  if (!DEMO) HBClock.load(CHART);                                 // preview mode never asks :8852
+}
 refresh(); setInterval(refresh, 2500);
-loadWatch(); if (!DEMO) setInterval(loadWatch, 30000);   // a strategy promoted in the Lab shows up here within half a minute
 // a Lab strategy's state moves with the day: asked every 5 s, and only while this page is on screen
-loadDeskLab();
+loadDeskLab(); loadDeskRes(); loadDeskGroups();
 window.addEventListener("hashchange", () => {      // a link to a Lab strategy opened while the Desk is already open
   const n = labHashName();
   if (n) { clearLabHash(); setView("lab", n); }
 });
 if (!DEMO) {
   setInterval(() => { if (!document.hidden) loadDeskLab(); }, 5000);
+  setInterval(loadDeskRes, 60000);      // a new saved run shows within a minute
+  setInterval(loadDeskGroups, 30000);   // a group changed from another window shows within half a minute
+  setInterval(loadDeskGroupRes, 60000); // (asked only while a group's page is open)
   document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskLab(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskRes(); });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) loadDeskGroups(); });
 }
 </script>
 <script src="/static/hb-glass.js?v=2"></script>

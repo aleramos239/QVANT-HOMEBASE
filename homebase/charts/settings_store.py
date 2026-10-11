@@ -19,6 +19,7 @@ from pathlib import Path
 from . import MD_ENV
 
 MD_CHOICES = ("live", "demo")
+CLOCK_CHOICES = ("12h", "24h")      # how every page prints a time of day; the first is the default
 
 
 class SettingsStore:
@@ -74,3 +75,16 @@ class SettingsStore:
         d["md"] = md
         self._write(d)
         return self.get()
+
+    def clock(self) -> str:
+        """"12h" | "24h": the one clock format of the Desk, Charts and Lab pages (static/hbclock.js)."""
+        v = self._read().get("clock")
+        return v if v in CLOCK_CHOICES else CLOCK_CHOICES[0]
+
+    def set_clock(self, clock: str) -> str:
+        if clock not in CLOCK_CHOICES:
+            raise ValueError(f"clock must be one of {CLOCK_CHOICES}")
+        d = self._read()
+        d["clock"] = clock
+        self._write(d)
+        return clock

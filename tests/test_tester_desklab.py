@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from homebase import draftstore
 from homebase.backtest import sandbox, slots
-from homebase.charts import lab_templates, tester_api
+from homebase.charts import deskresults, lab_templates, tester_api
 from homebase.labrun import door, store
 from tests.test_tester_api import EVIL, app
 
@@ -502,6 +502,12 @@ UNSEEN = {"kind": "custom", "start": "2025-07-01", "end": "2026-10-11", "label":
 HEAD = {"eval_pass_p": 0.41, "bust_p": 0.59, "median_days_to_pass": 14, "funded_payout_p": 0.3, "funded_expected_cheque": 602.3}
 
 
+def lab_results(c):
+    """The promoted strategies' answers: the Desk's own straddles (deskresults.BUILTIN_TWINS) are answered beside them."""
+    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]
+    return {k: v for k, v in got.items() if k not in deskresults.BUILTIN_TWINS}
+
+
 def write_run(tmp_path, rid, name="nq_bars", code=CODE, rng=UNSEEN, inputs=None, qty=2, status="done", net=900.0):
     d = tmp_path / "state" / "tester" / "runs" / rid
     d.mkdir(parents=True)
@@ -529,8 +535,8 @@ def test_results_show_the_saved_unseen_run_of_this_copy_and_the_prop_sim_of_both
     assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
     got = c.get("/api/tester/desklab/results", headers=DESK)
     assert got.headers["access-control-allow-origin"] == DESK["origin"]
-    assert got.json() == {"results": {"nq_bars": {"unseen": None, "unseen_state": "none", "curve": None, "prop": {
-        "build": {"account": "LucidFlex 50K", **HEAD}, "unseen": None}}}}
+    assert lab_results(c) == {"nq_bars": {"unseen": None, "unseen_state": "none", "curve": None, "prop": {
+        "build": {"account": "LucidFlex 50K", **HEAD}, "unseen": None}}}
     # runs that are NOT this copy on the unseen days: other code, other settings, another size, all the data, not finished
     write_run(tmp_path, "20261011-120001-draft_nq_bars-aa01", code=CODE + "# other\n")
     write_run(tmp_path, "20261011-120002-draft_nq_bars-aa02", inputs={"lookback": 9, "sl_pts": 20.0, "tp_pts": 40.0})
@@ -553,13 +559,13 @@ def test_results_show_the_saved_unseen_run_of_this_copy_and_the_prop_sim_of_both
 
 def test_results_answer_the_desk_page_only_and_a_lost_run_has_no_prop_sim(c, tmp_path, drafts_dir, make_run):
     assert c.get("/api/tester/desklab/results", headers=EVIL).status_code == 403
-    assert c.get("/api/tester/desklab/results", headers=DESK).json() == {"results": {}}
+    assert lab_results(c) == {}
     draft(drafts_dir)
     build = make_run()
     assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
     (tmp_path / "state" / "tester" / "runs" / build / "status.json").write_text(json.dumps({"id": build, "status": "error"}))
-    assert c.get("/api/tester/desklab/results", headers=DESK).json() == {"results": {"nq_bars": {
-        "unseen": None, "unseen_state": "none", "curve": None, "prop": {"build": None, "unseen": None}}}}
+    assert lab_results(c) == {"nq_bars": {
+        "unseen": None, "unseen_state": "none", "curve": None, "prop": {"build": None, "unseen": None}}}
 
 
 def test_a_setting_the_record_leaves_out_is_the_codes_default_when_a_run_is_matched(tmp_path, monkeypatch):
@@ -665,3 +671,61 @@ def test_the_desks_show_on_chart_carries_a_run_the_lab_page_takes_once_with_the_
     for bad in ({"name": "nq_bars", "run": "../etc"}, {"name": "nq_bars", "run": 7}, {"name": "nq_bars", "run": "a", "x": 1}):
         assert c.post("/api/tester/desklab/open", json=bad, headers=DESK).status_code == 400
     assert c.get("/api/tester/lab-open").json() == {"name": None}                        # a refusal asks nothing
+
+
+# ---- the Desk's own straddles (nq930, gc_nfp): their tester twin's saved runs, read by hand, shown under the Desk id ----
+BUILD = {"kind": "research", "start": "2021-09-22", "end": "2025-06-30", "label": "Build", "holdout": False}
+
+
+def write_twin_run(tmp_path, rid, rec, rng=UNSEEN, inputs=None, qty=None, status="done", net=900.0):
+    d = tmp_path / "state" / "tester" / "runs" / rid
+    d.mkdir(parents=True)
+    inputs = rec["params"] if inputs is None else inputs
+    qty = rec["qty"] if qty is None else qty
+    (d / "request.json").write_text(json.dumps({"strategy": rec["id"], "id": rid, "inputs": inputs, "qty": qty, "range": rng}))
+    (d / "status.json").write_text(json.dumps({"id": rid, "status": status}))
+    (d / "trades.json").write_text("[]")
+    if status == "done":
+        (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs, "qty": qty, "range": rng,
+                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net}}}}))
+    return rid
+
+
+def test_the_desks_straddles_are_answered_from_their_twins_saved_runs_and_nothing_is_started(c, tmp_path, monkeypatch):
+    monkeypatch.setattr(tester_api, "_run_propsim",
+                        lambda trades, req: ({"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False))
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)        # even with the automatic read on, a built-in's is never started
+    started = []
+    monkeypatch.setattr(tester_api.RunManager, "submit", lambda self, req: started.append(req), raising=False)
+    assert deskresults.BUILTIN_TWINS == {"nq930": "nq930", "gc_nfp": "gc_nfpcpi"}
+    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]
+    for desk_id, twin in deskresults.BUILTIN_TWINS.items():
+        assert got[desk_id] == {"unseen": None, "unseen_state": "none", "manual": True, "twin": twin, "curve": None,
+                                "prop": {"build": None, "unseen": None}}
+    assert started == []
+    # a saved run of the twin at the Desk's size and setting is its unseen result, and its build run feeds the prop sim's Build column
+    rec = deskresults.builtin_rec("nq930")
+    assert rec["id"] == "nq930" and rec["qty"] >= 1 and set(rec["params"]) >= {"offset_pts", "sl_pts", "tp_pts"}
+    unseen = write_twin_run(tmp_path, "20261011-190000-nq930-aa01", rec)
+    build = write_twin_run(tmp_path, "20261011-190001-nq930-aa02", rec, rng=BUILD)
+    write_twin_run(tmp_path, "20261011-190002-nq930-aa03", rec, qty=rec["qty"] + 1)          # another size: not the Desk's
+    write_twin_run(tmp_path, "20261011-190003-nq930-aa04", rec, inputs={**rec["params"], "sl_pts": rec["params"]["sl_pts"] + 1})
+    res = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq930"]
+    assert res["unseen"]["id"] == unseen and res["unseen"]["net"] == 900.0 and res["unseen_state"] == "done"
+    assert res["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
+    assert deskresults.build_run_id(tmp_path / "state" / "tester" / "runs", rec) == build
+    assert started == []
+
+
+def test_open_in_the_lab_takes_a_built_in_twin_by_its_flag_and_only_the_known_ones(c, drafts_dir):
+    ok = c.post("/api/tester/desklab/open", json={"name": "gc_nfpcpi", "builtin": True}, headers=DESK)
+    assert ok.status_code == 200 and ok.json() == {"ok": True, "name": "gc_nfpcpi"}
+    assert c.get("/api/tester/lab-open").json() == {"name": "gc_nfpcpi", "builtin": True}
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # taken once
+    withrun = c.post("/api/tester/desklab/open", json={"name": "nq930", "builtin": True, "run": "20261011-nq930-1"}, headers=DESK)
+    assert withrun.status_code == 200
+    assert c.get("/api/tester/lab-open").json() == {"name": "nq930", "run": "20261011-nq930-1", "builtin": True}
+    # a built-in that is not a Desk straddle's twin, and a flag that is not true, ask nothing
+    assert c.post("/api/tester/desklab/open", json={"name": "gc_nfp", "builtin": True}, headers=DESK).status_code == 404
+    assert c.post("/api/tester/desklab/open", json={"name": "nq930", "builtin": False}, headers=DESK).status_code == 400
+    assert c.get("/api/tester/lab-open").json() == {"name": None}

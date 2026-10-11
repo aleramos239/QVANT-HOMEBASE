@@ -181,11 +181,11 @@ function build() {
   ui.unitsLab = mk('span', 'op-lab', 'Units');
   urow.append(ui.unitsLab, ui.qty, ui.risk);
   const rrow = mk('div', 'op-swrow');
-  ui.riskSw = sw('USD risk');
+  ui.riskSw = sw('Size by dollar risk');
   ui.riskSw.onclick = () => setRisk(!st.riskOn);
-  rrow.append(mk('span', 'op-sub', 'USD risk'), ui.riskSw);
+  rrow.append(mk('span', 'op-sub', 'Size by dollar risk'), ui.riskSw);
   ui.qtyNote = mk('div', 'op-note');
-  units.append(urow, rrow, ui.qtyNote);
+  units.append(urow, ui.qtyNote, rrow);      // the note is the number's own unit ("contracts", "= 3 contracts"): right under it
 
   // Exits: TP and SL, each a switch, a value and its unit, with the other two alongside
   const exits = coll('Exits', 'exitsOpen');

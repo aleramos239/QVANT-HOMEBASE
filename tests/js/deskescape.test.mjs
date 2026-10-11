@@ -85,7 +85,7 @@ test('the Not-ready strip, the + Assign menu, the accounts dialog and the connec
 
 test('the Accounts dialog builds each row with replacer functions: $-patterns in a broker id stay literal', () => {
   const ID = "ev\"il'<b>$`$&$$\\u0022</b>";
-  const block = between('function openAccts() {', 'function closeAccts()');
+  const block = between('function openAccts(focus) {', 'function closeAccts()');
   assert.match(block, /\.replace\('<span class="spacer"><\/span>',\s*\(\) => `/);
   assert.match(block, /\.replace\("<\/div>", \(\) => `/);
   const els = { acctCount: { textContent: '' }, acctList2: { innerHTML: '' } };

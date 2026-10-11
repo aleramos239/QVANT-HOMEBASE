@@ -124,7 +124,8 @@ function dur(s) {
 function fmtEt(ms) {
   if (!Number.isFinite(ms)) return '—';
   const p = Object.fromEntries(ET.formatToParts(new Date(ms)).map((x) => [x.type, x.value]));
-  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}:${p.second}`;
+  const hms = `${p.hour}:${p.minute}:${p.second}`;
+  return `${p.year}-${p.month}-${p.day} ${typeof HBClock !== 'undefined' ? HBClock.text(hms) : hms}`;   // the app's one clock format
 }
 const int = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US'));
 const signed = (v) => Tr.usd(v) ?? '—';

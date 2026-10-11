@@ -1,0 +1,61 @@
+{
+ "name": "tm_break_only",
+ "source": {
+  "video": "O4ASr0fh7O8",
+  "title": "This Guy QUIT His Job for PROP TRADING. So I STOLE His Strategy",
+  "channel": "IQCapital",
+  "url": "https://www.youtube.com/watch?v=O4ASr0fh7O8"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "long",
+ "entry": {
+  "family": "hurst_ac_break",
+  "settings": {
+   "h_min": 50.0,
+   "ac_max": -0.1,
+   "h_win": 20,
+   "h_k": 5,
+   "ac_win": 20,
+   "ac_lag": 5,
+   "brk_n": 5,
+   "atr_n": 20,
+   "stop_atr": 4.0,
+   "use_h": "off",
+   "use_ac": "off",
+   "trail": "on"
+  },
+  "words": "CONTROL of tm_hurst_ac_break: the same 5-bar break, the same exits and trailing stop, with BOTH filters (Hurst, autocorrelation) switched off: what the two filters add."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.25,
+  "max_trades": 20
+ },
+ "taught": [
+  "CONTROL, not taught: the video's rule without its two filters"
+ ],
+ "not_run": [
+  "The Hurst proxy formula is not given (it is in the seller's indicator); this sheet's is the uncentered variance ratio of 5-bar to 1-bar changes over 20 bars, x 100 (50 = random walk, a straight line = 100). It does not know the direction of the trend.",
+  "The autocorrelation is read on 1-bar close changes at lag 5 over 20 bars (the video glosses over the lag and the series).",
+  "The evening session 18:00-23:59 ET is NOT run: the engine refuses one window across midnight. The video's chart is 24 hours; this runs 00:00-15:58 ET only, one position at a time, flat 15:58 (house rule).",
+  "The indicators restart at 00:00 ET, so the first signal of a day is at 06:30 ET (26 fifteen-minute bars).",
+  "Position size by ATR (the firm's per-trade loss cap) is not run: 1 contract a cell; sizing is read afterwards.",
+  "His real exits and his scale-ins on pullbacks are discretionary and are not run.",
+  "The short side is not shown in the video and is not run.",
+  "The ATR is the simple mean of the last 20 true ranges (TradingView's ta.atr is Wilder's RMA: a small difference), frozen at the signal bar.",
+  "The control's random entries use the same 4 ATR stop and 5 ATR target as plain brackets WITHOUT the trailing stop (the lane's random entries have no trailing); the filter-off sheet (tm_break_only) is the like-for-like control.",
+  "No cap on trades a day is taught; max_trades 20 is the engine's bound for the one instance."
+ ],
+ "control": "random"
+}

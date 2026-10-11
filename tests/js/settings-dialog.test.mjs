@@ -174,7 +174,7 @@ test('Ok after a template-changed interval marks the layout Unsaved (the changed
   await applySavedTemplate(box, host, 'Wide 5m');
   assert.equal(cell.cfg.spec, 'time:300');
 
-  const ok = findByOwnText(box, 'button', 'Ok');
+  const ok = findByOwnText(box, 'button', 'OK');
   ok.onclick();
   assert.deepEqual(commits, [true], 'a spec-only change must still report changed=true to host.commit');
 });
@@ -185,7 +185,7 @@ test('Ok with no changes at all (settings, indicators or spec) reports changed=f
   const box = new FakeEl('div');
   SD.mount(box, host);
 
-  const ok = findByOwnText(box, 'button', 'Ok');
+  const ok = findByOwnText(box, 'button', 'OK');
   ok.onclick();
   assert.deepEqual(commits, [false]);
 });

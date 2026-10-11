@@ -1,0 +1,46 @@
+{
+ "name": "bruni_va_break",
+ "source": {
+  "video": "nlLGlVJGrtw",
+  "title": "3x Trading WORLD CHAMPION Reveals the \"Low-Effort\" Strategy That Won the Robbins Cup (Live On Chart)",
+  "channel": "Gianluca Bruni (IQCapital)",
+  "url": "https://youtu.be/nlLGlVJGrtw"
+ },
+ "market": "NQ",
+ "bars": ["5", "15"],
+ "sessions": ["nyam", "mid", "pm"],
+ "dir": "long",
+ "entry": {
+  "family": "va_break",
+  "settings": {"buf_pts": 6.0, "vol": "either", "trend": "on"},
+  "words": "On a day whose developing value area sits higher than the previous session's, wait for price to come back into the previous session's value area. Enter long at the close of the bar that closes at least 6 NQ points above the previous session's value-area high, takes out the previous bar's high, and has volume under its 20-period average or under the bar before it. Stop at that candle's low, target 1 to 2, cut to the day's structure high. Further engulfing low-volume bars enter again until the structure high is reached. A bar under the structure low kills the setup."
+ },
+ "exits": {"stop": "struct", "target_r": 2, "max_trades": 10},
+ "taught": [
+  "[60:00-61:14] trending market read from a session volume profile: the developing value area is higher than the previous session's -> long only",
+  "[61:14-62:46] wait for price to come back into the previous session's value area (a touch is enough); the market structure low must hold",
+  "[62:46-64:17, 77:23-78:54] the trigger: a candle that closes above the previous session's value-area high by 6 points on NQ (0.6 on forex) -- the break",
+  "[66:36-68:06, 86:40-87:25] it must engulf: take out the previous candle's highest wick, size does not matter; volume must be below the 20 average or falling (\"low effort, big result\"); either condition is enough",
+  "[66:36, 73:08] entry at the close of that candle, stop below the engulfing candle's low, target 1 to 2 (1:1 to 1:5 tried, 1:2 best)",
+  "[69:40-71:11] more trades on the same engulf + low-effort conditions until price reaches the market structure high; no continuation if the value-area-high break trade was not taken; a reduced RR is fine near the high",
+  "[71:11-71:58, 73:31-75:51] market structure low = the closest VALID candle (body larger than its longest wick) before the breakout; price under it invalidates the whole thing",
+  "[69:40-70:26] 15-minute bars for the structure, the entry and the stop; \"you don't switch time frame\" (the lane also runs 5 minutes, which is NOT what he teaches)",
+  "[76:37-77:23] no trade when news (NFP, CPI) is at the trigger: the strategy tested worse on news days",
+  "[73:08] the 1:2, the 6 points, the ATR percentile and the 50 % cut-offs were tested on his own data (his words): the lane runs them as he gives them, untuned"
+ ],
+ "not_run": [
+  "NEWS DAYS: the video skips a trigger with NFP / CPI news; the lane does not skip any day (the blocks' `news no` filter is a card filter, not a family setting).",
+  "THE 0-5 SETUP SCORE AND THE SIZE (half Kelly at 5, a quarter at 4 ...): one contract, one size; the video says half of its profit comes from that sizing.",
+  "THE TRADE-SEQUENCE RULE (the best trade is the win after a loss streak; he skips the trade right after a loss): not built; every qualifying bar trades.",
+  "REGIME RULES (ATR percentile 14 / 200, regime age): not built; he names the high-volatility regime and fresh regimes as his best but gives no gate.",
+  "VALUE AREA: the 09:30-16:00 ET volume-by-price of the prior date (the library's own value area, as va_reclaim); his chart's session profile (Globex or RTH) is not said.",
+  "TREND DAY: 'the developing value area is higher' is not defined in the video; the lane takes the middle of today's developing 70 % value area (1-minute closes weighted by their volume) above the middle of yesterday's.",
+  "STRUCTURE HIGH / LOW: the RTH day high before the trigger bar; the low of the nearest valid down candle at or before that high's bar. The video draws them by eye.",
+  "THE TARGET AT THE STRUCTURE HIGH: the 2R target is cut to the structure high; the lane's random control does not know that cut or the structure kill (read 'beats random' with that in mind).",
+  "THE CAP: none is taught; the lane's day cap is 10 and the structure high ends the leg.",
+  "15 MINUTES IS HIS BAR: the 5-minute run is a different idea (his words), shown beside it, never instead of it. The 6-point buffer is not scaled to the bar size.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay); his report uses 'an approximation'.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only."
+ ],
+ "control": "random"
+}

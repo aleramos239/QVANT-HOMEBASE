@@ -1,0 +1,51 @@
+{
+ "source": {
+  "video": "A0G14JYYVTk",
+  "title": "A Hedge Fund Manager Just CRACKED Prop Trading (Live On Chart)",
+  "channel": "Matteo Conti (IQCapital)",
+  "url": "https://youtu.be/A0G14JYYVTk"
+ },
+ "market": "NQ",
+ "bars": [
+  "30"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "long",
+ "exits": {
+  "stop_pts": 75,
+  "target_pts": 40,
+  "exit_bars": 0,
+  "max_trades": 3
+ },
+ "taught": [
+  "[about 6:00-12:00] NQ, 30-minute bars, long only, one contract",
+  "[12:31-13:02] A = the average of the ATR for the past 15 sessions ('like a moving average of ATR'); [54:01] 'not an ATR with a look-back of 15, traditional ATR'",
+  "[13:02-14:08] noise up = the opening session price (midnight Central = 01:00 New York) + 30 % of A; [17:46-18:18] marked at midnight and left for the day",
+  "[14:39-15:41] buy when the price closes above the noise up AND is above the VWAP of that session; [54:17] the VWAP is 'calculated from midnight as well'",
+  "[16:12] positions may open only between 10:00 and 14:30 Central (11:00-15:30 New York)",
+  "[17:15] the trigger is the candle that closes above the noise up; the entry is the open of the following bar",
+  "[16:42, 18:48-19:53] up to three trades a session: after a target or a stop, if the price is still above the noise up and the VWAP, another trade opens; 'maximum three times a day'",
+  "[18:48-19:22] take profit $800, stop loss $1,500 (one NQ: 40 and 75 points), fixed; else out at 14:30 Central (15:30 New York)",
+  "[13:02, 19:53] the 30 %, the cap of three and the dollar exits were optimised in sample (his words): the lane runs them as he gives them, untuned"
+ ],
+ "not_run": [
+  "First bar that may trade: the 30-minute bar that CLOSES at 11:00 New York (a position may open from 10:00 Central); the bar that closes at 11:30 is the other reading. Last: the bar that closes at 15:00 (no entry in the last 5 minutes before 15:30: the Template's rule; a position opened at 15:30 would be closed at once).",
+  "A: the engine's daily bars are the Globex day; his sessions run 00:00-16:00 Central. The ATR period inside the 15-session average is not said (14 is the default).",
+  "VWAP: volume-weighted (high + low + close) / 3 of the 1-minute bars from 01:00 New York; the video does not say which price it weights.",
+  "The stop and the target are measured from the signal close and re-priced to the fill (the same points from the fill).",
+  "The family's one pass is the engine's nyam pass set to 11:00-15:30 and flattened at 15:30 by the family; the lane's generic lines 'nyam 09:30-11:00' and 'flat 15:58' do not describe it.",
+  "Costs and the order of a stop and a target inside one bar: the engine's own (1 tick of slippage, $4 a round turn, tick replay); his report shows no costs.",
+  "THE RANDOM CONTROL IS WEAKER THAN THE RULE: the lane's random entries run in the engine's own nyam pass (09:30-11:00, flat 15:58) at the same stop and target and do not know the family's 11:00-15:30 window or its cap of three a day; read the 'beats random' lines with that in mind."
+ ],
+ "control": "random",
+ "name": "conti_vault_break",
+ "entry": {
+  "family": "vault_break",
+  "settings": {
+   "k": 0.3
+  },
+  "words": "The 01:00 New York open + 30 % of A is the noise line, fixed for the day. A 30-minute bar that closes above the noise line and above the VWAP from 01:00, between 11:00 and 15:30, buys at the next bar's open. Target $800, stop $1,500, out at 15:30. Up to 3 trades a day: after an exit the next close that still qualifies buys again."
+ }
+}

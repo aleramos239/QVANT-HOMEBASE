@@ -1,0 +1,55 @@
+{
+ "source": {
+  "video": "A0G14JYYVTk",
+  "title": "A Hedge Fund Manager Just CRACKED Prop Trading (Live On Chart)",
+  "channel": "Matteo Conti (IQCapital)",
+  "url": "https://youtu.be/A0G14JYYVTk"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "exits": {
+  "stop": "struct",
+  "target_r": 3.0,
+  "max_trades": 1
+ },
+ "taught": [
+  "[36:01] NQ, 15-minute bars, long and short, one contract",
+  "[37:00-37:31; chart 1:04:32] the overnight range runs from midnight Central (01:00 New York) to the 08:30 Central open (09:30 New York); the whiteboard says 11 pm Central",
+  "[38:01-39:40] the open in the top third of the overnight range = long only today; the bottom third = short only; the middle third = no trade",
+  "[37:31] the opening range is the first 15-minute bar after the open (09:30-09:45 New York)",
+  "[40:01-41:40] a 15-minute bar closes beyond the opening range on the day's side with ADX above 20 (rising or falling does not matter): enter at the next bar's open",
+  "[40:34, 46:30] a dip into the middle third, or a break of the other side first, does not cancel the day",
+  "[42:31] one trade a day",
+  "[43:30-44:40] stop = 30 % of the 15-session moving average of the daily ATR ('not an ATR with a look-back of 15, traditional ATR'); target = 3 x the stop",
+  "[46:00, 47:30] out at 14:30 Central (15:30 New York) if neither is hit; most trades end on the clock"
+ ],
+ "not_run": [
+  "ADX: the engine reads Wilder's ADX(14) over the 15-minute bars since 00:00 ET of the day (the Template resets its bars daily); the video's is a continuous series, and its period is not said (14 is the default).",
+  "A: the engine's daily bars are the Globex day; his sessions run 00:00-16:00 Central. The ATR period inside the 15-session average is not said (14 is the default).",
+  "The stop is measured from the signal close and re-priced to the fill, so it is the same dollars from the fill; the video does not say from which price.",
+  "The family flattens a trade at 15:30 itself (fam_time); the lane's generic lines 'nyam 09:30-11:00', 'time exit none' and 'flat 15:58' do not describe this family: its one pass is 09:30-15:30 and its time exit is 15:30.",
+  "The family's one pass is the engine's nyam pass stretched to 09:30-15:30; no entry from 15:25 (the Template's last-5-minutes rule), so the last signal bar closes at 15:15.",
+  "Earliest entry: the whiteboard has none, at the chart he says 'after 9:30' Central (10:30 New York). Two sheets run each reading; neither is picked.",
+  "A later close beyond the range with ADX above 20 is traded after an earlier one with ADX at or under 20 (the video does not say); a middle-third open or an open exactly on a third's edge is no trade.",
+  "Costs and the order of a stop and a target inside one bar: the engine's own (1 tick of slippage, $4 a round turn, tick replay); his report shows no costs.",
+  "THE RANDOM CONTROL IS WEAKER THAN THE RULE: the lane's random entries run in the engine's own nyam pass (09:30-11:00, flat 15:58, the median stop of the taught trades) and do not know the family's 09:30-15:30 window or its 15:30 exit; read the 'beats random' line with that in mind."
+ ],
+ "control": "random",
+ "name": "conti_onr_orb_e1000",
+ "entry": {
+  "family": "onr_orb",
+  "settings": {
+   "k": 0.3,
+   "adx_min": 20.0,
+   "ov_from": "01:00",
+   "earliest": "10:00"
+  },
+  "words": "The open at 09:30 in the top (bottom) third of the 01:00-09:30 overnight range makes a long-only (short-only) day, the middle third no trade; a 15-minute close beyond the 09:30-09:45 range on that side with ADX above 20 enters at the next bar's open; one trade; stop 30 % of A, target 3 x the stop, out 15:30."
+ }
+}

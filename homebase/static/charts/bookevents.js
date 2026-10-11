@@ -16,7 +16,7 @@ const need = (name, file) => (typeof window !== 'undefined' && window[name]) || 
 const Store = need('HBBookStore', './bookstore.js');
 
 const PAINT_MS = 250;
-const ASK_MAX_MS = 48 * 3600 * 1000;   // the oldest history one ask walks back from the span's end
+const ASK_MAX_MS = 48 * 3600 * 1000;   // the oldest history one ask walks back from the span's end, counted in OPEN market time
 const ASK_EVERY = 8;        // paint ticks between two asks of the store (2 s): a refused chunk is retried when its back-off ends
 
 /* ---------------------------------------------------------------- pure */
@@ -68,17 +68,45 @@ function clipAt(eps, now) {
   return out;
 }
 
+/* Is the CME equity-futures market open at this instant? Closed: Friday 17:00 ET to Sunday 18:00 ET, and the daily
+   17:00-18:00 ET halt. New York wall time through Intl, so daylight saving moves with it. */
+const ET = typeof Intl !== 'undefined'
+  ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', weekday: 'short', hour: '2-digit', hourCycle: 'h23' })
+  : null;
+function marketOpen(ms) {
+  if (!ET) return true;
+  let wd = '', h = 0;
+  for (const p of ET.formatToParts(new Date(ms))) { if (p.type === 'weekday') wd = p.value; else if (p.type === 'hour') h = +p.value; }
+  if (wd === 'Sat') return false;
+  if (wd === 'Fri') return h < 17;
+  if (wd === 'Sun') return h >= 18;
+  return h !== 17;
+}
+
+/* The instant `budget` ms of OPEN market time before `end` (a weekend does not use the budget up: on a Sunday
+   evening "two days" still reaches back through Friday and Thursday). Walks in 15 min steps, at most 8 days. */
+function openStart(end, budget) {
+  const STEP = 15 * 60_000;
+  let left = budget, t = end;
+  for (let i = 0; i < 8 * 96 && left > 0; i++) {
+    const a = t - STEP;
+    if (marketOpen(a)) left -= STEP;
+    t = a;
+  }
+  return t;
+}
+
 /* The span to ask the store for: the visible window up to `limit` (now live; the replay cursor in a replay, null
-   when that is unknown), and never more than the newest ASK_MAX_MS of it: a zoomed-out view would otherwise walk
-   every 5 h chunk of weeks, one request each, for rows the store would evict anyway. Older chunks stay a gap.
-   null when there is nothing to ask. */
+   when that is unknown), and never more than the newest ASK_MAX_MS of OPEN market time of it: a zoomed-out view
+   would otherwise walk every 5 h chunk of weeks, one request each, for rows the store would evict anyway. Older
+   chunks stay a gap. null when there is nothing to ask. */
 function askSpan(from, to, limit) {
   if (!Number.isFinite(from) || !Number.isFinite(to) || !Number.isFinite(limit)) return null;
-  const end = Math.min(to, limit), start = Math.max(from, end - ASK_MAX_MS);
+  const end = Math.min(to, limit), start = Math.max(from, openStart(end, ASK_MAX_MS));
   return end > start ? [start, end] : null;
 }
 
-const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, clipAt, askSpan };
+const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, clipAt, askSpan, marketOpen, openStart };
 
 /* ---------------------------------------------------------------- browser */
 

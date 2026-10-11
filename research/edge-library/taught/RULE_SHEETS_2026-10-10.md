@@ -134,6 +134,50 @@ Two sheets, because the targets differ: long only, stop 80 / target 40 (target =
 
 ---
 
+## 7. Matteo Conti, "Overnight-bias opening range breakout" (video `A0G14JYYVTk`, strategy 3, IQCapital, 82 min)
+
+Added 2026-10-10 (evening). NOT CHECKED BY THE OWNER YET. Nothing has run. His clock is Central; every time below is New York (Central + 1 hour).
+
+**Taught** (notes `videos/A0G14JYYVTk.md` section 3; whiteboard [36:00-48:00], chart [1:03:30-1:06:30])
+1. NQ, 15-minute bars, long and short, 1 contract. [36:01]
+2. Overnight range = the high and low from 00:00 to 09:30 (he says 11 pm to 08:30 Central). [37:00]
+3. At the 09:30 open: the open price in the TOP third of that range = long only today; the BOTTOM third = short only; the MIDDLE third = no trade. On the line = no trade. [38:01-39:40, 42:01]
+4. Opening range = the first 15-minute bar, 09:30-09:45. [37:31]
+5. Entry: a 15-minute bar CLOSES beyond the opening range on the day's side (above the high on a long day, below the low on a short day) with ADX above 20 on that bar; rising or falling does not matter. Market order at the next bar's open. [40:01-41:40]
+6. A dip into the middle third after the open, or a break of the wrong side first, does NOT cancel the day. [40:34, 46:30]
+7. One trade a day. [42:31]
+8. Stop = 30 % of the 15-session moving average of the daily ATR ("the same number as strategy 1"). Target = 3 x the stop. [43:30-44:40]
+9. Neither hit: out at 15:30 (14:30 Central). No overnight. He says most trades end on the clock. [46:00, 47:30]
+10. His screen [1:13:35, 1:15:55]: 434 trades from 2022-01-24 to 2026-09-24, 53.7 % winners, average trade $456, net $197,870, profit factor 1.62, worst drawdown $19,510; 53 trades make 45 % of the net.
+
+**Would run**: NO ENGINE RULE YET. One new entry rule has to be built (working name `onr_orb`); `orb_confirm` is the nearest (same range, same close-beyond entry) but has no overnight third, no ADX gate, one side a card and one trade a PASS. As built it would be:
+- Overnight range = the high and low of the 1-minute bars 00:00-09:30. The open = the open of the first 1-minute bar from 09:30. Top third = the open at or above low + 2/3 of the range, strictly inside the range's top; bottom third = the mirror; anything else = no trade.
+- Opening range = high and low of 09:30-09:45. Bars 15 only.
+- Entry = the day's FIRST 15-minute bar that ends after 09:45 and closes strictly beyond the range on the day's side with Wilder ADX(14) of the 15-minute bars above 20. A close beyond with ADX at or under 20 is skipped and the rule keeps waiting. Market at the next bar's open. One trade a day, whichever pass it falls in.
+- Stop = 0.3 x A from the entry, A = the average true range of the 15 daily sessions before the trade date. Target = 3 x the stop.
+- No entry from 15:30; flat at 15:30.
+- One sheet, both sides; the long and the short side are read separately in the result. Controls: random entries at the same stop and target.
+
+**Not the video**
+- The ADX period is not said: 14 is the standard one, my choice.
+- The ATR's own period is not said. He says "a 15-period moving average of ATR, not an ATR with a look-back of 15". I would run the plain average of the last 15 daily true ranges (question 3).
+- At the chart he says the range "starts at midnight Central" (01:00 New York), not 11 pm Central as on the whiteboard (question 1).
+- At the chart he says the entry waits until "after 9" or "after 9:30" Central (10:00 or 10:30 New York). The whiteboard has no such wait (question 2).
+- The stop is measured from the fill (the next bar's open), so the dollar risk is the same every trade of a day; his code may measure it from the signal bar's close.
+- Costs: the engine's own (1 tick of slippage, $4 a round turn, tick replay). His report shows none.
+- His report starts in January 2022 and he says "out of sample from 2023": about a year of his picture is his build data. Ours would be the build days only (2021-09-22 to 2025-06-30).
+- Size check before any run: 0.3 x A is about 90-100 NQ points now (about $1,900 on 1 NQ, $190 on 1 MNQ). The $1,200 daily limit of LucidPro 50K is smaller than one full stop on 1 NQ: the prop odds have to be read on micros.
+
+**Can it run now?** No. After the owner's yes on the four questions: build `onr_orb` (one rule, with tests), then the sheet runs as written.
+
+**Questions for the owner (answer by number; "ok" = my default for all)**
+1. Overnight range starts at: (a) 00:00 New York, the whiteboard or (b) 01:00 New York, midnight Central, what he says at the chart [default since the screen check of 2026-10-10: his chart draws the range lines from the date marker, i.e. chart midnight, and his chart clock is UTC-5 = Central].
+2. Earliest entry: (a) the first bar after the opening range, 09:45 on, the whiteboard [default] or (b) not before 10:00 or (c) not before 10:30.
+3. Stop size A: ANSWERED from the captions [44:30] and [54:01], 2026-10-10: A = the simple average, over the last 15 sessions, of the usual daily ATR ("a 15 daily moving average of ATR", "not an ATR with a look-back of 15, traditional ATR"); the ATR period itself (14 is the default) is not said. Not the plain average of 15 daily true ranges, and not the toolkit's single ATR(14).
+4. A break with ADX at or under 20: (a) skip that bar and keep waiting for a later close beyond with ADX above 20 [default] or (b) the day is over.
+
+---
+
 ## What this says about the earlier "already tested" statements
 
 Only sheet 1 (Conti) and sheet 4's first half (Vince's IB first touch, built last night) can be run close to the video today. Sheets 2, 3 and 6 are partly or wholly not expressible, and sheet 5 needs a structure stop the earlier standard table did not give. So the earlier verdicts on these videos are verdicts on rough cousins, not on the strategies as taught.
