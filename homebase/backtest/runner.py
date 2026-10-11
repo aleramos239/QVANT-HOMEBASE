@@ -299,7 +299,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         prop, prop_error = {"skipped": "not run (a walk-forward cell)"}, False
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
-            "strategy": {"id": cls.id, "name": cls.name, "root": cls.root},
+            "strategy": {"id": cls.id, "name": cls.name, "root": cls.root,
+                         **({"exec_root": cls.exec_root} if getattr(cls, "exec_root", "") else {})},
             "inputs": req["inputs"], "strategy_config": req.get("strategy_config", {}),
             "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],

@@ -1027,6 +1027,8 @@ class LabDesk:
         rows = self._rows(name)
         b = fanout.brain(rows, d["entries"])
         last, root = self._last_price(ev), rec.get("root")
+        traded = labcfg.exec_symbol(rec) if root else None   # the market the orders go to (root's micro, or root)
+        own = rec.get("own_size") is True
         clean = all(r.get("clean") for r in rows if not r.get("carried"))
         # no position and nothing working, yet a round of today is not read ended: no account takes a new entry, and
         # the refusal says why in the engine's own words (the door only knows "not flat")
@@ -1036,7 +1038,8 @@ class LabDesk:
                  "now_hhmm": self.engine.now_et().strftime("%H:%M"), "prices_late": bool(ev.prices_late) or last is None}
         lim = {"max_trades_day": limits.max_trades_day, "max_qty": limits.max_qty, "max_risk_usd": limits.max_risk_usd,
                "last_entry_et": limits.last_entry_et, "session_from_et": labcfg.window(rec)[0],
-               "point_value": point_value(root) if root else None, "tick": tick_size(root) if root else None}
+               "point_value": point_value(traded) if traded else None, "tick": tick_size(root) if root else None,
+               "own_size": own}
         entries = [i for i, it in enumerate(ev.intents) if it["op"] == "entry"]
         index = {ev.intents[i]["id"]: i for i in entries}
         per: dict = {i: {} for i in entries}
@@ -1044,7 +1047,8 @@ class LabDesk:
         pair: dict = {}
         for row in booked:
             a, q = row["account"], int(row["qty"])
-            got = door.check_event([dict(it, qty=q) if it["op"] == "entry" else it for it in ev.intents], state, lim)
+            got = door.check_event([dict(it, qty=self._sized(own, it, q)) if it["op"] == "entry" else it
+                                    for it in ev.intents], state, lim)
             for i, it in enumerate(ev.intents):
                 if it["op"] == "oco":
                     oco[i] = got[i]
@@ -1203,8 +1207,9 @@ class LabDesk:
                     unit = [i] + ([pair[i]] if i in pair else [])
                     ids = [ev.intents[j]["id"] for j in unit]
                     no, accounts = why, {}
+                    want = self._own_size(name, ev, unit)
                     if no is None:
-                        accounts, sizes = self._takers(unit, per, booked)
+                        accounts, sizes = self._takers(unit, per, booked, want)
                         if sizes:
                             waited = False
                             if go is None:
@@ -1220,7 +1225,7 @@ class LabDesk:
                                     no = OUT_OF_DATE
                                 else:
                                     per, oco, _ = self._verdicts(name, ev, booked)
-                                    accounts, sizes = self._takers(unit, per, booked)
+                                    accounts, sizes = self._takers(unit, per, booked, want)
                         if sizes and no is None:
                             rows = await self._enter(name, ev, d, unit, ids, sizes, accounts)
                         else:
@@ -1247,12 +1252,26 @@ class LabDesk:
         return {**answer, "brain": self._brain_now(name)}
 
     @staticmethod
-    def _takers(unit: list, per: dict, booked: list) -> tuple:
+    def _sized(own: bool, it: dict, cap: int) -> int:
+        """The size ONE account sends for an entry: the size set on that account, or -- for a strategy that sizes its
+        own orders (`own_size`) -- the order's own size, never above the account's."""
+        return min(cap, int(it["qty"])) if own else cap
+
+    def _own_size(self, name: str, ev, unit: list) -> int | None:
+        """The size an entry of this strategy carries itself (both legs of a pair carry the same: the door's rule),
+        or None when size is set on the Desk."""
+        rec = labcfg.record_of(self.cfg, name) or {}
+        return int(ev.intents[unit[0]]["qty"]) if rec.get("own_size") is True else None
+
+    @staticmethod
+    def _takers(unit: list, per: dict, booked: list, want: int | None = None) -> tuple:
         """({account: the sentence that refuses this entry there | None}, {account: size} of the ones that may take
         it). A lone leg of a pair never goes out: an account takes both legs or neither, and says the first refused
-        leg's sentence."""
+        leg's sentence. `want`: the entry's own size (a strategy that sizes its orders) -- an account sends that,
+        never more than the size set on it."""
         accounts = {r["account"]: next((per[j][r["account"]] for j in unit if per[j][r["account"]]), None) for r in booked}
-        return accounts, {r["account"]: int(r["qty"]) for r in booked if accounts[r["account"]] is None}
+        return accounts, {r["account"]: int(r["qty"]) if want is None else min(int(r["qty"]), want)
+                          for r in booked if accounts[r["account"]] is None}
 
     def _no_entry(self, name: str, ev, d, ids: list, why: str | None, accounts: dict) -> list:
         """An entry (or a pair) the desk itself refused: it never reached the engine. `why`: one sentence for every

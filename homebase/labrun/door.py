@@ -13,7 +13,7 @@ host passes in the state and the limits and shows the sentence it gets back.
 
     state  = {"flat", "working_entries", "entries_today", "last_price", "now_hhmm", "prices_late"}
     limits = {"max_trades_day", "max_qty", "max_risk_usd" (0 = not set), "last_entry_et", "session_from_et",
-              "point_value", "tick"}
+              "point_value", "tick", "own_size" (True: the strategy may size its own orders; absent = False)}
 
 Stdlib only; imports nothing from homebase.
 """
@@ -103,7 +103,7 @@ def _check_entry(intent: dict, state: dict, limits: dict) -> str | None:
     px = _entry_price(intent, state)
     if _wrong_side(intent, px):
         return WRONG_SIDE
-    if intent.get("own_qty"):
+    if intent.get("own_qty") and limits.get("own_size") is not True:
         return OWN_SIZE
     if not state.get("flat") or state.get("working_entries", 0) > 0:
         return ONE_AT_A_TIME
@@ -232,6 +232,11 @@ def read_source(text: str) -> list[str]:
                      else f"{no_stop} orders can go out with no stop.")
     if limit:
         notes.append("It uses limit entries: not built yet.")
-    if own_size:
+    declared = any(isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant) and n.value.value is True
+                   and any(isinstance(t, ast.Name) and t.id == "own_size" for t in n.targets)
+                   for c in tree.body if isinstance(c, ast.ClassDef) for n in c.body)
+    if own_size and declared:                    # own_size = True: the Desk sends the strategy's size (labdesk)
+        notes.append("It sets its own size: the size set on an account is the most it sends there.")
+    elif own_size:
         notes.append("It sets its own size: size is set on the Desk.")
     return notes

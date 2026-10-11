@@ -31,6 +31,8 @@ import threading
 import time
 from pathlib import Path
 
+from .contracts import exec_ok
+
 ENV = "HOMEBASE_DRAFTS_DIR"
 PREFIX = "draft_"
 MAX_BYTES = 200_000
@@ -335,7 +337,7 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 
 _CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
                 "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
-                "desk_settings": (tuple, list)}
+                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool}
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 
 
@@ -409,6 +411,8 @@ def static_meta(source: str) -> dict:
             meta["inputs"] = [_input(c, i) for i, c in enumerate(body[0].value.elts)]
     if not meta.get("root"):
         raise StaticError('the strategy needs a literal `root = "NQ"` (or another archive root)')
+    if meta.get("exec_root") and not exec_ok(meta["root"], meta["exec_root"]):   # orders to the market's own micro only
+        raise StaticError(f"exec_root: {meta['root']} has no micro named {meta['exec_root']} here")
     if "desk_settings" in meta:      # the inputs the Desk's Setup panel may change once it is promoted (2026-10-10)
         keys = {i["key"] for i in meta["inputs"]}
         names = meta["desk_settings"]

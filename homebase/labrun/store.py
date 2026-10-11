@@ -173,6 +173,10 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
     declared = settings_of(meta)
     if declared:                                  # only a strategy that declares some carries the key: older records are as before
         snap["settings"] = declared
+    if meta.get("exec_root"):                     # prices from `root`, orders to its micro (contracts.exec_ok, checked by static_meta)
+        snap["exec_root"] = meta["exec_root"]
+    if meta.get("own_size") is True:              # every order carries its own size; the account's size is the most it takes
+        snap["own_size"] = True
     return snap
 
 

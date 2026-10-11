@@ -99,6 +99,8 @@ def own_limits(rec: dict) -> dict | None:
     if not isinstance(a, dict):
         return None
     n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
+    if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
+        qty = 10
     if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
         return None
     start, end = w if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW

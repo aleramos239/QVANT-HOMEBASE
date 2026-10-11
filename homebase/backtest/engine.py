@@ -263,11 +263,11 @@ class Ctx:
 
 
 class _Sim:
-    def __init__(self, root, d, ts, px, lo, hi, costs: Costs, placement_ms: int):
+    def __init__(self, root, d, ts, px, lo, hi, costs: Costs, placement_ms: int, exec_root: str = ""):
         self.root, self.date = root, d
         self.ts, self.px, self.lo, self.hi = ts, px, lo, hi
         self.tick = tick_size(root)
-        self.pv = point_value(root) or 0.0
+        self.pv = point_value(exec_root or root) or 0.0     # the dollars are the contract's the ORDERS go to (a micro's)
         self.slip = costs.slippage_ticks * self.tick
         self.comm = costs.commission_rt
         self.place_ns = placement_ms * 1_000_000
@@ -426,7 +426,7 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     t0, t1 = et_ns(d, w0), et_ns(d, w1)
     ts, px = tape.ts, tape.px
     lo, hi = bisect_left(ts, t0), bisect_left(ts, t1)
-    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms)
+    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, getattr(strategy, "exec_root", "") or "")
     ctx = sim._ctx = Ctx(sim, qty, daily or [])
     events: list[tuple] = [(t0, 0, 0, "session", None)]
     if strategy.bar_minutes:

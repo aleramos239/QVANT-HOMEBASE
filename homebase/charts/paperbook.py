@@ -77,7 +77,7 @@ from fastapi.responses import JSONResponse, Response
 
 from .. import netguard
 from ..backtest.engine import Costs, tick_cmp, to_tick
-from ..contracts import point_value, tick_size
+from ..contracts import micro_of, point_value, price_root, tick_size
 from ..symbols import resolve_contract
 from . import _jsonl
 
@@ -105,6 +105,7 @@ QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's
 QUOTE_FILL_MAX_AGE_S = 2.0        # a Market fills at once against a book / quote at most this old...
 QUOTE_FILL_MAX_FUTURE_S = 1.0     # ...at most this far ahead of this book's clock (more: the clock is off -- no fill)
 QUOTE_FILL_MAX_SPREAD_TICKS = 20  # ...and at most this wide; otherwise it waits for the next print, as before
+MICRO_COMMISSION_RT = 1.00        # a micro's round turn (the research cost model's: library.MICRO_RT_USD)
 LIVE_PRINT_MAX_AGE_S = 30.0       # ...and only while that root printed this recently (a halt, a closed market's
                                   # subscribe-time snapshot: no instant fill)
 BOOK_WALK_MAX_TICKS = 40          # a book level further than this from the touch, or priced <= 0, ends the walk
@@ -326,7 +327,7 @@ class Planner:
         return p
 
     def _consume(self, root: str, side: int, ts: int, parts: list) -> None:
-        tick = tick_size(root)
+        tick, root = tick_size(root), price_root(root)   # one snapshot, whoever takes from it (NQ or its micro)
         snap, used = self._taken.get(root, (None, {}))
         if snap != ts:
             used = {}                                # a new snapshot: nothing of it taken yet
@@ -343,9 +344,10 @@ class Planner:
         if not self._matching(root, now_ms, last_ms):
             return None
         tick = tick_size(root)
-        b = self.book_of(root) if self.book_of is not None else None
+        src = price_root(root)                   # a micro has no feed of its own here: its market's book and quote
+        b = self.book_of(src) if self.book_of is not None else None
         b = b if self._usable_book(b, side, now_ms, tick) else None
-        q = self.quote_of(root) if self.quote_of is not None else None
+        q = self.quote_of(src) if self.quote_of is not None else None
         q = q if self._usable_quote(q, now_ms, tick) else None
         if b is not None and (q is None or q["ts_ms"] <= b["ts_ms"]):
             parts = self._walk(b, root, side, qty, tick)
@@ -412,7 +414,7 @@ class Planner:
         ends the walk: what is before it is all there is."""
         levels = b["offers"] if side > 0 else b["bids"]
         touch = levels[0][0]
-        snap, used = self._taken.get(root, (None, {}))
+        snap, used = self._taken.get(price_root(root), (None, {}))
         if snap != b["ts_ms"]:
             used = {}
         parts, left = [], qty
@@ -558,7 +560,8 @@ class PaperBook:
                 gross = was * pv * sum((p_ - avg) * n for p_, n in shut)
             else:
                 gross = was * (price - avg) * pv * closed     # engine.py L372
-            comm = self.costs.commission_rt * closed          # engine.py L373: per round turn, per contract
+            # engine.py L373: per round turn, per contract; a micro pays the micro's fee
+            comm = (self.costs.commission_rt if price_root(o.root) == o.root else MICRO_COMMISSION_RT) * closed
             pnl = round(gross - comm, 2)
             self.realized += gross - comm
             self.commission += comm
@@ -586,9 +589,12 @@ class PaperBook:
     def on_ticks(self, root: str, rows: list) -> None:
         """The live tick rows the service just kept for `root` ({ts_ms, price, ts_ns?}), in tape order."""
         root = root.upper()
+        micro = micro_of(root)                       # MNQ has no feed here: it trades on NQ's prints (2026-10-11)
         for r in rows:
             ts_ns = int(r["ts_ns"]) if r.get("ts_ns") else int(r["ts_ms"]) * 1_000_000
             self.on_print(root, ts_ns, float(r["price"]))
+            if micro is not None:
+                self.on_print(micro, ts_ns, float(r["price"]))
 
     def on_print(self, root: str, ts_ns: int, px: float) -> None:
         s = self.seq[root] = self.seq.get(root, 0) + 1
@@ -752,7 +758,7 @@ class PaperBook:
         return [o for o in self.orders.values() if o.root == root and o.status == "working"]
 
     def _place(self, root, side, typ, qty, price, trigger, sl, tp, tif) -> dict:
-        if self.roots and root not in self.roots:
+        if self.roots and price_root(root) not in self.roots:
             raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
         if not 1 <= qty <= MAX_ORDER_QTY:                                  # trading.py guard 3
             raise Refused(f"quantity must be 1-{MAX_ORDER_QTY}")
@@ -902,7 +908,7 @@ class PaperBook:
         cancels the existing exit and places the pair with its price kept, in one synchronous step (no print can land
         between them here). The Stop is always placed BEFORE the Limit, so if one print could ever trigger both, the
         oldest-first rule fills the stop (pessimistic, like the engine's same-bar rule)."""
-        if self.roots and root not in self.roots:
+        if self.roots and price_root(root) not in self.roots:
             raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
         pos = self.pos.get(root) or {}
         net = pos.get("net", 0)

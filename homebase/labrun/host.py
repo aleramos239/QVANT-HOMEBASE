@@ -48,7 +48,7 @@ from ..backtest.engine import Costs, build_bars
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
 from ..charts.session import session_date, session_range_ms
-from ..contracts import point_value, tick_size
+from ..contracts import exec_ok, point_value, tick_size
 from . import door, match, store
 from .deskclient import DeskClient
 from .deskside import DeskSide, booked, desk_id, limits_of
@@ -170,14 +170,16 @@ def _window(w) -> bool:
     return isinstance(w, list) and len(w) == 2 and _at(w[0], _HHMM) and _at(w[1], _HHMM) and w[0] < w[1]
 
 
-def well_set(meta, root) -> bool:
+def well_set(meta, root, exec_root: str = "") -> bool:
     """The child's answer to `init`, checked like an intent before anything is built from it (a negative bar_minutes
-    kept the tester's build_bars going for ever): the record's own market, windows of two "HH:MM" with start < end,
-    whole numbers in range, at most 500 times, true/false where true/false belongs."""
+    kept the tester's build_bars going for ever): the record's own market (and the one its orders go to, when that is
+    another), windows of two "HH:MM" with start < end, whole numbers in range, at most 500 times, true/false where
+    true/false belongs."""
     if not isinstance(meta, dict):
         return False
     bars, place, times = meta.get("bar_minutes"), meta.get("placement_ms"), meta.get("times")
-    return (isinstance(root, str) and meta.get("root") == root and _window(meta.get("session_window"))
+    return (isinstance(root, str) and meta.get("root") == root and (meta.get("exec_root") or "") == exec_root
+            and _window(meta.get("session_window"))
             and (meta.get("bar_window") is None or _window(meta["bar_window"]))
             and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
             and isinstance(times, list) and len(times) <= 500 and all(_at(t, _HMS) for t in times)
@@ -555,7 +557,11 @@ class StrategyDay:
                                 "params": record.get("params"), "qty": record.get("qty"),
                                 "date": self.date.isoformat()}, start_s, typed=False).get("meta")
         root = record.get("root")
-        if not well_set(meta, root):                 # checked like an intent, before anything is built from it
+        ex = record.get("exec_root")                 # the market the orders go to, when it is root's micro
+        ex = ex if isinstance(ex, str) and exec_ok(root, ex) else ""
+        if record.get("exec_root") and not ex:       # a record that names a market it may not trade: never hosted
+            raise _Stop(BAD_SETTINGS, f"exec_root: {str(record.get('exec_root'))[:40]}")
+        if not well_set(meta, root, ex):             # checked like an intent, before anything is built from it
             raise _Stop(BAD_SETTINGS, f"meta: {str(meta)[:300]}")
         if not meta["trades_on"]:
             self.state = "not_today"
@@ -568,7 +574,8 @@ class StrategyDay:
         self.rebuilt = now_ns is not None and now_ns > self._t0
         self._tick = tick_size(root)
         self._limits = {**SHADOW, "last_entry_et": w1[:5], "session_from_et": w0[:5],
-                        "point_value": point_value(root) or 0.0, "tick": self._tick}
+                        "point_value": point_value(ex or root) or 0.0, "tick": self._tick,
+                        "own_size": record.get("own_size") is True}
         # the schedule, run_session's: by time, then session < bar < time, then index
         self._events = deque(sorted([(self._t0, 0, 0, "session", None)]
                                     + [(et_ns(self.date, t), 2, n, "time", t) for n, t in enumerate(meta["times"])]))
@@ -578,7 +585,7 @@ class StrategyDay:
         self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
         self._root = root
         self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
-        self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"])
+        self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"], ex)
         if self._desk is not None:
             self._desk_start()
         if self._desk is not None and self._flat_et is not None:
@@ -1482,6 +1489,8 @@ def match_due(date: dt.date, end_ns: int) -> int:
 def sized(rec: dict, trades: list) -> dict:
     """The record for a desk day's match: the tester runs at the size the Desk traded (size is set on the Desk, per
     account: a backtest at the record's own size would differ on every trade, by size alone)."""
+    if rec.get("own_size") is True:              # it sizes every trade itself: there is no one Desk size to run at
+        return rec
     qty = trades[0].get("qty") if trades and isinstance(trades[0], dict) else None
     return {**rec, "qty": qty} if _int(qty) and qty > 0 else rec
 

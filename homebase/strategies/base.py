@@ -101,6 +101,13 @@ class Strategy:
     # (a month sliced out of a full-window run == a run over that month) and refuses a strategy without it.
     # Opt-in: each strategy says so in its OWN class once someone has checked it (rereview M3).
     session_independent: bool = False
+    # The market the ORDERS go to, when it is not the one the prices are read from: only that market's own micro
+    # (root "NQ", exec_root "MNQ"; contracts.exec_ok). Bars, levels and fills are still NQ's; the dollars, the
+    # commission and the Desk's order are the micro's. "" = the same market.
+    exec_root: str = ""
+    # True = every order carries its own size (qty=...) and the Desk sends that size, never above the size set on
+    # the account. False (the default): size is set on the Desk, per account.
+    own_size: bool = False
 
     def __init__(self, params: dict | None = None):
         self.p = resolve_inputs(self.inputs(), params)
@@ -114,6 +121,8 @@ class Strategy:
         return {"id": cls.id, "name": cls.name, "root": cls.root,
                 "session_window": list(cls.session_window),
                 "bar_minutes": cls.bar_minutes,
+                **({"exec_root": cls.exec_root} if cls.exec_root else {}),
+                **({"own_size": True} if cls.own_size else {}),
                 "inputs": [i.to_dict() for i in cls.inputs()]}
 
     def times(self) -> list[str]:

@@ -65,6 +65,11 @@ _SPECS: dict[str, tuple[float, float]] = {
 
 _ROOT_RE = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
 
+# A market and its micro: the same index or metal, the same tick, a smaller contract. A Lab strategy may read the
+# prices of the first and send its orders to the second (`exec_root`, 2026-10-11): only these pairs.
+_MICRO_OF: dict[str, str] = {"NQ": "MNQ", "ES": "MES", "YM": "MYM", "RTY": "M2K", "GC": "MGC", "SI": "SIL"}
+_PRICED_ON: dict[str, str] = {micro: root for root, micro in _MICRO_OF.items()}
+
 
 @dataclass(frozen=True)
 class ContractSpec:
@@ -106,6 +111,22 @@ def spec_for(symbol: str) -> ContractSpec:
         return _UNKNOWN
     point_value, tick_size = pv_ts
     return ContractSpec(root=root, point_value=point_value, tick_size=tick_size)
+
+
+def exec_ok(root: str, exec_root: str) -> bool:
+    """May a strategy that reads `root`'s prices send its orders to `exec_root`? Only to that market's own micro."""
+    return isinstance(root, str) and isinstance(exec_root, str) and _MICRO_OF.get(root) == exec_root
+
+
+def micro_of(root: str) -> Optional[str]:
+    """The micro of a market (NQ -> MNQ), or None when it has none here."""
+    return _MICRO_OF.get(root)
+
+
+def price_root(symbol: str) -> str:
+    """The market whose prices a contract is traded on here: a micro's parent (MNQ, MNQZ6 -> NQ), else its own root."""
+    root = root_of(symbol)
+    return _PRICED_ON.get(root, root)
 
 
 def point_value(symbol: str) -> Optional[float]:

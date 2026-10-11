@@ -40,13 +40,13 @@ class Stepper:
 
 
 def mkdesk(tmp_path, accounts=("a1",), qty=1, armed=True, at=(10, 0), enabled=True, limits=LIMITS, extra=None,
-           book=None, start=True, own_store=False, window=("09:25", "15:55")):
+           book=None, start=True, own_store=False, window=("09:25", "15:55"), rec_kw=None):
     """A desk at `at` ET whose Lab strategy is on, has limits and is booked on `accounts` at `qty` (0: not booked).
     `extra`: {name: StrategyCfg} of other strategies, `book`: their rows. own_store: a second desk in one test gets a
     store of its own under its tmp_path (one desk owns a store). -> ld, cfg, eng, ads, clock, tmp."""
     tmp_path.mkdir(parents=True, exist_ok=True)
     root = tmp_path / "store" if own_store else None
-    store.put(rec(enabled=enabled, session_window=list(window)), root)
+    store.put(rec(enabled=enabled, session_window=list(window), **(rec_kw or {})), root)
     clock = Clock()
     clock.set_et(*at)
     cfg = AppCfg(armed=armed,

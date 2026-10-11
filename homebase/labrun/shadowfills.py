@@ -29,8 +29,8 @@ FIELDS = ("status", "fill_px", "fill_sl", "fill_tp", "fill_ms")     # what an up
 class _LiveSim(_Sim):
     """The engine's _Sim over a tape that is still arriving."""
 
-    def __init__(self, root, d, ts, px, costs: Costs, placement_ms: int):
-        super().__init__(root, d, ts, px, 0, 0, costs, placement_ms)
+    def __init__(self, root, d, ts, px, costs: Costs, placement_ms: int, exec_root: str = ""):
+        super().__init__(root, d, ts, px, 0, 0, costs, placement_ms, exec_root)
         self.live_at: dict[Order, int] = {}     # an entry -> when it goes live, until its first eligible print is known
         self.closing: list[tuple[int, str, list]] = []   # (time, reason, positions): flats waiting for their print
 
@@ -99,9 +99,9 @@ class ShadowFills:
     """One strategy's would-be orders and fills for one day. The host calls, in this order for each event:
     advance_to(t), now(t), [the strategy runs], apply(intents); then advance_all() once the due events are done."""
 
-    def __init__(self, root: str, date: dt.date, costs: Costs, placement_ms: int):
+    def __init__(self, root: str, date: dt.date, costs: Costs, placement_ms: int, exec_root: str = ""):
         self.ts, self.px, self.size = array("q"), array("d"), array("q")
-        self._sim = _LiveSim(root, date, self.ts, self.px, costs, placement_ms)
+        self._sim = _LiveSim(root, date, self.ts, self.px, costs, placement_ms, exec_root)
         self._ctx = self._sim._ctx = Ctx(self._sim, 1, [])
         self._orders: dict[int, Order] = {}          # the LiveCtx order id -> the engine's order
         self._told: dict[int, tuple] = {}            # ... -> what the strategy was last told about it

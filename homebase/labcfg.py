@@ -65,6 +65,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from .config import AppCfg, StrategyCfg
+from .contracts import exec_ok
 from .labrun import store
 
 LAB = "lab"                              # StrategyCfg.kind
@@ -191,6 +192,8 @@ def derive_limits(rec: dict) -> LabLimits | None:
     if not isinstance(a, dict):
         return None
     n, qty = a.get("max_trades_day"), rec.get("qty")
+    if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
+        qty = 10
     if not _whole(n, 1, 20) or not _whole(qty, 1, 10 ** 6):
         return None
     start, end = window(rec)
@@ -203,9 +206,22 @@ def derive_limits(rec: dict) -> LabLimits | None:
 
 # ------------------------------------------------------------------ record -> StrategyCfg
 def usable(rec) -> bool:
-    """A record the desk can make a strategy of: it names itself and its market."""
+    """A record the desk can make a strategy of: it names itself and its market -- and, when it names another market
+    for its orders (`exec_root`), that one is its market's own micro. A record whose orders would go to a contract
+    nobody checked is not a strategy here (its sizes are counted in that contract: 10 micros must never go out as 10
+    full contracts)."""
     return (isinstance(rec, dict) and isinstance(rec.get("name"), str) and bool(rec.get("name"))
-            and isinstance(rec.get("root"), str) and bool(rec.get("root")))
+            and isinstance(rec.get("root"), str) and bool(rec.get("root"))
+            and (rec.get("exec_root") is None or exec_ok(rec["root"], rec["exec_root"])))
+
+
+def exec_symbol(rec: dict) -> str:
+    """The market the Desk's ORDERS go to: the record's own, or -- when it names one -- that market's micro
+    (`exec_root`, 2026-10-11: the strategy reads NQ and trades MNQ). Everything the engine does with a symbol (the
+    order, the position read, the fill match, the dollars) follows this one. A name that is not that market's micro
+    never reaches here (usable() drops the record); were it to, the record's own market is used."""
+    ex = rec.get("exec_root")
+    return ex if isinstance(ex, str) and exec_ok(rec["root"], ex) else rec["root"]
 
 
 def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
@@ -220,7 +236,7 @@ def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
     fee = float(fee) if _number(fee, 0, 1e6) else 4.0
     label = rec.get("label")
     return StrategyCfg(
-        symbol=rec["root"], kind=LAB, label=label if isinstance(label, str) and label else rec["name"],
+        symbol=exec_symbol(rec), kind=LAB, label=label if isinstance(label, str) and label else rec["name"],
         enabled=rec.get("enabled") is True, shadow=False, metrics={},
         qty=min(qty, limits.max_qty) if limits else 1,
         offset_pts=0.0, sl_pts=0.0, tp_pts=0.0,

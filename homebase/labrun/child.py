@@ -38,12 +38,14 @@ def _init(msg: dict):
     day = dt.date.fromisoformat(msg["date"])
     strategy = drafthost.register_source(msg["name"], msg["source"])(msg.get("params") or {})
     root = strategy.root
-    ctx = LiveCtx(root=root, date=day, tick=tick_size(root), point_value=point_value(root) or 0.0,
+    ex = getattr(strategy, "exec_root", "") or ""
+    ctx = LiveCtx(root=root, date=day, tick=tick_size(root), point_value=point_value(ex or root) or 0.0,
                   qty=int(msg["qty"]), daily=[])
     bw = strategy.bar_window
     meta = {"root": root, "session_window": list(strategy.session_window), "bar_minutes": strategy.bar_minutes,
             "bar_window": list(bw) if bw else None, "placement_ms": strategy.placement_ms,
             "times": list(strategy.times()), "needs_daily": bool(strategy.needs_daily()),
+            **({"exec_root": ex} if ex else {}),       # only a strategy that trades its market's micro says so
             "trades_on": bool(strategy.trades_on(day))}
     return strategy, ctx, meta
 
