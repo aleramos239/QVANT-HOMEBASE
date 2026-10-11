@@ -108,7 +108,7 @@ def test_a_page_gets_bookflow_right_after_history_and_then_the_live_samples(tmp_
             assert "history" in seen and seen.index("history") < seen.index("bookflow")
             for sec in (0, 1, 2, 3):
                 feed.q.put(lambda s=sec: (clk.__setitem__(0, session_ms(D, 9, 45, s)),
-                                          ws.push(111, ladder(200.0, 25 + s), ladder(200.25, 18, down=False),
+                                          ws.push(111, ladder(200.0, 25, size=5 + s), ladder(200.25, 18, down=False),   # top 10 must differ
                                                   ts=f"2026-09-24T13:45:0{s}.000Z")))
             got = []
             for _ in range(400):
@@ -117,3 +117,47 @@ def test_a_page_gets_bookflow_right_after_history_and_then_the_live_samples(tmp_
                     got = m["samples"]
                     break
             assert got and m["root"] == "NQ" and not m.get("reset")
+
+
+def test_a_book_line_late_by_less_than_the_grace_does_not_make_a_second_sample_for_its_second(tmp_path):
+    """The pump's flush runs behind the clock by CLOSE_GRACE_MS (like the hub's bar close): a line stamped in second S
+    that arrives 1.5 s of wall time after S began must land in S's one sample, not re-open S after it was committed."""
+    import time
+    from tests.test_charts_depth import FakeWS, ladder
+    from tests.test_charts_depth_server import LiveFeed, wait_for
+    ws = FakeWS()
+    feed = LiveFeed(ws)
+    write_archive(tmp_path / "ticks", "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0 + 0.25 * (i % 4) for i in range(60)]))
+    s0 = session_ms(D, 9, 45)
+    clk = [s0]
+
+    def push(at_ms, stamp_ms, size):
+        def go():
+            clk[0] = at_ms
+            iso = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime(stamp_ms // 1000)) + f".{stamp_ms % 1000:03d}Z"
+            ws.push(111, ladder(200.0, 25, size=size), ladder(200.25, 18, down=False), ts=iso)
+        feed.q.put(go)
+
+    app = create_app(roots=["NQ"], base=tmp_path / "ticks", feed_factory=feed, now_ms=lambda: clk[0],
+                     state=tmp_path / "state", depth_roots=("NQ",), depth_base=tmp_path / "depth")
+    with TestClient(app, base_url=BASE_URL) as client:
+        wait_for(lambda: len(ws.sent) > 0)
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as page:
+            page.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60"})
+            while page.receive_json().get("type") != "bookflow":
+                pass
+            push(s0 + 100, s0 + 100, 25)           # opens second S
+            time.sleep(0.6)
+            clk[0] = s0 + 1500                     # S is over; without a grace the pump's flush commits it here
+            time.sleep(0.6)
+            push(s0 + 1750, s0 + 900, 26)          # a line stamped in S arrives 1.75 s on: inside the grace
+            time.sleep(0.6)
+            clk[0] = s0 + 4000                     # now S is well past its grace: the pump commits it, once
+            time.sleep(0.9)
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as page:
+            page.send_json({"op": "sub", "id": "b", "root": "NQ", "spec": "time:60"})
+            m = {}
+            while m.get("type") != "bookflow":
+                m = page.receive_json()
+    ts = [r[0] for r in m["samples"]]
+    assert s0 in ts and len(ts) == len(set(ts)), ts

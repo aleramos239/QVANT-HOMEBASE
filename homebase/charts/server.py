@@ -1132,7 +1132,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 for m in quotes.drain():
                     fan(m)
                 desk_fan.flush()                # only a page that had no room: a desk event goes out as it arrives
-                booklive.flush(clock())         # the seconds a quiet book never closed itself
+                booklive.flush(clock() - CLOSE_GRACE_MS)   # the seconds a quiet book never closed itself; a line
+                                                           # stamped in S can arrive after S+1 s (like a bar's close)
                 if book is not None and book.dirty:
                     paper_push.kick()           # the backstop: a PAPER change nothing announced still reaches every page
                 replays.pump()
