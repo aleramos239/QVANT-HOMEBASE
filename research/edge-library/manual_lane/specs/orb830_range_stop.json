@@ -1,0 +1,31 @@
+{
+ "name": "orb830_range_stop_tk",
+ "reason": "Owner's manual test (2026-10-10), kept in the toolkit: NQ 08:30 ET data release, the first 5-minute candle is the range, the first 1-minute close outside it enters (market, or a limit at the broken edge), stop at the other side of the range, entries to 11:00, flat 15:58.",
+ "family": "orb_close",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "pre"
+ ],
+ "params": {
+  "entry": [
+   "market",
+   "limit"
+  ]
+ },
+ "fixed": {
+  "or_min": "5",
+  "start": "0830",
+  "wait": "0"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}
