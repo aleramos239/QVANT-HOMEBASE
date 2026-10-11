@@ -13,6 +13,21 @@ const CHUNK_MS = 5 * 3600 * 1000;      // history is asked in aligned 5 h chunks
 const MAX_ROWS = 400_000;              // per root; the oldest go first
 const GAP_OK_MS = 120_000;             // a chunk is "covered" when its covered span is within this of its end
 
+/* An episode that has ended carries a t1 or an `end` other than "open". The history endpoint masks an episode that
+   outlives the requested `to` as open (t1 null) as of that `to`, so a chunk fetched later can hold a staler, open copy
+   of an episode a newer chunk already closed. */
+const isClosed = (e) => e.t1 != null || (e.end != null && e.end !== 'open');
+
+/* Does the incoming copy `n` replace the stored copy `o`? Only if it is at least as complete: never open over closed;
+   closed over open; between two closed ones the larger t1; between two open ones the later copy (live updates). */
+function moreComplete(n, o) {
+  const nc = isClosed(n), oc = isClosed(o);
+  if (nc !== oc) return nc;
+  if (!nc) return true;
+  const a = n.t1 == null ? -Infinity : n.t1, b = o.t1 == null ? -Infinity : o.t1;
+  return a >= b;
+}
+
 class RootStore {
   constructor() {
     this.rows = [];                    // sorted by t, one per t
@@ -25,9 +40,14 @@ class RootStore {
     const clean = rows.filter((r) => Array.isArray(r) && Number.isFinite(r[0]));
     if (!clean.length) return;
     const last = this.rows.length ? this.rows[this.rows.length - 1][0] : -Infinity;
-    const sorted = clean.every((r, i) => i === 0 || r[0] > clean[i - 1][0]);
-    if (sorted && clean[0][0] > last) {
-      for (const r of clean) this.rows.push(r);
+    const ordered = clean.every((r, i) => i === 0 || r[0] >= clean[i - 1][0]);
+    if (ordered && clean[0][0] >= last) {
+      // in order, or repeating the newest t (the live tracker may re-emit a second): append, a repeated t replaces
+      // the tail row (the later copy wins). No rebuild: this is the per-second hot path.
+      for (const r of clean) {
+        const n = this.rows.length;
+        if (n && this.rows[n - 1][0] === r[0]) this.rows[n - 1] = r; else this.rows.push(r);
+      }
     } else {                           // out of order or overlapping: merge, the later copy of a t wins
       const m = new Map();
       for (const r of this.rows) m.set(r[0], r);
@@ -39,7 +59,9 @@ class RootStore {
 
   addEpisodes(list) {
     for (const e of Array.isArray(list) ? list : []) {
-      if (e && typeof e.id === 'string' && Number.isFinite(e.t0)) this.eps.set(e.id, e);
+      if (!e || typeof e.id !== 'string' || !Number.isFinite(e.t0)) continue;
+      const old = this.eps.get(e.id);
+      if (!old || moreComplete(e, old)) this.eps.set(e.id, e);
     }
   }
 
