@@ -146,3 +146,18 @@ def test_an_empty_or_crossed_book_line_is_not_a_fault_and_the_feed_goes_on():
     assert logs == []
     rows, eps = collect(page)
     assert len(rows) == 60 and any(e["end"] == "traded" for e in eps.values())
+
+
+def test_a_failing_feed_logs_once_per_root_and_kind_a_minute():
+    logs, now = [], [1000.0]
+    live = BookLive(lambda r: TICK, log=logs.append, clock=lambda: now[0])
+    for i in range(50):                                   # a broken book line every 250 ms
+        now[0] += 0.25
+        live.on_book("NQ", T0 + i, None, None)
+    assert len(logs) == 1
+    live.on_tick("NQ", object())                          # another kind of failure of the same root: its own line
+    live.on_book("ES", T0, None, None)                    # another root: its own line
+    assert len(logs) == 3
+    now[0] += 61
+    live.on_book("NQ", T0 + 99, None, None)               # a minute later: logged again
+    assert len(logs) == 4 and "book flow (NQ)" in logs[-1]

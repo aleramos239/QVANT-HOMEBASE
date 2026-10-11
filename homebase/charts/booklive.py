@@ -10,6 +10,7 @@ episodes (reset: true), so it never waits for the next second. Never blocks: des
 """
 from __future__ import annotations
 
+import time
 from collections import OrderedDict, deque
 from typing import Callable, Hashable, Optional
 
@@ -21,6 +22,7 @@ from .session import session_date
 RECENT_SAMPLES = 900          # 15 minutes of 1 s samples
 RECENT_EPISODES = 400
 PAGE_QUEUE_MAX = 8            # messages held per page per root before it is resynced to the latest
+LOG_EVERY_S = 60.0            # a failing feed is logged at most this often per root and kind
 
 
 class _Live:
@@ -33,9 +35,12 @@ class _Live:
 
 
 class BookLive:
-    def __init__(self, tick_of: Callable[[str], float] = contract_tick_size, log: Optional[Callable[[str], None]] = None):
+    def __init__(self, tick_of: Callable[[str], float] = contract_tick_size, log: Optional[Callable[[str], None]] = None,
+                 clock: Callable[[], float] = time.monotonic):
         self.tick_of = tick_of
         self._log = log or (lambda _m: None)
+        self._clock = clock
+        self._logged: dict[tuple, float] = {}      # (root, kind) -> when it was last logged
         self._live: dict[str, _Live] = {}
         self._fans: dict[str, Fanout] = {}
         self._viewers: dict[Hashable, str] = {}
@@ -76,19 +81,27 @@ class BookLive:
 
     # ---- the feeds (never raise: a tracker fault must not touch the tick or depth path)
 
+    def _fault(self, root: str, kind: str, e: Exception) -> None:
+        """Log a feed fault, once per root and kind per LOG_EVERY_S (a broken line would otherwise log 4 a second)."""
+        now = self._clock()
+        last = self._logged.get((root, kind))
+        if last is None or now - last >= LOG_EVERY_S:
+            self._logged[(root, kind)] = now
+            self._log(f"book flow ({root}): {type(e).__name__}: {e}")
+
     def on_book(self, root: str, ts: int, bids: list, offers: list) -> None:
         try:
             lv = self._at(root, ts)
             self._take(lv, lv.tracker.on_book(ts, bids, offers))
         except Exception as e:  # noqa: BLE001
-            self._log(f"book flow ({root}): {type(e).__name__}: {e}")
+            self._fault(root, "book", e)
 
     def on_tick(self, root: str, tk) -> None:
         try:
             lv = self._at(root, tk.ts_ms)
             self._take(lv, lv.tracker.on_print(tk.ts_ms, tk.price, tk.size, tk.side))
         except Exception as e:  # noqa: BLE001
-            self._log(f"book flow ({root}): {type(e).__name__}: {e}")
+            self._fault(root, "tick", e)
 
     def flush(self, now_ms: int) -> None:
         """Commit the seconds that ended while no book line came (the pump calls this about once a second)."""
@@ -96,7 +109,7 @@ class BookLive:
             try:
                 self._take(lv, lv.tracker.flush(now_ms))
             except Exception as e:  # noqa: BLE001
-                self._log(f"book flow ({root}): {type(e).__name__}: {e}")
+                self._fault(root, "flush", e)
 
     # ---- inside
 
