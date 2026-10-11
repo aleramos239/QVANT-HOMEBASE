@@ -22,12 +22,15 @@ const LABEL_ALIGN = ['left', 'center', 'right'];      // a horizontal line's lab
 const MAX_TEXT = 200;
 const MAX_FIB_LEVELS = 16, FIB_MIN = -10, FIB_MAX = 10;
 const TEXT = ['text', 'fontSize', 'textColor', 'bold', 'labelPos'];
+/* The end of a line may carry a mark (2026-10-11): none, an arrow head or a dot. Optional fields (no entry in DEFAULTS
+   below) are left out of a style until they are set, so a drawing nobody touched is stored exactly as before. */
+const CAPS = ['none', 'arrow', 'circle'];
 /* Exactly the style fields each drawing type takes (check_style in server.py mirrors this list);
    long/short keep their existing look (colour, via the drawing's own top-level `color`) and take
    no style object of their own. */
 const FIELDS = {
-  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats'],
-  ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap'],
+  ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap'],
   xline: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
   hline: ['width', 'lineStyle', 'axisLabel', ...TEXT, 'labelAlign'],
   vline: ['width', 'lineStyle', ...TEXT, 'timeLabel'],
@@ -39,7 +42,8 @@ const FIELDS = {
   channel: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'fillColor', 'midline'],
   note: ['text', 'fontSize', 'textColor', 'bold', 'fillColor'],
   avwap: ['width', 'lineStyle'],
-  long: [], short: [],
+  // a position box: the colours of its two zones, the size of its labels and whether they show (all optional: unset = the theme's)
+  long: ['profitColor', 'lossColor', 'fontSize', 'showLabels'], short: ['profitColor', 'lossColor', 'fontSize', 'showLabels'],
 };
 /* The Fibonacci levels a fresh retracement carries: {v: the ratio, on: drawn, color}. 0 sits on the
    SECOND point (where the drag ended) and 1 on the first, so the levels count the pullback. */
@@ -94,7 +98,10 @@ function isValidLevel(l) {
 }
 function isValidField(type, key, v) {
   switch (key) {
-    case 'width': return Number.isInteger(v) && v >= 1 && v <= 4;
+    case 'width': return Number.isInteger(v) && v >= 1 && v <= 8;
+    case 'startCap': case 'endCap': return CAPS.includes(v);
+    case 'profitColor': case 'lossColor': return isColor(v);
+    case 'showLabels': return typeof v === 'boolean';
     case 'lineStyle': case 'midStyle': return LINE_STYLES.includes(v);
     case 'extendLeft': case 'extendRight': case 'axisLabel': case 'bold': case 'priceLabel': case 'stats': case 'timeLabel':
     case 'border': case 'midline': case 'quarters': case 'priceLabels': case 'showLevels': case 'showPrices': case 'fill': case 'reverse':
@@ -121,7 +128,7 @@ function normalize(type, style) {
     // invalid/absent value drops the key entirely rather than filling in one theme's colour, and
     // this PUTs cleanly too (check_style in server.py only looks at a `style.fillColor` that is
     // actually present).
-    if (key === 'fillColor' && def[key] == null) continue;
+    if (def[key] === undefined) continue;
     out[key] = def[key];
   }
   // a retracement's levels: its own copies, ascending, each {v, on, color} and nothing else
@@ -251,7 +258,7 @@ function shouldStartRuler(tool, shiftKey) { return tool === 'cursor' && !!shiftK
    mid-drag goes back to the pointer's own price on the very next move. */
 function snapEndpointPrice(otherPrice, proposedPrice, shiftHeld) { return shiftHeld ? otherPrice : proposedPrice; }
 
-const api = { LINE_STYLES, LINE_TYPES, isLine, LABEL_POS, LABEL_ALIGN, FIELDS, DEFAULTS, FIB_LEVELS, MAX_FIB_LEVELS, MAX_TEXT, VIS_MAX_S,
+const api = { LINE_STYLES, LINE_TYPES, CAPS, isLine, LABEL_POS, LABEL_ALIGN, FIELDS, DEFAULTS, FIB_LEVELS, MAX_FIB_LEVELS, MAX_TEXT, VIS_MAX_S,
   isColor, isValidField, normalize, starting, dashFor, extendLine, lineEnds, fibPrice, fibLevels, fibText, normalizeVis, shownOn,
   labelAnchor, toolbarAnchor, shouldStartRuler, snapEndpointPrice };
 if (typeof window !== 'undefined') window.HBDrawStyle = api;

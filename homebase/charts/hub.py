@@ -63,7 +63,10 @@ def warm_bars(key: str) -> int:
     long enough for an EMA's (5n) / a Wilder ADX's (10n) memory to fade below e^-10. 0: the study restarts on
     its own anchor (VWAP, cumulative delta, levels). Reads only the length token (index 1): an sma/ema key may
     carry a third `:source` token, which never changes the window length."""
-    name, *rest = str(key).split(":")
+    base, _, tf = str(key).partition("@")
+    if tf.isdecimal():       # on a longer timeframe: the same count of ITS bars, each up to tf/60 one-minute chart bars
+        return min(HISTORY_MAX, warm_bars(base) * max(1, int(tf) // 60))
+    name, *rest = base.split(":")
     n = int(rest[0]) if rest and rest[0].isdecimal() else 0
     if name in TA_NAMES:
         return warm_ta(name, rest)
@@ -72,7 +75,10 @@ def warm_bars(key: str) -> int:
 
 def prime_sessions(key: str) -> int:
     """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars)."""
-    name, *rest = str(key).split(":")
+    base, _, tf = str(key).partition("@")
+    if tf.isdecimal():       # the sessions its higher bars need to settle (a trading day is ~23 h), at most 60
+        return min(60, 1 + -(-warm_bars(base) * int(tf) // 82800))
+    name, *rest = base.split(":")
     return prime_ta(name, rest) if name in TA_NAMES else 0
 
 

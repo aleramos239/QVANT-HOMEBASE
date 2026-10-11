@@ -296,10 +296,20 @@ function withAlpha(color, a) {
   return m ? `rgba(${m[1]},${m[2]},${m[3]},${a})` : color;
 }
 
+/* The fill of a box, channel or note: the one picked, else the drawing's own colour at the theme's soft opacity (a green
+   box is green inside too). A colour that is not a plain hex falls back to the theme's soft blue. */
+function fillOf(style, color, P) {
+  if (style && style.fillColor) return style.fillColor;
+  if (!/^#[0-9A-Fa-f]{6}$/.test(String(color))) return P.accentSoft;
+  const m = /,\s*([\d.]+)\s*\)\s*$/.exec(String(P.accentSoft));
+  return withAlpha(color, m ? Number(m[1]) : 0.12);
+}
+
 /* A vertical line's time, as its tag at the foot of the pane says it: New York wall clock. */
 function timeTag(ms) {
   try {
-    return new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+    const tag = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(ms));
+    return typeof HBClock !== 'undefined' ? HBClock.within(tag) : tag;   // the app's one clock format
   } catch (_) { return new Date(ms).toISOString().slice(0, 16).replace('T', ' '); }
 }
 
@@ -556,15 +566,24 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(ex0, ey0); ctx.lineTo(ex1, ey1); ctx.stroke();
     ctx.setLineDash([]);
-    if (d.type === 'arrow' && (x0 !== x1 || y0 !== y1)) {         // the head, at the second point
-      const ang = Math.atan2(y1 - y0, x1 - x0), L = 9 + style.width * 2;
+    const moved = x0 !== x1 || y0 !== y1;
+    const head = (x, y, ang) => {          // an arrow head with its tip at (x, y), pointing along `ang`
+      const L = 9 + style.width * 2;
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x1 - L * Math.cos(ang - 0.45), y1 - L * Math.sin(ang - 0.45));
-      ctx.lineTo(x1 - L * Math.cos(ang + 0.45), y1 - L * Math.sin(ang + 0.45));
+      ctx.moveTo(x, y);
+      ctx.lineTo(x - L * Math.cos(ang - 0.45), y - L * Math.sin(ang - 0.45));
+      ctx.lineTo(x - L * Math.cos(ang + 0.45), y - L * Math.sin(ang + 0.45));
       ctx.closePath();
       ctx.fill();
+    };
+    const dot = (x, y) => { ctx.fillStyle = color; ctx.beginPath(); ctx.arc(x, y, 2.5 + style.width, 0, Math.PI * 2); ctx.fill(); };
+    if (moved) {
+      const ang = Math.atan2(y1 - y0, x1 - x0);
+      if (d.type === 'arrow' || style.endCap === 'arrow') head(x1, y1, ang);            // the head, at the second point
+      else if (style.endCap === 'circle') dot(x1, y1);
+      if (style.startCap === 'arrow') head(x0, y0, ang + Math.PI);
+      else if (style.startCap === 'circle') dot(x0, y0);
     }
     drawLabel(ctx, d.type, hs, style, paneW);
     const [a, b] = d.points;
@@ -587,7 +606,7 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
   // explicit fill -- P.accentSoft is exactly what an unstyled rect always filled with (review
   // finding: a fixed default here would have been the light theme's .10 even in dark, where an
   // old rect used .20)
-  ctx.fillStyle = style.fillColor || P.accentSoft;
+  ctx.fillStyle = fillOf(style, color, P);
   ctx.fillRect(x, y, w, h);
   if (style.border) ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, Math.round(w), Math.round(h));
   if (style.midline || style.quarters) {       // the 50 % line, and the 25 % / 75 % ones
@@ -620,7 +639,7 @@ function drawNote(ctx, hs, style, color, P) {
   const [[x, y]] = hs, text = style.text || ' ';
   ctx.font = `${style.bold ? 'bold ' : ''}${style.fontSize}px ${window.HBCell.FONT}`;
   const w = ctx.measureText(text).width + 12, h = style.fontSize + 10;
-  ctx.fillStyle = style.fillColor || P.accentSoft;
+  ctx.fillStyle = fillOf(style, color, P);
   ctx.fillRect(x, y - h / 2, w, h);
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
@@ -652,7 +671,7 @@ function drawChannel(ctx, hs, geo, P, style, color) {
   ctx.lineCap = 'round';
   if (lines.length === 2) {
     const [[ax, ay, bx, by], [cx, cy, ex, ey]] = lines;
-    ctx.fillStyle = style.fillColor || P.accentSoft;
+    ctx.fillStyle = fillOf(style, color, P);
     ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(ex, ey); ctx.lineTo(cx, cy); ctx.closePath(); ctx.fill();
   }
   ctx.strokeStyle = color;
@@ -1017,7 +1036,8 @@ class Controller {
 
   commit(d) {
     const style = this.startingStyle(d.type);
-    const full = { id: newId(), color: '#2962FF', ...d, ...(style ? { style } : {}) };
+    const own = this.host.colorFor ? this.host.colorFor(this.cell) : null;        // set for the timeframe it is drawn on
+    const full = { id: newId(), color: own || '#2962FF', ...d, ...(style && Object.keys(style).length ? { style } : {}) };   // a box has no look until it is given one
     this.sel = full.id;
     this.release();
     this.host.drawings.add(this.root, full);   // every chart of this symbol refreshes
@@ -1154,7 +1174,7 @@ class Controller {
 }
 
 const api = { barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
-  setPoint, shiftTime, moveDrawing, samePoints, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
+  setPoint, shiftTime, moveDrawing, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;

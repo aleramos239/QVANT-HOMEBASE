@@ -174,9 +174,10 @@ function drawPosition(ctx, d, geo, P, pctx) {
   if (!hs) return;
   const [[x0, yE], [, yT], [, yS], [x1]] = hs, long = d.type === 'long';
   const left = Math.min(x0, x1), w = Math.max(1, Math.abs(x1 - x0)), top = Math.min(yT, yS), bot = Math.max(yT, yS);
-  ctx.fillStyle = P.profitZone;
+  const st = d.style && typeof d.style === 'object' ? d.style : {};     // the box's look (2026-10-11): all optional
+  ctx.fillStyle = typeof st.profitColor === 'string' ? st.profitColor : P.profitZone;
   ctx.fillRect(left, Math.min(yE, yT), w, Math.abs(yT - yE));
-  ctx.fillStyle = P.lossZone;
+  ctx.fillStyle = typeof st.lossColor === 'string' ? st.lossColor : P.lossZone;
   ctx.fillRect(left, Math.min(yE, yS), w, Math.abs(yS - yE));
   ctx.strokeStyle = P.text2;
   ctx.lineWidth = 1;
@@ -192,18 +193,20 @@ function drawPosition(ctx, d, geo, P, pctx) {
     }
   }
   if (pctx.selected) ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(bot - top));
+  if (st.showLabels === false) return;
   const lab = labels(d, pctx.pv, pctx.tick), cx = left + w / 2, GAP = 4;
-  ctx.font = pctx.font;
+  const fs = Number.isInteger(st.fontSize) && st.fontSize >= 10 && st.fontSize <= 28 ? st.fontSize : null, lh = fs ? fs + 4 : 16;
+  ctx.font = fs ? pctx.font.replace(/\d+(\.\d+)?px/, `${fs}px`) : pctx.font;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const label = (lines, bg, yAt) => {   // yAt(height) -> the label's top before clamping
-    const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * 16 + 4;
+    const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * lh + 4;
     const bx = Math.max(2, Math.min(cx - bw / 2, pctx.size.width - bw - 2));
     const by = Math.max(2, Math.min(yAt(bh), pctx.size.height - bh - 2));
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
     ctx.fillStyle = P.onAccent;
-    lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 10 + i * 16));
+    lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 2 + lh / 2 + i * lh));
   };
   label([lab.target], P.up, (h) => (long ? top - GAP - h : bot + GAP));
   label([lab.stop], P.down, (h) => (long ? bot + GAP : top - GAP - h));

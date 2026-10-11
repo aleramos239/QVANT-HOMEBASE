@@ -288,6 +288,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         }
     }
 
+    /// Full screen has no traffic lights, and the (empty, native) toolbar would sit opaque over the page's own toolbar:
+    /// the tabs and buttons were hidden under it. The page draws that band itself, so the native one steps aside
+    /// while the window is full screen and comes back when it leaves.
+    func windowWillEnterFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = false } }
+    func windowDidExitFullScreen(_ n: Notification) { if systemToolbar { window.toolbar?.isVisible = true } }
+
     @objc private func windowChanged(_ n: Notification) {
         layoutTrafficLights()
         DispatchQueue.main.async { [weak self] in self?.layoutTrafficLights() }

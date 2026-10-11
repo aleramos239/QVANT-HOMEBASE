@@ -101,10 +101,12 @@ DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "
                      "arrow": _LINE_POS}
 DRAWING_LABEL_ALIGN = ("left", "center", "right")
 _TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
+DRAWING_CAPS = ("none", "arrow", "circle")      # the mark at a line's end (2026-10-11); a field left out = none
+MAX_DRAWING_WIDTH = 8
 # exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
 DRAWING_STYLE_FIELDS = {
-    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats"} | _TEXT_FIELDS,
-    "ray": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats", "startCap", "endCap"} | _TEXT_FIELDS,
+    "ray": {"width", "lineStyle", "priceLabel", "stats", "startCap", "endCap"} | _TEXT_FIELDS,
     "xline": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
     "hline": {"width", "lineStyle", "axisLabel", "labelAlign"} | _TEXT_FIELDS,
     "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
@@ -114,10 +116,11 @@ DRAWING_STYLE_FIELDS = {
     "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
     "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
     "avwap": {"width", "lineStyle"},
-    "long": set(), "short": set(),
+    # a position box: its zone colours, its label size, whether its labels show
+    "long": {"profitColor", "lossColor", "fontSize", "showLabels"}, "short": {"profitColor", "lossColor", "fontSize", "showLabels"},
 }
 DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
-                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse")
+                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse", "showLabels")
 MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
 DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
 MAX_DRAWING_LABEL_TEXT = 200
@@ -230,8 +233,8 @@ def check_style(kind: str, style) -> dict:
     out = {}
     if "width" in style:
         w = style["width"]
-        if not isinstance(w, int) or isinstance(w, bool) or not 1 <= w <= 4:
-            raise ValueError("style.width: a whole number from 1 to 4")
+        if not isinstance(w, int) or isinstance(w, bool) or not 1 <= w <= MAX_DRAWING_WIDTH:
+            raise ValueError(f"style.width: a whole number from 1 to {MAX_DRAWING_WIDTH}")
         out["width"] = w
     if "lineStyle" in style:
         if style["lineStyle"] not in DRAWING_LINE_STYLES:
@@ -252,10 +255,16 @@ def check_style(kind: str, style) -> dict:
         out["labelAlign"] = style["labelAlign"]
     if "levels" in style:
         out["levels"] = _check_levels(style["levels"])
-    if "fillColor" in style:
-        if not _valid_color(style["fillColor"]):
-            raise ValueError("style.fillColor: #RRGGBB or rgba(r,g,b,a)")
-        out["fillColor"] = style["fillColor"]
+    for key in ("startCap", "endCap"):
+        if key in style:
+            if style[key] not in DRAWING_CAPS:
+                raise ValueError(f"style.{key}: none, arrow or circle")
+            out[key] = style[key]
+    for key in ("fillColor", "profitColor", "lossColor"):
+        if key in style:
+            if not _valid_color(style[key]):
+                raise ValueError(f"style.{key}: #RRGGBB or rgba(r,g,b,a)")
+            out[key] = style[key]
     if "text" in style:
         t = style["text"]
         if not isinstance(t, str) or len(t) > MAX_DRAWING_LABEL_TEXT:

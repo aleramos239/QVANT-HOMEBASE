@@ -193,7 +193,7 @@ body.lab-page { background: var(--panel) !important; }
 .rs-set > summary::-webkit-details-marker { display: none; }
 .rs-set > summary span:last-child { color: var(--hb-fg2); font-size: var(--hb-fs-ui); }
 .rs-set .grid { display: grid; grid-template-columns: minmax(0, 1fr) 108px; gap: 8px 12px; align-items: center; padding: 2px 14px 14px; }
-.rs-set label { font-size: var(--hb-fs-ui); color: var(--hb-fg2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rs-set label { font-size: var(--hb-fs-ui); line-height: 1.25; color: var(--hb-fg2); overflow-wrap: anywhere; }   /* the whole name, on two lines if it needs them */
 .rs-set input, .rs-set select { height: var(--hb-h-sm); width: 100%; padding: 0 9px; border: 0; border-radius: 8px; background: var(--hb-glass-strong); color: var(--hb-fg); font-size: var(--hb-fs-ui); font-variant-numeric: tabular-nums; outline: none; box-shadow: 0 0 0 .5px var(--hb-hair); }
 .rs-set input:focus, .rs-set select:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 .rs-set input.bad { box-shadow: 0 0 0 1.5px var(--down); }

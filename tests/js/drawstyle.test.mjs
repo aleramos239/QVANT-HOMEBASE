@@ -8,7 +8,8 @@ const S = require('../../homebase/static/charts/drawstyle.js');
 test('every drawing type has a default style with exactly its own fields', () => {
   for (const type of ['trend', 'hline']) {
     const d = S.normalize(type, {});
-    assert.deepEqual(Object.keys(d).sort(), [...S.FIELDS[type]].sort());
+    // an optional field (no default: the end marks of a trend line) is left out until it is set
+    assert.deepEqual(Object.keys(d).sort(), S.FIELDS[type].filter((k) => k in S.DEFAULTS[type]).sort());
     assert.deepEqual(d, S.DEFAULTS[type]);
   }
   // rect's fillColor has no built-in default (unset = follow the theme's own accentSoft): the
@@ -18,7 +19,20 @@ test('every drawing type has a default style with exactly its own fields', () =>
   assert.deepEqual(rect, S.DEFAULTS.rect);
   assert.equal('fillColor' in S.DEFAULTS.rect, false);
   assert.deepEqual(S.normalize('long', {}), {});
-  assert.deepEqual(S.normalize('short', { width: 3 }), {});   // long/short take no style fields at all
+  assert.deepEqual(S.normalize('short', { width: 3 }), {});   // a position box takes no line style
+});
+
+test('optional style fields stay out until they are set, and only valid ones stay', () => {
+  assert.equal('startCap' in S.normalize('trend', {}), false);
+  assert.deepEqual(S.normalize('trend', { startCap: 'arrow', endCap: 'circle' }).startCap, 'arrow');
+  assert.equal('endCap' in S.normalize('trend', { endCap: 'star' }), false);
+  assert.equal('startCap' in S.normalize('xline', { startCap: 'arrow' }), false, 'an extended line has no ends');
+  assert.equal(S.normalize('trend', { width: 8 }).width, 8);
+  assert.equal(S.normalize('trend', { width: 9 }).width, S.DEFAULTS.trend.width);
+  // a position box: zone colours, label size, whether the labels show -- nothing else
+  assert.deepEqual(S.normalize('long', { profitColor: '#00FF00', lossColor: 'rgba(255,0,0,0.3)', fontSize: 14, showLabels: false, width: 3 }),
+    { profitColor: '#00FF00', lossColor: 'rgba(255,0,0,0.3)', fontSize: 14, showLabels: false });
+  assert.deepEqual(S.normalize('short', { profitColor: 'green', fontSize: 5, showLabels: 'no' }), {});
 });
 
 test('normalize falls back to the default field-by-field, never throws on junk', () => {

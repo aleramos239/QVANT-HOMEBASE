@@ -870,6 +870,10 @@ class Cell {
     this.paneUid = [null];
     const DASH = { solid: LW.LineStyle.Solid, dashed: LW.LineStyle.Dashed, dotted: LW.LineStyle.Dotted };
     const dash = (d) => DASH[d] || LW.LineStyle.Solid;
+    // a line's optional extras (Style tab, 2026-10-11): its type (line | steps | curved) and its value on the price axis
+    const shapeOpt = (s) => (s.shape === 'steps' ? { lineType: LW.LineType.WithSteps } : s.shape === 'curved' ? { lineType: LW.LineType.Curved }
+      : s.shape === 'line' ? { lineType: LW.LineType.Simple } : {});
+    const tagOpt = (s) => (typeof s.tag === 'boolean' ? { lastValueVisible: s.tag } : {});
     const add = (inst, src, part, type, opts, where) => {
       const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
       const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
@@ -885,6 +889,9 @@ class Cell {
       return { where: 0, scale: { priceScaleId: 'ind:' + inst.uid, lastValueVisible: false } };
     };
     const pin = (s, where, top) => { if (where === 0) s.priceScale().applyOptions({ scaleMargins: { top, bottom: 0 } }); };
+    // volume / delta: the up and down bar colours from the instance's style (an instance with none keeps the palette's)
+    const sideColors = (inst) => (inst.style && inst.style.up && inst.style.down
+      ? { up: C.lineColor(inst.style.up), down: C.lineColor(inst.style.down) } : null);
     for (const inst of this.cfg.indicators) {
       const k = C.serverKey(inst);
       switch (inst.id) {
@@ -892,6 +899,7 @@ class Cell {
           const { where } = spot(inst);
           const s = add(inst, '__vol', null, LW.HistogramSeries, { priceFormat: { type: 'volume' },
             ...(where === 0 ? { priceScaleId: 'vol', lastValueVisible: false } : { lastValueVisible: true }) }, where);
+          this.lines[this.lines.length - 1].cols = sideColors(inst);
           pin(s, where, VOL_TOP);
           break;
         }
@@ -901,13 +909,13 @@ class Cell {
           const st = inst.style || {};
           const main = st.main || { color: P.vwap, width: 2, dash: 'solid', visible: true };
           this.colorOf[inst.uid] = main.color;
-          line(inst, k, null, main.color, main.width, 0, { lineStyle: dash(main.dash), visible: main.visible !== false });
+          line(inst, k, null, C.lineColor(main), main.width, 0, { ...tagOpt(main), ...shapeOpt(main), lineStyle: dash(main.dash), visible: main.visible !== false });
           for (let n = 1; n <= 3; n++) {
             if (!inst.params[`band${n}On`]) continue;
             const mult = inst.params[`band${n}Mult`] || n, bs = st[`band${n}`] || { color: P.band, width: 1, dash: 'dashed', visible: true };
             for (const sign of [1, -1]) {   // part: the signed sd multiplier itself -- point() just applies it
-              line(inst, k, mult * sign, bs.color, bs.width, 0,
-                { lineStyle: dash(bs.dash), lastValueVisible: false, visible: bs.visible !== false });
+              line(inst, k, mult * sign, C.lineColor(bs), bs.width, 0,
+                { ...shapeOpt(bs), lineStyle: dash(bs.dash), lastValueVisible: false, visible: bs.visible !== false });
             }
           }
           break;
@@ -916,7 +924,8 @@ class Cell {
           const st = inst.style && inst.style.main;
           const color = st ? st.color : P.lines[ci++ % P.lines.length];
           this.colorOf[inst.uid] = color;
-          line(inst, k, null, color, st ? st.width : 1, 0, st ? { lineStyle: dash(st.dash), visible: st.visible !== false } : {});
+          line(inst, k, null, st ? C.lineColor(st) : color, st ? st.width : 1, 0,
+            st ? { ...tagOpt(st), ...shapeOpt(st), lineStyle: dash(st.dash), visible: st.visible !== false } : {});
           break;
         }
         case 'adx': {
@@ -925,24 +934,37 @@ class Cell {
           const mn = st.adx || { color: P.text, width: 2, dash: 'solid', visible: true };
           const pd = st.pdi || { color: P.up, width: 1, dash: 'solid', visible: true };
           const md = st.mdi || { color: P.down, width: 1, dash: 'solid', visible: true };
-          const a = line(inst, k, null, mn.color, mn.width, where, { ...scale, lineStyle: dash(mn.dash), visible: mn.visible !== false });
-          line(inst, k, 'p', pd.color, pd.width, where, { ...scale, lineStyle: dash(pd.dash), visible: pd.visible !== false });
-          line(inst, k, 'm', md.color, md.width, where, { ...scale, lineStyle: dash(md.dash), visible: md.visible !== false });
+          const a = line(inst, k, null, C.lineColor(mn), mn.width, where, { ...tagOpt(mn), ...shapeOpt(mn), ...scale, lineStyle: dash(mn.dash), visible: mn.visible !== false });
+          line(inst, k, 'p', C.lineColor(pd), pd.width, where, { ...tagOpt(pd), ...shapeOpt(pd), ...scale, lineStyle: dash(pd.dash), visible: pd.visible !== false });
+          line(inst, k, 'm', C.lineColor(md), md.width, where, { ...tagOpt(md), ...shapeOpt(md), ...scale, lineStyle: dash(md.dash), visible: md.visible !== false });
           pin(a, where, MAIN_TOP);   // the three lines share the one scale
           break;
         }
         case 'delta': {   // a per-bar up/down-coloured histogram, not a single-colour line: inputs only (it has none)
           const { where, scale } = spot(inst);
-          pin(add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE }, ...scale }, where),
-            where, MAIN_TOP);
+          const ds = add(inst, '__delta', null, LW.HistogramSeries, { lastValueVisible: true, priceFormat: { ...WHOLE }, ...scale }, where);
+          this.lines[this.lines.length - 1].cols = sideColors(inst);
+          pin(ds, where, MAIN_TOP);
           break;
         }
         case 'cumdelta': {
           const st = (inst.style && inst.style.main) || { color: P.cum, width: 2, dash: 'solid', visible: true };
           this.colorOf[inst.uid] = st.color;
           const { where, scale } = spot(inst);
-          pin(line(inst, k, null, st.color, st.width, where,
-            { priceFormat: { ...WHOLE }, ...scale, lineStyle: dash(st.dash), visible: st.visible !== false }), where, MAIN_TOP);
+          pin(line(inst, k, null, C.lineColor(st), st.width, where,
+            { priceFormat: { ...WHOLE }, ...tagOpt(st), ...shapeOpt(st), ...scale, lineStyle: dash(st.dash), visible: st.visible !== false }), where, MAIN_TOP);
+          break;
+        }
+        case 'sess': {   // every box that is on: its high (solid) and low (dashed) in the box's colour, held as steps
+          const t = C.TA_BY_ID.sess;
+          C.sessBoxes(inst).forEach((b, j) => {
+            if (j === 0) this.colorOf[inst.uid] = b.color;
+            for (const ln of t.lines) {
+              line(inst, b.key, ln.part, b.color, 1, 0, { lastValueVisible: false, lineStyle: dash(ln.part === 'lo' ? 'dashed' : 'solid'),
+                lineType: LW.LineType.WithSteps });
+              this.lines[this.lines.length - 1].gen = ln;
+            }
+          });
           break;
         }
         default: {
@@ -960,16 +982,20 @@ class Cell {
             const tag = ln.tag !== false;   // its value on the price axis (a band or a histogram has none)
             const serie = ln.type === 'hist'
               ? add(inst, k, ln.part, LW.HistogramSeries, { ...fmt, lastValueVisible: false, ...scale, visible: sty.visible !== false }, where)
-              : line(inst, k, ln.part, sty.color, sty.width, where,
-                { ...fmt, lastValueVisible: tag, ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
-                  ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}) });
+              : line(inst, k, ln.part, C.lineColor(sty), sty.width, where,
+                { ...fmt, lastValueVisible: tag, ...tagOpt(sty), ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
+                  ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}), ...shapeOpt(sty) });
             this.lines[this.lines.length - 1].gen = ln;
             if (!top) top = serie;
           });
           if (own && t.refs) {
-            for (const r of t.refs) {
-              top.createPriceLine({ price: r, color: P.text2 || '#787B86', lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false, title: '' });
-            }
+            // the reference levels (RSI 70/30 ...): each value editable or hidden, one colour (the instance's opts)
+            const o = inst.opts || {}, rc = o.refColor || P.text2 || '#787B86';
+            t.refs.forEach((r0, i) => {
+              const r = o.refs && o.refs[i] !== undefined ? o.refs[i] : r0;
+              if (r === null) return;
+              top.createPriceLine({ price: r, color: rc, lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false, title: '' });
+            });
           }
           if (top && t.pane) pin(top, where, MAIN_TOP);   // a movable one on the price pane shares an overlay scale; a plain overlay rides the price scale untouched
           break;
@@ -997,7 +1023,7 @@ class Cell {
     this.rows = this.cfg.indicators.map((inst) => {
       const off = inst.visible === false, row = mk('div', 'lg-row' + (off ? ' off' : '')), vals = mk('span', 'lg-vals');
       const btns = mk('span', 'lg-btns'), hasParams = C.def(inst.id).params.length > 0;
-      const hasSettings = hasParams || !!C.styleLineKeys(inst.id);   // a Style-only indicator (cumdelta) still gets a gear
+      const hasSettings = true;   // every indicator has its Style tab (at least the legend option)
       btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
       if (hasSettings) btns.append(iconButton('gear', 'Settings', 'gear'));
       btns.append(iconButton('x', 'Remove', 'x'));
@@ -1131,7 +1157,7 @@ class Cell {
       // per-instance colour as their line, not the old fixed palette, once a style gives them one.
       const own = this.colorOf[r.inst.uid];
       const colors = { text: P.text, up: P.up, down: P.down, line: own || P.accent, vwap: own || P.vwap, cum: own || P.cum };
-      const vs = F.indValues ? C.legendValues(r.inst, b, colors, dt) : [];
+      const vs = F.indValues && !(r.inst.opts && r.inst.opts.legend === false) ? C.legendValues(r.inst, b, colors, dt) : [];
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -1243,8 +1269,8 @@ class Cell {
   point(l, b) {
     const P = this.P, time = b.tt;
     if (b.blank) return { time };
-    if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? P.upA : P.downA };
-    if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? P.upA : P.downA };
+    if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
+    if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
     const v = b.sv ? b.sv[l.src] : null;
     if (v == null) return { time };
     if (l.gen) {   // a technical indicator: its definition says which number this line plots

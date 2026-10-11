@@ -1515,14 +1515,30 @@ def test_style_drops_nothing_silently_it_fails_closed():
         check_drawings([{**RECT, "style": {"axisLabel": True}}])
 
 
-def test_style_is_not_allowed_at_all_on_positions():
+def test_a_position_takes_only_its_look():
+    # 2026-10-11: zone colours, label size, whether the labels show -- no line style
     with pytest.raises(ValueError):
         check_drawings([{**LONG, "style": {"width": 2}}])
     assert "style" not in check_drawings([{**LONG, "style": {}}])[0]
+    look = {"profitColor": "#00FF00", "lossColor": "rgba(255,0,0,.3)", "fontSize": 14, "showLabels": False}
+    assert check_drawings([{**LONG, "style": look}])[0]["style"] == look
+    for bad in ({"profitColor": "green"}, {"fontSize": 9}, {"showLabels": "no"}):
+        with pytest.raises(ValueError):
+            check_drawings([{**LONG, "style": bad}])
+
+
+def test_line_end_marks_and_wider_lines():
+    assert check_drawings([{**TREND, "style": {"startCap": "arrow", "endCap": "circle", "width": 8}}])[0]["style"] == \
+        {"startCap": "arrow", "endCap": "circle", "width": 8}
+    for bad in ({"endCap": "star"}, {"startCap": 1}, {"width": 9}):
+        with pytest.raises(ValueError):
+            check_drawings([{**TREND, "style": bad}])
+    with pytest.raises(ValueError):       # a horizontal line has no ends
+        check_drawings([{**HLINE, "style": {"endCap": "arrow"}}])
 
 
 STYLE_BAD = [
-    ("width zero", "trend", {"width": 0}), ("width too big", "trend", {"width": 5}),
+    ("width zero", "trend", {"width": 0}), ("width too big", "trend", {"width": 9}),
     ("width a float", "trend", {"width": 2.5}), ("width a bool", "trend", {"width": True}),
     ("lineStyle unknown", "trend", {"lineStyle": "wavy"}),
     ("extendLeft not a bool", "trend", {"extendLeft": "yes"}),
