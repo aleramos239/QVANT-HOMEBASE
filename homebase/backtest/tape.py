@@ -51,10 +51,18 @@ CACHE_VERSION = 1
 ET = ZoneInfo("America/New_York")
 
 
+def et_day_time(d: dt.date, hhmm: str) -> dt.datetime:
+    """'HH:MM' or 'HH:MM:SS' ET wall clock on calendar day d (naive). A leading '-' means the calendar day BEFORE d: a
+    session's file starts at 18:00 ET the evening before, so '-18:00' is the evening a session opens (the Sunday for a
+    Monday)."""
+    if hhmm.startswith("-"):
+        return dt.datetime.combine(d - dt.timedelta(days=1), dt.time.fromisoformat(hhmm[1:]))
+    return dt.datetime.combine(d, dt.time.fromisoformat(hhmm))
+
+
 def et_ns(d: dt.date, hhmm: str) -> int:
-    """'HH:MM' or 'HH:MM:SS' ET wall clock on calendar day d -> UTC epoch ns."""
-    t = dt.time.fromisoformat(hhmm)
-    return int(dt.datetime.combine(d, t, tzinfo=ET).timestamp()) * 1_000_000_000
+    """'HH:MM' or 'HH:MM:SS' ET wall clock on calendar day d (a leading '-' = the day before) -> UTC epoch ns."""
+    return int(et_day_time(d, hhmm).replace(tzinfo=ET).timestamp()) * 1_000_000_000
 
 
 @dataclass
@@ -110,8 +118,8 @@ def stable_sorted(ts: array, px: array, sz: array) -> tuple[array, array, array]
 def missing_hours(ts, d: dt.date, window: tuple[str, str]) -> list[tuple[str, str]]:
     """Runs of clock-hour pieces of the ET window [start, end) with zero prints,
     e.g. [("13:00", "15:00")]. Pieces are cut at every o'clock."""
-    t0 = dt.datetime.combine(d, dt.time.fromisoformat(window[0]))
-    t1 = dt.datetime.combine(d, dt.time.fromisoformat(window[1]))
+    t0 = et_day_time(d, window[0])
+    t1 = et_day_time(d, window[1])
     cuts = [t0]
     h = t0.replace(minute=0, second=0) + dt.timedelta(hours=1)
     while h < t1:
@@ -120,7 +128,8 @@ def missing_hours(ts, d: dt.date, window: tuple[str, str]) -> list[tuple[str, st
     cuts.append(t1)
     out: list[list[str]] = []
     for a, b in zip(cuts, cuts[1:]):
-        na, nb = et_ns(d, a.strftime("%H:%M:%S")), et_ns(d, b.strftime("%H:%M:%S"))
+        na = int(a.replace(tzinfo=ET).timestamp()) * 1_000_000_000
+        nb = int(b.replace(tzinfo=ET).timestamp()) * 1_000_000_000
         if bisect_left(ts, nb) - bisect_left(ts, na) > 0:
             continue
         sa, sb = a.strftime("%H:%M"), b.strftime("%H:%M")
@@ -193,6 +202,8 @@ def effective_session_window(root: str, d: dt.date, window: tuple[str, str]) -> 
     the runner also feeds it to the engine as that day's session_window, so a
     flat/cancel time scheduled past the early close never fires."""
     close = early_close_et(root, d)
+    if window[1].startswith("-"):                   # a window that ends the evening before is not on the half day
+        return window
     return (window[0], close) if close is not None and close < window[1] else window
 
 

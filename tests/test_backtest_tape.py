@@ -157,3 +157,18 @@ def test_effective_session_window_clamps_to_the_early_close():
     # a strategy whose ordinary window already ends before the early close is unaffected
     assert tape_mod.effective_session_window("NQ", dt.date(2024, 12, 24),
                                               ("09:25", "10:00")) == ("09:25", "10:00")
+
+
+def test_a_leading_minus_is_the_evening_before():
+    import datetime as dt
+    from homebase.backtest.tape import et_day_time, et_ns, effective_session_window, missing_hours
+    mon = dt.date(2024, 3, 4)
+    assert et_day_time(mon, "-18:00") == dt.datetime(2024, 3, 3, 18, 0)           # the Sunday evening
+    assert et_ns(mon, "-18:00") == et_ns(dt.date(2024, 3, 3), "18:00")
+    assert et_ns(mon, "-18:00:30") == et_ns(mon, "-18:00") + 30 * 1_000_000_000
+    # a window that ends the evening before is never clamped to a half day
+    d = dt.date(2024, 7, 3)
+    assert effective_session_window("NQ", d, ("-18:00", "-23:00")) == ("-18:00", "-23:00")
+    # prints only in the 18:00-19:00 hour of the evening before: the rest of the window is a hole
+    ts = [et_ns(mon, "-18:30"), et_ns(mon, "-18:45")]
+    assert missing_hours(ts, mon, ("-18:00", "-21:00")) == [("19:00", "21:00")]

@@ -48,7 +48,8 @@ from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
 from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
-from .tape import ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason, effective_session_window, missing_hours
+from .tape import (ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason, effective_session_window, et_ns,
+                   missing_hours)
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
 FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital",
@@ -230,6 +231,23 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             if bar is not None:
                 dailies.append(bar)
     daily_dates = [b["date"] for b in dailies]
+    by_date = {b["date"]: b for b in dailies}
+
+    def note_open930(day: dt.date, tape) -> None:
+        """Each daily bar a strategy reads (`ctx.daily`) also carries `o930`: the first print at or after 09:30 ET of
+        that session (None when there is none). A session that trades the evening before reads the 09:30 of the
+        session before it."""
+        b = by_date.get(day.isoformat())
+        if b is not None and "o930" not in b:
+            i = bisect_left(tape.ts, et_ns(day, "09:30:00"))
+            b["o930"] = tape.px[i] if i < len(tape.ts) else None
+
+    if strat.needs_daily() and days:                     # the session before the first one is read from its own tape
+        before = [dt.date.fromisoformat(x) for x in daily_dates if x < days[0].isoformat()]
+        if before:
+            t_before = store.load(cls.root, before[-1])
+            if t_before is not None:
+                note_open930(before[-1], t_before)
 
     costs = Costs(req["commission"], req["slippage_ticks"])
     trades, skipped, no_trade, hlines = [], [], [], []
@@ -245,6 +263,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         if tape is None:
             skipped.append({"date": d.isoformat(), "reason": "no tape"})
             continue
+        if strat.needs_daily():
+            note_open930(d, tape)
         # Item 2: a CME half day shortens the session -- clamp the window BEFORE
         # checking coverage (the empty afternoon is an early close, not a hole),
         # and feed the same clamped window to the engine so the day's flat/cancel
