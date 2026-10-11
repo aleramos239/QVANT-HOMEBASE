@@ -56,6 +56,15 @@ def test_parse_settings_checks_each_value_against_its_spec():
         labcfg.parse_settings({"open_min": "1"}, None)
 
 
+def test_parse_settings_reads_an_on_off_setting():
+    r = {"settings": [{"key": "red_5m", "label": "Red-folder days: 5-minute candle", "type": "bool", "default": False}]}
+    assert labcfg.parse_settings({"red_5m": True}, r) == {"red_5m": True}
+    assert labcfg.parse_settings({"red_5m": False}, r) == {"red_5m": False}
+    for bad in ("true", 1, 0, None):
+        with pytest.raises(ValueError, match="on or off"):
+            labcfg.parse_settings({"red_5m": bad}, r)
+
+
 # ---------------------------------------------------------------- what Promote keeps (store.snapshot / draftstore)
 def test_the_snapshot_carries_the_declared_settings_and_a_draft_without_them_none():
     meta = {"root": "NQ", "name": "X", "desk_settings": ("open_min", "big_body", "gone"),

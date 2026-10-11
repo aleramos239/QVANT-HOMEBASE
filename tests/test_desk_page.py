@@ -86,7 +86,7 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 def test_the_asset_versions_are_bumped():
     assert '<script src="/static/desklab.js?v=8"></script>' in HTML                  # 8: adjustable settings in the Setup panel
-    assert '<script src="/static/desklabset.js?v=1"></script>' in HTML
+    assert '<script src="/static/desklabset.js?v=2"></script>' in HTML
     assert all(f"desklab.js?v={n}" not in HTML for n in (1, 2, 3, 4, 5, 6, 7))
     assert '"version": 8' in (STATIC / "apple" / "manifest.json").read_text()      # 8: the wave review's words (N9)
 

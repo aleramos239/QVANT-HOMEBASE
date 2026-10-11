@@ -110,3 +110,20 @@ test('sig changes only when something the controls show changes', () => {
   assert.notEqual(S.sig(LAB({ params: { open_min: '1', big_body: 25 } })), a);
   assert.notEqual(S.sig(LAB({ read_only: true })), a);
 });
+
+test('an on/off setting is an On / Off menu that sends a real boolean', async () => {
+  const calls = [];
+  const { S } = load({ setLabSetting: async (n, k, v) => { calls.push([n, k, v]); return ''; } });
+  const spec = [{ key: 'red_5m', label: 'Red-folder days: 5-minute candle', type: 'bool', default: false }];
+  const rows = S.nodes('lab_x', { settings: spec, params: { red_5m: false }, read_only: false }, false);
+  const sel = rows[0].children[1];
+  assert.equal(sel.tag, 'select');
+  assert.deepEqual(sel.children.map((o) => [o.value, o.textContent]), [['true', 'On'], ['false', 'Off']]);
+  assert.equal(sel.value, 'false');
+  sel.value = 'true';
+  await fire(sel, 'change');
+  await fire(rows[0].children[2], 'click');
+  assert.deepEqual(calls, [['lab_x', 'red_5m', true]]);
+  const on = S.nodes('lab_x', { settings: spec, params: { red_5m: true }, read_only: false }, false);
+  assert.equal(on[0].children[1].value, 'true');                       // follows the Desk's value
+});

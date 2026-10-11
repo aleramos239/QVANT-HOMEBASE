@@ -27,7 +27,7 @@
   // What the control holds as the text the backend takes: a choice as it is, a number as typed.
   function wire(s, raw) {
     if (s.type === "choice") return String(raw);
-    if (s.type === "bool") return raw === true || raw === "true";
+    if (s.type === "bool") return raw === true || raw === "true";           // the menu's "true" / "false"
     var n = parseFloat(raw);
     return isFinite(n) ? n : NaN;
   }
@@ -39,9 +39,12 @@
       var row = el("div", "hb-row");
       row.appendChild(el("span", "hb-row-k", plain(s.label || s.key)));
       var input;
-      if (s.type === "choice") {
+      if (s.type === "choice" || s.type === "bool") {
         input = el("select", "hb-field");
-        (s.choices || []).forEach(function (c) { var o = el("option", "", plain(c)); o.value = plain(c); input.appendChild(o); });
+        // an on/off setting is a two-item menu: the values are the words the backend reads back as true / false
+        var opts = s.type === "bool" ? [["true", "On"], ["false", "Off"]]
+          : (s.choices || []).map(function (c) { return [plain(c), plain(c)]; });
+        opts.forEach(function (c) { var o = el("option", "", c[1]); o.value = c[0]; input.appendChild(o); });
       } else {
         input = el("input", "hb-field");
         input.type = "number";
