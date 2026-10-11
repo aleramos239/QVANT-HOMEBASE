@@ -2664,11 +2664,24 @@ class Engine:
             theirs = str(so.symbol).upper()
             if other == name or not mine or not theirs or not (mine in theirs or theirs in mine):
                 continue
+            if so.kind == LAB and theirs == mine:    # a group: the same contract, one trade at a time (_lab_slot_busy)
+                continue
             if any(a.get("account") == account for a in assignments(self.cfg, other)) or any(
                     s.strategy == other and s.status in ("placing", "placed", "live")
                     for s in self.day_states_for_account(account)):
                 return so.symbol
         return None
+
+    def _lab_slot_busy(self, name: str, cfg: StrategyCfg, account: str) -> bool:
+        """A GROUP -- Lab strategies in the SAME contract booked on one account -- trades one at a time, first come:
+        True while another member's round on this account is placing, placed or live, or is over with its orders
+        not read terminal (a block carried from an earlier day is one). on_fill books an opposite fill in a market
+        as the live round's exit, so two rounds of one contract are never open on an account together."""
+        mine = str(cfg.symbol).upper()
+        return any(other != name and so.kind == LAB and str(so.symbol).upper() == mine
+                   and any(s.account == account and (s.status in ("placing", "placed", "live") or not self._lab_clean(s))
+                           for s in self.day_states(other))
+                   for other, so in self.cfg.strategies.items())
 
     def _lab_archive(self, key: str, st: DayState) -> None:
         """A terminal, clean round leaves the plain key (I-3: the next state made for the pair is inserted last)."""
@@ -2702,6 +2715,8 @@ class Engine:
         taken = self._lab_market_taken(name, cfg, account)                  # 2
         if taken is not None:
             return f"Another strategy trades {taken} on this account."
+        if self._lab_slot_busy(name, cfg, account):
+            return LAB_SLOT_BUSY
         today = self._today()                                               # 3
         if any(self._archived(s) and (self._lab_carried(s) or not self._lab_clean(s))
                for s in self.day_states(name) if s.account == account):
@@ -3673,6 +3688,7 @@ LAB_NOT_CONNECTED = "The account is not connected."
 LAB_ACCOUNT_STOPPED = "This account is stopped for the day."
 LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
 LAB_ONE_AT_A_TIME = "One position at a time."
+LAB_SLOT_BUSY = "Another strategy's trade is open on this account."
 LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
 LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."
