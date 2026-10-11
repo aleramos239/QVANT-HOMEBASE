@@ -60,6 +60,18 @@ test('a tick chart ends a bar where the next one starts, the last one now', () =
   assert.ok(Math.abs(c.bookEnd(c.bars[2]) - Date.now()) < 1000);
 });
 
+test('Bar Replay: a bar never ends past the replay cursor, so the book series holds no sample from after it', () => {
+  S.applyHistory('NQ', { t0: T0, t1: T0 + 120000, samples: [row(0, 0.2, 10, 30, 100), row(30, 0.4, 20, 30, 102), row(45, 0.9, 0, 0, 0)], episodes: [] });
+  const c = stub({ replay: { cursorMs: T0 + 40000 } }), b = { tt: 7, ms: T0, sv: {} };
+  assert.equal(c.bookEnd(b), T0 + 40000);                         // the bar runs to T0 + 60 s, the cursor is at 40 s
+  assert.ok(Math.abs(c.point(line('bkimb'), b).value - 0.3) < 1e-9);   // the sample at 45 s is not in it
+  assert.equal(stub({ replay: { cursorMs: T0 + 90000 } }).bookEnd(b), T0 + 60000);   // a cursor beyond the bar changes nothing
+  assert.equal(stub({ replay: { cursorMs: null } }).bookEnd(b), T0 + 60000);          // an unknown cursor: not capped
+  const t = stub({ cfg: { root: 'NQ', spec: 'tick:500', indicators: [] }, shown: { root: 'NQ', spec: 'tick:500' },
+    bars: [{ ms: T0 }, { ms: T0 + 5000 }], replay: { cursorMs: T0 + 7000 } });
+  assert.equal(t.bookEnd(t.bars[1]), T0 + 7000);                  // the last tick bar: the cursor, not now
+});
+
 test('a "fixed" histogram keeps its own colour (tape speed), the others take it from the sign', () => {
   const c = stub(), b = { tt: 1, sv: { 'tspeed:200': { rate: 12, burst: 30, hot: null } } };
   const src = 'tspeed:200';

@@ -2331,6 +2331,7 @@ function connect() {
     if (m.type === 'paper') { window.HBPaperClient?.onMessage(m); return; }
     if (m.type === 'paperbook') { window.HBPaperClient?.onBook(m); window.HBDeskClient?.bookChanged(); return; }   // the PAPER account
     if (m.type === 'depth') { window.HBDomUI?.onDepth(m); window.HBL2Layer?.onDepth(m); window.HBLiquidity?.onDepth(m); return; }
+    if (m.type === 'bookflow') { window.HBBookStore?.applyLive(m); return; }   // the book's seconds + order levels (booklive.py)
     if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI?.onMessage(m); return; }
     if (m.type === 'tester_show') { window.HBTesterUI?.show(m); return; }   // Claude's "show on chart" (POST /api/tester/show)
     const c = cells.find((x) => x.id === m.id);
@@ -2480,6 +2481,8 @@ async function init() {
   if (window.HBTesterLayer) page.overlays.push(window.HBTesterLayer.overlay);  // Task 10: the tester's trades, plots and jump on the root's chart
   if (window.HBL2Layer) page.overlays.push(window.HBL2Layer.overlay);      // charts-l2-news-ui Task 2: big-order lines + the imbalance gauge
   if (window.HBLiquidity) page.overlays.push(window.HBLiquidity.overlay);    // charts-l2-news-ui Task 3: the liquidity heatmap behind the candles
+  if (window.HBBookEvents) page.overlays.push(window.HBBookEvents.overlay);  // 2026-10-11: ended big orders, absorption, pulled liquidity, the book series
+  if (window.HBFlowLayer) page.overlays.push(window.HBFlowLayer.overlay);    // 2026-10-11: heatmap trade bubbles, big-print sweeps
   if (window.HBNewsUI) page.overlays.push(window.HBNewsUI.overlay);       // 2026-09-27 news-ui plan, Task 4: headline ticks + burst markers
   // M8 (tester review): HBTesterUI.mount registers the 'tester' tab via HBPanel.addTab, so it runs BEFORE
   // HBPanel.mount reads a saved {tab: 'tester'} -- otherwise a saved tester tab is not restored on reload.

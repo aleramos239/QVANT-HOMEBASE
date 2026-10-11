@@ -1284,11 +1284,16 @@ class Cell {
     return (b.sv[src] = F.bookValue(src, (col) => S.meanAt(root, from, to, col)));
   }
   /* Where a bar ends, for the book's samples: a time bar's length, else the start of the next bar (the last one:
-     now). */
+     now). Bar Replay: never past the replay cursor (the store may hold a fetched chunk that runs on past it). */
   bookEnd(b) {
-    if (this.isTime()) return b.ms + this.barMs();
-    const i = C.barIndexAtMs(this.bars, b.ms, 0);
-    return i >= 0 && this.bars[i + 1] ? this.bars[i + 1].ms : Date.now();
+    let end;
+    if (this.isTime()) end = b.ms + this.barMs();
+    else {
+      const i = C.barIndexAtMs(this.bars, b.ms, 0);
+      end = i >= 0 && this.bars[i + 1] ? this.bars[i + 1].ms : Date.now();
+    }
+    const cur = this.replay && this.replay.cursorMs;
+    return Number.isFinite(cur) ? Math.min(end, cur) : end;
   }
   /* The book changed (HBBookEvents' timer): every "bk:" series is set again after a fetched window landed, else
      only the newest bar's point moves (the live samples). */
