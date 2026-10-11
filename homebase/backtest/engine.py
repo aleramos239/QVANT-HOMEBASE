@@ -40,7 +40,7 @@ from __future__ import annotations
 from bisect import bisect_left
 from dataclasses import asdict, dataclass, field
 
-from ..contracts import point_value, tick_size
+from ..contracts import exec_ok, point_value, tick_size
 from .tape import et_ns
 
 ENGINE_VERSION = "tick-2"      # tick-2: a strategy's own no-trade day is a flat 0.0 on the Sharpe grid (review C1)
@@ -426,7 +426,10 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     t0, t1 = et_ns(d, w0), et_ns(d, w1)
     ts, px = tape.ts, tape.px
     lo, hi = bisect_left(ts, t0), bisect_left(ts, t1)
-    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, getattr(strategy, "exec_root", "") or "")
+    ex = getattr(strategy, "exec_root", "") or ""
+    if ex and not exec_ok(tape.root, ex):          # orders to a market's own micro only: never priced on another contract
+        raise ValueError(f"exec_root: {tape.root} has no micro named {ex} here")
+    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, ex)
     ctx = sim._ctx = Ctx(sim, qty, daily or [])
     events: list[tuple] = [(t0, 0, 0, "session", None)]
     if strategy.bar_minutes:

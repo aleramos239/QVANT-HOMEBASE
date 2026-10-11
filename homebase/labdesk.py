@@ -109,6 +109,7 @@ OUT_OF_DATE = "This order is out of date."
 TOO_MANY = "Too many orders at once."
 FIRE_FIRST = "The 9:30 orders go first."
 PRICE_PAST = "The price is already past this entry."
+UNEVEN_PAIR = "A linked pair must be the same size on both sides."
 LAST_TRADE = "The Desk cannot check the last trade's orders."     # the engine's own (LAB_CANNOT_CHECK)
 BOTH_FILLED = "Both entries filled."     # why the desk stops a strategy whose pair filled on both sides
 NOT_PLACED = "The entry was not placed. Check it."     # the page's words for a row whose `why` is a raw engine note:
@@ -1042,6 +1043,14 @@ class LabDesk:
                "own_size": own}
         entries = [i for i, it in enumerate(ev.intents) if it["op"] == "entry"]
         index = {ev.intents[i]["id"]: i for i in entries}
+        # a strategy that sizes its own orders: the two legs of a linked pair must carry ONE size. An account's cap
+        # could otherwise make a pair of one account's legs and a lone leg of another's (2026-10-11 review)
+        uneven = set()
+        if own:
+            for it in ev.intents:
+                legs = [index[k] for k in it.get("ids") or () if k in index] if it["op"] == "oco" else []
+                if len({ev.intents[j]["qty"] for j in legs}) > 1:
+                    uneven.update(legs)
         per: dict = {i: {} for i in entries}
         oco: dict = {}
         pair: dict = {}
@@ -1057,6 +1066,8 @@ class LabDesk:
                         pair[x], pair[y] = y, x
             for i in entries:
                 why = LAST_TRADE if (unread and got[i] == door.ONE_AT_A_TIME) else got[i]
+                if i in uneven:
+                    why = UNEVEN_PAIR
                 if why is None and q > limits.max_qty:
                     why = f"Size is capped at {limits.max_qty} here."
                 if why is None and self._past(ev.intents[i], last):
@@ -1529,6 +1540,7 @@ class LabDesk:
         keep = ("account", "round", "status", "date", "carried", "iid", "qty", "entry_side", "entry_qty", "entry_fill",
                 "exit_qty", "exit_fill", "exit_reason", "sl", "tp", "pnl", "clean", "entry_ms", "exit_ms", "why")
         return {"strategy": name, "mark": labcfg.mark_of(self.cfg, name), "date": d["date"],
+                "symbol": str(self.cfg.strategies[name].symbol),     # the market THIS desk's orders go to
                 "enabled": bool(self.cfg.strategies[name].enabled), "armed": bool(self.cfg.armed),
                 "killed": self.engine.killed_today(name), "stopped": d["stopped"],
                 "brain": self._brain(name, rows), "rounds": [{k: r.get(k) for k in keep} for r in rows],

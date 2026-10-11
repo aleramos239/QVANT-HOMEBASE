@@ -1944,7 +1944,9 @@ class Runner:
                 return None
         elif not accounts:
             return {}
-        side = DeskSide(desk_id(name), mark, d, accounts, wall=self._wall, flat=was["flat"] if begun else True)
+        ex = rec.get("exec_root")
+        side = DeskSide(desk_id(name), mark, d, accounts, wall=self._wall, flat=was["flat"] if begun else True,
+                        symbol=ex if isinstance(ex, str) and ex else None)
         snap = self._snaps.get(side.desk_id)
         if snap is not None:
             side.take(snap)

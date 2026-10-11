@@ -13,8 +13,9 @@ from homebase.backtest.engine import Costs, run_session
 from homebase.charts import paperbook as pb
 from homebase.charts.paperbook import PAPER_ID, PaperBook
 from homebase.labrun import deskside, door, store
+from homebase.labrun.deskside import DeskSide
 from homebase.labrun.host import StrategyDay, sized, well_set
-from tests.labdesk_util import LAB, entry, mkdesk, send
+from tests.labdesk_util import DATE, LAB, MARK, entry, mkdesk, rec as desk_rec, send
 from tests.test_backtest_engine import D, Script, tape
 from tests.test_charts_paperbook import T0, order
 from tests.test_engine import run
@@ -27,7 +28,8 @@ OWN = {"max_trades_day": 3, "max_qty": 10, "max_risk_usd": 5000, "last_entry_et"
 # ---------------------------------------------------------------- the pairs
 def test_only_a_markets_own_micro_may_take_its_orders():
     assert contracts.exec_ok("NQ", "MNQ") and contracts.exec_ok("ES", "MES") and contracts.exec_ok("GC", "MGC")
-    for root, ex in (("NQ", "MES"), ("NQ", "NQ"), ("MNQ", "NQ"), ("NQ", ""), ("NQ", None), ("CL", "MCL")):
+    # (RTY's M2K: its name does not resolve to a contract here -- not a pair)
+    for root, ex in (("NQ", "MES"), ("NQ", "NQ"), ("MNQ", "NQ"), ("NQ", ""), ("NQ", None), ("CL", "MCL"), ("RTY", "M2K")):
         assert not contracts.exec_ok(root, ex), (root, ex)
     for root, micro in contracts._MICRO_OF.items():          # a level of the market is a level of its micro
         assert contracts.tick_size(root) == contracts.tick_size(micro)
@@ -42,6 +44,9 @@ def test_a_micro_rolls_with_its_market():
     for root, micro in contracts._MICRO_OF.items():
         for day in (dt.date(2026, 1, 5), dt.date(2026, 3, 12), dt.date(2026, 6, 19), dt.date(2026, 9, 25), dt.date(2026, 12, 18)):
             assert front_month(micro, day)[len(micro):] == front_month(root, day)[len(root):], (root, day)
+        from homebase.symbols import resolve_contract
+        got = resolve_contract(micro)                       # a real contract, never the bare root (the broker refuses that)
+        assert got.startswith(micro) and len(got) > len(micro), got
 
 
 # ---------------------------------------------------------------- the draft
@@ -254,3 +259,76 @@ def test_a_micro_of_a_market_that_is_not_streamed_is_refused_and_nq_is_as_before
     order(b, "Sell", "Market", qty=1, root="NQ")
     b.on_ticks("NQ", rows_at(T0 + 2 * 10 ** 9, 21011.0))
     assert b.fills[-1]["pnl"] == pytest.approx((21010.75 - 21001.25) * 20 - 4.0)      # the full contract's fee, as before
+
+
+# ---------------------------------------------------------------- the 2026-10-11 review's findings
+def test_the_runner_believes_only_a_desk_that_sends_the_orders_to_the_same_market(tmp_path):
+    """A Desk started before it knew of micros reads the record as NQ: the runner must send it no entry."""
+    d = mkdesk(tmp_path, limits=OWN, qty=10, rec_kw={"exec_root": "MNQ", "own_size": True})
+    snap = d.ld.snapshot()["strategies"][LAB]
+    assert snap["symbol"] == "MNQ"
+    side = DeskSide(LAB, MARK, DATE, ["a1"], symbol="MNQ")
+    assert side.take(snap) is True and side.silent() is False
+    for old in ({k: v for k, v in snap.items() if k != "symbol"}, {**snap, "symbol": "NQ"}, {**snap, "symbol": None}):
+        side = DeskSide(LAB, MARK, DATE, ["a1"], symbol="MNQ")
+        assert side.take(old) is False and side.silent() is True, old.get("symbol", "(none)")
+    plain = DeskSide(LAB, MARK, DATE, ["a1"])                    # a strategy that names no micro: as before
+    assert plain.take({k: v for k, v in snap.items() if k != "symbol"}) is True and plain.silent() is False
+
+
+def test_a_record_whose_market_changes_under_the_same_promotion_is_not_followed(tmp_path):
+    d = mkdesk(tmp_path, limits=OWN, qty=2)
+    assert d.cfg.strategies[LAB].symbol == "NQ" and d.cfg.strategies[LAB].enabled is True
+    store.put(desk_rec(enabled=True, session_window=["09:25", "15:55"], exec_root="MNQ"))     # edited by hand: same mark
+    labcfg.overlay(d.cfg)
+    s = d.cfg.strategies[LAB]
+    assert s.symbol == "NQ" and s.enabled is False              # kept as it last read, and switched off
+
+
+def test_a_pair_of_a_self_sizing_strategy_goes_out_whole_or_not_at_all(tmp_path):
+    def legs(a, b):
+        return [entry(3, side="long", price=110.0, sl=105.0, tp=120.0, qty=a, own_qty=True),
+                entry(4, side="short", price=90.0, sl=95.0, tp=80.0, qty=b, own_qty=True), {"op": "oco", "ids": [3, 4]}]
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), limits=OWN, rec_kw={"own_size": True})
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 10}, {"account": "a2", "qty": 2}]))
+    out = send(d, legs(5, 2))
+    assert [r.get("refused") for r in out["results"][:2]] == ["A linked pair must be the same size on both sides."] * 2
+    assert placed(d, "a1") == [] and placed(d, "a2") == []
+    out = send(d, legs(5, 5), seq=2)
+    assert [r.get("refused") for r in out["results"]] == [None, None, None]
+    assert placed(d, "a1") == [("NQ", "Buy", "Stop", 5), ("NQ", "Sell", "Stop", 5)]
+    assert placed(d, "a2") == [("NQ", "Buy", "Stop", 2), ("NQ", "Sell", "Stop", 2)]     # capped, both legs alike
+
+
+def test_the_fee_nobody_typed_is_the_fee_of_the_contract_the_orders_go_to():
+    assert contracts.commission_rt("MNQ") == contracts.commission_rt("MNQZ6") == 1.0
+    assert contracts.commission_rt("NQ") == contracts.commission_rt("CL") == 4.0
+    assert labcfg.strategy_cfg(lab_rec(exec_root="MNQ"), None).fee_rt == 1.0
+    assert labcfg.strategy_cfg(lab_rec(), None).fee_rt == 4.0
+    assert labcfg.strategy_cfg(lab_rec(exec_root="MNQ", commission=0.5), None).fee_rt == 0.5      # the run's own, when frozen
+    assert pb.MICRO_COMMISSION_RT == contracts.MICRO_COMMISSION_RT
+
+
+def test_the_tester_refuses_to_price_on_a_contract_that_is_not_the_markets_micro():
+    bad = Script(buy(1))
+    bad.exec_root = "MES"
+    with pytest.raises(ValueError, match="exec_root"):
+        run_session(bad, tape(ROWS), Costs(1.0, 1.0))
+
+
+def test_promote_says_when_the_backtest_traded_more_than_the_desk_sends():
+    meta = draftstore.static_meta(draft('exec_root = "MNQ"', "own_size = True"))
+    snap = store.snapshot("x", "src", meta, {"run": {"qty": 1}, "trades": [{"date": "2025-01-02", "qty": 20}]}, "r1", ["n"])
+    assert snap["notes"] == ["n", "It traded up to 20 contracts in the backtest: the Desk sends 10 at most."]
+    snap = store.snapshot("x", "src", meta, {"run": {"qty": 1}, "trades": [{"date": "2025-01-02", "qty": 10}]}, "r1", [])
+    assert snap["notes"] == []
+
+
+def test_a_micro_that_is_streamed_itself_keeps_its_own_prints_and_an_annotated_own_size_reads():
+    b = PaperBook(None, roots=["NQ", "MNQ"], clock_ms=lambda: T0 // 1_000_000)
+    b.on_ticks("NQ", rows_at(T0, 21000.0))
+    assert "MNQ" not in b.last
+    b.on_ticks("MNQ", rows_at(T0, 21000.5))
+    assert b.last == {"NQ": 21000.0, "MNQ": 21000.5} and b.seq == {"NQ": 1, "MNQ": 1}
+    src = HEAD + "class X(Strategy):\n    own_size: bool = True\n    def f(self, ctx):\n        ctx.market('long', qty=3, sl=1.0)\n"
+    assert door.read_source(src) == ["It sets its own size: the size set on an account is the most it sends there."]

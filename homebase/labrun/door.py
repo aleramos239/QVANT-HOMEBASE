@@ -232,8 +232,10 @@ def read_source(text: str) -> list[str]:
                      else f"{no_stop} orders can go out with no stop.")
     if limit:
         notes.append("It uses limit entries: not built yet.")
-    declared = any(isinstance(n, ast.Assign) and isinstance(n.value, ast.Constant) and n.value.value is True
-                   and any(isinstance(t, ast.Name) and t.id == "own_size" for t in n.targets)
+    declared = any(isinstance(n, (ast.Assign, ast.AnnAssign)) and isinstance(n.value, ast.Constant)
+                   and n.value.value is True
+                   and any(isinstance(t, ast.Name) and t.id == "own_size"
+                           for t in (n.targets if isinstance(n, ast.Assign) else [n.target]))
                    for c in tree.body if isinstance(c, ast.ClassDef) for n in c.body)
     if own_size and declared:                    # own_size = True: the Desk sends the strategy's size (labdesk)
         notes.append("It sets its own size: the size set on an account is the most it sends there.")

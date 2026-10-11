@@ -951,7 +951,9 @@ def test_every_change_is_published_as_that_strategys_whole_snapshot(tmp_path):
     working(d)                                                                     # right after the intake action
     (name, snap), = drain(q)
     assert name == "strategy" and snap == d.ld.snapshot()["strategies"][LAB]
-    assert set(snap) == {"strategy", "mark", "date", "enabled", "armed", "killed", "stopped", "brain", "rounds", "answered"}
+    assert set(snap) == {"strategy", "mark", "date", "symbol", "enabled", "armed", "killed", "stopped", "brain", "rounds",
+                         "answered"}
+    assert snap["symbol"] == "NQ"                                                  # the market this desk's orders go to
     assert set(snap["rounds"][0]) == {"account", "round", "status", "date", "carried", "iid", "qty", "entry_side",
                                       "entry_qty", "entry_fill", "exit_qty", "exit_fill", "exit_reason", "sl", "tp",
                                       "pnl", "clean", "entry_ms", "exit_ms", "why"}

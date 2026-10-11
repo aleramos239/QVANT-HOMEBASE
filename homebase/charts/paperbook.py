@@ -77,7 +77,7 @@ from fastapi.responses import JSONResponse, Response
 
 from .. import netguard
 from ..backtest.engine import Costs, tick_cmp, to_tick
-from ..contracts import micro_of, point_value, price_root, tick_size
+from ..contracts import MICRO_COMMISSION_RT, micro_of, point_value, price_root, tick_size
 from ..symbols import resolve_contract
 from . import _jsonl
 
@@ -105,7 +105,6 @@ QUOTE_MAX_FUTURE_S = 5.0          # ...and at most this far ahead of this book's
 QUOTE_FILL_MAX_AGE_S = 2.0        # a Market fills at once against a book / quote at most this old...
 QUOTE_FILL_MAX_FUTURE_S = 1.0     # ...at most this far ahead of this book's clock (more: the clock is off -- no fill)
 QUOTE_FILL_MAX_SPREAD_TICKS = 20  # ...and at most this wide; otherwise it waits for the next print, as before
-MICRO_COMMISSION_RT = 1.00        # a micro's round turn (the research cost model's: library.MICRO_RT_USD)
 LIVE_PRINT_MAX_AGE_S = 30.0       # ...and only while that root printed this recently (a halt, a closed market's
                                   # subscribe-time snapshot: no instant fill)
 BOOK_WALK_MAX_TICKS = 40          # a book level further than this from the touch, or priced <= 0, ends the walk
@@ -590,6 +589,8 @@ class PaperBook:
         """The live tick rows the service just kept for `root` ({ts_ms, price, ts_ns?}), in tape order."""
         root = root.upper()
         micro = micro_of(root)                       # MNQ has no feed here: it trades on NQ's prints (2026-10-11)
+        if micro in self.roots:                      # ... unless it is streamed itself: then its own prints only
+            micro = None
         for r in rows:
             ts_ns = int(r["ts_ns"]) if r.get("ts_ns") else int(r["ts_ms"]) * 1_000_000
             self.on_print(root, ts_ns, float(r["price"]))
@@ -758,7 +759,7 @@ class PaperBook:
         return [o for o in self.orders.values() if o.root == root and o.status == "working"]
 
     def _place(self, root, side, typ, qty, price, trigger, sl, tp, tif) -> dict:
-        if self.roots and price_root(root) not in self.roots:
+        if self.roots and root not in self.roots and price_root(root) not in self.roots:
             raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
         if not 1 <= qty <= MAX_ORDER_QTY:                                  # trading.py guard 3
             raise Refused(f"quantity must be 1-{MAX_ORDER_QTY}")
@@ -908,7 +909,7 @@ class PaperBook:
         cancels the existing exit and places the pair with its price kept, in one synchronous step (no print can land
         between them here). The Stop is always placed BEFORE the Limit, so if one print could ever trigger both, the
         oldest-first rule fills the stop (pessimistic, like the engine's same-bar rule)."""
-        if self.roots and price_root(root) not in self.roots:
+        if self.roots and root not in self.roots and price_root(root) not in self.roots:
             raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
         pos = self.pos.get(root) or {}
         net = pos.get("net", 0)

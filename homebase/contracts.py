@@ -67,7 +67,10 @@ _ROOT_RE = re.compile(r"^([A-Z0-9]+?)([FGHJKMNQUVXZ])(\d{1,2})$")
 
 # A market and its micro: the same index or metal, the same tick, a smaller contract. A Lab strategy may read the
 # prices of the first and send its orders to the second (`exec_root`, 2026-10-11): only these pairs.
-_MICRO_OF: dict[str, str] = {"NQ": "MNQ", "ES": "MES", "YM": "MYM", "RTY": "M2K", "GC": "MGC", "SI": "SIL"}
+# (RTY's M2K is left out: symbols.resolve_contract reads the "2" in its name as a contract year.)
+_MICRO_OF: dict[str, str] = {"NQ": "MNQ", "ES": "MES", "YM": "MYM", "GC": "MGC", "SI": "SIL"}
+MICRO_COMMISSION_RT = 1.00        # a micro's round turn, per contract (the research cost model's: library.MICRO_RT_USD)
+FULL_COMMISSION_RT = 4.00         # a full contract's (backtest.engine.Costs' own default)
 _PRICED_ON: dict[str, str] = {micro: root for root, micro in _MICRO_OF.items()}
 
 
@@ -121,6 +124,11 @@ def exec_ok(root: str, exec_root: str) -> bool:
 def micro_of(root: str) -> Optional[str]:
     """The micro of a market (NQ -> MNQ), or None when it has none here."""
     return _MICRO_OF.get(root)
+
+
+def commission_rt(symbol: str) -> float:
+    """The round-turn fee of one contract when nobody typed one: a micro's, or a full contract's."""
+    return MICRO_COMMISSION_RT if root_of(symbol) in _PRICED_ON else FULL_COMMISSION_RT
 
 
 def price_root(symbol: str) -> str:

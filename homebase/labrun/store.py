@@ -133,6 +133,9 @@ def _read(f: Path) -> dict | None:
 OWN_TRADES_DAY = 20            # a backtest with no trade list or no trades: the strategy is not held to fewer than the Desk allows
 
 
+OWN_SIZE_MOST = 10        # the most contracts the Desk sends in one order (labcfg.LabLimits.max_qty's own top)
+
+
 def auto_limits(trades) -> dict | None:
     """What the strategy itself did in the backtest the record is frozen from: the most trades it took in one day.
     The Desk reads its limits from this (labcfg.derive_limits), so the owner fills in nothing. None: no trade list."""
@@ -177,6 +180,10 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
         snap["exec_root"] = meta["exec_root"]
     if meta.get("own_size") is True:              # every order carries its own size; the account's size is the most it takes
         snap["own_size"] = True
+        trades = bundle.get("trades") if isinstance(bundle.get("trades"), list) else []
+        most = max((t["qty"] for t in trades if isinstance(t, dict) and isinstance(t.get("qty"), int)), default=0)
+        if most > OWN_SIZE_MOST:                  # the backtest is not capped; the Desk is
+            snap["notes"].append(f"It traded up to {most} contracts in the backtest: the Desk sends {OWN_SIZE_MOST} at most.")
     return snap
 
 

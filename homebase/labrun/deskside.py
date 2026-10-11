@@ -144,8 +144,13 @@ class DeskSide:
     book for it, in order (the runner keeps it up to date: it only decides the lead). flat: what the day believes
     before the first snapshot (a day picked up from its tell-log: the log's last word)."""
 
-    def __init__(self, desk_id: str, mark, date: str, accounts, *, wall=time.monotonic, flat: bool = True):
+    def __init__(self, desk_id: str, mark, date: str, accounts, *, wall=time.monotonic, flat: bool = True,
+                 symbol: str | None = None):
         self.desk_id, self.mark, self.date = desk_id, list(mark), date
+        # the market the orders must go to, for a record that names its market's micro (None: not checked). A Desk
+        # that does not say this very market -- one started before it knew of micros says none -- is not believed:
+        # no entry is sent to it (10 micros must never go out as 10 full contracts)
+        self.symbol = symbol
         self.accounts = list(accounts)
         self._wall = wall
         self._snap: dict | None = None               # the latest snapshot of this day
@@ -187,9 +192,10 @@ class DeskSide:
             return False
         self.heard()
         self.on_day(snap.get("date"))
-        if snap.get("mark") != self.mark or snap.get("date") != self.date:
-            self._valid = False                      # another promotion's, or another day's: nothing of it is believed
-            return False
+        if snap.get("mark") != self.mark or snap.get("date") != self.date \
+                or (self.symbol is not None and snap.get("symbol") != self.symbol):
+            self._valid = False                      # another promotion's, another day's, or a Desk that would send
+            return False                             # the orders to another market: nothing of it is believed
         self._snap, self._valid = snap, True
         brain = snap.get("brain")
         if isinstance(brain, dict) and isinstance(brain.get("flat"), bool):

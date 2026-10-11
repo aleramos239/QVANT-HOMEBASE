@@ -65,7 +65,7 @@ import re
 from dataclasses import asdict, dataclass
 
 from .config import AppCfg, StrategyCfg
-from .contracts import exec_ok
+from .contracts import commission_rt, exec_ok
 from .labrun import store
 
 LAB = "lab"                              # StrategyCfg.kind
@@ -233,7 +233,7 @@ def strategy_cfg(rec: dict, limits: LabLimits | None) -> StrategyCfg:
     qty = rec.get("qty")
     qty = qty if _whole(qty, 1, 10 ** 6) else 1
     fee = rec.get("commission")
-    fee = float(fee) if _number(fee, 0, 1e6) else 4.0
+    fee = float(fee) if _number(fee, 0, 1e6) else commission_rt(exec_symbol(rec))
     label = rec.get("label")
     return StrategyCfg(
         symbol=exec_symbol(rec), kind=LAB, label=label if isinstance(label, str) and label else rec["name"],
@@ -553,6 +553,11 @@ def _known(cfg: AppCfg, m: dict, did: str, rec: dict) -> bool:
         limits = derive_limits(rec)
         auto = limits is not None
     s = strategy_cfg(rec, limits)            # may raise: nothing has changed yet
+    was = cfg.strategies.get(did)
+    if not again and was is not None and str(was.symbol) != str(s.symbol):
+        # the same promotion, another market: a record edited by hand. Never followed -- a round open on the old
+        # market would be flattened, cancelled and read on the new one (2026-10-11 review)
+        raise ValueError(f"its market changed from {was.symbol} to {s.symbol} under the same promotion")
     if again:
         _unbook(cfg, did, cfg.book.pop(did, None) or [], "promoted again")
         m["mark"], m["limits"], m["frozen"], m["auto"] = mark, limits, froze, auto

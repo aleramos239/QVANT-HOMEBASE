@@ -43,6 +43,7 @@ from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
+from ..contracts import commission_rt
 from . import drafthost, sandbox
 from ..paths import repo_root, state_dir
 from . import discipline, propsim, report
@@ -127,7 +128,8 @@ def validate(body, *, draft: tuple | None = None) -> dict:
     req = {"strategy": cls.id, "inputs": inputs, "range": rng.to_dict(),
             "strategy_config": strategy_config,
             "qty": _num(body, "qty", 1, 1, 100, integer=True),
-            "commission": _num(body, "commission", 4.00, 0.0, 100.0),
+            # nobody typed a fee: the fee of the contract the orders go to (a micro's for an exec_root strategy)
+            "commission": _num(body, "commission", commission_rt(getattr(cls, "exec_root", "") or cls.root), 0.0, 100.0),
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
             "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
