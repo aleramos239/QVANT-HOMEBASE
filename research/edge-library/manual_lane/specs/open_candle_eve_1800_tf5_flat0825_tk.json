@@ -1,0 +1,33 @@
+{
+ "name": "open_candle_eve_1800_tf5_flat0825_tk",
+ "reason": "Owner's request 2026-10-11 ('do the same for 6pm and 8pm'): the 18:00 ET candle of the evening before the trade date followed at its close, body gate 0.4-0.85 x the standard 48 stop/target cells, flat by 08:25 next morning. Judged by the average of the grid, not the best cell; plateau, not the best cell.",
+ "family": "open_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "eve"
+ ],
+ "params": {
+  "body_r": [
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.85
+  ]
+ },
+ "fixed": {
+  "start": "1800"
+ },
+ "filters": [],
+ "exits": "standard",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both",
+  "exit_bars": 172
+ }
+}

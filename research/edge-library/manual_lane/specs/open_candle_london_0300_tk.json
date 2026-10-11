@@ -1,0 +1,32 @@
+{
+ "name": "open_candle_london_0300_tk",
+ "reason": "Owner's manual test (2026-10-11): the candle that opens at 03:00 ET (08:00 London, the cash open) followed at its close in its own direction, with and without a body gate; 1- and 5-minute candles; standard stop / target grid; one trade a day, flat 15:58.",
+ "family": "open_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1",
+  "5"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "body_r": [
+   0.0,
+   0.5,
+   0.7,
+   0.85
+  ]
+ },
+ "fixed": {
+  "start": "0300"
+ },
+ "filters": [],
+ "exits": "standard",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

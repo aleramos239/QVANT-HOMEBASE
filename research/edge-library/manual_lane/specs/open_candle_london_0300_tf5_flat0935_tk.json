@@ -1,0 +1,33 @@
+{
+ "name": "open_candle_london_0300_tf5_flat0935_tk",
+ "reason": "Owner's request (2026-10-11): build something with about 40 % eval pass as quickly as possible from the 03:00 ET candle, small fixed grid (body 0.4-0.85 x the standard 48 stop / target cells), flat time 09:35 ET (78 five-minute bars after the 03:05 fill). Judged by the average of the grid, not the best cell.",
+ "family": "open_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "body_r": [
+   0.4,
+   0.5,
+   0.6,
+   0.7,
+   0.85
+  ]
+ },
+ "fixed": {
+  "start": "0300"
+ },
+ "filters": [],
+ "exits": "standard",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both",
+  "exit_bars": 78
+ }
+}

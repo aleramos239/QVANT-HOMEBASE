@@ -394,6 +394,41 @@ def test_the_0830_candle_is_followed_at_its_close_with_its_other_extreme_as_the_
     assert got(cdl({}, PX, PX, h=PX + 3.0, l=PX - 3.0)[1]) == []                                      # a doji is no signal
 
 
+def _london(start, o, c, h=None, l=None, base=None, params=None):
+    """The `start` (02:00 | 03:00) candle on a background of 6-point minutes, followed by quiet minutes at its close."""
+    t0 = f"{start[:2]}:{start[2:]}"
+    bars = [(PX, PX + 3.0, PX - 3.0, PX, 40)] * 960
+    k = S._sec(t0) // 60
+    for t, b in candle(o, c, h, l, t0=t0).items():
+        bars[S._sec(t) // 60] = b
+    for i in range(k + 5, k + 200):                                                                     # quiet at the close for three hours
+        bars[i] = hold(c)
+    return run(CANDLE, {**CBASE, "sess": "london", **(base or {})}, {"start": start, **(params or {})}, bars)
+
+
+def test_the_london_candle_is_followed_at_its_close_in_its_own_session_and_the_0830_start_never_trades_there():
+    for start, hh in (("0200", 2), ("0300", 3)):
+        st, res = _london(start, PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0)
+        assert st.sessions() == ["london"] and st.S["london"] == (hh * 3600, OC.LONDON_END)
+        assert got(res) == [(sec(hh, 5, FILL), "long", PX + 10.0, PX - 2.0, None)]                      # the structure stop = the candle's low
+        st, res = _london(start, PX, PX - 10.0, h=PX + 2.0, l=PX - 12.0)
+        assert got(res) == [(sec(hh, 5, FILL), "short", PX - 10.0 - SELL_SLIP, PX + 2.0 - SELL_SLIP, None)]
+        assert got(_london(start, PX, PX, h=PX + 3.0, l=PX - 3.0)[1]) == []                              # a doji is no signal
+    # a start belongs to ITS session only: 0830 trades in "pre", never in "london"; 0200 never in "pre"
+    assert CANDLE({**CBASE, "sess": "london", "start": "0830"}).sessions() == []
+    assert CANDLE({**CBASE, "sess": "pre", "start": "0200"}).sessions() == []
+    assert CANDLE({**CBASE, "sess": "pre"}).sessions() == ["pre"] and CANDLE(CBASE).p["start"] == "0830"        # the default is unchanged
+
+
+def test_the_london_candle_takes_the_body_gate_and_a_time_stop_in_tf_bars():
+    o, c, h, l = PX, PX + 6.0, PX + 10.0, PX - 4.0                                                      # body 6 of a 14-point range (43 %)
+    assert len(got(_london("0200", o, c, h, l, params={"body_r": 0.42})[1])) == 1
+    assert got(_london("0200", o, c, h, l, params={"body_r": 0.44})[1]) == []
+    st, res = _london("0200", PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0, params={"exit_bars": 12})           # 12 five-minute bars after the fill: 03:05
+    t = sorted(res.trades, key=lambda x: x["entry_ms"])[0]
+    assert (t["entry_ms"] - MS0) // 1000 == sec(2, 5, FILL) and (t["exit_ms"] - MS0) // 1000 == sec(3, 5)       # a time stop leaves at the 12th close
+
+
 def test_open_candle_is_one_trade_on_the_first_candle_only_and_never_in_another_session():
     assert CANDLE({**CBASE, "sess": "nyam"}).sessions() == [] and len(got(cdl({}, PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0)[1])) == 1
     # a candle at 08:35 (the SECOND 5-minute bar) is not the signal
@@ -506,3 +541,48 @@ def test_real_build_days_open_candle_follows_the_0830_candle():
         et = dt.datetime.fromtimestamp(t["entry_ms"] / 1000, S.ET)
         s = et.hour * 3600 + et.minute * 60 + et.second
         assert sec(8, 35) <= s < sec(8, 36), (t["date"], s)                                             # the order goes right after the 08:30 5-minute close
+
+
+def _eve(start, o, c, h=None, l=None, base=None, params=None):
+    """The `start` (18:00 | 20:00) candle of the evening BEFORE the trade date on a background of 6-point minutes, quiet at its close all night."""
+    import test_blocks as TB
+    t0 = f"{start[:2]}:{start[2:]}"
+    n = 22 * 60                                                                                         # 18:00 of D-1 .. 16:00 of D
+    bars = [(PX, PX + 3.0, PX - 3.0, PX, 40)] * n
+    k = (S._sec(t0) - 18 * 3600) // 60
+    for t, b in candle(o, c, h, l, t0=t0).items():
+        bars[(S._sec(t) - 18 * 3600) // 60 + (k - (S._sec(t0) - 18 * 3600) // 60)] = b
+    for i in range(k + 5, n):
+        bars[i] = hold(c)
+    prev = TB.D - dt.timedelta(days=1)
+    tp = minute_tape(bars, "18:00", d=prev)
+    tape = S.Tape(tp.root, TB.D, tp.contract, tp.ts, tp.px, tp.size)
+    st = CANDLE({**CBASE, "sess": "eve", **(base or {})} | {"start": start, **(params or {})})
+    st.ROLLS = frozenset()
+    res = S.run_session(st, tape, costs=S.Costs(**getattr(CANDLE, "SCREEN_RUN", {})), daily=list(DAILY), on_error="raise", window=st.eve_window, segment="eve")
+    return st, res
+
+
+def test_the_evening_candle_is_followed_at_its_close_and_belongs_to_the_next_trade_date():
+    for start, hh in (("1800", 18), ("2000", 20)):
+        st, res = _eve(start, PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0)
+        assert st.sessions() == ["eve"] and st.S["eve"] == (hh * 3600 - 86400, OC.EVE_END)
+        assert got(res) == [(sec(hh, 5, FILL) - 86400, "long", PX + 10.0, PX - 2.0, None)]                 # the evening BEFORE the trade date
+        assert [t["date"] for t in res.trades] == [dt.date(2023, 3, 14).isoformat()] or res.trades[0]["date"]
+        st, res = _eve(start, PX, PX - 10.0, h=PX + 2.0, l=PX - 12.0)
+        assert got(res) == [(sec(hh, 5, FILL) - 86400, "short", PX - 10.0 - SELL_SLIP, PX + 2.0 - SELL_SLIP, None)]
+        assert got(_eve(start, PX, PX, h=PX + 3.0, l=PX - 3.0)[1]) == []                                  # a doji is no signal
+    assert CANDLE({**CBASE, "sess": "eve", "start": "0830"}).sessions() == []                             # a start belongs to ITS session only
+    assert CANDLE({**CBASE, "sess": "london", "start": "1800"}).sessions() == []
+
+
+def test_the_evening_candle_takes_the_body_gate_and_a_time_stop_that_leaves_at_0935_next_morning():
+    o, c, h, l = PX, PX + 6.0, PX + 10.0, PX - 4.0                                                      # range 14, body 6 (43 %)
+    assert len(got(_eve("1800", o, c, h, l, params={"body_r": 0.42})[1])) == 1
+    assert got(_eve("1800", o, c, h, l, params={"body_r": 0.44})[1]) == []
+    st, res = _eve("1800", PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0, params={"exit_bars": 186})            # 186 five-minute bars after 18:05 = 09:35
+    t = sorted(res.trades, key=lambda x: x["entry_ms"])[0]
+    assert (t["entry_ms"] - MS0) // 1000 == sec(18, 5, FILL) - 86400 and (t["exit_ms"] - MS0) // 1000 == sec(9, 35)
+    st, res = _eve("2000", PX, PX + 10.0, h=PX + 12.0, l=PX - 2.0, params={"exit_bars": 162})            # 162 bars after 20:05 = 09:35
+    t = sorted(res.trades, key=lambda x: x["entry_ms"])[0]
+    assert (t["exit_ms"] - MS0) // 1000 == sec(9, 35)

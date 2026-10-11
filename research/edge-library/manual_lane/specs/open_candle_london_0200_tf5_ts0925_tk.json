@@ -1,0 +1,32 @@
+{
+ "name": "open_candle_london_0200_tf5_ts0925_tk",
+ "reason": "Owner's manual test (2026-10-11): as open_candle_london_0200_tf5_tk with a time stop of 88 five-minute bars after the fill: out at 09:25 ET, before the NY open if neither the stop nor the target has been reached.",
+ "family": "open_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "london"
+ ],
+ "params": {
+  "body_r": [
+   0.0,
+   0.5,
+   0.7,
+   0.85
+  ]
+ },
+ "fixed": {
+  "start": "0200"
+ },
+ "filters": [],
+ "exits": "standard",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both",
+  "exit_bars": 88
+ }
+}

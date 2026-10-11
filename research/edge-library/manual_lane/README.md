@@ -9,11 +9,15 @@ settings files and the two report scripts, so the next test is "take it from the
 | piece | what it is |
 |---|---|
 | family `orb_close` | the opening range (`or_min` 5 / 15 / 30 / 60 minutes) broken on a **close** of the tf bar. `start` 0830 (default) = ONE session 08:30-11:00 (`sessions: ["pre"]`), 0930 = NY sessions (the library's `orb_confirm` is the older 09:30 rule). `entry` market, or limit AT the broken edge for `wait` 0 / 5 / 15 / 30 minutes (0 = to the last 5 minutes of the session; the signal is used up filled or not). `dir` both / long / short (a limit key, in `limits`). `vwap` off / on / first, `vwap_tf` 0 (every print) / 15 (15-minute bars): long only above, short only below the VWAP anchored at 16:00 ET of the prior session, at the signal's close; **build days only, a later date raises** |
-| family `open_candle` | the candle that opens at 08:30 ET (sessions `["pre"]`), followed at its close, market, stop = its other extreme. Gates, all off at 0: `k` range >= k x ATR(14), `body_r` body >= r x range, `body_pts` body >= points, `vol_m` volume >= m x the median of the same bar over 14 dates |
+| family `open_candle` | the candle that opens at `start` (0830 default = sessions `["pre"]`; 0200 or 0300 ET = the London opens, sessions `["london"]`, window to 08:25), followed at its close, market, stop = its other extreme. Gates, all off at 0: `k` range >= k x ATR(14), `body_r` body >= r x range, `body_pts` body >= points, `vol_m` volume >= m x the median of the same bar over 14 dates |
 | exits `"own"` | the family's own table (`orb_close`): stop = the far side of the range, x the six standard targets (none, 0.5R, 0.75R, 1R, 2R, 3R) = 6 cells. Manual lane only (the card / pipeline take `standard`) |
 | `specs/*.json` | the eight settings files that produced the tables of 2026-10-10 (below); copy one, change the numbers |
 | `heatmap.py` | stop x target heat map for every variant of one or more stores, one colour scale, metric picker (Net $, Average trade $, Win %) |
 | `by_year.py` | the house metric set per year, then combined, for every cell of a store; `--risk 750` sizes every trade to about $750 of risk in micros |
+| `by_year.py --prop` | the same page plus each cell's prop sim (the pipeline's account and days, plain row, stress row); `--cells` keeps your order |
+| `sizing_sweep.py` | the prop sim of each cell at EVERY whole micro (1 .. the account's maximum): eval odds by day, bust, payout, stress; a grid by dollars of risk a trade |
+| `eval_scan.py` | the prop sim of EVERY cell of one or more stores, on the build days and on a 75 / 25 split of them (first 75 % to pick, last 25 % to check); sizes capped by --risk-cap dollars a trade (raise the cap past one target = the account's profit target, or the scan misses the size where one win passes) |
+| `test_read.py` | THE ONE READ of the test days (2025-07-01 .. last complete session) for one manual spec, on the owner's word and with `--confirm`: claimed in the app's one-read log first, the engine's test switch (runner.run_test: table, worse fills, random pool), then cells' trades / net / profit factor at `--size` micros, the average of all cells and the prop sim of `--box` at every size. Labelled MANUAL-LANE READ: no card, no lock, no lines 4.1-4.9; cannot prove an idea. The card route refuses a time stop, this one takes the spec as written |
 
 Only `engine/families/orb830.py`, `run_idea.py` and `blueprint/runner.py` (the `own` allow-list) are new or changed: no hashed engine file moved,
 so no earlier store or lock is marked "written by other code".
@@ -43,6 +47,11 @@ variants), `fixed`, `filters`, `exits` (`standard` or `own`), `limits`. 12 cells
 | `orb830_range_stop_vwap_on_tick` | + a break against the tick VWAP is skipped, the next may trade | orb830_vwap16-NQ-tf1 (corrected one) | 10,452 |
 | `open_candle_none` | 08:30 5-min candle, its own direction, no filter | fb830_none_tf5-NQ-tf5 | 44,928 |
 | `open_candle_a / b / d / e` | the four displacement filters: range vs ATR, body share, volume vs median, body points | fb830_{a,b,d,e}_tf5-NQ-tf5 | 82,128 / 35,904 / 36,096 / 31,200 |
+| `open_candle_london_0200_tf5_tk` / `_tf1_tk` (+ `_tf5_ts0825_tk`, `_tf5_ts0925_tk`: time stop 76 / 88 five-minute bars) | the 02:00 ET candle followed at its close, body gate 0 / 0.5 / 0.7 / 0.85 (2026-10-11) | open_candle_london_0200_* | 78,864 each (tf5), 80,208 (tf1) |
+| `open_candle_london_0300_tk` | the 03:00 ET candle (London cash open), 1- and 5-minute, body gate 0 / 0.5 / 0.7 / 0.85 | open_candle_london_0300_tk-NQ-tf1 / -tf5 | 80k / 77k |
+
+London (2026-10-11): 02:00 ET does not follow (13 of 48 cells profitable with no gate, body 0.5 / 0.7 lose); 03:00 ET does (5-minute, body 0.7: 42 of 48
+cells profitable, 30-pt stop 3R +$27.5k, 189 trades). A time stop (`exit_bars` is a limit key, one spec each) is not a variant.
 
 All eight were rebuilt from the toolkit families and **match the stored tables element for element** (cells, entries, nets, exits).
 
