@@ -4,7 +4,7 @@
 
 One card per variant of each store (the first store is usually the no-filter baseline, so every card is read against it). Rows are stops,
 columns are targets (a multiple of the stop; the last one is no target). A cell shows the metric you pick above the grid (Net $, Average trade $,
-Win %); colour is scaled to the strongest cell on the page; hover a cell for its trades, long / short split and exit mix. --risk USD sizes every
+Win %); colour is the box's net profit on ONE scale for the whole page (--shade net, the default; --shade metric scales to the shown number); hover a cell for its trades, long / short split and exit mix. --risk USD sizes every
 trade to about that risk in micros (library.sized), otherwise one contract. A card's header says how many of its cells are profitable.
 """
 from __future__ import annotations
@@ -62,6 +62,8 @@ def main(argv=None) -> int:
     ap.add_argument("--title", default="Stop x target heat map")
     ap.add_argument("--risk", type=float, default=None)
     ap.add_argument("--root", default="NQ")
+    ap.add_argument("--shade", choices=("net", "metric"), default="net",
+                    help="net = colour is the box's net profit on one scale for the whole page (default); metric = the shown number's own scale")
     a = ap.parse_args(argv)
     groups = []                                                   # [(store idea, variant label, {(stop, tgt): cell})]
     for s in a.stores:
@@ -98,7 +100,7 @@ th.rl{{text-align:right;padding-right:6px;width:96px;white-space:nowrap}}td{{hei
 </style></head><body><div class="wrap"><h1>{html.escape(a.title)}</h1>
 <p class="sub">{sizing} &middot; build days 2021-09-22 to 2025-06-30 &middot; costs as the engine books them &middot; test days not read</p>
 {radios}<div class="bar">{labels}</div><div class="sets">{sets}</div>
-<p class="note">Rows are stops, columns are targets as a multiple of the stop. Colour is scaled to the strongest cell on the page for the chosen metric. Hover a cell for its full numbers.</p>
+<p class="note">Rows are stops, columns are targets as a multiple of the stop. Colour is the box's net profit on one scale for the page (green makes money, red loses). Hover a cell for its full numbers.</p>
 </div></body></html>"""
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text(page)
@@ -107,7 +109,12 @@ th.rl{{text-align:right;padding-right:6px;width:96px;white-space:nowrap}}td{{hei
 
 
 def _cards(groups, stops, tgts, allc, get, fmt, centre, a) -> str:
-    mx = max((abs(get(c) - centre) for c in allc if c["trades"]), default=1.0) or 1.0
+    by_net = a.shade == "net"
+    if by_net:                                   # colour = the box's net profit, ONE scale for every grid, whatever number is shown
+        get_c, centre_c = (lambda c: c["net"]), 0.0
+    else:
+        get_c, centre_c = get, centre
+    mx = max((abs(get_c(c) - centre_c) for c in allc if c["trades"]), default=1.0) or 1.0
     cards = ""
     for idea, vlabel, g in groups:
         rows = ""
@@ -119,8 +126,9 @@ def _cards(groups, stops, tgts, allc, get, fmt, centre, a) -> str:
                     tds += "<td>-</td>"
                     continue
                 v = get(c)
-                pct = min(1.0, abs(v - centre) / mx) * 75
-                col = "var(--pos)" if v >= centre else "var(--neg)"
+                sv = get_c(c)
+                pct = min(1.0, abs(sv - centre_c) / mx) * 75
+                col = "var(--pos)" if sv >= centre_c else "var(--neg)"
                 tip = (f"{idea} {vlabel}, {stop_label(c['exit'])}, {tgt_label(t)}: net ${c['net']:,.0f}, {c['trades']} trades, avg ${c['avg']:,.0f}, "
                        f"wins {c['win']:.0f}%, long ${c['long']:,.0f} ({c['nl']}), short ${c['short']:,.0f} ({c['ns']}); exits "
                        + ", ".join(f"{n} {k}" for k, n in c["mix"].items()))
