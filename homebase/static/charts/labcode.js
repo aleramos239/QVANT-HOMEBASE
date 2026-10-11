@@ -240,72 +240,6 @@ function deleteKey(e, ctx) {
 }
 const isTyping = (el) => !!el && (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName) || el.isContentEditable === true);
 
-/* ---- the blueprint toolkit: the tools every chat has, as the Lab lists them and fills them in ---- */
-const BP_TITLES = { blueprint_blocks: 'Blocks', blueprint_card: 'Idea card', blueprint_code_check: 'Code check', blueprint_build: 'Build',
-  blueprint_lock: 'Pick and lock', blueprint_test: 'Out-of-sample test', blueprint_sim: 'Simulator: one strategy',
-  blueprint_portfolio: 'Simulator: portfolio', blueprint_eval_card: 'Eval card', blueprint_status: 'Status',
-  blueprint_heatmap: 'Heat map', blueprint_mc: 'Monte Carlo' };
-const bpTitle = (name) => BP_TITLES[name] || String(name).replace(/^blueprint_/, '').replace(/_/g, ' ');
-/* "Blueprint phase 2, the build" -> "Phase 2"; "Blueprint, before the card" -> "Before the card" */
-function bpPhase(head) {
-  const m = /phase (\d)/.exec(String(head || ''));
-  if (m) return `Phase ${m[1]}`;
-  const rest = String(head || '').replace(/^Blueprint,?\s*/, '').replace(/:.*$/, '');
-  return rest ? rest[0].toUpperCase() + rest.slice(1) : '';
-}
-/* An empty value of the shape a schema asks for: what a JSON field starts as. */
-function bpStarter(prop) {
-  const t = Array.isArray(prop.type) ? prop.type[0] : prop.type;
-  if (t === 'object') return Object.fromEntries(Object.entries(prop.properties || {}).map(([k, v]) => [k, bpStarter(v)]));
-  if (t === 'array') return [];
-  if (t === 'integer' || t === 'number') return 0;
-  if (t === 'boolean') return false;
-  return '';
-}
-/* A tool's inputs as form fields, in the schema's own order: [{key, kind, required, help, options?, starter?}].
-   kind: text | choice | int | number | bool | list (several names) | json (a card, settings, fills). */
-function bpFields(schema) {
-  const req = new Set((schema && schema.required) || []);
-  return Object.entries((schema && schema.properties) || {}).map(([key, p]) => {
-    const t = Array.isArray(p.type) ? p.type[0] : p.type, f = { key, required: req.has(key), help: p.description || '' };
-    if (t === 'string') return p.enum ? { ...f, kind: 'choice', options: p.enum } : { ...f, kind: 'text' };
-    if (t === 'integer') return { ...f, kind: 'int' };
-    if (t === 'number') return { ...f, kind: 'number' };
-    if (t === 'boolean') return { ...f, kind: 'bool' };
-    if (t === 'array' && p.items && p.items.type === 'string') return { ...f, kind: 'list' };
-    return { ...f, kind: 'json', starter: JSON.stringify(bpStarter(p), null, 1) };
-  });
-}
-/* What the form holds -> the tool's arguments: {args} or {error, key}. An empty optional field is left out, so the
-   tool's own default applies; a required one that is empty is named. values: {key: string | boolean}. */
-function bpArgs(fields, values) {
-  const args = {};
-  for (const f of fields) {
-    const v = values[f.key], miss = () => ({ error: `${f.key} is needed`, key: f.key });
-    if (f.kind === 'bool') { if (v || f.required) args[f.key] = !!v; continue; }
-    const t = String(v == null ? '' : v).trim();
-    if (!t) { if (f.required) return miss(); continue; }
-    if (f.kind === 'int' || f.kind === 'number') {
-      const n = Number(t);
-      if (!Number.isFinite(n) || (f.kind === 'int' && !Number.isInteger(n))) return { error: `${f.key}: a ${f.kind === 'int' ? 'whole ' : ''}number`, key: f.key };
-      args[f.key] = n;
-    } else if (f.kind === 'list') {
-      const xs = t.split(/[\s,]+/).filter(Boolean);
-      if (!xs.length) { if (f.required) return miss(); continue; }
-      args[f.key] = xs;
-    } else if (f.kind === 'json') {
-      try { args[f.key] = JSON.parse(t); } catch (e) { return { error: `${f.key} does not read as JSON (${e.message})`, key: f.key }; }
-    } else args[f.key] = t;
-  }
-  return { args };
-}
-/* The job a tool's answer says is still going ("... job_id='b3f1' ..."), or '' */
-const bpJob = (text) => { const m = /is still going[\s\S]*?job_id=['"]?([A-Za-z0-9_.-]+)/.exec(String(text || '')); return m ? m[1] : ''; };
-/* An idea's one line under its name: "LEAD · phase 2 · round 1" */
-function bpIdeaLine(i) {
-  return [String(i.status || 'idea').replace(/_/g, ' ').toUpperCase(), i.phase == null ? null : `phase ${i.phase}`, i.round ? `round ${i.round}` : null].filter(Boolean).join(' · ');
-}
-
 /* ---- the arsenal: every tool we have, with the code that implements it (blocks, chat tools, skills, scripts) ----
    The server (homebase/arsenal.py) sends {groups: [{id, title, words, items}], sources: {id: {file, start, end, code}}}; an item is
    {id, name, sub, words, sides?: [{side, words}], markets, runs, why_not, parts: [{label, src}]}. */
@@ -346,7 +280,7 @@ function tkClip(text, n = 150) {
   return `${cut.slice(0, sp > n * 0.6 ? sp : n)}…`;
 }
 
-/* ---- the strategy pipeline: the Lab's Queue, Book and Guide ----
+/* ---- the strategy pipeline: the Lab's Queue and Book ----
    The server (GET /api/tester/pipeline) sends {runner: {running, paused}, counts: {label: n}, ideas: [an idea's state: name, family, label,
    stage (the last one it finished), stopped_at, why], book: [book cards], stages: [{n, name, words}]}. Nothing here judges anything: a
    verdict, a reason and a number are the server's. These only choose the words, the marks and what a button may do. */
@@ -393,50 +327,8 @@ function plDots(row) {
         : stage == null ? 'No stage run yet' : `Reached stage ${stage} of ${PL_LAST}`;
   return { dots, label };
 }
-/* What is being tested now, in one line. An idea is only being tested while the runner works. */
-function plRunning(P) {
-  const it = P && P.runner && P.runner.running ? (P.ideas || []).find((x) => x.label === 'Running') : null;
-  if (!it) return 'Nothing is running';
-  const stage = plInt(it.stage);
-  return `Testing ${it.name} ${DASH} stage ${Math.min(PL_LAST, stage == null ? 0 : stage + 1)} of ${PL_LAST}`;
-}
-/* The Guide's six steps (the design's section 6). Each: {n, title, words, button: its label or null, enabled, reason: why it is grey,
-   primary: the one to press next, status: step 3's line, actions: step 2's, name: step 5's idea}. */
-function plGuide(P) {
-  const ideas = (P && P.ideas) || [], r = (P && P.runner) || {}, live = plLive(P), c = plControl(P), green = ideas.find((x) => x.label === 'Passed');
-  const start = !live ? { enabled: false, reason: 'Add an idea first.' } : r.paused ? { enabled: true, reason: '' } : r.running ? { enabled: false, reason: 'Testing is already on.' } : { enabled: true, reason: '' };
-  const steps = [
-    { n: 1, title: 'Write the idea', words: 'Fill the card, or tell Claude the idea and it fills the card.', button: 'Write an idea', enabled: true, reason: '' },
-    { n: 2, title: 'Press Start', words: 'The computer starts testing your ideas.', button: r.paused && live ? 'Resume' : 'Start testing', ...start, actions: start.enabled ? c.actions : [] },
-    { n: 3, title: 'Wait', words: 'The computer tests it. This can take a night.', button: null, enabled: false, reason: '', status: plRunning(P) },
-    { n: 4, title: 'Read the Queue', words: 'Red = stopped, and it says why in one line. Green = it passed everything.', button: 'Open the Queue', enabled: ideas.length > 0, reason: ideas.length ? '' : 'No ideas yet.' },
-    { n: 5, title: 'Look at a green one', words: 'Read its card. Press Approve to put it in the Book, or Refuse.', button: green ? `Look at ${green.name}` : 'Look at a green one', enabled: !!green, reason: green ? '' : 'No idea has passed everything yet.', name: green ? green.name : '' },
-    { n: 6, title: 'Build a portfolio', words: 'Mix strategies from the Book. This comes later.', button: 'Build a portfolio', enabled: false, reason: 'Not built yet' },
-  ];
-  const next = green ? 5 : steps[1].enabled ? 2 : !ideas.length ? 1 : 4;
-  return steps.map((s) => ({ ...s, primary: s.n === next }));
-}
-/* Beside the Guide: what is happening now, in three lines at most (the count, what is being tested, who waits for the owner). */
-function plSummary(P) {
-  const n = ((P && P.counts) || {}).Passed || 0;
-  return [plCount(P && P.counts), plRunning(P), n ? `${n} idea${n === 1 ? '' : 's'} passed and wait${n === 1 ? 's' : ''} for your look.` : ''].filter(Boolean);
-}
 /* The one that is selected in a list: the one that was, while it is still there; else the first (the server lists what can run first). */
 const plPick = (names, cur) => (names.includes(cur) ? cur : names.length ? names[0] : '');
-/* The stage an idea is AT now: where it stopped; else, while it waits or runs, the next one; a finisher sits at the owner's look.
-   An idea that is in the book or was refused is at none (null). */
-function plAt(row) {
-  const stage = plInt(row.stage), stop = plInt(row.stopped_at);
-  if (row.label === 'In the book' || row.label === 'Refused') return null;
-  if (stop != null) return stop;
-  if (row.label === 'Waiting' || row.label === 'Running') return Math.min(PL_LAST, stage == null ? 0 : stage + 1);
-  return stage == null ? 0 : Math.min(PL_LAST, stage);
-}
-/* The ladder under the Guide: the server's stages, each with how many ideas are at it now. */
-function plLadder(P) {
-  const at = ((P && P.ideas) || []).map(plAt);
-  return ((P && P.stages) || []).map((s) => { const n = at.filter((a) => a === s.n).length; return { n: s.n, name: s.name, words: s.words, ideas: n, count: n ? `${n} idea${n === 1 ? '' : 's'}` : 'None' }; });
-}
 /* PASS / FAIL / — for a stage or one of its lines, as the server judged it. */
 const plMark = (passed) => (passed === true ? { text: 'PASS', tone: 'ok' } : passed === false ? { text: 'FAIL', tone: 'err' } : { text: DASH, tone: '' });
 /* A way and an indicator of a card, in words. */
@@ -614,7 +506,7 @@ function plBookLine(card) {
   if (plNum(c.profit_factor) != null) rest.push(`PF ${c.profit_factor.toFixed(2)}`);
   return { net: plSigned(c.net), tone: plTone$(c.net), rest: rest.join(' · ') };
 }
-/* A curve's numbers as tiles, in the order a person asks: [{k, v, tone}]. `cv` = GET /pipeline/curve/<name> (or a watch snapshot). */
+/* A curve's numbers as tiles, in the order a person asks: [{k, v, tone}]. `cv` = GET /pipeline/curve/<name>. */
 function plCurveTiles(cv) {
   const c = cv || {};
   return [{ k: 'Net profit', v: plSigned(c.net), tone: plTone$(c.net) }, { k: 'Trades', v: plWhole(c.trades), tone: '' },
@@ -659,12 +551,6 @@ function plExecSaid(name, j, shown) {
     + (shown ? 'They are on the chart, at the last day it traded: the list under it steps through every trade.'
       : 'The chart did not take them: turn Chart off and on, then press this again.');
 }
-/* One plain sentence after a strategy goes on, or comes off, the Desk's watch list. */
-function plWatchSaid(what, name) {
-  return what === 'promote' ? `${name} is on the Desk page now, under Strategies. It is watch-only: it shows its results there and places no orders.`
-    : `${name} is off the Desk page. It stays in the Book and can be promoted again.`;
-}
-
 /* ---- Promote to Desk (2026-10-09): the row under a finished run of a draft ----
    `row` = this draft's record on the Desk (GET /desklab) or null; `sha` = the hash of the open code ('' when it cannot be worked out);
    `hasRun` = a finished run of this draft is open; `dirty` = unsaved edits. Returns {label, hint, disabled, action: 'promote' | 'open' | null},
@@ -898,13 +784,12 @@ function fmFirstError(errors, order) {
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
-  bpTitle, bpPhase, bpStarter, bpFields, bpArgs, bpJob, bpIdeaLine,
   tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
-  PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots, plRunning, plGuide,
-  plSummary, plPick, plAt, plLadder, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
+  PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
+  plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
-  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, plWatchSaid, promoteState, deskSaid };
+  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

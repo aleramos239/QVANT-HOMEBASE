@@ -23,6 +23,8 @@
   var MINUS = "−";
   var DASH = "—";
   var TIME_RE = /^\d{1,2}:\d\d$/;
+  /* a time of day in the app's one clock format (hbclock.js); as it is where that is not loaded */
+  function clock(t) { return typeof HBClock !== "undefined" ? HBClock.text(t) : t; }
 
   var TAG_TITLE = "It writes down its orders. Nothing is sent.";
   var NET_WORDS = "What it would have made today, after costs";
@@ -160,7 +162,10 @@
 
   function sessionText(row) {
     var w = row && row.session_window;
-    return Array.isArray(w) && w.length === 2 && TIME_RE.test(w[0]) && TIME_RE.test(w[1]) ? w[0] + "-" + w[1] + " ET" : "";
+    if (Array.isArray(w) && w.length === 2 && typeof w[0] === "string" && w[0].charAt(0) === "-" && TIME_RE.test(w[0].slice(1)) && TIME_RE.test(w[1])) {
+      return clock(w[0].slice(1)) + " the evening before-" + clock(w[1]) + " ET";      // opens the evening before (shadow only)
+    }
+    return Array.isArray(w) && w.length === 2 && TIME_RE.test(w[0]) && TIME_RE.test(w[1]) ? clock(w[0]) + "-" + clock(w[1]) + " ET" : "";
   }
   function barMinutes(row) {
     var n = row && row.bar_minutes;
@@ -183,6 +188,161 @@
       { k: "Trades", v: n === null ? DASH : String(n) },
       { k: "Profit factor", v: pf === null ? DASH : pf.toFixed(2) },
       { k: "Deepest drawdown", v: loss(run.max_drawdown) },
+    ];
+  }
+
+  /* ---- The research the panel shows beside a promoted strategy (chart service, GET /api/tester/desklab/results): its saved
+     run on the unseen days, and the prop sim of its build run and of that run. `res` = {unseen, prop: {build, unseen}};
+     undefined while the first answer is on its way. Saved runs only: a strategy with no run on the unseen days says so. ---- */
+  var RES_WAIT = "Reading…";
+  var NO_UNSEEN = "Not run on the unseen days yet. It starts by itself.";
+  // A Desk straddle (nq930, gc_nfp): its tester twin is read by hand, so nothing starts by itself and a changed Desk setting says so.
+  var NO_UNSEEN_MANUAL = "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.";
+  var RUNNING_UNSEEN = "Reading the unseen days now. This shows here when it is done.";
+  var FAILED_UNSEEN = "The unseen-days run did not finish. Run it again from the Lab.";
+  var NO_PROP = "No prop sim: its backtest run is not saved any more.";
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function share(v) {            // 0.3688 -> "37%"
+    v = num(v);
+    return v === null ? DASH : Math.round(v * 100) + "%";
+  }
+  function monthOf(day) {        // "2025-07-01" -> "Jul 2025"
+    var m = /^(\d{4})-(\d\d)-\d\d$/.exec(text(day)), name = m ? MONTHS[+m[2] - 1] : "";
+    return name ? name + " " + m[1] : "";
+  }
+  function propCells(p) {        // one run's prop sim, in the rows' order; all "—" for a run with none
+    p = p && typeof p === "object" ? p : {};
+    var days = num(p.median_days_to_pass), cheque = num(p.funded_expected_cheque);
+    return [share(p.eval_pass_p), share(p.bust_p), days === null ? DASH : String(Math.round(days)), share(p.funded_payout_p),
+      cheque === null ? DASH : dollars(Math.round(Math.max(0, cheque)))];
+  }
+  // The unseen run's running total, for the curve under the Desk page: null when there is no run or fewer than two days.
+  function curve(res) {
+    var c = res && typeof res === "object" ? res.curve : null;
+    if (!c || !Array.isArray(c.vals) || !Array.isArray(c.days) || c.vals.length < 2 || c.vals.length !== c.days.length) return null;
+    for (var i = 0; i < c.vals.length; i++) if (num(c.vals[i]) === null) return null;
+    var from = monthOf(c.days[0]), to = monthOf(c.days[c.days.length - 1]);
+    return {
+      title: "Unseen days, after costs",
+      label: "Running total",
+      vals: c.vals.slice(),
+      total: c.vals[c.vals.length - 1],
+      ends: [from || DASH, to || DASH],
+      aria: "Running net P&L after costs on the unseen days, by day",
+    };
+  }
+  var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected cheque"];
+  function results(res) {
+    var wait = !res || typeof res !== "object";
+    var u = !wait && res.unseen && typeof res.unseen === "object" ? res.unseen : null;
+    var prop = (!wait && res.prop && typeof res.prop === "object") ? res.prop : {};
+    var b = prop.build && typeof prop.build === "object" ? prop.build : null;
+    var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
+    var range = (u && u.range) || {}, from = monthOf(range.start), to = monthOf(range.end);
+    var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu);
+    return {
+      unseen: {
+        title: "Unseen days (OOS)",
+        rows: u ? [{ k: "Days", v: from && to ? from + " – " + to : DASH }].concat(figures({ run: u })) : [],
+        note: wait ? RES_WAIT : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
+      },
+      prop: {
+        title: "Prop sim" + (account ? " · " + account : ""),
+        head: ["Build", "Unseen"],
+        rows: b || pu ? PROP_ROWS.map(function (k, i) { return { k: k, build: cb[i], unseen: cu[i] }; }) : [],
+        note: wait ? RES_WAIT : b || pu ? "" : NO_PROP,
+      },
+    };
+  }
+
+  /* ---- Desk groups (chart service, GET /api/tester/deskgroups and /deskgroups/results): named sets of strategies that run
+     together. Bookkeeping and display only: a group switches nothing on and books no account. Its combined results are its
+     members' SAVED runs put together as one account's trades. ---- */
+  var GROUP_KINDS = [
+    { k: "eval", label: "Eval", note: "Leads with the odds of passing the eval." },
+    { k: "funded", label: "Funded", note: "Leads with the odds of a payout." },
+    { k: "together", label: "Together", note: "Run together; shows the eval and the payout odds." },
+  ];
+  var NO_GROUP = "No group";
+  var EMPTY_GROUP = "No strategy is in this group yet. Add one from Manage groups.";
+  var GROUP_NOTE = "Display only: a group switches nothing on and books no account. Its results are its strategies' saved runs put together as one account's trades.";
+  var GROUP_MISSING = "That group is not there any more.";
+  var NO_GROUP_RUNS = "No saved run to put together yet.";
+  var GROUP_FIG_ROWS = ["Net", "Win rate", "Trades", "Profit factor", "Deepest drawdown"];
+  function kindOf(k) {
+    for (var i = 0; i < GROUP_KINDS.length; i++) if (GROUP_KINDS[i].k === k) return GROUP_KINDS[i];
+    return GROUP_KINDS[2];
+  }
+  function kindLabel(k) { return kindOf(k).label; }
+  function summaryCells(s) {       // one side's combined figures, in GROUP_FIG_ROWS' order; all "—" with none
+    s = isObj(s) ? s : {};
+    var wr = num(s.win_rate), pf = num(s.profit_factor), n = num(s.trades);
+    return [usd(s.net), wr === null ? DASH : Math.round(wr) + "%", n === null ? DASH : String(n),
+      pf === null ? DASH : pf.toFixed(2), loss(s.max_drawdown)];
+  }
+  function groupLabelOf(id, members) {
+    var ms = Array.isArray(members) ? members : [];
+    for (var i = 0; i < ms.length; i++) if (isObj(ms[i]) && ms[i].strategy === id && text(ms[i].label)) return text(ms[i].label);
+    return text(id).replace(/^lab_/, "").replace(/_/g, " ");
+  }
+  function memberState(m) {
+    var st = text(m.state);
+    return st === "done" ? "" : st === "pending" ? "Reading the unseen days…" : st === "failed" ? "Unseen run did not finish" : "No unseen run yet";
+  }
+  /* A group's page: `group` = its record {id, name, kind, members}, `res` = its entry of /deskgroups/results (undefined while
+     the first answer is on its way). Plain text everywhere; the page escapes it. */
+  function groupPage(group, res) {
+    var g = isObj(group) ? group : {};
+    var kind = kindOf(text(g.kind)).k, count = Array.isArray(g.members) ? g.members.length : 0;
+    var wait = !isObj(res);
+    var b = !wait && isObj(res.build) ? res.build : null, u = !wait && isObj(res.unseen) ? res.unseen : null;
+    var prop = !wait && isObj(res.prop) ? res.prop : {};
+    var pb = isObj(prop.build) ? prop.build : null, pu = isObj(prop.unseen) ? prop.unseen : null;
+    var members = !wait && Array.isArray(res.members) ? res.members : [];
+    var account = text((pu || pb || {}).account);
+    var cb = summaryCells(b), cu = summaryCells(u), pcb = propCells(pb), pcu = propCells(pu);
+    var want = kind === "eval" ? [0, 1, 2] : kind === "funded" ? [3, 4] : [0, 1, 2, 3, 4];
+    var days = u ? [
+      { k: "Days traded", v: String(num(u.days) === null ? DASH : u.days) },
+      { k: "Best day", v: usd(u.best_day) },
+      { k: "Worst day", v: usd(u.worst_day) },
+      { k: "Days 2+ traded", v: num(u.together_days) === null ? DASH : String(u.together_days) },
+    ] : [];
+    var note = wait ? RES_WAIT : count === 0 ? EMPTY_GROUP : NO_GROUP_RUNS;
+    return {
+      title: text(g.name), kind: kindLabel(kind), kindNote: kindOf(kind).note, note: GROUP_NOTE,
+      lead: count + (count === 1 ? " strategy" : " strategies") + " · " + kindLabel(kind),
+      empty: count === 0,
+      figs: { head: ["Build", "Unseen"], rows: b || u ? GROUP_FIG_ROWS.map(function (k, i) { return { k: k, build: cb[i], unseen: cu[i] }; }) : [], note: note },
+      days: { title: "Unseen days traded", rows: days },
+      prop: {
+        title: "Prop sim" + (account ? " · " + account : ""),
+        head: ["Build", "Unseen"],
+        rows: pb || pu ? want.map(function (i) { return { k: PROP_ROWS[i], build: pcb[i], unseen: pcu[i] }; }) : [],
+        note: wait ? RES_WAIT : NO_PROP_GROUP,
+      },
+      curve: u ? curve({ curve: u.curve }) : null,
+      members: members.map(function (m) {
+        var mm = isObj(m) ? m : {};
+        var ub = isObj(mm.build) ? mm.build : null, uu = isObj(mm.unseen) ? mm.unseen : null;
+        return { strategy: text(mm.strategy), label: text(mm.label) || groupLabelOf(mm.strategy, members),
+          build: ub ? usd(ub.net) : DASH, unseen: uu ? usd(uu.net) : DASH, state: memberState(mm) };
+      }),
+      leftOut: !wait && Array.isArray(res.left_out) ? res.left_out.map(function (x) {
+        return { strategy: text(x && x.strategy), label: groupLabelOf(x && x.strategy, members), why: text(x && x.why) };
+      }) : [],
+    };
+  }
+  var NO_PROP_GROUP = "No prop sim: no saved run to score yet.";
+  // The skin's Setup card for a group: [[name, value], ...]
+  function groupSetupRows(group, res) {
+    var g = isObj(group) ? group : {}, count = Array.isArray(g.members) ? g.members.length : 0;
+    var p = isObj(res) && isObj(res.prop) ? (res.prop.unseen || res.prop.build) : null;
+    return [
+      ["Kind", kindLabel(text(g.kind))],
+      ["Strategies", String(count)],
+      ["Account", text(isObj(p) ? p.account : "") || DASH],
+      ["Orders", "None: display only"],
     ];
   }
 
@@ -391,8 +551,8 @@
       { k: "Trades a day", v: trades === null ? DASH : String(trades) },
       { k: "Most contracts per account", v: qty === null ? DASH : String(qty) },
       { k: "Most at risk per trade", v: risk === null ? DASH : money(risk) },
-      { k: "No new trade after", v: HHMM.test(text(l.last_entry_et)) ? l.last_entry_et + " ET" : DASH },
-      { k: "Flat by", v: HHMM.test(text(l.flat_et)) ? l.flat_et + " ET" : DASH },
+      { k: "No new trade after", v: HHMM.test(text(l.last_entry_et)) ? clock(l.last_entry_et) + " ET" : DASH },
+      { k: "Flat by", v: HHMM.test(text(l.flat_et)) ? clock(l.flat_et) + " ET" : DASH },
     ];
   }
   // What the dialog shows when it opens: the limits as set, or empty fields (one contract is the default).
@@ -683,7 +843,9 @@
     ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING,
     usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, netTitle: netTitle,
     rebuiltNote: rebuiltNote, orderLine: orderLine,
-    tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, setupRows: setupRows,
+    tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, results: results, curve: curve, setupRows: setupRows,
+    GROUP_KINDS: GROUP_KINDS, NO_GROUP: NO_GROUP, EMPTY_GROUP: EMPTY_GROUP, GROUP_NOTE: GROUP_NOTE, GROUP_MISSING: GROUP_MISSING,
+    kindLabel: kindLabel, groupPage: groupPage, groupSetupRows: groupSetupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
     // Step B: the strategy the Desk itself knows
     deskId: deskId, onDesk: onDesk, deskState: deskState, deskDot: deskDot, startsNext: startsNext, readOnly: readOnly, windowNote: windowNote,

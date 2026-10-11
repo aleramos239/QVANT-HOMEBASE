@@ -94,7 +94,7 @@ const TABS = [
     ['TIME SCALE', [
       { label: 'Day of week on labels', check: 'dayOfWeek' },
       { label: 'Date format', select: { key: 'dateFormat', choices: DATE_FORMAT } },
-      { label: 'Time format', select: { key: 'timeFormat', choices: TIME_FORMAT } },
+      { label: 'Time format (whole app)', select: { key: 'timeFormat', choices: TIME_FORMAT } },
       { label: 'Right margin', number: { key: 'rightOffset', min: 0, max: 100, unit: 'bars' } },
     ]],
   ] },
@@ -782,6 +782,10 @@ function mount(box, host) {
       for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; s.append(o); }
       s.value = work[key] == null ? '' : String(work[key]);
       s.onchange = () => set(key, parse ? parse(s.value) : s.value);
+      if (key === 'timeFormat' && window.HBClock) {      // one clock for the Desk, the Charts and the Lab: changed at once, Cancel does not undo it
+        s.value = window.HBClock.format;
+        s.onchange = () => { window.HBClock.set(s.value); };
+      }
       ctl.append(s);
     }
     if (r.number) {
@@ -998,7 +1002,7 @@ function mount(box, host) {
   }
 
   /* ---- footer ---- */
-  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'Ok');
+  const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
   cancel.onclick = () => host.cancel();
   ok.onclick = () => {
     flush();

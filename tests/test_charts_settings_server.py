@@ -127,6 +127,26 @@ def test_a_bad_md_value_is_refused(tmp_path):
         assert c.put("/api/settings", json={}).status_code == 400
 
 
+def test_the_clock_format_is_one_app_wide_choice_kept_beside_the_md_login(tmp_path):
+    """Owner 2026-10-10: one clock for the Desk, Charts and Lab pages ("normal" 12-hour or military
+    24-hour). It is a display choice: none of the md switch's refusals (window, cooldown, a bot
+    working) apply to it, and it never touches the md login."""
+    ws = FakeMdWS("demo")
+    app = app_with(tmp_path, {"demo": ws})
+    with TestClient(app, base_url=BASE_URL) as c:
+        assert c.get("/api/settings").json()["clock"] == "12h"          # no choice yet
+        for want in ("24h", "12h", "24h"):                               # back and forth, no cooldown
+            r = c.put("/api/settings", json={"clock": want})
+            assert r.status_code == 200 and r.json() == {"clock": want}
+            assert c.get("/api/settings").json()["clock"] == want
+        assert c.get("/api/settings").json()["md"] == "demo"
+        assert c.put("/api/settings", json={"clock": "13h"}).status_code == 400
+        assert c.put("/api/settings", json={"clock": "12h", "md": "live"}).status_code == 400   # one thing at a time
+        from homebase.charts.settings_store import SettingsStore
+        store = SettingsStore(tmp_path / "state" / "settings.json")
+        assert store.clock() == "24h" and store.get() == {"md": "demo"}
+
+
 def test_refused_inside_the_0920_0935_et_window_on_a_weekday(tmp_path):
     app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
                    now_ms=lambda: session_ms(D, 9, 25))   # D is a Thursday

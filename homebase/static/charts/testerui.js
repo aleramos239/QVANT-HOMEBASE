@@ -568,7 +568,7 @@ function openInputsDialog() {
   for (const inp of schema.inputs) fields.appendChild(inputsDialogRow(inp, draft));
   fields.appendChild(page.mk('div', 'set-cap', 'PROP EVAL'));
   fields.appendChild(propRulesRow(draft));
-  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'Ok');
+  const foot = page.mk('div', 'dlg-foot'), cancel = page.mk('button', 'btn btn-ghost', 'Cancel'), ok = page.mk('button', 'btn btn-primary', 'OK');
   cancel.type = 'button';
   ok.type = 'button';
   cancel.onclick = page.closeDialog;

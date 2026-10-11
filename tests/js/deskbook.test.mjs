@@ -49,6 +49,7 @@ function load({ armed = true, confirm = true, book = {}, strategies = STRATS, ac
     },
     post: async (url, body) => { posts.push({ url, body }); return { ok: true }; },
     refresh: () => refreshes.push(true),
+    hbClock: (t) => t,                  // the page's clock helper: 24-hour, as these tests read it
   });
   vm.runInContext(LABEL + BLOCK + `
     globalThis.api = { pickAsg, editQty, acctShort, isDemoAcct, liveBookingNote,

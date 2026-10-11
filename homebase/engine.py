@@ -1240,13 +1240,15 @@ class Engine:
                                  "accounts": {a: took[a] for a in results}})
         return results
 
-    async def flatten_today(self) -> dict:
+    async def flatten_today(self, account: Optional[str] = None, reason: str = "killed") -> dict:
         """Kill switch: every strategy's footprint today, proven calls only. The
         accounts go side by side (each_account); one account's runs go one after
         another, in today's order -- _flatten_state sells the account's WHOLE net
         in a symbol. A run that raises is reported in its own actions; every
-        other run still goes."""
-        states = list(self.states.values())
+        other run still goes.
+        `account`: that account's runs only (the Desk's per-account Flatten), ended
+        with exit_reason `reason`."""
+        states = [st for st in self.states.values() if account is None or st.account == account]
         by_account: dict[str, list[DayState]] = {}
         for st in states:
             by_account.setdefault(st.account, []).append(st)
@@ -1277,7 +1279,7 @@ class Engine:
                         sold.add(lab_sym(st))
                     flat, acts[key] = await self._flatten_state(st, cfg, ad)
                     if flat and st.status in ("placing", "placed", "live"):
-                        st.status, st.exit_reason = "done", "killed"
+                        st.status, st.exit_reason = "done", reason
                 except Exception as e:  # noqa: BLE001 — the Kill always finishes
                     acts[key] = [f"internal error: {type(e).__name__}: {e}"]
             return acts

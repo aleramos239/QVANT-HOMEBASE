@@ -253,8 +253,10 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                            "detail": f"battery {power.get('pct')}% and unplugged — "
                                      "the laptop will die"})
         elif power.get("discharging"):
-            checks.append({"level": "warn", "label": "Power",
-                           "detail": f"on battery ({power.get('pct')}%) — plug in"})
+            # under half is worth a look; above it, on battery is a fact and the shield stays quiet
+            low = (power.get("pct") or 100) < 50
+            checks.append({"level": "warn" if low else "info", "label": "Power",
+                           "detail": f"on battery ({power.get('pct')}%)" + (" — plug in" if low else "")})
         else:
             checks.append({"level": "ok", "label": "Power", "detail": "on power"})
     def shown(n):                       # a strategy as the page names it: its label, else its id
@@ -1277,6 +1279,18 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             held = kill_lock_box["lock"] = (loop, asyncio.Lock())
         return held[1]
 
+    async def _sweep(ad) -> dict:
+        """One account's two account-wide calls: cancel every working order, then flatten every position.
+        Never raises: each call's own answer, or why it could not be made."""
+        r = {}
+        for call in ("cancel_all", "flatten_all"):
+            try:
+                x = await getattr(ad, call)()
+                r[call] = {"ok": x.ok, "error": x.error}
+            except Exception as e:  # noqa: BLE001 — kill always finishes
+                r[call] = {"ok": False, "error": str(e)}
+        return r
+
     @app.post("/api/kill")
     async def kill():
         """Disarm, switch chart trading off, then cancel and flatten everything.
@@ -1301,18 +1315,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             strategies = await engine.flatten_today()
             t1 = _t.perf_counter()
 
-            async def sweep(ad) -> dict:
-                r = {}
-                for call in ("cancel_all", "flatten_all"):
-                    try:
-                        x = await getattr(ad, call)()
-                        r[call] = {"ok": x.ok, "error": x.error}
-                    except Exception as e:  # noqa: BLE001 — kill always finishes
-                        r[call] = {"ok": False, "error": str(e)}
-                return r
-
             pool = dict(adapters)
-            got, took = await engine.each_account(pool, lambda aid: sweep(pool[aid]))
+            got, took = await engine.each_account(pool, lambda aid: _sweep(pool[aid]))
             results = {aid: (g if isinstance(g, dict) else
                              {call: {"ok": False, "error": str(g)}
                               for call in ("cancel_all", "flatten_all")})
@@ -1325,6 +1329,26 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                                     "total": round((t2 - t0) * 1000, 1), "accounts": took})
         return {"ok": True, "armed": False, "results": results,
                 "strategies": strategies}
+
+    @app.post("/api/account-flatten")
+    async def account_flatten(request: Request):
+        """The Kill's broker work for ONE account: its strategies' footprint today with the proven
+        per-order calls (engine.flatten_today), then the account-wide cancel and flatten. Nothing is
+        disarmed and no strategy is switched off; a run that was working on this account today is over
+        for today. It holds the Kill's locks, so it never reads a net alongside a Kill or a
+        per-strategy Kill."""
+        body = await request.json()
+        aid = str(body.get("account") or "")
+        if aid not in cfg.accounts:
+            raise HTTPException(404, f"unknown account {aid!r}")
+        ad = adapters.get(aid)
+        if ad is None:
+            raise HTTPException(409, "account not connected — nothing can be sent to it")
+        async with _kill_lock(), engine.all_kill_locks():
+            strategies = await engine.flatten_today(account=aid, reason="manual_flat")
+            results = await _sweep(ad)
+            engine.journal("account_flatten", account=aid, results=results, strategies=strategies)
+        return {"ok": True, "account": aid, "results": {aid: results}, "strategies": strategies}
 
     @app.post("/api/test-alert")
     async def test_alert(request: Request):

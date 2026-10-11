@@ -1,0 +1,55 @@
+{
+ "name": "rother_vwap_day_a12",
+ "source": {
+  "video": "XWJlBBikUc0",
+  "title": "Ex-Hedge Fund Manager Trades His $150M VWAP Strategy Live (Full Breakdown)",
+  "channel": "IQCapital (Robert Rother)",
+  "url": "https://www.youtube.com/watch?v=XWJlBBikUc0"
+ },
+ "market": "ES",
+ "bars": [
+  "1",
+  "5"
+ ],
+ "sessions": [
+  "london",
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "vwap_touch",
+  "settings": {
+   "anchor": "day",
+   "away": 12,
+   "near": 3
+  },
+  "words": "Price moves away from VWAP and comes back: put a limit order AT the VWAP and let it fill on the first touch only; if price comes within two or three ticks and pulls back, take the order out (the second or third touch is not A+)."
+ },
+ "exits": {
+  "stop_ticks": 10,
+  "target_ticks": 12,
+  "max_trades": 5
+ },
+ "taught": [
+  "[8:30] if the market is moving away from VWAP and coming back to VWAP we see a reaction: that is what he trades",
+  "[9:04-9:39] three VWAPs: the day VWAP from the electronic open (18:00 ET), the London VWAP from the London open, the US session VWAP from regular trading hours",
+  "[21:18-22:24] a limit order at the VWAP; the first touch is the A+ setup; if price is two or three ticks from the order and pulls back, the order is taken out",
+  "[20:10] stop 10 ticks, target 10 to 15 ticks; win rate said to be 80% at about 1.1 to 1",
+  "[31:13] the order sits exactly at VWAP and is moved by hand as VWAP moves",
+  "[53:00-54:30] never closes early, never moves the target: 'I never could improve it'"
+ ],
+ "not_run": [
+  "Day VWAP: the video's day VWAP starts 18:00 ET. The engine's morning instance reads the trade date's bars from 00:00 ET, so the day VWAP here starts at 00:00 ET (the first six evening hours are missing).",
+  "London VWAP: no clock time was said; 03:00 ET (08:00 London, 02:00 Central) is my reading.",
+  "'Which VWAP is most respected' is a look at the chart with no rule: each VWAP is run alone as its own sheet.",
+  "'Away' is not a number in the video: the setting is mine (ticks away from VWAP before a return counts); three values are run as three sheets and none is picked.",
+  "Skipping sideways days has no rule and is not run (no filter). The Bookmap liquidity check is not run (he says to skip it: 'just take the trade').",
+  "The 'bad feeling' early exit and the swing-low liquidity sweep trade are not run.",
+  "The limit order is re-priced at every bar close of the sheet's bar size (1 or 5 minutes), not continuously. A limit fills on a one-tick trade-through (a touch to the tick is no fill): his own fills may be easier.",
+  "max_trades 5 a pass is mine (the video gives no cap); sessions are separate passes, so a cap counts inside each pass.",
+  "The video's market is ES; costs are the engine's own (1 tick of slippage on market and stop fills, $4 a round turn)."
+ ],
+ "control": "random"
+}

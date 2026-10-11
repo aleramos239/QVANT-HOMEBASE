@@ -2618,8 +2618,8 @@ function clockEt() {
 }
 
 function tick() {
-  const sc = cells[selected], fmt = sc && sc.R ? sc.R.timeFormat : '24h';   // the selected chart's Time format
-  $('#sbClock').textContent = `${window.HBSettings.clockText(ET_CLOCK.format(new Date()), fmt)} ET`;
+  const now = ET_CLOCK.format(new Date());
+  $('#sbClock').textContent = `${window.HBClock ? window.HBClock.text(now) : now} ET`;   // the app's one clock format
   greyIfStale();
   const et = clockEt();
   for (const c of cells) c.tickSecond(et);
@@ -2837,6 +2837,10 @@ async function init() {
   loadDrawStyleDefaults();   // async: host.styleDefault() reads whatever has landed by the time a drawing is placed
   loadIndicatorDefaults();   // async: indicatorsDialog's addIndicator path reads whatever has landed by then
   connect();
+  if (window.HBClock) {
+    window.HBClock.on(() => { for (const c of cells) if (c) c.applySettings(); tick(); });   // every chart's axis and labels, and the status bar
+    window.HBClock.load('');
+  }
   tick();
   setInterval(tick, 1000);
   watchStatusBar();   // W1: after the first tick, so the clock is in the first fit

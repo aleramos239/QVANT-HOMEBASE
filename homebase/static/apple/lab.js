@@ -9,7 +9,6 @@
      - gives the page's library the sidebar pane and its backtest panel the inspector pane. There is ONE state, the
        page's: the window's sidebar / inspector buttons click the page's own Strategies / Results toggles, and a
        change the page makes itself is mirrored back to the window;
-     - re-houses the trade stepper (the same node, with its listener) at the foot of the inspector;
      - writes the window title from what the page prints as the document's name and state, and repeats the page's
        own validation message at the top of the inspector while the script has a problem.
    It calls no endpoint, changes no handler and never stops an event. If anything here throws, the page is shown as
@@ -75,12 +74,6 @@
     const check = el('section', { class: 'hb-isec hb-lab-check', id: 'hbLabCheck', hidden: true },
       el('div', { class: 'hb-isec-h', text: 'Validation' }), el('div', { class: 'hb-box' }, el('div', { class: 'hb-row' }, sf('warn'), checkTxt)));
     res.prepend(check);
-    // the trade stepper: out of the chart, to the foot of the inspector (shown while the chart is)
-    const nav = $('#labNav');
-    if (nav) {
-      res.append(el('section', { class: 'hb-isec hb-lab-trades', id: 'hbLabTrades' },
-        el('div', { class: 'hb-isec-h', text: 'Trades on the chart' }), el('div', { class: 'hb-box' }, nav)));
-    }
 
     /* ---- one state for the panes: the page's ---- */
     const PANEL = { sidebar: 'lib', inspector: 'res' }, OFF = { sidebar: 'hb-side-off', inspector: 'hb-insp-off' };

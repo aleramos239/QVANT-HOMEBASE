@@ -28,8 +28,11 @@ def same_settings(a, b) -> bool:
 
 def resolved_params(rec: dict) -> dict:
     """The record's settings as a run resolves them: a setting the record leaves out is the code's default (the record's
-    own text, read as text -- never run). The record's bare settings when its text cannot be read."""
+    own text, read as text -- never run). The record's bare settings when its text cannot be read (or it has none: a
+    built-in's record carries its settings already resolved)."""
     params = rec.get("params") or {}
+    if not rec.get("source"):
+        return params
     try:
         cls = drafthost.stub_class(str(rec.get("name")), rec.get("source") or "")
         return strategies.resolve_inputs(cls.inputs(), params)
@@ -53,7 +56,7 @@ def unseen_state(runs: Path, rec: dict) -> dict:
     never started again by itself), {"state": "none"} when there is none."""
     want = resolved_params(rec)
     seen = set()
-    for d in sorted(runs.glob(f"*-draft_{rec.get('name')}-*"), key=lambda p: p.name, reverse=True):
+    for d in sorted(runs.glob(f"*-{rec.get('id')}-*"), key=lambda p: p.name, reverse=True):
         req, st = (read_json(d / f, None) for f in ("request.json", "status.json"))
         if not isinstance(req, dict) or req.get("strategy") != rec.get("id") or req.get("draft_sha256") != rec.get("sha256"):
             continue
@@ -68,6 +71,48 @@ def unseen_state(runs: Path, rec: dict) -> dict:
                                                  **{ours: summary.get(theirs) for ours, theirs in HEADLINE}}}
         seen.add("pending" if status in PENDING else "failed")
     return {"state": "pending" if "pending" in seen else "failed" if seen else "none"}
+
+
+def build_run_id(runs: Path, rec: dict) -> str | None:
+    """The newest finished run of this record over the build days and nothing else (same code, settings and size), or None.
+    A promoted strategy carries its build run in its record; a built-in has no record, so its run is found here."""
+    want = resolved_params(rec)
+    for d in sorted(runs.glob(f"*-{rec.get('id')}-*"), key=lambda p: p.name, reverse=True):
+        req, st = (read_json(d / f, None) for f in ("request.json", "status.json"))
+        if not isinstance(req, dict) or req.get("strategy") != rec.get("id") or req.get("draft_sha256") != rec.get("sha256"):
+            continue
+        rng = req.get("range") if isinstance(req.get("range"), dict) else {}
+        if (rng.get("kind"), rng.get("start"), rng.get("end")) != ("research", discipline.RESEARCH_START.isoformat(),
+                                                                    discipline.RESEARCH_END.isoformat()):
+            continue
+        if req.get("qty") != rec.get("qty") or not same_settings(req.get("inputs"), want):
+            continue
+        if isinstance(st, dict) and st.get("status") == "done":
+            return d.name
+    return None
+
+
+# The Desk's own straddles are not Lab copies, but the tester holds an exact twin of each (it reads the Desk's config at call time):
+# Desk strategy id -> the tester strategy that mirrors it. gc_nfp is the NFP-and-CPI spec of 2026-10-08, so its twin is gc_nfpcpi.
+BUILTIN_TWINS = {"nq930": "nq930", "gc_nfp": "gc_nfpcpi"}
+
+
+def builtin_rec(desk_id: str) -> dict | None:
+    """A built-in Desk straddle as a record the functions above can match runs against: its tester twin, the Desk's size, and
+    the settings the Desk runs now (so a run read before the Desk's setting changed stops matching, as a promoted copy's would).
+    None for a strategy with no twin."""
+    twin = BUILTIN_TWINS.get(desk_id)
+    if twin is None:
+        return None
+    from ..strategies.straddle import desk_cfg
+    c = desk_cfg(desk_id)
+    want = {"offset_pts": c.offset_pts, "sl_pts": c.sl_pts, "tp_pts": c.tp_pts}
+    if twin == "nq930":
+        want["adx_gate"] = bool(c.gated)
+    else:
+        want["events"] = "NFP+CPI"
+    return {"name": twin, "id": twin, "sha256": None, "qty": c.qty, "source": "",
+            "params": strategies.resolve_inputs(strategies.get(twin).inputs(), want)}
 
 
 def unseen_run(runs: Path, rec: dict) -> dict | None:

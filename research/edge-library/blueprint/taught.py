@@ -110,6 +110,21 @@ LIMITS = ("One video's rule, read on the build days (2021-09-22 .. 2025-06-30): 
 
 # ================================================================ small things
 
+def _blocks():
+    """runner._blocks(), with the families of engine/families/conti.py added in this process. They live in their own module (not in
+    families/blocks.py, which is hashed into every store's code stamp); their wrapped class is built on first use and the worker
+    processes unpickle it by that module's name."""
+    import importlib
+    blocks = RUN._blocks()
+    for mod in ("families.conti", "families.conti_both"):
+        C = importlib.import_module(mod)
+        for n, e in C.FAMILIES.items():
+            if n not in blocks.BASES:
+                blocks.BASES[n] = e
+                blocks.WRAPPED[n] = getattr(C, "B_" + n)
+    return blocks
+
+
 def where(arg=None) -> Path:
     """The taught root: the argument, else HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught."""
     return Path(arg or os.environ.get(ENV) or (Path.home() / ".homebase" / "taught")).expanduser()
@@ -214,7 +229,7 @@ def passes_structure(family: str):
     """True when the family's code hands the engine a STRUCTURE LEVEL with an order -- `_mkt(..., struct=x)`, `_lim(..., struct=x)` or a
     leg (side, price, struct, target) of `_arm` -- read off its source (the family's class and its bases, up to the Template); False when
     it never does (then stop_mode struct would silently become `stop_val` x ATR); None when the source cannot be read."""
-    cls = RUN._blocks().BASES[family][0]
+    cls = _blocks().BASES[family][0]
     flagged = False
     for k in cls.__mro__:
         if k is object or k.__module__ == S.__name__:
@@ -245,8 +260,8 @@ def passes_structure(family: str):
 # ================================================================ the sheet -> the plan
 
 def _family_notes(family: str) -> str:
-    cls = RUN._blocks().BASES[family][0]
-    notes = RUN._blocks().BASES[family][3]
+    cls = _blocks().BASES[family][0]
+    notes = _blocks().BASES[family][3]
     doc = inspect.getdoc(cls) or ""
     return notes + ("\n" + doc if doc else "")
 
@@ -324,7 +339,7 @@ def _plan(raw) -> tuple:
             no("entry", f"an object {{family, settings, words}} (got {entry!r})")
         else:
             try:
-                fam, blocks = RM.registry(), RUN._blocks()
+                fam, blocks = RM.registry(), _blocks()
             except RM.RegistryBroken as e:
                 return None, [f"the families registry is broken: {e}"]
             family = entry["family"]
@@ -526,6 +541,9 @@ def _plan(raw) -> tuple:
                     trade.append(s)
             except ValueError:
                 pass
+        one = getattr(cls, "ONE_INSTANCE_PASSES", None)
+        if one:                                 # ONE instance stands for these passes: the reads and the random control still use each of them
+            trade = [s for s in RM.DAY_PASSES if s in one]
         if chosen:
             never = [s for s in chosen if s not in trade]
             if never:
@@ -566,7 +584,8 @@ def _plan(raw) -> tuple:
         chosen = [s for s in RM.DAY_PASSES if s in chosen]
     plan = None
     if not bad and family and cls is not None:
-        full = {**{k: v for k, v in cls.defaults().items() if k in own}, **settings}
+        from . import blocklist as _BL                  # the open layer's nine settings are said when the sheet sets one, not as defaults
+        full = {**{k: v for k, v in cls.defaults().items() if k in own and k not in _BL.OPEN_KEYS}, **settings}
         cap = out_exits["max_trades"]
         eng = {}
         for tf in bars:
@@ -577,7 +596,7 @@ def _plan(raw) -> tuple:
                 if not struct:
                     p["stop_val"] = c["stop_pts"]
                 rows.append({"id": c["id"], "params": p, "sessions": list(chosen), "hold_to": RM.HOLD,
-                             "class": RUN._blocks().BASES[family][0].__name__})
+                             "class": _blocks().BASES[family][0].__name__})
             eng[tf] = rows
         seeds = R.template("control")["seeds"]
         plan = {"name": name, "source": src, "market": market, "tick": tick, "point_value": costs[market]["point_value"], "bars": bars, "sessions": chosen,
@@ -585,7 +604,8 @@ def _plan(raw) -> tuple:
                 "effective": full, "words": entry["words"], "exits": out_exits, "cells": cells, "engine": eng, "taught": list(taught), "not_run": list(nr or []),
                 "nothing_left_out": not nr, "control": {"kind": "random", "p_entry": RM.C1_P_ENTRY, "seeds": seeds,
                                                          "sides": ["both"] + ([side] if side != "both" else [])},
-                "struct": struct, "family_words": _family_notes(family)}
+                "struct": struct, "family_words": _family_notes(family),
+                "one_instance": list(getattr(_blocks().WRAPPED[family], "ONE_INSTANCE_PASSES", ()) or []) or None}
         plan["lane_notes"] = _lane_notes(plan)
     return plan, bad
 
@@ -594,7 +614,12 @@ def _lane_notes(plan: dict) -> list:
     """What is true of the run whatever the sheet says: the facts a reader holding the video next to the Run lines needs."""
     n, notes = len(plan["sessions"]), []
     cap = plan["exits"]["max_trades"]
-    if n > 1:
+    if plan.get("one_instance"):
+        notes.append(f"ONE INSTANCE FOR THE DAY ({', '.join(plan['one_instance'])} are one window, entries 10:30-15:30, flat {S.DAY_FLAT}): the cap of {cap} "
+                     f"trade{'s' * (cap != 1)} is a DAY cap, one position at a time holds for the whole day, and the family's loss stop counts over the day "
+                     f"({', '.join(k for k in plan['effective'] if 'loss' in k) or 'none'}). The random control and the reads still go pass by pass "
+                     f"({', '.join(plan['sessions'])}), matched by day.")
+    elif n > 1:
         notes.append(f"CAPPED PER SESSION PASS, NOT PER DAY: max_trades {cap} counts inside each pass ({n} passes: {', '.join(plan['sessions'])}), so a day can "
                      f"hold up to {cap * n} trades; a family's own loss or trade count ({', '.join(k for k in plan['effective'] if 'loss' in k or k.startswith('max_')) or 'none'}) "
                      "counts inside one pass too.")
@@ -622,7 +647,7 @@ def _run_lines(p: dict) -> list:
            f"side      {side} (dir={p['dir']})",
            f"market    {p['market']} (tick {_g(p['tick'])}, ${_g(p['point_value'])} a point)",
            f"bars      {' and '.join(p['bars'])}-minute bars, one run each",
-           f"passes    {' '.join(p['sessions'])} ({'; '.join(_pass_words(s) for s in p['sessions'])}), each its own pass, hold to the day (flat {S.DAY_FLAT} ET)"]
+           f"passes    {' '.join(p['sessions'])} ({'; '.join(_pass_words(s) for s in p['sessions'])}), {'ONE instance for the whole window (the passes only name the clock and the controls)' if p.get('one_instance') else 'each its own pass'}, hold to the day (flat {S.DAY_FLAT} ET)"]
     if p["window"]:
         out.append(f"window    {p['window']['text']} ET, honoured by {p['window']['by']}")
     if e["struct"]:
@@ -636,7 +661,7 @@ def _run_lines(p: dict) -> list:
     out.append("time exit " + ("none" if not any(bars.values()) else
                                (f"after {next(iter(bars.values()))} bars" if same else "after " + ", ".join(f"{v} bars of {k}" for k, v in bars.items()))
                                + (f" ({e['exit_minutes']} minutes)" if e["exit_minutes"] else "")))
-    out.append(f"cap       at most {e['max_trades']} trade{'s' * (e['max_trades'] != 1)} a session pass (max_tr)")
+    out.append(f"cap       at most {e['max_trades']} trade{'s' * (e['max_trades'] != 1)} {'a DAY (one instance)' if p.get('one_instance') else 'a session pass'} (max_tr)")
     c = p["cells"]
     if p["struct"]:
         out.append(f"cells     {len(c)}: the taught cell and its neighbours, target {', '.join(_g(x['tgt_r']) for x in c)} x the stop")
@@ -699,7 +724,7 @@ def _exit(plan: dict, tf: str, cell: dict, stop_pts=None) -> dict:
 
 
 def _unit_part(plan: dict, tf: str) -> dict:
-    blocks = RUN._blocks()
+    blocks = _blocks()
     cls = blocks.WRAPPED[plan["family"]]
     grid = []
     for k, (c, e) in enumerate(zip(plan["cells"], plan["engine"][tf])):

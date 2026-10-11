@@ -1,0 +1,64 @@
+{
+ "source": {
+  "video": "A0G14JYYVTk",
+  "title": "A Hedge Fund Manager Just CRACKED Prop Trading (Live On Chart)",
+  "channel": "Matteo Conti (IQCapital)",
+  "url": "https://youtu.be/A0G14JYYVTk"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "long",
+ "exits": {
+  "stop": "struct",
+  "target_r": 1.0,
+  "max_trades": 1
+ },
+ "taught": [
+  "[22:53-26:24] NQ, 1-minute bars, long only, one contract",
+  "[27:51-28:19] the opening range is recorded from 08:30 to 09:00 Central (09:30-10:00 New York)",
+  "[31:28-31:50] 1: one bar closes above the opening range: 'gate number one. It arms the strategy'",
+  "[28:42-29:02, 31:28] 2: the price touches the VWAP ('just can touch it')",
+  "[29:02, 32:12] 3: a 1-minute bar closes back above the VWAP",
+  "[29:26-29:47, 32:12-32:32] 4: ADX above 20 and not increasing 'from the previous bar' (flat or decreasing)",
+  "[32:55-33:15] when only the ADX is missing, wait until it is satisfied, then open",
+  "[33:15-33:36] 1, 2 and 3 can happen on one candle; the entry is the open of the following bar",
+  "[34:17-34:38] take profit at the high of the past five bars; stop loss at the low of the past 20",
+  "[34:38] out at 3:55 Central if neither is hit",
+  "[1:00:44] the target is a limit order, the stop a market order",
+  "[chart 59:35, 2026-09-22] the VWAP line starts at the 08:30 Central open (09:30 New York); one trade on that day: in about 11:10 Central, out at the target about 11:44, both levels fixed at the entry",
+  "[ours, 2026-10-11] a signal whose target is nearer than 10 points is not traded; the day goes on and a later signal may trade"
+ ],
+ "not_run": [
+  "THIS IS NOT THE VIDEO'S RULE: the least target of 10 points is ours, chosen after the taught run was seen (its far-target trades made money, its near-target trades did not). In-sample by construction: only unseen days can judge it. 10, 15 and 20 points run side by side so that no one number is picked.",
+  "Trades a day: the video gives no number. The sheet runs ONE trade a day (the simplest reading); his report shows about 122 trades a year.",
+  "Exit time: he says 3:55 Central = 16:55 New York. The engine's day ends at 15:58 and the family flattens at 15:55 New York, an hour earlier; no entry from 15:50.",
+  "A target less than 2 ticks above the signal close is NO TRADE here (the Template's rule). He says the target sits at the entry candle's own high under 5 % of the time and the trade is taken (it would fill at once, at about the entry).",
+  "The stop is never nearer than a quarter of the 1-minute bars' ATR (the Template's floor on a structure stop).",
+  "Both levels are fixed at the signal close and move with the fill (1 tick of slippage), so the distances are those of the signal.",
+  "The target is the family's own LEVEL, not a multiple of the stop: the lane's three cells (target x 0.75 / 1 / 1.25) are the same cell three times here. There is no neighbourhood to read.",
+  "ADX: Wilder's ADX(14) over the 1-minute bars since 00:00 ET of the day; his is a continuous series and its period is not said (14 is the default).",
+  "VWAP: volume-weighted (high + low + close) / 3 of the 1-minute bars from 09:30; the video does not say which price it weights.",
+  "Arming: the whiteboard says a bar CLOSES above the opening range (run here); at the chart he says the price 'touches' the high of the range.",
+  "While waiting for the ADX the bar that trades must itself close above the VWAP (the video does not say what happens when the price falls back under it).",
+  "Costs and the order of a stop and a target inside one bar: the engine's own (1 tick of slippage, $4 a round turn, tick replay); his report shows no costs.",
+  "THE RANDOM CONTROL IS WEAKER THAN THE RULE: the lane's random entries run in the engine's own nyam pass (09:30-11:00, flat 15:58, the median stop of the taught trades, target = that stop) and do not know the family's 09:30-15:55 window or its level target; read the 'beats random' lines with that in mind."
+ ],
+ "control": "random",
+ "name": "conti_vwap_adx_tp10",
+ "entry": {
+  "family": "vwap_adx",
+  "settings": {
+   "adx_min": 20.0,
+   "or_min": 30,
+   "tp_bars": 5,
+   "sl_bars": 20,
+   "min_tp": 10.0
+  },
+  "words": "A 1-minute bar closes above the 09:30-10:00 opening range (armed); the price touches the VWAP; a 1-minute bar closes back above the VWAP with ADX above 20 and not higher than on the bar before: buy at the next bar's open. Target = the high of the past five bars, stop = the low of the past 20, out at the end of the day. OURS, not the video's: only when that target is at least 10 points above the signal close."
+ }
+}

@@ -75,10 +75,15 @@
                                           is run by this route. `curve` = {days, vals}: that run's running total by day,
                                           after costs. A strategy with no unseen-days run of its code + settings
                                           gets one started by itself, once (its `unseen_state`: done | pending | failed |
-                                          none; a failed or cancelled one is not started again). A promote starts it too
-    POST /api/tester/desklab/open        {name} -> {ok, name}: the Desk page's "Open in the Lab" leaves its ask (the Mac app
-                                          drops a link's #fragment when it switches tab). GET /api/tester/lab-open -> {name}
-                                          hands it to the Lab page once (null when none, or one older than two minutes)
+                                          none; a failed or cancelled one is not started again). A promote starts it too.
+                                          The Desk's own straddles (nq930, gc_nfp) answer under their Desk id with `twin` (the
+                                          tester strategy that mirrors them) and `manual: true`: their saved runs at the Desk's
+                                          size and setting; nothing starts one (it is read by hand, from the Lab)
+    POST /api/tester/desklab/open        {name[, run][, builtin: true]} -> {ok, name}: the Desk page's "Open in the Lab" leaves its ask
+                                          (the Mac app drops a link's #fragment when it switches tab); `builtin`: name is a
+                                          built-in tester strategy (a Desk straddle's twin). GET /api/tester/lab-open ->
+                                          {name[, run][, builtin]} hands it to the Lab page once (null when none, or one older
+                                          than two minutes)
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
                                           draft's text, its settings and that backtest's headline numbers. Refused (in
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
@@ -759,11 +764,6 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
             return {"state": "none"}
 
-    @r.get("/desklab/results")
-    def desklab_results(request: Request):
-        """The research the Desk's panel shows beside a promoted strategy (deskresults.py). Saved runs and their saved trades
-        only: no strategy runs and no test day is read. A plain `def`: FastAPI's threadpool, not the loop."""
-        watch_guard(request)
     def prop_of(rid):
         try:
             return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid), DESKLAB_PROP))
@@ -784,6 +784,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except Exception:      # noqa: BLE001 -- a warm-up never takes the service down; the route computes it on ask
             pass
 
+    @r.get("/desklab/results")
+    def desklab_results(request: Request):
+        """The research the Desk's panel shows beside a promoted strategy (deskresults.py). Saved runs and their saved trades
+        only: no strategy runs and no test day is read. A plain `def`: FastAPI's threadpool, not the loop."""
+        watch_guard(request)
         out = {}
         with desk_res_lock:
             for rec in store.listing():
@@ -793,6 +798,19 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                                     "curve": deskresults.curve_of(manager.runs, unseen["id"]) if unseen else None,
                                     "prop": {"build": prop_of(build) if build else None,
                                              "unseen": prop_of(unseen["id"]) if unseen else None}}
+            # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
+            # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
+            for desk_id in deskresults.BUILTIN_TWINS:
+                try:
+                    rec = deskresults.builtin_rec(desk_id)
+                    got = deskresults.unseen_state(manager.runs, rec)
+                    build, unseen = deskresults.build_run_id(manager.runs, rec), got.get("run")
+                    out[desk_id] = {"unseen": unseen, "unseen_state": got["state"], "manual": True, "twin": rec["id"],
+                                    "curve": deskresults.curve_of(manager.runs, unseen["id"]) if unseen else None,
+                                    "prop": {"build": prop_of(build) if build else None,
+                                             "unseen": prop_of(unseen["id"]) if unseen else None}}
+                except Exception:      # noqa: BLE001 -- a twin that cannot be read leaves the Desk's page as it was
+                    continue
         return watch_answer(request, {"results": out})
 
     @r.options("/desklab/{what}")
@@ -850,26 +868,33 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
-    open_ask = {"name": None, "run": None, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
+    open_ask = {"name": None, "run": None, "builtin": False, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
 
-    def desklab_open(name: str, run: str | None = None) -> dict:
+    def desklab_open(name: str, run: str | None = None, builtin: bool = False) -> dict:
         """The Desk page asks the Lab page to show one draft. The Mac app drops a link's #fragment when it switches
         tab, so the ask waits here and the Lab page takes it (GET /lab-open) the moment it is shown. `run`: a finished run of
-        it to put on the chart as well (the Desk's "Show on chart")."""
-        try:
-            draftstore.read(name)
-        except (FileNotFoundError, ValueError, OSError):
-            raise HTTPException(404, "That strategy is not in the Lab.") from None
-        open_ask["name"], open_ask["run"], open_ask["at"] = name, run, time.monotonic()
+        it to put on the chart as well (the Desk's "Show on chart"). `builtin`: the name is a built-in tester strategy (the twin
+        of one of the Desk's own straddles), not a draft."""
+        if builtin:
+            if name not in deskresults.BUILTIN_TWINS.values():
+                raise HTTPException(404, "That strategy is not in the Lab.")
+        else:
+            try:
+                draftstore.read(name)
+            except (FileNotFoundError, ValueError, OSError):
+                raise HTTPException(404, "That strategy is not in the Lab.") from None
+        open_ask["name"], open_ask["run"], open_ask["builtin"], open_ask["at"] = name, run, bool(builtin), time.monotonic()
         return {"ok": True, "name": name}
 
     @r.get("/lab-open")
     def lab_open_take():
         """The Lab page takes the Desk's ask, once: {name} (null when none, or one older than two minutes)."""
-        name, run, at = open_ask["name"], open_ask["run"], open_ask["at"]
+        name, run, at, builtin = open_ask["name"], open_ask["run"], open_ask["at"], open_ask["builtin"]
         open_ask["name"] = open_ask["run"] = None
+        open_ask["builtin"] = False
         fresh = bool(name) and time.monotonic() - at <= 120
-        return {"name": name if fresh else None, **({"run": run} if fresh and run else {})}
+        return {"name": name if fresh else None, **({"run": run} if fresh and run else {}),
+                **({"builtin": True} if fresh and builtin else {})}
 
     def desklab_onoff(name: str, on: bool) -> dict:
         if store.set_enabled(name, on) is None:
@@ -895,8 +920,13 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             run = body.get("run") if what == "open" and isinstance(body, dict) else None
             if run is not None and (not isinstance(run, str) or not re.fullmatch(r"[0-9a-z_-]{1,120}", run)):
                 raise HTTPException(400, "run: a finished run's id")
+            builtin = body.get("builtin") if what == "open" and isinstance(body, dict) else None
+            if builtin is not None and builtin is not True:
+                raise HTTPException(400, "builtin: true")
             if what == "open" and run is not None:
                 keys = {"name", "run"}
+            if what == "open" and builtin is not None:
+                keys = keys | {"builtin"}
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
@@ -912,7 +942,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "open":
-                    done = await asyncio.to_thread(desklab_open, name, run)
+                    done = await asyncio.to_thread(desklab_open, name, run, builtin is True)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)
@@ -1346,6 +1376,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child
     r.wfs = wfs           # ... and every walk-forward cell's
+    r.warm = warm_desklab_results   # the chart service runs it once in a thread after startup
     return r
 
 
@@ -1359,4 +1390,3 @@ def tester_router(write_ok: Callable[[Request], None], archive: Path,
     return make_router(write_ok, RunManager(base, archive=archive, cache=cache),
                        GridManager(base, archive=archive, cache=cache),
                        WalkForwardManager(base, archive=archive, cache=cache), notify=notify, live_roots=live_roots)
-    r.warm = warm_desklab_results   # the chart service runs it once in a thread after startup

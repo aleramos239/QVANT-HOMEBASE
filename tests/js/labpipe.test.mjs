@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRequire } from 'node:module';
 import { readFileSync } from 'node:fs';
 
-/* The strategy pipeline in the Lab (its Queue, Book and Guide): the pure half in labcode.js, and source-text pins on lab.js for what
+/* The strategy pipeline in the Lab (its Queue and Book): the pure half in labcode.js, and source-text pins on lab.js for what
    the page may do with it. The verdicts, the reasons and the numbers are the server's (GET /api/tester/pipeline): nothing here judges. */
 const require = createRequire(import.meta.url);
 const L = require('../../homebase/static/charts/labcode.js');
@@ -58,57 +58,6 @@ test('the dots: finished = done, the stage that stopped it = stop, the one in ha
 
 test('a chip\'s colour goes with its word; an unknown word is plain', () => {
   assert.deepEqual(['Waiting', 'Running', 'Stopped', 'Problem', 'Passed', 'In the book', 'Refused', 'New'].map(L.plTone), ['', 'run', 'err', 'warn', 'ok', 'ok', '', '']);
-});
-
-test('what is running now: only while the runner works', () => {
-  assert.equal(L.plRunning(state([idea('fvg_open', 'Running', 2)], { running: true })), 'Testing fvg_open — stage 3 of 7');
-  assert.equal(L.plRunning(state([idea('fvg_open', 'Running')], { running: true })), 'Testing fvg_open — stage 0 of 7');
-  assert.equal(L.plRunning(state([idea('fvg_open', 'Running', 2)])), 'Nothing is running', 'the runner ended: nothing is being tested');
-  assert.equal(L.plRunning(state([idea('a', 'Waiting')], { running: true })), 'Nothing is running');
-  assert.equal(L.plRunning(null), 'Nothing is running');
-});
-
-test('the Guide: six steps, a button grey until its step makes sense, with the reason in words', () => {
-  const by = (P) => Object.fromEntries(L.plGuide(P).map((s) => [s.n, s]));
-  const none = by(state([]));
-  assert.deepEqual(L.plGuide(state([])).map((s) => s.title), ['Write the idea', 'Press Start', 'Wait', 'Read the Queue', 'Look at a green one', 'Build a portfolio']);
-  assert.deepEqual([1, 2, 3, 4, 5, 6].map((n) => none[n].enabled), [true, false, false, false, false, false]);
-  assert.deepEqual([2, 4, 5, 6].map((n) => none[n].reason), ['Add an idea first.', 'No ideas yet.', 'No idea has passed everything yet.', 'Not built yet']);
-  assert.equal(none[3].button, null, 'step 3 has no button');
-  assert.equal(none[3].status, 'Nothing is running');
-  assert.deepEqual(L.plGuide(state([])).filter((s) => s.primary).map((s) => s.n), [1], 'with no idea, the one to press is step 1');
-
-  const waiting = by(state([idea('a', 'Waiting')]));
-  assert.deepEqual([waiting[2].enabled, waiting[2].button, waiting[2].actions, waiting[2].primary], [true, 'Start testing', ['start'], true]);
-  assert.deepEqual([waiting[4].enabled, waiting[4].reason], [true, '']);
-
-  const on = by(state([idea('a', 'Running', 1), idea('b', 'Stopped', 1, 1)], { running: true }));
-  assert.deepEqual([on[2].enabled, on[2].reason, on[2].actions], [false, 'Testing is already on.', []]);
-  assert.equal(on[3].status, 'Testing a — stage 2 of 7');
-  assert.equal(on[4].primary, true, 'while it tests, the next thing is to read the Queue');
-
-  const paused = by(state([idea('a', 'Waiting')], { paused: true }));
-  assert.deepEqual([paused[2].button, paused[2].enabled, paused[2].actions], ['Resume', true, ['resume', 'start']]);
-
-  const green = by(state([idea('a', 'Waiting'), idea('fvg_open', 'Passed', 7)]));
-  assert.deepEqual([green[5].enabled, green[5].button, green[5].name, green[5].primary], [true, 'Look at fvg_open', 'fvg_open', true]);
-  assert.equal(green[2].primary, false, 'one primary button at a time');
-  for (const P of [state([]), state([idea('a', 'Passed', 7)], { running: true })]) {
-    assert.deepEqual([by(P)[6].enabled, by(P)[6].reason], [false, 'Not built yet'], 'the portfolio is never open');
-    assert.equal(L.plGuide(P).filter((s) => s.primary).length, 1);
-  }
-  assert.equal(L.plGuide(null).length, 6);
-});
-
-test('the ladder: the server\'s eight stages, each with the ideas that are at it now', () => {
-  const P = state([idea('w', 'Waiting'), idea('r', 'Running', 0), idea('q', 'Waiting', 0), idea('s', 'Stopped', 3, 3), idea('c', 'Problem', 1, 2), idea('p', 'Passed', 7),
-    idea('b', 'In the book', 7), idea('x', 'Refused', 7)]);
-  const lad = L.plLadder(P);
-  assert.deepEqual(lad.map((s) => s.ideas), [1, 2, 1, 1, 0, 0, 0, 1], 'an idea in the book or refused is at no stage');
-  assert.deepEqual([lad[0].count, lad[1].count, lad[4].count], ['1 idea', '2 ideas', 'None']);
-  assert.deepEqual([lad[3].n, lad[3].name, lad[3].words], [3, 'Indicators', 'Indicators?'], 'the name and the sentence are the server\'s');
-  assert.deepEqual(L.plLadder(null), []);
-  assert.equal(L.plAt(idea('a', 'Running', 7)), 7, 'never past the last stage');
 });
 
 test('marks, and a card\'s lines in words', () => {
@@ -272,11 +221,7 @@ test('with the server\'s lists the form can be sent only for a rule it offers, a
     'no lists from the server: what is typed goes to the server, which checks it');
 });
 
-test('beside the Guide: what is happening now, and the selection of a list', () => {
-  assert.deepEqual(L.plSummary(state([idea('a', 'Running', 2), idea('b', 'Passed', 7), idea('c', 'Passed', 7)], { running: true })),
-    ['3 ideas: 1 running, 2 passed', 'Testing a — stage 3 of 7', '2 ideas passed and wait for your look.']);
-  assert.deepEqual(L.plSummary(state([idea('b', 'Passed', 7)])), ['1 idea: 1 passed', 'Nothing is running', '1 idea passed and waits for your look.']);
-  assert.deepEqual(L.plSummary(state([])), ['No ideas yet', 'Nothing is running']);
+test('the selection of a list', () => {
   assert.deepEqual([L.plPick(['a', 'b'], 'b'), L.plPick(['a', 'b'], 'gone'), L.plPick(['a', 'b'], ''), L.plPick([], 'x')], ['b', 'a', 'a', ''], 'the one that was while it is there, else the first');
 });
 
@@ -328,28 +273,27 @@ test('the whole book card: every fact, every account (one whose rules are not co
 const LAB = rd('charts/lab.js');
 const PIPE = LAB.slice(LAB.indexOf('/* ---- the strategy pipeline in the sidebar ----'), LAB.indexOf('function paintEditor()'));
 
-test('the view switcher lists the six views: Strategies, Blueprint, Arsenal, then Queue, Book, Guide', () => {
-  assert.match(LAB, /\['lib', 'Strategies'\], \['bp', 'Blueprint'\], \['tk', 'Arsenal'\]/);
-  assert.match(LAB, /\['pq', 'Queue'\], \['pb', 'Book'\], \['pg', 'Guide'\]/);
+test('the view switcher lists the four views: Strategies, Arsenal, then Queue, Book', () => {
+  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\]\];/);
+  assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint/, 'the Blueprint and Guide views are gone, with what only they called');
+  assert.match(LAB, /if \(VIEW_IDS\.includes\(v\)\) S\.view = v;/, 'a stored view that is no longer listed opens Strategies');
 });
 
-test('the pipeline pages talk to five pipeline routes and the watch list only, and post nothing but the six actions', () => {
+test('the pipeline pages talk to five pipeline routes only, and post nothing but the six actions', () => {
   assert.ok(PIPE.length > 2000, 'the section is there');
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
   // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
   assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
     '/api/tester/pipeline/idea/', '/api/tester/pipeline/run']);
-  const watch = [...LAB.matchAll(/['"`](\/api\/tester\/watch[^'"`$?]*)/g)].map((m) => m[1]);
-  assert.deepEqual([...new Set(watch)].sort(), ['/api/tester/watch', '/api/tester/watch/'], 'the Desk watch list: read, and promote / remove by name');
-  assert.match(LAB, /watchDo\('promote', el\.dataset\.name\)/);
-  assert.match(LAB, /watchDo\('remove', el\.dataset\.name\)/);
-  assert.doesNotMatch(LAB, /watchDo\('(?!promote'|remove')/, 'the Lab only promotes and removes');
+  // 2026-10-10 (the owner): watch-only is gone -- any strategy on the Desk can run live; the Book only reads, and says "On the Desk" by the Lab's own list
+  assert.doesNotMatch(LAB, /\/api\/tester\/watch|watchDo|plWatch|loadWatch|plunwatch|plpromote/, 'no watch list, no promote-from-the-Book');
+  assert.match(LAB, /S\.desk && S\.desk\.has\(card\.name\)/, 'the Book row says On the Desk when a promoted Lab strategy of that name is there');
   const actions = [...PIPE.matchAll(/action: '(\w+)'/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(actions)].sort(), ['add', 'approve', 'refuse']);
   assert.match(PIPE, /pipeRun\(\{ action: a \}\)/, 'start, pause and resume are posted as the helper names them');
 });
 
-test('one timer for the three views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {
+test('one timer for the two views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {
   assert.equal((LAB.match(/setInterval\(loadPipeline, 5000\)/g) || []).length, 1);
   assert.match(LAB, /const pipeOn = \(\) => PIPE_VIEWS\.includes\(S\.view\);/);
   assert.match(LAB, /const plOpen = \(\) => pipeOn\(\) && !document\.hidden;/);
@@ -362,7 +306,7 @@ test('one timer for the three views: never while hidden, never two requests at o
 test('the words on the pipeline pages are plain: none of the toolkit\'s own', () => {
   const shown = PIPE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
   for (const word of ['sub-idea', 'signature', 'stage card', 'awaiting_owner', 'code_problem', 'toolkit', 'store']) assert.doesNotMatch(shown, new RegExp(`\\b${word}s?\\b`, 'i'), word);
-  for (const text of ['No ideas yet. Add one from the Guide, or tell Claude your idea in any chat.', 'The book is empty. A strategy lands here after it passes every stage and you approve it.',
+  for (const text of ['No ideas yet. Press Write an idea, or tell Claude your idea in any chat.', 'The book is empty. A strategy lands here after it passes every stage and you approve it.',
     'Not sure how? Tell Claude your idea in any chat and it fills this in.']) assert.ok(PIPE.includes(text), text);
 });
 
@@ -435,6 +379,5 @@ test('book results: the words beside the curve and after an action are plain tex
   assert.match(LAB, /async function showRunOnChart\(rid, focus = null\) \{\n  if \(!RUN_ID\.test\(String\(rid\)\)\) return false;\n  if \(pipeOn\(\)\) setView\('lib'\);/);
   assert.match(LAB, /const shown = await showRunOnChart\(j\.run_id, j\.end \? \{ date: j\.end \} : null\);/);
   assert.match(LAB, /const run = \/\^#run=\(\[0-9a-z_-\]\+\)\$\/\.exec\(location\.hash\);/, 'a link from the Desk page opens a run here');
-  assert.match(L.plWatchSaid('promote', 'nq_x'), /watch-only: it shows its results there and places no orders\.$/);
-  assert.match(L.plWatchSaid('remove', 'nq_x'), /stays in the Book and can be promoted again\.$/);
+  assert.equal(L.plWatchSaid, undefined, 'the watch-list sentences are gone');
 });

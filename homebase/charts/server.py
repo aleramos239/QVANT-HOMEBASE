@@ -53,7 +53,7 @@ from .presets import MAX_PRESET_BYTES, PresetsStore
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
-from .settings_store import MD_CHOICES, SettingsStore
+from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore
 from .store import ARCHIVE, TickStore, splice_tail
 from .studies import make
 from .tick import SideClassifier, from_row
@@ -1453,6 +1453,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         d = settings_store.get()
         if getattr(feed, "switch_in_progress", False):
             d["md"] = feed.md_env   # the file already names the target; the feed is not there yet
+        d["clock"] = settings_store.clock()
         try:
             accts = T.accounts_by_env()
         except Exception:  # noqa: BLE001 — a broken config must never break the dialog, only omit the note
@@ -1510,8 +1511,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             body = await request.json()
         except ValueError:
             raise HTTPException(400, "the body is not JSON") from None
-        if not isinstance(body, dict) or body.get("md") not in MD_CHOICES:
-            raise HTTPException(400, f"""a settings update is {{"md": {' or '.join(MD_CHOICES)}}}""")
+        if isinstance(body, dict) and set(body) == {"clock"}:
+            # the clock format is a display choice: nothing of the feed moves, so none of the md
+            # switch's refusals below apply to it
+            if body["clock"] not in CLOCK_CHOICES:
+                raise HTTPException(400, f"""the clock is {' or '.join(CLOCK_CHOICES)}""")
+            return {"clock": settings_store.set_clock(body["clock"])}
+        if not isinstance(body, dict) or "clock" in body or body.get("md") not in MD_CHOICES:
+            raise HTTPException(400, f"""a settings update is {{"md": {' or '.join(MD_CHOICES)}}}"""
+                                f""" or {{"clock": {' or '.join(CLOCK_CHOICES)}}}""")
         md = body["md"]
         if not hasattr(feed, "switch_md"):
             raise HTTPException(503, "the market-data login can't be switched here (replay)")

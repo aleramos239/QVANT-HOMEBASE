@@ -1,0 +1,156 @@
+rother_vwap_us_a12: vwap_touch (anchor us, away 12, near 3), both sides, 1 and 5-minute bars, stop 2.5 / target 3 points, up to 5 trades a session pass over 3 passes (nyam mid pm); the sheet leaves out 9 things the video says (listed below); verdict: 1-minute bars make -$24 a trade on 4,091 trades and hold 2 of 10 lines (misses P3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1); the neighbours average -$25 a trade; 5-minute bars make -$22 a trade on 2,918 trades and hold 2 of 10 lines (misses P3.2, 3.3, 3.4, 3.5, 3.6, 3.7, 3.8, P4.1); the neighbours average -$24 a trade.
+
+BUILD DAYS 2021-09-22 .. 2025-06-30 (948 session days), 1 contract after costs. The unseen days (2025-07-01 on) were not read.
+
+=== 1-MINUTE BARS ===
+
+                                                    the taught cell (stop 2.5 / target 3)  average of the 9 cells
+trades                                                                              4,091                   4,086
+net                                                                              -$99,526               -$102,746
+win rate                                                                           41.0 %                  41.5 %
+average trade                                                                        -$24                    -$25
+profit factor                                                                        0.71                    0.70
+average win                                                                          $146                    $146
+average loss                                                                        -$142                   -$147
+average win / average loss                                                           1.02                    1.03
+worst drawdown, daily                                                             $99,686                $103,401
+worst drawdown, open losses counted                                               $99,798                $103,541
+Sharpe                                                                              -5.57                   -5.74
+months won                                                                          6.5 %                   5.6 %
+best month, share of the profit                                                    47.4 %                  69.3 %
+longest run of losing days                                                             10                    12.9
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                      3.7 %                   3.8 %
+prop payout odds (stress, "live is worse", beside)                          0.7 % (0.1 %)           0.6 % (0.1 %)
+prop eval odds, stress                                                              1.0 %                   1.2 %
+
+The neighbours (the 8 others): average trade -$25, they hold 2.0 of 10 lines on average (the taught cell holds 2).
+
+THE NINE CELLS: average trade (lines held)
+           target 2.25     target 3  target 3.75
+stop 2     -$26 (2/10)  -$26 (2/10)  -$26 (2/10)
+stop 2.5   -$25 (2/10)  -$24 (2/10)  -$25 (2/10)
+stop 3.25  -$24 (2/10)  -$25 (2/10)  -$25 (2/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 FAIL average trade -$24 (need above $0)
+  P3.3 PASS 4,091 trades (need 200)
+  P3.4 missed (a label, asks nothing) long -$63,270, short -$36,257 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (205 of 4091) the box makes -$129,456 (need above $0)
+  P3.8 missed (a label, asks nothing) 3 of 46 months won, 6.522 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2021-11 is 47.43 % of the profit of the months won (need 10 % or less)
+  P3.10 missed (a label, asks nothing) longest run of losing days: 10 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 0.71 over 4,091 trades (need 1.2 or more)
+  3.4 FAIL default variant: net -$99,526 / worst drawdown $99,798 = -1.00, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe -5.57 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $9,980 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 0 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$106,168 without its best 1 % of days (10 of 948 session days; they made $6,642 of -$99,526; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 0 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 PASS beats 99.9 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*        210   -$5,278       -$25  40.5 %  0.70    $5,309
+2022       1,480  -$33,595       -$23  41.8 %  0.73   $35,924
+2023         812  -$24,060       -$30  38.9 %  0.66   $24,352
+2024         872  -$17,313       -$20  42.3 %  0.76   $18,077
+2025*        717  -$19,280       -$27  40.2 %  0.69   $19,454
+combined   4,091  -$99,526       -$24  41.0 %  0.71   $99,686
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades        net  avg trade     win    PF  drawdown
+2021*        210    -$4,946       -$24  41.9 %  0.71    $5,292
+2022       1,477   -$36,743       -$25  41.8 %  0.70   $38,293
+2023         811   -$22,747       -$28  40.3 %  0.67   $23,118
+2024         872   -$18,027       -$21  42.9 %  0.75   $18,369
+2025*        716   -$20,284       -$28  40.6 %  0.67   $20,716
+combined   4,086  -$102,746       -$25  41.5 %  0.70  $103,401
+
+=== 5-MINUTE BARS ===
+
+                                                    the taught cell (stop 2.5 / target 3)  average of the 9 cells
+trades                                                                              2,918                   2,915
+net                                                                              -$64,810                -$69,078
+win rate                                                                           41.8 %                  42.1 %
+average trade                                                                        -$22                    -$24
+profit factor                                                                        0.73                    0.71
+average win                                                                          $146                    $146
+average loss                                                                        -$143                   -$147
+average win / average loss                                                           1.02                    1.02
+worst drawdown, daily                                                             $65,198                 $69,945
+worst drawdown, open losses counted                                               $65,310                 $70,132
+Sharpe                                                                              -4.23                   -4.60
+months won                                                                         13.0 %                  10.9 %
+best month, share of the profit                                                    43.1 %                  52.6 %
+longest run of losing days                                                             12                    13.7
+prop eval odds, 30 days (LucidPro 50K, no DLL)                                      4.1 %                   4.0 %
+prop payout odds (stress, "live is worse", beside)                          1.0 % (0.2 %)           1.0 % (0.2 %)
+prop eval odds, stress                                                              1.1 %                   1.4 %
+
+The neighbours (the 8 others): average trade -$24, they hold 1.8 of 10 lines on average (the taught cell holds 2).
+
+THE NINE CELLS: average trade (lines held)
+           target 2.25     target 3  target 3.75
+stop 2     -$26 (1/10)  -$23 (2/10)  -$23 (2/10)
+stop 2.5   -$25 (2/10)  -$22 (2/10)  -$22 (2/10)
+stop 3.25  -$25 (1/10)  -$24 (2/10)  -$23 (2/10)
+
+LINES on the taught cell (the pipeline's own functions and words)
+  P3.2 FAIL average trade -$22 (need above $0)
+  P3.3 PASS 2,918 trades (need 200)
+  P3.4 missed (a label, asks nothing) long -$38,664, short -$26,146 (need both above $0)
+  P3.7 missed (a label, asks nothing) without its best 5 % of trades (146 of 2918) the box makes -$86,126 (need above $0)
+  P3.8 missed (a label, asks nothing) 6 of 46 months won, 13.04 % (need 70 % or more)
+  P3.9 missed (a label, asks nothing) best month 2022-01 is 43.11 % of the profit of the months won (need 10 % or less)
+  P3.10 missed (a label, asks nothing) longest run of losing days: 12 (need 8 or fewer)
+  3.3 FAIL default variant: profit factor 0.73 over 2,918 trades (need 1.2 or more)
+  3.4 FAIL default variant: net -$64,810 / worst drawdown $65,310 = -0.99, open losses counted (need 3 or more)
+  3.5 FAIL default variant: Sharpe -4.23 on 948 session days (need 1 or more)
+  3.6 FAIL default variant: worst drawdown $6,531 at 1 micro, open losses counted (need under $2,000, the limit of LucidPro 50K)
+  3.7 FAIL default variant: makes money in 0 % of 1,000 reshuffled runs (need 80 % or more)
+  3.8 FAIL default variant: -$70,576 without its best 1 % of days (10 of 948 session days; they made $5,766 of -$64,810; need above $0)
+  P4.1 FAIL the box's average trade is above $0 in 0 % of 1,000 reshuffled runs (need 75 % or more)
+  P4.2 PASS beats 99.92 % of the random-entry runs of the same box on try 1 (need above 95 % = 100 - 5 / 1 try)
+
+PER YEAR, then combined: the taught cell
+year      trades       net  avg trade     win    PF  drawdown
+2021*        159   -$2,661       -$17  43.4 %  0.79    $2,918
+2022       1,044  -$20,064       -$19  43.1 %  0.77   $22,088
+2023         588  -$15,652       -$27  40.0 %  0.69   $15,971
+2024         624  -$13,571       -$22  41.7 %  0.74   $13,630
+2025*        503  -$12,862       -$26  40.8 %  0.70   $13,030
+combined   2,918  -$64,810       -$22  41.8 %  0.73   $65,198
+
+PER YEAR, then combined: the average of the 9 cells
+year      trades       net  avg trade     win    PF  drawdown
+2021*        159   -$2,926       -$18  43.5 %  0.77    $3,411
+2022       1,043  -$23,765       -$23  42.6 %  0.72   $24,926
+2023         587  -$16,030       -$27  40.5 %  0.67   $16,432
+2024         624  -$14,436       -$23  42.1 %  0.72   $14,674
+2025*        502  -$11,921       -$24  42.3 %  0.71   $12,469
+combined   2,915  -$69,078       -$24  42.1 %  0.71   $69,945
+
+NOT RUN (the person who wrote the sheet)
+  - Day VWAP: the video's day VWAP starts 18:00 ET. The engine's morning instance reads the trade date's bars from 00:00 ET, so the day VWAP here starts at 00:00 ET (the first six evening hours are missing).
+  - London VWAP: no clock time was said; 03:00 ET (08:00 London, 02:00 Central) is my reading.
+  - 'Which VWAP is most respected' is a look at the chart with no rule: each VWAP is run alone as its own sheet.
+  - 'Away' is not a number in the video: the setting is mine (ticks away from VWAP before a return counts); three values are run as three sheets and none is picked.
+  - Skipping sideways days has no rule and is not run (no filter). The Bookmap liquidity check is not run (he says to skip it: 'just take the trade').
+  - The 'bad feeling' early exit and the swing-low liquidity sweep trade are not run.
+  - The limit order is re-priced at every bar close of the sheet's bar size (1 or 5 minutes), not continuously. A limit fills on a one-tick trade-through (a touch to the tick is no fill): his own fills may be easier.
+  - max_trades 5 a pass is mine (the video gives no cap); sessions are separate passes, so a cap counts inside each pass.
+  - The video's market is ES; costs are the engine's own (1 tick of slippage on market and stop fills, $4 a round turn).
+
+ALSO TRUE OF THE RUN (the lane)
+  - CAPPED PER SESSION PASS, NOT PER DAY: max_trades 5 counts inside each pass (3 passes: nyam, mid, pm), so a day can hold up to 15 trades; a family's own loss or trade count (none) counts inside one pass too.
+  - The passes are independent: a trade of one pass may still be open when another pass enters (one position at a time holds inside a pass only).
+  - Every trade is flat by 15:58 ET (13:13 on an equity half day); no entry in the last 5 minutes of a pass.
+  - Costs: $4.00 a round turn and 1 tick of slippage on market and stop fills, 1 contract (the engine's own).
+
+HONEST LIMITS
+  - One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.
+  - The family's settings and the exits are the video's own: nothing was tuned, searched or picked.
+  - The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.
+  - The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.
+  - The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the family's entry window.
+NEXT: This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.

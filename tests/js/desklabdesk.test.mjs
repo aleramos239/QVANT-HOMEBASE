@@ -109,7 +109,9 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.length/);
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two), and a strategy in a group is counted in its group
+  assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
+  assert.match(side, /freeNames\.length \+ freeLab\.length/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {
@@ -571,9 +573,9 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=8"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=15"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
-  assert.doesNotMatch(HTML, /desklab\.js\?v=[1234567]\b/);
+  assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
   assert.equal(manifest.version >= 3, true);
 });
@@ -1047,4 +1049,24 @@ test('final wave B6 (rehearsal o1): a cancel time equal to the flat time is one 
   const u = load({ strategies: { nq930: nq930() } }).api.dayTimeline();      // the usual 12:55 / 15:55: two labels
   assert.match(u, />12:55 Cancel unfilled</);
   assert.match(u, />15:55 Flat</);
+});
+
+
+/* ---- a built-in Desk straddle (nq930, gc_nfp) has the same actions as a Lab one (2026-10-11) ---- */
+test('a built-in strategy page: Open in the Lab, Show on chart, Remove from Desk, its unseen blocks, and the actions stay in view', () => {
+  const start = HTML.indexOf('function stratView(name)'), end = HTML.indexOf('/* ---- A Lab strategy the Desk itself knows');
+  const view = HTML.slice(start, end);
+  assert.ok(start > 0 && end > start);
+  assert.match(view, /Flatten &amp; turn off/);
+  assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}\)/);
+  assert.match(view, /openBuiltinInLab\(\$\{jsArg\(name\)\}, true\)"\$\{hasRun \? "" : " disabled"\}/);
+  assert.match(view, /removeBuiltin\(\$\{jsArg\(name\)\}\)"\$\{hide\.locked \? " disabled" : ""\}/);
+  assert.match(view, /twin \? labCurveHtml\(name\) \+ labResHtml\(name, name\)/);
+  // the twin and a hide that the rule locks come from the chart service's answer and Manage algos' own rule
+  assert.match(HTML, /const twin = DESKRES\[name\] && typeof DESKRES\[name\]\.twin === "string"/);
+  assert.match(HTML, /computeVisibility\(ST\.strategies, ST\.book, HIDDEN_ALGOS, ST\.accounts\)\.find\(r => r\.name === name\)/);
+  assert.match(HTML, /\{name: twin, builtin: true/);
+  assert.match(HTML, /#builtin=/);
+  const css = readFileSync(new URL('../../homebase/static/apple/desk.css', import.meta.url), 'utf8');
+  assert.match(css, /\.hb-acts \{ position: sticky; bottom: -20px;/);
 });

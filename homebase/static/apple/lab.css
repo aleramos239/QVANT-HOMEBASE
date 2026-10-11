@@ -36,8 +36,8 @@ html.hb-apple.hb-insp-off .toasts { right: 12px; }
 /* ---- toolbar ------------------------------------------------------------------------------------------------ */
 /* the page's bar wraps the toolbar's main zone and takes no box of its own */
 html.hb-apple .hb-tb > .hb-bar.lab-bar { display: contents; view-transition-name: none; }
-html.hb-apple #pgSw.hb-seg { height: 36px; padding: 4px; gap: 2px; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
-html.hb-apple #pgSw.hb-seg > a { height: 28px; padding: 0 12px; border-radius: 14px; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; color: var(--a-label); background: transparent; box-shadow: none; z-index: auto; }
+html.hb-apple #pgSw.hb-seg { height: 36px; padding: 4px; gap: 2px; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple #pgSw.hb-seg > a { height: 28px; padding: 0 12px; border-radius: var(--hb-bubble-r); font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; color: var(--a-label); background: transparent; box-shadow: none; z-index: auto; }
 html.hb-apple #pgSw.hb-seg > a:hover { background: var(--a-hover); color: var(--a-label); }
 html.hb-apple #pgSw.hb-seg > a[aria-current="page"] { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
 /* the title: the shell's (name over state). An unsaved script shows the page's own name field there instead */
@@ -58,10 +58,10 @@ html.hb-apple #labDoc .doc-state { grid-column: 1 / -1; grid-row: 2; min-width: 
 html.hb-apple #labDoc .doc-state.err { color: var(--a-red-text); }
 html.hb-apple #labDoc .doc-state.edited::before { content: none; }
 /* Code / Chart: two toggles on one platter (the grey pill is the pressed state); the other two toggles are stand-ins */
-html.hb-apple #labPanels.hb-platter { display: inline-flex; align-items: center; gap: 0; height: 36px; padding: 0; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
+html.hb-apple #labPanels.hb-platter { display: inline-flex; align-items: center; gap: 0; height: 36px; padding: 0; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
   box-shadow: var(--a-platter-shadow); }
 html.hb-apple #labPanels .hb-proxy { display: none; }
-html.hb-apple .hb-tb .hb-ib.hb-tbtn { display: inline-flex; width: auto; min-width: 36px; height: 36px; padding: 0 10px; border-radius: 18px; background: transparent !important; box-shadow: none !important; color: var(--a-label);
+html.hb-apple .hb-tb .hb-ib.hb-tbtn { display: inline-flex; width: auto; min-width: 36px; height: 36px; padding: 0 10px; border-radius: var(--hb-bubble-r); background: transparent !important; box-shadow: none !important; color: var(--a-label);
   transform: none; transition: none; cursor: default; z-index: auto; }
 html.hb-apple .hb-tb .hb-ib.hb-tbtn:hover, html.hb-apple .hb-tb .hb-ib.hb-tbtn[aria-pressed="true"] { color: var(--a-label); }
 html.hb-apple .hb-tb .hb-ib.hb-tbtn.hb-solo { background: var(--a-platter) !important; box-shadow: var(--a-platter-shadow) !important; -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); }
@@ -69,13 +69,13 @@ html.hb-apple #labActs { display: flex; align-items: center; gap: 8px; flex: non
 html.hb-apple #labActs:empty { display: none; }
 html.hb-apple #labActs [data-act="more"] { order: -1; }          /* More, then Run: the primary action ends the group */
 /* Run: the one primary action */
-html.hb-apple .hb-tb .lab-run.hb-tbtn { height: 36px; min-width: 0; padding: 0 15px 0 12px; gap: 6px; border: 0; border-radius: 18px; background: var(--a-accent) !important; color: var(--a-on-accent) !important;
+html.hb-apple .hb-tb .lab-run.hb-tbtn { height: 36px; min-width: 0; padding: 0 15px 0 12px; gap: 6px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-accent) !important; color: var(--a-on-accent) !important;
   font-size: 13px; line-height: 16px; font-weight: 510; letter-spacing: normal; transform: none; transition: none; cursor: default;
   box-shadow: 0 3px 10px color-mix(in srgb, var(--a-accent) 22%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
 html.hb-apple .hb-tb .lab-run.hb-tbtn:active { transform: none; }
 html.hb-apple .hb-tb .lab-run.hb-tbtn[disabled] { opacity: .45; color: var(--a-on-accent) !important; pointer-events: none; }
 html.hb-apple .hb-tb .lab-run.hb-tbtn.busy { opacity: 1; }
-html.hb-apple .hb-tb .lab-run.hb-tbtn.busy::before { width: auto; height: auto; border: 0; border-radius: 14px; animation: none; }
+html.hb-apple .hb-tb .lab-run.hb-tbtn.busy::before { width: auto; height: auto; border: 0; border-radius: var(--hb-bubble-r); animation: none; }
 html.hb-apple .hb-tb .lab-run.busy .sf { width: 12px; height: 12px; box-sizing: border-box; border: 1.5px solid currentColor; border-top-color: transparent; border-radius: 50%; background: transparent;
   -webkit-mask: none; mask: none; animation: hb-lab-spin .8s linear infinite; }
 @keyframes hb-lab-spin { to { transform: rotate(360deg); } }
@@ -89,9 +89,9 @@ html.hb-apple #labLib.hb-side { width: var(--a-side-w); margin: 0 !important; ov
   -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-pane-shadow); transition: transform 320ms var(--a-spring), opacity 200ms ease; }
 html.hb-apple #labLib.hb-side > .in { width: auto; height: 100%; padding: 0 0 6px; overflow: hidden auto; overscroll-behavior: contain; }
 html.hb-apple #labLib .lb-top { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 0 10px; padding: 0 2px 0 4.5px; }
-/* the six views sit behind ONE button in this bar (a pop-up, like Notes' folder title); it starts below the traffic lights */
+/* the views sit behind ONE button in this bar (a pop-up, like Notes' folder title); it starts below the traffic lights */
 html.hb-apple #labLib .lb-top.lb-sw { display: flex; align-items: center; justify-content: space-between; height: 30px; margin: 37px 10px 8px; padding: 0; }
-html.hb-apple #labLib .lb-view { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 30px; margin: 0; padding: 0 11px 0 14px; border: 0; border-radius: 15px;
+html.hb-apple #labLib .lb-view { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; height: 28px; margin: 0; padding: 0 11px 0 14px; border: 0; border-radius: var(--hb-bubble-r);
   background: var(--a-fill); color: var(--a-label); cursor: default; transition: background-color 120ms ease; }   /* a capsule at rest, like the app's other buttons: it reads as a pop-up */
 html.hb-apple #labLib .lb-top .lb-view b { font-size: 14px; line-height: 20px; font-weight: 590; letter-spacing: -.005em; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.hb-apple #labLib .lb-view .lb-ud { flex: none; width: 9px; height: 13px; color: var(--a-label-2); }
@@ -100,7 +100,7 @@ html.hb-apple #labLib .lb-view[aria-expanded="true"], html.hb-apple #labLib .lb-
 html.hb-apple #labLib .lb-view:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
 @media (prefers-reduced-motion: reduce) { html.hb-apple #labLib .lb-view { transition: none; } }
 html.hb-apple #labLib .lb-top b { font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; color: var(--a-label-pane-3); }
-html.hb-apple #labLib .lb-top .hb-ib { display: block; width: 22px; height: 19px; padding: 0; border: 0; border-radius: 5px; background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
+html.hb-apple #labLib .lb-top .hb-ib { display: block; width: 22px; height: 19px; padding: 0; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
   -webkit-mask: var(--sf-plus) center / 11px 11px no-repeat; mask: var(--sf-plus) center / 11px 11px no-repeat; }
 html.hb-apple #labLib .lb-top .hb-ib svg { display: none; }
 html.hb-apple #labLib .lb-top .hb-ib:hover { background: var(--a-label-vibrant); }
@@ -134,7 +134,7 @@ html.hb-apple #labLib button.lb-sh::after { content: ""; flex: none; width: 9px;
   -webkit-mask: var(--sf-chevron-right) center / 7px 9px no-repeat; mask: var(--sf-chevron-right) center / 7px 9px no-repeat; }
 html.hb-apple #labLib button.lb-sh[aria-expanded="true"]::after { transform: rotate(90deg); }
 html.hb-apple #labLib .lb-gh:hover .lb-sh::after, html.hb-apple #labLib button.lb-sh[aria-expanded="false"]::after, html.hb-apple #labLib button.lb-sh:focus-visible::after { opacity: 1; }
-html.hb-apple #labLib .lb-more { display: block; top: 6.5px; right: 17.5px; width: 22px; height: 19px; padding: 0; border: 0; border-radius: 5px; background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
+html.hb-apple #labLib .lb-more { display: block; top: 6.5px; right: 17.5px; width: 22px; height: 19px; padding: 0; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-label-pane-2); box-shadow: none; transform: none; transition: none; cursor: default;
   -webkit-mask: var(--sf-ellipsis-circle) center / 15px 15px no-repeat; mask: var(--sf-ellipsis-circle) center / 15px 15px no-repeat; }
 html.hb-apple #labLib .lb-gh .lb-more { top: 0; right: 15.5px; }
 html.hb-apple #labLib .lb-more svg { display: none; }
@@ -185,20 +185,49 @@ html.hb-apple #labEd .lab-welcome { flex: 1; display: grid; place-content: cente
 html.hb-apple #labEd .lab-welcome h2 { margin: 0; font-size: 22px; line-height: 26px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
 html.hb-apple #labEd .lab-welcome p { margin: 6px 0 18px; max-width: 420px; font-size: 13px; line-height: 16px; color: var(--a-label-2); text-wrap: balance; }
 html.hb-apple #labEd .lab-welcome .acts { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+/* the Arsenal: one quiet line where the welcome would be (the words are charts/lab.css's) */
+html.hb-apple #lab[data-view="tk"] #labEd .lab-welcome > * { display: none; }
+html.hb-apple #lab[data-view="tk"] #labEd .lab-welcome::before { font-size: 13px; line-height: 16px; color: var(--a-label-2); }
 
-/* ---- the chart: one chart, edge to edge; the interval switch floats over it on a platter -------------------------- */
+/* ---- the chart: one chart, edge to edge; the trade stepper and the interval switch float over it, a platter each ---- */
 html.hb-apple #lab .lab-chart > .main { padding: 0; gap: 0; }
 html.hb-apple #lab .lab-chart .panel, html.hb-apple #lab .lab-chart .panel.selected::after { border-radius: 0; box-shadow: none; }
-html.hb-apple #lab .lab-chart > .toolbar { position: absolute; z-index: 8; left: 50%; bottom: 40px; top: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); height: auto; padding: 0; margin: 0; gap: 8px;
-  background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
-/* with the full report open the chart is short: the switch moves up, clear of the legend and the price scale */
-html.hb-apple #lab[data-report="1"] .lab-chart > .toolbar { bottom: auto; top: 8px; left: auto; right: 76px; transform: none; }
-html.hb-apple #lab .lab-chart .toolbar #tbFavs { display: inline-flex; align-items: center; height: 36px; margin: 0; padding: 4px; gap: 2px; border-radius: 18px; background: var(--a-platter);
+/* ONE row, centred over the bars and never over the price scale (76 at the trailing edge): where the chart is narrow the row does
+   not wrap, the stepper gives up its words after the count instead */
+html.hb-apple #lab .lab-chart > .toolbar { position: absolute; z-index: 8; left: calc(50% - 38px); bottom: 40px; top: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 100px); height: auto; padding: 0; margin: 0; gap: 8px;
+  flex-wrap: nowrap; background: transparent; border: 0; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* with the full report open the chart is short: the two platters move up to the trailing corner and stack -- the intervals on
+   top, where they always sat, the stepper under them -- so the legend keeps the room it had before the stepper came */
+html.hb-apple #lab[data-report="1"] .lab-chart > .toolbar { bottom: auto; top: 8px; left: auto; right: 76px; transform: none; max-width: calc(100% - 88px);
+  flex-direction: column-reverse; align-items: flex-end; gap: 6px; }
+html.hb-apple #lab .lab-chart .toolbar #tbFavs { display: inline-flex; align-items: center; height: 36px; margin: 0; padding: 4px; gap: 2px; border-radius: var(--hb-bubble-r); background: var(--a-platter);
   -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); pointer-events: auto; }
-html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 36px; margin: 0; padding: 0 10px; border: 0; border-radius: 14px; background: transparent; box-shadow: none; color: var(--a-label);
+html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn { position: relative; height: 28px; min-width: 36px; margin: 0; padding: 0 10px; border: 0; border-radius: var(--hb-bubble-r); background: transparent; box-shadow: none; color: var(--a-label);
   font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; font-variant-numeric: tabular-nums; transform: none; transition: none; cursor: default; justify-content: center; }
 html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn:hover { background: var(--a-hover); color: var(--a-label); }
 html.hb-apple #lab .lab-chart .toolbar #tbFavs .tb-btn.active { background: var(--a-track); color: var(--a-label); font-weight: 510; box-shadow: none; }
+/* the trade stepper: the same platter beside it -- previous, "3 of 42 · Long +$350 · Oct 3, 2025", next. The words have a width of
+   their own, so the arrows stay under the pointer from trade to trade; they wrap out of sight, whole, when the row is short of room */
+html.hb-apple #labNav.lab-nav { display: inline-flex; align-items: center; gap: 2px; flex: 0 1 auto; min-width: 0; height: 36px; margin: 0; padding: 4px; border-radius: var(--hb-bubble-r); background: var(--a-platter);
+  -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); pointer-events: auto; }
+html.hb-apple #labNav .lab-nav-b { -webkit-appearance: none; appearance: none; flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: var(--hb-bubble-r); background: transparent; color: var(--a-label); font-size: 0; line-height: 0;
+  display: grid; place-items: center; text-shadow: none; transform: none; transition: none; cursor: default; }
+html.hb-apple #labNav .lab-nav-b::before { content: ""; width: 9px; height: 12px; background: currentColor;
+  -webkit-mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; }
+html.hb-apple #labNav .lab-nav-b[data-nav="1"]::before { -webkit-mask-image: var(--sf-chevron-right); mask-image: var(--sf-chevron-right); }
+html.hb-apple #labNav .lab-nav-b:hover { background: var(--a-hover); }
+html.hb-apple #labNav .lab-nav-b:active { background: var(--a-track); transform: none; }
+html.hb-apple #labNav .lab-nav-b[disabled] { opacity: 1; background: transparent; color: var(--a-label-3); pointer-events: none; }
+html.hb-apple #labNav .lab-nav-t { display: flex; flex-wrap: wrap; justify-content: center; align-content: flex-start; flex: 0 1 auto; width: 36ch; min-width: 0; height: 16px; padding: 0 6px; overflow: hidden;
+  font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); text-shadow: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+html.hb-apple #labNav .lab-nav-t > span { flex: none; }
+html.hb-apple #labNav .lab-nav-t .lab-nav-d { white-space: pre; }
+html.hb-apple #labNav .lab-nav-t b { color: var(--a-label); font-weight: 510; }
+html.hb-apple #labNav .lab-nav-t .pos { color: var(--a-green); font-weight: 510; }
+html.hb-apple #labNav .lab-nav-t .neg { color: var(--a-label); font-weight: 510; }
+/* over the short chart the report's own list names the trade: the stepper keeps the count, and stays clear of the legend */
+html.hb-apple #lab[data-report="1"] #labNav .lab-nav-t { width: auto; min-width: 9ch; }
+html.hb-apple #lab[data-report="1"] #labNav .lab-nav-d { display: none; }
 html.hb-apple #lab .lab-chart .lg-title { font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; }
 html.hb-apple #lab .lab-chart .lg-ohlc, html.hb-apple #lab .lab-chart .lg-row, html.hb-apple #lab .lab-chart .lg-msg { font-size: 11px; font-variant-numeric: tabular-nums; }
 
@@ -251,7 +280,7 @@ html.hb-apple #labRes .rs-gh { margin: 11px 0 0; padding: 4px 9px 5px; font-size
 html.hb-apple #labRes .rs-group { margin: 0; border-radius: 10px; background: var(--a-group); overflow: hidden; }
 html.hb-apple #labRes .rs-group + .rs-group { margin-top: 11px; }
 html.hb-apple #labRes .rs-chips { display: flex; flex-wrap: wrap; gap: 5px; margin: 10px 9px 0; }
-html.hb-apple #labRes .rs-chip { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; white-space: nowrap; }
+html.hb-apple #labRes .rs-chip { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; white-space: nowrap; }
 html.hb-apple #labRes .rs-chip.warn { color: var(--a-orange); }
 html.hb-apple #labRes .rs-chip.err { color: var(--a-red-text); }
 /* rows that do something: a chevron at the trailing edge */
@@ -292,33 +321,16 @@ html.hb-apple #labRes .rs-prog { padding: 6px 9px 2px; }
 html.hb-apple #labRes .rs-prog .t { font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); font-variant-numeric: tabular-nums; }
 html.hb-apple #labRes .rs-bar { height: 6px; margin: 9px 0 12px; border-radius: 3px; background: var(--a-track); overflow: hidden; }
 html.hb-apple #labRes .rs-bar i { border-radius: 3px; background: var(--a-accent-on); }
-/* the trade stepper, at the foot of the inspector while the chart is showing */
-html.hb-apple #hbLabTrades { flex: none; margin: 0; padding: 6px 11px 11px; box-shadow: 0 -1px 0 var(--a-sep); }
-html.hb-apple body:not(.lab-chart-on) #hbLabTrades { display: none; }
-html.hb-apple #labNav.lab-nav { display: flex; align-items: center; gap: 6px; height: 37px; min-width: 0; padding: 0 7px; border-radius: 0; background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; pointer-events: auto; }
-html.hb-apple #labNav .lab-nav-b { -webkit-appearance: none; appearance: none; flex: none; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px; background: var(--a-fill); color: var(--a-label); font-size: 0; line-height: 0;
-  display: grid; place-items: center; text-shadow: none; transform: none; transition: background-color 100ms ease; cursor: default; }
-html.hb-apple #labNav .lab-nav-b::before { content: ""; width: 9px; height: 12px; background: currentColor;
-  -webkit-mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; mask: var(--sf-chevron-left) center / var(--sf-chevron-left-w) var(--sf-chevron-left-h) no-repeat; }
-html.hb-apple #labNav .lab-nav-b[data-nav="1"]::before { -webkit-mask-image: var(--sf-chevron-right); mask-image: var(--sf-chevron-right); }
-html.hb-apple #labNav .lab-nav-b:hover { background: var(--a-fill); }
-html.hb-apple #labNav .lab-nav-b:active { background: var(--a-fill-press); transform: none; }
-html.hb-apple #labNav .lab-nav-b[disabled] { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); pointer-events: none; }
-html.hb-apple #labNav .lab-nav-t { flex: 1 1 auto; min-width: 0; padding: 0; text-align: center; font-size: 11px; line-height: 14px; color: var(--a-label-2); text-shadow: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  font-variant-numeric: tabular-nums; }
-html.hb-apple #labNav .lab-nav-t b { color: var(--a-label); font-weight: 590; }
-html.hb-apple #labNav .lab-nav-t .pos { color: var(--a-green); font-weight: 590; }
-html.hb-apple #labNav .lab-nav-t .neg { color: var(--a-label); font-weight: 590; }
 
 /* ---- buttons, the page's own classes on the system sizes ----------------------------------------------------------- */
-html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: 14px; gap: 5px;
+html.hb-apple .lab-page .btn { -webkit-appearance: none; appearance: none; display: inline-flex; align-items: center; justify-content: center; flex: none; height: 28px; padding: 0 14.5px; border: 0; border-radius: var(--hb-bubble-r); gap: 5px;
   background: var(--a-fill); color: var(--a-label); box-shadow: none; font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transform: none; cursor: default; transition: background-color 100ms ease; }
 html.hb-apple .lab-page .btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .lab-page .btn:active { background: var(--a-fill-press); transform: none; }
 html.hb-apple .lab-page .btn:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple .lab-page .btn:disabled { opacity: 1; background: var(--a-fill-off); color: var(--a-label-3); }
 html.hb-apple .lab-page .btn.btn-sm { height: 24px; padding: 0 12.5px; border-radius: 6px; }
-html.hb-apple .lab-page .btn.btn-lg { height: 28px; padding: 0 14.5px; border-radius: 14px; }
+html.hb-apple .lab-page .btn.btn-lg { height: 28px; padding: 0 14.5px; border-radius: var(--hb-bubble-r); }
 html.hb-apple .lab-page .btn.btn-default, html.hb-apple .lab-page .btn.btn-primary { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .lab-page .btn.btn-default:hover, html.hb-apple .lab-page .btn.btn-primary:hover { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .lab-page .btn.btn-default:active, html.hb-apple .lab-page .btn.btn-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
@@ -380,7 +392,7 @@ html.hb-apple #lab .bp-tabs, html.hb-apple #lab .tst-tabs { align-items: center;
 html.hb-apple #lab .bp-tab, html.hb-apple #lab .tst-tab, html.hb-apple #lab .tst-hide { flex: none; white-space: nowrap; }
 html.hb-apple #lab .bp-tab, html.hb-apple #lab .tst-tab { height: 24px; padding: 0 10px; border: 0; border-radius: 6px; background: transparent; color: var(--a-label-2); font-size: 13px; line-height: 16px; font-weight: 400; letter-spacing: normal; transition: none; }
 html.hb-apple #lab .bp-tab:hover, html.hb-apple #lab .tst-tab:hover { color: var(--a-label); }
-html.hb-apple #lab .bp-tab[aria-selected="true"], html.hb-apple #lab .tst-tab.active { background: var(--a-fill); color: var(--a-label); font-weight: 510; }
+html.hb-apple #lab .bp-tab[aria-selected="true"], html.hb-apple #lab .tst-tab.active { background: var(--a-track); color: var(--a-label); font-weight: 510; }
 html.hb-apple #lab .bp-toggle, html.hb-apple #lab .tst-icon-btn { width: 24px; height: 24px; border-radius: 6px; color: var(--a-label-2); }
 html.hb-apple #lab .bp-toggle:hover, html.hb-apple #lab .tst-icon-btn:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple #lab .tst-sticky { background: var(--a-window); border-top: 0; -webkit-backdrop-filter: none; backdrop-filter: none; }
@@ -390,7 +402,7 @@ html.hb-apple #lab .tst-tile { border-left-color: var(--a-sep); }
 html.hb-apple #lab .tst-tile-v { font-size: 17px; line-height: 22px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
 html.hb-apple #lab .tst-tile-l, html.hb-apple #lab .tst-tile-s, html.hb-apple #lab .tst-caveat, html.hb-apple #lab .tst-kv-line { margin-top: 2px; font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple #lab .tst-prop-title { font-size: 13px; line-height: 16px; font-weight: 700; }
-html.hb-apple #lab .tst-badge { height: 16px; padding: 0 6px; border-radius: 8px; background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; }
+html.hb-apple #lab .tst-badge { height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); font-size: 10px; line-height: 13px; font-weight: 590; }
 html.hb-apple #lab .tst-badge.warn { color: var(--a-orange); }
 html.hb-apple #lab .tst-badge.err { background: var(--a-fill); color: var(--a-red-text); }
 html.hb-apple #lab .tst-head .set-select, html.hb-apple #lab .tst-num, html.hb-apple #lab .tst-date-in, html.hb-apple #lab .tst-range, html.hb-apple #lab .bp-fq-select { height: 24px; border: 0; border-radius: 6px; background: var(--a-fill); color: var(--a-label); font-size: 13px; }
@@ -430,10 +442,10 @@ html.hb-apple .lab-page .backdrop.clear { background: transparent; }
 html.hb-apple .lab-page .dialog { border: 0; border-radius: 26px; background: var(--a-window); -webkit-backdrop-filter: none; backdrop-filter: none; box-shadow: var(--a-sheet-shadow); color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .lab-page .dialog .menu { background: var(--a-window); }
 html.hb-apple .lab-page .dlg-head { padding: 20px 14px 10px 20px; font-size: 13px; line-height: 16px; font-weight: 700; letter-spacing: normal; color: var(--a-label); }
-html.hb-apple .lab-page .dlg-x { width: 24px; height: 24px; border-radius: 12px; background: var(--a-fill); color: var(--a-label-2); }
+html.hb-apple .lab-page .dlg-x { width: 24px; height: 24px; border-radius: var(--hb-bubble-r); background: var(--a-fill); color: var(--a-label-2); }
 html.hb-apple .lab-page .dlg-x .ic { width: 12px; height: 12px; }
 html.hb-apple .lab-page .dialog .set-cap { margin: 14px 0 4px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
-html.hb-apple .lab-page .toast { padding: 9px 9px 9px 14px; border: 0; border-radius: 18px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
+html.hb-apple .lab-page .toast { padding: 9px 9px 9px 14px; border: 0; border-radius: var(--hb-bubble-r); background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-menu-shadow);
   font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); }
 html.hb-apple .lab-page .toast.err { color: var(--a-red-text); }
 html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2); }
@@ -443,6 +455,6 @@ html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2);
   html.hb-apple .hb-tb .lab-run.busy .sf { animation: none; }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
-  html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp, html.hb-apple #pgSw.hb-seg, html.hb-apple #labPanels.hb-platter, html.hb-apple .lab-menu, html.hb-apple #lab .lab-chart .toolbar #tbFavs {
+  html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp, html.hb-apple #pgSw.hb-seg, html.hb-apple #labPanels.hb-platter, html.hb-apple .lab-menu, html.hb-apple #lab .lab-chart .toolbar #tbFavs, html.hb-apple #labNav.lab-nav {
     -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
 }

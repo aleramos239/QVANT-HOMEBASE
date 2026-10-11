@@ -65,7 +65,7 @@ function flagAt(flags, pt, y) {
   return null;
 }
 
-const hhmm = (t, tz) => new Date(S.wallSeconds(t, tz) * 1000).toISOString().slice(11, 16);
+const hhmm = (t, tz) => { const v = new Date(S.wallSeconds(t, tz) * 1000).toISOString().slice(11, 16); return typeof HBClock !== 'undefined' ? HBClock.text(v) : v; };   // the app's one clock format
 
 /* "08:30 CPI m/m · USD · High · forecast 0.3% · prev 0.2%": the time in the chart's zone (a TIMEZONES value). */
 function tipLine(e, tz) {

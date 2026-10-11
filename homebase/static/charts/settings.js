@@ -154,6 +154,7 @@ function overrides(full) {
 function resolve(over, palette) {
   const n = normalize(over);
   for (const [k, pk] of Object.entries(THEMED)) if (n[k] == null) n[k] = palette[pk];
+  if (typeof HBClock !== 'undefined') n.timeFormat = HBClock.format;   // one clock for the whole app (hbclock.js), never a chart's own
   return n;
 }
 

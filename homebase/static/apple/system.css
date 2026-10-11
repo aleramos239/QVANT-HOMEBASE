@@ -22,6 +22,7 @@
    ===================================================================================================== */
 
 html.hb-apple {
+  --hb-bubble-r: 8px;                      /* one corner for every bubble: buttons, pills, segments, platters, chips, tags (change here, nowhere else) */
   color-scheme: light;
   --a-font: system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
   --a-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
@@ -188,13 +189,13 @@ html.hb-apple .hb-title span:empty { display: none; }
 html.hb-apple .hb-title:has(span:empty) b { font-size: 15px; line-height: 19px; font-weight: 590; }
 
 /* a platter: one piece of glass holding neighbouring toolbar items */
-html.hb-apple .hb-platter { display: inline-flex; align-items: center; height: 36px; border-radius: 18px; padding: 0; box-sizing: border-box; flex: none;
+html.hb-apple .hb-platter { display: inline-flex; align-items: center; height: 36px; border-radius: var(--hb-bubble-r); padding: 0; box-sizing: border-box; flex: none;
   background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
 /* a symbol button inside a platter (or alone: it becomes its own platter) */
-html.hb-apple .hb-tbtn { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0 10px; min-width: 36px; height: 36px; border-radius: 18px; flex: none;
+html.hb-apple .hb-tbtn { -webkit-appearance: none; appearance: none; border: 0; margin: 0; padding: 0 10px; min-width: 36px; height: 36px; border-radius: var(--hb-bubble-r); flex: none;
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; background: transparent; color: var(--a-label);
   font-size: 13px; line-height: 16px; font-weight: 400; white-space: nowrap; position: relative; }
-html.hb-apple .hb-tbtn::before { content: ""; position: absolute; inset: 4px 3px; border-radius: 14px; background: transparent; transition: background-color 120ms ease; }
+html.hb-apple .hb-tbtn::before { content: ""; position: absolute; inset: 4px 3px; border-radius: var(--hb-bubble-r); background: transparent; transition: background-color 120ms ease; }
 html.hb-apple .hb-tbtn > * { position: relative; }
 html.hb-apple .hb-tbtn:hover::before { background: var(--a-hover); }
 html.hb-apple .hb-tbtn:active::before { background: var(--a-track); }
@@ -203,8 +204,8 @@ html.hb-apple .hb-tbtn.hb-solo { background: var(--a-platter); -webkit-backdrop-
 html.hb-apple .hb-tbtn.hb-text { padding: 0 14px; }
 html.hb-apple .hb-tbtn[disabled] { color: var(--a-label-3); pointer-events: none; }
 /* the sidebar toggle sits on the sidebar's own glass: no platter, 28 high */
-html.hb-apple .hb-tbtn.hb-bare { height: 28px; min-width: 34px; padding: 0 8px; border-radius: 14px; }
-html.hb-apple .hb-tbtn.hb-bare::before { inset: 0; border-radius: 14px; }
+html.hb-apple .hb-tbtn.hb-bare { height: 28px; min-width: 34px; padding: 0 8px; border-radius: var(--hb-bubble-r); }
+html.hb-apple .hb-tbtn.hb-bare::before { inset: 0; border-radius: var(--hb-bubble-r); }
 /* the one primary action: tinted with the accent */
 html.hb-apple .hb-tbtn.hb-prominent { background: var(--a-accent); color: var(--a-on-accent); font-weight: 510; box-shadow: 0 3px 10px color-mix(in srgb, var(--a-accent) 22%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none; }
 html.hb-apple .hb-tbtn.hb-prominent:hover::before { background: rgb(255 255 255 / .10); }
@@ -212,9 +213,9 @@ html.hb-apple .hb-tbtn.hb-prominent:active::before { background: rgb(0 0 0 / .14
 html.hb-apple.hb-inactive .hb-tbtn.hb-prominent { background: var(--a-platter); color: var(--a-label); box-shadow: var(--a-platter-shadow); }
 
 /* a text segmented control in the toolbar: equal segments, the chosen one a 28-high pill, hairlines between the rest */
-html.hb-apple .hb-seg { display: inline-flex; align-items: center; height: 36px; padding: 4px; border-radius: 18px; box-sizing: border-box; gap: 2px; margin: 0; border: 0;
+html.hb-apple .hb-seg { display: inline-flex; align-items: center; height: 36px; padding: 4px; border-radius: var(--hb-bubble-r); box-sizing: border-box; gap: 2px; margin: 0; border: 0;
   background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
-html.hb-apple .hb-seg > a, html.hb-apple .hb-seg > button { -webkit-appearance: none; appearance: none; border: 0; margin: 0; min-width: 60px; height: 28px; padding: 0 12px; border-radius: 14px;
+html.hb-apple .hb-seg > a, html.hb-apple .hb-seg > button { -webkit-appearance: none; appearance: none; border: 0; margin: 0; min-width: 60px; height: 28px; padding: 0 12px; border-radius: var(--hb-bubble-r);
   display: inline-flex; align-items: center; justify-content: center; position: relative; box-sizing: border-box; background: transparent; box-shadow: none;
   font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label); text-decoration: none; letter-spacing: normal; transition: background-color 140ms ease; }
 html.hb-apple .hb-seg > a:hover, html.hb-apple .hb-seg > button:hover { background: var(--a-hover); color: var(--a-label); }
@@ -281,8 +282,8 @@ html.hb-apple .hb-btn { -webkit-appearance: none; appearance: none; border: 0; m
 html.hb-apple .hb-btn:hover { background: var(--a-fill); }
 html.hb-apple .hb-btn:active { background: var(--a-fill-press); transform: none; }
 html.hb-apple .hb-btn[disabled], html.hb-apple .hb-btn:disabled { background: var(--a-fill-off); color: var(--a-label-3); }
-html.hb-apple .hb-btn.hb-lg { height: 28px; padding: 0 14.5px; border-radius: 14px; }
-html.hb-apple .hb-btn.hb-xl { height: 36px; padding: 0 18.5px; border-radius: 18px; }
+html.hb-apple .hb-btn.hb-lg { height: 28px; padding: 0 14.5px; border-radius: var(--hb-bubble-r); }
+html.hb-apple .hb-btn.hb-xl { height: 36px; padding: 0 18.5px; border-radius: var(--hb-bubble-r); }
 html.hb-apple .hb-btn.hb-primary { background: var(--a-accent); color: var(--a-on-accent); }
 html.hb-apple .hb-btn.hb-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
 html.hb-apple .hb-btn.hb-danger { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
@@ -312,7 +313,7 @@ html.hb-apple .hb-field::placeholder { color: var(--a-label-2); }
 html.hb-apple .hb-field:focus, html.hb-apple .hb-field:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 
 /* badge / tag: an 18-high capsule, quaternary fill, secondary text */
-html.hb-apple .hb-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: 8px; border: 0; background: var(--a-fill); color: var(--a-label-2);
+html.hb-apple .hb-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); border: 0; background: var(--a-fill); color: var(--a-label-2);
   font-size: 10px; line-height: 13px; font-weight: 590; letter-spacing: normal; white-space: nowrap; vertical-align: 1px; }
 
 /* ---- menus, alerts and sheets ---------------------------------------------------------------------------------- */
@@ -335,5 +336,39 @@ html.hb-apple .hb-menu-i:hover, html.hb-apple .hb-menu-i:focus-visible { backgro
 }
 
 /* with the sidebar closed its toggle joins the toolbar, on its own platter beside the traffic lights */
-html.hb-apple.hb-side-off .hb-tbtn.hb-bare { height: 36px; min-width: 40px; border-radius: 18px; background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
+html.hb-apple.hb-side-off .hb-tbtn.hb-bare { height: 36px; min-width: 40px; border-radius: var(--hb-bubble-r); background: var(--a-platter); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur); box-shadow: var(--a-platter-shadow); }
 html.hb-apple.hb-side-off .hb-tbtn.hb-bare::before { inset: 4px 3px; }
+
+/* =====================================================================================================
+   BUBBLES: one corner, three sizes, one voice. (Owner 2026-10-10: "all bubbles the same edges, same font,
+   bolding, size, colour, through the entire app".) Every pill, button, segment, platter, chip and tag takes
+   its look from here. !important is deliberate: the page sheets style the same controls by id and would
+   otherwise win one by one. To change the corner for the whole app, change --hb-bubble-r at the top.
+     bar   36 px  toolbar platters, page switch, toolbar buttons, symbol / interval pills
+     btn   28 px  every button, inner segments, tabs, chart intervals, Lab list switcher
+     chip  20 px  ARMED, tags, badges, counters (label only, not clickable)
+   Text: buttons 13/16 regular, the chosen one 510; chips 11/14 at 590. Colour is the label colour; the only
+   exceptions are the filled primary (white on graphite) and red (Kill, ARMED).
+   ===================================================================================================== */
+html.hb-apple .hb-platter, html.hb-apple .hb-seg, html.hb-apple .hb-tbtn:not(.hb-bare), html.hb-apple #armBtn, html.hb-apple #killBtn,
+html.hb-apple #settingsBtn, html.hb-apple #tbSymbol, html.hb-apple #tbIndicators, html.hb-apple #tbGrid, html.hb-apple #tbIntervals,
+html.hb-apple #tbOrder, html.hb-apple #tbDom, html.hb-apple #tbSettings, html.hb-apple #tbFavs, html.hb-apple #pgSw, html.hb-apple #labPanels,
+html.hb-apple .tb-pill, html.hb-apple .toolbar > .tb-btn { height: 36px !important; border-radius: var(--hb-bubble-r) !important; }
+
+html.hb-apple .btn, html.hb-apple .btn-sm, html.hb-apple .btn-lg, html.hb-apple .btn-icon, html.hb-apple .btn-quiet,
+html.hb-apple .hb-seg > a, html.hb-apple .hb-seg > button, html.hb-apple #tbFavs .tb-btn, html.hb-apple .tab-btn, html.hb-apple .tab-add,
+html.hb-apple .bp-tab, html.hb-apple .lb-view, html.hb-apple .dtb-btn, html.hb-apple .op-tile, html.hb-apple .cal-nav, html.hb-apple .dlg-x,
+html.hb-apple .hb-tbtn.hb-bare, html.hb-apple .rail-btn { height: 28px !important; min-height: 28px; border-radius: var(--hb-bubble-r) !important; }
+html.hb-apple .btn-icon, html.hb-apple .tab-add, html.hb-apple .dlg-x, html.hb-apple .hb-tbtn.hb-bare { width: 28px !important; }
+html.hb-apple .btn:not(.btn-icon), html.hb-apple .tab-btn, html.hb-apple .bp-tab, html.hb-apple .lb-view { padding-inline: 12px !important; }
+
+html.hb-apple .btn, html.hb-apple .btn-sm, html.hb-apple .btn-lg, html.hb-apple .btn-quiet, html.hb-apple .hb-tbtn, html.hb-apple .hb-seg > a,
+html.hb-apple .hb-seg > button, html.hb-apple #tbSymbol, html.hb-apple #tbIndicators, html.hb-apple #tbGrid, html.hb-apple #tbIntervals,
+html.hb-apple #tbFavs .tb-btn, html.hb-apple .tab-btn, html.hb-apple .bp-tab, html.hb-apple .tb-pill, html.hb-apple .lb-view, html.hb-apple .lb-view b,
+html.hb-apple .dtb-btn, html.hb-apple .op-tile, html.hb-apple #killBtn, html.hb-apple #armBtn { font-size: 13px !important; line-height: 16px !important; font-weight: 400 !important; letter-spacing: normal !important; }
+html.hb-apple .hb-seg > .on, html.hb-apple .hb-seg > [aria-current], html.hb-apple .hb-seg > [aria-selected="true"], html.hb-apple .hb-seg > .active,
+html.hb-apple #tbFavs .tb-btn.active, html.hb-apple .tab-btn.active, html.hb-apple .bp-tab[aria-selected="true"] { font-weight: 510 !important; }
+
+html.hb-apple #statusPill.pill.armed, html.hb-apple .tag, html.hb-apple .tag-live, html.hb-apple .tag-paper, html.hb-apple .hb-badge,
+html.hb-apple .legend .badge, html.hb-apple .hb-news-chip, html.hb-apple .hb-news-src, html.hb-apple .hb-news-tag, html.hb-apple .rs-chip,
+html.hb-apple .tst-badge, html.hb-apple .tl-now { height: 20px !important; border-radius: var(--hb-bubble-r) !important; font-size: 11px !important; line-height: 14px !important; font-weight: 590 !important; letter-spacing: normal !important; padding-inline: 8px !important; }
