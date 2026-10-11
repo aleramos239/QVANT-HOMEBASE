@@ -9,8 +9,7 @@ reproduces:
   rules/*@2026-10-11.json                the prop audit's corrections, each from the firm's own
                                          pages (the URLs are in its "source"): LucidPro's OWN
                                          payout rule (buffer + 40% consistency, no winning days),
-                                         LucidFlex's $500 minimum request and $2,000 cap,
-                                         Topstep's 55% consistency and $50,000 lock, Apex EOD's
+                                         LucidFlex's $500 minimum request and $2,000 cap, Apex EOD's
                                          30 days and payout rule, and the Apex Legacy files
                                          renamed for what they are (the holder's end-of-day
                                          reading; Apex trails the intraday high).
@@ -28,7 +27,10 @@ reproduces:
   rules/lucid-pro-50k-no-dll@2026-09-27b.json  the same account with the daily limit
                                          removed (an option Lucid offers).
   rules/lucid-flex-50k-dll@2026-09-27b.json  Flex plus a SOFT $1,200 daily limit.
-  rules/topstep-50k@2026-09-27b.json     Flex rules, no daily limit, 5-mini cap.
+  (Topstep: REMOVED 2026-10-11 on the account holder's word, "remove topstep for now". The
+   2026-09-27b file was a copy of LucidFlex; Topstep's own rules -- 55% consistency, the floor
+   locking at $50,000, a funded account that starts at 2 lots -- are in git history as
+   topstep-50k@2026-10-11.json, unconfirmed.)
   rules/apex-legacy-50k@2026-09-27b.json $3,000 / $2,000 EOD trail locking at +$100, no
                                          consistency, 1 day, 10 minis.
   rules/apex-eod-50k@2026-09-27b.json    the same plus a SOFT $1,000 daily limit, 6 minis.
@@ -36,7 +38,7 @@ reproduces:
                                          copied from Flex, "confirmed": false.
   rules/lucid-pro-50k@2026-09-27.json    superseded (no daily limit, all but two numbers
                                          inherited), kept for reproducing older runs.
-Apex and Topstep files carry ONLY numbers the account holder gave (2026-09-27); an
+Apex files carry ONLY numbers the account holder gave (2026-09-27); an
 invented number is worse than no file (an earlier Apex placeholder was deleted
 2026-09-27).
 

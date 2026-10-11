@@ -43,7 +43,7 @@ import library as LB  # noqa: E402
 PS = PO.app()
 PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py)
 FILE = pipe_law.file()
-PRO_FREE, FLEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
+PRO_FREE, FLEX = "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-09-27"      # the pipeline's own account since 2026-10-11: LucidPro on its OWN payout rule
 CAL = SY.weekdays("2024-01-01", "2024-10-04")        # 200 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed
 KEYS = {"account", "days", "size", "payout_size", "eval", "payout", "label", "need", "table", "stress", "text"}
@@ -108,7 +108,9 @@ def test_the_answer_and_where_its_numbers_come_from():
     assert got["account"] == {"id": PRO_FREE, "name": r["name"], "confirmed": True} and got["days"] == 30 and got["need"] == {"eval": 0.5, "payout": 0.5}
     ev, fu = PO.steps(r)
     assert [x["size"] for x in got["table"]] == ev and all(set(x) == {"size", "eval", "payout"} for x in got["table"])
-    assert [x["size"] for x in got["table"] if x["payout"] is not None] == fu and fu[-1] < ev[-1], "no payout above the size the funded account starts at"
+    assert [x["size"] for x in got["table"] if x["payout"] is not None] == fu == ev, "LucidPro has no scaling plan: the funded account trades every step"
+    flex = odds(STRONG, account=FLEX)["table"]                      # LucidFlex has one: no payout above the size its funded account starts at
+    assert [x["size"] for x in flex if x["payout"] is not None] == PO.steps(PS.load_rules(FLEX))[1] and flex[-1]["payout"] is None
     assert all(0.0 <= x["eval"] <= 1.0 and (x["payout"] is None or 0.0 <= x["payout"] <= 1.0) for x in got["table"])
     json.dumps(got)                                 # plain JSON: it goes on a stage card
     assert got == odds(STRONG), "the same paths, the same answer"

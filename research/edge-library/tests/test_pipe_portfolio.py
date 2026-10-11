@@ -58,7 +58,7 @@ import library as LB  # noqa: E402
 APP = PO.app()
 IS = api.ideastore()
 FILE = P.FILE
-PRO, FLEX, APEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"
+PRO, FLEX, APEX = "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"
 CAL = SY.weekdays()                                 # 44 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed
 KEYS = {"account", "need", "judged", "rules", "notes", "members", "left_out", "unread", "twins", "skipped", "mixes", "best", "gap", "meets", "paths", "seed", "text"}
@@ -235,8 +235,11 @@ def test_a_pair_that_covers_each_others_losing_days_is_the_best_mix_and_meets_th
     assert pair["eval"] > max(up["eval"], down["eval"]) + 0.2 and pair["drags"] == [] and pair["allowed"] is True
     assert r["best"] == pair and pair["meets"] is True and r["meets"] is True and pair["eval"] >= 0.6 and pair["payout"] >= 0.75 and pair["margin"] >= 1.0
     assert r["gap"] == NO_GAP and up["meets"] is False and down["meets"] is False
-    # every member at the same size step, inside the account's maximum FOR BOTH: 40 micros in the eval, 20 from the funded account's start
-    assert [t["size"] for t in pair["table"]] == [1, 2, 3, 5, 7, 10, 15, 20] and [t["size"] for t in pair["table"] if t["payout"] is not None] == [1, 2, 3, 5, 7, 10]
+    # every member at the same size step, inside the account's maximum FOR BOTH: 40 micros in the eval -- and on the funded account too
+    # (LucidPro, the pipeline's account since 2026-10-11, has no scaling plan; LucidFlex's starts at 20 micros: test below)
+    assert [t["size"] for t in pair["table"]] == [1, 2, 3, 5, 7, 10, 15, 20] == [t["size"] for t in pair["table"] if t["payout"] is not None]
+    flex = PF.odds([cells(UP), cells(DOWN)], CAL, APP.load_rules(FLEX), N, SEED)["table"]
+    assert [t["size"] for t in flex if t["payout"] is not None] == [1, 2, 3, 5, 7, 10]
     text = r["text"].splitlines()
     assert text[0].endswith(f"the best mix found MEETS THE BAR. It is up + down ({pair['size']} micros each for the eval, {pair['payout_size']} micros each on the funded "
                             "account; read on 44 session days they share).")

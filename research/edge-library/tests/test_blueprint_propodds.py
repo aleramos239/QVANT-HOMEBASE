@@ -52,7 +52,7 @@ PS = PO.app()
 E = PS.engine
 IS = A.ideastore()
 PRO, PRO_FREE, FLEX = "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
-ACCOUNTS = (FLEX, PRO, PRO_FREE, "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28", "topstep-50k@2026-09-27b")
+ACCOUNTS = (FLEX, PRO, PRO_FREE, "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28")
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")      # plan section 8
 NAMES = {0: "timeout", PO.PASS: "pass", PO.BUST: "bust"}
 HOME = Path.home() / ".homebase"
@@ -118,7 +118,7 @@ def pool(seed: int, n: int = 120, scale: float = 600.0) -> tuple:
 
 # ================================================================ (a) the walks are the app's
 
-AUDIT = ("lucid-pro-50k@2026-10-11", "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-10-11", "topstep-50k@2026-10-11", "apex-eod-50k@2026-10-11")
+AUDIT = ("lucid-pro-50k@2026-10-11", "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-10-11", "apex-eod-50k@2026-10-11")
 
 
 def test_with_open_losses_the_walks_are_still_the_apps_path_for_path():
@@ -319,7 +319,7 @@ def test_the_size_steps_an_account_may_trade():
     all_ = R.template("sizes")["steps"]
     assert all_ == [1, 2, 3, 5, 7, 10, 15, 20, 30, 40]
     assert PO.steps(PS.load_rules(PRO)) == (all_, [1, 2, 3, 5, 7, 10, 15, 20])      # funded: the scaling plan starts at 20 micros
-    assert PO.steps(PS.load_rules("topstep-50k@2026-09-27b")) == (all_, all_)       # 50 micros, no scaling plan
+    assert PO.steps(PS.load_rules("apex-legacy-300k@2026-09-28")) == (all_, all_)   # 350 micros, no scaling plan
     assert PO.steps({**PS.load_rules(PRO), "cap_micros": 12, "scaling_micros": None}) == ([1, 2, 3, 5, 7, 10], [1, 2, 3, 5, 7, 10])
 
 

@@ -69,7 +69,7 @@ def test_rule_files_and_the_unconfirmed_label():
     corrections of 2026-10-11); older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
     assert set(ids) == {"lucid-flex-50k@2026-10-11", "lucid-flex-50k-dll@2026-10-11", "lucid-pro-50k@2026-10-11",
-                        "lucid-pro-50k-no-dll@2026-10-11", "topstep-50k@2026-10-11", "apex-legacy-50k@2026-10-11",
+                        "lucid-pro-50k-no-dll@2026-10-11", "apex-legacy-50k@2026-10-11",
                         "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11"}
     assert ids["lucid-flex-50k@2026-10-11"] == {"id": "lucid-flex-50k@2026-10-11", "name": "LucidFlex 50K",
                                                 "version": "2026-10-11", "confirmed": True}
@@ -78,9 +78,10 @@ def test_rule_files_and_the_unconfirmed_label():
     assert ids["lucid-pro-50k-no-dll@2026-10-11"]["name"] == "LucidPro 50K · no daily loss limit"
     assert load_rules("lucid-pro-50k@2026-09-27")["daily_loss_limit"] is None   # the older Pro still reproduces
     for old in ("lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b",
-                "topstep-50k@2026-09-27b", "apex-legacy-300k@2026-09-28"):          # the pipeline's book names these: never edited
+                "apex-legacy-300k@2026-09-28"):          # saved runs and book cards name these: never edited
         assert load_rules(old)["version"] == old.split("@")[1]
     assert DEFAULT_RULES == "lucid-flex-50k@2026-10-11"
+    assert not list(RULES_DIR.glob("topstep*"))      # the account holder, 2026-10-11: "remove topstep for now" (its files are in git history)
     # the superseded snapshot is off the picker but still on disk and still loadable
     assert (RULES_DIR / "lucid-flex-50k@2026-08.json").is_file()
     assert load_rules("lucid-flex-50k@2026-08")["version"] == "2026-08"
@@ -350,18 +351,16 @@ def test_overlapping_positions_and_a_broken_mae_are_flagged():
 
 
 def test_the_account_holders_other_evals():
-    """2026-09-27: Flex + a $1,200 daily limit; Topstep = Flex with no daily limit and a 5-mini cap;
+    """2026-09-27: Flex + a $1,200 daily limit (Topstep, a copy of Flex then, was removed 2026-10-11);
     Apex Legacy = $3,000 / $2,000 EOD trail locking at $50,100, 10 minis, no consistency, 1 day;
     Apex EOD = the same with a $1,000 daily limit and 6 minis. Apex payout terms are placeholders,
     so both Apex files stay unconfirmed."""
     flex = load_rules(DEFAULT_RULES)
     fd = load_rules("lucid-flex-50k-dll@2026-09-27b")
     assert fd["daily_loss_limit"] == 1200 and fd["consistency"] == 0.5 and fd["eval_min_days"] == 2
-    top = load_rules("topstep-50k@2026-09-27b")
-    assert top["cap_micros"] == 50 and top["daily_loss_limit"] is None
     same = ("eval_target", "trailing_mll", "lock_at", "lock_floor", "consistency", "eval_min_days", "win_day",
             "payout_win_days", "payout_share", "payout_cap", "max_payout_profit")
-    assert all(top[k] == flex[k] == fd[k] for k in same)
+    assert all(flex[k] == fd[k] for k in same)
     for rid, cap, dll in (("apex-legacy-50k@2026-09-27b", 100, None), ("apex-eod-50k@2026-09-27b", 60, 1000)):
         a = load_rules(rid)
         assert (a["eval_target"], a["trailing_mll"], a["lock_at"], a["lock_floor"]) == (3000, 2000, 2100, 100)
@@ -470,17 +469,17 @@ def test_lucidpro_pays_on_its_own_rule_not_lucidflexs():
 
 
 def test_the_other_corrected_files():
-    """LucidFlex: a $500 minimum request. Topstep: 55% consistency, the floor locks at the start
-    balance. Apex EOD: 30 calendar days (21 weekdays) and its own payout rule. Apex Legacy: the
-    numbers are the account holder's, the name says what the file is."""
+    """LucidFlex: a $500 minimum request. Apex EOD: 30 calendar days (21 weekdays) and its own
+    payout rule. Apex Legacy: the numbers are the account holder's, the name says what the file is.
+    A consistency other than Flex's 50% and a floor that locks at the start balance (Topstep's, whose
+    file is removed for now) are still read off whatever rule file names them."""
     flex, was = load_rules(DEFAULT_RULES), load_rules("lucid-flex-50k@2026-09-27")
     assert flex["payout_min"] == 500 and flex["flat_by_et"] == "16:45" and {k: v for k, v in flex.items() if k in was and was[k] != v}.keys() == {
         "version", "as_of", "source", "notes", "flat_by_et", "payout_ladder"}
     small = [200.0] * 4 + [-300.0, 200.0]              # five $200 days, +$700: half of it is under the $500 minimum
     assert engine.run_funded(small, was)["cheque"] == 350.0 and engine.run_funded(small, flex)["payout_at"] is None
     assert engine.run_funded([200.0] * 5, flex)["cheque"] == 500.0
-    top = load_rules("topstep-50k@2026-10-11")
-    assert (top["consistency"], top["lock_at"], top["lock_floor"], top["payout_min"], top["confirmed"]) == (0.55, 2000, 0, 125, False)
+    top = {**flex, "consistency": 0.55, "lock_at": 2000, "lock_floor": 0}
     assert engine.run_eval([1650.0, 1350.0], top)["outcome"] == "pass"         # 1,650 of 3,000 = 55%
     assert engine.run_eval([1700.0, 1300.0], top)["outcome"] == "timeout"      # 56.7%: the target rises, keep trading
     assert engine.run_eval([1700.0, 1300.0, 100.0], top)["outcome"] == "pass"  # 1,700 / 0.55 = 3,091 <= 3,100
