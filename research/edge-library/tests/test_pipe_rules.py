@@ -53,7 +53,8 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     assert P.need("proof") == {"reshuffle": 0.75, "random_alpha": 0.05} and P.need("box", "best_days_share") == 0.01
     assert P.need("box") == {"best_days_share": 0.01, "fast_seconds": 5, "month_days": 21}         # ... and the book card's two numbers (stage 7)
     assert P.need("prop") == {"account": "lucid-pro-50k-no-dll@2026-10-11", "days": 30, "eval": 0.4, "payout": 0.5,        # (the owner, 2026-10-10: the eval bar is 40 %;
-                              "book_accounts": ["lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"],        #  2026-10-11: LucidPro on its OWN payout rule)
+                              "book_accounts": ["lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-09-27"],        #  2026-10-11: LucidPro on its OWN payout rule; Apex 300K off the book:
+                                                                                                                 #  the stores keep no intraday high to trail it on)
                               "fees": {"lucid-pro-50k-no-dll@2026-10-11": 140, "lucid-pro-50k@2026-10-11": 115}}
     assert P.need("portfolio") == {"eval": {"days": 5, "odds": 0.6}, "payout": {"days": 14, "odds": 0.75}, "fast_share": 0.5,       # the bar, and what the design says of a mix
                                    "one_side": ["apex-legacy-300k@2026-09-28"], "funded_only": ["apex-legacy-300k@2026-09-28"]}     # that no rule file carries (stage 8, 2026-10-09)
