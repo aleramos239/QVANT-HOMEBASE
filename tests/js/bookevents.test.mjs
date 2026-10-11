@@ -151,13 +151,15 @@ test('overlay: the visible span is asked of the store, up to now', () => {
   o.destroy();
 });
 
-test('overlay: 100k one-minute bars in view ask for the newest 48 h only', () => {
+test('overlay: 100k one-minute bars in view ask for the newest 48 h of open market time only', () => {
   const t0 = T0 - 70 * 86_400_000, end = t0 + 100_000 * 60_000;     // 69 days ending 1 day before T0 (a past)
   const r = rig({ n: 100_000, bar: 60_000, t0 });
   const o = r.M.overlay(r.cell);
   assert.equal(r.calls.ensure.length, 1);
-  assert.deepEqual(r.calls.ensure[0], ['NQ', end - 48 * 3_600_000, end]);
-  assert.ok(r.S.missing('NQ', r.calls.ensure[0][1], r.calls.ensure[0][2], end).length <= 11);
+  const [root, from, to] = r.calls.ensure[0];
+  assert.equal(root, 'NQ'); assert.equal(to, end);
+  assert.ok(from >= end - 7 * 86_400_000 && from <= end - 48 * 3_600_000, 'back 48 open hours: a weekend and halts may push it older');
+  assert.ok(r.S.missing('NQ', from, to, end).length <= Math.ceil((to - from) / 18_000_000) + 1);   // 5 h chunks
   o.destroy();
 });
 
