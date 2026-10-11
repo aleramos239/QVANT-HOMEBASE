@@ -25,6 +25,7 @@ const int = (key, def, min, max) => ({ key, type: 'int', def, min, max });
 const choice = (key, def, choices) => ({ key, type: 'choice', def, choices });
 const FIELDS = [
   // Symbol · CANDLES
+  choice('chartType', 'candles', ['candles', 'heikin', 'bars', 'line']),   // how the price is drawn (2026-10-11)
   bool('prevClose', false),
   bool('body', true), color('bodyUp'), color('bodyDown'),
   bool('borders', true), color('borderUp'), color('borderDown'),

@@ -66,6 +66,16 @@
                                           each cut to {date, state, why, net, match, rebuilt})],
                                           runner: {alive, seen_utc, prices}} -- alive = the runner's heartbeat is under
                                           20 s old
+    GET  /api/tester/desklab/results     {results: {name: {unseen, prop: {build, unseen}}}}: for each promoted strategy, its
+                                          saved run on the unseen days (the newest finished run of the same code, settings
+                                          and size; cut as the record's `run`, or null when none is saved) and the prop
+                                          sim's headline of its build run and of that run, scored on DESKLAB_PROP (LucidPro 50K no-DLL)
+                                          from the runs' saved trades ({account, eval_pass_p, bust_p, median_days_to_pass,
+                                          funded_payout_p, funded_expected_cheque} | null). Reads saved runs only: nothing
+                                          is run by this route. `curve` = {days, vals}: that run's running total by day,
+                                          after costs. A strategy with no unseen-days run of its code + settings
+                                          gets one started by itself, once (its `unseen_state`: done | pending | failed |
+                                          none; a failed or cancelled one is not started again). A promote starts it too
     POST /api/tester/desklab/open        {name} -> {ok, name}: the Desk page's "Open in the Lab" leaves its ask (the Mac app
                                           drops a link's #fragment when it switches tab). GET /api/tester/lab-open -> {name}
                                           hands it to the Lab page once (null when none, or one older than two minutes)
@@ -74,7 +84,8 @@
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
                                           that changed since, code that cannot be read, one that is not
                                           session_independent, a market this service does not stream, a sandbox that does
-                                          not work. Reads text only: no draft runs, no order goes anywhere
+                                          not work. No draft runs here and no order goes anywhere; it does queue the copy's
+                                          unseen-days backtest (once per code + settings, a tester run like the Lab's Run)
     POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
                                           (promote and remove answer 409 "Take its accounts off on the Desk first."
                                           while the desk's sidecar, <name>.desk.json, holds book rows)
@@ -174,7 +185,7 @@ from ..claude_mcp.client import ToolError
 from ..labrun import door, store
 from .desk import DESK_URL
 from ..labrun.host import session_today
-from . import DEFAULT_ROOTS, lab_forms, lab_templates, reviewpack
+from . import DEFAULT_ROOTS, deskgroups, deskresults, lab_forms, lab_templates, reviewpack
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
 
 MC_CACHE = 64            # Monte Carlo results kept per service (review I3)
@@ -199,10 +210,13 @@ def desk_strategy_ids() -> list[str]:
 
 
 DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open")
+DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
 NOT_TRASHED = "It could not be moved to the trash."   # the move failed (an OSError): nothing was deleted
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
+DESKLAB_AUTO_UNSEEN = True   # a promoted strategy's unseen-days run starts by itself, once per code + settings (owner 2026-10-11)
+DESKLAB_PROP = "lucid-pro-50k-no-dll@2026-10-11"   # the account every Desk panel's prop sim is scored on (the pipeline's account; owner 2026-10-11)
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
@@ -725,6 +739,48 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             t = t.replace(tzinfo=dt.timezone.utc)
         return abs((dt.datetime.now(dt.timezone.utc) - t).total_seconds()) <= DESKLAB_ALIVE_S
 
+    desk_res_lock = threading.Lock()     # one asker at a time: a run's first prop sim takes about 1.5 s, then it is kept
+    unseen_lock = threading.Lock()
+
+    def ensure_unseen(rec: dict) -> dict:
+        """The state of the record's unseen-days run (deskresults.unseen_state); when there is none, start it -- once: a run
+        that failed or was cancelled is not started again by itself. A start the tester refuses (the 09:20-09:35 ET window,
+        a sandbox that is down) leaves the state as it was, and the next ask tries again. Never raises."""
+        try:
+            with unseen_lock:
+                got = deskresults.unseen_state(manager.runs, rec)
+                if got["state"] != "none" or not DESKLAB_AUTO_UNSEEN:
+                    return got
+                try:
+                    manager.submit(deskresults.unseen_request(rec, slots.et_now().date()))
+                except Exception:      # noqa: BLE001 -- not now: refused in words by the tester, or not working
+                    return got
+                return deskresults.unseen_state(manager.runs, rec)
+        except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
+            return {"state": "none"}
+
+    @r.get("/desklab/results")
+    def desklab_results(request: Request):
+        """The research the Desk's panel shows beside a promoted strategy (deskresults.py). Saved runs and their saved trades
+        only: no strategy runs and no test day is read. A plain `def`: FastAPI's threadpool, not the loop."""
+        watch_guard(request)
+
+        def prop_of(rid):
+            try:
+                return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid), DESKLAB_PROP))
+            except (HTTPException, KeyError, ValueError, OSError):      # a run that was deleted or cannot be read: nothing to show
+                return None
+        out = {}
+        with desk_res_lock:
+            for rec in store.listing():
+                build, got = (rec.get("run") or {}).get("id"), ensure_unseen(rec)
+                unseen = got.get("run")
+                out[rec["name"]] = {"unseen": unseen, "unseen_state": got["state"],
+                                    "curve": deskresults.curve_of(manager.runs, unseen["id"]) if unseen else None,
+                                    "prop": {"build": prop_of(build) if build else None,
+                                             "unseen": prop_of(unseen["id"]) if unseen else None}}
+        return watch_answer(request, {"results": out})
+
     @r.options("/desklab/{what}")
     def desklab_preflight(what: str, request: Request):
         """The desk page's CORS preflight: for its exact origins only."""
@@ -769,6 +825,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             trades = read_json(d / "trades.json", None)
             trades = trades.get("trades") if isinstance(trades, dict) else trades
             store.put(store.snapshot(name, source, meta, {"run": run, "trades": trades}, run_id, notes))
+        ensure_unseen(store.get(name))      # its unseen days are read by themselves, so its Desk panel shows them (owner 2026-10-11)
         return {"ok": True, "name": name, "notes": notes}
 
     def desklab_remove(name: str) -> dict:
@@ -779,24 +836,26 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
-    open_ask = {"name": None, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
+    open_ask = {"name": None, "run": None, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
 
-    def desklab_open(name: str) -> dict:
+    def desklab_open(name: str, run: str | None = None) -> dict:
         """The Desk page asks the Lab page to show one draft. The Mac app drops a link's #fragment when it switches
-        tab, so the ask waits here and the Lab page takes it (GET /lab-open) the moment it is shown."""
+        tab, so the ask waits here and the Lab page takes it (GET /lab-open) the moment it is shown. `run`: a finished run of
+        it to put on the chart as well (the Desk's "Show on chart")."""
         try:
             draftstore.read(name)
         except (FileNotFoundError, ValueError, OSError):
             raise HTTPException(404, "That strategy is not in the Lab.") from None
-        open_ask["name"], open_ask["at"] = name, time.monotonic()
+        open_ask["name"], open_ask["run"], open_ask["at"] = name, run, time.monotonic()
         return {"ok": True, "name": name}
 
     @r.get("/lab-open")
     def lab_open_take():
         """The Lab page takes the Desk's ask, once: {name} (null when none, or one older than two minutes)."""
-        name, at = open_ask["name"], open_ask["at"]
-        open_ask["name"] = None
-        return {"name": name if name and time.monotonic() - at <= 120 else None}
+        name, run, at = open_ask["name"], open_ask["run"], open_ask["at"]
+        open_ask["name"] = open_ask["run"] = None
+        fresh = bool(name) and time.monotonic() - at <= 120
+        return {"name": name if fresh else None, **({"run": run} if fresh and run else {})}
 
     def desklab_onoff(name: str, on: bool) -> dict:
         if store.set_enabled(name, on) is None:
@@ -819,6 +878,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
             keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"}}[what]
+            run = body.get("run") if what == "open" and isinstance(body, dict) else None
+            if run is not None and (not isinstance(run, str) or not re.fullmatch(r"[0-9a-z_-]{1,120}", run)):
+                raise HTTPException(400, "run: a finished run's id")
+            if what == "open" and run is not None:
+                keys = {"name", "run"}
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
@@ -834,7 +898,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "open":
-                    done = await asyncio.to_thread(desklab_open, name)
+                    done = await asyncio.to_thread(desklab_open, name, run)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)
@@ -842,6 +906,102 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return watch_answer(request, done)
         except HTTPException as e:
             return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
+
+    # ---- Desk groups (deskgroups.py): named sets of Desk strategies, kept beside the Lab records. Bookkeeping only: a group
+    # ---- books no account and switches nothing; its results are read off the members' saved runs.
+    @r.get("/deskgroups")
+    def deskgroups_list(request: Request):
+        watch_guard(request)
+        return watch_answer(request, {"groups": deskgroups.load()})
+
+    @r.options("/deskgroups/{what}")
+    def deskgroups_preflight(what: str, request: Request):
+        o = request.headers.get("origin")
+        if what not in DESKGROUP_ACTIONS or o not in DESK_ORIGINS:
+            return JSONResponse({"detail": "origin not allowed"}, status_code=403)
+        return Response(status_code=204, headers={
+            "access-control-allow-origin": o, "vary": "Origin", "access-control-allow-methods": "POST",
+            "access-control-allow-headers": "content-type", "access-control-max-age": "600"})
+
+    @r.post("/deskgroups/{what}")
+    async def deskgroups_write(what: str, request: Request):
+        """create {name, kind?} | rename {id, name} | kind {id, kind} | delete {id} | move {strategy, group: id | null}
+        -> {ok: true, groups} | {ok: false, detail} (a refusal in words)."""
+        watch_guard(request)
+        try:
+            write_ok(request)
+            json_body(request)
+            if what not in DESKGROUP_ACTIONS:
+                raise HTTPException(404, f"unknown group action {what!r}")
+            try:
+                body = await request.json()
+            except ValueError:
+                raise HTTPException(400, "the body is JSON") from None
+            if not isinstance(body, dict):
+                raise HTTPException(400, "the body is a JSON object")
+            try:
+                groups = await asyncio.to_thread(deskgroups.apply, what, body)
+            except deskgroups.GroupError as e:
+                raise HTTPException(409, str(e)) from None
+            return watch_answer(request, {"ok": True, "groups": groups})
+        except HTTPException as e:
+            return watch_answer(request, {"ok": False, "detail": e.detail}, e.status_code)
+
+    def ledger_of(run_id):
+        t = read_json(manager.runs / run_id / "trades.json", None) if isinstance(run_id, str) else None
+        t = t.get("trades") if isinstance(t, dict) else t
+        return t if isinstance(t, list) else None
+
+    @r.get("/deskgroups/results")
+    def deskgroups_results(request: Request):
+        """For each group: its members' own unseen-days numbers and, for the members' saved runs put together as one account's
+        trades, the same on the build days and on the unseen days (net, win rate, PF, drawdown, days, the curve, the prop sim on
+        DESKLAB_PROP). A member that is not a Lab strategy, or has no unseen-days run yet, is left out of the unseen figures and
+        named. Saved runs only; a member's missing unseen run is started like the Desk panel's (ensure_unseen)."""
+        watch_guard(request)
+
+        def prop_of(ids, ledger):
+            if not ledger:
+                return None
+            try:
+                got = _rescore(("group", tuple(sorted(ids))), lambda: {"run": {}, "trades": ledger, "propsim": None}, DESKLAB_PROP)
+                return deskresults.prop_headline(got)
+            except (HTTPException, KeyError, ValueError, OSError):
+                return None
+        out = {}
+        with desk_res_lock:
+            for g in deskgroups.load():
+                members, build_in, unseen_in, left_out = [], [], [], []
+                for sid in g["members"]:
+                    try:
+                        rec = store.get(sid[4:]) if sid.startswith("lab_") else None
+                    except ValueError:
+                        rec = None
+                    if not isinstance(rec, dict):
+                        left_out.append({"strategy": sid, "why": "not on the Desk any more" if sid.startswith("lab_")
+                                         else "built in: it has no unseen-days run to add"})
+                        continue
+                    got = ensure_unseen(rec)
+                    unseen_run = got.get("run")
+                    b_id = (rec.get("run") or {}).get("id")
+                    members.append({"strategy": sid, "label": rec.get("label") or rec.get("name"), "state": got["state"],
+                                    "build": {k: (rec.get("run") or {}).get(k) for k in ("net", "trades", "win_rate", "profit_factor", "max_drawdown")},
+                                    "unseen": ({k: unseen_run.get(k) for k in ("net", "trades", "win_rate", "profit_factor", "max_drawdown")}
+                                               if unseen_run else None)})
+                    if ledger_of(b_id) is not None:
+                        build_in.append((sid, b_id))
+                    if unseen_run and ledger_of(unseen_run["id"]) is not None:
+                        unseen_in.append((sid, unseen_run["id"]))
+                    else:
+                        left_out.append({"strategy": sid, "why": "no unseen-days run yet"})
+                res = {"id": g["id"], "name": g["name"], "kind": g["kind"], "members": members, "left_out": left_out}
+                for key, chosen in (("build", build_in), ("unseen", unseen_in)):
+                    ledger, owners = deskgroups.merged([(sid, ledger_of(rid) or []) for sid, rid in chosen])
+                    res[key] = deskgroups.summarize(ledger, owners)
+                    res.setdefault("prop", {})[key] = prop_of([rid for _, rid in chosen], ledger)
+                    res.setdefault("in", {})[key] = [sid for sid, _ in chosen]
+                out[g["id"]] = res
+        return watch_answer(request, {"results": out})
 
     @r.post("/show")
     async def show(request: Request):

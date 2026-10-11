@@ -51,6 +51,13 @@ window.HBIcons = {
   // 2026-10-09: a ray (one end fixed, running on), an extended line (running on both ways), a vertical line, a Fib retracement
   ray: svg('<circle cx="5" cy="19" r="2"/><path d="M6.5 17.5 21 3"/>'),
   xline: svg('<circle cx="12" cy="12" r="2"/><path d="M3 21l7.5-7.5"/><path d="M13.5 10.5 21 3"/>'),
+  objects: svg('<path d="M8 6h13"/><path d="M8 12h13"/><path d="M8 18h13"/><path d="M3 6h.01"/><path d="M3 12h.01"/><path d="M3 18h.01"/>'),
+  // 2026-10-11: a price alert (a bell), an arrow, a parallel channel, a note, an anchored VWAP
+  alert: svg('<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>'),
+  arrow: svg('<circle cx="5" cy="19" r="2"/><path d="M6.5 17.5 19 5"/><path d="M11 5h8v8"/>'),
+  channel: svg('<path d="M3 15 17 3"/><path d="M7 21 21 9"/>'),
+  note: svg('<path d="M4 4h16v12h-9l-5 4v-4H4z"/><path d="M8 9h8"/><path d="M8 12h5"/>'),
+  avwap: svg('<circle cx="4.5" cy="17.5" r="1.8"/><path d="M6 16.5C9 15 10 8.5 13 8.5s4 4 8 3"/>'),
   vline: svg('<circle cx="12" cy="12" r="3"/><line x1="12" x2="12" y1="3" y2="9"/><line x1="12" x2="12" y1="15" y2="21"/>'),
   fib: svg('<path d="M3 5h18"/><path d="M3 10h13"/><path d="M3 14.5h18"/><path d="M3 19h9"/>'),
   rect: svg('<rect width="20" height="12" x="2" y="6" rx="2"/>'),

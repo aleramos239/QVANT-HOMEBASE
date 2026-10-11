@@ -473,3 +473,94 @@ def test_structure_keys_and_warmup():
         with pytest.raises(ValueError):
             make(key)
     assert warm_bars("swing:50") == 500 and warm_bars("vaprev") == 400 and warm_bars("noise") == 0
+
+
+# ---- 2026-10-11: a start time for the opening range, windows of your own, fair value gaps, week / month levels ----
+def test_opening_range_from_another_start_and_from_the_evening_before():
+    # 03:00 London candle: 5 minutes from minute 180
+    bars = [mk(100 + i, h=101 + i, l=99 + i, t=ms(2026, 10, 7, 3, 0) + i * 60000) for i in range(8)]
+    got = run("orb:5:180", [mk(50, h=500, l=1, t=ms(2026, 10, 7, 2, 59))] + bars)
+    assert got[0] is None and got[1] == {"hi": 101, "lo": 99, "mid": 100.0}
+    assert got[5]["hi"] == 105 and got[8] == got[5]                 # frozen from 03:05 on
+    # the default is still 09:30 (the old wire key is unchanged)
+    assert run("orb:5", [mk(100, t=ms(2026, 10, 7, 3, 0))]) == [None]
+    # 20:00 of the evening BEFORE the session dated 2026-10-08 (session key = the date it trades)
+    eve = [mk(100 + i, h=101 + i, l=99 + i, t=ms(2026, 10, 7, 20, 0) + i * 60000, session="2026-10-08") for i in range(6)]
+    got = run("orb:5:1200", eve)
+    assert got[0] == {"hi": 101, "lo": 99, "mid": 100.0} and got[5] == got[4]
+    s = make("orb:5:1200")
+    for b in eve:
+        s.push(b)
+    assert s.push(mk(300, h=999, l=1, t=ms(2026, 10, 8, 9, 30), session="2026-10-08")) == got[5]    # held into the day
+
+
+def test_a_window_of_your_own_and_one_that_crosses_midnight():
+    s = make("sess:600:660")                                         # 10:00-11:00
+    got = [s.push(mk(100 + i, h=101 + i, l=99 + i, t=ms(2026, 10, 7, 9, 58) + i * 60000)) for i in range(5)]
+    assert got[:2] == [None, None] and got[2] == {"hi": 103, "lo": 101}   # the 10:00 bar is the first inside
+    s = make("sess:1080:180")                                        # 18:00 -> 03:00 (the evening session)
+    eve = mk(100, h=110, l=90, t=ms(2026, 10, 7, 18, 0), session="2026-10-08")
+    late = mk(100, h=120, l=95, t=ms(2026, 10, 8, 2, 59), session="2026-10-08")
+    after = mk(100, h=999, l=1, t=ms(2026, 10, 8, 3, 0), session="2026-10-08")
+    assert s.push(eve) == {"hi": 110, "lo": 90}
+    assert s.push(late) == {"hi": 120, "lo": 90}
+    assert s.push(after) == {"hi": 120, "lo": 90}                    # 03:00 is outside: held, not extended
+    for key in ("sess:600:600", "sess:600:1440", "sess:-1:5"):
+        with pytest.raises(ValueError):
+            make(key)
+
+
+def test_fair_value_gaps_are_the_engines_three_bar_rule_and_end_when_filled():
+    base = ms(2026, 10, 7, 9, 30)
+
+    def b(i, h, l, c=None):
+        return mk(c if c is not None else (h + l) / 2, h=h, l=l, t=base + i * 60000)
+    flat = [b(i, 101, 99) for i in range(15)]                         # ATR(14) = 2 once 15 bars are in
+    s = make("fvg:0.5:14")
+    for x in flat:
+        assert s.push(x) is None
+    s.push(b(15, 102, 100))                                          # bar 1 (high 102)
+    s.push(b(16, 110, 103))                                          # bar 2
+    got = s.push(b(17, 112, 106))                                    # bar 3's low 106 > bar 1's high 102: up gap 102..106
+    assert got == {"uh": 106, "ul": 102, "dh": None, "dl": None}
+    assert s.preview(b(18, 120, 104)) == got                         # preview never commits, 104 > 102 holds the gap
+    assert s.push(b(18, 120, 101)) is None                           # this bar trades through the far edge 102: filled
+    # too small a gap (below k x ATR) is not a gap; a new session forgets the old ones
+    s = make("fvg:0.5:14")
+    for x in flat:
+        s.push(x)
+    s.push(b(15, 102, 100))
+    s.push(b(16, 104, 100))
+    assert s.push(b(17, 104.5, 102.5)) is None                       # gap 0.5 < 0.5 x 2.. exactly the bar: 0.5 < 1.0
+    with pytest.raises(ValueError):
+        make("fvg:99")
+
+
+def test_week_and_month_levels_are_the_prior_period_and_this_periods_open():
+    d = [("2026-10-05", 100, 110, 90, 105), ("2026-10-06", 106, 120, 100, 118), ("2026-10-12", 119, 125, 115, 124),
+         ("2026-10-13", 124, 130, 118, 128)]
+    s = make("wk")
+    got = [s.push(Bar(t=ms(2026, int(x[0][5:7]), int(x[0][8:]), 10, 0), session=x[0], o=x[1], h=x[2], l=x[3], c=x[4], v=1)) for x in d]
+    assert got[0] is None and got[1] is None                         # no finished week yet
+    assert got[2] == {"hi": 120, "lo": 90, "close": 118, "open": 119}  # the week of Oct 5, and the new week's open
+    assert got[3] == {"hi": 120, "lo": 90, "close": 118, "open": 119}
+    m = make("mo")
+    got = [m.push(Bar(t=ms(2026, 9 + (i > 0), 30 if i == 0 else 1 + i, 10, 0), session=("2026-09-30" if i == 0 else f"2026-10-0{1 + i}"),
+                      o=10 + i, h=20 + i, l=5 + i, c=15 + i, v=1)) for i in range(3)]
+    assert got[0] is None and got[1] == {"hi": 20, "lo": 5, "close": 15, "open": 11}
+
+
+def test_time_open_is_the_first_open_at_the_time_held_to_the_end():
+    s = make("topen:0")
+    assert s.push(mk(100, o=100, t=ms(2026, 10, 6, 23, 59), session="2026-10-07")) is None   # before midnight of Oct 7
+    assert s.push(mk(105, o=104, t=ms(2026, 10, 7, 0, 0), session="2026-10-07")) == 104       # the first bar at 00:00
+    assert s.push(mk(110, o=109, t=ms(2026, 10, 7, 0, 1), session="2026-10-07")) == 104
+    assert make("topen:1200").push(mk(100, o=101, t=ms(2026, 10, 7, 20, 0), session="2026-10-08")) == 101   # the evening before
+    late = make("topen:0")
+    assert late.push(mk(100, o=100, t=ms(2026, 10, 7, 0, 9), session="2026-10-07")) is None   # joined too late: no open
+
+
+def test_the_new_studies_are_warmed_and_primed():
+    from homebase.charts.studies_ta import prime_ta
+    assert warm_bars("fvg:0.25:14") == 143 and warm_bars("wk") == 0 and warm_bars("topen:0") == 0
+    assert prime_ta("wk", []) == 11 and prime_ta("mo", []) == 45 and prime_ta("orb", ["15", "180"]) == 0

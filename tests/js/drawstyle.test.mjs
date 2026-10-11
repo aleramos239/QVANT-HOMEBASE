@@ -171,7 +171,7 @@ test('snapEndpointPrice: Shift takes the other endpoint\'s price, else the point
 
 /* ---- 2026-10-09: ray, extended line, vertical line, Fib retracement; more settings; per-interval visibility ---- */
 test('the new tools take exactly their own fields, and an old drawing keeps its look', () => {
-  assert.deepEqual(Object.keys(S.FIELDS), ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib', 'long', 'short']);
+  assert.deepEqual(Object.keys(S.FIELDS), ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib', 'arrow', 'channel', 'note', 'avwap', 'long', 'short']);
   assert.ok(!S.FIELDS.ray.includes('extendLeft') && !S.FIELDS.xline.includes('extendRight'), 'a ray and an extended line extend by what they are');
   for (const t of ['trend', 'ray', 'xline']) assert.ok(S.FIELDS[t].includes('priceLabel') && S.FIELDS[t].includes('stats'), t);
   // an old trend line / rectangle saved before these settings existed: every new switch is off
@@ -253,4 +253,17 @@ test('labelAnchor: a horizontal line label left / centre / right; a vertical lin
   const seg = [[0, 0], [100, 50]];
   assert.deepEqual(S.labelAnchor('ray', seg, 'middle', 400), S.labelAnchor('trend', seg, 'middle', 400));
   assert.deepEqual(S.labelAnchor('xline', seg, 'above', 400), S.labelAnchor('trend', seg, 'above', 400));
+});
+
+/* ---- 2026-10-11: arrow, parallel channel, note, anchored VWAP ---- */
+test('an arrow is a line with a head; a channel, a note and an anchored VWAP take their own fields', () => {
+  assert.ok(S.isLine('arrow'));
+  assert.deepEqual(S.LABEL_POS.arrow, S.LABEL_POS.trend);
+  for (const f of ['width', 'lineStyle', 'text', 'priceLabel', 'stats']) assert.ok(S.FIELDS.arrow.includes(f), f);
+  for (const f of ['fillColor', 'midline', 'extendLeft', 'extendRight']) assert.ok(S.FIELDS.channel.includes(f), f);
+  assert.deepEqual([...S.FIELDS.note].sort(), ['bold', 'fillColor', 'fontSize', 'text', 'textColor']);
+  assert.deepEqual([...S.FIELDS.avwap].sort(), ['lineStyle', 'width']);
+  assert.equal(S.normalize('note', undefined).text, 'Note');
+  assert.equal(S.normalize('channel', undefined).midline, false);
+  assert.equal(S.normalize('avwap', { width: 3 }).width, 3);
 });

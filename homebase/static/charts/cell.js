@@ -155,7 +155,7 @@ function tickLabel(t, type, fmt) {
 class Cell {
   constructor(slot, cfg, host) {
     this.el = slot; this.cfg = cfg; this.host = host; this.id = host.id;
-    this.chart = null; this.candles = null; this.markers = null; this.P = null;
+    this.chart = null; this.candles = null; this.alt = null; this.haC = null; this.markers = null; this.P = null;
     this.bars = []; this.realT = new Map(); this.devel = false; this.sessions = []; this.tick = 0.25;
     this.pv = null;   // USD per 1.00 of price for one contract (the history's point_value; null: unknown)
     this.profile = null; this.keys = new Set(); this.lines = []; this.rows = []; this.colorOf = {}; this.levelLines = {};
@@ -302,6 +302,7 @@ class Cell {
     const o = S.chartOptions(R);
     this.chart.applyOptions({ ...o, rightPriceScale: { ...o.rightPriceScale, scaleMargins: S.scaleMargins(R) } });
     this.chart.priceScale('right', 0).applyOptions(S.priceScaleOptions(R));   // the price pane's scale only: an RSI pane stays regular
+    if (was.chartType !== R.chartType) this.syncChartType();
     this.candles.applyOptions(this.candleOpts());
     this.syncRefLines();
     if (was.indLabels !== R.indLabels) this.syncIndLabels();
@@ -324,6 +325,9 @@ class Cell {
   candleOpts() {
     const o = S.candleOptions(this.R, this.tick);
     o.priceLineColor = this.lastCol = this.bars.length ? S.lastColor(this.R, this.lastUp()) : '';
+    if (this.R.chartType === 'bars' || this.R.chartType === 'line') {
+      return { ...o, upColor: S.CLEAR, downColor: S.CLEAR, borderVisible: false, wickVisible: false };
+    }
     return this.fpHide ? { ...o, upColor: S.CLEAR, downColor: S.CLEAR, borderVisible: false } : o;
   }
 
@@ -508,6 +512,7 @@ class Cell {
       for (const b of this.slotted(merged)) this.append(b);
       const k = this.bars.length - had;   // slots added in front of the chart's first bar, empty ones included
       this.candles.setData(this.candleData());
+      this.fillAlt();
       for (const l of this.lines) l.s.setData(this.bars.map((b) => this.point(l, b)));
       if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
       if (this.hover != null) this.hover += k;
@@ -734,6 +739,7 @@ class Cell {
     const sel = this.dc && this.shown && this.dc.root === this.shown.root ? this.dc.sel : null;
     this.makeChart();
     this.candles.setData(this.candleData());
+    this.fillAlt();
     this.syncLastColor();
     this.buildSeries();
     if (this.R.indLabels !== 'value') this.syncIndLabels();
@@ -793,6 +799,7 @@ class Cell {
     this.chart.priceScale('right', 0).applyOptions(S.priceScaleOptions(R));
     this.refLines = {}; this.pdc = null;   // the chart's own price lines (syncRefLines): gone with the old series
     this.markers = LW.createSeriesMarkers(this.candles, []);
+    this.makeAlt();
     this.wm = LW.createTextWatermark(this.chart.panes()[0], { visible: R.watermark, horzAlign: 'center',
       vertAlign: 'center', lines: [this.wmLine()] });
     this.fp = new Footprint(P); this.prof = new Profile(P); this.gaps = new Gaps(P);
@@ -850,7 +857,7 @@ class Cell {
     if (this.dc) { this.dc.destroy(); this.dc = null; }
     if (!this.chart) return;
     this.chart.remove();
-    this.chart = this.candles = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
+    this.chart = this.candles = this.alt = this.markers = this.fp = this.prof = this.gaps = this.wm = null;   // stale async callbacks can tell
     this.eth = this.cd = this.evl = this.start = null;
   }
 
@@ -1140,9 +1147,11 @@ class Cell {
     this.devel = !!m.live;
     for (const b of touched) {
       const i = this.bars.lastIndexOf(b);
-      this.candles.update(this.candle(b, i > 0 ? this.bars[i - 1] : null));
+      this.candles.update(this.candleAt(b, i));
+      if (this.alt) this.alt.update(this.altPoint(b));
       for (const l of this.lines) l.s.update(this.point(l, b));
     }
+    if (touched.length && !this.replay && this.dc && this.dc.checkAlerts) this.dc.checkAlerts();
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
     if (touched.some((b) => b.big && b.big.length)) this.drawMarkers();
     this.syncLastColor();
@@ -1175,11 +1184,58 @@ class Cell {
     const k = S.barColor(b, prev, this.R);
     return { ...c, color: this.fpHide ? S.CLEAR : k.color, borderColor: k.borderColor, wickColor: k.wickColor };
   }
-  candleData() { return this.bars.map((b, i) => this.candle(b, i ? this.bars[i - 1] : null)); }
+  candleData() {
+    this.haC = [];
+    return this.bars.map((b, i) => this.candleAt(b, i));
+  }
+  /* Bar i as the chart type draws it on the candle series: Heikin Ashi's own averaged bar, else the plain candle. */
+  candleAt(b, i) {
+    if (this.R.chartType !== 'heikin' || b.blank) return this.candle(b, i > 0 ? this.bars[i - 1] : null);
+    return { time: b.tt, ...this.haBar(i) };
+  }
+  /* Heikin Ashi bar i: close = (o + h + l + c) / 4, open = the middle of the previous Heikin Ashi bar's open and close
+     (the first bar's own o and c), high / low = the extremes of the real high / low and those two. Each one is kept
+     (this.haC) so a live tick only needs the bar before it; a replaced last bar drops its own cached value. */
+  haBar(i) {
+    const c = this.haC || (this.haC = []);
+    if (c.length > i) c.length = i;
+    for (let k = c.length; k <= i; k++) {
+      const b = this.bars[k], p = k ? c[k - 1] : null;
+      const close = (b.o + b.h + b.l + b.c) / 4, open = p ? (p.open + p.close) / 2 : (b.o + b.c) / 2;
+      c.push({ open, close, high: Math.max(b.h, open, close), low: Math.min(b.l, open, close) });
+    }
+    return c[i];
+  }
+  /* OHLC bars and the line chart ride on a second series over the same price scale (the candle series stays, see-through,
+     so every marker, price line and drawing still sits on it). */
+  makeAlt() {
+    const t = this.R.chartType;
+    this.alt = null;
+    if (t !== 'bars' && t !== 'line') return;
+    const o = S.candleOptions(this.R, this.tick), P = this.P;
+    const common = { priceFormat: o.priceFormat, lastValueVisible: false, priceLineVisible: false };
+    this.alt = t === 'bars'
+      ? this.chart.addSeries(LW.BarSeries, { ...common, upColor: this.R.borderUp, downColor: this.R.borderDown, thinBars: false })
+      : this.chart.addSeries(LW.LineSeries, { ...common, color: P.accent, lineWidth: 2, crosshairMarkerVisible: false });
+  }
+  altPoint(b) {
+    if (b.blank) return { time: b.tt };
+    return this.R.chartType === 'line' ? { time: b.tt, value: b.c } : { time: b.tt, open: b.o, high: b.h, low: b.l, close: b.c };
+  }
+  fillAlt() { if (this.alt) this.alt.setData(this.bars.map((b) => this.altPoint(b))); }
+  /* The chart type changed: the candle series is see-through or not (candleOpts), the second series made or dropped, and
+     every candle again (Heikin Ashi's own numbers). */
+  syncChartType() {
+    if (this.alt) { this.chart.removeSeries(this.alt); this.alt = null; }
+    this.makeAlt();
+    this.candles.applyOptions(this.candleOpts());
+    this.resetCandles();
+  }
   /* Every candle again (per-bar colours changed), the view kept where it is. */
   resetCandles() {
     const v = this.viewNow();
     this.candles.setData(this.candleData());
+    this.fillAlt();
     this.syncLastColor();
     if (v) this.setView(v);
   }

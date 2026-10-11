@@ -11,13 +11,13 @@
 const LINE_STYLES = ['solid', 'dashed', 'dotted'];
 /* The straight two-point lines: a trend line stops at its points (unless it is told to extend), a
    ray runs on past its second point, an extended line runs on both ways. */
-const LINE_TYPES = ['trend', 'ray', 'xline'];
+const LINE_TYPES = ['trend', 'ray', 'xline', 'arrow'];
 const isLine = (t) => LINE_TYPES.includes(t);
 /* Where the optional text label sits: lines are relative to the line, a rectangle is inside the
    box (spec: "above/below/middle" for lines, "inside top/middle/bottom" for a rectangle), a
    vertical line beside it at the top / middle / bottom of the pane. */
 const LINE_POS = ['above', 'below', 'middle'], BOX_POS = ['top', 'middle', 'bottom'];
-const LABEL_POS = { trend: LINE_POS, ray: LINE_POS, xline: LINE_POS, hline: LINE_POS, rect: BOX_POS, vline: BOX_POS };
+const LABEL_POS = { trend: LINE_POS, ray: LINE_POS, xline: LINE_POS, arrow: LINE_POS, hline: LINE_POS, rect: BOX_POS, vline: BOX_POS };
 const LABEL_ALIGN = ['left', 'center', 'right'];      // a horizontal line's label, along the line
 const MAX_TEXT = 200;
 const MAX_FIB_LEVELS = 16, FIB_MIN = -10, FIB_MAX = 10;
@@ -33,6 +33,12 @@ const FIELDS = {
   vline: ['width', 'lineStyle', ...TEXT, 'timeLabel'],
   rect: ['width', 'lineStyle', 'fillColor', ...TEXT, 'border', 'midline', 'quarters', 'midStyle', 'extendRight', 'priceLabels'],
   fib: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'reverse', 'fontSize'],
+  // 2026-10-11: an arrow is a line with a head; a channel a line and its parallel (the third point); a note its text; an
+  // anchored VWAP a line from the bar it was dropped on
+  arrow: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  channel: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'fillColor', 'midline'],
+  note: ['text', 'fontSize', 'textColor', 'bold', 'fillColor'],
+  avwap: ['width', 'lineStyle'],
   long: [], short: [],
 };
 /* The Fibonacci levels a fresh retracement carries: {v: the ratio, on: drawn, color}. 0 sits on the
@@ -58,6 +64,11 @@ const DEFAULTS = {
     border: true, midline: false, quarters: false, midStyle: 'dashed', extendRight: false, priceLabels: false },
   fib: { width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, levels: FIB_LEVELS, showLevels: true, showPrices: true,
     fill: true, reverse: false, fontSize: 11 },
+  arrow: { ...LINE_DEF },
+  // no fillColor on a channel or a note: unset follows the theme (the same rule as a rectangle)
+  channel: { width: 2, lineStyle: 'solid', extendLeft: false, extendRight: false, midline: false },
+  note: { text: 'Note', fontSize: 12, textColor: '#2962FF', bold: false },
+  avwap: { width: 2, lineStyle: 'solid' },
   long: {}, short: {},
 };
 /* Canvas dash patterns (ctx.setLineDash), keyed the same as lineStyle. */

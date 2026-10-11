@@ -2061,8 +2061,10 @@ async function takeDeskAsk() {
   const r = await send('GET', '/api/tester/lab-open');
   const name = r.ok && r.json && typeof r.json.name === 'string' ? r.json.name : '';
   if (!name) return;
+  const run = r.json && typeof r.json.run === 'string' && /^[0-9a-z_-]+$/.test(r.json.run) ? r.json.run : '';   // the Desk's "Show on chart"
   if (!S.drafts.some((d) => d.name === name)) await loadLists();
   if (S.drafts.some((d) => d.name === name)) selectDraft(name);
+  if (run) showRunOnChart(run).then((ok) => log(ok ? 'Its run on the unseen days is on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.'));
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') takeDeskAsk(); });
 window.addEventListener('focus', takeDeskAsk);

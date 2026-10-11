@@ -801,6 +801,19 @@ test('technical indicators: wire keys, labels and style keys come from the defin
   assert.equal(k('orb', { minutes: 30 }), 'orb:30');
   assert.equal(k('sess', { session: 'asia' }), 'sess:asia');
   assert.equal(k('sess', { session: 'nonsense' }), 'sess:london', 'a bad choice falls back to the default');
+  // 2026-10-11: a start time, evening / own windows, gaps, week / month levels, an open at a time
+  assert.equal(k('orb', { minutes: 5, start: '03:00' }), 'orb:5:180');
+  assert.equal(k('orb', { minutes: 5, start: '20:00' }), 'orb:5:1200');
+  assert.equal(k('orb', { minutes: 15, start: '9:30' }), 'orb:15', 'the old key for the old default');
+  assert.equal(k('sess', { session: 'evening' }), 'sess:1080:180');
+  assert.equal(k('sess', { session: 'custom', from: '10:00', to: '11:30' }), 'sess:600:690');
+  assert.equal(k('sess', { session: 'custom', from: '10:00', to: '10:00' }), 'sess:1080:180', 'a window with no length falls back');
+  assert.equal(k('fvg', {}), 'fvg:0.25:14');
+  assert.equal(k('fvg', { min: 0.5, length: 20 }), 'fvg:0.5:20');
+  assert.equal(k('wk', {}), 'wk');
+  assert.equal(k('mo', {}), 'mo');
+  assert.equal(k('topen', { time: '08:30' }), 'topen:510');
+  assert.equal(C.label(C.instance('orb', { minutes: 5, start: '03:00' })), 'Candle 03:00 5m');
   assert.equal(C.label(C.instance('macd')), 'MACD 12 26 9');
   assert.equal(C.label(C.instance('orb', { minutes: 5 })), 'Opening range 5m');
   assert.deepEqual(C.styleLineKeys('macd'), ['hist', 'macd', 'signal']);

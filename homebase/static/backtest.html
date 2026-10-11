@@ -15,7 +15,7 @@
      window.HB_PAGE tells the shared app.js/panel.js which storage namespace (layouts, the bottom
      panel's default) and /ws page kind to use. -->
 <script>window.HB_PAGE = 'backtest';</script>
-<link rel="stylesheet" href="/static/charts/charts.css?v=35">
+<link rel="stylesheet" href="/static/charts/charts.css?v=36">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=8">
 <link rel="stylesheet" href="/static/charts/lab.css?v=46">
 <link rel="stylesheet" href="/static/charts/labstep.css?v=1">
@@ -74,7 +74,12 @@
     <button class="rail-btn" type="button" data-tool="trend" title="Trend line" aria-pressed="false"><span class="icw" data-icon="trend"></span></button>
     <button class="rail-btn" type="button" data-tool="ray" title="Ray" aria-pressed="false"><span class="icw" data-icon="ray"></span></button>
     <button class="rail-btn" type="button" data-tool="xline" title="Extended line" aria-pressed="false"><span class="icw" data-icon="xline"></span></button>
+    <button class="rail-btn" type="button" data-tool="arrow" title="Arrow" aria-pressed="false"><span class="icw" data-icon="arrow"></span></button>
+    <button class="rail-btn" type="button" data-tool="channel" title="Parallel channel" aria-pressed="false"><span class="icw" data-icon="channel"></span></button>
+    <button class="rail-btn" type="button" data-tool="note" title="Note" aria-pressed="false"><span class="icw" data-icon="note"></span></button>
+    <button class="rail-btn" type="button" data-tool="avwap" title="Anchored VWAP" aria-pressed="false"><span class="icw" data-icon="avwap"></span></button>
     <button class="rail-btn" type="button" data-tool="hline" title="Horizontal line" aria-pressed="false"><span class="icw" data-icon="hline"></span></button>
+    <button class="rail-btn" type="button" data-tool="alert" title="Price alert" aria-pressed="false"><span class="icw" data-icon="alert"></span></button>
     <button class="rail-btn" type="button" data-tool="vline" title="Vertical line" aria-pressed="false"><span class="icw" data-icon="vline"></span></button>
     <button class="rail-btn" type="button" data-tool="rect" title="Rectangle" aria-pressed="false"><span class="icw" data-icon="rect"></span></button>
     <button class="rail-btn" type="button" data-tool="fib" title="Fib retracement" aria-pressed="false"><span class="icw" data-icon="fib"></span></button>
@@ -86,6 +91,7 @@
       <button class="rail-btn" type="button" id="railMagnet" title="Magnet off" aria-label="Magnet off" aria-pressed="false"><span class="icw" data-icon="magnet"></span></button>
       <button class="rail-corner" type="button" id="railMagnetMore" title="Magnet mode" aria-label="Magnet mode" aria-haspopup="menu" aria-expanded="false"></button>
     </div>
+    <button class="rail-btn" type="button" id="railObjects" title="Objects on this symbol (undo: ⌘Z)"><span class="icw" data-icon="objects"></span></button>
     <button class="rail-btn" type="button" id="railClear" title="Remove drawings"><span class="icw" data-icon="trash"></span></button>
   </nav>
   <div class="grid" id="grid"></div>
@@ -119,19 +125,19 @@
 <div class="rail-tip" id="railTip" role="status" hidden></div>
 <script src="/static/nobacknav.js?v=33"></script>
 <script src="/static/vendor/lightweight-charts-5.2.1.js?v=33"></script>
-<script src="/static/charts/icons.js?v=33"></script>
+<script src="/static/charts/icons.js?v=34"></script>
 <script src="/static/charts/spring.js?v=33"></script>
-<script src="/static/charts/catalog.js?v=34"></script>
+<script src="/static/charts/catalog.js?v=35"></script>
 <script src="/static/charts/primitives.js?v=36"></script>
-<script src="/static/charts/drawstyle.js?v=33"></script>
-<script src="/static/charts/drawings.js?v=33"></script>
+<script src="/static/charts/drawstyle.js?v=34"></script>
+<script src="/static/charts/drawings.js?v=34"></script>
 <script src="/static/charts/position.js?v=33"></script>
-<script src="/static/charts/settings.js?v=35"></script>
+<script src="/static/charts/settings.js?v=36"></script>
 <script src="/static/charts/dataexport.js?v=35"></script>
 <script src="/static/charts/events.js?v=33"></script>
 <script src="/static/charts/scrollback.js?v=33"></script>
-<script src="/static/charts/cell.js?v=37"></script>
-<script src="/static/charts/settings-dialog.js?v=37"></script>
+<script src="/static/charts/cell.js?v=38"></script>
+<script src="/static/charts/settings-dialog.js?v=38"></script>
 <script src="/static/charts/indicator-settings-dialog.js?v=36"></script>
 <script src="/static/charts/chartmenu.js?v=33"></script>
 <script src="/static/charts/tradepure.js?v=33"></script>
@@ -144,9 +150,9 @@
 <script src="/static/charts/panellayout.js?v=33"></script>
 <script src="/static/charts/layouts.js?v=33"></script>
 <script src="/static/charts/presets.js?v=33"></script>
-<script src="/static/charts/app.js?v=37"></script>
+<script src="/static/charts/app.js?v=38"></script>
 <script src="/static/charts/labcode.js?v=15"></script>
-<script src="/static/charts/lab.js?v=53"></script>
+<script src="/static/charts/lab.js?v=54"></script>
 <script src="/static/charts/labstep.js?v=1"></script>
 <script src="/static/hb-glass.js?v=2"></script>
 </body>

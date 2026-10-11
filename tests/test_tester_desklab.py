@@ -34,6 +34,7 @@ def sha(text):
 def c(tmp_path, monkeypatch):
     monkeypatch.setenv(store.ENV_ROOT, str(tmp_path / "desklab"))
     monkeypatch.setattr(sandbox, "available", lambda: True)
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", False)     # a promote starts no run here unless a test says so
     return TestClient(app(tmp_path), base_url="http://localhost:8852")
 
 
@@ -494,3 +495,173 @@ def test_the_list_names_the_built_ins_the_desk_runs(c, monkeypatch):
     assert c.get("/api/tester/desklab").json()["builtins"] == []
     monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: ["gc_nfp", "nq930"])
     assert c.get("/api/tester/desklab").json()["builtins"] == ["gc_nfp", "nq930"]
+
+
+# ---- the research the Desk's panel shows: the saved run on the unseen days and the prop sim (GET /api/tester/desklab/results) ----
+UNSEEN = {"kind": "custom", "start": "2025-07-01", "end": "2026-10-11", "label": "Test", "holdout": True}
+HEAD = {"eval_pass_p": 0.41, "bust_p": 0.59, "median_days_to_pass": 14, "funded_payout_p": 0.3, "funded_expected_cheque": 602.3}
+
+
+def write_run(tmp_path, rid, name="nq_bars", code=CODE, rng=UNSEEN, inputs=None, qty=2, status="done", net=900.0):
+    d = tmp_path / "state" / "tester" / "runs" / rid
+    d.mkdir(parents=True)
+    inputs = inputs or {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0}
+    (d / "request.json").write_text(json.dumps({"strategy": f"draft_{name}", "id": rid, "draft_sha256": sha(code),
+                                                "inputs": inputs, "qty": qty, "range": rng}))
+    (d / "status.json").write_text(json.dumps({"id": rid, "status": status}))
+    (d / "trades.json").write_text("[]")
+    if status == "done":
+        (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs, "qty": qty, "range": rng,
+                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net}}}}))
+    return rid
+
+
+def test_results_show_the_saved_unseen_run_of_this_copy_and_the_prop_sim_of_both_runs(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    scored = []
+
+    def fake(trades, req):
+        scored.append(req["prop_rules"])
+        return {"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False
+    monkeypatch.setattr(tester_api, "_run_propsim", fake)
+    draft(drafts_dir)
+    build = make_run()
+    (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
+    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
+    got = c.get("/api/tester/desklab/results", headers=DESK)
+    assert got.headers["access-control-allow-origin"] == DESK["origin"]
+    assert got.json() == {"results": {"nq_bars": {"unseen": None, "unseen_state": "none", "curve": None, "prop": {
+        "build": {"account": "LucidFlex 50K", **HEAD}, "unseen": None}}}}
+    # runs that are NOT this copy on the unseen days: other code, other settings, another size, all the data, not finished
+    write_run(tmp_path, "20261011-120001-draft_nq_bars-aa01", code=CODE + "# other\n")
+    write_run(tmp_path, "20261011-120002-draft_nq_bars-aa02", inputs={"lookback": 9, "sl_pts": 20.0, "tp_pts": 40.0})
+    write_run(tmp_path, "20261011-120003-draft_nq_bars-aa03", qty=1)
+    write_run(tmp_path, "20261011-120004-draft_nq_bars-aa04", rng={**UNSEEN, "start": "2021-09-22"})
+    write_run(tmp_path, "20261011-120005-draft_nq_bars-aa05", status="running")
+    write_run(tmp_path, "20261011-120006-draft_nq_bars-aa06", rng=RANGE)
+    r = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    assert r["unseen"] is None and r["unseen_state"] == "pending", "the one that is still running is the copy's own, not a result"
+    # the copy's own: the newest one, with a setting saved as text counted the same
+    write_run(tmp_path, "20261011-110000-draft_nq_bars-bb01", net=100.0)
+    newest = write_run(tmp_path, "20261011-130000-draft_nq_bars-bb02", inputs={"lookback": "8", "sl_pts": 20, "tp_pts": 40.0})
+    res = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    assert res["unseen"] == {"id": newest, "range": UNSEEN, "net": 900.0, "trades": 41, "win_rate": 48.8,
+                             "profit_factor": 1.31, "max_drawdown": -2100.0}
+    assert res["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
+    assert tester_api.DESKLAB_PROP == "lucid-pro-50k-no-dll@2026-10-11"
+    assert scored == [tester_api.DESKLAB_PROP] * 2, "each run is scored once, on the pipeline's account (LucidPro no-DLL), and kept"
+
+
+def test_results_answer_the_desk_page_only_and_a_lost_run_has_no_prop_sim(c, tmp_path, drafts_dir, make_run):
+    assert c.get("/api/tester/desklab/results", headers=EVIL).status_code == 403
+    assert c.get("/api/tester/desklab/results", headers=DESK).json() == {"results": {}}
+    draft(drafts_dir)
+    build = make_run()
+    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
+    (tmp_path / "state" / "tester" / "runs" / build / "status.json").write_text(json.dumps({"id": build, "status": "error"}))
+    assert c.get("/api/tester/desklab/results", headers=DESK).json() == {"results": {"nq_bars": {
+        "unseen": None, "unseen_state": "none", "curve": None, "prop": {"build": None, "unseen": None}}}}
+
+
+def test_a_setting_the_record_leaves_out_is_the_codes_default_when_a_run_is_matched(tmp_path, monkeypatch):
+    """A record may carry fewer settings than its code has (the Desk's Setup panel adds one when it is changed): a run that
+    resolved the rest to the code's defaults is still the same copy; one that changed a default is not."""
+    from homebase.charts import deskresults
+    rec = {"name": "nq_bars", "id": "draft_nq_bars", "source": CODE, "sha256": sha(CODE), "qty": 2, "params": {"lookback": 8}}
+    full = deskresults.resolved_params(rec)
+    assert full["lookback"] == 8 and set(full) == {"lookback", "sl_pts", "tp_pts"}, "the code's own defaults fill the rest"
+    runs = tmp_path / "runs"
+    write_run(tmp_path.joinpath("x"), "20261011-140000-draft_nq_bars-cc01", inputs=dict(full))
+    write_run(tmp_path.joinpath("x"), "20261011-140001-draft_nq_bars-cc02", inputs={**full, "sl_pts": full["sl_pts"] + 5})
+    runs = tmp_path / "x" / "state" / "tester" / "runs"
+    got = deskresults.unseen_run(runs, rec)
+    assert got and got["id"] == "20261011-140000-draft_nq_bars-cc01"
+
+
+def test_a_promote_starts_the_unseen_days_run_once_and_a_failed_one_is_not_started_again(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    from homebase.backtest.runner import RunManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
+    at_et(monkeypatch, 2026, 10, 12, 12, 0)
+    calls, refuse = [], []
+
+    def fake_submit(self, body):
+        if refuse:
+            raise ValueError("Backtests do not start 09:20-09:35 ET.")
+        calls.append(body)
+        write_run(tmp_path, f"20261012-12000{len(calls)}-draft_nq_bars-dd0{len(calls)}", status="queued")
+        return "x"
+    monkeypatch.setattr(RunManager, "submit", fake_submit)
+    draft(drafts_dir)
+    # refused at the promote: the record is made, nothing started, and the next ask of the results tries again
+    refuse.append(1)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True and calls == []
+    assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "none"
+    refuse.clear()
+    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    assert got["unseen_state"] == "pending" and got["unseen"] is None and len(calls) == 1
+    # the request reads the unseen days as promoted: its own settings, size and costs
+    body = calls[0]
+    assert body == {"strategy": "draft_nq_bars", "inputs": {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0},
+                    "range": {"kind": "custom", "start": "2025-07-01", "end": "2026-10-12"}, "qty": 2,
+                    "commission": 2.5, "slippage_ticks": 0.0}
+    # waiting or going: asked again, nothing more starts
+    for _ in range(2):
+        assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "pending"
+    assert len(calls) == 1
+    # it ended in error: shown as failed, and never started again by itself
+    run_dir = tmp_path / "state" / "tester" / "runs" / "20261012-120001-draft_nq_bars-dd01"
+    (run_dir / "status.json").write_text(json.dumps({"id": run_dir.name, "status": "error"}))
+    for _ in range(2):
+        assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "failed"
+    assert len(calls) == 1
+    # a re-promote of the same copy does not read the unseen days again either
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True and len(calls) == 1
+
+
+def test_a_promote_starts_nothing_when_the_copys_unseen_run_is_already_saved(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    from homebase.backtest.runner import RunManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
+    monkeypatch.setattr(RunManager, "submit", lambda self, body: (_ for _ in ()).throw(AssertionError("a run was started")))
+    draft(drafts_dir)
+    write_run(tmp_path, "20261011-110000-draft_nq_bars-ee01")
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    assert got["unseen_state"] == "done" and got["unseen"]["id"] == "20261011-110000-draft_nq_bars-ee01"
+
+
+def test_the_curve_of_an_unseen_run_is_its_running_total_by_day_after_costs(tmp_path):
+    from homebase.charts import deskresults
+    runs = tmp_path / "runs"
+    (runs / "r1").mkdir(parents=True)
+    trades = [{"date": "2025-07-03", "net": -500.0}, {"date": "2025-07-01", "net": 1000.0}, {"date": "2025-07-01", "net": -250.5},
+              {"date": "2025-07-08", "net": 3000.0}, {"date": "bad", "net": "x"}, "junk"]
+    (runs / "r1" / "trades.json").write_text(json.dumps({"trades": trades}))
+    assert deskresults.curve_of(runs, "r1") == {"days": ["2025-07-01", "2025-07-03", "2025-07-08"], "vals": [749.5, 249.5, 3249.5]}
+    (runs / "r1" / "trades.json").write_text(json.dumps(trades[:2]))
+    assert deskresults.curve_of(runs, "r1") == {"days": ["2025-07-01", "2025-07-03"], "vals": [1000.0, 500.0]}
+    (runs / "r1" / "trades.json").write_text(json.dumps(trades[:1]))
+    assert deskresults.curve_of(runs, "r1") is None, "one trading day is not a curve"
+    assert deskresults.curve_of(runs, "gone") is None
+    (runs / "r1" / "trades.json").write_text("not json")
+    assert deskresults.curve_of(runs, "r1") is None
+
+
+def test_the_results_carry_the_curve_of_the_unseen_run(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    monkeypatch.setattr(tester_api, "_run_propsim", lambda trades, req: ({"rules": {"label": "x"}, "headline": HEAD, "breach": {}}, False))
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    rid = write_run(tmp_path, "20261011-130000-draft_nq_bars-ff01")
+    (tmp_path / "state" / "tester" / "runs" / rid / "trades.json").write_text(json.dumps(
+        [{"date": "2025-07-01", "net": 100.0}, {"date": "2025-07-02", "net": -40.0}]))
+    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    assert got["curve"] == {"days": ["2025-07-01", "2025-07-02"], "vals": [100.0, 60.0]}
+
+
+def test_the_desks_show_on_chart_carries_a_run_the_lab_page_takes_once_with_the_strategy(c, drafts_dir):
+    draft(drafts_dir)
+    ok = c.post("/api/tester/desklab/open", json={"name": "nq_bars", "run": "20261011-nq_bars-1"}, headers=DESK)
+    assert ok.status_code == 200 and ok.json() == {"ok": True, "name": "nq_bars"}
+    assert c.get("/api/tester/lab-open").json() == {"name": "nq_bars", "run": "20261011-nq_bars-1"}
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # taken once
+    for bad in ({"name": "nq_bars", "run": "../etc"}, {"name": "nq_bars", "run": 7}, {"name": "nq_bars", "run": "a", "x": 1}):
+        assert c.post("/api/tester/desklab/open", json=bad, headers=DESK).status_code == 400
+    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # a refusal asks nothing

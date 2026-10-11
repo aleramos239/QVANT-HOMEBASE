@@ -39,6 +39,8 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
     ['CANDLES', [
+      { label: 'Chart type', select: { key: 'chartType',
+        choices: [['candles', 'Candles'], ['heikin', 'Heikin Ashi'], ['bars', 'Bars (OHLC)'], ['line', 'Line (close)']] } },
       { label: 'Colour bars based on previous close', check: 'prevClose' },
       { label: 'Body', check: 'body', colors: [['bodyUp', 'up'], ['bodyDown', 'down']] },
       { label: 'Borders', check: 'borders', colors: [['borderUp', 'up'], ['borderDown', 'down']] },

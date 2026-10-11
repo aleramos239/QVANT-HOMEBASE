@@ -96,6 +96,38 @@ function distToSegment(px, py, ax, ay, bx, by) {
   return Math.hypot(px - (ax + u * dx), py - (ay + u * dy));
 }
 
+const ONE_POINT = new Set(['note', 'avwap']);
+const ALERT_COLOR = '#F5A623';
+const UNDO_MAX = 50;
+
+/* An anchored VWAP's line: the volume-weighted average of (high + low + close) / 3 from the bar its point sits on to the
+   last bar, [{ms, v}]. A bar with no volume adds nothing; nothing is drawn until some volume has traded. */
+function avwapPoints(d, bars) {
+  if (!bars || !bars.length) return [];
+  const i0 = barIndexAt(bars, d.points[0].t);
+  let pv = 0, vol = 0;
+  const out = [];
+  for (let i = Math.max(0, i0); i < bars.length; i++) {
+    const b = bars[i], v = b.v > 0 ? b.v : 0;
+    pv += ((b.h + b.l + b.c) / 3) * v;
+    vol += v;
+    if (vol > 0) out.push({ ms: b.ms, v: pv / vol });
+  }
+  return out;
+}
+
+/* A channel's two lines as pixel ends [[x, y, x, y], [x, y, x, y]]: the one through its first two points (extended the way
+   a trend line is) and the parallel through the third (none yet while it is being placed). */
+function channelLines(hs, style, geo) {
+  const [[x0, y0], [x1, y1]] = hs;
+  const a = DS.lineEnds('trend', x0, y0, x1, y1, geo.w, geo.h || 0, style);
+  if (!hs[2]) return [a];
+  const [x2, y2] = hs[2];
+  if (x1 === x0) { const kx = x2 - x0; return [a, [a[0] + kx, a[1], a[2] + kx, a[3]]]; }
+  const k = y2 - (y0 + (x2 - x0) * (y1 - y0) / (x1 - x0));
+  return [a, [a[0], a[1] + k, a[2], a[3] + k]];
+}
+
 /* Pixel positions [[x, y], ...] of drawing d's handles, or null when a point cannot be placed:
    trend 0/1 = its points; rect 0 (t0,p0), 1 (t1,p1), 2 (t0,p1), 3 (t1,p0), then its four side
    midpoints (TradingView-style) -- 4 top, 5 bottom (price only; "top" is whichever corner has the
@@ -113,8 +145,16 @@ function handlePoints(d, geo) {
     const x = geo.x(P[0].t);
     return x == null ? null : [[x, (geo.h || 0) / 2]];
   }
+  if (ONE_POINT.has(d.type)) {     // a note and an anchored VWAP: one handle, at the point
+    const x = geo.x(P[0].t), y = geo.y(P[0].p);
+    return x == null || y == null ? null : [[x, y]];
+  }
   const x0 = geo.x(P[0].t), x1 = geo.x(P[1].t), y0 = geo.y(P[0].p), y1 = geo.y(P[1].p);
   if (x0 == null || x1 == null || y0 == null || y1 == null) return null;
+  if (d.type === 'channel' && P[2]) {     // the third handle is the point the parallel line runs through
+    const x2 = geo.x(P[2].t), y2 = geo.y(P[2].p);
+    return x2 == null || y2 == null ? null : [[x0, y0], [x1, y1], [x2, y2]];
+  }
   if (d.type !== 'rect') return [[x0, y0], [x1, y1]];
   const midX = (x0 + x1) / 2, midY = (y0 + y1) / 2;
   const top = Math.min(y0, y1), bot = Math.max(y0, y1), left = Math.min(x0, x1), right = Math.max(x0, x1);
@@ -131,7 +171,26 @@ function hitTest(d, pt, geo) {
   }
   if (d.type === 'hline') return Math.abs(pt.y - hs[0][1]) <= LINE_TOL ? { part: 'body' } : null;
   if (d.type === 'vline') return Math.abs(pt.x - hs[0][0]) <= LINE_TOL ? { part: 'body' } : null;
-  const [[x0, y0], [x1, y1]] = hs, style = DS.normalize(d.type, d.style);
+  const style = DS.normalize(d.type, d.style);
+  if (d.type === 'note') {         // its text box, as wide as the text is about (the canvas measures it exactly when it draws)
+    const w = String(style.text || ' ').length * style.fontSize * 0.6 + 12, h = style.fontSize + 10;
+    const inside = pt.x >= hs[0][0] - LINE_TOL && pt.x <= hs[0][0] + w + LINE_TOL && Math.abs(pt.y - hs[0][1]) <= h / 2 + LINE_TOL;
+    return inside ? { part: 'body' } : null;
+  }
+  if (d.type === 'avwap') {        // along its line
+    const pts = avwapPoints(d, geo.bars).map((q) => [geo.x(q.ms), geo.y(q.v)]).filter(([x, y]) => x != null && y != null);
+    for (let i = 1; i < pts.length; i++) {
+      if (distToSegment(pt.x, pt.y, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1]) <= LINE_TOL) return { part: 'body' };
+    }
+    return null;
+  }
+  if (d.type === 'channel') {      // either of its two lines
+    for (const [ax, ay, bx, by] of channelLines(hs, style, geo)) {
+      if (distToSegment(pt.x, pt.y, ax, ay, bx, by) <= LINE_TOL) return { part: 'body' };
+    }
+    return null;
+  }
+  const [[x0, y0], [x1, y1]] = hs;
   if (DS.isLine(d.type)) {         // the line as it is drawn: a ray or an extended one is grabbed along its whole run
     const [ax, ay, bx, by] = DS.lineEnds(d.type, x0, y0, x1, y1, geo.w, geo.h || 0, style);
     return distToSegment(pt.x, pt.y, ax, ay, bx, by) <= LINE_TOL ? { part: 'body' } : null;
@@ -169,6 +228,8 @@ function setPoint(d, k, t, p, ctx) {
   if (isPos(d)) return Pos().setHandle(d, k, t, p, ctx);
   if (d.type === 'hline') return { ...d, points: [{ p }] };
   if (d.type === 'vline') return { ...d, points: [{ t }] };
+  if (ONE_POINT.has(d.type)) return { ...d, points: [{ t, p }] };
+  if (d.type === 'channel') return { ...d, points: d.points.map((q, i) => (i === k ? { t, p } : q)) };
   const [a, b] = d.points;
   let points;
   if (d.type === 'rect' && k >= 4) {
@@ -329,16 +390,52 @@ class Store {
   }
 
   add(root, d) { this.set(root, [...this.list(root), d]); }
-  replace(root, d) { this.set(root, this.list(root).map((x) => (x.id === d.id ? d : x))); }
+  /* `quiet`: not an undo step of its own (a settings dialog's live preview, an alert marked gone off). */
+  replace(root, d, quiet = false) { this.set(root, this.list(root).map((x) => (x.id === d.id ? d : x)), quiet); }
   remove(root, id) { this.set(root, this.list(root).filter((x) => x.id !== id)); }
   clear(root) { this.set(root, []); }
 
-  set(root, list) {
+  /* Every change is one undo step (the list before it), up to UNDO_MAX; a new change drops the redo steps. The steps live
+     as long as the page: a reload starts clean. */
+  set(root, list, quiet = false) {
+    const s = this.st(root);
+    if (!quiet) this.mark(root, s.list);
+    this.put(root, list);
+  }
+
+  put(root, list) {
     const s = this.st(root);
     s.list = list;
     this.emit(root);
     clearTimeout(s.timer);
     s.timer = setTimeout(() => { s.timer = null; this.save(root); }, this.delay);
+  }
+
+  /* `before` (a list as it was) becomes the next undo step, for a change made in several quiet ones. */
+  mark(root, before) {
+    const s = this.st(root);
+    (s.undo || (s.undo = [])).push(before);
+    if (s.undo.length > UNDO_MAX) s.undo.shift();
+    s.redo = [];
+  }
+
+  canUndo(root) { const s = this.st(root); return !!(s.undo && s.undo.length); }
+  canRedo(root) { const s = this.st(root); return !!(s.redo && s.redo.length); }
+
+  undo(root) {
+    const s = this.st(root);
+    if (!this.canUndo(root)) return false;
+    (s.redo || (s.redo = [])).push(s.list);
+    this.put(root, s.undo.pop());
+    return true;
+  }
+
+  redo(root) {
+    const s = this.st(root);
+    if (!this.canRedo(root)) return false;
+    (s.undo || (s.undo = [])).push(s.list);
+    this.put(root, s.redo.pop());
+    return true;
   }
 
   async save(root) {
@@ -450,12 +547,25 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
     if (style.timeLabel) drawTag(ctx, timeTag(d.points[0].t), x + 4, paneH - 12, color, P.onAccent, paneW, font);
     return;
   }
+  if (d.type === 'note') { drawNote(ctx, hs, style, color, P); return; }
+  if (d.type === 'avwap') { drawAvwap(ctx, d, geo, P, paneW, style, color, tick, font); return; }
+  if (d.type === 'channel') { drawChannel(ctx, hs, geo, P, style, color); return; }
   const [[x0, y0], [x1, y1]] = hs;
   if (DS.isLine(d.type)) {
     const [ex0, ey0, ex1, ey1] = DS.lineEnds(d.type, x0, y0, x1, y1, paneW, paneH, style);
     ctx.lineCap = 'round';
     ctx.beginPath(); ctx.moveTo(ex0, ey0); ctx.lineTo(ex1, ey1); ctx.stroke();
     ctx.setLineDash([]);
+    if (d.type === 'arrow' && (x0 !== x1 || y0 !== y1)) {         // the head, at the second point
+      const ang = Math.atan2(y1 - y0, x1 - x0), L = 9 + style.width * 2;
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x1 - L * Math.cos(ang - 0.45), y1 - L * Math.sin(ang - 0.45));
+      ctx.lineTo(x1 - L * Math.cos(ang + 0.45), y1 - L * Math.sin(ang + 0.45));
+      ctx.closePath();
+      ctx.fill();
+    }
     drawLabel(ctx, d.type, hs, style, paneW);
     const [a, b] = d.points;
     if (style.stats && mctx && (a.t !== b.t || a.p !== b.p)) {
@@ -503,6 +613,59 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
     ctx.fillText(Cat.fmtPrice(lo, tick), x + w - 5, y + h - 4);
     if (style.midline) { ctx.textBaseline = 'bottom'; ctx.fillText(Cat.fmtPrice(roundToTick((hi + lo) / 2, tick), tick), x + w - 5, y + h / 2 - 3); }
   }
+}
+
+/* A note: its text in a small box, the point at the box's left edge. */
+function drawNote(ctx, hs, style, color, P) {
+  const [[x, y]] = hs, text = style.text || ' ';
+  ctx.font = `${style.bold ? 'bold ' : ''}${style.fontSize}px ${window.HBCell.FONT}`;
+  const w = ctx.measureText(text).width + 12, h = style.fontSize + 10;
+  ctx.fillStyle = style.fillColor || P.accentSoft;
+  ctx.fillRect(x, y - h / 2, w, h);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.setLineDash([]);
+  ctx.strokeRect(Math.round(x) + 0.5, Math.round(y - h / 2) + 0.5, Math.round(w), Math.round(h));
+  ctx.fillStyle = style.textColor;
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + 6, y);
+}
+
+/* An anchored VWAP: the line from its bar to the last one, with its latest value tagged at the end. */
+function drawAvwap(ctx, d, geo, P, paneW, style, color, tick, font) {
+  const pts = avwapPoints(d, geo.bars).map((q) => [geo.x(q.ms), geo.y(q.v), q.v]).filter(([x, y]) => x != null && y != null);
+  if (!pts.length) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+  ctx.stroke();
+  ctx.setLineDash([]);
+  const [lx, ly, lv] = pts[pts.length - 1];
+  drawTag(ctx, Cat.fmtPrice(lv, tick), lx + 8, ly, color, P.onAccent, paneW, font);
+}
+
+/* A parallel channel: its line, the parallel through the third point, the band between them and (optionally) the middle. */
+function drawChannel(ctx, hs, geo, P, style, color) {
+  const lines = channelLines(hs, style, geo);
+  ctx.lineCap = 'round';
+  if (lines.length === 2) {
+    const [[ax, ay, bx, by], [cx, cy, ex, ey]] = lines;
+    ctx.fillStyle = style.fillColor || P.accentSoft;
+    ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.lineTo(ex, ey); ctx.lineTo(cx, cy); ctx.closePath(); ctx.fill();
+  }
+  ctx.strokeStyle = color;
+  ctx.lineWidth = style.width;
+  ctx.setLineDash(DS.dashFor(style));
+  for (const [ax, ay, bx, by] of lines) { ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke(); }
+  if (lines.length === 2 && style.midline) {
+    const [[ax, ay, bx, by], [cx, cy, ex, ey]] = lines;
+    ctx.lineWidth = 1;
+    ctx.setLineDash(DS.dashFor({ lineStyle: 'dashed' }));
+    ctx.beginPath(); ctx.moveTo((ax + cx) / 2, (ay + cy) / 2); ctx.lineTo((bx + ex) / 2, (by + ey) / 2); ctx.stroke();
+  }
+  ctx.setLineDash([]);
 }
 
 /* A Fib retracement: a faint line between its two points, then each level across the span of the two (to the pane's
@@ -633,7 +796,7 @@ class Controller {
     const c = this.cell;
     if (!c.chart || !c.bars.length) return null;
     const ctx = this.ctx();
-    return { x: (t) => timeToX(t, ctx), y: (p) => c.candles.priceToCoordinate(p), w: this.paneW(), h: this.paneH() };
+    return { x: (t) => timeToX(t, ctx), y: (p) => c.candles.priceToCoordinate(p), w: this.paneW(), h: this.paneH(), bars: c.bars };
   }
   paneW() { return this.box.clientWidth - this.cell.chart.priceScale('right').width(); }
   paneH() { return this.cell.chart.panes()[0].getHeight(); }
@@ -669,9 +832,11 @@ class Controller {
       seen.add(d.id);
       const style = DS.normalize('hline', d.style), LS = window.LightweightCharts.LineStyle;
       const LMAP = { solid: LS.Solid, dashed: LS.Dashed, dotted: LS.Dotted };
-      const opts = { price: d.points[0].p, color: d.color || P.accent,
+      const al = d.alert, spent = !!(al && al.fired);       // an alert that has gone off is faint and dotted
+      const opts = { price: d.points[0].p, color: spent ? '#787B86' : d.color || P.accent,
         lineWidth: Math.min(4, style.width + (d.id === this.sel ? 1 : 0)),
-        lineStyle: LMAP[style.lineStyle] ?? LS.Solid, axisLabelVisible: style.axisLabel, title: '' };
+        lineStyle: spent ? LS.Dotted : LMAP[style.lineStyle] ?? LS.Solid, axisLabelVisible: style.axisLabel,
+        title: al ? (spent ? 'Alert (went off)' : `Alert ${al.dir === 'up' ? 'above' : 'below'}`) : '' };
       const line = this.hlines.get(d.id);
       if (line) line.applyOptions(opts); else this.hlines.set(d.id, this.cell.candles.createPriceLine(opts));
     }
@@ -733,7 +898,13 @@ class Controller {
       this.own(e);
       if (this.mode === 'click') { this.finish(this.place ? this.placedEnd(at, e.shiftKey) : at); return; }
       if (tool === 'hline') { this.commit({ type: 'hline', points: [{ p: at.p }] }); return; }
+      if (tool === 'alert') {         // a price alert: a horizontal line that goes off when the price crosses it
+        const last = this.cell.bars.length ? this.cell.bars[this.cell.bars.length - 1].c : at.p;
+        this.commit({ type: 'hline', points: [{ p: at.p }], color: ALERT_COLOR, alert: { dir: at.p >= last ? 'up' : 'down', fired: false } });
+        return;
+      }
       if (tool === 'vline') { this.commit({ type: 'vline', points: [{ t: at.t }] }); return; }
+      if (tool === 'note' || tool === 'avwap') { this.commit({ type: tool, points: [{ t: at.t, p: at.p }] }); return; }
       if (tool === 'long' || tool === 'short') { this.commit(this.newPosition(tool, at)); return; }
       const start = { t: at.t, p: at.p };
       if (tool === 'measure') this.measure = { a: start, b: start, done: false };
@@ -812,7 +983,7 @@ class Controller {
     this.release();
     this.setCursor(null);
     // saved only when a point really moved: a drag that ends where it started PUTs nothing
-    if (cur && !samePoints(orig, cur)) this.host.drawings.replace(this.root, cur); else this.refresh();
+    if (cur && !samePoints(orig, cur)) this.host.drawings.replace(this.root, this.rearmed(cur)); else this.refresh();
   }
 
   finish(at) {
@@ -831,6 +1002,7 @@ class Controller {
     this.place = null;
     const [a, b] = d.points;
     if (a.t === b.t && a.p === b.p) { this.prim.redraw(); this.host.toolDone(); return; }   // nothing to draw
+    if (d.type === 'channel') d.points = [a, b, this.channelThird(a, b)];
     this.commit(d);
   }
 
@@ -845,11 +1017,40 @@ class Controller {
 
   commit(d) {
     const style = this.startingStyle(d.type);
-    const full = { id: newId(), ...d, color: '#2962FF', ...(style ? { style } : {}) };
+    const full = { id: newId(), color: '#2962FF', ...d, ...(style ? { style } : {}) };
     this.sel = full.id;
     this.release();
     this.host.drawings.add(this.root, full);   // every chart of this symbol refreshes
     this.host.toolDone();
+    // a note is its text: its settings open at once so it can be written (the drawing is in the store by then)
+    if (full.type === 'note' && this.host.onDrawingSettings) setTimeout(() => this.host.onDrawingSettings(this.cell, full), 0);
+  }
+
+  /* A moved alert is armed again from where the price is now: it goes off when the price crosses its NEW level. */
+  rearmed(d) {
+    if (!d.alert || d.type !== 'hline') return d;
+    const bars = this.cell.bars, last = bars.length ? bars[bars.length - 1].c : d.points[0].p;
+    return { ...d, alert: { dir: d.points[0].p >= last ? 'up' : 'down', fired: false } };
+  }
+
+  /* The last price against every armed alert of this symbol: one that is crossed goes to the host (which marks it gone off
+     and says so). The last TRADED price, not the bar's high or low: an alert set mid-bar must not go off on a high
+     that was already in before it was placed. */
+  checkAlerts() {
+    const bars = this.cell.bars, b = bars.length ? bars[bars.length - 1] : null;
+    if (!b || b.blank || !this.host.onAlert) return;
+    for (const d of this.host.drawings.list(this.root)) {
+      if (d.type !== 'hline' || !d.alert || d.alert.fired) continue;
+      const p = d.points[0].p;
+      if (d.alert.dir === 'up' ? b.c >= p : b.c <= p) this.host.onAlert(this.cell, d, b.c);
+    }
+  }
+
+  /* A new channel's third point: the parallel starts half the line's own rise (at least 20 ticks) below its first
+     point, and is dragged from its handle. */
+  channelThird(a, b) {
+    const tick = this.cell.tick || 0.25, gap = Math.max(Math.abs(b.p - a.p) * 0.5, tick * 20);
+    return { t: a.t, p: roundToTick(a.p - gap, tick) };
   }
 
   /* A new long/short box at the pointer: risk = the price distance of 8% of the price pane's height (on the

@@ -224,6 +224,7 @@ function hostFor(id) {
     onPosition(cell, d) { positionDialog(cell, d); },
     onDrawingSettings(cell, d) { drawingSettingsDialog(cell, d); },
     onSelectionChanged(cell, d) { syncDrawToolbar(cell, d); },
+    onAlert(cell, d, price) { alertWentOff(cell, d, price); },
     styleDefault(type) { return drawStyleDefaults.get(type) || null; },
     onChartMenu(cell, at) { chartMenu(cell, at); },
     onIndicatorMenu(cell, uid, o) { indicatorMenu(cell, uid, o); },
@@ -1345,6 +1346,30 @@ function settingsDialog(cell, uid) {
 
 /* Double-click on a long/short box: Entry, Target, Stop (rounded to the tick) and Qty. OK checks the order for
    the type; a wrong one shows why under the fields and saves nothing. */
+/* A price alert was crossed: marked gone off (saved with the chart), said on the status bar and in a toast, a short beep, and a
+   desktop notice when the browser allows one. It never goes off twice: it is armed again from its settings or by moving it. */
+function alertWentOff(cell, d, price) {
+  const root = cell.dc ? cell.dc.root : cell.cfg.root;
+  if (!patchDrawing(root, d.id, { alert: { dir: d.alert.dir, fired: true } }, true)) return;
+  const text = `${C.rootName(root)} crossed ${d.points[0].p} (now ${price})`;
+  sbNote(`Alert: ${text}`);
+  window.HBDeskClient?.toast('ok', `Alert: ${text}`);
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)(), o = ac.createOscillator(), g = ac.createGain();
+    o.frequency.value = 880; g.gain.value = 0.08;
+    o.connect(g); g.connect(ac.destination);
+    o.start(); o.stop(ac.currentTime + 0.25);
+  } catch (e) { /* no sound is fine */ }
+  try {
+    if (window.Notification && Notification.permission === 'granted') new Notification('Price alert', { body: text });
+  } catch (e) { /* the status bar and toast already said it */ }
+}
+
+/* The interval choices of a drawing's "show on" rows: Any, then every time interval. */
+function visChoices() {
+  return [['', 'Any'], ...C.INTERVAL_GROUPS.flatMap(([, specs]) => specs).filter((x) => x.startsWith('time:')).map((x) => [x.slice(5), C.specLabel(x)])];
+}
+
 function positionDialog(cell, d) {
   const Pos = window.HBPosition, D = window.HBDrawings, tick = cell.tick, root = cell.dc ? cell.dc.root : cell.cfg.root;
   const box = openDialog(d.type === 'long' ? 'Long position' : 'Short position', 'small');
@@ -1364,6 +1389,19 @@ function positionDialog(cell, d) {
     form.appendChild(row);
     inputs[key] = ctl;
   }
+  // which intervals the box shows on (the same From / To a line's Visibility tab has): "Any" on both = everywhere
+  const vis0 = DS.normalizeVis(d.vis) || { min: null, max: null };
+  for (const [key, label] of [['visMin', 'Show from'], ['visMax', 'Show to']]) {
+    const row = mk('div', 'field'), id = `pos-${key}`, lab = mk('label', '', label), ctl = mk('select', '');
+    for (const [v, text] of visChoices()) { const o = mk('option', '', text); o.value = v; ctl.append(o); }
+    const cur = key === 'visMin' ? vis0.min : vis0.max;
+    ctl.value = cur == null ? '' : String(cur);
+    ctl.id = id;
+    lab.htmlFor = id;
+    row.append(lab, ctl);
+    form.appendChild(row);
+    inputs[key] = ctl;
+  }
   const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
   cancel.type = 'button';
   ok.type = 'button';
@@ -1375,10 +1413,16 @@ function positionDialog(cell, d) {
     const why = Pos.validate(d.type, entry, target, stop, qty, tick);
     if (why) { err.textContent = why; err.hidden = false; return; }
     const now = drawings.list(root).find((x) => x.id === d.id);
+    const bound = (k) => (inputs[k].value === '' ? null : Number(inputs[k].value));
+    let lo = bound('visMin'), hi = bound('visMax');
+    if (lo != null && hi != null && lo > hi) [lo, hi] = [hi, lo];      // "from" is never above "to"
+    const vis = DS.normalizeVis({ min: lo, max: hi });
     closeDialog();
     if (!now) return;   // removed meanwhile (on another chart of this symbol)
-    drawings.replace(root, { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
-      { t: now.points[2].t, p: stop }] });
+    const next = { ...now, qty, points: [{ t: now.points[0].t, p: entry }, { t: now.points[1].t, p: target },
+      { t: now.points[2].t, p: stop }] };
+    if (vis) next.vis = vis; else delete next.vis;       // no rule = shown everywhere: nothing stored
+    drawings.replace(root, next);
   };
   form.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.tagName === 'INPUT') { if (e.repeat) return; ok.click(); } });   // S7
   foot.append(cancel, ok);
@@ -1388,8 +1432,11 @@ function positionDialog(cell, d) {
 }
 
 /* ---- 2026-09-27 draw-tools plan: the floating per-drawing toolbar + its settings dialog ---- */
-const DRAW_TYPES = ['trend', 'ray', 'xline', 'hline', 'vline', 'rect', 'fib'];          // the types that take a style object at all
+const DRAW_TYPES = ['trend', 'ray', 'xline', 'arrow', 'channel', 'note', 'avwap', 'hline', 'vline', 'rect', 'fib'];          // the types that take a style object at all
 const isPosDrawing = (d) => d.type === 'long' || d.type === 'short';
+const DRAW_NAMES = { trend: 'Trend line', ray: 'Ray', xline: 'Extended line', arrow: 'Arrow', channel: 'Parallel channel', note: 'Note',
+  avwap: 'Anchored VWAP', rect: 'Rectangle', hline: 'Horizontal line', vline: 'Vertical line', fib: 'Fib retracement',
+  long: 'Long position', short: 'Short position' };
 const drawStyleDefaults = new Map();                    // type -> that tool's saved "__default__" preset payload
 async function loadDrawStyleDefaults() {
   for (const type of DRAW_TYPES) {
@@ -1454,13 +1501,13 @@ function colorSwatchMenu(anchor, get, set) {
 /* Merges `patch` onto the drawing's saved color/locked/style (style fields renormalized for its
    type, so a bad value never lands) and saves it -- every chart of the symbol, and this one's
    toolbar/dialog through the usual drawings store subscription. */
-function patchDrawing(root, id, patch) {
+function patchDrawing(root, id, patch, quiet = false) {
   const now = drawings.list(root).find((x) => x.id === id);
   if (!now) return null;
   const next = { ...now, ...patch };
   if (patch.style) next.style = DS.normalize(now.type, { ...DS.normalize(now.type, now.style), ...patch.style });
   if ('vis' in patch) { const v = DS.normalizeVis(patch.vis); if (v) next.vis = v; else delete next.vis; }   // no rule = shown everywhere: nothing stored
-  drawings.replace(root, next);
+  drawings.replace(root, next, quiet);
   markDirty();
   return next;
 }
@@ -1575,16 +1622,16 @@ function drawingSettingsDialog(cell, d0) {
   const orig = drawings.list(root).find((x) => x.id === d0.id);
   if (!orig) return;
   const type = orig.type, has = (k) => DS.FIELDS[type].includes(k);
-  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis) };
+  const atOpen = { color: orig.color || '#2962FF', style: DS.normalize(type, orig.style), vis: DS.normalizeVis(orig.vis), alert: orig.alert };
   let work = { ...atOpen, style: { ...atOpen.style } }, tab = 'style', done = false;
-  const title = { trend: 'Trend line', ray: 'Ray', xline: 'Extended line', rect: 'Rectangle', hline: 'Horizontal line', vline: 'Vertical line',
-    fib: 'Fib retracement' }[type] || 'Drawing';
+  const title = (type === 'hline' && orig.alert ? 'Price alert' : DRAW_NAMES[type]) || 'Drawing';
+  const before = drawings.list(root);           // the list as it was: one undo step for everything this dialog does
   const box = openDialog(title, 'drawstyle');
   const body = mk('div', 'set-body'), tabs = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   body.append(tabs, pane);
   box.append(body, foot);
 
-  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style, vis: work.vis }); }
+  function preview() { patchDrawing(root, d0.id, { color: work.color, style: work.style, vis: work.vis, ...(work.alert ? { alert: work.alert } : {}) }, true); }
   function set(patch) { work = { ...work, ...patch }; preview(); }
   function setStyle(patch, repaint = true) { work = { ...work, style: DS.normalize(type, { ...work.style, ...patch }) }; preview(); if (repaint) renderPane(); }
 
@@ -1651,7 +1698,7 @@ function drawingSettingsDialog(cell, d0) {
   }
 
   /* Which intervals it shows on: from / to, each an interval or "any". Tick, volume and range charts always show it. */
-  const VIS_CHOICES = [['', 'Any'], ...C.INTERVAL_GROUPS.flatMap(([, specs]) => specs).filter((x) => x.startsWith('time:')).map((x) => [x.slice(5), C.specLabel(x)])];
+  const VIS_CHOICES = visChoices();
   function visRows() {
     const v = work.vis || { min: null, max: null }, num = (x) => (x === '' ? null : Number(x));
     const put = (next) => { set({ vis: DS.normalizeVis(next) }); renderPane(); };
@@ -1670,7 +1717,7 @@ function drawingSettingsDialog(cell, d0) {
     return rows;
   }
 
-  const TABS = [['style', 'Style'], ...(has('text') ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []), ['vis', 'Visibility']];
+  const TABS = [['style', 'Style'], ...(has('text') && type !== 'note' ? [['text', 'Text']] : []), ...(type === 'fib' ? [['levels', 'Levels']] : []), ['vis', 'Visibility']];
   function renderTabs() {
     tabs.replaceChildren(...TABS.map(([id, label]) => {
       const b = mk('button', 'set-tab' + (id === tab ? ' active' : ''), label);
@@ -1681,16 +1728,44 @@ function drawingSettingsDialog(cell, d0) {
   }
   function renderPane() {
     const rows = [];
-    if (tab === 'style') {
+    if (tab === 'style' && type === 'note') {      // a note is its text: the words, their look, the box
+      rows.push(mk('div', 'set-cap', 'NOTE'));
+      rows.push(row('Text', textCtl(work.style.text, (v) => setStyle({ text: v }, false))));
+      rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
+      rows.push(row('Text colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
+      rows.push(row('Bold', sw('bold')));
+      rows.push(row('Border', colorCtl(() => work.color, (c) => set({ color: c }))));
+      rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+    } else if (tab === 'style') {
       rows.push(mk('div', 'set-cap', 'LINE'));
       rows.push(row(type === 'fib' ? 'Trend colour' : 'Colour', colorCtl(() => work.color, (c) => set({ color: c }))));
       rows.push(row('Width', numberCtl(work.style.width, 1, 4, (v) => setStyle({ width: v }))));
       rows.push(row('Style', selectCtl(work.style.lineStyle, LINE_CHOICES, (v) => setStyle({ lineStyle: v }))));
+      if (type === 'channel') {
+        rows.push(row('Fill', colorCtl(() => work.style.fillColor || cell.P.accentSoft, (c) => setStyle({ fillColor: c }))));
+        rows.push(row('Middle line', sw('midline')));
+      }
       if (has('extendLeft')) rows.push(row('Extend left', sw('extendLeft')));
       if (has('extendRight') && type !== 'rect') rows.push(row('Extend right', sw('extendRight')));
       if (has('priceLabel')) rows.push(row('Price tag at its end', sw('priceLabel')));
       if (has('stats')) rows.push(row('Its move, in points and bars', sw('stats')));
       if (type === 'hline') rows.push(row('Price label', sw('axisLabel')));
+      if (type === 'hline' && work.alert) {
+        const bars = cell.bars, last = bars.length ? bars[bars.length - 1].c : orig.points[0].p;
+        rows.push(mk('div', 'set-cap', 'ALERT'));
+        rows.push(row('Goes off when', selectCtl(work.alert.fired ? 'off' : work.alert.dir,
+          [['up', 'The price rises to it'], ['down', 'The price falls to it'], ['off', 'Has gone off (not armed)']],
+          (v) => { work = { ...work, alert: v === 'off' ? { ...work.alert, fired: true } : { dir: v, fired: false } }; preview(); renderPane(); })));
+        if (work.alert.fired) {
+          const arm = mk('button', 'btn btn-ghost', 'Arm it again');
+          arm.type = 'button';
+          arm.onclick = () => {
+            work = { ...work, alert: { dir: orig.points[0].p >= last ? 'up' : 'down', fired: false } };
+            preview(); renderPane();
+          };
+          rows.push(arm);
+        }
+      }
       if (type === 'vline') rows.push(row('Time tag', sw('timeLabel')));
       if (type === 'rect') {
         rows.push(row('Border', sw('border')));
@@ -1722,8 +1797,10 @@ function drawingSettingsDialog(cell, d0) {
       rows.push(row('Font size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
       rows.push(row('Colour', colorCtl(() => work.style.textColor, (c) => setStyle({ textColor: c }))));
       rows.push(row('Bold', sw('bold')));
-      const posChoices = DS.LABEL_POS[type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
-      rows.push(row('Position', selectCtl(work.style.labelPos, posChoices, (v) => setStyle({ labelPos: v }))));
+      if (DS.LABEL_POS[type]) {
+        const posChoices = DS.LABEL_POS[type].map((p) => [p, p[0].toUpperCase() + p.slice(1)]);
+        rows.push(row('Position', selectCtl(work.style.labelPos, posChoices, (v) => setStyle({ labelPos: v }))));
+      }
       if (has('labelAlign')) rows.push(row('Along the line', selectCtl(work.style.labelAlign, DS.LABEL_ALIGN.map((p) => [p, p[0].toUpperCase() + p.slice(1)]), (v) => setStyle({ labelAlign: v }))));
     }
     pane.replaceChildren(...rows);
@@ -1745,9 +1822,14 @@ function drawingSettingsDialog(cell, d0) {
   });
   const grow = mk('span', 'grow'), cancel = button('btn btn-ghost', 'Cancel'), ok = button('btn btn-solid', 'OK');
   cancel.onclick = () => closeDialog();
-  ok.onclick = () => { done = true; closeDialog(); };
+  ok.onclick = () => {
+    done = true;
+    const after = drawings.list(root).find((x) => x.id === d0.id);
+    if (JSON.stringify(after) !== JSON.stringify(before.find((x) => x.id === d0.id))) drawings.mark(root, before);
+    closeDialog();
+  };
   foot.append(tpl, grow, cancel, ok);
-  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style, vis: atOpen.vis }); };
+  dlg.onClose = () => { if (!done) patchDrawing(root, d0.id, { color: atOpen.color, style: atOpen.style, vis: atOpen.vis, ...(atOpen.alert ? { alert: atOpen.alert } : {}) }, true); };
 
   renderTabs();
   renderPane();
@@ -2032,6 +2114,49 @@ function clearDrawings() {
   armTimer = setTimeout(disarm, 3000);
 }
 
+/* Undo (or redo) the last change to the drawings of this chart's symbol, and say so on the status bar. */
+function undoDrawings(c, again) {
+  const root = c.dc ? c.dc.root : c.cfg.root;
+  const ok = again ? drawings.redo(root) : drawings.undo(root);
+  if (ok) { markDirty(); sbNote(again ? 'Redone' : 'Undone'); }
+  else sbNote(again ? 'Nothing to redo' : 'Nothing to undo');
+}
+
+/* The objects list: every drawing on the selected chart's symbol, newest first; a row selects it, with its own lock and delete. */
+function objectsDialog() {
+  const c = cur();
+  if (!c) return;
+  const root = c.dc ? c.dc.root : c.cfg.root, tick = c.tick, D = window.HBDrawings;
+  const box = openDialog(`Objects on ${C.rootName(root)}`, 'small');
+  const list = mk('div', 'obj-list'), foot = mk('div', 'dlg-foot');
+  const detail = (d) => {
+    const ps = d.points.map((p) => (p.p != null ? C.fmtPrice(p.p, tick) : D.timeTag(p.t)));
+    const al = d.alert ? (d.alert.fired ? 'went off' : d.alert.dir === 'up' ? 'goes off above' : 'goes off below') : '';
+    return [ps.join(' → '), al].filter(Boolean).join(' · ');
+  };
+  function render() {
+    const all = drawings.list(root);
+    if (!all.length) { list.replaceChildren(mk('div', 'dlg-msg', 'No drawings on this symbol yet.')); return; }
+    list.replaceChildren(...[...all].reverse().map((d) => {
+      const row = mk('div', 'obj-row'), name = mk('button', 'obj-name');
+      name.type = 'button';
+      name.append(mk('span', 'obj-type', (d.type === 'hline' && d.alert ? 'Price alert' : DRAW_NAMES[d.type]) || d.type), mk('span', 'obj-sub', detail(d)));
+      name.onclick = () => { closeDialog(); if (c.dc) { c.dc.sel = d.id; c.dc.refresh(); } };
+      const lock = button('btn btn-ghost obj-btn', d.locked ? 'Unlock' : 'Lock');
+      lock.onclick = () => { patchDrawing(root, d.id, { locked: !d.locked }); render(); };
+      const del = button('btn btn-ghost obj-btn', 'Delete');
+      del.onclick = () => { drawings.remove(root, d.id); markDirty(); render(); };
+      row.append(name, lock, del);
+      return row;
+    }));
+  }
+  const done = button('btn btn-solid', 'Done');
+  done.onclick = closeDialog;
+  foot.append(mk('span', 'grow'), done);
+  render();
+  box.append(list, foot);
+}
+
 /* ---- magnet ---- */
 function loadMagnet() {
   try { return window.HBDrawings.parseMagnet(localStorage.getItem('hb_charts_magnet')); }
@@ -2259,6 +2384,12 @@ function onKey(e) {
     if (/^[0-9]$/.test(e.key)) { e.preventDefault(); openTimeframeBox(c, e.key); return; }
     if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); openSymbolBox(c, e.key); return; }
   }
+  // ⌘Z / Ctrl+Z undoes the last drawing change on the selected chart's symbol; ⇧⌘Z / Ctrl+Shift+Z / Ctrl+Y does it again
+  if ((e.metaKey || e.ctrlKey) && !e.altKey && c && (e.code === 'KeyZ' || (e.ctrlKey && e.code === 'KeyY'))) {
+    e.preventDefault();
+    undoDrawings(c, e.code === 'KeyY' || e.shiftKey);
+    return;
+  }
   if (e.altKey && !e.metaKey && !e.ctrlKey && e.code === 'KeyR') {   // ⌥R: Reset chart view (e.key is ® on macOS)
     e.preventDefault();
     if (c) c.resetView();
@@ -2318,6 +2449,8 @@ async function init() {
     b.onclick = () => setTool(b.dataset.tool === tool && tool !== 'cursor' ? 'cursor' : b.dataset.tool);
   }
   $('#railClear').onclick = clearDrawings;
+  const objects = $('#railObjects');
+  if (objects) objects.onclick = objectsDialog;
   $('#railMagnet').onclick = () => setMagnet({ ...magnet, on: !magnet.on });
   $('#railMagnetMore').onclick = () => toggleMenu($('#railMagnetMore'), magnetMenu);
   renderMagnet();

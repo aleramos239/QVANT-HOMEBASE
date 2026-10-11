@@ -2167,3 +2167,46 @@ def test_the_new_drawings_roundtrip_over_the_wire(tmp_path):
         r = client.put("/api/drawings/NQ", json=[{**FIB, "style": {"levels": []}}])
         assert r.status_code == 400 and "levels" in r.json()["detail"]
         assert client.get("/api/drawings/NQ").json() == body          # the refused write changed nothing
+
+
+# ---- 2026-10-11: arrow, parallel channel, note, anchored VWAP ----
+ARROW = {"id": "a1", "type": "arrow", "points": [{"t": T0_MS, "p": 30900.25}, {"t": T0_MS + 600000, "p": 30950.0}]}
+CHANNEL = {"id": "a2", "type": "channel", "points": [{"t": T0_MS, "p": 30900.25}, {"t": T0_MS + 600000, "p": 30950.0}, {"t": T0_MS, "p": 30850.0}]}
+NOTE = {"id": "a3", "type": "note", "points": [{"t": T0_MS, "p": 30900.25}]}
+AVWAP = {"id": "a4", "type": "avwap", "points": [{"t": T0_MS, "p": 30900.25}]}
+
+
+def test_arrow_channel_note_and_avwap_are_kept_with_exactly_their_own_points():
+    got = check_drawings([ARROW, CHANNEL, NOTE, AVWAP])
+    assert [d["type"] for d in got] == ["arrow", "channel", "note", "avwap"]
+    assert [len(d["points"]) for d in got] == [2, 3, 1, 1]
+    for bad in ([{**ARROW, "points": [ARROW["points"][0]]}], [{**CHANNEL, "points": CHANNEL["points"][:2]}],
+                [{**NOTE, "points": [{"t": T0_MS}]}], [{**AVWAP, "points": []}]):
+        with pytest.raises(ValueError):
+            check_drawings(bad)
+
+
+def test_the_new_drawings_take_their_own_settings_only():
+    styled = [
+        {**ARROW, "style": {"width": 3, "priceLabel": True, "stats": True, "text": "go", "labelPos": "above"}},
+        {**CHANNEL, "style": {"width": 2, "lineStyle": "dashed", "extendRight": True, "midline": True, "fillColor": "#112233"}},
+        {**NOTE, "style": {"text": "FOMC", "fontSize": 14, "textColor": "#2962FF", "bold": True, "fillColor": "#FFEEAA"}},
+        {**AVWAP, "style": {"width": 1, "lineStyle": "dotted"}},
+    ]
+    assert [d["style"] for d in check_drawings(styled)] == [s["style"] for s in styled]
+    for base, style in ((ARROW, {"midline": True}), (CHANNEL, {"text": "x"}), (NOTE, {"width": 2}), (AVWAP, {"fillColor": "#112233"}),
+                        (NOTE, {"fontSize": 9}), (CHANNEL, {"midline": 1})):
+        with pytest.raises(ValueError):
+            check_drawings([{**base, "style": style}])
+
+
+# ---- 2026-10-11: price alerts ride on a horizontal line ----
+def test_a_horizontal_line_can_carry_an_alert_and_nothing_else_can():
+    armed = {**HLINE, "alert": {"dir": "up", "fired": False}}
+    assert check_drawings([armed])[0]["alert"] == {"dir": "up", "fired": False}
+    assert check_drawings([{**HLINE, "alert": {"dir": "down"}}])[0]["alert"] == {"dir": "down", "fired": False}
+    for bad in ({"dir": "sideways"}, {"dir": "up", "fired": 1}, {"dir": "up", "extra": 1}, {"fired": True}, "up", None):
+        with pytest.raises(ValueError):
+            check_drawings([{**HLINE, "alert": bad}])
+    with pytest.raises(ValueError):
+        check_drawings([{**TREND, "alert": {"dir": "up", "fired": False}}])

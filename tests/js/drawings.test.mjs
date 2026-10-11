@@ -777,3 +777,75 @@ test('a drawing told to show on other intervals is not on this chart: not listed
   assert.deepEqual(R.ctl.items().map((d) => d.id), ['h', 'b'], 'a tick chart has no interval: everything shows');
   R.done();
 });
+
+/* ---- 2026-10-11: arrow, parallel channel, note, anchored VWAP ---- */
+test('an arrow hits like a line; a note is one handle and a box; a channel is two parallel lines', () => {
+  const arrow = { ...trend, id: 'e', type: 'arrow' };
+  assert.deepEqual(D.hitTest(arrow, { x: 122, y: 118 }, geo), { part: 'body' });
+  const note = { id: 'n', type: 'note', points: [{ t: bars[1].ms, p: 880 }], style: { text: 'Hello', fontSize: 12 } };   // (110, 120)
+  assert.deepEqual(D.handlePoints(note, geo), [[110, 120]]);
+  assert.deepEqual(D.hitTest(note, { x: 111, y: 121 }, geo), { part: 'handle', index: 0 });
+  assert.deepEqual(D.hitTest(note, { x: 130, y: 122 }, geo), { part: 'body' });
+  assert.equal(D.hitTest(note, { x: 130, y: 160 }, geo), null);
+  // a channel: its line through (100,100)-(140,140), the parallel through its third point (100,150) = 50 px below
+  const ch = { id: 'c2', type: 'channel', points: [{ t: bars[0].ms, p: 900 }, { t: bars[4].ms, p: 860 }, { t: bars[0].ms, p: 850 }] };
+  assert.deepEqual(D.handlePoints(ch, geo), [[100, 100], [140, 140], [100, 150]]);
+  assert.deepEqual(D.hitTest(ch, { x: 120, y: 170 }, geo), { part: 'body' });
+  assert.deepEqual(D.hitTest(ch, { x: 122, y: 118 }, geo), { part: 'body' });
+  assert.equal(D.hitTest(ch, { x: 120, y: 145 }, geo), null);
+});
+
+test('an anchored VWAP is the volume-weighted (h + l + c) / 3 from its bar; it moves by one point', () => {
+  const pr = [900, 900, 910, 920, 930];
+  const vb = pr.map((p, i) => ({ ms: T0 + i * MIN, h: p, l: p, c: p, v: i === 3 ? 2 : 1 }));
+  const av = { id: 'v', type: 'avwap', points: [{ t: vb[1].ms, p: 900 }] };
+  const g2 = { ...geo, bars: vb };
+  assert.deepEqual(D.handlePoints(av, g2), [[110, 100]]);
+  assert.deepEqual(D.hitTest(av, { x: 111, y: 101 }, g2), { part: 'handle', index: 0 });
+  // bar 3 closes the line at (900 + 910 + 2 * 920) / 4 = 912.5, i.e. y = 87.5; bar 4 at (900 + 910 + 1840 + 930) / 5 = 916
+  assert.deepEqual(D.hitTest(av, { x: 125, y: 94 }, g2), { part: 'body' });
+  assert.equal(D.hitTest(av, { x: 125, y: 140 }, g2), null);
+  const moved = D.setPoint(av, 0, T0 + 3 * MIN, 905, TIME);
+  assert.deepEqual(moved.points, [{ t: T0 + 3 * MIN, p: 905 }]);
+});
+
+test('alerts: an armed alert goes off once the last price crosses it, from the side it was set on; a spent one never again', () => {
+  const live = [{ ms: T0, c: 880, blank: undefined }];
+  const hits = [];
+  const mk = (list) => Object.assign(Object.create(D.Controller.prototype), {
+    cell: { bars: live }, root: 'NQ', host: { onAlert: (_c, d, px) => hits.push([d.id, px]), drawings: { list: () => list } } });
+  const up = { id: 'u', type: 'hline', points: [{ p: 890 }], alert: { dir: 'up', fired: false } };
+  const down = { id: 'd', type: 'hline', points: [{ p: 870 }], alert: { dir: 'down', fired: false } };
+  const spent = { id: 's', type: 'hline', points: [{ p: 880 }], alert: { dir: 'up', fired: true } };
+  const plain = { id: 'p', type: 'hline', points: [{ p: 880 }] };
+  const c = mk([up, down, spent, plain]);
+  c.checkAlerts();
+  assert.deepEqual(hits, []);                                   // price 880 is between 870 and 890
+  live[0] = { ms: T0, c: 890.25 };
+  c.checkAlerts();
+  assert.deepEqual(hits, [['u', 890.25]]);
+  live[0] = { ms: T0, c: 869.5 };
+  c.checkAlerts();
+  assert.deepEqual(hits.map((h) => h[0]), ['u', 'd']);          // the up alert is not crossed back down: only the down one
+  // moved to the other side of the price: armed again from there
+  const moved = mk([]).rearmed({ ...up, points: [{ p: 860 }] });
+  assert.deepEqual(moved.alert, { dir: 'down', fired: false });
+});
+
+test('undo and redo: every change is a step, a quiet one is not, a new change drops the redo steps', () => {
+  const st = new D.Store({ fetchFn: async () => ({ ok: true, json: async () => [] }), delay: 0 });
+  const A = { id: 'a', type: 'hline', points: [{ p: 1 }] }, B = { id: 'b', type: 'hline', points: [{ p: 2 }] };
+  st.add('NQ', A);
+  st.add('NQ', B);
+  st.replace('NQ', { ...B, locked: true }, true);                        // quiet: no step of its own
+  assert.deepEqual(st.list('NQ').map((d) => d.id), ['a', 'b']);
+  assert.equal(st.undo('NQ'), true);                                     // back to [a]
+  assert.deepEqual(st.list('NQ').map((d) => d.id), ['a']);
+  assert.equal(st.canRedo('NQ'), true);
+  assert.equal(st.redo('NQ'), true);
+  assert.deepEqual(st.list('NQ').map((d) => d.id), ['a', 'b']);
+  assert.equal(st.undo('NQ') && st.undo('NQ'), true);                    // back to []
+  assert.equal(st.undo('NQ'), false);
+  st.add('NQ', A);
+  assert.equal(st.canRedo('NQ'), false);
+});

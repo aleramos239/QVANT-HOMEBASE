@@ -84,7 +84,10 @@ MAX_STUDIES = 16              # per subscription
 LOCAL_HOSTS = ("localhost", "127.0.0.1")
 MAX_DRAWINGS = 500            # per symbol
 # 2026-10-09: a ray, an extended line and a Fib retracement are two points like a trend line; a vertical line is one TIME
-DRAWING_POINTS = {"trend": 2, "ray": 2, "xline": 2, "rect": 2, "fib": 2, "hline": 1, "vline": 1, "long": 3, "short": 3}
+# 2026-10-11: an arrow (two points, a line with a head), a parallel channel (a line and a third point that sets the
+# parallel), a note (one point and its text) and an anchored VWAP (one point: the bar it starts at)
+DRAWING_POINTS = {"trend": 2, "ray": 2, "xline": 2, "rect": 2, "fib": 2, "hline": 1, "vline": 1, "long": 3, "short": 3,
+                  "arrow": 2, "channel": 3, "note": 1, "avwap": 1}
 POSITION_QTY_MAX = 10_000     # a long/short box's quantity
 MAX_TEMPLATE_BYTES = 16 * 1024   # one chart-settings template, as JSON
 MAX_TEMPLATE_NAME = 40
@@ -94,7 +97,8 @@ _HEX_COLOR = re.compile(r"#[0-9A-Fa-f]{6}")
 _RGBA_COLOR = re.compile(r"rgba\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(0|1|0?\.\d+)\s*\)")
 DRAWING_LINE_STYLES = ("solid", "dashed", "dotted")
 _LINE_POS, _BOX_POS = ("above", "below", "middle"), ("top", "middle", "bottom")
-DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "hline": _LINE_POS, "rect": _BOX_POS, "vline": _BOX_POS}
+DRAWING_LABEL_POS = {"trend": _LINE_POS, "ray": _LINE_POS, "xline": _LINE_POS, "hline": _LINE_POS, "rect": _BOX_POS, "vline": _BOX_POS,
+                     "arrow": _LINE_POS}
 DRAWING_LABEL_ALIGN = ("left", "center", "right")
 _TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
 # exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
@@ -106,6 +110,10 @@ DRAWING_STYLE_FIELDS = {
     "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
     "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels"} | _TEXT_FIELDS,
     "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "reverse", "fontSize"},
+    "arrow": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
+    "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
+    "avwap": {"width", "lineStyle"},
     "long": set(), "short": set(),
 }
 DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
@@ -289,6 +297,19 @@ def _check_levels(levels) -> list:
     return out
 
 
+def check_alert(kind: str, alert) -> dict:
+    """A price alert, which only a horizontal line carries: {dir: "up" | "down" (which way the price must cross it),
+    fired: true | false (it has gone off; armed again by the page)}. Anything else fails the whole PUT."""
+    if kind != "hline":
+        raise ValueError("alert: only a horizontal line carries one")
+    if not isinstance(alert, dict) or set(alert) - {"dir", "fired"} or alert.get("dir") not in ("up", "down"):
+        raise ValueError("alert: {dir: up or down, fired: true or false}")
+    fired = alert.get("fired", False)
+    if not isinstance(fired, bool):
+        raise ValueError("alert.fired: true or false")
+    return {"dir": alert["dir"], "fired": fired}
+
+
 def check_vis(vis) -> dict | None:
     """Which intervals a drawing shows on: {min, max} in bar SECONDS, either one null (no bound); None when both are
     (it shows everywhere, and nothing is stored). ValueError on anything else."""
@@ -328,7 +349,7 @@ def check_drawings(body) -> list:
             raise ValueError("id: a string of 1-40 characters")
         n = DRAWING_POINTS.get(kind)
         if n is None:
-            raise ValueError("type: trend, ray, xline, hline, vline, rect, fib, long or short")
+            raise ValueError("type: trend, ray, xline, arrow, hline, vline, rect, fib, channel, note, avwap, long or short")
         if not isinstance(pts, list) or len(pts) != n or not all(isinstance(p, dict) for p in pts):
             raise ValueError(f"a {kind} has exactly {n} point(s)")
         clean = []
@@ -371,6 +392,8 @@ def check_drawings(body) -> list:
             vis = check_vis(d["vis"])
             if vis:
                 item["vis"] = vis
+        if "alert" in d:
+            item["alert"] = check_alert(kind, d["alert"])
         out.append(item)
     return out
 

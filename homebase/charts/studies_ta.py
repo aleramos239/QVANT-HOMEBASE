@@ -16,8 +16,19 @@ Wire keys (every part after the name is a number; a missing one takes its defaul
   mfi:14            Money Flow Index of the last n bars                                         -> float
   er:14             Kaufman efficiency ratio of the last n steps (0 .. 1)                       -> float
   orb:15            the first n minutes from 09:30 ET: high, low, mid, growing until n is up    -> {hi, lo, mid}
+  orb:5:180         the same from another start: the 2nd number is the start minute of the ET day (180 = 03:00).
+                    A start at 18:00 or later is the evening BEFORE the session's date (its candle opens the session)
   sess:london       high / low of a named session window so far today (asia 00:00-03:00, london 03:00-08:25,
                     pre 08:25-09:30, nyam 09:30-11:00; ET), kept through the rest of the day  -> {hi, lo}
+  sess:1080:180     high / low of a window of your own: start and end as ET minutes of the day (1080 = 18:00); an end
+                    before the start crosses midnight; one at 18:00 or later is the evening before the session  -> {hi, lo}
+  fvg:0.25:14       the newest unfilled fair value gap each side, of the chart's own bars, inside the session: three
+                    bars where bar 3's low is above bar 1's high (up) or the mirror (down), at least k x ATR(n) high:
+                    families/fvg.py's rule. A gap ends when a later bar trades through its far edge -> {uh, ul, dh, dl}
+  wk / mo           the PRIOR week's / month's high, low and close, and the open of this one (the session dates'
+                    ISO week / calendar month)                                                -> {hi, lo, close, open}
+  topen:0           the open price at a time of the ET day (0 = midnight; same start rule as orb), held from then
+                    until the session ends                                                    -> float
 
 Structure (engine/levels.py pivots, ranges.py, zones.py, families/round1.py va_reclaim, families/noise.py):
   swing:50          the latest swing high / low no later bar traded beyond; a swing is a bar strictly above / below
@@ -298,7 +309,15 @@ class Efficiency(_Study):
         return w, (None if path == 0 else abs(w[-1] - w[0]) / path)
 
 
-_NINE_THIRTY = dt.time(9, 30)
+
+
+def _window_start(session: str, minute: int) -> dt.datetime:
+    """The ET time a window that starts at `minute` of the ET day begins, for the session keyed `session` (its date). The
+    session opens the evening before: a start at 18:00 or later falls on the previous calendar day."""
+    d = dt.date.fromisoformat(session)
+    if minute >= 18 * 60:
+        d -= dt.timedelta(days=1)
+    return dt.datetime(d.year, d.month, d.day, minute // 60, minute % 60, tzinfo=ET)
 
 
 class OpeningRange(_Study):
@@ -306,8 +325,8 @@ class OpeningRange(_Study):
     is open (so the lines show the developing range) and is frozen after it; None before 09:30. A bar counts when
     it starts inside the window."""
 
-    def __init__(self, minutes: int = 15):
-        self.minutes = int(minutes)
+    def __init__(self, minutes: int = 15, start: int = 9 * 60 + 30):
+        self.minutes, self.start = int(minutes), int(start)
         super().__init__()
 
     def initial(self):
@@ -315,13 +334,11 @@ class OpeningRange(_Study):
 
     def step(self, st, bar):
         sess, hi, lo = st
-        t = _et(bar)
-        if t.date().isoformat() != bar.session or t.time() < _NINE_THIRTY:
-            return st, (None if sess != bar.session else self._val(hi, lo))
         if sess != bar.session:
             sess, hi, lo = bar.session, None, None
-        start = t.replace(hour=9, minute=30, second=0, microsecond=0)
-        if (t - start) < dt.timedelta(minutes=self.minutes):
+        t = _et(bar)
+        w0 = _window_start(bar.session, self.start)
+        if w0 <= t < w0 + dt.timedelta(minutes=self.minutes):
             hi = bar.h if hi is None else max(hi, bar.h)
             lo = bar.l if lo is None else min(lo, bar.l)
         return (sess, hi, lo), self._val(hi, lo)
@@ -361,6 +378,140 @@ class SessionRange(_Study):
             lo = bar.l if lo is None else min(lo, bar.l)
         return (day, hi, lo), (None if hi is None else {"hi": hi, "lo": lo})
 
+
+
+class WindowRange(_Study):
+    """High / low of a window of the ET day that you choose (`a` .. `b` minutes; `b` <= `a` crosses midnight), per session,
+    growing while it is open and held after it, like the named sessions. A window starting at 18:00 or later is the
+    evening before the session's date. None until it opens."""
+
+    def __init__(self, a: int, b: int):
+        if a == b:
+            raise ValueError("bad study 'sess': a window needs a start and an end that differ")
+        self.a, self.length = int(a), (int(b) - int(a)) % 1440
+        super().__init__()
+
+    def initial(self):
+        return (None, None, None)   # session, high, low
+
+    def step(self, st, bar):
+        sess, hi, lo = st
+        if sess != bar.session:
+            sess, hi, lo = bar.session, None, None
+        w0 = _window_start(bar.session, self.a)
+        if w0 <= _et(bar) < w0 + dt.timedelta(minutes=self.length):
+            hi = bar.h if hi is None else max(hi, bar.h)
+            lo = bar.l if lo is None else min(lo, bar.l)
+        return (sess, hi, lo), (None if hi is None else {"hi": hi, "lo": lo})
+
+
+class FairValueGap(_Study):
+    """families/fvg.py's gap on the chart's own bars: three bars of the session, bar 3's low above bar 1's high (an up gap)
+    or bar 3's high below bar 1's low (down), at least `k` x ATR(`n`) high and never less than a tick. Per side the
+    NEWEST gap not yet filled: a later bar trading through its far edge ends it. The gap is known at bar 3's close."""
+
+    def __init__(self, k: float = 0.25, n: int = 14, tick: float = 0.25):
+        self.k, self.n, self.tick = float(k), int(n), float(tick)
+        super().__init__()
+
+    def initial(self):
+        # session, the bars so far of it ((h, l) newest last, at most 3), ATR state (prev close, count, sum, atr), up gap, down gap
+        return (None, (), (None, 0, 0.0, None), None, None)
+
+    def step(self, st, bar):
+        sess, hl, (pc, nt, tsum, atr), up, dn = st
+        if bar.session != sess:
+            sess, hl, up, dn = bar.session, (), None, None
+        # the gap still open ends when this bar trades through its far edge (the bar that forms a gap is not a fill)
+        if up is not None and bar.l <= up[1]:
+            up = None
+        if dn is not None and bar.h >= dn[0]:
+            dn = None
+        hl = (hl + ((bar.h, bar.l),))[-3:]
+        if len(hl) == 3 and atr is not None:
+            (h1, l1), (h3, l3) = hl[0], hl[2]
+            if l3 > h1 and l3 - h1 >= max(self.k * atr, self.tick):
+                up = (l3, h1)                                  # (near edge, far edge): the zone is far..near
+            elif h3 < l1 and l1 - h3 >= max(self.k * atr, self.tick):
+                dn = (l1, h3)
+        if pc is not None:                                     # Wilder ATR, seeded with the mean of the first n ranges
+            tr = _true_range(bar, pc)
+            nt += 1
+            if nt <= self.n:
+                tsum += tr
+                if nt == self.n:
+                    atr = tsum / self.n
+            else:
+                atr = (atr * (self.n - 1) + tr) / self.n
+        st = (sess, hl, (bar.c, nt, tsum, atr), up, dn)
+        if up is None and dn is None:
+            return st, None
+        return st, {"uh": up[0] if up else None, "ul": up[1] if up else None,
+                    "dh": dn[0] if dn else None, "dl": dn[1] if dn else None}
+
+
+class PeriodLevels(_Study):
+    """The PRIOR period's high, low and close and the open of the current one, the period being a week or a month of
+    session dates. None until a period has finished (the first value comes with the second period's first bar)."""
+    KEY = None
+
+    def initial(self):
+        # current period key, its open / high / low / last close, the finished period's (high, low, close)
+        return (None, None, None, None, None, None)
+
+    def period(self, session: str):
+        raise NotImplementedError
+
+    def step(self, st, bar):
+        per, op, h, l, c, prev = st
+        k = self.period(bar.session)
+        if k != per:
+            if per is not None:
+                prev = (h, l, c)
+            per, op, h, l = k, bar.o, bar.h, bar.l
+        else:
+            h, l = max(h, bar.h), min(l, bar.l)
+        c = bar.c
+        st = (per, op, h, l, c, prev)
+        if prev is None:
+            return st, None
+        return st, {"hi": prev[0], "lo": prev[1], "close": prev[2], "open": op}
+
+
+class WeekLevels(PeriodLevels):
+    def period(self, session):
+        y, w, _ = dt.date.fromisoformat(session).isocalendar()
+        return (y, w)
+
+
+class MonthLevels(PeriodLevels):
+    def period(self, session):
+        return session[:7]
+
+
+class TimeOpen(_Study):
+    """The open price at a time of the ET day (`minute`, same start rule as the windows): the first bar starting at or
+    after it, at most 5 minutes late, held until the session ends. None before it or when no bar came near it."""
+
+    def __init__(self, minute: int = 0):
+        self.minute = int(minute)
+        super().__init__()
+
+    def initial(self):
+        return (None, None, False)   # session, the open, gave up
+
+    def step(self, st, bar):
+        sess, px, dead = st
+        if sess != bar.session:
+            sess, px, dead = bar.session, None, False
+        if px is None and not dead:
+            late = (_et(bar) - _window_start(bar.session, self.minute)).total_seconds() / 60.0
+            if late >= 0:
+                if late <= 5:
+                    px = bar.o
+                else:
+                    dead = True
+        return (sess, px, dead), px
 
 
 # ---- structure ----------------------------------------------------------------------------------------------------
@@ -659,7 +810,7 @@ PARAMS = {
     "tema": (TEMA, ((20, 2, 500),)),
     "mfi": (MFI, ((14, 2, 500),)),
     "er": (Efficiency, ((14, 2, 500),)),
-    "orb": (OpeningRange, ((15, 1, 240),)),
+    "orb": (OpeningRange, ((15, 1, 240), (570, 0, 1439))),
     "swing": (Swing, ((50, 2, 500),)),
     "equal": (EqualHL, ((50, 2, 500), (10.0, 0.25, 1000))),
     "rmove": (RangeMove, ((200.0, 1, 5000),)),
@@ -667,8 +818,25 @@ PARAMS = {
     "rvol": (RelVolume, ((14, 3, 60), (10, 1, 60))),
     "dhl": (DayHL, ((5, 1, 60),)),
     "vaprev": (VaPrev, ()),
+    "fvg": (FairValueGap, ((0.25, 0.0, 10.0), (14, 1, 200))),
+    "wk": (WeekLevels, ()),
+    "mo": (MonthLevels, ()),
+    "topen": (TimeOpen, ((0, 0, 1439),)),
 }
 NAMES = tuple(PARAMS) + ("sess", "noise")
+
+
+def make_ta_num(name: str, args: list, i: int, default, lo, hi) -> float:
+    """Parameter `i` of a wire key as a number inside lo..hi, or `default` when the key stops short of it."""
+    if i >= len(args):
+        return default
+    try:
+        x = float(args[i])
+    except ValueError:
+        raise ValueError(f"bad study {name!r}: {args[i]!r} is not a number") from None
+    if not (math.isfinite(x) and lo <= x <= hi):
+        raise ValueError(f"bad study {name!r}: parameter {i + 1} must be {lo}..{hi}")
+    return x
 
 
 def make_ta(name: str, args: list, tick: float = 0.25):
@@ -685,14 +853,25 @@ def make_ta(name: str, args: list, tick: float = 0.25):
             raise ValueError("bad study 'noise': k must be 0.05..3")
         return NoiseBand(k, *args[1:])
     if name == "sess":
+        if len(args) > 2:
+            raise ValueError(f"bad study {name!r}: sess takes one session name ({', '.join(SESSIONS)}) or a start and an end minute")
+        if len(args) == 2 and all(a.lstrip("-").isdecimal() for a in args):
+            a, b = int(args[0]), int(args[1])
+            if not (0 <= a < 1440 and 0 <= b < 1440):
+                raise ValueError("bad study 'sess': a window's start and end are minutes of the day, 0..1439")
+            return WindowRange(a, b)
         if len(args) > 1:
-            raise ValueError(f"bad study {name!r}: sess takes one session name ({', '.join(SESSIONS)})")
+            raise ValueError("bad study 'sess': a named session takes no more parameters")
         return SessionRange(*args)
     cls, spec = PARAMS[name]
     if cls is VaPrev:
         if args:
             raise ValueError("bad study 'vaprev': it takes no parameters")
         return VaPrev(tick)
+    if cls is FairValueGap and len(args) <= 2:
+        k = make_ta_num(name, args, 0, 0.25, 0.0, 10.0)
+        n = int(make_ta_num(name, args, 1, 14, 1, 200))
+        return FairValueGap(k, n, tick)
     if len(args) > len(spec):
         raise ValueError(f"bad study {name!r}: at most {len(spec)} parameter(s)")
     vals = []
@@ -742,6 +921,8 @@ def warm_ta(name: str, rest: list) -> int:
         return 400
     if name == "vaprev":
         return 400
+    if name == "fvg":
+        return 10 * num(1, 14) + 3
     return 0
 
 
@@ -755,4 +936,4 @@ def prime_ta(name: str, rest: list) -> int:
         except (IndexError, ValueError):
             return default
     return {"noise": 16, "rvol": num(0, 14) + 1, "dhl": num(0, 5) + 1, "vaprev": 1, "swing": 3, "rswing": 3, "equal": 3,
-            "rmove": 5}.get(name, 0)
+            "rmove": 5, "wk": 11, "mo": 45}.get(name, 0)
