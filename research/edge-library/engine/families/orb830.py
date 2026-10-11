@@ -18,8 +18,12 @@ orb_close -- the opening range, broken on a CLOSE.
                  chart draws it, the last COMPLETED bar's value (no look-ahead). A roll day (the two tapes are different contracts) has no VWAP
                  and does not trade. BUILD DAYS ONLY (to 2025-06-30): on a later date it raises, it never trades silently.
 
-open_candle -- the candle that opens at 08:30 ET, followed at its close.
-  * SIGNAL     = the 08:30 ET candle (the first tf bar of ONE session 08:30-11:00, id "pre") closes up (long) or down (short); a doji is no
+open_candle -- the candle that opens at `start` (08:30 ET default), followed at its close.
+  * START      = 0830 (default: the US data release; ONE session 08:30-11:00, id "pre"), 0200 (the ICT "London open" killzone) or 0300 (the
+                 London cash open, 08:00 UK): ONE session start-08:25, id "london" (the engine's own 03:00-08:25 window replaced for this
+                 family only). Entries are the one candle; the trade runs to its stop / target or the day's flat 15:58 ET (`exit_bars` N =
+                 a time stop after N tf bars, a limit key).
+  * SIGNAL     = the `start` ET candle (the first tf bar of that session) closes up (long) or down (short); a doji is no
                  signal. Entry = a market order at that close; the structure stop (stop_mode struct) is the candle's other extreme; one trade a
                  session. (The 09:30 candle and the library's own session opens are the library's first_bar_mom, not this family.)
   * GATES      = every one off at 0 (no displacement): `k` range >= k x ATR(14) of the bars before the candle (A), `body_r` body |close - open|
@@ -41,6 +45,7 @@ OPEN = 34200                                        # 09:30 ET, seconds after 00
 RELEASE = 30600                                     # 08:30 ET
 NY = ("nyam", "mid", "pm")
 END_0830 = 39600                                    # the 08:30 session's window ends 11:00 ET
+LONDON_END = 30300                                  # the 02:00 / 03:00 candle sessions end 08:25 ET (the engine's own london end)
 LAST_BUILD_DAY = "2025-06-30"                       # the 16:00 VWAP reads the prior session's tape: the build switch opens to here only
 TFS = ("1", "5", "15")
 STRUCT_TGT_R = (0.0, 0.5, 0.75, 1.0, 2.0, 3.0)      # the standard targets: none, then x the stop
@@ -175,16 +180,21 @@ class OrbClose(Template):
 # ---- open_candle -------------------------------------------------------------------------------------------------------------------
 class OpenCandle(Template):
     """open_candle (module docstring). The signal bar is the session's first tf bar (sn == 1)."""
-    DEFAULTS = {"k": 0.0, "body_r": 0.0, "vol_m": 0.0, "body_pts": 0.0, "max_tr": 1}
-    SCHEMA = {"k": ("float", 0, 10), "body_r": ("float", 0, 1), "vol_m": ("float", 0, 50), "body_pts": ("float", 0, 1000)}
+    DEFAULTS = {"k": 0.0, "body_r": 0.0, "vol_m": 0.0, "body_pts": 0.0, "max_tr": 1, "start": "0830"}
+    SCHEMA = {"k": ("float", 0, 10), "body_r": ("float", 0, 1), "vol_m": ("float", 0, 50), "body_pts": ("float", 0, 1000),
+              "start": ("choice", ("0830", "0200", "0300"))}
+    OPENS = {"0830": RELEASE, "0200": 7200, "0300": 10800}      # ET seconds after 00:00 of the candle's open
     SCREEN_TFS = TFS
     FEATURES = ()
 
+    def _sid(self) -> str:
+        return "pre" if self.p["start"] == "0830" else "london"
+
     def fam_filter(self, ids):
-        return [s for s in ids if s == "pre"]
+        return [s for s in ids if s == self._sid()]
 
     def fam_sessions(self):
-        return {"pre": (RELEASE, END_0830)}
+        return {"pre": (RELEASE, END_0830)} if self.p["start"] == "0830" else {"london": (self.OPENS[self.p["start"]], LONDON_END)}
 
     def fam_signal(self, ctx):
         if self.sn != 1 or not self.atr_p:
@@ -207,7 +217,7 @@ class OpenCandle(Template):
 
 
 # entry windows, ET seconds after 00:00 [first, last]: the smoke's "entries outside the window" count
-ENTRY_WINDOWS = {"orb_close": (RELEASE + 5 * 60, 57480 - 1), "open_candle": (RELEASE + 60, 57480 - 1)}
+ENTRY_WINDOWS = {"orb_close": (RELEASE + 5 * 60, 57480 - 1), "open_candle": (7200 + 60, 57480 - 1)}
 
 FAMILIES = {
     "orb_close": (OrbClose, {}, False,
@@ -221,7 +231,7 @@ FAMILIES = {
                    "complexity": 6,
                    "variants": [{"or_min": "5"}, {"or_min": "15"}, {"or_min": "30"}]}),
     "open_candle": (OpenCandle, {}, False,
-                    "open_candle: the tf candle that opens at 08:30 ET (the data release) is "
+                    "open_candle: the tf candle that opens at 08:30 ET (the data release; start 0200 / 0300 = the London opens) is "
                     "followed at its close in its own direction (green long, red short); optional size gates, all off at 0: range >= k x ATR, "
                     "body >= body_r of its range, volume >= vol_m x the median of the same bar over 14 dates, body >= body_pts points; one trade "
                     "a session, flat 15:58",
