@@ -146,7 +146,7 @@ def test_a_strategy_that_sizes_itself_is_capped_by_the_desks_most_in_both_deriva
         if a is not None:
             assert (a.max_trades_day, a.max_qty, a.last_entry_et, a.flat_et) == (
                 b["max_trades_day"], b["max_qty"], b["last_entry_et"], b["flat_et"]), r
-    assert labcfg.derive_limits(lab_rec(own_size=True)).max_qty == 10
+    assert labcfg.derive_limits(lab_rec(own_size=True)).max_qty == 100         # no cap of 10: the account's size is its most
     assert labcfg.derive_limits(lab_rec()).max_qty == 1
     assert labcfg.derive_limits(lab_rec(own_size="yes", qty=3)).max_qty == 3       # true, not truthy
 
@@ -318,8 +318,8 @@ def test_the_tester_refuses_to_price_on_a_contract_that_is_not_the_markets_micro
 
 def test_promote_says_when_the_backtest_traded_more_than_the_desk_sends():
     meta = draftstore.static_meta(draft('exec_root = "MNQ"', "own_size = True"))
-    snap = store.snapshot("x", "src", meta, {"run": {"qty": 1}, "trades": [{"date": "2025-01-02", "qty": 20}]}, "r1", ["n"])
-    assert snap["notes"] == ["n", "It traded up to 20 contracts in the backtest: the Desk sends 10 at most."]
+    snap = store.snapshot("x", "src", meta, {"run": {"qty": 1}, "trades": [{"date": "2025-01-02", "qty": 120}]}, "r1", ["n"])
+    assert snap["notes"] == ["n", "It traded up to 120 contracts in the backtest: the Desk sends 100 at most."]
     snap = store.snapshot("x", "src", meta, {"run": {"qty": 1}, "trades": [{"date": "2025-01-02", "qty": 10}]}, "r1", [])
     assert snap["notes"] == []
 

@@ -109,8 +109,8 @@ def own_limits(rec: dict) -> dict | None:
     n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
     if _evening(w):                              # opens the evening before: no Desk limits (labcfg.evening), shadow only
         return None
-    if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
-        qty = 10
+    if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
+        qty = store.OWN_SIZE_MOST
     if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
         return None
     start, end = w if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW
@@ -118,7 +118,7 @@ def own_limits(rec: dict) -> dict | None:
     last = _before(flat)
     if not start <= last < flat:
         return None
-    return {"max_trades_day": n, "max_qty": min(qty, 10), "max_risk_usd": 0.0, "last_entry_et": last, "flat_et": flat}
+    return {"max_trades_day": n, "max_qty": min(qty, store.OWN_SIZE_MOST), "max_risk_usd": 0.0, "last_entry_et": last, "flat_et": flat}
 
 
 def limits_of(side, rec: dict) -> dict | None:

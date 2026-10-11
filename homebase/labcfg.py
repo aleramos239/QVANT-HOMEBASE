@@ -98,7 +98,7 @@ def store_name(desk_id) -> str | None:
 @dataclass(frozen=True)
 class LabLimits:
     max_trades_day: int      # 1..20
-    max_qty: int             # 1..10, contracts per account
+    max_qty: int             # contracts per account: 1..10 when typed (the old form), up to store.OWN_SIZE_MOST when derived
     max_risk_usd: float      # > 0, per trade per account
     last_entry_et: str       # "HH:MM", >= the record's session_window[0]
     flat_et: str             # "HH:MM", > last_entry_et, <= "15:55"
@@ -208,8 +208,8 @@ def derive_limits(rec: dict) -> LabLimits | None:
     if not isinstance(a, dict) or evening(rec):  # (an evening-before session has no Desk limits: it is shadow only)
         return None
     n, qty = a.get("max_trades_day"), rec.get("qty")
-    if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
-        qty = 10
+    if rec.get("own_size") is True:              # it sizes each trade itself: the size set on the account is its most
+        qty = store.OWN_SIZE_MOST
     if not _whole(n, 1, 20) or not _whole(qty, 1, 10 ** 6):
         return None
     start, end = window(rec)
@@ -217,7 +217,7 @@ def derive_limits(rec: dict) -> LabLimits | None:
     last = _before(flat)
     if not start <= last < flat:
         return None
-    return LabLimits(n, min(qty, 10), 0.0, last, flat)
+    return LabLimits(n, min(qty, store.OWN_SIZE_MOST), 0.0, last, flat)
 
 
 # ------------------------------------------------------------------ record -> StrategyCfg

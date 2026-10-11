@@ -23,8 +23,9 @@ def test_derive_limits_from_the_record():
     assert labcfg.derive_limits(own_rec(session_window=["09:25", "16:00"])) == LabLimits(1, 4, 0.0, "15:54", "15:55")
     # a window that ends earlier: flat is the window's end
     assert labcfg.derive_limits(own_rec(session_window=["09:25", "11:30"])) == LabLimits(1, 4, 0.0, "11:29", "11:30")
-    # the size is capped at the schema's 10
-    assert labcfg.derive_limits(own_rec(qty=40)).max_qty == 10
+    # no cap of 10 any more (owner, 2026-10-11): the tested size stands, up to the tester's own largest (100)
+    assert labcfg.derive_limits(own_rec(qty=40)).max_qty == 40
+    assert labcfg.derive_limits(own_rec(qty=400)).max_qty == 100
 
 
 def test_a_record_without_them_has_none_and_a_bad_one_has_none():
