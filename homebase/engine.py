@@ -1251,8 +1251,17 @@ class Engine:
         for st in states:
             by_account.setdefault(st.account, []).append(st)
 
+        def lab_sym(st: DayState) -> Optional[str]:
+            c = self.cfg.strategies.get(st.strategy)
+            return str(c.symbol).upper() if c is not None and c.kind == "lab" else None
+
         async def account(a: str) -> dict:
             acts: dict = {}
+            # a GROUP of Lab strategies shares the account: its net in a contract is sold ONCE, by the member whose
+            # round is open -- or, with none open, by the first; a member's round that is over and checked is
+            # then left out (it holds nothing, and a second read of the net could sell it twice)
+            sold = {lab_sym(s) for s in by_account[a] if lab_sym(s) is not None and s.date == self._today()
+                    and s.status in ("placing", "placed", "live") and not self._archived(s)}
             for st in by_account[a]:
                 key = f"{st.strategy}@{st.account}"
                 try:
@@ -1260,8 +1269,12 @@ class Engine:
                     ad = self.adapters.get(st.account)
                     if cfg is None or ad is None or st.date != self._today() \
                             or st.status == "idle" or self._archived(st) \
-                            or (cfg.kind == "lab" and self._lab_close_sent(st)):
+                            or (cfg.kind == "lab" and self._lab_close_sent(st)) \
+                            or (cfg.kind == "lab" and st.status == "done" and lab_sym(st) in sold
+                                and self._lab_clean(st)):
                         continue
+                    if cfg.kind == "lab":
+                        sold.add(lab_sym(st))
                     flat, acts[key] = await self._flatten_state(st, cfg, ad)
                     if flat and st.status in ("placing", "placed", "live"):
                         st.status, st.exit_reason = "done", "killed"
@@ -2664,11 +2677,38 @@ class Engine:
             theirs = str(so.symbol).upper()
             if other == name or not mine or not theirs or not (mine in theirs or theirs in mine):
                 continue
+            if so.kind == LAB and theirs == mine:    # a group: the same contract, one trade at a time (_lab_slot_busy)
+                continue
             if any(a.get("account") == account for a in assignments(self.cfg, other)) or any(
                     s.strategy == other and s.status in ("placing", "placed", "live")
                     for s in self.day_states_for_account(account)):
                 return so.symbol
         return None
+
+    def _lab_slot_busy(self, name: str, cfg: StrategyCfg, account: str) -> bool:
+        """A GROUP -- Lab strategies in the SAME contract booked on one broker account -- trades one at a time,
+        first come. True while another member has, today and on that broker account, a round that is placing,
+        placed or live; one that is over with its orders not read terminal (a block carried from an earlier day is
+        one); or one that went in and was never SEEN out (a Kill books a round done when its market order leaves:
+        the fill that follows must not meet another member's round). on_fill books an opposite fill in a market as
+        the live round's exit, so two rounds of one contract are never open on an account together. A Lab round
+        whose strategy is no longer in the config (its record did not load) is nobody's to judge: it holds too."""
+        mine, today = str(cfg.symbol).upper(), self._today()
+
+        def broker(a: str):
+            return getattr(self.adapters.get(a), "broker_key", a)
+
+        for s in self.states.values():
+            if s.strategy == name or s.date != today or s.status == "idle" or broker(s.account) != broker(account):
+                continue
+            so = self.cfg.strategies.get(s.strategy)
+            if not s.strategy.startswith(LAB_PREFIX) if so is None else \
+                    (so.kind != LAB or str(so.symbol).upper() != mine):
+                continue
+            went_in = (s.entry_qty or s.qty or 0) if s.entry_side else 0
+            if s.status in ("placing", "placed", "live") or not self._lab_clean(s) or (s.exit_qty or 0) < went_in:
+                return True
+        return False
 
     def _lab_archive(self, key: str, st: DayState) -> None:
         """A terminal, clean round leaves the plain key (I-3: the next state made for the pair is inserted last)."""
@@ -2702,6 +2742,8 @@ class Engine:
         taken = self._lab_market_taken(name, cfg, account)                  # 2
         if taken is not None:
             return f"Another strategy trades {taken} on this account."
+        if self._lab_slot_busy(name, cfg, account):
+            return LAB_SLOT_BUSY
         today = self._today()                                               # 3
         if any(self._archived(s) and (self._lab_carried(s) or not self._lab_clean(s))
                for s in self.day_states(name) if s.account == account):
@@ -3656,6 +3698,7 @@ class Engine:
 
 # ---- the Lab section, module level --------------------------------------------------------------------
 LAB = "lab"                                    # StrategyCfg.kind
+LAB_PREFIX = "lab_"                            # a Lab strategy's desk id (labcfg.PREFIX: a test holds them equal)
 LAB_FLAT_TEXT = "homebase:lab-flat"            # the capped market-out's order text
 LAB_FLAT_RETRY_S = 5.0                         # the flat time's retry (cancels and reads only)
 LAB_CHECK_RETRY_S = 30.0                       # ... once a round is "check it"
@@ -3673,6 +3716,7 @@ LAB_NOT_CONNECTED = "The account is not connected."
 LAB_ACCOUNT_STOPPED = "This account is stopped for the day."
 LAB_TAKE_RULE = "This account has a daily take rule. A Lab strategy cannot share it."
 LAB_ONE_AT_A_TIME = "One position at a time."
+LAB_SLOT_BUSY = "Another strategy's trade on this account is open or not checked yet."
 LAB_CANNOT_CHECK = "The Desk cannot check the last trade's orders."
 LAB_CLOSE_UNCONFIRMED = "Check it: the close order was not confirmed. Its stop is still working."
 LAB_EXIT_TWICE = "Check it: this trade's exit may have filled twice."

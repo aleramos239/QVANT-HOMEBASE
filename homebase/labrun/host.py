@@ -1187,6 +1187,8 @@ class StrategyDay:
         if any(text is None for text in entries):
             self._refused_run = 0
             return
+        if all(text == door.SLOT_BUSY for text in entries):     # skipped for the group's turn: not a refusal
+            return
         self._refused_run += 1
         if self._refused_run >= REFUSED_RUN:
             self._halt(entries[-1])

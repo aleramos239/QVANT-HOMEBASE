@@ -751,6 +751,162 @@ def test_one_strategy_per_market_per_account(tmp_path):
     assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True
 
 
+# ------------------------------------------------------------------------------------------------ a group on one account
+LAB2 = "lab_qq"
+BUSY = {"ok": False, "round": None, "reason": "Another strategy's trade on this account is open or not checked yet."}
+
+
+def group(tmp_path, accounts=("a1",), book2=None, **over):
+    """Two Lab strategies, both booked on `accounts` (`book2`: the second one's rows) -- in the same contract unless
+    `over` gives the second another."""
+    return mk(tmp_path, accounts=accounts, extra={LAB2: lab_cfg(name="qq", label="QQ", **over)},
+              book={LAB2: [{"account": a, "qty": 1} for a in accounts] if book2 is None else book2})
+
+
+def go2(eng, legs, sizes=None):
+    return run(eng.lab_enter(LAB2, [legs], sizes or {a: 1 for a in eng.adapters}, max_rounds=3))
+
+
+def test_a_group_shares_an_account_one_trade_at_a_time(tmp_path):
+    """Lab strategies in the same contract may be booked on one account; the second sits a trade out, and uses no
+    round, while the first one's entry is working, its position is open, or its orders are not read yet."""
+    from homebase.labrun import door
+    assert engine_mod.LAB_SLOT_BUSY == door.SLOT_BUSY == BUSY["reason"]
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is True
+    st = rnd(eng)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY                # its entry is working
+    fill_entry(eng, ad, st, 100.0)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY                # its position is open
+    fill_exit(eng, ad, st, 110.0, "tp")
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY                # over, its orders not read yet
+    assert len(ad.brackets) == 1 and f"{LAB2}@a1" not in eng.states
+    assert ad.net_reads == 1                                              # it sat out before the position read
+    assert [e["strategy"] for e in events(tmp_path, "place_skipped")] == [LAB2] * 3
+    tick(eng)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == {"ok": True, "round": 1, "reason": None}
+    assert go(eng, leg(iid=2))["accounts"]["a1"] == BUSY                  # and the other way round
+    assert len(ad.brackets) == 2
+
+
+def test_a_busy_account_does_not_hold_the_groups_other_accounts(tmp_path):
+    eng, ads, _ = group(tmp_path, accounts=("a1", "a2"), book2=[{"account": "a1", "qty": 1}])
+    assert go2(eng, leg(iid=7), {"a1": 1})["accounts"]["a1"]["ok"] is True
+    out = go(eng, leg())
+    assert out["accounts"] == {"a1": BUSY, "a2": {"ok": True, "round": 1, "reason": None}}
+
+
+def test_two_of_a_group_entering_at_once_send_one_order(tmp_path):
+    """Both pass the first read and wait for the position; the round is opened in one run, so only one goes."""
+    eng, ads, _ = group(tmp_path)
+    read = ads["a1"].get_net_position
+
+    async def slow(symbol):                      # a real broker read yields
+        await asyncio.sleep(0)
+        return await read(symbol)
+
+    ads["a1"].get_net_position = slow
+
+    async def both():
+        return await asyncio.gather(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3),
+                                    eng.lab_enter(LAB2, [leg(iid=7)], {"a1": 1}, max_rounds=3))
+
+    got = [o["accounts"]["a1"] for o in run(both())]
+    assert sorted(g["ok"] for g in got) == [False, True] and BUSY in got
+    assert len(ads["a1"].brackets) == 1 and ads["a1"].net_reads == 2
+
+
+def test_a_member_whose_trade_cannot_be_checked_holds_the_account(tmp_path):
+    """Fail closed: an order that may be working under an id nobody has keeps the whole group off that account."""
+    eng, ads, _ = group(tmp_path)
+    ads["a1"].reject = "OSO failed: timeout"
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is False
+    ads["a1"].reject = None
+    tick(eng)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY and ads["a1"].brackets == []
+
+
+def test_the_global_kill_sells_a_groups_position_once(tmp_path):
+    """The Kill's flatten sells the account's WHOLE net in a contract. With a group, a member whose round is over and
+    checked is left out: the member with the open round sells it, once (a broker whose position read lags would
+    otherwise be sold twice)."""
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad)                                                        # the first member: a whole round, clean
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["ok"] is True
+    fill_entry(eng, ad, eng.states[f"{LAB2}@a1"], 100.0)                  # the second is long 1 (the fake's net stays 1)
+    out = run(eng.flatten_today())
+    assert list(out) == [f"{LAB2}@a1"]
+    assert [(o.side, o.qty, o.text) for o in ad.orders] == [("Sell", 1, "homebase:flat")]
+
+
+def test_the_global_kill_sells_a_stray_position_once_when_every_member_is_out(tmp_path):
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["ok"] is True
+    b = eng.states[f"{LAB2}@a1"]
+    fill_entry(eng, ad, b, 100.0)
+    fill_exit(eng, ad, b, 110.0, "tp")
+    tick(eng)
+    ad.net = 2                                                            # a position nobody here opened
+    assert list(run(eng.flatten_today())) == [f"{LAB}@a1"]
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 2)]
+
+
+def test_a_member_whose_record_did_not_load_after_a_restart_still_holds_the_account(tmp_path):
+    """Its round came back from the day file and its strategy is not in the config: nobody reads its fills or its
+    orders, so the group stays off that account."""
+    assert engine_mod.LAB_PREFIX == labcfg.PREFIX
+    eng, ads, clock = group(tmp_path)
+    assert go(eng, pair())["accounts"]["a1"]["ok"] is True
+    cfg2 = AppCfg(armed=True, accounts=dict(eng.cfg.accounts), book={LAB2: [{"account": "a1", "qty": 1}]},
+                  strategies={LAB2: eng.cfg.strategies[LAB2]})
+    eng2 = quick(Engine(cfg2, ads, now_fn=clock, root=tmp_path))          # the restart
+    assert eng2.states[f"{LAB}@a1"].status == "placed" and LAB not in eng2.cfg.strategies
+    out = run(eng2.lab_enter(LAB2, [leg(iid=7)], {"a1": 1}, max_rounds=3))
+    assert out["accounts"]["a1"] == BUSY and len(ads["a1"].brackets) == 2
+
+
+def test_a_killed_members_position_never_seen_out_holds_the_account_for_the_day(tmp_path):
+    """A Kill books the round done when its market order leaves. The fill that follows must not meet another
+    member's round (on_fill would book it as that round's exit): the account stays busy."""
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    a = rnd(eng)
+    fill_entry(eng, ad, a, 100.0)
+    assert run(eng.kill_strategy(LAB))["a1"]["ok"] is True and (a.status, a.exit_reason) == ("done", "killed")
+    ad.net = 0
+    tick(eng)
+    assert eng._lab_clean(a) is True and a.exit_qty == 0
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY
+    assert len(ad.brackets) == 1
+
+
+def test_a_group_is_one_broker_account_whatever_the_desk_calls_it(tmp_path):
+    """Two desk entries pinned to one broker account are one account to the group."""
+    eng, ads, _ = group(tmp_path, accounts=("a1", "a2"), book2=[{"account": "a2", "qty": 1}])
+    eng.cfg.book[LAB] = [{"account": "a1", "qty": 1}]
+    shared = type("Shared", (LabAdapter,), {"broker_key": property(lambda self: "the-one-broker-account")})
+    for ad in ads.values():
+        ad.__class__ = shared
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True
+    out = run(eng.lab_enter(LAB2, [leg(iid=7)], {"a2": 1}, max_rounds=3))
+    assert out["accounts"]["a2"] == BUSY and ads["a2"].brackets == []
+
+
+def test_a_micro_and_the_full_contract_are_not_a_group(tmp_path):
+    """Only the SAME contract is shared. MNQ and NQ on one account stay refused, as a strategy of another kind does
+    (test_one_strategy_per_market_per_account)."""
+    eng, ads, _ = group(tmp_path, exec_root="MNQ")
+    assert (eng.cfg.strategies[LAB].symbol, eng.cfg.strategies[LAB2].symbol) == ("NQ", "MNQ")
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["reason"] == "Another strategy trades NQ on this account."
+    assert go(eng, leg())["accounts"]["a1"]["reason"] == "Another strategy trades MNQ on this account."
+    assert ads["a1"].brackets == []
+
+
 def test_an_account_with_a_daily_take_rule_sits_out(tmp_path):
     """Ruling Q-B: a live Lab round would switch the take watcher off for that account (check_takes needs a price
     for every live state). So the two never share an account."""

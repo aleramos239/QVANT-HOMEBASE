@@ -26,6 +26,7 @@ NO_STOP = "Every entry needs a stop held at the broker."
 WRONG_SIDE = "The stop must sit on the losing side of the entry."
 NO_LIMIT = "Limit entries are not built yet."
 ONE_AT_A_TIME = "One position at a time."
+SLOT_BUSY = "Another strategy's trade on this account is open or not checked yet."   # a group shares an account one trade at a time
 OWN_SIZE = "Size is set on the Desk, per account."
 TOO_LATE = "Too late for a new trade today."
 PRICES_LATE = "Prices are late."

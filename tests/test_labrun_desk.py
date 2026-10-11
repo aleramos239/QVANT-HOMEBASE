@@ -9,7 +9,7 @@ import json
 import httpx
 import pytest
 
-from homebase.labrun import host
+from homebase.labrun import door, host
 from homebase.labrun.deskclient import DeskClient
 from tests.labrun_desk_util import (ACCOUNT, D, DATE, DESK_ID, EVERY, ONE, REPLACE, StubDesk, at, desk_day, feed, filled,
                                     mark_of, ms_of, plots, rec, rnd, snap, ticks)
@@ -253,6 +253,18 @@ def test_three_events_in_a_row_whose_entries_were_all_refused_stop_the_strategy_
     assert day.state == "stopped" and day.summary()["why"] == "Too late for a new trade today."
     assert stub.bodies[-1]["intents"] == [{"op": "stop", "why": "Too late for a new trade today.", "flatten": False}]
     assert len(stub.entries()) == 3 and day.child_alive() is False
+
+
+def test_an_entry_skipped_for_the_groups_turn_is_not_one_of_the_three(days):
+    """A group shares an account one trade at a time: "busy" is not a refusal, however often it is said."""
+    stub = StubDesk()
+    stub.script = [stub.refuse(door.SLOT_BUSY)] * 4
+    day, stub, _, _, _ = days(EVERY, stub=stub)
+    feed(day, "09:29:50", [21000.0] * 11)
+    for minute in ("09:30:01", "09:31:01", "09:32:01"):
+        feed(day, minute, [21000.0] * 60)
+    assert day.state == "running" and len(stub.entries()) == 4
+    assert [r for _, r in texts(day)] == [door.SLOT_BUSY] * 4
 
 
 def test_a_taken_entry_ends_the_run_of_refusals_and_a_refusal_here_counts(days):

@@ -568,6 +568,9 @@ class LabDesk:
                 a, b = str(s.symbol).upper(), str(so.symbol).upper()
                 if not a or not b or not (a in b or b in a):
                     continue
+                if a == b and mine and getattr(so, "kind", "") == LAB:
+                    continue                 # a group: Lab strategies in the same contract share the account, one
+                                             # trade at a time (engine._lab_slot_busy)
                 if any(x.get("account") == r["account"] for x in assignments(self.cfg, other)):
                     raise Refused(f"Another strategy trades {so.symbol} on this account.")
         if mine:
@@ -1337,8 +1340,9 @@ class LabDesk:
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
             self._dead(d, ids)
-            if whole is None:
-                d["untaken"] += 1                            # it was offered to its accounts and none took it
+            if whole is None and not all(s == door.SLOT_BUSY for s in said.values()):
+                d["untaken"] += 1                            # it was offered to its accounts and none took it (one
+                                                             # skipped for the group's turn is not counted)
         if not took and whole is not None:
             self._refused(name, ev.seq, ids, text)           # the engine refused the whole call: no account was asked
         else:
