@@ -185,7 +185,7 @@ class Cell {
     this.replay = null;    // Bar Replay (2026-09-27 plan): null live, else {date, cursorMs, speed, playing, done}
                             // -- set by replayui.js, read by HBTradeUI.effectiveMode (a replaying chart never trades)
     this.today = []; this.todayKey = '[]';   // the session under way's thin hours, from the status message (setToday)
-    this.has = { fp: false, big: false };   // what the bars on screen carry beyond OHLCV: need() as their history was asked
+    this.has = { fp: false, big: false, flow: false };   // what the bars on screen carry beyond OHLCV: need() as their history was asked
     this.wantFp = false;   // the Level 2 ladder reads this chart's footprint (needFootprint)
     slot.className = 'panel';
     this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
@@ -483,7 +483,7 @@ class Cell {
   askOlder(r) {
     if (!this.chart || this.inflight.length || !this.bars.length || this.capped) return;
     const req = this.back.want(r, this.bars[0].ms);
-    if (req && this.host.send({ op: 'older', id: this.id, before: req.before, fp: this.has.fp, big: this.has.big })) this.back.sent(req);
+    if (req && this.host.send({ op: 'older', id: this.id, before: req.before, fp: this.has.fp, big: this.has.big, flow: this.has.flow })) this.back.sent(req);
   }
 
   /* Older sessions in front of the chart: the bars, their studies (and the repaired first bars) and session
@@ -549,7 +549,7 @@ class Cell {
         if (++w.tries > 40) { w.resolve(false); return; }
         // a sub in flight answers with its own history: this asks again once that has landed
         if (!this.chart || this.inflight.length || !this.bars.length) { w.timer = setTimeout(go, 300); return; }
-        if (!this.host.send({ op: 'older', id: this.id, before: endMs, fp: this.has.fp, big: this.has.big })) { w.resolve(false); return; }
+        if (!this.host.send({ op: 'older', id: this.id, before: endMs, fp: this.has.fp, big: this.has.big, flow: this.has.flow })) { w.resolve(false); return; }
         w.timer = setTimeout(go, 8000);       // no answer at all: ask once more (the guard above ends it)
       };
       w.go = go;
@@ -620,7 +620,9 @@ class Cell {
      chart without them asks for its history without -- it is most of the message. */
   need() {
     const on = (id) => this.cfg.indicators.some((x) => x.id === id);
-    return { fp: this.wantFp || on('footprint'), big: on('bigprints') };
+    const opt = (id, key) => this.cfg.indicators.some((x) => x.id === id && x.params && x.params[key]);
+    // flow: the sweeps and trade bubbles (the bar's `sw` / `bub`), a good part of the message: only while an option wants them
+    return { fp: this.wantFp || on('footprint'), big: on('bigprints'), flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') };
   }
 
   /* The Level 2 ladder shows this chart (domui.js calls this at every paint): its Vol column sums the bars'
@@ -640,7 +642,7 @@ class Cell {
   subscribe(keepView = false) {
     const cfg = this.cfgNow(), view = keepView && this.chart ? this.viewNow() : null, has = this.need();
     if (!this.host.send({ op: 'sub', id: this.id, root: cfg.root, spec: cfg.spec, studies: C.serverKeys(cfg.indicators),
-      fp: has.fp, big: has.big })) return;
+      fp: has.fp, big: has.big, flow: has.flow })) return;
     this.inflight.push({ cfg, view, has });
     const s = this.shown;
     if (!s || s.root !== cfg.root || s.spec !== cfg.spec) this.message('Loading…');
@@ -674,7 +676,7 @@ class Cell {
     this.title();
     this.host.changed();
     const same = !!was && was.root === this.cfg.root && was.spec === this.cfg.spec && !(this.windowAt != null && ('spec' in patch || 'root' in patch)), need = this.need();
-    const loaded = (this.has.fp || !need.fp) && (this.has.big || !need.big);
+    const loaded = (this.has.fp || !need.fp) && (this.has.big || !need.big) && (this.has.flow || !need.flow);
     if (same && this.chart && !this.inflight.length && loaded && C.serverKeys(this.cfg.indicators).every((k) => this.keys.has(k))) {
       this.lastGood = this.cfgNow();
       this.restyle();
@@ -689,7 +691,7 @@ class Cell {
     const entry = this.inflight.shift();
     if (entry) this.lastGood = entry.cfg;
     if (this.inflight.length) return;
-    this.has = entry ? entry.has : { fp: true, big: true };   // no sub of ours: a replay's history, which carries both
+    this.has = entry ? entry.has : { fp: true, big: true, flow: true };   // no sub of ours: a replay's history, which carries all
     this.windowAt = null;
     if (this.winReq) this.winReq.resolve(false);   // a window asked for before this history is not the one wanted now
     this.back.reset();
@@ -959,7 +961,8 @@ class Cell {
             if (j === 0) this.colorOf[inst.uid] = sty.color;
             const tag = ln.tag !== false;   // its value on the price axis (a band or a histogram has none)
             const serie = ln.type === 'hist'
-              ? add(inst, k, ln.part, LW.HistogramSeries, { ...fmt, lastValueVisible: false, ...scale, visible: sty.visible !== false }, where)
+              ? add(inst, k, ln.part, LW.HistogramSeries, { ...fmt, lastValueVisible: false, ...(ln.fixed ? { color: sty.color } : {}),
+                ...scale, visible: sty.visible !== false }, where)
               : line(inst, k, ln.part, sty.color, sty.width, where,
                 { ...fmt, lastValueVisible: tag, ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
                   ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}) });
@@ -1245,12 +1248,14 @@ class Cell {
     if (b.blank) return { time };
     if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? P.upA : P.downA };
     if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? P.upA : P.downA };
+    if (typeof l.src === 'string' && l.src.startsWith('bk:')) this.bookSv(l.src, b);   // the book's own series: into b.sv
     const v = b.sv ? b.sv[l.src] : null;
     if (v == null) return { time };
     if (l.gen) {   // a technical indicator: its definition says which number this line plots
       const x = C.lineValue(l.gen, v);
       if (x == null) return { time };
-      return l.gen.type === 'hist' ? { time, value: x, color: x >= 0 ? P.upA : P.downA } : { time, value: x };
+      if (l.gen.type !== 'hist') return { time, value: x };
+      return l.gen.fixed ? { time, value: x } : { time, value: x, color: x >= 0 ? P.upA : P.downA };
     }
     if (typeof v === 'number') return { time, value: v };
     if (l.src.startsWith('vwap')) {
@@ -1267,26 +1272,73 @@ class Cell {
 
   visible(id) { return this.cfg.indicators.filter((x) => x.id === id && x.visible !== false); }
 
+  /* A "bk:" series (flowdefs.js) is computed here, not by the server: the mean of the book's 1 s samples inside
+     the bar (HBBookStore), written into b.sv so the legend and the crosshair read it like any study. A bar past
+     what the store holds gives null (a gap, not a zero). */
+  bookSv(src, b) {
+    const S = window.HBBookStore, F = window.HBFlowDefs;
+    if (!S || !F || !this.shown || !b.sv) return null;
+    const from = b.ms, to = this.bookEnd(b), root = this.shown.root;
+    return (b.sv[src] = F.bookValue(src, (col) => S.meanAt(root, from, to, col)));
+  }
+  /* Where a bar ends, for the book's samples: a time bar's length, else the start of the next bar (the last one:
+     now). */
+  bookEnd(b) {
+    if (this.isTime()) return b.ms + this.barMs();
+    const i = C.barIndexAtMs(this.bars, b.ms, 0);
+    return i >= 0 && this.bars[i + 1] ? this.bars[i + 1].ms : Date.now();
+  }
+  /* The book changed (HBBookEvents' timer): every "bk:" series is set again after a fetched window landed, else
+     only the newest bar's point moves (the live samples). */
+  refreshBookSeries(all) {
+    if (!this.chart || !this.bars.length) return;
+    const last = this.bars[this.bars.length - 1];
+    for (const l of this.lines) {
+      if (typeof l.src !== 'string' || !l.src.startsWith('bk:')) continue;
+      if (all) l.s.setData(this.bars.map((b) => this.point(l, b))); else l.s.update(this.point(l, last));
+    }
+    this.legend(this.hover);
+  }
+
   /* Trading, bot and tester markers share this one series-markers plugin, keyed by source (ruling S22): each
      overlay hands its own list to setExtraMarkers, and every redraw merges them with the big-prints markers. */
   setExtraMarkers(key, list) { this.extMarkers[key] = list || []; this.drawMarkers(); }
 
   drawMarkers() {
     if (!this.markers) return;
-    const mins = this.visible('bigprints').map((x) => x.params.min), P = this.P, big = [];
+    const prints = this.visible('bigprints'), mins = prints.map((x) => x.params.min), P = this.P, big = [];
     if (mins.length) {
-      const min = Math.min(...mins);
+      const min = Math.min(...mins), scale = prints.some((x) => x.params.scale) && window.HBFlowMath;
       for (const b of this.bars) {
         for (const [, , size, side] of (b.big || [])) {
           if (size >= min) big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
-            color: side > 0 ? P.up : P.down, shape: 'circle', size: 0.6, text: String(size) });
+            color: side > 0 ? P.up : P.down, shape: 'circle', size: scale ? scale.markerSize(size, min, true) : 0.6, text: String(size) });
         }
       }
     }
     const extra = [];
     for (const k in this.extMarkers) extra.push(...this.extMarkers[k]);
     const placed = window.HBDrawings.placeMarkers(this.bars, extra, this.barMs());
-    this.markers.setMarkers([...big.slice(-600), ...placed].sort((a, b) => a.time - b.time));
+    this.markers.setMarkers([...big.slice(-600), ...this.studyMarks(), ...placed].sort((a, b) => a.time - b.time));
+  }
+
+  /* The markers of the studies that are drawn as markers (a catalog definition's `marks`: delta divergence). The
+     server emits one on the bar that CONFIRMS a swing, `ago` bars after it; it is placed on the swing's bar. */
+  studyMarks() {
+    const out = [];
+    for (const inst of this.cfg.indicators) {
+      const t = C.TA_BY_ID[inst.id];
+      if (!t || !t.marks || inst.visible === false) continue;
+      const k = C.serverKey(inst);
+      for (let i = 0; i < this.bars.length; i++) {
+        const v = this.bars[i].sv && this.bars[i].sv[k], m = v ? t.marks(v, this.P) : null;
+        if (!m) continue;
+        let j = i, left = m.ago || 0;
+        while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back
+        if (!this.bars[j].blank) out.push({ time: this.bars[j].tt, position: m.position, color: m.color, shape: m.shape, text: m.text, size: m.size });
+      }
+    }
+    return out;
   }
 
   drawLevels() {
@@ -1339,10 +1391,25 @@ class Cell {
   syncFootprint() {
     if (!this.fp) return;
     const f = this.visible('footprint')[0];
-    this.fp.set(this.bars, !!f, f ? f.params.imbalance : 0, this.tick);
+    this.fp.set(this.bars, !!f, f ? f.params.imbalance : 0, this.tick,
+      f ? { stack: f.params.stack, unfinished: f.params.unfinished, deltaNum: f.params.deltaNum } : null);
   }
 
-  syncProfile() { if (this.prof) this.prof.set(this.visible('profile').length ? this.profile : null, this.tick); }
+  syncProfile() {
+    if (!this.prof) return;
+    const f = this.visible('profile')[0];
+    this.prof.set(f ? this.profile : null, this.tick, f ? { prior: f.params.prior, lines: f.params.lines, naked: this.priorNaked() } : null);
+  }
+  /* The prior session's POC has not been traded since this session began (its line is dashed until it is). */
+  priorNaked() {
+    const q = this.profile && this.profile.prev, bars = this.bars;
+    if (!q || q.poc == null || !bars.length) return false;
+    const sess = bars[bars.length - 1].s;
+    for (let i = bars.length - 1; i >= 0 && bars[i].s === sess; i--) {
+      if (!bars[i].blank && bars[i].l <= q.poc && bars[i].h >= q.poc) return false;
+    }
+    return true;
+  }
 
   destroy() {
     this.host.send({ op: 'unsub', id: this.id });

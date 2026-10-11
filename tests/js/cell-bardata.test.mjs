@@ -21,7 +21,7 @@ function cell(indicators) {
   const c = Object.create(Cell.prototype);
   return Object.assign(c, { id: 'c1', cfg: { root: 'NQ', spec: 'time:60', indicators }, sent: [], drawn: 0, built: 0,
     host: { send: (m) => { c.sent.push(m); return true; }, changed() {}, onLoaded() {} },
-    inflight: [], has: { fp: false, big: false }, wantFp: false, replay: null, chart: null, shown: null, keys: new Set(),
+    inflight: [], has: { fp: false, big: false, flow: false }, wantFp: false, replay: null, chart: null, shown: null, keys: new Set(),
     bars: [], realT: new Map(), loadWaiters: [], noteOn: false, capped: false, reaching: null, R: { timezone: 'exchange' },
     back: { reset() {}, want: (r, ms) => ({ before: ms }), sent() {} },
     title() {}, message() {}, viewNow: () => null, restyle() { c.drawn++; }, build() { c.built++; c.chart = {}; } });
@@ -34,31 +34,31 @@ function loaded(indicators) {
   c.sent.length = 0;
   return c;
 }
-const subs = (c) => c.sent.filter((m) => m.op === 'sub').map((m) => ({ fp: m.fp, big: m.big }));
+const subs = (c) => c.sent.filter((m) => m.op === 'sub').map((m) => ({ fp: m.fp, big: m.big, flow: m.flow }));
 
 test('a chart asks for the footprint and the big prints only with an indicator that draws them', () => {
   const ask = (list) => { const c = cell(list); c.subscribe(); return subs(c); };
-  assert.deepEqual(ask([ind('volume'), ind('vwap'), ind('levels')]), [{ fp: false, big: false }]);
-  assert.deepEqual(ask([ind('volume'), ind('footprint')]), [{ fp: true, big: false }]);
-  assert.deepEqual(ask([ind('bigprints')]), [{ fp: false, big: true }]);
-  assert.deepEqual(ask([ind('footprint'), ind('bigprints')]), [{ fp: true, big: true }]);
+  assert.deepEqual(ask([ind('volume'), ind('vwap'), ind('levels')]), [{ fp: false, big: false, flow: false }]);
+  assert.deepEqual(ask([ind('volume'), ind('footprint')]), [{ fp: true, big: false, flow: false }]);
+  assert.deepEqual(ask([ind('bigprints')]), [{ fp: false, big: true, flow: false }]);
+  assert.deepEqual(ask([ind('footprint'), ind('bigprints')]), [{ fp: true, big: true, flow: false }]);
   // a hidden instance still counts: the legend's eye shows it again at once, with no reload (setVisible)
-  assert.deepEqual(ask([ind('footprint', { visible: false }), ind('bigprints', { visible: false })]), [{ fp: true, big: true }]);
+  assert.deepEqual(ask([ind('footprint', { visible: false }), ind('bigprints', { visible: false })]), [{ fp: true, big: true, flow: false }]);
 });
 
 test('Footprint switched on later: the chart reloads with the data, it is never drawn from bars that lack it', () => {
   const c = loaded([ind('volume')]);
-  assert.deepEqual(c.has, { fp: false, big: false });
+  assert.deepEqual(c.has, { fp: false, big: false, flow: false });
   c.update({ indicators: [ind('volume'), ind('footprint')] });
-  assert.deepEqual(subs(c), [{ fp: true, big: false }]);
+  assert.deepEqual(subs(c), [{ fp: true, big: false, flow: false }]);
   assert.equal(c.drawn, 0);                        // not restyle(): the bars on screen have no footprint
   c.onHistory({ ...HIST });
-  assert.deepEqual(c.has, { fp: true, big: false });
+  assert.deepEqual(c.has, { fp: true, big: false, flow: false });
   c.update({ indicators: [ind('volume'), ind('footprint'), ind('bigprints')] });   // and Big prints after it
-  assert.deepEqual(subs(c), [{ fp: true, big: false }, { fp: true, big: true }]);
+  assert.deepEqual(subs(c), [{ fp: true, big: false, flow: false }, { fp: true, big: true, flow: false }]);
   assert.equal(c.drawn, 0);
   c.onHistory({ ...HIST });
-  assert.deepEqual(c.has, { fp: true, big: true });
+  assert.deepEqual(c.has, { fp: true, big: true, flow: false });
 });
 
 test('with the data already on the chart an indicator change is still drawn in place, with no reload', () => {
@@ -76,21 +76,21 @@ test('with the data already on the chart an indicator change is still drawn in p
 test('scroll-back asks for what the history on screen carries', () => {
   const c = loaded([ind('volume')]);
   c.askOlder({ from: 0, to: 1 });
-  assert.deepEqual(c.sent, [{ op: 'older', id: 'c1', before: 60000, fp: false, big: false }]);
+  assert.deepEqual(c.sent, [{ op: 'older', id: 'c1', before: 60000, fp: false, big: false, flow: false }]);
   const f = loaded([ind('footprint'), ind('bigprints')]);
   f.askOlder({ from: 0, to: 1 });
-  assert.deepEqual(f.sent, [{ op: 'older', id: 'c1', before: 60000, fp: true, big: true }]);
+  assert.deepEqual(f.sent, [{ op: 'older', id: 'c1', before: 60000, fp: true, big: true, flow: false }]);
 });
 
 test('the Level 2 ladder asks a chart for its footprint once, and the chart keeps asking for it afterwards', () => {
   const c = loaded([ind('volume')]);
   c.needFootprint();
   c.needFootprint();                               // the ladder calls at every paint
-  assert.deepEqual(subs(c), [{ fp: true, big: false }]);
+  assert.deepEqual(subs(c), [{ fp: true, big: false, flow: false }]);
   c.onHistory({ ...HIST });
   assert.equal(c.has.fp, true);
   c.subscribe(true);                               // a later reload (a reset, a reconnect) still carries it
-  assert.deepEqual(subs(c), [{ fp: true, big: false }, { fp: true, big: false }]);
+  assert.deepEqual(subs(c), [{ fp: true, big: false, flow: false }, { fp: true, big: false, flow: false }]);
   const f = loaded([ind('footprint')]);            // already on the chart: nothing to load
   f.needFootprint();
   assert.deepEqual(f.sent, []);
@@ -108,15 +108,37 @@ test('a refused footprint reload is not sent again at the next paint', () => {
   assert.equal(subs(c).length, 1);
 });
 
-test('in a replay the ladder never sends a sub (it would end the replay); the replay history carries both', () => {
+test('in a replay the ladder never sends a sub (it would end the replay); the replay history carries all', () => {
   const c = loaded([ind('volume')]);
   c.replay = { date: '2026-09-24' };
   c.needFootprint();
   assert.deepEqual(c.sent, []);
   c.onHistory({ ...HIST, replay: true });          // no sub of ours in flight: the replay's own history
-  assert.deepEqual(c.has, { fp: true, big: true });
+  assert.deepEqual(c.has, { fp: true, big: true, flow: true });
   c.replay = null;                                 // a refused or finished replay: the ladder asks now
-  c.has = { fp: false, big: false };
+  c.has = { fp: false, big: false, flow: false };
   c.needFootprint();
-  assert.deepEqual(subs(c), [{ fp: true, big: false }]);
+  assert.deepEqual(subs(c), [{ fp: true, big: false, flow: false }]);
+});
+
+test('trade bubbles and sweeps are asked for only while an option wants them; switching one on reloads', () => {
+  const ask = (list) => { const c = cell(list); c.subscribe(); return subs(c); };
+  const hm = (bubbles) => ind('heatmap', { params: { bubbles } });
+  const bp = (sweeps) => ind('bigprints', { params: { sweeps } });
+  assert.deepEqual(ask([hm(false), bp(false)]), [{ fp: false, big: true, flow: false }]);
+  assert.deepEqual(ask([hm(true)]), [{ fp: false, big: false, flow: true }]);
+  // a hidden instance still counts: the legend's eye shows its bubbles at once, with no reload (setVisible)
+  assert.deepEqual(ask([{ ...hm(true), visible: false }]), [{ fp: false, big: false, flow: true }]);
+  assert.deepEqual(ask([bp(true)]), [{ fp: false, big: true, flow: true }]);
+  const c = loaded([hm(false)]);
+  c.update({ indicators: [hm(true)] });
+  assert.deepEqual(subs(c), [{ fp: false, big: false, flow: true }]);
+  assert.equal(c.drawn, 0);                        // the bars on screen have no bubbles: reload, never draw from them
+  c.onHistory({ ...HIST });
+  assert.deepEqual(c.has, { fp: false, big: false, flow: true });
+  c.askOlder({ from: 0, to: 1 });
+  assert.equal(c.sent.find((m) => m.op === 'older').flow, true);
+  c.sent.length = 0;
+  c.update({ indicators: [hm(false)] });           // switched off again: the data is there, nothing to reload
+  assert.deepEqual(c.sent, []);
 });

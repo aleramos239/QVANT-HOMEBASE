@@ -15,7 +15,7 @@ const P = Cell.prototype;
 
 function bare(over = {}) {
   const sent = [];
-  const c = { sent, id: 'c1', chart: {}, bars: [{ ms: 9e12 }], inflight: [], has: { fp: false, big: false }, windowAt: null, winReq: null,
+  const c = { sent, id: 'c1', chart: {}, bars: [{ ms: 9e12 }], inflight: [], has: { fp: false, big: false, flow: false }, windowAt: null, winReq: null,
     back: new globalThis.HBScrollBack.ScrollBack(), sessions: [], keys: new Set(), host: { send: (m) => { sent.push(m); return true; }, onLoaded() {} },
     slotted: (b) => b, append(b) { this.bars.push(b); }, build() { this.built = (this.built || 0) + 1; }, message(t) { this.msg = t; },
     showWindow: P.showWindow, onWindow: P.onWindow, onOlder: P.onOlder, onUpdate: P.onUpdate, ...over };
@@ -26,7 +26,7 @@ const ans = (before, over = {}) => ({ type: 'older', id: 'c1', before, bars: [{ 
 test('showWindow sends the older request for the end time and resolves true when it lands', async () => {
   const c = bare();
   const p = c.showWindow(5000);
-  assert.deepEqual(c.sent, [{ op: 'older', id: 'c1', before: 5000, fp: false, big: false }]);
+  assert.deepEqual(c.sent, [{ op: 'older', id: 'c1', before: 5000, fp: false, big: false, flow: false }]);
   c.onOlder(ans(5000));
   assert.equal(await p, true);
   assert.equal(c.windowAt, 5000);
