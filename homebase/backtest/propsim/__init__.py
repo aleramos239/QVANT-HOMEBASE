@@ -49,6 +49,12 @@ bust / timeout, Wilson CI, days to pass) and the funded race (first payout, expe
 cheque). A rule file is UNCONFIRMED when it says "confirmed": false; its results carry
 confirmed=False and the label "<name> · unconfirmed rules". Every result carries CAVEAT.
 
+AN INTRADAY TRAIL (rule file `trail: "intraday"`: the Apex Legacy files @2026-10-11b): the floor follows the
+highest LIVE balance, not the close. `day_trail` gives each day its worst fall from its own running high and
+its highest open point, off every trade's mfe_usd / mae_usd; the result says `trail` and, as the careful bound,
+`trail_worst_case` (every trade's high before its low). The pipeline's stores keep no high: propodds refuses
+such a file.
+
 OPEN LOSSES COUNT (the account holder, 2026-10-02; the tile since 2026-10-11): a ledger whose
 trades all carry the engine's `mae_usd` is raced with each day's worst open loss (`day_opens`),
 so a day whose worst open point reaches the drawdown floor fails the account whatever it closes
@@ -188,6 +194,36 @@ def day_opens(trades: list[dict], dates: list[str], r: dict) -> list[float] | No
     return out
 
 
+def day_trail(trades: list[dict], dates: list[str], worst: bool = False) -> list[tuple] | None:
+    """Each day's (drop, high) in $ for an account whose floor trails the INTRADAY high (propsim._trail_day),
+    aligned with `dates`: drop = the day's worst fall from its own running high, high = its highest open point
+    above its start. A trade is three points from where the day stood at its entry: its high (mfe_usd less its
+    commission), its low (mae_usd plus it) and its close (net). THE ORDER of high and low inside a trade is not
+    on file. The natural reading (the number): a winner made its low first, then its high; a loser its high
+    first, then its low -- the old research engine's 'nat'. worst=True: every trade made its high first, so
+    its whole fall counts against the lifted floor ('pess': the careful bound). Trades are walked one after
+    the other in entry order. None when a trade has no mfe_usd or mae_usd: the day's high cannot be seen."""
+    num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool) and math.isfinite(v)  # noqa: E731
+    if any(not _has_mae(t) or not num(t.get("mfe_usd")) for t in trades):
+        return None
+    timed = all(_span(t) is not None for t in trades)
+    by: dict[str, list] = {}
+    for i, t in enumerate(trades):
+        by.setdefault(t["date"], []).append((_span(t) if timed else (i, i), t))
+    out = []
+    for d in dates:
+        real = run = drop = 0.0
+        for _, t in sorted(by.get(d, ()), key=lambda x: x[0]):
+            net, c = float(t["net"]), float(t.get("commission") or 0.0)
+            hi, lo = max(abs(float(t["mfe_usd"])) - c, net, 0.0), min(-abs(float(t["mae_usd"])) - c, net, 0.0)
+            for e in ((lo, hi, net) if net > 0 and not worst else (hi, lo, net)):
+                run = max(run, real + e)
+                drop = max(drop, run - (real + e))
+            real += net
+        out.append((drop, run))
+    return out
+
+
 def limit_trades(trades: list[dict], r: dict) -> list[dict]:
     """The ledger as a SOFT daily loss limit leaves it (LucidPro: the moment the day's P&L --
     closed trades plus the open one -- reaches -limit you are closed out and stopped for the
@@ -250,9 +286,23 @@ def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int =
     if not pnls:
         return {**out, "skipped": "no trades: nothing to simulate"}
     opens = day_opens(limited, dates, r)
-    res = engine.run(pnls, trade_flags=flags, day_opens=opens, rules=r, n_paths=n_paths, horizon=horizon,
-                     seed=seed, sweep=(), degradation=())
+    intraday = r.get("trail") == "intraday"
+    trail = day_trail(limited, dates) if intraday and opens is not None else None
+    kw = dict(trade_flags=flags, day_opens=opens, rules=r, n_paths=n_paths, horizon=horizon, seed=seed, sweep=(), degradation=())
+    res = engine.run(pnls, day_trail=trail, **kw)
     ev, fu = res["eval"], res["funded"]
+    if intraday:
+        out["trail"] = "intraday" if trail is not None else "closes only"
+        if trail is None:
+            out["caveat"] += (" This account's floor trails the INTRADAY high, and this ledger has no per-trade open-profit "
+                              "high: the floor was trailed on the closes only. The pass rate is OVERSTATED.")
+        else:
+            hard = engine.run(pnls, day_trail=day_trail(limited, dates, worst=True), **kw)
+            out["trail_worst_case"] = {"eval_pass_p": hard["eval"]["p"], "bust_p": hard["eval"]["bust_p"],
+                                       "funded_payout_p": hard["funded"]["payout_p"]}
+            out["caveat"] += (" The floor trails the intraday high: a winning trade is taken to make its low before its "
+                              "high, a losing trade its high before its low (the order is not on file). If every trade "
+                              f"made its high first, pass would be about {100 * hard['eval']['p']:.1f}%.")
     if opens is None:
         out["breach"] = BREACH_CLOSE
         out["caveat"] += (" This ledger has no per-trade adverse excursion, so the account is failed only when a "

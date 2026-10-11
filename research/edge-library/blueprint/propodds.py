@@ -199,6 +199,9 @@ def draws(days_: int, paths: int, horizon: int, seed: int) -> np.ndarray:
 
 
 def _start(pnl, r: dict) -> tuple:
+    if r.get("trail") == "intraday" or r.get("payout_min_days"):
+        raise J.Refuse(f"{r.get('name')}: this account's floor trails the INTRADAY high (or its payout counts traded days), and the stores keep each trade's low but "
+                       "not its high: the pipeline cannot read it. The tester's prop tile does (homebase/backtest/propsim, from every trade's mfe_usd)")
     n, dll = len(pnl), app().engine._dll(r)
     return np.zeros(n), np.zeros(n), np.full(n, -float(r["trailing_mll"])), np.ones(n, bool), (lambda p: np.maximum(p, -dll)) if dll else (lambda p: p)
 

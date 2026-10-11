@@ -69,8 +69,8 @@ def test_rule_files_and_the_unconfirmed_label():
     corrections of 2026-10-11); older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
     assert set(ids) == {"lucid-flex-50k@2026-10-11", "lucid-flex-50k-dll@2026-10-11", "lucid-pro-50k@2026-10-11",
-                        "lucid-pro-50k-no-dll@2026-10-11", "apex-legacy-50k@2026-10-11",
-                        "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11"}
+                        "lucid-pro-50k-no-dll@2026-10-11", "apex-legacy-50k@2026-10-11b",
+                        "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11b"}
     assert ids["lucid-flex-50k@2026-10-11"] == {"id": "lucid-flex-50k@2026-10-11", "name": "LucidFlex 50K",
                                                 "version": "2026-10-11", "confirmed": True}
     assert ids["lucid-pro-50k@2026-10-11"] == {"id": "lucid-pro-50k@2026-10-11", "name": "LucidPro 50K · $1,200 daily limit",
@@ -105,7 +105,8 @@ def test_the_apex_placeholder_is_gone():
     assert not (RULES_DIR / "apex-50k@unconfirmed.json").exists()
     assert sorted(p.name for p in RULES_DIR.glob("apex*")) == ["apex-eod-50k@2026-09-27b.json", "apex-eod-50k@2026-10-11.json",
                                                               "apex-legacy-300k@2026-09-28.json", "apex-legacy-300k@2026-10-11.json",
-                                                              "apex-legacy-50k@2026-09-27b.json", "apex-legacy-50k@2026-10-11.json"]
+                                                              "apex-legacy-300k@2026-10-11b.json", "apex-legacy-50k@2026-09-27b.json",
+                                                              "apex-legacy-50k@2026-10-11.json", "apex-legacy-50k@2026-10-11b.json"]
 
 
 def test_apex_legacy_300k_is_the_account_holders_numbers():
@@ -515,3 +516,88 @@ def test_the_close_only_reading_is_of_the_same_paths_and_never_below():
             assert b["headline"] == bare["headline"]
             assert (b["close_only"]["eval_pass_p"], b["close_only"]["funded_payout_p"]) == (b["headline"]["eval_pass_p"], b["headline"]["funded_payout_p"])
             assert a["close_only"]["eval_pass_p"] == pytest.approx(bare["headline"]["eval_pass_p"], abs=0.04)
+
+
+# ---------------------------------------------------------------- Apex Legacy: the floor trails the intraday high
+
+LEG50, LEG300 = "apex-legacy-50k@2026-10-11b", "apex-legacy-300k@2026-10-11b"
+
+
+def test_apex_legacy_is_apexs_own_rule_now():
+    a, b = load_rules(LEG50), load_rules(LEG300)
+    assert (a["trailing_mll"], a["lock_at"], a["lock_floor"], a["eval_target"], a["eval_min_days"], a["cap_micros"]) == (2500, 2600, 100, 3000, 7, 100)
+    assert (b["trailing_mll"], b["lock_at"], b["lock_floor"], b["eval_target"], b["eval_min_days"], b["cap_micros"]) == (7500, 7600, 100, 20000, 7, 350)
+    for r, cap in ((a, 2000), (b, 3500)):
+        assert r["trail"] == "intraday" and r["eval_lock"] is False and r["confirmed"] is False and r["daily_loss_limit"] is None
+        assert (r["win_day"], r["payout_win_days"], r["payout_min_days"], r["payout_consistency"], r["payout_min"], r["payout_cap"]) == (50, 5, 8, 0.3, 500, cap)
+        assert r["payout_buffer"] == r["trailing_mll"] - 400 and r["max_payout_profit"] == r["payout_buffer"] + cap
+    # the holder's end-of-day reading stays on disk for the runs and book cards that name it
+    assert "trail" not in load_rules("apex-legacy-300k@2026-09-28") and "trail" not in load_rules("apex-legacy-300k@2026-10-11")
+
+
+def test_the_floor_follows_the_intraday_high():
+    """A day = (P&L, traded, worst open loss, drop from its own running high, its highest open point)."""
+    r = load_rules(LEG50)                           # $2,500 under the highest LIVE balance
+    day = lambda pnl, opn=0.0, drop=0.0, high=0.0: (pnl, True, opn, drop, high)  # noqa: E731
+    out = lambda days: (engine.run_eval(days, r)["outcome"], engine.run_eval(days, r)["day"])  # noqa: E731
+    # a day that ran +$3,000 open and came back to +$400: the fall from its own high is the bust, though it closed UP
+    assert out([day(400.0, drop=2600.0, high=3000.0)]) == ("bust", 1) and out([day(400.0, drop=2499.0, high=2899.0)]) == ("timeout", 1)
+    # on the close alone (the holder's old file) the same day is nothing
+    assert engine.run_eval([day(400.0, drop=2600.0, high=3000.0)], load_rules("apex-legacy-50k@2026-10-11"))["outcome"] == "timeout"
+    # the high lifts the floor for good: +$2,000 open, closed +$500 -> the floor is -$500, and the next day's $1,000 dip is the bust
+    assert out([day(500.0, drop=1500.0, high=2000.0), day(0.0, opn=1000.0, drop=1000.0)]) == ("bust", 2)
+    assert out([day(500.0, drop=1500.0, high=2000.0), day(0.0, opn=999.0, drop=999.0)]) == ("timeout", 2)
+    # ... where the end-of-day trail would have left the floor at -$2,000
+    assert engine.run_eval([day(500.0, drop=1500.0, high=2000.0), day(0.0, opn=1000.0, drop=1000.0)],
+                           {**r, "trail": "eod"})["outcome"] == "timeout"
+    # in the evaluation the floor never stops trailing (Tradovate): after +$2,900 it is +$400, not the PA's locked +$100
+    assert out([day(2900.0, high=2900.0), day(-2500.0, opn=2500.0, drop=2500.0)]) == ("bust", 2)
+    assert engine.run_eval([day(2900.0, high=2900.0), day(-2700.0, opn=2700.0, drop=2700.0)], {**r, "eval_lock": True, "trail": "eod"})["outcome"] == "timeout"
+    # the pass is at a close, with its 7 trading days
+    assert out([day(500.0, high=500.0)] * 6) == ("timeout", 6) and out([day(500.0, high=500.0)] * 7) == ("pass", 7)
+    # THE PERFORMANCE ACCOUNT locks at +$100 once the live balance reached +$2,600 -- an open high is enough
+    f = engine.run_funded([day(300.0, drop=2400.0, high=2700.0), day(-150.0, opn=199.0, drop=199.0)], r)
+    assert f["bust_at"] is None
+    assert engine.run_funded([day(300.0, drop=2400.0, high=2700.0), day(-150.0, opn=200.0, drop=200.0)], r)["bust_at"] == 2
+    assert engine.run_funded([day(300.0, drop=2400.0, high=2700.0), day(100.0, drop=2600.0, high=2600.0)], r)["bust_at"] is None   # locked: it trails no more
+
+
+def test_apex_legacy_pays_after_eight_traded_days():
+    r = load_rules(LEG50)
+    assert engine.run_funded([600.0] * 7, r)["payout_at"] is None                      # +$4,200, five $50 days, 14% the largest: but 7 days
+    assert engine.run_funded([600.0] * 8, r) == dict(payout_at=8, cheque=2000.0, max_payout_at=8, bust_at=None)
+    assert engine.run_funded([600.0] * 7 + [0.0, 0.0], r)["payout_at"] is None         # a day without a trade is not a traded day
+    assert engine.run_funded([2000.0] + [200.0] * 7, r)["payout_at"] is None            # 2,000 of 3,400 = 59%: over the 30%
+    assert engine.run_funded([340.0] * 8, r) == dict(payout_at=8, cheque=620.0, max_payout_at=None, bust_at=None)   # +$2,720: $620 above +$2,100
+
+
+def test_day_trail_reads_the_days_high_and_its_fall_off_the_trades():
+    t = lambda d, a, net, mfe, mae: {"date": d, "entry_ms": a, "exit_ms": a + 5, "net": net, "mfe_usd": mfe, "mae_usd": mae, "commission": 4.0}  # noqa: E731
+    ledger = [t("2024-03-04", 10, 396.0, 900.0, 200.0),      # a winner: low -204 first, then high +896, closed +396
+              t("2024-03-04", 30, -304.0, 100.0, 300.0),     # a loser from +396: high +492 first (under the day's +896), then low +92
+              t("2024-03-05", 10, -504.0, 700.0, 500.0)]     # a loser: high +696 first, then low -504
+    dates = ["2024-03-04", "2024-03-05", "2024-03-06"]
+    assert propsim.day_trail(ledger, dates) == [(804.0, 896.0), (1200.0, 696.0), (0.0, 0.0)]
+    # the worst order: the winner's high comes first too, so its whole swing counts: 896 - (-204) = 1,100
+    assert propsim.day_trail(ledger, dates, worst=True) == [(1100.0, 896.0), (1200.0, 696.0), (0.0, 0.0)]
+    assert propsim.day_trail(ledger + [{"date": "2024-03-06", "net": 5.0, "mae_usd": 1.0}], dates) is None     # no mfe_usd: the high is not on file
+
+
+def test_the_tile_reads_apex_legacy_on_the_intraday_high_and_says_so():
+    """Every day runs +$3,000 open and closes +$600: nothing on the closes, a lost account on Apex's rule."""
+    swing = [{**t, "mfe_usd": 3000.0, "mae_usd": 10.0, "commission": 4.0} for t in day_trades([600.0] * 10)]
+    r = evaluate(swing, LEG50, n_paths=200)
+    assert r["trail"] == "intraday" and r["breach"] == propsim.BREACH_OPEN and "intraday high" in r["caveat"]
+    assert r["headline"]["bust_p"] == 0.0 and r["headline"]["eval_pass_p"] == 1.0       # a winner's low came first: it gave back $2,396, under $2,500
+    # the careful bound: had every trade made its high first, the fall is the whole swing ($3,010) and every account is lost
+    assert r["trail_worst_case"]["eval_pass_p"] == 0.0 and "made its high first, pass would be about 0.0%" in r["caveat"]
+    deep = [{**t, "mfe_usd": 3200.0} for t in swing]                                    # it gave back $2,596
+    lost = evaluate(deep, LEG50, n_paths=200)
+    assert (lost["headline"]["eval_pass_p"], lost["headline"]["bust_p"]) == (0.0, 1.0) and lost["close_only"]["eval_pass_p"] == 1.0
+    old = evaluate(deep, "apex-legacy-50k@2026-10-11", n_paths=200)                    # the end-of-day reading sees nothing
+    assert old["headline"]["eval_pass_p"] == 1.0 and "trail" not in old
+    blind = evaluate([{k: v for k, v in t.items() if k != "mfe_usd"} for t in deep], LEG50, n_paths=200)
+    assert blind["trail"] == "closes only" and "OVERSTATED" in blind["caveat"] and blind["headline"]["eval_pass_p"] == 1.0
+    from homebase.backtest.stats import montecarlo
+    assert montecarlo.run(deep, paths=50, seed=1, rules=load_rules(LEG50))["p_prop_pass"] == 0.0
+    assert montecarlo.run(swing, paths=50, seed=1, rules=load_rules(LEG50))["p_prop_pass"] == 1.0

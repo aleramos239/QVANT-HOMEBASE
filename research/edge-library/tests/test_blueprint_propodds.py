@@ -162,6 +162,16 @@ def test_the_apps_worst_open_loss_of_a_day_is_the_librarys():
         assert dates == cal and PS.day_opens(rows, cal, r) == pytest.approx(opn.tolist())
 
 
+def test_an_account_that_trails_the_intraday_high_is_refused():
+    """The stores keep each trade's low and not its high: the pipeline says so instead of reading Apex Legacy the friendly way."""
+    leg = PS.load_rules("apex-legacy-300k@2026-10-11b")
+    assert leg["trail"] == "intraday"
+    for walk in (lambda: one([(500.0, 0.0)], leg), lambda: one([(500.0, 0.0)], leg, funded=True)):
+        with pytest.raises(J.Refuse, match="INTRADAY high"):
+            walk()
+    one([(500.0, 0.0)], PS.load_rules("apex-legacy-300k@2026-09-28"))            # the holder's end-of-day file is read as before
+
+
 def test_lucidpro_is_paid_on_its_own_rule():
     """The 2026-10-11 LucidPro file: no winning days; $500 of profit, the largest day 40 % of it or less, paid from above the
     $2,100 buffer; the maximum payout at +$4,100 -- and the funded account may trade its 40 micros from the first day."""

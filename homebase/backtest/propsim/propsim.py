@@ -9,6 +9,10 @@
 # firms fail an account in real time), the payout rule reads its conditions off the rule file
 # (LucidPro's buffer and 40% consistency are not LucidFlex's five winning days), and an eval with
 # `max_days` is not raced past them.
+# 2026-10-11, later: `trail: "intraday"` (Apex Legacy) -- the floor follows the highest LIVE balance,
+# not the close: a day also carries its worst fall from its own running high and its highest open
+# point (`_trail_day`); `eval_lock: false` = the floor never stops trailing in the evaluation;
+# `payout_min_days` = traded days a payout needs.
 """Monte Carlo over the LucidFlex 50K eval + funded lifecycle.
 
 Port of the Institutional Protocol course's prop-firm notebook engine
@@ -115,9 +119,31 @@ def wilson_ci(successes: int, n: int, z: float = 1.96) -> Tuple[float, float]:
 
 # --- account mechanics (unchanged from propsim5 — these ARE the rules) -------
 
-def _floor(peak: float, r: dict) -> float:
-    """The trailing max-loss line for a given EOD peak profit."""
-    return r["lock_floor"] if peak >= r["lock_at"] else peak - r["trailing_mll"]
+def _floor(peak: float, r: dict, lock: bool = True) -> float:
+    """The trailing max-loss line for a given peak profit (the end-of-day peak; with
+    `trail: "intraday"` the highest live balance). lock False = it never stops trailing
+    (an Apex Legacy evaluation on Tradovate: `eval_lock: false`)."""
+    return r["lock_floor"] if lock and peak >= r["lock_at"] else peak - r["trailing_mll"]
+
+
+def _trail_day(profit: float, peak: float, floor: float, pnl: float, drop: float,
+               high: float, r: dict, lock: bool = True) -> Tuple[bool, float, float]:
+    """THE INTRADAY TRAIL of one day (`trail: "intraday"`, Apex Legacy: the threshold
+    follows the highest LIVE balance during trades, open profit included, and is enforced
+    in real time) -> (bust?, peak, floor) once the day's highs are in.
+
+    `drop` = the day's worst fall from its OWN running high, `high` = its highest open
+    point above its start (both $ >= 0). With the day's worst open loss L below its start
+    (the walk tests it first, against the floor in force) the account is lost during the
+    day exactly when (peak - profit) + L or `drop` reaches the trailing amount. The floor
+    is trailed for the whole day even when the lock is reached inside it: the one
+    approximation, on the careful side. A floor already locked no longer trails."""
+    if drop >= r["trailing_mll"] and not (lock and peak >= r["lock_at"]):
+        return True, peak, floor
+    top = profit + max(high, pnl, 0.0)
+    if top > peak:
+        peak, floor = top, _floor(top, r, lock)
+    return False, peak, floor
 
 
 def _dll(r: dict) -> Optional[float]:
@@ -144,19 +170,21 @@ def _cap_day(pnl: float, r: dict) -> float:
     return max(pnl, -dll) if dll else pnl
 
 
-def _days(path: Iterable) -> Iterable[Tuple[float, bool, float]]:
-    """Normalize a path to (pnl, is_trade_day, worst_open_loss) triples. Bare floats
+def _days(path: Iterable) -> Iterable[Tuple[float, bool, float, float, float]]:
+    """Normalize a path to (pnl, is_trade_day, worst_open_loss, drop, high). Bare floats
     count a day as traded when its P&L is nonzero — the notebook's own fallback. A day
     without a worst open loss ($ >= 0: how far the day stood below its start at its
-    worst point, open trades included) has 0: it can only fail the account on its close."""
+    worst point, open trades included) has 0: it can only fail the account on its close.
+    drop / high (`_trail_day`) are read only by an intraday-trailing account; a day
+    without them has 0: its close is then its only high."""
     for d in path:
         if isinstance(d, tuple):
-            yield d if len(d) == 3 else (d[0], d[1], 0.0)
+            yield d if len(d) == 5 else (d[0], d[1], d[2] if len(d) > 2 else 0.0, 0.0, 0.0)
         else:
-            yield (d, d != 0.0, 0.0)
+            yield (d, d != 0.0, 0.0, 0.0, 0.0)
 
 
-def _cheque(profit: float, win_days: int, big: float, r: dict) -> Optional[float]:
+def _cheque(profit: float, win_days: int, big: float, r: dict, days: Optional[int] = None) -> Optional[float]:
     """The payout that can be requested at this close in $, or None. Every condition is the
     rule file's own, and one it does not name is not asked:
       payout_win_days      that many days of `win_day` $ or more (LucidFlex: 5 of $150)
@@ -165,8 +193,11 @@ def _cheque(profit: float, win_days: int, big: float, r: dict) -> Optional[float
       payout_buffer        paid only from the profit above it (LucidPro: $2,100); without
                            one the cheque is `payout_share` of the profit (LucidFlex: 50%)
       payout_cap           the most one request pays; payout_min the least it may ask for
+      payout_min_days      traded days since the start (Apex Legacy: 8), asked of `days`
     Net profit above $0 is always needed."""
     if profit <= 0 or win_days < (r.get("payout_win_days") or 0):
+        return None
+    if days is not None and days < (r.get("payout_min_days") or 0):
         return None
     if profit < (r.get("payout_min_profit") or 0):
         return None
@@ -197,7 +228,8 @@ def run_eval(path: Iterable, r: dict) -> dict:
     """
     profit, peak, floor = 0.0, 0.0, -r["trailing_mll"]
     largest_win_day, trade_days, max_dd, day = 0.0, 0, 0.0, 0
-    for pnl, traded, opn in _days(path):
+    trail, lock = r.get("trail") == "intraday", r.get("eval_lock") is not False
+    for pnl, traded, opn, drop, high in _days(path):
         pnl = _cap_day(pnl, r)
         day += 1
         if traded:
@@ -205,6 +237,11 @@ def run_eval(path: Iterable, r: dict) -> dict:
         if opn > 0 and profit - opn <= floor:
             return dict(outcome="bust", day=day, trade_days=trade_days,
                         max_dd=max(max_dd, peak - profit + opn))
+        if trail:
+            lost, peak, floor = _trail_day(profit, peak, floor, pnl, drop, high, r, lock)
+            if lost:
+                return dict(outcome="bust", day=day, trade_days=trade_days,
+                            max_dd=max(max_dd, drop))
         profit += pnl
         largest_win_day = max(largest_win_day, pnl)
         max_dd = max(max_dd, peak - profit)
@@ -213,7 +250,7 @@ def run_eval(path: Iterable, r: dict) -> dict:
                         max_dd=max_dd)
         if profit > peak:
             peak = profit
-            floor = _floor(peak, r)
+            floor = _floor(peak, r, lock)
         # `consistency: null` = the account has no consistency rule (LucidPro);
         # a number is the cap on the largest winning day's share of the profit.
         consistency = r.get("consistency")
@@ -238,16 +275,23 @@ def run_funded(path: Iterable, r: dict) -> dict:
     in ``run_eval``.
     """
     profit, peak, floor = 0.0, 0.0, -r["trailing_mll"]
-    win_days, day, big = 0, 0, 0.0
+    win_days, day, big, trade_days = 0, 0, 0.0, 0
     payout_at = max_at = bust_at = None
     cheque = None
-    win_day = r.get("win_day")
-    for pnl, _, opn in _days(path):
+    win_day, trail = r.get("win_day"), r.get("trail") == "intraday"
+    for pnl, traded, opn, drop, high in _days(path):
         pnl = _cap_day(pnl, r)
         day += 1
+        if traded:
+            trade_days += 1
         if opn > 0 and profit - opn <= floor:
             bust_at = day
             break
+        if trail:
+            lost, peak, floor = _trail_day(profit, peak, floor, pnl, drop, high, r)
+            if lost:
+                bust_at = day
+                break
         profit += pnl
         big = max(big, pnl)
         if win_day is not None and pnl >= win_day:
@@ -258,7 +302,7 @@ def run_funded(path: Iterable, r: dict) -> dict:
         if profit > peak:
             peak = profit
             floor = _floor(peak, r)
-        due = _cheque(profit, win_days, big, r)
+        due = _cheque(profit, win_days, big, r, trade_days)
         if payout_at is None and due is not None:
             payout_at = day
             cheque = due
@@ -272,13 +316,14 @@ def run_funded(path: Iterable, r: dict) -> dict:
 # --- sampling & degradation --------------------------------------------------
 
 def _draws(pnls: Sequence[float], flags: Sequence[bool],
-           rng: random.Random, horizon: int, opens: Optional[Sequence[float]] = None):
+           rng: random.Random, horizon: int, opens: Optional[Sequence[tuple]] = None):
     """One simulated attempt: ``horizon`` i.i.d. draws from the weekday pool (a day is
-    drawn whole: its P&L, whether it traded, and its worst open loss where given)."""
+    drawn whole: its P&L, whether it traded, and -- ``opens``, one tuple a day -- its
+    worst open loss, alone or with its drop and high for an intraday trail)."""
     n = len(pnls)
     for _ in range(horizon):
         i = rng.randrange(n)
-        yield (pnls[i], flags[i]) if opens is None else (pnls[i], flags[i], opens[i])
+        yield (pnls[i], flags[i]) if opens is None else (pnls[i], flags[i], *opens[i])
 
 
 def _seen(days: Iterable, keep: list) -> Iterable:
@@ -339,7 +384,7 @@ def _timing(days: List[int]) -> dict:
 
 def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
               n_paths: int, horizon: int, rng: random.Random,
-              opens: Optional[Sequence[float]] = None) -> dict:
+              opens: Optional[Sequence[tuple]] = None) -> dict:
     """Race ``n_paths`` eval attempts and funded accounts; return both blocks.
     Eval and funded draw their own streams, notebook-style. An eval with its own
     ``max_days`` (Apex EOD: 30 calendar days) is raced for those days at most.
@@ -457,6 +502,7 @@ def run(
     *,
     trade_flags: Optional[Sequence[bool]] = None,
     day_opens: Optional[Sequence[float]] = None,
+    day_trail: Optional[Sequence[Tuple[float, float]]] = None,
     rules: Optional[dict] = None,
     n_paths: int = 20000,
     horizon: int = 250,
@@ -472,7 +518,9 @@ def run(
     builds both. A bare active-days list also works (every day counts as
     traded); its clock is then sessions, not calendar. ``day_opens`` = each day's
     worst open loss in $ (>= 0): with it OPEN LOSSES COUNT (``run_eval``); without
-    it an account fails only on a day's close, the friendlier reading.
+    it an account fails only on a day's close, the friendlier reading. ``day_trail``
+    = each day's (drop, high) for an account whose floor trails the intraday high
+    (``_trail_day``); it needs ``day_opens``.
 
     Pass ``sweep=()`` / ``degradation=()`` to skip those blocks (the web
     endpoints do — they only need the headline).
@@ -486,10 +534,14 @@ def run(
     if len(flags) != len(pnls):
         raise ValueError("trade_flags must align with day_pnls (%d != %d)"
                          % (len(flags), len(pnls)))
-    opens = None if day_opens is None else [float(o) for o in day_opens]
+    opens = None if day_opens is None else [(float(o),) for o in day_opens]
     if opens is not None and len(opens) != len(pnls):
         raise ValueError("day_opens must align with day_pnls (%d != %d)"
                          % (len(opens), len(pnls)))
+    if day_trail is not None:
+        if opens is None or len(day_trail) != len(pnls):
+            raise ValueError("day_trail needs day_opens and must align with day_pnls")
+        opens = [(o[0], float(d), float(h)) for o, (d, h) in zip(opens, day_trail)]
 
     main = _simulate(pnls, flags, r, n_paths=n_paths, horizon=horizon,
                      rng=random.Random(seed), opens=opens)
@@ -498,7 +550,7 @@ def run(
     for mult in sweep:
         s = _simulate([p * mult for p in pnls], flags, r, n_paths=sweep_paths,
                       horizon=horizon, rng=random.Random(seed + 1),
-                      opens=None if opens is None else [o * mult for o in opens])
+                      opens=None if opens is None else [tuple(v * mult for v in o) for o in opens])
         sweep_rows.append({
             "mult": mult,
             "eval_p": s["eval"]["p"], "eval_ci": s["eval"]["ci"],
