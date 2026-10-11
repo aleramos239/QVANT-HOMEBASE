@@ -127,7 +127,7 @@ function buildRow(it) {
   const row = mk('div', 'hb-news-row');
   row.dataset.id = it.id;
   if (N.isTrump(it)) row.classList.add('trump');
-  row.appendChild(mk('span', `hb-news-src ${it.source}`, N.sourceLabel(it.source)));
+  row.appendChild(mk('span', `hb-news-src ${it.source}${it.impact ? ` ff-${it.impact.toLowerCase()}` : ''}`, N.sourceLabel(it.source)));
   row.appendChild(mk('span', 'hb-news-time', N.etTime(it.t_ms)));
   const title = mk('button', 'hb-news-title', it.title);
   title.type = 'button';
@@ -163,10 +163,24 @@ function syncList(container, items) {
   }
 }
 
+/* ForexFactory's US red and orange folders, as rows of the same list: a day back to a week ahead, so what is about to
+   drop sits at the top. They come from the calendar the page already holds (host.events); never the chart's headline
+   markers (the chart has its own flags and vertical lines for them). */
+function calendarItems(nowMs = Date.now()) {
+  const ev = PAGE && typeof PAGE.events === 'function' ? PAGE.events() : [];
+  return (ev || []).filter((e) => String(e.country).toUpperCase() === 'USD' && (e.impact === 'High' || e.impact === 'Medium')
+    && e.t_ms >= nowMs - 86400000 && e.t_ms <= nowMs + 7 * 86400000)
+    .map((e) => ({ id: `ff:${e.t_ms}:${e.title}`, source: 'forexfactory', t_ms: e.t_ms, seen_ms: 0, impact: e.impact,
+      // the day too: the list reaches a week ahead and a row shows only its time
+      title: [new Date(e.t_ms).toLocaleDateString('en-US', { timeZone: 'America/New_York', weekday: 'short', month: 'short', day: 'numeric' }),
+        e.title, e.forecast ? `forecast ${e.forecast}` : '', e.previous ? `prev ${e.previous}` : ''].filter(Boolean).join(' · '),
+      tags: [e.impact === 'High' ? 'red folder' : 'orange folder'] }));
+}
+
 function patchPanel() {
   if (!listEl) return;
   renderBar();
-  const filtered = N.filterItems(store.items, store.filter);
+  const filtered = N.filterItems([...calendarItems(), ...store.items], store.filter).sort((a, b) => b.t_ms - a.t_ms);
   if (!filtered.length) {
     listEl.replaceChildren();
     emptyEl.textContent = store.loaded ? 'No headlines yet' : 'Loading…';
@@ -282,5 +296,5 @@ function mount(page) {
   window.HBPanel.addTab({ id: 'news', label: 'News', render, onShow, onHide });
 }
 
-window.HBNewsUI = { mount, onMessage, overlay: (cell) => new Overlay(cell) };
+window.HBNewsUI = { mount, onMessage, overlay: (cell) => new Overlay(cell), refresh: emit };   // refresh: the calendar was (re)loaded
 })();

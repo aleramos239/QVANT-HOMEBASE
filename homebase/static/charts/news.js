@@ -13,7 +13,7 @@
 (function () {
 'use strict';
 
-const SOURCE_LABELS = Object.freeze({ financialjuice: 'FinancialJuice', truth: 'Truth Social' });
+const SOURCE_LABELS = Object.freeze({ financialjuice: 'FinancialJuice', truth: 'Truth Social', forexfactory: 'ForexFactory' });
 const ITEMS_CAP = 500;            // "Items are capped at 500 in memory" (spec)
 const FLASH_MS = 3000;            // "A new item flashes for 3 s as breaking" (spec)
 const LINK_MS = 3 * 60_000;       // news<->burst window, mirrors bursts.py's NEWS_LINK_MS (+/- 3 minutes)

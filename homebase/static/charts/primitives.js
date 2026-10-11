@@ -252,7 +252,7 @@ class HighLow extends Layer {
 }
 
 /* The economic calendar: a 10 px flag per event time at the bottom of the price pane (ForexFactory's folder
-   colours) and, for High events, a 1 px dotted line in the event's colour through the pane. read() -> {events,
+   colours) and, for High and Medium events, a 1 px dotted line in the event's colour through the pane. read() -> {events,
    xOf, lines} | null is asked before every render (the bars and settings live in the cell); `flags` and
    `flagY` stay for the page's hover test. Layout and colours: HBEvents. */
 class EventFlags extends Layer {
@@ -276,10 +276,10 @@ class EventFlags extends Layer {
     if (!this.lines || !this.flags.some((g) => g.line)) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.lineWidth = 1;
-      ctx.strokeStyle = window.HBEvents.COLORS.High;
       ctx.setLineDash([1, 3]);
       for (const g of this.flags) {
         if (!g.line) continue;
+        ctx.strokeStyle = g.color;      // the folder's colour: red high, orange medium
         const x = Math.round(g.x) + 0.5;
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mediaSize.height); ctx.stroke();
       }

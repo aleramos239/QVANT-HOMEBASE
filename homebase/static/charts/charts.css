@@ -574,6 +574,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .hb-news-src { flex: none; padding: 0 5px; border-radius: 4px; font-size: 11px; line-height: 16px;
   background: var(--hover); color: var(--text-2); }
 .hb-news-src.truth { background: var(--paper-soft); color: var(--paper); }
+.hb-news-src.ff-high { background: #F23645; color: #fff; }       /* ForexFactory's folder colours */
+.hb-news-src.ff-medium { background: #FF9800; color: #fff; }
 .hb-news-title { flex: 1; min-width: 0; padding: 0; border: 0; background: none; text-align: left; font-size: 13px;
   color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 .hb-news-title:hover { text-decoration: underline; }

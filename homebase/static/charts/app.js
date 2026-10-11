@@ -2464,6 +2464,7 @@ async function loadCalendar() {
   } catch (_) { return; }
   for (const c of cells) c.redrawEvents();
   renderNextEvent();
+  if (window.HBNewsUI) window.HBNewsUI.refresh();      // the News tab lists the US red and orange folders
 }
 
 /* Now in epoch ms: a replay's clock in a replay (so its "Next" matches its charts), else the browser's. */
@@ -2738,7 +2739,7 @@ async function init() {
   page = {
     mk, icon, $, cells: () => cells, cur, select: (c) => select(cells.indexOf(c)),
     openDialog, closeDialog, setDialogClose(fn) { if (dlg) dlg.onClose = fn; }, dialogOpen: () => !!dlg,
-    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings,
+    openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings, events: () => calendar,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
     // a chart's trade config changed (HBTradeUI.setCellTrade): an account-list change is a layout change (Unsaved);

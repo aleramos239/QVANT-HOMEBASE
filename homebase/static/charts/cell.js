@@ -448,7 +448,9 @@ class Cell {
     // every stored event (the calendar accumulates weeks without bound) through xOf() on every redraw
     const vr = ts.getVisibleLogicalRange();
     const from = vr ? (this.bars[Math.max(0, Math.floor(vr.from) - 1)] || this.bars[0]).ms : first;
-    const to = vr ? (this.bars[Math.min(n - 1, Math.ceil(vr.to) + 1)] || this.bars[n - 1]).ms : last;
+    // past the last bar the window reaches as many bar lengths on as the visible range does (a news at 10:00 seen at 09:30)
+    const ahead = vr && time && this.barMs() > 0 ? Math.max(0, Math.ceil(vr.to) + 1 - (n - 1)) * this.barMs() : 0;
+    const to = vr ? (this.bars[Math.min(n - 1, Math.ceil(vr.to) + 1)] || this.bars[n - 1]).ms + ahead : last;
     return { events: window.HBEvents.shown(this.host.events(), this.R), xOf, lines: this.R.evLines, from, to };
   }
 
