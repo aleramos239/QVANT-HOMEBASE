@@ -301,6 +301,9 @@ class HistoryPool:
         self._busy = False
 
     async def grid(self, root: str, frm: int, to: int, cols: int, now_ms: int, offset_ms: float = 0.0) -> bytes:
+        return await self._run(child_grid, self.base, root, frm, to, cols, now_ms, offset_ms)
+
+    async def _run(self, fn, *args) -> bytes:
         if self._busy:
             raise Busy(BUSY)
         self._busy = True
@@ -309,7 +312,7 @@ class HistoryPool:
                 self._ex = self._factory()
             ex = self._ex
             try:
-                fut = ex.submit(child_grid, self.base, root, frm, to, cols, now_ms, offset_ms)
+                fut = ex.submit(fn, *args)
                 return await asyncio.wrap_future(fut)
             except BrokenProcessPool:
                 if self._ex is ex:
