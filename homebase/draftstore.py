@@ -85,9 +85,14 @@ def shadow_names() -> frozenset:
 
 
 def _shadow_names() -> frozenset:
+    """Hidden directories are not walked: `.state` holds every tester run and heat-map cell (~100k entries, 16 GB),
+    nothing in it can be imported, and walking it took 3-7 s on every cold listing (Lab load, Desk results)."""
+    mine = set()
     try:
-        mine = {p.stem for p in _HOMEBASE_DIR.rglob("*.py")} | {p.name for p in _HOMEBASE_DIR.rglob("*")
-                                                                if p.is_dir()}
+        for root, dirs, files in os.walk(_HOMEBASE_DIR):
+            dirs[:] = [d for d in dirs if not d.startswith(".")]
+            mine.update(dirs)
+            mine.update(Path(f).stem for f in files if f.endswith(".py"))
     except OSError:
         mine = set()
     return _STDLIB | frozenset(mine)
