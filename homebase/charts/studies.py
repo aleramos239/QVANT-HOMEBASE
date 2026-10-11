@@ -15,6 +15,7 @@ import math
 import re
 
 from .session import custom_anchor_key, is_rth, month_key, week_key
+from .studies_flow import NAMES as FLOW_NAMES, make_flow
 from .studies_ta import NAMES as TA_NAMES, make_ta
 
 SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
@@ -253,9 +254,11 @@ def make(key: str, tick_size: float = 0.25) -> Study:
     name, *args = str(key).split(":")
     if name in TA_NAMES:
         return make_ta(name, args, tick_size)
+    if name in FLOW_NAMES:
+        return make_flow(name, args)
     cls = REGISTRY.get(name)
     if cls is None:
-        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES]))}, profile)")
+        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES, *FLOW_NAMES]))}, profile)")
     if cls in (SMA, EMA):
         if len(args) > 2 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
             raise ValueError(f"bad study {key!r}: {name} takes a length and optional source "
@@ -307,17 +310,25 @@ class Profile:
         self.tick_size = tick_size
         self.session: str | None = None
         self.vol: dict = {}
+        self.prev_vol: dict = {}    # the session before: the prior-day ghost and lines
 
     def push(self, bar) -> None:
         if bar.session != self.session:
+            self.prev_vol = self.vol if self.session is not None else {}
             self.session, self.vol = bar.session, {}
         for k, (s, b) in bar.fp.items():
             self.vol[k] = self.vol.get(k, 0) + s + b
 
     def value(self, live=None) -> dict | None:
-        vol = self.vol
+        vol, prev = self.vol, self.prev_vol
         if live is not None:
-            vol = dict(vol) if live.session == self.session else {}
+            if live.session == self.session:
+                vol = dict(vol)
+            else:                       # the developing bar opens a new session: the finished one is the prior
+                vol, prev = {}, self.vol
             for k, (s, b) in live.fp.items():
                 vol[k] = vol.get(k, 0) + s + b
-        return profile_from(vol, self.tick_size)
+        out = profile_from(vol, self.tick_size)
+        if out is not None and prev:
+            out["prev"] = profile_from(prev, self.tick_size)
+        return out

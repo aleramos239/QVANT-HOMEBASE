@@ -34,6 +34,7 @@ from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
 from .session import session_date
 from .studies import Profile, make
+from .studies_flow import NAMES as FLOW_NAMES, warm_flow
 from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
 from .tick import BUY, SideClassifier, Tick, from_row
 
@@ -67,6 +68,8 @@ def warm_bars(key: str) -> int:
     n = int(rest[0]) if rest and rest[0].isdecimal() else 0
     if name in TA_NAMES:
         return warm_ta(name, rest)
+    if name in FLOW_NAMES:
+        return warm_flow(name, rest)
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 

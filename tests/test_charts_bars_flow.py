@@ -4,6 +4,7 @@ from __future__ import annotations
 import random
 
 from homebase.charts.bars import BUB_CAP, BarSpec, build, resample
+from homebase.charts.studies import Profile
 from homebase.charts.tick import BUY, SELL, Tick
 
 TS = 0.25
@@ -113,3 +114,21 @@ def test_a_developing_bar_holds_only_the_current_second_and_wires_what_the_defin
     bar.seal(TS)
     assert bar.wire(TS) == before and bar._bd == {}                        # sealing changes nothing on the wire
     assert bar.bub == _oracle_bubbles(ticks) and len(bar.bub) == BUB_CAP
+
+
+def test_profile_keeps_the_prior_session_for_the_ghost_and_the_lines():
+    from homebase.charts.bars import Bar
+
+    def b(session, px, v):
+        x = Bar.open_at(0, session, px)
+        x.fp = {int(px / TS): [0, v]}
+        return x
+    p = Profile(TS)
+    p.push(b("2026-10-08", 100.0, 5))
+    assert "prev" not in p.value()
+    p.push(b("2026-10-09", 101.0, 7))
+    v = p.value()
+    assert v["poc"] == 101.0 and v["prev"]["poc"] == 100.0
+    live = b("2026-10-10", 102.0, 1)                 # the developing bar opens a new session
+    v = p.value(live)
+    assert v["poc"] == 102.0 and v["prev"]["poc"] == 101.0
