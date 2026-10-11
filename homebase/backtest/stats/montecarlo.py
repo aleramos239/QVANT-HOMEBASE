@@ -12,9 +12,11 @@ Per path:
   * ruin = the path's max drawdown reaching ``floor`` $ (review I1). The default floor is the prop
     rules' trailing max loss, else $2,000;
   * prop pass = ``propsim.engine.run_eval`` on the FIRST ``propsim.HORIZON`` (250) days of the
-    reordered (day P&L, traded?) sequence, i.e. the LucidFlex race itself -- EOD trailing floor,
-    consistency on the largest DAY, min days on traded days -- over the same horizon the run's own
-    prop sim uses, so a bootstrap MC reads what the prop tile reads. It is not a copy.
+    reordered (day P&L, traded?, worst open loss) sequence, i.e. the LucidFlex race itself -- EOD
+    trailing floor, open losses counted where the trades carry mae_usd (``prop_breach`` says which
+    rule was read), consistency on the largest DAY, min days on traded days -- over the same
+    horizon the run's own prop sim uses, so a bootstrap MC reads what the prop tile reads. It is
+    not a copy.
 
 Work is capped at ``MAX_WORK`` steps (max(days, trades) x paths, review I3 + rereview), and the
 result reports the paths actually used. Money is USD, and drawdowns are <= 0 and include the 0 starting peak (the same
@@ -28,7 +30,7 @@ from itertools import accumulate, chain, islice
 from operator import sub
 from typing import List, Optional, Sequence
 
-from ..propsim import HORIZON, engine, limit_trades, weekday_grid
+from ..propsim import BREACH_CLOSE, BREACH_OPEN, HORIZON, day_opens, day_trail, engine, limit_trades, weekday_grid
 
 __all__ = ["run", "MAX_WORK", "MAX_PATHS", "DEFAULT_FLOOR"]
 
@@ -131,6 +133,9 @@ def run(
     if rules is not None:
         trades = limit_trades(list(trades), rules)
     pnls, flags, dates = weekday_grid(list(trades))
+    opens = day_opens(list(trades), dates, rules) if rules is not None else None
+    trail = day_trail(list(trades), dates) if opens is not None and rules.get("trail") == "intraday" else None
+    extra = [(o, *t) for o, t in zip(opens, trail)] if trail is not None else [(o,) for o in opens or [0.0] * len(dates)]
     at = {d: i for i, d in enumerate(dates)}
     day_nets: List[list] = [[] for _ in dates]
     for t in trades:
@@ -158,7 +163,7 @@ def run(
         streaks.append(float(max(map(len, "".join(map(sig.__getitem__, order)).split("W")))))
         if -dd >= floor:
             n_ruin += 1
-        days = zip(map(pnls.__getitem__, order), map(flags.__getitem__, order))
+        days = ((pnls[i], flags[i], *extra[i]) for i in order)       # a day whole: its worst open loss, and its drop and high for an intraday trail
         if rules is not None and engine.run_eval(islice(days, HORIZON), rules)["outcome"] == "pass":
             n_pass += 1
 
@@ -171,6 +176,7 @@ def run(
         "losing_streak": _percentiles(streaks),
         "floor": floor, "p_ruin": n_ruin / used,
         "p_prop_pass": (n_pass / used) if rules is not None else None,
+        "prop_breach": None if rules is None else BREACH_OPEN if opens is not None else BREACH_CLOSE,
         "histogram": _histogram(dds, bins),
         "actual": {"max_dd": actual, "worse_than_pct": 100.0 * sum(1 for d in dds if d > actual) / used},
     }

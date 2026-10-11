@@ -1,0 +1,52 @@
+{
+  "name": "Apex Legacy 300K",
+  "version": "2026-10-11b",
+  "as_of": "2026-10-11",
+  "source": "Apex's help centre, read 2026-10-01 and again 2026-10-11 (https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/, https://apextraderfunding.com/help-center/legacy-payouts/legacy-pa-payout-parameters/, https://apextraderfunding.com/legacy-products/; every value with its page in research/prop-portfolio/2026-10-01-l2/APEX300_RULES.md and research/prop-portfolio/2026-09-29/FUNDED_RULES.md). THIS FILE IS APEX'S OWN RULE: the threshold trails the highest LIVE balance during trades (open profit included), not the end-of-day balance. It replaces the 2026-10-11 file, which kept the account holder's end-of-day reading. Asked for by the account holder 2026-10-11 (\"add the fix to the apex legacy simulators with the intraday high\"); the numbers are Apex's pages', not yet his own word: \"confirmed\": false.",
+  "confirmed": false,
+  "account_size": 300000,
+  "eval_target": 20000,
+  "eval_min_days": 7,
+  "consistency": null,
+  "trailing_mll": 7500,
+  "lock_at": 7600,
+  "lock_floor": 100,
+  "trail": "intraday",
+  "eval_lock": false,
+  "win_day": 50,
+  "payout_win_days": 5,
+  "payout_min_days": 8,
+  "payout_share": null,
+  "payout_cap": 3500,
+  "max_payout_profit": 10600,
+  "payout_consistency": 0.3,
+  "payout_buffer": 7100,
+  "payout_min": 500,
+  "daily_loss_limit": null,
+  "max_days": null,
+  "scaling_micros": {
+    "start": 170,
+    "full_after": 7600
+  },
+  "cap_micros": 350,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:59",
+  "no_overnight": true,
+  "payout_ladder": "payouts 1-5 at most $3,500 each, none after; the safety net applies to the first three; 100% of the first $25,000, then 90%",
+  "notes": [
+    "INTRADAY TRAIL: the threshold sits $7,500 under the highest LIVE balance (open profit included) and is enforced in real time. The tester reads each day's worst fall from its own running high and its highest open point off every trade's tick-level high and low (mfe_usd, mae_usd).",
+    "The order of a trade's high and low is not on file: a winner is taken to make its low first, a loser its high first; the result also says what the worst order (every high first) would give. A ledger without mfe_usd is trailed on the closes only and says it is overstated.",
+    "EVALUATION: +$20,000 at a close, 35 minis, no daily loss limit, no consistency rule, 7 trading days at least (a one-day-pass promotion would make it 1: the account holder's own accounts were described as one-day). On Tradovate the threshold never stops trailing in the evaluation (`eval_lock`: false).",
+    "PERFORMANCE ACCOUNT: the threshold stops at $300,000 + $100 once the live balance reaches +$7,600. Half size (17 minis) until a close above +$7,600: NOT enforced by the simulator.",
+    "PAYOUT, Apex's own: 8 traded days, 5 of them of $50 or more, the largest day 30% of the profit or less, and the balance after the payout stays at +$7,100 or more (so $500 needs +$7,600); at least $500, at most $3,500: the maximum first payout needs +$10,600. Only the first payout is simulated.",
+    "NOT MODELLED: the 30% open-loss rule (an open loss over 30% of the start-of-day profit, at least 30% of the threshold, is a violation), the 5:1 stop-to-target limit, one direction at a time (no orders resting on both sides), and Apex's ban on automated trading in Performance Accounts.",
+    "The evaluation is a monthly subscription ($797 a month list) with no time limit. Flat by 16:59 ET.",
+    "THE PIPELINE CANNOT READ THIS ACCOUNT: its stores keep each trade's low but not its high (blueprint/propodds.py refuses the file). The tester does."
+  ],
+  "disclaimer": "Apex's published Legacy rules as read 2026-10-11; not yet confirmed by the account holder."
+}

@@ -71,9 +71,9 @@ def test_the_shipped_file_asks_the_prop_gates_and_its_numbers_lie_over_the_varia
     assert (v["region_boxes"], v["pick_boxes"], v["floor_part"]) == (1, 1, 0.0)                              # the gates' numbers ...
     assert (v["map_share"], v["region_trades"], v["box_tries"], v["without_best_trades"], v["months_won"]) == (0.5, 200, 5, 0.05, 0.7)      # ... and the file's own, unchanged
     assert P.need("prop", "eval") == 0.4 and P.need("prop", "payout") == 0.5                                # the owner's 40 % eval odds
-    assert P.need("prop", "fees") == {"lucid-pro-50k-no-dll@2026-09-27b": 140, "lucid-pro-50k@2026-09-27b": 115}      # the owner, 2026-09-30
+    assert P.need("prop", "fees") == {"lucid-pro-50k-no-dll@2026-10-11": 140, "lucid-pro-50k@2026-10-11": 115}      # the owner, 2026-09-30
     assert P.floor("NQ", v["floor_part"]) == 0.0                                                            # a floor of nothing: "above $0" is read by the gates
-    assert P.need("prop", "account") == "lucid-pro-50k-no-dll@2026-09-27b"                                  # the account is untouched: open losses count
+    assert P.need("prop", "account") == "lucid-pro-50k-no-dll@2026-10-11"                                   # LucidPro 50K, no daily limit: open losses count; since 2026-10-11 its OWN payout rule
 
 
 def test_a_file_without_gates_or_in_mode_law_reads_as_it_was_and_another_word_is_refused():
@@ -224,7 +224,7 @@ def test_where_the_box_stands_is_a_new_high_or_a_drawdown_from_its_best():
 
 
 def test_the_fee_line_sets_what_an_eval_costs_against_the_cheque_expected():
-    own = "lucid-pro-50k-no-dll@2026-09-27b"
+    own = "lucid-pro-50k-no-dll@2026-10-11"
     f = ST._fees({own: {"eval": 0.5, "payout": 0.4}, "lucid-flex-50k@2026-09-27": {"eval": 0.5, "payout": 0.4}})
     assert list(f) == [own]                                                    # (an account with no fee on file has no line)
     x = f[own]

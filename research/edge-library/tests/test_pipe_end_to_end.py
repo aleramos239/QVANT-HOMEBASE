@@ -269,8 +269,8 @@ def test_the_book_card_holds_what_the_design_asks_and_the_owner_approves_it(worl
     b = seven["book"]
     assert set(BOOK) <= set(b) and seven["lines"] == [] and f"bp.py pipe approve {A}" in seven["text"]
     assert (b["name"], b["sub"], b["family"], b["market"], b["session"], b["bar"], b["filter"], b["tries"]) == (A, SUB, "orb", "NQ", "nyam", "5", None, 2)
-    assert b["label"] == six["label"] and list(b["prop"]) == ACCOUNTS and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())      # the three accounts
-    assert [b["prop"][a]["confirmed"] for a in ACCOUNTS] == [True, True, False] and all(0.0 <= p["eval"] <= 1.0 and 0.0 <= p["payout"] <= 1.0 for p in b["prop"].values())
+    assert b["label"] == six["label"] and list(b["prop"]) == ACCOUNTS and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())      # the book's accounts
+    assert [b["prop"][a]["confirmed"] for a in ACCOUNTS] == [True, True] and all(0.0 <= p["eval"] <= 1.0 and 0.0 <= p["payout"] <= 1.0 for p in b["prop"].values())
     lock = TI.read(ROOT / "ideas" / SUB / "lock.json")
     assert b["rule"] == {"spec": lock["spec"], "default": five["locked"]["default"], "lock": lock["hash"]} and b["rule"]["spec"]["run"]["limits"] == {"max_tr": 2}
     # the money facts are the default box's trades of the two unseen days (counts and shapes: no P&L of a test day is asserted)

@@ -22,6 +22,7 @@ EVERYTHING IS HAND-MADE (tests/blueprint_synth.py): no tape is read, no engine r
 from __future__ import annotations
 
 import contextlib
+import datetime as dt
 import io
 import json
 import math
@@ -33,6 +34,7 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 W = Path(__file__).resolve().parents[1]
 sys.path[:0] = [str(W), str(Path(__file__).resolve().parent)]
@@ -50,7 +52,7 @@ PS = PO.app()
 E = PS.engine
 IS = A.ideastore()
 PRO, PRO_FREE, FLEX = "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27"
-ACCOUNTS = (FLEX, PRO, PRO_FREE, "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28", "topstep-50k@2026-09-27b")
+ACCOUNTS = (FLEX, PRO, PRO_FREE, "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28")
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")      # plan section 8
 NAMES = {0: "timeout", PO.PASS: "pass", PO.BUST: "bust"}
 HOME = Path.home() / ".homebase"
@@ -115,6 +117,73 @@ def pool(seed: int, n: int = 120, scale: float = 600.0) -> tuple:
 
 
 # ================================================================ (a) the walks are the app's
+
+AUDIT = ("lucid-pro-50k@2026-10-11", "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-10-11", "apex-eod-50k@2026-10-11")
+
+
+def test_with_open_losses_the_walks_are_still_the_apps_path_for_path():
+    """Since the prop audit (2026-10-11) the app's own walks take a day's worst open loss too, and the payout rule is read off
+    the rule file (LucidPro's buffer and consistency, Apex EOD's): both simulators must say the same of every path, on the
+    files of the audit as on the ones before it."""
+    rnd = np.random.default_rng(5)
+    for rid in ACCOUNTS + AUDIT:
+        r = PS.load_rules(rid)
+        for seed, scale in ((1, 300.0), (2, 900.0), (3, 2600.0)):
+            pnl, traded = pool(seed, scale=scale * r["trailing_mll"] / 2000)
+            opn = np.where(traded, np.maximum(-pnl, 0.0) + np.abs(rnd.normal(0.0, scale * 0.6, len(pnl))), 0.0)
+            idx = PO.draws(len(pnl), 200, 60, PS.SEED)
+            P, T, O = pnl[idx], traded[idx], opn[idx]
+            e, f = PO.eval_walk(P, T, O, r), PO.funded_walk(P, O, r)
+            for k in range(len(idx)):
+                path = list(zip(P[k].tolist(), T[k].tolist(), O[k].tolist()))
+                a, b = E.run_eval(path, r), E.run_funded(path, r)
+                assert (NAMES[int(e["outcome"][k])], int(e["day"][k]), int(e["trade_days"][k])) == (a["outcome"], a["day"], a["trade_days"]), (rid, seed, k)
+                mine = {"payout_at": int(f["payout_at"][k]) or None, "max_payout_at": int(f["max_payout_at"][k]) or None, "bust_at": int(f["bust_at"][k]) or None,
+                        "cheque": None if math.isnan(f["cheque"][k]) else float(f["cheque"][k])}
+                assert mine == b, (rid, seed, k, mine, b)
+
+
+def test_the_apps_worst_open_loss_of_a_day_is_the_librarys():
+    """propsim.day_opens (the tester tile's) and propodds.days (library._worst_open) read the same ledger to the same number."""
+    rnd = random.Random(9)
+    for rid in (FLEX, PRO):
+        r, rows = PS.load_rules(rid), []
+        for d in range(60):
+            t0 = 0
+            for _ in range(rnd.randint(0, 4)):
+                a = t0 + rnd.randint(0, 50)
+                b = a + rnd.randint(1, 120)
+                t0 = a if rnd.random() < 0.3 else b                 # some trades overlap the next one
+                rows.append({"date": (dt.date(2024, 1, 1) + dt.timedelta(d)).isoformat(), "entry_ms": a, "exit_ms": b, "net": round(rnd.gauss(20, 700), 2),
+                             "mae_usd": round(abs(rnd.gauss(0, 600)), 2), "commission": 4.0})
+        rows = PS.limit_trades(sorted(rows, key=lambda t: (t["date"], t["exit_ms"], t["entry_ms"])), r)
+        cal = sorted({t["date"] for t in rows})
+        _, _, opn, dates = PO.days(rows, r, cal)
+        assert dates == cal and PS.day_opens(rows, cal, r) == pytest.approx(opn.tolist())
+
+
+def test_an_account_that_trails_the_intraday_high_is_refused():
+    """The stores keep each trade's low and not its high: the pipeline says so instead of reading Apex Legacy the friendly way."""
+    leg = PS.load_rules("apex-legacy-300k@2026-10-11b")
+    assert leg["trail"] == "intraday"
+    for walk in (lambda: one([(500.0, 0.0)], leg), lambda: one([(500.0, 0.0)], leg, funded=True)):
+        with pytest.raises(J.Refuse, match="INTRADAY high"):
+            walk()
+    one([(500.0, 0.0)], PS.load_rules("apex-legacy-300k@2026-09-28"))            # the holder's end-of-day file is read as before
+
+
+def test_lucidpro_is_paid_on_its_own_rule():
+    """The 2026-10-11 LucidPro file: no winning days; $500 of profit, the largest day 40 % of it or less, paid from above the
+    $2,100 buffer; the maximum payout at +$4,100 -- and the funded account may trade its 40 micros from the first day."""
+    pro = PS.load_rules("lucid-pro-50k-no-dll@2026-10-11")
+    f = one([(900.0, 0.0)] * 5, pro, funded=True)
+    assert (int(f["payout_at"][0]), float(f["cheque"][0]), int(f["max_payout_at"][0]), int(f["bust_at"][0])) == (3, 600.0, 5, 0)
+    f = one([(3000.0, 0.0), (600.0, 0.0), (600.0, 0.0), (600.0, 0.0), (300.0, 0.0)], pro, funded=True)       # 3,000 of 5,100 = 59 %
+    assert (int(f["payout_at"][0]), int(f["max_payout_at"][0])) == (0, 0) and math.isnan(f["cheque"][0])
+    assert PO.steps(pro) == ([1, 2, 3, 5, 7, 10, 15, 20, 30, 40], [1, 2, 3, 5, 7, 10, 15, 20, 30, 40])
+    assert PO.steps(PS.load_rules(PRO_FREE))[1] == [1, 2, 3, 5, 7, 10, 15, 20]              # the old file: LucidFlex's scaling plan
+
+
 
 def test_with_zero_open_loss_the_walks_are_the_apps_path_for_path():
     seen = set()
@@ -260,7 +329,7 @@ def test_the_size_steps_an_account_may_trade():
     all_ = R.template("sizes")["steps"]
     assert all_ == [1, 2, 3, 5, 7, 10, 15, 20, 30, 40]
     assert PO.steps(PS.load_rules(PRO)) == (all_, [1, 2, 3, 5, 7, 10, 15, 20])      # funded: the scaling plan starts at 20 micros
-    assert PO.steps(PS.load_rules("topstep-50k@2026-09-27b")) == (all_, all_)       # 50 micros, no scaling plan
+    assert PO.steps(PS.load_rules("apex-legacy-300k@2026-09-28")) == (all_, all_)   # 350 micros, no scaling plan
     assert PO.steps({**PS.load_rules(PRO), "cap_micros": 12, "scaling_micros": None}) == ([1, 2, 3, 5, 7, 10], [1, 2, 3, 5, 7, 10])
 
 
@@ -383,7 +452,7 @@ def test_refused_unless_the_test_is_on_file_and_passed():
                      ({"fee_budget": None}, "fee budget"), ({"fee_budget": -1.0}, "fee budget"), ({"fee_budget": float("nan")}, "fee budget")):
         refused(lambda: sim("syn_ok", **kw), word, "5.4")
     refused(lambda: sim("syn_ok", account=None), "--account")
-    refused(lambda: sim("syn_ok", account="lucid-pro-9000k@2030"), "lucid-pro-9000k@2030", PRO, FLEX)       # the app's rule files are named
+    refused(lambda: sim("syn_ok", account="lucid-pro-9000k@2030"), "lucid-pro-9000k@2030", "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-10-11")       # the app's rule files are named
     for name in ("syn_lead", "syn_failed", "syn_bare", "syn_gone", "syn_early", "syn_other", "syn_relock", "syn_none", "syn_missing", "syn_ok"):
         assert not (ROOT / name / "sim").exists(), f"{name}: a refusal wrote a result"
 
@@ -543,7 +612,7 @@ def test_what_a_portfolio_refuses():
     refused(lambda: PO.portfolio(["pf_up"], PRO_FREE, ROOT), "two or more DIFFERENT ideas")
     refused(lambda: PO.portfolio(["pf_up", "pf_up"], PRO_FREE, ROOT), "two or more DIFFERENT ideas")
     refused(lambda: PO.portfolio(["pf_up", "pf_down"], "", ROOT), "--account=ID")
-    refused(lambda: PO.portfolio(["pf_up", "pf_down"], "nobody@1", ROOT), "nobody@1", PRO)
+    refused(lambda: PO.portfolio(["pf_up", "pf_down"], "nobody@1", ROOT), "nobody@1", "lucid-pro-50k-no-dll@2026-10-11")
     refused(lambda: PO.portfolio(["pf_up", "pf_failed"], PRO_FREE, ROOT), "pf_failed", "SHELVED", "did not pass")      # line 5.6: every member proven on its own
     refused(lambda: PO.portfolio(["pf_up", "pf_nobody"], PRO_FREE, ROOT), "no idea pf_nobody")
     assert before == (sorted(p.name for p in (ROOT / "_portfolios").glob("*")) if (ROOT / "_portfolios").exists() else [])
@@ -624,7 +693,7 @@ def test_the_apps_connector_against_this_toolkit():
     assert "Lines: 4 passed · 0 FAILED · 1 not judged or does not apply (5.3)" in out and any(ln.startswith("Next: ") for ln in out) and any(ln.startswith("Saved: ") and f"{PRO}.json" in ln for ln in out)
     assert all(text.count(f"\n{k} PASS ") == 1 for k in ("5.1", "5.2", "5.4", "5.5")), "each line once"
     assert bad == "error" and why.startswith("Refused (blueprint sim): ") and "out-of-sample test is not on file" in why and "Nothing was run." in why
-    assert bad2 == "error" and "nobody@1" in why2 and PRO in why2
+    assert bad2 == "error" and "nobody@1" in why2 and "lucid-pro-50k-no-dll@2026-10-11" in why2
 
 
 def test_nothing_was_written_outside_the_temp_folder():

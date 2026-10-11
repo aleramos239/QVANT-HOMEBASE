@@ -1,0 +1,49 @@
+{
+  "name": "Apex EOD 50K",
+  "version": "2026-10-11",
+  "as_of": "2026-10-11",
+  "source": "Account holder 2026-09-27: \"the EOD trail apex with the max 6 con\", $3,000 target, $2,000 EOD-trailing max loss, $1,000 daily loss limit, no consistency rule, passable in 1 day, floor locks at +$100. The daily limit is modelled SOFT (closed out and stopped for the day, the account survives), the same as Lucid's -- confirm if Apex's differs. Floor: $2,000 below the EOD peak, locking at $50,100 (+$100) once the EOD peak reaches +$2,100. CORRECTED 2026-10-11 from Apex's pages (https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-evaluations/, .../eod-drawdown-explained/, .../eod-payouts/, https://apextraderfunding.com/help-center/additional-helpful-items/scaling-levels-pa-explained/): the evaluation lasts 30 calendar days with no extension and no reset (21 weekdays here), and the payout block is now Apex's own: 5 days of $250 or more, the largest day under 50% of the profit, paid only from the profit above the $52,100 safety net, minimum $500, first payout at most $1,500. Not confirmed by the account holder.",
+  "confirmed": false,
+  "account_size": 50000,
+  "eval_target": 3000,
+  "eval_min_days": 1,
+  "consistency": null,
+  "trailing_mll": 2000,
+  "lock_at": 2100,
+  "lock_floor": 100,
+  "win_day": 250,
+  "payout_win_days": 5,
+  "payout_share": null,
+  "payout_cap": 1500,
+  "max_payout_profit": 3600,
+  "payout_consistency": 0.5,
+  "payout_buffer": 2100,
+  "payout_min": 500,
+  "daily_loss_limit": 1000,
+  "max_days": 21,
+  "scaling_micros": {
+    "start": 20,
+    "at_1500": 30,
+    "at_3000": 40
+  },
+  "cap_micros": 60,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:59",
+  "no_overnight": true,
+  "notes": [
+    "Max size 6 minis = 60 micros in the EVALUATION. The PA starts at 2 contracts (3 from +$1,500, 4 from +$3,000). NOT enforced by the simulator.",
+    "Trailing max loss is END OF DAY (recalculated at 16:59:59 ET from the closing balance, never down) and enforced in real time: touching it intraday, open losses included, fails the account.",
+    "The EVALUATION lasts 30 calendar days, no extension, no reset: `max_days` 21 weekdays, and the eval is not raced past them.",
+    "NOT MODELLED: in the evaluation the floor does not lock at $50,100 (Tradovate: it trails to the end; Rithmic / WealthCharts: fixed at $53,000). Here it locks at +$100 from +$2,100, as in the PA: between +$2,100 and +$3,000 the real floor is up to $900 higher, so the pass rate is slightly friendly.",
+    "No consistency rule and no minimum days in the evaluation: a single +$3,000 day passes.",
+    "SOFT daily loss limit $1,000 (open losses included), applied per trade from each trade's tick-level worst moment (MAE); stopped for the day, account survives. In the PA it rises to $2,000 / $3,000 with profit: NOT MODELLED.",
+    "PAYOUT, Apex's own: 5 days of $250 or more, the largest day under 50% of the profit since the last payout, paid only from the profit above the $52,100 safety net, minimum $500, first payout at most $1,500 (so the maximum first payout needs +$3,600). Only the first payout is simulated."
+  ],
+  "disclaimer": "Eval rules from the account holder 2026-09-27; the 30-day limit and the payout terms are Apex's published ones (2026-10-11), not yet confirmed by the account holder.",
+  "payout_ladder": "caps by payout number: $1,500, $1,500, $2,000, $2,500, $2,500, $3,000; six payouts, then the PA closes; 100% split"
+}

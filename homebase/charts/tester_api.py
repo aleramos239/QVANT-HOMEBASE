@@ -1116,7 +1116,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     def _rescore(source: tuple, load: Callable[[], dict], rule_id) -> dict:
         """A finished run's (or heat-map cell's) prop eval under `rule_id`, from its stored ledger.
-        The run's OWN eval returns its saved propsim.json as is; any other runs the same
+        The run's OWN eval returns its saved propsim.json as is -- unless it was saved before the
+        open-loss rule (no `breach`): that one is scored again; any other runs the same
         _run_propsim a fresh run would (same seed, same paths), so the numbers equal a re-run.
         Never writes to the run dir. A plain-`def` caller: FastAPI's threadpool, not the loop."""
         if not isinstance(rule_id, str) or not rule_id:
@@ -1137,7 +1138,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         run_meta = b["run"] or {}
-        if run_meta.get("prop_rules") == rule_id and b.get("propsim") is not None:
+        if run_meta.get("prop_rules") == rule_id and (b.get("propsim") or {}).get("breach"):
             out = b["propsim"]
         else:
             out, _ = _run_propsim(b["trades"] or [], {"prop_rules": rule_id, "prop_rules_data": rules})

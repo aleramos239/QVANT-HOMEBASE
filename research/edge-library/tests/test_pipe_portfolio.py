@@ -58,7 +58,7 @@ import library as LB  # noqa: E402
 APP = PO.app()
 IS = api.ideastore()
 FILE = P.FILE
-PRO, FLEX, APEX = "lucid-pro-50k-no-dll@2026-09-27b", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"
+PRO, FLEX, APEX = "lucid-pro-50k-no-dll@2026-10-11", "lucid-flex-50k@2026-09-27", "apex-legacy-300k@2026-09-28"
 CAL = SY.weekdays()                                 # 44 hand-made session days
 N, SEED = 2000, 7                                   # the paths of a test, and their seed
 KEYS = {"account", "need", "judged", "rules", "notes", "members", "left_out", "unread", "twins", "skipped", "mixes", "best", "gap", "meets", "paths", "seed", "text"}
@@ -157,11 +157,11 @@ def test_the_answer_and_where_its_numbers_come_from():
 
 
 def test_the_accounts_are_the_pipelines_own_first_then_the_book_cards():
-    assert PF.accounts() == [PRO, FLEX, APEX] == list(dict.fromkeys([P.need("prop", "account"), *P.need("prop", "book_accounts")]))
+    assert PF.accounts() == [PRO, FLEX] == list(dict.fromkeys([P.need("prop", "account"), *P.need("prop", "book_accounts")]))
     for bad in ("no-such-account@2026-01-01", "lucid"):
         with pytest.raises(J.Refuse) as e:
             build([M("up", UP)], bad)
-        assert repr(bad) in str(e.value) and PRO in str(e.value)
+        assert repr(bad) in str(e.value) and "lucid-pro-50k-no-dll@2026-10-11" in str(e.value)        # the offered files are named
 
 
 # ================================================================ 2. one strategy
@@ -235,8 +235,11 @@ def test_a_pair_that_covers_each_others_losing_days_is_the_best_mix_and_meets_th
     assert pair["eval"] > max(up["eval"], down["eval"]) + 0.2 and pair["drags"] == [] and pair["allowed"] is True
     assert r["best"] == pair and pair["meets"] is True and r["meets"] is True and pair["eval"] >= 0.6 and pair["payout"] >= 0.75 and pair["margin"] >= 1.0
     assert r["gap"] == NO_GAP and up["meets"] is False and down["meets"] is False
-    # every member at the same size step, inside the account's maximum FOR BOTH: 40 micros in the eval, 20 from the funded account's start
-    assert [t["size"] for t in pair["table"]] == [1, 2, 3, 5, 7, 10, 15, 20] and [t["size"] for t in pair["table"] if t["payout"] is not None] == [1, 2, 3, 5, 7, 10]
+    # every member at the same size step, inside the account's maximum FOR BOTH: 40 micros in the eval -- and on the funded account too
+    # (LucidPro, the pipeline's account since 2026-10-11, has no scaling plan; LucidFlex's starts at 20 micros: test below)
+    assert [t["size"] for t in pair["table"]] == [1, 2, 3, 5, 7, 10, 15, 20] == [t["size"] for t in pair["table"] if t["payout"] is not None]
+    flex = PF.odds([cells(UP), cells(DOWN)], CAL, APP.load_rules(FLEX), N, SEED)["table"]
+    assert [t["size"] for t in flex if t["payout"] is not None] == [1, 2, 3, 5, 7, 10]
     text = r["text"].splitlines()
     assert text[0].endswith(f"the best mix found MEETS THE BAR. It is up + down ({pair['size']} micros each for the eval, {pair['payout_size']} micros each on the funded "
                             "account; read on 44 session days they share).")
@@ -434,7 +437,7 @@ def test_an_empty_book_says_so_and_raises_nothing(tmp_path):
     rc, out = run(["pipe", "portfolio", f"--root={root}", "--json"])
     assert rc == 0 and out["ok"] is True and (out["command"], out["book"], out["saved"]) == ("pipe portfolio", [], [])
     assert out["text"].splitlines()[0].startswith("THE PORTFOLIO (stage 8): 0 strategies in the book. A mix must pass the eval within 5 trading days 60 % of the time or more")
-    assert [a["account"]["id"] for a in out["accounts"]] == [PRO, FLEX, APEX] and all("the book is empty" in a["text"] for a in out["accounts"])
+    assert [a["account"]["id"] for a in out["accounts"]] == [PRO, FLEX] and all("the book is empty" in a["text"] for a in out["accounts"])
     assert not root.exists(), "an empty book writes nothing, not even its folder"
 
 
@@ -469,8 +472,8 @@ def test_the_command_reads_the_book_for_every_account_and_saves_one_file_an_acco
     before = tree(root)
     with SY.no_engine():
         r = PF.portfolio(root, paths=N, seed=SEED)
-    assert (r["ok"], r["command"], r["book"]) == (True, "pipe portfolio", ["pf_down", "pf_up"]) and [a["account"]["id"] for a in r["accounts"]] == [PRO, FLEX, APEX]
-    files = [root / "portfolios" / f"{a}.json" for a in (PRO, FLEX, APEX)]
+    assert (r["ok"], r["command"], r["book"]) == (True, "pipe portfolio", ["pf_down", "pf_up"]) and [a["account"]["id"] for a in r["accounts"]] == [PRO, FLEX]
+    files = [root / "portfolios" / f"{a}.json" for a in (PRO, FLEX)]
     assert r["saved"] == [str(f) for f in files] and sorted(p.name for p in (root / "portfolios").iterdir()) == sorted(f.name for f in files)
     for a, f in zip(r["accounts"], files):
         assert json.loads(f.read_text(encoding="utf-8")) == json.loads(json.dumps(a)) and a["best"]["members"] == ["pf_down", "pf_up"] and a["text"] in r["text"]
@@ -493,18 +496,20 @@ def test_the_command_line_and_what_it_refuses(tmp_path, capsys):
     rc, text = run(["pipe", "portfolio", f"--root={root}"])                                    # for a person: every account
     lines = text.splitlines()
     assert rc == 0 and lines[0].startswith("THE PORTFOLIO (stage 8): 1 strategy in the book (pf_up).") and "NEXT" not in text
-    names = [APP.load_rules(a)["name"] for a in (PRO, FLEX, APEX)]
+    names = [APP.load_rules(a)["name"] for a in (PRO, FLEX)]
     assert [x.strip() for x in lines[1].split("  ") if x.strip()] == ["account", "best mix", "eval in 5 days", "max payout in 14 days", "at the bar", "stress: eval / payout"]      # the answer first: one row an account
     full = RN.command("portfolio", root=root)["accounts"]
-    assert [[c.strip() for c in x.split("  ") if c.strip()] for x in lines[2:5]] == [
-        *[[n, "pf_up", f"{100 * a['best']['eval']:.1f} % of 60 %", f"{100 * a['best']['payout']:.1f} % of 75 %", "no",
-           " / ".join(f"{100 * a['best']['stress'][k]:.1f} %" for k in ("eval", "payout"))] for n, a in zip(names[:2], full)], [names[2], "none", "-", "-", "no", "-"]]
-    assert [x.split(" [")[0] for x in lines[5:] if not x.startswith(" ")] == names                                 # then each account in full
-    assert sum("It is pf_up alone" in x for x in lines) == 2 and "  left out on this account: pf_up -- its entry rule (orb) rests orders on both sides" in text
+    assert [[c.strip() for c in x.split("  ") if c.strip()] for x in lines[2:4]] == [
+        [n, "pf_up", f"{100 * a['best']['eval']:.1f} % of 60 %", f"{100 * a['best']['payout']:.1f} % of 75 %", "no",
+         " / ".join(f"{100 * a['best']['stress'][k]:.1f} %" for k in ("eval", "payout"))] for n, a in zip(names, full)]
+    assert [x.split(" [")[0] for x in lines[4:] if not x.startswith(" ")] == names                                 # then each account in full
+    assert sum("It is pf_up alone" in x for x in lines) == 2
+    rc, apex = run(["pipe", "portfolio", f"--account={APEX}", f"--root={root}"])               # Apex 300K is off the book's own list (2026-10-11), and still read when asked for
+    assert rc == 0 and "  left out on this account: pf_up -- its entry rule (orb) rests orders on both sides" in apex
     with capsys.disabled():
         print("\n--- bp.py pipe portfolio, a book of one strategy (hand-made trades) ---\n" + text)
     rc, r = run(["pipe", "portfolio", "--account=nobody@1", f"--root={root}", "--json"])
-    assert rc == 2 and r["ok"] is False and r["command"] == "pipe portfolio" and "'nobody@1'" in r["error"] and PRO in r["error"]
+    assert rc == 2 and r["ok"] is False and r["command"] == "pipe portfolio" and "'nobody@1'" in r["error"] and "lucid-pro-50k-no-dll@2026-10-11" in r["error"]
     assert sorted(p.name for p in (root / "portfolios").iterdir()) == sorted(f"{a}.json" for a in (PRO, FLEX, APEX))
     assert "portfolio" in RN.SUBS and RN.command("portfolio", root=root, account=PRO)["accounts"][0]["account"]["id"] == PRO
     with pytest.raises(J.Refuse):

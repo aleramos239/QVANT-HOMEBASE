@@ -528,9 +528,9 @@ def test_stage_6_reads_the_unseen_days_once_through_the_toolkit_and_labels_a_pas
     assert t["env"]["switch"] == {**TINY, "out": str(ROOT / "runs"), "ledger": str(ROOT / "p" / C / "ledger.csv"), "test_out": str(ROOT / "runs_test")}
     # the label: the default box's TEST trades on the days the read replayed, on the pipeline's account and the book's accounts
     assert calls["handed"] == [(f"{C}_a5", ROOT / "ideas")] and calls["cell"] == ["or_min15_atr3-r1"]
-    assert [o["account"] for o in calls["odds"]] == [OWN, FLEX, APEX] == list(c["prop"]) and ACCOUNTS == [OWN, FLEX, APEX]
+    assert [o["account"] for o in calls["odds"]] == [OWN, FLEX] == list(c["prop"]) and ACCOUNTS == [OWN, FLEX]      # (Apex 300K is off the book since 2026-10-11)
     assert all((o["trades"], o["calendar"]) == (2, SY.weekdays()) for o in calls["odds"])
-    assert c["label"] == PP.ALONE == c["prop"][OWN]["label"] and c["prop"][APEX]["confirmed"] is False and c["prop"][FLEX]["confirmed"] is True
+    assert c["label"] == PP.ALONE == c["prop"][OWN]["label"] and c["prop"][FLEX]["confirmed"] is True
     assert set(c["prop"][OWN]) == {"name", "confirmed", "size", "payout_size", "eval", "payout", "label", "stress", "text"}
     assert c["rules"]["lines"] == {f"4.{i}": 0.5 for i in range(1, 10)} and c["rules"]["range"] == {"start": "2025-07-01", "end": "2026-09-30"}
     calls = six(world)                                                                         # a tiny run names its test days; no tiny run: no days, no switch
@@ -638,7 +638,7 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     with SY.no_engine():
         s6 = TS.whole(ST.stage6(N7, CTX7), 6)                                                  # the verdict of THIS lock is on file: it is read, the days are not
         assert (s6["passed"], s6["result"]) == (True, "proven on history") and "its verdict was on file" in s6["text"] and len(s6["lines"]) == 9
-        assert list(s6["prop"]) == [OWN, FLEX, APEX] and s6["label"] == s6["prop"][OWN]["label"] and s6["label"] in (PP.ALONE, PP.HELPER)
+        assert list(s6["prop"]) == [OWN, FLEX] and s6["label"] == s6["prop"][OWN]["label"] and s6["label"] in (PP.ALONE, PP.HELPER)
         assert s6["relatives"] == REL7 and "(2 related ideas read on these days before it)" in s6["text"]      # off the verdict on file, as the read wrote them
         ran(N7, 6, s6, ROOT7)
         PS.set_state(N7, ROOT7, status="running", stage=6, picked=PICK7, tries=4)
@@ -662,14 +662,12 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     assert b["worst_drawdown"] == 2004.0                                                       # open losses counted: 5 August stood $2,004 under the high it started at
     assert b["profit_factor"] == 3.0 and b["avg_trade"] == pytest.approx(1000 / 6)             # $1,500 won / $500 lost
     # the accounts: the label is stage 6's on the pipeline's account; the unconfirmed rule file says so, and its numbers are there
-    assert b["label"] == s6["label"] and list(b["prop"]) == [OWN, FLEX, APEX] and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())
-    assert [b["prop"][a]["confirmed"] for a in (OWN, FLEX, APEX)] == [True, True, False] and b["prop"][APEX]["name"] == PO.app().load_rules(APEX)["name"]
+    assert b["label"] == s6["label"] and list(b["prop"]) == [OWN, FLEX] and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())
+    assert [b["prop"][a]["confirmed"] for a in (OWN, FLEX)] == [True, True] and b["prop"][FLEX]["name"] == PO.app().load_rules(FLEX)["name"]
     assert all(isinstance(p["eval"], float) and isinstance(p["payout"], float) and p["size"] >= 1 for p in b["prop"].values())
     assert b["prop"] == {a: {k: s6["prop"][a][k] for k in ST.BOOK_PROP} for a in s6["prop"]}
-    # winning days a month: at the label's eval size, a day at the account's $150 or more, per 21 session days (66 here)
-    size = b["prop"][OWN]["size"]
-    wins = sum(size * micro >= PO.app().load_rules(OWN)["win_day"] for micro in (29.4, 49.4, 69.4))      # the three winning days at one micro: (net + $4) / 10 - $1
-    assert b["win_days_month"] == pytest.approx(wins / 66 * 21) and len(SY.weekdays(*SPAN7)) == 66
+    # winning days a month: the pipeline's account (LucidPro since 2026-10-11) has no winning-day rule, so the card has none to count
+    assert PO.app().load_rules(OWN)["win_day"] is None and b["win_days_month"] is None and len(SY.weekdays(*SPAN7)) == 66
     assert list(b["stages"]) == [str(n) for n in range(7)] and b["stages"]["3"] == {"passed": True, "result": "pass", "text": "stage 3 passed"}
     assert b["stages"]["6"] == {"passed": True, "result": "proven on history", "text": s6["text"]} and dt.datetime.fromisoformat(b["utc"]).tzinfo is not None
     assert c["rules"] == {"prop": PR.need("prop"), "box": PR.need("box"), "unseen": list(SPAN7)}
@@ -711,9 +709,10 @@ def test_the_facts_of_a_book_card_by_hand():
 def test_winning_days_a_month_at_a_size():
     cal = SY.weekdays("2025-07-01", "2025-08-27")
     x = LB.pack([SY.trade(d, 20.0) for d in cal[:4]] + [SY.trade(cal[4], -20.0)])              # four days of +$20 a micro, one of -$20
-    assert len(cal) == 42 and PO.app().load_rules(OWN)["win_day"] == 150 and PR.need("box", "month_days") == 21
-    assert ST._win_days(x, cal, OWN, 10) == pytest.approx(2.0)                                 # 10 micros: 4 days of $200 in 42 session days = 2 a month of 21
-    assert ST._win_days(x, cal, OWN, 7) == 0.0 and ST._win_days(x, cal, OWN, None) is None     # 7 micros: $140 is under the $150 · no size: nothing to read
+    assert len(cal) == 42 and PO.app().load_rules(FLEX)["win_day"] == 150 and PR.need("box", "month_days") == 21
+    assert ST._win_days(x, cal, FLEX, 10) == pytest.approx(2.0)                                # 10 micros: 4 days of $200 in 42 session days = 2 a month of 21
+    assert ST._win_days(x, cal, FLEX, 7) == 0.0 and ST._win_days(x, cal, FLEX, None) is None   # 7 micros: $140 is under the $150 · no size: nothing to read
+    assert ST._win_days(x, cal, OWN, 10) is None                                               # LucidPro names no winning day: nothing to count
 
 
 if __name__ == "__main__":

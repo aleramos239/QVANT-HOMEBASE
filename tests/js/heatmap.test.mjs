@@ -96,7 +96,7 @@ test('gridBody: the range picker\'s window and the cell cap, varied inputs left 
   assert.deepEqual(b, { strategy: 'nq930', inputs: { adx_gate: false, mode: 'a', n: 3 },
     axes: [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }],
     range: { kind: 'custom', start: '2024-01-01', end: '2025-06-01' },
-    qty: 2, commission: 4, slippage_ticks: 1, max_cells: 60, prop_rules: 'lucid-flex-50k@2026-09-27' });
+    qty: 2, commission: 4, slippage_ticks: 1, max_cells: 60, prop_rules: 'lucid-flex-50k@2026-10-11' });
   assert.equal('holdout' in b, false);
   // the default preset still sends {kind:'research'} verbatim
   assert.deepEqual(X.gridBody(X.defaults(STRAT), [{ key: 'offset_pts', values: [5] }, { key: 'sl_pts', values: [4] }]).range,

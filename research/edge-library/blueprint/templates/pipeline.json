@@ -82,18 +82,17 @@
   "one_read_a_slot": false
  },
  "prop": {
-  "account": "lucid-pro-50k-no-dll@2026-09-27b",
+  "account": "lucid-pro-50k-no-dll@2026-10-11",
   "days": 30,
   "eval": 0.4,
   "payout": 0.5,
   "book_accounts": [
-   "lucid-pro-50k-no-dll@2026-09-27b",
-   "lucid-flex-50k@2026-09-27",
-   "apex-legacy-300k@2026-09-28"
+   "lucid-pro-50k-no-dll@2026-10-11",
+   "lucid-flex-50k@2026-09-27"
   ],
   "fees": {
-   "lucid-pro-50k-no-dll@2026-09-27b": 140,
-   "lucid-pro-50k@2026-09-27b": 115
+   "lucid-pro-50k-no-dll@2026-10-11": 140,
+   "lucid-pro-50k@2026-10-11": 115
   }
  },
  "portfolio": {
