@@ -65,6 +65,10 @@ const FIELDS = [
   { key: 'evCountries', type: 'list', def: Object.freeze(['USD']) },   // currency codes, upper-case, sorted
   bool('evLines', true), choice('evLineStyle', 'dotted', STYLES), int('evLineWidth', 1, 1, 4),   // the vertical line at a High / Medium event
   choice('newsOnChart', 'bursts', ['all', 'bursts', 'off']),   // news bubbles: every headline + bursts / big moves with news / none
+  // Canvas · TOOL LABELS: the numbers a tool writes on the chart (long / short boxes, a line's stats, price tags)
+  choice('toolLabels', 'hover', ['hover', 'always', 'never']),   // hover: while the mouse is over the tool or it is selected
+  bool('posTarget', true), bool('posStop', true), bool('posRR', true), bool('posResult', true),   // a long / short's four labels
+  bool('posPrice', true), bool('posPoints', true), bool('posTicks', true), bool('posMoney', true),   // what the target / stop labels say
 ];
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
 /* The colours that follow the theme while never changed, and the HBCell.palette() key each takes. */

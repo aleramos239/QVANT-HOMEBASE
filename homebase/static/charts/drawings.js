@@ -467,6 +467,20 @@ class Store {
 /* ---------------- browser half: canvas primitive + pointer controller ---------------- */
 const MOVE_PX = 4;   // a press that moves less than this is a click, not a drag (placing, moving, reshaping)
 
+/* The Tool labels settings (cell.R): are a tool's numbers (a long / short's labels, a line's stats, its price tags)
+   drawn now? 'hover' = while the mouse is over the tool or it is selected. */
+function toolLabelsShown(R, hovered, selected) {
+  const m = R && R.toolLabels;
+  return m === 'always' || (m !== 'never' && (hovered || selected));
+}
+
+/* A long / short's label parts from the settings (each on unless switched off). */
+function toolLabelParts(R) {
+  const on = (k) => !R || R[k] !== false;
+  return { target: on('posTarget'), stop: on('posStop'), rr: on('posRR'), result: on('posResult'),
+    price: on('posPrice'), points: on('posPoints'), ticks: on('posTicks'), money: on('posMoney') };
+}
+
 /* Draws one chart's trend lines and rectangles, the drawing being placed,
    the selected drawing's handles and the measure box, as a series
    primitive on the candles (so only in the price pane). Horizontal lines
@@ -487,11 +501,13 @@ class Primitive {
     if (!geo) return;
     const P = c.cell.P;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const pc = { tick: c.cell.tick, pv: c.cell.pv, bars: c.cell.bars, size: mediaSize, font: `12px ${window.HBCell.FONT}` };
+      const pc = { tick: c.cell.tick, pv: c.cell.pv, bars: c.cell.bars, size: mediaSize, font: `12px ${window.HBCell.FONT}`,
+        parts: toolLabelParts(c.cell.R) };
       for (const d of c.items()) {
-        if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel });
+        const show = toolLabelsShown(c.cell.R, d.id === c.hover, d.id === c.sel);
+        if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel, labels: show });
         else if (d.type === 'hline') drawHlineLabel(ctx, d, geo, P, mediaSize.width);
-        else drawShape(ctx, d, geo, P, mediaSize.width, c.ctx());
+        else drawShape(ctx, d, geo, P, mediaSize.width, c.ctx(), show);
       }
       if (c.place) drawShape(ctx, c.place, geo, P, mediaSize.width, c.ctx());
       const sel = c.selectedDrawing(), hs = sel && handlePoints(sel, geo);
@@ -541,7 +557,7 @@ function drawTag(ctx, text, x, y, fill, ink, paneW, font) {
   ctx.fillText(text, left + 5, y + 0.5);
 }
 
-function drawShape(ctx, d, geo, P, paneW, mctx = null) {
+function drawShape(ctx, d, geo, P, paneW, mctx = null, nums = true) {
   const hs = handlePoints(d, geo);
   if (!hs) return;
   const style = DS.normalize(d.type, d.style), color = d.color || P.accent, tick = mctx ? mctx.tick : 0;
@@ -587,7 +603,7 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
     }
     drawLabel(ctx, d.type, hs, style, paneW);
     const [a, b] = d.points;
-    if (style.stats && mctx && (a.t !== b.t || a.p !== b.p)) {
+    if (nums && style.stats && mctx && (a.t !== b.t || a.p !== b.p)) {
       // its numbers sit on the other side of the line from its own text (which takes `labelPos`)
       const below = style.labelPos !== 'below' || !style.text;
       ctx.font = font;
@@ -596,7 +612,7 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
       ctx.textBaseline = below ? 'top' : 'bottom';
       ctx.fillText(lineStats(a, b, mctx), (x0 + x1) / 2, (y0 + y1) / 2 + (below ? 8 : -8));
     }
-    if (style.priceLabel) drawTag(ctx, Cat.fmtPrice(b.p, tick), x1 + 8, y1, color, P.onAccent, paneW, font);
+    if (nums && style.priceLabel) drawTag(ctx, Cat.fmtPrice(b.p, tick), x1 + 8, y1, color, P.onAccent, paneW, font);
     return;
   }
   if (d.type === 'fib') { drawFib(ctx, d, geo, P, paneW, style, color, tick); return; }
@@ -621,7 +637,7 @@ function drawShape(ctx, d, geo, P, paneW, mctx = null) {
   }
   ctx.setLineDash([]);
   drawLabel(ctx, 'rect', hs, style, paneW);
-  if (style.priceLabels) {                      // its top and bottom prices, inside its right edge
+  if (nums && style.priceLabels) {              // its top and bottom prices, inside its right edge
     const [a, b] = d.points, hi = Math.max(a.p, b.p), lo = Math.min(a.p, b.p);
     ctx.font = font;
     ctx.fillStyle = color;
@@ -765,11 +781,12 @@ class Controller {
     this.drag = null;      // moving / reshaping: {orig, part, index, from, down, moving, cur}
     this.owned = false;    // this gesture switched the chart's panning off
     this.shiftRuler = false;   // this.measure is a Shift+drag ruler (cursor tool), not the measure TOOL itself
+    this.hover = null;         // id of the drawing under the mouse (or just around a long / short box): Tool labels 'hover'
     this.hlines = new Map();   // drawing id -> its price line
     this.prim = new Primitive(this);
     cell.candles.attachPrimitive(this.prim);
     this.on = { down: (e) => this.onDown(e), move: (e) => this.onMove(e), up: (e) => this.onUp(e),
-      hover: (e) => this.onHover(e), leave: () => this.setCursor(null), lost: () => this.abort(), dbl: (e) => this.onDbl(e) };
+      hover: (e) => this.onHover(e), leave: () => { this.setCursor(null); this.setHover(null); }, lost: () => this.abort(), dbl: (e) => this.onDbl(e) };
     this.box.addEventListener('pointerdown', this.on.down, true);
     this.box.addEventListener('pointermove', this.on.hover);
     this.box.addEventListener('pointerleave', this.on.leave);
@@ -1166,16 +1183,27 @@ class Controller {
   }
 
   onHover(e) {
-    if (this.drag || this.place || e.buttons || this.host.tool() !== 'cursor' || !this.cell.chart) return;
-    const pt = this.local(e), geo = this.geo();
-    const over = !!geo && this.inPane(pt) && this.items().some((d) => hitTest(d, pt, geo));
-    this.setCursor(over ? 'move' : null);
+    if (this.drag || e.buttons || !this.cell.chart) return;
+    const pt = this.local(e), geo = this.geo(), pane = !!geo && this.inPane(pt);
+    const items = pane ? [...this.items()].reverse() : [];   // the top one first
+    const hit = items.find((d) => hitTest(d, pt, geo));
+    // a long / short's labels sit just outside its box: the mouse on one still counts as over the box
+    const near = hit || items.find((d) => isPos(d) && Pos().near(d, pt, geo, 28));
+    this.setHover(near ? near.id : null);
+    if (this.place || this.host.tool() !== 'cursor') return;
+    this.setCursor(hit ? 'move' : null);
+  }
+
+  setHover(id) {
+    if (this.hover === id) return;
+    this.hover = id;
+    this.prim.redraw();
   }
 }
 
 const api = { barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
   setPoint, shiftTime, moveDrawing, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
-  magnetMode, snapPrice, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
+  magnetMode, snapPrice, toolLabelsShown, toolLabelParts, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

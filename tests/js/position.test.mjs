@@ -183,3 +183,27 @@ test('the settings dialog\'s check: the order for the type, a tick apart, qty 1-
   assert.match(P.validate('long', 100, 110, 95, 1.5, 0.25), /Qty/);
   assert.match(P.validate('long', NaN, 110, 95, 1, 0.25), /prices/);
 });
+
+test('Tool labels settings: parts of a label left out, the box counted as hovered around its labels', () => {
+  const b = box('long', 30900, 30950, 30875);
+  assert.equal(P.labels(b, 20, 0.25, { price: false }).target, 'Target · +50.00 (0.16%) · 200 ticks · +$1,000');
+  assert.equal(P.labels(b, 20, 0.25, { points: false, ticks: false, money: false }).stop, 'Stop 30,875.00');
+  assert.equal(P.labels(b, 20, 0.25, { price: false, points: false, ticks: false, money: false }).target, 'Target');
+  assert.deepEqual(P.labels(b, 20, 0.25, {}), P.labels(b, 20, 0.25));
+  const hs = P.handles(LONG, geo);            // x 110..130, target y 80, stop y 110
+  assert.ok(hs && P.near(LONG, { x: 120, y: 60 }, geo, 28), 'on the target label above the box');
+  assert.ok(P.near(LONG, { x: 120, y: 130 }, geo, 28), 'on the stop label below the box');
+  assert.ok(!P.near(LONG, { x: 120, y: 30 }, geo, 28), 'far above is not hovered');
+  assert.ok(!P.near(LONG, { x: 300, y: 100 }, geo, 28), 'far to the side is not hovered');
+});
+
+test('Tool labels setting: hover shows on hover or when selected, always / never are fixed', () => {
+  const show = D.toolLabelsShown;
+  assert.equal(show({ toolLabels: 'hover' }, false, false), false);
+  assert.equal(show({ toolLabels: 'hover' }, true, false), true);
+  assert.equal(show({ toolLabels: 'hover' }, false, true), true);
+  assert.equal(show({ toolLabels: 'always' }, false, false), true);
+  assert.equal(show({ toolLabels: 'never' }, true, true), false);
+  assert.deepEqual(D.toolLabelParts({ posStop: false, posMoney: false }),
+    { target: true, stop: false, rr: true, result: true, price: true, points: true, ticks: true, money: false });
+});
