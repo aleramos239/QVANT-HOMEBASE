@@ -764,12 +764,26 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         """The research the Desk's panel shows beside a promoted strategy (deskresults.py). Saved runs and their saved trades
         only: no strategy runs and no test day is read. A plain `def`: FastAPI's threadpool, not the loop."""
         watch_guard(request)
+    def prop_of(rid):
+        try:
+            return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid), DESKLAB_PROP))
+        except (HTTPException, KeyError, ValueError, OSError):      # a run that was deleted or cannot be read: nothing to show
+            return None
 
-        def prop_of(rid):
-            try:
-                return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid), DESKLAB_PROP))
-            except (HTTPException, KeyError, ValueError, OSError):      # a run that was deleted or cannot be read: nothing to show
-                return None
+    def warm_desklab_results() -> None:
+        """Score every promoted strategy's saved runs once, so the Desk's first results ask after a restart is a cache hit
+        (about 16 prop sims: 25-90 s cold). Reads saved runs only and never starts one (unlike ensure_unseen). The lock is
+        taken per record, so a real ask is never held behind the whole warm-up. Never raises."""
+        try:
+            for rec in store.listing():
+                with desk_res_lock:
+                    for rid in ((rec.get("run") or {}).get("id"),
+                                ((deskresults.unseen_state(manager.runs, rec) or {}).get("run") or {}).get("id")):
+                        if rid:
+                            prop_of(rid)
+        except Exception:      # noqa: BLE001 -- a warm-up never takes the service down; the route computes it on ask
+            pass
+
         out = {}
         with desk_res_lock:
             for rec in store.listing():
@@ -1345,3 +1359,4 @@ def tester_router(write_ok: Callable[[Request], None], archive: Path,
     return make_router(write_ok, RunManager(base, archive=archive, cache=cache),
                        GridManager(base, archive=archive, cache=cache),
                        WalkForwardManager(base, archive=archive, cache=cache), notify=notify, live_roots=live_roots)
+    r.warm = warm_desklab_results   # the chart service runs it once in a thread after startup
