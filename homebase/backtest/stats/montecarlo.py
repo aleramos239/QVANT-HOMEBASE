@@ -30,7 +30,7 @@ from itertools import accumulate, chain, islice
 from operator import sub
 from typing import List, Optional, Sequence
 
-from ..propsim import BREACH_CLOSE, BREACH_OPEN, HORIZON, day_opens, engine, limit_trades, weekday_grid
+from ..propsim import BREACH_CLOSE, BREACH_OPEN, HORIZON, day_opens, day_trail, engine, limit_trades, weekday_grid
 
 __all__ = ["run", "MAX_WORK", "MAX_PATHS", "DEFAULT_FLOOR"]
 
@@ -134,6 +134,8 @@ def run(
         trades = limit_trades(list(trades), rules)
     pnls, flags, dates = weekday_grid(list(trades))
     opens = day_opens(list(trades), dates, rules) if rules is not None else None
+    trail = day_trail(list(trades), dates) if opens is not None and rules.get("trail") == "intraday" else None
+    extra = [(o, *t) for o, t in zip(opens, trail)] if trail is not None else [(o,) for o in opens or [0.0] * len(dates)]
     at = {d: i for i, d in enumerate(dates)}
     day_nets: List[list] = [[] for _ in dates]
     for t in trades:
@@ -161,8 +163,7 @@ def run(
         streaks.append(float(max(map(len, "".join(map(sig.__getitem__, order)).split("W")))))
         if -dd >= floor:
             n_ruin += 1
-        days = zip(map(pnls.__getitem__, order), map(flags.__getitem__, order),
-                   map((opens or [0.0] * n).__getitem__, order))
+        days = ((pnls[i], flags[i], *extra[i]) for i in order)       # a day whole: its worst open loss, and its drop and high for an intraday trail
         if rules is not None and engine.run_eval(islice(days, HORIZON), rules)["outcome"] == "pass":
             n_pass += 1
 

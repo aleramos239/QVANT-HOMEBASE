@@ -53,8 +53,7 @@ def test_prop_rule_sets_are_listed_with_the_unconfirmed_flag(tmp_path):
         listed = c.get("/api/tester/prop-rules").json()
         rules = {r["id"]: r for r in listed}
         # exactly the evals the account holder runs, newest version per family
-        assert [r["name"] for r in listed] == ["Apex EOD 50K", "Apex Legacy 300K · holder's EOD reading, not Apex's rule",
-                                               "Apex Legacy 50K · holder's EOD reading, not Apex's rule", "LucidFlex 50K",
+        assert [r["name"] for r in listed] == ["Apex EOD 50K", "Apex Legacy 300K", "Apex Legacy 50K", "LucidFlex 50K",      # (Apex Legacy: Apex's own intraday trail since 2026-10-11b)
                                                "LucidFlex 50K · $1,200 daily limit", "LucidPro 50K · $1,200 daily limit",
                                                "LucidPro 50K · no daily loss limit"]      # (Topstep: removed 2026-10-11)
         assert rules["lucid-flex-50k@2026-10-11"]["confirmed"] is True
