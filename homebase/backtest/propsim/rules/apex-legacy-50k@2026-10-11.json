@@ -1,0 +1,40 @@
+{
+  "name": "Apex Legacy 50K · holder's EOD reading, not Apex's rule",
+  "version": "2026-10-11",
+  "as_of": "2026-10-11",
+  "source": "Account holder 2026-09-27: \"apex legacy with the 10 contract max\", \"2000 EOD TRAIL DD locks at 50100 and 3000 profit target\", no consistency rule, passable in 1 day. No daily loss limit was named for Legacy. Floor: $2,000 below the EOD peak, locking at $50,100 (+$100) once the EOD peak reaches +$2,100. THIS FILE IS THE ACCOUNT HOLDER'S END-OF-DAY READING, NOT WHAT APEX'S HELP CENTRE SAYS. Apex (https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/, read 2026-10-11; research/prop-portfolio/2026-10-01-l2/APEX300_RULES.md): a Legacy account's threshold trails the highest LIVE balance during trades (intraday, open profit included), not the end-of-day balance; the 50K's drawdown is $2,500, not $2,000; the evaluation needs 7 trading days unless a one-day-pass promotion is on; on Tradovate the evaluation's threshold never stops trailing. This simulator cannot trail an intraday high, so these odds are the FRIENDLY reading: Apex's own rule passes less often and busts more often. The payout block is LucidFlex's, not Apex's (Apex: 8 trading days, 5 of them >= $50, largest day <= 30% of the profit, a safety net, at most $2,000 a payout; the PA trades half size until the safety net). Apex bans automated trading on Performance Accounts.",
+  "confirmed": false,
+  "account_size": 50000,
+  "eval_target": 3000,
+  "eval_min_days": 1,
+  "consistency": null,
+  "trailing_mll": 2000,
+  "lock_at": 2100,
+  "lock_floor": 100,
+  "win_day": 150,
+  "payout_win_days": 5,
+  "payout_share": 0.5,
+  "payout_cap": 2000,
+  "max_payout_profit": 4000,
+  "daily_loss_limit": null,
+  "max_days": null,
+  "scaling_micros": null,
+  "cap_micros": 100,
+  "mini_point_values": {
+    "NQ": 20,
+    "ES": 50,
+    "GC": 100,
+    "CL": 1000
+  },
+  "flat_by_et": "16:10",
+  "no_overnight": true,
+  "notes": [
+    "THIS FILE IS THE ACCOUNT HOLDER'S END-OF-DAY READING, NOT WHAT APEX'S HELP CENTRE SAYS. Apex (https://apextraderfunding.com/help-center/evaluation-accounts-ea/legacy-evaluation-rules/, read 2026-10-11; research/prop-portfolio/2026-10-01-l2/APEX300_RULES.md): a Legacy account's threshold trails the highest LIVE balance during trades (intraday, open profit included), not the end-of-day balance; the 50K's drawdown is $2,500, not $2,000; the evaluation needs 7 trading days unless a one-day-pass promotion is on; on Tradovate the evaluation's threshold never stops trailing. This simulator cannot trail an intraday high, so these odds are the FRIENDLY reading: Apex's own rule passes less often and busts more often. The payout block is LucidFlex's, not Apex's (Apex: 8 trading days, 5 of them >= $50, largest day <= 30% of the profit, a safety net, at most $2,000 a payout; the PA trades half size until the safety net). Apex bans automated trading on Performance Accounts.",
+    "Max size 10 minis = 100 micros. NOT enforced by the simulator.",
+    "Trailing max loss is END OF DAY: the floor moves up with the EOD peak and never down, and locks at +$100 ($50,100) once EOD profit reaches +$2,100.",
+    "No consistency rule and no minimum days: a single +$3,000 day passes.",
+    "No daily loss limit.",
+    "FUNDED/PAYOUT block (win_day, payout_win_days, payout_share, payout_cap, max_payout_profit) is COPIED FROM LUCIDFLEX as a placeholder -- Apex's own payout rules were not given, so the 'Funded: expected cheque' figure is NOT Apex's. That is the only unconfirmed part of this file."
+  ],
+  "disclaimer": "The account holder's end-of-day reading; Apex's help centre says intraday trailing. Friendly odds. Payout terms are placeholders copied from LucidFlex."
+}

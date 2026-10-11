@@ -220,7 +220,7 @@ def test_the_account_is_the_files_or_the_one_asked_for():
         try:
             odds(STRONG, account=bad)
         except J.Refuse as e:
-            assert repr(bad) in str(e) and PRO_FREE in str(e), str(e)
+            assert repr(bad) in str(e) and "lucid-pro-50k-no-dll@2026-10-11" in str(e), str(e)        # the offered files are named
         else:
             raise AssertionError(f"{bad} was not refused")
 

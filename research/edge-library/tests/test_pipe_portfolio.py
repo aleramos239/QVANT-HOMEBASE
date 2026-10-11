@@ -161,7 +161,7 @@ def test_the_accounts_are_the_pipelines_own_first_then_the_book_cards():
     for bad in ("no-such-account@2026-01-01", "lucid"):
         with pytest.raises(J.Refuse) as e:
             build([M("up", UP)], bad)
-        assert repr(bad) in str(e.value) and PRO in str(e.value)
+        assert repr(bad) in str(e.value) and "lucid-pro-50k-no-dll@2026-10-11" in str(e.value)        # the offered files are named
 
 
 # ================================================================ 2. one strategy
@@ -504,7 +504,7 @@ def test_the_command_line_and_what_it_refuses(tmp_path, capsys):
     with capsys.disabled():
         print("\n--- bp.py pipe portfolio, a book of one strategy (hand-made trades) ---\n" + text)
     rc, r = run(["pipe", "portfolio", "--account=nobody@1", f"--root={root}", "--json"])
-    assert rc == 2 and r["ok"] is False and r["command"] == "pipe portfolio" and "'nobody@1'" in r["error"] and PRO in r["error"]
+    assert rc == 2 and r["ok"] is False and r["command"] == "pipe portfolio" and "'nobody@1'" in r["error"] and "lucid-pro-50k-no-dll@2026-10-11" in r["error"]
     assert sorted(p.name for p in (root / "portfolios").iterdir()) == sorted(f"{a}.json" for a in (PRO, FLEX, APEX))
     assert "portfolio" in RN.SUBS and RN.command("portfolio", root=root, account=PRO)["accounts"][0]["account"]["id"] == PRO
     with pytest.raises(J.Refuse):

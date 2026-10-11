@@ -4,9 +4,10 @@ its walks, its "live is worse" rows) on the TEST-PERIOD trades of an idea that p
 
 THIS SIMULATOR COUNTS OPEN LOSSES. The firm's drawdown is breached by an open loss, not only by a closed day (owner,
 2026-10-02): a day whose WORST POINT -- where the account stood at the day's start, minus the day's worst open loss -- is at
-or under the floor in force busts the account, whatever the day closes at. The tester page's own Monte Carlo and prop tile
-use the END-OF-DAY rule (a bust only when a day CLOSES at or under the floor): theirs are the friendlier odds, and every
-result here says which rule it is (LABEL). With an open loss of zero the walks ARE the app's, path for path (locked by
+or under the floor in force busts the account, whatever the day closes at. Since 2026-10-11 the tester page's own Monte Carlo
+and prop tile count open losses too; a ledger without per-trade MAE, or a run saved before that day, was read on the
+END-OF-DAY rule (a bust only when a day CLOSES at or under the floor): the friendlier odds. Every result here says which
+rule it is (LABEL). The walks ARE the app's, path for path, with and without an open loss (locked by
 tests/test_blueprint_propodds.py against propsim.run_eval and run_funded).
 
 WHAT IS RUN, for one account (a rule file of the app):
@@ -79,7 +80,8 @@ PHASES = (("eval", "EVAL: pass"), ("payout", "FUNDED: maximum payout"))
 FREE = (("eval", "EVAL: a pass before a bust"), ("payout", "FUNDED: a first payout before a bust"))      # line 5.5: no day limit
 RULE = "open losses count"
 LABEL = ("THIS SIMULATOR COUNTS OPEN LOSSES: a day whose worst open point is at or under the drawdown floor busts the account, whatever it closes at. "
-         "The tester page's own Monte Carlo and prop tile use the END-OF-DAY rule: their odds are the friendlier ones, and the two are not the same number.")
+         "The tester page's prop tile counts them too since 2026-10-11; a ledger without per-trade MAE, or a run saved before that day, was read on the "
+         "END-OF-DAY rule: friendlier odds, and not the same number.")
 
 
 def app():
@@ -235,12 +237,23 @@ def eval_walk(pnl, traded, open_, r: dict) -> dict:
     return {"outcome": out, "day": day, "trade_days": tdays}
 
 
+def _cheque(profit, wins, big, r: dict) -> np.ndarray:
+    """propsim._cheque for many paths at once: the payout that can be requested at this close (NaN = none), on the rule
+    file's own conditions -- its winning days, its profit goal, its consistency, its buffer, its cap and its minimum."""
+    buf, cons = r.get("payout_buffer"), r.get("payout_consistency")
+    ok = (profit > 0) & (wins >= (r.get("payout_win_days") or 0)) & (profit >= (r.get("payout_min_profit") or 0))
+    if cons is not None:
+        ok &= big <= cons * profit
+    amt = np.minimum(profit - buf if buf is not None else r["payout_share"] * profit, r["payout_cap"])
+    return np.where(ok & (amt > 0) & (amt >= (r.get("payout_min") or 0)), amt, np.nan)
+
+
 def funded_walk(pnl, open_, r: dict) -> dict:
     """propsim.run_funded for many paths at once (a funded account from a flat start, the first payout only), WITH THE
     OPEN-LOSS RULE as in eval_walk. -> {payout_at, max_payout_at, bust_at (the day; 0 = not reached), cheque (NaN = none)}"""
     pnl, open_ = np.asarray(pnl, np.float64), np.asarray(open_, np.float64)
     profit, peak, floor, live, cap = _start(pnl, r)
-    wins, cheque = np.zeros(len(pnl), np.int64), np.full(len(pnl), np.nan)
+    wins, cheque, big, win_day = np.zeros(len(pnl), np.int64), np.full(len(pnl), np.nan), np.zeros(len(pnl)), r.get("win_day")
     pay, top, bust_at = (np.zeros(len(pnl), np.int64) for _ in range(3))
     for d in range(pnl.shape[1]):
         if not live.any():
@@ -249,14 +262,17 @@ def funded_walk(pnl, open_, r: dict) -> dict:
         hit = live & (o > 0) & (profit - o <= floor)                     # THE OPEN-LOSS RULE
         go = live & ~hit
         profit = np.where(go, profit + p, profit)
-        wins += go & (p >= r["win_day"])
+        big = np.where(go, np.maximum(big, p), big)
+        if win_day is not None:
+            wins += go & (p >= win_day)
         bust = go & (profit <= floor)
         ok = go & ~bust
         peak, floor = _floor(ok & (profit > peak), profit, peak, floor, r)
-        due = ok & (wins >= r["payout_win_days"])
-        first, most = due & (pay == 0) & (profit > 0), due & (profit >= r["max_payout_profit"])
+        amt = _cheque(profit, wins, big, r)
+        due = ok & ~np.isnan(amt)
+        first, most = due & (pay == 0), due & (profit >= r["max_payout_profit"])
         pay[first], top[most], bust_at[hit | bust] = d + 1, d + 1, d + 1
-        cheque = np.where(first, np.minimum(r["payout_share"] * profit, r["payout_cap"]), cheque)
+        cheque = np.where(first, amt, cheque)
         live = ok & ~most
     return {"payout_at": pay, "max_payout_at": top, "bust_at": bust_at, "cheque": cheque}
 
@@ -279,9 +295,10 @@ def odds(pnl, traded, open_, r: dict, paths=None, seed=None, funded: bool = True
 
     e = eval_walk(P[:, :de], T[:, :de], O[:, :de], r)
     f = funded_walk(P[:, :dp], O[:, :dp], r) if funded else None
-    idx = draws(len(pnl), n, horizon(r), PS.SEED if seed is None else int(seed))
+    H = horizon(r)                                  # (an eval's own maximum of days does not bind the funded account)
+    idx = draws(len(pnl), n, max(H, PS.HORIZON), PS.SEED if seed is None else int(seed))
     P, T, O = np.asarray(pnl, np.float64)[idx], np.asarray(traded, bool)[idx], np.asarray(open_, np.float64)[idx]
-    e2 = eval_walk(P, T, O, r)
+    e2 = eval_walk(P[:, :H], T[:, :H], O[:, :H], r)
     f2 = funded_walk(P, O, r) if funded else None
     paid = None if f2 is None else (f2["payout_at"] > 0) & ((f2["bust_at"] == 0) | (f2["payout_at"] < f2["bust_at"]))
     return {"eval": {**said(e["outcome"] == PASS, e["outcome"] == BUST), "free": said(e2["outcome"] == PASS, e2["outcome"] == BUST)},
