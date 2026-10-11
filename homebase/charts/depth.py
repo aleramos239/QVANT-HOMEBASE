@@ -357,6 +357,9 @@ class Depth:
         self._flush_lock: Optional[asyncio.Lock] = None
         self._stop = False
         self.error: Optional[str] = None
+        self.tap: Optional[Callable[[str, int, list, list], None]] = None
+        # tap(root, ts_ms, bids, offers): called with each book line the recorder would write (top REC_LEVELS, on
+        # change, <= 4 a second), for the recorded roots and for any root a page is showing. Must not raise.
 
     # ---- pages
 
@@ -446,7 +449,7 @@ class Depth:
                 self._log(f"depth {root}: the feed's stamp is {book.skew_ms / 1000:+.0f} s from the clock, using arrival time"
                           if book.skew_ms else f"depth {root}: the feed's stamps are back in line with the clock")
             self._wire_due.add(root)
-            if self.recorder is not None and root in self.record:
+            if (self.recorder is not None and root in self.record) or (self.tap is not None and self._count.get(root)):
                 self._rec_due.add(root)
             self._drain(root, now)
 
@@ -462,13 +465,20 @@ class Depth:
         if root in self._rec_due and now - self._last_rec.get(root, -math.inf) >= REC_MIN_S - _EPS:
             self._rec_due.discard(root)
             book, contract = self.books.get(root), self._contract.get(root)
-            if book is None or contract is None or book.ts is None:
+            rec = self.recorder is not None and root in self.record
+            if book is None or book.ts is None or (rec and contract is None):
                 return
             top = book.top(REC_LEVELS)
             if top != self._last_top.get(root):
                 self._last_top[root] = top
                 self._last_rec[root] = now
-                self.recorder.add(root, contract, book.ts, *top)
+                if rec:
+                    self.recorder.add(root, contract, book.ts, *top)
+                if self.tap is not None and (rec or self._count.get(root)):
+                    try:
+                        self.tap(root, book.ts, *top)
+                    except Exception as e:  # noqa: BLE001 — a listener never stops the md socket's reader
+                        self._log(f"depth {root}: tap: {type(e).__name__}: {e}")
 
     def _watch_socket(self) -> None:
         ws = getattr(self.feed, "ws", None)
