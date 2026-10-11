@@ -29,7 +29,7 @@ from .session import et_wall_s
 from .store import TickStore
 
 M1 = BarSpec("time", 60)
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
                         # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 

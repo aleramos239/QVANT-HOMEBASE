@@ -20,6 +20,9 @@ from .tick import Tick
 
 KINDS = ("time", "tick", "volume", "range")
 BIG_MIN = 10        # prints of >= this many contracts are kept per bar
+SWEEP_TICKS = 2     # a burst of same-side prints inside one millisecond that spans >= this many ticks is a sweep
+BUB_MIN = 3         # trade bubbles: contracts printed in one second at one price on one side, at least this many
+BUB_CAP = 60        # ... and at most this many per bar (the largest)
 
 
 @dataclass(frozen=True)
@@ -44,6 +47,13 @@ class BarSpec:
         return self.kind == "time" and self.size % 60 == 0
 
 
+def _cap_bubbles(rows: list) -> list:
+    """The BUB_CAP largest bubbles, in time order; a tie on size is broken by time then price, so the same prints
+    always keep the same rows however the bar was assembled."""
+    rows.sort(key=lambda r: (-r[2], r[0], r[1], r[3]))
+    return sorted(rows[:BUB_CAP], key=lambda r: (r[0], r[1], r[3]))
+
+
 @dataclass
 class Bar:
     t: int                  # start, epoch ms (time: bucket start; others: first trade)
@@ -61,6 +71,12 @@ class Bar:
     fp: dict = field(default_factory=dict)    # price in ticks -> [sell at bid, buy at ask]
     big: list = field(default_factory=list)   # [ts_ms, price, size, side], size >= BIG_MIN
     closed: bool = False
+    te: int = 0                                # ms of the bar's last print
+    span: int = 0                              # a time bar's length in ms (0: a tick / volume / range bar)
+    sw: list = field(default_factory=list)     # sweeps: [ts_ms, price_from, price_to, size, side]
+    bub: list = field(default_factory=list)    # bubbles: [sec, price, size, side], sealed (see seal())
+    _bd: dict = field(default_factory=dict, repr=False, compare=False)   # developing bubbles: (sec, tick, side) -> size
+    _g: object = field(default=None, repr=False, compare=False)          # the sweep group in progress
 
     @classmethod
     def open_at(cls, t: int, session: str, price: float) -> "Bar":
@@ -93,12 +109,43 @@ class Bar:
             cell[0] += q
         if q >= BIG_MIN:
             self.big.append([tk.ts_ms, p, q, tk.side])
+        if tk.ts_ms > self.te:
+            self.te = tk.ts_ms
+        bk = (tk.ts_ms // 1000, k, 1 if tk.side > 0 else -1)
+        self._bd[bk] = self._bd.get(bk, 0) + q
+        g = self._g
+        if g is not None and g[0] == tk.ts_ms and g[1] == tk.side:
+            g[2] = min(g[2], k)
+            g[3] = max(g[3], k)
+            g[4] += q
+            g[5] += 1
+        else:
+            self._flush_group(tick_size)
+            self._g = [tk.ts_ms, tk.side, k, k, q, 1]
+
+    def _flush_group(self, tick_size: float) -> None:
+        g, self._g = self._g, None
+        if g is not None and g[5] >= 2 and g[3] - g[2] >= SWEEP_TICKS:
+            self.sw.append([g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]])
+
+    def seal(self, tick_size: float) -> None:
+        """The bar is closed: finish the sweep group and fold the developing bubbles into the capped list."""
+        self._flush_group(tick_size)
+        self.bub = self._bubbles(tick_size)
+        self._bd = {}
+
+    def _bubbles(self, tick_size: float) -> list:
+        rows = [list(x) for x in self.bub]
+        rows += [[s, round(k * tick_size, 6), q, side] for (s, k, side), q in self._bd.items() if q >= BUB_MIN]
+        return _cap_bubbles(rows)
 
     def copy(self) -> "Bar":
         return Bar(self.t, self.session, self.o, self.h, self.l, self.c, self.v,
                    self.buy, self.sell, self.n, self.pv, self.p2v,
                    {k: list(c) for k, c in self.fp.items()},
-                   [list(x) for x in self.big], self.closed)
+                   [list(x) for x in self.big], self.closed, self.te, self.span,
+                   [list(x) for x in self.sw], [list(x) for x in self.bub], dict(self._bd),
+                   list(self._g) if self._g else None)
 
     def merge(self, other: "Bar") -> None:
         """Absorb the NEXT bar in time (resampling)."""
@@ -116,16 +163,27 @@ class Bar:
             cell[0] += s
             cell[1] += b
         self.big.extend(list(x) for x in other.big)
+        self.te = max(self.te, other.te)
+        self.sw.extend(list(x) for x in other.sw)
+        self.bub = _cap_bubbles([list(x) for x in self.bub] + [list(x) for x in other.bub])
+        for bk, q in other._bd.items():
+            self._bd[bk] = self._bd.get(bk, 0) + q
+        self._g = list(other._g) if other._g else None
 
-    def wire(self, tick_size: float, fp: bool = True, big: bool = True) -> dict:
+    def wire(self, tick_size: float, fp: bool = True, big: bool = True, flow: bool = True) -> dict:
         """JSON for the page: t = ET wall-clock seconds (the axis shows ET),
-        ms = the real start in epoch ms. fp / big False: without the footprint /
-        the big prints (a chart that draws neither does not ask for them)."""
+        ms = the real start in epoch ms. fp / big / flow False: without the footprint / the big prints / the
+        sweeps and trade bubbles (a chart that draws none of them does not ask for them)."""
         d = {"t": et_wall_s(self.t), "ms": self.t, "s": self.session,
              "o": self.o, "h": self.h, "l": self.l, "c": self.c,
              "v": self.v, "d": self.delta, "n": self.n}
         if big:
             d["big"] = self.big
+        if flow:
+            d["sw"] = self.sw + ([[self._g[0], round(self._g[2] * tick_size, 6), round(self._g[3] * tick_size, 6),
+                                   self._g[4], self._g[1]]]
+                                 if self._g and self._g[5] >= 2 and self._g[3] - self._g[2] >= SWEEP_TICKS else [])
+            d["bub"] = self._bubbles(tick_size) if self._bd else self.bub
         if fp:
             d["fp"] = [[round(k * tick_size, 6), s, b] for k, (s, b) in sorted(self.fp.items())]
         return d
@@ -168,6 +226,8 @@ class BarBuilder:
                 # and a rebuild from the recorded ticks files it in its own bar.
                 return closed
             self.cur = Bar.open_at(t, self._sess, tk.price)
+            if self.spec.kind == "time":
+                self.cur.span = self.spec.size * 1000
         self.cur.add(tk, self.tick_size)
         if self._full(self.cur):
             closed.append(self._close())
@@ -214,6 +274,7 @@ class BarBuilder:
     def _close(self) -> Bar:
         b, self.cur = self.cur, None
         b.closed = True
+        b.seal(self.tick_size)
         return b
 
 
@@ -244,6 +305,7 @@ def resample(minutes: list[Bar], spec: BarSpec) -> list[Bar]:
                 out.append(cur)
             cur = m.copy()
             cur.t = t
+            cur.span = n
             cur.closed = True
         else:
             cur.merge(m)

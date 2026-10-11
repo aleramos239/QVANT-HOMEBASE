@@ -624,7 +624,10 @@ def test_on_a_decimal_tick_every_bar_sent_is_still_the_replay_s(tmp_path):
         s = hub.prepare("GC", spec, []).stream
         closed, cur = build(tape, spec, 0.1, "GC")
         got, want = s.bars + [s.builder.cur], closed + [cur]
-        assert [b.wire(0.1) for b in got] == [b.wire(0.1) for b in want]
+        # (bubbles aside: rough_rows is out of order on purpose, so one second's prints can fall in two 1-minute bars
+        # and be below the bubble minimum in each; an in-order tape is tested in test_charts_bars_flow.py)
+        nob = lambda b: {k: v for k, v in b.wire(0.1).items() if k != "bub"}
+        assert [nob(b) for b in got] == [nob(b) for b in want]
         assert [b.closed for b in got] == [b.closed for b in want]
         assert [b.pv for b in got] == pytest.approx([b.pv for b in want], rel=1e-12)
         assert [b.p2v for b in got] == pytest.approx([b.p2v for b in want], rel=1e-12)

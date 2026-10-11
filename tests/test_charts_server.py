@@ -746,11 +746,11 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
     orig_payload = Stream.payload
     calls = [0]
 
-    def payload(self, fp=True, big=True):
+    def payload(self, fp=True, big=True, flow=True):
         calls[0] += 1
         if calls[0] == 1:
             raise RuntimeError("payload boom")
-        return orig_payload(self, fp, big)
+        return orig_payload(self, fp, big, flow)
 
     monkeypatch.setattr(Stream, "payload", payload)
 
@@ -1711,7 +1711,10 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
         return [b for b in m["bars"] if b["s"] != D.isoformat()]
 
     def lean(bars):
-        return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+        return [{k: v for k, v in b.items() if k not in ("fp", "big", "sw", "bub")} for b in bars]
+
+    def no_flow(bars):
+        return [{k: v for k, v in b.items() if k not in ("sw", "bub")} for b in bars]
 
     with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
@@ -1724,15 +1727,19 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
 
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False})
         bare = next_of(ws, "history")
-        assert all("fp" not in b and "big" not in b for b in bare["bars"])
+        assert all("fp" not in b and "big" not in b and "sw" in b and "bub" in b for b in bare["bars"])   # flow said nothing: kept
+        assert past(bare) == [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in past(full)]
+        ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False, "flow": False})
+        bare = next_of(ws, "history")
+        assert all(not ({"fp", "big", "sw", "bub"} & set(b)) for b in bare["bars"])
         assert past(bare) == lean(past(full))
-        ws.send_json({"op": "older", "id": "c1", "before": bare["bars"][0]["ms"], "fp": False, "big": False})
+        ws.send_json({"op": "older", "id": "c1", "before": bare["bars"][0]["ms"], "fp": False, "big": False, "flow": False})
         bare_older = next_of(ws, "older")
         assert bare_older == {**full_older, "bars": lean(full_older["bars"])}
 
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": True, "big": False})
         only_fp = next_of(ws, "history")
-        assert all("fp" in b and "big" not in b for b in only_fp["bars"])
+        assert all("fp" in b and "big" not in b and "sw" in b and "bub" in b for b in only_fp["bars"])
 
 
 def test_a_second_older_request_while_one_builds_gets_busy_not_silence(tmp_path, monkeypatch):
