@@ -311,24 +311,29 @@ class Profile:
         self.session: str | None = None
         self.vol: dict = {}
         self.prev_vol: dict = {}    # the session before: the prior-day ghost and lines
+        self.prev_session: str | None = None
+        self._prev_built: tuple | None = None   # (session, its profile): a finished session's profile never changes
 
     def push(self, bar) -> None:
         if bar.session != self.session:
             self.prev_vol = self.vol if self.session is not None else {}
+            self.prev_session = self.session
             self.session, self.vol = bar.session, {}
         for k, (s, b) in bar.fp.items():
             self.vol[k] = self.vol.get(k, 0) + s + b
 
     def value(self, live=None) -> dict | None:
-        vol, prev = self.vol, self.prev_vol
+        vol, prev, prev_session = self.vol, self.prev_vol, self.prev_session
         if live is not None:
             if live.session == self.session:
                 vol = dict(vol)
             else:                       # the developing bar opens a new session: the finished one is the prior
-                vol, prev = {}, self.vol
+                vol, prev, prev_session = {}, self.vol, self.session
             for k, (s, b) in live.fp.items():
                 vol[k] = vol.get(k, 0) + s + b
         out = profile_from(vol, self.tick_size)
         if out is not None and prev:
-            out["prev"] = profile_from(prev, self.tick_size)
+            if self._prev_built is None or self._prev_built[0] != prev_session:
+                self._prev_built = (prev_session, profile_from(prev, self.tick_size))
+            out["prev"] = self._prev_built[1]
         return out

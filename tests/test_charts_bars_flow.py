@@ -167,3 +167,31 @@ def test_merging_capped_bars_stays_capped_and_equals_the_direct_build():
     via = resample(m1, BarSpec.parse("time:120"))
     direct, _ = build(ticks, BarSpec.parse("time:120"), TS)
     assert len(via[0].sw) == SW_CAP and via[0].sw == direct[0].sw
+
+
+def test_the_prior_session_profile_is_built_once_per_session_not_once_per_update(monkeypatch):
+    import homebase.charts.studies as st
+    from homebase.charts.bars import Bar
+
+    def b(session, px, v):
+        x = Bar.open_at(0, session, px)
+        x.fp = {int(px / TS): [0, v]}
+        return x
+    calls = []
+    real = st.profile_from
+    monkeypatch.setattr(st, "profile_from", lambda vol, tick, va=0.70: calls.append(dict(vol)) or real(vol, tick, va))
+    p = Profile(TS)
+    p.push(b("2026-10-08", 100.0, 5))
+    p.push(b("2026-10-09", 101.0, 7))
+    first = p.value()
+    assert first["prev"]["poc"] == 100.0 and len(calls) == 2               # this session + the prior one
+    for _ in range(5):
+        assert p.value() == first
+    assert len(calls) == 2 + 5                                             # only the current session again
+    live = b("2026-10-10", 102.0, 1)                                       # a new session developing: the prior is 10-09
+    calls.clear()
+    v = p.value(live)
+    assert v["prev"]["poc"] == 101.0 and len(calls) == 2
+    assert p.value(live) == v and len(calls) == 3
+    p.push(live)                                                           # it closes: the same prior, still cached
+    assert p.value()["prev"]["poc"] == 101.0 and len(calls) == 4
