@@ -12,6 +12,7 @@ overlap it.
 from __future__ import annotations
 
 import datetime as dt
+import heapq
 import json
 import time
 from collections import OrderedDict
@@ -30,27 +31,40 @@ MAX_POINTS = 20_000                # samples per response, after averaging
 MAX_EPISODES = 6_000
 TODAY_TTL_S = 20.0
 CACHE_DAYS = 4
+REORDER_MS = 60_000                # a stray older depth line is put back in order up to this far; older is dropped
 
 
 def depth_lines(path: Path):
-    """(ts_ms, bids, offers) of each complete line of a depth file, in time order."""
-    out = []
+    """(ts_ms, bids, offers) of each complete line of a depth file, in time order, one at a time (a day's lines
+    are never all in memory). A line that arrives out of order is put back in place when it is less than
+    REORDER_MS late; a later one is dropped, as DepthHistory drops a stray older line."""
     try:
         raw = Path(path).read_bytes()
     except OSError:
-        return out
+        return
+    heap, seq, hi, last = [], 0, None, None
     for text, _end in _members(raw):
         for v in _parse_member(text):
             t, b, a = v.get("t"), v.get("b"), v.get("a")
-            if isinstance(t, (int, float)) and not isinstance(t, bool) and isinstance(b, list) and isinstance(a, list):
-                out.append((int(t), b, a))
-    out.sort(key=lambda x: x[0])
-    return out
+            if not (isinstance(t, (int, float)) and not isinstance(t, bool) and isinstance(b, list) and isinstance(a, list)):
+                continue
+            t = int(t)
+            if last is not None and t < last:
+                continue
+            heapq.heappush(heap, (t, seq, b, a))
+            seq += 1
+            hi = t if hi is None else max(hi, t)
+            while heap and heap[0][0] <= hi - REORDER_MS:
+                last, _, hb, ha = heapq.heappop(heap)
+                yield last, hb, ha
+    while heap:
+        t, _, b, a = heapq.heappop(heap)
+        yield t, b, a
 
 
-def replay_day(lines: list, ticks: list, tick_size: float, finished: bool) -> tuple[list, dict]:
-    """(sample rows, {episode id: episode}) of one session: the lines and the prints in time order, a book
-    before a print with the same stamp."""
+def replay_day(lines, ticks: list, tick_size: float, finished: bool) -> tuple[list, dict]:
+    """(sample rows, {episode id: episode}) of one session: the lines (any iterable, in time order) and the
+    prints in time order, a book before a print with the same stamp."""
     tr = BookTracker(tick_size)
     samples: list = []
     eps: dict = {}
@@ -62,16 +76,13 @@ def replay_day(lines: list, ticks: list, tick_size: float, finished: bool) -> tu
             else:
                 eps[e["id"]] = {k: v for k, v in e.items() if k != "k"}
 
-    i = j = 0
-    n, m = len(lines), len(ticks)
-    while i < n or j < m:
-        if j >= m or (i < n and lines[i][0] <= ticks[j].ts_ms):
-            t, b, a = lines[i]
-            i += 1
-            take(tr.on_book(t, b, a))
+    # heapq.merge is lazy and, on a tie, yields the earlier iterable first: the book line goes before the print
+    for x in heapq.merge(((t, 0, b, a) for t, b, a in lines), ((tk.ts_ms, 1, tk) for tk in ticks),
+                         key=lambda x: x[0]):
+        if x[1] == 0:
+            take(tr.on_book(x[0], x[2], x[3]))
         else:
-            tk = ticks[j]
-            j += 1
+            tk = x[2]
             take(tr.on_print(tk.ts_ms, tk.price, tk.size, tk.side))
     take(tr.finish() if finished else tr.flush(10 ** 18))
     return samples, eps
@@ -139,6 +150,9 @@ class BookHistory:
             raise ValueError("to_ms must be after from_ms")
         if to - frm > MAX_SPAN_MS:
             raise ValueError(f"at most {MAX_SPAN_MS // 3_600_000} h per request")
+        why = self.quiet()                                 # paused windows answer 503 even from the cache
+        if why:
+            raise Paused(why)
         to = min(to, int(now_ms))
         tick = float(self.tick_of(root))
         rows: list = []
@@ -155,6 +169,9 @@ class BookHistory:
         step = max(1000, -(-raw // 1000) * 1000)           # whole seconds, at most MAX_POINTS samples
         rows = _average(rows, step)
         out = sorted(eps.values(), key=lambda v: v["t0"])
+        for i, v in enumerate(out):                        # nothing later than `to`: a level still standing then is open
+            if v["t1"] is None or v["t1"] > to:
+                out[i] = {**v, "t1": None, "end": "open", "ab": None if v["ab"] is None or v["ab"] > to else v["ab"]}
         if len(out) > MAX_EPISODES:
             out = sorted(sorted(out, key=lambda v: -v["r"])[:MAX_EPISODES], key=lambda v: v["t0"])
         return json.dumps({"tick": tick, "step": step, "t0": frm, "t1": to, "samples": rows, "episodes": out},
