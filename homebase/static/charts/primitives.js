@@ -27,15 +27,17 @@ class Layer {
 /* Per bar and price: "sells at bid | buys at ask", a volume bar behind, the
    bar's POC boxed, and diagonal imbalances coloured (buys at P vs sells one
    tick below; sells at P vs buys one tick above) at `ratio`:1. Drawn only
-   when zoomed in far enough to read. */
+   when zoomed in far enough to read. `ex` (2026-10-11): {stack, unfinished, deltaNum} -- a bracket beside runs of
+   `stack` or more stacked imbalances, a triangle where an auction at the bar's high / low did not finish, and
+   the bar's delta under it (HBFlowMath holds the rules). */
 class Footprint extends Layer {
   constructor(P) {
     super(P);
-    this.bars = []; this.ratio = 0; this.tick = 0.25; this.on = false;
+    this.bars = []; this.ratio = 0; this.tick = 0.25; this.on = false; this.ex = {};
     this.onReadableChange = null; this._readable = false;   // last value reported to the callback
     this._timer = null;   // pending setTimeout id for the not-yet-delivered flip, if any
   }
-  set(bars, on, ratio, tick) { this.bars = bars; this.on = on; this.ratio = ratio; this.tick = tick; this.redraw(); }
+  set(bars, on, ratio, tick, ex) { this.bars = bars; this.on = on; this.ratio = ratio; this.tick = tick; this.ex = ex || {}; this.redraw(); }
   readable() {
     if (!this.on || !this.chart || !this.series || !this.bars.length) return false;
     const last = this.bars[this.bars.length - 1];
@@ -88,16 +90,53 @@ class Footprint extends Layer {
           ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(String(bv), x + 3, y);
           if (px === poc[0]) { ctx.strokeStyle = P.poc; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
         }
+        this.extras(ctx, b, x, w, rh);
       }
     });
   }
+  /* One bar's extras (see the class comment). Nothing here when an option is off or HBFlowMath did not load. */
+  extras(ctx, b, x, w, rh) {
+    const M = window.HBFlowMath, ex = this.ex, P = this.P, s = this.series;
+    if (!M || !ex || !b.fp.length) return;
+    if (ex.stack > 0 && this.ratio > 0) {
+      ctx.lineWidth = 2;
+      for (const r of M.stackedRuns(b.fp, this.tick, this.ratio, ex.stack)) {
+        const y0 = s.priceToCoordinate(r.to), y1 = s.priceToCoordinate(r.from);
+        if (y0 == null || y1 == null) continue;
+        const xx = r.side === 'buy' ? x + w / 2 + 3 : x - w / 2 - 3;     // buyers on the ask (right), sellers on the bid (left)
+        ctx.strokeStyle = r.side === 'buy' ? P.up : P.down;
+        ctx.beginPath(); ctx.moveTo(xx, y0 - rh / 2); ctx.lineTo(xx, y1 + rh / 2); ctx.stroke();
+      }
+    }
+    const u = M.unfinished(b.fp);
+    if (ex.unfinished) {
+      ctx.fillStyle = P.text2;
+      const mark = (px, dir) => {
+        const y = s.priceToCoordinate(px);
+        if (y == null) return;
+        const yy = y + dir * (rh / 2 + 5);
+        ctx.beginPath(); ctx.moveTo(x, yy + dir * 3); ctx.lineTo(x - 4, yy - dir * 3); ctx.lineTo(x + 4, yy - dir * 3); ctx.closePath(); ctx.fill();
+      };
+      if (u.high) mark(u.hi, -1);    // the triangle points at the top row
+      if (u.low) mark(u.lo, 1);      // ... and at the bottom row
+    }
+    if (ex.deltaNum && Number.isFinite(b.d) && window.HBCatalog) {
+      const y = s.priceToCoordinate(u.lo);
+      if (y == null) return;
+      ctx.textAlign = 'center';
+      ctx.fillStyle = b.d >= 0 ? P.up : P.down;
+      ctx.fillText(window.HBCatalog.fmtSigned(b.d), x, y + rh / 2 + (ex.unfinished && u.low ? 16 : 9));
+    }
+  }
 }
 
-/* Session volume profile on the right edge: POC highlighted, value area darker. */
+/* Session volume profile on the right edge: POC highlighted, value area darker. `ex` (2026-10-11): {prior, lines,
+   naked} -- the session before (p.prev, the same shape) as a faint ghost left of the current one, and its VAH / VAL /
+   POC as lines across the chart (the POC dashed while price has not traded back to it: `naked`). */
 class Profile extends Layer {
-  constructor(P) { super(P); this.p = null; this.tick = 0.25; }
+  constructor(P) { super(P); this.p = null; this.tick = 0.25; this.ex = {}; }
   z() { return 'bottom'; }
-  set(p, tick) { this.p = p; this.tick = tick; this.redraw(); }
+  set(p, tick, ex) { this.p = p; this.tick = tick; this.ex = ex || {}; this.redraw(); }
   draw(target) {
     const p = this.p; if (!p || !this.series || !p.rows || !p.rows.length) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
@@ -107,6 +146,32 @@ class Profile extends Layer {
         const y = this.series.priceToCoordinate(px); if (y == null) continue;
         ctx.fillStyle = px === p.poc ? this.P.poc : (px >= p.val && px <= p.vah ? this.P.vaIn : this.P.va);
         const w = W * v / maxV; ctx.fillRect(mediaSize.width - w, y - rh / 2, w, rh);
+      }
+      const q = p.prev, ex = this.ex || {};
+      if (!q || !q.rows || !q.rows.length) return;
+      if (ex.prior) {                  // the prior session's ghost, left of the current profile
+        let mq = 1; for (const r of q.rows) if (r[1] > mq) mq = r[1];
+        const qh = Math.max(1, this.rowH(q.poc, this.tick) - 0.5);
+        ctx.globalAlpha = 0.45;
+        for (const [px, v] of q.rows) {
+          const y = this.series.priceToCoordinate(px); if (y == null) continue;
+          ctx.fillStyle = px === q.poc ? this.P.poc : this.P.va;
+          const w = W * v / mq; ctx.fillRect(mediaSize.width - W - 6 - w, y - qh / 2, w, qh);
+        }
+        ctx.globalAlpha = 1;
+      }
+      if (ex.lines) {                  // VAH / VAL / POC of the session before, across the whole pane
+        ctx.font = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
+        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 1;
+        for (const [px, name, color, dashed] of [[q.vah, 'pVAH', this.P.text2, false], [q.val, 'pVAL', this.P.text2, false],
+          [q.poc, 'pPOC', this.P.poc, !!ex.naked]]) {
+          const y = px == null ? null : this.series.priceToCoordinate(px); if (y == null) continue;
+          ctx.strokeStyle = color; ctx.fillStyle = color;
+          ctx.setLineDash(dashed ? [6, 4] : []);
+          ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(mediaSize.width, Math.round(y) + 0.5); ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.fillText(name, 6, y - 2);
+        }
       }
     });
   }
