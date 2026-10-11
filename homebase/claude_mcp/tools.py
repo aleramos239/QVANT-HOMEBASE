@@ -244,9 +244,11 @@ def _prop_line(p) -> str:
     h = p.get("headline") or {}
     ci = h.get("eval_pass_ci")
     ci_s = f" [{_pct(ci[0], True)}–{_pct(ci[1], True)}]" if isinstance(ci, (list, tuple)) and len(ci) == 2 else ""
+    soft = p.get("close_only") or {}
+    rule = (f" [{p['breach']}" + (f"; close only would say pass {_pct(soft.get('eval_pass_p'), True)}" if soft else "") + "]") if p.get("breach") else ""
     return (f"Prop eval ({label}): pass {_pct(h.get('eval_pass_p'), True)}{ci_s}, bust {_pct(h.get('bust_p'), True)}, "
             f"timeout {_pct(h.get('timeout_p'), True)}, median days to pass {_num(h.get('median_days_to_pass'), '{:g}')}, "
-            f"funded payout {_pct(h.get('funded_payout_p'), True)}, E[cheque] {_usd(h.get('funded_expected_cheque'))}")
+            f"funded payout {_pct(h.get('funded_payout_p'), True)}, E[cheque] {_usd(h.get('funded_expected_cheque'))}{rule}")
 
 
 def _ref_text(ref: dict) -> str:

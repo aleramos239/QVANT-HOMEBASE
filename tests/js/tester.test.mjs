@@ -27,7 +27,7 @@ test('form defaults from the schema; restore keeps only valid values', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(f, { strategy: 'nq930', inputs: { offset_pts: 10, adx_gate: false, mode: 'a', n: 3 },
     range: { id: 'research', start: '', end: '', wf: null }, qty: 1, commission: 4, slippage_ticks: 1,
-    max_cells: 60, prop_rules: 'lucid-flex-50k@2026-09-27' });
+    max_cells: 60, prop_rules: 'lucid-flex-50k@2026-10-11' });
   const r = X.restore({ ...f, inputs: { offset_pts: 11, adx_gate: 'yes', ghost: 1, n: 2.5 }, qty: 3 }, STRAT);
   assert.deepEqual(r.inputs, { offset_pts: 11, adx_gate: false, mode: 'a', n: 3 });
   assert.equal(r.qty, 3);
@@ -123,7 +123,7 @@ test('the request body: the range picker\'s own window, and the default preset u
   // THE parity line: the default preset still sends {kind:'research'} verbatim -- the server owns the
   // build days' dates -- so the request is byte for byte the one this tester always sent.
   assert.deepEqual(X.body(f), { strategy: 'nq930', inputs: f.inputs, range: { kind: 'research' },
-    qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-09-27' });
+    qty: 1, commission: 4, slippage_ticks: 1, prop_rules: 'lucid-flex-50k@2026-10-11' });
   assert.equal('holdout' in X.body(f), false);
   assert.deepEqual(X.body({ ...f, range: { id: 'test', start: '', end: '', wf: null } }).range,
     { kind: 'custom', start: '2025-07-01', end: X.today() });
@@ -338,7 +338,7 @@ test('the Eval picker: one option per listed ruleset, unconfirmed ones marked', 
     [['lucid-flex-50k@2026-09-27', false], ['lucid-pro-50k@2026-09-27', false], ['lucid-flex-50k@2026-08', true]]);
   assert.deepEqual(X.evalOptions(null, 'lucid-flex-50k@2026-09-27'),
     [{ id: 'lucid-flex-50k@2026-09-27', label: 'lucid-flex-50k@2026-09-27', unconfirmed: false, selected: true }]);
-  assert.equal(X.DEFAULT_RULES, 'lucid-flex-50k@2026-09-27');
+  assert.equal(X.DEFAULT_RULES, 'lucid-flex-50k@2026-10-11');
 });
 
 test('propShown: the saved block, a re-score in flight, a finished re-score, a stale one', () => {

@@ -65,20 +65,23 @@ def test_the_weekday_grid_fills_no_trade_weekdays_with_zero():
 
 
 def test_rule_files_and_the_unconfirmed_label():
-    """The picker offers exactly three evals -- LucidFlex (the default, confirmed), LucidPro
-    with its $1,200 daily limit and LucidPro without it (both partly unconfirmed) -- newest
-    version per family; older snapshots stay loadable."""
+    """The picker offers one eval per family -- newest version per family (the prop audit's
+    corrections of 2026-10-11); older snapshots stay loadable."""
     ids = {r["id"]: r for r in list_rules()}
-    assert set(ids) == {"lucid-flex-50k@2026-09-27", "lucid-flex-50k-dll@2026-09-27b", "lucid-pro-50k@2026-09-27b",
-                        "lucid-pro-50k-no-dll@2026-09-27b", "topstep-50k@2026-09-27b", "apex-legacy-50k@2026-09-27b",
-                        "apex-eod-50k@2026-09-27b", "apex-legacy-300k@2026-09-28"}
-    assert ids["lucid-flex-50k@2026-09-27"] == {"id": "lucid-flex-50k@2026-09-27", "name": "LucidFlex 50K",
-                                                "version": "2026-09-27", "confirmed": True}
-    assert ids["lucid-pro-50k@2026-09-27b"] == {"id": "lucid-pro-50k@2026-09-27b", "name": "LucidPro 50K · $1,200 daily limit",
-                                                "version": "2026-09-27b", "confirmed": True}
-    assert ids["lucid-pro-50k-no-dll@2026-09-27b"]["name"] == "LucidPro 50K · no daily loss limit"
+    assert set(ids) == {"lucid-flex-50k@2026-10-11", "lucid-flex-50k-dll@2026-10-11", "lucid-pro-50k@2026-10-11",
+                        "lucid-pro-50k-no-dll@2026-10-11", "apex-legacy-50k@2026-10-11",
+                        "apex-eod-50k@2026-10-11", "apex-legacy-300k@2026-10-11"}
+    assert ids["lucid-flex-50k@2026-10-11"] == {"id": "lucid-flex-50k@2026-10-11", "name": "LucidFlex 50K",
+                                                "version": "2026-10-11", "confirmed": True}
+    assert ids["lucid-pro-50k@2026-10-11"] == {"id": "lucid-pro-50k@2026-10-11", "name": "LucidPro 50K · $1,200 daily limit",
+                                               "version": "2026-10-11", "confirmed": True}
+    assert ids["lucid-pro-50k-no-dll@2026-10-11"]["name"] == "LucidPro 50K · no daily loss limit"
     assert load_rules("lucid-pro-50k@2026-09-27")["daily_loss_limit"] is None   # the older Pro still reproduces
-    assert DEFAULT_RULES == "lucid-flex-50k@2026-09-27"
+    for old in ("lucid-flex-50k@2026-09-27", "lucid-pro-50k@2026-09-27b", "lucid-pro-50k-no-dll@2026-09-27b",
+                "apex-legacy-300k@2026-09-28"):          # saved runs and book cards name these: never edited
+        assert load_rules(old)["version"] == old.split("@")[1]
+    assert DEFAULT_RULES == "lucid-flex-50k@2026-10-11"
+    assert not list(RULES_DIR.glob("topstep*"))      # the account holder, 2026-10-11: "remove topstep for now" (its files are in git history)
     # the superseded snapshot is off the picker but still on disk and still loadable
     assert (RULES_DIR / "lucid-flex-50k@2026-08.json").is_file()
     assert load_rules("lucid-flex-50k@2026-08")["version"] == "2026-08"
@@ -88,7 +91,9 @@ def test_rule_files_and_the_unconfirmed_label():
     assert lucid["rules"]["id"] == DEFAULT_RULES and lucid["rules"]["label"] == "LucidFlex 50K"
     assert pro["rules"]["confirmed"] is False
     assert pro["rules"]["label"] == "LucidPro 50K (before the daily limit) · unconfirmed rules"
-    assert lucid["caveat"] == pro["caveat"] == CAVEAT
+    # day_trades is a bare {date, net} ledger: it cannot see inside a day, and both results say so
+    assert lucid["caveat"] == pro["caveat"] and lucid["caveat"].startswith(CAVEAT) and "OVERSTATED" in lucid["caveat"]
+    assert lucid["breach"] == pro["breach"] == propsim.BREACH_CLOSE and "close_only" not in lucid
     for bad in ("nope@x", "../lucid-flex-50k@2026-08", "", None):
         with pytest.raises(ValueError, match="prop_rules"):
             load_rules(bad)
@@ -98,9 +103,9 @@ def test_the_apex_placeholder_is_gone():
     """Invented numbers are worse than no file: the old all-Flex-copy placeholder stays deleted;
     the Apex files that exist now carry the account holder's own numbers (2026-09-27)."""
     assert not (RULES_DIR / "apex-50k@unconfirmed.json").exists()
-    assert sorted(p.name for p in RULES_DIR.glob("apex*")) == ["apex-eod-50k@2026-09-27b.json",
-                                                              "apex-legacy-300k@2026-09-28.json",
-                                                              "apex-legacy-50k@2026-09-27b.json"]
+    assert sorted(p.name for p in RULES_DIR.glob("apex*")) == ["apex-eod-50k@2026-09-27b.json", "apex-eod-50k@2026-10-11.json",
+                                                              "apex-legacy-300k@2026-09-28.json", "apex-legacy-300k@2026-10-11.json",
+                                                              "apex-legacy-50k@2026-09-27b.json", "apex-legacy-50k@2026-10-11.json"]
 
 
 def test_apex_legacy_300k_is_the_account_holders_numbers():
@@ -141,7 +146,7 @@ def test_flex_2026_09_27_reaffirms_the_2026_08_numbers_so_nothing_moves():
 def test_pro_is_flex_minus_the_consistency_rule_and_the_minimum_days():
     """Account holder, 2026-09-27: "same as Flex except no consistency rule and no
     minimum days". Everything else is INHERITED and unconfirmed."""
-    flex = load_rules(DEFAULT_RULES)
+    flex = load_rules("lucid-flex-50k@2026-09-27")
     pro = load_rules("lucid-pro-50k@2026-09-27")
     assert pro["consistency"] is None and pro["eval_min_days"] == 1
     assert pro["confirmed"] is False
@@ -191,7 +196,9 @@ def test_the_runner_writes_propsim_json_and_validates_the_rule_set(tmp_path, mon
     assert meta["prop_rules"] == "lucid-pro-50k@2026-09-27"
     assert p["rules"]["label"] == "LucidPro 50K (before the daily limit) · unconfirmed rules" and p["n_paths"] == 300
     assert p["grid"] == {"first": "2024-03-05", "last": "2024-03-05", "weekdays": 1, "trade_days": 1}
-    assert 0.0 <= p["headline"]["eval_pass_p"] <= 1.0 and p["caveat"] == CAVEAT
+    assert 0.0 <= p["headline"]["eval_pass_p"] <= 1.0 and p["caveat"].startswith(CAVEAT)
+    # the engine's ledger carries mae_usd: the run's own prop eval counts open losses and keeps the close-only reading beside it
+    assert p["breach"] == propsim.BREACH_OPEN and "OVERSTATED" not in p["caveat"] and 0.0 <= p["close_only"]["eval_pass_p"] <= 1.0
 
 
 def test_a_malformed_rule_file_never_loses_the_run_bundle(tmp_path, monkeypatch):
@@ -268,7 +275,7 @@ def test_flex_is_unchanged_by_the_daily_limit_code():
     for path in ([-2500.0], [-1900.0, 3200.0, 1000.0], [2900.0, 200.0, 50.0], [1600.0, 1600.0]):
         assert engine.run_eval(path, flex) == engine.run_eval(path, dict(flex, daily_loss_limit=None))
         assert engine.run_funded(path, flex) == engine.run_funded(path, dict(flex, daily_loss_limit=None))
-    assert evaluate(ledger, DEFAULT_RULES, n_paths=300)["caveat"] == CAVEAT
+    assert evaluate(ledger, DEFAULT_RULES, n_paths=300)["caveat"].startswith(CAVEAT)
 
 
 def test_a_bad_daily_limit_is_refused_not_guessed():
@@ -305,7 +312,8 @@ def test_a_dip_past_the_limit_is_a_stop_even_when_the_trade_then_wins():
         ("2024-03-04", -1200.0, True), ("2024-03-05", -200.0, False), ("2024-03-05", -1000.0, True),
         ("2024-03-06", 900.0, False)]
     res = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=200)
-    assert res["dll_stopped_days"] == 2 and res["caveat"] == CAVEAT   # MAE present: nothing hidden
+    assert res["dll_stopped_days"] == 2 and "OVERSTATED" not in res["caveat"]   # MAE present: nothing hidden
+    assert res["breach"] == propsim.BREACH_OPEN
     # the same ledger without the limit is untouched
     assert propsim.limit_trades(ledger, load_rules("lucid-pro-50k-no-dll@2026-09-27b")) is ledger
 
@@ -315,7 +323,8 @@ def test_a_ledger_without_mae_is_flagged_as_overstated():
     pro = evaluate(ledger, "lucid-pro-50k@2026-09-27b", n_paths=200)
     assert "OVERSTATED" in pro["caveat"]
     no = evaluate(ledger, "lucid-pro-50k-no-dll@2026-09-27b", n_paths=200)
-    assert "dll_stopped_days" not in no and no["caveat"] == CAVEAT
+    # without a daily limit the bare ledger is still blind to an open loss at the drawdown floor
+    assert "dll_stopped_days" not in no and no["breach"] == propsim.BREACH_CLOSE and "OVERSTATED" in no["caveat"]
 
 
 def test_monte_carlo_ruin_agrees_with_the_daily_limit():
@@ -342,18 +351,16 @@ def test_overlapping_positions_and_a_broken_mae_are_flagged():
 
 
 def test_the_account_holders_other_evals():
-    """2026-09-27: Flex + a $1,200 daily limit; Topstep = Flex with no daily limit and a 5-mini cap;
+    """2026-09-27: Flex + a $1,200 daily limit (Topstep, a copy of Flex then, was removed 2026-10-11);
     Apex Legacy = $3,000 / $2,000 EOD trail locking at $50,100, 10 minis, no consistency, 1 day;
     Apex EOD = the same with a $1,000 daily limit and 6 minis. Apex payout terms are placeholders,
     so both Apex files stay unconfirmed."""
     flex = load_rules(DEFAULT_RULES)
     fd = load_rules("lucid-flex-50k-dll@2026-09-27b")
     assert fd["daily_loss_limit"] == 1200 and fd["consistency"] == 0.5 and fd["eval_min_days"] == 2
-    top = load_rules("topstep-50k@2026-09-27b")
-    assert top["cap_micros"] == 50 and top["daily_loss_limit"] is None
     same = ("eval_target", "trailing_mll", "lock_at", "lock_floor", "consistency", "eval_min_days", "win_day",
             "payout_win_days", "payout_share", "payout_cap", "max_payout_profit")
-    assert all(top[k] == flex[k] == fd[k] for k in same)
+    assert all(flex[k] == fd[k] for k in same)
     for rid, cap, dll in (("apex-legacy-50k@2026-09-27b", 100, None), ("apex-eod-50k@2026-09-27b", 60, 1000)):
         a = load_rules(rid)
         assert (a["eval_target"], a["trailing_mll"], a["lock_at"], a["lock_floor"]) == (3000, 2000, 2100, 100)
@@ -364,3 +371,147 @@ def test_the_account_holders_other_evals():
     legacy = load_rules("apex-legacy-50k@2026-09-27b")
     assert engine.run_eval([-2500.0], eod)["outcome"] == "timeout"        # stopped at -1,000 for the day
     assert engine.run_eval([-2500.0], legacy)["outcome"] == "bust"        # no daily limit: through the $2,000 trail
+
+
+# ---------------------------------------------------------------- the prop audit, 2026-10-11
+
+PRO_OWN, PRO_OWN_FREE = "lucid-pro-50k@2026-10-11", "lucid-pro-50k-no-dll@2026-10-11"
+
+
+def test_an_open_loss_at_the_floor_fails_the_account_whatever_the_day_closes_at():
+    """Open losses count (account holder 2026-10-02): a day is (P&L, traded, worst open loss). From a
+    flat start the floor is -$2,000: a day that dipped $2,000 is a bust though it closed UP."""
+    flex, pro = load_rules(DEFAULT_RULES), load_rules(PRO_OWN_FREE)
+    assert engine.run_eval([(500.0, True, 2000.0)], flex) == dict(outcome="bust", day=1, trade_days=1, max_dd=2000.0)
+    assert engine.run_eval([(500.0, True, 1999.99)], flex)["outcome"] == "timeout"
+    assert engine.run_eval([(500.0, True)], flex) == engine.run_eval([500.0], flex) == engine.run_eval([(500.0, True, 0.0)], flex)
+    # the floor trails the end-of-day peak, and the next day's worst point is held against THAT floor
+    assert engine.run_eval([(1000.0, True, 0.0), (200.0, True, 2000.0)], flex)["outcome"] == "bust"
+    assert engine.run_eval([(1000.0, True, 0.0), (200.0, True, 1999.0)], flex)["outcome"] == "timeout"
+    # the breach comes before the close: a day that would have passed is a bust when it touched the floor first
+    assert engine.run_eval([(3000.0, True, 1500.0)], pro)["outcome"] == "pass"
+    assert engine.run_eval([(3000.0, True, 2000.0)], pro)["outcome"] == "bust"
+    f = engine.run_funded([(900.0, True, 2000.0)] + [(900.0, True, 0.0)] * 4, flex)
+    assert f == dict(payout_at=None, cheque=None, max_payout_at=None, bust_at=1)
+
+
+def test_day_opens_is_the_days_worst_open_point():
+    """realised so far - (mae + commission of every trade open then), at each entry; capped at the soft
+    daily limit; None when a trade has no mae_usd."""
+    flex, pro = load_rules(DEFAULT_RULES), load_rules(PRO_OWN)
+    t = lambda d, a, b, net, mae: {"date": d, "entry_ms": a, "exit_ms": b, "net": net, "mae_usd": mae, "commission": 4.0}  # noqa: E731
+    ledger = [t("2024-03-04", 10, 20, 300.0, 100.0),      # alone: 104 down at worst
+              t("2024-03-04", 30, 40, -500.0, 600.0),     # after +300 banked: 300 - 604 = -304
+              t("2024-03-05", 10, 50, 900.0, 700.0),      # two open at once: their open losses add
+              t("2024-03-05", 20, 30, 100.0, 400.0),
+              t("2024-03-07", 10, 20, 50.0, 0.0)]
+    _, _, dates = weekday_grid(ledger)
+    assert dates == ["2024-03-04", "2024-03-05", "2024-03-06", "2024-03-07"]
+    assert propsim.day_opens(ledger, dates, flex) == [304.0, 1108.0, 0.0, 4.0]
+    deep = [t("2024-03-04", 10, 20, 2500.0, 1900.0)]
+    assert propsim.day_opens(deep, ["2024-03-04"], flex) == [1904.0]
+    assert propsim.day_opens(deep, ["2024-03-04"], pro) == [1200.0]          # the day was closed at the limit
+    assert propsim.day_opens(ledger + [{"date": "2024-03-08", "net": 5.0}], dates + ["2024-03-08"], flex) is None
+    # no entry / exit times: one after the other, in ledger order
+    bare = [{"date": "2024-03-04", "net": 300.0, "mae_usd": 100.0, "commission": 4.0},
+            {"date": "2024-03-04", "net": -500.0, "mae_usd": 600.0, "commission": 4.0}]
+    assert propsim.day_opens(bare, ["2024-03-04"], flex) == [304.0]
+
+
+def test_the_tile_counts_open_losses_and_keeps_the_close_only_reading_beside_it():
+    """Every day wins $1,600 after sitting $2,500 under water: on the close alone that passes every
+    time; with open losses counted the first day fails every account."""
+    ledger = [{**t, "mae_usd": 2500.0, "commission": 4.0} for t in day_trades([1600.0] * 6)]
+    r = evaluate(ledger, PRO_OWN_FREE, n_paths=200)
+    assert r["breach"] == propsim.BREACH_OPEN == "open losses count"
+    assert (r["headline"]["eval_pass_p"], r["headline"]["bust_p"]) == (0.0, 1.0)
+    assert (r["close_only"]["eval_pass_p"], r["close_only"]["bust_p"]) == (1.0, 0.0)
+    assert "Open losses count" in r["caveat"] and "pass 100.0%" in r["caveat"] and "OVERSTATED" not in r["caveat"]
+    calm = evaluate([{**t, "mae_usd": 50.0, "commission": 4.0} for t in day_trades([1600.0] * 6)], PRO_OWN_FREE, n_paths=200)
+    assert calm["headline"]["eval_pass_p"] == calm["close_only"]["eval_pass_p"] == 1.0
+    bare = evaluate(day_trades([1600.0] * 6), PRO_OWN_FREE, n_paths=200)       # no mae_usd: the old reading, and it says so
+    assert bare["breach"] == propsim.BREACH_CLOSE and "close_only" not in bare and "OVERSTATED" in bare["caveat"]
+    from homebase.backtest.stats import montecarlo
+    rules = load_rules(PRO_OWN_FREE)
+    assert montecarlo.run(ledger, paths=50, seed=1, rules=rules)["p_prop_pass"] == 0.0
+    assert montecarlo.run(ledger, paths=50, seed=1, rules=rules)["prop_breach"] == propsim.BREACH_OPEN
+    soft = montecarlo.run(day_trades([1600.0] * 6), paths=50, seed=1, rules=rules)
+    assert (soft["p_prop_pass"], soft["prop_breach"]) == (1.0, propsim.BREACH_CLOSE)
+    assert montecarlo.run(ledger, paths=50, seed=1)["prop_breach"] is None
+
+
+def test_lucidpro_pays_on_its_own_rule_not_lucidflexs():
+    """Lucid's payouts page (2026-10-11): no winning-days rule; cycle profit >= $500, largest day <= 40%
+    of it, paid only from the profit above the $2,100 buffer, at least $500 and at most $2,000."""
+    pro, old = load_rules(PRO_OWN_FREE), load_rules("lucid-pro-50k-no-dll@2026-09-27b")
+    assert (pro["payout_min_profit"], pro["payout_consistency"], pro["payout_buffer"], pro["payout_min"], pro["payout_cap"],
+            pro["max_payout_profit"]) == (500, 0.4, 2100, 500, 2000, 4100)
+    assert pro["win_day"] is None and pro["payout_win_days"] is None and pro["payout_share"] is None and pro["scaling_micros"] is None
+    eval_keys = ("eval_target", "eval_min_days", "consistency", "trailing_mll", "lock_at", "lock_floor", "daily_loss_limit", "cap_micros")
+    assert all(pro[k] == old[k] for k in eval_keys)                           # the eval is the account holder's, unchanged
+    for path in ([3100.0], [-2500.0], [900.0, -400.0, 2600.0], [1600.0, 1600.0]):
+        assert engine.run_eval(path, pro) == engine.run_eval(path, old)
+    # three even days reach +$2,700: $600 above the buffer, largest day a third of the profit -> a $600 cheque on day 3
+    assert engine.run_funded([900.0] * 3, pro) == dict(payout_at=3, cheque=600.0, max_payout_at=None, bust_at=None)
+    # ... and five reach +$4,500: the full $2,000, the maximum payout. No day had to be a "winning day" of $150
+    assert engine.run_funded([900.0] * 5, pro) == dict(payout_at=3, cheque=600.0, max_payout_at=5, bust_at=None)
+    # +$2,599 is $499 above the buffer: under the $500 minimum request
+    assert engine.run_funded([900.0, 900.0, 799.0], pro)["payout_at"] is None
+    # one day is more than 40% of the profit: nothing is paid until the others catch up
+    lumpy = engine.run_funded([3000.0, 600.0, 600.0, 600.0, 2700.0], pro)     # 3000 of 4800 = 62% ... of 7500 = 40%
+    assert lumpy == dict(payout_at=5, cheque=2000.0, max_payout_at=5, bust_at=None)
+    # LucidFlex's rule on the same days pays at five $150 days whatever their shape -- the 2026-09-27b file's mistake
+    assert engine.run_funded([3000.0, 600.0, 600.0, 600.0, 2700.0], old)["payout_at"] == 5
+    assert engine.run_funded([3000.0, 600.0, 600.0, 600.0, 300.0], old)["max_payout_at"] == 5
+    assert engine.run_funded([3000.0, 600.0, 600.0, 600.0, 300.0], pro)["max_payout_at"] is None
+    res = evaluate(day_trades([900.0] * 8), PRO_OWN_FREE, n_paths=100)["result"]
+    assert res["series"]["win_day_rate"] is None and res["funded"]["payout_p"] == 1.0
+
+
+def test_the_other_corrected_files():
+    """LucidFlex: a $500 minimum request. Apex EOD: 30 calendar days (21 weekdays) and its own
+    payout rule. Apex Legacy: the numbers are the account holder's, the name says what the file is.
+    A consistency other than Flex's 50% and a floor that locks at the start balance (Topstep's, whose
+    file is removed for now) are still read off whatever rule file names them."""
+    flex, was = load_rules(DEFAULT_RULES), load_rules("lucid-flex-50k@2026-09-27")
+    assert flex["payout_min"] == 500 and flex["flat_by_et"] == "16:45" and {k: v for k, v in flex.items() if k in was and was[k] != v}.keys() == {
+        "version", "as_of", "source", "notes", "flat_by_et", "payout_ladder"}
+    small = [200.0] * 4 + [-300.0, 200.0]              # five $200 days, +$700: half of it is under the $500 minimum
+    assert engine.run_funded(small, was)["cheque"] == 350.0 and engine.run_funded(small, flex)["payout_at"] is None
+    assert engine.run_funded([200.0] * 5, flex)["cheque"] == 500.0
+    top = {**flex, "consistency": 0.55, "lock_at": 2000, "lock_floor": 0}
+    assert engine.run_eval([1650.0, 1350.0], top)["outcome"] == "pass"         # 1,650 of 3,000 = 55%
+    assert engine.run_eval([1700.0, 1300.0], top)["outcome"] == "timeout"      # 56.7%: the target rises, keep trading
+    assert engine.run_eval([1700.0, 1300.0, 100.0], top)["outcome"] == "pass"  # 1,700 / 0.55 = 3,091 <= 3,100
+    assert engine.run_eval([2500.0, -2400.0], top)["outcome"] == "timeout"     # locked at $50,000: +$100 is above it
+    assert engine.run_eval([2500.0, -2500.0], top)["outcome"] == "bust"
+    eod = load_rules("apex-eod-50k@2026-10-11")
+    assert eod["max_days"] == 21 and eod["confirmed"] is False
+    slow = evaluate(day_trades([100.0] * 40), "apex-eod-50k@2026-10-11", n_paths=50)      # +$100 a day needs 30 days: out of time
+    assert slow["headline"]["eval_pass_p"] == 0.0 and slow["headline"]["timeout_p"] == 1.0
+    assert evaluate(day_trades([100.0] * 40), "apex-eod-50k@2026-09-27b", n_paths=50)["headline"]["eval_pass_p"] == 1.0
+    assert engine.run_funded([700.0] * 5, eod)["cheque"] == 1400.0             # +$3,500: $1,400 above the safety net
+    assert engine.run_funded([700.0] * 6, eod)["max_payout_at"] == 6           # +$4,200: the $1,500 cap
+    assert engine.run_funded([240.0] * 20, eod)["payout_at"] is None           # no day reaches $250
+    for rid, old in (("apex-legacy-50k@2026-10-11", "apex-legacy-50k@2026-09-27b"), ("apex-legacy-300k@2026-10-11", "apex-legacy-300k@2026-09-28")):
+        a, b = load_rules(rid), load_rules(old)
+        assert a["name"].endswith("holder's EOD reading, not Apex's rule") and a["confirmed"] is False
+        assert "intraday" in a["notes"][0] and {k for k in a if a[k] != b[k]} == {"name", "version", "as_of", "source", "notes", "disclaimer"}
+
+
+def test_the_close_only_reading_is_of_the_same_paths_and_never_below():
+    """close_only walks the very paths the open-loss number walked, so it can only be friendlier -- and the
+    main stream is untouched by it: with no open loss on any day the two readings are one."""
+    import random
+    rnd = random.Random(4)
+    nets = [round(rnd.gauss(40.0, 700.0), 2) for _ in range(160)]
+    deep = [{**t, "mae_usd": max(-t["net"], 0.0) + abs(rnd.gauss(0.0, 900.0)), "commission": 4.0} for t in day_trades(nets)]
+    flat = [{**t, "mae_usd": 0.0, "commission": 0.0} for t in day_trades(nets)]
+    for rid in (DEFAULT_RULES, PRO_OWN, PRO_OWN_FREE):
+        a, b, bare = evaluate(deep, rid, n_paths=1500), evaluate(flat, rid, n_paths=1500), evaluate(day_trades(nets), rid, n_paths=1500)
+        assert a["close_only"]["eval_pass_p"] > a["headline"]["eval_pass_p"] and a["close_only"]["funded_payout_p"] >= a["headline"]["funded_payout_p"]
+        assert a["close_only"]["bust_p"] < a["headline"]["bust_p"]
+        if not load_rules(rid)["daily_loss_limit"]:           # (a daily limit reads the MAE too: only without one is the flat ledger the bare one)
+            assert b["headline"] == bare["headline"]
+            assert (b["close_only"]["eval_pass_p"], b["close_only"]["funded_payout_p"]) == (b["headline"]["eval_pass_p"], b["headline"]["funded_payout_p"])
+            assert a["close_only"]["eval_pass_p"] == pytest.approx(bare["headline"]["eval_pass_p"], abs=0.04)

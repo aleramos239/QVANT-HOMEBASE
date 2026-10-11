@@ -13,6 +13,9 @@ move numbers, never to make this pass.
 2026-10-06: the default range became the build days (2021-09-22 -> 2025-06-30), so this pin
 names its window by its dates. Two words of the fixture changed with that -- the range's
 kind ("research" -> "custom") and its label -- and no number.
+
+2026-10-11: the default prop rule set became lucid-flex-50k@2026-10-11 (the prop audit's corrected
+LucidFlex file). One word of the fixture changed with that -- run.prop_rules -- and no number.
 """
 from __future__ import annotations
 

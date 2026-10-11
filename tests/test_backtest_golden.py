@@ -79,7 +79,12 @@ def test_engine_reproduces_research_trade_by_trade(store, case):
 # Re-pinned at release/4: feat/propsim-evals renamed the ruleset id lucid-flex-50k@2026-08 ->
 # lucid-flex-50k@2026-09-27 inside propsim.json. trades/equity/report/coverage hash identical and
 # propsim.json minus its "rules" label hashes identical (81feeaffd10f24e9) on both sides.
-RESEARCH_DIGEST = "bedc19f61142f4ecb9a30d32dde33fb26378fd97e58aa887b272f98163e6773a"
+# Re-pinned 2026-10-11 (the prop audit): propsim.json alone moved -- the run's prop eval now counts open
+# losses (breach, close_only, a longer caveat) under the default lucid-flex-50k@2026-10-11. Checked before
+# the re-pin: the old propsim.json rebuilt from this run's own trades the old way (close only, the
+# 2026-09-27 file) hashes to the old digest bedc19f6...6773a with the new trades / equity / report /
+# coverage, so none of those moved by a byte.
+RESEARCH_DIGEST = "4ff246a710c9d02a7ee732a80589a3ae275ef27914bfbd3f508a291f1652d6b2"
 RESEARCH_HEADLINE = {"trades": 518, "net_profit": 263.0, "win_rate": 27.220077220077222,
                      "profit_factor": 1.0063414751766209, "sharpe": 0.037311904610996545,
                      "skipped": 2}

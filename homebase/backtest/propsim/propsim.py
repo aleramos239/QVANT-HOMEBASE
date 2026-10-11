@@ -5,6 +5,10 @@
 # copy carries the same null-handling but also a lucid-flex-50k@2026-09 snapshot claiming Flex
 # has NO consistency rule — the account holder WITHDREW that on 2026-09-27, so do NOT re-vendor
 # ONYX's rules over homebase's. Re-vendor engine changes only, keeping this divergence.
+# DIVERGED 2026-10-11 (the prop audit): a day may carry its WORST OPEN LOSS (open losses count: the
+# firms fail an account in real time), the payout rule reads its conditions off the rule file
+# (LucidPro's buffer and 40% consistency are not LucidFlex's five winning days), and an eval with
+# `max_days` is not raced past them.
 """Monte Carlo over the LucidFlex 50K eval + funded lifecycle.
 
 Port of the Institutional Protocol course's prop-firm notebook engine
@@ -26,7 +30,7 @@ THE CLOCK: the sampling pool is the full weekday grid (Mon–Fri, including
 clock — not traded sessions.
 
 LUCIDFLEX 50K RULES (account holder 2026-08-01, reaffirmed 2026-09-27; snapshot
-in ``rules/lucid-flex-50k@2026-09-27.json``, echoed on every result):
+in ``rules/lucid-flex-50k@2026-10-11.json``, echoed on every result):
 
     EVAL    +$3,000 target; $2,000 EOD-trailing max loss which LOCKS at a +$100
             floor once EOD profit reaches +$2,100; 50% consistency (largest
@@ -48,6 +52,9 @@ stays on disk so older runs reproduce.)
             5 separate days >= $150 AND net > 0. The cheque is 50% of the
             profit standing when it first qualifies, capped at $2,000 — so the
             MAX payout additionally needs >= $4,000 profit.
+            (LUCIDFLEX's. Since 2026-10-11 the payout rule is read off the rule
+            file, ``_cheque``: LucidPro pays on a $500 goal, 40% consistency and a
+            $2,100 buffer with no winning days -- ``lucid-pro-50k*@2026-10-11``.)
 
 Pure stdlib, seeded, deterministic across processes.
 """
@@ -58,6 +65,7 @@ import math
 import os
 import random
 import statistics
+from itertools import chain
 from typing import Iterable, List, Optional, Sequence, Tuple
 
 __all__ = ["RULES", "run", "run_eval", "run_funded", "load_rules", "wilson_ci"]
@@ -67,7 +75,7 @@ __all__ = ["RULES", "run", "run_eval", "run_funded", "load_rules", "wilson_ci"]
 # daily_loss_limit) and its CLI loads whatever file sorts first. This ruleset
 # uses a different, LucidFlex-shaped contract and must not collide with it.
 _RULES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                           "rules", "lucid-flex-50k@2026-09-27.json")
+                           "rules", "lucid-flex-50k@2026-10-11.json")
 
 
 def load_rules(path: Optional[str] = None) -> dict:
@@ -136,20 +144,47 @@ def _cap_day(pnl: float, r: dict) -> float:
     return max(pnl, -dll) if dll else pnl
 
 
-def _days(path: Iterable) -> Iterable[Tuple[float, bool]]:
-    """Normalize a path to (pnl, is_trade_day) pairs. Bare floats count a day
-    as traded when its P&L is nonzero — the notebook's own fallback."""
+def _days(path: Iterable) -> Iterable[Tuple[float, bool, float]]:
+    """Normalize a path to (pnl, is_trade_day, worst_open_loss) triples. Bare floats
+    count a day as traded when its P&L is nonzero — the notebook's own fallback. A day
+    without a worst open loss ($ >= 0: how far the day stood below its start at its
+    worst point, open trades included) has 0: it can only fail the account on its close."""
     for d in path:
         if isinstance(d, tuple):
-            yield d
+            yield d if len(d) == 3 else (d[0], d[1], 0.0)
         else:
-            yield (d, d != 0.0)
+            yield (d, d != 0.0, 0.0)
+
+
+def _cheque(profit: float, win_days: int, big: float, r: dict) -> Optional[float]:
+    """The payout that can be requested at this close in $, or None. Every condition is the
+    rule file's own, and one it does not name is not asked:
+      payout_win_days      that many days of `win_day` $ or more (LucidFlex: 5 of $150)
+      payout_min_profit    the profit goal of the cycle (LucidPro: $500)
+      payout_consistency   the largest day <= this share of the profit (LucidPro: 40%)
+      payout_buffer        paid only from the profit above it (LucidPro: $2,100); without
+                           one the cheque is `payout_share` of the profit (LucidFlex: 50%)
+      payout_cap           the most one request pays; payout_min the least it may ask for
+    Net profit above $0 is always needed."""
+    if profit <= 0 or win_days < (r.get("payout_win_days") or 0):
+        return None
+    if profit < (r.get("payout_min_profit") or 0):
+        return None
+    cons = r.get("payout_consistency")
+    if cons is not None and big > cons * profit:
+        return None
+    buf = r.get("payout_buffer")
+    amt = min(profit - buf if buf is not None else r["payout_share"] * profit, r["payout_cap"])
+    return amt if amt > 0 and amt >= (r.get("payout_min") or 0) else None
 
 
 def run_eval(path: Iterable, r: dict) -> dict:
-    """Race one eval attempt. ``path`` yields daily P&L floats or
-    ``(pnl, is_trade_day)`` pairs; exhausting it without a verdict is a
-    ``timeout`` (LucidFlex has no time limit — the horizon stands in).
+    """Race one eval attempt. ``path`` yields daily P&L floats, ``(pnl, is_trade_day)``
+    pairs or ``(pnl, is_trade_day, worst_open_loss)`` triples; exhausting it without a
+    verdict is a ``timeout`` (LucidFlex has no time limit — the horizon stands in).
+
+    OPEN LOSSES COUNT: a day whose worst open point -- the profit it started with minus its
+    worst open loss -- is at or under the floor in force is a bust, whatever it closes at.
 
     -> {outcome: "pass"|"bust"|"timeout", day, trade_days, max_dd}
 
@@ -162,12 +197,15 @@ def run_eval(path: Iterable, r: dict) -> dict:
     """
     profit, peak, floor = 0.0, 0.0, -r["trailing_mll"]
     largest_win_day, trade_days, max_dd, day = 0.0, 0, 0.0, 0
-    for pnl, traded in _days(path):
+    for pnl, traded, opn in _days(path):
         pnl = _cap_day(pnl, r)
         day += 1
-        profit += pnl
         if traded:
             trade_days += 1
+        if opn > 0 and profit - opn <= floor:
+            return dict(outcome="bust", day=day, trade_days=trade_days,
+                        max_dd=max(max_dd, peak - profit + opn))
+        profit += pnl
         largest_win_day = max(largest_win_day, pnl)
         max_dd = max(max_dd, peak - profit)
         if profit <= floor:
@@ -194,19 +232,25 @@ def run_funded(path: Iterable, r: dict) -> dict:
     -> {payout_at, cheque, max_payout_at, bust_at}  (None where not reached)
 
     ``cheque`` is sized on the profit standing when the payout FIRST becomes
-    claimable (5 win days AND net > 0): ``min(share * profit, cap)``. A later
-    monster day changes nothing — the cheque was already sized. An account can
-    take a payout and bust later, so payout and bust are NOT exclusive.
+    claimable (``_cheque``: the rule file's own conditions). A later monster day
+    changes nothing — the cheque was already sized. An account can take a payout
+    and bust later, so payout and bust are NOT exclusive. Open losses count, as
+    in ``run_eval``.
     """
     profit, peak, floor = 0.0, 0.0, -r["trailing_mll"]
-    win_days, day = 0, 0
+    win_days, day, big = 0, 0, 0.0
     payout_at = max_at = bust_at = None
     cheque = None
-    for pnl, _ in _days(path):
+    win_day = r.get("win_day")
+    for pnl, _, opn in _days(path):
         pnl = _cap_day(pnl, r)
         day += 1
+        if opn > 0 and profit - opn <= floor:
+            bust_at = day
+            break
         profit += pnl
-        if pnl >= r["win_day"]:
+        big = max(big, pnl)
+        if win_day is not None and pnl >= win_day:
             win_days += 1
         if profit <= floor:
             bust_at = day
@@ -214,11 +258,11 @@ def run_funded(path: Iterable, r: dict) -> dict:
         if profit > peak:
             peak = profit
             floor = _floor(peak, r)
-        if payout_at is None and win_days >= r["payout_win_days"] and profit > 0:
+        due = _cheque(profit, win_days, big, r)
+        if payout_at is None and due is not None:
             payout_at = day
-            cheque = min(r["payout_share"] * profit, r["payout_cap"])
-        if (max_at is None and win_days >= r["payout_win_days"]
-                and profit >= r["max_payout_profit"]):
+            cheque = due
+        if due is not None and profit >= r["max_payout_profit"]:
             max_at = day
             break
     return dict(payout_at=payout_at, cheque=cheque, max_payout_at=max_at,
@@ -228,12 +272,20 @@ def run_funded(path: Iterable, r: dict) -> dict:
 # --- sampling & degradation --------------------------------------------------
 
 def _draws(pnls: Sequence[float], flags: Sequence[bool],
-           rng: random.Random, horizon: int):
-    """One simulated attempt: ``horizon`` i.i.d. draws from the weekday pool."""
+           rng: random.Random, horizon: int, opens: Optional[Sequence[float]] = None):
+    """One simulated attempt: ``horizon`` i.i.d. draws from the weekday pool (a day is
+    drawn whole: its P&L, whether it traded, and its worst open loss where given)."""
     n = len(pnls)
     for _ in range(horizon):
         i = rng.randrange(n)
-        yield (pnls[i], flags[i])
+        yield (pnls[i], flags[i]) if opens is None else (pnls[i], flags[i], opens[i])
+
+
+def _seen(days: Iterable, keep: list) -> Iterable:
+    """`days`, remembering in `keep` the ones a walk actually took."""
+    for d in days:
+        keep.append(d)
+        yield d
 
 
 def degrade(pnls: Sequence[float], flags: Sequence[bool], wr_adj: float,
@@ -286,9 +338,18 @@ def _timing(days: List[int]) -> dict:
 
 
 def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
-              n_paths: int, horizon: int, rng: random.Random) -> dict:
+              n_paths: int, horizon: int, rng: random.Random,
+              opens: Optional[Sequence[float]] = None) -> dict:
     """Race ``n_paths`` eval attempts and funded accounts; return both blocks.
-    Eval and funded draw their own streams, notebook-style."""
+    Eval and funded draw their own streams, notebook-style. An eval with its own
+    ``max_days`` (Apex EOD: 30 calendar days) is raced for those days at most.
+
+    With ``opens`` (open losses count) every path is ALSO walked on the close alone --
+    the same days, and past where the open-loss walk ended its own further draws from a
+    stream of its own, so the main stream is untouched: ``close_only`` is the friendlier
+    reading of the very same paths, never below the number it stands beside."""
+    eval_days = min(horizon, int(r.get("max_days") or horizon))
+    soft_rng, s_pass, s_bust, s_pay, s_cheques = random.Random(20261011), 0, 0, 0, 0.0
     ev_out: List[str] = []
     ev_days: List[int] = []
     ev_tdays: List[int] = []
@@ -300,7 +361,10 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
     cheques: List[float] = []
     n_payout = n_max = n_fbust = n_neither = 0
     for _ in range(n_paths):
-        e = run_eval(_draws(pnls, flags, rng, horizon), r)
+        seen_e: list = []
+        seen_f: list = []
+        days = _draws(pnls, flags, rng, eval_days, opens)
+        e = run_eval(days if opens is None else _seen(days, seen_e), r)
         ev_out.append(e["outcome"])
         dds.append(e["max_dd"])
         if e["outcome"] == "pass":
@@ -308,7 +372,16 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
             ev_tdays.append(e["trade_days"])
         elif e["outcome"] == "bust":
             bust_days.append(e["day"])
-        f = run_funded(_draws(pnls, flags, rng, horizon), r)
+        days = _draws(pnls, flags, rng, horizon, opens)
+        f = run_funded(days if opens is None else _seen(days, seen_f), r)
+        if opens is not None:
+            es = run_eval(chain((d[:2] for d in seen_e), _draws(pnls, flags, soft_rng, eval_days - len(seen_e))), r)
+            fs = run_funded(chain((d[:2] for d in seen_f), _draws(pnls, flags, soft_rng, horizon - len(seen_f))), r)
+            s_pass += es["outcome"] == "pass"
+            s_bust += es["outcome"] == "bust"
+            if fs["payout_at"] is not None:
+                s_pay += 1
+                s_cheques += fs["cheque"]
         if f["payout_at"] is not None:
             n_payout += 1
             pay_days.append(f["payout_at"])
@@ -329,6 +402,8 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
     cheq = sorted(cheques)
     p = n_pass / n
     return {
+        **({} if opens is None else {"close_only": {"eval_p": s_pass / n, "bust_p": s_bust / n, "payout_p": s_pay / n,
+                                                    "expected_payout": s_cheques / n}}),
         "eval": {
             "p": p,
             "ci": list(wilson_ci(n_pass, n)),
@@ -381,6 +456,7 @@ def run(
     day_pnls: Sequence[float],
     *,
     trade_flags: Optional[Sequence[bool]] = None,
+    day_opens: Optional[Sequence[float]] = None,
     rules: Optional[dict] = None,
     n_paths: int = 20000,
     horizon: int = 250,
@@ -394,7 +470,9 @@ def run(
     ``day_pnls`` should be the full weekday grid (0.0 on no-trade weekdays)
     with ``trade_flags`` marking real trading days — ``ledger.weekday_grid``
     builds both. A bare active-days list also works (every day counts as
-    traded); its clock is then sessions, not calendar.
+    traded); its clock is then sessions, not calendar. ``day_opens`` = each day's
+    worst open loss in $ (>= 0): with it OPEN LOSSES COUNT (``run_eval``); without
+    it an account fails only on a day's close, the friendlier reading.
 
     Pass ``sweep=()`` / ``degradation=()`` to skip those blocks (the web
     endpoints do — they only need the headline).
@@ -408,14 +486,19 @@ def run(
     if len(flags) != len(pnls):
         raise ValueError("trade_flags must align with day_pnls (%d != %d)"
                          % (len(flags), len(pnls)))
+    opens = None if day_opens is None else [float(o) for o in day_opens]
+    if opens is not None and len(opens) != len(pnls):
+        raise ValueError("day_opens must align with day_pnls (%d != %d)"
+                         % (len(opens), len(pnls)))
 
     main = _simulate(pnls, flags, r, n_paths=n_paths, horizon=horizon,
-                     rng=random.Random(seed))
+                     rng=random.Random(seed), opens=opens)
 
     sweep_rows = []
     for mult in sweep:
         s = _simulate([p * mult for p in pnls], flags, r, n_paths=sweep_paths,
-                      horizon=horizon, rng=random.Random(seed + 1))
+                      horizon=horizon, rng=random.Random(seed + 1),
+                      opens=None if opens is None else [o * mult for o in opens])
         sweep_rows.append({
             "mult": mult,
             "eval_p": s["eval"]["p"], "eval_ci": s["eval"]["ci"],
@@ -431,7 +514,7 @@ def run(
     for label, wr_adj, shrink in degradation:
         pool = degrade(pnls, flags, wr_adj, shrink)
         d = _simulate(pool, flags, r, n_paths=sweep_paths, horizon=horizon,
-                      rng=random.Random(seed + 2))   # same stream per scenario
+                      rng=random.Random(seed + 2), opens=opens)   # same stream per scenario
         deg_rows.append({
             "label": label, "wr_adj": wr_adj, "pnl_shrink": shrink,
             "eval_p": d["eval"]["p"], "eval_ci": d["eval"]["ci"],
@@ -457,13 +540,14 @@ def run(
             "median_day": statistics.median(trade_pnls) if trade_pnls else 0.0,
             "worst_day": min(trade_pnls) if trade_pnls else 0.0,
             "best_day": max(trade_pnls) if trade_pnls else 0.0,
-            "win_day_rate": sum(1 for x in trade_pnls
-                                if x >= r["win_day"]) / n_trade,
+            "win_day_rate": (sum(1 for x in trade_pnls if x >= r["win_day"]) / n_trade
+                             if r.get("win_day") is not None else None),
             "positive_day_rate": sum(1 for x in trade_pnls if x > 0) / n_trade,
         },
         "eval": main["eval"],
         "retries": main["retries"],
         "funded": main["funded"],
+        **({"close_only": main["close_only"]} if "close_only" in main else {}),
         "sweep": sweep_rows,
         "degradation": deg_rows,
     }
