@@ -528,9 +528,9 @@ def test_stage_6_reads_the_unseen_days_once_through_the_toolkit_and_labels_a_pas
     assert t["env"]["switch"] == {**TINY, "out": str(ROOT / "runs"), "ledger": str(ROOT / "p" / C / "ledger.csv"), "test_out": str(ROOT / "runs_test")}
     # the label: the default box's TEST trades on the days the read replayed, on the pipeline's account and the book's accounts
     assert calls["handed"] == [(f"{C}_a5", ROOT / "ideas")] and calls["cell"] == ["or_min15_atr3-r1"]
-    assert [o["account"] for o in calls["odds"]] == [OWN, FLEX, APEX] == list(c["prop"]) and ACCOUNTS == [OWN, FLEX, APEX]
+    assert [o["account"] for o in calls["odds"]] == [OWN, FLEX] == list(c["prop"]) and ACCOUNTS == [OWN, FLEX]      # (Apex 300K is off the book since 2026-10-11)
     assert all((o["trades"], o["calendar"]) == (2, SY.weekdays()) for o in calls["odds"])
-    assert c["label"] == PP.ALONE == c["prop"][OWN]["label"] and c["prop"][APEX]["confirmed"] is False and c["prop"][FLEX]["confirmed"] is True
+    assert c["label"] == PP.ALONE == c["prop"][OWN]["label"] and c["prop"][FLEX]["confirmed"] is True
     assert set(c["prop"][OWN]) == {"name", "confirmed", "size", "payout_size", "eval", "payout", "label", "stress", "text"}
     assert c["rules"]["lines"] == {f"4.{i}": 0.5 for i in range(1, 10)} and c["rules"]["range"] == {"start": "2025-07-01", "end": "2026-09-30"}
     calls = six(world)                                                                         # a tiny run names its test days; no tiny run: no days, no switch
@@ -638,7 +638,7 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     with SY.no_engine():
         s6 = TS.whole(ST.stage6(N7, CTX7), 6)                                                  # the verdict of THIS lock is on file: it is read, the days are not
         assert (s6["passed"], s6["result"]) == (True, "proven on history") and "its verdict was on file" in s6["text"] and len(s6["lines"]) == 9
-        assert list(s6["prop"]) == [OWN, FLEX, APEX] and s6["label"] == s6["prop"][OWN]["label"] and s6["label"] in (PP.ALONE, PP.HELPER)
+        assert list(s6["prop"]) == [OWN, FLEX] and s6["label"] == s6["prop"][OWN]["label"] and s6["label"] in (PP.ALONE, PP.HELPER)
         assert s6["relatives"] == REL7 and "(2 related ideas read on these days before it)" in s6["text"]      # off the verdict on file, as the read wrote them
         ran(N7, 6, s6, ROOT7)
         PS.set_state(N7, ROOT7, status="running", stage=6, picked=PICK7, tries=4)
@@ -662,8 +662,8 @@ def test_stage_7_makes_the_book_card_from_the_test_trades_and_the_owner_approves
     assert b["worst_drawdown"] == 2004.0                                                       # open losses counted: 5 August stood $2,004 under the high it started at
     assert b["profit_factor"] == 3.0 and b["avg_trade"] == pytest.approx(1000 / 6)             # $1,500 won / $500 lost
     # the accounts: the label is stage 6's on the pipeline's account; the unconfirmed rule file says so, and its numbers are there
-    assert b["label"] == s6["label"] and list(b["prop"]) == [OWN, FLEX, APEX] and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())
-    assert [b["prop"][a]["confirmed"] for a in (OWN, FLEX, APEX)] == [True, True, False] and b["prop"][APEX]["name"] == PO.app().load_rules(APEX)["name"]
+    assert b["label"] == s6["label"] and list(b["prop"]) == [OWN, FLEX] and all(tuple(p) == ST.BOOK_PROP for p in b["prop"].values())
+    assert [b["prop"][a]["confirmed"] for a in (OWN, FLEX)] == [True, True] and b["prop"][FLEX]["name"] == PO.app().load_rules(FLEX)["name"]
     assert all(isinstance(p["eval"], float) and isinstance(p["payout"], float) and p["size"] >= 1 for p in b["prop"].values())
     assert b["prop"] == {a: {k: s6["prop"][a][k] for k in ST.BOOK_PROP} for a in s6["prop"]}
     # winning days a month: the pipeline's account (LucidPro since 2026-10-11) has no winning-day rule, so the card has none to count

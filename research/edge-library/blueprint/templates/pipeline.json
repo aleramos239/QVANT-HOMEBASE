@@ -88,8 +88,7 @@
   "payout": 0.5,
   "book_accounts": [
    "lucid-pro-50k-no-dll@2026-10-11",
-   "lucid-flex-50k@2026-09-27",
-   "apex-legacy-300k@2026-09-28"
+   "lucid-flex-50k@2026-09-27"
   ],
   "fees": {
    "lucid-pro-50k-no-dll@2026-10-11": 140,
