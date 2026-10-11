@@ -1516,15 +1516,25 @@ def test_style_drops_nothing_silently_it_fails_closed():
 
 
 def test_a_position_takes_only_its_look():
-    # 2026-10-11: zone colours, label size, whether the labels show -- no line style
+    # 2026-10-11: zone colours, label size, whether the labels show, its entry line, which label parts show -- no extend
     with pytest.raises(ValueError):
-        check_drawings([{**LONG, "style": {"width": 2}}])
+        check_drawings([{**LONG, "style": {"extendLeft": True}}])
     assert "style" not in check_drawings([{**LONG, "style": {}}])[0]
     look = {"profitColor": "#00FF00", "lossColor": "rgba(255,0,0,.3)", "fontSize": 14, "showLabels": False}
     assert check_drawings([{**LONG, "style": look}])[0]["style"] == look
-    for bad in ({"profitColor": "green"}, {"fontSize": 9}, {"showLabels": "no"}):
+    more = {"entryColor": "#112233", "width": 3, "lineStyle": "dashed", "textColor": "#FFFFFF", "bold": True, "hoverLabels": False,
+            "showTarget": False, "showStop": True, "showRR": False, "showResult": False, "showPrice": True,
+            "showPoints": False, "showTicks": False, "showMoney": False, "showPath": False}
+    assert check_drawings([{**LONG, "style": more}])[0]["style"] == more
+    for bad in ({"profitColor": "green"}, {"fontSize": 9}, {"showLabels": "no"}, {"entryColor": "red"}, {"width": 9},
+                {"showTicks": 1}, {"hoverLabels": "hover"}, {"showPath": None}):
         with pytest.raises(ValueError):
             check_drawings([{**LONG, "style": bad}])
+    # the numbers of a line / rectangle: on hover or always, per tool
+    assert check_drawings([{**TREND, "style": {"hoverLabels": True}}])[0]["style"] == {"hoverLabels": True}
+    assert check_drawings([{**RECT, "style": {"hoverLabels": False}}])[0]["style"] == {"hoverLabels": False}
+    with pytest.raises(ValueError):
+        check_drawings([{**HLINE, "style": {"hoverLabels": True}}])
 
 
 def test_line_end_marks_and_wider_lines():

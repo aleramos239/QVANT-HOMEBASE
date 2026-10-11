@@ -1430,7 +1430,8 @@ function positionDialog(cell, d) {
   }
   // the box's look (2026-10-11): its two zone colours, its label size, whether the labels show; unset = the theme's own
   const look = { ...DS.normalize(d.type, d.style) };
-  for (const [key, label, fallback] of [['profitColor', 'Profit zone', cell.P.profitZone], ['lossColor', 'Loss zone', cell.P.lossZone]]) {
+  for (const [key, label, fallback] of [['profitColor', 'Profit zone', cell.P.profitZone], ['lossColor', 'Loss zone', cell.P.lossZone],
+    ['entryColor', 'Entry line', cell.P.text2], ['textColor', 'Label text', cell.P.onAccent]]) {
     const row = mk('div', 'field'), lab = mk('label', '', label), box2 = mk('span', 'pos-look');
     const b = mk('button', 'swatch'), dot = mk('i'), reset = mk('button', 'btn btn-ghost', 'Theme');
     b.type = 'button'; reset.type = 'button';
@@ -1464,6 +1465,45 @@ function positionDialog(cell, d) {
     cb.onchange = () => { if (cb.checked) delete look.showLabels; else look.showLabels = false; };
     row2.append(lab2, cb);
     form.appendChild(row2);
+    // 2026-10-11: the entry line's width and style, bold labels, when the labels show, and what they say. A part you
+    // never touch follows Settings > Canvas > Tool labels; one you set stays as set for this box.
+    const field = (label, ctl, id) => { const r = mk('div', 'field'), l = mk('label', '', label); if (id) { ctl.id = id; l.htmlFor = id; } r.append(l, ctl); form.appendChild(r); };
+    const num = mk('input');
+    num.type = 'number'; num.min = '1'; num.max = '8'; num.step = '1'; num.placeholder = '1';
+    num.value = look.width ? String(look.width) : '';
+    num.onchange = () => {
+      const n = Math.round(Number(num.value));
+      if (num.value.trim() === '' || !Number.isFinite(n)) { delete look.width; num.value = ''; return; }
+      look.width = Math.max(1, Math.min(8, n));
+      num.value = String(look.width);
+    };
+    field('Entry line width', num, 'pos-width');
+    const sty = mk('select');
+    for (const [v, text] of [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']]) { const o = mk('option', '', text); o.value = v; sty.append(o); }
+    sty.value = look.lineStyle || 'solid';
+    sty.onchange = () => { if (sty.value === 'solid') delete look.lineStyle; else look.lineStyle = sty.value; };
+    field('Entry line style', sty, 'pos-lineStyle');
+    const bold = mk('input');
+    bold.type = 'checkbox'; bold.checked = look.bold === true;
+    bold.onchange = () => { if (bold.checked) look.bold = true; else delete look.bold; };
+    field('Bold labels', bold, 'pos-bold');
+    const mode = mk('select');
+    for (const [v, text] of [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']]) { const o = mk('option', '', text); o.value = v; mode.append(o); }
+    mode.value = typeof look.hoverLabels === 'boolean' ? (look.hoverLabels ? 'hover' : 'always') : '';
+    mode.onchange = () => { if (mode.value === '') delete look.hoverLabels; else look.hoverLabels = mode.value === 'hover'; };
+    field('Labels appear', mode, 'pos-hoverLabels');
+    const R = cell.R || {};
+    for (const [key, label, setting] of [['showTarget', 'Target label', 'posTarget'], ['showStop', 'Stop label', 'posStop'],
+      ['showRR', 'Risk:reward and quantity', 'posRR'], ['showResult', 'Result (entered, closed, open)', 'posResult'],
+      ['showPrice', 'Price in the target and stop', 'posPrice'], ['showPoints', 'Distance and % in the target and stop', 'posPoints'],
+      ['showTicks', 'Ticks in the target and stop', 'posTicks'], ['showMoney', 'Dollars in the target and stop', 'posMoney'],
+      ['showPath', 'The played-out path (entry to exit)', null]]) {
+      const c = mk('input');
+      c.type = 'checkbox';
+      c.checked = typeof look[key] === 'boolean' ? look[key] : (setting ? R[setting] !== false : true);
+      c.onchange = () => { look[key] = c.checked; };
+      field(label, c, `pos-${key}`);
+    }
   }
   const foot = mk('div', 'dlg-foot'), cancel = mk('button', 'btn btn-ghost', 'Cancel'), ok = mk('button', 'btn btn-primary', 'OK');
   cancel.type = 'button';
@@ -1848,6 +1888,11 @@ function drawingSettingsDialog(cell, d0) {
       if (has('extendRight') && type !== 'rect') rows.push(row('Extend right', sw('extendRight')));
       if (has('priceLabel')) rows.push(row('Price tag at its end', sw('priceLabel')));
       if (has('stats')) rows.push(row('Its move, in points and bars', sw('stats')));
+      if (has('hoverLabels') && (has('stats') || has('priceLabel'))) {
+        rows.push(row('Show its numbers', selectCtl(typeof work.style.hoverLabels === 'boolean' ? (work.style.hoverLabels ? 'hover' : 'always') : '',
+          [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']],
+          (v) => setStyle({ hoverLabels: v === '' ? undefined : v === 'hover' }))));
+      }
       if (type === 'hline') rows.push(row('Price label', sw('axisLabel')));
       if (type === 'hline' && work.alert) {
         const bars = cell.bars, last = bars.length ? bars[bars.length - 1].c : orig.points[0].p;
@@ -1877,6 +1922,9 @@ function drawingSettingsDialog(cell, d0) {
         rows.push(row('Quarter lines (25%, 75%)', sw('quarters')));
         rows.push(row('Their style', selectCtl(work.style.midStyle, LINE_CHOICES, (v) => setStyle({ midStyle: v }))));
         rows.push(row('Prices on its edges', sw('priceLabels')));
+        rows.push(row('Show them', selectCtl(typeof work.style.hoverLabels === 'boolean' ? (work.style.hoverLabels ? 'hover' : 'always') : '',
+          [['', 'Follow Settings'], ['hover', 'On hover or when selected'], ['always', 'Always']],
+          (v) => setStyle({ hoverLabels: v === '' ? undefined : v === 'hover' }))));
       }
       if (type === 'fib') {
         rows.push(mk('div', 'set-cap', 'LEVELS'));

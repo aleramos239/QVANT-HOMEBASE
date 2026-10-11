@@ -1044,6 +1044,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .bp-table tr.sel td { background: var(--accent-soft); }
 .dialog.settings-small { width: min(460px, 92vw); max-height: 80vh; }
 .dialog.settings-small .dlg-fields { max-height: 60vh; overflow: auto; scrollbar-width: thin; }
+.dialog.small .dlg-fields { max-height: 60vh; overflow: auto; scrollbar-width: thin; }   /* a long position dialog scrolls, Ok stays in view */
 .menu-tester-runs { width: 360px; }
 .tst-run-row { display: flex; align-items: center; gap: 8px; white-space: normal; }
 .tst-run-row .menu-t { white-space: normal; }

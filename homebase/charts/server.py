@@ -103,24 +103,29 @@ DRAWING_LABEL_ALIGN = ("left", "center", "right")
 _TEXT_FIELDS = {"text", "fontSize", "textColor", "bold", "labelPos"}
 DRAWING_CAPS = ("none", "arrow", "circle")      # the mark at a line's end (2026-10-11); a field left out = none
 MAX_DRAWING_WIDTH = 8
+# a position box (2026-10-11): zone colours, label size / colour / weight, whether labels show (showLabels), on hover or always
+# (hoverLabels), which label parts and the played-out path show, and its entry line's colour / width / style
+_POS_FIELDS = {"profitColor", "lossColor", "fontSize", "showLabels", "entryColor", "width", "lineStyle", "textColor", "bold",
+               "hoverLabels", "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath"}
 # exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
 DRAWING_STYLE_FIELDS = {
-    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats", "startCap", "endCap"} | _TEXT_FIELDS,
-    "ray": {"width", "lineStyle", "priceLabel", "stats", "startCap", "endCap"} | _TEXT_FIELDS,
-    "xline": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats", "startCap", "endCap", "hoverLabels"} | _TEXT_FIELDS,
+    "ray": {"width", "lineStyle", "priceLabel", "stats", "startCap", "endCap", "hoverLabels"} | _TEXT_FIELDS,
+    "xline": {"width", "lineStyle", "priceLabel", "stats", "hoverLabels"} | _TEXT_FIELDS,
     "hline": {"width", "lineStyle", "axisLabel", "labelAlign"} | _TEXT_FIELDS,
     "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
-    "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels"} | _TEXT_FIELDS,
+    "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels", "hoverLabels"} | _TEXT_FIELDS,
     "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "reverse", "fontSize"},
-    "arrow": {"width", "lineStyle", "priceLabel", "stats"} | _TEXT_FIELDS,
+    "arrow": {"width", "lineStyle", "priceLabel", "stats", "hoverLabels"} | _TEXT_FIELDS,
     "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
     "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
     "avwap": {"width", "lineStyle"},
     # a position box: its zone colours, its label size, whether its labels show
-    "long": {"profitColor", "lossColor", "fontSize", "showLabels"}, "short": {"profitColor", "lossColor", "fontSize", "showLabels"},
+    "long": _POS_FIELDS, "short": _POS_FIELDS,
 }
 DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
-                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse", "showLabels")
+                       "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse", "showLabels", "hoverLabels",
+                       "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath")
 MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
 DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
 MAX_DRAWING_LABEL_TEXT = 200
@@ -260,7 +265,7 @@ def check_style(kind: str, style) -> dict:
             if style[key] not in DRAWING_CAPS:
                 raise ValueError(f"style.{key}: none, arrow or circle")
             out[key] = style[key]
-    for key in ("fillColor", "profitColor", "lossColor"):
+    for key in ("fillColor", "profitColor", "lossColor", "entryColor"):
         if key in style:
             if not _valid_color(style[key]):
                 raise ValueError(f"style.{key}: #RRGGBB or rgba(r,g,b,a)")

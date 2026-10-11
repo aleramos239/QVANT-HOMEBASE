@@ -469,8 +469,8 @@ const MOVE_PX = 4;   // a press that moves less than this is a click, not a drag
 
 /* The Tool labels settings (cell.R): are a tool's numbers (a long / short's labels, a line's stats, its price tags)
    drawn now? 'hover' = while the mouse is over the tool or it is selected. */
-function toolLabelsShown(R, hovered, selected) {
-  const m = R && R.toolLabels;
+function toolLabelsShown(R, hovered, selected, own) {   // own: the tool's own hoverLabels (true: on hover, false: always)
+  const m = typeof own === 'boolean' ? (own ? 'hover' : 'always') : R && R.toolLabels;
   return m === 'always' || (m !== 'never' && (hovered || selected));
 }
 
@@ -504,7 +504,7 @@ class Primitive {
       const pc = { tick: c.cell.tick, pv: c.cell.pv, bars: c.cell.bars, size: mediaSize, font: `12px ${window.HBCell.FONT}`,
         parts: toolLabelParts(c.cell.R) };
       for (const d of c.items()) {
-        const show = toolLabelsShown(c.cell.R, d.id === c.hover, d.id === c.sel);
+        const show = toolLabelsShown(c.cell.R, d.id === c.hover, d.id === c.sel, d.style && d.style.hoverLabels);
         if (isPos(d)) Pos().drawPosition(ctx, d, geo, P, { ...pc, selected: d.id === c.sel, labels: show });
         else if (d.type === 'hline') drawHlineLabel(ctx, d, geo, P, mediaSize.width);
         else drawShape(ctx, d, geo, P, mediaSize.width, c.ctx(), show);

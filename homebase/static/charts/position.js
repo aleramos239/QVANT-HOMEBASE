@@ -184,6 +184,10 @@ function near(d, pt, geo, pad) {
    height}, font, selected, labels?: false (the box's labels are hidden: only shown on hover), parts?: {target,
    stop, rr, result, price, points, ticks, money} (each default true: what the labels show)}. The handle dots
    are drawn by the drawings primitive. */
+/* A box's own label switches (style key) over the Tool labels settings' (the parts keys of `labels`/drawPosition). */
+const PART_KEYS = [['target', 'showTarget'], ['stop', 'showStop'], ['rr', 'showRR'], ['result', 'showResult'],
+  ['price', 'showPrice'], ['points', 'showPoints'], ['ticks', 'showTicks'], ['money', 'showMoney']];
+
 function drawPosition(ctx, d, geo, P, pctx) {
   const hs = handles(d, geo);
   if (!hs) return;
@@ -194,12 +198,16 @@ function drawPosition(ctx, d, geo, P, pctx) {
   ctx.fillRect(left, Math.min(yE, yT), w, Math.abs(yT - yE));
   ctx.fillStyle = typeof st.lossColor === 'string' ? st.lossColor : P.lossZone;
   ctx.fillRect(left, Math.min(yE, yS), w, Math.abs(yS - yE));
-  ctx.strokeStyle = P.text2;
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = typeof st.entryColor === 'string' ? st.entryColor : P.text2;     // the entry line (its own look, 2026-10-11)
+  ctx.lineWidth = Number.isInteger(st.width) && st.width >= 1 && st.width <= 8 ? st.width : 1;
+  ctx.setLineDash(st.lineStyle === 'dashed' ? [6, 4] : st.lineStyle === 'dotted' ? [2, 3] : []);
   const ye = Math.round(yE) + 0.5;
   ctx.beginPath(); ctx.moveTo(left, ye); ctx.lineTo(left + w, ye); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle = P.text2;
+  ctx.lineWidth = 1;
   const out = outcome(d, pctx.bars, pctx.pv, pctx.tick);
-  if (out.path) {
+  if (out.path && st.showPath !== false) {
     const ax = geo.x(out.path.a.t), bx = geo.x(out.path.b.t), ay = geo.y(out.path.a.p), by = geo.y(out.path.b.p);
     if (ax != null && bx != null && ay != null && by != null) {
       ctx.setLineDash([4, 4]);
@@ -209,9 +217,11 @@ function drawPosition(ctx, d, geo, P, pctx) {
   }
   if (pctx.selected) ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(bot - top));
   if (st.showLabels === false || pctx.labels === false) return;
-  const parts = pctx.parts || {}, lab = labels(d, pctx.pv, pctx.tick, parts), cx = left + w / 2, GAP = 4;
+  const parts = { ...(pctx.parts || {}) };      // the settings' parts, then this box's own (each only when it was set)
+  for (const [k, key] of PART_KEYS) if (typeof st[key] === 'boolean') parts[k] = st[key];
+  const lab = labels(d, pctx.pv, pctx.tick, parts), cx = left + w / 2, GAP = 4;
   const fs = Number.isInteger(st.fontSize) && st.fontSize >= 10 && st.fontSize <= 28 ? st.fontSize : null, lh = fs ? fs + 4 : 16;
-  ctx.font = fs ? pctx.font.replace(/\d+(\.\d+)?px/, `${fs}px`) : pctx.font;
+  ctx.font = (st.bold === true ? 'bold ' : '') + (fs ? pctx.font.replace(/\d+(\.\d+)?px/, `${fs}px`) : pctx.font);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   const label = (lines, bg, yAt) => {   // yAt(height) -> the label's top before clamping
@@ -220,7 +230,7 @@ function drawPosition(ctx, d, geo, P, pctx) {
     const by = Math.max(2, Math.min(yAt(bh), pctx.size.height - bh - 2));
     ctx.fillStyle = bg;
     ctx.beginPath(); ctx.roundRect(bx, by, bw, bh, 4); ctx.fill();
-    ctx.fillStyle = P.onAccent;
+    ctx.fillStyle = typeof st.textColor === 'string' ? st.textColor : P.onAccent;
     lines.forEach((s, i) => ctx.fillText(s, bx + bw / 2, by + 2 + lh / 2 + i * lh));
   };
   if (parts.target !== false) label([lab.target], P.up, (h) => (long ? top - GAP - h : bot + GAP));

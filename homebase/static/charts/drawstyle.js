@@ -28,22 +28,25 @@ const CAPS = ['none', 'arrow', 'circle'];
 /* Exactly the style fields each drawing type takes (check_style in server.py mirrors this list);
    long/short keep their existing look (colour, via the drawing's own top-level `color`) and take
    no style object of their own. */
+// 2026-10-11: + the entry line's colour / width / style, the labels' text colour and weight, on hover or always (unset: the
+// Tool labels setting), which label parts show (each unset: the setting) and whether the played-out path shows
+const POS = ['profitColor', 'lossColor', 'fontSize', 'showLabels', 'entryColor', 'width', 'lineStyle', 'textColor', 'bold', 'hoverLabels', 'showTarget', 'showStop', 'showRR', 'showResult', 'showPrice', 'showPoints', 'showTicks', 'showMoney', 'showPath'];
 const FIELDS = {
-  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap'],
-  ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap'],
-  xline: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap', 'hoverLabels'],
+  ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap', 'hoverLabels'],
+  xline: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'hoverLabels'],
   hline: ['width', 'lineStyle', 'axisLabel', ...TEXT, 'labelAlign'],
   vline: ['width', 'lineStyle', ...TEXT, 'timeLabel'],
-  rect: ['width', 'lineStyle', 'fillColor', ...TEXT, 'border', 'midline', 'quarters', 'midStyle', 'extendRight', 'priceLabels'],
+  rect: ['width', 'lineStyle', 'fillColor', ...TEXT, 'border', 'midline', 'quarters', 'midStyle', 'extendRight', 'priceLabels', 'hoverLabels'],
   fib: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'reverse', 'fontSize'],
   // 2026-10-11: an arrow is a line with a head; a channel a line and its parallel (the third point); a note its text; an
   // anchored VWAP a line from the bar it was dropped on
-  arrow: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats'],
+  arrow: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'hoverLabels'],
   channel: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'fillColor', 'midline'],
   note: ['text', 'fontSize', 'textColor', 'bold', 'fillColor'],
   avwap: ['width', 'lineStyle'],
   // a position box: the colours of its two zones, the size of its labels and whether they show (all optional: unset = the theme's)
-  long: ['profitColor', 'lossColor', 'fontSize', 'showLabels'], short: ['profitColor', 'lossColor', 'fontSize', 'showLabels'],
+  long: POS, short: POS,
 };
 /* The Fibonacci levels a fresh retracement carries: {v: the ratio, on: drawn, color}. 0 sits on the
    SECOND point (where the drag ended) and 1 on the first, so the levels count the pullback. */
@@ -100,8 +103,9 @@ function isValidField(type, key, v) {
   switch (key) {
     case 'width': return Number.isInteger(v) && v >= 1 && v <= 8;
     case 'startCap': case 'endCap': return CAPS.includes(v);
-    case 'profitColor': case 'lossColor': return isColor(v);
-    case 'showLabels': return typeof v === 'boolean';
+    case 'profitColor': case 'lossColor': case 'entryColor': return isColor(v);
+    case 'showLabels': case 'hoverLabels': case 'showTarget': case 'showStop': case 'showRR': case 'showResult':
+    case 'showPrice': case 'showPoints': case 'showTicks': case 'showMoney': case 'showPath': return typeof v === 'boolean';
     case 'lineStyle': case 'midStyle': return LINE_STYLES.includes(v);
     case 'extendLeft': case 'extendRight': case 'axisLabel': case 'bold': case 'priceLabel': case 'stats': case 'timeLabel':
     case 'border': case 'midline': case 'quarters': case 'priceLabels': case 'showLevels': case 'showPrices': case 'fill': case 'reverse':
