@@ -1,0 +1,33 @@
+{
+ "family": "orb_close",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "pre"
+ ],
+ "params": {
+  "entry": [
+   "market",
+   "limit"
+  ]
+ },
+ "fixed": {
+  "or_min": "5",
+  "start": "0830",
+  "wait": "0",
+  "vwap": "first",
+  "vwap_tf": "15"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ },
+ "name": "orb830_vwap16_15m_first_tk",
+ "reason": "Owner's manual test (2026-10-10), kept in the toolkit: the 08:30 ET 5-minute range test plus a side rule (the FIRST break decides, no trade that day if it is against it): long only above the VWAP of 15-minute bars anchored at 16:00 ET of the prior session, short only below it. Build days only."
+}

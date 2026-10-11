@@ -1,0 +1,28 @@
+{
+ "name": "open_candle_a_tf5_tk",
+ "reason": "Owner's manual test (2026-10-10), kept in the toolkit: NQ 08:30 ET 5-minute candle, enter at its close in its own direction only if its range >= k x ATR(14) of the bars before it; no other filter; standard stop / target grid; one trade a day, flat 15:58.",
+ "family": "open_candle",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "5"
+ ],
+ "sessions": [
+  "pre"
+ ],
+ "params": {
+  "k": [
+   1.0,
+   1.5,
+   2.0
+  ]
+ },
+ "fixed": {},
+ "filters": [],
+ "exits": "standard",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

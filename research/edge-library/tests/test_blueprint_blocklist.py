@@ -54,7 +54,7 @@ def test_the_plain_card_passes_so_a_refusal_below_is_the_change():
 def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
     fam, blocks = RM.registry(), RUN._blocks()
     F = {f["name"]: f for f in B["families"]}
-    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 35
+    assert list(F) == sorted(blocks.WRAPPED) and len(F) == 37
     assert [n for n, f in F.items() if not f["runs"]] == []                                       # va_reclaim runs too: its cache is built for the range (runner.prepare_family)
     for name, f in F.items():
         cls, lib = blocks.WRAPPED[name], fam.library(name)
@@ -178,7 +178,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 35, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": 37, "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]
