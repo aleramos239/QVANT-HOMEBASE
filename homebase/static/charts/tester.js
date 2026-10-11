@@ -15,7 +15,7 @@ const Cat = need('HBCatalog', './catalog.js');
 const Tr = need('HBTrade', './trade.js') || need('HBTradePure', './tradepure.js');
 
 const MINUS = '−';
-const DEFAULT_RULES = 'lucid-flex-50k@2026-10-11';
+const DEFAULT_RULES = 'lucid-flex-50k@2026-09-27';
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
 /* ---- the range picker (one pill -> a menu of presets -> a Custom dialog) ----
