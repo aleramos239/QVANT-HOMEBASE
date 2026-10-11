@@ -71,12 +71,20 @@ def _hhmm(v) -> bool:
     return isinstance(v, str) and _HHMM.fullmatch(v) is not None
 
 
+def _evening(w) -> bool:
+    """A window whose start has a leading "-": the session opens the evening before its date (labcfg.evening)."""
+    return (isinstance(w, (list, tuple)) and len(w) == 2 and isinstance(w[0], str) and w[0].startswith("-")
+            and _hhmm(w[0][1:]) and _hhmm(w[1]))
+
+
 def limits_read(limits, rec: dict) -> bool:
     """Limits as the Desk itself would take them (labcfg.parse_limits; a test runs both over the same cases). Limits
     that do not read are no limits, and with no limits there is no book."""
     if not isinstance(limits, dict):
         return False
     w = rec.get("session_window")
+    if _evening(w):                              # opens the evening before: no Desk limits (labcfg.evening), shadow only
+        return False
     start = w[0] if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]) else store.DEFAULT_WINDOW[0]
     trades, qty, risk = limits.get("max_trades_day"), limits.get("max_qty"), limits.get("max_risk_usd")
     last, flat = limits.get("last_entry_et"), limits.get("flat_et")
@@ -99,6 +107,8 @@ def own_limits(rec: dict) -> dict | None:
     if not isinstance(a, dict):
         return None
     n, qty, w = a.get("max_trades_day"), rec.get("qty"), rec.get("session_window")
+    if _evening(w):                              # opens the evening before: no Desk limits (labcfg.evening), shadow only
+        return None
     if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
         qty = 10
     if not (_whole(n) and 1 <= n <= 20 and _whole(qty) and qty >= 1):
