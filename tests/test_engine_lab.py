@@ -753,7 +753,7 @@ def test_one_strategy_per_market_per_account(tmp_path):
 
 # ------------------------------------------------------------------------------------------------ a group on one account
 LAB2 = "lab_qq"
-BUSY = {"ok": False, "round": None, "reason": "Another strategy's trade is open on this account."}
+BUSY = {"ok": False, "round": None, "reason": "Another strategy's trade on this account is open or not checked yet."}
 
 
 def group(tmp_path, accounts=("a1",), book2=None, **over):
@@ -825,6 +825,76 @@ def test_a_member_whose_trade_cannot_be_checked_holds_the_account(tmp_path):
     ads["a1"].reject = None
     tick(eng)
     assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY and ads["a1"].brackets == []
+
+
+def test_the_global_kill_sells_a_groups_position_once(tmp_path):
+    """The Kill's flatten sells the account's WHOLE net in a contract. With a group, a member whose round is over and
+    checked is left out: the member with the open round sells it, once (a broker whose position read lags would
+    otherwise be sold twice)."""
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad)                                                        # the first member: a whole round, clean
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["ok"] is True
+    fill_entry(eng, ad, eng.states[f"{LAB2}@a1"], 100.0)                  # the second is long 1 (the fake's net stays 1)
+    out = run(eng.flatten_today())
+    assert list(out) == [f"{LAB2}@a1"]
+    assert [(o.side, o.qty, o.text) for o in ad.orders] == [("Sell", 1, "homebase:flat")]
+
+
+def test_the_global_kill_sells_a_stray_position_once_when_every_member_is_out(tmp_path):
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    trade(eng, ad)
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["ok"] is True
+    b = eng.states[f"{LAB2}@a1"]
+    fill_entry(eng, ad, b, 100.0)
+    fill_exit(eng, ad, b, 110.0, "tp")
+    tick(eng)
+    ad.net = 2                                                            # a position nobody here opened
+    assert list(run(eng.flatten_today())) == [f"{LAB}@a1"]
+    assert [(o.side, o.qty) for o in ad.orders] == [("Sell", 2)]
+
+
+def test_a_member_whose_record_did_not_load_after_a_restart_still_holds_the_account(tmp_path):
+    """Its round came back from the day file and its strategy is not in the config: nobody reads its fills or its
+    orders, so the group stays off that account."""
+    assert engine_mod.LAB_PREFIX == labcfg.PREFIX
+    eng, ads, clock = group(tmp_path)
+    assert go(eng, pair())["accounts"]["a1"]["ok"] is True
+    cfg2 = AppCfg(armed=True, accounts=dict(eng.cfg.accounts), book={LAB2: [{"account": "a1", "qty": 1}]},
+                  strategies={LAB2: eng.cfg.strategies[LAB2]})
+    eng2 = quick(Engine(cfg2, ads, now_fn=clock, root=tmp_path))          # the restart
+    assert eng2.states[f"{LAB}@a1"].status == "placed" and LAB not in eng2.cfg.strategies
+    out = run(eng2.lab_enter(LAB2, [leg(iid=7)], {"a1": 1}, max_rounds=3))
+    assert out["accounts"]["a1"] == BUSY and len(ads["a1"].brackets) == 2
+
+
+def test_a_killed_members_position_never_seen_out_holds_the_account_for_the_day(tmp_path):
+    """A Kill books the round done when its market order leaves. The fill that follows must not meet another
+    member's round (on_fill would book it as that round's exit): the account stays busy."""
+    eng, ads, _ = group(tmp_path)
+    ad = ads["a1"]
+    go(eng, leg())
+    a = rnd(eng)
+    fill_entry(eng, ad, a, 100.0)
+    assert run(eng.kill_strategy(LAB))["a1"]["ok"] is True and (a.status, a.exit_reason) == ("done", "killed")
+    ad.net = 0
+    tick(eng)
+    assert eng._lab_clean(a) is True and a.exit_qty == 0
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY
+    assert len(ad.brackets) == 1
+
+
+def test_a_group_is_one_broker_account_whatever_the_desk_calls_it(tmp_path):
+    """Two desk entries pinned to one broker account are one account to the group."""
+    eng, ads, _ = group(tmp_path, accounts=("a1", "a2"), book2=[{"account": "a2", "qty": 1}])
+    eng.cfg.book[LAB] = [{"account": "a1", "qty": 1}]
+    shared = type("Shared", (LabAdapter,), {"broker_key": property(lambda self: "the-one-broker-account")})
+    for ad in ads.values():
+        ad.__class__ = shared
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True
+    out = run(eng.lab_enter(LAB2, [leg(iid=7)], {"a2": 1}, max_rounds=3))
+    assert out["accounts"]["a2"] == BUSY and ads["a2"].brackets == []
 
 
 def test_a_micro_and_the_full_contract_are_not_a_group(tmp_path):

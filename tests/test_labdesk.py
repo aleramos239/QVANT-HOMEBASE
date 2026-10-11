@@ -636,6 +636,22 @@ def test_a_group_is_booked_on_one_account_and_a_trade_skipped_for_its_turn_stops
     assert refusal(send(d, entry(2), seq=2)) == door.SLOT_BUSY                     # and the first one waits its turn
 
 
+def test_a_skipped_trade_counts_when_another_account_refused_it_for_a_reason_of_its_own(tmp_path):
+    """Only an entry EVERY account skipped for the group's turn is left out of the count."""
+    d = mkdesk(tmp_path, accounts=("a1", "a2"), qty=0)
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 1}]))
+    store.put(rec(name="qq"))
+    run(d.ld.refresh())
+    run(d.ld.set_limits("lab_qq", LIMITS))
+    run(d.ld.set_book("lab_qq", [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 1}]))
+    working(d)                                                                     # the first one holds a1
+    d.ads["a2"]._connected = False
+    for seq in (1, 2):
+        got = send(d, entry(seq), seq=seq, strategy="lab_qq")["results"][0]["accounts"]
+        assert {a: r["reason"] for a, r in got.items()} == {"a1": door.SLOT_BUSY, "a2": "The account is not connected."}
+    assert (d.ld._rec("lab_qq")["untaken"], d.ld._rec("lab_qq")["stopped"]) == (2, "Stopped for today.")
+
+
 def test_a_micro_strategy_and_one_on_the_full_contract_are_still_not_booked_together(tmp_path):
     d = mkdesk(tmp_path)
     store.put(rec(name="qq", exec_root="MNQ"))

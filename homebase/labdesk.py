@@ -1340,7 +1340,7 @@ class LabDesk:
         if not took:
             text = whole or next(iter(said.values()), door.CANNOT_CHECK)
             self._dead(d, ids)
-            if whole is None and door.SLOT_BUSY not in said.values():
+            if whole is None and not all(s == door.SLOT_BUSY for s in said.values()):
                 d["untaken"] += 1                            # it was offered to its accounts and none took it (one
                                                              # skipped for the group's turn is not counted)
         if not took and whole is not None:
