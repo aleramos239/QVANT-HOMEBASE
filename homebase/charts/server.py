@@ -32,6 +32,8 @@ from ..paths import state_dir
 from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
 from .bars import BarSpec
 from .barreplay import BarReplay
+from .bookhist import MAX_SPAN_MS as BOOK_MAX_SPAN_MS, BookPool
+from .booklive import BookLive
 from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
@@ -1014,6 +1016,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         depth = Depth(feed, rec_roots, log=log, wall_ms=lambda: int(clock()),    # the service's clock, like the tick hub
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
+    # the book indicators' live side (booklive.py): the same book lines the recorder writes and the hub's classified
+    # prints, through one BookTracker per root; live service only (a replay has no book)
+    booklive = BookLive(log=log)
+    if depth is not None:
+        depth.tap = booklive.on_book
+        hub.taps.append(booklive.on_tick)
     # per-chart Bar Replay: its own hubs over its own History memo; never the live hub, recorder, desk or quotes
     replays = BarReplay(store, sd / "cache", roots, lambda: clock(), min_bar=MIN_BAR,
                         max_studies=MAX_STUDIES, log=log, known=known)
@@ -1124,6 +1132,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 for m in quotes.drain():
                     fan(m)
                 desk_fan.flush()                # only a page that had no room: a desk event goes out as it arrives
+                booklive.flush(clock())         # the seconds a quiet book never closed itself
                 if book is not None and book.dirty:
                     paper_push.kick()           # the backstop: a PAPER change nothing announced still reaches every page
                 replays.pump()
@@ -1243,6 +1252,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 await depth.aclose()    # cancels its requests in flight; the recording's last member
             depth_pool.shutdown()       # the depth history worker (depthgrid.HistoryPool), if it ever started
+            book_pool.shutdown()        # ... and the book history worker (bookhist.BookPool)
             tester.manager.shutdown()   # never leave a runner child orphaned
             tester.grids.shutdown()     # ... nor a heat-map cell's
             tester.wfs.shutdown()       # ... nor a walk-forward cell's
@@ -1776,6 +1786,35 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(400, str(e)) from None
         return Response(body, media_type="application/json")
 
+    # the book indicators' history (bookhist.py): the recorded depth files + the tick archive replayed through the
+    # same BookTracker the live feed runs; one spawned worker, one request at a time (busy -> 503), the same
+    # paused windows as the depth history, never past now
+    book_pool = BookPool(depth_base or DEPTH_ARCHIVE, base, depth_executor)
+
+    @app.get("/api/book/history")
+    async def api_book_history(request: Request):
+        q = request.query_params
+        root = known_root(q.get("root", ""))
+        now = clock()
+        try:
+            frm, to = int(q["from_ms"]), int(q["to_ms"])
+        except (KeyError, ValueError):
+            raise HTTPException(400, "from_ms / to_ms: epoch ms") from None
+        if frm < 0 or to > now + 86_400_000 or to <= frm or to - frm > BOOK_MAX_SPAN_MS:
+            raise HTTPException(400, f"0 <= from_ms < to_ms <= now + 1 day, "
+                                     f"at most {BOOK_MAX_SPAN_MS // 3_600_000} h apart")
+        wall = depth_wall_ms()
+        why = paused_reason(wall / 1000)
+        if why:
+            raise HTTPException(503, why)
+        try:
+            body = await book_pool.window(root, frm, to, now, wall - time.time() * 1000)
+        except (Busy, Paused) as e:
+            raise HTTPException(503, str(e)) from None
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return Response(body, media_type="application/json")
+
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):
         if not origin_ok(sock.headers.get("origin"), sock.headers.get("host")):
@@ -1832,6 +1871,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     hub.unsubscribe((conn, cid))
                     if depth is not None:
                         depth.unview((conn, cid))
+                        booklive.unview((conn, cid))
                     continue
                 if op == "older":
                     if not replays.ask_older(conn, cid, msg.get("before")):
@@ -1887,6 +1927,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                                            bool(msg.get("flow", True)))})
                     if depth is not None:
                         depth.view((conn, cid), root, conn.send, room)   # after `history`: depth follows it
+                        booklive.view((conn, cid), root, conn.send, room)   # and the book flow's recent state
                 except Exception as e:  # noqa: BLE001 — an unexpected failure building the
                                         # stream must not drop every chart on the page either
                     log(f"sub {cid} ({root} {spec.key}): {type(e).__name__}: {e}\n{traceback.format_exc()}")
@@ -1898,6 +1939,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     hub.unsubscribe((conn, cid))
                     if depth is not None:
                         depth.unview((conn, cid))
+                        booklive.unview((conn, cid))
                     if s is not None and not s.subs and hub.streams.get(s.key) is s:
                         del hub.streams[s.key]
                     continue
@@ -1911,6 +1953,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             desk_fan.detach(conn)
             if depth is not None:
                 depth.drop_conn(conn)
+                booklive.drop_conn(conn)
             hub.drop_conn(conn)
             replays.drop_conn(conn)
             conn.task.cancel()

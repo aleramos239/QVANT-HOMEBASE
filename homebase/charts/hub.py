@@ -192,6 +192,7 @@ class Hub:
         self.streams: dict[tuple[str, str], Stream] = {}
         self.minutes: dict[str, Minutes] = {}
         self._minutes_lock = threading.Lock()
+        self.taps: list = []                # each (root, Tick) -> None, called for every live print, after its side is known
 
     # ------------------------------------------------------------ today's tape
     def start_today(self, root: str, d: dt.date, ticks: list[Tick], info: dict | None = None) -> None:
@@ -236,6 +237,8 @@ class Hub:
                     s.sessions.append(info)
             tk = from_row(r, self.clf[root])
             self.today[root].append(tk)
+            for tap in self.taps:
+                tap(root, tk)
             for s in streams:
                 for b in s.builder.add(tk):
                     s.commit(b)
