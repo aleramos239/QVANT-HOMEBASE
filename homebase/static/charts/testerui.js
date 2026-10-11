@@ -812,6 +812,8 @@ async function showFromClaude(m) {
   const panelOk = !anyTrading || window.HBPanel.isShowing('tester');
   if (panelOk) window.HBPanel.show('tester');
   applyRun(b, focus ? 'trades' : 'overview', m.grid_id != null ? { grid_id: m.grid_id, cell: m.cell } : null);
+  // the page that hosts a stepper through the trades (the Lab) learns which run it is now looking at
+  window.dispatchEvent(new CustomEvent('hb:tester-show', { detail: { run_id: b.run.id } }));
   const notes = [];
   if (edited) notes.push('your unsaved Strategy Tester edits were replaced');
   if (!panelOk) notes.push('open the Strategy Tester tab to see it (the panel stays put while a chart has accounts)');

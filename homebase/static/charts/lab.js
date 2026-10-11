@@ -369,7 +369,13 @@ if (window.HBTesterLayer && window.HBTesterLayer.setWindowJumps) window.HBTester
 const jumpTo = (i) => { const t = navTrades()[i]; return t && window.HBTesterLayer && window.HBTesterLayer.jump(i, null, { contextMs: dayContext(t) }); };
 const NAV_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
 const NAV_DATE = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-const navTrades = () => (S.run && S.run.bundle && shownRid === S.run.rid ? S.run.bundle.trades || [] : []);
+/* The trades of the run on the chart: the open strategy's own, or -- a run shown from the Book, the Queue or a link -- the
+   tester's copy of it once it has arrived. */
+function navTrades() {
+  if (S.run && S.run.bundle && shownRid === S.run.rid) return S.run.bundle.trades || [];
+  const b = window.HBTesterUI && window.HBTesterUI.bundle;
+  return shownRid && b && b.run && b.run.id === shownRid ? b.trades || [] : [];
+}
 function paintNav() {
   const el = document.getElementById('labNavText');
   if (!el) return;
@@ -395,6 +401,15 @@ document.getElementById('labNav')?.addEventListener('click', (e) => { const b = 
 if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
   const i = window.HBTesterUI.selected;
   if (i != null && i !== ti && i < navTrades().length) { ti = i; paintNav(); }
+});
+// a run Claude put on the chart (the tester was handed it over the socket, not through showOnChart): the stepper walks it too
+window.addEventListener('hb:tester-show', (e) => {
+  const rid = e.detail && e.detail.run_id, ui = window.HBTesterUI;
+  if (!rid || !ui) return;
+  shownRid = rid;
+  const i = ui.selected;
+  ti = i != null && i < navTrades().length ? i : null;      // opened on a trade: that one; otherwise the first Next goes to trade 1
+  paintNav();
 });
 // a new interval reloads the chart at the latest bars: bring the trade back into view
 document.getElementById('tbFavs')?.addEventListener('click', (e) => { if (e.target.closest('button') && ti != null && navTrades().length) setTimeout(() => jumpTo(ti), 400); });

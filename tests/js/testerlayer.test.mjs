@@ -51,8 +51,11 @@ test('plotPoints: maps [t_ms, v] to the covering bar\'s tt, drops a point before
   assert.deepEqual(X.plotPoints(pts, BARS), [{ time: 1000, value: 3 }, { time: 2000, value: 5 }]);
 });
 
-test('plotPoints: a point past the last bar still lands on it (no upper bound, unlike a marker)', () => {
-  assert.deepEqual(X.plotPoints([[9999, 7]], BARS), [{ time: 4000, value: 7 }]);
+test('plotPoints: a reading up to the last bar\'s end lands on it; a later one is dropped, not piled on it', () => {
+  // BARS step 1000, last bar at 4000: its end is 5000
+  assert.deepEqual(X.plotPoints([[4500, 6], [5000, 7]], BARS), [{ time: 4000, value: 7 }]);
+  assert.deepEqual(X.plotPoints([[4000, 6], [9999, 7]], BARS), [{ time: 4000, value: 6 }]);
+  assert.deepEqual(X.plotPoints([[9999, 7]], BARS), []);
 });
 
 test('plotPoints: no bars -> []', () => {

@@ -143,3 +143,13 @@ test('claudeAvoidsSelected: the selected chart is off limits on the Charts tab (
   assert.equal(L.showPlan([{ root: 'NQ', replay: false, tradeReady: false }], 0, 'NQ', { avoidSelected: false }).index, 0);
   assert.equal(L.showPlan([{ root: 'NQ', replay: false, tradeReady: false }], 0, 'NQ', { avoidSelected: true }).index, -1);
 });
+
+test('a run Claude shows reaches the Lab\'s trade stepper: the tester announces it, the Lab adopts it', () => {
+  const ui = src('testerui.js'), lab = src('lab.js');
+  const fn = ui.slice(ui.indexOf('async function showFromClaude'), ui.indexOf('/* ===', ui.indexOf('async function showFromClaude')));
+  // announced after the run is loaded into the tester, with the run's own id
+  assert.match(fn, /applyRun\([^]*dispatchEvent\(new CustomEvent\('hb:tester-show', \{ detail: \{ run_id: b\.run\.id \} \}\)\)/);
+  // the Lab takes it as the run on its chart, and starts the stepper on the selected trade (none: the first Next goes to trade 1)
+  const on = lab.slice(lab.indexOf("addEventListener('hb:tester-show'"));
+  assert.match(on, /shownRid = rid;[^]*ti = i != null && i < navTrades\(\)\.length \? i : null;[^]*paintNav\(\);/);
+});

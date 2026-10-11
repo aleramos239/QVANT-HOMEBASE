@@ -53,11 +53,16 @@ function sessionIndex(bars) {
 /* A plot series' data: each [t_ms, v] lands on the tt of the bar covering it (the last bar starting at or
    before t_ms); a point before the first bar is dropped (barIndexAt returns -1); two points landing on the
    same bar keep only the later one (a plot can update several times inside one bar). Sorted by time, as
-   LineSeries.setData wants. */
+   LineSeries.setData wants. A point past the end of the last bar (one bar after its start) is dropped too: a Lab
+   jump holds a few days of a run of years, and every later point would pile onto the last bar, the final one
+   of the whole run winning -- a line shot to the run's last value at the window's edge. */
 function plotPoints(points, bars) {
   if (!bars || !bars.length) return [];
+  const n = bars.length, last = bars[n - 1].ms;
+  const end = n > 1 && last > bars[n - 2].ms ? last + (last - bars[n - 2].ms) : Infinity;
   const byTt = new Map();
   for (const p of points || []) {
+    if (p[0] > end) continue;
     const i = D.barIndexAt(bars, p[0]);
     if (i < 0) continue;
     byTt.set(bars[i].tt, p[1]);
