@@ -1351,6 +1351,7 @@ class Cell {
         if (!m) continue;
         let j = i, left = m.ago || 0;
         while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back
+        if (left > 0) continue;       // the swing is left of the first loaded bar: no marker (never one on bar 0)
         if (!this.bars[j].blank) out.push({ time: this.bars[j].tt, position: m.position, color: m.color, shape: m.shape, text: m.text, size: m.size });
       }
     }

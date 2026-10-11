@@ -12,6 +12,9 @@
 const UP = '#089981', DOWN = '#F23645', BLUE = '#2962FF', ORANGE = '#FF6D00', VIOLET = '#7E57C2', GREY = '#787B86';
 const line = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
 const SECONDS = { key: 'minSeconds', label: 'Stood at least (seconds)', type: 'int', min: 1, max: 600, def: 5 };
+/* bookflow.py emits no level that ended before 3 s (min_episode_ms) and opens one only at 3x the median (OPEN_RATIO):
+   a pulled level's setting below 3 changes nothing, so its lower bound is the floor. A saved value below clamps. */
+const SECONDS_ENDED = { ...SECONDS, min: 3 };
 
 const ta = [
   { id: 'bkimb', group: 'Order flow', name: 'Book imbalance (over time)', pane: 'own',
@@ -48,7 +51,7 @@ const catalog = [
   { id: 'absorb', group: 'Order flow', name: 'Absorption', desc: 'Heavy volume traded into a resting level that held, marked by the side that held',
     params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 4, max: 50, step: 0.5, def: 4 }, SECONDS] },
   { id: 'pulled', group: 'Order flow', name: 'Pulled liquidity', desc: 'A big resting order withdrawn as price came toward it',
-    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 2, max: 50, step: 0.5, def: 5 }, SECONDS] },
+    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 3, max: 50, step: 0.5, def: 5 }, SECONDS_ENDED] },
 ];
 
 /* The value a "bk:" series shows for one bar: `mean(col)` = the mean of that book column over the bar's seconds (or

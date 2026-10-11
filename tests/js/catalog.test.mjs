@@ -68,7 +68,7 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1, scale: true, sweeps: false });
   assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true });
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 1, history: false });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false });
   assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { bubbles: true, bubbleMin: 1 });
   assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false });
   assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
@@ -890,4 +890,15 @@ test('structure indicators: wire keys match the server, the levels draw as steps
   assert.equal(C.placement(C.instance('rvol')), 'own');
   assert.equal(C.lineValue(C.TA_BY_ID.rmove.lines[3], { ote1: 19500.5, dir: 1 }), 19500.5);
   assert.deepEqual(C.legendValues(C.instance('swing'), { sv: { 'swing:50': { hi: 19500.25, lo: null } } }, {}, 0.25).map((x) => x.text), ['19500.25', '—']);
+});
+
+test('order-flow settings that did nothing below the server floor start at it; older saved values clamp, never error', () => {
+  const min = (id, key) => C.CATALOG.find((d) => d.id === id).params.find((p) => p.key === key).min;
+  assert.equal(min('bigorders', 'minSeconds'), 3);               // an ended level is only shown once it stood 3 s
+  assert.equal(min('pulled', 'multiple'), 3);                    // a level only opens at 3x the median
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 5, minSeconds: 1, history: true }), { multiple: 5, minSeconds: 3, history: true });
+  assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).multiple, 3);
+  assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).minSeconds, 3);
+  assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5 });     // defaults untouched
+  assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5 });
 });

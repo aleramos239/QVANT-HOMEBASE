@@ -10,7 +10,7 @@
 
 const COL = { b10: 1, a10: 2, imb1: 3, imb5: 4, imb10: 5, micro: 6, spread: 7 };
 const CHUNK_MS = 5 * 3600 * 1000;      // history is asked in aligned 5 h chunks: 18,000 samples, always 1 s steps
-const MAX_ROWS = 400_000;              // per root; the oldest go first
+const MAX_ROWS = 2 * 86_400;           // per root: two days of 1 Hz rows (asks are clamped to 48 h); the oldest go first
 const GAP_OK_MS = 120_000;             // a chunk is "covered" when its covered span is within this of its end
 const SHORT_ANSWER_MS = 30_000;          // a chunk whose answer did not cover it is not asked again for this long
 
@@ -20,11 +20,17 @@ const SHORT_ANSWER_MS = 30_000;          // a chunk whose answer did not cover i
 const isClosed = (e) => e.t1 != null || (e.end != null && e.end !== 'open');
 
 /* Does the incoming copy `n` replace the stored copy `o`? Only if it is at least as complete: never open over closed;
-   closed over open; between two closed ones the larger t1; between two open ones the later copy (live updates). */
+   closed over open; between two closed ones the larger t1; between two open ones the one that carries the absorption
+   flag (sent once, by the live feed: a cached history copy up to 20 s stale must not drop it), then the larger traded
+   size, then the later copy (live updates). */
 function moreComplete(n, o) {
   const nc = isClosed(n), oc = isClosed(o);
   if (nc !== oc) return nc;
-  if (!nc) return true;
+  if (!nc) {
+    const na = n.ab != null, oa = o.ab != null;
+    if (na !== oa) return na;
+    return (n.tr || 0) >= (o.tr || 0);
+  }
   const a = n.t1 == null ? -Infinity : n.t1, b = o.t1 == null ? -Infinity : o.t1;
   return a >= b;
 }
@@ -34,6 +40,7 @@ class RootStore {
     this.rows = [];                    // sorted by t, one per t
     this.eps = new Map();              // id -> episode
     this.cov = [];                     // merged [from, to) spans a request (or the live feed) answered
+    this.liveEnd = null;               // where the live feed's covered span ends: the next message continues from it
   }
 
   addRows(rows) {
@@ -107,8 +114,19 @@ function applyLive(m) {
   const s = of(m.root);
   s.addRows(m.samples);
   s.addEpisodes(m.episodes);
-  const t = (Array.isArray(m.samples) ? m.samples : []).filter((r) => Array.isArray(r) && Number.isFinite(r[0])).map((r) => r[0]);
-  if (t.length) s.cover(Math.min(...t), Math.max(...t) + 1000);
+  let lo = Infinity, hi = -Infinity;
+  for (const r of Array.isArray(m.samples) ? m.samples : []) {
+    if (Array.isArray(r) && Number.isFinite(r[0])) { if (r[0] < lo) lo = r[0]; if (r[0] > hi) hi = r[0]; }
+  }
+  if (hi >= lo) {
+    hi += 1000;
+    // The live feed is continuous since its greeting: a quiet second or two (no book line, so no row) between two
+    // messages is not a hole, or the chunk would be fetched again. A reset (a new page, or one that fell behind)
+    // and a silence of GAP_OK_MS or more start a new span.
+    const join = !m.reset && s.liveEnd != null && lo >= s.liveEnd && lo - s.liveEnd < GAP_OK_MS;
+    s.cover(join ? s.liveEnd : lo, hi);
+    s.liveEnd = m.reset || s.liveEnd == null ? hi : Math.max(s.liveEnd, hi);
+  }
   changed(m.root, 'live');
 }
 
@@ -142,7 +160,7 @@ function missing(root, from, to, now) {
     const hit = s.cov.some((x) => x[0] <= a + GAP_OK_MS && x[1] >= b - GAP_OK_MS);
     if (!hit) out.push([c, Math.min(c + CHUNK_MS, now)]);
   }
-  return out;
+  return out.reverse();                // newest first: today's data before the older chunks (ensure takes the first)
 }
 
 /* Milliseconds to leave a refused chunk alone: a busy answer clears in seconds, a paused window (09:20-09:35 ET, the
@@ -154,8 +172,9 @@ function retryAfter(status, detail) { return status === 503 ? (/^busy/.test(Stri
 function onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 function clear() { stores.clear(); }
 function rowCount(root) { const s = stores.get(root); return s ? s.rows.length : 0; }
+function covered(root) { const s = stores.get(root); return s ? s.cov.map((x) => [x[0], x[1]]) : []; }
 
-const api = { COL, CHUNK_MS, applyHistory, applyLive, meanAt, episodes, missing, retryAfter, onChange, clear, rowCount };
+const api = { COL, CHUNK_MS, MAX_ROWS, covered, applyHistory, applyLive, meanAt, episodes, missing, retryAfter, onChange, clear, rowCount };
 
 /* ---------------------------------------------------------------- browser */
 if (typeof window !== 'undefined') {

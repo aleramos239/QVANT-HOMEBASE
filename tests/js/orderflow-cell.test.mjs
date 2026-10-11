@@ -94,6 +94,15 @@ test('delta divergence: a marker on the swing bar, `ago` real bars before the co
   assert.deepEqual(c.studyMarks().map((m) => [m.position, m.shape, m.color]), [['belowBar', 'arrowUp', '#0f0']]);
 });
 
+test('delta divergence: a swing left of the first loaded bar gets no marker (never one on bar 0)', () => {
+  const bars = [0, 1, 2, 3].map((i) => ({ tt: 100 + i, ms: i, sv: {} }));
+  bars[1].sv['ddiv:5'] = { dir: -1, ago: 5, px: 101 };           // the swing was 5 bars back: before bar 0
+  bars[3].sv['ddiv:5'] = { dir: 1, ago: 3, px: 99 };             // this one is exactly bar 0
+  const inst = { uid: 'u', id: 'ddiv', params: { length: 5 }, visible: true };
+  const c = stub({ bars, cfg: { root: 'NQ', spec: 'time:60', indicators: [inst] } });
+  assert.deepEqual(c.studyMarks().map((m) => [m.time, m.position]), [[100, 'belowBar']]);
+});
+
 test('the prior POC is naked until the session trades back through it', () => {
   const bars = [{ s: 'A', l: 90, h: 100 }, { s: 'B', l: 101, h: 105 }, { s: 'B', l: 104, h: 108 }];
   const c = stub({ bars, profile: { poc: 100, prev: { poc: 100, rows: [[100, 5]] } } });

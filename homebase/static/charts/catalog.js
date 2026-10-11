@@ -234,7 +234,7 @@ const CATALOG = [
     { key: 'sweeps', label: 'Mark sweeps (one order walking several prices)', type: 'bool', def: false }] },
   { id: 'bigorders', group: 'Order flow', name: 'Big orders', desc: 'Resting book orders N× the median size or more, as lines; ended ones stay', params: [
     { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 },
-    { key: 'minSeconds', label: 'Ended ones that stood at least (seconds)', type: 'int', min: 1, max: 600, def: 5 },
+    { key: 'minSeconds', label: 'Ended ones that stood at least (seconds)', type: 'int', min: 3, max: 600, def: 5 },   // bookflow.py shows none younger than 3 s
     { key: 'history', label: 'Keep ended orders on the chart', type: 'bool', def: true }] },
   { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
   { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [

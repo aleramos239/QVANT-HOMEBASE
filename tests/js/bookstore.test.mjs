@@ -34,9 +34,37 @@ test('episodes upsert by id and overlap queries include open ones', () => {
 
 test('missing: aligned chunks not covered, clipped to now; covered ones are not asked again', () => {
   const C = S.CHUNK_MS, base = Math.floor(T0 / C) * C, now = base + C + 600_000;
-  assert.deepEqual(S.missing('NQ', base, base + 2 * C, now), [[base, base + C], [base + C, now]]);
+  assert.deepEqual(S.missing('NQ', base, base + 2 * C, now), [[base + C, now], [base, base + C]]);   // newest first
   S.applyHistory('NQ', { t0: base, t1: base + C, samples: [], episodes: [] });
   assert.deepEqual(S.missing('NQ', base, base + 2 * C, now), [[base + C, now]]);
+});
+
+test('the row cap is two days of 1 Hz rows and evicts the oldest first', () => {
+  assert.equal(S.MAX_ROWS, 2 * 86_400);
+  const n = S.MAX_ROWS + 25, rows = [];
+  for (let i = 0; i < n; i++) rows.push(row(i, 0.5));
+  S.applyHistory('NQ', { t0: T0, t1: T0 + n * 1000, samples: rows.slice(0, 1000), episodes: [] });
+  S.applyLive({ root: 'NQ', samples: rows.slice(1000) });
+  assert.equal(S.rowCount('NQ'), S.MAX_ROWS);
+  assert.equal(S.meanAt('NQ', T0, T0 + 25_000, 'imb10'), null);                    // the 25 oldest are gone
+  assert.equal(S.meanAt('NQ', T0 + 25_000, T0 + 26_000, 'imb10'), 0.5);            // the next one is the oldest kept
+  assert.equal(S.meanAt('NQ', T0 + (n - 1) * 1000, T0 + n * 1000, 'imb10'), 0.5);  // the newest is kept
+});
+
+test('live cover runs through quiet seconds: a message after a 2 s silence extends the span, a reset starts a new one', () => {
+  S.applyLive({ root: 'NQ', reset: true, samples: [row(0), row(1), row(2)] });
+  S.applyLive({ root: 'NQ', samples: [row(5)] });                                  // seconds 3 and 4 had no book line
+  S.applyLive({ root: 'NQ', samples: [row(6), row(7)] });
+  const cov = (r) => S.covered(r);
+  assert.deepEqual(cov('NQ'), [[T0, T0 + 8000]]);
+  assert.deepEqual(S.missing('NQ', T0, T0 + 8000, T0 + 8000), []);                 // so the history is not asked for it
+  S.applyLive({ root: 'ES', reset: true, samples: [row(0)] });
+  S.applyLive({ root: 'ES', samples: [row(600)] });                                // ten minutes on: not continuous
+  assert.deepEqual(cov('ES'), [[T0, T0 + 1000], [T0 + 600_000, T0 + 601_000]]);
+  S.applyLive({ root: 'ES', reset: true, samples: [row(601)] });                   // a reset: never joined to the old end
+  assert.deepEqual(cov('ES'), [[T0, T0 + 1000], [T0 + 600_000, T0 + 602_000]]);
+  S.applyLive({ root: 'ES', reset: true, samples: [row(604)] });
+  assert.deepEqual(cov('ES').slice(-2), [[T0 + 600_000, T0 + 602_000], [T0 + 604_000, T0 + 605_000]]);
 });
 
 test('change listeners fire once per applied message and can be removed', () => {
@@ -98,6 +126,26 @@ test('episodes: the other fetch order ends closed too; a later live open update 
   assert.equal(e.length, 1);
   assert.equal(e[0].pk, 55);
   assert.equal(e[0].end, 'open');
+});
+
+test('episodes: between two open copies the one with the absorption flag wins, then the larger traded size', () => {
+  const live = ep({ pk: 40, tr: 90, ab: T0 + 6000 });                // the live copy: flagged, sent once
+  const stale = ep({ pk: 40, tr: 70, ab: null });                    // a cached history copy, up to 20 s old
+  S.applyLive({ root: 'NQ', samples: [], episodes: [live] });
+  S.applyHistory('NQ', { t0: T0, t1: T0 + 20_000, samples: [], episodes: [stale] });
+  assert.equal(S.episodes('NQ', T0, T0 + 1000)[0].ab, T0 + 6000);
+  S.clear();
+  S.applyHistory('NQ', { t0: T0, t1: T0 + 20_000, samples: [], episodes: [stale] });
+  S.applyLive({ root: 'NQ', samples: [], episodes: [live] });         // the flagged one still replaces the stale one
+  assert.equal(S.episodes('NQ', T0, T0 + 1000)[0].ab, T0 + 6000);
+  S.clear();
+  S.applyLive({ root: 'NQ', samples: [], episodes: [ep({ tr: 90 })] });
+  S.applyHistory('NQ', { t0: T0, t1: T0 + 20_000, samples: [], episodes: [ep({ tr: 50 })] });
+  assert.equal(S.episodes('NQ', T0, T0 + 1000)[0].tr, 90);           // neither flagged: the larger traded size stays
+  S.applyLive({ root: 'NQ', samples: [], episodes: [ep({ tr: 120 })] });
+  assert.equal(S.episodes('NQ', T0, T0 + 1000)[0].tr, 120);
+  S.applyLive({ root: 'NQ', samples: [], episodes: [closed] });       // a closed copy still beats any open one
+  assert.equal(S.episodes('NQ', T0, T0 + 1000)[0].end, 'traded');
 });
 
 test('episodes: a closed live copy replaces an open one; between closed copies the larger t1 stays', () => {
@@ -178,5 +226,5 @@ test('ensure: an answer that covers its chunk is not held off and not asked agai
   await B.ensure('NQ', A, A + 2 * CHUNK);
   await B.ensure('NQ', A, A + 2 * CHUNK);                        // the next chunk: one per call
   await B.ensure('NQ', A, A + 2 * CHUNK);
-  assert.deepEqual(asked, [[A, A + CHUNK], [A + CHUNK, A + 2 * CHUNK]]);
+  assert.deepEqual(asked, [[A + CHUNK, A + 2 * CHUNK], [A, A + CHUNK]]);                  // the newest chunk first
 });
