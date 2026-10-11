@@ -480,6 +480,58 @@ def test_the_limits_are_read_from_the_rules_file():
         fails({**good, "indicators": CARD["indicators"] * 2}, "P0.3", "2 indicators")
 
 
+# ================================================================ 7. the card's own bar sizes, and a family's session from its own settings (2026-10-11)
+
+CANDLE = {"family": "open_candle", "main_setting": "k", "values": [0, 1, 1.5], "fixed": {"start": "0300"}, "limits": {}}      # the London open candle
+
+
+def test_a_card_names_its_own_bar_sizes_out_of_the_allowed_ones():
+    assert P.need("card", "bars") == ["1", "5"] and P.need("card", "bars_allowed") == ["1", "5", "15", "30"]
+    subs = passes(ways(IB_N) | {"bars": ["30", "15"]})                                       # the order the card names them in does not matter
+    assert [(s["name"], s["bar"]) for s in subs] == [("fvg_open_a15", "15"), ("fvg_open_a30", "30")]
+    assert [s["spec"]["card"]["home"]["bar"] for s in subs] == ["15", "30"]
+    rows, _ = PC.check(ways(IB_N) | {"bars": ["15"]})
+    assert rows[1]["need"]["bars"] == ["15"] and "15-minute bars" in rows[1]["text"] and "1- and" not in rows[1]["text"]
+    assert [s["bar"] for s in passes(card())] == ["1", "5"]                                  # no `bars` = the default sizes, as ever
+    refused(lambda: PC.check(card(bars=["60"])), "out of 1, 5, 15, 30")
+    refused(lambda: PC.check(card(bars=[])), "a list of bar sizes")
+    refused(lambda: PC.check(card(bars=["5", 5])), "each once")
+    refused(lambda: PC.check(card(bars="15")), "a list of bar sizes")
+
+
+def test_a_family_that_does_not_run_on_the_cards_bar_sizes_fails_line_p0_2_in_those_words():
+    family("fvg", bars=["1", "5"])
+    fails(ways(WAY) | {"bars": ["15", "30"]}, "P0.2", "way a", "15- or 30-minute bars", "its bars: 1, 5")
+    family("fvg", bars=["5", "15"])
+    assert [s["bar"] for s in passes(ways(WAY) | {"bars": ["15", "30"]})] == ["15"]            # a family with one of the card's sizes gets that one only
+
+
+def test_a_name_needs_room_for_a_two_digit_bar_size_and_a_later_rounds_suffix():
+    ok = "x" * 33
+    assert passes(ways(IB_N) | {"name": ok, "bars": ["15"]})
+    refused(lambda: PC.check(ways(IB_N) | {"name": ok + "y", "bars": ["15"]}), "33 characters or fewer")
+    assert PC.check(ways(WAY) | {"name": ok + "y"})[1]                                       # a one-digit bar size: the 34 characters it always had
+
+
+def test_the_signature_holds_the_bar_sizes_only_when_they_are_not_the_default_ones():
+    s = PC.signature(card())
+    assert s == PC.signature(card(bars=["1", "5"])) == PC.signature(card(bars=["5", "1"])) == PC.signature(card(bars=[1, 5]))
+    assert s != PC.signature(card(bars=["5"])) and PC.signature(ways(IB_N) | {"bars": ["15"]}) != PC.signature(ways(IB_N) | {"bars": ["30"]})
+    assert PC.signature(ways(IB_N) | {"bars": ["15", "30"]}) == PC.signature(ways(IB_N) | {"bars": ["30", "15"]})
+
+
+def test_a_familys_session_is_read_with_the_ways_own_settings():
+    assert RUN._blocks().WRAPPED["open_candle"].defaults()["start"] == "0830"
+    subs = passes(ways(CANDLE) | {"session": "london"})                                       # start 0300 trades in London
+    assert [s["name"] for s in subs] == ["fvg_open_a1", "fvg_open_a5"] and subs[0]["spec"]["run"]["fixed"] == {"start": "0300"}
+    assert subs[0]["spec"]["card"]["home"]["session"] == "london"
+    fails(ways(CANDLE) | {"session": "pre"}, "P0.2", "open_candle does not trade in", "its sessions: london")      # ... and not in the pre-open
+    fails(ways({**CANDLE, "fixed": {}}) | {"session": "london"}, "P0.2", "open_candle does not trade in", "its sessions: pre")  # the default start 0830 is the pre-open's
+    passes(ways({**CANDLE, "fixed": {"start": "0830"}}) | {"session": "pre"})
+    fails(ways({**CANDLE, "main_setting": "start", "values": ["0200", "0300", "0830"], "fixed": {}}) | {"session": "london"},
+          "P0.2", "open_candle does not trade in")                                            # a main setting that moves the session: every value must trade there
+
+
 # ================================================================ 6. the signature: "the same idea"
 
 def test_the_signature_is_the_idea_not_its_name_its_reason_or_its_indicators():

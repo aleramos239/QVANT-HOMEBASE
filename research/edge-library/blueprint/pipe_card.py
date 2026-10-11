@@ -41,7 +41,8 @@ unless the card says; loses_when "not named on a pipeline card" (the pipeline dr
 REFUSED OUTRIGHT (judge.Refuse): what is no card -- no JSON object, a field a card does not have, a source that is not one
 of the four, a name that is not ^[a-z][a-z0-9_]{1,33}$ or whose heat maps the toolkit would not take as idea names
 (records._name: '__', the c1 prefix, the app's reserved words). A card with a line missing is NOT refused: its row fails.
-THE LIMITS (ways 1-3, 3 values, indicators 0-5, bars 1 and 5, the markets, the sessions) are pipe_rules.need("card"); none is typed here.
+THE LIMITS (ways 1-3, 3 values, indicators 0-5, bars 1 and 5 by default and card.bars_allowed when a card names its own `bars`, the markets,
+the sessions) are pipe_rules.need("card"); none is typed here.
 check() WRITES NOTHING and reads no tape: code and templates only (records.card_lines is pure; the idea folder is not
 touched). The card it is handed is not changed. Locked by tests/test_pipe_card.py.
 """
@@ -68,10 +69,15 @@ KEYS = ("name", "why", "loser", "source", "market", "session", "sides", "sides_w
 WAY_KEYS = ("family", "main_setting", "values", "fixed", "limits")
 IND_KEYS = ("block", "side", "why")
 SOURCES = ("owner", "video", "claude", "wiki", "paper", "book", "course")
-OPTIONAL = ("ref", "again_of")      # ref: which paper / book / video / course (the owner, 2026-10-08); no part of the signature
+OPTIONAL = ("ref", "again_of", "bars")  # ref: which paper / book / video / course (the owner, 2026-10-08); no part of the signature
                                     # again_of: the name of the card this one runs AGAIN on the owner's word (2026-10-10; pipe_store.add lets
                                     # the one card of that signature through, and logs it): a card is otherwise run once
+                                    # bars: the bar sizes this card is tried on (the owner, 2026-10-11: "use any timeframe"); a list of the
+                                    # pipeline's allowed sizes (card.bars_allowed); left out = the default sizes (card.bars: 1 and 5), and
+                                    # then the signature is what it always was
 REF_MAX = 300
+APP_NAME = 40                                       # the app's longest idea name (draftstore.NAME_RE)
+LATER_ROUND = 3                                     # "_r5": a later round's suffix on a heat map's name
 NAME = re.compile(r"^[a-z][a-z0-9_]{1,33}$")        # 34 characters: + "_a1" + a later round's "_r5" = the app's 40 (draftstore.NAME_RE)
 LETTERS = string.ascii_lowercase                    # a way's letter in its heat maps' names
 WORDS = 8                                           # the engine's own floor for a reason (run_idea.check_spec), held here on why + loser
@@ -103,6 +109,23 @@ def sub_name(name: str, way: int, bar: str) -> str:
     return f"{name}_{LETTERS[way]}{bar}"
 
 
+def allowed_bars(lim: dict | None = None) -> list:
+    """The bar sizes a card may name: card.bars_allowed (a file without it allows card.bars only)."""
+    lim = lim or P.need("card")
+    return list(lim.get("bars_allowed") or lim["bars"])
+
+
+def card_bars(card: dict, lim: dict | None = None) -> list:
+    """The bar sizes THIS card is tried on: its own `bars` (checked in _whole) or, left out, the default sizes (card.bars). Written as
+    the pipeline's allowed order, whatever order the card names them in."""
+    lim = lim or P.need("card")
+    got = card.get("bars") if isinstance(card, dict) else None
+    if not isinstance(got, list) or not got or not all(isinstance(b, (str, int)) and not isinstance(b, bool) for b in got):
+        return list(lim["bars"])
+    want = {str(b) for b in got}
+    return [b for b in allowed_bars(lim) if b in want]
+
+
 def _whole(card) -> dict:
     """The card, or judge.Refuse for what is no card (module docstring)."""
     if not isinstance(card, dict):
@@ -113,11 +136,15 @@ def _whole(card) -> dict:
     name, lim = card.get("name"), P.need("card")
     if not (isinstance(name, str) and NAME.fullmatch(name)):
         raise J.Refuse(f"name {name!r}: 2-34 characters of a-z, 0-9 and '_', starting with a letter (e.g. fvg_open)")
-    for sub in (sub_name(name, i, b) for i in range(lim["ways"][1]) for b in lim["bars"]):
+    bars = card_bars(card, lim)
+    for sub in (sub_name(name, i, b) for i in range(lim["ways"][1]) for b in bars):
         try:
             REC._name(sub)
         except J.Refuse as e:
             raise J.Refuse(f"name {name!r}: its heat maps are named like {sub}, which the toolkit does not take -- {e}") from None
+        if len(sub) + LATER_ROUND > APP_NAME:
+            raise J.Refuse(f"name {name!r}: its heat map {sub} and a later round's suffix are longer than the app's {APP_NAME} characters "
+                           f"(a bar size of two digits needs a name of {APP_NAME - LATER_ROUND - 4} characters or fewer)")
     if card.get("source") not in SOURCES:
         raise J.Refuse(f"source {card.get('source')!r}: one of {', '.join(SOURCES)}")
     ref = card.get("ref")
@@ -126,6 +153,13 @@ def _whole(card) -> dict:
     again = card.get("again_of")
     if again is not None and not (isinstance(again, str) and NAME.fullmatch(again)):
         raise J.Refuse("again_of: the name of the card this one runs again (the owner's word), or leave it out")
+    got = card.get("bars")
+    if got is not None:
+        ok = allowed_bars(lim)
+        bad = (not isinstance(got, list) or not got or not all(isinstance(b, (str, int)) and not isinstance(b, bool) for b in got)
+               or len({str(b) for b in got}) != len(got) or any(str(b) not in ok for b in got))
+        if bad:
+            raise J.Refuse(f"bars {got!r}: a list of bar sizes, each once, out of {', '.join(ok)} (minutes), or leave it out for {' and '.join(lim['bars'])}")
     return card
 
 
@@ -153,8 +187,30 @@ def _typed(kind, x):
             next((o for o in kind[1] if str(o) == t), x) if kind[0] == "choice" else x)
 
 
-def _way(w, mk, ss, lim: dict) -> tuple:
-    """One way of the card -> (what is wrong with it, the way as the family types it, its family, its bars)."""
+def _own_sessions(fam: str, F: dict, fixed: dict, ms, values: list, bars: list) -> list:
+    """The sessions (of the seven) `fam` trades in WITH THIS WAY'S OWN SETTINGS: the block list reads them off the family's first library
+    variant, and a family whose session follows a setting (open_candle: start 0300 trades in London, 0830 in the pre-open) is not the
+    family the list describes. Every value of the main setting must trade there. When the block list was told something else than the
+    class says (a test does), or the class cannot be built, the block list's own sessions stand: the toolkit's card check says the rest."""
+    cls = RUN._blocks().WRAPPED.get(fam)
+    if cls is None:
+        return F["sessions"]
+    try:
+        base = dict(RM.registry().library(fam)["variants"][0])
+        at = lambda extra, tf: [s for s in RM.DAY_PASSES if cls({**base, **extra, "tf": tf, "sess": s}).sessions()]  # noqa: E731
+        if at({}, str(cls.SCREEN_TFS[0])) != F["sessions"]:
+            return F["sessions"]
+        tf = str((bars or cls.SCREEN_TFS)[0])
+        per = [set(at({**fixed, ms: x}, tf)) for x in values]
+        return [s for s in RM.DAY_PASSES if all(s in p for p in per)]
+    except Exception:                                # noqa: BLE001 - a value the class refuses is the toolkit's row to write
+        return F["sessions"]
+
+
+def _way(w, mk, ss, lim: dict, cbars: list | None = None) -> tuple:
+    """One way of the card -> (what is wrong with it, the way as the family types it, its family, its bars). `cbars` = the bar sizes the
+    card is tried on (card_bars): the card's own list, or the default sizes."""
+    cbars = list(cbars or lim["bars"])
     if not (isinstance(w, dict) and set(w) <= set(WAY_KEYS)):
         extra = sorted(str(k) for k in set(w) - set(WAY_KEYS)) if isinstance(w, dict) else []
         return (f"unknown fields {extra}: " if extra else "") + f"an object {{{', '.join(WAY_KEYS)}}}", None, None, None
@@ -162,9 +218,13 @@ def _way(w, mk, ss, lim: dict) -> tuple:
     F = _families().get(fam) if isinstance(fam, str) else None
     if F is None:
         return f"family {fam!r} is no entry trigger: one of {', '.join(sorted(_families()))}", None, None, None
-    own, n, bars = [s["name"] for s in F["settings"]], len(v) if isinstance(v, list) else 0, [b for b in lim["bars"] if b in F["bars"]]
+    own, n, bars = [s["name"] for s in F["settings"]], len(v) if isinstance(v, list) else 0, [b for b in cbars if b in F["bars"]]
     kind = F["schema"].get(ms) if isinstance(ms, str) else None
     v = [_typed(kind, x) for x in v] if isinstance(v, list) else []
+    sess = F["sessions"]
+    if isinstance(ms, str) and ms in own and isinstance(fixed, dict) and len(v) == n and all(_scalar(x) for x in v) \
+            and all(_scalar(x) for x in fixed.values()):
+        sess = _own_sessions(fam, F, {k: _typed(F["schema"].get(k), x) for k, x in fixed.items()}, ms, v, bars)
     why = (f"{fam} cannot run on the build days yet: {F['why_not']}" if not F["runs"] else
            f"main setting {ms!r} is no setting of {fam} (" + (f"its settings: {', '.join(own)}" if own else "it has none of its own") + ")" if ms not in own else
            f"the values of {ms} are text or a number" if not all(_scalar(x) for x in v) else
@@ -172,8 +232,8 @@ def _way(w, mk, ss, lim: dict) -> tuple:
            "fixed and limits are objects {setting: value}, each value text or a number"
            if not all(isinstance(d, dict) and all(_scalar(x) for x in d.values()) for d in (fixed, limits)) else
            f"{fam} does not run on {mk} (its markets: {', '.join(F['markets'])})" if mk not in F["markets"] else
-           f"{fam} does not trade in {J.SESS_PLAIN[ss]} (its sessions: {', '.join(F['sessions'])})" if ss not in F["sessions"] else
-           f"{fam} does not run on {'- or '.join(lim['bars'])}-minute bars (its bars: {', '.join(F['bars'])})" if not bars else "")
+           f"{fam} does not trade in {J.SESS_PLAIN[ss]} (its sessions: {', '.join(sess)})" if ss not in sess else
+           f"{fam} does not run on {'- or '.join(cbars)}-minute bars (its bars: {', '.join(F['bars'])})" if not bars else "")
     if why:
         return why, None, None, None
     return "", {"family": fam, "main_setting": ms, "values": v, "fixed": {k: _typed(F["schema"].get(k), x) for k, x in fixed.items()}, "limits": dict(limits)}, F, bars
@@ -182,7 +242,7 @@ def _way(w, mk, ss, lim: dict) -> tuple:
 def _ways(card: dict, lim: dict) -> tuple:
     """Line P0.2 as the card alone says it -> (the row, [(way index, the way as typed, its family, its bars)])."""
     W, mk, ss, (lo, hi) = card.get("ways"), card.get("market"), card.get("session"), lim["ways"]
-    n, out, keys = len(W) if isinstance(W, list) else 0, [], []
+    n, out, keys, cbars = len(W) if isinstance(W, list) else 0, [], [], card_bars(card, lim)
     own = [s for s in lim["sessions"] if s in RM.DAY_PASSES]
     bad = (f"market {mk!r}: one of {', '.join(lim['markets'])}" if mk not in lim["markets"] else
            f"session {ss!r}: the {J.SESS_PLAIN[ss].split(' (')[0]} session is not in this version of the pipeline (one of {', '.join(own)})"
@@ -190,7 +250,7 @@ def _ways(card: dict, lim: dict) -> tuple:
            f"session {ss!r}: one of {', '.join(own)}" if ss not in own else
            f"{n} ways to enter (need {lo} to {hi}): ways is a list of {{{', '.join(WAY_KEYS)}}}" if not lo <= n <= hi else "")
     for i, w in enumerate(W if not bad else []):
-        why, way, F, bars = _way(w, mk, ss, lim)
+        why, way, F, bars = _way(w, mk, ss, lim, cbars)
         if not why and _key(way) in keys:
             why = f"is the same as way {LETTERS[keys.index(_key(way))]}"
         if why:
@@ -200,7 +260,7 @@ def _ways(card: dict, lim: dict) -> tuple:
         keys.append(_key(way))
     words = bad or (f"{n} way{'s' * (n > 1)} to enter on {mk}, {J.SESS_PLAIN[ss]}: " + " · ".join(
         f"{LETTERS[i]} {w['family']}, {w['main_setting']} {' / '.join(str(x) for x in w['values'])}, {'- and '.join(bars)}-minute bars" for i, w, _, bars in out))
-    return L._row("P0.2", not bad, n, {k: lim[k] for k in ("ways", "values", "bars", "markets", "sessions")}, words), out
+    return L._row("P0.2", not bad, n, {**{k: lim[k] for k in ("ways", "values", "markets", "sessions")}, "bars": cbars}, words), out
 
 
 def _indicators(card: dict, lim: dict) -> dict:
@@ -299,6 +359,9 @@ def _key(way: dict) -> list:
 def signature(card: dict) -> str:
     """The sha1 (40 hex characters) of what makes two cards the same idea (module docstring)."""
     body = {"market": card["market"], "session": card["session"], "sides": card["sides"], "ways": sorted((_key(w) for w in card["ways"]), key=_txt)}
+    lim = P.need("card")
+    if card.get("bars") is not None and card_bars(card, lim) != [b for b in allowed_bars(lim) if b in lim["bars"]]:
+        body["bars"] = card_bars(card, lim)         # a card that names the default sizes (or none) is the card it always was
     return hashlib.sha1(_txt(body).encode("utf-8")).hexdigest()
 
 
