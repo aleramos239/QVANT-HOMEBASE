@@ -51,6 +51,10 @@ const BAND = (n, def) => [
    false (no price-axis tag). `refs` are the dashed reference lines of an own-pane study. Each is the same
    definition the strategy engine's blocks read (studies_ta.py). A def with `pane` can live in a pane of its own
    or on the price pane; one without is drawn on the price pane only. */
+/* The order-flow indicators' definitions (flowdefs.js, loaded before this file on the chart page): the book and
+   tick studies of 2026-10-11. Absent (a page that does not load it), none of them exist there. */
+const FLOW = (typeof window !== 'undefined' && window.HBFlowDefs)
+  || (typeof require === 'function' ? require('./flowdefs.js') : { ta: [], catalog: [] });
 const TA_UP = '#089981', TA_DOWN = '#F23645', TA_BLUE = '#2962FF', TA_ORANGE = '#FF6D00', TA_VIOLET = '#7E57C2', TA_GREY = '#787B86';
 const TA_LEN = (def, min = 2, max = 500) => ({ key: 'length', label: 'Length', type: 'int', min, max, def });
 const TA_LINE = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
@@ -185,6 +189,7 @@ const TA_DEFS = [
       { key: 'need', label: 'Fewest days needed', type: 'int', min: 1, max: 60, def: 10 }],
     label: (p) => `RVOL ${p.days}`, desc: 'Bar volume over the median of the same time of day on earlier days; 2 is a spike',
     lines: [TA_LINE('main', 'RVOL', TA_VIOLET, 1, 'solid', { type: 'hist', tag: false })], refs: [1, 2] },
+  ...FLOW.ta,
 ];
 const TA_BY_ID = Object.fromEntries(TA_DEFS.map((d) => [d.id, d]));
 /* The number a generic line plots from the server's value `v` for one bar, or null (still warming up). */
@@ -212,18 +217,30 @@ const CATALOG = [
   { id: 'levels', group: 'Levels', name: 'Session levels', params: [],
     desc: 'Prior session high / low / close, overnight high / low and RTH open, as lines' },
   { id: 'footprint', group: 'Order flow', name: 'Footprint', desc: 'Sells at bid and buys at ask per price in each bar, shown when zoomed in', params: [
-    { key: 'imbalance', label: 'Imbalance ratio', type: 'num', min: 0, max: 20, step: 0.5, def: 3 }] },
-  { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [],
-    desc: 'Volume traded at each price this session, its point of control and 70% value area' },
+    { key: 'imbalance', label: 'Imbalance ratio', type: 'num', min: 0, max: 20, step: 0.5, def: 3 },
+    { key: 'stack', label: 'Stacked imbalances: rows in a row (0 = off)', type: 'int', min: 0, max: 20, def: 3 },
+    { key: 'unfinished', label: 'Mark unfinished auctions', type: 'bool', def: true },
+    { key: 'deltaNum', label: 'Delta under each bar', type: 'bool', def: true }] },
+  { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [
+    { key: 'prior', label: 'Show the prior session', type: 'bool', def: true },
+    { key: 'lines', label: 'Prior VAH / VAL / POC lines', type: 'bool', def: false }],
+    desc: 'Volume at each price this session, POC and value area; prior session as a ghost' },
   { id: 'delta', group: 'Order flow', name: 'Delta', params: [], pane: 'own', desc: 'Buy minus sell volume in each bar: which side was hitting the market harder' },
   { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own',
     desc: "Running total of each bar's buy-minus-sell volume, reset every session" },
   { id: 'bigprints', group: 'Order flow', name: 'Big prints', desc: 'Single N+ contract trades: green = buyers lifted the offer, red = sellers hit the bid', params: [
-    { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 }] },
-  { id: 'bigorders', group: 'Order flow', name: 'Big orders', desc: "Resting book orders of N× the last minute's median size or more, drawn as lines", params: [
-    { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 }] },
+    { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 },
+    { key: 'scale', label: 'Marker size follows the print size', type: 'bool', def: true },
+    { key: 'sweeps', label: 'Mark sweeps (one order walking several prices)', type: 'bool', def: false }] },
+  { id: 'bigorders', group: 'Order flow', name: 'Big orders', desc: 'Resting book orders N× the median size or more, as lines; ended ones stay', params: [
+    { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 },
+    { key: 'minSeconds', label: 'Ended ones that stood at least (seconds)', type: 'int', min: 1, max: 600, def: 5 },
+    { key: 'history', label: 'Keep ended orders on the chart', type: 'bool', def: true }] },
   { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
-  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', params: [], desc: 'Resting book size at each price over time, drawn behind the candles' },
+  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
+    { key: 'bubbles', label: 'Trade bubbles', type: 'bool', def: false },
+    { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 1, max: 10000, def: 10 }] },
+  ...FLOW.catalog,
   ...TA_DEFS,
 ];
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
@@ -348,7 +365,10 @@ const STYLE_LINES = { vwap: ['main', 'band1', 'band2', 'band3'], ema: ['main'], 
   adx: ['adx', 'pdi', 'mdi'], cumdelta: ['main'] };
 // delta has no Style tab: it draws a per-bar up/down-coloured histogram, not a single line -- style-able
 // the same way would need its own up/down fields, not this one-colour-per-key shape (spec: "unless trivial").
-function styleLineKeys(id) { return STYLE_LINES[id] || (TA_BY_ID[id] ? TA_BY_ID[id].lines.map((l) => l.part) : null); }
+function styleLineKeys(id) {
+  const t = TA_BY_ID[id];
+  return STYLE_LINES[id] || (t && t.lines.length ? t.lines.map((l) => l.part) : null);   // a study drawn as markers only has no line style
+}
 
 const VWAP_DEFAULT = '#9C27B0';   // cell.js palette().vwap -- today's single-VWAP purple, kept as the first colour
 const UP_DEFAULT = '#089981', DOWN_DEFAULT = '#F23645';   // palette().up/.down -- theme-independent
@@ -451,7 +471,9 @@ function serverKey(inst) {
   }
 }
 
-function serverKeys(list) { return [...new Set((list || []).map(serverKey).filter(Boolean))]; }
+/* The studies the server computes for these instances. A "bk:" key is computed in the page from the book samples
+   (flowdefs.js): it is never asked of the server. */
+function serverKeys(list) { return [...new Set((list || []).map(serverKey).filter((k) => k && !k.startsWith('bk:')))]; }
 
 /* A saved chart config of any vintage as {root, spec, indicators}. The spec is
    normalised as the server answers it (a Build-1 "tick:0750" is "tick:750"). */
