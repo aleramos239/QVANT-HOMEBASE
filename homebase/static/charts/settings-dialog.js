@@ -124,7 +124,9 @@ const TABS = [
       { label: 'Low', check: 'evLow', dot: '#F7C600' },
       { label: 'Holiday', check: 'evHoliday', dot: '#9598A1' },
       { label: 'Currencies', chips: 'evCountries' },
-      { label: 'Vertical lines for high and medium impact', check: 'evLines' },
+      { label: 'Vertical lines for high and medium impact', check: 'evLines', select: [
+        { key: 'evLineStyle', choices: LINE, name: 'Event line style' },
+        { key: 'evLineWidth', choices: WIDTHS, parse: asNumber, name: 'Event line width' }] },
     ]],
     ['NEWS', [
       { label: 'News on chart', select: { key: 'newsOnChart', choices: [

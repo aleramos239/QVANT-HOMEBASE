@@ -267,6 +267,7 @@ class EventFlags extends Layer {
   updateAllViews() {
     const r = this.chart ? this.read() : null;
     this.lines = !!(r && r.lines);
+    this.lineStyle = (r && r.lineStyle) || 'dotted'; this.lineWidth = (r && r.lineWidth) || 1;
     // binary-search down to the visible time range first (events.js: visibleSlice) -- a chart never runs
     // xOf() over every stored calendar event, only the handful actually near what is on screen
     const events = r ? window.HBEvents.visibleSlice(r.events, r.from, r.to) : [];
@@ -275,12 +276,13 @@ class EventFlags extends Layer {
   drawLines(target) {
     if (!this.lines || !this.flags.some((g) => g.line)) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.lineWidth = 1;
-      ctx.setLineDash([1, 3]);
+      const w = this.lineWidth;
+      ctx.lineWidth = w;
+      ctx.setLineDash(this.lineStyle === 'solid' ? [] : this.lineStyle === 'dashed' ? [4 * w, 3 * w] : [w, 3 * w]);
       for (const g of this.flags) {
         if (!g.line) continue;
         ctx.strokeStyle = g.color;      // the folder's colour: red high, orange medium
-        const x = Math.round(g.x) + 0.5;
+        const x = Math.round(g.x) + (w % 2 ? 0.5 : 0);
         ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, mediaSize.height); ctx.stroke();
       }
       ctx.setLineDash([]);

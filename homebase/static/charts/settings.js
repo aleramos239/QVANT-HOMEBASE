@@ -63,7 +63,7 @@ const FIELDS = [
   // Events (the economic calendar)
   bool('evHigh', true), bool('evMedium', true), bool('evLow', false), bool('evHoliday', false),
   { key: 'evCountries', type: 'list', def: Object.freeze(['USD']) },   // currency codes, upper-case, sorted
-  bool('evLines', true),
+  bool('evLines', true), choice('evLineStyle', 'dotted', STYLES), int('evLineWidth', 1, 1, 4),   // the vertical line at a High / Medium event
   choice('newsOnChart', 'bursts', ['all', 'bursts', 'off']),   // news bubbles: every headline + bursts / big moves with news / none
 ];
 const DEFAULTS = Object.freeze(Object.fromEntries(FIELDS.map((f) => [f.key, f.def])));
