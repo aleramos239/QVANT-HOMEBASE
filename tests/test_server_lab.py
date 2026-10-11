@@ -396,27 +396,22 @@ def test_a_size_above_the_cap_is_refused(client):
     assert book(client, [("eval1", 4)]).json()["detail"] == "Size is capped at 3 here."
 
 
-def test_one_strategy_per_market_per_account_for_the_lab_strategys_book(client):
+def test_a_lab_strategy_may_be_booked_on_the_account_of_a_strategy_in_its_market(client):
+    """Since 2026-10-11 strategies of one market share an account and trade one at a time (engine._slot_busy)."""
     set_limits(client)
-    r = book(client, [("main", 1)])                                              # nq930 trades NQ on main
-    assert r.status_code == 409 and r.json()["detail"] == "Another strategy trades NQ on this account."
-    assert LAB not in client.cfg.book
-    assert book(client, [("eval1", 1), ("main", 1)]).status_code == 409         # any row of the write
-    assert book(client, [("eval1", 1)]).status_code == 200
+    assert book(client, [("main", 1)]).status_code == 200                        # nq930 trades NQ on main: allowed
+    assert client.cfg.book[LAB] == [{"account": "main", "qty": 1}]
+    assert book(client, [("eval1", 1), ("main", 1)]).status_code == 200
 
 
-def test_one_strategy_per_market_per_account_for_every_other_strategys_book_too(client):
+def test_the_other_strategys_book_may_name_the_lab_strategys_account_too(client):
     set_limits(client)
     assert book(client, [("eval1", 1)]).status_code == 200
-    r = book(client, [("main", 3), ("eval1", 1)], "nq930")                       # nq930 onto the Lab strategy's account
-    assert r.status_code == 409 and r.json()["detail"] == "Another strategy trades NQ on this account."
-    assert client.cfg.book["nq930"] == [{"account": "main", "qty": 3}]
-    assert book(client, [("main", 2), ("eval2", 1)], "nq930").status_code == 200   # other accounts: as ever
-    assert book(client, [], LAB).status_code == 200                              # the Lab strategy leaves eval1
-    assert book(client, [("main", 3), ("eval1", 1)], "nq930").status_code == 200
+    assert book(client, [("main", 3), ("eval1", 1)], "nq930").status_code == 200   # nq930 onto the Lab account
+    assert client.cfg.book["nq930"] == [{"account": "main", "qty": 3}, {"account": "eval1", "qty": 1}]
 
 
-def test_the_market_rule_is_the_engines_substring_rule_and_other_markets_share_an_account(paths):
+def test_the_micro_and_the_full_contract_may_share_an_account_and_other_markets_always_do(paths):
     store.put(rec("micro_one", root="MNQ"))
     store.put(rec("gold_one", root="GC"))
     app = make_client()
@@ -424,12 +419,9 @@ def test_the_market_rule_is_the_engines_substring_rule_and_other_markets_share_a
         c.tmp = paths
         for n in ("lab_micro_one", "lab_gold_one"):
             assert set_limits(c, n).status_code == 200
-        r = book(c, [("main", 1)], "lab_micro_one")                              # NQ is inside MNQ: one market
-        assert r.status_code == 409 and r.json()["detail"] == "Another strategy trades NQ on this account."
+        assert book(c, [("main", 1)], "lab_micro_one").status_code == 200        # NQ is inside MNQ: one market, shared
         assert book(c, [("main", 1)], "lab_gold_one").status_code == 200         # gold beside nq930: fine
-        assert book(c, [("eval1", 1)], "lab_micro_one").status_code == 200
-        r = book(c, [("main", 3), ("eval1", 1)], "nq930")
-        assert r.status_code == 409 and r.json()["detail"] == "Another strategy trades MNQ on this account."
+        assert book(c, [("main", 3), ("eval1", 1)], "nq930").status_code == 200
 
 
 def test_two_strategies_that_are_not_from_the_lab_are_never_judged(paths):

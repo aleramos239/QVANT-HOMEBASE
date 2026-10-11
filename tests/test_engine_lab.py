@@ -739,16 +739,65 @@ def test_an_account_the_strategy_is_not_booked_on_is_never_traded(tmp_path):
     assert go(eng, leg(), {"a1": 0})["accounts"]["a1"]["reason"] == "The Desk cannot check this order."
 
 
-def test_one_strategy_per_market_per_account(tmp_path):
-    """Design A5, at placement: another strategy booked in this market on the account -> it sits the trade out."""
-    other = StrategyCfg(symbol="MNQ", qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
-    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), extra={"mnq930": other},
-                     book={"mnq930": [{"account": "a1", "qty": 1}]})
-    out = go(eng, leg())
-    assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "Another strategy trades MNQ on this account."}
-    assert out["accounts"]["a2"]["ok"] is True and ads["a1"].brackets == []
-    eng.cfg.strategies["mnq930"].symbol = "ES"                        # another market: no conflict
-    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True
+def straddle_cfg(symbol="MNQ"):
+    return StrategyCfg(symbol=symbol, qty=1, offset_pts=10.0, sl_pts=5.0, tp_pts=15.0, enabled=True)
+
+
+def alert(eng, name="mnq930"):
+    """The built-in straddle's fire, as the timer sends it (spread = 2 x offset)."""
+    return run(eng.handle_alert({"strategy": name, "upper": 110.0, "lower": 90.0}, force_window=True))
+
+
+def test_a_built_in_strategy_in_the_market_shares_the_account_one_trade_at_a_time(tmp_path):
+    """Since 2026-10-11 a Lab strategy and a built-in one in the same market may be booked on one account. A built-in's
+    round that is placed (its OCO legs are working) or live holds the account: the Lab entry is told so and sends
+    nothing; and the other way round (test below). A built-in with nothing open on the account holds nothing."""
+    eng, ads, _ = mk(tmp_path, extra={"mnq930": straddle_cfg()}, book={"mnq930": [{"account": "a1", "qty": 1}]})
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is True              # nothing of the straddle is open: the Lab trades
+    tick(eng)
+    fill_entry(eng, ads["a1"], rnd(eng), 100.0)
+    fill_exit(eng, ads["a1"], rnd(eng), 110.0, "tp")
+    tick(eng)
+    st = eng._state("mnq930", "a1")
+    st.status = "placed"                                                # the straddle's legs are working
+    assert go(eng, leg(iid=2))["accounts"]["a1"] == BUSY
+    st.status, st.entry_side, st.entry_qty, st.exit_qty = "live", "Buy", 1, 0   # a position
+    assert go(eng, leg(iid=2))["accounts"]["a1"] == BUSY
+    st.status, st.exit_qty = "done", 1                                  # over and out
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["ok"] is True
+    tick(eng)
+    fill_entry(eng, ads["a1"], rnd(eng), 100.0)
+    fill_exit(eng, ads["a1"], rnd(eng), 110.0, "tp")
+    tick(eng)
+    st.status, st.exit_qty = "live", 0                                  # open again, but in another market
+    eng.cfg.strategies["mnq930"].symbol = "ES"
+    assert go(eng, leg(iid=3))["accounts"]["a1"]["ok"] is True
+
+
+def test_a_built_in_strategy_sits_the_account_out_while_a_lab_round_is_open(tmp_path):
+    """The built-in straddle fires at 09:30:00 onto an account where a Lab round is open: on_fill would book its
+    entry fill as the Lab round's exit (by symbol and side). It sits that account out for the day -- never placed late
+    at stale levels -- and trades the other."""
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"), extra={"mnq930": straddle_cfg("NQ")},
+                     book={"mnq930": [{"account": "a1", "qty": 1}, {"account": "a2", "qty": 1}]})
+    assert go(eng, leg(), {"a1": 1})["accounts"]["a1"]["ok"] is True       # a Lab round on a1 only
+    out = alert(eng)
+    assert out["accounts"]["a1"] == {"ok": False, "reason": engine_mod.LAB_SLOT_BUSY}
+    assert out["accounts"]["a2"]["ok"] is True and len(ads["a1"].brackets) == 1 and len(ads["a2"].brackets) == 2
+    assert eng.skipped_today("mnq930") == {"a1"}
+    assert [(e["strategy"], e["account"], e["reason"]) for e in events(tmp_path, "place_skipped")] == \
+        [("mnq930", "a1", engine_mod.LAB_SLOT_BUSY)]
+    assert f"mnq930@a1" not in eng.states
+
+
+def test_the_micro_and_the_full_contract_share_an_account_one_at_a_time(tmp_path):
+    """NQ and MNQ are one market to on_fill (the substring rule): an NQ straddle next to an MNQ Lab strategy is the
+    same hazard, held by the same rule."""
+    eng, ads, _ = mk(tmp_path, extra={"nq930": straddle_cfg("NQ")}, book={"nq930": [{"account": "a1", "qty": 1}]})
+    eng.cfg.strategies[LAB].symbol = "MNQ"
+    out = alert(eng, "nq930")
+    assert out["accounts"]["a1"]["ok"] is True                           # the straddle's legs are working ...
+    assert go(eng, leg())["accounts"]["a1"] == BUSY                       # ... so the micro Lab strategy waits
 
 
 # ------------------------------------------------------------------------------------------------ a group on one account
@@ -897,14 +946,14 @@ def test_a_group_is_one_broker_account_whatever_the_desk_calls_it(tmp_path):
     assert out["accounts"]["a2"] == BUSY and ads["a2"].brackets == []
 
 
-def test_a_micro_and_the_full_contract_are_not_a_group(tmp_path):
-    """Only the SAME contract is shared. MNQ and NQ on one account stay refused, as a strategy of another kind does
-    (test_one_strategy_per_market_per_account)."""
+def test_a_micro_and_the_full_contract_are_one_market_to_the_group(tmp_path):
+    """NQ and MNQ are one market to on_fill (the substring rule: NQ also claims MNQ): they share an account one
+    trade at a time, like two strategies in one contract."""
     eng, ads, _ = group(tmp_path, exec_root="MNQ")
     assert (eng.cfg.strategies[LAB].symbol, eng.cfg.strategies[LAB2].symbol) == ("NQ", "MNQ")
-    assert go2(eng, leg(iid=7))["accounts"]["a1"]["reason"] == "Another strategy trades NQ on this account."
-    assert go(eng, leg())["accounts"]["a1"]["reason"] == "Another strategy trades MNQ on this account."
-    assert ads["a1"].brackets == []
+    assert go(eng, leg())["accounts"]["a1"]["ok"] is True
+    assert go2(eng, leg(iid=7))["accounts"]["a1"] == BUSY
+    assert len(ads["a1"].brackets) == 1
 
 
 def test_an_account_with_a_daily_take_rule_sits_out(tmp_path):

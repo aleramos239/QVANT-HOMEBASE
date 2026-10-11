@@ -217,14 +217,13 @@ def test_the_dollar_cap_of_a_micro_strategy_is_counted_in_the_micros_dollars(tmp
     assert out["results"][0]["refused"] is None and placed(d) == [("MNQ", "Buy", "Market", 10)]
 
 
-def test_a_micro_strategy_cannot_share_an_account_with_one_that_trades_the_market(tmp_path):
+def test_a_micro_strategy_may_share_an_account_with_one_that_trades_the_market(tmp_path):
+    """Since 2026-10-11: NQ and MNQ are one market to on_fill, so they trade one at a time (engine._slot_busy)."""
     from homebase.config import StrategyCfg
-    from homebase.labdesk import Refused
     extra = {"nq930": StrategyCfg(symbol="NQ", qty=1, offset_pts=5.0, sl_pts=5.0, tp_pts=15.0, enabled=True)}
     d = mkdesk(tmp_path, limits=OWN, qty=0, extra=extra, book={"nq930": [{"account": "a1", "qty": 1}]},
                rec_kw={"exec_root": "MNQ", "own_size": True})
-    with pytest.raises(Refused, match="Another strategy trades NQ on this account."):
-        run(d.ld.set_book(LAB, [{"account": "a1", "qty": 5}]))
+    run(d.ld.set_book(LAB, [{"account": "a1", "qty": 5}]))
 
 
 # ---------------------------------------------------------------- the paper book

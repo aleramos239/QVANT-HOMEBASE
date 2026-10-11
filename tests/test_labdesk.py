@@ -603,7 +603,7 @@ def test_the_engines_answer_for_each_account_is_that_accounts_sentence(tmp_path)
         (a, s) for a, s in got.items() if s)
 
 
-def test_an_account_with_a_take_rule_or_another_strategy_in_the_market_sits_out(tmp_path):
+def test_an_account_with_a_take_rule_sits_out_and_another_strategy_in_the_market_does_not_stop_it(tmp_path):
     d = mkdesk(tmp_path, accounts=("a1", "a2", "a3"))
     d.cfg.strategies["lv"] = StrategyCfg(symbol="ES", kind="levels", qty=1, offset_pts=1, sl_pts=1, tp_pts=1,
                                          enabled=True, day_take=500.0)
@@ -613,11 +613,11 @@ def test_an_account_with_a_take_rule_or_another_strategy_in_the_market_sits_out(
     out = send(d, entry())
     got = {a: r["reason"] for a, r in out["results"][0]["accounts"].items()}
     assert got == {"a1": "This account has a daily take rule. A Lab strategy cannot share it.",
-                   "a2": "Another strategy trades MNQ on this account.", "a3": None}
+                   "a2": None, "a3": None}              # an MNQ strategy on a2 shares it (engine._slot_busy)
 
 
 def test_a_group_is_booked_on_one_account_and_a_trade_skipped_for_its_turn_stops_nothing(tmp_path):
-    """Two Lab strategies in the same contract share an account, one trade at a time (engine._lab_slot_busy). The one
+    """Two Lab strategies in the same contract share an account, one trade at a time (engine._slot_busy). The one
     that finds the account busy is told so; that is not a refusal: two of them do not stop it for the day."""
     d = mkdesk(tmp_path)
     store.put(rec(name="qq"))
@@ -652,13 +652,12 @@ def test_a_skipped_trade_counts_when_another_account_refused_it_for_a_reason_of_
     assert (d.ld._rec("lab_qq")["untaken"], d.ld._rec("lab_qq")["stopped"]) == (2, "Stopped for today.")
 
 
-def test_a_micro_strategy_and_one_on_the_full_contract_are_still_not_booked_together(tmp_path):
+def test_a_micro_strategy_and_one_on_the_full_contract_may_be_booked_together(tmp_path):
     d = mkdesk(tmp_path)
     store.put(rec(name="qq", exec_root="MNQ"))
     run(d.ld.refresh())
     run(d.ld.set_limits("lab_qq", LIMITS))
-    with pytest.raises(Refused, match="Another strategy trades NQ on this account."):
-        run(d.ld.set_book("lab_qq", [{"account": "a1", "qty": 1}]))
+    run(d.ld.set_book("lab_qq", [{"account": "a1", "qty": 1}]))                    # NQ and MNQ: one market, shared
 
 
 def test_an_entry_the_broker_refused_shows_its_words_and_no_account_holds_it(tmp_path):

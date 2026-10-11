@@ -643,6 +643,13 @@ class Engine:
         if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
             self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
             return {"ok": False, "reason": f"account stopped for the day ({locked})"}
+        if cfg.kind != LAB and self._slot_busy(name, cfg, account, lab_only=True):
+            # a Lab round (or another built-in) of this market is open on the account: one trade at a time. A
+            # straddle sits the account out for the day -- placed late it would trade stale levels.
+            self.journal("place_skipped", strategy=name, account=account, reason=LAB_SLOT_BUSY)
+            if cfg.kind == "straddle":
+                self.skip_today(name, account)
+            return {"ok": False, "reason": LAB_SLOT_BUSY}
         st = self._state(name, account)
         ad = self.adapters.get(account)
         if ad is None or not ad.connected:
@@ -711,6 +718,13 @@ class Engine:
         if locked:                       # day_take / day_lock: stopped for the day -- nothing new goes out
             self.journal("place_skipped", strategy=name, account=account, reason=f"locked:{locked}")
             return {"ok": False, "reason": f"account stopped for the day ({locked})"}
+        if cfg.kind != LAB and self._slot_busy(name, cfg, account, lab_only=True):
+            # a Lab round (or another built-in) of this market is open on the account: one trade at a time. A
+            # straddle sits the account out for the day -- placed late it would trade stale levels.
+            self.journal("place_skipped", strategy=name, account=account, reason=LAB_SLOT_BUSY)
+            if cfg.kind == "straddle":
+                self.skip_today(name, account)
+            return {"ok": False, "reason": LAB_SLOT_BUSY}
         st = self._state(name, account)
         ad = self.adapters.get(account)
         if ad is None or not ad.connected:
@@ -2669,31 +2683,24 @@ class Engine:
         e = str(err if err is not None else "").strip()
         return e in LAB_CLEAR_REJECTS and not any(w in e.lower() for w in LAB_UNKNOWN_WORDS)
 
-    def _lab_market_taken(self, name: str, cfg: StrategyCfg, account: str) -> Optional[str]:
-        """Design A5, at placement: the symbol of another strategy that is booked on this account, or busy on it
-        today, in the same market (the engine's own substring rule, on_fill's exit match)."""
-        mine = str(cfg.symbol).upper()
-        for other, so in self.cfg.strategies.items():
-            theirs = str(so.symbol).upper()
-            if other == name or not mine or not theirs or not (mine in theirs or theirs in mine):
-                continue
-            if so.kind == LAB and theirs == mine:    # a group: the same contract, one trade at a time (_lab_slot_busy)
-                continue
-            if any(a.get("account") == account for a in assignments(self.cfg, other)) or any(
-                    s.strategy == other and s.status in ("placing", "placed", "live")
-                    for s in self.day_states_for_account(account)):
-                return so.symbol
-        return None
+    @staticmethod
+    def _same_market(a, b) -> bool:
+        """The engine's own substring rule (on_fill's exit match): NQ also claims MNQ."""
+        a, b = str(a or "").upper(), str(b or "").upper()
+        return bool(a and b and (a in b or b in a))
 
-    def _lab_slot_busy(self, name: str, cfg: StrategyCfg, account: str) -> bool:
-        """A GROUP -- Lab strategies in the SAME contract booked on one broker account -- trades one at a time,
-        first come. True while another member has, today and on that broker account, a round that is placing,
-        placed or live; one that is over with its orders not read terminal (a block carried from an earlier day is
-        one); or one that went in and was never SEEN out (a Kill books a round done when its market order leaves:
-        the fill that follows must not meet another member's round). on_fill books an opposite fill in a market as
-        the live round's exit, so two rounds of one contract are never open on an account together. A Lab round
-        whose strategy is no longer in the config (its record did not load) is nobody's to judge: it holds too."""
-        mine, today = str(cfg.symbol).upper(), self._today()
+    def _slot_busy(self, name: str, cfg: StrategyCfg, account: str, lab_only: bool = False) -> bool:
+        """STRATEGIES THAT SHARE A MARKET on one broker account trade one at a time, first come -- a Lab strategy next
+        to a Lab strategy, or next to a built-in (nq930, gc_nfp, a rule, a levels strategy), whatever the contract.
+        True while another strategy has, today and on that broker account, a round that is placing, placed or live;
+        one that went in and was never SEEN out (a Kill books a round done when its market order leaves: the fill that
+        follows must not meet another strategy's round); and, for a Lab round, one that is over with its orders not
+        read terminal (a block carried from an earlier day is one). on_fill books an opposite fill in a market as
+        the live round's exit (by symbol and side, never by order id), so two rounds of one market are never open
+        on an account together. A Lab round whose strategy is no longer in the config (its record did not load) is
+        nobody's to judge: it holds too. `lab_only`: only a Lab round counts (a built-in strategy asking: two built-ins
+        in one market keep sharing an account as they always did)."""
+        today = self._today()
 
         def broker(a: str):
             return getattr(self.adapters.get(a), "broker_key", a)
@@ -2702,11 +2709,15 @@ class Engine:
             if s.strategy == name or s.date != today or s.status == "idle" or broker(s.account) != broker(account):
                 continue
             so = self.cfg.strategies.get(s.strategy)
-            if not s.strategy.startswith(LAB_PREFIX) if so is None else \
-                    (so.kind != LAB or str(so.symbol).upper() != mine):
+            if so is None:
+                if not s.strategy.startswith(LAB_PREFIX):
+                    continue
+            elif not self._same_market(so.symbol, cfg.symbol) or (lab_only and so.kind != LAB):
                 continue
             went_in = (s.entry_qty or s.qty or 0) if s.entry_side else 0
-            if s.status in ("placing", "placed", "live") or not self._lab_clean(s) or (s.exit_qty or 0) < went_in:
+            lab = s.strategy.startswith(LAB_PREFIX)
+            if s.status in ("placing", "placed", "live") or (lab and not self._lab_clean(s)) \
+                    or (s.exit_qty or 0) < went_in:
                 return True
         return False
 
@@ -2739,10 +2750,7 @@ class Engine:
         rules = self.rules_for(account)
         if rules.day_take or rules.target_take:     # check_takes needs a price for every live state on the account
             return LAB_TAKE_RULE
-        taken = self._lab_market_taken(name, cfg, account)                  # 2
-        if taken is not None:
-            return f"Another strategy trades {taken} on this account."
-        if self._lab_slot_busy(name, cfg, account):
+        if self._slot_busy(name, cfg, account):                             # 2
             return LAB_SLOT_BUSY
         today = self._today()                                               # 3
         if any(self._archived(s) and (self._lab_carried(s) or not self._lab_clean(s))

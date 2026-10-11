@@ -26,9 +26,9 @@ on=False), attach() never called) the desk never reads the store, never tries it
                            request is writing. It never waits for the store's lock.
     LabDesk.set_limits     the owner's limits, checked (labcfg.parse_limits); not 09:20-09:35 ET, not with a round open,
                            not below a size already booked.
-    LabDesk.check_book     asked before EVERY strategy's book write: one strategy per market per account when a Lab
-                           strategy is one of the two; for a Lab strategy also its limits, its size cap, one broker
-                           account once, and no account taken off while it has a round open.
+    LabDesk.check_book     asked before EVERY strategy's book write: for a Lab strategy its limits, its size cap,
+                           one broker account once, and no account taken off while it has a round open. Strategies of
+                           one market may share an account: they trade one at a time (engine._slot_busy).
     LabDesk.set_book       a Lab strategy's book: check_book, then its sidecar, then the desk's memory.
     LabDesk.set_enabled    the ONE switch: the store record's `enabled` (the runner hosts by it).
     LabDesk.remove         off the Desk: sidecar and record go, the history stays. Not with a round open.
@@ -561,18 +561,6 @@ class LabDesk:
                 rules = rules_for(r["account"]) if rules_for is not None else None
                 if rules is not None and (rules.day_take or rules.target_take):
                     raise Refused(TAKE_RULE)
-        for r in rows:                       # one strategy per market per account (the engine's substring rule)
-            for other, so in self.cfg.strategies.items():
-                if other == name or not (mine or getattr(so, "kind", "") == LAB):
-                    continue
-                a, b = str(s.symbol).upper(), str(so.symbol).upper()
-                if not a or not b or not (a in b or b in a):
-                    continue
-                if a == b and mine and getattr(so, "kind", "") == LAB:
-                    continue                 # a group: Lab strategies in the same contract share the account, one
-                                             # trade at a time (engine._lab_slot_busy)
-                if any(x.get("account") == r["account"] for x in assignments(self.cfg, other)):
-                    raise Refused(f"Another strategy trades {so.symbol} on this account.")
         if mine:
             keep = {r["account"] for r in rows}
             why = self._open_why(name, [aid for aid in self._open(name) if aid not in keep])
