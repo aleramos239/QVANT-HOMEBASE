@@ -55,12 +55,23 @@ test('askSpan: never past the limit, nothing for an unknown limit or an empty sp
   assert.equal(E.askSpan(100, NaN, 5000), null);
 });
 
+test('askSpan: a zoomed-out view asks only for the newest 48 h before its end', () => {
+  const DAY = 86_400_000, end = T0 + 10 * 60_000;
+  const span = E.askSpan(end - 69 * DAY, end, Date.now());
+  assert.deepEqual(span, [end - 48 * 3_600_000, end]);
+  const S = require('../../homebase/static/charts/bookstore.js');
+  S.clear();
+  assert.ok(S.missing('NQ', span[0], span[1], end).length <= Math.ceil(48 / 5) + 1);    // at most 11 chunks of 5 h
+  assert.deepEqual(E.askSpan(end - DAY, end, Date.now()), [end - DAY, end]);            // a day: untouched
+  assert.deepEqual(E.askSpan(end - 69 * DAY, end + 5 * DAY, end), [end - 48 * 3_600_000, end]);   // measured from the limit
+});
+
 /* ---- the overlay, on a fake chart (the browser half of the module) ---- */
 
 const T0 = 1_790_000_000_000;      // well in the past, so Date.now() is always after the bars
 const BAR = 60_000;
 
-function rig({ replay = null, indicators } = {}) {
+function rig({ replay = null, indicators, n = 10, bar = BAR, t0 = T0 } = {}) {
   const S = require('../../homebase/static/charts/bookstore.js');
   S.clear();
   const calls = { ensure: [], refresh: [], attach: 0, detach: 0 };
@@ -73,14 +84,14 @@ function rig({ replay = null, indicators } = {}) {
   const path = require.resolve('../../homebase/static/charts/bookevents.js');
   delete require.cache[path];
   const M = require(path);
-  const range = { from: 0, to: 9 };
+  const range = { from: 0, to: n - 1 };
   const cell = {
     cfg: { root: 'NQ', indicators: indicators || [
       { id: 'bigorders', visible: true, params: { multiple: 5, minSeconds: 5, history: true } },
       { id: 'absorb', visible: true, params: { multiple: 4, minSeconds: 5 } }] },
     shown: { root: 'NQ' }, P: {}, replay,
-    bars: Array.from({ length: 10 }, (_, i) => ({ ms: T0 + i * BAR })),
-    isTime: () => true, barMs: () => BAR,
+    bars: Array.from({ length: n }, (_, i) => ({ ms: t0 + i * bar })),
+    isTime: () => true, barMs: () => bar,
     chart: { timeScale: () => ({ getVisibleLogicalRange: () => range, logicalToCoordinate: (i) => i * 100,
       subscribeVisibleLogicalRangeChange() {}, unsubscribeVisibleLogicalRangeChange() {} }) },
     candles: { attachPrimitive() { calls.attach++; }, detachPrimitive() { calls.detach++; }, priceToCoordinate: (p) => p },
@@ -117,6 +128,16 @@ test('overlay: the visible span is asked of the store, up to now', () => {
   const o = r.M.overlay(r.cell);
   assert.equal(r.calls.ensure.length, 1);
   assert.deepEqual(r.calls.ensure[0], ['NQ', T0, T0 + 10 * BAR]);
+  o.destroy();
+});
+
+test('overlay: 100k one-minute bars in view ask for the newest 48 h only', () => {
+  const t0 = T0 - 70 * 86_400_000, end = t0 + 100_000 * 60_000;     // 69 days ending 1 day before T0 (a past)
+  const r = rig({ n: 100_000, bar: 60_000, t0 });
+  const o = r.M.overlay(r.cell);
+  assert.equal(r.calls.ensure.length, 1);
+  assert.deepEqual(r.calls.ensure[0], ['NQ', end - 48 * 3_600_000, end]);
+  assert.ok(r.S.missing('NQ', r.calls.ensure[0][1], r.calls.ensure[0][2], end).length <= 11);
   o.destroy();
 });
 

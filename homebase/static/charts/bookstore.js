@@ -12,6 +12,7 @@ const COL = { b10: 1, a10: 2, imb1: 3, imb5: 4, imb10: 5, micro: 6, spread: 7 };
 const CHUNK_MS = 5 * 3600 * 1000;      // history is asked in aligned 5 h chunks: 18,000 samples, always 1 s steps
 const MAX_ROWS = 400_000;              // per root; the oldest go first
 const GAP_OK_MS = 120_000;             // a chunk is "covered" when its covered span is within this of its end
+const SHORT_ANSWER_MS = 30_000;          // a chunk whose answer did not cover it is not asked again for this long
 
 /* An episode that has ended carries a t1 or an `end` other than "open". The history endpoint masks an episode that
    outlives the requested `to` as open (t1 null) as of that `to`, so a chunk fetched later can hold a staler, open copy
@@ -170,7 +171,15 @@ if (typeof window !== 'undefined') {
       try {
         const q = new URLSearchParams({ root, from_ms: String(a), to_ms: String(b) });
         const r = await fetch('/api/book/history?' + q);
-        if (r.ok) { applyHistory(root, await r.json()); blocked.delete(key); }
+        if (r.ok) {
+          const body = await r.json();
+          // applyHistory's listeners run inside it and may ask again at once: hold the chunk off first, and lift the
+          // hold only when the answer really covered it. A 200 whose t1 stops short (the server's clamp, a skewed
+          // clock) is left alone for SHORT_ANSWER_MS instead of being re-requested in a tight loop.
+          blocked.set(key, Date.now() + SHORT_ANSWER_MS);
+          applyHistory(root, body);
+          if (!missing(root, a, b, Date.now()).length) blocked.delete(key);
+        }
         else {
           let detail = null;
           try { detail = (await r.json()).detail; } catch (_) { /* no JSON body */ }

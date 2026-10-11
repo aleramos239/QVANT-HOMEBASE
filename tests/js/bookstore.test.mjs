@@ -124,3 +124,59 @@ test('rows: a batch repeating the newest t replaces that row in place (order and
   assert.equal(S.meanAt('NQ', T0 + 298_000, T0 + 299_000, 'imb10'), 0.1);      // earlier rows untouched
   assert.ok(Math.abs(S.meanAt('NQ', T0 + 298_000, T0 + 302_000, 'imb10') - (0.1 + 0.8 + 0.4 + 0.5) / 4) < 1e-9);
 });
+
+/* ---- ensure (the browser half): a fresh copy of the module with a fake window and fetch ---- */
+function browserStore() {
+  const path = require.resolve('../../homebase/static/charts/bookstore.js');
+  const had = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  globalThis.window = {};
+  delete require.cache[path];
+  const B = require(path);
+  if (!had) delete globalThis.window;
+  delete require.cache[path];
+  return B;
+}
+const CHUNK = 5 * 3600 * 1000;
+const A = Math.floor(T0 / CHUNK) * CHUNK;          // an aligned chunk start
+
+test('ensure: a 200 answer that stops short of its chunk is asked once, not again for 30 s, even when a landing handler asks at once', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: A + 8 * 3600 * 1000 });   // the chunk [A, A+5h) is wholly in the past
+  const B = browserStore();
+  const asked = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const q = new URL(url, 'http://x').searchParams;
+    asked.push([Number(q.get('from_ms')), Number(q.get('to_ms'))]);
+    return { ok: true, status: 200, json: async () => ({ t0: Number(q.get('from_ms')), t1: Number(q.get('from_ms')) + 1000, samples: [], episodes: [] }) };
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  let landings = 0;
+  B.onChange((root, kind) => { if (kind === 'history' && ++landings < 50) B.ensure('NQ', A, A + CHUNK); });   // the overlay's handler
+  await B.ensure('NQ', A, A + CHUNK);
+  await new Promise((r) => setImmediate(r));
+  assert.deepEqual(asked, [[A, A + CHUNK]]);                     // once: the handler's immediate re-ask found it held off
+  await B.ensure('NQ', A, A + CHUNK);
+  t.mock.timers.tick(29_000);
+  await B.ensure('NQ', A, A + CHUNK);
+  assert.equal(asked.length, 1);                                 // still inside the 30 s
+  t.mock.timers.tick(2000);
+  await B.ensure('NQ', A, A + CHUNK);
+  assert.equal(asked.length, 2);                                 // and then once more, not a loop
+});
+
+test('ensure: an answer that covers its chunk is not held off and not asked again', async (t) => {
+  t.mock.timers.enable({ apis: ['Date'], now: A + 12 * 3600 * 1000 });
+  const B = browserStore();
+  const asked = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const q = new URL(url, 'http://x').searchParams, a = Number(q.get('from_ms')), b = Number(q.get('to_ms'));
+    asked.push([a, b]);
+    return { ok: true, status: 200, json: async () => ({ t0: a, t1: b, samples: [], episodes: [] }) };
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  await B.ensure('NQ', A, A + 2 * CHUNK);
+  await B.ensure('NQ', A, A + 2 * CHUNK);                        // the next chunk: one per call
+  await B.ensure('NQ', A, A + 2 * CHUNK);
+  assert.deepEqual(asked, [[A, A + CHUNK], [A + CHUNK, A + 2 * CHUNK]]);
+});
