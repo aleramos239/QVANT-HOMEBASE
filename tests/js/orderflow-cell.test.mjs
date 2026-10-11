@@ -107,3 +107,41 @@ test('a page that does not load the book store (the Backtest tab) draws the book
     assert.deepEqual(b.sv, {});
   } finally { globalThis.HBBookStore = saved; }
 });
+
+/* A live `update` message through the real onUpdate: a recorder stands in for the chart, the series and the markers plugin. */
+function liveCell(indicators) {
+  const rec = { markers: [] };
+  globalThis.HBDrawings = { placeMarkers: (bars, extra) => extra };
+  const c = stub({
+    cfg: { root: 'NQ', spec: 'time:60', indicators }, chart: {}, inflight: [], windowAt: null, devel: false, replay: null, dc: null,
+    R: { timezone: 'exchange' }, lines: [], ov: [], alt: null, hover: null, extMarkers: {}, realT: new Map(), tick: 0.25,
+    bars: [{ tt: 1_790_000_000, ms: 1_790_000_000_000, o: 1, h: 2, l: 0, c: 1, v: 1, d: 0, sv: {} }],
+    candles: { update() {} }, markers: { setMarkers: (m) => rec.markers.push(m) },
+    syncLastColor() {}, drawLevels() {}, syncFootprint() {}, syncProfile() {}, legend() {},
+  });
+  return { c, rec };
+}
+const closedBar = (ms, over = {}) => ({ ms, t: ms / 1000, o: 1, h: 2, l: 0, c: 1, v: 1, d: 0, ...over });
+
+test('a live update carrying a delta-divergence value redraws the markers; one without it (and no big print) does not', () => {
+  const inst = { uid: 'u', id: 'ddiv', params: { length: 5 }, visible: true };
+  const { c, rec } = liveCell([inst]);
+  c.bars.length = 0;
+  for (let i = 0; i < 8; i++) c.bars.push({ tt: 100 + i, ms: i * 60000, o: 1, h: 2, l: 0, c: 1, v: 1, d: 0, sv: {} });
+  const k = 'ddiv:5';
+  c.onUpdate({ closed: [closedBar(8 * 60000)], live: null, studies: { [k]: { closed: [{ dir: 1, ago: 5, px: 99 }], live: null } } });
+  assert.equal(rec.markers.length, 1);
+  assert.deepEqual(rec.markers[0].map((m) => [m.time, m.position, m.shape, m.color]), [[c.bars[3].tt, 'belowBar', 'arrowUp', '#0f0']]);
+  c.onUpdate({ closed: [closedBar(9 * 60000)], live: null, studies: { [k]: { closed: [null], live: null } } });
+  assert.equal(rec.markers.length, 1);             // no ddiv value, no big print: the markers are left alone
+  inst.visible = false;
+  c.onUpdate({ closed: [closedBar(10 * 60000)], live: null, studies: { [k]: { closed: [{ dir: -1, ago: 5, px: 99 }], live: null } } });
+  assert.equal(rec.markers.length, 1);             // a hidden study draws nothing
+});
+
+test('a big print still redraws the markers on an update (the existing trigger is kept)', () => {
+  const { c, rec } = liveCell([{ uid: 'u', id: 'bigprints', params: { min: 1 }, visible: true }]);
+  c.onUpdate({ closed: [closedBar(60000, { big: [[0, 0, 5, 1]] })], live: null, studies: {} });
+  assert.equal(rec.markers.length, 1);
+  assert.equal(rec.markers[0].length, 1);
+});

@@ -1156,7 +1156,9 @@ class Cell {
     }
     if (touched.length && !this.replay && this.dc && this.dc.checkAlerts) this.dc.checkAlerts();
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
-    if (touched.some((b) => b.big && b.big.length)) this.drawMarkers();
+    // a big print, or a value for a study drawn as markers (ddiv: the server puts it on the confirming bar), moves the markers
+    const markKeys = this.markerStudyKeys();
+    if (touched.some((b) => (b.big && b.big.length) || (b.sv && markKeys.some((k) => b.sv[k] != null)))) this.drawMarkers();
     this.syncLastColor();
     this.drawLevels(); this.syncFootprint();
     this.legend(this.hover);
@@ -1324,6 +1326,15 @@ class Cell {
 
   /* The markers of the studies that are drawn as markers (a catalog definition's `marks`: delta divergence). The
      server emits one on the bar that CONFIRMS a swing, `ago` bars after it; it is placed on the swing's bar. */
+  /* The server keys of the visible studies drawn as markers (a `marks` function on their catalog entry). */
+  markerStudyKeys() {
+    const out = [];
+    for (const inst of this.cfg.indicators) {
+      const t = C.TA_BY_ID[inst.id];
+      if (t && t.marks && inst.visible !== false) out.push(C.serverKey(inst));
+    }
+    return out;
+  }
   studyMarks() {
     const out = [];
     for (const inst of this.cfg.indicators) {
