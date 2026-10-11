@@ -94,6 +94,7 @@ class Stream:
     profile: Profile | None = None
     sessions: list = field(default_factory=list)   # [{date, contract, source, approx, gaps}]
     subs: dict = field(default_factory=dict)       # (conn, chart_id) -> bars already sent
+    flows: dict = field(default_factory=dict)      # (conn, chart_id) -> whether that chart draws sweeps / bubbles
     dirty: bool = False
     reset: bool = False
     partial: bool = False   # prepare() hit BUILD_BUDGET_S before loading every completed session it wanted;
@@ -102,6 +103,13 @@ class Stream:
     @property
     def key(self) -> tuple[str, str]:
         return (self.root, self.spec.key)
+
+    @property
+    def flow(self) -> bool:
+        """Whether any subscriber wants sweeps and bubbles on the bars of an update (the union of the charts'
+        `flow` flags; a sub that said nothing wants them). A stream nobody follows answers True: as a bare
+        update_since() always did."""
+        return not self.subs or any(self.flows.get(sub, True) for sub in self.subs)
 
     def commit(self, b: Bar) -> None:
         self.bars.append(b)
@@ -143,10 +151,13 @@ class Stream:
                 "profile": self.profile.value(live) if self.profile is not None else None,
                 "sessions": self.sessions, "partial": self.partial}
 
-    def update_since(self, cursor: int) -> dict:
+    def update_since(self, cursor: int, flow: bool | None = None) -> dict:
+        """The bars after `cursor` and the live one. flow: with sweeps and bubbles (default: the union of the
+        subscribers' flags, Stream.flow) -- a stream no chart draws them on sends neither, up to 4 times a second."""
         ts, live = self.tick_size, self.builder.cur
-        msg = {"type": "update", "closed": [b.wire(ts) for b in self.bars[cursor:]],
-               "live": live.wire(ts) if live is not None else None,
+        flow = self.flow if flow is None else flow
+        msg = {"type": "update", "closed": [b.wire(ts, flow=flow) for b in self.bars[cursor:]],
+               "live": live.wire(ts, flow=flow) if live is not None else None,
                "studies": {k: {"closed": self.values[k][cursor:],
                                "live": st.preview(live) if live is not None else None}
                            for k, st in self.studies.items()}}
@@ -358,11 +369,13 @@ class Hub:
         self.streams[s.key] = s
         return s
 
-    def subscribe(self, s: Stream, sub: tuple) -> None:
+    def subscribe(self, s: Stream, sub: tuple, flow: bool = True) -> None:
         s.subs[sub] = len(s.bars)
+        s.flows[sub] = flow
 
     def unsubscribe(self, sub: tuple) -> None:
         for k, s in list(self.streams.items()):
+            s.flows.pop(sub, None)
             if s.subs.pop(sub, None) is not None and not s.subs:
                 del self.streams[k]
 
@@ -428,6 +441,7 @@ class Hub:
         for k, s in list(self.streams.items()):
             for sub in [x for x in s.subs if x[0] is conn]:
                 del s.subs[sub]
+                s.flows.pop(sub, None)
             if not s.subs:
                 del self.streams[k]
 

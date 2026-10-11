@@ -132,3 +132,38 @@ def test_profile_keeps_the_prior_session_for_the_ghost_and_the_lines():
     live = b("2026-10-10", 102.0, 1)                 # the developing bar opens a new session
     v = p.value(live)
     assert v["poc"] == 102.0 and v["prev"]["poc"] == 101.0
+
+
+def _sweep_ticks(n, base_ms=0):
+    """n sweeps, one per 10 ms: a 1-lot at 100.0 and a q-lot at 100.5 in the same millisecond (3 ticks wide)."""
+    out = []
+    for i in range(n):
+        out += [T(base_ms + i * 10, 100.0, 1), T(base_ms + i * 10, 100.5, 1 + (i * 7) % 23)]
+    return out
+
+
+def test_a_bar_keeps_only_the_largest_sweep_cap_in_time_order_and_the_same_ones_every_build():
+    from homebase.charts.bars import SW_CAP
+
+    ticks = _sweep_ticks(500) + [T(61_000, 100.0)]
+    a, _ = build(ticks, M1, TS)
+    b, _ = build(ticks, M1, TS)
+    sw = a[0].sw
+    assert len(sw) == SW_CAP and sw == b[0].sw
+    assert [r[0] for r in sw] == sorted(r[0] for r in sw)                 # time order
+    sizes = sorted((1 + (i * 7) % 23 + 1 for i in range(500)), reverse=True)
+    assert sorted((r[3] for r in sw), reverse=True) == sizes[:SW_CAP]     # the largest, no smaller one in
+    assert len(a[0].wire(TS)["sw"]) <= SW_CAP
+    cur = build(_sweep_ticks(500), M1, TS)[1]                             # still developing: the wire is capped too
+    assert len(cur.wire(TS)["sw"]) <= SW_CAP
+
+
+def test_merging_capped_bars_stays_capped_and_equals_the_direct_build():
+    from homebase.charts.bars import SW_CAP
+
+    ticks = _sweep_ticks(300, 0) + _sweep_ticks(300, 60_000) + [T(121_000, 100.0)]
+    m1, _ = build(ticks, M1, TS)
+    assert len(m1[0].sw) == SW_CAP and len(m1[1].sw) == SW_CAP
+    via = resample(m1, BarSpec.parse("time:120"))
+    direct, _ = build(ticks, BarSpec.parse("time:120"), TS)
+    assert len(via[0].sw) == SW_CAP and via[0].sw == direct[0].sw

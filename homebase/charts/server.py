@@ -1920,7 +1920,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     await asyncio.to_thread(hub.ensure_prime, s, keys)   # sessions the new studies read (noise band ...)
                     for k in keys:
                         s.add_study(k)
-                    hub.subscribe(s, (conn, cid))
+                    hub.subscribe(s, (conn, cid), bool(msg.get("flow", True)))
                     # fp / big: a chart that draws no footprint / no big prints asks for its bars without
                     # them (cell.js need()); a sub that says nothing gets both, as before
                     conn.send({"type": "history", "id": cid,

@@ -803,3 +803,49 @@ def test_ensure_prime_reaches_back_further_for_a_study_added_later(tmp_path):
     assert s.values["dhl:5"][0] is not None
     hub.ensure_prime(s, ["ema:3"])                                # nothing new to read: nothing reloaded
     assert s.prime_n == 6
+
+
+def _flow_wire(m):
+    return {"closed": [("sw" in b, "bub" in b) for b in m["closed"]],
+            "live": None if m["live"] is None else ("sw" in m["live"], "bub" in m["live"])}
+
+
+def test_updates_carry_sweeps_and_bubbles_only_while_a_subscriber_wants_flow(tmp_path):
+    hub, today, _ = setup(tmp_path)
+    hub.start_today("NQ", D, ticks_of(today[:90]))
+    s = hub.attach(hub.prepare("NQ", M1, ["vwap"]))
+    hub.subscribe(s, ("conn", "plain"), flow=False)
+    assert s.flow is False
+    m = s.update_since(0)
+    assert m["live"] is not None and _flow_wire(m)["live"] == (False, False)
+    assert not any(sw or bub for sw, bub in _flow_wire(m)["closed"])
+    hub.subscribe(s, ("conn", "flow"), flow=True)
+    assert s.flow is True
+    m = s.update_since(0)
+    assert _flow_wire(m)["live"] == (True, True)
+    assert all(sw and bub for sw, bub in _flow_wire(m)["closed"]) and m["closed"]
+    # a sub that says nothing wants it, as before
+    hub.subscribe(s, ("conn", "silent"))
+    assert s.flow is True
+    # recomputed when the flow subscribers leave
+    hub.unsubscribe(("conn", "flow"))
+    assert s.flow is True                         # "silent" still wants it
+    hub.unsubscribe(("conn", "silent"))
+    assert s.flow is False
+    assert _flow_wire(s.update_since(0))["live"] == (False, False)
+    hub.drop_conn("conn")
+    assert hub.streams == {}
+
+
+def test_drain_updates_follow_the_union_of_the_subscribers_flow_flags(tmp_path):
+    hub, today, clock = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = hub.attach(hub.prepare("NQ", M1, ["vwap"]))
+    hub.subscribe(s, ("conn", "c1"), flow=False)
+    hub.on_ticks("NQ", today[:20])
+    (_, msg), = hub.drain()
+    assert "sw" not in msg["live"] and "bub" not in msg["live"]
+    hub.subscribe(s, ("conn", "c2"), flow=True)
+    hub.on_ticks("NQ", today[20:40])
+    out = dict(hub.drain())
+    assert "sw" in out[("conn", "c1")]["live"] and "bub" in out[("conn", "c2")]["live"]

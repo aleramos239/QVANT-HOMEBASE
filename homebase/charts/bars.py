@@ -23,6 +23,7 @@ BIG_MIN = 10        # prints of >= this many contracts are kept per bar
 SWEEP_TICKS = 2     # a burst of same-side prints inside one millisecond that spans >= this many ticks is a sweep
 BUB_MIN = 3         # trade bubbles: contracts printed in one second at one price on one side, at least this many
 BUB_CAP = 60        # ... and at most this many per bar (the largest)
+SW_CAP = 60         # sweeps kept per bar: the largest (a 1D bar of an NQ day would otherwise carry ~11,000)
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,14 @@ def _cap_bubbles(rows: list) -> list:
     always keep the same rows however the bar was assembled."""
     rows.sort(key=lambda r: (-r[2], r[0], r[1], r[3]))
     return sorted(rows[:BUB_CAP], key=lambda r: (r[0], r[1], r[3]))
+
+
+def _cap_sweeps(rows: list) -> list:
+    """The SW_CAP largest sweeps ([ts_ms, from, to, size, side]), in time order; a tie on size is broken by time,
+    then price, so the same prints always keep the same rows however the bar was assembled. A new list."""
+    if len(rows) > SW_CAP:
+        rows = sorted(rows, key=lambda r: (-r[3], r[0], r[1], r[2], r[4]))[:SW_CAP]
+    return sorted(rows, key=lambda r: (r[0], r[1], r[2], r[4]))
 
 
 @dataclass
@@ -135,7 +144,8 @@ class Bar:
     def _flush_group(self, tick_size: float) -> None:
         g, self._g = self._g, None
         if g is not None and g[5] >= 2 and g[3] - g[2] >= SWEEP_TICKS:
-            self.sw.append([g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]])
+            row = [g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]]
+            self.sw = _cap_sweeps(self.sw + [row]) if len(self.sw) >= SW_CAP else self.sw + [row]
 
     def seal(self, tick_size: float) -> None:
         """The bar is closed: finish the sweep group and fold the developing bubbles into the capped list."""
@@ -178,7 +188,7 @@ class Bar:
             cell[1] += b
         self.big.extend(list(x) for x in other.big)
         self.te = max(self.te, other.te)
-        self.sw.extend(list(x) for x in other.sw)
+        self.sw = _cap_sweeps([list(x) for x in self.sw] + [list(x) for x in other.sw])
         self.bub = _cap_bubbles([list(x) for x in self.bub] + [list(x) for x in other.bub])
         for bk, q in other._bd.items():
             self._bd[bk] = self._bd.get(bk, 0) + q
@@ -195,9 +205,9 @@ class Bar:
         if big:
             d["big"] = self.big
         if flow:
-            d["sw"] = self.sw + ([[self._g[0], round(self._g[2] * tick_size, 6), round(self._g[3] * tick_size, 6),
-                                   self._g[4], self._g[1]]]
-                                 if self._g and self._g[5] >= 2 and self._g[3] - self._g[2] >= SWEEP_TICKS else [])
+            g = self._g
+            d["sw"] = _cap_sweeps(self.sw + ([[g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]]]
+                                             if g and g[5] >= 2 and g[3] - g[2] >= SWEEP_TICKS else []))
             d["bub"] = self._bubbles(tick_size) if self._bd else self.bub
         if fp:
             d["fp"] = [[round(k * tick_size, 6), s, b] for k, (s, b) in sorted(self.fp.items())]
