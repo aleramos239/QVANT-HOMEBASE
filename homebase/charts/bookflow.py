@@ -8,10 +8,12 @@ print that carries the same stamp.
 
 Output is a list of plain dicts (JSON-ready), from every call:
   {"k": "sample", "t": ms, "row": [t, b10, a10, imb1, imb5, imb10, micro, spread_ticks]}   once per second
-  {"k": "ep", ...episode...}   an order level's life: when it is first worth showing (>= MIN_EPISODE_MS old),
+  {"k": "ep", ...episode...}   an order level's life: when it is first worth showing (>= TUNING["min_episode_ms"] old),
                                when it is flagged as absorbing, and when it ends
 An episode is "big" when its level shows >= OPEN_RATIO x the median level size of the last MEDIAN_WINDOW_S
 seconds of books (both sides pooled, top 10 each), and stays one until it falls under CLOSE_RATIO x.
+A side with no levels at all on a book line (an empty or one-sided snapshot) says nothing about that side's
+open episodes: they are left as they were. A missing level on a non-empty side reads as size 0.
 
 Every number that decides a verdict is in TUNING: first-guess definitions the owner reviews on real days.
 """
@@ -82,6 +84,8 @@ class _Ep:
         return f"{self.side}{self.idx}_{self.t0}"
 
     def wire(self) -> dict:
+        """The event a consumer merges by `id`. "pk" is the peak size; "r" is the PEAK ratio to the trailing median
+        over the episode's life (not the ratio when it opened); "d0" is the ticks from the touch when it opened."""
         return {"k": "ep", "id": self.id, "s": self.side, "p": self.px, "t0": self.t0, "t1": self.t1,
                 "pk": self.peak, "r": round(self.ratio, 2), "tr": self.traded, "end": self.end,
                 "ab": self.abs_t, "d0": self.dist0}
@@ -172,6 +176,8 @@ class BookTracker:
         best_bid = bids[0][0] if bids else None
         best_ask = offers[0][0] if offers else None
         for key, ep in list(self._eps.items()):
+            if not (bids if ep.side == "b" else offers):
+                continue              # a side with no levels on this line is no information: leave its episodes be
             cur = present.get(key)
             size = cur[1] if cur else 0
             ratio = size / med if med > 0 else 0.0

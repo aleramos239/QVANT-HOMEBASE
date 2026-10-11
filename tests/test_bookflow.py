@@ -153,3 +153,42 @@ def test_a_print_before_any_book_is_harmless():
     out = tr.on_book(2000, *book()) + tr.flush(4000)
     ts = [e["row"][0] for e in out if e["k"] == "sample"]
     assert ts and ts == sorted(set(ts))                                # ascending, one row a second
+
+
+def _two_walls(tr):
+    """warm, then a bid wall and an ask wall that are old enough to be shown; returns (events, t of the last line)."""
+    ev = warm(tr, 12)
+    t = 12_000
+    walls = book(big={('b', 3): 200, ('a', 3): 200})
+    ev += tr.on_book(t, *walls)
+    ev += tr.on_book(t + 3500, *walls)
+    return ev, t + 3500, walls
+
+
+def test_an_empty_book_line_is_no_information_for_open_episodes():
+    tr = BookTracker(TICK)
+    ev, t, walls = _two_walls(tr)
+    shown = {e["id"]: e["t0"] for e in eps(ev)}
+    assert len(shown) == 2 and {e["s"] for e in eps(ev)} == {"b", "a"}
+    mid = tr.on_book(t + 500, [], [])                                  # a transient empty snapshot
+    mid += tr.on_book(t + 1000, *walls)                                # the same book again
+    assert [e for e in eps(mid) if e["end"] != "open"] == []           # nothing pulled / faded by the gap
+    assert [e for e in eps(mid) if e["id"] not in shown or e["t0"] != shown[e["id"]]] == []
+    end = eps(tr.finish())
+    assert {e["id"]: e["t0"] for e in end} == shown                    # same two episodes, t0 unchanged, none re-opened
+    assert {e["end"] for e in end} == {"faded"}
+
+
+def test_a_one_sided_book_line_keeps_the_missing_side_and_updates_the_other():
+    tr = BookTracker(TICK)
+    ev, t, walls = _two_walls(tr)
+    shown = {e["id"]: (e["s"], e["t0"]) for e in eps(ev)}
+    bids_plain = book()[0]
+    mid = tr.on_book(t + 500, bids_plain, [])                          # offers empty; the bid wall is really gone
+    ended = [e for e in eps(mid) if e["end"] != "open"]
+    assert len(ended) == 1 and ended[0]["s"] == "b" and ended[0]["end"] in ("pulled", "faded")
+    assert [e for e in eps(mid) if e["s"] == "a"] == []                # the ask wall: untouched
+    mid = tr.on_book(t + 1000, *walls)                                 # book returns with the ask wall still there
+    assert [e for e in eps(mid) if e["s"] == "a" and (e["end"] != "open" or e["id"] not in shown)] == []
+    ask = [e for e in eps(tr.finish()) if e["s"] == "a"]
+    assert len(ask) == 1 and shown[ask[0]["id"]] == ("a", ask[0]["t0"])   # same id and t0 as when first shown
