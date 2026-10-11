@@ -91,6 +91,7 @@ BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 NO_YESTERDAY = "Yesterday's prices are not stored yet."
 TOO_LATE = "Started too late to follow today."
+EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
 PROBLEM = "Stopped: the runner had a problem."
 NO_STREAM = "No prices: the chart service is not answering."
@@ -166,8 +167,26 @@ def _at(v, shape) -> bool:
     return True
 
 
+def _at_eve(v, shape) -> bool:
+    """_at, for a time that may lead with "-" (the evening before the session's date: "-20:00")."""
+    return isinstance(v, str) and _at(v[1:] if v.startswith("-") else v, shape)
+
+
 def _window(w) -> bool:
-    return isinstance(w, list) and len(w) == 2 and _at(w[0], _HHMM) and _at(w[1], _HHMM) and w[0] < w[1]
+    """Two "HH:MM" with start < end. A start with a leading "-" is the evening before the session's date and is earlier
+    than any end on the date itself (a window cannot END the evening before, nor start after it ends)."""
+    if not (isinstance(w, list) and len(w) == 2):
+        return False
+    if isinstance(w[0], str) and w[0].startswith("-"):
+        return _at_eve(w[0], _HHMM) and _at(w[1], _HHMM)
+    return _at(w[0], _HHMM) and _at(w[1], _HHMM) and w[0] < w[1]
+
+
+def _since(t0_ns: int, t_ns: int) -> str:
+    """"HH:MM" of the minutes since the window opened. An evening-before window cannot be ordered by the wall clock
+    ("20:05" is after "15:57" as a string, and before it in the session), so its door reads this key instead."""
+    m = max(0, (t_ns - t0_ns) // 60_000_000_000)
+    return f"{m // 60:02d}:{m % 60:02d}"
 
 
 def well_set(meta, root, exec_root: str = "") -> bool:
@@ -182,7 +201,7 @@ def well_set(meta, root, exec_root: str = "") -> bool:
             and _window(meta.get("session_window"))
             and (meta.get("bar_window") is None or _window(meta["bar_window"]))
             and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
-            and isinstance(times, list) and len(times) <= 500 and all(_at(t, _HMS) for t in times)
+            and isinstance(times, list) and len(times) <= 500 and all(_at_eve(t, _HMS) for t in times)
             and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool))
 
 
@@ -528,6 +547,7 @@ class StrategyDay:
         self._saved_key = None
         self._saved_at = float("-inf")
         self._updated = _utc()
+        self._evening = False                        # a window that opens the evening before the date (set by _start)
         self._desk_init(desk, send, tell, resume, now_ns, flat_et)    # (desk mode's own fields; nothing read or sent)
         try:
             self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns)
@@ -573,7 +593,11 @@ class StrategyDay:
             raise _Stop(TOO_LATE)
         self.rebuilt = now_ns is not None and now_ns > self._t0
         self._tick = tick_size(root)
-        self._limits = {**SHADOW, "last_entry_et": w1[:5], "session_from_et": w0[:5],
+        self._evening = w0.startswith("-")           # the session opens the evening before its date: shadow only
+        if self._evening and self._desk is not None:     # (nothing books it: labdesk.check_book; this is the second lock)
+            raise _Stop(EVENING_DESK)
+        self._limits = {**SHADOW, "last_entry_et": _since(self._t0, self._t1) if self._evening else w1[:5],
+                        "session_from_et": "00:00" if self._evening else w0[:5],
                         "point_value": point_value(ex or root) or 0.0, "tick": self._tick,
                         "own_size": record.get("own_size") is True}
         # the schedule, run_session's: by time, then session < bar < time, then index
@@ -714,7 +738,8 @@ class StrategyDay:
         if kind == "session":
             msg["daily"] = daily
         seen = {"flat": f.flat, "working_entries": f.working_entries, "entries_today": self._entries,
-                "last_price": last, "now_hhmm": _hms(t)[:5], "prices_late": self._late.late or self._silent}
+                "last_price": last, "now_hhmm": _since(self._t0, t) if self._evening else _hms(t)[:5],
+                "prices_late": self._late.late or self._silent}
         intents = self._child.ask(msg, self._deadline).get("intents")
         if not isinstance(intents, list) or not all(well_formed(i) for i in intents):
             raise _Stop(GONE)

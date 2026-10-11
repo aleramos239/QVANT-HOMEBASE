@@ -469,6 +469,10 @@ class LabDesk:
         """Weekdays, ET, between the strategy's window start and end: the runner is (or may be) hosting its day."""
         w = rec.get("session_window")
         now = self.engine.now_et()
+        if labcfg.evening(rec):                  # opens the evening before: from that evening, and until the end on its date
+            a, b = (dt.time.fromisoformat(x) for x in labcfg.window(rec))
+            tomorrow = (now + dt.timedelta(days=1)).weekday() < 5
+            return (now.time() >= a and tomorrow) or (now.time() < b and now.weekday() < 5)
         try:
             a, b = (dt.time.fromisoformat(str(x)[:5]) for x in w)
         except (TypeError, ValueError):
@@ -538,6 +542,8 @@ class LabDesk:
             return
         mine = self.is_lab(name)
         if mine:
+            if rows and labcfg.evening(labcfg.record_of(self.cfg, name) or {}):
+                raise Refused(labcfg.SAY_EVENING)
             limits = labcfg.limits_of(self.cfg, name)
             if rows and limits is None:
                 raise Refused(SET_LIMITS_FIRST)

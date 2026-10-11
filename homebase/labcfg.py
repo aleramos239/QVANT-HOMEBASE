@@ -80,6 +80,7 @@ SAY_QTY = "Contracts: a whole number from 1 to 10."
 SAY_RISK = "At risk per trade: a dollar amount above 0, like 300 or 300.50."
 SAY_LAST = "No new trade after: a time like 11:00, before the flat time."
 SAY_FLAT = "Flat by: a time like 15:55, no later than 15:55."
+SAY_EVENING = "It starts the evening before. The Desk runs it in shadow only for now: it cannot be booked on an account."
 
 
 def desk_id(name: str) -> str:
@@ -121,9 +122,22 @@ def _hhmm(v) -> bool:
     return isinstance(v, str) and HHMM.fullmatch(v) is not None
 
 
+def evening(rec) -> bool:
+    """The record's session opens the evening before its date (a window start with a leading "-", e.g. "-20:00": the
+    tester reads such windows, labrun hosts them in SHADOW). The Desk's own time-of-day logic (accept from / until,
+    flat, the engine's clock checks) cannot order a session across midnight, so such a record is never booked on an
+    account: no limits, no book, no settings change while its session runs (2026-10-11)."""
+    w = rec.get("session_window") if isinstance(rec, dict) else None
+    return (isinstance(w, (list, tuple)) and len(w) == 2 and isinstance(w[0], str) and w[0].startswith("-")
+            and _hhmm(w[0][1:]) and _hhmm(w[1]))
+
+
 def window(rec: dict) -> tuple[str, str]:
-    """The record's session window as two "HH:MM" strings; the Strategy's default one when it does not read."""
+    """The record's session window as two "HH:MM" strings; the Strategy's default one when it does not read. An
+    evening-before window reads as its clock times (no sign): shown as is, and never usable for limits (see evening)."""
     w = rec.get("session_window")
+    if evening(rec):
+        return w[0][1:], w[1]
     if isinstance(w, (list, tuple)) and len(w) == 2 and _hhmm(w[0]) and _hhmm(w[1]):
         return w[0], w[1]
     return store.DEFAULT_WINDOW[0], store.DEFAULT_WINDOW[1]
@@ -149,6 +163,8 @@ def window_note(rec: dict, limits: LabLimits | None) -> str | None:
 
 def parse_limits(body, rec: dict) -> LabLimits:
     """The limits the owner typed, checked. A ValueError carries the one sentence the dialog shows."""
+    if evening(rec):
+        raise ValueError(SAY_EVENING)
     if not isinstance(body, dict):
         raise ValueError(SAY_TRADES)
     trades, qty, risk = body.get("max_trades_day"), body.get("max_qty"), body.get("max_risk_usd")
@@ -189,7 +205,7 @@ def derive_limits(rec: dict) -> LabLimits | None:
     and is flat when the window ends (never later than 15:55). The dollars at risk are not capped (0 = not set): its
     stop is in its code. None for a record without `auto_limits` (an older promotion): the owner sets limits as before."""
     a = rec.get("auto_limits") if isinstance(rec, dict) else None
-    if not isinstance(a, dict):
+    if not isinstance(a, dict) or evening(rec):  # (an evening-before session has no Desk limits: it is shadow only)
         return None
     n, qty = a.get("max_trades_day"), rec.get("qty")
     if rec.get("own_size") is True:              # it sizes each trade itself: the cap is the Desk's own most (10)
