@@ -14,6 +14,7 @@ def _patch_run(monkeypatch, captured):
 
     def fake_run(app, **kw):
         assert app == "the app"
+        captured["uvicorn"] = kw
 
     monkeypatch.setattr(main_mod, "create_app", fake_create_app)
     monkeypatch.setattr(main_mod.uvicorn, "run", fake_run)
@@ -35,3 +36,24 @@ def test_live_mode_passes_the_real_http_get(monkeypatch):
     assert captured["replay"] is None
     assert captured["calendar_fetch"] is main_mod.http_get
     assert captured["news_fetch"] is main_mod.news_http_get
+
+
+def test_the_loopback_socket_is_not_compressed(monkeypatch):
+    """permessage-deflate would run zlib over every multi-megabyte history message on the event loop."""
+    captured: dict = {}
+    _patch_run(monkeypatch, captured)
+    assert main_mod.main([]) == 0
+    assert captured["uvicorn"]["ws_per_message_deflate"] is False
+
+
+def test_the_event_loop_gets_a_short_gil_slice(monkeypatch):
+    """Worker threads (bars from ticks, prop simulations) hold the GIL in 5 ms slices; the loop must not queue
+    behind each of them for a whole slice on every re-acquire."""
+    import sys
+    before = sys.getswitchinterval()
+    try:
+        _patch_run(monkeypatch, {})
+        assert main_mod.main([]) == 0
+        assert sys.getswitchinterval() == main_mod.SWITCH_INTERVAL_S < 0.005
+    finally:
+        sys.setswitchinterval(before)

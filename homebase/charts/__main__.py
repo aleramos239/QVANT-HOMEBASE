@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import sys
 
 import uvicorn
 
@@ -18,6 +19,7 @@ from .server import create_app
 
 # the real desk, the chart service, the replays: kept equal to tools/fake_desk.py's FORBIDDEN_PORTS (a test checks)
 FAKE_DESK_REFUSED_PORTS = frozenset({8850, 8852, 8853, 8854})
+SWITCH_INTERVAL_S = 0.0005     # the GIL slice (see main())
 
 
 def main(argv=None) -> int:
@@ -65,7 +67,14 @@ def main(argv=None) -> int:
                      fake_desk_factory=(lambda fan: DeskLink(
                          fan, key_path=state_dir() / "fake-desk.key", url=f"http://127.0.0.1:{a.fake_desk}"))
                      if a.fake_desk is not None else None)
-    uvicorn.run(app, host=a.host, port=a.port, log_level="warning")
+    # The event loop shares the GIL with the worker threads that build bars from ticks and run the Desk's prop
+    # simulations: at the 5 ms default every GIL re-acquire the loop makes waits a full slice behind each busy
+    # thread, so a trivial request took 1.6 s (p50) while charts loaded. A 0.5 ms slice gives the loop its turn.
+    sys.setswitchinterval(SWITCH_INTERVAL_S)
+    # ws_per_message_deflate=False: the page is on this machine's loopback, so compressing every history / older
+    # message (megabytes with sweeps and bubbles) bought nothing and ran zlib on the event loop thread; the lag
+    # watchdog caught it 3+ s late inside permessage_deflate.encode
+    uvicorn.run(app, host=a.host, port=a.port, log_level="warning", ws_per_message_deflate=False)
     return 0
 
 
