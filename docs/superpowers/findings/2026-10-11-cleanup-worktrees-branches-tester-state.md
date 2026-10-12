@@ -15,7 +15,7 @@ The owner asked to inspect the app and clean up dead weight, speed it up, clean 
 | `.worktrees/*` merged + clean (9) | ~25 GB | 0 | same; kept the ones with unmerged commits, uncommitted work or active sessions |
 | local branches | 139 | 14 | `git branch -d` (merged only); 2 unmerged + worktree-held kept |
 | `homebase/.state/tester` | 11 GB (776 runs, 242 grids) | 4.9 GB | new `python -m homebase.backtest.prune --days 7 --yes`: unreferenced from ~/.homebase, not running |
-| repo directory | 91 GB | ~25 GB | |
+| repo directory | 91 GB | 33 GB (14 GB of it live worktrees, 9.4 GB state, 7.8 GB research) | |
 
 - Nothing in the app ever deleted a run, heat map or walk-forward; the lists the Lab loads grew with them.
 - A walk-forward folder holds its own `spends.jsonl` (the test-days ledger). The prune tool appends those lines
