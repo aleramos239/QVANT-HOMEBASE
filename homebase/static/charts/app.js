@@ -219,7 +219,7 @@ function hostFor(id) {
     },
     onLoaded,
     onRefused,
-    onSettings(cell, uid) { settingsDialog(cell, uid); },
+    onSettings(cell, uid, tab) { settingsDialog(cell, uid, tab); },
     onChartSettings(cell) { chartSettings(cell); },
     onPosition(cell, d) { positionDialog(cell, d); },
     onDrawingSettings(cell, d) { drawingSettingsDialog(cell, d); },
@@ -1292,10 +1292,11 @@ function indicatorsDialog() {
   body.append(groups, list);
   box.append(search, body);
   let group = indFavs.length ? C.FAV_GROUP : 'All';      // the starred ones first, once there are any
+  let helpOpen = null;                                   // the indicator whose guide is folded open under its row
   const render = () => {
     const q = input.value.trim(), hits = C.filter(q, group, indFavs);
     const had = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;   // keyboard focus
-    list.replaceChildren(...hits.map((d) => {
+    list.replaceChildren(...hits.flatMap((d) => {
       const row = mk('button', 'dlg-row has-desc');
       row.type = 'button';
       row.title = `Add ${d.name} — ${d.desc}`;
@@ -1304,6 +1305,16 @@ function indicatorsDialog() {
       const txt = mk('span', 'dlg-txt');
       txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', d.desc));
       row.append(txt);
+      const g = window.HBGuide && window.HBGuide.get(d.id);
+      if (g) {   // "?": the plain-words guide, folded open under the row (a click on it never adds the indicator)
+        const help = mk('span', 'dlg-help');
+        help.setAttribute('role', 'button');
+        help.title = 'What it is and how to read it';
+        help.setAttribute('aria-label', `How to read ${d.name}`);
+        help.replaceChildren(icon('help'));
+        help.onclick = (e) => { e.stopPropagation(); helpOpen = helpOpen === d.id ? null : d.id; render(); };
+        row.append(help);
+      }
       if (q && group === 'All') row.append(mk('span', 'dlg-grp', d.group));
       if (c.cfg.indicators.some((x) => x.id === d.id)) row.append(icon('check'));
       const star = mk('span', 'dlg-star' + (indFavs.includes(d.id) ? ' on' : ''));       // starred: it joins the Favorites group
@@ -1322,7 +1333,18 @@ function indicatorsDialog() {
         c.update({ indicators: [...c.cfg.indicators, inst] });
         render();
       };
-      return row;
+      const g2 = helpOpen === d.id && window.HBGuide && window.HBGuide.get(d.id);
+      if (!g2) return [row];
+      const box2 = mk('div', 'dlg-guide');
+      box2.append(mk('p', 'guide-what', g2.what));
+      for (const [key, title] of [['see', 'What you see'], ['read', 'How to read it'], ['use', 'How to use it']]) {
+        box2.append(mk('h4', 'guide-h', title));
+        const ul = mk('ul', 'guide-list');
+        for (const t of g2[key]) ul.append(mk('li', '', t));
+        box2.append(ul);
+      }
+      if (g2.watch) box2.append(mk('p', 'guide-watch', g2.watch));
+      return [row, box2];
     }));
     if (!hits.length) {
       list.appendChild(mk('div', 'dlg-empty', group === C.FAV_GROUP && !q ? 'Star an indicator (the star on its row) and it is here.' : 'No indicators match'));
@@ -1350,12 +1372,12 @@ function indicatorsDialog() {
 
 /* The gear on a legend row (or the indicator's own menu): the TradingView-style Inputs/Style dialog
    (indicator-settings-dialog.js). Nothing to show for an indicator with no params and no Style tab. */
-function settingsDialog(cell, uid) {
+function settingsDialog(cell, uid, tab) {
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
   if (!d) return;     // every indicator has its legend option, so every one has a dialog (2026-10-11)
   const box = openDialog(d.name, 'settings indicator-settings');
   const ctl = window.HBIndicatorSettings.mount(box, {
-    cell, uid,
+    cell, uid, tab,
     toggleMenu(anchor, cls, fill) {
       if (menuAnchor === anchor) { closeMenu(); return; }
       fill(openMenu(anchor, cls, { root: box }));

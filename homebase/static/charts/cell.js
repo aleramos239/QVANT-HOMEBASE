@@ -823,7 +823,7 @@ class Cell {
     };
     for (const l of [this.eth, this.gaps, this.start, this.prof, this.fp, this.hl, this.cd, this.evl]) this.candles.attachPrimitive(l);
     this.lines = []; this.levelLines = {}; this.colorOf = {}; this.hover = null;
-    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { this.syncFootprint(); this.evTip.hidden = true; this.askOlder(r); });
+    this.chart.timeScale().subscribeVisibleLogicalRangeChange((r) => { this.syncFootprint(); this.evTip.hidden = true; this.askOlder(r); this.refreshStatus(); });
     this.chart.subscribeCrosshairMove((p) => {
       this.hover = p && p.logical != null ? Math.round(p.logical) : null;
       this.legend(this.hover);
@@ -1034,6 +1034,7 @@ class Cell {
       const hasSettings = true;   // every indicator has its Style tab (at least the legend option)
       btns.append(iconButton(off ? 'eyeOff' : 'eye', off ? 'Show' : 'Hide', 'eye'));
       if (hasSettings) btns.append(iconButton('gear', 'Settings', 'gear'));
+      if (window.HBGuide && window.HBGuide.get(inst.id)) btns.append(iconButton('help', 'What it is and how to read it', 'help'));
       btns.append(iconButton('x', 'Remove', 'x'));
       if (C.movable(inst.id)) {   // TradingView's "More": move to the price pane / to a pane below
         const more = iconButton('ellipsis', 'More', 'more');
@@ -1042,19 +1043,70 @@ class Cell {
         btns.append(more);
       }
       row.dataset.uid = inst.uid;
-      row.append(mk('span', 'lg-label', S.legendLabel(C.label(inst), hasParams, F)), vals, btns);
-      return { inst, row, vals };
+      const note = mk('span', 'lg-note');
+      note.hidden = true;
+      row.append(mk('span', 'lg-label', S.legendLabel(C.label(inst), hasParams, F)), vals, note, btns);
+      return { inst, row, vals, note };
     });
     this.lg.inds.replaceChildren(...this.rows.map((r) => r.row));
+    this.refreshStatus();
+  }
+
+  /* The facts HBStatus.of reads: the bars in view, whether the footprint's numbers fit, what the Level 2 book holds
+     for this span. Cheap: a few lookups, no scan of the whole history. */
+  statusFacts() {
+    const n = this.bars.length, ts = this.chart.timeScale(), vr = ts.getVisibleLogicalRange();
+    const i0 = vr ? Math.max(0, Math.floor(vr.from)) : 0, i1 = vr ? Math.min(n - 1, Math.ceil(vr.to)) : n - 1;
+    const f = { bars: this.bars, i0, i1, readable: !this.fp || this.fp.readable(), M: window.HBFlowMath, E: window.HBBookEvents };
+    const Bk = window.HBBookStore, first = this.bars[i0], last = this.bars[i1];
+    if (Bk && first && last) {
+      const t0 = first.ms, t1 = last.ms + (this.isTime() ? this.barMs() : 0) + 1, root = this.cfg.root, cov = Bk.covered(root);
+      f.book = { rows: Bk.rowCount(root), covered: cov.some((c) => c[0] < t1 && c[1] > t0),
+        live: cov.some((c) => c[1] >= Date.now() - 120000) };
+      if (this.cfg.indicators.some((x) => ['bigorders', 'absorb', 'pulled', 'iceberg'].includes(x.id))) f.episodes = Bk.episodes(root, t0, t1);
+    }
+    return f;
+  }
+
+  /* A note beside an indicator's name when it shows nothing (or how much it shows): at most every 350 ms. */
+  refreshStatus() {
+    if (this.statusTimer || !this.chart) return;
+    this.statusTimer = setTimeout(() => { this.statusTimer = 0; this.paintStatus(); }, 350);
+  }
+  paintStatus() {
+    const H = window.HBStatus;
+    if (!H || !this.chart || !this.bars.length || !this.rows) return;
+    let f = null;
+    for (const r of this.rows) {
+      f = f || this.statusFacts();
+      let s = null;
+      try { s = H.of(r.inst, f); } catch (_) { s = null; }      // a note never breaks the legend
+      r.note.hidden = !s;
+      r.note.className = 'lg-note' + (s ? ` ${s.tone}` + (s.act ? ' act' : '') : '');
+      r.note.textContent = s ? s.text : '';
+      if (s && s.act) r.note.dataset.act = s.act; else delete r.note.dataset.act;
+      r.note.title = s ? (s.act === 'zoom' ? 'Click to zoom in' : s.text) : '';
+    }
+  }
+
+  /* Zoom so the footprint's numbers fit: the newest bars, about 70 px each. */
+  zoomToRead() {
+    const n = this.bars.length;
+    if (!this.chart || !n) return;
+    const k = Math.max(6, Math.floor((this.box.clientWidth || 600) / 70));
+    this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - k, to: n + 1 });
   }
 
   onLegendClick(e) {
+    const note = e.target.closest('.lg-note[data-act]');
+    if (note) { if (note.dataset.act === 'zoom') this.zoomToRead(); return; }
     const b = e.target.closest('button[data-act]');
     if (!b) return;
     const uid = b.closest('.lg-row').dataset.uid, inst = this.cfg.indicators.find((x) => x.uid === uid);
     if (!inst) return;
     if (b.dataset.act === 'eye') this.setVisible(uid, inst.visible === false);
     else if (b.dataset.act === 'gear') this.host.onSettings(this, uid);
+    else if (b.dataset.act === 'help') this.host.onSettings(this, uid, 'guide');
     else if (b.dataset.act === 'more') this.host.onIndicatorMenu(this, uid, { anchor: b });
     else this.removeIndicator(uid);
   }
@@ -1193,6 +1245,7 @@ class Cell {
     this.syncLastColor();
     this.drawLevels(); this.syncFootprint();
     this.legend(this.hover);
+    this.refreshStatus();
     for (const o of this.ov) if (o.onBars) o.onBars();
   }
 

@@ -44,9 +44,12 @@ function mount(box, host) {
   let style = inst.style ? JSON.parse(JSON.stringify(inst.style))
     : lineKeys ? C.defaultStyle(inst.id, cell.cfg.indicators.filter((x) => x.uid !== uid)) : null;
   const TABS = [];
+  const guide = window.HBGuide && window.HBGuide.get(inst.id);
   if (d.params.length) TABS.push({ id: 'inputs', label: 'Inputs' });         // a style-only indicator (volume, cum delta) opens on Style
   TABS.push({ id: 'style', label: 'Style' });
-  let tab = 0, done = false, raf = 0;
+  if (guide) TABS.push({ id: 'guide', label: 'How to read' });
+  const first = TABS.findIndex((t) => t.id === host.tab);                   // the legend's "?" opens on the guide
+  let tab = first < 0 ? 0 : first, done = false, raf = 0;
 
   const body = mk('div', 'set-body'), tabsEl = mk('div', 'set-tabs'), pane = mk('div', 'set-pane'), foot = mk('div', 'set-foot');
   tabsEl.setAttribute('role', 'tablist');
@@ -88,8 +91,25 @@ function mount(box, host) {
     host.closeMenu();
     pane.replaceChildren();
     if (TABS[tab].id === 'style') pane.append(...stylePane());
+    else if (TABS[tab].id === 'guide') pane.append(guidePane());
     else pane.append(...d.params.map(inputRow));
     pane.scrollTop = 0;
+  }
+
+  /* ---- How to read: the plain-words guide (guide-*.js) and, when it has one, what this chart shows right now ---- */
+  function guidePane() {
+    const wrap = mk('div', 'guide');
+    wrap.append(mk('p', 'guide-what', guide.what));
+    const now = window.HBStatus && cell.statusFacts ? (() => { try { return window.HBStatus.of(inst, cell.statusFacts()); } catch (_) { return null; } })() : null;
+    if (now) wrap.append(mk('p', 'guide-now ' + now.tone, `Right now: ${now.text}`));
+    for (const [key, title] of [['see', 'What you see'], ['read', 'How to read it'], ['use', 'How to use it']]) {
+      wrap.append(mk('h4', 'guide-h', title));
+      const ul = mk('ul', 'guide-list');
+      for (const t of guide[key]) ul.append(mk('li', '', t));
+      wrap.append(ul);
+    }
+    if (guide.watch) wrap.append(mk('p', 'guide-watch', guide.watch));
+    return wrap;
   }
 
   /* ---- Inputs tab: one row per catalog param (bool / choice / time / number) ---- */
