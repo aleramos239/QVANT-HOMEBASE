@@ -256,3 +256,22 @@ def test_the_memo_is_weighed_in_bars_not_sessions(tmp_path):
     assert h._weight == len(h.memo[("NQ", minute.key, D)]) + 1
     h.clear()
     assert h._weight == 0 and not h.memo
+
+
+def test_a_weekly_session_bar_is_the_daily_one_with_a_longer_span(tmp_path, monkeypatch):
+    """Bars longer than a day are built from the session's cached daily bar, not from its minutes, and equal what a
+    resample of the minutes gives."""
+    from homebase.charts import history as hist_mod
+    from homebase.charts.bars import resample
+    h, _, _ = setup(tmp_path)
+    week = BarSpec("time", 604800)
+    want = resample(h.minutes("NQ", D), week)
+    assert len(want) == 1
+    calls = []
+    real = hist_mod.resample
+    monkeypatch.setattr(hist_mod, "resample", lambda bars, spec: calls.append((len(bars), spec.size)) or real(bars, spec))
+    got = h.bars("NQ", week, D, memo=False)
+    assert [_k(b) for b in got] == [_k(b) for b in want]
+    assert (got[0].t, got[0].span, got[0].closed) == (want[0].t, want[0].span, True)
+    assert all(n == 1 for n, size in calls if size == 604800)        # one daily bar went in, never the minutes
+    assert (tmp_path / "cache").glob("*.t86400.pkl") and list((tmp_path / "cache").glob("*.t604800.pkl"))

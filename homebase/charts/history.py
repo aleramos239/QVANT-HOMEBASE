@@ -33,6 +33,7 @@ from .store import TickStore
 
 M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
+DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
 COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
 MEMO_BARS = 400_000     # bars the memo holds across sessions (about what 256 one-minute sessions were): a weight, not a count --
                         # a daily or weekly chart keeps one bar a session, so its 1,300 sessions stay memoized
@@ -159,7 +160,13 @@ class History:
                     return pickle.load(fh)
         except (OSError, pickle.UnpicklingError, EOFError):
             pass
-        out = resample(self.minutes(root, d), spec)
+        if spec.size > DAY_S:
+            # a session is one bar of anything longer than a day (resample anchors at the session open), and that bar is
+            # the session's daily bar with a longer span: from the cached daily file, not from ~1,400 minutes (a 1W
+            # chart's first build was ~55 ms a session, 70 s over 1,300 of them; from the daily bar it is ~1 ms)
+            out = resample(self._coarse(root, BarSpec("time", DAY_S), d), spec)
+        else:
+            out = resample(self.minutes(root, d), spec)
         self._keep(cp, out, src_ns)
         return out
 
