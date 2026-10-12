@@ -23,8 +23,12 @@
   "losing_day_streak": 8
  },
  "winlane": {
-  "_about": "THE WIN-RATE LANE (the owner, 2026-10-12: \"most important is the win rate ... a really monthly consistent winrate\"). mode \"off\" = nothing changes; \"label\" (shipped 2026-10-12) = rows P3.11 and P3.12 are READ and printed on every box as labels, asking nothing: look first, decide after; \"ask\" = the same two rows ask, and a box that misses either cannot be the picked box. In \"label\" and \"ask\" the eval odds of gates.mode \"prop\" are SHOWN, not asked (the owner, 2026-10-12: the win rate comes first). P3.11: the box's win rate (trades with a net above $0 after costs, over all its trades) is `win_rate` or more. P3.12: of the months with `month_trades` trades or more, `months` of them have a win rate of `month_floor` or more. A change of a number or of the mode is a change of the pipeline's rules: it needs the owner's word. Locked by tests/test_pipe_winlane.py.",
-  "mode": "label",
+  "_about": "THE WIN-RATE LANE (the owner, 2026-10-12: \"most important is the win rate ... a really monthly consistent winrate\"). mode \"off\" = nothing changes; \"label\" = rows P3.11 and P3.12 are READ and printed on every box as labels, asking nothing; \"ask\" (shipped 2026-10-12, for the cards in `cards` only) = the same two rows ask, and a box that misses either cannot be the picked box (the pick is the middle, by eval odds, of the boxes that hold them: never the best). `cards` = the card names the lane is on (a heat map of card C is named C_a5 ...); every other card is judged exactly as before; empty = every card. On the lane's cards the eval odds of gates.mode \"prop\" are SHOWN, not asked (the win rate comes first). P3.11: the box's win rate (trades with a net above $0 after costs, over all its trades) is `win_rate` or more. P3.12: of the months with `month_trades` trades or more, `months` of them have a win rate of `month_floor` or more. A change of a number, the mode or the cards is a change of the pipeline's rules: it needs the owner's word. Locked by tests/test_pipe_winlane.py.",
+  "mode": "ask",
+  "cards": [
+   "nq_ib_break_nyam_wl",
+   "nq_noise_gx_nyam_long_wl"
+  ],
   "win_rate": 0.7,
   "month_floor": 0.6,
   "months": 0.9,

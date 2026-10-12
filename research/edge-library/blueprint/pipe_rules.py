@@ -16,8 +16,11 @@ typed in code. A change of a number is a change of the pipeline's rules (the own
                        (every line asks, the pipeline as it was). A file without `gates` reads "law". In "prop" the file's `gates.variant`
                        numbers are laid over `variant`, so need("variant") says what the mode asks; any other word: R.RuleError
   prop_gates()         gates() == "prop"
-  winlane()            "off" (the shipped default: no win-rate rows), "label" (rows P3.11 and P3.12 are printed on every box and ask nothing) or "ask"
-                       (they ask); a file without `winlane` reads "off"; any other word: R.RuleError. The numbers: need("winlane", ...)
+  winlane(unit=None)   "off" (the shipped default: no win-rate rows), "label" (rows P3.11 and P3.12 are printed on every box and ask nothing) or "ask"
+                       (they ask); a file without `winlane` reads "off"; any other word: R.RuleError. The numbers: need("winlane", ...).
+                       `winlane.cards` (a list of card names; empty or missing = every card) says WHICH ideas the lane is on: a heat map
+                       of card C is named C_a5 / C_b1 ... (its unit starts with that), and any other unit reads "off" -- so a hunt for a win
+                       rate does not change how the rest of the queue is judged. With `cards` set, a call without a unit reads "off".
 
 THE TWO FILES NEVER DISAGREE. A number that pipeline.json and rules.json both carry is checked when the file loads (check):
 raw.strict.share = line 2.1 · raw.strict.trades = line 2.4 · proof.reshuffle = line 2.8 · the random bar = line 2.3 in each
@@ -29,6 +32,7 @@ from __future__ import annotations
 
 import copy
 import json
+import re
 from functools import lru_cache
 
 from . import rules as R
@@ -73,6 +77,9 @@ def _all() -> dict:
     w = (p.get("winlane") or {}).get("mode", WINLANE[0])
     if w not in WINLANE:
         raise R.RuleError(f"pipeline.json winlane.mode = {w!r}: the win-rate lane is one of {', '.join(WINLANE)}")
+    c = (p.get("winlane") or {}).get("cards", [])
+    if not isinstance(c, list) or not all(isinstance(x, str) and x for x in c):
+        raise R.RuleError(f"pipeline.json winlane.cards = {c!r}: a list of card names (empty = every card)")
     if g == "prop":                                 # the numbers the prop gates ask, over the file's variant block (a copy: the file stays as written)
         p["variant"] = {**p["variant"], **(p["gates"].get("variant") or {})}
     return {k: v for k, v in p.items() if not k.startswith("_")}
@@ -104,9 +111,15 @@ def prop_gates() -> bool:
     return gates() == "prop"
 
 
-def winlane() -> str:
-    """"off" (no win-rate rows), "label" (they are printed and ask nothing) or "ask" (a box must hold them); a file without `winlane` is "off"."""
-    return (_all().get("winlane") or {}).get("mode", WINLANE[0])
+def winlane(unit: str | None = None) -> str:
+    """"off" (no win-rate rows), "label" (they are printed and ask nothing) or "ask" (a box must hold them) FOR THIS UNIT; a file without `winlane`
+    is "off". `winlane.cards` limits the lane to those cards' heat maps (module docstring); no `cards` = every unit, whatever `unit` is."""
+    lane = _all().get("winlane") or {}
+    mode, cards = lane.get("mode", WINLANE[0]), lane.get("cards") or []
+    if not cards:
+        return mode
+    on = unit is not None and any(re.match(re.escape(c) + r"_[a-z]\d+(?:-|$)", str(unit)) for c in cards)
+    return mode if on else WINLANE[0]
 
 
 def random_bar(tries: int) -> float:

@@ -27,7 +27,7 @@ def lane(tmp_path):
     d = json.loads((R.T / "pipeline.json").read_text(encoding="utf-8"))
 
     def use(mode, **numbers):
-        d["winlane"] = {**d["winlane"], "mode": mode, **numbers}
+        d["winlane"] = {**d["winlane"], "mode": mode, "cards": [], **numbers}       # (no cards: the lane is on every unit, as the tests' boxes have none)
         f = tmp_path / "pipeline.json"
         f.write_text(json.dumps(d), encoding="utf-8")
         P.FILE = f
@@ -50,12 +50,27 @@ def rows(b) -> dict:
     return {r["line"]: r for r in G.winlane(b)}
 
 
-def test_the_shipped_lane_is_label_with_the_owners_numbers_and_off_prints_nothing(lane):
-    assert P.winlane() == "label"                                                         # shipped 2026-10-12: look first, decide after
-    got = {k: v for k, v in P.need("winlane").items() if k != "_about"}                  # (a nested note is part of the level)
-    assert got == {"mode": "label", "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
+def test_the_shipped_lane_asks_on_two_named_cards_only_with_the_owners_numbers_and_off_prints_nothing(lane):
+    keep = {k: v for k, v in P.need("winlane").items() if k != "_about"}                # (a nested note is part of the level)
+    assert keep == {"mode": "ask", "cards": ["nq_ib_break_nyam_wl", "nq_noise_gx_nyam_long_wl"], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
+    assert P.winlane("nq_ib_break_nyam_wl_a5-NQ-tf5") == "ask" and P.winlane("nq_noise_gx_nyam_long_wl_a1-NQ-tf1") == "ask"
+    for other in ("nq_ib_break_nyam_a5-NQ-tf5", "nq_donch_first_nyam_slow_a5-NQ-tf5", "nq_ib_break_nyam_wl2_a5-NQ-tf5", None):
+        assert P.winlane(other) == "off"                                                  # every other card is judged as before; no unit = off while `cards` is set
     lane("off")
     assert P.winlane() == "off" and G.winlane(months({1: 14})) == []
+
+
+def test_a_lane_with_no_cards_is_on_every_unit(lane):
+    lane("label")
+    assert P.winlane() == "label" and P.winlane("anything_a5-NQ-tf5") == "label"
+    lane("ask", cards=["x"])
+    assert P.winlane("x_a5") == "ask" and P.winlane("x_a5-NQ-tf5") == "ask" and P.winlane("xy_a5-NQ-tf5") == "off" and P.winlane("x_a5y") == "off"
+
+
+def test_cards_that_are_not_a_list_of_names_are_refused(lane):
+    with pytest.raises(R.RuleError, match="winlane.cards"):
+        lane("ask", cards="nq_ib_break_nyam_wl")
+        P.winlane()
 
 
 def test_a_word_the_lane_does_not_know_is_refused(lane):

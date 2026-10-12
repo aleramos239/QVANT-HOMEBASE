@@ -339,16 +339,16 @@ def _box_rows(t: dict, cell: str, days=None) -> list:
     return G.variant_rows(_one_box(t, cell), []) + G.labels([fn(T.box(t["_st"], t["_u"], cell, days)) for fn in L.BOX], gate=())
 
 
-def _eval_asked() -> bool:
-    """Does the eval-odds bar of mode "prop" ask? Yes, unless the win-rate lane is on: there the owner's first goal is the win rate and the odds are a label."""
-    return PR.prop_gates() and PR.winlane() == "off"
+def _eval_asked(unit=None) -> bool:
+    """Does the eval-odds bar of mode "prop" ask of this unit? Yes, unless the win-rate lane is on for it: there the owner's first goal is the win rate and the odds are a label."""
+    return PR.prop_gates() and PR.winlane(unit) == "off"
 
 
-def _asked_words() -> str:
+def _asked_words(unit=None) -> str:
     """What a pick says it asks besides money and trades: the eval odds (mode "prop"), the win rate and its months (win-rate lane "ask")."""
-    return ((f" and have {L._pc(PR.need('prop', 'eval'))} eval odds or more" if _eval_asked() else "")
+    return ((f" and have {L._pc(PR.need('prop', 'eval'))} eval odds or more" if _eval_asked(unit) else "")
             + (f", win {L._pc(PR.need('winlane', 'win_rate'))} or more of its trades and have {L._pc(PR.need('winlane', 'months'))} of its months at "
-               f"{L._pc(PR.need('winlane', 'month_floor'))} wins or better" if PR.winlane() == "ask" else ""))
+               f"{L._pc(PR.need('winlane', 'month_floor'))} wins or better" if PR.winlane(unit) == "ask" else ""))
 
 
 def _holding(t: dict, cells: list, days=None) -> tuple:
@@ -363,7 +363,7 @@ def _holding(t: dict, cells: list, days=None) -> tuple:
             missed[k] = missed.get(k, 0) + 1
         if not bad:
             good.append(c)
-    if _eval_asked() and good:
+    if _eval_asked(t.get("unit")) and good:
         bar, got = PR.need("prop", "eval"), _odds(t, good, days)
         keep = [c for c in good if got[c]["eval"] >= bar]
         if len(keep) < len(good):
@@ -530,10 +530,10 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) ->
         said += ((f"; if this box does not hold at the proof or cannot be locked, the next of {more} more box{'es' * (more != 1)} that hold{'s' * (more == 1)} every line "
                   "is tried, each one more try of the random bar") if not PR.prop_gates() else
                  f"; the other {more} box{'es' * (more != 1)} that hold{'s' * (more == 1)} the gates {'is' if more == 1 else 'are'} kept as the next picks") if more > 0 else ""
-        what = (f"make money after costs with enough trades{_asked_words()}" if PR.prop_gates() else
+        what = (f"make money after costs with enough trades{_asked_words(s['name'])}" if PR.prop_gates() else
                 "hold every line a box is held to on the build days")
         how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 and not PR.prop_gates() else
-               f"the one box of its {res[i]['qualifying']} that makes money after costs with enough trades{_asked_words()}" if len(good) == 1 else
+               f"the one box of its {res[i]['qualifying']} that makes money after costs with enough trades{_asked_words(s['name'])}" if len(good) == 1 else
                f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that {what} "
                "(never the best)")
     box = _box_card(t, cell)

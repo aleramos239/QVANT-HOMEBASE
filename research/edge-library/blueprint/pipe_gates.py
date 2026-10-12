@@ -303,7 +303,7 @@ def _consistent(b: dict, need: dict) -> list:
 def winlane(b: dict) -> list:
     """The win-rate lane (pipeline.json `winlane`, owner 2026-10-12) on the picked box `b` -> rows P3.11 and P3.12, or none. mode "off" = none (every other
     number of the pipeline is as it was); "label" = the rows as labels (passed None, `held` = what they said); "ask" = the rows ask."""
-    lane = PR.winlane()
+    lane = PR.winlane(b.get("unit"))
     if lane == "off":
         return []
     rows = _win_steady(b, PR.need("winlane"))
