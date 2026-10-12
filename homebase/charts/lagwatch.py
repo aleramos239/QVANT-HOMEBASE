@@ -41,8 +41,10 @@ def snapshot(skip_ident: int | None = None) -> list[str]:
         if not stack:
             continue
         top = stack[-1]
-        if top.filename.endswith(_IDLE_FILES) and ident != threading.main_thread().ident:
-            continue                # a worker parked on its queue / a lock
+        if ident != threading.main_thread().ident and (
+                top.filename.endswith(_IDLE_FILES)
+                or (top.filename.replace("\\", "/").endswith("concurrent/futures/thread.py") and top.name == "_worker")):
+            continue                # a worker parked on its queue / a lock (a pool worker waits inside _worker itself)
         req = _request_path(frame)
         lines.append(f"{names.get(ident, ident)}{' [' + req + ']' if req else ''}: "
                      + " > ".join(_where(f) for f in stack[-DEPTH:]))

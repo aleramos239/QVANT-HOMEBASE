@@ -236,3 +236,23 @@ def test_bars_finer_than_15_minutes_are_not_kept_as_their_own_file(tmp_path):
     assert not list((tmp_path / "cache").glob("*.t300.pkl"))
     h.bars("NQ", BarSpec("time", 900), D)
     assert list((tmp_path / "cache").glob("*.t900.pkl"))
+
+
+def test_the_memo_is_weighed_in_bars_not_sessions(tmp_path):
+    """A daily / weekly chart keeps one bar a session: hundreds of them stay memoized (the count cap of 256 sessions
+    made every 1D / 1W switch re-read a pickle per session), while minute sessions are evicted by their weight."""
+    h, store, _ = setup(tmp_path)
+    day, minute = BarSpec("time", 86400), BarSpec("time", 60)
+    h.memo_bars = 40                     # a small budget for the test: the real one is MEMO_BARS
+    base = D
+    for i in range(30):                  # thirty daily sessions: 1 bar each, all kept (the files are the same one)
+        h.memo[("NQ", day.key, base - dt.timedelta(days=i + 1))] = [object()]
+        h._weight += 2
+    assert len(h.memo) == 30
+    h.bars("NQ", minute, D)              # ~600 ticks over 7 s steps = 70 minute bars: over the budget on its own
+    # the heavy session is kept (never evict the entry just built), the older ones went to make room for it
+    assert ("NQ", minute.key, D) in h.memo
+    assert len(h.memo) == 1
+    assert h._weight == len(h.memo[("NQ", minute.key, D)]) + 1
+    h.clear()
+    assert h._weight == 0 and not h.memo

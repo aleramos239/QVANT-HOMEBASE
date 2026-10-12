@@ -34,17 +34,23 @@ from .store import TickStore
 M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
 COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
+MEMO_BARS = 400_000     # bars the memo holds across sessions (about what 256 one-minute sessions were): a weight, not a count --
+                        # a daily or weekly chart keeps one bar a session, so its 1,300 sessions stay memoized
+                        # (they never fitted 256 entries: every 1D / 1W switch re-read a pickle per session, 1-2 s)
 WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
                         # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 
 
 class History:
-    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 256, known=None):
+    def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 4096, known=None,
+                 memo_bars: int = MEMO_BARS):
         self.store = store
         self.known = known      # charts.known.Known: the tick job's coverage report, for each session's holes
         self.cache_dir = Path(cache_dir) if cache_dir else state_dir() / "charts" / "cache"
         self.memo: OrderedDict = OrderedDict()
         self.memo_max = memo_max
+        self.memo_bars = memo_bars
+        self._weight = 0        # the memo's bars (+1 an entry, so an empty session still counts)
         self._lock = threading.Lock()
         self._gen = 0           # bumped by clear(): a build that overlapped a clear() is not memoized
         self._built: dict = {}  # (root, date) -> its tick files' stamp when its bars were first built: changed()
@@ -177,9 +183,13 @@ class History:
         if memo:
             with self._lock:
                 if gen == self._gen:        # else a clear() landed mid-build: its file may have changed
+                    if key in self.memo:
+                        self._weight -= len(self.memo[key]) + 1
                     self.memo[key] = out
-                    while len(self.memo) > self.memo_max:
-                        self.memo.popitem(last=False)
+                    self._weight += len(out) + 1
+                    while len(self.memo) > 1 and (len(self.memo) > self.memo_max or self._weight > self.memo_bars):
+                        _, old = self.memo.popitem(last=False)
+                        self._weight -= len(old) + 1
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
@@ -236,7 +246,7 @@ class History:
                         self._built[k] = stamp
                 if moved:
                     for k in [k for k in self.memo if (k[0], k[2]) in moved]:
-                        del self.memo[k]
+                        self._weight -= len(self.memo.pop(k)) + 1
                     self._gen += 1
         return sorted(moved)
 
@@ -245,4 +255,5 @@ class History:
         the charts open now still show those sessions."""
         with self._lock:
             self.memo.clear()
+            self._weight = 0
             self._gen += 1

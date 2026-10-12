@@ -68,3 +68,15 @@ def test_snapshot_names_the_request_a_thread_is_serving():
         t.join()
     mine = [ln for ln in out if ln.startswith("serving [GET /api/some/route?a=1]")]
     assert mine
+
+
+def test_snapshot_skips_idle_pool_workers():
+    from concurrent.futures import ThreadPoolExecutor
+    ex = ThreadPoolExecutor(max_workers=2, thread_name_prefix="idlepool")
+    try:
+        ex.submit(lambda: None).result()      # one worker started, now parked on the pool's queue
+        time.sleep(0.05)
+        out = lagwatch.snapshot(skip_ident=threading.get_ident())
+        assert not any(ln.startswith("idlepool") for ln in out)
+    finally:
+        ex.shutdown()
