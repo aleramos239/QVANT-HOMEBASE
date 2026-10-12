@@ -157,6 +157,10 @@ def test_the_pick_keeps_the_boxes_with_the_eval_odds_and_counts_the_rest(monkeyp
         return {"c0": 0.55, "c1": 0.40, "c2": 0.39, "c3": 0.10}[c]
     monkeypatch.setattr(ST, "_box_rows", lambda t, c, days=None: [] if c != "c4" else [{"line": "P3.2", "passed": False}])
     monkeypatch.setattr(ST, "_odds", lambda t, cells, days=None: {c: {"eval": eval_of(c), "payout": 0.5} for c in cells})
+    assert P.winlane() == "label"                                             # the shipped file (owner, 2026-10-12): the win-rate lane shows the eval odds, it does not ask
+    good, missed = ST._holding({}, ["c0", "c1", "c2", "c3", "c4"])
+    assert good == ["c0", "c1", "c2", "c3"] and missed == {"P3.2": 1}         # (no box is dropped for its odds)
+    with_file(lambda p: p["winlane"].update(mode="off"))                      # lane off: the owner's 2026-10-10 gate asks again
     good, missed = ST._holding({}, ["c0", "c1", "c2", "c3", "c4"])
     assert good == ["c0", "c1"]                                               # 40 % is "40 % or more"; 39 % is not
     assert missed == {"P3.2": 1, "eval odds": 2}

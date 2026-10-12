@@ -271,7 +271,7 @@ def variant_rows(b: dict, others: list) -> list:
     return labels([L._row("P3.2", _met(at, floor), at, floor, f"no trade (need an average trade {want if floor == 0 else 'of ' + want})" if at is None else
                           f"average trade {_fig(at, (floor,), '$')} (need {want})"),
                    L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)])
+                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]) + winlane(b)
 
 
 def _consistent(b: dict, need: dict) -> list:
@@ -298,6 +298,42 @@ def _consistent(b: dict, need: dict) -> list:
             L._row("P3.9", bool(best <= need["best_month_share"]), best, need["best_month_share"],
                    f"best month {str(um[int(np.argmax(mn))])} is {L._pc(best)} of the profit of the months won (need {L._pc(need['best_month_share'])} or less)"),
             L._row("P3.10", bool(longest <= need["losing_day_streak"]), longest, need["losing_day_streak"], f"longest run of losing days: {longest} (need {need['losing_day_streak']} or fewer)")]
+
+
+def winlane(b: dict) -> list:
+    """The win-rate lane (pipeline.json `winlane`, owner 2026-10-12) on the picked box `b` -> rows P3.11 and P3.12, or none. mode "off" = none (every other
+    number of the pipeline is as it was); "label" = the rows as labels (passed None, `held` = what they said); "ask" = the rows ask."""
+    lane = PR.winlane()
+    if lane == "off":
+        return []
+    rows = _win_steady(b, PR.need("winlane"))
+    return rows if lane == "ask" else [label(r) for r in rows]
+
+
+def _win_steady(b: dict, need: dict) -> list:
+    """P3.11 the box's win rate (a trade wins when its net, one contract after costs, is above $0) and P3.12 how steadily it held that rate month by month:
+    of the months with `month_trades` trades or more, the share whose win rate is `month_floor` or more. Needs `trade_date` (ordinals) and `trade_net`."""
+    d, t = b.get("trade_date"), b.get("trade_net")
+    if d is None or t is None or not len(t):
+        return [L._row(k, None, None, n, "no list of the box's trades: the row does not apply") for k, n in (("P3.11", need["win_rate"]), ("P3.12", need["months"]))]
+    d, t = np.asarray(d, np.int64), np.asarray(t, np.float64)
+    win = t > 0
+    rate = round(float(win.mean()), 9)
+    first = L._row("P3.11", bool(rate >= need["win_rate"]), rate, need["win_rate"],
+                   f"win rate {L._pc(rate)} on {len(t)} trades (need {L._pc(need['win_rate'])} or more)")
+    um, inv = np.unique((d - 719163).astype("datetime64[D]").astype("datetime64[M]"), return_inverse=True)
+    n_m, w_m = np.bincount(inv, minlength=len(um)), np.bincount(inv, weights=win, minlength=len(um))
+    keep = n_m >= need["month_trades"]
+    if not keep.any():
+        return [first, L._row("P3.12", None, None, need["months"], f"no month has {need['month_trades']} trades: the row does not apply")]
+    r_m = np.round(w_m[keep] / n_m[keep], 9)
+    share = round(float((r_m >= need["month_floor"]).mean()), 9)
+    worst = int(np.argmin(r_m))
+    left = int((~keep).sum())
+    said = (f"{int((r_m >= need['month_floor']).sum())} of {len(r_m)} months at {L._pc(need['month_floor'])} wins or better, {L._pc(share)} "
+            f"(need {L._pc(need['months'])} or more); worst month {str(um[keep][worst])} at {L._pc(float(r_m[worst]))}"
+            + (f"; {left} month{'s' if left != 1 else ''} under {need['month_trades']} trades left out" if left else ""))
+    return [first, L._row("P3.12", bool(share >= need["months"]), share, need["months"], said)]
 
 
 def _without_best(b: dict, share: float) -> dict:

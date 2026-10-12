@@ -19,6 +19,7 @@ def file() -> Path:
     if not _made:
         d = json.loads((R.T / "pipeline.json").read_text(encoding="utf-8"))
         d.pop("gates", None)
+        d.get("winlane", {}).update(mode="off")           # (the lane of 2026-10-12 did not exist: no win-rate rows)
         d["prop"]["eval"] = 0.5
         d["prop"].pop("fees", None)
         tmp = Path(tempfile.mkdtemp(prefix="pipe_law_"))
