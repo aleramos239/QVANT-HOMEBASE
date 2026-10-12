@@ -30,6 +30,11 @@ const ta = [
     key: () => 'bk:micro', label: () => 'Microprice',
     desc: "Top-of-book price weighted by each side's size: it leans to the heavier side",
     lines: [line('main', 'Microprice', VIOLET, 1, 'solid', { tag: false })] },
+  { id: 'bkquote', group: 'Order flow', name: 'Best bid / best ask', params: [],
+    key: () => 'bk:quote', label: () => 'Best bid / ask',
+    desc: 'The best bid and best ask price, averaged per bar: the spread over time',
+    lines: [line('bid', 'Best bid', UP, 1, 'solid', { col: 'bid', tag: false }),
+      line('ask', 'Best ask', DOWN, 1, 'solid', { col: 'ask', tag: false })] },
   { id: 'tspeed', group: 'Order flow', name: 'Tape speed', pane: 'own',
     params: [{ key: 'length', label: 'Bars for the burst line', type: 'int', min: 20, max: 2000, def: 200 }],
     key: (p) => `tspeed:${p.length}`, label: (p) => `Tape speed ${p.length}`,
@@ -55,11 +60,18 @@ const catalog = [
   { id: 'iceberg', group: 'Order flow', name: 'Icebergs', desc: 'A price hit again and again that keeps reloading: a hidden order',
     params: [{ key: 'multiple', label: 'Traded at least (x the size it showed)', type: 'num', min: 3, max: 50, step: 0.5, def: 3 },
       { key: 'minTraded', label: 'And at least (contracts)', type: 'int', min: 1, max: 5000, def: 30 }] },
+  { id: 'stoprun', group: 'Order flow', name: 'Stop runs', desc: 'A burst of aggressive trades through a recent swing high or low, where stops sit',
+    params: [{ key: 'length', label: 'Swing = highest / lowest of the last (bars)', type: 'int', min: 3, max: 200, def: 50 },
+      { key: 'minSize', label: 'Burst at least (contracts)', type: 'int', min: 1, max: 10000, def: 100 }] },
+  { id: 'exhaust', group: 'Order flow', name: 'Exhaustion', desc: 'A big one-sided push to a new extreme that goes nowhere, then price gives it back',
+    params: [{ key: 'length', label: 'Compared with the last (bars)', type: 'int', min: 3, max: 200, def: 20 },
+      { key: 'multiple', label: 'Delta at least (x the average)', type: 'num', min: 1.5, max: 20, step: 0.5, def: 4 },
+      { key: 'wait', label: 'No progress for (bars)', type: 'int', min: 1, max: 10, def: 3 }] },
 ];
 
 /* The value a "bk:" series shows for one bar: `mean(col)` = the mean of that book column over the bar's seconds (or
    null). A key with several lines gets an object by line part (the depth pane's bid / ask), the others a number. */
-const BOOK_COLS = { 'bk:depth': ['b10', 'a10'] };
+const BOOK_COLS = { 'bk:depth': ['b10', 'a10'], 'bk:quote': ['bid', 'ask'] };
 function bookValue(key, mean) {
   const cols = BOOK_COLS[key];
   if (!cols) return mean(String(key).replace(/^bk:/, ''));

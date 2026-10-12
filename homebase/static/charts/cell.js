@@ -625,7 +625,9 @@ class Cell {
     const on = (id) => this.cfg.indicators.some((x) => x.id === id);
     const opt = (id, key) => this.cfg.indicators.some((x) => x.id === id && x.params && x.params[key]);
     // flow: the sweeps and trade bubbles (the bar's `sw` / `bub`), a good part of the message: only while an option wants them
-    return { fp: this.wantFp || on('footprint'), big: on('bigprints'), flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') };
+    // (Stop runs read the sweeps; Exhaustion reads only OHLC and delta, which every bar carries)
+    return { fp: this.wantFp || on('footprint'), big: on('bigprints'),
+      flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') || on('stoprun') };
   }
 
   /* The Level 2 ladder shows this chart (domui.js calls this at every paint): its Vol column sums the bars'

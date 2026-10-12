@@ -89,8 +89,8 @@ def replay_day(lines, ticks: list, tick_size: float, finished: bool) -> tuple[li
 
 
 def _average(rows: list, step: int) -> list:
-    """Rows [t, b10, a10, i1, i5, i10, micro, spread] averaged inside `step` ms buckets (the bucket's start
-    as t); micro and spread are averaged over the rows that have them."""
+    """Rows [t, b10, a10, i1, i5, i10, micro, spread, bid, ask] averaged inside `step` ms buckets (the bucket's
+    start as t); micro, spread and the best prices are averaged over the rows that have them."""
     if step <= 1000:
         return rows
     out, cur, acc = [], None, []

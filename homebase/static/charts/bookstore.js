@@ -8,7 +8,7 @@
 (function () {
 'use strict';
 
-const COL = { b10: 1, a10: 2, imb1: 3, imb5: 4, imb10: 5, micro: 6, spread: 7 };
+const COL = { b10: 1, a10: 2, imb1: 3, imb5: 4, imb10: 5, micro: 6, spread: 7, bid: 8, ask: 9 };   // bid / ask: the best prices
 const CHUNK_MS = 5 * 3600 * 1000;      // history is asked in aligned 5 h chunks: 18,000 samples, always 1 s steps
 const MAX_ROWS = 2 * 86_400;           // per root: two days of 1 Hz rows (asks are clamped to 48 h); the oldest go first
 const GAP_OK_MS = 120_000;             // a chunk is "covered" when its covered span is within this of its end

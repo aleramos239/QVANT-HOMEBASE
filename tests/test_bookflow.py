@@ -28,9 +28,10 @@ def test_samples_once_per_second_last_book_wins():
     ev = tr.on_book(2100, *book(size=10))
     s = samples(ev)
     assert len(s) == 1 and s[0]["t"] == 1000
-    t, b10, a10, i1, i5, i10, micro, spread = s[0]["row"]
+    t, b10, a10, i1, i5, i10, micro, spread, bid, ask = s[0]["row"]
     assert (t, b10, a10) == (1000, 300.0, 300.0)
     assert i1 == i5 == i10 == 0.0 and spread == 1 and micro == 100.125
+    assert (bid, ask) == (100.0, 100.25)          # the best prices: the Best bid / best ask lines
 
 def test_imbalance_signs_and_micro_leans_to_the_thin_side():
     tr = BookTracker(TICK)
@@ -321,3 +322,15 @@ def test_iceberg_same_input_same_output():
         ev, t = _hit_and_reload(tr, 13_000, 10)
         return out + ev + tr.finish(t + 1000)
     assert run() == run()
+
+
+def test_best_prices_are_none_without_a_quote():
+    """A one-sided or crossed book has no best bid / ask to draw (the row keeps micro and spread None as before)."""
+    tr = BookTracker(TICK)
+    one_side = tr.on_book(1000, [(100.0, 10)], []) + tr.on_book(2100, [(100.0, 10)], [])
+    row = samples(one_side)[0]["row"]
+    assert row[6] is None and row[7] is None and row[8] is None and row[9] is None
+    tr = BookTracker(TICK)
+    crossed = tr.on_book(1000, [(100.25, 10)], [(100.0, 10)]) + tr.on_book(2100, [(100.25, 10)], [(100.0, 10)])
+    row = samples(crossed)[0]["row"]
+    assert row[8] is None and row[9] is None

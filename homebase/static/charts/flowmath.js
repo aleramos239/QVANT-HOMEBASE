@@ -62,12 +62,16 @@ function markerSize(size, min, scale) {
   return Math.round((0.6 + 1.6 * t) * 100) / 100;
 }
 
-/* Trade bubbles of one bar for the heatmap: rows [sec, price, size, side] with size >= min, as {t, price, size, side}
+/* Trade bubbles of one bar for the heatmap: rows [sec, price, size, side] with min <= size (<= max when max > 0) and,
+   for side 'buy' / 'sell', only that aggressor (+1 lifted the offer, -1 hit the bid), as {t, price, size, side}
    (t = the middle of that second). A bar without `bub` (the chart did not ask for it) gives none. */
-function bubblesOf(bar, min) {
-  const out = [];
+function bubblesOf(bar, min, max = 0, side = 'all') {
+  const out = [], top = max > 0 ? max : Infinity;
   for (const r of (bar && bar.bub) || []) {
-    if (Array.isArray(r) && r[2] >= min) out.push({ t: r[0] * 1000 + 500, price: r[1], size: r[2], side: r[3] });
+    if (!Array.isArray(r) || !(r[2] >= min) || r[2] > top) continue;
+    if (side === 'buy' && !(r[3] > 0)) continue;
+    if (side === 'sell' && !(r[3] < 0)) continue;
+    out.push({ t: r[0] * 1000 + 500, price: r[1], size: r[2], side: r[3] });
   }
   return out;
 }
@@ -81,7 +85,71 @@ function sweepsOf(bar, min) {
   return out;
 }
 
-const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf };
+const real = (b) => !!b && Number.isFinite(b.h) && Number.isFinite(b.l);   // a blank slot (a closed hour) has no prices
+
+/* Stop runs among bars[i0..i1]: bar i trades through the highest high (or lowest low) of the `len` bars before it
+   while sweeps (one aggressor walking several prices) that reach beyond that level add up to `min` contracts or
+   more -- the burst that takes the stops resting there. Needs the bars' `sw` (the chart's flow data); a bar
+   without it is never a run. [{i, from, side: 1 (up) | -1 (down), level, size, held}]: `from` the swing's bar,
+   `held` = the bar closed beyond the level (false: it was pushed straight back, a trap). */
+function stopRuns(bars, i0, i1, len, min) {
+  const n = Math.max(2, Math.floor(len) || 20), out = [];
+  for (let i = Math.max(i0, 1); i <= Math.min(i1, bars.length - 1); i++) {
+    const b = bars[i];
+    if (!real(b) || !Array.isArray(b.sw) || !b.sw.length) continue;
+    let hi = -Infinity, lo = Infinity, hiAt = -1, loAt = -1;
+    for (let j = Math.max(0, i - n); j < i; j++) {
+      const x = bars[j];
+      if (!real(x)) continue;
+      if (x.h > hi) { hi = x.h; hiAt = j; }
+      if (x.l < lo) { lo = x.l; loAt = j; }
+    }
+    if (hiAt < 0) continue;
+    let up = 0, down = 0;
+    for (const w of sweepsOf(b, 1)) {
+      const top = Math.max(w.from, w.to), bottom = Math.min(w.from, w.to);
+      if (w.side > 0 && top > hi) up += w.size;
+      if (w.side < 0 && bottom < lo) down += w.size;
+    }
+    if (b.h > hi && up >= min) out.push({ i, from: hiAt, side: 1, level: hi, size: up, held: b.c > hi });
+    if (b.l < lo && down >= min) out.push({ i, from: loAt, side: -1, level: lo, size: down, held: b.c < lo });
+  }
+  return out;
+}
+
+/* Exhaustion among bars[i0..i1]: bar `at` pushes to a new extreme of the `len` bars before it on a delta of `mult`
+   x their average |delta| or more, the next `wait` bars make no new extreme, and the last of them closes back past
+   the push bar's midpoint -- the aggression went nowhere and was given back. Only confirmed ones (all `wait` bars
+   are in). [{i: the confirming bar, at: the push bar, dir: -1 (buyers spent: price turns down) | 1, level: the
+   extreme, delta}]. */
+function exhaustions(bars, i0, i1, len, mult, wait) {
+  const n = Math.max(2, Math.floor(len) || 20), w = Math.max(1, Math.floor(wait) || 3), out = [];
+  for (let at = Math.max(i0 - w, 1); at <= Math.min(i1 - w, bars.length - 1 - w); at++) {
+    const b = bars[at];
+    if (!real(b) || !Number.isFinite(b.d) || b.d === 0) continue;
+    let hi = -Infinity, lo = Infinity, sum = 0, k = 0;
+    for (let j = Math.max(0, at - n); j < at; j++) {
+      const x = bars[j];
+      if (!real(x) || !Number.isFinite(x.d)) continue;
+      if (x.h > hi) hi = x.h;
+      if (x.l < lo) lo = x.l;
+      sum += Math.abs(x.d); k++;
+    }
+    if (k < Math.min(n, 5) || !(sum > 0) || Math.abs(b.d) < mult * (sum / k)) continue;
+    const mid = (b.h + b.l) / 2, up = b.d > 0;
+    if (up ? !(b.h >= hi) : !(b.l <= lo)) continue;
+    let ok = true;
+    for (let j = at + 1; j <= at + w && ok; j++) {
+      const x = bars[j];
+      if (!real(x) || (up ? x.h > b.h : x.l < b.l)) ok = false;
+    }
+    const last = bars[at + w];
+    if (ok && (up ? last.c < mid : last.c > mid)) out.push({ i: at + w, at, dir: up ? -1 : 1, level: up ? b.h : b.l, delta: b.d });
+  }
+  return out;
+}
+
+const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions };
 if (typeof window !== 'undefined') window.HBFlowMath = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

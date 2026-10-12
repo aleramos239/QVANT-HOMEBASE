@@ -142,7 +142,7 @@ function rig({ replay = null, indicators, n = 10, bar = BAR, t0 = T0 } = {}) {
     refreshBookSeries: (all) => calls.refresh.push(all),
   };
   const ctx = { log: [], strokeStyle: '', fillStyle: '', globalAlpha: 1, lineWidth: 1 };
-  for (const k of ['beginPath', 'moveTo', 'lineTo', 'stroke', 'fill', 'fillRect', 'arc', 'closePath']) ctx[k] = (...a) => ctx.log.push([k, ...a]);
+  for (const k of ['beginPath', 'moveTo', 'lineTo', 'stroke', 'fill', 'fillRect', 'arc', 'closePath', 'setLineDash', 'fillText']) ctx[k] = (...a) => ctx.log.push([k, ...a]);
   const target = { useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 2000, height: 500 } }) };
   return { M, S, cell, calls, ctx, target };
 }
@@ -265,7 +265,48 @@ test('flow layer: bubbles of the heatmap and sweeps of the big prints, each only
   o.bub.draw(r.target); o.swp.draw(r.target);
   assert.equal(r.ctx.log.length, 0);
   o.destroy();
-  assert.equal(r.calls.detach, 2);
+  assert.equal(r.calls.detach, 3);                                  // bubbles, sweeps, and the stop-run / exhaustion layer
+});
+
+function flowRig(indicators) {
+  const r = rig({ indicators });
+  globalThis.window.HBFlowMath = require('../../homebase/static/charts/flowmath.js');
+  const path = require.resolve('../../homebase/static/charts/flowlayer.js');
+  delete require.cache[path];
+  require(path);
+  return { ...r, o: globalThis.window.HBFlowLayer.overlay(r.cell), count: (n) => r.ctx.log.filter((c) => c[0] === n).length };
+}
+
+test('flow layer: bubbles keep to the size window and the side picked', () => {
+  const r = flowRig([{ id: 'heatmap', visible: true, params: { bubbles: true, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all' } }]);
+  const s0 = Math.floor((T0 + 2 * BAR) / 1000);
+  r.cell.bars[2].bub = [[s0 + 1, 80, 12, 1], [s0 + 2, 81, 30, -1], [s0 + 3, 82, 90, 1], [s0 + 4, 83, 40, -1]];
+  const arcs = (params) => { Object.assign(r.cell.cfg.indicators[0].params, params); r.ctx.log.length = 0; r.o.bub.draw(r.target); return r.count('arc'); };
+  assert.equal(arcs({}), 4);
+  assert.equal(arcs({ bubbleMax: 50 }), 3);                         // the 90 is over the ceiling
+  assert.equal(arcs({ bubbleMax: 0, bubbleSide: 'buy' }), 2);
+  assert.equal(arcs({ bubbleSide: 'sell' }), 2);
+  assert.equal(arcs({ bubbleMax: 35, bubbleSide: 'sell' }), 1);     // only the 30 sold
+  r.o.destroy();
+});
+
+test('flow layer: a stop run and an exhaustion are drawn only while their indicator is on', () => {
+  const r = flowRig([{ id: 'stoprun', visible: true, params: { length: 3, minSize: 20 } },
+    { id: 'exhaust', visible: true, params: { length: 4, multiple: 3, wait: 2 } }]);
+  const B = r.cell.bars;
+  B.forEach((b, i) => Object.assign(b, { h: 101, l: 99, c: 100, d: i % 2 ? 10 : -10 }));
+  Object.assign(B[5], { h: 103, l: 100, c: 102.5, d: 80, sw: [[B[5].ms + 100, 101, 103, 30, 1]] });   // through the 101 high with 30 contracts
+  Object.assign(B[6], { h: 102.5, l: 101, c: 101.5 });
+  Object.assign(B[7], { h: 102, l: 100, c: 100.5 });                                                 // 2 bars, no higher high, under the midpoint
+  r.o.run.draw(r.target);
+  assert.equal(r.count('fillText'), 2);                             // "30" for the run, "Ex" for the exhaustion
+  assert.deepEqual(r.ctx.log.filter((c) => c[0] === 'fillText').map((c) => c[1]).sort(), ['30', 'Ex']);
+  assert.equal(r.count('setLineDash') >= 1, true);
+  r.cell.cfg.indicators.forEach((x) => { x.visible = false; });
+  r.ctx.log.length = 0;
+  r.o.run.draw(r.target);
+  assert.equal(r.ctx.log.length, 0);
+  r.o.destroy();
 });
 
 test.after(() => { delete globalThis.window; });

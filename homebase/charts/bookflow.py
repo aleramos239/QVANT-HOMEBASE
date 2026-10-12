@@ -7,7 +7,8 @@ book line (top 10 levels each side, best first) and `on_print(ts_ms, price, size
 print that carries the same stamp.
 
 Output is a list of plain dicts (JSON-ready), from every call:
-  {"k": "sample", "t": ms, "row": [t, b10, a10, imb1, imb5, imb10, micro, spread_ticks]}   once per second
+  {"k": "sample", "t": ms, "row": [t, b10, a10, imb1, imb5, imb10, micro, spread_ticks, best_bid, best_ask]}
+                               once per second (best bid / ask: prices, None when a side is empty or the book crossed)
   {"k": "ep", ...episode...}   an order level's life: when it is first worth showing (>= TUNING["min_episode_ms"] old),
                                when it is flagged as absorbing, and when it ends
 An episode is "big" when its level shows >= OPEN_RATIO x the median level size of the last MEDIAN_WINDOW_S
@@ -294,8 +295,9 @@ class BookTracker:
             if bs + as_ > 0:
                 micro = round((bids[0][0] * as_ + offers[0][0] * bs) / (bs + as_), 6)
         spread = round((offers[0][0] - bids[0][0]) / self.tick) if bids and offers and not crossed else None
+        quote = bids and offers and not crossed
         row = [sec, _sum(bids, LEVELS), _sum(offers, LEVELS), _imb(bids, offers, 1), _imb(bids, offers, 5),
-               _imb(bids, offers, LEVELS), micro, spread]
+               _imb(bids, offers, LEVELS), micro, spread, bids[0][0] if quote else None, offers[0][0] if quote else None]
         self._win.append((sec, [r[1] for r in bids] + [r[1] for r in offers]))
         while self._win and self._win[0][0] <= sec - MEDIAN_WINDOW_S * SAMPLE_MS:
             self._win.popleft()

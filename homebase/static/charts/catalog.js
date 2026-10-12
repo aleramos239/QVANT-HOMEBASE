@@ -265,7 +265,9 @@ const CATALOG = [
   { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
     { key: 'map', label: 'Show the heatmap', type: 'bool', def: true },
     { key: 'bubbles', label: 'Trade bubbles', type: 'bool', def: false },
-    { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 1, max: 10000, def: 10 }] },
+    { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 1, max: 10000, def: 10 },
+    { key: 'bubbleMax', label: 'Bubble up to (contracts, 0 = no limit)', type: 'int', min: 0, max: 100000, def: 0 },
+    { key: 'bubbleSide', label: 'Bubbles of', type: 'choice', def: 'all', choices: [['all', 'Buyers and sellers'], ['buy', 'Buyers only (lifted the offer)'], ['sell', 'Sellers only (hit the bid)']] }] },
   ...FLOW.catalog,
   ...TA_DEFS,
 ];

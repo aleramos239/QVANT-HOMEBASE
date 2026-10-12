@@ -130,6 +130,8 @@ test('trade bubbles and sweeps are asked for only while an option wants them; sw
   // a hidden instance still counts: the legend's eye shows its bubbles at once, with no reload (setVisible)
   assert.deepEqual(ask([{ ...hm(true), visible: false }]), [{ fp: false, big: false, flow: true }]);
   assert.deepEqual(ask([bp(true)]), [{ fp: false, big: true, flow: true }]);
+  assert.deepEqual(ask([ind('stoprun', { params: { length: 50, minSize: 100 } })]), [{ fp: false, big: false, flow: true }]);   // reads the sweeps
+  assert.deepEqual(ask([ind('exhaust', { params: { length: 20, multiple: 4, wait: 3 } })]), [{ fp: false, big: false, flow: false }]);   // OHLC + delta only
   const c = loaded([hm(false)]);
   c.update({ indicators: [hm(true)] });
   assert.deepEqual(subs(c), [{ fp: false, big: false, flow: true }]);
