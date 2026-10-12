@@ -69,10 +69,10 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false });
-  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { bubbles: true, bubbleMin: 1 });
+  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 1 });
   assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false });
   assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
-  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { bubbles: false, bubbleMin: 10 });
+  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10 });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
   assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', junk: 1 }), { ...VWAP_DEFAULT_PARAMS, anchor: 'rth' });
   // "9:30" is loose keyboard entry, not an error: it normalises to "09:30" like the other shorthands do
@@ -1038,4 +1038,12 @@ test('session range: boxes, each on or off, four defaults, one key per box that 
   assert.deepEqual(old.params.boxes, [{ name: '', from: '04:15', to: '07:00', on: true }]);
   // no style rows of its own: the boxes carry their colours
   assert.equal(C.styleLineKeys('sess'), null);
+});
+
+test('heatmap: "Show the heatmap" is on by default and an older saved heatmap keeps it on, so bubbles can be shown alone', () => {
+  const d = C.CATALOG.find((x) => x.id === 'heatmap');
+  const map = d.params.find((q) => q.key === 'map');
+  assert.equal(map.type, 'bool'); assert.equal(map.def, true);
+  assert.equal(C.clampParams('heatmap', { bubbles: true, bubbleMin: 10 }).map, true);       // saved before the switch existed
+  assert.equal(C.clampParams('heatmap', { map: false, bubbles: true }).map, false);
 });

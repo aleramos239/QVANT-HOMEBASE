@@ -266,7 +266,9 @@ if (typeof window !== 'undefined' && window.HBLayers) {
     draw(target) { this.ov.draw(target); }
   }
 
-  const findOn = (cell) => (cell.cfg.indicators || []).some((x) => x.id === 'heatmap' && x.visible !== false);
+  // `map` off: the indicator is only its trade bubbles (flowlayer.js), no heatmap is drawn and no depth history is asked
+  const findOn = (cell) => (cell.cfg.indicators || []).some((x) => x.id === 'heatmap' && x.visible !== false
+    && !(x.params && x.params.map === false));
 
   class Overlay {
     constructor(cell) {

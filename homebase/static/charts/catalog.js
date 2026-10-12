@@ -263,6 +263,7 @@ const CATALOG = [
     { key: 'history', label: 'Keep ended orders on the chart', type: 'bool', def: true }] },
   { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
   { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
+    { key: 'map', label: 'Show the heatmap', type: 'bool', def: true },
     { key: 'bubbles', label: 'Trade bubbles', type: 'bool', def: false },
     { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 1, max: 10000, def: 10 }] },
   ...FLOW.catalog,
