@@ -147,10 +147,6 @@ def _root_of(p: Path) -> str:
     return p.parent.parent.name
 
 
-def _date_of(p: Path) -> dt.date:
-    return dt.date.fromisoformat(p.name[:10])
-
-
 def splice_tail(loaded: list[Tick], current, since_ms: int) -> list[Tick]:
     """`loaded` (the session as the files hold it) plus the ticks of `current` (the hub's live tape)
     at/after since_ms that it lacks -- by tick id, or by (time, price, size) for an id-less tick.

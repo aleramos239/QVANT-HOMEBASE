@@ -694,11 +694,6 @@ class VaPrev(_Study):
         return (sess, vol, last), out
 
 
-class _Daily:
-    """Session highs / lows / closes, finished one at a time as the session key changes: shared by the studies that
-    read prior sessions (the daily ATR, the n-session high / low)."""
-
-
 class NoiseBand(_Study):
     """families/noise.py: the anchor's open +/- k x the daily ATR(14) of the sessions BEFORE today (none until 15 exist).
     The anchor's open is the first bar starting at or after the anchor, at most 5 minutes late."""
