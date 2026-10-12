@@ -37,3 +37,15 @@ The owner asked to inspect the app and clean up dead weight, speed it up, clean 
 
 - `homebase/backtest/prune.py`, `tests/test_backtest_prune.py`
 - Related: `2026-10-11-charts-black-page-300mb-plots-bundle-on-the-loop.md`
+
+## Follow-up, 2026-10-12: `research/` and the last worktrees
+
+- `research/` has no dead weight left to trim in the working tree. 2.88 GB is tracked, and that is the record
+  (stage-1 `c1-*` cell tables, prop-portfolio runs). 4.5 GB is `engine/cache/tape` -- the warm tape cache, ignored on
+  purpose (see `tape-cache-must-stay-warm`). Derived tapes, `runs_void`, locks and the `c1o` tables are already in
+  `.gitignore`. The only tracked junk is 20 `.bak` / `.pre-*` files, 0.7 MB, kept as the audit trail of the DLL and
+  verify fixes. `.git` is 2.4 GB because the `.npz` tables went into history; only a history rewrite (force push,
+  every worktree re-cloned) would shrink it, and the tables are still at HEAD. Left alone.
+- Worktrees: `desk-group` (merged, idle 18 h), `lab-own-limits` and `sibcancel` (every commit already in main, by
+  `git cherry`) removed with their branches. Kept: `depthfix`, `open-retrace`, `study` (unique commits), `rel5`
+  (a merge with unique conflict resolution), `orb-5min` (uncommitted work).
