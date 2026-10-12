@@ -486,7 +486,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             rid = str(body["run_id"])
             known(rid)
             try:
-                bundle = await asyncio.to_thread(manager.bundle, rid)
+                bundle = await asyncio.to_thread(manager.bundle, rid, False)
             except ValueError as e:
                 raise HTTPException(409, str(e)) from None
             if (bundle.get("run") or {}).get("strategy", {}).get("id") != draftstore.draft_id(name):
@@ -766,7 +766,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     def prop_of(rid):
         try:
-            return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid), DESKLAB_PROP))
+            return deskresults.prop_headline(_rescore(("run", rid), lambda: manager.bundle(rid, plots=False), DESKLAB_PROP))
         except (HTTPException, KeyError, ValueError, OSError):      # a run that was deleted or cannot be read: nothing to show
             return None
 
@@ -1113,9 +1113,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.get("/run/{rid}/bundle")
     def run_bundle(rid: str):
+        """The stored files as JSON text, never parsed here: a plots.json of a per-bar indicator is 300 MB, and
+        FastAPI would encode a parsed dict ON THE EVENT LOOP (20 s, ~5 GB: the 2026-10-11 black Charts page)."""
         known(rid)
         try:
-            return manager.bundle(rid)
+            return Response(manager.bundle_bytes(rid), media_type="application/json")
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
 
@@ -1152,7 +1154,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def grid_cell_bundle(gid: str, i: int):
         known_grid(gid)
         try:
-            return grids.cell_bundle(gid, i)
+            return Response(grids.cell_bundle_bytes(gid, i), media_type="application/json")
         except KeyError:
             raise HTTPException(404, f"no cell {i} in grid {gid!r}") from None
         except ValueError as e:
@@ -1265,11 +1267,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             if isinstance(cell, bool) or not isinstance(cell, int):
                 raise HTTPException(400, "cell: a whole number")
             known_grid(gid)
-            load = lambda: grids.cell_bundle(gid, cell)          # noqa: E731
+            load = lambda: grids.cell_bundle(gid, cell, plots=False)   # noqa: E731
         else:
             rid = str(body.get("run_id", ""))
             known(rid)
-            load = lambda: manager.bundle(rid)                   # noqa: E731
+            load = lambda: manager.bundle(rid, plots=False)      # noqa: E731
         mode = body.get("mode", "shuffle")
         if mode not in ("shuffle", "bootstrap"):
             raise HTTPException(400, "mode: shuffle or bootstrap")
@@ -1356,7 +1358,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def rescore_run(rid: str, request: Request, body: dict):
         write_ok(request)
         known(rid)
-        return _rescore(("run", rid), lambda: manager.bundle(rid), body.get("prop_rules"))
+        return _rescore(("run", rid), lambda: manager.bundle(rid, plots=False), body.get("prop_rules"))
 
     @r.post("/propsim")
     def rescore(request: Request, body: dict):
@@ -1368,10 +1370,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             if isinstance(cell, bool) or not isinstance(cell, int):
                 raise HTTPException(400, "cell: a whole number")
             known_grid(gid)
-            return _rescore(("cell", gid, cell), lambda: grids.cell_bundle(gid, cell), body.get("prop_rules"))
+            return _rescore(("cell", gid, cell), lambda: grids.cell_bundle(gid, cell, plots=False), body.get("prop_rules"))
         rid = str(body.get("run_id", ""))
         known(rid)
-        return _rescore(("run", rid), lambda: manager.bundle(rid), body.get("prop_rules"))
+        return _rescore(("run", rid), lambda: manager.bundle(rid, plots=False), body.get("prop_rules"))
 
     r.manager = manager   # so the chart service can stop an in-flight child on shutdown
     r.grids = grids       # likewise every grid cell's child

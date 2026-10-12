@@ -340,11 +340,17 @@ class GridManager:
                         "axes": [a["key"] for a in g.get("axes", [])]})
         return out
 
-    def cell_bundle(self, gid: str, i: int) -> dict:
+    def cell_dir(self, gid: str, i: int) -> Path:
         cdir = self.dir(gid) / "cells" / f"{int(i):02d}"
         if not cdir.is_dir():
             raise KeyError(f"{gid}/{i}")
-        return runner.read_bundle(cdir)
+        return cdir
+
+    def cell_bundle(self, gid: str, i: int, plots: bool = True) -> dict:
+        return runner.read_bundle(self.cell_dir(gid, i), plots)
+
+    def cell_bundle_bytes(self, gid: str, i: int) -> bytes:
+        return runner.read_bundle_bytes(self.cell_dir(gid, i))
 
     def cancel(self, gid: str) -> dict:
         self.dir(gid)

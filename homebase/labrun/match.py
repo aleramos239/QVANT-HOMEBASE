@@ -202,7 +202,7 @@ def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, t
             runner.stop_proc(proc)
             raise MatchUnavailable("the backtest took too long") from None
         try:
-            got = runner.read_bundle(run_dir)
+            got = runner.read_bundle(run_dir, plots=False)
         except ValueError:
             err = (runner.read_json(run_dir / "status.json", {}) or {}).get("error")
             _log(f"{name} {d}: the run failed: {str(err)[-300:]}")

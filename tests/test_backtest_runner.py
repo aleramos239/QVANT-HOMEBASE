@@ -350,3 +350,42 @@ def test_every_strategy_declares_session_independence_explicitly():
     for cls in strategies.REGISTRY.values():
         assert "session_independent" in vars(cls), cls.id
         assert cls.session_independent is True, cls.id
+
+
+# ---- the bundle's series (plots.json) can be 300 MB: never parsed where only trades are needed ----------------
+
+def test_thin_plots_keeps_every_kth_point_and_the_last_one():
+    pts = [[i, float(i)] for i in range(1001)]
+    short = [[0, 1.0], [1, 2.0]]
+    out, thinned = runner.thin_plots({"long": pts, "short": short}, limit=100)
+    assert thinned == {"long": 11}                      # ceil(1001 / 100)
+    assert out["short"] is short
+    assert out["long"][0] == [0, 0.0] and out["long"][1] == [11, 11.0]
+    assert out["long"][-1] == [1000, 1000.0]            # the line still ends on its last value
+    assert len(out["long"]) <= 100 + 1
+
+
+def test_a_bundle_without_plots_leaves_them_unread_and_the_bytes_equal_the_parsed_bundle(tmp_path):
+    arch = nq_archive(tmp_path / "ticks")
+    rid = prepare(body(), tmp_path / "t")
+    d = tmp_path / "t" / "runs" / rid
+    execute(d, TapeStore(arch, tmp_path / "cache"))
+    full = runner.read_bundle(d)
+    (d / "plots.json").write_text(json.dumps({"plots": {"vwap": [[1, 2.0]] * 5}, "hlines": []}))
+    assert runner.read_bundle(d, plots=False)["plots"] is None
+    assert runner.read_bundle(d, plots=False)["trades"] == full["trades"]
+    parsed = runner.read_bundle(d)
+    assert json.loads(runner.read_bundle_bytes(d)) == parsed         # same JSON, assembled without parsing
+    assert parsed["plots"]["plots"]["vwap"] == [[1, 2.0]] * 5
+
+
+def test_bundle_bytes_reads_a_missing_or_broken_file_as_null(tmp_path):
+    arch = nq_archive(tmp_path / "ticks")
+    rid = prepare(body(), tmp_path / "t")
+    d = tmp_path / "t" / "runs" / rid
+    execute(d, TapeStore(arch, tmp_path / "cache"))
+    (d / "equity.json").unlink()
+    (d / "propsim.json").write_text("{not json")
+    got = json.loads(runner.read_bundle_bytes(d))
+    assert got["equity"] is None and got["propsim"] is None
+    assert got == runner.read_bundle(d)

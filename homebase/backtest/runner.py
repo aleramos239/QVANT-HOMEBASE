@@ -81,6 +81,28 @@ def read_json(path: Path, default=None):
         return default
 
 
+MAX_PLOT_POINTS = 100_000   # points kept per ctx.plot series in plots.json (a 4-year 1-minute plot is 1.2 M: 300 MB for 7)
+
+
+def thin_plots(plots: dict[str, list], limit: int = MAX_PLOT_POINTS) -> tuple[dict[str, list], dict[str, int]]:
+    """Each series over `limit` points keeps every k-th point (k = ceil(n / limit)) and always its last, so a
+    line still runs from its first to its last value. Returns (plots, {name: k} for the series that were thinned).
+    A plot only draws a line on the page; no order ever reads it. Series are thinned by their own length, so
+    series that were equally long (the bands of one indicator) keep the same points."""
+    out, thinned = {}, {}
+    for name, pts in plots.items():
+        n = len(pts)
+        if n <= limit:
+            out[name] = pts
+            continue
+        k = -(-n // limit)
+        kept = pts[::k]
+        if kept[-1] is not pts[-1]:
+            kept.append(pts[-1])
+        out[name], thinned[name] = kept, k
+    return out, thinned
+
+
 def _num(body: dict, key: str, default: float, lo: float, hi: float, integer: bool = False):
     v = body.get(key, default)
     if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
@@ -318,7 +340,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     trades.sort(key=lambda t: (t["exit_ns"], t["entry_ns"]))
     write_json(run_dir / "equity.json", report.equity(trades))       # needs ts_ns; ms conversion is last
     write_json(run_dir / "trades.json", report.to_ms(trades))        # Item 6: entry_ns/exit_ns -> _ms
-    write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines})
+    plots, thinned = thin_plots(plots)
+    write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines, **({"thinned": thinned} if thinned else {})})
     write_json(run_dir / "propsim.json", prop)
     write_json(run_dir / "run.json", meta)
     status.update(status="done", phase="done", done=len(days), updated=_now())
@@ -350,14 +373,41 @@ def exec_run(run_dir: Path, store: TapeStore, lock: bool = True) -> int:
             fh.close()
 
 
-def read_bundle(d: Path) -> dict:
-    """A finished run dir (runs/<id>/ or a grid cell) as the page loads it."""
+_BUNDLE_FILES = ("run", "trades", "equity", "plots", "propsim")
+
+
+def _require_done(d: Path) -> None:
     st = read_json(d / "status.json", {}) or {}
     if st.get("status") != "done":
         raise ValueError(f"run {d.name} is {st.get('status')}, not done")
-    return {"run": read_json(d / "run.json"), "trades": read_json(d / "trades.json"),
-            "equity": read_json(d / "equity.json"), "plots": read_json(d / "plots.json"),
-            "propsim": read_json(d / "propsim.json")}
+
+
+def read_bundle(d: Path, plots: bool = True) -> dict:
+    """A finished run dir (runs/<id>/ or a grid cell) as the page loads it. plots=False: the series are left
+    out (None) -- a prop re-score, a Monte Carlo or a replay never reads them, and a plots.json of a
+    4-year per-bar indicator is 300 MB (parsed: ~3 GB)."""
+    _require_done(d)
+    return {name: (None if name == "plots" and not plots else read_json(d / f"{name}.json"))
+            for name in _BUNDLE_FILES}
+
+
+def read_bundle_bytes(d: Path) -> bytes:
+    """read_bundle(d), as the JSON text the page loads, assembled from the stored files WITHOUT parsing them:
+    parsing and re-encoding a 300 MB plots.json held the chart service's event loop for 20 s and ~5 GB."""
+    _require_done(d)
+    parts = []
+    for name in _BUNDLE_FILES:
+        try:
+            raw = (d / f"{name}.json").read_bytes().strip()
+        except OSError:
+            raw = b""
+        if 0 < len(raw) < 1_000_000:        # a small file that is not JSON reads as null, as read_json does
+            try:
+                json.loads(raw)
+            except ValueError:
+                raw = b""
+        parts.append(f'"{name}":'.encode() + (raw or b"null"))
+    return b"{" + b",".join(parts) + b"}"
 
 
 class RunManager:
@@ -461,8 +511,11 @@ class RunManager:
                         "net_profit": allc.get("net_profit")})
         return out
 
-    def bundle(self, rid: str) -> dict:
-        return read_bundle(self.dir(rid))
+    def bundle(self, rid: str, plots: bool = True) -> dict:
+        return read_bundle(self.dir(rid), plots)
+
+    def bundle_bytes(self, rid: str) -> bytes:
+        return read_bundle_bytes(self.dir(rid))
 
     def _head(self) -> str | None:
         with self._lock:
