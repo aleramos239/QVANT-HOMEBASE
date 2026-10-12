@@ -18,7 +18,7 @@ from __future__ import annotations
 import math
 import re
 
-from .session import custom_anchor_key, is_rth, month_key, week_key
+from .session import anchor_period_start, is_rth, month_key, week_key
 from .studies_flow import NAMES as FLOW_NAMES, make_flow
 from .studies_ta import NAMES as TA_NAMES, make_ta
 
@@ -125,6 +125,8 @@ class VWAP(Study):
       "week"   resets at the week's first session (Sunday 18:00 ET) -- wire key "vwap:week"
       "month"  resets at the first session of the calendar month, by CME trade date -- wire key "vwap:month"
       "tHHMM"  resets every day at HH:MM ET, e.g. "t0200" = 02:00 ET -- wire key "vwap:t0200".
+               Only at that time: an HH:MM that falls while the week is shut (Saturday, Sunday before the 18:00
+               open, Friday after 17:00) is not a reset, so "t0930" does not restart at the Sunday open.
 
     The period key is decided from each CLOSED bar's own start (bar.t; a Study never sees mid-bar ticks), the
     same rule the "rth" anchor already used for is_rth. So on bars coarser than the anchor (e.g. 1h bars with a
@@ -158,7 +160,7 @@ class VWAP(Study):
             return week_key(bar.session)
         if self.kind == "month":
             return month_key(bar.session)
-        return custom_anchor_key(bar.t, self.hh, self.mm)
+        return anchor_period_start(bar.t, self.hh, self.mm)
 
     def step(self, st, bar):
         if self.kind == "rth" and not is_rth(bar.t, bar.session):

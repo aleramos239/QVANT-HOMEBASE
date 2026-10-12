@@ -159,8 +159,8 @@ def test_vwap_custom_anchor_is_dst_safe():
     """2026-03-08: US DST begins (02:00 -> 03:00 ET). The 10:00 ET reset must stay at 10:00 wall-clock on
     both sides of the jump, which only holds if the anchor math converts through the ET zone rather than
     applying a fixed UTC offset."""
-    before = bar(10.0, t=session_ms(dt.date(2026, 3, 7), 10, 0), session="2026-03-07")
-    after = bar(20.0, t=session_ms(dt.date(2026, 3, 8), 10, 0), session="2026-03-08")
+    before = bar(10.0, t=session_ms(dt.date(2026, 3, 6), 10, 0), session="2026-03-06")    # Friday, EST
+    after = bar(20.0, t=session_ms(dt.date(2026, 3, 9), 10, 0), session="2026-03-09")     # Monday, EDT
     before.pv, before.p2v, before.v = 10.0, 100.0, 1
     after.pv, after.p2v, after.v = 20.0, 400.0, 1
     v = make("vwap:t1000")
@@ -196,9 +196,9 @@ def test_custom_anchor_key_pins_fold_through_the_fall_back_repeated_hour():
     assert k_before.timestamp() != k_first.timestamp()    # the 00:30 bar is still in the PRIOR day's period
 
 
-def test_vwap_custom_anchor_resets_once_on_the_fall_back_sunday():
-    """Same day as above, end to end through VWAP: one reset at 01:00, not a second one when the repeated
-    hour's second pass (fold 1) arrives."""
+def test_vwap_custom_anchor_ignores_a_reset_while_the_week_is_shut():
+    """2026-11-01 is a Sunday (the fall-back day): 01:00 ET falls in the shut weekend, so a t0100 anchor does not
+    reset there -- the bars on either side of it, and in the repeated hour, share one period."""
     d = dt.date(2026, 11, 1)
     first_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=0)
     second_pass = dt.datetime(d.year, d.month, d.day, 1, 30, tzinfo=ET, fold=1)
@@ -208,8 +208,35 @@ def test_vwap_custom_anchor_resets_once_on_the_fall_back_sunday():
     b = bar(10.0, t=int(first_pass.timestamp() * 1000), session="2026-11-01"); b.pv, b.p2v, b.v = 10.0, 100.0, 1
     c = bar(20.0, t=int(second_pass.timestamp() * 1000), session="2026-11-01"); c.pv, c.p2v, c.v = 20.0, 400.0, 1
     got = [v.push(a), v.push(b), v.push(c)]
-    assert got[1]["vwap"] == 10.0    # the 01:00 anchor resets here (a's period ends)
-    assert got[2]["vwap"] == 15.0    # b + c share the SAME period: no second reset in the repeated hour
+    assert got[1]["vwap"] == 7.5     # no reset at 01:00: a + b
+    assert got[2]["vwap"] == pytest.approx(35.0 / 3)
+
+
+def test_vwap_nine_thirty_anchor_resets_at_monday_0930_not_at_the_sunday_open():
+    """The reported case: a custom 09:30 VWAP showed a restart at Sunday 18:00 and another at 09:30. Friday's
+    period must run through the weekend and the Sunday-evening bars up to Monday 09:30."""
+    fri = bar(10.0, t=session_ms(dt.date(2026, 10, 9), 10, 0), session="2026-10-09")        # Fri 10:00 ET
+    sun = bar(20.0, t=int(dt.datetime(2026, 10, 11, 18, 0, tzinfo=ET).timestamp() * 1000), session="2026-10-12")
+    mon_pre = bar(30.0, t=session_ms(dt.date(2026, 10, 12), 9, 0), session="2026-10-12")
+    mon_open = bar(40.0, t=session_ms(dt.date(2026, 10, 12), 9, 30), session="2026-10-12")
+    for x in (fri, sun, mon_pre, mon_open):
+        x.pv, x.p2v, x.v = x.c, x.c * x.c, 1
+    v = make("vwap:t0930")
+    got = [v.push(x) for x in (fri, sun, mon_pre, mon_open)]
+    assert got[1]["vwap"] == 15.0                      # Sunday 18:00 joins Friday's period
+    assert got[2]["vwap"] == pytest.approx(20.0)
+    assert got[3]["vwap"] == 40.0                      # Monday 09:30 is the one reset
+
+
+def test_vwap_evening_anchor_still_resets_at_the_sunday_open():
+    sun_open = int(dt.datetime(2026, 10, 11, 18, 0, tzinfo=ET).timestamp() * 1000)
+    fri = bar(10.0, t=session_ms(dt.date(2026, 10, 9), 10, 0), session="2026-10-09")
+    sun = bar(20.0, t=sun_open, session="2026-10-12")
+    for x in (fri, sun):
+        x.pv, x.p2v, x.v = x.c, x.c * x.c, 1
+    v = make("vwap:t1800")
+    got = [v.push(x) for x in (fri, sun)]
+    assert got[1]["vwap"] == 20.0                      # 18:00 is open on Sunday, so it is a real reset
 
 
 def test_vwap_week_anchor_resets_at_the_weeks_first_session():

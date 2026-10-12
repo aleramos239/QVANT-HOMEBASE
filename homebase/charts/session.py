@@ -103,6 +103,23 @@ def custom_anchor_key(ts_ms: int, hh: int, mm: int) -> dt.datetime:
     return today if t >= today else today - _DAY
 
 
+def _weekend_closed(t: dt.datetime) -> bool:
+    """True while the futures week is shut: Friday from 17:00 ET until Sunday 18:00 ET (a Saturday is all of it)."""
+    wd = t.weekday()
+    return (wd == 4 and t.time() >= dt.time(17, 0)) or wd == 5 or (wd == 6 and t.time() < dt.time(18, 0))
+
+
+def anchor_period_start(ts_ms: int, hh: int, mm: int) -> dt.datetime:
+    """custom_anchor_key, but a reset instant that falls while the week is shut does not count: a 09:30 anchor
+    resets at Monday 09:30, not again at Sunday's 18:00 open (the Saturday / Sunday 09:30 'instants' never
+    traded). Those candidates are stepped back a day at a time until one inside the trading week, so the bar at
+    the Sunday open keeps Friday's period. An anchor that falls on a weekday's 17:00-18:00 break is unchanged."""
+    today = custom_anchor_key(ts_ms, hh, mm)
+    while _weekend_closed(today):
+        today -= _DAY
+    return today
+
+
 @lru_cache(maxsize=65536)
 def _et_offset_s(hour: int) -> int:
     return int(dt.datetime.fromtimestamp(hour * 3600, ET).utcoffset().total_seconds())
