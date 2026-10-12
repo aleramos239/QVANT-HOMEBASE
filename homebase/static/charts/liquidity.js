@@ -429,6 +429,9 @@ if (typeof window !== 'undefined' && window.HBLayers) {
     /* A new bar moves the drawing end (and a new session may need history). */
     onBars() { this.dirty = true; }
 
+    /* The legend's eye: the tick's own on/off check, now instead of within the paint clock. */
+    onIndicators() { this.tick(); }
+
     destroy() {
       this.dead = true;
       clearInterval(this.timer);

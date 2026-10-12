@@ -183,6 +183,13 @@ class Overlay {
   /* Depth-driven only: a new/updated bar changes nothing here (onDepth already marks us dirty). */
   onBars() {}
 
+  /* The legend's eye: the lines and the gauge follow it at once, not on the next depth message. */
+  onIndicators() {
+    if (this.dead) return;
+    this.dirty = false;
+    this.paint();
+  }
+
   destroy() {
     this.dead = true;
     clearInterval(this.timer);

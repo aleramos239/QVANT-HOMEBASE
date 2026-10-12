@@ -163,6 +163,13 @@ class Overlay {
 
   onBars() { this.dirty = true; }
 
+  /* The legend's eye: repaint now, not on the next bar (the layer reads each indicator's eye as it draws). */
+  onIndicators() {
+    if (this.dead) return;
+    this.dirty = false;
+    this.bub.redraw(); this.swp.redraw(); this.run.redraw();
+  }
+
   destroy() {
     this.dead = true;
     clearInterval(this.timer);

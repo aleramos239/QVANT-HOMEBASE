@@ -289,6 +289,15 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
 
     onBars() { this.dirty = true; this.ask(); }
 
+    /* The legend's eye: the painted events go (or come) at once. Off, the paint clock does nothing, so without
+       this the last picture stayed on the chart until a pan. */
+    onIndicators() {
+      if (this.dead) return;
+      this.dirty = false;
+      this.layer.redraw();
+      this.ask();
+    }
+
     destroy() {
       this.dead = true;
       clearInterval(this.timer);

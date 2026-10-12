@@ -884,8 +884,12 @@ class Cell {
     const add = (inst, src, part, type, opts, where) => {
       const overlay = where === 0 && !opts.priceScaleId;   // on the price pane's own scale (not the volume overlay)
       const auto = overlay && this.R.scalePriceOnly ? { autoscaleInfoProvider: NO_SCALE } : {};
-      const s = this.chart.addSeries(type, { priceLineVisible: false, visible: inst.visible !== false, ...opts, ...auto }, where);
-      this.lines.push({ uid: inst.uid, s, src, part, overlay, tag: opts.lastValueVisible !== false, name: C.label(inst) });
+      // `own`: this line's own Style-tab flag. The instance's eye is applied over it, never under it: a line that says
+      // visible: true must not draw while its indicator is hidden (it did, after any rebuild), and the eye turning the
+      // indicator back on must not show the lines the Style tab hid.
+      const own = opts.visible !== false;
+      const s = this.chart.addSeries(type, { priceLineVisible: false, ...opts, ...auto, visible: own && inst.visible !== false }, where);
+      this.lines.push({ uid: inst.uid, s, src, part, own, overlay, tag: opts.lastValueVisible !== false, name: C.label(inst) });
       return s;
     };
     const line = (inst, src, part, color, width, where = 0, extra = {}) => add(inst, src, part, LW.LineSeries,
@@ -1127,8 +1131,11 @@ class Cell {
       if (q) q.visible = on;
     }
     this.host.changed();
-    for (const l of this.lines) if (l.uid === uid) l.s.applyOptions({ visible: on });
+    for (const l of this.lines) if (l.uid === uid) l.s.applyOptions({ visible: on && l.own !== false });
     this.drawLevels(); this.drawMarkers(); this.syncFootprint(); this.syncProfile();
+    // the overlay layers (flow bubbles, Level 2 lines, the book's events, the heatmap) read the eye themselves but
+    // repainted only on a new bar or a pan: an eye click left them as they were
+    for (const o of this.ov) { if (o && o.onIndicators) { try { o.onIndicators(); } catch (e) { console.error(e); } } }
     this.legendRows();
     this.legend(this.hover);
   }

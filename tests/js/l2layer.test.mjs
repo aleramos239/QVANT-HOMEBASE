@@ -50,3 +50,25 @@ test('big-order lines: drawn off the live book, never on a Bar Replay chart (rev
     delete globalThis.window;
   }
 });
+
+test('the legend\'s eye clears (and restores) the big-order lines at once, not on the next depth message', () => {
+  const L = load();
+  const { cell, lines } = fakeCell();
+  let ov = null;
+  try {
+    const t = Date.now();
+    for (let i = 0; i < 20; i++) L.onDepth({ type: 'depth', root: 'NQ', ts: t - 20_000 + i * 1000, bids: [[100, 2], [99.75, 2]], offers: [[100.25, 2]] });
+    L.onDepth({ type: 'depth', root: 'NQ', ts: t, bids: [[100, 50], [99.75, 2]], offers: [[100.25, 2]] });
+    ov = L.overlay(cell);
+    assert.equal(lines.size, 1);
+    cell.cfg.indicators[0].visible = false;                 // setVisible (cell.js) flips the flag, then tells the layers
+    ov.onIndicators();
+    assert.equal(lines.size, 0);
+    cell.cfg.indicators[0].visible = true;
+    ov.onIndicators();
+    assert.equal(lines.size, 1);
+  } finally {
+    if (ov) ov.destroy();
+    delete globalThis.window;
+  }
+});
