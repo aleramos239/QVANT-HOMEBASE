@@ -38,10 +38,23 @@ class Footprint extends Layer {
     this._timer = null;   // pending setTimeout id for the not-yet-delivered flip, if any
   }
   set(bars, on, ratio, tick, ex) { this.bars = bars; this.on = on; this.ratio = ratio; this.tick = tick; this.ex = ex || {}; this.redraw(); }
+  /* Ticks per drawn row: the chosen 1 / 2 / 4 / 8 / 16, or (auto) the smallest that makes a row at least 11 px tall. */
+  rowTicks() {
+    const r = this.ex && this.ex.rows;
+    if (r && r !== 'auto') return Math.max(1, Math.round(+r) || 1);
+    const last = this.bars.length ? this.bars[this.bars.length - 1] : null;
+    if (!last || !this.series) return 1;
+    const one = this.rowH(last.c, this.tick);
+    if (!(one > 0)) return 1;
+    for (const n of [1, 2, 4, 8, 16, 32, 64]) if (one * n >= 11) return n;
+    return 64;
+  }
   readable() {
     if (!this.on || !this.chart || !this.series || !this.bars.length) return false;
     const last = this.bars[this.bars.length - 1];
-    return this.spacing() >= 56 && this.rowH(last.c, this.tick) >= 9;
+    if (this.spacing() < 56) return false;
+    const auto = !this.ex || !this.ex.rows || this.ex.rows === 'auto';
+    return auto || this.rowH(last.c, this.tick * this.rowTicks()) >= 9;
   }
   /* Cancel any pending flip and drop the callback: a torn-down primitive must
      never dispatch into whatever it used to be attached to. */
@@ -64,12 +77,24 @@ class Footprint extends Layer {
     clearTimeout(this._timer);
     this._timer = setTimeout(() => { this._timer = null; if (this.onReadableChange) this.onReadableChange(on); }, 0);
   }
+  /* One bar's rows grouped `n` ticks to a row: [[price of the row's bottom, sells, buys], ...] ascending. */
+  static group(fp, tick, n) {
+    if (n <= 1) return fp;
+    const m = new Map();
+    for (const [px, sv, bv] of fp) {
+      const k = Math.floor(Math.round(px / tick) / n), c = m.get(k);
+      if (c) { c[1] += sv; c[2] += bv; } else m.set(k, [+(k * n * tick).toFixed(6), sv, bv]);
+    }
+    return [...m.values()].sort((x, y) => x[0] - y[0]);
+  }
   draw(target) {
     if (!this.readable()) return;
     const ts = this.chart.timeScale(), r = ts.getVisibleLogicalRange(); if (!r) return;
     const i0 = Math.max(0, Math.floor(r.from)), i1 = Math.min(this.bars.length - 1, Math.ceil(r.to));
     if (i1 < i0) return;   // visible range holds no bars (panned past either end)
-    const w = this.spacing() * 0.86, P = this.P, tick = this.tick;
+    const w = this.spacing() * 0.86, P = this.P, ex = this.ex || {};
+    const nTicks = this.rowTicks(), tick = this.tick * nTicks;          // one drawn row = `tick` of price
+    const mode = ex.numbers || 'both', showBars = ex.vbars !== false, showPoc = ex.poc !== false;
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       const rh = this.rowH(this.bars[i1].c, tick);
       ctx.font = `${Math.max(8, Math.min(11, rh - 2))}px ui-monospace, SFMono-Regular, Menlo, monospace`;
@@ -77,30 +102,43 @@ class Footprint extends Layer {
       for (let i = i0; i <= i1; i++) {
         const b = this.bars[i]; if (!b || !b.fp || !b.fp.length) continue;
         const x = ts.logicalToCoordinate(i); if (x == null) continue;
-        const at = new Map(b.fp.map((row) => [key(row[0]), row]));
-        let maxV = 1, poc = b.fp[0];
-        for (const row of b.fp) { const v = row[1] + row[2]; if (v > maxV) maxV = v; if (v > poc[1] + poc[2]) poc = row; }
-        for (const [px, sv, bv] of b.fp) {
-          const y = this.series.priceToCoordinate(px); if (y == null) continue;
-          ctx.fillStyle = P.fpBg; ctx.fillRect(x - w / 2, y - rh / 2, w * (sv + bv) / maxV, rh - 1);
+        const rows = Footprint.group(b.fp, this.tick, nTicks);
+        const at = new Map(rows.map((row) => [key(row[0]), row]));
+        let maxV = 1, poc = rows[0];
+        for (const row of rows) { const v = row[1] + row[2]; if (v > maxV) maxV = v; if (v > poc[1] + poc[2]) poc = row; }
+        for (const [px, sv, bv] of rows) {
+          // a grouped row sits centred on the ticks it covers
+          const y = this.series.priceToCoordinate(px + (nTicks - 1) * this.tick / 2); if (y == null) continue;
+          if (showBars) { ctx.fillStyle = P.fpBg; ctx.fillRect(x - w / 2, y - rh / 2, w * (sv + bv) / maxV, rh - 1); }
           const below = at.get(key(px - tick)), above = at.get(key(px + tick));
           const buyImb = this.ratio > 0 && bv > 0 && bv >= this.ratio * Math.max(below ? below[1] : 0, 1);
           const sellImb = this.ratio > 0 && sv > 0 && sv >= this.ratio * Math.max(above ? above[2] : 0, 1);
-          ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(String(sv), x - 3, y);
-          ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(String(bv), x + 3, y);
-          if (px === poc[0]) { ctx.strokeStyle = P.poc; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
+          if (mode === 'both') {
+            ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(String(sv), x - 3, y);
+            ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(String(bv), x + 3, y);
+          } else if (mode === 'delta') {
+            const d = bv - sv;
+            ctx.textAlign = 'center'; ctx.fillStyle = d > 0 ? P.up : d < 0 ? P.down : P.fpText;
+            ctx.fillText(d > 0 ? `+${d}` : String(d), x, y);
+          } else if (mode === 'total') {
+            ctx.textAlign = 'center'; ctx.fillStyle = buyImb ? P.up : sellImb ? P.down : P.fpText; ctx.fillText(String(sv + bv), x, y);
+          } else if (buyImb || sellImb) {             // no numbers: a thin edge where one side dominates
+            ctx.fillStyle = buyImb ? P.up : P.down;
+            ctx.fillRect(buyImb ? x + w / 2 - 3 : x - w / 2, y - rh / 2, 3, rh - 1);
+          }
+          if (showPoc && px === poc[0]) { ctx.strokeStyle = P.poc; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
         }
-        this.extras(ctx, b, x, w, rh);
+        this.extras(ctx, b, x, w, rh, rows, tick);
       }
     });
   }
   /* One bar's extras (see the class comment). Nothing here when an option is off or HBFlowMath did not load. */
-  extras(ctx, b, x, w, rh) {
+  extras(ctx, b, x, w, rh, rows = b.fp, tick = this.tick) {
     const M = window.HBFlowMath, ex = this.ex, P = this.P, s = this.series;
     if (!M || !ex || !b.fp.length) return;
     if (ex.stack > 0 && this.ratio > 0) {
       ctx.lineWidth = 2;
-      for (const r of M.stackedRuns(b.fp, this.tick, this.ratio, ex.stack)) {
+      for (const r of M.stackedRuns(rows, tick, this.ratio, ex.stack)) {
         const y0 = s.priceToCoordinate(r.to), y1 = s.priceToCoordinate(r.from);
         if (y0 == null || y1 == null) continue;
         const xx = r.side === 'buy' ? x + w / 2 + 3 : x - w / 2 - 3;     // buyers on the ask (right), sellers on the bid (left)
@@ -108,7 +146,7 @@ class Footprint extends Layer {
         ctx.beginPath(); ctx.moveTo(xx, y0 - rh / 2); ctx.lineTo(xx, y1 + rh / 2); ctx.stroke();
       }
     }
-    const u = M.unfinished(b.fp);
+    const u = M.unfinished(rows);
     if (ex.unfinished) {
       ctx.fillStyle = P.text2;
       const mark = (px, dir) => {
@@ -141,11 +179,16 @@ class Profile extends Layer {
     const p = this.p; if (!p || !this.series || !p.rows || !p.rows.length) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       let maxV = 1; for (const r of p.rows) if (r[1] > maxV) maxV = r[1];
-      const W = mediaSize.width * 0.18, rh = Math.max(1, this.rowH(p.poc, this.tick) - 0.5);
+      const ex0 = this.ex || {}, M = window.HBFlowMath;
+      const W = mediaSize.width * Math.min(0.5, Math.max(0.05, (+ex0.width || 18) / 100)), rh = Math.max(1, this.rowH(p.poc, this.tick) - 0.5);
+      // the value area at the chosen share (70 is the server's own): recomputed from the rows otherwise
+      const va = ex0.va && ex0.va !== 70 && M && M.valueArea ? M.valueArea(p.rows, p.poc, ex0.va) : null;
+      const vah = va ? va.vah : p.vah, val = va ? va.val : p.val;
+      const left = ex0.side === 'left';
       for (const [px, v] of p.rows) {
         const y = this.series.priceToCoordinate(px); if (y == null) continue;
-        ctx.fillStyle = px === p.poc ? this.P.poc : (px >= p.val && px <= p.vah ? this.P.vaIn : this.P.va);
-        const w = W * v / maxV; ctx.fillRect(mediaSize.width - w, y - rh / 2, w, rh);
+        ctx.fillStyle = px === p.poc ? this.P.poc : (px >= val && px <= vah ? this.P.vaIn : this.P.va);
+        const w = W * v / maxV; ctx.fillRect(left ? 0 : mediaSize.width - w, y - rh / 2, w, rh);
       }
       const q = p.prev, ex = this.ex || {};
       if (!q || !q.rows || !q.rows.length) return;

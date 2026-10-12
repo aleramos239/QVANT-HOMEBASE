@@ -1359,22 +1359,3 @@ input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-o
 .box-del { padding: 0 8px; }
 .box-foot { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
 .box-note { margin-top: 2px; }
-
-/* ---- indicator guide + legend status note (2026-10-12) ---- */
-.lg-note { font-size: 11px; color: var(--text2); white-space: nowrap; max-width: 46ch; overflow: hidden; text-overflow: ellipsis; }
-.lg-note.warn { color: var(--warn, #e0a030); }
-.lg-note.act { cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
-.lg-row.off .lg-note { display: none; }
-.dlg-help { display: inline-flex; width: 22px; height: 22px; align-items: center; justify-content: center; border-radius: 11px;
-  color: var(--text2); flex: none; }
-.dlg-help:hover, .dlg-help:focus-visible { background: var(--hover); color: var(--text); }
-.dlg-help .icw, .dlg-help svg { width: 16px; height: 16px; }
-.dlg-guide, .guide { padding: 6px 20px 12px 20px; font-size: 13px; line-height: 1.45; color: var(--text); }
-.dlg-guide { background: var(--hover); border-bottom: 1px solid var(--border, rgba(127,127,127,.2)); }
-.guide-what { margin: 6px 0 4px; font-weight: 600; }
-.guide-now { margin: 6px 0; padding: 6px 8px; border-radius: 6px; background: var(--hover); color: var(--text2); }
-.guide-now.warn { color: var(--warn, #e0a030); }
-.guide-h { margin: 10px 0 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text2); }
-.guide-list { margin: 0; padding-left: 18px; }
-.guide-list li { margin: 2px 0; }
-.guide-watch { margin: 10px 0 0; color: var(--text2); font-style: italic; }

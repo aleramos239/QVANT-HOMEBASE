@@ -50,9 +50,17 @@ function pulls(eps, { multiple = 5, minSeconds = 5 } = {}) {
   const out = [];
   for (const e of eps || []) {
     if (!e || e.end !== 'pulled' || e.t1 == null || !(e.r >= multiple) || !(e.t1 - e.t0 >= minSeconds * 1000)) continue;
-    out.push({ id: e.id, t: e.t1, price: e.p, side: e.s });
+    out.push({ id: e.id, t: e.t1, price: e.p, side: e.s, size: e.pk });
   }
   return out;
+}
+
+/* A marker indicator's `side` setting against a row's side: 'all', or 'up' (support: a bid) / 'down' (resistance: an
+   offer). Rows carry 'up' / 'down' (absorption, icebergs) or 'b' / 'a' (pulled). */
+function sideOk(want, side) {
+  if (!want || want === 'all') return true;
+  const up = side === 'up' || side === 'b';
+  return want === 'up' ? up : !up;
 }
 
 /* Icebergs: [{id, t0, t1, price, side, traded, shown, times, open}]. The server marks one with `rl`; `pk` is the biggest
@@ -119,7 +127,7 @@ function askSpan(from, to, limit) {
   return end > start ? [start, end] : null;
 }
 
-const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, icebergs, clipAt, askSpan, marketOpen, openStart };
+const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, icebergs, sideOk, clipAt, askSpan, marketOpen, openStart };
 
 /* ---------------------------------------------------------------- browser */
 
@@ -222,46 +230,58 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
             const x0 = X(s.t0), x1 = X(s.t1), y = series.priceToCoordinate(s.price);
             if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
             const col = s.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645');
-            ctx.strokeStyle = col; ctx.globalAlpha = s.open ? 0.9 : 0.6; ctx.lineWidth = 2;
+            ctx.strokeStyle = col; ctx.globalAlpha = s.open ? 0.9 : 0.6; ctx.lineWidth = +big.params.width || 2;
             ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
             ctx.globalAlpha = 1;
             if (!s.open && s.end === 'traded') { ctx.fillStyle = col; ctx.fillRect(x1 - 2.5, y - 2.5, 5, 5); }
             else if (!s.open && s.end === 'pulled') { ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x1, y, 3.5, 0, Math.PI * 2); ctx.stroke(); }
           }
         }
+        const sz = (inst) => Math.max(0.5, +inst.params.size || 1);        // the Marker size setting
         if (ab) {
+          const k = sz(ab);
+          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
           for (const a of absorptions(eps, { multiple: ab.params.multiple, minSeconds: ab.params.minSeconds })) {
+            if (!sideOk(ab.params.side, a.side)) continue;
             const x = X(a.t), y = series.priceToCoordinate(a.price);
             if (x == null || y == null || x < 0 || x > mediaSize.width) continue;
             ctx.fillStyle = a.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
             ctx.beginPath();
-            if (a.side === 'up') { ctx.moveTo(x, y - 7); ctx.lineTo(x - 5, y + 3); ctx.lineTo(x + 5, y + 3); }
-            else { ctx.moveTo(x, y + 7); ctx.lineTo(x - 5, y - 3); ctx.lineTo(x + 5, y - 3); }
+            if (a.side === 'up') { ctx.moveTo(x, y - 7 * k); ctx.lineTo(x - 5 * k, y + 3 * k); ctx.lineTo(x + 5 * k, y + 3 * k); }
+            else { ctx.moveTo(x, y + 7 * k); ctx.lineTo(x - 5 * k, y - 3 * k); ctx.lineTo(x + 5 * k, y - 3 * k); }
             ctx.closePath(); ctx.fill();
+            if (ab.params.labels && a.traded > 0) ctx.fillText(String(a.traded), x + 7 * k, y);   // contracts that traded into the level
           }
         }
         if (ice) {
           ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
           ctx.textBaseline = 'bottom';
+          const k = sz(ice);
           for (const q of icebergs(eps, { multiple: ice.params.multiple, minTraded: ice.params.minTraded })) {
+            if (!sideOk(ice.params.side, q.side)) continue;
             const x0 = X(q.t0), x1 = X(q.t1 == null ? now : q.t1), y = series.priceToCoordinate(q.price);
             if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
             const col = q.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
-            ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 3; ctx.globalAlpha = q.open ? 1 : 0.7;
+            ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 3 * k; ctx.globalAlpha = q.open ? 1 : 0.7;
             ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(Math.max(x1, x0 + 6), y); ctx.stroke();
             ctx.globalAlpha = 1;
-            ctx.beginPath(); ctx.moveTo(x0 - 4, y); ctx.lineTo(x0, y - 4); ctx.lineTo(x0 + 4, y); ctx.lineTo(x0, y + 4); ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(x0 - 4 * k, y); ctx.lineTo(x0, y - 4 * k); ctx.lineTo(x0 + 4 * k, y); ctx.lineTo(x0, y + 4 * k); ctx.closePath(); ctx.fill();
             ctx.textAlign = 'left';
-            ctx.fillText(`×${q.times} · ${q.traded}`, Math.max(x1, x0 + 6) + 4, y + 4);
+            if (ice.params.labels !== false) ctx.fillText(`×${q.times} · ${q.traded}`, Math.max(x1, x0 + 6) + 4, y + 4);
           }
         }
         if (pu) {
-          ctx.lineWidth = 1.5;
+          const k = sz(pu);
+          ctx.lineWidth = 1.5 * k;
+          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
           for (const p of pulls(eps, { multiple: pu.params.multiple, minSeconds: pu.params.minSeconds })) {
+            if (!sideOk(pu.params.side, p.side)) continue;
             const x = X(p.t), y = series.priceToCoordinate(p.price);
             if (x == null || y == null || x < 0 || x > mediaSize.width) continue;
-            ctx.strokeStyle = p.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645');
-            ctx.beginPath(); ctx.moveTo(x - 4, y - 4); ctx.lineTo(x + 4, y + 4); ctx.moveTo(x + 4, y - 4); ctx.lineTo(x - 4, y + 4); ctx.stroke();
+            ctx.strokeStyle = ctx.fillStyle = p.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645');
+            ctx.beginPath(); ctx.moveTo(x - 4 * k, y - 4 * k); ctx.lineTo(x + 4 * k, y + 4 * k);
+            ctx.moveTo(x + 4 * k, y - 4 * k); ctx.lineTo(x - 4 * k, y + 4 * k); ctx.stroke();
+            if (pu.params.labels && p.size > 0) ctx.fillText(String(Math.round(p.size)), x + 7 * k, y);   // the size that was pulled
           }
         }
       });

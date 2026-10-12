@@ -149,7 +149,26 @@ function exhaustions(bars, i0, i1, len, mult, wait) {
   return out;
 }
 
-const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions };
+/* The value area of a volume profile: `rows` [[price, volume]] sorted ascending, `poc` the busiest price, `pct` the
+   share of the volume to cover (1-100). From the POC it takes the heavier of the next two rows above / below until
+   the share is covered: {vah, val}. */
+function valueArea(rows, poc, pct) {
+  if (!Array.isArray(rows) || !rows.length) return null;
+  let at = rows.findIndex((r) => r[0] === poc);
+  if (at < 0) { let best = 0; rows.forEach((r, i) => { if (r[1] > rows[best][1]) best = i; }); at = best; }
+  const total = rows.reduce((t, r) => t + r[1], 0), want = total * Math.min(100, Math.max(1, pct)) / 100;
+  let lo = at, hi = at, got = rows[at][1];
+  while (got < want && (lo > 0 || hi < rows.length - 1)) {
+    const up = hi < rows.length - 1 ? rows[hi + 1][1] + (hi + 2 < rows.length ? rows[hi + 2][1] : 0) : -1;
+    const dn = lo > 0 ? rows[lo - 1][1] + (lo - 2 >= 0 ? rows[lo - 2][1] : 0) : -1;
+    if (up >= dn && up >= 0) { hi++; got += rows[hi][1]; if (got < want && hi < rows.length - 1) { hi++; got += rows[hi][1]; } }
+    else if (dn >= 0) { lo--; got += rows[lo][1]; if (got < want && lo > 0) { lo--; got += rows[lo][1]; } }
+    else break;
+  }
+  return { vah: rows[hi][0], val: rows[lo][0] };
+}
+
+const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions, valueArea };
 if (typeof window !== 'undefined') window.HBFlowMath = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

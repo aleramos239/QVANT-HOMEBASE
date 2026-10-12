@@ -1400,10 +1400,13 @@ class Cell {
     const prints = this.visible('bigprints'), mins = prints.map((x) => x.params.min), P = this.P, big = [];
     if (mins.length) {
       const min = Math.min(...mins), scale = prints.some((x) => x.params.scale) && window.HBFlowMath;
+      const pick = prints.find((x) => x.params.min === min) || prints[0], only = pick.params.side;   // buy / sell / all
+      const text = pick.params.labels !== false;
       for (const b of this.bars) {
         for (const [, , size, side] of (b.big || [])) {
-          if (size >= min) big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
-            color: side > 0 ? P.up : P.down, shape: 'circle', size: scale ? scale.markerSize(size, min, true) : 0.6, text: String(size) });
+          if (size < min || (only === 'buy' && side <= 0) || (only === 'sell' && side > 0)) continue;
+          big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
+            color: side > 0 ? P.up : P.down, shape: 'circle', size: scale ? scale.markerSize(size, min, true) : 0.6, text: text ? String(size) : '' });
         }
       }
     }
@@ -1493,13 +1496,15 @@ class Cell {
     if (!this.fp) return;
     const f = this.visible('footprint')[0];
     this.fp.set(this.bars, !!f, f ? f.params.imbalance : 0, this.tick,
-      f ? { stack: f.params.stack, unfinished: f.params.unfinished, deltaNum: f.params.deltaNum } : null);
+      f ? { stack: f.params.stack, unfinished: f.params.unfinished, deltaNum: f.params.deltaNum, rows: f.params.rows,
+        numbers: f.params.numbers, vbars: f.params.vbars, poc: f.params.poc } : null);
   }
 
   syncProfile() {
     if (!this.prof) return;
     const f = this.visible('profile')[0];
-    this.prof.set(f ? this.profile : null, this.tick, f ? { prior: f.params.prior, lines: f.params.lines, naked: this.priorNaked() } : null);
+    this.prof.set(f ? this.profile : null, this.tick, f ? { prior: f.params.prior, lines: f.params.lines, naked: this.priorNaked(),
+      va: f.params.va, width: f.params.width, side: f.params.side } : null);
   }
   /* The prior session's POC has not been traded since this session began (its line is dashed until it is). */
   priorNaked() {

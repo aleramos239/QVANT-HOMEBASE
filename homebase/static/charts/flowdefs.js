@@ -11,6 +11,11 @@
 'use strict';
 const UP = '#089981', DOWN = '#F23645', BLUE = '#2962FF', ORANGE = '#FF6D00', VIOLET = '#7E57C2', GREY = '#787B86';
 const line = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
+/* what every marker indicator can show or hide, and how big it draws */
+const SIDE = { key: 'side', label: 'Show', type: 'choice', def: 'all',
+  choices: [['all', 'Both sides'], ['up', 'Support only (bids that held)'], ['down', 'Resistance only (offers that held)']] };
+const LABELS = { key: 'labels', label: 'Write the numbers next to each marker', type: 'bool', def: true };
+const MSIZE = { key: 'size', label: 'Marker size', type: 'choice', def: '1', choices: [['0.7', 'Small'], ['1', 'Normal'], ['1.5', 'Large']] };
 const SECONDS = { key: 'minSeconds', label: 'Stood at least (seconds)', type: 'int', min: 1, max: 600, def: 5 };
 /* bookflow.py emits no level that ended before 3 s (min_episode_ms) and opens one only at 3x the median (OPEN_RATIO):
    a pulled level's setting below 3 changes nothing, so its lower bound is the floor. A saved value below clamps. */
@@ -64,19 +69,27 @@ const ta = [
 
 const catalog = [
   { id: 'absorb', group: 'Order flow', name: 'Absorption', desc: 'Heavy volume traded into a resting level that held, marked by the side that held',
-    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 4, max: 50, step: 0.5, def: 4 }, SECONDS] },
+    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 4, max: 50, step: 0.5, def: 4 }, SECONDS,
+      SIDE, { ...LABELS, def: false }, MSIZE] },
   { id: 'pulled', group: 'Order flow', name: 'Pulled liquidity', desc: 'A big resting order withdrawn as price came toward it',
-    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 3, max: 50, step: 0.5, def: 5 }, SECONDS_ENDED] },
+    params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 3, max: 50, step: 0.5, def: 5 }, SECONDS_ENDED,
+      { ...SIDE, choices: [['all', 'Both sides'], ['up', 'Bids pulled (support gone)'], ['down', 'Offers pulled (resistance gone)']] },
+      { ...LABELS, def: false }, MSIZE] },
   { id: 'iceberg', group: 'Order flow', name: 'Icebergs', desc: 'A price hit again and again that keeps reloading: a hidden order',
     params: [{ key: 'multiple', label: 'Traded at least (x the size it showed)', type: 'num', min: 3, max: 50, step: 0.5, def: 3 },
-      { key: 'minTraded', label: 'And at least (contracts)', type: 'int', min: 1, max: 5000, def: 30 }] },
+      { key: 'minTraded', label: 'And at least (contracts)', type: 'int', min: 1, max: 5000, def: 30 },
+      { ...SIDE, choices: [['all', 'Both sides'], ['up', 'Bids only (hidden buyer)'], ['down', 'Offers only (hidden seller)']] }, LABELS, MSIZE] },
   { id: 'stoprun', group: 'Order flow', name: 'Stop runs', desc: 'A burst of aggressive trades through a recent swing high or low, where stops sit',
     params: [{ key: 'length', label: 'Swing = highest / lowest of the last (bars)', type: 'int', min: 3, max: 200, def: 50 },
-      { key: 'minSize', label: 'Burst at least (contracts)', type: 'int', min: 1, max: 10000, def: 100 }] },
+      { key: 'minSize', label: 'Burst at least (contracts)', type: 'int', min: 1, max: 10000, def: 100 },
+      { key: 'side', label: 'Show', type: 'choice', def: 'all', choices: [['all', 'Both directions'], ['up', 'Runs up through highs'], ['down', 'Runs down through lows']] },
+      LABELS, MSIZE] },
   { id: 'exhaust', group: 'Order flow', name: 'Exhaustion', desc: 'A big one-sided push to a new extreme that goes nowhere, then price gives it back',
     params: [{ key: 'length', label: 'Compared with the last (bars)', type: 'int', min: 3, max: 200, def: 20 },
       { key: 'multiple', label: 'Delta at least (x the average)', type: 'num', min: 1.5, max: 20, step: 0.5, def: 4 },
-      { key: 'wait', label: 'No progress for (bars)', type: 'int', min: 1, max: 10, def: 3 }] },
+      { key: 'wait', label: 'No progress for (bars)', type: 'int', min: 1, max: 10, def: 3 },
+      { key: 'side', label: 'Show', type: 'choice', def: 'all', choices: [['all', 'Both'], ['up', 'Buying spent (price turned down)'], ['down', 'Selling spent (price turned up)']] },
+      { ...LABELS, label: 'Write "Ex" next to each mark' }, MSIZE] },
 ];
 
 /* The value a "bk:" series shows for one bar: `mean(col)` = the mean of that book column over the bar's seconds (or

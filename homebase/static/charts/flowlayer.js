@@ -118,14 +118,16 @@ class Overlay {
     const f = this.frame();
     if (!f) return;
     const up = f.P.up || '#089981', down = f.P.down || '#F23645';
-    const tri = (ctx, x, y, dir) => {                   // dir 1: points up, -1: points down; y = the tip
-      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 5, y + 9 * dir); ctx.lineTo(x + 5, y + 9 * dir); ctx.closePath();
+    const tri = (ctx, x, y, dir, k = 1) => {            // dir 1: points up, -1: points down; y = the tip; k = marker size
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 5 * k, y + 9 * k * dir); ctx.lineTo(x + 5 * k, y + 9 * k * dir); ctx.closePath();
     };
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = '11px -apple-system, BlinkMacSystemFont, sans-serif';
       ctx.textBaseline = 'middle';
       if (sr) {
+        const k = Math.max(0.5, +sr.params.size || 1), only = sr.params.side;
         for (const r of M.stopRuns(f.bars, f.i0, f.i1, sr.params.length, sr.params.minSize)) {
+          if ((only === 'up' && r.side <= 0) || (only === 'down' && r.side > 0)) continue;
           const x1 = f.XI(r.i), x0 = f.XI(r.from), y = f.series.priceToCoordinate(r.level);
           if (x1 == null || y == null || x1 < -20 || x1 > mediaSize.width + 20) continue;
           const col = r.side > 0 ? up : down;
@@ -135,23 +137,25 @@ class Overlay {
           ctx.setLineDash([]);
           // the arrow sits just past the level, on the side the run went, pointing that way; hollow = pushed back (a trap)
           const tipY = y - 4 * r.side;
-          tri(ctx, x1, tipY, r.side);
+          tri(ctx, x1, tipY, r.side, k);
           if (r.held) ctx.fill(); else ctx.stroke();
           ctx.fillStyle = col;
-          ctx.fillText(`${r.size}${r.held ? '' : ' ✕'}`, x1 + 8, tipY - r.side * 8);
+          if (sr.params.labels !== false) ctx.fillText(`${r.size}${r.held ? '' : ' ✕'}`, x1 + 8, tipY - r.side * 8);
         }
       }
       if (ex) {
+        const k = Math.max(0.5, +ex.params.size || 1), only = ex.params.side;
         for (const r of M.exhaustions(f.bars, f.i0, f.i1, ex.params.length, ex.params.multiple, ex.params.wait)) {
+          if ((only === 'up' && r.dir >= 0) || (only === 'down' && r.dir < 0)) continue;   // 'up' = price turned down (buying spent)
           const xa = f.XI(r.at), xi = f.XI(r.i), y = f.series.priceToCoordinate(r.level);
           if (xi == null || y == null || xi < -20 || xi > mediaSize.width + 20) continue;
           const col = r.dir < 0 ? down : up;               // buyers spent: price turned down (red)
           ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
           ctx.beginPath(); ctx.moveTo((xa ?? xi) - 6, y); ctx.lineTo(xi + 6, y); ctx.stroke();   // the cap: the extreme that stopped
           const dir = r.dir, tipY = y + (dir < 0 ? -2 : 2);   // the arrow points the way price went, at the cap
-          tri(ctx, xi, tipY, dir);
+          tri(ctx, xi, tipY, dir, k);
           ctx.fill();
-          ctx.fillText('Ex', xi + 8, y + (dir < 0 ? -14 : 14));
+          if (ex.params.labels !== false) ctx.fillText('Ex', xi + 8, y + (dir < 0 ? -14 : 14));
         }
       }
     });

@@ -14,7 +14,7 @@ test('a new chart gets volume, VWAP (ETH), session levels and a 3x footprint', (
     { id: 'volume', params: {}, visible: true },
     { id: 'vwap', params: VWAP_DEFAULT_PARAMS, visible: true },
     { id: 'levels', params: {}, visible: true },
-    { id: 'footprint', params: { imbalance: 3, stack: 3, unfinished: true, deltaNum: true }, visible: true }]);
+    { id: 'footprint', params: { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true }, visible: true }]);
 });
 
 test('every instance gets its own short uid', () => {
@@ -62,20 +62,20 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('ema', { length: 20, source: 'bogus' }), { length: 20, source: 'close' });
   assert.deepEqual(C.clampParams('sma', { length: 20, source: 'ohlc4' }), { length: 20, source: 'ohlc4' });
   assert.deepEqual(C.clampParams('vwma', { length: 9 }), { length: 9 });   // no Source param for VWMA
-  assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true });
-  assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true });
-  assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true });
-  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1, scale: true, sweeps: false });
-  assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true });
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true });
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false });
-  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 1, bubbleMax: 0, bubbleSide: 'all' });
+  assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+  assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+  assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1, scale: true, sweeps: false, side: 'all', labels: true });
+  assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true, width: '2' });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true, width: '2' });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false, width: '2' });
+  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 1, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
   assert.deepEqual(C.clampParams('heatmap', { bubbleMax: -5, bubbleSide: 'sideways' }).bubbleMax, 0);
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sideways' }).bubbleSide, 'all');
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sell', bubbleMax: 40 }).bubbleSide, 'sell');
-  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false });
+  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false, va: 70, width: 18, side: 'right' });
   assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
-  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all' });
+  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
   assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', junk: 1 }), { ...VWAP_DEFAULT_PARAMS, anchor: 'rth' });
   // "9:30" is loose keyboard entry, not an error: it normalises to "09:30" like the other shorthands do
@@ -108,9 +108,9 @@ test('a Build-1 chart (st form) migrates field by field', () => {
     { id: 'delta', params: {}, visible: true },
     { id: 'cumdelta', params: {}, visible: true },
     { id: 'adx', params: { length: 14 }, visible: true },
-    { id: 'footprint', params: { imbalance: 4, stack: 3, unfinished: true, deltaNum: true }, visible: true },
-    { id: 'profile', params: { prior: true, lines: false }, visible: true },
-    { id: 'bigprints', params: { min: 30, scale: true, sweeps: false }, visible: true }]);
+    { id: 'footprint', params: { imbalance: 4, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true }, visible: true },
+    { id: 'profile', params: { prior: true, lines: false, va: 70, width: 18, side: 'right' }, visible: true },
+    { id: 'bigprints', params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true }, visible: true }]);
 });
 
 test('an empty Build-1 st means the Build-1 defaults', () => {
@@ -904,11 +904,11 @@ test('order-flow settings that did nothing below the server floor start at it; o
   const min = (id, key) => C.CATALOG.find((d) => d.id === id).params.find((p) => p.key === key).min;
   assert.equal(min('bigorders', 'minSeconds'), 3);               // an ended level is only shown once it stood 3 s
   assert.equal(min('pulled', 'multiple'), 3);                    // a level only opens at 3x the median
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 5, minSeconds: 1, history: true }), { multiple: 5, minSeconds: 3, history: true });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 5, minSeconds: 1, history: true }), { multiple: 5, minSeconds: 3, history: true, width: '2' });
   assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).multiple, 3);
   assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).minSeconds, 3);
-  assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5 });     // defaults untouched
-  assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5 });
+  assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5, side: 'all', labels: false, size: '1' });     // defaults untouched
+  assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5, side: 'all', labels: false, size: '1' });
 });
 
 test('starred indicators: Favorites is a group of whatever is starred, not a catalog group', () => {
@@ -1052,10 +1052,10 @@ test('heatmap: "Show the heatmap" is on by default and an older saved heatmap ke
 });
 
 test('stop runs, exhaustion and best bid / ask: defaults, clamps and the book keys', () => {
-  assert.deepEqual(C.clampParams('stoprun', {}), { length: 50, minSize: 100 });
-  assert.deepEqual(C.clampParams('stoprun', { length: 1, minSize: 0 }), { length: 3, minSize: 1 });
-  assert.deepEqual(C.clampParams('exhaust', {}), { length: 20, multiple: 4, wait: 3 });
-  assert.deepEqual(C.clampParams('exhaust', { multiple: 0.1, wait: 99, length: 999 }), { length: 200, multiple: 1.5, wait: 10 });
+  assert.deepEqual(C.clampParams('stoprun', {}), { length: 50, minSize: 100, side: 'all', labels: true, size: '1' });
+  assert.deepEqual(C.clampParams('stoprun', { length: 1, minSize: 0 }), { length: 3, minSize: 1, side: 'all', labels: true, size: '1' });
+  assert.deepEqual(C.clampParams('exhaust', {}), { length: 20, multiple: 4, wait: 3, side: 'all', labels: true, size: '1' });
+  assert.deepEqual(C.clampParams('exhaust', { multiple: 0.1, wait: 99, length: 999 }), { length: 200, multiple: 1.5, wait: 10, side: 'all', labels: true, size: '1' });
   const q = C.instance('bkquote');
   assert.equal(C.serverKey(q), 'bk:quote');
   assert.deepEqual(C.serverKeys([q]), []);                          // computed in the page: never asked of the server
@@ -1069,4 +1069,15 @@ test('buy / sell pressure: server key from its length, clamps, lines the legend 
   assert.equal(C.serverKey(p), 'press:12');
   assert.deepEqual(C.serverKeys([p]), ['press:12']);                 // a server study: asked of the service
   assert.equal(C.label(p), 'Buy/sell pressure 12');
+});
+
+test('adjustable settings: new options default to what the chart did before, and clamp', () => {
+  assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right' });
+  assert.deepEqual(C.clampParams('footprint', { rows: '3', numbers: 'zzz' }),
+    { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+  assert.equal(C.clampParams('heatmap', { contrast: 'strong', palette: 'ice' }).palette, 'ice');
+  assert.equal(C.clampParams('heatmap', { contrast: 'x' }).contrast, 'normal');
+  assert.equal(C.clampParams('bigprints', { side: 'sell', labels: false }).side, 'sell');
+  assert.equal(C.clampParams('bigorders', { width: '4' }).width, '4');
+  assert.equal(C.clampParams('absorb', { size: '1.5', side: 'up', labels: true }).size, '1.5');
 });

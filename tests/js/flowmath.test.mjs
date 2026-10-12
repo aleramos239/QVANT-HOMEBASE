@@ -110,3 +110,12 @@ test('exhaustions: sellers spent at a new low turn price up; a modest delta is n
   const mild = [...calm, { ...push, d: -40 }, ...after];
   assert.equal(M.exhaustions(mild, 0, mild.length - 1, 10, 3, 3).length, 0);
 });
+
+test('valueArea: from the busiest price outward until the share of volume is covered', () => {
+  const rows = [[100, 5], [101, 10], [102, 30], [103, 20], [104, 15], [105, 5]];     // 85 in all
+  assert.deepEqual(M.valueArea(rows, 102, 70), { vah: 104, val: 102 });              // the two rows above (35) beat the two below (15): 30 + 20 + 15 = 65 >= 59.5
+  assert.deepEqual(M.valueArea(rows, 102, 100), { vah: 105, val: 100 });
+  assert.deepEqual(M.valueArea(rows, 102, 1), { vah: 102, val: 102 });
+  assert.deepEqual(M.valueArea([[1, 1]], 1, 70), { vah: 1, val: 1 });
+  assert.equal(M.valueArea([], 1, 70), null);
+});

@@ -281,6 +281,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       const P = cell.P || {};
       this.stops = parseStops([P.heatLo || 'rgba(41,98,255,.06)', P.heatMid || 'rgba(247,166,0,.45)', P.heatHi || 'rgba(242,54,69,.85)']);
       this.fills = Array.from({ length: BUCKETS }, (_, b) => ramp((b + 1) / BUCKETS, this.stops));
+      this.palettes = { fire: this.fills };        // the colour sets by the Colours setting, built when first asked for
       this.layer = new HeatLayer(P, this);
       if (cell.candles) cell.candles.attachPrimitive(this.layer);
       this.onRange = () => { clearTimeout(this.deb); this.deb = setTimeout(() => this.ask(), DEBOUNCE_MS); };
@@ -300,6 +301,20 @@ if (typeof window !== 'undefined' && window.HBLayers) {
     }
 
     on() { return !this.dead && !!this.cell.chart && findOn(this.cell) && this.cell.bars && this.cell.bars.length > 0; }
+
+    /* The heatmap indicator's settings: how hard the colour ramps (contrast) and which colours (palette). */
+    look() {
+      const h = (this.cell.cfg.indicators || []).find((x) => x.id === 'heatmap' && x.visible !== false);
+      const p = (h && h.params) || {};
+      const name = p.palette === 'ice' || p.palette === 'mono' ? p.palette : 'fire';
+      if (!this.palettes[name]) {
+        const stops = name === 'ice' ? ['rgba(0,188,212,.04)', 'rgba(0,188,212,.5)', 'rgba(255,255,255,.95)']
+          : ['rgba(120,123,134,.05)', 'rgba(120,123,134,.5)', 'rgba(60,63,74,.9)'];
+        const st = parseStops(stops);
+        this.palettes[name] = Array.from({ length: BUCKETS }, (_, b) => ramp((b + 1) / BUCKETS, st));
+      }
+      return { fills: this.palettes[name], gamma: p.contrast === 'soft' ? 1.8 : p.contrast === 'strong' ? 0.55 : 1 };
+    }
     redraw() { if (!this.dead) this.layer.redraw(); }
 
     /* What the chart shows now: the visible time window, the column level, the drawing end (never past the
@@ -391,10 +406,11 @@ if (typeof window !== 'undefined' && window.HBLayers) {
         const max = windowMax(cells, v.from, v.to, pBot, pTop);
         if (!max) return;
         const rows = Array.from({ length: BUCKETS }, () => []);
+        const look = this.look();
         for (const c of cells) {
           const x0 = X(c.t0), x1 = X(c.t1), y = series.priceToCoordinate(c.price);
           if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
-          const b = Math.min(BUCKETS - 1, Math.floor(intensity(c.size, max) * BUCKETS));
+          const b = Math.min(BUCKETS - 1, Math.floor(Math.pow(intensity(c.size, max), look.gamma) * BUCKETS));
           rows[b].push(x0, y, x1);
         }
         const y0 = series.priceToCoordinate(cells[0].price), y1 = series.priceToCoordinate(cells[0].price + tick);
@@ -402,7 +418,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
         for (let b = 0; b < BUCKETS; b++) {
           const r = rows[b];
           if (!r.length) continue;
-          ctx.fillStyle = this.fills[b];
+          ctx.fillStyle = look.fills[b];
           ctx.beginPath();
           for (let k = 0; k < r.length; k += 3) ctx.rect(r[k], r[k + 1] - h / 2, Math.max(1, r[k + 2] - r[k]), h);
           ctx.fill();
