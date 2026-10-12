@@ -43,8 +43,26 @@ def snapshot(skip_ident: int | None = None) -> list[str]:
         top = stack[-1]
         if top.filename.endswith(_IDLE_FILES) and ident != threading.main_thread().ident:
             continue                # a worker parked on its queue / a lock
-        lines.append(f"{names.get(ident, ident)}: " + " > ".join(_where(f) for f in stack[-DEPTH:]))
+        req = _request_path(frame)
+        lines.append(f"{names.get(ident, ident)}{' [' + req + ']' if req else ''}: "
+                     + " > ".join(_where(f) for f in stack[-DEPTH:]))
     return lines
+
+
+def _request_path(frame) -> str | None:
+    """The HTTP request a thread is serving, if one of its frames holds a Starlette `request`: the stack of a
+    response being encoded is all framework code, so without this a stall does not say which route it was."""
+    while frame is not None:
+        try:
+            r = frame.f_locals.get("request")
+            scope = getattr(r, "scope", None)
+            if isinstance(scope, dict) and scope.get("type") == "http":
+                q = scope.get("query_string", b"")
+                return f"{scope.get('method', '?')} {scope.get('path', '?')}" + (f"?{q.decode('latin-1')[:80]}" if q else "")
+        except Exception:  # noqa: BLE001
+            pass
+        frame = frame.f_back
+    return None
 
 
 def start(loop, log: Callable[[str], None], *, lag_s: float = LAG_S, beat_s: float = BEAT_S,

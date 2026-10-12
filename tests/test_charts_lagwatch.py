@@ -47,3 +47,24 @@ def test_snapshot_skips_the_given_thread_and_parked_workers():
     finally:
         stop.set()
         t.join()
+
+
+def test_snapshot_names_the_request_a_thread_is_serving():
+    class _Req:
+        scope = {"type": "http", "method": "GET", "path": "/api/some/route", "query_string": b"a=1"}
+
+    seen = threading.Event()
+
+    def handler(request):                    # a framework frame holding `request`, busy in its own code
+        seen.set()
+        time.sleep(0.6)
+
+    t = threading.Thread(target=handler, args=(_Req(),), name="serving")
+    t.start()
+    try:
+        seen.wait(2)
+        out = lagwatch.snapshot(skip_ident=threading.get_ident())
+    finally:
+        t.join()
+    mine = [ln for ln in out if ln.startswith("serving [GET /api/some/route?a=1]")]
+    assert mine
