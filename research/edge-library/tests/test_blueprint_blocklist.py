@@ -94,13 +94,16 @@ def test_the_families_are_the_engines_bar_based_ones_with_their_own_settings():
 
 def test_the_filters_the_limits_and_the_exit_table():
     blocks = RUN._blocks()
-    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 99
+    assert [(f["block"], f["side"]) for f in B["filters"]] == [(b, s) for b, sides in blocks.FILTERS.items() for s in sides] and len(B["filters"]) == 116
     assert all(f["words"] == blocks.PLAIN[(f["block"], f["side"])] for f in B["filters"])
     assert all(f["runs"] and f["why_not"] is None for f in B["filters"])
     l2 = [f for f in B["filters"] if f["block"] in blocks.L2_BLOCKS]                                   # Level 2: NQ only (built, locked and tested like the others)
     assert l2 and all(f["markets"] == ["NQ"] for f in l2) and all(f["markets"] == list(blocks.BLOCK_MARKETS.get(f["block"], ("NQ", "ES", "GC"))) for f in B["filters"] if f not in l2)
+    assert {f["block"] for f in B["filters"] if f["research_tier"]} == {"iceberg", "pulled", "qdepl"} == set(blocks.RT_BLOCKS)     # the vendor series are flagged
+    assert all(f["research_tier"] == (f["block"] in blocks.RT_BLOCKS) for f in B["filters"])
+    assert all("esearch tier" in f["words"] for f in B["filters"] if f["research_tier"])                 # and the words say so
     assert not any("tested" in f for f in B["filters"])                                               # the flag is gone: every filter is built, locked and tested
-    assert {f["block"] for f in l2} == {"book", "depth", "ahead", "wall", "stack"}
+    assert {f["block"] for f in l2} == {"book", "depth", "ahead", "wall", "stack", "micro", "iceberg", "pulled", "qdepl"}
     assert {x["name"]: x["runs"] for x in B["limits"]} == {"max_tr": True, "dir": True, "exit_bars": False, "trail_atr": False} == {
         k: k not in REC.OWN_EXITS for k in ("max_tr", "dir", "exit_bars", "trail_atr")}
     import run_idea as RI
@@ -178,7 +181,7 @@ def test_the_command():
     r = json.loads(out)
     assert rc == 0 and out.count("\n") == 1 and tuple(r)[:len(CONTRACT)] == CONTRACT
     assert (r["ok"], r["command"], r["name"], r["lines"], r["saved"]) == (True, "blocks", None, [], [])
-    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": len(B["families"]), "families_not_yet": 0, "filters": 99, "filters_not_yet": 0, "refused": len(B["refused"])}
+    assert r["blocks"] == json.loads(json.dumps(B)) and r["counts"] == {"families": len(B["families"]), "families_not_yet": 0, "filters": 116, "filters_not_yet": 0, "refused": len(B["refused"])}
     rc, text = _run(["blocks"])
     lines = text.splitlines()
     assert rc == 0 and text == r["text"] + "\n" and "bp.py card" in r["next"]

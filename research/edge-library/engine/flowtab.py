@@ -27,22 +27,19 @@ FLOW = Path.home() / "futures_derived" / "flow_1m"
 MIN0, NMIN = -360, 1380                             # as blocks.py: index 0 = 18:00 ET of the evening before
 SERIES = ("volume", "delta", "sweep", "big")        # the prefix-summed series of a day
 COLS = ["t_utc", "session", "volume", "delta", "sweep_buy_vol", "sweep_sell_vol", "big_order", "big_order_side"]
+PCOLS = ["t_utc", "session", "prints"]               # the trade count per minute: the prefix sums of a second, separate table (tape speed)
 
 
-@lru_cache(maxsize=None)
-def _table(root: str) -> dict:
-    """{session ISO date: int64 [4, NMIN + 1] prefix sums of volume, delta, net sweep volume, signed biggest order} of one root.
-    Read once per process."""
+def _prefix(root: str, cols: list, rows_of) -> dict:
+    """{session ISO date: int64 [k, NMIN + 1] prefix sums} of the per-minute series rows_of(df) -> [k, n] of one root's flow file."""
     import pandas as pd
     p = FLOW / f"{root}.parquet"
     if not p.exists():
         return {}
-    df = pd.read_parquet(p, columns=COLS).sort_values("t_utc", kind="mergesort")
+    df = pd.read_parquet(p, columns=cols).sort_values("t_utc", kind="mergesort")
     sess = df["session"].astype(str).to_numpy()
     t = df["t_utc"].to_numpy(np.int64)
-    rows = np.stack([df["volume"].to_numpy(np.int64), df["delta"].to_numpy(np.int64),
-                     (df["sweep_buy_vol"] - df["sweep_sell_vol"]).to_numpy(np.int64),
-                     (df["big_order"].to_numpy(np.int64) * df["big_order_side"].to_numpy(np.int64))])
+    rows = rows_of(df)
     cut = np.flatnonzero(np.concatenate(([True], sess[1:] != sess[:-1], [True])))
     out = {}
     for a, b in zip(cut[:-1], cut[1:]):
@@ -50,10 +47,26 @@ def _table(root: str) -> dict:
         base = _midnight_utc(iso)                   # 00:00 ET of the session date, UTC seconds
         k = (t[a:b] - base) // 60 - MIN0
         ok = (k >= 0) & (k < NMIN)
-        day = np.zeros((len(SERIES), NMIN), np.int64)
+        day = np.zeros((len(rows), NMIN), np.int64)
         day[:, k[ok]] = rows[:, a:b][:, ok]
-        out[iso] = np.concatenate((np.zeros((len(SERIES), 1), np.int64), np.cumsum(day, axis=1)), axis=1)
+        out[iso] = np.concatenate((np.zeros((len(rows), 1), np.int64), np.cumsum(day, axis=1)), axis=1)
     return out
+
+
+@lru_cache(maxsize=None)
+def _table(root: str) -> dict:
+    """{session ISO date: int64 [4, NMIN + 1] prefix sums of volume, delta, net sweep volume, signed biggest order} of one root.
+    Read once per process."""
+    return _prefix(root, COLS, lambda df: np.stack([
+        df["volume"].to_numpy(np.int64), df["delta"].to_numpy(np.int64),
+        (df["sweep_buy_vol"] - df["sweep_sell_vol"]).to_numpy(np.int64),
+        (df["big_order"].to_numpy(np.int64) * df["big_order_side"].to_numpy(np.int64))]))
+
+
+@lru_cache(maxsize=None)
+def _prints(root: str) -> dict:
+    """{session ISO date: int64 [1, NMIN + 1] prefix sums of the trade count (prints) per minute} of one root. Read once per process."""
+    return _prefix(root, PCOLS, lambda df: df["prints"].to_numpy(np.int64)[None, :])
 
 
 def _midnight_utc(iso: str) -> int:
@@ -81,3 +94,13 @@ def window(root: str, iso: str, a: int, b: int):
     if c is None or not 0 <= i < j <= NMIN:
         return None
     return tuple(int(x) for x in c[:, j] - c[:, i])
+
+
+def prints(root: str, iso: str, a: int, b: int):
+    """The number of prints of the completed minutes in the clock window [a, b) (as `window`), or None (no flow for the date, or an
+    empty / outside window)."""
+    c = _prints(root).get(iso)
+    i, j = a // 60 - MIN0, b // 60 - MIN0
+    if c is None or not 0 <= i < j <= NMIN:
+        return None
+    return int(c[0, j] - c[0, i])

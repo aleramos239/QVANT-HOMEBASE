@@ -392,6 +392,14 @@ Still to build:
    (Bollinger bandwidth tight / wide), `atrp` (ATR percentile high / low), `er` (efficiency ratio trend / chop), `macd` (histogram with / against),
    `rsidiv` (RSI divergence with / against), `mfi` (Money Flow Index with / against / extreme_against), `deltadiv` (price against net delta over
    20 bars, with / against; a delta block, so its test range ends where the flow file ends) and `candle` (displace / engulf / reject).
+   Batch 5 (tick and Level-2 concepts, first-guess definitions the owner reviews one by one, built 2026-10-12): from the flow table and
+   the completed 1-minute bars, NQ, ES and GC, test range ends where the flow file ends: `tspeed` (trades per minute over the last 5
+   minutes against the median of the same window on the 20 days before: fast / slow / burst), `absorb` (heavy one-sided delta, price made
+   at most one unit of progress: the aggressors lose), `exhaust` (a heavy push of 3 units or more ending at a real level, the last minute
+   closes back) and `stoprun` (the window traded beyond a real level and closed back inside it, with the sweeps on the side that broke).
+   `exhaust` and `stoprun` use the real levels of `engine/levels.py`, never a rolling extreme. From the Level-2 table, NQ only: `micro`
+   (spread-weighted size lean of the best bid and ask over 5 minutes) and, from the vendor's own series (RESEARCH TIER: 1-minute
+   history, not reproducible live, never promotable), `iceberg`, `pulled` and `qdepl`. All seven direction blocks take with / against.
 4. Then the waiting idea batch (`ideas/specs/r3_*.json`), each idea with its card first.
 
 Version 1.1, built on 2026-10-06 (toolkit and app, locked by tests):

@@ -150,3 +150,54 @@ def candle(kind: str, sd: int, O, H, L, C, atr) -> bool:
                 and min(o, c) <= min(po, pc) and max(o, c) >= max(po, pc))
     wick = (min(o, c) - l) if sd > 0 else (h - max(o, c))                         # reject
     return body > 0 and wick >= WICK_X * body
+
+
+# ---- batch 5: tick-flow reads of a short window (absorb, exhaust, stoprun) ----------------------------------------------------------
+# First-guess definitions written before any result (2026-10-12). The unit of "how far is far" is the mean high - low of the last
+# RANGE_N completed 1-minute bars, so a block does not depend on the idea's bar size. The window is the delta blocks' own last
+# FLOW_WIN minutes; the levels are engine/levels.py's (prior day, overnight, sessions, 5 days, swings, equal highs / lows): never a
+# rolling N-bar extreme.
+RANGE_N, RANGE_MIN = 20, 10                         # the unit: bars averaged / the fewest of them
+ABS_PROGRESS = 1.0                                  # absorb: the aggressors got at most this many units of progress
+EX_PUSH = 3.0                                       # exhaust: the push is at least this many units
+LEVEL_NEAR = 1.0                                    # exhaust: the push ends within this many units of a level
+
+
+def minute_unit(bars):
+    """The mean high - low of the last RANGE_N of `bars` ((start, o, h, l, c, v), oldest first), or None with fewer than RANGE_MIN
+    or a zero mean."""
+    xs = [b[2] - b[3] for b in bars[-RANGE_N:]]
+    if len(xs) < RANGE_MIN:
+        return None
+    u = sum(xs) / len(xs)
+    return u if u > 0 else None
+
+
+def absorb(delta: float, move: float, unit: float):
+    """+1 | -1 | None. The aggressors pushed (delta > 0 buyers, < 0 sellers) and price did not follow: move x side <= ABS_PROGRESS units.
+    Absorbed buying is bearish (-1), absorbed selling bullish (+1). The caller has tested that the push was heavy."""
+    if delta == 0 or unit is None or unit <= 0:
+        return None
+    s = 1 if delta > 0 else -1
+    return -s if move * s <= ABS_PROGRESS * unit else None
+
+
+def exhaust(delta: float, o: float, h: float, l: float, c_prev: float, c: float, unit: float, highs, lows):
+    """+1 | -1 | None. A heavy push (the caller tested the size) that went at least EX_PUSH units the delta's way, ended within LEVEL_NEAR
+    units of a level on that side (`highs` for a push up, `lows` for a push down), and whose last minute closed back against it
+    (c below c_prev for a push up). Reversal direction: a push up is -1."""
+    if delta == 0 or unit is None or unit <= 0:
+        return None
+    s = 1 if delta > 0 else -1
+    ext, lv = (h, highs) if s > 0 else (l, lows)
+    if (c - o) * s < EX_PUSH * unit or (c - c_prev) * s >= 0:
+        return None
+    return -s if any(abs(ext - x) <= LEVEL_NEAR * unit for x in lv) else None
+
+
+def stoprun(h: float, l: float, c: float, highs, lows):
+    """+1 | -1 | None. The window traded beyond a level and its last close is back inside it: beyond a level high and back at or below it
+    is -1 (a stop run up that failed), beyond a level low and back at or above it +1. Both at once: None."""
+    up = any(h > x and c <= x for x in highs)
+    dn = any(l < x and c >= x for x in lows)
+    return None if up == dn else (-1 if up else 1)

@@ -1,6 +1,6 @@
 """overlap_check -- how much do the filter blocks say the same thing? A sample of BUILD days (the ten of tests/test_blocks.days_of, then every
 k-th other session up to --days), a plain `donchian` n=10 5-minute run that trades nothing: at EVERY tf-bar decision the family is asked at,
-each block (batch 4 and the older price / trend blocks, each side) is asked `allowed("long")` ALONE and the decision is recorded when it says
+each block (batches 4 and 5 and the older price / trend blocks, each side; the Level-2 blocks need a feature table and are not in it) is asked `allowed("long")` ALONE and the decision is recorded when it says
 yes. Prints each block's share of all decisions and every pair of DIFFERENT blocks where the share of one block's yes-decisions that the other
 also allows is at least 80 % (with the other's own share, the share it would have by chance; a second block that allows 90 % of all decisions
 anyway says nothing and is left out). Reads build days only; never deletes a block.
@@ -25,7 +25,7 @@ PARAMS = {"tf": "5", "n": 10, "hold_to": "day", "stop_mode": "atr", "stop_val": 
 OLD = (("adx", "strong"), ("adx", "weak"), ("momentum", "with"), ("momentum", "against"), ("ema20", "with"), ("ema20", "against"),
        ("vwap", "with"), ("vwap", "against"), ("channel", "with"), ("channel", "against"), ("trend", "with"), ("trend", "against"),
        ("rvol", "high"), ("rvol", "low"), ("rvol", "spike"))
-NEW = tuple((b, s) for b in ("bbw", "atrp", "er", "macd", "rsidiv", "mfi", "deltadiv", "candle") for s in B.FILTERS[b])
+NEW = tuple((b, s) for b in ("bbw", "atrp", "er", "macd", "rsidiv", "mfi", "deltadiv", "candle", "tspeed", "absorb", "exhaust", "stoprun") for s in B.FILTERS[b])
 CONFIGS = {f"{b} {s}": B.filter_inputs(b, s) for b, s in OLD + NEW}
 MIN_N, SHARE, BASE_MAX = 30, 0.80, 0.90          # a pair is listed when the first block has >= MIN_N yes-decisions, SHARE of them are shared and the second does not allow >= BASE_MAX of all decisions anyway
 

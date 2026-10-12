@@ -99,7 +99,7 @@ def blocks() -> dict:
     fam, eng = RM.registry(), RUN._blocks()
     m, c, mc, ctl, sz, rg = (R.template(n) for n in ("exit_menu", "costs", "montecarlo", "control", "sizes", "ranges"))
     F = families()
-    filters = [{"block": b, "side": s, "words": eng.PLAIN[(b, s)], "runs": True, "why_not": None,
+    filters = [{"block": b, "side": s, "words": eng.PLAIN[(b, s)], "runs": True, "why_not": None, "research_tier": b in eng.RT_BLOCKS,
                 "markets": ["NQ"] if b in eng.L2_BLOCKS else list(eng.BLOCK_MARKETS.get(b, ("NQ", "ES", "GC")))}
                for b, sides in eng.FILTERS.items() for s in sides]
     B = {"families": F, "other_families": sorted(set(fam.REGISTRY) - set(eng.WRAPPED)), "filters": filters,
@@ -146,7 +146,8 @@ def blocks() -> dict:
               for x in B["open_settings"]],
             "FILTERS (settings.filters: {block, side}; a filter is kept only if it wins alone, line 2.7; a card may name two, line 0.2: each runs alone and both together, and the pair is kept only if each wins alone AND the pair beats each one)",
             *[f"  {f['block'] + ' ' + f['side']:<18s}  " + ("" if f["runs"] else f"NOT IN VERSION 1 ({f['why_not']}) -- ") + f["words"]
-              + (" [NQ only; its test days end 2026-07-07, where the vendor's Level 2 history ends]" if f["block"] in eng.L2_BLOCKS else "") for f in filters],
+              + (" [NQ only; its test days end 2026-07-07, where the vendor's Level 2 history ends]" if f["block"] in eng.L2_BLOCKS else "")
+              for f in filters],
             "LIMITS (settings.limits)",
             *[f"  {x['name']:<18s}  " + ("" if x["runs"] else "NOT IN VERSION 1 (an exit of its own) -- ") + x["words"] for x in B["limits"]],
             f"EXITS: the standard table, the same for every idea -- {m['cells'] // len(B['exits']['targets_r'])} stops x {len(B['exits']['targets_r'])} targets = {m['cells']} cells; "

@@ -144,6 +144,28 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   bigorder    f_bigorder = ...                                      series: the largest aggressor order of each minute, signed
                                                                     by its side (big buys minus big sells)
 
+  BATCH 5 BLOCKS (tick and Level-2 concepts; first-guess definitions in engine/indicators.py, the owner reviews each; no signal = both sides
+        blocked). The flow ones read the flow table and the completed 1-minute bars of the last FLOW_WIN = 5 minutes (a hole = no signal),
+        NQ, ES and GC, a delta block for the data cap (FLOW_BLOCKS); the book ones read the Level-2 table, NQ only (L2_BLOCKS).
+  tspeed        fast | slow | burst   f_tspeed    trades (prints) of the last 5 minutes against the median of the same clock window on the 20
+        dates before (15 needed): fast = above it, slow = below it, burst = at least RVOL_SPIKE = 2 times a median above 0. Direction-free.
+  absorb        with | against        f_absorb    a heavy one-sided window (|share| and volume both at or above the reference medians) in which
+        price made at most ABS_PROGRESS = 1 unit of progress the aggressors' way: buying absorbed = bearish, selling absorbed = bullish.
+        The unit = the mean 1-minute range of the 20 minutes before (10 needed).
+  exhaust       with | against        f_exhaust   a window with |share| at or above the reference 80th percentile that pushed at least
+        EX_PUSH = 3 units, ended within LEVEL_NEAR = 1 unit of a real level on that side (engine/levels.py) and whose last minute closed
+        back against the push: reversal direction (a push up = bearish).
+  stoprun       with | against        f_stoprun   the window traded beyond a real level and its last close is back at or inside it, with the
+        net sweep share on the side that broke, at or above the reference median: a run above a level that failed = bearish. Both
+        levels run: no signal.
+  micro         with | against        f_micro     the 5-minute mean of spread / 2 x (bid - ask) / (bid + ask) of the best level sizes
+        (Level 2: a larger bid pulls the fair price up): above 0 bullish, below 0 bearish, exactly 0: no signal.
+  iceberg       with | against        f_iceberg   RESEARCH TIER (vendor series, 1-minute, NQ, not reproducible live, never promotable):
+        refilled size summed over 5 minutes, bid above ask = bullish.
+  pulled        with | against        f_pulled    RESEARCH TIER: pulled size summed over 5 minutes, ask above bid = bullish.
+  qdepl         with | against        f_qdepl     RESEARCH TIER: queue depletion (eaten) summed over 5 minutes, ask above bid = bullish.
+        with = a long needs bullish (a short bearish); against = the reverse; the five-minute window needs five consecutive finite rows.
+
 ib_n = port1.Ib with the range length as an input: ib_min 5 | 15 | 30 | 60 minutes from 09:30 (60 = ib, trade for trade).
 """
 from __future__ import annotations
@@ -170,7 +192,9 @@ VOL_DAYS = 20                                       # volatility and volume bloc
 RSI_N = 14
 NEWS_TIMES = ("08:30", "10:00")                     # the release groups of cache/events.csv that make a "release day"
 BOOK_COLS = ("imb10", "t_utc", "depth10_rel20d", "bid10_rel15", "ask10_rel15", "bid10_chg", "ask10_chg", "depth10",
-             "bid_wall_sz", "ask_wall_sz", "bid_wall_dist", "ask_wall_dist", "bid_med_sz", "ask_med_sz")      # what the Level-2 blocks read through ctx.feat
+             "bid_wall_sz", "ask_wall_sz", "bid_wall_dist", "ask_wall_dist", "bid_med_sz", "ask_med_sz",
+             "bid_top1", "ask_top1", "spread_ticks",                                                        # micro
+             "rt_ice_bid", "rt_ice_ask", "rt_pulled_bid", "rt_pulled_ask", "rt_qdepl_bid", "rt_qdepl_ask")      # iceberg, pulled, qdepl: what the Level-2 blocks read through ctx.feat
 WALL_X, WALL_TICKS = 5.0, 8                         # wall block: a level >= WALL_X x the median level, within WALL_TICKS of the touch
 STACK_FRAC = 0.05                                   # stack block: the change of (own side - other side) top-10 size, as a share of the depth
 MIN0, NMIN = -360, 1380                             # minute volume: index 0 = 18:00 ET of the evening before .. 17:00 ET
@@ -187,12 +211,15 @@ FLOW_WIN = 5                                        # delta blocks: the minutes 
 FLOW_REF, FLOW_REF_MIN = 20, 15                     # ... the trade dates of the size bar, and the fewest of them with volume
 FLOW_Q = {"": 0.5, "_big": 0.8}                     # ... the size bar: the median / the 80th percentile of the reference |share|
 FLOW_SERIES = {"delta": 1, "cumdelta": 1, "sweep": 2, "bigorder": 3}      # block -> row of flowtab's prefix sums
-FLOW_BLOCKS = (*FLOW_SERIES, "deltadiv")            # every block that reads the flow table: its test range ends where the flow file ends
+FLOW_DIR = ("absorb", "exhaust", "stoprun")         # batch 5: direction blocks of the flow table and the minute bars (levels for the last two)
+BOOK_DIR = ("micro", "iceberg", "pulled", "qdepl")  # batch 5: direction blocks of the Level-2 table (NQ)
+RT_BLOCKS = ("iceberg", "pulled", "qdepl")          # ... of them the research tier: the vendor's history slots, not reproducible live (l2data rt_*)
+FLOW_BLOCKS = (*FLOW_SERIES, "deltadiv", "tspeed", *FLOW_DIR)      # every block that reads the flow table: its test range ends where the flow file ends
 BBW_TIGHT, BBW_WIDE = 0.20, 0.80                    # bbw block: the rank at most / at least
 ATRP_HIGH, ATRP_LOW = 0.70, 0.30                    # atrp block
 ER_TREND, ER_CHOP = 0.5, 0.25                       # er block
 MFI_EXTREME = 30.0                                  # mfi block: points beyond 50 for extreme_against (20 / 80)
-DIR_BLOCKS = ("macd", "rsidiv", "deltadiv")         # blocks whose signal is a direction (+1 bullish, -1 bearish): with / against
+DIR_BLOCKS = ("macd", "rsidiv", "deltadiv", *FLOW_DIR, *BOOK_DIR)      # blocks whose signal is a direction (+1 bullish, -1 bearish): with / against
 VOL_ANCHOR = {"asia": 0, "london": 10800, "pre": 30300, "nyam": OPEN, "mid": OPEN, "pm": OPEN, "eve": -21600}
 
 X_STOP_ATR = (1.0, 2.0)                             # the extended menu's new stops and targets
@@ -235,8 +262,10 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "mfi": {"with": {"f_mfi": "with"}, "against": {"f_mfi": "against"}, "extreme_against": {"f_mfi": "extreme_against"}},
            "deltadiv": {"with": {"f_deltadiv": "with"}, "against": {"f_deltadiv": "against"}},
            "candle": {"displace": {"f_candle": "displace"}, "engulf": {"f_candle": "engulf"}, "reject": {"f_candle": "reject"}},
+           "tspeed": {"fast": {"f_tspeed": "fast"}, "slow": {"f_tspeed": "slow"}, "burst": {"f_tspeed": "burst"}},
+           **{b: {"with": {f"f_{b}": "with"}, "against": {f"f_{b}": "against"}} for b in (*FLOW_DIR, *BOOK_DIR)},
            **{blk: {side: {f"f_{blk}": side} for side in ("with", "against", "with_big", "against_big")} for blk in FLOW_SERIES}}
-L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack")      # NQ only: they read the Level-2 feature table
+L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack", *BOOK_DIR)      # NQ only: they read the Level-2 feature table
 BLOCK_MARKETS = {"smt": ("NQ", "ES"), **{b: ("NQ",) for b in Z.RANGE_BLOCKS}}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
 PLAIN = {("volatility", "high"): "only after a day whose range was above its own 20-day median",
          ("volatility", "low"): "only after a day whose range was at or below its own 20-day median",
@@ -313,6 +342,28 @@ PLAIN.update({("bbw", "tight"): "only when the Bollinger bands (20 bars, 2 sigma
               ("candle", "displace"): "only when the signal bar is a strong push the trade's way: body at least 1.5 ATR and the close in the outer quarter of its range",
               ("candle", "engulf"): "only when the signal bar's body engulfs the previous bar's body, in the opposite colour and the trade's direction",
               ("candle", "reject"): "only when the signal bar shows a rejection wick on the trade's side: at least twice its body (a long: the lower wick)"})
+PLAIN.update({
+    ("tspeed", "fast"): "only when the tape is fast: the prints of the last 5 minutes are above the median of the same window on the 20 days before",
+    ("tspeed", "slow"): "only when the tape is slow: the prints of the last 5 minutes are below the median of the same window on the 20 days before",
+    ("tspeed", "burst"): "only when the tape is in a burst: the prints of the last 5 minutes are at least twice the median of the same window on the 20 days before",
+    ("absorb", "with"): "only when the aggressors were absorbed the trade's way in the last 5 minutes: heavy volume and one-sided delta (each at least its 20-day median for that window) "
+                        "with at most one average 1-minute range of progress (a long: heavy selling that did not push price down)",
+    ("absorb", "against"): "only when the aggressors were absorbed against the trade in the last 5 minutes: heavy volume and one-sided delta with at most one average 1-minute range "
+                           "of progress (a long: heavy buying that did not push price up)",
+    ("exhaust", "with"): "only when a heavy push ran out at a liquidity level the trade's way: the last 5 minutes moved at least 3 average 1-minute ranges on a delta share above the "
+                         "80th percentile of its 20 days, ended within one range of a level, and the last minute closed back (a long: after a push down into a level low)",
+    ("exhaust", "against"): "only when a heavy push ran out at a liquidity level against the trade (a long: after a push up into a level high), as above",
+    ("stoprun", "with"): "only when a stop run failed the trade's way: in the last 5 minutes price traded beyond a liquidity level on net sweep volume of that side and the last close "
+                         "is back inside it (a long: a level low was run and the close is back above it)",
+    ("stoprun", "against"): "only when a stop run failed against the trade (a long: a level high was run and the close is back below it)",
+    ("micro", "with"): "only when the microprice leans the trade's way: the 5-minute mean of the spread-weighted size imbalance of the best bid and ask (a long needs it above the mid)",
+    ("micro", "against"): "only when the microprice leans against the trade: the 5-minute mean of the spread-weighted size imbalance of the best bid and ask",
+    ("iceberg", "with"): "only when more hidden size was refilled on the bid than the offer over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
+    ("iceberg", "against"): "only when more hidden size was refilled on the offer than the bid over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
+    ("pulled", "with"): "only when more size was pulled from the offers than the bids over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
+    ("pulled", "against"): "only when more size was pulled from the bids than the offers over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
+    ("qdepl", "with"): "only when the offer queue was eaten faster than the bid queue over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
+    ("qdepl", "against"): "only when the bid queue was eaten faster than the offer queue over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live"})
 _WHAT = {"delta": ("net buying volume of the last 5 minutes", "buy volume minus sell volume of the aggressors"),
          "cumdelta": ("net buying volume since the session's anchor", "buy minus sell volume of the aggressors since 09:30 (the session's anchor)"),
          "sweep": ("net sweep volume of the last 5 minutes", "buy minus sell volume of orders that walked two price levels or more"),
@@ -684,8 +735,8 @@ class Blocks:
                 "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
                 "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
                 **{f"f_pdz_{k}": "off" for k in RG.KINDS}, **{f"f_ote_{k}": "off" for k in RG.KINDS},
-                "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off",
-                **{f"f_{b}": "off" for b in FLOW_SERIES}}
+                "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off", "f_tspeed": "off",
+                **{f"f_{b}": "off" for b in (*FLOW_SERIES, *FLOW_DIR, *BOOK_DIR)}}
     SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen")),
               "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
               "f_cvol": ("choice", ("off", "hi", "lo")), "f_news": ("choice", ("off", "yes", "no")),
@@ -700,6 +751,7 @@ class Blocks:
               **{f"f_pdz_{k}": ("choice", ("off", "with", "against")) for k in RG.KINDS}, **{f"f_ote_{k}": ("choice", ("off", "in", "out")) for k in RG.KINDS},
               "f_bbw": ("choice", ("off", "tight", "wide")), "f_atrp": ("choice", ("off", "high", "low")), "f_er": ("choice", ("off", "trend", "chop")),
               "f_mfi": ("choice", ("off", "with", "against", "extreme_against")), "f_candle": ("choice", ("off", "displace", "engulf", "reject")),
+              "f_tspeed": ("choice", ("off", "fast", "slow", "burst")),
               **{f"f_{b}": ("choice", ("off", "with", "against")) for b in DIR_BLOCKS},
               **{f"f_{b}": ("choice", ("off", "with", "against", "with_big", "against_big")) for b in FLOW_SERIES}}
     BASE = None                                     # the family name the class was built for
@@ -780,12 +832,142 @@ class Blocks:
         w = flowtab.window(self._cx.root, self.day, b - IND.DIV_N * self.tf * 60, b)
         return None if w is None or w[0] <= 0 else IND.delta_div(self.C[-1] - self.C[-IND.DIV_N - 1], w[1])
 
+    # ---- batch 5: tick-flow blocks (the flow table + the completed 1-minute bars) and Level-2 blocks ----------------------------------
+    def _flow_ref(self, fn):
+        """(fn(today), [fn(d) for the 20 dates before today that have one]) or None: no value today, or fewer than FLOW_REF_MIN dates."""
+        x = fn(self.day)
+        if x is None:
+            return None
+        ref = [v for v in (fn(r["date"]) for r in self.dl[-FLOW_REF:]) if v is not None]
+        return (x, ref) if len(ref) >= FLOW_REF_MIN else None
+
+    def _win5(self):
+        """(the last FLOW_WIN completed 1-minute bars, consecutive, ending at this decision's minute; the unit; the window's end second)
+        or None: outside a session, a minute of the window without prints, or too few bars for the unit."""
+        if self.sid is None:
+            return None
+        b = _now_s(self) // 60 * 60
+        recent = [m for m in self.M[-(IND.RANGE_N + FLOW_WIN):] if m[0] < b]
+        by = {m[0]: m for m in recent}
+        w = [by.get(b - 60 * k) for k in range(FLOW_WIN, 0, -1)]
+        if any(m is None for m in w):
+            return None
+        u = IND.minute_unit(recent)
+        return (w, u, b) if u is not None else None
+
+    def _share_vol(self, a, b, row=1):
+        """fn(iso) -> (series share of the window's volume, the window's volume) of the flow table, or None."""
+        root = self._cx.root
+
+        def f(iso):
+            t = flowtab.window(root, iso, a, b)
+            return None if t is None or t[0] <= 0 else (t[row] / t[0], t[0])
+        return f
+
+    def blk_tspeed(self):
+        """(prints of the last FLOW_WIN minutes, the median of the same window on the 20 dates before) or None."""
+        if self.sid is None:
+            return None
+        b = _now_s(self) // 60 * 60
+        a, root = b - FLOW_WIN * 60, self._cx.root
+        r = self._flow_ref(lambda iso: flowtab.prints(root, iso, a, b))
+        return None if r is None else (r[0], float(np.median(r[1])))
+
+    def blk_absorb(self):
+        w = self._win5()
+        if w is None:
+            return None
+        bars, unit, b = w
+        r = self._flow_ref(self._share_vol(b - FLOW_WIN * 60, b))
+        if r is None:
+            return None
+        (x, vol), ref = r
+        if abs(x) < float(np.median([abs(s) for s, _ in ref])) or vol < float(np.median([v for _, v in ref])):
+            return None                                             # not a heavy, one-sided window
+        return IND.absorb(x, bars[-1][4] - bars[0][1], unit)
+
+    def _levels(self):
+        """([the level highs], [the level lows]) known at this decision (engine/levels.py)."""
+        lv = LV.levels(self).values()
+        return [hi for hi, _ in lv], [lo for _, lo in lv]
+
+    def blk_exhaust(self):
+        w = self._win5()
+        if w is None:
+            return None
+        bars, unit, b = w
+        r = self._flow_ref(self._share_vol(b - FLOW_WIN * 60, b))
+        if r is None:
+            return None
+        (x, _), ref = r
+        if abs(x) < float(np.quantile([abs(s) for s, _ in ref], FLOW_Q["_big"])):
+            return None
+        highs, lows = self._levels()
+        return IND.exhaust(x, bars[0][1], max(m[2] for m in bars), min(m[3] for m in bars), bars[-2][4], bars[-1][4], unit, highs, lows)
+
+    def blk_stoprun(self):
+        w = self._win5()
+        if w is None:
+            return None
+        bars, _, b = w
+        highs, lows = self._levels()
+        d = IND.stoprun(max(m[2] for m in bars), min(m[3] for m in bars), bars[-1][4], highs, lows)
+        if d is None:
+            return None
+        r = self._flow_ref(self._share_vol(b - FLOW_WIN * 60, b, row=2))
+        if r is None:
+            return None
+        (x, _), ref = r
+        # the sweeps that broke the level are on the breaking side (-d), and as heavy as the median window of the 20 days before
+        return d if x * -d > 0 and abs(x) >= float(np.median([abs(s) for s, _ in ref])) else None
+
+    def _book5(self, cols):
+        """[the last BOOK_ROWS values of each column of `cols`] over consecutive finite minutes ending at the fresh row, or None."""
+        cx = self._cx
+        if not S.feat_fresh(cx):
+            return None
+        t = cx.feat_window("t_utc", S.BOOK_ROWS)
+        w = [cx.feat_window(c, S.BOOK_ROWS).astype(np.float64) for c in cols]
+        if (len(t) < S.BOOK_ROWS or int(t[-1]) - int(t[0]) != 60 * (S.BOOK_ROWS - 1)
+                or any(len(x) < S.BOOK_ROWS or not np.isfinite(x).all() for x in w)):
+            return None
+        return w
+
+    def blk_micro(self):
+        """+1 | -1 | None: the sign of the 5-minute mean of the microprice's offset from the mid, spread / 2 x (bid - ask) / (bid + ask)
+        of the best level sizes (a larger bid pulls the fair price up)."""
+        w = self._book5(("bid_top1", "ask_top1", "spread_ticks"))
+        if w is None:
+            return None
+        b, a, sp = w
+        tot = b + a
+        if (tot <= 0).any():
+            return None
+        m = float(np.mean(sp / 2.0 * (b - a) / tot))
+        return 1 if m > 0 else -1 if m < 0 else None
+
+    def blk_rt(self, name: str):
+        """+1 | -1 | None for iceberg / pulled / qdepl: the vendor's bid and ask series summed over the last BOOK_ROWS minutes. iceberg: more
+        refilled on the bid is bullish; pulled and qdepl: more pulled / eaten on the ask is bullish. A tie: None."""
+        w = self._book5((f"rt_{'ice' if name == 'iceberg' else name}_bid", f"rt_{'ice' if name == 'iceberg' else name}_ask"))
+        if w is None:
+            return None
+        bid, ask = float(w[0].sum()), float(w[1].sum())
+        if bid == ask:
+            return None
+        up = bid > ask if name == "iceberg" else ask > bid
+        return 1 if up else -1
+
     def blk_dir(self, block: str):
         """The direction signal (+1 bullish, -1 bearish, None) of a DIR_BLOCKS block."""
         if block == "macd":
             return IND.macd_dir(self.C)
         if block == "rsidiv":
             return IND.rsidiv(self.H, self.L, lambda i: rsi(self.C[:i + 1]))
+        if block in ("absorb", "exhaust", "stoprun", "micro"):
+            return getattr(self, f"blk_{block}")()
+        if block in RT_BLOCKS:
+            return self.blk_rt(block)
         return self.blk_deltadiv()
 
     def on_session(self, ctx):
@@ -982,6 +1164,14 @@ class Blocks:
         if p["f_stack"] != "off":
             x = self.blk_stack(sd)
             if x is None or not (x >= STACK_FRAC if p["f_stack"] == "with" else x <= -STACK_FRAC):
+                return False
+        if p["f_tspeed"] != "off":
+            sig = self.blk_tspeed()
+            if sig is None:
+                return False
+            x, med = sig
+            mode = p["f_tspeed"]
+            if not (x > med if mode == "fast" else x < med if mode == "slow" else med > 0 and x >= RVOL_SPIKE * med):
                 return False
         for blk in FLOW_SERIES:
             mode = p[f"f_{blk}"]
