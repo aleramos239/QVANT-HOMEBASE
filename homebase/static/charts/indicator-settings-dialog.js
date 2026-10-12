@@ -21,6 +21,8 @@ const LINE_LABEL = { vwap: { main: 'VWAP', band1: 'Band 1', band2: 'Band 2', ban
   ema: { main: 'EMA' }, sma: { main: 'SMA' }, vwma: { main: 'VWMA' },
   adx: { adx: 'ADX', pdi: '+DI', mdi: '-DI' }, cumdelta: { main: 'Cum delta' },
   volume: { up: 'Up bars', down: 'Down bars' }, delta: { up: 'Buying (up)', down: 'Selling (down)' } };
+/* a param that only matters for one value of another: hidden otherwise (vwap's time is for the custom anchor) */
+const SHOW_IF = { vwap: { customTime: (v) => v.anchor === 'custom' } };
 const SHAPE_NAMES = { line: 'Line', steps: 'Steps', curved: 'Curved' };
 
 function mk(tag, cls, text) {
@@ -92,8 +94,46 @@ function mount(box, host) {
     pane.replaceChildren();
     if (TABS[tab].id === 'style') pane.append(...stylePane());
     else if (TABS[tab].id === 'guide') pane.append(guidePane());
-    else pane.append(...d.params.map(inputRow));
+    else {
+      const rows = d.params.filter((p) => !(SHOW_IF[inst.id] && SHOW_IF[inst.id][p.key] && !SHOW_IF[inst.id][p.key](vals))).map(inputRow);
+      if (inst.id === 'vwap') rows.splice(vals.anchor === 'custom' ? 2 : 1, 0, vwapColourRow());   // right under the anchor (and its time)
+      if (inst.id === 'vwap' && host.addAnother) rows.unshift(addAnotherRow());   // on top, where it is seen
+      pane.append(...rows);
+    }
     pane.scrollTop = 0;
+  }
+
+  /* ---- VWAP: one colour for the line and its bands, and a button for a second (third...) VWAP ---- */
+  function vwapColourRow() {
+    const row = mk('div', 'field'), lab = mk('label', '', 'Colour'), sw = button('swatch'), dot = mk('i');
+    if (!style) style = C.defaultStyle('vwap', cell.cfg.indicators.filter((x) => x.uid !== uid));
+    dot.style.background = C.lineColor(style.main);
+    sw.title = 'VWAP colour (its bands follow)';
+    sw.setAttribute('aria-label', 'VWAP colour');
+    sw.append(dot);
+    sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
+      const grid = mk('div', 'sw-grid');
+      for (const hex of C.LINE_COLORS.concat(['#9C27B0', '#089981', '#F23645', '#787B86', '#FFFFFF', '#000000'])) {
+        const b = button('sw-cell');
+        b.style.background = hex; b.title = hex; b.setAttribute('aria-label', hex);
+        b.onclick = () => {
+          for (const k of ['main', 'band1', 'band2', 'band3']) if (style[k]) style[k].color = hex;
+          dot.style.background = hex; host.closeMenu(); preview();
+        };
+        grid.append(b);
+      }
+      m.append(grid);
+    });
+    row.append(lab, sw);
+    return row;
+  }
+  function addAnotherRow() {
+    const row = mk('div', 'field vw-add'), b = button('btn btn-ghost', '+ Add VWAP');
+    const n = cell.cfg.indicators.filter((x) => x.id === 'vwap').length;
+    b.title = 'Keeps these settings, then opens a new VWAP with its own anchor and colour';
+    b.onclick = () => { ok.onclick(); host.addAnother('vwap'); };
+    row.append(mk('label', '', n > 1 ? `${n} VWAPs on this chart` : 'VWAPs on this chart: 1'), b);
+    return row;
   }
 
   /* ---- How to read: the plain-words guide (guide-*.js) and, when it has one, what this chart shows right now ---- */
@@ -122,21 +162,17 @@ function mount(box, host) {
       ctl.checked = !!vals[p.key];
       ctl.onchange = () => { vals[p.key] = ctl.checked; preview(); };
     } else if (p.type === 'choice') {
-      ctl = mk('div', 'seg');
-      ctl.setAttribute('role', 'radiogroup');
+      ctl = mk('select', 'set-select ch-select');       // a dropdown, never a row of pills: long names fit the card
+      ctl.id = id;
+      lab.htmlFor = id;
       ctl.setAttribute('aria-label', p.label);
-      const draw = () => {
-        ctl.replaceChildren(...p.choices.map(([v, text]) => {
-          const on = (vals[p.key] === undefined ? p.def : vals[p.key]) === v;      // an omitted default (the timeframe) reads as it
-          const b = mk('button', on ? 'on' : '', text);
-          b.type = 'button';
-          b.setAttribute('role', 'radio');
-          b.setAttribute('aria-checked', String(on));
-          b.onclick = () => { vals[p.key] = v; draw(); preview(); };
-          return b;
-        }));
+      for (const [v, text] of p.choices) { const o = mk('option', '', text); o.value = v; ctl.append(o); }
+      ctl.value = vals[p.key] === undefined ? p.def : vals[p.key];       // an omitted default (the timeframe) reads as it
+      ctl.onchange = () => {
+        vals[p.key] = ctl.value;
+        if (SHOW_IF[inst.id]) renderPane();   // a box that depends on this choice (vwap's time) shows or hides
+        preview();
       };
-      draw();
     } else if (p.type === 'boxes') {
       return boxesEditor(p);
     } else if (p.type === 'tf') {

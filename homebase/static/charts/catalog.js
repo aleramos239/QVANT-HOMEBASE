@@ -228,7 +228,7 @@ function lineValue(ln, v) {
 const CATALOG = [
   { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main',
     desc: 'Contracts traded per bar; green when buyers outweighed sellers, else red' },
-  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Volume-weighted average price since its anchor (session, RTH…), optional bands', params: [
+  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Average price since its anchor (session, RTH…), optional bands. Add it again for more', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice',
       choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
     { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },

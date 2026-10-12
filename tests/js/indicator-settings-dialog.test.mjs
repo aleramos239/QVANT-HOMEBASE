@@ -124,3 +124,60 @@ test('Cancel (revert) puts the instance back to what it was when the dialog open
   ctl.revert();
   assert.equal(cell.cfg.indicators[0].params.customTime, '16:00');
 });
+
+/* 2026-10-12: a choice is a dropdown (a row of pills overflowed the card), vwap's time shows only for the custom
+   anchor, the VWAP has one colour row, and "+ Add VWAP" keeps this one and asks the page for a new one. */
+function pane(box) { return box.children[0].children[1]; }
+function walk(el, fn) { fn(el); for (const c of el.children) walk(c, fn); }
+function find(el, pred) { const out = []; walk(el, (n) => { if (pred(n)) out.push(n); }); return out; }
+
+test('a choice is a <select> with every option, set to the current value', () => {
+  const { box } = openVwap();
+  const sel = find(pane(box), (n) => n.tagName === 'select')[0];
+  assert.ok(sel, 'the anchor is a dropdown');
+  assert.deepEqual(sel.children.map((o) => o.value), ['eth', 'rth', 'custom', 'week', 'month']);
+  assert.equal(sel.value, 'custom');
+  assert.equal(find(pane(box), (n) => /\bseg\b/.test(n.className)).length, 0, 'no pill row left');
+});
+
+test('picking a different anchor hides the time row and previews it', () => {
+  const { box, cell } = openVwap();
+  const sel = find(pane(box), (n) => n.tagName === 'select')[0];
+  sel.value = 'rth';
+  sel.onchange();
+  assert.equal(cell.cfg.indicators[0].params.anchor, 'rth');
+  assert.equal(find(pane(box), (n) => n._class === 'sw-hex').length, 0, 'the HH:MM box is gone');
+});
+
+test('the VWAP colour row recolours the line and its three bands', () => {
+  const inst = C.instance('vwap', { anchor: 'rth' });
+  const cell = makeCell(inst);
+  const box = new FakeEl('div');
+  let fill = null;
+  const host = { cell, uid: inst.uid, closeMenu: () => {}, toggleMenu: (a, cls, f) => { fill = f; }, commit() {}, cancel() {} };
+  HBIndicatorSettings.mount(box, host);
+  const sw = find(pane(box), (n) => n.tagName === 'button' && n._class === 'swatch')[0];
+  sw.onclick();
+  const m = new FakeEl('div');
+  fill(m);
+  const cells = find(m, (n) => n._class === 'sw-cell');
+  cells[1].onclick();
+  const want = cells[1].style.background;
+  const st = cell.cfg.indicators[0].style;
+  assert.ok(want);
+  for (const k of ['main', 'band1', 'band2', 'band3']) assert.equal(st[k].color, want);
+});
+
+test('"+ Add VWAP" commits this one, then asks for a new VWAP', () => {
+  const inst = C.instance('vwap');
+  const cell = makeCell(inst);
+  const box = new FakeEl('div');
+  const calls = [];
+  const host = { cell, uid: inst.uid, closeMenu: () => {}, toggleMenu: () => {}, commit: () => calls.push('commit'),
+    cancel() {}, addAnother: (id) => calls.push(`add:${id}`) };
+  HBIndicatorSettings.mount(box, host);
+  const btn = find(pane(box), (n) => n.tagName === 'button' && /Add VWAP/.test(n.textContent))[0];
+  assert.ok(btn);
+  btn.onclick();
+  assert.deepEqual(calls, ['commit', 'add:vwap']);
+});

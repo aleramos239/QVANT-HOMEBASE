@@ -1388,6 +1388,14 @@ function settingsDialog(cell, uid, tab) {
     commit(changed) { if (changed) markDirty(); closeDialog(); },
     cancel: closeDialog,
     onDefaultApplied: (id, payload) => indicatorDefaults.set(id, payload),
+    addAnother(id) {   // "+ Add another VWAP": a new instance (its own colour), its settings open at once
+      const saved = indicatorDefaults.get(id), inst2 = C.instance(id, saved && saved.params);
+      const style = C.defaultStyle(id, cell.cfg.indicators);
+      if (style) inst2.style = style;
+      cell.update({ indicators: [...cell.cfg.indicators, inst2] });
+      markDirty();
+      settingsDialog(cell, inst2.uid);
+    },
   });
   dlg.onClose = ctl.revert;   // Cancel, ×, Esc, a backdrop click: the instance back to what it was at open
 }
