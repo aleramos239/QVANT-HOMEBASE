@@ -771,9 +771,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return None
 
     def warm_desklab_results() -> None:
-        """Score every promoted strategy's saved runs once, so the Desk's first results ask after a restart is a cache hit
-        (about 16 prop sims: 25-90 s cold). Reads saved runs only and never starts one (unlike ensure_unseen). The lock is
-        taken per record, so a real ask is never held behind the whole warm-up. Never raises."""
+        """Score every promoted strategy's (and the two built-in straddles' twins') saved runs, so the Desk's first results
+        ask is a cache hit (about 16 prop sims: 25-90 s cold; a new run was 3-4 s on the next ask). One pass; the chart
+        service repeats it every WARM_EVERY_S. Reads saved runs only and never starts one (unlike ensure_unseen). The lock
+        is taken per record, so a real ask is never held behind the whole warm-up. Never raises."""
         try:
             for rec in store.listing():
                 with desk_res_lock:
@@ -781,6 +782,16 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                                 ((deskresults.unseen_state(manager.runs, rec) or {}).get("run") or {}).get("id")):
                         if rid:
                             prop_of(rid)
+            for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
+                try:
+                    rec = deskresults.builtin_rec(desk_id)
+                    with desk_res_lock:
+                        for rid in (deskresults.build_run_id(manager.runs, rec),
+                                    (deskresults.unseen_state(manager.runs, rec) or {}).get("run", {}).get("id")):
+                            if rid:
+                                prop_of(rid)
+                except Exception:      # noqa: BLE001 -- a twin that cannot be read is skipped, as the route does
+                    continue
         except Exception:      # noqa: BLE001 -- a warm-up never takes the service down; the route computes it on ask
             pass
 

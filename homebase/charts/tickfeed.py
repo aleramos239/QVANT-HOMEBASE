@@ -106,10 +106,6 @@ async def connect_env(env: str):
     return await T.connect_md(prefer_live=(env == "live"))
 
 
-async def connect_default():
-    return await connect_env(MD_ENV)
-
-
 class TickFeed:
     def __init__(self, roots, on_ticks: Callable[[str, str, list], None],
                  on_subscribed: Optional[Callable[[str, str, Optional[int]], Awaitable[None]]] = None,

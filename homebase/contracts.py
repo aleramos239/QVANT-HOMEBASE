@@ -160,11 +160,6 @@ def realized_pnl(symbol: str, side: str, qty: int,
     return move * pv * abs(int(qty))
 
 
-def ticks_to_delta(symbol: str, ticks: float) -> float:
-    """Price distance for `ticks` minimum increments. 4 ticks of ES -> 1.00."""
-    return float(ticks) * tick_size(symbol)
-
-
 def round_to_tick(symbol: str, price: float) -> float:
     """Snap a price to the contract's tick grid (avoids 'invalid price' rejects)."""
     ts = tick_size(symbol)

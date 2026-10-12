@@ -70,6 +70,7 @@ ROLL_GRACE_MS = 60_000        # a 24/7 root rolls at 18:00 with no dead hour: it
                               # prints can reach us after the clock passed 18:00 and are kept this long
 REFILL_BUDGET = 60            # this process's own chart requests per hour
 SEND_QUEUE_MAX = 400
+WARM_EVERY_S = 120.0          # the Desk results pre-warm repeats this often (saved runs only; a run already scored is a cache hit)
 REPAIR_POLL_S = 60.0           # how often today's archive files are stat'ed for a repair that landed (a stat per root)
 PAST_REDRAW_S = 600.0          # a root's charts reload for a repaired PAST session at most this often: a fill lands piece
                                # by piece (a merge every few minutes), and each reload rebuilds every chart of the root
@@ -1254,7 +1255,12 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         log(f"up — {'replay ' + replay.isoformat() if replay else 'live'} · {', '.join(roots)}")
         # the Desk's first results ask is ~16 prop sims cold (25-90 s); done here, once, in a daemon thread (never blocks
         # a stop), it is a cache hit. Saved runs only: nothing is started.
-        threading.Thread(target=tester.warm, name="desklab-warm", daemon=True).start()
+        def warm_desklab() -> None:
+            while True:             # a new run is scored here within WARM_EVERY_S, not on the Desk's next ask
+                tester.warm()
+                time.sleep(WARM_EVERY_S)
+
+        threading.Thread(target=warm_desklab, name="desklab-warm", daemon=True).start()
         lagwatch.start(asyncio.get_running_loop(), log)     # a stall of the loop names its busy threads in the log
         try:
             yield
