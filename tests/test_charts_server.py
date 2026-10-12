@@ -775,6 +775,36 @@ def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path
     assert not any(m.get("type") == "update" and m.get("id") == "a" for m in sent), sent
 
 
+def test_a_chart_adding_a_study_does_not_rebuild_its_stream(tmp_path, monkeypatch):
+    """The same chart subscribing again to the same market and interval with one more study (an indicator
+    added) is answered from the stream it already has: prepare() runs once, the history carries both studies,
+    and a study the chart dropped is gone from the stream."""
+    prepared = [0]
+    orig_prepare = Hub.prepare
+
+    def prepare(self, root, spec, keys):
+        prepared[0] += 1
+        return orig_prepare(self, root, spec, keys)
+
+    monkeypatch.setattr(Hub, "prepare", prepare)
+    app = create_app(roots=["NQ"], base=archive(tmp_path), replay=D, speed=1,
+                     start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60", "studies": ["vwap"]})
+        first = next_of(ws, "history")
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60", "studies": ["vwap", "ema:5"]})
+        second = next_of(ws, "history")
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:60", "studies": ["ema:5"]})
+        third = next_of(ws, "history")
+        ws.send_json({"op": "sub", "id": "a", "root": "NQ", "spec": "time:300", "studies": ["ema:5"]})
+        fourth = next_of(ws, "history")
+    assert set(first["studies"]) == {"vwap"}
+    assert set(second["studies"]) == {"vwap", "ema:5"} and len(second["studies"]["ema:5"]) == len(second["bars"])
+    assert set(third["studies"]) == {"ema:5"}
+    assert third["bars"] == second["bars"] and third["studies"]["ema:5"] == second["studies"]["ema:5"]
+    assert prepared[0] == 2      # time:60 once, time:300 once -- the two re-subscribes of time:60 reused its stream
+
+
 class QueueFeed:
     """A live feed the test drives: every item put on `q` is delivered to
     on_ticks; `delivered` counts the ones that were."""

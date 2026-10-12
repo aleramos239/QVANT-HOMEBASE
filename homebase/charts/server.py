@@ -1942,11 +1942,17 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 s = None
                 replays.stop(conn, cid, notify=False)   # a sub on a replaying chart returns it to live
                 try:
-                    hub.unsubscribe((conn, cid))
+                    # An indicator added is this same chart asking again for the same market and interval with one
+                    # more study: its stream is kept (not rebuilt from every session, 1-4 s on a cold 5m..1D chart)
+                    # and only the new study is run over it. A stream marked for reset is never reused.
+                    same = hub.streams.get((root, spec.key))
+                    hub.unsubscribe((conn, cid), keep=same if same is not None and not same.reset else None)
                     s = hub.streams.get((root, spec.key))
                     if s is None:
                         s = hub.attach(await asyncio.to_thread(hub.prepare, root, spec, keys))
                     await asyncio.to_thread(hub.ensure_prime, s, keys)   # sessions the new studies read (noise band ...)
+                    if not s.subs:
+                        s.retain(keys)      # the studies this chart no longer asks for stop running
                     for k in keys:
                         s.add_study(k)
                     hub.subscribe(s, (conn, cid), bool(msg.get("flow", True)))

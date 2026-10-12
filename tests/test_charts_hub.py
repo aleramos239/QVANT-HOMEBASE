@@ -122,6 +122,30 @@ def test_the_last_unsubscribe_drops_the_stream(tmp_path):
     assert hub.streams == {}
 
 
+def test_unsubscribe_keeps_the_stream_asked_for(tmp_path):
+    """An indicator added re-subscribes the same chart: its stream is not dropped and rebuilt (keep=)."""
+    hub, _, _ = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, sub=("a", "1"))
+    hub.unsubscribe(("a", "1"), keep=s)
+    assert hub.streams == {s.key: s} and s.subs == {} and s.flows == {}
+    hub.subscribe(s, ("a", "1"))
+    hub.unsubscribe(("a", "1"))                      # no keep: the last one still drops it
+    assert hub.streams == {}
+
+
+def test_retain_keeps_only_the_studies_asked_for(tmp_path):
+    hub, _, _ = setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    s = open_stream(hub, keys=("vwap", "cumdelta", "profile"))
+    assert set(s.studies) == {"vwap", "cumdelta"} and s.profile is not None
+    s.retain(["vwap", "ema:5"])
+    assert set(s.studies) == {"vwap"} and set(s.values) == {"vwap"} and s.profile is None
+    s.add_study("ema:5")
+    p = s.payload()
+    assert set(p["studies"]) == {"vwap", "ema:5"} and len(p["studies"]["ema:5"]) == len(p["bars"])
+
+
 def test_no_reset_loop_for_a_root_with_no_today_tape(tmp_path):
     """A root nobody has ticked yet (no file on a replay date; a recorded
     root that hasn't started ticking) must not be reset every drain forever:

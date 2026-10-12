@@ -141,6 +141,16 @@ class Stream:
         self.studies[key] = st
         self.values[key] = [st.push(b) for b in self.bars]
 
+    def retain(self, keys) -> None:
+        """Keep only the studies in `keys` (and the profile only when asked for): what a stream built fresh for a
+        chart that asks for exactly these would hold. Called for a stream no other chart follows."""
+        want = set(keys)
+        for k in [k for k in self.studies if k not in want]:
+            del self.studies[k]
+            self.values.pop(k, None)
+        if "profile" not in want:
+            self.profile = None
+
     def payload(self, fp: bool = True, big: bool = True, flow: bool = True) -> dict:
         """The history message: the most recent HISTORY_MAX bars, every
         study's values sliced to match. A subscriber's cursor is still
@@ -388,10 +398,13 @@ class Hub:
         s.subs[sub] = len(s.bars)
         s.flows[sub] = flow
 
-    def unsubscribe(self, sub: tuple) -> None:
+    def unsubscribe(self, sub: tuple, keep: "Stream | None" = None) -> None:
+        """keep: a stream that stays registered even when this was its last subscriber -- the one the same chart
+        is about to subscribe to again (an indicator added: same market and interval, one more study), so it is
+        not thrown away and rebuilt from the sessions' bars."""
         for k, s in list(self.streams.items()):
             s.flows.pop(sub, None)
-            if s.subs.pop(sub, None) is not None and not s.subs:
+            if s.subs.pop(sub, None) is not None and not s.subs and s is not keep:
                 del self.streams[k]
 
     def stream_of(self, sub: tuple) -> Stream | None:
