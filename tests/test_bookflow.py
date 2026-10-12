@@ -241,3 +241,83 @@ def test_a_short_gap_is_not_a_feed_gap():
     ev = tr.on_book(last + 5_000, *book())                      # 5 s of nothing, then the level is gone: still pulled
     e = [x for x in eps(ev) if x["end"] != "open"]
     assert len(e) == 1 and e[0]["end"] == "pulled" and e[0]["t1"] == last + 5_000
+
+
+# ---- icebergs: a level that is hit again and again and keeps showing size
+
+def _hit_and_reload(tr, t, n, size=10, px=100.0, side=SELL, shown_after=2, lvl=('b', 0)):
+    """n times: a print of `size` at the level, the book shows it nearly empty, then full again."""
+    ev = []
+    for k in range(n):
+        tk = t + k * 1000
+        ev += tr.on_print(tk, px, size, side)
+        ev += tr.on_book(tk + 100, *book(big={lvl: shown_after}))
+        ev += tr.on_book(tk + 500, *book())
+    return ev, t + n * 1000
+
+def ices(ev): return [e for e in eps(ev) if "rl" in e]
+
+def test_iceberg_flagged_when_a_level_is_hit_again_and_again_and_reloads():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, t = _hit_and_reload(tr, 13_000, 10)               # 100 contracts into a level that shows 10
+    ic = ices(ev)
+    assert ic and ic[0]["s"] == "b" and ic[0]["p"] == 100.0 and ic[0]["id"].startswith("ib")
+    assert ic[0]["end"] == "open" and ic[0]["t1"] is None and ic[0]["r"] == 0.0 and ic[0]["ab"] is None
+    assert ic[0]["pk"] == 10 and ic[0]["tr"] >= 30 and ic[0]["rl"] >= 2        # flagged at 3x what it showed
+    assert ic[-1]["tr"] >= 60                                                  # sent again when its total doubled
+
+def test_an_iceberg_is_never_taken_for_a_wall_or_an_absorption():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, _ = _hit_and_reload(tr, 13_000, 10)
+    assert all(e["r"] < 1 and e["ab"] is None for e in ices(ev))
+    assert [e for e in eps(ev) if "rl" not in e] == []     # no big-level episode came of it
+
+def test_no_iceberg_for_a_level_that_is_simply_eaten():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev = tr.on_print(13_000, 100.0, 10, SELL)
+    ev += tr.on_book(13_100, *book(big={('b', 0): 0}))     # gone
+    ev += tr.on_print(13_200, 100.0 - TICK, 90, SELL)
+    assert ices(ev) == []
+
+def test_no_iceberg_without_reloads_even_if_much_traded():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev = []
+    for k in range(10):
+        ev += tr.on_print(13_000 + k * 100, 100.0, 10, SELL)    # 100 traded, the book never showed a reload
+        ev += tr.on_book(13_050 + k * 100, *book())
+    assert ices(ev) == []
+
+def test_iceberg_closes_when_price_trades_through_or_the_level_leaves():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, t = _hit_and_reload(tr, 13_000, 10)
+    assert ices(ev)
+    ev = tr.on_print(t + 100, 100.0 - 2 * TICK, 5, SELL)       # 2 ticks through
+    done = [e for e in ices(ev) if e["end"] == "ice"]
+    assert len(done) == 1 and done[0]["t1"] == t + 100 and done[0]["tr"] >= 80
+
+def test_iceberg_on_the_ask_side_and_buy_prints():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, _ = _hit_and_reload(tr, 13_000, 10, px=100.25, side=BUY, lvl=('a', 0))
+    ic = ices(ev)
+    assert ic and ic[0]["s"] == "a" and ic[0]["p"] == 100.25 and ic[0]["id"].startswith("ia")
+
+def test_iceberg_is_dropped_after_it_goes_idle_and_finish_closes_a_flagged_one():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    ev, t = _hit_and_reload(tr, 13_000, 10)
+    end = ices(tr.finish(t + 1000))
+    assert len(end) == 1 and end[0]["end"] == "ice" and end[0]["t1"] == t + 1000
+
+def test_iceberg_same_input_same_output():
+    def run():
+        tr = BookTracker(TICK)
+        out = warm(tr, 12)
+        ev, t = _hit_and_reload(tr, 13_000, 10)
+        return out + ev + tr.finish(t + 1000)
+    assert run() == run()

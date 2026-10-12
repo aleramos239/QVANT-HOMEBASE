@@ -55,6 +55,19 @@ function pulls(eps, { multiple = 5, minSeconds = 5 } = {}) {
   return out;
 }
 
+/* Icebergs: [{id, t0, t1, price, side, traded, shown, times, open}]. The server marks one with `rl`; `pk` is the biggest
+   size the level showed and `tr` what traded there, so tr / pk is how many times the shown size went through. side
+   'up' = a bid (support), 'down' = an offer. t1 null while it stands. */
+function icebergs(eps, { multiple = 3, minTraded = 30 } = {}) {
+  const out = [];
+  for (const e of eps || []) {
+    if (!e || e.rl == null || !(e.pk > 0) || !(e.tr >= minTraded) || !(e.tr / e.pk >= multiple)) continue;
+    out.push({ id: e.id, t0: e.t0, t1: e.t1, price: e.p, side: e.s === 'b' ? 'up' : 'down', traded: e.tr, shown: e.pk,
+      times: Math.floor(e.tr / e.pk), open: e.t1 == null });
+  }
+  return out;
+}
+
 /* The episodes as they stood at `now` (Bar Replay: the store may hold a chunk that runs past the cursor). One that
    began later is dropped; one that ended later is still open (the server masks the same way at a request's `to`);
    a flag raised later is not set yet. Rows that need no change are returned as they are. */
@@ -106,7 +119,7 @@ function askSpan(from, to, limit) {
   return end > start ? [start, end] : null;
 }
 
-const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, clipAt, askSpan, marketOpen, openStart };
+const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, icebergs, clipAt, askSpan, marketOpen, openStart };
 
 /* ---------------------------------------------------------------- browser */
 
@@ -160,7 +173,7 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
     on() {
       const c = this.cell;
       if (this.dead || !c.chart || !c.bars || !c.bars.length) return false;
-      if (inst(c, 'bigorders') || inst(c, 'absorb') || inst(c, 'pulled')) return true;
+      if (inst(c, 'bigorders') || inst(c, 'absorb') || inst(c, 'pulled') || inst(c, 'iceberg')) return true;
       return (c.cfg.indicators || []).some((x) => x.visible !== false && String(window.HBCatalog.serverKey(x) || '').startsWith('bk:'));
     }
 
@@ -200,7 +213,7 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
         if (x === undefined) { x = window.HBDrawings.xOfLogical(logicalAt(w.bars, t, w.barMs, w.end), (i) => ts.logicalToCoordinate(i)); xs.set(t, x); }
         return x;
       };
-      const big = inst(cell, 'bigorders'), ab = inst(cell, 'absorb'), pu = inst(cell, 'pulled');
+      const big = inst(cell, 'bigorders'), ab = inst(cell, 'absorb'), pu = inst(cell, 'pulled'), ice = inst(cell, 'iceberg');
       target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
         if (big && big.params.history !== false) {
           const segs = segments(eps, { multiple: big.params.multiple, minSeconds: big.params.minSeconds, now });
@@ -225,6 +238,21 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
             if (a.side === 'up') { ctx.moveTo(x, y - 7); ctx.lineTo(x - 5, y + 3); ctx.lineTo(x + 5, y + 3); }
             else { ctx.moveTo(x, y + 7); ctx.lineTo(x - 5, y - 3); ctx.lineTo(x + 5, y - 3); }
             ctx.closePath(); ctx.fill();
+          }
+        }
+        if (ice) {
+          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.textBaseline = 'bottom';
+          for (const q of icebergs(eps, { multiple: ice.params.multiple, minTraded: ice.params.minTraded })) {
+            const x0 = X(q.t0), x1 = X(q.t1 == null ? now : q.t1), y = series.priceToCoordinate(q.price);
+            if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
+            const col = q.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
+            ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 3; ctx.globalAlpha = q.open ? 1 : 0.7;
+            ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(Math.max(x1, x0 + 6), y); ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.beginPath(); ctx.moveTo(x0 - 4, y); ctx.lineTo(x0, y - 4); ctx.lineTo(x0 + 4, y); ctx.lineTo(x0, y + 4); ctx.closePath(); ctx.fill();
+            ctx.textAlign = 'left';
+            ctx.fillText(`×${q.times} · ${q.traded}`, Math.max(x1, x0 + 6) + 4, y + 4);
           }
         }
         if (pu) {

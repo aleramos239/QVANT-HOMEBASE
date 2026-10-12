@@ -52,6 +52,9 @@ const catalog = [
     params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 4, max: 50, step: 0.5, def: 4 }, SECONDS] },
   { id: 'pulled', group: 'Order flow', name: 'Pulled liquidity', desc: 'A big resting order withdrawn as price came toward it',
     params: [{ key: 'multiple', label: 'Level at least (x median)', type: 'num', min: 3, max: 50, step: 0.5, def: 5 }, SECONDS_ENDED] },
+  { id: 'iceberg', group: 'Order flow', name: 'Icebergs', desc: 'A price hit again and again that keeps reloading: a hidden order',
+    params: [{ key: 'multiple', label: 'Traded at least (x the size it showed)', type: 'num', min: 3, max: 50, step: 0.5, def: 3 },
+      { key: 'minTraded', label: 'And at least (contracts)', type: 'int', min: 1, max: 5000, def: 30 }] },
 ];
 
 /* The value a "bk:" series shows for one bar: `mean(col)` = the mean of that book column over the bar's seconds (or

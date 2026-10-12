@@ -32,6 +32,30 @@ test('pulls: only ended-as-pulled levels, at the end time', () => {
   assert.deepEqual(E.pulls(eps, { multiple: 5, minSeconds: 5 }).map((x) => [x.id, x.t, x.side]), [['p', 30_000, 'b']]);
 });
 
+/* ---- icebergs ---- */
+
+test('icebergs: only levels the server marked (rl), traded at least N x what they showed and the minimum contracts', () => {
+  const eps = [
+    { id: 'ib1_1', s: 'b', p: 100, t0: 1000, t1: null, pk: 10, r: 0, tr: 60, end: 'open', ab: null, rl: 3 },
+    { id: 'ia2_2', s: 'a', p: 101, t0: 2000, t1: 9000, pk: 12, r: 0, tr: 40, end: 'ice', ab: null, rl: 2 },
+    { id: 'ib3_3', s: 'b', p: 99, t0: 3000, t1: null, pk: 10, r: 0, tr: 25, end: 'open', ab: null, rl: 2 },        // under 30 contracts
+    { id: 'b4_4', s: 'b', p: 98, t0: 4000, t1: null, pk: 10, r: 7, tr: 80, end: 'open', ab: null },                   // a wall, not an iceberg
+    { id: 'ib5_5', s: 'b', p: 97, t0: 5000, t1: null, pk: 40, r: 0, tr: 90, end: 'open', ab: null, rl: 2 }];         // 2.25x only
+  const out = E.icebergs(eps, { multiple: 3, minTraded: 30 });
+  assert.deepEqual(out.map((x) => x.id), ['ib1_1', 'ia2_2']);
+  assert.deepEqual(out[0], { id: 'ib1_1', t0: 1000, t1: null, price: 100, side: 'up', traded: 60, shown: 10, times: 6, open: true });
+  assert.equal(out[1].side, 'down'); assert.equal(out[1].open, false);
+  assert.equal(E.icebergs(eps, { multiple: 2, minTraded: 30 }).length, 3);            // 2.25x passes at 2
+  assert.deepEqual(E.icebergs(null), []);
+});
+
+test('an iceberg is never a big-order segment, an absorption or a pull', () => {
+  const e = { id: 'ib1_1', s: 'b', p: 100, t0: 0, t1: 60_000, pk: 10, r: 0, tr: 60, end: 'ice', ab: null, rl: 3 };
+  assert.deepEqual(E.segments([e], { multiple: 1, minSeconds: 1 }), []);
+  assert.deepEqual(E.absorptions([e], { multiple: 0, minSeconds: 0 }), []);
+  assert.deepEqual(E.pulls([e], { multiple: 0, minSeconds: 0 }), []);
+});
+
 /* ---- clipAt / askSpan: what Bar Replay relies on ---- */
 
 test('clipAt: an episode that began after the cursor is gone, one that ended after it is still open, a late flag is unset', () => {

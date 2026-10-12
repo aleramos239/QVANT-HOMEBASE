@@ -174,7 +174,8 @@ class BookHistory:
             if v["t1"] is None or v["t1"] > to:
                 out[i] = {**v, "t1": None, "end": "open", "ab": None if v["ab"] is None or v["ab"] > to else v["ab"]}
         if len(out) > MAX_EPISODES:
-            out = sorted(sorted(out, key=lambda v: -v["r"])[:MAX_EPISODES], key=lambda v: v["t0"])
+            # the biggest levels stay (an iceberg has r 0 and is kept first: there are few of them)
+            out = sorted(sorted(out, key=lambda v: -(v["r"] + (1e6 if "rl" in v else 0)))[:MAX_EPISODES], key=lambda v: v["t0"])
         return json.dumps({"tick": tick, "step": step, "t0": frm, "t1": to, "samples": rows, "episodes": out},
                           separators=(",", ":")).encode()
 

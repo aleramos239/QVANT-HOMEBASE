@@ -45,7 +45,16 @@ TUNING = {
     "abs_min_ratio": 4.0,          # ... and the level was at least this x the median to begin with ...
     "abs_hold_frac": 0.50,         # ... and the level still shows >= this fraction of that size ...
     "abs_through_ticks": 1,        # ... and price never printed beyond it by more than this many ticks
+    # icebergs (any level, big or not): a level that is hit again and again and keeps showing size
+    "ice_mult": 3.0,               # iceberg: traded at the level >= this x the biggest size it showed ...
+    "ice_median_mult": 3.0,        # ... and >= this x the median level size ...  (replayed NQ 2026-10-08/09: 16-22 a day;
+                                   #   8.0 gave 3-7, 2x / 2x gave about 90 and mostly noise)
+    "ice_refills": 2,              # ... and the shown size came back up (a reload) at least this many times ...
+    "ice_refill_frac": 0.5,        # ... a reload = it rose by >= this fraction of the biggest size shown, from its low
+    "ice_idle_ms": 20_000,         # the level is let go after this long without a print at it
+    "ice_through_ticks": 1,        # ... or when price prints beyond it by more than this many ticks
 }
+ICE_MAX = 64                       # candidate levels tracked at once
 
 
 def _sum(rows, n) -> float:
@@ -95,6 +104,31 @@ class _Ep:
                 "ab": self.abs_t, "d0": self.dist0}
 
 
+class _Ice:
+    """A level that has been hit while it showed size: the iceberg candidate."""
+    __slots__ = ("side", "px", "idx", "t0", "last", "shown_max", "low", "traded", "refills", "beyond", "sent_tr", "flagged")
+
+    def __init__(self, side, px, idx, t0, shown):
+        self.side, self.px, self.idx, self.t0, self.last = side, px, idx, t0, t0
+        self.shown_max = self.low = shown
+        self.traded = 0
+        self.refills = 0
+        self.beyond = 0
+        self.sent_tr = 0
+        self.flagged = False
+
+    @property
+    def id(self) -> str:
+        return f"i{self.side}{self.idx}_{self.t0}"
+
+    def wire(self, t1, end) -> dict:
+        """The same event shape as a level (merged by `id`); "rl" marks it an iceberg, "pk" is the biggest size it
+        showed, "tr" what traded there, "r" is 0 so no big-order consumer takes it for a wall."""
+        return {"k": "ep", "id": self.id, "s": self.side, "p": self.px, "t0": self.t0, "t1": t1,
+                "pk": self.shown_max, "r": 0.0, "tr": self.traded, "end": end, "ab": None, "d0": 0.0,
+                "rl": self.refills}
+
+
 class BookTracker:
     def __init__(self, tick_size: float, tuning: dict | None = None):
         self.tick = float(tick_size)
@@ -104,6 +138,8 @@ class BookTracker:
         self._win: deque = deque()    # (second, [sizes]) of committed samples
         self._med = 0.0
         self._eps: dict = {}          # (side, tick index) -> _Ep
+        self._ice: dict = {}          # (side, tick index) -> _Ice
+        self._shown: dict = {}        # (side, tick index) -> the size the book last showed there
         self._ts = None               # the newest stamp seen
 
     # ---- the stream
@@ -113,6 +149,7 @@ class BookTracker:
         out = self._roll(ts) + self._gap(ts)
         self._sec, self._last, self._ts = ts - ts % SAMPLE_MS, (bids, offers), ts
         out += self._update(ts, bids, offers)
+        out += self._ice_book(ts, bids, offers)
         return out
 
     def on_print(self, ts: int, price: float, size: int, side: int) -> list:
@@ -128,6 +165,7 @@ class BookTracker:
             else:
                 continue
             out += self._after(ep, ts)
+        out += self._ice_print(ts, price, i, size, side)
         return out
 
     def flush(self, ts: int) -> list:
@@ -141,6 +179,7 @@ class BookTracker:
         for key, ep in list(self._eps.items()):
             out += self._close(ep, t, "faded")
             del self._eps[key]
+        out += self._ice_clear(t)
         return out
 
     def _gap(self, ts: int) -> list:
@@ -152,8 +191,89 @@ class BookTracker:
         for key, ep in list(self._eps.items()):
             out += self._close(ep, self._ts, "faded")
             del self._eps[key]
+        out += self._ice_clear(self._ts)
+        self._shown.clear()
         self._win.clear()
         self._med = 0.0
+        return out
+
+    # ---- icebergs
+
+    def _ice_clear(self, ts: int) -> list:
+        out = []
+        for key, ic in list(self._ice.items()):
+            if ic.flagged:
+                out.append(ic.wire(ts, "ice"))
+            del self._ice[key]
+        return out
+
+    def _ice_close(self, key, ts: int) -> list:
+        ic = self._ice.pop(key, None)
+        return [ic.wire(ts, "ice")] if ic is not None and ic.flagged else []
+
+    def _ice_flag(self, ic: _Ice, ts: int) -> list:
+        t = self.tune
+        need = max(t["ice_mult"] * ic.shown_max, t["ice_median_mult"] * self._med)
+        if self._med <= 0 or ic.refills < t["ice_refills"] or ic.traded < need:
+            return []
+        if not ic.flagged:
+            ic.flagged, ic.sent_tr = True, ic.traded
+            return [ic.wire(None, "open")]
+        if ic.traded >= 2 * ic.sent_tr:        # an open one again when its total has doubled
+            ic.sent_tr = ic.traded
+            return [ic.wire(None, "open")]
+        return []
+
+    def _ice_book(self, ts: int, bids: list, offers: list) -> list:
+        """A book line: what each side shows now, a reload of a candidate, a candidate whose level is gone or idle."""
+        out, t = [], self.tune
+        for side, rows in (("b", bids), ("a", offers)):
+            if not rows:
+                continue                       # a side with no levels says nothing: its last sizes stand
+            for k in [k for k in self._shown if k[0] == side]:
+                del self._shown[k]
+            for px, sz in rows:
+                self._shown[(side, self._idx(px))] = sz
+        have = {"b": bool(bids), "a": bool(offers)}
+        for key, ic in list(self._ice.items()):
+            if not have[ic.side]:
+                continue
+            size = self._shown.get(key, 0)
+            if size <= 0 or ts - ic.last > t["ice_idle_ms"]:
+                out += self._ice_close(key, ic.last if size > 0 else ts)
+                continue
+            if size < ic.low:
+                ic.low = size
+            if size > ic.shown_max:
+                ic.shown_max = size
+            if size - ic.low >= t["ice_refill_frac"] * ic.shown_max:
+                ic.refills += 1
+                ic.low = size
+            out += self._ice_flag(ic, ts)
+        return out
+
+    def _ice_print(self, ts: int, price: float, idx: int, size: int, side: int) -> list:
+        """A trade: it hit the bid (a sell) or lifted the offer (a buy) at `idx`."""
+        out, t = [], self.tune
+        key = ("b", idx) if side == SELL else ("a", idx)
+        for k, ic in list(self._ice.items()):          # price went through a candidate: it is spent
+            if k[0] == key[0] and ((k[0] == "b" and idx < k[1]) or (k[0] == "a" and idx > k[1])):
+                ic.beyond = max(ic.beyond, abs(idx - k[1]))
+                if ic.beyond > t["ice_through_ticks"]:
+                    out += self._ice_close(k, ts)
+            elif ts - ic.last > t["ice_idle_ms"]:
+                out += self._ice_close(k, ic.last)
+        ic = self._ice.get(key)
+        if ic is None:
+            shown = self._shown.get(key, 0)
+            if shown <= 0:
+                return out                          # a trade at a price the book does not show: nothing to measure
+            if len(self._ice) >= ICE_MAX:
+                self._ice.pop(next(iter(self._ice)))
+            ic = self._ice[key] = _Ice(key[0], price, key[1], ts, shown)
+        ic.traded += size
+        ic.last = ts
+        out += self._ice_flag(ic, ts)
         return out
 
     # ---- the samples

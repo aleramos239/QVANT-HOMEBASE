@@ -398,7 +398,7 @@ test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma', 'tema']);
   assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'ddiv']);
   assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigorders', 'imbalance', 'heatmap',
-    'absorb', 'pulled', 'bkimb', 'bkdepth', 'bkmicro', 'tspeed', 'ddiv']);
+    'absorb', 'pulled', 'iceberg', 'bkimb', 'bkdepth', 'bkmicro', 'tspeed', 'ddiv']);
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
