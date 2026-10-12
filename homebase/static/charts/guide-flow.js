@@ -27,6 +27,7 @@ G.add({
       'Green lines stacked near a low can mean buyers took control. Red lines near a high, sellers.',
       'Compare the delta under the candle with its colour. A green candle with red delta looks weak.',
       'Use it on the few candles at a level you care about, not to scan the whole chart.',
+      'Settings: group ticks into taller rows, show buys minus sells or the total, hide the bars or the box.',
     ],
     watch: 'Drawn only when you zoom in until candles are wide and price rows are tall. Zoomed out you see plain candles.',
   },

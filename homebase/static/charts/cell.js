@@ -1089,12 +1089,13 @@ class Cell {
     }
   }
 
-  /* Zoom so the footprint's numbers fit: the newest bars, about 70 px each. */
+  /* Zoom so the footprint's numbers fit: the newest bars, about 62 px each (it reads from 56 px a bar). */
   zoomToRead() {
     const n = this.bars.length;
     if (!this.chart || !n) return;
-    const k = Math.max(6, Math.floor((this.box.clientWidth || 600) / 70));
-    this.chart.timeScale().setVisibleLogicalRange({ from: n - 1 - k, to: n + 1 });
+    const ts = this.chart.timeScale();
+    const slots = Math.max(4, Math.floor((ts.width() || this.box.clientWidth || 600) / 62));   // bar slots across the plot, the two margin ones included
+    ts.setVisibleLogicalRange({ from: n - 1 - (slots - 2), to: n + 1 });
   }
 
   onLegendClick(e) {
