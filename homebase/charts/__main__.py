@@ -70,11 +70,16 @@ def main(argv=None) -> int:
     # The event loop shares the GIL with the worker threads that build bars from ticks and run the Desk's prop
     # simulations: at the 5 ms default every GIL re-acquire the loop makes waits a full slice behind each busy
     # thread, so a trivial request took 1.6 s (p50) while charts loaded. A 0.5 ms slice gives the loop its turn.
+    # Only while the server runs: restored after (a stubbed run in a test must not leave it set for the next test).
+    before = sys.getswitchinterval()
     sys.setswitchinterval(SWITCH_INTERVAL_S)
-    # ws_per_message_deflate=False: the page is on this machine's loopback, so compressing every history / older
-    # message (megabytes with sweeps and bubbles) bought nothing and ran zlib on the event loop thread; the lag
-    # watchdog caught it 3+ s late inside permessage_deflate.encode
-    uvicorn.run(app, host=a.host, port=a.port, log_level="warning", ws_per_message_deflate=False)
+    try:
+        # ws_per_message_deflate=False: the page is on this machine's loopback, so compressing every history / older
+        # message (megabytes with sweeps and bubbles) bought nothing and ran zlib on the event loop thread; the lag
+        # watchdog caught it 3+ s late inside permessage_deflate.encode
+        uvicorn.run(app, host=a.host, port=a.port, log_level="warning", ws_per_message_deflate=False)
+    finally:
+        sys.setswitchinterval(before)
     return 0
 
 

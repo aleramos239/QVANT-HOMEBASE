@@ -3,6 +3,7 @@ fetches ForexFactory -- only the cached weeks already on disk are served."""
 from __future__ import annotations
 
 import datetime as dt
+import sys
 
 from homebase.charts import __main__ as main_mod
 
@@ -15,6 +16,7 @@ def _patch_run(monkeypatch, captured):
     def fake_run(app, **kw):
         assert app == "the app"
         captured["uvicorn"] = kw
+        captured["switch_while_running"] = sys.getswitchinterval()
 
     monkeypatch.setattr(main_mod, "create_app", fake_create_app)
     monkeypatch.setattr(main_mod.uvicorn, "run", fake_run)
@@ -46,14 +48,13 @@ def test_the_loopback_socket_is_not_compressed(monkeypatch):
     assert captured["uvicorn"]["ws_per_message_deflate"] is False
 
 
-def test_the_event_loop_gets_a_short_gil_slice(monkeypatch):
+def test_the_event_loop_gets_a_short_gil_slice_only_while_the_server_runs(monkeypatch):
     """Worker threads (bars from ticks, prop simulations) hold the GIL in 5 ms slices; the loop must not queue
-    behind each of them for a whole slice on every re-acquire."""
-    import sys
+    behind each of them for a whole slice on every re-acquire. Restored after: a stubbed run in a test must not
+    leave a faster switch interval for the tests that follow (news_server's fan-out test races at 0.5 ms)."""
     before = sys.getswitchinterval()
-    try:
-        _patch_run(monkeypatch, {})
-        assert main_mod.main([]) == 0
-        assert sys.getswitchinterval() == main_mod.SWITCH_INTERVAL_S < 0.005
-    finally:
-        sys.setswitchinterval(before)
+    captured: dict = {}
+    _patch_run(monkeypatch, captured)
+    assert main_mod.main([]) == 0
+    assert captured["switch_while_running"] == main_mod.SWITCH_INTERVAL_S < 0.005
+    assert sys.getswitchinterval() == before
