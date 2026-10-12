@@ -9,6 +9,10 @@ Wire keys (every part after the name is a number; a missing one takes its defaul
                                                                                   -> {dir, ago, px}
   tspeed:200   prints per second of the bar and a burst line = 3 x the median rate of the last n bars before it
                                                                                   -> {rate, burst, hot}
+  press:5      buy / sell pressure over the last n bars (-100 .. +100, + = buyers): the aggressors' volume, the
+               volume of the big prints (BIG_MIN+ contracts) and the volume of the sweeps, each as
+               (buy - sell) / (buy + sell); `p` is the mean of the parts that have anything to say, `tot` the
+               session's whole volume balance so far                          -> {p, vol, big, swp, tot}
 """
 from __future__ import annotations
 
@@ -77,10 +81,51 @@ class TapeSpeed(_Study):
         return (st + (r,))[-self.n:], out
 
 
+class Pressure(_Study):
+    """Who is pushing harder, and by how much. Pure arithmetic on what a Bar already holds: buy / sell volume, the
+    big prints (`big`: [ts, price, size, side]) and the finished sweeps (`sw`: [ts, from, to, size, side]).
+    A part with no volume on either side in the window is None and left out of the mean; a session change
+    restarts the window and the running total."""
+
+    def __init__(self, n: int = 5):
+        self.n = int(n)
+        super().__init__()
+
+    def initial(self):
+        return (None, (), 0, 0)      # session, last n bars' (buy, sell, big buy, big sell, sweep buy, sweep sell), session buy, sell
+
+    @staticmethod
+    def _parts(bar):
+        bb = sum(r[2] for r in bar.big if r[3] > 0)
+        bs = sum(r[2] for r in bar.big if r[3] <= 0)
+        sb = sum(r[3] for r in bar.sw if r[4] > 0)
+        ss = sum(r[3] for r in bar.sw if r[4] <= 0)
+        return (bar.buy, bar.sell, bb, bs, sb, ss)
+
+    @staticmethod
+    def _ratio(a, b):
+        return 100.0 * (a - b) / (a + b) if a + b > 0 else None
+
+    def step(self, st, bar):
+        sess, win, cb, cs = st
+        if bar.session != sess:
+            sess, win, cb, cs = bar.session, (), 0, 0
+        parts = self._parts(bar)
+        win = (win + (parts,))[-self.n:]
+        cb, cs = cb + parts[0], cs + parts[1]
+        t = [sum(w[i] for w in win) for i in range(6)]
+        vol, big, swp = self._ratio(t[0], t[1]), self._ratio(t[2], t[3]), self._ratio(t[4], t[5])
+        have = [x for x in (vol, big, swp) if x is not None]
+        out = {"p": sum(have) / len(have) if have else None, "vol": vol, "big": big, "swp": swp,
+               "tot": self._ratio(cb, cs)}
+        return (sess, win, cb, cs), out
+
+
 # name -> (class, parameters): each parameter is (default, minimum, maximum); a wire key may give them in order
 PARAMS = {
     "ddiv": (DeltaDiv, ((5, 1, 50),)),
     "tspeed": (TapeSpeed, ((200, 20, 2000),)),
+    "press": (Pressure, ((5, 1, 50),)),
 }
 NAMES = tuple(PARAMS)
 

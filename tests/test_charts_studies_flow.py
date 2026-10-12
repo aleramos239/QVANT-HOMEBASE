@@ -80,3 +80,55 @@ def test_the_wire_keys():
     with pytest.raises(ValueError):
         make("ddiv:5:6")
     assert warm_bars("ddiv:5") == 22 and warm_bars("tspeed:200") == 201
+
+
+# ---- press: buy / sell pressure
+
+def pbar(i, buy, sell, big=(), sw=(), session="2026-10-09"):
+    b = bar(i, 100, 99, buy, sell, session=session)
+    b.big = [[i * MIN + k, 100.0, size, side] for k, (size, side) in enumerate(big)]
+    b.sw = [[i * MIN + k, 100.0, 101.0, size, side] for k, (size, side) in enumerate(sw)]
+    return b
+
+
+def test_pressure_is_the_mean_of_volume_big_print_and_sweep_balance_over_the_window():
+    s = make("press:2", 0.25)
+    first = s.push(pbar(0, buy=300, sell=100, big=[(50, 1), (10, -1)], sw=[(40, 1)]))
+    assert first["vol"] == pytest.approx(50.0)                      # (300-100)/400
+    assert first["big"] == pytest.approx(100.0 * 40 / 60)
+    assert first["swp"] == pytest.approx(100.0)
+    assert first["p"] == pytest.approx((50.0 + 100.0 * 40 / 60 + 100.0) / 3)
+    second = s.push(pbar(1, buy=100, sell=300, big=[(50, -1)], sw=[(40, -1)]))   # window of 2: both bars
+    assert second["vol"] == pytest.approx(0.0)                      # 400 buy vs 400 sell
+    assert second["big"] == pytest.approx(100.0 * (50 - 60) / 110)
+    assert second["swp"] == pytest.approx(0.0)
+    third = s.push(pbar(2, buy=0, sell=200))                        # bar 0 has left the window
+    assert third["vol"] == pytest.approx(100.0 * (100 - 500) / 600)
+    assert third["tot"] == pytest.approx(100.0 * (400 - 600) / 1000)    # the session's balance so far
+
+
+def test_pressure_leaves_out_a_part_with_nothing_to_say_and_is_none_when_all_are():
+    s = make("press:3", 0.25)
+    v = s.push(pbar(0, buy=10, sell=30))                            # no big prints, no sweeps
+    assert v["big"] is None and v["swp"] is None
+    assert v["p"] == pytest.approx(v["vol"]) == pytest.approx(-50.0)
+    empty = make("press:3", 0.25).push(pbar(0, 0, 0))
+    assert empty["p"] is None and empty["tot"] is None
+
+
+def test_pressure_restarts_with_the_session_and_the_developing_bar_changes_nothing():
+    s = make("press:5", 0.25)
+    s.push(pbar(0, 500, 0, session="a"))
+    new = s.push(pbar(1, 0, 100, session="b"))
+    assert new["vol"] == pytest.approx(-100.0) and new["tot"] == pytest.approx(-100.0)
+    before = s.state
+    pre = s.preview(pbar(2, 900, 0, session="b"))
+    assert s.state is before and pre["vol"] == pytest.approx(100.0 * (900 - 100) / 1000)
+
+
+def test_pressure_wire_key_defaults_and_limits():
+    assert make("press", 0.25).n == 5 and make("press:20", 0.25).n == 20
+    for bad in ("press:0", "press:51", "press:5:5"):
+        with pytest.raises(ValueError):
+            make(bad, 0.25)
+    assert warm_bars("press:20") >= 21

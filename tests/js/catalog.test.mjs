@@ -401,7 +401,7 @@ test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma', 'tema']);
   assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'ddiv']);
   assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigorders', 'imbalance', 'heatmap',
-    'absorb', 'pulled', 'iceberg', 'stoprun', 'exhaust', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote', 'tspeed', 'ddiv']);
+    'absorb', 'pulled', 'iceberg', 'stoprun', 'exhaust', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote', 'tspeed', 'pressure', 'ddiv']);
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
@@ -1059,4 +1059,14 @@ test('stop runs, exhaustion and best bid / ask: defaults, clamps and the book ke
   const q = C.instance('bkquote');
   assert.equal(C.serverKey(q), 'bk:quote');
   assert.deepEqual(C.serverKeys([q]), []);                          // computed in the page: never asked of the server
+});
+
+test('buy / sell pressure: server key from its length, clamps, lines the legend reads', () => {
+  assert.deepEqual(C.clampParams('pressure', {}), { length: 5 });
+  assert.deepEqual(C.clampParams('pressure', { length: 0 }), { length: 1 });
+  assert.deepEqual(C.clampParams('pressure', { length: 999 }), { length: 50 });
+  const p = C.instance('pressure', { length: 12 });
+  assert.equal(C.serverKey(p), 'press:12');
+  assert.deepEqual(C.serverKeys([p]), ['press:12']);                 // a server study: asked of the service
+  assert.equal(C.label(p), 'Buy/sell pressure 12');
 });
