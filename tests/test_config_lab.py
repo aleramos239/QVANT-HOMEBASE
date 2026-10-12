@@ -146,3 +146,17 @@ def test_the_desks_hook_writes_the_sidecar_when_the_lab_book_changes(cfg_path):
     cfg.book["lab_pp_orb"] = [r for r in cfg.book["lab_pp_orb"] if r["account"] != "eval1"]
     desk_config.save(cfg)
     assert store.get_desk("pp_orb")["book"] == [{"account": "main", "qty": 1}]
+
+
+def test_an_accounts_day_take_is_written_only_when_set_and_survives_a_reload(cfg_path):
+    """Group day take (2026-10-11): AccountCfg.day_lock reaches config.json only above 0, so a desk with none set writes the
+    same bytes it always did, and one that set it reads it back."""
+    c = golden_cfg()
+    desk_config.save(c)
+    assert all("day_lock" not in a for a in json.loads(cfg_path.read_text())["accounts"].values())
+    c.accounts["main"].day_lock = 1000.0
+    desk_config.save(c)
+    saved = json.loads(cfg_path.read_text())["accounts"]
+    assert saved["main"]["day_lock"] == 1000.0 and "day_lock" not in saved["eval1"]
+    back = desk_config.load()
+    assert back.accounts["main"].day_lock == 1000.0 and back.accounts["eval1"].day_lock == 0.0

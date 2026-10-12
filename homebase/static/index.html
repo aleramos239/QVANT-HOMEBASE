@@ -3702,6 +3702,28 @@ async function flattenStrat(name) {
   toast(`${N} flattened and switched off.`);
 }
 
+/* ---- the account's day take (the group's) ----
+   Closed net P&L of the day, in dollars: once a trade of ANY strategy booked here closes with the day at or above it, no new
+   entry is taken on the account for the rest of the day (open trades run to their stop / target). 0 turns it off. */
+function dayTakeBox(id, a) {
+  const d = (a && a.day) || {}, v = Number(d.day_lock) || 0;
+  const state = d.locked ? ` <span class="neg" title="No new entry on this account for the rest of the day">stopped for the day (${usd(d.closed_net)})</span>`
+    : (v ? ` <span class="mcap" title="The day's closed P&amp;L so far">${usd(d.closed_net || 0)} of ${usd(v)}</span>` : "");
+  return `<span class="mcap" title="Closed profit that ends the day for this account: no new entry after it, for any strategy. 0 = off">Day take $</span>
+    <input type="number" min="0" max="100000" step="50" value="${v}" style="width:72px" aria-label="Day take, dollars"
+      onkeydown="if(event.key==='Enter')setDayTake(${jsArg(id)}, this.value)"><button class="btn btn-outline btn-sm"
+      onclick="setDayTake(${jsArg(id)}, this.previousElementSibling.value)">Set</button>${state}`;
+}
+async function setDayTake(id, raw) {
+  const v = Number(raw);
+  if (raw === "" || !Number.isFinite(v) || v < 0 || v > 100000) return toast("The day take is a dollar amount from 0 (off) to 100000.", 5000);
+  const r = await post("/api/account-day-lock", {account: id, day_lock: v});
+  if (r && r.ok) toast(r.locked ? "Day take set. This account is stopped for the day." : (v ? "Day take set: " + usd(v) + "." : "Day take off."), 4000);
+  else toast((r && r.detail) || "Could not set the day take.", 5000);
+  await refresh();
+  if ($("#acctOverlay").classList.contains("open")) openAccts(id);   // the popup shows the new take at once
+}
+
 /* ---- accounts popup ---- */
 function openAccts(focus) {
   const accts = (ST && ST.accounts) || {};
@@ -3720,7 +3742,7 @@ function openAccts(focus) {
         return acctRow(id, {}).replace('<div class="acct">', () => `<div class="acct${id === focus ? " acct-focus" : ""}">`)
           .replace('<span class="spacer"></span>',
           () => `<span class="strats">${esc(running || "no strategy assigned")}</span><span class="spacer"></span>`)
-          .replace("</div>", () => `<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
+          .replace("</div>", () => `${dayTakeBox(id, accts[id])}<button class="btn btn-outline btn-sm" onclick="flattenAcct(${jsArg(id)})"${accts[id].connected ? "" : " disabled"}
             title="Cancel every working order and close every position on this account">Flatten</button>
             <button class="btn btn-outline btn-sm" onclick="reconnectAcct(${jsArg(id)})"
             title="Rebuild this account's broker connection">Reconnect</button>

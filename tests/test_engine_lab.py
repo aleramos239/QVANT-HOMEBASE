@@ -14,6 +14,7 @@ from homebase import engine as engine_mod
 from homebase import labcfg
 from homebase.broker.base import FillEvent, OrderRequest, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
+from homebase.dayrules import DayBook
 from homebase.engine import PLACING_UNKNOWN, Engine, LabLeg
 from tests import test_engine as te
 from tests import test_engine_levels as tl
@@ -3843,3 +3844,85 @@ def test_a_second_flatten_of_a_round_its_own_exit_fill_closed_meanwhile_says_so(
     out = run(eng.lab_flatten(LAB, reason="time"))["a1"]
     assert out == {"ok": True, "sold": 0, "actions": ["This trade had already ended."]}
     assert (st.status, st.exit_reason) == ("done", "time") and len(ad.orders) == 1      # ONE close order, ever
+
+
+# ------------------------------------------------------------------------------------------------ the group's day take
+def settle(eng, ad, a="a1", legs=None, entry=100.0, exit_px=110.0, by="tp", strategy=LAB):
+    """One whole round of `strategy` on one account, as trade() does for LAB."""
+    out = run(eng.lab_enter(strategy, legs or [leg()], {a: 1}, max_rounds=3))
+    assert out["accounts"][a]["ok"], out
+    st = eng.states[f"{strategy}@{a}"]
+    fill_entry(eng, ad, st, entry)
+    fill_exit(eng, ad, st, exit_px, by)
+    tick(eng)
+    return st
+
+
+def test_an_accounts_day_take_stops_the_group_once_a_trade_closes_at_or_above_it(tmp_path):
+    """The account's own day take (AccountCfg.day_lock): a trade of any strategy closes with the day's closed net at
+    or above it -> no new entry by anyone on the account today. Two Lab strategies share it."""
+    eng, ads, _ = group(tmp_path)
+    eng.cfg.accounts["a1"].day_lock = 300.0
+    settle(eng, ads["a1"])                                   # +10 pts x $20 - $4 = +$196: below
+    assert eng.books["a1"].closed_net == 196.0 and eng.account_locked("a1") is None
+    assert go2(eng, leg(iid=7))["accounts"]["a1"]["ok"] is True   # the other member still trades
+    st2 = eng.states[f"{LAB2}@a1"]
+    fill_entry(eng, ads["a1"], st2, 100.0)
+    fill_exit(eng, ads["a1"], st2, 110.0, "tp")
+    tick(eng)                                                # +$196 more: 392 >= 300
+    assert eng.books["a1"].closed_net == 392.0 and eng.account_locked("a1") == "day_lock"
+    brackets = len(ads["a1"].brackets)
+    for out in (go(eng, leg(iid=2)), go2(eng, leg(iid=8))):
+        assert out["accounts"]["a1"] == {"ok": False, "round": None, "reason": "This account is stopped for the day."}
+    assert len(ads["a1"].brackets) == brackets
+    assert [e["reason"] for e in events(tmp_path, "day_rule_lock")] == ["day_lock"]
+
+
+def test_a_day_take_of_zero_is_off_and_the_strategys_own_day_lock_still_counts(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    settle(eng, ads["a1"])
+    assert eng.rules_for("a1").day_lock == 0 and eng.account_locked("a1") is None
+    eng.cfg.accounts["a1"].day_lock = 500.0
+    eng.cfg.strategies[LAB].day_lock = 150.0                 # tightest wins, as for strategies on one account
+    assert eng.rules_for("a1").day_lock == 150.0
+    eng.cfg.strategies[LAB].day_lock = 0.0
+    assert eng.rules_for("a1").day_lock == 500.0
+
+
+def test_a_day_take_stops_a_built_in_strategy_on_the_account_too(tmp_path):
+    """The take is the ACCOUNT's: the straddle booked beside the Lab strategy sits the day out after the lock."""
+    eng, ads, _ = mk(tmp_path, extra={"nq930": straddle_cfg("ES")}, book={"nq930": [{"account": "a1", "qty": 1}]})
+    eng.cfg.accounts["a1"].day_lock = 100.0
+    settle(eng, ads["a1"])                                   # +$196 >= 100 -> locked
+    assert eng.account_locked("a1") == "day_lock"
+    out = alert(eng, "nq930")
+    assert out["accounts"]["a1"] == {"ok": False, "reason": "account stopped for the day (day_lock)"}
+
+
+def test_a_day_take_set_at_or_below_the_days_closed_pnl_locks_now_and_a_lock_stays(tmp_path):
+    eng, ads, _ = mk(tmp_path)
+    settle(eng, ads["a1"])                                   # +$196, no take yet
+    assert eng.day_view("a1") == {"day_lock": 0.0, "closed_net": 196.0, "closes": 1, "locked": None}
+    eng.cfg.accounts["a1"].day_lock = 500.0
+    assert run(eng.apply_day_lock("a1")) is None             # above the day's closed P&L: not yet
+    eng.cfg.accounts["a1"].day_lock = 196.0
+    assert run(eng.apply_day_lock("a1")) == "day_lock" and eng.account_locked("a1") == "day_lock"
+    eng.cfg.accounts["a1"].day_lock = 0.0                    # turning it off does not lift today's lock
+    assert run(eng.apply_day_lock("a1")) == "day_lock"
+    assert go(eng, leg(iid=2))["accounts"]["a1"]["reason"] == "This account is stopped for the day."
+
+
+def test_the_day_take_never_stops_a_trade_that_is_open_and_other_accounts_keep_trading(tmp_path):
+    eng, ads, _ = mk(tmp_path, accounts=("a1", "a2"))
+    eng.cfg.accounts["a1"].day_lock = 100.0
+    assert go(eng, leg(), {"a1": 1, "a2": 1})["accounts"]["a1"]["ok"] is True
+    fill_entry(eng, ads["a1"], rnd(eng, "a1"), 100.0)        # a position is open on a1
+    eng.books.setdefault("a1", DayBook(account="a1", date=eng._today())).closed_net = 500.0
+    eng.books["a1"].closes = 1
+    assert run(eng.apply_day_lock("a1")) == "day_lock"
+    assert rnd(eng, "a1").status == "live"                   # open trades run to their own stop / target
+    fill_exit(eng, ads["a1"], rnd(eng, "a1"), 110.0, "tp")
+    tick(eng)
+    assert go(eng, leg(iid=2), {"a1": 1, "a2": 1})["accounts"] == {
+        "a1": {"ok": False, "round": None, "reason": "This account is stopped for the day."},
+        "a2": {"ok": False, "round": None, "reason": "One position at a time."}}

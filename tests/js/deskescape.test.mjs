@@ -96,6 +96,7 @@ test('the Accounts dialog builds each row with replacer functions: $-patterns in
     renderPaper() {}, loadPaper() {}, showOverlay() {},
   });
   vm.runInContext(ESC + between('/* ---- account row (rendered inside strategy cards) ---- */', '/* ---- the book (assignments) ---- */') +
+    between("/* ---- the account's day take (the group's) ----", '/* ---- accounts popup ---- */') +
     block + '\nglobalThis.openAccts = openAccts;', ctx);
   ctx.openAccts();
   const html = els.acctList2.innerHTML;

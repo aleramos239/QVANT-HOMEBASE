@@ -45,7 +45,7 @@ from .config import AppCfg, StrategyCfg, assignments
 from .contracts import point_value, tick_size
 from .levels import AccountLeg, Geometry, account_leg
 from .paths import state_dir
-from .dayrules import LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
+from .dayrules import LOCK_LOCK, LOCK_TAKE, DayBook, DayRules, merge_rules, standing, take_level
 
 ET = ZoneInfo("America/New_York")
 SPREAD_TOL_PTS = 0.05
@@ -276,6 +276,10 @@ class Engine:
         rs = [DayRules(s.day_take, s.day_lock, s.target_take)
               for n, s in self.cfg.strategies.items()
               if s.enabled and any(a.get("account") == account for a in assignments(self.cfg, n))]
+        acct = self.cfg.accounts.get(account)
+        own = float(getattr(acct, "day_lock", 0.0) or 0.0)         # the account's own (group) day take
+        if own > 0:
+            rs.append(DayRules(0.0, own, False))
         return merge_rules(rs)
 
     def account_locked(self, account: str) -> Optional[str]:
@@ -1088,6 +1092,26 @@ class Engine:
                 await self._lock_account(st.account, lock, why="a trade closed")
         except Exception as e:  # noqa: BLE001 — the fill is already in
             print(f"homebase engine: day book for {st.strategy}@{st.account} failed: {e!r}", file=sys.stderr)
+
+    def day_view(self, account: str) -> dict:
+        """What the account's day stands at, for the page: the day take in force, the day's closed net P&L, the lock.
+        Reads only (a day that has not started has no book: zeros)."""
+        b = self.books.get(account)
+        today = b is not None and b.date == self._today()
+        return {"day_lock": self.rules_for(account).day_lock, "closed_net": b.closed_net if today else 0.0,
+                "closes": b.closes if today else 0, "locked": b.locked if today else None}
+
+    async def apply_day_lock(self, account: str) -> Optional[str]:
+        """The account's day take was just set or lowered: a day whose closed P&L is already at it locks NOW (a lock
+        is otherwise taken when a trade closes). A lock already taken stays for the day -- never lifted here.
+        -> the lock in force (None: none)."""
+        b = self.books.get(account)
+        if b is None or b.date != self._today():
+            return None
+        rules = self.rules_for(account)
+        if not b.locked and b.closes and rules.day_lock and b.closed_net >= rules.day_lock - 1e-9:
+            await self._lock_account(account, LOCK_LOCK, why="the day take was set at or below the day's closed P&L")
+        return b.locked
 
     async def _lock_account(self, account: str, reason: str, *, why: str = "") -> None:
         """The account is stopped for the day: cancel every entry still resting on it (a later fill would

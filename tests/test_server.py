@@ -3,6 +3,7 @@ calendar. No network."""
 from __future__ import annotations
 
 import datetime as dt
+import json
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -1026,3 +1027,35 @@ def test_status_and_calendar_stop_costing_a_file_parse_per_call(client, tmp_path
         warm = min(ms(url, params) for _ in range(5))
         print(f"{url}: first {first:.1f} ms, then {warm:.2f} ms")
         assert warm * 5 < first
+
+
+def test_an_accounts_day_take_is_set_saved_journaled_and_shown(client, tmp_path):
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 1000}).json()
+    assert r == {"ok": True, "account": "main", "day_lock": 1000.0, "closed_net": 0.0, "closes": 0, "locked": None}
+    assert client.app.state.cfg.accounts["main"].day_lock == 1000.0
+    saved = json.loads((tmp_path / "config.json").read_text())
+    assert saved["accounts"]["main"]["day_lock"] == 1000.0
+    row = client.get("/api/status").json()["accounts"]["main"]
+    assert row["day"] == {"day_lock": 1000.0, "closed_net": 0.0, "closes": 0, "locked": None}
+    events = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [e for e in events if e["event"] == "account_day_lock_set"][-1]["day_lock"] == 1000.0
+    assert client.post("/api/account-day-lock", json={"account": "main", "day_lock": 0}).json()["day_lock"] == 0.0
+
+
+def test_a_bad_day_take_or_account_is_refused_and_changes_nothing(client):
+    cfg = client.app.state.cfg
+    assert client.post("/api/account-day-lock", json={"account": "nope", "day_lock": 100}).status_code == 404
+    for bad in (-1, "100", True, None, 100001, [1]):
+        r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": bad})
+        assert r.status_code == 400 and "dollar amount" in r.json()["detail"], bad
+    assert client.post("/api/account-day-lock", json=[1]).status_code == 400
+    assert cfg.accounts["main"].day_lock == 0.0
+
+
+def test_a_day_take_below_the_days_closed_pnl_locks_the_account_at_once(client):
+    eng = client.app.state.engine
+    book = eng.book("main")
+    book.closed_net, book.closes = 400.0, 2
+    r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 300}).json()
+    assert r["locked"] == "day_lock" and r["closed_net"] == 400.0
+    assert eng.account_locked("main") == "day_lock"

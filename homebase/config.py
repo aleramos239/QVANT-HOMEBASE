@@ -88,6 +88,11 @@ class AccountCfg:
     # balance record does not yet cover.  Empty = no standing: tiers use their smallest size, target_take
     # has no level.
     prop: dict = field(default_factory=dict)
+    # The account's own day take (a "group day take"), $ of CLOSED net P&L, 0 = off: a trade of ANY strategy booked here
+    # closes with the day's closed P&L at or above it -> no new entry on this account for the rest of the day (resting
+    # entries are cancelled, open trades run to their own stop / target). The engine's day_lock, set per account
+    # instead of per strategy: it does not stop a Lab strategy from sharing the account (day_take / target_take do).
+    day_lock: float = 0.0
 
 
 HARD_MAX_ORDER_QTY = 50        # the desk page cannot set chart-trading limits above these
@@ -321,6 +326,11 @@ def save(cfg: AppCfg) -> None:
             + [n for n in d["book"] if str(n).startswith("lab_")]:
         d["strategies"].pop(name, None)
         d["book"].pop(name, None)
+    # An account's own day take is written only when one is set: with none the file is byte for byte what it always was
+    # (an older desk loading it with unknown="raise" would refuse the key).
+    for a in d["accounts"].values():
+        if not a.get("day_lock"):
+            a.pop("day_lock", None)
     # atomic: a crash mid-write must never leave a truncated config (the desk now
     # rewrites it on its own, e.g. removing a closed account)
     path = config_path()

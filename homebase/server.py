@@ -23,6 +23,7 @@ import asyncio
 import contextlib
 import datetime as dt
 import json
+import math
 import os
 import sys
 from dataclasses import asdict
@@ -1173,7 +1174,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             cooldown_s = max(0.0, _login_cooldown.get(aid, 0) - _t.time())
             accounts[aid] = {"label": a.label or a.account_name or aid,
                              "env": "paper" if a.paper else "live" if a.live else "demo",
-                             "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m}
+                             "cooldown_s": round(cooldown_s, 1) if cooldown_s else 0, **m,
+                             "day": engine.day_view(aid)}      # the day take in force, the day's closed P&L, the lock
         # the journal is parsed once, then only the lines appended since the last poll
         recs = journal_cache.records(state_dir() / "journal.jsonl")
         if recs is not live_box["recs"]:      # a new list: the journal changed
@@ -1267,6 +1269,32 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         config_mod.save(cfg)
         engine.journal("armed_toggled", armed=cfg.armed)
         return {"ok": True, "armed": cfg.armed}
+
+    @app.post("/api/account-day-lock")
+    async def account_day_lock(request: Request):
+        """An account's own day take, the group's: {account, day_lock} in dollars of CLOSED net P&L, 0 = off. Once a
+        trade of any strategy booked on the account closes with the day at or above it, no new entry is taken on the
+        account for the rest of the day (resting entries are cancelled, open trades run to their stop / target). Set
+        at or below the day's closed P&L it locks now; a lock already taken stays for the day."""
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(400, "{account, day_lock}")
+        aid = str(body.get("account") or "")
+        if aid not in cfg.accounts:
+            raise HTTPException(404, f"unknown account {aid!r}")
+        v = body.get("day_lock")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or not 0 <= v <= 100000:
+            raise HTTPException(400, "The day take is a dollar amount from 0 (off) to 100000.")
+        prev = cfg.accounts[aid].day_lock
+        cfg.accounts[aid].day_lock = float(v)
+        try:
+            config_mod.save(cfg)
+        except Exception as e:  # noqa: BLE001 -- nothing changed: the memory goes back with the file
+            cfg.accounts[aid].day_lock = prev
+            raise HTTPException(500, f"Could not save it: {e}") from None
+        engine.journal("account_day_lock_set", account=aid, day_lock=float(v), previous=prev)
+        await engine.apply_day_lock(aid)
+        return {"ok": True, "account": aid, **engine.day_view(aid)}
 
     kill_lock_box: dict = {}
 
