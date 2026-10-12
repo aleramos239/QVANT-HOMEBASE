@@ -275,3 +275,29 @@ def test_a_weekly_session_bar_is_the_daily_one_with_a_longer_span(tmp_path, monk
     assert (got[0].t, got[0].span, got[0].closed) == (want[0].t, want[0].span, True)
     assert all(n == 1 for n, size in calls if size == 604800)        # one daily bar went in, never the minutes
     assert (tmp_path / "cache").glob("*.t86400.pkl") and list((tmp_path / "cache").glob("*.t604800.pkl"))
+
+
+def test_a_listing_scope_reads_each_year_folder_once_and_nothing_outside_it_is_kept(tmp_path):
+    h, store, _ = setup(tmp_path)
+    folder = tmp_path / "ticks" / "NQ" / str(D.year)
+    scans = []
+    real = os.scandir
+    import homebase.charts.store as store_mod
+    store_mod.os.scandir = lambda p: scans.append(str(p)) or real(p)
+    try:
+        with store.listing():
+            for _ in range(5):
+                assert store.pick("NQ", D) is not None
+                assert len(store.stamps("NQ", [D])[D]) == 1
+            assert len(scans) == 1                       # one listing for the ten calls
+            later = D + dt.timedelta(days=1)
+            write_archive(tmp_path / "ticks", "NQ", later, "NQZ6", rows(session_ms(later, 9, 30), [100.0] * 5))
+            assert store.pick("NQ", later) is None       # inside the scope the folder is as it was when first read
+        assert store.pick("NQ", later) is not None       # the scope ended: the file is seen
+        n = len(scans)
+        store.pick("NQ", D)
+        store.pick("NQ", D)
+        assert len(scans) == n + 2                       # outside a scope every call reads the folder
+    finally:
+        store_mod.os.scandir = real
+    assert folder.exists()

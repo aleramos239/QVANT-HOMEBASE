@@ -310,10 +310,11 @@ class Hub:
         newest_first = list(reversed(dates))
         t0 = time.monotonic()
         chunks = []
-        for i, d in enumerate(newest_first):
-            chunks.append((self.history.bars(root, spec, d), self.history.info(root, d)))
-            if i + 1 < len(newest_first) and time.monotonic() - t0 > BUILD_BUDGET_S:
-                break        # the OLDER remainder stays unloaded: at least one session is always built
+        with self.store.listing():       # one directory read per year folder, not three per session
+            for i, d in enumerate(newest_first):
+                chunks.append((self.history.bars(root, spec, d), self.history.info(root, d)))
+                if i + 1 < len(newest_first) and time.monotonic() - t0 > BUILD_BUDGET_S:
+                    break        # the OLDER remainder stays unloaded: at least one session is always built
         for bars_d, info_d in reversed(chunks):     # oldest first again, for the stream's own order
             s.bars.extend(bars_d)
             s.sessions.append(info_d)
@@ -354,10 +355,11 @@ class Hub:
         first = s.sessions[0]["date"] if s.sessions else today.isoformat()
         older = [d for d in self.store.sessions(root) if d.isoformat() < str(first)][-need:]
         got, t0 = [], time.monotonic()
-        for d in reversed(older):                    # newest first, so a budget cutoff drops the oldest
-            got[:0] = self.history.bars(root, spec, d, memo=False)
-            if time.monotonic() - t0 > BUILD_BUDGET_S:
-                break
+        with self.store.listing():
+            for d in reversed(older):                # newest first, so a budget cutoff drops the oldest
+                got[:0] = self.history.bars(root, spec, d, memo=False)
+                if time.monotonic() - t0 > BUILD_BUDGET_S:
+                    break
         s.prime, s.prime_n = got, need
 
     def _minutes(self, root: str, tape: list, ts: float) -> tuple[int, list[Bar]] | None:
@@ -432,19 +434,20 @@ class Hub:
         infos: list[dict] = []
         taken, trimmed, i = 0, False, len(back)
         t0 = time.monotonic()
-        while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
-            if taken and time.monotonic() - t0 > BUILD_BUDGET_S:
-                break        # at least one session is always built; the rest is the next `older` request's
-            i -= 1
-            bs = [b for b in self.history.bars(root, spec, back[i], memo=False) if b.t < before_ms]
-            if not bs:
-                continue
-            room = HISTORY_MAX - len(chunk)
-            if len(bs) > room:
-                bs, trimmed = bs[-room:], True
-            chunk[:0] = bs
-            infos.insert(0, self.history.info(root, back[i]))
-            taken += 1
+        with self.store.listing():       # one directory read per year folder, not three per session
+            while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
+                if taken and time.monotonic() - t0 > BUILD_BUDGET_S:
+                    break        # at least one session is always built; the rest is the next `older` request's
+                i -= 1
+                bs = [b for b in self.history.bars(root, spec, back[i], memo=False) if b.t < before_ms]
+                if not bs:
+                    continue
+                room = HISTORY_MAX - len(chunk)
+                if len(bs) > room:
+                    bs, trimmed = bs[-room:], True
+                chunk[:0] = bs
+                infos.insert(0, self.history.info(root, back[i]))
+                taken += 1
         # across the join: the page's first bars, as far as a study still remembers the chunk, and all of a
         # session the chunk ends inside (VWAP and cumulative delta restart only at a session's open)
         ahead: list[Bar] = []

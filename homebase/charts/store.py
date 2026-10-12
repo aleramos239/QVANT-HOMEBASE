@@ -25,6 +25,7 @@ import re
 import threading
 import zlib
 from bisect import bisect_left
+from contextlib import contextmanager
 from operator import itemgetter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -187,12 +188,43 @@ class TickStore:
         self.base = Path(base)
         self._archive_memo: dict[tuple, tuple] = {}     # (archive path, (size, mtime)) -> its parsed ticks, oldest first
         self._merged_lock = threading.Lock()
+        self._scope = threading.local()
+
+    @contextmanager
+    def listing(self):
+        """Within the block this thread reads each (root, year) folder's names once. files() / stamps() list the whole
+        year folder (some 500 names) per session: a 258-session daily chart did that three times a session, ~0.5 s of a
+        cold subscribe. The names are taken when first asked and kept until the block ends, so use it around ONE
+        build (a subscribe, a scroll-back chunk), never around anything that waits for a file to appear."""
+        if getattr(self._scope, "names", None) is not None:
+            yield
+            return
+        self._scope.names = {}
+        try:
+            yield
+        finally:
+            self._scope.names = None
+
+    def _names(self, root: str, year: int) -> list[str]:
+        """The sorted names of root's `year` folder's tick files."""
+        kept = getattr(self._scope, "names", None)
+        if kept is not None and (root, year) in kept:
+            return kept[root, year]
+        try:
+            with os.scandir(self.base / root / str(year)) as it:
+                names = sorted(e.name for e in it if e.name.endswith(".csv.gz"))
+        except OSError:
+            names = []
+        if kept is not None:
+            kept[root, year] = names
+        return names
 
     def files(self, root: str, d: dt.date) -> list[SessionFile]:
-        tag = d.isoformat()
+        tag = d.isoformat() + "_"
         out = []
-        for p in sorted((self.base / root / str(d.year)).glob(f"{tag}_*.csv.gz")):
-            contract = p.name[len(tag) + 1:].split(".")[0]
+        folder = self.base / root / str(d.year)
+        for p in (folder / n for n in self._names(root, d.year) if n.startswith(tag)):
+            contract = p.name[len(tag):].split(".")[0]
             if p.name.endswith(LIVE_SUFFIX):
                 try:
                     size = p.stat().st_size
@@ -261,19 +293,16 @@ class TickStore:
         want = {d.isoformat(): d for d in dates}
         out: dict = {d: [] for d in want.values()}
         for year in {d.year for d in want.values()}:
-            try:
-                with os.scandir(self.base / root / str(year)) as it:
-                    for e in it:
-                        d = want.get(e.name[:10])
-                        if d is None or not e.name.endswith(".csv.gz"):
-                            continue
-                        try:
-                            st = e.stat()
-                        except OSError:
-                            continue                  # vanished between the listing and here
-                        out[d].append((e.name, st.st_size, st.st_mtime_ns))
-            except OSError:
-                continue
+            folder = self.base / root / str(year)
+            for name in self._names(root, year):
+                d = want.get(name[:10])
+                if d is None:
+                    continue
+                try:
+                    st = os.stat(folder / name)
+                except OSError:
+                    continue                          # vanished between the listing and here
+                out[d].append((name, st.st_size, st.st_mtime_ns))
         return {d: tuple(sorted(v)) for d, v in out.items()}
 
     def sessions(self, root: str) -> list[dt.date]:
