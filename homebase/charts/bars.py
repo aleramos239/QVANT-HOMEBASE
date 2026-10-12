@@ -87,10 +87,13 @@ class Bar:
     _bd: dict = field(default_factory=dict, repr=False, compare=False)   # developing bubbles: (sec, tick, side) -> size
     _g: object = field(default=None, repr=False, compare=False)          # the sweep group in progress
     _bs: int = field(default=0, repr=False, compare=False)               # the latest second in _bd
+    ords_b: int = -1            # aggressive BUY orders: runs of buy prints inside one millisecond (-1: not counted)
+    ords_s: int = -1            # aggressive SELL orders likewise. A bar cached before the counts existed unpickles with -1
+                            # (the class default), and a resampled bar that took any such minute keeps -1
 
     @classmethod
     def open_at(cls, t: int, session: str, price: float) -> "Bar":
-        return cls(t=t, session=session, o=price, h=price, l=price, c=price)
+        return cls(t=t, session=session, o=price, h=price, l=price, c=price, ords_b=0, ords_s=0)
 
     @property
     def delta(self) -> int:
@@ -140,6 +143,11 @@ class Bar:
         else:
             self._flush_group(tick_size)
             self._g = [tk.ts_ms, tk.side, k, k, q, 1]
+            if self.ords_b >= 0:                    # a new run of one side inside one millisecond: one aggressor order
+                if tk.side > 0:
+                    self.ords_b += 1
+                else:
+                    self.ords_s += 1
 
     def _flush_group(self, tick_size: float) -> None:
         g, self._g = self._g, None
@@ -169,7 +177,7 @@ class Bar:
                    {k: list(c) for k, c in self.fp.items()},
                    [list(x) for x in self.big], self.closed, self.te, self.span,
                    [list(x) for x in self.sw], [list(x) for x in self.bub], dict(self._bd),
-                   list(self._g) if self._g else None, self._bs)
+                   list(self._g) if self._g else None, self._bs, ords_b=self.ords_b, ords_s=self.ords_s)
 
     def finish_merge(self) -> None:
         """Cap and order the sweeps and bubbles after merge(..., cap=False) calls. The cap keeps the top rows of a total
@@ -202,6 +210,11 @@ class Bar:
         else:
             self.sw.extend(list(x) for x in other.sw)
             self.bub.extend(list(x) for x in other.bub)
+        if self.ords_b >= 0 and other.ords_b >= 0:
+            self.ords_b += other.ords_b
+            self.ords_s += other.ords_s
+        else:
+            self.ords_b = self.ords_s = -1
         for bk, q in other._bd.items():
             self._bd[bk] = self._bd.get(bk, 0) + q
         self._bs = max(self._bs, other._bs)

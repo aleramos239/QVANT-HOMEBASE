@@ -27,9 +27,25 @@ COARSE = (900, 1800, 3600, 14400, 86400)   # the coarse time bars the chart offe
 
 
 def warm(roots, since: dt.date | None = None, *, base: Path = ARCHIVE, cache_dir: Path | None = None,
-         today: dt.date | None = None, out=print) -> dict:
-    """Build each missing or stale 1-minute cache; {"built": n, "skipped": m}. cache_dir None: the service's."""
+         today: dt.date | None = None, out=print, recount: bool = False) -> dict:
+    """Build each missing or stale 1-minute cache; {"built": n, "skipped": m}. cache_dir None: the service's.
+    recount: instead, give the sessions cached before the aggressive order counts existed those counts (newest
+    session first, so the recent charts have them soonest); {"recounted": n, "skipped": m}."""
     history = History(TickStore(base), cache_dir=cache_dir)
+    if recount:
+        done = skipped = 0
+        for root in roots:
+            last = today or session_date(int(time.time() * 1000), root)
+            dates = [d for d in history.store.sessions(root) if d < last and (since is None or d >= since)]
+            for i, d in enumerate(reversed(dates), 1):
+                t0 = time.monotonic()
+                if history.recount(root, d):
+                    done += 1
+                    out(f"{root} {d.isoformat()}: recounted in {time.monotonic() - t0:.1f}s ({i}/{len(dates)})")
+                else:
+                    skipped += 1
+            out(f"{root}: {len(dates)} sessions checked")
+        return {"recounted": done, "skipped": skipped}
     built = skipped = 0
     for root in roots:
         last = today or session_date(int(time.time() * 1000), root)
@@ -56,13 +72,18 @@ def parse_args(argv):
                    help="comma-separated roots (default: the chart service's)")
     p.add_argument("--since", type=dt.date.fromisoformat, default=None,
                    help="the first session, YYYY-MM-DD (default: the archive's first)")
+    p.add_argument("--recount", action="store_true",
+                   help="rebuild the sessions cached before the order counts existed (newest first) instead of warming")
     return p.parse_args(argv)
 
 
 def main(argv=None) -> int:
     a = parse_args(sys.argv[1:] if argv is None else argv)
-    r = warm(a.roots, a.since)
-    print(f"done: {r['built']} built, {r['skipped']} already current")
+    r = warm(a.roots, a.since, recount=a.recount)
+    if a.recount:
+        print(f"done: {r['recounted']} recounted, {r['skipped']} already counted")
+    else:
+        print(f"done: {r['built']} built, {r['skipped']} already current")
     return 0
 
 

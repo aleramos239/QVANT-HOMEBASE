@@ -83,16 +83,19 @@ class TapeSpeed(_Study):
 
 class Pressure(_Study):
     """Who is pushing harder, and by how much. Pure arithmetic on what a Bar already holds: buy / sell volume, the
-    big prints (`big`: [ts, price, size, side]) and the finished sweeps (`sw`: [ts, from, to, size, side]).
-    A part with no volume on either side in the window is None and left out of the mean; a session change
-    restarts the window and the running total."""
+    big prints (`big`: [ts, price, size, side]), the finished sweeps (`sw`: [ts, from, to, size, side]) and the
+    aggressive orders each side sent (`ords_b` / `ords_s`: runs of one side's prints inside one millisecond, -1 on
+    a bar cached before they were counted). A part with nothing on either side in the window is None and left out
+    of the mean; a session change restarts the window and the running total."""
 
     def __init__(self, n: int = 5):
         self.n = int(n)
         super().__init__()
 
     def initial(self):
-        return (None, (), 0, 0)      # session, last n bars' (buy, sell, big buy, big sell, sweep buy, sweep sell), session buy, sell
+        # session, last n bars' (buy, sell, big buy, big sell, sweep buy, sweep sell, orders buy, orders sell),
+        # session buy, sell
+        return (None, (), 0, 0)
 
     @staticmethod
     def _parts(bar):
@@ -100,7 +103,7 @@ class Pressure(_Study):
         bs = sum(r[2] for r in bar.big if r[3] <= 0)
         sb = sum(r[3] for r in bar.sw if r[4] > 0)
         ss = sum(r[3] for r in bar.sw if r[4] <= 0)
-        return (bar.buy, bar.sell, bb, bs, sb, ss)
+        return (bar.buy, bar.sell, bb, bs, sb, ss, max(bar.ords_b, 0), max(bar.ords_s, 0))
 
     @staticmethod
     def _ratio(a, b):
@@ -113,10 +116,11 @@ class Pressure(_Study):
         parts = self._parts(bar)
         win = (win + (parts,))[-self.n:]
         cb, cs = cb + parts[0], cs + parts[1]
-        t = [sum(w[i] for w in win) for i in range(6)]
-        vol, big, swp = self._ratio(t[0], t[1]), self._ratio(t[2], t[3]), self._ratio(t[4], t[5])
-        have = [x for x in (vol, big, swp) if x is not None]
-        out = {"p": sum(have) / len(have) if have else None, "vol": vol, "big": big, "swp": swp,
+        t = [sum(w[i] for w in win) for i in range(8)]
+        vol, big, swp, odr = (self._ratio(t[0], t[1]), self._ratio(t[2], t[3]),
+                              self._ratio(t[4], t[5]), self._ratio(t[6], t[7]))
+        have = [x for x in (vol, big, swp, odr) if x is not None]
+        out = {"p": sum(have) / len(have) if have else None, "vol": vol, "big": big, "swp": swp, "ord": odr,
                "tot": self._ratio(cb, cs)}
         return (sess, win, cb, cs), out
 

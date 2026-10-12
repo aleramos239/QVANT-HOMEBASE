@@ -44,3 +44,34 @@ def test_the_command_line():
     assert a.roots == ["NQ", "ES"] and a.since == dt.date(2021, 9, 22)
     a = parse_args([])
     assert a.since is None and "NQ" in a.roots                     # the chart service's roots
+
+
+def test_recount_rebuilds_only_the_sessions_cached_before_the_order_counts(tmp_path):
+    import pickle
+    from homebase.charts.bars import BarSpec
+    from homebase.charts.history import History
+    from homebase.charts.store import TickStore
+    base, days = archive(tmp_path)
+    cache = tmp_path / "cache"
+    warm(["NQ"], base=base, cache_dir=cache, today=D, out=lambda line: None)
+    h = History(TickStore(base), cache_dir=cache)
+    for d in days:                                                  # coarse files beside each session's minutes
+        h.bars("NQ", BarSpec("time", 900), d, memo=False)
+    for m1 in cache.glob("*.m1.pkl"):                               # make every session look cached before the counts
+        for f in [m1, *cache.glob(m1.name.replace(".m1.pkl", ".t*.pkl"))]:
+            bars = pickle.load(open(f, "rb"))
+            for b in bars:
+                b.ords_b = b.ords_s = -1
+            st = f.stat()
+            pickle.dump(bars, open(f, "wb"))
+            os.utime(f, ns=(st.st_mtime_ns, st.st_mtime_ns))
+    out = []
+    assert warm(["NQ"], base=base, cache_dir=cache, today=D, out=out.append, recount=True) == {"recounted": 3, "skipped": 0}
+    assert [line.split(":")[0] for line in out if "recounted" in line] == [f"NQ {d.isoformat()}" for d in reversed(days)]
+    h2 = History(TickStore(base), cache_dir=cache)
+    for d in days:
+        m = h2.minutes("NQ", d)
+        assert m and all(b.ords_b >= 0 for b in m) and sum(b.ords_b + b.ords_s for b in m) > 0
+        c = h2.bars("NQ", BarSpec("time", 900), d, memo=False)
+        assert c and all(b.ords_b >= 0 for b in c)
+    assert warm(["NQ"], base=base, cache_dir=cache, today=D, out=lambda line: None, recount=True) == {"recounted": 0, "skipped": 3}

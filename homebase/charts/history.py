@@ -21,6 +21,7 @@ import datetime as dt
 import os
 import pickle
 import threading
+from glob import escape as glob_escape
 from collections import OrderedDict
 from pathlib import Path
 
@@ -95,6 +96,34 @@ class History:
         bars = self._from_ticks(root, M1, d)
         self._keep(cp, bars, src_ns)
         return bars
+
+    def recount(self, root: str, d: dt.date) -> bool:
+        """Give session d's cached bars the aggressive order counts (bars.Bar.ords_b / ords_s) when they were cached
+        before those existed: its 1-minute file is rebuilt from the ticks and every coarse file beside it is
+        resampled from the new minutes (a coarse file keeps its source's stamp, so it would otherwise stay "fresh"
+        and uncounted). False: nothing to do (counted already, no cache, or no ticks)."""
+        f = self.store.pick(root, d)
+        if f is None:
+            return False
+        cp = self._cache_file(root, d, f)
+        try:
+            with open(cp, "rb") as fh:
+                old = pickle.load(fh)
+        except (OSError, pickle.UnpicklingError, EOFError):
+            return False                                    # no cache: the next read builds it, counted
+        if not old or old[0].ords_b >= 0:
+            return False
+        src_ns = self._src_ns(f)
+        bars = self._from_ticks(root, M1, d)
+        if not bars:
+            return False
+        self._keep(cp, bars, src_ns)
+        stem = cp.name[:-len(".m1.pkl")]
+        for coarse in self.cache_dir.glob(glob_escape(stem) + ".t*.pkl"):
+            tail = coarse.name[len(stem) + 2:-len(".pkl")]  # ".t900.pkl" -> "900"
+            if tail.isdigit():
+                self._keep(coarse, resample(bars, BarSpec("time", int(tail))), src_ns)
+        return True
 
     def _keep(self, cp: Path, bars: list[Bar], src_ns: int | None) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)

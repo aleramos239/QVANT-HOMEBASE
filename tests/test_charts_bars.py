@@ -156,3 +156,43 @@ def test_resample_caps_sweeps_and_bubbles_once_with_the_same_rows_as_capping_eve
         ref.merge(m)                      # the original behaviour: cap and sort after every merge
     assert len(got) == 1 and got[0].bub == ref.bub and got[0].sw == ref.sw
     assert len(got[0].bub) == BUB_CAP and len(got[0].sw) == SW_CAP
+
+
+# ---- aggressive order counts (ords_b / ords_s): runs of one side's prints inside one millisecond
+
+def test_a_bar_counts_the_orders_each_side_sent_one_run_per_millisecond_and_side():
+    ticks = [T(M, 100.0, 1, BUY), T(M, 100.25, 2, BUY), T(M, 100.5, 3, BUY),     # one buy order walking up 3 levels
+             T(M + 5, 100.5, 1, SELL),                                           # a sell order
+             T(M + 9, 100.25, 1, BUY), T(M + 20, 100.25, 1, BUY),                # two more buy orders
+             T(M + 30, 100.0, 4, SELL), T(M + 30, 99.75, 4, SELL)]               # one sell order, two prints
+    closed, cur = build(ticks, BarSpec("time", 60), TS)
+    b = cur
+    assert (b.ords_b, b.ords_s) == (3, 2)
+    assert b.n == 8 and b.buy == 8 and b.sell == 9
+
+
+def test_order_counts_survive_resampling_and_an_uncounted_minute_makes_the_bar_uncounted():
+    ticks = [T(M, 100.0, 1, BUY), T(M + 1, 100.0, 1, SELL), T(M + 61_000, 100.0, 1, BUY), T(M + 61_001, 100.0, 1, BUY),
+             T(M + 130_000, 100.0, 1, BUY)]
+    direct, cur = build(ticks, BarSpec("time", 180), TS)
+    direct = direct + [cur]
+    mins, cur1 = build(ticks, BarSpec("time", 60), TS)
+    mins = mins + [cur1]
+    for m in mins:
+        m.closed = True
+    five = resample(mins, BarSpec("time", 180))
+    assert [(b.ords_b, b.ords_s) for b in five] == [(b.ords_b, b.ords_s) for b in direct] == [(4, 1)]
+    mins[1].ords_b = mins[1].ords_s = -1                                        # a minute cached before the counts
+    assert [(b.ords_b, b.ords_s) for b in resample(mins, BarSpec("time", 180))] == [(-1, -1)]
+
+
+def test_a_pickled_bar_from_before_the_counts_loads_as_uncounted():
+    import pickle
+    from homebase.charts.bars import Bar
+    b = Bar.open_at(M, "2026-10-09", 100.0)
+    state = dict(b.__dict__)
+    del state["ords_b"], state["ords_s"]
+    old = Bar.__new__(Bar)
+    old.__dict__.update(state)
+    again = pickle.loads(pickle.dumps(old))
+    assert (again.ords_b, again.ords_s) == (-1, -1)

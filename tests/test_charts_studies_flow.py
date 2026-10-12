@@ -107,6 +107,20 @@ def test_pressure_is_the_mean_of_volume_big_print_and_sweep_balance_over_the_win
     assert third["tot"] == pytest.approx(100.0 * (400 - 600) / 1000)    # the session's balance so far
 
 
+def test_pressure_counts_the_orders_each_side_sent_and_skips_bars_cached_before_the_counts():
+    s = make("press:2", 0.25)
+    b0 = pbar(0, buy=100, sell=100)
+    b0.ords_b, b0.ords_s = 30, 10
+    first = s.push(b0)
+    assert first["ord"] == pytest.approx(50.0)                      # (30-10)/40
+    assert first["p"] == pytest.approx((0.0 + 50.0) / 2)            # volume balanced, orders lean to buyers
+    old = pbar(1, buy=100, sell=100)
+    old.ords_b = old.ords_s = -1                                    # a bar cached before the counts: the class default
+    second = s.push(old)
+    assert second["ord"] == pytest.approx(50.0)                     # the old bar adds nothing, bar 0 still counts
+    assert make("press:2", 0.25).push(old)["ord"] is None
+
+
 def test_pressure_leaves_out_a_part_with_nothing_to_say_and_is_none_when_all_are():
     s = make("press:3", 0.25)
     v = s.push(pbar(0, buy=10, sell=30))                            # no big prints, no sweeps
