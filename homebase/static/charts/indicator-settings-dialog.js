@@ -21,8 +21,9 @@ const LINE_LABEL = { vwap: { main: 'VWAP', band1: 'Band 1', band2: 'Band 2', ban
   ema: { main: 'EMA' }, sma: { main: 'SMA' }, vwma: { main: 'VWMA' },
   adx: { adx: 'ADX', pdi: '+DI', mdi: '-DI' }, cumdelta: { main: 'Cum delta' },
   volume: { up: 'Up bars', down: 'Down bars' }, delta: { up: 'Buying (up)', down: 'Selling (down)' } };
-/* a param that only matters for one value of another: hidden otherwise (vwap's time is for the custom anchor) */
-const SHOW_IF = { vwap: { customTime: (v) => v.anchor === 'custom' } };
+const VWAP_NEW_COLORS = ['#2962FF', '#FF6D00', '#00897B', '#E91E63', '#00BCD4'];
+const VWAP_OWN = new Set(['anchor', 'customTime', 'more']);   // the VWAP's lines editor draws these
+const VWAP_ANCHOR_NAMES = [['eth', 'Session (6 pm)'], ['rth', 'RTH (9:30 am)'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']];
 const SHAPE_NAMES = { line: 'Line', steps: 'Steps', curved: 'Curved' };
 
 function mk(tag, cls, text) {
@@ -37,9 +38,9 @@ function mount(box, host) {
   const { cell, uid } = host;
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
   if (!inst || !d) return { revert() {} };
-  const atOpen = { params: { ...inst.params }, style: inst.style ? JSON.parse(JSON.stringify(inst.style)) : null,
+  const atOpen = { params: JSON.parse(JSON.stringify(inst.params)), style: inst.style ? JSON.parse(JSON.stringify(inst.style)) : null,
     opts: inst.opts ? JSON.parse(JSON.stringify(inst.opts)) : null };
-  let vals = { ...inst.params };
+  let vals = JSON.parse(JSON.stringify(inst.params));   // deep: a VWAP's extra lines are edited in place
   let opts = inst.opts ? JSON.parse(JSON.stringify(inst.opts)) : {};          // legend, refs, refColor (catalog.js clampOpts)
   const refDefs = C.refsOf(inst.id);
   const lineKeys = C.styleLineKeys(inst.id);
@@ -95,45 +96,98 @@ function mount(box, host) {
     if (TABS[tab].id === 'style') pane.append(...stylePane());
     else if (TABS[tab].id === 'guide') pane.append(guidePane());
     else {
-      const rows = d.params.filter((p) => !(SHOW_IF[inst.id] && SHOW_IF[inst.id][p.key] && !SHOW_IF[inst.id][p.key](vals))).map(inputRow);
-      if (inst.id === 'vwap') rows.splice(vals.anchor === 'custom' ? 2 : 1, 0, vwapColourRow());   // right under the anchor (and its time)
-      if (inst.id === 'vwap' && host.addAnother) rows.unshift(addAnotherRow());   // on top, where it is seen
+      const rows = d.params.filter((p) => !(inst.id === 'vwap' && VWAP_OWN.has(p.key))).map(inputRow);
+      if (inst.id === 'vwap') rows.unshift(vwapLinesEditor());   // its lines (anchor, time, colour) first; the bands follow
       pane.append(...rows);
     }
     pane.scrollTop = 0;
   }
 
-  /* ---- VWAP: one colour for the line and its bands, and a button for a second (third...) VWAP ---- */
-  function vwapColourRow() {
-    const row = mk('div', 'field'), lab = mk('label', '', 'Colour'), sw = button('swatch'), dot = mk('i');
+  /* ---- VWAP: its lines, one row each: anchor, its time when custom, colour. The first line carries the bands. ---- */
+  function vwapLinesEditor() {
+    const wrap = mk('div', 'vlines');
+    const more = () => (vals.more = Array.isArray(vals.more) ? vals.more : []);
     if (!style) style = C.defaultStyle('vwap', cell.cfg.indicators.filter((x) => x.uid !== uid));
-    dot.style.background = C.lineColor(style.main);
-    sw.title = 'VWAP colour (its bands follow)';
-    sw.setAttribute('aria-label', 'VWAP colour');
-    sw.append(dot);
-    sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
-      const grid = mk('div', 'sw-grid');
-      for (const hex of C.LINE_COLORS.concat(['#9C27B0', '#089981', '#F23645', '#787B86', '#FFFFFF', '#000000'])) {
-        const b = button('sw-cell');
-        b.style.background = hex; b.title = hex; b.setAttribute('aria-label', hex);
-        b.onclick = () => {
-          for (const k of ['main', 'band1', 'band2', 'band3']) if (style[k]) style[k].color = hex;
-          dot.style.background = hex; host.closeMenu(); preview();
-        };
-        grid.append(b);
+    const palette = C.LINE_COLORS.concat(['#9C27B0', '#089981', '#F23645', '#787B86', '#FFFFFF', '#000000']);
+    const colourOf = (i) => (i === 0 ? C.lineColor(style.main) : (more()[i - 1].color || VWAP_NEW_COLORS[(i - 1) % VWAP_NEW_COLORS.length]));
+    const setColour = (i, hex) => {
+      if (i === 0) { for (const k of ['main', 'band1', 'band2', 'band3']) if (style[k]) style[k].color = hex; } else more()[i - 1].color = hex;
+    };
+    const draw = () => {
+      host.closeMenu();
+      const items = [mk('label', 'vl-head', 'VWAP lines: each restarts at its own time every day')];
+      for (let i = 0; i <= more().length; i++) {
+        const obj = i === 0 ? vals : more()[i - 1];
+        const item = mk('div', 'vl-item'), row = mk('div', 'vl-row'), err = mk('div', 'dlg-err');
+        err.hidden = true; err.setAttribute('role', 'alert');
+        if (i > 0) {
+          const on = mk('input'); on.type = 'checkbox'; on.checked = obj.on !== false;
+          on.setAttribute('aria-label', `Line ${i + 1} on`);
+          on.onchange = () => { obj.on = on.checked; preview(); };
+          row.append(on);
+        } else row.append(mk('span', 'vl-first', '1'));
+        const sel = mk('select', 'set-select vl-anchor');
+        sel.setAttribute('aria-label', `Line ${i + 1} anchor`);
+        for (const [v, text] of VWAP_ANCHOR_NAMES) { const o = mk('option', '', text); o.value = v; sel.append(o); }
+        sel.value = obj.anchor || 'eth';
+        sel.onchange = () => { obj.anchor = sel.value; if (!obj.customTime) obj.customTime = '09:30'; preview(); draw(); };
+        row.append(sel);
+        if ((obj.anchor || 'eth') === 'custom') {
+          // No destructive re-clamp per keystroke: a value replaces the stored one only once it normalises; left
+          // bad on blur or Enter, an inline error shows and the box snaps back to the last valid time.
+          const tin = mk('input', 'sw-hex vl-time');
+          tin.type = 'text'; tin.placeholder = 'HH:MM'; tin.maxLength = 5; tin.value = obj.customTime || '09:30';
+          tin.setAttribute('aria-label', `Line ${i + 1} time (ET)`);
+          tin.oninput = () => { const n = C.normalizeHHMM(tin.value); if (!n) return; obj.customTime = n; err.hidden = true; preview(); };
+          const settle = () => {
+            const n = C.normalizeHHMM(tin.value);
+            if (n) { obj.customTime = n; tin.value = n; err.hidden = true; preview(); return; }
+            err.textContent = 'Use HH:MM, e.g. 09:30'; err.hidden = false; tin.value = obj.customTime;
+          };
+          tin.onblur = settle;
+          tin.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; settle(); } };
+          row.append(tin);
+        }
+        const sw = button('swatch'), dot = mk('i');
+        dot.style.background = colourOf(i);
+        sw.title = `Line ${i + 1} colour` + (i === 0 ? ' (its bands follow)' : '');
+        sw.setAttribute('aria-label', `Line ${i + 1} colour`);
+        sw.append(dot);
+        sw.onclick = () => host.toggleMenu(sw, 'menu-swatch', (m) => {
+          const grid = mk('div', 'sw-grid');
+          for (const hex of palette) {
+            const c = button('sw-cell');
+            c.style.background = hex; c.title = hex; c.setAttribute('aria-label', hex);
+            c.onclick = () => { setColour(i, hex); dot.style.background = hex; host.closeMenu(); preview(); };
+            grid.append(c);
+          }
+          m.append(grid);
+        });
+        row.append(sw);
+        if (i > 0) {
+          const rm = button('vl-rm', '×');
+          rm.title = `Remove line ${i + 1}`; rm.setAttribute('aria-label', rm.title);
+          rm.onclick = () => { more().splice(i - 1, 1); if (!more().length) delete vals.more; preview(); draw(); };
+          row.append(rm);
+        }
+        item.append(row, err);
+        items.push(item);
       }
-      m.append(grid);
-    });
-    row.append(lab, sw);
-    return row;
-  }
-  function addAnotherRow() {
-    const row = mk('div', 'field vw-add'), b = button('btn btn-ghost', '+ Add VWAP');
-    const n = cell.cfg.indicators.filter((x) => x.id === 'vwap').length;
-    b.title = 'Keeps these settings, then opens a new VWAP with its own anchor and colour';
-    b.onclick = () => { ok.onclick(); host.addAnother('vwap'); };
-    row.append(mk('label', '', n > 1 ? `${n} VWAPs on this chart` : 'VWAPs on this chart: 1'), b);
-    return row;
+      if (more().length < C.VWAP_MORE_MAX) {
+        const add = button('btn btn-ghost vl-add', '+ Add line');
+        add.title = 'A second VWAP line in this indicator, with its own anchor and colour';
+        add.onclick = () => {
+          const used = new Set([vals.anchor === 'custom' ? vals.customTime : vals.anchor, ...more().map((l) => (l.anchor === 'custom' ? l.customTime : l.anchor))]);
+          const next = ['09:30', '18:00', '02:00', '16:00'].find((h) => !used.has(h)) || '09:30';
+          more().push({ anchor: 'custom', customTime: next, on: true, color: VWAP_NEW_COLORS[more().length % VWAP_NEW_COLORS.length] });
+          preview(); draw();
+        };
+        items.push(add);
+      }
+      wrap.replaceChildren(...items);
+    };
+    draw();
+    return wrap;
   }
 
   /* ---- How to read: the plain-words guide (guide-*.js) and, when it has one, what this chart shows right now ---- */
@@ -170,7 +224,6 @@ function mount(box, host) {
       ctl.value = vals[p.key] === undefined ? p.def : vals[p.key];       // an omitted default (the timeframe) reads as it
       ctl.onchange = () => {
         vals[p.key] = ctl.value;
-        if (SHOW_IF[inst.id]) renderPane();   // a box that depends on this choice (vwap's time) shows or hides
         preview();
       };
     } else if (p.type === 'boxes') {

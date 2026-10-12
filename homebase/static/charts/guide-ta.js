@@ -28,7 +28,7 @@ G.add({
     what: 'Volume-weighted average price: the average price paid since a start time, busy bars counting more.',
     see: [
       'One line on the price pane, 2 pixels thick, purple at first. Pick its colour in Settings.',
-      'More than one? Click VWAP again, or "+ Add VWAP" in Settings: each has its own anchor and colour.',
+      'More lines: "+ Add line" in Settings. Each line has its own anchor (say 6 pm or 9:30 am) and colour.',
       'It restarts at its anchor. The default anchor, Session, is the 18:00 New York open.',
       'Optional bands, off by default: dashed lines above and below, in the same colour.',
       'Band 1, 2 and 3 sit 1, 2 and 3 standard deviations away (the usual spread of price around the line).',

@@ -99,6 +99,27 @@ function sessBoxes(inst) {
   return list.map((b, i) => ({ ...b, index: i, key: sessKey(b), color: b.color || SESS_BOX_COLORS[i % SESS_BOX_COLORS.length] }))
     .filter((b) => b.on !== false);
 }
+/* A VWAP holds its first line (anchor / customTime / bands, its Style) and up to VWAP_MORE_MAX more, each its own anchor
+   (session, RTH, a custom ET time, week, month) and colour, switched on and off; they share the first line's width and dash. */
+const VWAP_MORE_MAX = 5, VWAP_ANCHORS = ['eth', 'rth', 'custom', 'week', 'month'];
+function clampVwapLines(v) {
+  const out = [];
+  for (const l of Array.isArray(v) ? v : []) {
+    if (!l || typeof l !== 'object' || out.length >= VWAP_MORE_MAX) continue;
+    const row = { anchor: VWAP_ANCHORS.includes(l.anchor) ? l.anchor : 'custom',
+      customTime: (typeof l.customTime === 'string' && normalizeHHMM(l.customTime)) || '09:30', on: l.on !== false };
+    if (typeof l.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(l.color)) row.color = l.color;
+    out.push(row);
+  }
+  return out;
+}
+/* The extra lines a VWAP draws: the switched-on ones, each with its wire key, label and colour (its own, else by place). */
+const VWAP_LINE_COLORS = ['#2962FF', '#FF6D00', '#00897B', '#E91E63', '#00BCD4'];
+function vwapLines(inst) {
+  const list = (inst.params && Array.isArray(inst.params.more)) ? inst.params.more : [];
+  return list.map((l, i) => ({ ...l, index: i, key: vwapServerKey(l), label: vwapLabel(l), color: l.color || VWAP_LINE_COLORS[i % VWAP_LINE_COLORS.length] }))
+    .filter((l) => l.on !== false);
+}
 const TA_DEFS = [
   { id: 'rsi', group: 'Momentum', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
     label: (p) => `RSI ${p.length}`, desc: 'Relative strength: how strongly the last N bars closed up versus down, 0 to 100',
@@ -228,10 +249,11 @@ function lineValue(ln, v) {
 const CATALOG = [
   { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main',
     desc: 'Contracts traded per bar; green when buyers outweighed sellers, else red' },
-  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Average price since its anchor (session, RTH…), optional bands. Add it again for more', params: [
+  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Average price since its anchor; several lines, each its own anchor and colour', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice',
       choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
     { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },
+    { key: 'more', label: 'More lines', type: 'vwaplines', def: [] },
     ...BAND(1, 1), ...BAND(2, 2), ...BAND(3, 3)] },
   { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20), SOURCE],
     desc: 'Exponential moving average of the last N bars; recent bars count more' },
@@ -406,6 +428,7 @@ function clampParams(id, params) {
   for (const p of d.params) {
     const v = src[p.key];
     if (p.type === 'boxes') { out[p.key] = clampBoxes(Array.isArray(v) ? v : p.def); continue; }
+    if (p.type === 'vwaplines') { const more = clampVwapLines(v); if (more.length) out[p.key] = more; continue; }   // none = no key
     if (p.type === 'tf') {      // typed ("15m"), kept as seconds; "Chart" is no key at all
       const s = typeof v === 'string' || typeof v === 'number' ? (/^\d+$/.test(String(v)) ? Number(v) : parseTf(v)) : null;
       if (s && s >= 1 && s <= 86400) out[p.key] = String(s);
@@ -572,6 +595,13 @@ function defaults() { return [instance('volume'), instance('vwap'), instance('le
    "vwap:week"/"vwap:month"; "vwap:t0200" for a custom HH:MM ET (colon stripped -- wire keys use ':' as their
    own delimiter). An invalid/missing customTime never reaches here: clampParams already fell back to its
    default. */
+function vwapLabel(p) {
+  if (p.anchor === 'rth') return 'VWAP RTH';
+  if (p.anchor === 'week') return 'VWAP W';
+  if (p.anchor === 'month') return 'VWAP M';
+  if (p.anchor === 'custom') return `VWAP ${HHMM.test(p.customTime) ? p.customTime : '02:00'}`;
+  return 'VWAP';
+}
 function vwapServerKey(p) {
   switch (p.anchor) {
     case 'rth': return 'vwap:rth';
@@ -598,7 +628,8 @@ function baseServerKey(inst) {
 }
 
 // a session range asks for the window of every box that is on; any other indicator for its one key
-const keysOf = (inst) => (inst.id === 'sess' ? sessBoxes(inst).map((b) => b.key) : [serverKey(inst)]);
+const keysOf = (inst) => (inst.id === 'sess' ? sessBoxes(inst).map((b) => b.key)
+  : inst.id === 'vwap' ? [serverKey(inst), ...vwapLines(inst).map((l) => l.key)] : [serverKey(inst)]);
 /* A "bk:" key is computed in the page from the book samples (flowdefs.js): it is never asked of the server. */
 function serverKeys(list) { return [...new Set((list || []).flatMap(keysOf).filter((k) => k && !k.startsWith('bk:')))]; }
 
@@ -704,12 +735,10 @@ function baseLabel(inst) {
   const d = def(inst.id), p = inst.params || {};
   if (!d) return String(inst.id);
   switch (inst.id) {
-    case 'vwap':
-      if (p.anchor === 'rth') return 'VWAP RTH';
-      if (p.anchor === 'week') return 'VWAP W';
-      if (p.anchor === 'month') return 'VWAP M';
-      if (p.anchor === 'custom') return `VWAP ${HHMM.test(p.customTime) ? p.customTime : '02:00'}`;
-      return 'VWAP';
+    case 'vwap': {
+      const n = vwapLines(inst).length;
+      return n ? `${vwapLabel(p)} +${n}` : vwapLabel(p);   // "VWAP 09:30 +1": its first line, and how many more
+    }
     case 'ema': case 'sma':
       return p.source && p.source !== 'close' ? `${d.name} ${p.length} ${p.source.toUpperCase()}` : `${d.name} ${p.length}`;
     case 'vwma': return `${d.name} ${p.length}`;
@@ -760,7 +789,8 @@ function legendValues(inst, bar, colors, tick) {
   const n2 = (x) => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(2));
   switch (inst.id) {
     case 'ema': case 'sma': case 'vwma': return [{ text: fmtPrice(v, tick), color: colors.line }];
-    case 'vwap': return [{ text: fmtPrice(v ? v.vwap : null, tick), color: colors.vwap }];
+    case 'vwap': return [{ text: fmtPrice(v ? v.vwap : null, tick), color: colors.vwap },
+      ...vwapLines(inst).map((l) => { const lv = bar && bar.sv ? bar.sv[l.key] : null; return { text: fmtPrice(lv ? lv.vwap : null, tick), color: l.color }; })];
     case 'adx': return [{ text: n2(v && v.adx), color: colors.text }, { text: n2(v && v.pdi), color: colors.up },
       { text: n2(v && v.mdi), color: colors.down }];
     case 'cumdelta': return [{ text: fmtSigned(v), color: colors.cum }];
@@ -982,7 +1012,7 @@ function toggleId(list, id) { return list.includes(id) ? list.filter((x) => x !=
 function toolGroupOf(tool) { return TOOL_GROUPS.findIndex(([, tools]) => tools.includes(tool)); }
 
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
-  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
+  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, vwapLines, VWAP_MORE_MAX, VWAP_ANCHORS, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, styleControls, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,

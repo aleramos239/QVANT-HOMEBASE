@@ -1081,3 +1081,25 @@ test('adjustable settings: new options default to what the chart did before, and
   assert.equal(C.clampParams('bigorders', { width: '4' }).width, '4');
   assert.equal(C.clampParams('absorb', { size: '1.5', side: 'up', labels: true }).size, '1.5');
 });
+
+test('a VWAP holds more lines: each its own wire key, label and colour; none is no key at all', () => {
+  assert.equal(C.clampParams('vwap', { more: [] }).more, undefined);
+  const p = C.clampParams('vwap', { anchor: 'eth', more: [{ anchor: 'custom', customTime: '9:30', color: '#112233' },
+    { anchor: 'rth', on: false }, { anchor: 'nope', customTime: 'x' }, null] });
+  assert.deepEqual(p.more, [{ anchor: 'custom', customTime: '09:30', on: true, color: '#112233' },
+    { anchor: 'rth', customTime: '09:30', on: false }, { anchor: 'custom', customTime: '09:30', on: true }]);
+  const inst = C.instance('vwap', p);
+  assert.deepEqual(C.vwapLines(inst).map((l) => [l.key, l.color]), [['vwap:t0930', '#112233'], ['vwap:t0930', '#00897B']]);
+  assert.deepEqual(C.serverKeys([inst]), ['vwap', 'vwap:t0930']);
+  assert.equal(C.label(inst), 'VWAP +2');
+  assert.equal(C.clampParams('vwap', { more: Array.from({ length: 9 }, () => ({})) }).more.length, C.VWAP_MORE_MAX);
+});
+
+test('the legend shows one value per VWAP line, each in its line colour', () => {
+  const inst = C.instance('vwap', { more: [{ anchor: 'custom', customTime: '09:30', color: '#112233' }] });
+  const bar = { sv: { vwap: { vwap: 100 }, 'vwap:t0930': { vwap: 101.5 } } };
+  const v = C.legendValues(inst, bar, { vwap: '#9C27B0' }, 0.25);
+  assert.equal(v.length, 2);
+  assert.equal(v[1].color, '#112233');
+  assert.match(v[1].text, /101\.5/);
+});

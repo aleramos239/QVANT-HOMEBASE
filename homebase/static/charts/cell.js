@@ -917,6 +917,9 @@ class Cell {
           const main = st.main || { color: P.vwap, width: 2, dash: 'solid', visible: true };
           this.colorOf[inst.uid] = main.color;
           line(inst, k, null, C.lineColor(main), main.width, 0, { ...tagOpt(main), ...shapeOpt(main), lineStyle: dash(main.dash), visible: main.visible !== false });
+          for (const l of C.vwapLines(inst)) {   // more lines: each its own anchor and colour, the first line's width and dash
+            line(inst, l.key, null, l.color, main.width, 0, { ...tagOpt(main), ...shapeOpt(main), lineStyle: dash(main.dash), visible: main.visible !== false });
+          }
           for (let n = 1; n <= 3; n++) {
             if (!inst.params[`band${n}On`]) continue;
             const mult = inst.params[`band${n}Mult`] || n, bs = st[`band${n}`] || { color: P.band, width: 1, dash: 'dashed', visible: true };

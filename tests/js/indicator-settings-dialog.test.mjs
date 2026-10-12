@@ -36,7 +36,7 @@ global.window = global.window || {};
 global.window.HBCatalog = require('../../homebase/static/charts/catalog.js');
 global.window.HBIcons = global.window.HBIcons || new Proxy({}, { get: () => '' });   // the Template button's chevron (merge with the presets wiring)
 global.document = { createElement: (tag) => new FakeEl(tag), activeElement: null };
-global.requestAnimationFrame = (fn) => { fn(); return 1; };
+global.requestAnimationFrame = (fn) => { fn(); return 0; };   // runs at once; 0 so preview() is never left "pending"
 global.cancelAnimationFrame = () => {};
 require('../../homebase/static/charts/indicator-settings-dialog.js');
 const HBIndicatorSettings = global.window.HBIndicatorSettings;
@@ -53,11 +53,12 @@ function makeHost(cell, uid) {
   return { host: { cell, uid, closeMenu: () => {}, toggleMenu: () => {}, commit: (c) => commits.push(c), cancel: () => {} }, commits };
 }
 
-/* The time field is the 2nd field in VWAP's Inputs tab (anchor, customTime, band1On, ...): row index 1. */
+/* The first line's time box is the first HH:MM input in VWAP's Inputs tab (its lines editor); its error line sits beside it. */
+function walk(el, fn) { fn(el); for (const c of el.children) walk(c, fn); }
+function find(el, pred) { const out = []; walk(el, (n) => { if (pred(n)) out.push(n); }); return out; }
 function timeField(box) {
-  const inputsPane = box.children[0].children[1];   // set-body -> set-pane (tabs hidden or not, pane is index 1)
-  const row = inputsPane.children[1];                // customTime's .field row
-  return { ctl: row.children[1], err: row.children[2] };
+  const item = find(box, (n) => n._class === 'vl-item')[0];
+  return { ctl: find(item, (n) => /\bsw-hex\b/.test(n._class))[0], err: find(item, (n) => n._class === 'dlg-err')[0] };
 }
 
 function openVwap(customTime = '02:00') {
@@ -125,59 +126,75 @@ test('Cancel (revert) puts the instance back to what it was when the dialog open
   assert.equal(cell.cfg.indicators[0].params.customTime, '16:00');
 });
 
-/* 2026-10-12: a choice is a dropdown (a row of pills overflowed the card), vwap's time shows only for the custom
-   anchor, the VWAP has one colour row, and "+ Add VWAP" keeps this one and asks the page for a new one. */
+/* 2026-10-12: a choice is a dropdown (a row of pills overflowed the card); a VWAP holds several lines in ONE
+   indicator, each its own anchor and colour. */
 function pane(box) { return box.children[0].children[1]; }
-function walk(el, fn) { fn(el); for (const c of el.children) walk(c, fn); }
-function find(el, pred) { const out = []; walk(el, (n) => { if (pred(n)) out.push(n); }); return out; }
 
 test('a choice is a <select> with every option, set to the current value', () => {
-  const { box } = openVwap();
-  const sel = find(pane(box), (n) => n.tagName === 'select')[0];
-  assert.ok(sel, 'the anchor is a dropdown');
-  assert.deepEqual(sel.children.map((o) => o.value), ['eth', 'rth', 'custom', 'week', 'month']);
-  assert.equal(sel.value, 'custom');
+  const inst = C.instance('footprint');
+  const cell = makeCell(inst);
+  const box = new FakeEl('div');
+  HBIndicatorSettings.mount(box, makeHost(cell, inst.uid).host);
+  const sel = find(pane(box), (n) => n.tagName === 'select' && n.attrs['aria-label'] === 'Numbers in each row')[0];
+  assert.ok(sel, 'the numbers choice is a dropdown');
+  assert.deepEqual(sel.children.map((o) => o.value), ['both', 'delta', 'total', 'none']);
+  assert.equal(sel.value, 'both');
   assert.equal(find(pane(box), (n) => /\bseg\b/.test(n.className)).length, 0, 'no pill row left');
 });
 
-test('picking a different anchor hides the time row and previews it', () => {
-  const { box, cell } = openVwap();
-  const sel = find(pane(box), (n) => n.tagName === 'select')[0];
+test('VWAP: the first line is a row with an anchor dropdown, a time box only for Custom time and a colour', () => {
+  const { box } = openVwap();
+  const row = find(pane(box), (n) => n._class === 'vl-row');
+  assert.equal(row.length, 1);
+  const sel = find(row[0], (n) => n.tagName === 'select')[0];
+  assert.deepEqual(sel.children.map((o) => o.value), ['eth', 'rth', 'custom', 'week', 'month']);
+  assert.equal(sel.value, 'custom');
+  assert.equal(find(row[0], (n) => /\bsw-hex\b/.test(n._class)).length, 1);
   sel.value = 'rth';
   sel.onchange();
-  assert.equal(cell.cfg.indicators[0].params.anchor, 'rth');
-  assert.equal(find(pane(box), (n) => n._class === 'sw-hex').length, 0, 'the HH:MM box is gone');
+  const again = find(pane(box), (n) => n._class === 'vl-row')[0];
+  assert.equal(find(again, (n) => /\bsw-hex\b/.test(n._class)).length, 0, 'no time box for RTH');
 });
 
-test('the VWAP colour row recolours the line and its three bands', () => {
+test('"+ Add line" puts a second line in the same VWAP: its own anchor and colour, no new indicator', () => {
+  const { box, cell } = openVwap();
+  const add = find(pane(box), (n) => n.tagName === 'button' && /Add line/.test(n.textContent))[0];
+  add.onclick();
+  assert.equal(cell.cfg.indicators.length, 1, 'still one indicator');
+  const more = cell.cfg.indicators[0].params.more;
+  assert.equal(more.length, 1);
+  assert.equal(more[0].anchor, 'custom');
+  assert.equal(more[0].customTime, '09:30');
+  assert.ok(more[0].color);
+  assert.deepEqual(C.serverKeys(cell.cfg.indicators), ['vwap:t0200', 'vwap:t0930']);
+});
+
+test('a second line follows its own anchor; Cancel takes it away again', () => {
+  const { box, cell, ctl } = openVwap('16:00');
+  find(pane(box), (n) => n.tagName === 'button' && /Add line/.test(n.textContent))[0].onclick();
+  const rows = find(pane(box), (n) => n._class === 'vl-row');
+  assert.equal(rows.length, 2);
+  const sel = find(rows[1], (n) => n.tagName === 'select')[0];
+  sel.value = 'eth';
+  sel.onchange();
+  assert.deepEqual(C.serverKeys(cell.cfg.indicators), ['vwap:t1600', 'vwap']);
+  ctl.revert();
+  assert.equal(cell.cfg.indicators[0].params.more, undefined);
+});
+
+test('the first line colour recolours it and its three bands', () => {
   const inst = C.instance('vwap', { anchor: 'rth' });
   const cell = makeCell(inst);
   const box = new FakeEl('div');
   let fill = null;
   const host = { cell, uid: inst.uid, closeMenu: () => {}, toggleMenu: (a, cls, f) => { fill = f; }, commit() {}, cancel() {} };
   HBIndicatorSettings.mount(box, host);
-  const sw = find(pane(box), (n) => n.tagName === 'button' && n._class === 'swatch')[0];
-  sw.onclick();
+  find(pane(box), (n) => n.tagName === 'button' && n._class === 'swatch')[0].onclick();
   const m = new FakeEl('div');
   fill(m);
   const cells = find(m, (n) => n._class === 'sw-cell');
   cells[1].onclick();
-  const want = cells[1].style.background;
-  const st = cell.cfg.indicators[0].style;
+  const want = cells[1].style.background, st = cell.cfg.indicators[0].style;
   assert.ok(want);
   for (const k of ['main', 'band1', 'band2', 'band3']) assert.equal(st[k].color, want);
-});
-
-test('"+ Add VWAP" commits this one, then asks for a new VWAP', () => {
-  const inst = C.instance('vwap');
-  const cell = makeCell(inst);
-  const box = new FakeEl('div');
-  const calls = [];
-  const host = { cell, uid: inst.uid, closeMenu: () => {}, toggleMenu: () => {}, commit: () => calls.push('commit'),
-    cancel() {}, addAnother: (id) => calls.push(`add:${id}`) };
-  HBIndicatorSettings.mount(box, host);
-  const btn = find(pane(box), (n) => n.tagName === 'button' && /Add VWAP/.test(n.textContent))[0];
-  assert.ok(btn);
-  btn.onclick();
-  assert.deepEqual(calls, ['commit', 'add:vwap']);
 });
