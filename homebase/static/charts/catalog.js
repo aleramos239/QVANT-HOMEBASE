@@ -511,7 +511,10 @@ function defaultStyle(id, siblings) {
     default: {
       if (TA_BY_ID[id]) {   // a second copy of the same indicator moves its first line's colour on, the rest keep theirs
         const out = {}, again = (siblings || []).some((x) => x.id === id);
-        TA_BY_ID[id].lines.forEach((l, i) => { out[l.part] = lineStyle(again && i === 0 ? color : l.color, l.width, l.dash); });
+        TA_BY_ID[id].lines.forEach((l, i) => {
+          out[l.part] = lineStyle(again && i === 0 ? color : l.color, l.width, l.dash);
+          if (l.off) out[l.part].visible = false;   // a part line a new chart starts without (flowdefs.js)
+        });
         return out;
       }
       return { main: lineStyle(color, id === 'cumdelta' ? 2 : 1, 'solid') };   // ema, sma, vwma, delta, cumdelta

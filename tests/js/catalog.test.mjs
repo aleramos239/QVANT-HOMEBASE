@@ -1071,6 +1071,12 @@ test('buy / sell pressure: server key from its length, clamps, lines the legend 
   assert.equal(C.label(p), 'Buy/sell pressure 12');
 });
 
+test('buy / sell pressure: the four part lines start hidden on a new chart, the blend and session total show', () => {
+  const st = C.defaultStyle('pressure', []);
+  assert.deepEqual(['p', 'tot', 'vol', 'ord', 'big', 'swp'].map((k) => st[k].visible), [true, true, false, false, false, false]);
+  assert.equal(C.defaultStyle('bkimb', []).main.visible, true);        // a line without `off` is unchanged
+});
+
 test('adjustable settings: new options default to what the chart did before, and clamp', () => {
   assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right' });
   assert.deepEqual(C.clampParams('footprint', { rows: '3', numbers: 'zzz' }),

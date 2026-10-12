@@ -91,43 +91,60 @@ def pbar(i, buy, sell, big=(), sw=(), session="2026-10-09"):
     return b
 
 
-def test_pressure_is_the_mean_of_volume_big_print_and_sweep_balance_over_the_window():
-    s = make("press:2", 0.25)
-    first = s.push(pbar(0, buy=300, sell=100, big=[(50, 1), (10, -1)], sw=[(40, 1)]))
-    assert first["vol"] == pytest.approx(50.0)                      # (300-100)/400
-    assert first["big"] == pytest.approx(100.0 * 40 / 60)
-    assert first["swp"] == pytest.approx(100.0)
-    assert first["p"] == pytest.approx((50.0 + 100.0 * 40 / 60 + 100.0) / 3)
-    second = s.push(pbar(1, buy=100, sell=300, big=[(50, -1)], sw=[(40, -1)]))   # window of 2: both bars
-    assert second["vol"] == pytest.approx(0.0)                      # 400 buy vs 400 sell
-    assert second["big"] == pytest.approx(100.0 * (50 - 60) / 110)
-    assert second["swp"] == pytest.approx(0.0)
-    third = s.push(pbar(2, buy=0, sell=200))                        # bar 0 has left the window
-    assert third["vol"] == pytest.approx(100.0 * (100 - 500) / 600)
-    assert third["tot"] == pytest.approx(100.0 * (400 - 600) / 1000)    # the session's balance so far
+def test_pressure_parts_are_shrunk_and_blended_volume_three_to_one():
+    s = make("press:1", 0.25)                                       # n = 1: the bar alone
+    v = s.push(pbar(0, buy=300, sell=100, big=[(50, 1), (10, -1)], sw=[(40, 1)]))
+    assert v["vol"] == pytest.approx(50.0)                          # (300-100)/400, nothing added to the volume part
+    assert v["big"] == pytest.approx(100.0 * 40 / (60 + 30))        # a little neutral weight: not +67 but +44
+    assert v["swp"] == pytest.approx(100.0 * 40 / (40 + 30))
+    assert v["ord"] is None                                         # no orders on either side
+    assert v["p"] == pytest.approx((3 * 50.0 + v["big"] + v["swp"]) / 5)
+    lone = make("press:1", 0.25).push(pbar(0, buy=100, sell=100, big=[(10, 1)]))
+    assert lone["big"] == pytest.approx(25.0)                       # one 10-lot print is no longer +100
+
+
+def test_pressure_newest_bar_weighs_most_so_the_line_turns_with_the_move():
+    s = make("press:3", 0.25)                                       # keeps half the weight per bar
+    s.push(pbar(0, buy=300, sell=100))
+    v = s.push(pbar(1, buy=100, sell=300))
+    assert v["vol"] == pytest.approx(100.0 * (250 - 350) / 600)     # 300/2+100 buy vs 100/2+300 sell: already negative
+    assert v["tot"] == pytest.approx(0.0)                           # the session's whole balance is still level
+    old_box = 100.0 * (400 - 400) / 800
+    assert v["vol"] < old_box                                       # a plain two-bar window would still read 0
 
 
 def test_pressure_counts_the_orders_each_side_sent_and_skips_bars_cached_before_the_counts():
-    s = make("press:2", 0.25)
+    s = make("press:1", 0.25)
     b0 = pbar(0, buy=100, sell=100)
     b0.ords_b, b0.ords_s = 30, 10
     first = s.push(b0)
-    assert first["ord"] == pytest.approx(50.0)                      # (30-10)/40
-    assert first["p"] == pytest.approx((0.0 + 50.0) / 2)            # volume balanced, orders lean to buyers
+    assert first["ord"] == pytest.approx(100.0 * 20 / (40 + 20))    # (30-10) / (30+10+shrink)
+    assert first["p"] == pytest.approx((3 * 0.0 + first["ord"]) / 4)    # volume level, orders lean to buyers
     old = pbar(1, buy=100, sell=100)
     old.ords_b = old.ords_s = -1                                    # a bar cached before the counts: the class default
-    second = s.push(old)
-    assert second["ord"] == pytest.approx(50.0)                     # the old bar adds nothing, bar 0 still counts
-    assert make("press:2", 0.25).push(old)["ord"] is None
+    assert s.push(old)["ord"] is None                               # n = 1: nothing of bar 0 is left, the old bar adds none
+    assert make("press:1", 0.25).push(old)["ord"] is None
 
 
 def test_pressure_leaves_out_a_part_with_nothing_to_say_and_is_none_when_all_are():
     s = make("press:3", 0.25)
-    v = s.push(pbar(0, buy=10, sell=30))                            # no big prints, no sweeps
+    v = s.push(pbar(0, buy=10, sell=30))                            # no big prints, no sweeps, no orders
     assert v["big"] is None and v["swp"] is None
     assert v["p"] == pytest.approx(v["vol"]) == pytest.approx(-50.0)
     empty = make("press:3", 0.25).push(pbar(0, 0, 0))
     assert empty["p"] is None and empty["tot"] is None
+
+
+def test_pressure_a_big_print_is_scaled_to_the_markets_average_print():
+    quiet = pbar(0, buy=100, sell=0, big=[(30, 1)])
+    quiet.v, quiet.n = 100, 100                                     # average print 1: 30 lots clears max(10, 8 x 1)
+    assert make("press:1", 0.25).push(quiet)["big"] == pytest.approx(100.0 * 30 / 60)
+    busy = pbar(0, buy=100, sell=0, big=[(30, 1), (50, 1)])
+    busy.v, busy.n = 1000, 200                                      # average print 5: only 40+ lots are big
+    assert make("press:1", 0.25).push(busy)["big"] == pytest.approx(100.0 * 50 / 80)
+    hushed = pbar(0, buy=100, sell=0, big=[(30, 1)])
+    hushed.v, hushed.n = 1000, 200
+    assert make("press:1", 0.25).push(hushed)["big"] is None        # 30 is no longer big: the part has nothing to say
 
 
 def test_pressure_restarts_with_the_session_and_the_developing_bar_changes_nothing():
@@ -137,7 +154,9 @@ def test_pressure_restarts_with_the_session_and_the_developing_bar_changes_nothi
     assert new["vol"] == pytest.approx(-100.0) and new["tot"] == pytest.approx(-100.0)
     before = s.state
     pre = s.preview(pbar(2, 900, 0, session="b"))
-    assert s.state is before and pre["vol"] == pytest.approx(100.0 * (900 - 100) / 1000)
+    keep = 1 - 2 / 6
+    assert s.state is before
+    assert pre["vol"] == pytest.approx(100.0 * (900 - 100 * keep) / (900 + 100 * keep))
 
 
 def test_pressure_wire_key_defaults_and_limits():
