@@ -199,3 +199,40 @@ def test_only_recent_sessions_are_watched(tmp_path):
     h.bars("NQ", BarSpec("time", 60), D)
     write_archive(tmp_path / "ticks", "NQ", old, "NQU6", rows(session_ms(old, 9, 30), [100.0] * 9))
     assert h.changed() == []
+
+
+# ---- coarse bars (an hour and up) are kept per session beside the 1-minute cache -------------------------------------
+
+def test_coarse_bars_are_kept_per_session_and_read_back_equal(tmp_path, monkeypatch):
+    from homebase.charts import history as hist_mod
+    h, store, _ = setup(tmp_path)
+    spec = BarSpec("time", 3600)
+    first = h.bars("NQ", spec, D)
+    assert len(first) >= 2 and [p.name for p in (tmp_path / "cache").glob("*.t3600.pkl")]
+    # a new service: no memo, and neither the ticks nor the resampling may be needed again
+    store.load = lambda *a: (_ for _ in ()).throw(AssertionError("ticks read"))
+    monkeypatch.setattr(hist_mod, "resample", lambda *a: (_ for _ in ()).throw(AssertionError("resampled")))
+    again = History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)
+    assert [_k(b) for b in again] == [_k(b) for b in first]
+    assert all(b.closed for b in again)
+
+
+def test_a_newer_source_rebuilds_the_coarse_file(tmp_path):
+    h, store, src = setup(tmp_path)
+    spec = BarSpec("time", 3600)
+    h.bars("NQ", spec, D)
+    future = time.time() + 60
+    os.utime(src, (future, future))
+    calls = []
+    orig = store.load
+    store.load = lambda *a: calls.append(a) or orig(*a)
+    History(store, cache_dir=tmp_path / "cache").bars("NQ", spec, D)
+    assert len(calls) == 1, "the stale coarse file (and its minutes) were rebuilt from the ticks"
+
+
+def test_bars_finer_than_15_minutes_are_not_kept_as_their_own_file(tmp_path):
+    h, _, _ = setup(tmp_path)
+    h.bars("NQ", BarSpec("time", 300), D)
+    assert not list((tmp_path / "cache").glob("*.t300.pkl"))
+    h.bars("NQ", BarSpec("time", 900), D)
+    assert list((tmp_path / "cache").glob("*.t900.pkl"))

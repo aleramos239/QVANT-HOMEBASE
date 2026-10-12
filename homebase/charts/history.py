@@ -1,9 +1,11 @@
 """Bars of COMPLETED sessions, fast.
 
-Two caches over the TickStore: a per-session 1-minute bar pickle on disk
+Three caches over the TickStore: a per-session 1-minute bar pickle on disk
 (built once from ticks; every time bar >= 1m is resampled from it, so a
-60-session daily chart never re-reads ticks) and an in-memory memo per
-(root, bar type, date). Today's session is the hub's job, not this file's.
+60-session daily chart never re-reads ticks), beside it a per-session pickle
+of each coarse bar type (15 minutes and up: resampling a session is ~30 ms, a
+daily chart reads 250 of them), and an in-memory memo per (root, bar type,
+date). Today's session is the hub's job, not this file's.
 Thread-safe: the hub calls it from worker threads.
 
 A completed session is not final: the hourly tick job fills its holes and
@@ -30,6 +32,7 @@ from .store import TickStore
 
 M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
+COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
 WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
                         # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 
@@ -90,6 +93,10 @@ class History:
         except (OSError, pickle.UnpicklingError, EOFError):
             pass
         bars = self._from_ticks(root, M1, d)
+        self._keep(cp, bars, src_ns)
+        return bars
+
+    def _keep(self, cp: Path, bars: list[Bar], src_ns: int | None) -> None:
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         tmp = cp.with_name(cp.name + f".{threading.get_ident()}.tmp")
         with open(tmp, "wb") as fh:
@@ -99,7 +106,27 @@ class History:
             # refill into an old session) leaves the cache older than its source
             os.utime(tmp, ns=(src_ns, src_ns))
         os.replace(tmp, cp)
-        return bars
+
+    def _coarse(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
+        """A coarse time bar type of session d (15 minutes and up), kept on disk beside the 1-minute cache under the same
+        freshness rule. Resampling 1,400 one-minute bars costs ~30 ms and loading them ~25 ms, so a 250-session daily
+        chart was ~14 s of work against the 2 s subscribe budget; from this file a session is a fraction of a ms."""
+        f = self.store.pick(root, d)
+        if f is None:
+            return []
+        cp = self._cache_file(root, d, f)
+        cp = cp.with_name(cp.name.replace(".m1.pkl", f".t{spec.size}.pkl"))
+        src_ns = None
+        try:
+            src_ns = self._src_ns(f)                        # the source BEFORE its ticks are read
+            if cp.stat().st_mtime_ns >= src_ns:
+                with open(cp, "rb") as fh:
+                    return pickle.load(fh)
+        except (OSError, pickle.UnpicklingError, EOFError):
+            pass
+        out = resample(self.minutes(root, d), spec)
+        self._keep(cp, out, src_ns)
+        return out
 
     def bars(self, root: str, spec: BarSpec, d: dt.date, memo: bool = True) -> list[Bar]:
         """Session d's bars of this type. memo=False (scroll-back): a memoized session is used, but a new
@@ -112,7 +139,12 @@ class History:
                 return hit
             gen = self._gen
         self.watch(root, d)                                 # the files BEFORE their ticks are read
-        out = resample(self.minutes(root, d), spec) if spec.from_minutes else self._from_ticks(root, spec, d)
+        if spec.from_minutes and spec.size >= COARSE_MIN:
+            out = self._coarse(root, spec, d)
+        elif spec.from_minutes:
+            out = resample(self.minutes(root, d), spec)
+        else:
+            out = self._from_ticks(root, spec, d)
         if memo:
             with self._lock:
                 if gen == self._gen:        # else a clear() landed mid-build: its file may have changed

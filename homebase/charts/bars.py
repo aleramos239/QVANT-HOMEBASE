@@ -171,8 +171,16 @@ class Bar:
                    [list(x) for x in self.sw], [list(x) for x in self.bub], dict(self._bd),
                    list(self._g) if self._g else None, self._bs)
 
-    def merge(self, other: "Bar") -> None:
-        """Absorb the NEXT bar in time (resampling)."""
+    def finish_merge(self) -> None:
+        """Cap and order the sweeps and bubbles after merge(..., cap=False) calls. The cap keeps the top rows of a total
+        order, so capping once at the end keeps exactly the rows capping after every merge did."""
+        self.sw = _cap_sweeps(self.sw)
+        self.bub = _cap_bubbles(self.bub)
+
+    def merge(self, other: "Bar", cap: bool = True) -> None:
+        """Absorb the NEXT bar in time (resampling). cap=False leaves the sweeps and bubbles uncapped and unsorted:
+        the caller merges a whole run and then calls finish_merge() once (a 1D bar merges ~1,400 one-minute bars, and
+        sorting both lists at every step was most of a session's resample time)."""
         self.h = max(self.h, other.h)
         self.l = min(self.l, other.l)
         self.c = other.c
@@ -188,8 +196,12 @@ class Bar:
             cell[1] += b
         self.big.extend(list(x) for x in other.big)
         self.te = max(self.te, other.te)
-        self.sw = _cap_sweeps([list(x) for x in self.sw] + [list(x) for x in other.sw])
-        self.bub = _cap_bubbles([list(x) for x in self.bub] + [list(x) for x in other.bub])
+        if cap:
+            self.sw = _cap_sweeps([list(x) for x in self.sw] + [list(x) for x in other.sw])
+            self.bub = _cap_bubbles([list(x) for x in self.bub] + [list(x) for x in other.bub])
+        else:
+            self.sw.extend(list(x) for x in other.sw)
+            self.bub.extend(list(x) for x in other.bub)
         for bk, q in other._bd.items():
             self._bd[bk] = self._bd.get(bk, 0) + q
         self._bs = max(self._bs, other._bs)
@@ -327,13 +339,15 @@ def resample(minutes: list[Bar], spec: BarSpec) -> list[Bar]:
         t = s0 + (m.t - s0) // n * n
         if cur is None or cur.session != m.session or cur.t != t:
             if cur is not None:
+                cur.finish_merge()
                 out.append(cur)
             cur = m.copy()
             cur.t = t
             cur.span = n
             cur.closed = True
         else:
-            cur.merge(m)
+            cur.merge(m, cap=False)
     if cur is not None:
+        cur.finish_merge()
         out.append(cur)
     return out

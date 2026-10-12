@@ -130,3 +130,29 @@ def test_wire_leaves_out_the_footprint_and_the_big_prints_only_when_asked_to():
     assert closed[0].wire(TS, fp=False) == {k: v for k, v in full.items() if k != "fp"}
     assert closed[0].wire(TS, big=False) == {k: v for k, v in full.items() if k != "big"}
     assert closed[0].wire(TS, flow=False) == {k: v for k, v in full.items() if k not in ("sw", "bub")}
+
+
+def test_resample_caps_sweeps_and_bubbles_once_with_the_same_rows_as_capping_every_merge():
+    """merge(cap=False) + finish_merge() keeps exactly the rows that capping after every merge kept (the cap takes the
+    top rows of a total order), however many one-minute bars an hour bar absorbs."""
+    import random
+    from tests.charts_util import D, session_ms
+    from homebase.charts.bars import BUB_CAP, SW_CAP, Bar, BarSpec, resample
+    rnd = random.Random(7)
+    base = session_ms(D, 10, 0)      # on an hour bucket's edge (buckets anchor at the 18:00 open)
+    minutes = []
+    for i in range(60):
+        b = Bar.open_at(base + i * 60_000, D.isoformat(), 100.0)
+        b.closed, b.span = True, 60_000
+        b.bub = [[base // 1000 + i * 60 + rnd.randrange(60), 100 + 0.25 * rnd.randrange(20), rnd.randrange(3, 40),
+                  rnd.choice((1, -1))] for _ in range(30)]
+        b.sw = [[base + i * 60_000 + rnd.randrange(60_000), 100.0, 100.5 + 0.25 * rnd.randrange(8), rnd.randrange(2, 30),
+                 rnd.choice((1, -1))] for _ in range(8)]
+        minutes.append(b)
+    assert sum(len(m.bub) for m in minutes) > 5 * BUB_CAP and sum(len(m.sw) for m in minutes) > SW_CAP
+    got = resample(minutes, BarSpec("time", 3600))
+    ref = minutes[0].copy()
+    for m in minutes[1:]:
+        ref.merge(m)                      # the original behaviour: cap and sort after every merge
+    assert len(got) == 1 and got[0].bub == ref.bub and got[0].sw == ref.sw
+    assert len(got[0].bub) == BUB_CAP and len(got[0].sw) == SW_CAP
