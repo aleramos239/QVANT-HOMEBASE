@@ -46,6 +46,7 @@ from .refresh import refresh_router
 from .history import History
 from .hub import Hub, Stream
 from .known import Known
+from . import lagwatch
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
 from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, register as register_paperbook
@@ -1254,6 +1255,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         # the Desk's first results ask is ~16 prop sims cold (25-90 s); done here, once, in a daemon thread (never blocks
         # a stop), it is a cache hit. Saved runs only: nothing is started.
         threading.Thread(target=tester.warm, name="desklab-warm", daemon=True).start()
+        lagwatch.start(asyncio.get_running_loop(), log)     # a stall of the loop names its busy threads in the log
         try:
             yield
         finally:
