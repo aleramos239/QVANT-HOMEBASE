@@ -35,26 +35,32 @@ M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
 DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
 COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
-MEMO_BARS = 400_000     # bars the memo holds across sessions (about what 256 one-minute sessions were): a weight, not a count --
-                        # a daily or weekly chart keeps one bar a session, so its 1,300 sessions stay memoized
-                        # (they never fitted 256 entries: every 1D / 1W switch re-read a pickle per session, 1-2 s)
+MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level, big print,
+                        # sweep and bubble it carries; ~250 B each in Python, so ~1 GB). A weight, not a count: a daily
+                        # or weekly chart keeps one bar a session, so its 1,300 sessions stay memoized (they never fitted
+                        # 256 entries: every 1D / 1W switch re-read a pickle per session, 1-2 s) -- but a daily bar holds
+                        # a whole day's footprint (~1,000 levels, ~0.5 MB), so bars alone are the wrong unit.
 WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
                         # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 
 
 class History:
     def __init__(self, store: TickStore, cache_dir: Path | None = None, memo_max: int = 4096, known=None,
-                 memo_bars: int = MEMO_BARS):
+                 memo_cells: int = MEMO_CELLS):
         self.store = store
         self.known = known      # charts.known.Known: the tick job's coverage report, for each session's holes
         self.cache_dir = Path(cache_dir) if cache_dir else state_dir() / "charts" / "cache"
         self.memo: OrderedDict = OrderedDict()
         self.memo_max = memo_max
-        self.memo_bars = memo_bars
-        self._weight = 0        # the memo's bars (+1 an entry, so an empty session still counts)
+        self.memo_cells = memo_cells
+        self._weight = 0        # the memo's cells (an entry costs at least 1, so an empty session still counts)
         self._lock = threading.Lock()
         self._gen = 0           # bumped by clear(): a build that overlapped a clear() is not memoized
         self._built: dict = {}  # (root, date) -> its tick files' stamp when its bars were first built: changed()
+
+    @staticmethod
+    def _cost(bars: list[Bar]) -> int:
+        return 1 + sum(1 + len(b.fp) + len(b.big) + len(b.sw) + len(b.bub) for b in bars)
 
     def _from_ticks(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
         s = self.store.load(root, d)
@@ -191,12 +197,12 @@ class History:
             with self._lock:
                 if gen == self._gen:        # else a clear() landed mid-build: its file may have changed
                     if key in self.memo:
-                        self._weight -= len(self.memo[key]) + 1
+                        self._weight -= self._cost(self.memo[key])
                     self.memo[key] = out
-                    self._weight += len(out) + 1
-                    while len(self.memo) > 1 and (len(self.memo) > self.memo_max or self._weight > self.memo_bars):
+                    self._weight += self._cost(out)
+                    while len(self.memo) > 1 and (len(self.memo) > self.memo_max or self._weight > self.memo_cells):
                         _, old = self.memo.popitem(last=False)
-                        self._weight -= len(old) + 1
+                        self._weight -= self._cost(old)
         return out
 
     def info(self, root: str, d: dt.date) -> dict:
@@ -253,7 +259,7 @@ class History:
                         self._built[k] = stamp
                 if moved:
                     for k in [k for k in self.memo if (k[0], k[2]) in moved]:
-                        self._weight -= len(self.memo.pop(k)) + 1
+                        self._weight -= self._cost(self.memo.pop(k))
                     self._gen += 1
         return sorted(moved)
 

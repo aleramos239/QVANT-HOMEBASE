@@ -238,22 +238,21 @@ def test_bars_finer_than_15_minutes_are_not_kept_as_their_own_file(tmp_path):
     assert list((tmp_path / "cache").glob("*.t900.pkl"))
 
 
-def test_the_memo_is_weighed_in_bars_not_sessions(tmp_path):
-    """A daily / weekly chart keeps one bar a session: hundreds of them stay memoized (the count cap of 256 sessions
-    made every 1D / 1W switch re-read a pickle per session), while minute sessions are evicted by their weight."""
-    h, store, _ = setup(tmp_path)
-    day, minute = BarSpec("time", 86400), BarSpec("time", 60)
-    h.memo_bars = 40                     # a small budget for the test: the real one is MEMO_BARS
-    base = D
-    for i in range(30):                  # thirty daily sessions: 1 bar each, all kept (the files are the same one)
-        h.memo[("NQ", day.key, base - dt.timedelta(days=i + 1))] = [object()]
-        h._weight += 2
-    assert len(h.memo) == 30
-    h.bars("NQ", minute, D)              # ~600 ticks over 7 s steps = 70 minute bars: over the budget on its own
-    # the heavy session is kept (never evict the entry just built), the older ones went to make room for it
-    assert ("NQ", minute.key, D) in h.memo
-    assert len(h.memo) == 1
-    assert h._weight == len(h.memo[("NQ", minute.key, D)]) + 1
+def test_the_memo_is_weighed_by_what_its_bars_hold_not_by_sessions_or_bars(tmp_path):
+    """A daily bar holds a whole day's footprint: weighed as one bar, 1D / 1W charts of a few roots pinned gigabytes.
+    The budget is in cells, so a session is evicted for its weight, not its count."""
+    h, _, _ = setup(tmp_path)
+    minute, day = BarSpec("time", 60), BarSpec("time", 86400)
+    mins = h.bars("NQ", minute, D)
+    cost = h._cost(mins)
+    assert cost > len(mins)                            # footprint levels are counted, not only bars
+    h.clear()
+    h.memo_cells = cost + 5
+    h.bars("NQ", minute, D)
+    assert ("NQ", minute.key, D) in h.memo and h._weight == cost
+    h.bars("NQ", day, D)                               # over the budget together: the older entry goes
+    assert ("NQ", day.key, D) in h.memo and ("NQ", minute.key, D) not in h.memo
+    assert h._weight == h._cost(h.memo[("NQ", day.key, D)])
     h.clear()
     assert h._weight == 0 and not h.memo
 
