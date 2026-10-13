@@ -32,12 +32,16 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
 from functools import lru_cache
+from pathlib import Path
 
 from . import rules as R
 
-FILE = R.T / "pipeline.json"
+PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json"), "wr": ("WR PIPELINE", "pipeline_wr.json")}     # the pipelines to choose from (owner, 2026-10-13)
+STATE = Path(os.environ.get("HB_PIPELINE_STATE") or Path.home() / ".homebase" / "pipeline_profile")     # the chosen one; no file = live
+FILE = R.T / "pipeline.json"                       # the LIVE file; set to ANOTHER path (the tests point it at a copy) it is read instead of the profile's
 MODES = ("map", "variant")
 GATES = ("law", "prop")
 WINLANE = ("off", "label", "ask")
@@ -63,9 +67,40 @@ def check(p: dict) -> list:
     return bad
 
 
+def active() -> str:
+    """The profile in use: HB_PIPELINE (the environment), else the word in the state file (`bp.py pipe profile wr`), else "live". An unknown word: R.RuleError."""
+    try:
+        word = (os.environ.get("HB_PIPELINE") or (STATE.read_text(encoding="utf-8").strip() if STATE.exists() else "") or "live").lower()
+    except OSError:
+        word = "live"
+    if word not in PROFILES:
+        raise R.RuleError(f"pipeline profile {word!r}: one of {', '.join(PROFILES)}")
+    return word
+
+
+def label(profile: str | None = None) -> str:
+    """The profile's name for a person: LIVE PIPELINE or WR PIPELINE."""
+    return PROFILES[profile or active()][0]
+
+
+def use(profile: str) -> str:
+    """Choose the profile every later read of the rules uses (the state file; a running process takes it at its next start or `_all.cache_clear()`)."""
+    profile = str(profile).lower()
+    if profile not in PROFILES:
+        raise R.RuleError(f"pipeline profile {profile!r}: one of {', '.join(PROFILES)}")
+    STATE.parent.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(profile + "\n", encoding="utf-8")
+    _all.cache_clear()
+    return profile
+
+
+def _file() -> Path:
+    return Path(FILE) if Path(FILE) != R.T / PROFILES["live"][1] else R.T / PROFILES[active()][1]
+
+
 @lru_cache(maxsize=None)
-def _all() -> dict:
-    p = json.loads(FILE.read_text(encoding="utf-8"))
+def _load(path: str) -> dict:
+    p = json.loads(Path(path).read_text(encoding="utf-8"))
     bad = check(p)
     if bad:
         raise R.RuleError("the pipeline's numbers and the blueprint's do not agree: " + "; ".join(bad))
@@ -83,6 +118,13 @@ def _all() -> dict:
     if g == "prop":                                 # the numbers the prop gates ask, over the file's variant block (a copy: the file stays as written)
         p["variant"] = {**p["variant"], **(p["gates"].get("variant") or {})}
     return {k: v for k, v in p.items() if not k.startswith("_")}
+
+
+def _all() -> dict:
+    return _load(str(_file()))
+
+
+_all.cache_clear = _load.cache_clear               # (the tests clear the cache after pointing FILE elsewhere)
 
 
 def need(*keys):

@@ -141,7 +141,7 @@ def _box(x: dict, days: np.ndarray, root: str, name: str, sides: str = "both") -
 
 def _rows(b: dict) -> list:
     """The mix's rows: the box rows of the pipeline (P3.2 .. P3.10), the lock's 3.3-3.8 and P4.1 -- each by the pipeline's own function."""
-    rows = G.variant_rows(b, [])
+    rows = [r for r in G.variant_rows(b, []) if r["line"] != "P3.13"]        # (a mix has no one target: P3.13 is a row of ONE box)
     rows += [fn(b) for fn in L.BOX]
     rows.append(G.reshuffle_box(b))
     return rows

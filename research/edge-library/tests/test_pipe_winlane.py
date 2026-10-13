@@ -24,7 +24,7 @@ day = lambda y, m, d: dt.date(y, m, d).toordinal()          # noqa: E731
 def lane(tmp_path):
     """lane("ask") points the rules file at a copy of the shipped pipeline.json with winlane.mode set; the file and the cache are put back."""
     keep = P.FILE
-    d = json.loads((R.T / "pipeline.json").read_text(encoding="utf-8"))
+    d = json.loads((R.T / "pipeline_wr.json").read_text(encoding="utf-8"))
 
     def use(mode, **numbers):
         d["winlane"] = {**d["winlane"], "mode": mode, "cards": [], **numbers}       # (no cards: the lane is on every unit, as the tests' boxes have none)
@@ -50,12 +50,13 @@ def rows(b) -> dict:
     return {r["line"]: r for r in G.winlane(b)}
 
 
-def test_the_shipped_lane_asks_on_two_named_cards_only_with_the_owners_numbers_and_off_prints_nothing(lane):
+def test_the_shipped_lane_asks_on_every_card_with_the_owners_numbers_and_off_prints_nothing(lane, monkeypatch):
+    monkeypatch.setenv("HB_PIPELINE", "wr")                                                # (the WR PIPELINE's file, templates/pipeline_wr.json)
+    P._all.cache_clear()
     keep = {k: v for k, v in P.need("winlane").items() if k != "_about"}                # (a nested note is part of the level)
-    assert keep == {"mode": "ask", "cards": ["nq_ib_break_nyam_wl", "nq_noise_gx_nyam_long_wl"], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
-    assert P.winlane("nq_ib_break_nyam_wl_a5-NQ-tf5") == "ask" and P.winlane("nq_noise_gx_nyam_long_wl_a1-NQ-tf1") == "ask"
-    for other in ("nq_ib_break_nyam_a5-NQ-tf5", "nq_donch_first_nyam_slow_a5-NQ-tf5", "nq_ib_break_nyam_wl2_a5-NQ-tf5", None):
-        assert P.winlane(other) == "off"                                                  # every other card is judged as before; no unit = off while `cards` is set
+    assert keep == {"mode": "ask", "cards": [], "max_target_r": 0.75, "risk_usd": [500, 800], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
+    for unit in ("nq_ib_break_nyam_wl_a5-NQ-tf5", "nq_donch_first_nyam_slow_a5-NQ-tf5", None):
+        assert P.winlane(unit) == "ask"                                                   # no `cards` = every card (owner, 2026-10-13)
     lane("off")
     assert P.winlane() == "off" and G.winlane(months({1: 14})) == []
 
@@ -81,8 +82,8 @@ def test_a_word_the_lane_does_not_know_is_refused(lane):
 
 def test_label_mode_prints_both_rows_and_asks_nothing(lane):
     lane("label")
-    r = rows(months({m: 14 for m in range(1, 11)}))                 # 70 % in every month
-    assert list(r) == ["P3.11", "P3.12"]
+    r = rows({**months({m: 14 for m in range(1, 11)}), "ids": ["x_pct0p2-r0p5"]})        # 70 % in every month, a half-stop target
+    assert list(r) == ["P3.11", "P3.12", "P3.13"]
     assert all(x["passed"] is None for x in r.values()) and all(x["held"] is True for x in r.values())
     bad = rows(months({m: 8 for m in range(1, 11)}))                # 40 %: both missed, still only a label
     assert all(x["passed"] is None and x["held"] is False for x in bad.values())
@@ -142,7 +143,17 @@ def test_in_variant_rows_the_lane_adds_nothing_when_off_and_two_rows_when_on(lan
     assert "P3.11" not in base and base[-3:] == ["P3.8", "P3.9", "P3.10"]
     lane("ask")
     on = [r["line"] for r in G.variant_rows(box, [])]
-    assert on == base + ["P3.11", "P3.12"]
+    assert on == base + ["P3.11", "P3.12", "P3.13"]
     lane("label")
     marks = {r["line"]: r["passed"] for r in G.variant_rows(box, [])}
     assert marks["P3.11"] is None and marks["P3.12"] is None                    # a label asks nothing
+
+
+def test_p313_asks_for_a_target_of_at_most_the_cap_read_from_the_box_id(lane):
+    lane("ask")
+    one = lambda cell: {r["line"]: r for r in G._low_target({"ids": [cell]}, P.need("winlane"))}["P3.13"]   # noqa: E731
+    assert one("ib_min30_pct0p2-r0p5")["passed"] is True and one("k0p3_atr3-r0p75")["passed"] is True
+    assert one("ib_min60_atr3-r3")["passed"] is False and one("x-r1p5")["passed"] is False
+    assert one("x-rnone")["passed"] is False and one("")["passed"] is False               # no target in R = no low target
+    lane("ask", max_target_r=None)
+    assert G._low_target({"ids": ["x-r3"]}, P.need("winlane")) == []                       # no cap in the file = no row

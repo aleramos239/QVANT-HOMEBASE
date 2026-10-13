@@ -44,7 +44,7 @@ def teardown_function(_=None):
 # ================================================================ 1. need() walks the file
 
 def test_need_walks_the_file_and_refuses_what_it_does_not_have():
-    assert P.FILE == R.T / "pipeline.json" and "pipeline" not in R.NAMES       # the pipeline's own file: no template of the law
+    assert P.FILE == R.T / "pipeline.json" and P._file() == R.T / "pipeline.json" and "pipeline" not in R.NAMES       # the pipeline's own file: no template of the law
     assert P.need("raw", "low", "share") == 0.5 and P.need("raw", "low") == {"share": 0.5, "floor_part": 0.5, "trades": 300}
     assert P.need("raw", "strict") == {"share": 0.6, "floor_part": 1.0, "trades": 200}
     assert P.need("indicator") == {"share": 0.6, "floor_part": 1.0, "trades": 200, "other_markets": None}   # None: shown, asks nothing (the owner, 2026-10-08)

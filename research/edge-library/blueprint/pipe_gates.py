@@ -63,6 +63,8 @@ numpy + the package. Locked by tests/test_pipe_gates.py.
 """
 from __future__ import annotations
 
+import re
+
 import numpy as np
 
 from . import lines as L
@@ -306,8 +308,23 @@ def winlane(b: dict) -> list:
     lane = PR.winlane(b.get("unit"))
     if lane == "off":
         return []
-    rows = _win_steady(b, PR.need("winlane"))
+    need = PR.need("winlane")
+    rows = _win_steady(b, need) + _low_target(b, need)
     return rows if lane == "ask" else [label(r) for r in rows]
+
+
+def _low_target(b: dict, need: dict) -> list:
+    """P3.13 (owner, 2026-10-13: high win rate, low reward-to-risk): the picked box's target is `max_target_r` times its stop or less. The target is read
+    from the box id's `-r<R>` suffix (`p` stands for the decimal point); a box with no target (`-rnone`) or no readable suffix has no low target and misses. No
+    `max_target_r` in the file = the row does not exist."""
+    cap = need.get("max_target_r")
+    if cap is None:
+        return []
+    cell = str((b.get("ids") or [""])[0])
+    m = re.search(r"-r(\d+(?:p\d+)?)$", cell)
+    r = float(m.group(1).replace("p", ".")) if m else None
+    said = (f"target {r:g}R of the stop (need {cap:g}R or less)" if r is not None else f"box {cell or '?'} has no target in R (need {cap:g}R or less)")
+    return [L._row("P3.13", bool(r is not None and r <= cap), r, cap, said)]
 
 
 def _win_steady(b: dict, need: dict) -> list:

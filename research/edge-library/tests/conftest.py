@@ -10,6 +10,16 @@ from blueprint import pipe_rules as P
 
 
 @pytest.fixture(autouse=True)
+def _live_profile(monkeypatch, tmp_path):
+    """Every test reads the LIVE PIPELINE (templates/pipeline.json) whatever profile the machine has chosen; a test of the WR PIPELINE sets HB_PIPELINE itself."""
+    monkeypatch.setenv("HB_PIPELINE", "live")
+    monkeypatch.setattr(P, "STATE", tmp_path / "pipeline_profile")
+    P._all.cache_clear()
+    yield
+    P._all.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def _pipeline_rules_file(request):
     if getattr(request.module, "PIPE_GATES", None) != "law":
         yield
