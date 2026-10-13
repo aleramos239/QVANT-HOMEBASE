@@ -309,16 +309,16 @@ def toolkits(rel: str, name: str):
 # ---------------------------------------------------------------- the five tools
 
 REQUIRED = {"pipeline_add": ["card"], "pipeline_status": [], "pipeline_control": ["action"], "pipeline_decide": ["name", "decision"],
-            "pipeline_book": []}
+            "pipeline_book": [], "pipeline_refine": ["name"]}
 INPUTS = {"pipeline_add": ["card", "inbox"], "pipeline_status": ["name"], "pipeline_control": ["action"],
-          "pipeline_decide": ["name", "decision", "why"], "pipeline_book": []}
+          "pipeline_decide": ["name", "decision", "why"], "pipeline_book": [], "pipeline_refine": ["name", "move", "why", "tune"]}
 HEAD = {"pipeline_add": "Pipeline, add an idea: ", "pipeline_status": "Pipeline, where things stand: ", "pipeline_control": "Pipeline, the runner: ",
-        "pipeline_decide": "Pipeline, the owner's yes or no: ", "pipeline_book": "Pipeline, the book: "}
+        "pipeline_decide": "Pipeline, the owner's yes or no: ", "pipeline_book": "Pipeline, the book: ", "pipeline_refine": "Pipeline, the REFINER: "}
 
 
 def test_the_five_tools_their_inputs_and_what_each_requires():
     specs = {s["name"]: s for s in pipeline_tools.SPECS}
-    assert list(specs) == list(REQUIRED) and len(specs) == 5
+    assert list(specs) == list(REQUIRED) and len(specs) == 6
     listed = {s["name"]: s for s in tools.Toolbox().specs()}
     for name, spec in specs.items():
         schema = spec["inputSchema"]
@@ -328,7 +328,7 @@ def test_the_five_tools_their_inputs_and_what_each_requires():
         assert spec["description"].startswith(HEAD[name]), name               # each says what it is of, as the blueprint's do
         json.dumps(spec)
     names = tools.Toolbox().names()                                         # after the blueprint's, before the desk's
-    assert names[names.index("blueprint_mc") + 1:names.index("desk_status")] == list(REQUIRED) and len(names) == 42
+    assert names[names.index("blueprint_mc") + 1:names.index("desk_status")] == list(REQUIRED) and len(names) == 43
     props = {n: s["inputSchema"]["properties"] for n, s in specs.items()}
     assert props["pipeline_control"]["action"]["enum"] == ["start", "pause", "resume"] == list(pipeline_tools.ACTIONS)
     assert props["pipeline_decide"]["decision"]["enum"] == ["approve", "refuse"] == list(pipeline_tools.DECISIONS)

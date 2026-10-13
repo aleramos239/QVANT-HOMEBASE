@@ -450,7 +450,7 @@ def test_no_tool_can_trade():
                      "cancel", "write_strategy", "delete_draft", "set_group", "blueprint_blocks", "blueprint_card",
                      "blueprint_code_check", "blueprint_build", "blueprint_lock", "blueprint_test", "blueprint_sim", "blueprint_portfolio",
                      "blueprint_eval_card", "blueprint_status", "blueprint_heatmap", "blueprint_mc", "pipeline_add",
-                     "pipeline_status", "pipeline_control", "pipeline_decide", "pipeline_book", "desk_status",
+                     "pipeline_status", "pipeline_control", "pipeline_decide", "pipeline_book", "pipeline_refine", "desk_status",
                      "desk_journal", "desk_readiness", "data_coverage", "services_health", "account_reconnect",
                      "account_remove", "export_start", "export_status"]
     for n in names:

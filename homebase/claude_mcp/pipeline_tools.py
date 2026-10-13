@@ -285,6 +285,19 @@ SPECS = [
     _spec("pipeline_book", "Pipeline, the book: the strategies that passed every stage and that the owner approved, "
           "one row each -- its name, its label (stands alone, or helper), its entry rule, market, session and bar "
           "size. Runs nothing."),
+    _spec("pipeline_refine", "Pipeline, the REFINER: a near miss's next version, ONE change at a time (use it instead of adding new cards "
+          "until something lands). Without move: what the idea missed, its round (of 5), how many variants the family has tried and the moves "
+          "worth a look first -- writes nothing. With move + why: files ONE child card (a new idea in the queue, 'again_of' its parent) with "
+          "that single change; it runs on the build days only. Moves: regime (er, adx, atr_rank, bbw_rank), indicator (rsi, price_ema, ema_x, "
+          "macd, zscore, stoch, roc, cci, vwap_dev), days (a day rule: nonews, mon..fri, fomc ...), window (HH:MM-HH:MM), sides (long, short). "
+          "Only an idea that stopped on a verdict before the unseen days can be refined; an idea read on the unseen days is final. At most 5 "
+          "rounds a family. The reason is 8 words or more and is written before the run.",
+          {"name": _NAME,
+           "move": {"type": "string", "description": "ONE change as KIND=VALUE, e.g. regime=er, indicator=rsi, days=nonews, window=09:30-11:30, "
+                                                      "sides=long. Left out: only look (what it missed, which moves)."},
+           "why": {"type": "string", "description": "The reason for this one change, 8 words or more, written before the run."},
+           "tune": {"type": "object", "description": "Optional, with a regime or indicator move: g_n, g_m, g_s, g_lvl (numbers), g_side "
+                                                      "(with or against)."}}, ["name"]),
 ]
 
 
@@ -474,6 +487,21 @@ class PipelineMixin:
 
     def t_pipeline_decide(self, name: str, decision: str, why=None) -> str:
         return _said(self._pipe(decision, *_decided(name, decision, why)))
+
+    def t_pipeline_refine(self, name: str, move=None, why=None, tune=None) -> str:
+        args = [_name(name)]
+        if move is not None:
+            if not isinstance(move, str) or not re.fullmatch(r"[a-z]+=[A-Za-z0-9_:.\-]+", move):
+                raise ToolError("move: KIND=VALUE, e.g. regime=er, days=nonews, window=09:30-11:30")
+            args.append(f"--move={move}")
+            if not isinstance(why, str) or not why.strip():
+                raise ToolError("why: the reason for this one change, 8 words or more")
+            args.append(f"--why={why.strip()}")
+            for k, v in (tune or {}).items() if isinstance(tune, dict) else []:
+                if k not in ("g_n", "g_m", "g_s", "g_lvl", "g_side") or not re.fullmatch(r"[A-Za-z0-9_.\-]+", str(v)):
+                    raise ToolError(f"tune {k}: g_n, g_m, g_s, g_lvl (numbers) or g_side (with / against)")
+                args.append(f"--set={k}={v}")
+        return _said(self._pipe("refine", *args))
 
     def t_pipeline_book(self) -> str:
         return _said(self._pipe("book"))
