@@ -16,8 +16,8 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set() };
+  view: 'lib', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plSet: false, plDraft: null, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's two:
@@ -152,7 +152,7 @@ async function save(b) {
 function metaOf(b) {
   if (b.kind === 'builtin') return b.meta;
   const m = b.valid && b.valid.ok && b.valid.meta;
-  return m ? { id: b.id || `draft_${b.name}`, inputs: m.inputs || [] } : null;
+  return m ? { id: b.id || `draft_${b.name}`, inputs: m.inputs || [], bar_minutes: m.bar_minutes || 0, bar_sizes: m.bar_sizes || [] } : null;
 }
 function formOf(b) {
   const meta = metaOf(b);
@@ -199,6 +199,8 @@ async function poll(run) {
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
         log(`Ran in the sandbox · <b>${esc(String(a.trades ?? 0))} trades</b> · <a data-act="show">Show trades on the chart ›</a>`);
+        const held = run.bundle.run.controls && run.bundle.run.controls.blocked;
+        if (held && Object.keys(held).length) log(`Trade rules held back ${esc(Object.entries(held).map(([k, n]) => `${n} × ${k}`).join(', '))}`);
       } else log('<span class="err">The run finished but its report could not be loaded</span>');
       paintRes(); paintHead(); syncChart();
       return;
@@ -278,8 +280,8 @@ async function showOnChart(report = false) {
   const n = (r.bundle.trades || []).length;
   ti = n ? n - 1 : null;                        // open on the most recent trade: its executions are what you came to see
   paintNav();
-  const o = await send('POST', '/api/tester/show', { run_id: r.rid });
-  if (o.ok && o.json.pages && n) frameWhenLoaded(r.rid);
+  const o = await send('POST', '/api/tester/show', r.grid ? { grid_id: r.grid.id, cell: r.grid.cell } : { run_id: r.rid });
+  if (o.ok && o.json.pages && n) frameWhenLoaded(r.rid, r.grid ? r.bundle.run.id : r.rid);
   if (!o.ok) { shownRid = null; log(`<span class="err">Could not show it on the chart: ${esc(o.error)}</span>`); }
   else if (!o.json.pages) {       // this page's own socket is not up yet (just loaded): try again shortly, a few times
     shownRid = null;
@@ -299,6 +301,13 @@ async function showRunOnChart(rid, focus = null) {
     if (innerWidth < 1500 && !panelsChosen) P.lib = false;
     applyPanels();
     await new Promise((res) => setTimeout(res, 160));
+  }
+  const bd = await send('GET', `/api/tester/run/${encodeURIComponent(rid)}/bundle`);     // the run becomes the open result: the chart's own panel (trade list, stepper, report), not a bare chart
+  if (bd.ok && bd.json) {
+    const trades = (bd.json.trades || []).length;
+    S.run = { key: S.cur, rid, st: { status: 'done' }, bundle: bd.json, strategy: (bd.json.run && bd.json.run.strategy) || '' };
+    ti = trades ? trades - 1 : null;
+    paintRes();
   }
   setReport(true);
   soloChart();
@@ -321,10 +330,16 @@ function soloChart() {
   bareChart();
 }
 /* ...and it shows the STRATEGY: price, its executions, the levels and plots the script itself draws. The chart's
-   own saved indicators (volume, VWAP, session levels, footprint, ...) are not part of the strategy, so they go. */
+   own saved indicators (volume, VWAP, session levels, footprint, ...) are not part of the strategy, so they go --
+   ONCE, when the page opens. The Indicators button (the Lab shows it since 2026-10-11) then adds and removes them
+   for as long as the page is open: what a person added is never taken away by a later solo / sync. */
+let barred = false;
 function bareChart() {
+  if (barred) return;
   const c = window.HBCharts && window.HBCharts.cells && window.HBCharts.cells[0];
-  if (c && c.cfg && Array.isArray(c.cfg.indicators) && c.cfg.indicators.length) c.update({ indicators: [] });
+  if (!c || !c.cfg) return;
+  barred = true;
+  if (Array.isArray(c.cfg.indicators) && c.cfg.indicators.length) c.update({ indicators: [] });
 }
 /* ---- stepping through the trades ---- */
 let ti = null;
@@ -343,12 +358,12 @@ function dayContext(t) {
   return { before: Math.max(LEAD_MS, etMsOfDay(t.entry_ms) - (w.open - LEAD_MS)), after: Math.max(LEAD_MS, w.close - etMsOfDay(t.exit_ms)) };
 }
 /* The show arrives over the page's socket: once the tester holds this run, frame its latest trade. */
-async function frameWhenLoaded(rid) {
+async function frameWhenLoaded(rid, runId = rid) {
   const pause = (ms) => new Promise((res) => setTimeout(res, ms));
   for (let k = 0; k < 60; k++) {
     const b = window.HBTesterUI && window.HBTesterUI.bundle;
     if (shownRid !== rid) return;                       // a newer run took the chart
-    if (b && b.run && b.run.id === rid) break;
+    if (b && b.run && b.run.id === runId) break;
     await pause(200);
   }
   // the tester is still settling the run it was just handed: a jump can lose that race, so make sure it took
@@ -780,7 +795,7 @@ async function formEdit(anchor, b) {
 function reviewDialog() {
   const b = buf();
   if (!b || b.kind === 'builtin') return;
-  const runOk = S.run && S.run.bundle && S.run.strategy === `draft_${b.name}`;
+  const runOk = S.run && S.run.bundle && !S.run.grid && S.run.strategy === `draft_${b.name}`;
   const unsaved = isDirty(b);
   const d = dialog(`<h2>Request a review</h2>
     <p>This packages <b>${esc(b.name || 'this strategy')}</b>${runOk ? ' with its latest backtest' : ' (no backtest attached yet)'} into a file for a person to read before it can go anywhere near the desk. Nothing runs and nothing is switched on.</p>
@@ -1232,9 +1247,14 @@ function pipeSide() {
         ${plBookRowLine(card)}</button>`;
     }).join('')}</div>`;
   }
-  const ideas = A.ideas || [], names = Object.fromEntries((A.stages || []).map((s) => [s.n, s.name]));
-  if (!ideas.length) return '<div class="lb-empty">No ideas yet.</div>';
-  return `<div class="pl-list">${ideas.map((it) => {
+  const all = A.ideas || [], names = Object.fromEntries((A.stages || []).map((s) => [s.n, s.name]));
+  if (!all.length) return '<div class="lb-empty">No ideas yet.</div>';
+  const cnt = (f) => (f === 'all' ? all.length : all.filter((i) => i.label === f).length);
+  const fs = ['all', 'Passed', 'Waiting', 'Running', 'Stopped', 'Problem'].filter((f) => f === 'all' || f === S.plFilter || cnt(f) > 0);
+  const chips = `<div class="pl-filter" role="group" aria-label="Show">${fs.map((f) => `<button class="pl-fc${S.plFilter === f ? ' on' : ''}" data-act="plfilter" data-f="${esc(f)}" data-fk="f:${esc(f)}" aria-pressed="${S.plFilter === f}">${f === 'all' ? 'All' : esc(f)} <i>${cnt(f)}</i></button>`).join('')}</div>`;
+  const ideas = S.plFilter === 'all' ? all : all.filter((i) => i.label === S.plFilter);
+  if (!ideas.length) return `${chips}<div class="lb-empty">None are ${esc(S.plFilter.toLowerCase())}.</div>`;
+  return `${chips}<div class="pl-list">${ideas.map((it) => {
     const d = C.plDots(it), why = String(it.why || '').trim(), on = it.name === S.plIdea;
     return `<button class="tk-row pl-row${on ? ' sel' : ''}" data-act="plidea" data-name="${esc(it.name)}" data-fk="idea:${esc(it.name)}" aria-current="${on}">
       <span class="tk-nm"><b title="${esc(it.name)}">${esc(it.name)}</b>${plChip(it.label, C.plTone(it.label))}</span>
@@ -1250,7 +1270,53 @@ function pipeMain() {
   if (!L.data) return `<div class="pp"><p class="pp-lead" role="status">${esc(L.error)}</p></div>`;
   const stale = L.stale ? '<p class="pp-note pl-stale" role="status">Can’t reach the app. Showing the last known state.</p>' : '';
   const said = S.plSaid ? `<div class="pl-said${S.plSaid.bad ? ' bad' : ''}" role="status"><pre>${esc(S.plSaid.text)}</pre><button class="hb-ib" data-act="plhide" data-fk="hide" aria-label="Hide this message" title="Hide">×</button></div>` : '';
-  return `<div class="pp">${stale}${said}${S.view === 'pq' ? queueMain(L.data) : bookMain(L.data)}</div>`;
+  return `<div class="pp">${stale}${said}${profBar(L.data)}${S.view === 'pq' ? queueMain(L.data) : bookMain(L.data)}</div>`;
+}
+/* Which pipeline judges the ideas (LIVE PIPELINE / WR PIPELINE) and, for the WR one, its numbers. A toolkit that does not
+   report profiles shows nothing here. The choice is the whole app's: the runner and every chat read it. */
+const PSET = [['win_rate', 'Win rate at least', '%', 100, 50, 95, 1], ['month_floor', 'A steady month wins at least', '%', 100, 40, 90, 1],
+  ['months', 'Share of steady months', '%', 100, 50, 100, 1], ['month_trades', 'Trades a month to count', '', 1, 3, 60, 1], ['max_target_r', 'Target at most', 'R', 1, 0.25, 3, 0.05]];
+function profBar(A) {
+  const P = A && A.profile;
+  if (!P || !Array.isArray(P.options)) return '';
+  const seg = P.options.map((o) => `<button class="pl-fc${o.id === P.profile ? ' on' : ''}" data-act="plprof" data-p="${esc(o.id)}" data-fk="prof:${esc(o.id)}" aria-pressed="${o.id === P.profile}"${S.plBusy ? ' disabled' : ''}>${esc(o.label)}</button>`).join('');
+  const adj = P.editable ? `<button class="btn btn-outline pl-adj" data-act="plset" data-fk="set" aria-expanded="${!!S.plSet}">${S.plSet ? 'Hide settings' : 'Adjust settings'}</button>` : '';
+  let panel = '';
+  if (P.editable && S.plSet) {
+    const s = P.settings || {}, d = S.plDraft || {};
+    const val = (k, mul) => (d[k] != null ? d[k] : s[k] != null ? Math.round(s[k] * mul * 100) / 100 : '');
+    const rk = Array.isArray(s.risk_usd) ? s.risk_usd : [500, 800];
+    panel = `<form class="pl-set" onsubmit="return false">${PSET.map(([k, lab, unit, mul, lo, hi, step]) =>
+      `<label><span>${esc(lab)}</span><input type="number" inputmode="decimal" data-pset="${k}" data-fk="ps:${k}" min="${lo}" max="${hi}" step="${step}" value="${esc(val(k, mul))}">${unit ? `<i>${unit}</i>` : ''}</label>`).join('')}
+      <label><span>Risk per trade</span><input type="number" data-pset="risk_lo" data-fk="ps:lo" min="50" max="5000" step="50" value="${esc(d.risk_lo != null ? d.risk_lo : rk[0])}"><i>to</i><input type="number" data-pset="risk_hi" data-fk="ps:hi" min="50" max="5000" step="50" value="${esc(d.risk_hi != null ? d.risk_hi : rk[1])}"><i>$</i></label>
+      <div class="pl-set-go"><button type="button" class="btn btn-default" data-act="plsave" data-fk="save"${S.plBusy ? ' disabled' : ''}>Save settings</button><span class="pl-quiet">Saved for the whole app. The next stage that runs uses it.</span></div></form>`;
+  }
+  return `<div class="pl-prof"><div class="pl-prof-row"><span class="pl-prof-l">Pipeline</span><div class="pl-filter" role="group" aria-label="Pipeline">${seg}</div>${adj}</div>
+    <p class="pl-quiet">${P.profile === 'wr' ? 'Judges win rate and steady months. Eval odds are shown, not asked.' : 'The original rules, for live accounts.'}</p>${panel}</div>`;
+}
+async function pickProfile(id) {
+  if (S.plBusy) return;
+  S.plBusy = true; S.plDraft = null; paintLib();
+  const r = await send('POST', '/api/tester/pipeline/profile', { profile: id });
+  S.plBusy = false;
+  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !(r.ok && r.json && r.json.ok !== false));
+}
+async function saveSettings() {
+  const d = S.plDraft || {}, P = S.pl && S.pl.data && S.pl.data.profile, s = (P && P.settings) || {};
+  const out = {};
+  for (const [k, , , mul] of PSET) if (d[k] != null && d[k] !== '') out[k] = Math.round(Number(d[k]) / mul * 1000) / 1000;
+  if (d.risk_lo != null || d.risk_hi != null) {
+    const rk = Array.isArray(s.risk_usd) ? s.risk_usd : [500, 800];
+    out.risk_usd = [Number(d.risk_lo != null ? d.risk_lo : rk[0]), Number(d.risk_hi != null ? d.risk_hi : rk[1])];
+  }
+  if (!Object.keys(out).length) return pipeSaid('Nothing changed.', false);
+  if (Object.values(out).some((v) => Array.isArray(v) ? v.some(Number.isNaN) : Number.isNaN(v))) return pipeSaid('Every setting is a number.', true);
+  S.plBusy = true; paintLib();
+  const r = await send('POST', '/api/tester/pipeline/settings', { settings: out });
+  S.plBusy = false;
+  const ok = r.ok && r.json && r.json.ok !== false;
+  if (ok) S.plDraft = null;
+  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !ok);
 }
 /* The Queue's page: the count and the ONE button on top, always; under them the selected idea in full -- why it stopped (the ONE
    line), its card in words, every stage that ran with PASS / FAIL / — and its lines as the server wrote them. An idea that passed
@@ -1668,7 +1734,206 @@ function settingsHtml(b) {
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
       <label title="Dollars per contract, round trip">Fees ($ per contract)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
       <label>Slippage (ticks)</label><input type="number" data-f="slippage_ticks" value="${esc(f.slippage_ticks)}" min="0" step="1">
-      ${ins.length ? `<div class="sep"></div>${ins.map(inputRow).join('')}` : ''}</div></details>`;
+    </div></details>
+  ${ins.length ? `<details class="rs-group rs-set rs-inputs"${S.inOpen === false ? '' : ' open'}><summary><span>Strategy settings</span><span>${esc(ins.filter((i) => i.type === 'choice').slice(0, 3).map((i) => f.inputs[i.key]).join(' · ') || `${ins.length} inputs`)}</span></summary>
+    <div class="grid">${ins.map(inputRow).join('')}</div></details>` : ''}${rulesHtml(f, meta)}${heatSettingsHtml(f, meta)}`;
+}
+/* ---- Heat map (2026-10-12): pick up to three settings (the strategy's own, or any Trade rule), type the values each takes,
+   and run every combination. A cell is an ordinary run (the same tester); the other settings stay as set above. The rules
+   are tester.js (gridAxes, gridProblems, gridBody, heatPanels); the server is /api/tester/grid. */
+const HEAT_ROLES = ['Rows', 'Columns', 'Panels'];
+const HEAT_SUGGEST = { 'ctl.stop_pts': '10, 15, 20, 25', 'ctl.stop_atr': '1, 1.5, 2', 'ctl.target_pts': '20, 30, 40', 'ctl.target_atr': '1, 2, 3',
+  'ctl.target_rr': '1, 2, 3', 'ctl.stop_wins': '0, 1, 2', 'ctl.stop_losses': '0, 1, 2', 'ctl.max_trades': '0, 1, 2, 3', 'ctl.max_consec_losses': '0, 2, 3',
+  'ctl.entry_from': '09:35, 10:00, 10:30', 'ctl.entry_to': '10:30, 11:30, 12:00', 'ctl.flat_at': '11:30, 15:55', 'ctl.direction': 'both, long, short',
+  'ctl.day_loss': '0, 500, 1000', 'ctl.day_profit': '0, 1000, 2000', 'ctl.cooldown_min': '0, 5, 15, 30', 'ctl.max_hold_min': '0, 15, 30, 60',
+  'ctl.stop_mode': 'own, fixed, atr', 'ctl.target_mode': 'own, fixed, rr', 'ctl.atr_minutes': '1, 5, 15', 'ctl.atr_period': '7, 14, 21' };
+const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 'the strategy\'s own stop', 'ctl.target_pts': 'the strategy\'s own target',
+  'ctl.target_atr': 'the strategy\'s own target', 'ctl.target_rr': 'the strategy\'s own target', 'ctl.bar_minutes': 'the strategy\'s own bar' };
+function heatSuggest(inp) {
+  if (!inp) return '';
+  if (HEAT_SUGGEST[inp.key]) return HEAT_SUGGEST[inp.key];
+  if (inp.key === 'ctl.bar_minutes') return inp.choices.join(', ');
+  if (inp.type === 'bool') return 'on, off';
+  if (inp.type === 'choice') return inp.choices.slice(0, 4).join(', ');
+  const st = inp.step || 1, d = Number(inp.default) || 0, lo = inp.min != null ? inp.min : -Infinity, hi = inp.max != null ? inp.max : Infinity;
+  const round = (v) => { const r = Math.round(v / st) * st; return Number((inp.type === 'int' ? Math.round(r) : r).toFixed(4)); };
+  const base = d ? [d * 0.5, d, d * 1.5, d * 2] : [lo > -Infinity ? lo : 0, 1, 2, 3].map((v, i) => (lo > -Infinity ? lo : 0) + i * st);
+  return [...new Set(base.map(round).filter((v) => v >= lo && v <= hi))].join(', ');
+}
+function heatState(f) {
+  return S.heat[f.strategy] || (S.heat[f.strategy] = { rows: [{ key: '', text: '' }, { key: '', text: '' }, { key: '', text: '' }], grid: null, id: '', token: 0, starting: false, err: '' });
+}
+const heatBusy = (h) => h.starting || (h.grid && !X.gridProgress(h.grid).final);
+/* the current Rows / Columns / Panels as gridAxes wants them, and what it says about them */
+function heatCheck(f, meta, h) {
+  const rows = h.rows, filled = rows.filter((r) => r.key);
+  if (!filled.length) return { note: 'Pick what to vary: two settings make a table, a third makes one table for each of its values.', bad: false };
+  const m = { ...meta, id: f.strategy };
+  const err = X.gridProblems(f, m, rows);
+  if (err) return { note: err, bad: true };
+  const g = X.gridAxes(rows, m, f.max_cells);
+  const n = X.gridCount(g.axes);
+  return { note: `${n} run${n === 1 ? '' : 's'}${n > X.DEFAULT_MAX_CELLS ? ' — a long wait' : ''}`, bad: false, n };
+}
+function heatPickHtml(f, meta, h) {
+  const strat = meta.inputs || [];
+  const ctl = X.ctlAxisInputs(meta);
+  const opt = (i, cur) => `<option value="${esc(i.key)}"${i.key === cur ? ' selected' : ''}>${esc(i.label)}</option>`;
+  return HEAT_ROLES.map((role, k) => {
+    const r = h.rows[k], inp = r.key ? X.axisInput(meta, r.key) : null;
+    const hint = inp ? `${X.axisHint(inp)}${HEAT_ZERO[inp.key] ? ` · 0 = ${HEAT_ZERO[inp.key]}` : ''}` : '';
+    return `<label>${role}</label>
+      <select data-hk="${k}"><option value="">${k === 2 ? 'None (optional)' : 'Pick a setting'}</option>
+        ${strat.length ? `<optgroup label="Strategy settings">${strat.map((i) => opt(i, r.key)).join('')}</optgroup>` : ''}
+        <optgroup label="Trade rules">${ctl.map((i) => opt(i, r.key)).join('')}</optgroup></select>
+      ${inp ? `<input type="text" class="heat-vals" data-ht="${k}" value="${esc(r.text)}" placeholder="${esc(heatSuggest(inp))}" spellcheck="false" autocomplete="off">
+        <div class="heat-hint">${esc(hint)}</div>` : ''}`;
+  }).join('');
+}
+function heatSettingsHtml(f, meta) {
+  const h = heatState(f), chk = heatCheck(f, meta, h), busy = heatBusy(h);
+  const picked = h.rows.filter((r) => r.key).map((r) => (X.axisInput(meta, r.key) || {}).label).filter(Boolean);
+  return `<details class="rs-group rs-set rs-heat"${S.heatOpen ? ' open' : ''}><summary><span>Heat map</span><span>${picked.length ? esc(picked.join(' × ')) : 'off'}</span></summary>
+    <div class="grid heat-grid">${heatPickHtml(f, meta, h)}
+      <div class="sep"></div>
+      <div class="heat-note${chk.bad ? ' bad' : ''}" id="heatNote">${esc(chk.note)}</div>
+      <button class="btn btn-sm heat-run" data-act="${busy ? 'heatcancel' : 'heatrun'}" id="heatBtn"${!busy && (chk.bad || !chk.n) ? ' disabled' : ''}>${busy ? 'Cancel' : 'Run heat map'}</button>
+    </div>
+    <div class="heat-res" id="heatRes">${heatResHtml(f, meta)}</div></details>`;
+}
+/* the table(s): one per value of Panels; a cell is net $ (tone by sign, depth by size), a click puts that run on the chart */
+function heatResHtml(f, meta) {
+  const h = heatState(f), g = h.grid;
+  if (h.err) return `<div class="heat-err">${esc(h.err)}</div>`;
+  if (h.starting && !g) return '<div class="heat-prog">Starting…</div>';
+  if (!g) return '';
+  const pr = X.gridProgress(g), maxAbs = X.heatMaxAbs(g), bad = (g.cells || []).filter((c) => c.status === 'error');
+  const prog = `<div class="heat-prog"><span>${esc(pr.text)}</span>${pr.final ? '' : `<span class="rs-bar${pr.frac == null ? ' ind' : ''}"><i style="width:${pr.frac == null ? 38 : Math.round(pr.frac * 100)}%"></i></span>`}</div>`;
+  if (!g.axes || g.axes.length < 2) return prog;
+  const panels = X.heatPanels(g);
+  const tables = panels.map((pn) => `<div class="heat-panel">${pn.title ? `<div class="heat-title">${esc(pn.title)}</div>` : ''}
+    <div class="heat-corner"><span>${esc(pn.rowLabel)} ↓</span><span>${esc(pn.colLabel)} →</span></div>
+    <table class="heat-tbl"><thead><tr><th></th>${pn.cols.map((c) => `<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>
+      ${pn.rows.map((rl, r) => `<tr><th>${esc(rl)}</th>${pn.cells[r].map((ci) => {
+        const c = g.cells[ci], v = X.cellView(c), lvl = X.heatLevel(c && c.summary ? c.summary.net_profit : null, maxAbs);
+        const sel = h.cell === ci ? ' sel' : '';
+        return `<td><button class="heat-c ${v.tone}${sel}" data-act="heatcell" data-i="${ci}" title="${esc(v.title)}"${lvl.alpha ? ` style="--a:${lvl.alpha}"` : ''}${c && c.status === 'done' ? '' : ' disabled'}>
+          <b>${esc(v.net)}</b>${v.sharpe ? `<small>${esc(v.sharpe)}</small>` : ''}</button></td>`;
+      }).join('')}</tr>`).join('')}</tbody></table></div>`).join('');
+  const looks = g.looks != null ? `<div class="heat-looks">${esc(X.looksLine(g.looks, g.looks_error))}</div>` : '';
+  return `${prog}${tables}${bad.length ? `<div class="heat-err">${bad.length} cell${bad.length === 1 ? '' : 's'} failed: ${esc(bad[0].error || 'error')}</div>` : ''}${looks}
+    <div class="heat-foot">Average of the whole table is the answer, not the best cell.</div>`;
+}
+/* paint only the heat block + its note/button: a poll must not redraw the pane (it would take the focus out of a text box) */
+function heatPaint() {
+  const b = buf(), f = b && formOf(b), meta = b && metaOf(b);
+  if (!f || !meta) return;
+  const h = heatState(f), chk = heatCheck(f, meta, h), busy = heatBusy(h);
+  const note = $('#heatNote'), btn = $('#heatBtn'), res = $('#heatRes');
+  if (note) { note.textContent = chk.note; note.classList.toggle('bad', !!chk.bad); }
+  if (btn) { btn.textContent = busy ? 'Cancel' : 'Run heat map'; btn.dataset.act = busy ? 'heatcancel' : 'heatrun'; btn.disabled = !busy && (chk.bad || !chk.n); }
+  if (res) res.innerHTML = heatResHtml(f, meta);
+}
+async function heatRun() {
+  const b = buf();
+  if (!b || S.busy) return;
+  if (b.kind !== 'builtin') {
+    if (!b.code.trim()) return;
+    const v = await validateNow(b);
+    if (!v || !v.ok) { log(`<span class="err">Fix the script first: ${esc(C.statusOf(v).text)}</span>`); return; }
+    if (isDirty(b) || b.kind === 'new') { if (!(await save(b))) return; }
+  }
+  const nb = buf(), f = formOf(nb), meta = { ...metaOf(nb), id: f.strategy };
+  const h = heatState(f), err = X.gridProblems(f, meta, h.rows);
+  if (err) { log(`<span class="err">${esc(err)}</span>`); return; }
+  const bodyObj = X.gridBody(f, X.gridAxes(h.rows, meta, f.max_cells).axes);
+  const token = ++h.token;
+  h.err = ''; h.starting = true; h.grid = null; h.cell = null;
+  heatPaint();
+  const r = await send('POST', '/api/tester/grid', bodyObj);
+  if (token !== h.token) return;
+  if (!r.ok) { h.starting = false; h.err = r.error || 'request failed'; heatPaint(); return; }
+  h.id = r.json.id;
+  log(`Heat map of <b>${esc(nb.kind === 'builtin' ? nb.id : nb.name)}</b>: ${esc(String(X.gridCount(X.gridAxes(h.rows, meta, f.max_cells).axes)))} runs inside the sandbox…`);
+  heatPoll(h, token);
+}
+async function heatPoll(h, token) {
+  let lost = 0;
+  while (token === h.token) {
+    const r = await send('GET', `/api/tester/grid/${encodeURIComponent(h.id)}`);
+    if (token !== h.token) return;
+    if (r.ok) {
+      lost = 0; h.starting = false; h.grid = r.json; h.err = '';
+      heatPaint();
+      if (X.gridProgress(r.json).final) {
+        const done = (r.json.cells || []).filter((c) => c.status === 'done').length;
+        log(`Heat map ${r.json.status === 'cancelled' ? 'cancelled' : 'done'} · <b>${done} of ${(r.json.cells || []).length} runs</b>`);
+        return;
+      }
+    } else if (++lost > 8) { h.starting = false; h.err = `lost contact with the heat map: ${r.error || 'unknown'}`; heatPaint(); return; }
+    await new Promise((res) => setTimeout(res, 700));
+  }
+}
+async function heatCancel() {
+  const b = buf(), f = b && formOf(b);
+  if (!f) return;
+  const h = heatState(f);
+  if (h.id && h.grid && !X.gridProgress(h.grid).final) await send('POST', `/api/tester/grid/${encodeURIComponent(h.id)}/cancel`);
+}
+/* a cell becomes the open run: its numbers fill the pane, its trades go on the chart */
+async function heatCell(i) {
+  const b = buf(), f = b && formOf(b);
+  if (!f) return;
+  const h = heatState(f), g = h.grid;
+  if (!g || !g.cells[i] || g.cells[i].status !== 'done') return;
+  h.cell = i; heatPaint();
+  const r = await send('GET', `/api/tester/grid/${encodeURIComponent(h.id)}/cell/${i}/bundle`);
+  if (!r.ok || h.cell !== i) { if (!r.ok) log(`<span class="err">Could not load that run: ${esc(r.error)}</span>`); return; }
+  const labels = g.axes.map((a, k) => `${a.label} ${X.axisLabels(a)[g.cells[i].coords[k]]}`).join(' · ');
+  S.run = { key: b.key, rid: `${h.id}-c${i}`, st: { status: 'done' }, bundle: r.json, strategy: f.strategy, grid: { id: h.id, cell: i }, cellLabel: labels };
+  shownRid = null;
+  paintRes();
+  if (P.chart) showOnChart(false); else log(`Heat-map run: <b>${esc(labels)}</b> · <a data-act="show">Show trades on the chart ›</a>`);
+}
+/* ---- Trade rules (2026-10-12): the engine's run controls (backtest/controls.py, mirrored in tester.js) as a settings group.
+   Off by default; they hold for every strategy here, whatever its code does. A mode select repaints so only the number it
+   reads shows; every number field blank = that rule off. */
+const RULE_AUX = new Set(['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'atr_minutes', 'atr_period']);
+function rulesHtml(f, meta) {
+  const raw = f.controls || {}, c = X.controlsClean(raw), D = X.CONTROLS;
+  const n = Object.keys(c).filter((k) => !RULE_AUX.has(k)).length;
+  const num = (k, label, hint, step = 1) => `<label title="${esc(hint)}">${esc(label)}</label><input type="number" data-c="${k}" value="${raw[k] == null ? '' : esc(raw[k])}" placeholder="off" min="0" step="${step}">`;
+  const time = (k, label, hint) => `<label title="${esc(hint)}">${esc(label)}</label><input type="time" data-c="${k}" value="${esc(raw[k] || '')}">`;
+  const sel = (k, label, opts, hint = '') => {
+    const cur = String(c[k] === undefined ? D[k][1] : c[k]);
+    return `<label title="${esc(hint)}">${esc(label)}</label><select data-c="${k}">${opts.map(([v, t]) => `<option value="${esc(v)}"${String(v) === cur ? ' selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  };
+  const stopMode = c.stop_mode || 'own', tgtMode = c.target_mode || 'own';
+  const usesAtr = stopMode === 'atr' || tgtMode === 'atr';
+  const sizes = (meta && meta.bar_sizes) || [];       // the signal bar sizes this strategy's logic can be read on
+  const own = meta && meta.bar_minutes ? ` (${meta.bar_minutes} min)` : '';
+  return `<details class="rs-group rs-set rs-rules"${S.rulesOpen ? ' open' : ''}><summary><span>Trade rules</span><span>${n ? `${n} set` : 'none'}</span></summary>
+    <div class="grid">
+      ${sizes.length ? sel('bar_minutes', 'Signal bar', [[0, `Strategy's own${own}`], ...sizes.map((m) => [m, `${m} minute${m === 1 ? '' : 's'}`])], 'The candle size the strategy reads its signals on') : ''}
+      ${time('entry_from', 'Trade from (NY)', 'No entry before this time')}
+      ${time('entry_to', 'Trade until (NY)', 'No new entry from this time; an order still waiting is cancelled, an open trade is left alone')}
+      ${time('flat_at', 'Flat at (NY)', 'Cancels everything and closes what is open at this time; no entry after it')}
+      ${sel('direction', 'Direction', [['both', 'Both'], ['long', 'Long only'], ['short', 'Short only']])}
+      ${num('max_trades', 'Trades a day', 'The most entries in a day')}
+      ${num('stop_wins', 'Stop after wins', 'No new entry once the day has this many winning trades')}
+      ${num('stop_losses', 'Stop after losses', 'No new entry once the day has this many losing trades')}
+      ${num('max_consec_losses', 'Losses in a row', 'No new entry after this many losing trades in a row')}
+      ${num('day_loss', 'Daily loss ($)', 'No new entry once the day\'s closed P&L is down this much', 50)}
+      ${num('day_profit', 'Daily profit ($)', 'No new entry once the day\'s closed P&L is up this much', 50)}
+      ${num('cooldown_min', 'Cool off after a loss (min)', 'Minutes with no new entry after a losing trade')}
+      ${num('max_hold_min', 'Close after (min held)', 'A trade open this long is closed at the next print')}
+      <div class="sep"></div>
+      ${sel('stop_mode', 'Stop', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['none', 'No stop']], 'Replaces the strategy\'s stop, measured from the fill')}
+      ${stopMode === 'fixed' ? num('stop_pts', 'Stop (points)', 'Distance from the fill', 0.25) : stopMode === 'atr' ? num('stop_atr', 'Stop (× ATR)', 'Multiple of the ATR at the entry', 0.1) : ''}
+      ${sel('target_mode', 'Target', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['rr', 'R multiple of the stop'], ['none', 'No target']], 'Replaces the strategy\'s target, measured from the fill')}
+      ${tgtMode === 'fixed' ? num('target_pts', 'Target (points)', 'Distance from the fill', 0.25) : tgtMode === 'atr' ? num('target_atr', 'Target (× ATR)', 'Multiple of the ATR at the entry', 0.1) : tgtMode === 'rr' ? num('target_rr', 'Target (× stop)', 'Multiple of the stop distance', 0.25) : ''}
+      ${usesAtr ? `${sel('atr_minutes', 'ATR bars', [[1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar size the ATR is read on')}${num('atr_period', 'ATR length', 'Bars averaged: the mean true range of the last N closed bars before the entry', 1).replace('placeholder="off"', 'placeholder="14"')}` : ''}
+    </div></details>`;
 }
 /* "Oct 1 – Dec 13, 2024" / "2021 – 2024": a run's range the way a person writes it. */
 const RS_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' });
@@ -1720,7 +1985,7 @@ async function loadDesk() {
 function deskState(b) {
   if (!b || b.kind !== 'draft') return null;
   const dirty = isDirty(b), sha = dirty ? '' : shaNow(b.code);
-  const r = S.run && S.run.key === b.key ? S.run : null;
+  const r = S.run && S.run.key === b.key && !S.run.grid ? S.run : null;      // (a heat-map cell has no run of its own to promote)
   /* the hash only tells the same code on the Desk from other code; it never gates Promote -- the Desk judges the run when it is asked */
   return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha });
 }
@@ -1748,7 +2013,7 @@ function deskGo() {
 }
 async function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
-  if (!r || !r.rid || !r.bundle) return;
+  if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
   S.deskBusy = true; paintRes();
   const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
   S.deskBusy = false;
@@ -1798,7 +2063,7 @@ function paintRes() {
     const badges = X.badges(run).filter((x) => x.tone !== 'info');
     const used = run.coverage && run.coverage.used !== run.coverage.sessions ? ` · ${run.coverage.used} of ${run.coverage.sessions} sessions` : '';
     const split = (v) => { const m = /^([+−-]?\$?)(.*?)(%?)$/.exec(String(v)); return m ? `${esc(m[2])}${m[3] ? '<small>%</small>' : ''}` : esc(v); };
-    main = `<div class="rs-h"><b>Backtest</b><span>${esc(rangeText(run.range))}</span></div>
+    main = `<div class="rs-h"><b>Backtest</b><span>${esc(r.cellLabel ? r.cellLabel : rangeText(run.range))}</span></div>
       <div class="rs-hero"><div class="rs-net"><i>${netv > 0 ? '+' : netv < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(netv)).toLocaleString('en-US'))}</div>
         ${pctv == null ? '' : `<span class="rs-delta${pos ? '' : ' neg'}" title="Of the $${esc(Math.round(cap).toLocaleString('en-US'))} starting balance">${pos ? '▲' : netv < 0 ? '▼' : ''} ${Math.abs(pctv).toFixed(1)}%</span>`}</div>
       <div class="rs-take">${n === 0 ? 'It took no trades in this range. Check the session window and the entry rules, then run it again.' : takeaway(eqPoints(r.bundle.equity || {}), netv, n)}<span>${esc(used)}</span></div>
@@ -1833,6 +2098,9 @@ function act(name, el) {
   else if (name === 'paste') pasteScript();
   else if (name === 'run') run();
   else if (name === 'cancel') cancelRun();
+  else if (name === 'heatrun') heatRun();
+  else if (name === 'heatcancel') heatCancel();
+  else if (name === 'heatcell') heatCell(Number(el.dataset.i));
   else if (name === 'show') showOnChart(false);
   else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
   else if (name === 'review') reviewDialog();
@@ -1847,6 +2115,10 @@ function act(name, el) {
   else if (name === 'view') setView(el.dataset.v);
   else if (name === 'viewmenu') { if (menuEl && menuEl.dataset.for === 'view') closeMenu(); else viewMenu(el); }
   else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
+  else if (name === 'plfilter') { S.plFilter = el.dataset.f || 'all'; paintLib(); }
+  else if (name === 'plprof') pickProfile(el.dataset.p);
+  else if (name === 'plset') { S.plSet = !S.plSet; paintLib(); }
+  else if (name === 'plsave') saveSettings();
   else if (name === 'plidea') pickIdea(el.dataset.name);
   else if (name === 'plbook') pickCard(el.dataset.name);
   else if (name === 'plapprove') approveIdea();
@@ -1856,6 +2128,10 @@ function act(name, el) {
   else if (name === 'plexec') showExecutions(el.dataset.name);
   else if (name === 'tkblock') codeSheet(el.dataset.id);
 }
+root.addEventListener('input', (e) => {          // a WR setting being typed: kept, so a refresh of the Queue does not wipe it
+  const t = e.target;
+  if (t && t.dataset && t.dataset.pset) S.plDraft = Object.assign(S.plDraft || {}, { [t.dataset.pset]: t.value });
+});
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
   const lib = e.target.closest('[data-key]');
@@ -1878,7 +2154,13 @@ if (bar) {
   bar.addEventListener('input', (e) => { const b = buf(); if (e.target.id === 'edName' && b) { b.name = e.target.value.trim(); e.target.classList.remove('bad'); paintLib(); } });
   bar.addEventListener('keydown', (e) => { if (e.target.id === 'edName' && e.key === 'Enter' && !e.repeat) { e.preventDefault(); save(buf()); } });
 }
-root.addEventListener('toggle', (e) => { if (e.target.classList && e.target.classList.contains('rs-set')) S.setOpen = e.target.open; }, true);
+root.addEventListener('toggle', (e) => {
+  const cl = e.target.classList;
+  if (cl && cl.contains('rs-rules')) S.rulesOpen = e.target.open;
+  else if (cl && cl.contains('rs-heat')) S.heatOpen = e.target.open;
+  else if (cl && cl.contains('rs-inputs')) S.inOpen = e.target.open;
+  else if (cl && cl.contains('rs-set')) S.setOpen = e.target.open;
+}, true);
 root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
@@ -1888,13 +2170,30 @@ root.addEventListener('input', (e) => {
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
     if (b.kind === 'new' && wasEmpty && b.code.trim() && !b.name) { b.name = C.suggestName(b.code, takenNames()); const n = document.getElementById('edName'); if (n) n.value = b.name; }
     paintCode(); paintHead(); queueValidate(b); paintLib();
-  } else if (t.dataset.f || t.dataset.in) {
+  } else if (t.dataset.hk !== undefined || t.dataset.ht !== undefined) {
+    const f = b && formOf(b), meta = b && metaOf(b);
+    if (!f || !meta) return;
+    const h = heatState(f);
+    if (t.dataset.hk !== undefined) {
+      const row = h.rows[Number(t.dataset.hk)];
+      row.key = t.value;
+      row.text = t.value ? heatSuggest(X.axisInput({ ...meta, id: f.strategy }, t.value)) : '';      // a pick brings values to start from
+      paintRes();
+    } else {
+      h.rows[Number(t.dataset.ht)].text = t.value;
+      heatPaint();
+    }
+  } else if (t.dataset.f || t.dataset.in || t.dataset.c) {
     const f = formOf(b), meta = metaOf(b);
     if (!f) return;
-    if (t.dataset.in) {
+    if (t.dataset.c) {
+      f.controls = X.setControl(f.controls, t.dataset.c, t.value);
+      if (t.tagName === 'SELECT' && /_mode$/.test(t.dataset.c)) paintRes();     // only the number this mode reads shows
+    } else if (t.dataset.in) {
       const inp = (meta.inputs || []).find((i) => i.key === t.dataset.in);
       f.inputs[inp.key] = inp.type === 'bool' ? t.checked : inp.type === 'choice' ? t.value : t.value === '' ? NaN : Number(t.value);
       t.classList.toggle('bad', !!X.inputError(inp, f.inputs[inp.key]));
+      if (inp.type === 'choice') paintRes();          // the group's summary names the choices
     } else if (t.dataset.f === 'range') { f.range = { id: t.value, start: f.range.start, end: f.range.end, wf: null }; paintRes(); }
     else if (t.dataset.f === 'start' || t.dataset.f === 'end') f.range[t.dataset.f] = t.value.trim();
     else f[t.dataset.f] = t.value === '' ? NaN : Number(t.value);
