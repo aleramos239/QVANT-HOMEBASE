@@ -176,6 +176,7 @@ async function run() {
   if (!f) return;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { log(`<span class="err">${esc(pr)}</span>`); return; }
+  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code) && await openRecordRun(nb, f)) return;
   S.busy = true;
   S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy };
   paintRes(); paintHead();
@@ -184,6 +185,23 @@ async function run() {
   S.run.rid = r.json.id;
   log(`Running <b>${esc(nb.kind === 'builtin' ? nb.id : nb.name)}</b> over ${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} inside the sandbox…`);
   poll(S.run);
+}
+/* A "Blueprint record" file is the written card of an idea the research engine already ran: the script itself places no
+   trades, so running it here would only ever say 0 trades. Show the idea's own latest run with trades instead. */
+async function openRecordRun(nb, f) {
+  const l = await send('GET', '/api/tester/runs?limit=200');
+  const list = l.ok && l.json ? (Array.isArray(l.json) ? l.json : l.json.runs || []) : [];
+  const mine = list.filter((x) => x && x.strategy === f.strategy && x.status === 'done' && (x.trades || 0) > 0);
+  const hit = mine[0];
+  if (!hit) { log(`<b>${esc(nb.name || f.strategy)}</b> is a written record: the script places no trades itself, and no research-engine run with trades is saved for it yet.`); return true; }
+  const bd = await send('GET', `/api/tester/run/${encodeURIComponent(hit.id)}/bundle`);
+  if (!bd.ok || !bd.json) return false;
+  S.busy = false;
+  S.run = { key: nb.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: f.strategy };
+  const rg = (hit.range && (hit.range.label || hit.range.id)) || '';
+  log(`<b>${esc(nb.name || f.strategy)}</b> is a written record: its script places no trades, so this is its saved research-engine run${rg ? ` (${esc(rg)})` : ''} · <b>${esc(String(hit.trades))} trades</b> · <a data-act="show">Show trades on the chart ›</a>`);
+  paintRes(); paintHead(); syncChart();
+  return true;
 }
 async function poll(run) {
   while (S.run === run) {
@@ -322,6 +340,23 @@ async function showRunOnChart(rid, focus = null) {
   shownRid = null;
   return false;
 }
+/* Coming back to the app (the chart service socket dropped while it slept, and every chart was subscribed again) the executions on the
+   chart are gone: the same run is asked for once more. Same run, same stepper position; nothing new is run or read. */
+let reshowAt = 0;
+async function reshow() {
+  if (!shownRid || !RUN_ID.test(String(shownRid)) || Date.now() - reshowAt < 1500) return;
+  reshowAt = Date.now();
+  const keep = ti, rid = shownRid;
+  for (let k = 0; k < 6 && shownRid === rid; k++) {
+    const o = await send('POST', '/api/tester/show', { run_id: rid });
+    if (o.ok && o.json.pages) break;
+    await new Promise((res) => setTimeout(res, 1200));
+  }
+  if (shownRid === rid && keep != null) { ti = keep; paintNav(); }
+}
+window.addEventListener('hb:chart-reconnect', () => setTimeout(reshow, 700));
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(reshow, 900); });
+
 /* ONE chart: the Lab never shows a grid of them. (The grid menu is the chart shell's own; its button is hidden here.) */
 function soloChart() {
   const H = window.HBCharts;
@@ -846,8 +881,8 @@ function allMetricsDialog() {
       const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
       const lab = { trades: 'Trades', net: 'Net', win_rate: 'Win rate', profit_factor: 'Profit factor', expectancy: 'Avg trade', max_dd: 'Max drawdown', sharpe: 'Sharpe', month_wr: 'Good months' };
       body = `<table class="am-t am-y"><thead><tr><th>Year</th>${keys.map(([k]) => `<th>${lab[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((y) =>
-        `<tr><th>${esc(y.year)}${y.unseen ? ' <small>has unseen days</small>' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
-        <p class="am-note">Each row is the calendar year's own trades. 2025 straddles the cut: its build days end 2025-06-30, its unseen days start 2025-07-01 (choose a year above to see them apart).</p>`;
+        `<tr><th>${esc(y.year)}${y.unseen ? '*' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
+        <p class="am-note">Each row is the calendar year's own trades. * 2025 straddles the cut: build days end 2025-06-30, unseen days start 2025-07-01 (pick the year above to see them apart).</p>`;
     } else {
       body = AM.CATS.filter(([id]) => !st.hideCat.includes(id)).map(([id, name, rows]) => {
         const shown = rows.filter(([m]) => !st.hide.includes(m));
@@ -859,7 +894,7 @@ function allMetricsDialog() {
     const chip = (attr, val, text, on) => `<button class="am-c${on ? ' on' : ''}" data-${attr}="${esc(val)}">${esc(text)}</button>`;
     const sets2 = AM.CATS.map(([id, name, rows]) => `<fieldset><legend><label><input type="checkbox" data-cat="${id}"${st.hideCat.includes(id) ? '' : ' checked'}> ${esc(name)}</label></legend>${rows.map(([m, label]) =>
       `<label><input type="checkbox" data-m="${m}"${st.hide.includes(m) ? '' : ' checked'}> ${esc(label)}</label>`).join('')}</fieldset>`).join('');
-    d.innerHTML = `<div class="am-top"><h2>All metrics</h2><button class="btn btn-outline btn-sm" data-x="close">Close</button></div>
+    d.innerHTML = `<div class="am-head"><div class="am-top"><h2>All metrics</h2><button class="btn btn-outline btn-sm" data-x="close">Close</button></div>
       <p class="am-sub">${esc(r.cellLabel || r.strategy || '')} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
       <div class="am-bar">
         <div class="am-g"><span>Days</span>${AM.SCOPES.map(([k, n]) => chip('col', k, n, st.cols.includes(k))).join('')}</div>
@@ -867,11 +902,31 @@ function allMetricsDialog() {
         <div class="am-g"><span>Side</span>${chip('side', '', 'Both', !st.side)}${chip('side', 'long', 'Long', st.side === 'long')}${chip('side', 'short', 'Short', st.side === 'short')}</div>
         <div class="am-g"><span>Show</span>${chip('view', 'metrics', 'Every metric', st.view === 'metrics')}${chip('view', 'year', 'Year by year', st.view === 'year')}<button class="am-c" data-act2="adj">Choose rows</button></div>
       </div>
-      <div class="am-adj" hidden>${sets2}<div class="am-adjb"><button class="btn btn-outline btn-sm" data-act2="all">Show all</button></div></div>
-      <div class="am-body">${body || '<p class="am-note">Every category is hidden. Choose rows to bring some back.</p>'}</div>`;
+      <div class="am-adj" hidden>${sets2}<div class="am-adjb"><button class="btn btn-outline btn-sm" data-act2="all">Show all</button></div></div></div>
+      <div class="am-body">${body || '<p class="am-note">Every category is hidden. Choose rows to bring some back.</p>'}</div>
+      ${['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map((k) => `<i class="am-rz am-rz-${k}" data-rz="${k}"></i>`).join('')}`;
   }
+  try { const z = JSON.parse(localStorage.getItem('hb_lab_am_size')); if (z && z.w && z.h) { d.style.width = `${Math.min(z.w, innerWidth - 16)}px`; d.style.height = `${Math.min(z.h, innerHeight - 16)}px`; } } catch (_) { /* default size */ }
   draw();
   let adjOpen = false;
+  d.addEventListener('pointerdown', (e) => {          // stretch from any edge or corner; the card stays centred, so a dragged edge follows the pointer at twice the change
+    const h = e.target.closest('[data-rz]');
+    if (!h) return;
+    e.preventDefault();
+    const k = h.dataset.rz, x0 = e.clientX, y0 = e.clientY, w0 = d.offsetWidth, h0 = d.offsetHeight;
+    h.setPointerCapture(e.pointerId);
+    const mv = (m) => {
+      if (k.includes('e')) d.style.width = `${Math.max(380, Math.min(innerWidth - 16, w0 + 2 * (m.clientX - x0)))}px`;
+      if (k.includes('w')) d.style.width = `${Math.max(380, Math.min(innerWidth - 16, w0 - 2 * (m.clientX - x0)))}px`;
+      if (k.includes('s')) d.style.height = `${Math.max(300, Math.min(innerHeight - 16, h0 + 2 * (m.clientY - y0)))}px`;
+      if (k.includes('n')) d.style.height = `${Math.max(300, Math.min(innerHeight - 16, h0 - 2 * (m.clientY - y0)))}px`;
+    };
+    const up = () => {
+      h.removeEventListener('pointermove', mv); h.removeEventListener('pointerup', up); h.removeEventListener('pointercancel', up);
+      try { localStorage.setItem('hb_lab_am_size', JSON.stringify({ w: d.offsetWidth, h: d.offsetHeight })); } catch (_) { /* not kept */ }
+    };
+    h.addEventListener('pointermove', mv); h.addEventListener('pointerup', up); h.addEventListener('pointercancel', up);
+  });
   d.addEventListener('click', (e) => {
     const t = e.target.closest('button');
     if (!t) return;

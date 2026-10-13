@@ -339,7 +339,7 @@ test('the row is only for drafts, re-resolved at click time, and an unusable one
   assert.match(LABDESK, /function deskGo\(\) \{\n  const b = buf\(\), st = deskState\(b\);\n  if \(!st \|\| st\.disabled \|\| S\.deskBusy\) return;/);
   assert.match(LABDESK, /if \(!b \|\| b\.kind !== 'draft'\) return null;/);
   assert.match(LABDESK, /title="\$\{esc\(st\.hint\)\}"\$\{st\.disabled \? ' aria-disabled="true"' : ''\}/);
-  assert.match(LAB, /\$\{deskRows\(b\)\}<\/div>/, 'the fourth row of the last group of a finished run');
+  assert.match(LAB, /\$\{deskRows\(b\)\}`\}<\/div>/, 'the fourth row of the last group of a finished run');
 });
 
 test('Promote is not gated by the hash, and a promoted draft is marked in the library', () => {
@@ -457,7 +457,7 @@ test('the Lab lists only read: no pointer cursor, an amount never wraps, and Acc
 test('the Lab\'s Promote row ties its hint to a line under the group (aria-describedby), and the hint is read from the same state', () => {
   assert.match(LAB, /aria-describedby="deskHint" title="\$\{esc\(st\.hint\)\}"/);
   assert.match(LAB, /<div class="rs-take" id="deskHint">\$\{esc\(st\.hint\)\}<\/div>/);
-  assert.match(LAB, /\$\{deskRows\(b\)\}<\/div>\$\{deskNote\(b\)\}`;/);
+  assert.match(LAB, /\$\{deskRows\(b\)\}`\}<\/div>\$\{b\.kind === 'pipe' \? '' : deskNote\(b\)\}`;/);
 });
 
 /* ======================================================================================================================

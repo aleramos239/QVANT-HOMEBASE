@@ -674,3 +674,21 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .am-t td.up { color: var(--up); } .am-t td.dn { color: var(--down); } .am-t td.mu { color: var(--hb-fg2); }
 .am-t small { color: var(--hb-fg2); font-weight: 400; }
 .am-note { font-size: var(--hb-fs-sm) !important; color: var(--hb-fg2); }
+
+/* the card is fixed top and bottom and scrolls only its body; every edge stretches */
+.lab-dlg.am-dlg { position: relative; display: flex; flex-direction: column; overflow: hidden; padding: 0; width: min(1040px, calc(100vw - 32px)); height: min(760px, calc(100vh - 48px)); min-width: 380px; }
+.am-head { flex: none; padding: 20px 20px 0; }
+.am-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 0 20px 20px; }
+.am-t { table-layout: fixed; }
+.am-t th:first-child { width: 34%; overflow-wrap: anywhere; }
+.am-t th, .am-t td { overflow-wrap: anywhere; padding: 6px 4px; }
+.am-y th:first-child { width: 12%; }
+.am-y thead th { font-size: 11px; line-height: 13px; }
+.am-rz { position: absolute; z-index: 3; }
+.am-rz-n, .am-rz-s { left: 14px; right: 14px; height: 8px; cursor: ns-resize; }
+.am-rz-e, .am-rz-w { top: 14px; bottom: 14px; width: 8px; cursor: ew-resize; }
+.am-rz-n { top: 0; } .am-rz-s { bottom: 0; } .am-rz-e { right: 0; } .am-rz-w { left: 0; }
+.am-rz-ne, .am-rz-nw, .am-rz-se, .am-rz-sw { width: 16px; height: 16px; }
+.am-rz-ne { top: 0; right: 0; cursor: nesw-resize; } .am-rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.am-rz-nw { top: 0; left: 0; cursor: nwse-resize; } .am-rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
+html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 16px); padding: 0; }

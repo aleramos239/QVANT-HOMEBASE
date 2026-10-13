@@ -67,7 +67,7 @@ const cur = () => cells[selected];
 /* ---- layout + selection ---- */
 function starter(i) {
   const [root, spec] = START[i % START.length];
-  return { root, spec, indicators: C.defaults(), trade: { accounts: [] }, algo: null };   // a fresh chart places no new entries
+  return { root, spec, indicators: C.seedNews(C.defaults(), {}), newsInd: true, trade: { accounts: [] }, algo: null };   // a fresh chart places no new entries
 }
 function saveLast() { try { localStorage.setItem(LAST_KEY, JSON.stringify(layout)); } catch (_) { /* storage off */ } }
 /* Anything that changes a chart outside the Settings dialog's own commit (Ok already marks dirty itself) reads
@@ -115,6 +115,10 @@ function readLayout(v) {
     const r = raw[i] && typeof raw[i] === 'object' ? raw[i] : {};
     const s = r.settings, o = S.overrides(s && typeof s === 'object' ? s : {});
     if (Object.keys(o).length) c.settings = o;
+    // the calendar and the headlines are indicators (2026-10-12): a chart saved before that gets the two, from the
+    // chart settings it had, once -- `newsInd` is the mark, so removing one of them stays removed
+    if (r.newsInd !== true) c.indicators = C.seedNews(c.indicators, c.settings);
+    c.newsInd = true;
     // T (HBTrade) is absent on a page with no trading concept (2026-09-28 three-tabs plan, the
     // Backtest tab): such a chart simply carries no accounts/algo, same as an untouched fresh one.
     const t = T ? T.loadedTrade(r.trade, st) : { accounts: [], unverified: [], droppedLive: [] };
@@ -831,7 +835,8 @@ let dragTab = null;         // the tab name currently being dragged, or null
 function layoutBody() {
   return { grid: layout.grid, ...(layout.sizes ? { sizes: layout.sizes } : {}), cells: layout.cells.map((c) => {
     const { root, spec, indicators, settings } = c;
-    const base = settings && Object.keys(settings).length ? { root, spec, indicators, settings } : { root, spec, indicators };
+    const core = { root, spec, indicators, newsInd: true };   // newsInd: the calendar / headline indicators are already part of it
+    const base = settings && Object.keys(settings).length ? { ...core, settings } : core;
     // T (HBTrade) is not loaded on the Backtest tab (2026-09-28 three-tabs plan): a saved layout
     // there simply carries no trade bits, same as any other chart with no accounts/algo.
     return { ...base, ...(T ? T.tradeBits(c) : {}) };
@@ -1303,7 +1308,7 @@ function indicatorsDialog() {
       row.dataset.id = d.id;
       // W5 (2026-09-28): what it shows, in one plain line under its name (muted, TradingView-style)
       const txt = mk('span', 'dlg-txt');
-      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', d.desc));
+      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', group === C.BEST_GROUP ? C.BEST.find(([i]) => i === d.id)[1] : d.desc));
       row.append(txt);
       const g = window.HBGuide && window.HBGuide.get(d.id);
       if (g) {   // "?": the plain-words guide, folded open under the row (a click on it never adds the indicator)
@@ -1354,7 +1359,7 @@ function indicatorsDialog() {
   };
   const renderGroups = () => {
     const had = groups.contains(document.activeElement);
-    groups.replaceChildren(...[C.FAV_GROUP, ...C.GROUPS].map((g) => {
+    groups.replaceChildren(...[C.FAV_GROUP, C.BEST_GROUP, ...C.GROUPS].map((g) => {
       const b = mk('button', 'dlg-group' + (g === group ? ' active' : ''), g === C.FAV_GROUP ? `★ ${g} (${indFavs.length})` : g);
       b.type = 'button';
       b.onclick = () => { group = g; renderGroups(); render(); };
@@ -1519,7 +1524,8 @@ function positionDialog(cell, d) {
       ['showRR', 'Risk:reward and quantity', 'posRR'], ['showResult', 'Result (entered, closed, open)', 'posResult'],
       ['showPrice', 'Price in the target and stop', 'posPrice'], ['showPoints', 'Distance and % in the target and stop', 'posPoints'],
       ['showTicks', 'Ticks in the target and stop', 'posTicks'], ['showMoney', 'Dollars in the target and stop', 'posMoney'],
-      ['showPath', 'The played-out path (entry to exit)', null]]) {
+      ['showPath', 'The played-out path (entry to exit)', null],
+      ['showZoneMoney', 'Dollars for 1 contract, inside the profit and loss zones', null]]) {
       const c = mk('input');
       c.type = 'checkbox';
       c.checked = typeof look[key] === 'boolean' ? look[key] : (setting ? R[setting] !== false : true);
@@ -1781,6 +1787,17 @@ function drawingSettingsDialog(cell, d0) {
     n.onchange = () => onchange(Math.max(min, Math.min(max, Math.round(Number(n.value)) || min)));
     return n;
   }
+  /* A 0-100 % slider with its number beside it; greyed out while the thing it fades is off. Each drag step previews, nothing
+     rebuilds the pane under the thumb (the number is kept in step by hand). */
+  function opacityCtl(val, enabled, onchange) {
+    const w = mk('div', 'set-op'), r = mk('input'), pct = mk('span', 'sw-pct', `${val}%`);
+    r.type = 'range'; r.min = '0'; r.max = '100'; r.step = '1'; r.value = String(val); r.disabled = !enabled;
+    r.setAttribute('aria-label', 'Fill opacity');
+    r.oninput = () => { pct.textContent = `${r.value}%`; work = { ...work, style: DS.normalize(type, { ...work.style, fillOpacity: Number(r.value) }) }; preview(); };
+    r.onchange = () => onchange(Number(r.value));
+    w.append(r, pct);
+    return w;
+  }
   function selectCtl(val, choices, onchange) {
     const sel = mk('select', 'set-select');
     for (const [v, text] of choices) { const o = mk('option', '', text); o.value = v; sel.append(o); }
@@ -1957,6 +1974,7 @@ function drawingSettingsDialog(cell, d0) {
         rows.push(row('Show the ratio', sw('showLevels')));
         rows.push(row('Show the price', sw('showPrices')));
         rows.push(row('Fill between levels', sw('fill')));
+        rows.push(row('Fill opacity', opacityCtl(work.style.fillOpacity, work.style.fill, (v) => setStyle({ fillOpacity: v }))));
         rows.push(row('Reverse (0 at the start)', sw('reverse')));
         rows.push(row('Text size', numberCtl(work.style.fontSize, 10, 28, (v) => setStyle({ fontSize: v }))));
       }
@@ -2162,7 +2180,11 @@ function applyChartTemplate(cell, raw) {
   const t = S.applyTemplate(raw);
   cell.setSettings(t.settings);
   const patch = {};
-  if (t.indicators) patch.indicators = t.indicators;
+  if (t.indicators) {
+    // a template saved before the calendar / headlines were indicators does not know them: this chart keeps its own
+    const keep = cell.cfg.indicators.filter((x) => (x.id === 'events' || x.id === 'headlines') && !t.indicators.some((y) => y.id === x.id));
+    patch.indicators = [...t.indicators, ...keep];
+  }
   if (t.spec) patch.spec = t.spec;
   if (Object.keys(patch).length) cell.update(patch);
   applyTemplateTrade(cell, raw);   // its accounts (Trading off) and algo, when the template stored them
@@ -2649,12 +2671,15 @@ function tick() {
 }
 
 /* ---- the chart service ---- */
+let wsOpenedOnce = false;
 function connect() {
   // 2026-09-28 three-tabs plan: ?page=backtest tells the server which connections show_on_chart may target
   const wsPage = window.HB_PAGE === 'backtest' ? '?page=backtest' : '';
   ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws${wsPage}`);
   ws.onopen = () => {
     statusAt = Date.now();
+    if (wsOpenedOnce) setTimeout(() => window.dispatchEvent(new Event('hb:chart-reconnect')), 0);   // pages that put results on the chart put them back
+    wsOpenedOnce = true;
     window.HBReplayUI?.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
     for (const c of cells) { c.clearInflight(); c.subscribe(true); }
   };
