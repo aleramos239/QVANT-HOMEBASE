@@ -1143,6 +1143,17 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def start_run(request: Request, body: dict):
         write_ok(request)
         try:
+            # A "Blueprint record" draft places no trades itself; its real result is a saved research-engine run.
+            sid = str(body.get("strategy") or "")
+            if draftstore.is_draft_id(sid):
+                try:
+                    src = draftstore.read(draftstore.name_of(sid))
+                except Exception:
+                    src = ""
+                if "# >>> BLUEPRINT RECORD" in src:
+                    for x in manager.runs_list(limit=400):
+                        if x.get("strategy") == sid and x.get("status") == "done" and (x.get("trades") or 0) > 0:
+                            return {"id": x["id"]}
             return {"id": manager.submit(body)}
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
