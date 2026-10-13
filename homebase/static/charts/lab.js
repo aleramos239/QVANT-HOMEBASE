@@ -340,21 +340,34 @@ async function showRunOnChart(rid, focus = null) {
   shownRid = null;
   return false;
 }
-/* Coming back to the app (the chart service socket dropped while it slept, and every chart was subscribed again) the executions on the
-   chart are gone: the same run is asked for once more. Same run, same stepper position; nothing new is run or read. */
+/* Coming back to the app, the chart service socket has often dropped and every chart is subscribed again: the chart then holds
+   only the newest bars, so the run's executions are out of view (they are still loaded). The page checks, and when the run
+   is open but none of its trades is in the bars, it asks the tester for the run again if it was lost, then jumps back to the trade
+   the stepper is on. Same run, same position; nothing new is run or read. */
 let reshowAt = 0;
 async function reshow() {
   if (!shownRid || !RUN_ID.test(String(shownRid)) || Date.now() - reshowAt < 1500) return;
   reshowAt = Date.now();
-  const keep = ti, rid = shownRid;
-  for (let k = 0; k < 6 && shownRid === rid; k++) {
-    const o = await send('POST', '/api/tester/show', { run_id: rid });
-    if (o.ok && o.json.pages) break;
-    await new Promise((res) => setTimeout(res, 1200));
+  const rid = shownRid, U = window.HBTesterUI, L = window.HBTesterLayer, cell = window.HBCharts && window.HBCharts.cells && window.HBCharts.cells[0];
+  if (!U || !L || !cell) return;
+  if (!U.bundle || !U.bundle.run || U.bundle.run.id !== rid) {          // the tester let go of it: ask for it again
+    for (let k = 0; k < 6 && shownRid === rid; k++) {
+      const o = await send('POST', '/api/tester/show', { run_id: rid });
+      if (o.ok && o.json.pages) break;
+      await new Promise((res) => setTimeout(res, 1200));
+    }
   }
-  if (shownRid === rid && keep != null) { ti = keep; paintNav(); }
+  for (let k = 0; k < 8 && shownRid === rid; k++) {                       // the bars are on their way back
+    await new Promise((res) => setTimeout(res, 700));
+    const tr = navTrades();
+    if (!tr.length || !cell.bars || !cell.bars.length || !U.bundle) continue;
+    if (L.tradesInRange(U.bundle.trades, cell.bars, cell.barMs()).length) return;     // they are in view: nothing to do
+    const i = ti != null ? Math.min(ti, tr.length - 1) : tr.length - 1;
+    await jumpTo(i);
+    return;
+  }
 }
-window.addEventListener('hb:chart-reconnect', () => setTimeout(reshow, 700));
+window.addEventListener('hb:chart-reconnect', () => setTimeout(reshow, 500));
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') setTimeout(reshow, 900); });
 
 /* ONE chart: the Lab never shows a grid of them. (The grid menu is the chart shell's own; its button is hidden here.) */
