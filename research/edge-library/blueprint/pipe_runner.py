@@ -408,7 +408,11 @@ def listing(root=None) -> dict:
     text += ["", f"{n} idea{'s' * (n != 1)}" + (": " + ", ".join(f"{s['counts'][k]} {k}" for k in PS.STATUS if s["counts"].get(k)) if n else ""),
              "runner: " + (f"working (pid {s['pid']})" if s["running"] and s["pid"] else "working" if s["running"] else "not working")
              + " · queue: " + ("paused" if s["paused"] else "not paused")]
-    return api.result("pipe list", **s, text="\n".join(text),
+    from . import pipe_rules as PRL            # the pipeline in use rides along, so a page polling `pipe list` needs no second command
+    now = PRL.active()
+    prof = {"profile": now, "label": PRL.label(now), "settings": PRL.settings(now), "editable": now == "wr",
+            "options": [{"id": k, "label": v[0]} for k, v in PRL.PROFILES.items()]}
+    return api.result("pipe list", **s, pipeline=prof, text="\n".join(text),
                       next="" if s["running"] or not any(x.get("status") in PS.LIVE for x in s["ideas"]) else "bp.py pipe start runs the queue.")
 
 

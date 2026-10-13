@@ -93,8 +93,8 @@ def asked(fake) -> list:
 
 def test_the_queue_the_book_and_the_guide_in_one_answer(c, fake, proot):
     r = c.get("/api/tester/pipeline")
-    assert r.status_code == 200 and list(r.json()) == ["runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
-    assert r.json() == {"runner": {"running": False, "paused": False}, "counts": dict.fromkeys(LABELS, 0), "ideas": [], "book": [],
+    assert r.status_code == 200 and list(r.json()) == ["profile", "runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
+    assert r.json() == {"profile": None, "runner": {"running": False, "paused": False}, "counts": dict.fromkeys(LABELS, 0), "ideas": [], "book": [],
                         "stages": pipeline_tools.STAGES, **NO_PARTS}, "a toolkit whose `blocks` carries no block list: empty lists, and the Queue all the same"
     assert asked(fake) == ["list", "book"] and not proot.exists(), "two commands of the pipeline, and a look makes no folder"
     assert [x["argv"][0] for x in fake.calls()] == ["pipe", "pipe", "blocks"]
@@ -350,7 +350,7 @@ def test_the_rules_the_indicators_and_the_sessions_off_one_blocks_call_for_the_l
     now = [1000.0]
     monkeypatch.setattr(tester_api, "pipe_clock", lambda: now[0])
     got = c.get("/api/tester/pipeline").json()
-    assert list(got) == ["runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
+    assert list(got) == ["profile", "runner", "counts", "ideas", "book", "stages", "rules", "indicators", "sessions"]
     assert [r["name"] for r in got["rules"]] == ["fvg", "donchian", "supertrend"], "a rule that does not run yet is not sent"
     fvg = got["rules"][0]
     assert list(fvg) == ["name", "words", "markets", "sessions", "bars", "settings"], "only what the form needs"
@@ -412,3 +412,16 @@ def test_every_text_of_an_idea_is_plain_for_the_page(c, fake, proot):
     assert c.get("/api/tester/pipeline").json()["ideas"][0]["why"] == "it waits"
     assert run(c, "approve", name="orb_done").json() == {"ok": True, "text": "orb_done is in the Book."}
     assert c.get("/api/tester/pipeline").json()["book"][0]["stages"] == {"6": {"passed": True, "result": "proven on history", "text": "PROVEN"}}
+
+
+# ---------------------------------------------------------------- the pipeline in use + its numbers
+
+def test_the_page_picks_the_pipeline_and_changes_the_wr_numbers(c, fake, proot):
+    r = c.post("/api/tester/pipeline/profile", json={"profile": "nonsense"})
+    assert r.status_code == 200 and r.json()["ok"] is False
+    r = c.post("/api/tester/pipeline/settings", json={"settings": {}})
+    assert r.json()["ok"] is False
+    r = c.post("/api/tester/pipeline/settings", json={"settings": {"win_rate": True}})
+    assert r.json()["ok"] is False
+    asked_cmds = [x["argv"][:3] for x in fake.calls()]
+    assert not any(a[:2] == ["pipe", "profile"] or a[:2] == ["pipe", "settings"] for a in asked_cmds)

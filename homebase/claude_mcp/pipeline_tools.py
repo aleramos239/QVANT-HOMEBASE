@@ -380,9 +380,30 @@ class PipelineMixin:
     def pipeline_state(self) -> dict:
         """Not a tool: the Lab's Queue, Book and Guide in one answer (`pipe list` and `pipe book`, two commands)."""
         got, book = self._pipe("list", timeout=self._pipe_look_s), self._pipe("book", timeout=self._pipe_look_s)
-        return {"runner": {"running": bool(got.get("running")), "paused": bool(got.get("paused"))},
+        profile = got.get("pipeline") if isinstance(got.get("pipeline"), dict) else None   # LIVE / WR and the WR numbers; an older toolkit has none
+        return {"profile": profile, "runner": {"running": bool(got.get("running")), "paused": bool(got.get("paused"))},
                 "counts": counts(got.get("ideas")), "ideas": [_plain_row(s) for s in rows(got.get("ideas"))],
                 "book": [_plain_book(c) for c in book.get("book") or []], "stages": STAGES}
+
+    def pipeline_set_profile(self, profile) -> str:
+        """Not a tool: choose the pipeline in use (`pipe profile live|wr`) -> one plain sentence."""
+        if profile not in ("live", "wr"):
+            raise ToolError("profile: live or wr")
+        return plain(self._pipe("profile", profile).get("text"))
+
+    def pipeline_set_settings(self, settings) -> str:
+        """Not a tool: change the WR PIPELINE's numbers (`pipe settings --set k=v ...`) -> one plain sentence."""
+        if not isinstance(settings, dict) or not settings:
+            raise ToolError("settings: an object of numbers")
+        sets = []
+        for k, v in settings.items():
+            if k == "risk_usd" and isinstance(v, list) and len(v) == 2:
+                sets.append(f"--set=risk_usd={v[0]}-{v[1]}")
+            elif isinstance(v, (int, float)) and not isinstance(v, bool) and isinstance(k, str) and k.replace("_", "").isalnum():
+                sets.append(f"--set={k}={v}")
+            else:
+                raise ToolError(f"{k}: a number")
+        return plain(self._pipe("settings", *sets).get("text"))
 
     def pipeline_idea(self, name) -> dict:
         """Not a tool: one idea for its page (`pipe show`): its card as it was added, its state with the page's label,

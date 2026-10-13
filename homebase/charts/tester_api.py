@@ -343,7 +343,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def brief(meta: dict | None) -> dict | None:
         if meta is None:
             return None
-        keep = ("class", "name", "root", "session_window", "bar_minutes", "session_independent", "doc")
+        keep = ("class", "name", "root", "session_window", "bar_minutes", "bar_sizes", "session_independent", "doc")
         return {**{k: meta[k] for k in keep if k in meta}, "inputs": meta.get("inputs") or []}
 
     draft_rows: list[dict] = [{}]      # [{(file, mtime_ns, size): its row}] as of the last listing
@@ -615,6 +615,36 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(503, pipe_cache["error"])
             return pipe_cache["body"]
 
+    @r.post("/pipeline/profile")
+    def pipeline_profile(request: Request, body: dict):
+        """Choose the pipeline in use: {profile: "live" | "wr"} (LIVE PIPELINE for live accounts, WR PIPELINE for win rate)."""
+        write_ok(request)
+        json_body(request)
+        try:
+            return {"ok": True, "text": box.pipeline_set_profile(body.get("profile"))}
+        except blueprint_tools.Refused as e:
+            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
+        except ToolError as e:
+            return {"ok": False, "text": str(e)}
+        finally:
+            with pipe_lock:
+                pipe_cache["at"] = None
+
+    @r.post("/pipeline/settings")
+    def pipeline_settings(request: Request, body: dict):
+        """Change the WR PIPELINE's numbers: {settings: {win_rate, month_floor, months, month_trades, max_target_r, risk_usd: [lo, hi]}}."""
+        write_ok(request)
+        json_body(request)
+        try:
+            return {"ok": True, "text": box.pipeline_set_settings(body.get("settings"))}
+        except blueprint_tools.Refused as e:
+            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
+        except ToolError as e:
+            return {"ok": False, "text": str(e)}
+        finally:
+            with pipe_lock:
+                pipe_cache["at"] = None
+
     @r.get("/pipeline/idea/{name}")
     def pipeline_idea(name: str):
         if not pipeline_tools.NAME_RE.fullmatch(name):
@@ -851,6 +881,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise run_first
         if req.get("draft_sha256") != hashlib.sha256(source.encode("utf-8")).hexdigest():
             raise HTTPException(409, "The code changed since this backtest. Run it again, then promote.")
+        # The Desk runs the strategy's own on_bar / on_time only: the trade rules (run controls) and a print-by-print
+        # `scan` entry are tester-side, so a run that used either is not what would run there (2026-10-12).
+        if req.get("controls"):
+            raise HTTPException(409, "This backtest used Trade rules (" + ", ".join(sorted(req["controls"])) + "), which the Desk does "
+                                "not apply. Run it again with them off, then promote.")
+        ins = req.get("inputs") if isinstance(req.get("inputs"), dict) else {}
+        if ins.get("trigger") == "instant" and re.search(r"^\s*def scan\(", source, re.M):
+            raise HTTPException(409, "Entry is set to instant, which the Desk does not run (it acts on bar closes). "
+                                "Run it again with Entry = bar_close, then promote.")
         try:
             meta = draftstore.static_meta(source)
         except ValueError as e:

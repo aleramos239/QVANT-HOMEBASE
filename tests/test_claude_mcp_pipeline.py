@@ -640,8 +640,8 @@ def test_what_the_labs_pages_read(fake, proot):
     """Not tools: the Queue / Book / Guide answer and one idea's page, as the routes hand them on."""
     b = box()
     got = b.pipeline_state()
-    assert list(got) == ["runner", "counts", "ideas", "book", "stages"] and [c["argv"][:2] for c in fake.calls()] == [["pipe", "list"], ["pipe", "book"]]
-    assert got == {"runner": {"running": False, "paused": False}, "counts": dict.fromkeys(LABELS, 0), "ideas": [], "book": [], "stages": pipeline_tools.STAGES}
+    assert list(got) == ["profile", "runner", "counts", "ideas", "book", "stages"] and [c["argv"][:2] for c in fake.calls()] == [["pipe", "list"], ["pipe", "book"]]
+    assert got == {"profile": None, "runner": {"running": False, "paused": False}, "counts": dict.fromkeys(LABELS, 0), "ideas": [], "book": [], "stages": pipeline_tools.STAGES}
     b.call("pipeline_add", {"card": CARD})
     for i, status in enumerate(STATUSES[2:]):
         seed(proot, f"orb_{i}", status, stopped_at=1 if status in ("stopped", "code_problem") else None)
@@ -796,7 +796,7 @@ def test_the_real_toolkit_answers_these_tools_as_the_fake_does(monkeypatch, proo
             f"Refused (pipeline {decision}): fvg_open is queued: only an idea that passed every stage and waits for the owner (awaiting_owner) is {word}",
             "Nothing was run."]
     got = b.pipeline_state()
-    assert list(got) == ["runner", "counts", "ideas", "book", "stages"] and got["runner"] == {"running": False, "paused": False} and got["book"] == []
+    assert list(got) == ["profile", "runner", "counts", "ideas", "book", "stages"] and got["runner"] == {"running": False, "paused": False} and got["book"] == []
     assert got["counts"] == {**dict.fromkeys(LABELS, 0), "Waiting": 2} and [(r["name"], r["label"]) for r in got["ideas"]] == [("fvg_pm", "Waiting"), ("fvg_open", "Waiting")]
     assert set(got["ideas"][0]) == {"name", "status", "stage", "stopped_at", "why", "tries", "picked", "added_utc", "updated_utc", "source", "family", "label"}
     one = b.pipeline_idea(NAME)

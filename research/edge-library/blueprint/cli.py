@@ -246,7 +246,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,mix,curve,executions,profile}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,mix,curve,executions,profile,settings}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -260,6 +260,7 @@ def _parser() -> _Parser:
         ("mix", "the MIX on the build days: the ideas whose picked box fails only steadiness rows, read together on the pipeline's own rows (build days only; never the unseen days)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("profile", "the pipeline in use: LIVE PIPELINE (live accounts) or WR PIPELINE (high win rate, low R:R); `profile wr` chooses, no word shows"),
+        ("settings", "the WR PIPELINE's win-rate numbers; --set key=value (repeat) changes them (win_rate, month_floor, months, month_trades, max_target_r, risk_usd=500-800)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
@@ -281,6 +282,7 @@ def _parser() -> _Parser:
     for name in ("show", "approve", "refuse", "rerun", "pick", "curve", "executions"):
         pipes[name].add_argument("name", help="the pipeline card's name")
     pipes["profile"].add_argument("which", nargs="?", choices=["live", "wr"], help="the pipeline to use from now on (the runner takes it when it next starts)")
+    pipes["settings"].add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="a number to change (repeat); risk_usd=500-800")
     pipes["pick"].add_argument("cell", nargs="?", help="the box's id, e.g. k0p4_pts45-r2 (not with --clear)")
     pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
@@ -415,9 +417,25 @@ def _pipe(a) -> dict:
         if a.which:
             PR.use(a.which)
         now = PR.active()
-        return {"ok": True, "command": "pipe profile", "profile": now, "label": PR.label(now),
+        return {"ok": True, "command": "pipe profile", "profile": now, "label": PR.label(now), "settings": PR.settings(now), "editable": now == "wr",
+                "options": [{"id": k, "label": v[0]} for k, v in PR.PROFILES.items()],
                 "text": f"{PR.label(now)} is in use" + (" (chosen now: restart the runner with `pipe pause` / `pipe start` for it to take it)" if a.which else "")
                         + ". Choose with: bp.py pipe profile live | wr. Profiles: " + ", ".join(f"{k} = {v[0]}" for k, v in PR.PROFILES.items()) + "."}
+    if a.sub == "settings":                         # the WR PIPELINE's numbers (pipe_rules.set_settings)
+        from . import pipe_rules as PR
+        from . import rules as RL
+        ch = {}
+        for kv in a.set:
+            k, _, v = kv.partition("=")
+            try:
+                ch[k.strip()] = [float(x) for x in v.split("-")] if k.strip() == "risk_usd" else float(v)
+            except ValueError:
+                raise J.Refuse(f"{kv!r}: KEY=NUMBER (risk_usd=500-800)") from None
+        try:
+            now = PR.set_settings(ch) if ch else PR.settings("wr")
+        except RL.RuleError as e:
+            raise J.Refuse(str(e)) from None
+        return {"ok": True, "command": "pipe settings", "settings": now, "text": "WR PIPELINE numbers: " + ", ".join(f"{k} {v}" for k, v in now.items() if v is not None)}
     if a.sub == "mix":                              # the mix on the build days (pipe_mix): it reads stores, runs nothing, never opens the unseen days
         from . import pipe_mix
         return pipe_mix.command(a.root, market=getattr(a, "market", None), names=[x for x in (getattr(a, "names", None) or "").split(",") if x] or None,

@@ -99,7 +99,7 @@ def _file() -> Path:
 
 
 @lru_cache(maxsize=None)
-def _load(path: str) -> dict:
+def _load(path: str, stamp: int = 0) -> dict:
     p = json.loads(Path(path).read_text(encoding="utf-8"))
     bad = check(p)
     if bad:
@@ -121,7 +121,12 @@ def _load(path: str) -> dict:
 
 
 def _all() -> dict:
-    return _load(str(_file()))
+    f = _file()
+    try:
+        stamp = f.stat().st_mtime_ns          # a file changed on disk (the Lab's settings) is read again by a running process
+    except OSError:
+        stamp = 0
+    return _load(str(f), stamp)
 
 
 _all.cache_clear = _load.cache_clear               # (the tests clear the cache after pointing FILE elsewhere)
@@ -173,3 +178,39 @@ def floor(root: str, part: float) -> float:
     """`part` of the market's cost floor (line 2.2), in dollars a trade. A market without a floor: R.RuleError."""
     _all()
     return R.need("2.2", root) * part
+
+
+# ---- the win-rate settings the Lab page edits (owner, 2026-10-13): numbers of the WR PIPELINE's `winlane` block only; LIVE is never written from a page
+SETTINGS = {"win_rate": (0.5, 0.95), "month_floor": (0.4, 0.9), "months": (0.5, 1.0), "month_trades": (3, 60), "max_target_r": (0.25, 3.0)}
+
+
+def settings(profile: str | None = None) -> dict:
+    """The numbers a page may show (and, for the WR profile, change): {key: value}, risk_usd as [low, high]."""
+    p = profile or active()
+    f = R.T / PROFILES[p][1]
+    lane = (json.loads(f.read_text(encoding="utf-8")).get("winlane") or {})
+    return {k: lane.get(k) for k in (*SETTINGS, "risk_usd")}
+
+
+def set_settings(changes: dict, profile: str = "wr") -> dict:
+    """Write `changes` into the winlane block of the WR file. Only SETTINGS keys and risk_usd; each inside its range; LIVE: refused. -> the new settings."""
+    if profile != "wr":
+        raise R.RuleError("only the WR PIPELINE's numbers are changed from here; LIVE PIPELINE is edited in its file with the owner's word")
+    f = R.T / PROFILES[profile][1]
+    d = json.loads(f.read_text(encoding="utf-8"))
+    lane = d.setdefault("winlane", {})
+    for k, v in changes.items():
+        if k == "risk_usd":
+            if not (isinstance(v, (list, tuple)) and len(v) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v) and 0 < v[0] <= v[1] <= 5000):
+                raise R.RuleError("risk_usd: [low, high] dollars, 0 < low <= high <= 5000")
+            lane[k] = [int(v[0]), int(v[1])]
+            continue
+        if k not in SETTINGS:
+            raise R.RuleError(f"{k}: not a setting (one of {', '.join(SETTINGS)}, risk_usd)")
+        lo, hi = SETTINGS[k]
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
+            raise R.RuleError(f"{k}: a number from {lo:g} to {hi:g}")
+        lane[k] = int(v) if k == "month_trades" else float(v)
+    f.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
+    _all.cache_clear()
+    return settings(profile)
