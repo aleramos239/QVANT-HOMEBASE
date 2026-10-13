@@ -305,7 +305,7 @@ async function showRunOnChart(rid, focus = null) {
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(rid)}/bundle`);     // the run becomes the open result: the chart's own panel (trade list, stepper, report), not a bare chart
   if (bd.ok && bd.json) {
     const trades = (bd.json.trades || []).length;
-    S.run = { key: S.cur, rid, st: { status: 'done' }, bundle: bd.json, strategy: (bd.json.run && bd.json.run.strategy) || '' };
+    S.run = { key: `pl:${rid}`, pipe: true, rid, st: { status: 'done' }, bundle: bd.json, strategy: (bd.json.run && bd.json.run.strategy) || '' };   // a pipeline run has no open script: its own key
     ti = trades ? trades - 1 : null;
     paintRes();
   }
@@ -2048,10 +2048,10 @@ function deskOffDialog() {
 function paintRes() {
   const el = $('#labRes .in');
   if (!el) return;
-  const b = buf(), top = el.scrollTop;
+  const b = (S.run && S.run.pipe ? { key: S.run.key, kind: 'pipe', name: S.run.strategy, id: S.run.strategy } : null) || buf(), top = el.scrollTop;
   paintNav();
   if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
-  const r = S.run && S.run.key === b.key ? S.run : null, settings = settingsHtml(b);
+  const r = S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
   let main = '', settingsDone = false;
   if (r && !r.bundle && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
@@ -2076,7 +2076,7 @@ function paintRes() {
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
-        <button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}</div>${deskNote(b)}`;
+        ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
     settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
