@@ -246,7 +246,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,portfolio,mix,curve,executions,profile,settings}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,portfolio,mix,curve,executions,profile,settings}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -256,6 +256,7 @@ def _parser() -> _Parser:
         ("pick", "the owner names the box stage 1 picks (one of the boxes at the floor), with his reason; --clear takes it away"),
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
+        ("refine", "a near miss's next version: no --move lists what it missed and the moves; --move KIND=VALUE --why=TEXT files ONE child card (regime, indicator, days, window, sides)"),
         ("portfolio", "stage 8: the best mix of the book's strategies for each account, its odds against the portfolio's bar, what is missing (runs nothing)"),
         ("mix", "the MIX on the build days: the ideas whose picked box fails only steadiness rows, read together on the pipeline's own rows (build days only; never the unseen days)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
@@ -279,6 +280,10 @@ def _parser() -> _Parser:
         x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     pipes["add"].add_argument("--spec", metavar="-|FILE", help="the pipeline card as JSON: - = on stdin, else a file")
     pipes["add"].add_argument("--inbox", action="store_true", help="the card goes before the queued ones")
+    pipes["refine"].add_argument("name", help="the near miss to refine")
+    pipes["refine"].add_argument("--move", action="append", default=[], metavar="KIND=VALUE", help="ONE change: regime=er, indicator=rsi, days=nonews, window=09:30-11:30, sides=long")
+    pipes["refine"].add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="fine-tune a gate: g_n, g_m, g_s, g_lvl, g_side=with|against")
+    pipes["refine"].add_argument("--why", metavar="TEXT", help="the reason for this one change, 8 words or more (written before the run)")
     for name in ("show", "approve", "refuse", "rerun", "pick", "curve", "executions"):
         pipes[name].add_argument("name", help="the pipeline card's name")
     pipes["profile"].add_argument("which", nargs="?", choices=["live", "wr"], help="the pipeline to use from now on (the runner takes it when it next starts)")
@@ -436,6 +441,9 @@ def _pipe(a) -> dict:
         except RL.RuleError as e:
             raise J.Refuse(str(e)) from None
         return {"ok": True, "command": "pipe settings", "settings": now, "text": "WR PIPELINE numbers: " + ", ".join(f"{k} {v}" for k, v in now.items() if v is not None)}
+    if a.sub == "refine":                           # a near miss's next version (pipe_refine): reads stores, files one child card, runs nothing
+        from . import pipe_refine
+        return pipe_refine.refine(a.name, a.root, moves=a.move, sets=a.set, why=a.why)
     if a.sub == "mix":                              # the mix on the build days (pipe_mix): it reads stores, runs nothing, never opens the unseen days
         from . import pipe_mix
         return pipe_mix.command(a.root, market=getattr(a, "market", None), names=[x for x in (getattr(a, "names", None) or "").split(",") if x] or None,

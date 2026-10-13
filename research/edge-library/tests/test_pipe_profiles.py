@@ -26,7 +26,7 @@ def test_wr_asks_the_lane_on_every_card_with_a_low_target_and_shows_eval_odds(mo
     P._all.cache_clear()
     assert P.active() == "wr" and P.label() == "WR PIPELINE"
     assert P.winlane("nq_donch_first_nyam_slow_a5-NQ-tf5") == "ask" and P.winlane() == "ask"
-    assert P.need("winlane", "max_target_r") == 0.75 and P.need("winlane", "risk_usd") == [500, 800]
+    assert P.need("winlane", "max_target_r") == 1.0 and P.need("winlane", "risk_usd") == [500, 800]
 
 
 def test_use_writes_the_state_file_and_the_environment_wins(monkeypatch):

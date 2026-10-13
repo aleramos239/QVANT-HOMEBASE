@@ -54,7 +54,7 @@ def test_the_shipped_lane_asks_on_every_card_with_the_owners_numbers_and_off_pri
     monkeypatch.setenv("HB_PIPELINE", "wr")                                                # (the WR PIPELINE's file, templates/pipeline_wr.json)
     P._all.cache_clear()
     keep = {k: v for k, v in P.need("winlane").items() if k != "_about"}                # (a nested note is part of the level)
-    assert keep == {"mode": "ask", "cards": [], "max_target_r": 0.75, "risk_usd": [500, 800], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
+    assert keep == {"mode": "ask", "cards": [], "max_target_r": 1.0, "risk_usd": [500, 800], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
     for unit in ("nq_ib_break_nyam_wl_a5-NQ-tf5", "nq_donch_first_nyam_slow_a5-NQ-tf5", None):
         assert P.winlane(unit) == "ask"                                                   # no `cards` = every card (owner, 2026-10-13)
     lane("off")
