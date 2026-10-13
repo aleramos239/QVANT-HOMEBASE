@@ -309,7 +309,7 @@ async function showRunOnChart(rid, focus = null) {
     ti = trades ? trades - 1 : null;
     paintRes();
   }
-  setReport(true);
+  setReport(false);                 // the chart with its stepper, big; the Strategy Tester report is one toggle away
   soloChart();
   shownRid = rid;
   paintNav();
