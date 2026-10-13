@@ -284,7 +284,7 @@ test('the pipeline pages talk to five pipeline routes only, and post nothing but
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
   // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
   assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
-    '/api/tester/pipeline/idea/', '/api/tester/pipeline/run']);
+    '/api/tester/pipeline/idea/', '/api/tester/pipeline/profile', '/api/tester/pipeline/run', '/api/tester/pipeline/settings']);
   // 2026-10-10 (the owner): watch-only is gone -- any strategy on the Desk can run live; the Book only reads, and says "On the Desk" by the Lab's own list
   assert.doesNotMatch(LAB, /\/api\/tester\/watch|watchDo|plWatch|loadWatch|plunwatch|plpromote/, 'no watch list, no promote-from-the-Book');
   assert.match(LAB, /S\.desk && S\.desk\.has\(card\.name\)/, 'the Book row says On the Desk when a promoted Lab strategy of that name is there');

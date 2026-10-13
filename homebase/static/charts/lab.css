@@ -648,3 +648,28 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .pl-set input { width: 84px; font: inherit; padding: 4px 6px; text-align: right; }
 .pl-set i { font-style: normal; color: var(--pl-ink2); min-width: 14px; }
 .pl-set-go { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-top: 4px; }
+
+/* ---- All metrics popup ---- */
+.lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+.am-top { display: flex; align-items: center; justify-content: space-between; }
+.am-top h2 { margin: 0; }
+.am-sub { margin: 4px 0 12px !important; font-size: var(--hb-fs-sm) !important; }
+.am-bar { display: flex; flex-wrap: wrap; gap: 10px 18px; margin-bottom: 12px; }
+.am-g { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.am-g > span { font-size: var(--hb-fs-sm); color: var(--hb-fg2); margin-right: 4px; }
+.am-c { height: 26px; padding: 0 10px; border: 0; border-radius: 13px; background: var(--hb-fill); color: var(--hb-fg2); font-size: var(--hb-fs-sm); cursor: pointer; }
+.am-c.on { background: var(--hb-accent); color: var(--hb-bg); }
+.am-adj { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; padding: 12px; margin-bottom: 12px; border-radius: 14px; background: var(--hb-fill); }
+.am-adj[hidden] { display: none; }
+.am-adj fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--hb-fs-sm); }
+.am-adj legend { font-weight: 600; padding: 0; margin-bottom: 4px; }
+.am-adj input { width: auto; height: auto; }
+.am-adjb { grid-column: 1 / -1; }
+.am-t { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: var(--hb-fs-ui); font-variant-numeric: tabular-nums; }
+.am-t th, .am-t td { padding: 6px 8px; text-align: right; border-bottom: .5px solid var(--hb-hair); }
+.am-t th:first-child { text-align: left; font-weight: 400; }
+.am-t thead th { font-weight: 600; color: var(--hb-fg2); font-size: var(--hb-fs-sm); }
+.am-t thead th:first-child { color: var(--hb-fg); font-weight: 600; }
+.am-t td.up { color: var(--up); } .am-t td.dn { color: var(--down); } .am-t td.mu { color: var(--hb-fg2); }
+.am-t small { color: var(--hb-fg2); font-weight: 400; }
+.am-note { font-size: var(--hb-fs-sm) !important; color: var(--hb-fg2); }

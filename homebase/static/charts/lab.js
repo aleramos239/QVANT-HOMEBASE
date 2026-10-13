@@ -821,6 +821,80 @@ function reviewDialog() {
   });
 }
 
+/* ---- every metric of the open run: a popup. Build and unseen days side by side, by year, categories and rows picked by you ---- */
+const AM = window.HBAllMetrics;
+const AMK = 'hb_lab_am';
+const amDefault = () => ({ cols: ['build', 'unseen', 'all'], year: '', side: '', hideCat: [], hide: [], view: 'metrics' });
+function amLoad() { try { return { ...amDefault(), ...(JSON.parse(localStorage.getItem(AMK)) || {}) }; } catch (_) { return amDefault(); } }
+function amSave(st) { try { localStorage.setItem(AMK, JSON.stringify(st)); } catch (_) { /* private mode: not kept */ } }
+function allMetricsDialog() {
+  const r = S.run && S.run.bundle ? S.run : null;
+  if (!r || !AM) return;
+  const trades = (r.bundle.trades || []).filter((t) => t && t.date), cap = r.bundle.run.capital || 0, st = amLoad();
+  const yrs = AM.years(trades), scopeName = Object.fromEntries(AM.SCOPES);
+  const d = dialog('');
+  d.classList.add('am-dlg');
+  const cell = (unit, v, tone) => `<td class="${tone || ''}">${esc(AM.format(unit, v))}</td>`;
+  const toneOf = (unit, v) => (unit === 'usd' && v != null ? (v > 0 ? 'up' : v < 0 ? 'dn' : '') : '');
+  function draw() {
+    const cols = AM.SCOPES.map(([k]) => k).filter((k) => st.cols.includes(k));
+    const sets = cols.map((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap));
+    const none = (k, i) => k === 'unseen' && !sets[i].trades;
+    const head = `<tr><th></th>${cols.map((k) => `<th>${esc(scopeName[k])}</th>`).join('')}</tr>`;
+    let body = '';
+    if (st.view === 'year') {
+      const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
+      const lab = { trades: 'Trades', net: 'Net', win_rate: 'Win rate', profit_factor: 'Profit factor', expectancy: 'Avg trade', max_dd: 'Max drawdown', sharpe: 'Sharpe', month_wr: 'Good months' };
+      body = `<table class="am-t am-y"><thead><tr><th>Year</th>${keys.map(([k]) => `<th>${lab[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((y) =>
+        `<tr><th>${esc(y.year)}${y.unseen ? ' <small>has unseen days</small>' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
+        <p class="am-note">Each row is the calendar year's own trades. 2025 straddles the cut: its build days end 2025-06-30, its unseen days start 2025-07-01 (choose a year above to see them apart).</p>`;
+    } else {
+      body = AM.CATS.filter(([id]) => !st.hideCat.includes(id)).map(([id, name, rows]) => {
+        const shown = rows.filter(([m]) => !st.hide.includes(m));
+        if (!shown.length) return '';
+        return `<table class="am-t"><thead><tr><th>${esc(name)}</th>${cols.map((k) => `<th>${esc(scopeName[k])}</th>`).join('')}</tr></thead><tbody>${shown.map(([m, label, unit, hint]) =>
+          `<tr><th title="${esc(hint)}">${esc(label)}</th>${cols.map((k, i) => none(k, i) ? '<td class="mu">not read</td>' : cell(unit, sets[i][m], toneOf(unit, sets[i][m]))).join('')}</tr>`).join('')}</tbody></table>`;
+      }).join('');
+    }
+    const chip = (attr, val, text, on) => `<button class="am-c${on ? ' on' : ''}" data-${attr}="${esc(val)}">${esc(text)}</button>`;
+    const sets2 = AM.CATS.map(([id, name, rows]) => `<fieldset><legend><label><input type="checkbox" data-cat="${id}"${st.hideCat.includes(id) ? '' : ' checked'}> ${esc(name)}</label></legend>${rows.map(([m, label]) =>
+      `<label><input type="checkbox" data-m="${m}"${st.hide.includes(m) ? '' : ' checked'}> ${esc(label)}</label>`).join('')}</fieldset>`).join('');
+    d.innerHTML = `<div class="am-top"><h2>All metrics</h2><button class="btn btn-outline btn-sm" data-x="close">Close</button></div>
+      <p class="am-sub">${esc(r.cellLabel || r.strategy || '')} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
+      <div class="am-bar">
+        <div class="am-g"><span>Days</span>${AM.SCOPES.map(([k, n]) => chip('col', k, n, st.cols.includes(k))).join('')}</div>
+        <div class="am-g"><span>Year</span>${chip('year', '', 'All', !st.year)}${yrs.map((y) => chip('year', y, y, st.year === y)).join('')}</div>
+        <div class="am-g"><span>Side</span>${chip('side', '', 'Both', !st.side)}${chip('side', 'long', 'Long', st.side === 'long')}${chip('side', 'short', 'Short', st.side === 'short')}</div>
+        <div class="am-g"><span>Show</span>${chip('view', 'metrics', 'Every metric', st.view === 'metrics')}${chip('view', 'year', 'Year by year', st.view === 'year')}<button class="am-c" data-act2="adj">Choose rows</button></div>
+      </div>
+      <div class="am-adj" hidden>${sets2}<div class="am-adjb"><button class="btn btn-outline btn-sm" data-act2="all">Show all</button></div></div>
+      <div class="am-body">${body || '<p class="am-note">Every category is hidden. Choose rows to bring some back.</p>'}</div>`;
+  }
+  draw();
+  let adjOpen = false;
+  d.addEventListener('click', (e) => {
+    const t = e.target.closest('button');
+    if (!t) return;
+    if (t.dataset.x === 'close') return closeDialog();
+    const ds = t.dataset;
+    if (ds.col != null) { st.cols = st.cols.includes(ds.col) ? st.cols.filter((c) => c !== ds.col) : [...st.cols, ds.col]; if (!st.cols.length) st.cols = [ds.col]; }
+    else if (ds.year != null) st.year = ds.year;
+    else if (ds.side != null) st.side = ds.side;
+    else if (ds.view != null) st.view = ds.view;
+    else if (ds.act2 === 'adj') { adjOpen = !adjOpen; $('.am-adj', d).hidden = !adjOpen; return; }
+    else if (ds.act2 === 'all') { st.hide = []; st.hideCat = []; }
+    else return;
+    amSave(st); draw(); $('.am-adj', d).hidden = !adjOpen;
+  });
+  d.addEventListener('change', (e) => {
+    const i = e.target;
+    if (i.dataset.cat) st.hideCat = i.checked ? st.hideCat.filter((c) => c !== i.dataset.cat) : [...st.hideCat, i.dataset.cat];
+    else if (i.dataset.m) st.hide = i.checked ? st.hide.filter((c) => c !== i.dataset.m) : [...st.hide, i.dataset.m];
+    else return;
+    amSave(st); draw(); $('.am-adj', d).hidden = !adjOpen;
+  });
+}
+
 /* Delete one strategy or several: one sheet, then one request per name, one after the other. A refusal is the server's own
    sentence. The files go to the trash folder beside the strategies (the server moves them; nothing is unlinked). */
 function deleteDialog(name) { deleteStrategies([name]); }
@@ -2075,6 +2149,7 @@ function paintRes() {
       <div class="rs-group"><div class="rs-kv"><span>Average trade</span><b>${esc(by('Avg trade').value)}</b></div><div class="rs-kv"><span>Average win : loss</span><b>${esc(by('Avg win : loss').value.replace(/^RR /, '').replace(':', ' : '))}</b></div><div class="rs-kv"><span>Max drawdown</span><b>${esc(by('Max drawdown').value)}</b></div></div>
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
+        <button class="rs-row" data-act="allmetrics"><span>All metrics</span><span>›</span></button>
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
         ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
     settingsDone = true;
@@ -2103,6 +2178,7 @@ function act(name, el) {
   else if (name === 'heatcell') heatCell(Number(el.dataset.i));
   else if (name === 'show') showOnChart(false);
   else if (name === 'report') { if (root.dataset.report === '1' && P.chart) setReport(false); else showOnChart(true); }
+  else if (name === 'allmetrics') allMetricsDialog();
   else if (name === 'review') reviewDialog();
   else if (name === 'deskgo') deskGo();
   else if (name === 'deskoff') deskOffDialog();
