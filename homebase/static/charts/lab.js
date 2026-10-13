@@ -323,7 +323,7 @@ async function showRunOnChart(rid, focus = null) {
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(rid)}/bundle`);     // the run becomes the open result: the chart's own panel (trade list, stepper, report), not a bare chart
   if (bd.ok && bd.json) {
     const trades = (bd.json.trades || []).length;
-    S.run = { key: `pl:${rid}`, pipe: true, rid, st: { status: 'done' }, bundle: bd.json, strategy: (bd.json.run && bd.json.run.strategy) || '' };   // a pipeline run has no open script: its own key
+    S.run = { key: `pl:${rid}`, pipe: true, rid, st: { status: 'done' }, bundle: bd.json, strategy: (bd.json.run && bd.json.run.strategy && (bd.json.run.strategy.id || bd.json.run.strategy)) || '', cellLabel: (bd.json.run && bd.json.run.strategy && bd.json.run.strategy.name) || '' };   // a pipeline run has no open script: its own key
     ti = trades ? trades - 1 : null;
     paintRes();
   }
@@ -885,7 +885,11 @@ function allMetricsDialog() {
   const cell = (unit, v, tone) => `<td class="${tone || ''}">${esc(AM.format(unit, v))}</td>`;
   const toneOf = (unit, v) => (unit === 'usd' && v != null ? (v > 0 ? 'up' : v < 0 ? 'dn' : '') : '');
   function draw() {
-    const cols = AM.SCOPES.map(([k]) => k).filter((k) => st.cols.includes(k));
+    let cols = AM.SCOPES.map(([k]) => k).filter((k) => st.cols.includes(k));
+    // A column with no trades (a run that only touched unseen days has no build days) is dropped when another has some,
+    // and a card never opens with no column at all.
+    const live = cols.filter((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap).trades);
+    if (live.length) cols = live; else if (!cols.length) cols = ['all'];
     const sets = cols.map((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap));
     const none = (k, i) => k === 'unseen' && !sets[i].trades;
     const head = `<tr><th></th>${cols.map((k) => `<th>${esc(scopeName[k])}</th>`).join('')}</tr>`;
@@ -904,11 +908,12 @@ function allMetricsDialog() {
           `<tr><th title="${esc(hint)}">${esc(label)}</th>${cols.map((k, i) => none(k, i) ? '<td class="mu">not read</td>' : cell(unit, sets[i][m], toneOf(unit, sets[i][m]))).join('')}</tr>`).join('')}</tbody></table>`;
       }).join('');
     }
+    if (!trades.length) body = '<p class="am-note">This run placed no trades, so there is nothing to measure. A written record draft places none itself: press Run again and it opens its saved research-engine run.</p>';
     const chip = (attr, val, text, on) => `<button class="am-c${on ? ' on' : ''}" data-${attr}="${esc(val)}">${esc(text)}</button>`;
     const sets2 = AM.CATS.map(([id, name, rows]) => `<fieldset><legend><label><input type="checkbox" data-cat="${id}"${st.hideCat.includes(id) ? '' : ' checked'}> ${esc(name)}</label></legend>${rows.map(([m, label]) =>
       `<label><input type="checkbox" data-m="${m}"${st.hide.includes(m) ? '' : ' checked'}> ${esc(label)}</label>`).join('')}</fieldset>`).join('');
     d.innerHTML = `<div class="am-head"><div class="am-top"><h2>All metrics</h2><button class="btn btn-outline btn-sm" data-x="close">Close</button></div>
-      <p class="am-sub">${esc(r.cellLabel || r.strategy || '')} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
+      <p class="am-sub">${esc(String(r.cellLabel || r.strategy || ''))} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
       <div class="am-bar">
         <div class="am-g"><span>Days</span>${AM.SCOPES.map(([k, n]) => chip('col', k, n, st.cols.includes(k))).join('')}</div>
         <div class="am-g"><span>Year</span>${chip('year', '', 'All', !st.year)}${yrs.map((y) => chip('year', y, y, st.year === y)).join('')}</div>

@@ -28,8 +28,8 @@ const CATS = [
     ['max_runup', 'Max run-up', 'usd', 'Trough to peak'], ['recovery', 'Recovery factor', 'num', 'Net / max drawdown'],
     ['dd_days', 'Longest drawdown', 'int', 'Trading days from peak until a new peak (or the end)'],
     ['ulcer', 'Ulcer index', 'num', 'Depth and length of drawdowns, in % of the peak'],
-    ['avg_mae', 'Average worst point (MAE)', 'usd', 'How far a trade went against you'], ['avg_mfe', 'Average best point (MFE)', 'usd', 'How far a trade went for you'],
-    ['worst_mae', 'Worst MAE', 'usd', ''], ['best_mfe', 'Best MFE', 'usd', ''],
+    ['avg_mae', 'Average worst point (MAE)', 'cost', 'How far a trade went against you'], ['avg_mfe', 'Average best point (MFE)', 'cost', 'How far a trade went for you'],
+    ['worst_mae', 'Worst MAE', 'cost', ''], ['best_mfe', 'Best MFE', 'cost', ''],
     ['sd_trade', 'Std deviation of a trade', 'usd', ''], ['sd_day', 'Std deviation of a day', 'usd', '']]],
   ['ratios', 'Risk-adjusted', [
     ['sharpe', 'Sharpe', 'num', 'Traded days, annualised x√252'], ['sortino', 'Sortino', 'num', 'Downside deviation only'],
@@ -120,8 +120,8 @@ function compute(trades, capital) {
   longest = Math.max(longest, dates.length - 1 - ddStart);
   o.max_dd = dd; o.max_dd_pct = ddPct; o.max_runup = runup; o.recovery = dd ? net / -dd : null; o.dd_days = longest;
   o.ulcer = Math.sqrt(ulc / n);
-  o.avg_mae = mean(trades.map((t) => t.mae_usd || 0)); o.avg_mfe = mean(trades.map((t) => t.mfe_usd || 0));
-  o.worst_mae = Math.min(...trades.map((t) => t.mae_usd || 0)); o.best_mfe = Math.max(...trades.map((t) => t.mfe_usd || 0));
+  o.avg_mae = mean(trades.map((t) => Math.abs(t.mae_usd || 0))); o.avg_mfe = mean(trades.map((t) => t.mfe_usd || 0));
+  o.worst_mae = Math.max(...trades.map((t) => Math.abs(t.mae_usd || 0))); o.best_mfe = Math.max(...trades.map((t) => t.mfe_usd || 0));
   o.sd_trade = sd(nets);
   const dv = dates.map((d) => dayNet.get(d));
   o.sd_day = sd(dv);
