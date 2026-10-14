@@ -579,6 +579,102 @@ def test_flatten_also_cancels_chart_orders_the_cache_does_not_show_yet(tmp_path)
     assert calls == [("flatten", NQC)]
 
 
+# --- one close at a time: a repeat flatten never closes the same position twice ----------------
+def flat(desk, cid):
+    return run(desk.flatten({"client_id": cid, "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+
+
+def test_a_repeat_flatten_while_the_broker_still_shows_the_old_position_sends_nothing(tmp_path):
+    """2026-10-14 PAAPEX...021: short 4, Flatten clicked 5 times in 2 s; Tradovate's position read
+    still said -4 each time, so each click sent Buy 4 and the account went long 8."""
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    assert flat(desk, "f1")["ok"] is True
+    for status in (None, "Working", "Filled"):     # unknown / on its way / filled, but not shown yet
+        a.order_status["close-1"] = status
+        r = flat(desk, f"f-{status}")
+        assert r["ok"] is False and r["refused"] is True
+        assert r["error"] == (f"the last flatten of {NQC} on A1 is not confirmed yet — the broker "
+                              "still shows -4; nothing sent, try again in a moment")
+    assert a.flattened == [NQC]                    # ONE close (Buy 4), never a second
+    ev = [e for e in journal(tmp_path) if e["event"] == "manual_refused"]
+    assert [e["action"] for e in ev] == ["flatten"] * 3
+
+
+def test_a_repeat_flatten_goes_through_once_the_position_moved(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    flat(desk, "f1")
+    a.order_status["close-1"] = "Filled"
+    a.net = 0                                      # the broker caught up
+    assert flat(desk, "f2")["ok"] is True
+    assert a.flattened == [NQC, NQC]               # the second only cancels what is left
+
+
+def test_a_close_the_broker_refused_never_blocks_the_next_flatten(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    flat(desk, "f1")
+    for i, status in enumerate(("Rejected", "Canceled", "Expired")):
+        a.order_status[f"close-{i + 1}"] = status
+        assert flat(desk, f"f-{status}")["ok"] is True
+    assert len(a.flattened) == 4
+
+
+def test_an_unreadable_close_status_is_not_a_refused_close(tmp_path):
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    flat(desk, "f1")
+
+    async def boom(oid):
+        raise RuntimeError("order/item failed")
+    a.get_order_status = boom
+    r = flat(desk, "f2")
+    assert r["refused"] is True and "not confirmed yet" in r["error"]   # it may still fill: never doubled
+    a.net = 0
+    assert flat(desk, "f3")["ok"] is True                                # and never an internal error
+
+
+def test_the_close_guard_lapses_with_the_reservation(tmp_path):
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    flat(desk, "f1")
+    mono.t += 10.1
+    assert flat(desk, "f2")["ok"] is True and len(a.flattened) == 2
+
+
+def test_a_chart_order_after_the_close_lets_the_next_flatten_through(tmp_path):
+    """Flattened, then sold 4 again from the chart: the same -4 is a new position, not a stale read."""
+    desk, eng, ads, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    flat(desk, "f1")
+    assert order(desk, cid="o1", side="Sell", qty=4)["a1"]["ok"] is True
+    assert flat(desk, "f2")["ok"] is True and len(a.flattened) == 2
+
+
+def test_exits_and_reverse_wait_for_the_flattens_close(tmp_path):
+    """09:32:01 the same morning: a target for "short 4" was accepted while the close orders were
+    still out. The close is a chart order like any other until the cache shows it."""
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = -4
+    a.view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": -4, "avg_price": 100.0}]
+    flat(desk, "f1")
+    x = run(desk.exits({"client_id": "x1", "accounts": ["a1"], "root": "NQ", "tp_price": 90.0,
+                        "quotes": quote(clock), "expected_net": {"a1": -4}}))["results"]["a1"]
+    rv = run(desk.reverse({"client_id": "r1", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+    for r in (x, rv):
+        assert r["refused"] is True and r["error"] == \
+            f"an order sent from the chart in {NQC} on A1 is not confirmed yet — try again in a moment"
+    assert a.flattened == [NQC] and a.orders == []
+
+
 def test_a_reservation_clears_after_ten_seconds(tmp_path):
     desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
     ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]

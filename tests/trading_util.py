@@ -53,10 +53,15 @@ class TradeAdapter(FakeAdapter):
         return {1: NQC, 2: ESC}.get(cid)
 
     async def flatten_symbol(self, symbol):
+        """As the real one: a market close for the net it reads. `net` itself never moves -- the
+        broker's position read lagging the close's fill (2026-10-14: 1-4 s on Tradovate)."""
         self.flattened.append(symbol)
         if self.fail_flatten:
             return OrderResult(ok=False, error="flatten rejected by test")
-        return OrderResult(ok=True, raw={"net_before": self.net})
+        raw: dict = {"net_before": self.net}
+        if self.net:
+            raw["market"] = {"ok": True, "order_id": f"close-{len(self.flattened)}", "error": None}
+        return OrderResult(ok=True, raw=raw)
 
     async def place_oco(self, symbol, exit_side, qty, stop_price, limit_price, *, text="",
                         time_in_force="GTC"):

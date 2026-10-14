@@ -197,3 +197,22 @@ def test_a_reverse_that_finds_the_position_gone_at_the_close_sells_nothing_there
     reverse(desk)
     placed = [b for e, _, b in sent if e == "order/placeorder"]
     assert [b["text"] for b in placed] == ["homebase:chart-reverse"]  # no close order: nothing to close
+
+
+# --- the chart's Flatten, clicked again before the broker's position caught up -----------------------
+def test_five_flatten_clicks_on_a_stale_short_four_send_one_close(tmp_path):
+    """2026-10-14 PAAPEX...021 replayed on the wire: short 4, Flatten five times while position/list
+    still answers -4. Before: five Buy 4 market orders (long 8 after the broker's cap). Now: one close;
+    the repeats read -4, see the close still counting and send nothing; once the read moves, a flatten
+    goes through again (nothing left to close)."""
+    desk, ad, sent = reverse_desk(tmp_path, [-4, -4, -4, -4, -4, 0, 0])
+
+    def flat(cid):
+        return run(desk.flatten({"client_id": cid, "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
+
+    assert flat("f1")["ok"]
+    assert [flat(f"f{i}")["refused"] for i in range(2, 6)] == [True] * 4
+    desk.mono.t += 1.1                                                # past the 5-a-second limit
+    assert flat("f6")["ok"]                                           # the broker shows 0 now
+    placed = [b for e, _, b in sent if e == "order/placeorder"]
+    assert [(b["action"], b["orderQty"], b["text"]) for b in placed] == [("Buy", 4, "homebase:chart-flat")]

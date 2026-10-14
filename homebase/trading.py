@@ -37,6 +37,12 @@ Guards, per account (a refusal is one sentence the page shows as-is):
      again — + this order; an order of unknown side counts both ways)
      <= max_position_qty. A flatten also cancels those not-shown ids in its
      contract first (the adapter's symbol flatten only sees the cache).
+     A flatten's own close order is such a chart order too, and while it
+     counts a second flatten of that contract whose position read still
+     equals the first's is refused: the broker's position lags the close's
+     fill by seconds, and each click would close the old size again
+     (2026-10-14: five clicks on short 4 went long 8). A close the broker
+     refused, or a chart order sent after it, lets the next flatten through.
   An account runs one action at a time (a per-account asyncio.Lock over its
   guards and broker calls), so two quick clicks cannot both pass guard 3 on
   the same stale cache; different accounts still run concurrently. An
@@ -107,6 +113,7 @@ RATE_N, RATE_WINDOW_S = 5, 1.0
 QUOTE_MAX_AGE_S = 30.0
 QUOTE_MAX_FUTURE_S = 5.0          # a quote stamped further ahead than this is not trusted
 RESERVE_S = 10.0                  # a chart order counts against the limit until the cache shows it
+NEVER_FILLED = ("Canceled", "Rejected", "Expired")   # a flatten's close in these left the position as it was
 CHART_IDS_KEPT = 1000             # per account: order ids placed from the chart (positively manual)
 FILLS_KEPT = 50
 DEDUP_TTL_S = 600.0
@@ -933,9 +940,11 @@ class ChartDesk:
         return [r for r in self._kept_reservations(aid)
                 if r["order_id"] is None or r["order_id"] not in shown]
 
-    def _placed(self, aid: str, contract: str, side: str, qty: int, r: OrderResult) -> None:
+    def _placed(self, aid: str, contract: str, side: str, qty: int, r: OrderResult, *,
+                close_net: Optional[int] = None) -> None:
         """After the broker's ok: reserve the qty and remember the ids as
-        positively manual. Never raises — the order is already at the broker."""
+        positively manual. A flatten's close carries `close_net`, the position
+        it closed (_not_closing). Never raises — the order is already at the broker."""
         try:
             raw = r.raw if isinstance(r.raw, dict) else {}
             known = self._chart_ids.setdefault(aid, {})
@@ -944,11 +953,13 @@ class ChartDesk:
                     known[str(i)] = None
             while len(known) > CHART_IDS_KEPT:
                 known.pop(next(iter(known)))
-            self._reserved.setdefault(aid, []).append(
-                {"order_id": str(r.order_id) if r.order_id else None, "contract": contract,
-                 "side": side, "qty": qty, "t": self._mono(),
-                 "ids": [str(i) for i in (r.order_id, raw.get("sl_order_id"),
-                                          raw.get("tp_order_id")) if i]})
+            rv = {"order_id": str(r.order_id) if r.order_id else None, "contract": contract,
+                  "side": side, "qty": qty, "t": self._mono(),
+                  "ids": [str(i) for i in (r.order_id, raw.get("sl_order_id"),
+                                           raw.get("tp_order_id")) if i]}
+            if close_net is not None:
+                rv["close_net"] = close_net
+            self._reserved.setdefault(aid, []).append(rv)
         except Exception as e:  # noqa: BLE001
             _log(f"{aid}: reservation bookkeeping failed: {type(e).__name__}: {e}")
 
@@ -1451,6 +1462,7 @@ class ChartDesk:
         after. Those are cancelled first; a failed cancel (e.g. it already
         filled — the flatten's own position read then covers it) never stops
         the flatten."""
+        await self._not_closing(aid, ad, contract, label)
         shown = self._shown(view)
         pending = list(dict.fromkeys(
             i for rv in self._kept_reservations(aid) if rv["contract"] == contract
@@ -1460,11 +1472,40 @@ class ChartDesk:
             outs = await asyncio.gather(*(_call(ad.cancel_order_by_id(i)) for i in pending))
             cancels = {i: {"ok": c.ok, "error": c.error} for i, c in zip(pending, outs)}
         r = await _call(ad.flatten_symbol(contract))
+        raw = r.raw if isinstance(r.raw, dict) else {}
+        close, net = raw.get("market") or {}, raw.get("net_before")
+        if close.get("ok") and close.get("order_id") and net:
+            self._placed(aid, contract, "Sell" if net > 0 else "Buy", abs(net),
+                         OrderResult(ok=True, order_id=str(close["order_id"])), close_net=net)
         extra = {"reserved_cancels": cancels} if cancels else {}
         jerr = self._jsafe("manual_flatten", source="chart", client_id=cid, account=aid,
                            contract=contract, ok=r.ok, error=r.error, detail=r.raw, **extra,
                            ack_ms=self._ack_ms())
         return self._result(r.ok, None, r.error, jerr)
+
+    async def _not_closing(self, aid: str, ad, contract: str, label: str) -> None:
+        """The last chart order in `contract` is a flatten's close, still counting (RESERVE_S),
+        and the broker still shows the position it closed: the close's fill is not in the
+        position read yet, and a flatten now would close the same size again. A close the
+        broker refused, a chart order sent after it, or a position that moved lets it through;
+        an unreadable position is left to flatten_symbol's own read."""
+        mine = [rv for rv in self._kept_reservations(aid) if rv["contract"] == contract]
+        if not mine or "close_net" not in mine[-1]:
+            return
+        last = mine[-1]
+        try:
+            status = await ad.get_order_status(last["order_id"])
+        except Exception:  # noqa: BLE001 — unknown: it may still fill
+            status = None
+        if status in NEVER_FILLED:
+            return
+        try:
+            net = await ad.get_net_position(contract)
+        except Exception:  # noqa: BLE001
+            return
+        if net == last["close_net"]:
+            raise Refused(f"the last flatten of {contract} on {label} is not confirmed yet — the "
+                          f"broker still shows {net:+d}; nothing sent, try again in a moment")
 
     def _still_allowed(self, aid: str, contract: str, label: str, done: str) -> None:
         """Re-run guards 1 and 4 between a reverse's awaits: the desk's Kill
