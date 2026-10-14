@@ -7,7 +7,7 @@ stops at its first failed line. This turns a NEAR MISS into its next version, on
 THE MOVES (one a round -- ONE kind, so a result is read against ONE change). Each rides on the open layer's settings of every family
 (engine/families/_flex.py): nothing a card could not already say.
     regime      KIND=er|adx|atr_rank|bbw_rank   a non-directional gate: trade only when the regime reads `with` its level
-    indicator   KIND=rsi|price_ema|ema_x|macd|zscore|stoch|roc|cci|vwap_dev   a directional gate on the idea's own side
+    indicator   KIND=rsi|price_ema|ema_x|macd|zscore|stoch|roc|cci|vwap_dev|price_sma|sma_x   a directional gate on the idea's own side
     days        KIND=a day rule of flexind.DAY_RULES (nonews, mon .. fri, fomc ...)
     window      KIND=HH:MM-HH:MM   entries decided inside that clock window only
     sides       KIND=long|short
@@ -39,7 +39,8 @@ KINDS = ("regime", "indicator", "days", "window", "sides")
 GATE = {                                    # gate kind -> its textbook settings: (g_n, g_m, g_s, g_lvl)
     "er": (10, 26, 9, 0.3), "adx": (14, 26, 9, 20.0), "atr_rank": (20, 26, 9, 0.5), "bbw_rank": (60, 26, 9, 0.5),
     "rsi": (14, 26, 9, 10.0), "price_ema": (20, 26, 9, 0.5), "ema_x": (9, 21, 9, 0.0), "macd": (12, 26, 9, 0.0), "zscore": (20, 26, 9, 1.0),
-    "stoch": (14, 26, 9, 30.0), "roc": (10, 26, 9, 0.2), "cci": (20, 26, 9, 100.0), "vwap_dev": (1, 26, 9, 1.0)}
+    "stoch": (14, 26, 9, 30.0), "roc": (10, 26, 9, 0.2), "cci": (20, 26, 9, 100.0), "vwap_dev": (1, 26, 9, 1.0),
+    "price_sma": (50, 26, 9, 0.5), "sma_x": (20, 50, 9, 0.0)}
 HINT = {                                    # what a missed row points at: the moves worth a look first (a pointer, never an order)
     "P3.11": ("regime", "indicator", "window"), "P3.12": ("days", "regime", "window"), "P3.13": ("regime", "sides"),
     "P1": ("regime", "sides", "days"), "P2": ("regime", "days", "sides")}

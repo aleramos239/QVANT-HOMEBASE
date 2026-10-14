@@ -289,7 +289,7 @@ SPECS = [
           "until something lands). Without move: what the idea missed, its round (of 5), how many variants the family has tried and the moves "
           "worth a look first -- writes nothing. With move + why: files ONE child card (a new idea in the queue, 'again_of' its parent) with "
           "that single change; it runs on the build days only. Moves: regime (er, adx, atr_rank, bbw_rank), indicator (rsi, price_ema, ema_x, "
-          "macd, zscore, stoch, roc, cci, vwap_dev), days (a day rule: nonews, mon..fri, fomc ...), window (HH:MM-HH:MM), sides (long, short). "
+          "macd, zscore, stoch, roc, cci, vwap_dev, price_sma, sma_x), days (a day rule: nonews, mon..fri, fomc ...), window (HH:MM-HH:MM), sides (long, short). "
           "Only an idea that stopped on a verdict before the unseen days can be refined; an idea read on the unseen days is final. At most 5 "
           "rounds a family. The reason is 8 words or more and is written before the run.",
           {"name": _NAME,

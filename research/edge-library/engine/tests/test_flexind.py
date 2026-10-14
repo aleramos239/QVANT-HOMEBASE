@@ -124,7 +124,7 @@ def test_ranks_count_the_bars_before_and_need_their_bars():
 
 def test_bars_needed_is_the_first_bar_with_a_value():
     for kind, args in (("rsi", (14,)), ("price_ema", (20,)), ("ema_x", (9, 21)), ("macd", (12, 26, 9)), ("zscore", (20,)), ("stoch", (14,)),
-                       ("roc", (10,)), ("cci", (20,)), ("adx", (14,)), ("er", (14,))):
+                       ("roc", (10,)), ("cci", (20,)), ("adx", (14,)), ("er", (14,)), ("price_sma", (50,)), ("sma_x", (20, 50))):
         r = feed(F.make(kind, *args))
         k = F.bars_needed(kind, *args)
         assert r[k - 2] is None and r[k - 1] is not None, (kind, k)
@@ -172,3 +172,18 @@ def test_the_day_calendar():
     with pytest.raises(ValueError):
         F.day_ok("2025-01-10", "nfp_only")
     assert set(F.DAY_RULES) >= {"all", "news", "nonews", "mon", "fri", "month_end", "opex"}
+
+
+def test_price_sma_and_sma_x_are_the_plain_mean_over_atr():
+    g = np.random.default_rng(8)
+    bars = [(100.0 + i * 0.1 + float(g.normal(0, 1)),) * 1 for i in range(120)]
+    c = [b[0] for b in bars]
+    ps, sx, ref = F.make("price_sma", 50), F.make("sma_x", 20, 50), F.make("price_ema", 50)
+    for i, x in enumerate(c):
+        for ind in (ps, sx, ref):
+            ind.update(x, x + 0.5, x - 0.5, x, 1.0)
+        if i + 1 >= 50:
+            assert ps.v == pytest.approx((x - sum(c[i - 49:i + 1]) / 50) / ps.atr())
+            assert sx.v == pytest.approx((sum(c[i - 19:i + 1]) / 20 - sum(c[i - 49:i + 1]) / 50) / sx.atr())
+        else:
+            assert ps.v is None and sx.v is None

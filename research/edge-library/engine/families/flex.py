@@ -3,7 +3,7 @@ before any result. NQ, ES and GC (no Level-2 feature: FEATURES = ()), 1 contract
 The nine settings of the open layer (families/_flex.py: an entry window, a day rule, an indicator gate) are on every one of them.
 
 ind_signal -- an INDICATOR CROSSES A LINE.
-  * INDICATOR = `ind` of flexind.KINDS_DIR (rsi, price_ema, ema_x, macd, zscore, stoch, roc, cci, vwap_dev), its periods `n` (main), `m`
+  * INDICATOR = `ind` of flexind.KINDS_DIR (rsi, price_ema, ema_x, macd, zscore, stoch, roc, cci, vwap_dev, price_sma, sma_x), its periods `n` (main), `m`
                 (slow: ema_x, macd), `s` (macd signal), computed on the closed tf bars since the restart (00:00 ET; 18:00 for an evening).
   * LINE      = the indicator's centre +/- `lvl` (flexind's table: RSI points beyond 50, ATRs, sigmas ...).
   * EVENT     = `edge` enter: the value crosses above the upper line (+1) / below the lower (-1) at THIS bar's close; exit: it comes back
@@ -231,7 +231,7 @@ class WinCandle(Template):
 
 FAMILIES = {
     "ind_signal": (IndSignal, {}, False,
-                   "ind_signal: an indicator (rsi, price_ema, ema_x, macd, zscore, stoch, roc, cci, vwap_dev; any period) crosses its line "
+                   "ind_signal: an indicator (rsi, price_ema, ema_x, macd, zscore, stoch, roc, cci, vwap_dev, price_sma, sma_x; any period) crosses its line "
                    "(centre +/- lvl) at a tf bar's close -> a market entry in the crossing's direction (follow) or against it (fade); "
                    "edge exit = the value comes back out of the zone; one trade a session",
                    {"rationale": "A stretched or turning indicator marks a bar where the crowd has just acted one way: following it rides the "

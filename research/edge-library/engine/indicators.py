@@ -201,3 +201,83 @@ def stoprun(h: float, l: float, c: float, highs, lows):
     up = any(h > x and c <= x for x in highs)
     dn = any(l < x and c >= x for x in lows)
     return None if up == dn else (-1 if up else 1)
+
+
+# ---- BATCH 6: the chart's own indicators that the toolkit lacked (sma50, bbands, keltner, stoch) ----------------------------------------
+# Definitions are the chart's (homebase/charts/studies_ta.py) at the chart's default settings; written before any result, the owner reviews each.
+#   sma50    the plain mean of the last 50 closes (chart SMA, length 50); the close above it = with a long.
+#   bbpos    Bollinger %B of 20 closes, 2 population sigmas: (close - lower) / (upper - lower); 0.5 = the basis; > 1 / < 0 = outside.
+#   kcpos    Keltner position: (close - lower) / (upper - lower) of EMA(20) (seeded with the first close) +/- 1.5 x the mean true range of
+#            the last 20 bars (the chart's channel); 0.5 = the basis; > 1 / < 0 = outside.
+#   stoch    the chart's Stochastic 14, 3, 3: raw = 100 x (close - lowest low 14) / (highest high 14 - lowest low) (50 when flat), %K = the
+#            mean of the last 3 raw, %D = the mean of the last 3 %K. +1 = %K above %D, -1 = %K below it, None = equal / too few bars.
+SMA_N = 50
+BBP_N, BBP_K = 20, 2.0
+KC_N, KC_M, KC_K = 20, 20, 1.5
+STO_N, STO_SM, STO_D = 14, 3, 3
+BAND_MODES = ("with", "against", "break", "fade")
+
+
+def sma_last(closes, n: int = SMA_N):
+    """The mean of the last n closes, or None with fewer than n."""
+    return None if len(closes) < n else float(sum(closes[-n:])) / n
+
+
+def bbpos(closes, n: int = BBP_N, k: float = BBP_K):
+    """Bollinger %B at the last close, or None (fewer than n closes, or a flat band)."""
+    if len(closes) < n:
+        return None
+    w = closes[-n:]
+    mid = sum(w) / n
+    sd = (sum((x - mid) ** 2 for x in w) / n) ** 0.5
+    return None if sd <= 0 else (closes[-1] - (mid - k * sd)) / (2.0 * k * sd)
+
+
+def kcpos(highs, lows, closes, n: int = KC_N, m: int = KC_M, k: float = KC_K):
+    """Keltner position at the last close, or None (fewer than max(n, m) bars, or a flat channel)."""
+    N = len(closes)
+    if N < max(n, m):
+        return None
+    e, a = None, 2.0 / (n + 1)
+    for c in closes:
+        e = c if e is None else e + a * (c - e)
+    trs = [highs[0] - lows[0]] + [max(highs[i] - lows[i], abs(highs[i] - closes[i - 1]), abs(lows[i] - closes[i - 1])) for i in range(1, N)]
+    w = k * (sum(trs[-m:]) / m)
+    return None if w <= 0 else (closes[-1] - (e - w)) / (2.0 * w)
+
+
+def band_ok(pos, sd: int, mode: str) -> bool:
+    """Does a position in a band (%B / Keltner position, 0 = lower band, 1 = upper) pass `mode` for side sd (+1 long, -1 short)?
+    with = on the trade's side of the basis; against = the other side; break = at or beyond the trade's own band (a long at / above the
+    upper); fade = at or beyond the opposite band (a long at / below the lower). pos None: False."""
+    if pos is None:
+        return False
+    if mode == "with":
+        return (pos - 0.5) * sd > 0
+    if mode == "against":
+        return (pos - 0.5) * sd < 0
+    top = pos >= 1.0 if sd > 0 else pos <= 0.0
+    bot = pos <= 0.0 if sd > 0 else pos >= 1.0
+    return top if mode == "break" else bot
+
+
+def stoch_dir(highs, lows, closes, n: int = STO_N, sm: int = STO_SM, d: int = STO_D):
+    """+1 | -1 | None: %K against %D of the chart's Stochastic (see above)."""
+    N = len(closes)
+    need = n + sm + d - 2
+    if N < need:
+        return None
+    raw = []
+    for i in range(N - (sm + d - 1), N):
+        hh, ll = max(highs[i - n + 1:i + 1]), min(lows[i - n + 1:i + 1])
+        raw.append(50.0 if hh == ll else 100.0 * (closes[i] - ll) / (hh - ll))
+    ks = [sum(raw[j:j + sm]) / sm for j in range(d)]
+    kk, dd = ks[-1], sum(ks) / d
+    return 1 if kk > dd else -1 if kk < dd else None
+
+
+def above_below(close: float, line, sd: int, mode: str) -> bool:
+    """with / against: the close on the trade's side of `line` (a long needs it above); equal or no line: False."""
+    if line is None or close == line:
+        return False
+    return ((close - line) * sd > 0) == (mode == "with")

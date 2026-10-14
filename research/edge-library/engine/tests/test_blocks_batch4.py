@@ -469,8 +469,9 @@ def test_the_registry_the_plain_words_the_defaults_and_the_flow_cap():
         for m in modes:
             assert B.PLAIN[(blk, m)].startswith("only when") and B.filter_inputs(blk, m, "GC") == {f"f_{blk}": m}
         assert blk not in B.BLOCK_MARKETS and blk not in B.L2_BLOCKS            # NQ, ES and GC
-    assert sum(len(s) for s in B.FILTERS.values()) == 116          # 99 + batch 5 (test_blocks_batch5.py): tspeed 3, seven direction blocks x 2
-    assert set(B.FLOW_BLOCKS) == {"delta", "cumdelta", "sweep", "bigorder", "deltadiv", "tspeed", "absorb", "exhaust", "stoprun"}
+    assert sum(len(s) for s in B.FILTERS.values()) == 146          # 99 + batch 5 (test_blocks_batch5.py): tspeed 3, seven direction blocks x 2; + batch 6 (test_blocks_batch6.py): 30
+    assert set(B.FLOW_BLOCKS) == {"delta", "cumdelta", "sweep", "bigorder", "deltadiv", "tspeed", "absorb", "exhaust", "stoprun",
+                                   "fpstack", "press", "vprof"}                 # + batch 6: the three tape blocks
     assert B.DIR_BLOCKS[:3] == ("macd", "rsidiv", "deltadiv")
     assert "deltadiv" not in B.FLOW_SERIES                                       # it has no series of its own: the delta of the flow table, summed
     assert all((b, s) in B.PLAIN for b, sides in B.FILTERS.items() for s in sides)

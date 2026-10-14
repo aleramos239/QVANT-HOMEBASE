@@ -166,6 +166,24 @@ FILTER BLOCKS (FILTERS: block -> side -> the inputs that switch it on)
   qdepl         with | against        f_qdepl     RESEARCH TIER: queue depletion (eaten) summed over 5 minutes, ask above bid = bullish.
         with = a long needs bullish (a short bearish); against = the reverse; the five-minute window needs five consecutive finite rows.
 
+  BATCH 6 BLOCKS (the chart's own indicators the toolkit lacked; the definition IS the chart's at its default settings, so a strategy draws
+        what it tests; first guesses, the owner reviews each; no signal = both sides blocked; math in engine/indicators.py and engine/tapeflow.py).
+  sma50         with | against        f_sma50     the close against the plain 50-bar mean of the idea's bars (a long needs it above).
+  bb            with | against | break | fade   f_bb   Bollinger %B (20 closes, 2 sigma): with / against = the trade's side of the basis; break =
+        the close at or beyond the trade's own band (a long at / above the upper); fade = at or beyond the opposite band (a long at / below
+        the lower).
+  kc            with | against | break | fade   f_kc   the same on the Keltner channel (EMA 20 +/- 1.5 x the mean true range of 20).
+  stoch         with | against        f_stoch     the chart's Stochastic 14, 3, 3: %K above %D = bullish, below = bearish (equal: no signal).
+  topen         with | against (| with_HHMM | against_HHMM)   f_topen   the close against the open of the first minute at or after a time of
+        the trade date (default 00:00 ET; 0200, 0300, 0830, 0930 on the Globex day); none within 5 minutes of it, or before it: no signal.
+  vprof         with | against | inside | outside   f_vprof   the day's volume profile (tape prints, one tick per row, 18:00 ET to the decision):
+        with / against = the close on the trade's / the other side of the POC; inside = within the 70 % value area; outside = beyond it.
+  fpstack       with | against        f_fpstack   the last tf bar's footprint (ratio 3, 3 rows in a row): a buy stack = bullish, a sell stack
+        = bearish; both or none: no signal.
+  press         with | against        f_press     the chart's Buy / sell pressure (5 bars, -100..+100): above +10 = bullish, below -10 =
+        bearish; between: no signal. A tape block (tapeflow.py, NQ, ES, GC) for the data cap (FLOW_BLOCKS).
+  wk, mo (liq `levels = wk | mo`, not in "all"): the prior week's / month's high and low.
+
 ib_n = port1.Ib with the range length as an input: ib_min 5 | 15 | 30 | 60 minutes from 09:30 (60 = ib, trade for trade).
 """
 from __future__ import annotations
@@ -178,6 +196,7 @@ import numpy as np
 
 import flowtab
 import indicators as IND
+import tapeflow as TF
 import l2ref
 import levels as LV
 import l2sim as S
@@ -206,7 +225,7 @@ VWMA_N, CH_N, ADX_N = 20, 20, 14                    # vwma length, channel lengt
 CH_EDGE = 2.0 / 3.0                                 # channel block: the top third / the bottom third of the channel
 ADX_STRONG, ADX_WEAK = 25.0, 20.0                   # adx block
 RVOL_DAYS, RVOL_MIN, RVOL_SPIKE = 14, 10, 2.0       # rvol block: the dates compared, the fewest with a tape, the spike multiple
-LINE_BLOCKS = ("ema20", "ema50", "vwma", "avwap")   # blocks that compare the close with a line
+LINE_BLOCKS = ("ema20", "ema50", "sma50", "vwma", "avwap")   # blocks that compare the close with a line
 FLOW_WIN = 5                                        # delta blocks: the minutes of the short window
 FLOW_REF, FLOW_REF_MIN = 20, 15                     # ... the trade dates of the size bar, and the fewest of them with volume
 FLOW_Q = {"": 0.5, "_big": 0.8}                     # ... the size bar: the median / the 80th percentile of the reference |share|
@@ -214,12 +233,16 @@ FLOW_SERIES = {"delta": 1, "cumdelta": 1, "sweep": 2, "bigorder": 3}      # bloc
 FLOW_DIR = ("absorb", "exhaust", "stoprun")         # batch 5: direction blocks of the flow table and the minute bars (levels for the last two)
 BOOK_DIR = ("micro", "iceberg", "pulled", "qdepl")  # batch 5: direction blocks of the Level-2 table (NQ)
 RT_BLOCKS = ("iceberg", "pulled", "qdepl")          # ... of them the research tier: the vendor's history slots, not reproducible live (l2data rt_*)
-FLOW_BLOCKS = (*FLOW_SERIES, "deltadiv", "tspeed", *FLOW_DIR)      # every block that reads the flow table: its test range ends where the flow file ends
+TAPE_DIR = ("fpstack", "press")                     # batch 6: direction blocks of the per-trade tape (tapeflow.py)
+FLOW_BLOCKS = (*FLOW_SERIES, "deltadiv", "tspeed", *FLOW_DIR, *TAPE_DIR, "vprof")      # every block that reads the flow table: its test range ends where the flow file ends
 BBW_TIGHT, BBW_WIDE = 0.20, 0.80                    # bbw block: the rank at most / at least
 ATRP_HIGH, ATRP_LOW = 0.70, 0.30                    # atrp block
 ER_TREND, ER_CHOP = 0.5, 0.25                       # er block
 MFI_EXTREME = 30.0                                  # mfi block: points beyond 50 for extreme_against (20 / 80)
-DIR_BLOCKS = ("macd", "rsidiv", "deltadiv", *FLOW_DIR, *BOOK_DIR)      # blocks whose signal is a direction (+1 bullish, -1 bearish): with / against
+BAND_BLOCKS = ("bb", "kc")                          # batch 6: Bollinger %B / Keltner position, modes IND.BAND_MODES
+TOPEN_TIMES = ("0000", "0200", "0300", "0830", "0930")      # batch 6: the times of the topen block (0000 = the default, mode "with" / "against")
+VPROF_MODES = ("with", "against", "inside", "outside")
+DIR_BLOCKS = ("macd", "rsidiv", "deltadiv", "stoch", *FLOW_DIR, *TAPE_DIR, *BOOK_DIR)      # blocks whose signal is a direction (+1 bullish, -1 bearish): with / against
 VOL_ANCHOR = {"asia": 0, "london": 10800, "pre": 30300, "nyam": OPEN, "mid": OPEN, "pm": OPEN, "eve": -21600}
 
 X_STOP_ATR = (1.0, 2.0)                             # the extended menu's new stops and targets
@@ -231,6 +254,7 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
                         "extreme_against": {"f_rsi": "extreme_against"}},
            "ema20": {"with": {"f_ema20": "with"}, "against": {"f_ema20": "against"}},
            "ema50": {"with": {"f_ema50": "with"}, "against": {"f_ema50": "against"}},
+           "sma50": {"with": {"f_sma50": "with"}, "against": {"f_sma50": "against"}},
            "trend": {"with": {"f_trend": "with"}, "against": {"f_trend": "against"}},
            "vwap": {"with": {"f_vwap": "with"}, "against": {"f_vwap": "against"}},
            "avwap": {"with": {"f_avwap": "with"}, "against": {"f_avwap": "against"}},
@@ -263,7 +287,11 @@ FILTERS = {"volatility": {"high": {"f_dvol": "hi"}, "low": {"f_dvol": "lo"}},
            "deltadiv": {"with": {"f_deltadiv": "with"}, "against": {"f_deltadiv": "against"}},
            "candle": {"displace": {"f_candle": "displace"}, "engulf": {"f_candle": "engulf"}, "reject": {"f_candle": "reject"}},
            "tspeed": {"fast": {"f_tspeed": "fast"}, "slow": {"f_tspeed": "slow"}, "burst": {"f_tspeed": "burst"}},
-           **{b: {"with": {f"f_{b}": "with"}, "against": {f"f_{b}": "against"}} for b in (*FLOW_DIR, *BOOK_DIR)},
+           **{b: {"with": {f"f_{b}": "with"}, "against": {f"f_{b}": "against"}} for b in ("stoch", *FLOW_DIR, *TAPE_DIR, *BOOK_DIR)},
+           **{b: {m: {f"f_{b}": m} for m in IND.BAND_MODES} for b in BAND_BLOCKS},
+           "vprof": {m: {"f_vprof": m} for m in VPROF_MODES},
+           "topen": {f"{w}{'' if t == '0000' else '_' + t}": {"f_topen": f"{w}{'' if t == '0000' else '_' + t}"}
+                     for w in ("with", "against") for t in TOPEN_TIMES},
            **{blk: {side: {f"f_{blk}": side} for side in ("with", "against", "with_big", "against_big")} for blk in FLOW_SERIES}}
 L2_BLOCKS = ("book", "depth", "ahead", "wall", "stack", *BOOK_DIR)      # NQ only: they read the Level-2 feature table
 BLOCK_MARKETS = {"smt": ("NQ", "ES"), **{b: ("NQ",) for b in Z.RANGE_BLOCKS}}                        # the other blocks that are not for all three markets (SMT compares NQ with ES)
@@ -364,6 +392,30 @@ PLAIN.update({
     ("pulled", "against"): "only when more size was pulled from the bids than the offers over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
     ("qdepl", "with"): "only when the offer queue was eaten faster than the bid queue over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live",
     ("qdepl", "against"): "only when the bid queue was eaten faster than the offer queue over the last 5 minutes (a long; the vendor's series). Research tier: not reproducible live"})
+PLAIN.update({
+    ("sma50", "with"): "only when the close is on the trade's side of the 50-bar simple moving average of the idea's bars (a long needs it above)",
+    ("sma50", "against"): "only when the close is on the other side of the 50-bar simple moving average of the idea's bars",
+    ("stoch", "with"): "only when the Stochastic (14, 3, 3) leans the trade's way: %K above %D for a long, below for a short",
+    ("stoch", "against"): "only when the Stochastic (14, 3, 3) leans against the trade: %K below %D for a long, above for a short",
+    ("fpstack", "with"): "only when the bar that just closed has a stacked imbalance the trade's way: 3 or more price rows in a row where one side took 3 times the other (a long: buyers)",
+    ("fpstack", "against"): "only when the bar that just closed has a stacked imbalance against the trade (a long: sellers stacked), with none the other way",
+    ("press", "with"): "only when the Buy / sell pressure (5 bars, the chart's) leans the trade's way: at least 10 points above zero for a long, below -10 for a short",
+    ("press", "against"): "only when the Buy / sell pressure (5 bars, the chart's) leans against the trade: at least 10 points the other way",
+    ("vprof", "with"): "only when the close is on the trade's side of today's point of control (the busiest price so far this session; a long needs it above)",
+    ("vprof", "against"): "only when the close is on the other side of today's point of control (the busiest price so far this session)",
+    ("vprof", "inside"): "only when the close is inside today's value area (the prices holding 70% of the session's volume so far)",
+    ("vprof", "outside"): "only when the close is outside today's value area (above its high or below its low)"})
+for _b, _n, _what in (("bb", "the Bollinger bands (20 closes, 2 sigma)", "Bollinger"), ("kc", "the Keltner channel (EMA 20, 1.5 x the mean true range of 20)", "Keltner")):
+    PLAIN.update({(_b, "with"): f"only when the close is on the trade's side of the middle of {_n} (a long needs it above)",
+                  (_b, "against"): f"only when the close is on the other side of the middle of {_n}",
+                  (_b, "break"): f"only when the close is at or beyond the trade's own band of {_n} (a long: at or above the upper band)",
+                  (_b, "fade"): f"only when the close is at or beyond the opposite band of {_n} (a long: at or below the lower band)"})
+for _w in ("with", "against"):
+    for _t in TOPEN_TIMES:
+        _lbl = "the midnight (00:00 ET) open" if _t == "0000" else f"the {_t[:2]}:{_t[2:]} ET open of the trade date"
+        PLAIN[("topen", _w if _t == "0000" else f"{_w}_{_t}")] = (
+            f"only when the close is on the trade's side of {_lbl} (a long needs it above)" if _w == "with"
+            else f"only when the close is on the other side of {_lbl}")
 _WHAT = {"delta": ("net buying volume of the last 5 minutes", "buy volume minus sell volume of the aggressors"),
          "cumdelta": ("net buying volume since the session's anchor", "buy minus sell volume of the aggressors since 09:30 (the session's anchor)"),
          "sweep": ("net sweep volume of the last 5 minutes", "buy minus sell volume of orders that walked two price levels or more"),
@@ -732,17 +784,18 @@ class Blocks:
     """The blocks, in front of a family class (module docstring). All default off: the family is then unchanged."""
     DEFAULTS = {"f_dvol": "off", "f_rsi": "off", "f_cvol": "off", "f_news": "off", "f_bookopp": "off",
                 "f_ahead": "off", "f_wall": "off", "f_stack": "off",
-                "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
+                "f_level": "off", "f_swept": "off", "f_ema20": "off", "f_ema50": "off", "f_sma50": "off", "f_vwma": "off", "f_avwap": "off", "f_channel": "off", "f_adx": "off", "f_rvol": "off",
                 "f_pdz": "off", "f_ote": "off", "f_htf15": "off", "f_htf60": "off", "f_smt": "off",
                 **{f"f_pdz_{k}": "off" for k in RG.KINDS}, **{f"f_ote_{k}": "off" for k in RG.KINDS},
                 "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off", "f_tspeed": "off",
-                **{f"f_{b}": "off" for b in (*FLOW_SERIES, *FLOW_DIR, *BOOK_DIR)}}
+                **{f"f_{b}": "off" for b in (*FLOW_SERIES, *FLOW_DIR, *BOOK_DIR)},
+                **{f"f_{b}": "off" for b in ("stoch", *TAPE_DIR, *BAND_BLOCKS, "vprof", "topen")}}
     SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen")),
               "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
               "f_cvol": ("choice", ("off", "hi", "lo")), "f_news": ("choice", ("off", "yes", "no")),
               "f_bookopp": ("choice", ("off", "on")), "f_ahead": ("choice", ("off", "thin", "thick")),
               "f_wall": ("choice", ("off", "clear", "blocked")), "f_stack": ("choice", ("off", "with", "against")),
-              **{f"f_{b}": ("choice", ("off", "with", "against")) for b in ("ema20", "ema50", "vwma", "avwap", "channel")},
+              **{f"f_{b}": ("choice", ("off", "with", "against")) for b in ("ema20", "ema50", "sma50", "vwma", "avwap", "channel")},
               "f_level": ("choice", ("off", "near", "clear")), "f_swept": ("choice", ("off", "with", "against")),
               "f_adx": ("choice", ("off", "strong", "weak")), "f_rvol": ("choice", ("off", "high", "low", "spike")),
               "f_pdz": ("choice", ("off", "with", "against")), "f_ote": ("choice", ("off", "in", "out")),
@@ -753,6 +806,9 @@ class Blocks:
               "f_mfi": ("choice", ("off", "with", "against", "extreme_against")), "f_candle": ("choice", ("off", "displace", "engulf", "reject")),
               "f_tspeed": ("choice", ("off", "fast", "slow", "burst")),
               **{f"f_{b}": ("choice", ("off", "with", "against")) for b in DIR_BLOCKS},
+              **{f"f_{b}": ("choice", ("off", *IND.BAND_MODES)) for b in BAND_BLOCKS},
+              "f_vprof": ("choice", ("off", *VPROF_MODES)),
+              "f_topen": ("choice", ("off", *FILTERS["topen"])),
               **{f"f_{b}": ("choice", ("off", "with", "against", "with_big", "against_big")) for b in FLOW_SERIES}}
     BASE = None                                     # the family name the class was built for
     STRUCT = None                                   # its structure in plain words; None = it has none
@@ -958,12 +1014,47 @@ class Blocks:
         up = bid > ask if name == "iceberg" else ask > bid
         return 1 if up else -1
 
+    # ---- batch 6: the chart's own indicators (indicators.py math; tapeflow.py for the per-trade tape) ----------------------------------
+    def _tape_b(self):
+        """The decision's whole minute (seconds after 00:00 ET) when it is a tf bar's close inside a session, else None."""
+        if self.sid is None:
+            return None
+        b = _now_s(self) // 60 * 60
+        return b if b % (self.tf * 60) == 0 else None
+
+    def blk_fpstack(self):
+        b = self._tape_b()
+        return None if b is None else TF.stack_dir(self._cx.root, self.day, b - self.tf * 60, b)
+
+    def blk_press(self):
+        b = self._tape_b()
+        return None if b is None else TF.pressure_dir(self._cx.root, self.day, b, self.tf)
+
+    def blk_topen(self, hhmm: str):
+        """The open of the first completed 1-minute bar at or within 5 minutes after `hhmm` (ET, the Globex day: 18:00 and later = the
+        evening before), or None before it / when no bar starts there."""
+        t = int(hhmm[:2]) * 3600 + int(hhmm[2:]) * 60
+        t = t - 86400 if t >= 64800 else t
+        return next((m[1] for m in self.M if t <= m[0] <= t + 300), None)
+
+    def blk_vprof(self):
+        """(poc, vah, val) of the day's profile up to this decision's whole minute, or None."""
+        if self.sid is None:
+            return None
+        return TF.profile(self._cx.root, self.day, _now_s(self) // 60 * 60)
+
     def blk_dir(self, block: str):
         """The direction signal (+1 bullish, -1 bearish, None) of a DIR_BLOCKS block."""
         if block == "macd":
             return IND.macd_dir(self.C)
         if block == "rsidiv":
             return IND.rsidiv(self.H, self.L, lambda i: rsi(self.C[:i + 1]))
+        if block == "stoch":
+            return IND.stoch_dir(self.H, self.L, self.C)
+        if block == "fpstack":
+            return self.blk_fpstack()
+        if block == "press":
+            return self.blk_press()
         if block in ("absorb", "exhaust", "stoprun", "micro"):
             return getattr(self, f"blk_{block}")()
         if block in RT_BLOCKS:
@@ -985,6 +1076,8 @@ class Blocks:
             return ema_last(self.C, 20)
         if block == "ema50":
             return ema_last(self.C, 50)
+        if block == "sma50":
+            return IND.sma_last(self.C)
         if block == "vwma":
             return vwma_last(self.C, self.V)
         w = self.vwr()                                              # avwap: anchored at the day's anchor (the Template's rth VWAP)
@@ -1172,6 +1265,26 @@ class Blocks:
             x, med = sig
             mode = p["f_tspeed"]
             if not (x > med if mode == "fast" else x < med if mode == "slow" else med > 0 and x >= RVOL_SPIKE * med):
+                return False
+        for blk in BAND_BLOCKS:
+            if p[f"f_{blk}"] != "off":
+                pos = IND.bbpos(self.C) if blk == "bb" else IND.kcpos(self.H, self.L, self.C)
+                if not IND.band_ok(pos, sd, p[f"f_{blk}"]):
+                    return False
+        if p["f_vprof"] != "off":
+            va = self.blk_vprof()
+            if va is None:
+                return False
+            poc, vah, val = va
+            c, mode = self.C[-1], p["f_vprof"]
+            if mode in ("with", "against"):
+                if c == poc or ((c - poc) * sd > 0) != (mode == "with"):
+                    return False
+            elif (val <= c <= vah) != (mode == "inside"):
+                return False
+        if p["f_topen"] != "off":
+            way, _, t = p["f_topen"].partition("_")
+            if not IND.above_below(self.C[-1], self.blk_topen(t or "0000"), sd, way):
                 return False
         for blk in FLOW_SERIES:
             mode = p[f"f_{blk}"]

@@ -25,7 +25,7 @@ from l2sim import Template
 class Liq(Template):
     """liq (module docstring)."""
     DEFAULTS = {"levels": "pd", "mode": "sweep"}
-    SCHEMA = {"levels": ("choice", LV.NAMES + ("all",)), "mode": ("choice", ("sweep", "break"))}
+    SCHEMA = {"levels": ("choice", LV.NAMES + LV.OWN + ("all",)), "mode": ("choice", ("sweep", "break"))}
     SCREEN_TFS = ("1", "5", "15")
     FEATURES = ()
 

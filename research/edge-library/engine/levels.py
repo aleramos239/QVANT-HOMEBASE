@@ -12,6 +12,10 @@ level), so nothing here looks ahead. A level that cannot be had (a roll day, no 
     asia2000  the EVENING BEFORE: 20:00-24:00 ET of the previous calendar day, from the tape's prints before 00:00 (never traded: a level
               only; at least EV_MIN prints, else none)
     d5        the high / low of the 5 trade dates before today (the daily bars; none when a contract roll lies inside them)
+    wk        the PRIOR WEEK's high / low (batch 6; the chart's `wk`): the trade dates of the last ISO week that is not today's, from the daily
+              bars; none when a contract roll lies inside them, or today is the week's first date and no earlier week is held.
+    mo        the PRIOR MONTH's high / low (batch 6; the chart's `mo`), as `wk` on calendar months.
+              wk and mo are named by the card (`levels = wk`) and are NOT in "all": every stored run of "all" keeps its meaning.
     sw        the SWING high / low (owner's definition, 2026-10-06): a 5-minute bar whose high is above the 50 bars before it AND the 50 bars
               after it (strict; a low mirrors it). Known only once the 50th bar after it has closed. The level is the most recent swing
               high and the most recent swing low that no bar has traded beyond since, over the last 5 sessions of ONE contract (bars from
@@ -41,6 +45,7 @@ import numpy as np
 import l2sim as S
 
 NAMES = ("pd", "on", "asia", "lon0205", "ldn", "asia2000", "d5", "sw", "eq")
+OWN = ("wk", "mo")                                                                      # batch 6: asked for by name, not part of "all"
 WINDOWS = {"asia": (0, 10800), "lon0205": (7200, 18000), "ldn": (10800, 30300)}          # seconds after 00:00 ET, [a, b)
 EV_START, EV_END, EV_MIN = "20:00", "00:00", 30                                         # the evening window, and the fewest prints it needs
 D5 = 5
@@ -290,6 +295,27 @@ def _d5(st):
     return max(r["h"] for r in dl), min(r["l"] for r in dl)
 
 
+def _prior_period(st, key):
+    """(high, low) of the trade dates of the last period (key(date) -> a comparable) before today's, or None."""
+    today = key(dt.date.fromisoformat(st.day))
+    rows = [r for r in st.dl if key(dt.date.fromisoformat(r["date"])) < today]
+    if not rows or st.day in st.ROLLS:
+        return None
+    last = key(dt.date.fromisoformat(rows[-1]["date"]))
+    per = [r for r in rows if key(dt.date.fromisoformat(r["date"])) == last]
+    if any(r["date"] in st.ROLLS for r in per):
+        return None
+    return max(r["h"] for r in per), min(r["l"] for r in per)
+
+
+def _wk(st):
+    return _prior_period(st, lambda d: d.isocalendar()[:2])
+
+
+def _mo(st):
+    return _prior_period(st, lambda d: (d.year, d.month))
+
+
 def levels(st, which: str = "all") -> dict:
     """The levels of `which` known at this decision: {name: (high, low)}."""
     out = {}
@@ -307,6 +333,10 @@ def levels(st, which: str = "all") -> dict:
             v = _swing(st)
         elif name == "eq":
             v = _equal(st)
+        elif name == "wk":
+            v = _wk(st)
+        elif name == "mo":
+            v = _mo(st)
         else:
             v = _d5(st)
         if v is not None and v[0] is not None and v[1] is not None:
