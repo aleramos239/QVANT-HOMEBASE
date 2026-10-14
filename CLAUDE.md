@@ -1,5 +1,12 @@
 # Homebase — rules for assistants working in this repo
 
+## The payout pipeline is the owner's to switch on (2026-10-13)
+
+`bp.py pipe payout` and Lab > Payout build a set of session strategies for the funded accounts
+(`docs/superpowers/specs/2026-10-13-payout-pipeline-design.md`). It ships DISABLED. Never run `bp.py pipe payout enable`,
+never choose it with `bp.py pipe mode payout`, and never write its lock file (`payout_enabled` in the pipeline root): only
+the owner turns it on, from the Lab. While it is disabled none of its commands runs, for anyone.
+
 ## Strategy work follows the blueprint (house law, 2026-10-05)
 
 **To run an idea, use the pipeline first** (skill `pipeline`; chat tools `pipeline_add / pipeline_status / pipeline_control / pipeline_decide /

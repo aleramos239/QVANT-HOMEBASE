@@ -104,9 +104,9 @@ def notice(root, kind: str, text: str, **more) -> dict:
 def _words(now: dict, the_set: dict) -> list:
     lines = []
     for rid, slots in now["slots"].items():
-        name = ((the_set.get("sets") or {}).get(rid) or {}).get("account_name") or rid
-        for slot, v in slots.items():
-            lines.append(f"{name}, {slot}: {v['trades'] or 'stand down'}")
+        s = (the_set.get("sets") or {}).get(rid) or {}
+        parts = [f"{slot} {v['trades'] or 'stand down'}" for slot, v in slots.items() if (s.get("slots") or {}).get(slot)]      # a slot the set has nobody for is no news
+        lines.append(f"{s.get('account_name') or rid}: " + (", ".join(parts) if parts else "nobody trades"))
     return lines
 
 

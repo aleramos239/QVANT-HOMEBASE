@@ -841,8 +841,10 @@ function payAccounts(d) {
 function payTonight(t, d) {
   const out = [];
   for (const [rid, slots] of Object.entries((t && t.slots) || {})) {
-    const name = (((d && d.sets) || {})[rid] || {}).account_name || rid;
-    for (const [slot, v] of Object.entries(slots || {})) out.push([`${name}, ${paySlot(slot)}`, (v && v.trades) || 'Stand down']);
+    const s = ((d && d.sets) || {})[rid] || {}, name = s.account_name || rid;
+    for (const [slot, v] of Object.entries(slots || {})) {
+      if ((s.slots || {})[slot]) out.push([`${name}, ${paySlot(slot)}`, (v && v.trades) || 'Stand down']);      // a slot the set has nobody for is not listed
+    }
   }
   return out;
 }

@@ -47,30 +47,42 @@ daily note in Homebase; the long middle slot is tested with one strategy and wit
 | Profiles LIVE and WR, a profile bar in the Lab | `blueprint/pipe_rules.py`, `lab.js` | Live. |
 | Rule files | `homebase/backtest/propsim/rules/` | Lucid Flex / Pro 50K confirmed. Apex Legacy 300K (Apex's own pages) not confirmed by the owner. |
 
-## What is new
+## As built (2026-10-13)
 
-1. **The switch**: Off / Live / WR / Payout. One works, or none.
-2. **The group score**: every real account from where it stands today, many payouts, 12 weeks, the same
-   drawn days for all of them, days drawn in runs (streaks stay together).
-3. **The pool and the slots**: every idea that drifts up after costs on the build days, filed under the
-   session its trades fall in.
-4. **The tuner**: for each pool member, its stored boxes (stop, target), size and day rule, ranked by what
-   the member adds to the set. A setting counts only with its neighbours.
-5. **The rotation rule and the evening notice.**
-6. **The Payout page in the Lab**: the set by slot, the score over time, the notices.
-7. **The AI step**: a scheduled Claude task that reads the results and files the next tests.
+**One runner, three rule files.** LIVE, WR and PAYOUT are profiles of the same idea runner (`pipe_rules.PROFILES`).
+`templates/pipeline_payout.json` is the LIVE file with the win-rate lane as a label on every card, which makes the eval odds
+of ONE strategy a label: an idea is asked only for money after costs on the build days with enough trades, its code and price
+checks, and money on its one read of the unseen days. The switch (`pipe_switch.py`, `bp.py pipe mode`, the Lab's Pipeline bar):
+Off / Live / WR / Payout, one at a time or none.
 
-## Build order
+**The lock** (the owner: "if its disabled, it cant be used by me or claude until i renable it"). The payout pipeline is disabled
+unless `payout_enabled` is in the pipeline root. Disabled: it cannot be chosen, `bp.py pipe payout` runs nothing, the runner does
+none of its work, the Lab page shows one Enable button. Only the Lab page's buttons post enable / disable; no chat tool reaches
+them. It ships disabled.
 
-| Step | What | Done when |
-|---|---|---|
-| 1 | The switch | The Lab bar shows four choices; choosing one stops the others; tests pass. |
-| 2 | Group score, Lucid funded first | One command scores a set on the Lucid account over 12 weeks with many payouts. |
-| 3 | Pool, slots, tuner | The runner fills the three slots from the stored build-day boxes and writes the best set. |
-| 4 | Rotation rule and notice | The rule is backtested on the build days; a changed set leaves a notice. |
-| 5 | The Payout page | The set, the score over time and the notices show in the Lab. |
-| 6 | Apex 300K in the group score | Needs each trade's high in the pipeline's stores, and the owner's decision below. |
-| 7 | The AI step, then the Mac mini | The task runs a few times a day; Homebase runs on the mini. |
+| Module | What it does |
+|---|---|
+| `pay_rules.py`, `templates/payout.json` | Every number of the set: the slots, the pool's bar, the score (12 and 4 weeks, days in runs of 5, `max_bust` 50 %), size steps, day rule grid, rotation grid, proof (`keep` 50 %), firm rules, what follows a payout. |
+| `pay_accounts.py` | `<root>/payout/accounts.json`: the Desk's funded accounts, size from the first balance, rule file by firm (`assumed` until the owner says), balance and peak from the Desk's daily record. |
+| `pay_pool.py` | Members = ideas with a picked box whose trades are entered AND closed inside one slot (80 %, 200 trades, money after costs). Options = the pick and the middle box of each other target kind. An idea whose read FAILED is out (final). |
+| `pay_score.py` | The walk past the first payout, from each account's balance, open losses counted, Apex's intraday floor on the friendly side; the group on the same drawn days. |
+| `pay_build.py` | The search slot by slot, a size judged with its neighbours, the survival cap, what each member adds, reserves, the rotation rule kept only if it and its neighbours beat no rule; the group score, the "live is worse" row, the unseen-days score and PROVEN; `set.json`, `score.jsonl`, notices. `idle()` is the runner's call while its queue is idle. |
+| `pay_rotate.py` | "In form" = a lookback-day equity high within the last days, read from the days before only. The evening read (`tonight.json`) and a notice when what trades changes. |
+| Lab > Payout | The lock, the set by slot, tiles, the score at each build, tonight, accounts, caveats; Build, Send the stopped ideas round again (two presses), Disable. |
+| `deploy/payout-review.md` | The AI step's instructions. NOT scheduled: the pipeline is disabled. |
+
+**First build on real data (scratch copy, 2026-10-13):** 17 members, all but one in the New York slot, none for the evening.
+$772 a week expected across the 7 accounts on the build days, $215 with worse fills, NOT PROVEN (a member has no read yet).
+Most ideas stopped at stage 1 on the old single-strategy eval-odds line; `bp.py pipe payout requeue` sends them round again
+under the payout rules once the owner switches it on.
+
+## Not built
+
+- The Desk does not trade a set by itself: a notice says what to switch and the owner switches (his word).
+- Forward results after an idea's read: the evening rotation reads what is on file (build days, then the unseen read). Daily
+  results need the set running in shadow on the Desk.
+- A random-entry control for the set; Apex's 30 % open-loss rule and half size; the true intraday high (stores keep no trade high).
+- The Mac mini move.
 
 ## Open, the owner's to decide
 
@@ -78,7 +90,8 @@ daily note in Homebase; the long middle slot is tested with one strategy and wit
   row A1 (Apex's help centre, read 2026-10-01): AI, bots, algorithms and hands-off trading are prohibited;
   the penalty is closure and forfeiture. The same file: no orders on both sides (straddles), a stop at most
   5x the target, no opposite positions across accounts, the same size through a payout cycle, an open loss
-  at most 30 % of the profit. Six of the seven real accounts are Apex. Nothing in steps 1-5 touches them.
+  at most 30 % of the profit. Six of the seven real accounts are Apex. The set builder applies the both-sides and 5:1 rules to
+  every Apex account and runs one set on all of them; nothing here places an order.
 - Lucid's view of automation on funded accounts is not on file.
 - The unseen days wear out: each locked set reads them once. Live and shadow results become the judge.
 - Conti's method leans on end-of-day drawdown. With open losses counted, the no-edge ceiling was about 40 %.

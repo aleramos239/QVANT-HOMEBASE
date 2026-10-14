@@ -119,12 +119,12 @@ def test_the_evening_is_saved_and_a_notice_is_written_only_when_what_trades_chan
     book = {"first": up, "reserve": up}
     series = lambda name: (book[name], "2024-03-29")  # noqa: E731
     one = RO.evening(root, series)
-    assert one["kind"] == "set" and "day: first" in one["text"] and "evening: stand down" in one["text"] and "through 2024-03-29" in one["text"]
+    assert one["kind"] == "set" and one["text"] == "Tonight's set (results through 2024-03-29). LucidPro: day first"     # the empty evening slot is no news
     assert RO.evening(root, series) is None                                  # the same set: no notice
     book["first"] = down
     two = RO.evening(root, series)
-    assert two["kind"] == "switch" and "day: reserve" in two["text"] and two["slots"]["lucid-pro"]["day"]["in_form"] == {"first": False, "reserve": True}
+    assert two["kind"] == "switch" and two["text"].endswith("LucidPro: day reserve") and two["slots"]["lucid-pro"]["day"]["in_form"] == {"first": False, "reserve": True}
     book["reserve"] = down
-    assert "day: stand down" in RO.evening(root, series)["text"]
+    assert RO.evening(root, series)["text"].endswith("LucidPro: day stand down")
     assert [n["kind"] for n in RO.notices(root)] == ["set", "switch", "switch"]
     assert json.loads((root / "payout" / "tonight.json").read_text())["slots"]["lucid-pro"]["day"]["trades"] is None

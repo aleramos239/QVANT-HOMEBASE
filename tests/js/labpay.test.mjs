@@ -57,8 +57,8 @@ test('the accounts: what each is expected to pay, how often it pays, how often i
 });
 
 test('tonight: who trades each slot, or the slot stands down; a switch is the notice to act on', () => {
-  const t = { slots: { 'lucid-pro': { day: { trades: 'nq_noise' }, night: { trades: null } } } };
-  assert.deepEqual(L.payTonight(t, SET), [['LucidPro 50K, New York', 'nq_noise'], ['LucidPro 50K, Overnight', 'Stand down']]);
+  const t = { slots: { 'lucid-pro': { day: { trades: 'nq_noise' }, night: { trades: null } }, 'apex-300': { day: { trades: null } } } };
+  assert.deepEqual(L.payTonight(t, SET), [['LucidPro 50K, New York', 'nq_noise'], ['Apex Legacy 300K, New York', 'Stand down']]);      // the empty Overnight slot is not listed
   assert.deepEqual(L.payTonight(null, SET), []);
   const n = L.payNotice({ kind: 'switch', utc: '2026-10-14T21:15:00+00:00', text: 'SWITCH: the set changed.' });
   assert.equal(n.title, 'Switch the set'); assert.equal(n.tone, 'run'); assert.equal(n.text, 'SWITCH: the set changed.'); assert.ok(n.when);

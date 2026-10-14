@@ -1575,7 +1575,7 @@ function payMain() {
     ${g ? `<figure class="pl-eq ${g.up ? 'pos' : 'neg'}"><svg viewBox="0 0 ${EQ_W} ${EQ_H}" preserveAspectRatio="none" role="img" aria-label="Expected payout a week at each build: ${esc(C.plMoney(g.last))} now">
       <path class="pl-eq-area" d="${esc(g.area)}"/><line class="pl-eq-zero" x1="${EQ_PAD}" x2="${EQ_W - EQ_PAD}" y1="${esc(g.zero)}" y2="${esc(g.zero)}"/>
       <path class="pl-eq-line" d="${esc(g.line)}"/><circle class="pl-eq-dot" cx="${g.dot[0]}" cy="${g.dot[1]}" r="3.5"/></svg>
-      <figcaption><span>first build</span><span>expected payout a week, at each build</span><span>${esc(C.plMoney(g.last))}</span></figcaption></figure>` : ''}
+      <figcaption><span>before the first build</span><span>expected payout a week, at each build</span><span>${esc(C.plMoney(g.last))}</span></figcaption></figure>` : ''}
     <h3>Tonight</h3>${tonight.length ? plKv(tonight) : '<p class="pp-note">The evening’s read has not run yet. Until it does, the set below is the one to run.</p>'}
     <h3>The set</h3>${sets || '<p class="pp-note">No account is on.</p>'}
     <h3>Accounts</h3>${plKv(C.payAccounts(d))}
