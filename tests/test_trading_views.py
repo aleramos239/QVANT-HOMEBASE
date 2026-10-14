@@ -37,7 +37,7 @@ def test_snapshot_shape(tmp_path):
     ads["a1"].view["orders"] = [{"order_id": "60", "symbol": NQC, "side": "Buy", "type": "Stop",
                                  "qty": 3, "price": None, "stop_price": 110.0, "status": "Working"}]
     s = desk.snapshot()
-    assert s["enabled"] is True and s["limits"] == {"max_order_qty": 10, "max_position_qty": 20}
+    assert s["enabled"] is True and s["limits"] == {}
     a1, a2 = s["accounts"]
     assert (a1["id"], a1["label"], a1["pinned"], a1["env"]) == ("a1", "A1", "A1", "demo")
     assert a1["connected"] is True and a1["tradable"] is True and a1["error"] is None

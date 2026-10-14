@@ -220,8 +220,8 @@ def test_the_book_refuses_what_the_desk_would_and_the_adapter_says_why(svc):
     ad = adapter(svc)
     run(ad.connect())
     svc.feed([("09:29:59", 100.0)])
-    r = run(ad.place_bracket(OrderRequest(symbol="NQ", side="Buy", qty=36, order_type="Stop", price=101.0)))
-    assert not r.ok and "quantity must be 1-35" in r.error
+    r = run(ad.place_bracket(OrderRequest(symbol="NQ", side="Buy", qty=0, order_type="Stop", price=101.0)))
+    assert not r.ok and "quantity must be at least 1" in r.error
 
 
 def test_a_second_paper_account_is_its_own_book(svc):

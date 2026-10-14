@@ -718,7 +718,7 @@ class PaperBook:
                 raise ValueError("an sl_price or a tp_price is required")
             exp = body.get("expected_net")                # the desk's rule (trading.py _expected_net)
             want = exp.get(self.id) if isinstance(exp, dict) else None
-            if isinstance(want, bool) or not isinstance(want, int) or want == 0 or abs(want) > MAX_POSITION_QTY:
+            if isinstance(want, bool) or not isinstance(want, int) or want == 0 :
                 raise ValueError("expected_net: {account: the signed position the confirm showed} for every account")
             root = self._root(body)
             return self._once(action, cid, lambda: self._exits(root, sl, tp, want))
@@ -761,12 +761,8 @@ class PaperBook:
     def _place(self, root, side, typ, qty, price, trigger, sl, tp, tif) -> dict:
         if self.roots and root not in self.roots and price_root(root) not in self.roots:
             raise Refused(f"{root} is not streamed by this chart service — no prints to fill against")
-        if not 1 <= qty <= MAX_ORDER_QTY:                                  # trading.py guard 3
-            raise Refused(f"quantity must be 1-{MAX_ORDER_QTY}")
-        net = (self.pos.get(root) or {}).get("net", 0)
-        worst = _worst_net(net, [(o.side, o.qty) for o in self._working(root)], side, qty)
-        if worst > MAX_POSITION_QTY:
-            raise Refused(f"that could take {root} on {self.label} to {worst} contracts (limit {MAX_POSITION_QTY})")
+        if qty < 1:
+            raise Refused("quantity must be at least 1")
         tick = tick_size(root)
         rnd = (lambda p: None if p is None else to_tick(p, tick))
         price, trigger, sl, tp = rnd(price), rnd(trigger), rnd(sl), rnd(tp)
@@ -981,8 +977,6 @@ class PaperBook:
         net = (self.pos.get(root) or {}).get("net", 0)
         if not net:
             raise Refused(f"no {root} position on {self.label} to reverse")
-        if abs(net) > MAX_ORDER_QTY or abs(net) > MAX_POSITION_QTY:
-            raise Refused(f"reversing {abs(net)} is over the per-order limit ({MAX_ORDER_QTY})")
         side, n = (-1 if net > 0 else 1), abs(net)
         # ONE read for both legs, of 2n: the close takes the first n of it, the open the next n -- both fill now, or
         # both wait for the next print, in order
@@ -1025,7 +1019,7 @@ class PaperBook:
         if action == "order":
             qty = body.get("qty")
             if body.get("type") != "Market" or body.get("side") not in SIDES or isinstance(qty, bool) \
-                    or not isinstance(qty, int) or not 1 <= qty <= MAX_ORDER_QTY:
+                    or not isinstance(qty, int) or qty < 1:
                 return None
             return root, SIDES[body["side"]], qty
         net = (self.pos.get(root) or {}).get("net", 0)
@@ -1034,7 +1028,7 @@ class PaperBook:
         return root, (-1 if net > 0 else 1), abs(net) * (2 if action == "reverse" else 1)
 
 
-LIMITS = {"max_order_qty": MAX_ORDER_QTY, "max_position_qty": MAX_POSITION_QTY}
+LIMITS: dict = {}          # no size limits since 2026-10-14
 
 
 class PaperBooks:

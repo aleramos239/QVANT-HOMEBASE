@@ -10,7 +10,7 @@ import pytest
 
 from homebase.broker.base import OrderResult
 from homebase.engine import ET
-from homebase.trading import in_lock_window, parse_order
+from homebase.trading import parse_order
 from tests.trading_util import ESC, MNQC, NQC, journal, mkdesk, quote, run
 
 UTC = dt.timezone.utc
@@ -84,24 +84,8 @@ def test_a_root_without_a_contract_spec_is_refused(tmp_path):
 
 
 # --- guard 3: quantity -----------------------------------------------------------------
-def test_quantity_limits(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path)
-    assert order(desk, qty=0)["a1"]["error"] == "quantity must be 1-10"
-    assert order(desk, cid="c2", qty=11)["a1"]["error"] == "quantity must be 1-10"
-    assert order(desk, cid="c3", qty=10)["a1"]["ok"] is True
-    assert ads["a1"].orders[-1].qty == 10
 
 
-def test_position_limit_counts_the_position_and_every_working_order(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path)
-    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 18, "avg_price": 100.0}]
-    assert order(desk, qty=3)["a1"]["error"] == \
-        f"that could take {NQC} on A1 to 21 contracts (limit 20)"
-    assert order(desk, cid="c2", qty=3, side="Sell")["a1"]["ok"] is True       # reducing
-    ads["a1"].view["positions"] = [{"contract_id": 2, "symbol": ESC, "net": 20, "avg_price": 5000.0}]
-    ads["a1"].view["orders"] = [{**WORKING, "qty": 15}]
-    assert order(desk, cid="c3", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    assert order(desk, cid="c4", qty=5)["a1"]["ok"] is True                     # ES never counts
 
 
 def test_an_unresolved_contract_in_the_cache_refuses_orders(tmp_path):
@@ -112,39 +96,10 @@ def test_an_unresolved_contract_in_the_cache_refuses_orders(tmp_path):
 
 
 # --- guard 4: the bot lock ---------------------------------------------------------------
-@pytest.mark.parametrize("hh,mm,locked", [(9, 19, False), (9, 20, True), (9, 34, True), (9, 35, False)])
-def test_bot_lock_window_on_a_booked_account(tmp_path, hh, mm, locked):
-    desk, eng, ads, *_ = mkdesk(tmp_path, et=(hh, mm))
-    r = order(desk, accounts=["a1", "a2"])
-    assert (r["a1"]["ok"] is False) is locked
-    if locked:
-        assert r["a1"]["error"] == f"{NQC} on A1 is locked 09:20-09:35 ET for the nq930 bot"
-    assert r["a2"]["ok"] is True                        # not booked: never window-locked
 
 
-def test_lock_covers_mnq_but_not_es_and_not_weekends(tmp_path):
-    desk, eng, ads, clock, *_ = mkdesk(tmp_path, et=(9, 25))
-    assert order(desk, root="MNQ")["a1"]["error"] == \
-        f"{MNQC} on A1 is locked 09:20-09:35 ET for the nq930 bot"
-    assert order(desk, cid="c2", root="ES")["a1"]["ok"] is True
-    clock.dt = dt.datetime(2026, 9, 19, 13, 25, tzinfo=UTC)          # Saturday 09:25 ET
-    assert order(desk, cid="c3")["a1"]["ok"] is True
 
 
-def test_lock_window_follows_new_york_time_across_dst(tmp_path):
-    def et(y, m, d, hh, mm):
-        return dt.datetime(y, m, d, hh, mm, tzinfo=UTC).astimezone(ET)
-    # Fri 2026-03-06 is EST (UTC-5): 14:25 UTC = 09:25 ET locked; 13:25 UTC = 08:25 open
-    assert in_lock_window(et(2026, 3, 6, 14, 25)) and not in_lock_window(et(2026, 3, 6, 13, 25))
-    # Mon 2026-03-09 is EDT (DST began Sun 03-08): 13:25 UTC = 09:25 locked; 14:25 = 10:25 open
-    assert in_lock_window(et(2026, 3, 9, 13, 25)) and not in_lock_window(et(2026, 3, 9, 14, 25))
-    # Mon 2026-11-02 is EST again (DST ended Sun 11-01)
-    assert in_lock_window(et(2026, 11, 2, 14, 25)) and not in_lock_window(et(2026, 11, 2, 13, 25))
-    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
-    clock.dt = dt.datetime(2026, 3, 9, 13, 25, tzinfo=UTC)
-    assert "locked 09:20-09:35" in order(desk)["a1"]["error"]
-    clock.dt = dt.datetime(2026, 3, 6, 13, 25, tzinfo=UTC)
-    assert order(desk, cid="c2")["a1"]["ok"] is True
 
 
 @pytest.mark.parametrize("status,locked", [("placing", True), ("placed", True), ("live", True),
@@ -335,11 +290,6 @@ def test_flatten_and_cancel_symbol_are_symbol_scoped_and_journaled(tmp_path):
     assert all(e["source"] == "chart" and "strategy" not in e for e in ev)
 
 
-def test_flatten_is_locked_in_the_window_for_the_booked_account_only(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path, et=(9, 25))
-    r = run(desk.flatten({"client_id": "f1", "accounts": ["a1", "a2"], "root": "NQ"}))["results"]
-    assert r["a1"]["error"] == f"{NQC} on A1 is locked 09:20-09:35 ET for the nq930 bot"
-    assert r["a2"]["ok"] is True and ads["a1"].flattened == []
 
 
 def test_reverse_flattens_then_opens_the_other_side(tmp_path):
@@ -352,18 +302,6 @@ def test_reverse_flattens_then_opens_the_other_side(tmp_path):
     assert [e["step"] for e in journal(tmp_path) if e["event"] == "manual_reverse"] == ["flatten", "open"]
 
 
-def test_reverse_refuses_flat_oversized_and_a_failed_flatten(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path)
-
-    def rv(cid):
-        return run(desk.reverse({"client_id": cid, "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
-
-    assert rv("r1")["error"] == f"no {NQC} position on A1 to reverse"
-    ads["a1"].net = -11
-    assert rv("r2")["error"] == "reversing 11 is over the per-order limit (10)"
-    ads["a1"].net, ads["a1"].fail_flatten = -3, True
-    assert rv("r3")["error"] == "flatten failed: flatten rejected by test — not reversed"
-    assert ads["a1"].orders == []
 
 
 # --- ruling 3: an unseeded / missing cache is never read as flat ---------------------------------
@@ -480,19 +418,6 @@ def _slow_orders(ad):
     ad.place_order = slow
 
 
-def test_two_concurrent_orders_cannot_both_pass_the_position_limit(tmp_path):
-    desk, eng, ads, *_ = mkdesk(tmp_path)
-    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 10, "avg_price": 100.0}]
-    _slow_orders(ads["a1"])
-
-    async def go():
-        return await asyncio.gather(desk.order({**BUY10, "client_id": "k1"}),
-                                    desk.order({**BUY10, "client_id": "k2"}))
-
-    rs = [r["results"]["a1"] for r in run(go())]
-    assert sorted(r["ok"] for r in rs) == [False, True] and len(ads["a1"].orders) == 1
-    bad = next(r for r in rs if not r["ok"])
-    assert bad["error"] == f"that could take {NQC} on A1 to 30 contracts (limit 20)"
 
 
 def test_two_concurrent_reverses_only_one_proceeds(tmp_path):
@@ -518,22 +443,6 @@ def test_two_concurrent_reverses_only_one_proceeds(tmp_path):
     assert ads["a1"].flattened == [NQC] and len(ads["a1"].orders) == 1
 
 
-def test_a_reservation_counts_only_while_the_cache_does_not_show_the_order(tmp_path):
-    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
-    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]
-    ads["a1"].place_order = lambda req: _ok("501")
-    assert order(desk, cid="b1", qty=10)["a1"]["ok"] is True
-    assert order(desk, cid="b2", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    ads["a1"].view["orders"] = [{**WORKING, "order_id": "501", "type": "Market", "qty": 10,
-                                 "side": "Buy", "price": None}]
-    # counted once (the cache), not twice (cache + reservation = 31)
-    assert order(desk, cid="b3", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    # it filled: gone from the orders, but the position update has not come in
-    # yet (still 5) — the reservation counts again instead of vanishing
-    ads["a1"].view["orders"] = []
-    assert order(desk, cid="b4", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    mono.t += 10.1                                      # kept the full 10 s, then gone
-    assert order(desk, cid="b5", qty=6)["a1"]["ok"] is True
 
 
 def test_flatten_also_cancels_chart_orders_the_cache_does_not_show_yet(tmp_path):
@@ -675,14 +584,6 @@ def test_exits_and_reverse_wait_for_the_flattens_close(tmp_path):
     assert a.flattened == [NQC] and a.orders == []
 
 
-def test_a_reservation_clears_after_ten_seconds(tmp_path):
-    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
-    ads["a1"].view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 5, "avg_price": 100.0}]
-    assert order(desk, cid="t1", qty=10)["a1"]["ok"] is True
-    mono.t += 9.9
-    assert order(desk, cid="t2", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    mono.t += 0.2
-    assert order(desk, cid="t3", qty=6)["a1"]["ok"] is True
 
 
 def test_kill_during_a_reverse_stops_it_before_the_open(tmp_path):
@@ -701,19 +602,6 @@ def test_kill_during_a_reverse_stops_it_before_the_open(tmp_path):
     assert ads["a1"].flattened == [NQC] and ads["a1"].orders == []
 
 
-def test_a_reverse_that_runs_into_the_lock_window_does_not_open(tmp_path):
-    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
-    clock.dt = dt.datetime(2026, 9, 14, 13, 19, 59, 800000, tzinfo=UTC)   # 09:19:59.8 ET
-    ads["a1"].net = 2
-    flat = ads["a1"].flatten_symbol
-
-    async def slow_flat(symbol):
-        clock.dt += dt.timedelta(milliseconds=500)     # the flatten takes the clock past 09:20
-        return await flat(symbol)
-    ads["a1"].flatten_symbol = slow_flat
-    r = run(desk.reverse({"client_id": "r", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]
-    assert r["error"] == f"{NQC} on A1 is locked 09:20-09:35 ET for the nq930 bot — flattened only"
-    assert ads["a1"].flattened == [NQC] and ads["a1"].orders == []
 
 
 def test_an_unknown_id_bot_stop_cannot_be_cancelled_while_the_bot_is_live(tmp_path):
@@ -782,12 +670,6 @@ def test_an_account_pinned_twice_in_config_is_refused_on_both(tmp_path):
     assert [a["tradable"] for a in desk.snapshot()["accounts"]] == [False, False]
 
 
-def test_an_order_with_an_unknown_side_counts_as_worst_case(tmp_path):
-    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
-    ads["a1"].view["orders"] = [{**WORKING, "side": None, "qty": 15}]
-    assert order(desk, cid="u1", qty=6)["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    assert order(desk, cid="u2", qty=6, side="Sell")["a1"]["error"].endswith("to 21 contracts (limit 20)")
-    assert order(desk, cid="u3", qty=5)["a1"]["ok"] is True
 
 
 def test_reverse_refuses_an_unreadable_position(tmp_path):

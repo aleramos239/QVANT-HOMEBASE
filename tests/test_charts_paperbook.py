@@ -230,28 +230,6 @@ def test_parity_with_run_session_on_the_same_prints(name, after, entry):
 
 
 # ---- the desk's caps and price checks ----------------------------------------------------------------------
-def test_order_qty_is_capped_at_the_desks_limit():
-    b = book()
-    feed(b, [("09:29:59", 100.0)])
-    r = order(b, "Buy", "Market", qty=pb.MAX_ORDER_QTY + 1)
-    assert r["ok"] is False and r["refused"] and f"1-{pb.MAX_ORDER_QTY}" in r["error"]
-    assert order(b, "Buy", "Market", qty=pb.MAX_ORDER_QTY)["ok"]
-
-
-def test_position_qty_is_capped_counting_working_orders_on_that_side():
-    b = book()
-    feed(b, [("09:29:59", 100.0)])
-    order(b, "Buy", "Market", qty=10)
-    feed(b, [("09:30:01", 100.0)])
-    order(b, "Buy", "Limit", qty=8, price=95.0)                # worst case 18
-    over = pb.MAX_POSITION_QTY - 18 + 1
-    r = order(b, "Buy", "Limit", qty=over, price=94.0)         # 1 past the cap
-    assert r["ok"] is False and str(pb.MAX_POSITION_QTY) in r["error"]
-    exact = pb.MAX_POSITION_QTY - 18
-    assert order(b, "Buy", "Limit", qty=exact, price=94.0)["ok"]     # exactly at the cap
-    assert order(b, "Sell", "Limit", qty=10, price=110.0)["ok"]      # a sell shrinks |net|: allowed
-
-
 def test_a_stop_on_the_wrong_side_or_with_no_price_yet_is_refused():
     b = book()
     r = order(b, "Buy", "Stop", price=101.0)
@@ -1324,16 +1302,6 @@ def test_a_send_to_several_accounts_is_one_plan_each_taking_its_slice_in_order(t
     assert [[o["type"] for o in bs.books[a].view()["orders"]] for a in ("paper", "paper-2")] == [["Market"], ["Market"]]
     for a in ("paper", "paper-2"):
         bs.books[a].act("cancel-symbol", {"client_id": f"x{a}", "accounts": [a], "root": "NQ"})
-    working = pb.MAX_POSITION_QTY - 2                       # paper-2 is long 2: fill it to just at the cap
-    for px, n in ((90.0, working - 8), (91.0, 8)):          # paper-2 (long 2): `working` more working on the buy side
-        assert bs.books["paper-2"].act("order", {"client_id": f"l{px}", "accounts": ["paper-2"], "root": "NQ",
-                                                 "side": "Buy", "type": "Limit", "price": px, "qty": n})["results"]["paper-2"]["ok"]
-    src["book"] = l2(offers=((100.0, 1), (100.25, 2)), age_ms=-1)     # a new snapshot
-    res = bs_order(bs, ["paper", "paper-2", "paper-3"], qty=1)        # paper-2 would pass the cap: refused -- its slice
-    assert res["paper-2"]["refused"] and res["paper"]["ok"] and res["paper-3"]["ok"]   # goes to the next in line
-    assert (bs.books["paper"].fills[-1]["parts"], bs.books["paper-3"].fills[-1]["parts"]) == ([[100.0, 1]], [[100.25, 1]])
-    bs_order(bs, ["paper"], qty=1)                                   # the slice no one took is still there
-    assert bs.books["paper"].fills[-1]["parts"] == [[100.25, 1]]
 
 
 def test_one_order_through_zero_closes_and_opens_at_the_levels_each_part_took(tmp_path):
@@ -1385,7 +1353,6 @@ def test_every_paper_account_fills_at_once_and_each_change_is_announced(tmp_path
     assert bs.books["paper-2"].fills[-1]["parts"] == [[100.0, 1], [100.25, 1]] and len(changed) == 3
     bs.message()                                                    # pushed: nothing is dirty now
     feed_all(bs, [("09:30:01", 100.0)])                              # a print that changes nothing: silent
-    assert bs_order(bs, ["paper"], qty=pb.MAX_ORDER_QTY + 1)["paper"]["refused"]   # a refusal changes nothing: silent
     assert len(changed) == 3
     src["quote"] = src["book"] = None
     bs_order(bs, ["paper"], side="Sell")                            # nothing to fill at: placed, waiting -- a change

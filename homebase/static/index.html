@@ -3254,13 +3254,13 @@ function buildTrading() {
         title="OFF — the chart page cannot trade"></button>
       <span class="nm" id="ctState" style="font-size:13px">Off</span>
       <span class="spacer"></span>
-      <label class="hint" for="ctMaxOrder">Max per order</label>
-      <input id="ctMaxOrder" type="number" min="1" max="50" step="1"
+      <label class="hint" hidden for="ctMaxOrder">Max per order</label>
+      <input id="ctMaxOrder" hidden type="number" min="1" max="50" step="1"
         style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
-      <label class="hint" for="ctMaxPos">Max position</label>
-      <input id="ctMaxPos" type="number" min="1" max="100" step="1"
+      <label class="hint" hidden for="ctMaxPos">Max position</label>
+      <input id="ctMaxPos" hidden type="number" min="1" max="100" step="1"
         style="width:64px;padding:5px 8px;border:1px solid var(--input);border-radius:var(--radius-md);background:var(--background);color:var(--foreground)">
-      <button class="btn btn-outline btn-sm" id="ctSave">Save limits</button>
+      <button class="btn btn-outline btn-sm" hidden id="ctSave">Save limits</button>
     </div>`;
   tradingEls = {sw: $("#ctSwitch"), save: $("#ctSave")};
   // Chart trading's own handlers -- UNCHANGED bodies, just wired here instead of at page load
@@ -3302,7 +3302,7 @@ async function setChartTrading(enabled) {
   if (switchBounced("chartTrading")) return;         // a double-click is one flip
   const ct = (ST && ST.chart_trading) || {};
   if (needsConfirm("chartTrading", enabled) && !await confirmDlg("Turn chart trading ON?",
-      `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. The 9:30 bot's symbol stays locked 09:20–09:35 ET on its accounts. The desk's Kill switches it off.`,
+      `The chart page can then place REAL orders on the accounts you tick there — at most ${ct.max_order_qty} per order and ${ct.max_position_qty} per position. A bot's symbol stays locked on its accounts while the bot is working. The desk's Kill switches it off.`,
       "Turn on", false)) { refresh(); return; }
   try {
     const r = await post("/api/chart-trading", {enabled});

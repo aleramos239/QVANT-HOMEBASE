@@ -77,8 +77,7 @@ def test_parse_exits_takes_a_single_account_too():
     assert it.expected("a2") == -2
 
 
-@pytest.mark.parametrize("expected", [None, [], {}, {"a1": 0}, {"a1": 1.0}, {"a1": True}, {"a2": 3},
-                                      {"a1": 10 ** 6}])
+@pytest.mark.parametrize("expected", [None, [], {}, {"a1": 0}, {"a1": 1.0}, {"a1": True}, {"a2": 3}])
 def test_parse_exits_needs_the_position_the_confirm_showed_for_every_account(expected):
     body = {"client_id": "c", "accounts": ["a1"], "root": "NQ", "sl_price": 95.0}
     if expected is not None:
@@ -275,8 +274,7 @@ def test_a_kept_exit_already_through_the_market_is_refused(tmp_path):
 
 
 def test_the_desk_gates_apply(tmp_path):
-    desk, eng, ad, clock = setup(tmp_path, et=(9, 25))           # a1 is booked to nq930: the lock window
-    assert "locked 09:20-09:35" in exits(desk, clock, sl_price=95.0)["error"]
+    desk, eng, ad, clock = setup(tmp_path, et=(11, 0))
     desk.cfg.chart_trading.enabled = False
     assert exits(desk, clock, cid="x2", sl_price=95.0)["error"] == \
         "chart trading is off — switch it on on the desk page"
@@ -425,3 +423,20 @@ def test_still_not_canceled_after_the_extra_look_stays_loud_and_restores_nothing
     ad.cancel_ends = "PendingCancel"
     r = exits(desk, clock, tp_price=110.0)
     assert r["error"].endswith("CHECK THIS POSITION'S PROTECTION NOW") and ad.orders == [] and ad.ocos == []
+
+
+# --- 2026-10-14: a drag right after a market entry --------------------------------------------------
+def test_a_drag_right_after_a_filled_chart_order_is_not_held_for_ten_seconds(tmp_path):
+    desk, eng, ad, clock = setup(tmp_path)
+    desk._placed("a1", NQC, "Buy", 3, OrderResult(ok=True, order_id="900"))
+    ad.order_status["900"] = "Filled"
+    r = exits(desk, clock, sl_price=95.0)
+    assert r["ok"] is True and not r.get("refused")
+
+
+def test_a_drag_still_waits_while_the_chart_order_is_not_ended(tmp_path):
+    desk, eng, ad, clock = setup(tmp_path)
+    desk._placed("a1", NQC, "Buy", 3, OrderResult(ok=True, order_id="900"))
+    ad.order_status["900"] = "Working"
+    r = exits(desk, clock, sl_price=95.0)
+    assert r["refused"] and "not confirmed yet" in r["error"]

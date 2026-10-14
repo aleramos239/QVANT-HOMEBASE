@@ -21,21 +21,16 @@ Guards, per account (a refusal is one sentence the page shows as-is):
      account exists, before any broker work)
   4. the bot lock: an account booked to a strategy whose symbol matches the
      contract (the engine's own substring rule: NQ also claims MNQ) is
-     locked 09:20-09:35 ET on weekdays; any account whose day state for
-     that strategy is placing|placed|live is locked. Cancelling one of YOUR
-     orders by id stays allowed in the window, so a manual order can always
-     be cleared before the fire; while the bot is placing it is refused, and
+     any account whose day state for that strategy is placing|placed|live is
+     locked (the 09:20-09:35 time lock was removed 2026-10-14). Cancelling one
+     of YOUR orders by id stays allowed; while the bot is placing it is refused, and
      while it is placed|live only an order placed FROM THE CHART (its id
      remembered here) may be cancelled — a bot leg whose id the desk does
      not know must not be taken for a manual order. The bots' own orders
      are never modified or cancelled from the chart. A reverse re-checks
      guards 1 and 4 before its flatten and again before its open.
-  3. quantity: 1..max_order_qty per order; the worst-case |net| in the
-     contract (position + every working order on that side + chart orders
-     the broker accepted in the last 10 s whose id the cache does not show
-     — yet, or any more: one that filled before its position update counts
-     again — + this order; an order of unknown side counts both ways)
-     <= max_position_qty. A flatten also cancels those not-shown ids in its
+  3. quantity: at least 1. No size limits (removed 2026-10-14 at the owner's
+     word; the 09:20-09:35 lock went the same day). A flatten also cancels those not-shown ids in its
      contract first (the adapter's symbol flatten only sees the cache).
      A flatten's own close order is such a chart order too, and while it
      counts a second flatten of that contract whose position read still
@@ -107,7 +102,6 @@ from .config import (HARD_MAX_ORDER_QTY, HARD_MAX_POSITION_QTY, AppCfg,
                      ChartTradingCfg, assignments)
 from .contracts import point_value, root_of, round_to_tick, spec_for, tick_size
 
-LOCK_FROM, LOCK_UNTIL = dt.time(9, 20), dt.time(9, 35)
 BOT_BUSY = ("placing", "placed", "live")
 RATE_N, RATE_WINDOW_S = 5, 1.0
 QUOTE_MAX_AGE_S = 30.0
@@ -310,7 +304,7 @@ def _expected_net(body: dict, accounts: tuple) -> tuple:
     out = []
     for aid in accounts:
         v = e.get(aid)
-        if isinstance(v, bool) or not isinstance(v, int) or v == 0 or abs(v) > HARD_MAX_POSITION_QTY:
+        if isinstance(v, bool) or not isinstance(v, int) or v == 0:
             raise ValueError(EXPECTED_NET)
         out.append((aid, v))
     return tuple(out)
@@ -386,12 +380,6 @@ def exit_levels(net: int, exits: list, sl_new, tp_new, last: Optional[float]) ->
 
 
 # --- pure guards ---------------------------------------------------------------------
-def in_lock_window(now_et: dt.datetime) -> bool:
-    """09:20:00 <= t < 09:35:00 ET on a weekday. `now_et` is ET-aware
-    (engine.now_et()), so DST is the zone's business, not ours."""
-    return now_et.weekday() < 5 and LOCK_FROM <= now_et.time() < LOCK_UNTIL
-
-
 def contract_matches(strategy_symbol: str, contract: str) -> bool:
     """engine.on_fill gives a fill to a strategy when the strategy's symbol
     is a SUBSTRING of the fill's contract (NQ claims MNQZ6). The lock uses
@@ -619,8 +607,7 @@ class ChartDesk:
     def snapshot(self) -> dict:
         ct = self.cfg.chart_trading
         return {"enabled": ct.enabled,
-                "limits": {"max_order_qty": ct.max_order_qty,
-                           "max_position_qty": ct.max_position_qty},
+                "limits": {},                 # no size limits since 2026-10-14
                 "accounts": [self.account_view(a) for a in self._accts()],
                 "bot": self.bot_view()}
 
@@ -900,9 +887,6 @@ class ChartDesk:
                 self._not_the_bots(aid, cancel_oid, label, name, st.status, contract)
             if cancel_oid is not None:
                 continue
-            if in_lock_window(self.engine.now_et()) \
-                    and any(r.get("account") == aid for r in assignments(self.cfg, name)):
-                raise Refused(f"{contract} on {label} is locked 09:20-09:35 ET for the {name} bot")
 
     @staticmethod
     def _unresolved(view: dict) -> None:
@@ -1075,13 +1059,9 @@ class ChartDesk:
         contract = self._contract(it.root)
         self._lock(aid, contract, label)
         lim = self.cfg.chart_trading
-        if not 1 <= it.qty <= lim.max_order_qty:
-            raise Refused(f"quantity must be 1-{lim.max_order_qty}")
+        if it.qty < 1:
+            raise Refused("quantity must be at least 1")
         self._unresolved(view)
-        worst = worst_net(view, contract, it.side, it.qty, self._reservations(aid, view))
-        if worst > lim.max_position_qty:
-            raise Refused(f"that could take {contract} on {label} to {worst} contracts "
-                          f"(limit {lim.max_position_qty})")
         price, sl, tp, trigger = check_prices(it.side, it.type, it.price, it.sl_price,
                                               it.tp_price, contract, quote,
                                               trigger=it.trigger_price)
@@ -1208,6 +1188,7 @@ class ChartDesk:
         contract = self._contract(it.root)
         self._lock(aid, contract, label)
         self._unresolved(view)
+        await self._settle_reservations(aid, ad, contract)
         if any(r["contract"] == contract for r in self._reservations(aid, view)):
             raise Refused(f"an order sent from the chart in {contract} on {label} is not "
                           "confirmed yet — try again in a moment")
@@ -1326,6 +1307,25 @@ class ChartDesk:
                                     r.error)
         return await self._exits_restore(it, aid, contract, exit_side, qty, sl, tp, steps, kept, ad,
                                          f"the SL/TP pair was refused ({r.error})")
+
+    async def _settle_reservations(self, aid: str, ad, contract: str) -> None:
+        """A chart order the broker has already ENDED (Filled / Canceled / Rejected / Expired) no
+        longer needs its 10 s reservation: dropping it lets a stop or target dragged right after
+        a market entry through (2026-10-14: 17 drags refused "not confirmed yet" although the
+        entry had filled). The exits' own position checks (expected net, broker net) still run.
+        Status unreadable or still working: the reservation stays."""
+        for rv in list(self._kept_reservations(aid)):
+            if rv["contract"] != contract or not rv.get("order_id") or "close_net" in rv:
+                continue                      # a flatten's close keeps its guard (_not_closing)
+            try:
+                status = await ad.get_order_status(rv["order_id"])
+            except Exception:  # noqa: BLE001 — unknown: it may still fill
+                continue
+            if status in ("Filled",) + NEVER_FILLED:
+                try:
+                    self._reserved[aid].remove(rv)
+                except (KeyError, ValueError):
+                    pass
 
     async def _cancel_settled(self, ad, oid: str) -> Optional[str]:
         """After a cancel's ack (only "accepted"): poll the adapter -- its pushed
@@ -1527,9 +1527,6 @@ class ChartDesk:
             raise Refused(f"the {contract} position on {label} is unreadable ({e}) — nothing done") from None
         if not net:
             raise Refused(f"no {contract} position on {label} to reverse")
-        lim = self.cfg.chart_trading
-        if abs(net) > lim.max_order_qty or abs(net) > lim.max_position_qty:
-            raise Refused(f"reversing {abs(net)} is over the per-order limit ({lim.max_order_qty})")
         self._still_allowed(aid, contract, label, "nothing done")
         # flatten_symbol reads the position again itself, and that read is KEPT: the position's own
         # stop/target are still working at the broker and the desk's Kill does not take this
