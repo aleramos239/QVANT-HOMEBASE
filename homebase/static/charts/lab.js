@@ -1419,14 +1419,21 @@ function pipeMain() {
   const said = S.plSaid ? `<div class="pl-said${S.plSaid.bad ? ' bad' : ''}" role="status"><pre>${esc(S.plSaid.text)}</pre><button class="hb-ib" data-act="plhide" data-fk="hide" aria-label="Hide this message" title="Hide">×</button></div>` : '';
   return `<div class="pp">${stale}${said}${profBar(L.data)}${S.view === 'pq' ? queueMain(L.data) : bookMain(L.data)}</div>`;
 }
-/* Which pipeline judges the ideas (LIVE PIPELINE / WR PIPELINE) and, for the WR one, its numbers. A toolkit that does not
-   report profiles shows nothing here. The choice is the whole app's: the runner and every chat read it. */
+/* THE SWITCH: which pipeline works -- Off, Live, WR or Payout; one at a time, or none (the owner, 2026-10-13) -- and, for the WR
+   one, its numbers. A toolkit that reports no switch lists its two profiles as before; one that reports no profiles shows nothing
+   here. The choice is the whole app's: the runner and every chat read it. A choice that is not built yet cannot be pressed. */
+const MODE_SAYS = { off: 'No pipeline is working. Pick one to switch it on.', live: 'The original rules, for live accounts.',
+  wr: 'Judges win rate and steady months. Eval odds are shown, not asked.', payout: 'Tunes and rotates a small set for the funded accounts.' };
 const PSET = [['win_rate', 'Win rate at least', '%', 100, 50, 95, 1], ['month_floor', 'A steady month wins at least', '%', 100, 40, 90, 1],
   ['months', 'Share of steady months', '%', 100, 50, 100, 1], ['month_trades', 'Trades a month to count', '', 1, 3, 60, 1], ['max_target_r', 'Target at most', 'R', 1, 0.25, 3, 0.05]];
 function profBar(A) {
   const P = A && A.profile;
   if (!P || !Array.isArray(P.options)) return '';
-  const seg = P.options.map((o) => `<button class="pl-fc${o.id === P.profile ? ' on' : ''}" data-act="plprof" data-p="${esc(o.id)}" data-fk="prof:${esc(o.id)}" aria-pressed="${o.id === P.profile}"${S.plBusy ? ' disabled' : ''}>${esc(o.label)}</button>`).join('');
+  const modes = Array.isArray(P.modes) ? P.modes : null;
+  const seg = modes
+    ? modes.map((o) => `<button class="pl-fc${o.id === P.mode ? ' on' : ''}" data-act="plmode" data-m="${esc(o.id)}" data-fk="mode:${esc(o.id)}" aria-pressed="${o.id === P.mode}"${S.plBusy || o.ready === false ? ' disabled' : ''}${o.ready === false ? ' title="Not built yet"' : ''}>${esc(o.short || o.label)}</button>`).join('')
+    : P.options.map((o) => `<button class="pl-fc${o.id === P.profile ? ' on' : ''}" data-act="plprof" data-p="${esc(o.id)}" data-fk="prof:${esc(o.id)}" aria-pressed="${o.id === P.profile}"${S.plBusy ? ' disabled' : ''}>${esc(o.label)}</button>`).join('');
+  const says = modes ? (MODE_SAYS[P.mode] || '') : P.profile === 'wr' ? MODE_SAYS.wr : MODE_SAYS.live;
   const adj = P.editable ? `<button class="btn btn-outline pl-adj" data-act="plset" data-fk="set" aria-expanded="${!!S.plSet}">${S.plSet ? 'Hide settings' : 'Adjust settings'}</button>` : '';
   let panel = '';
   if (P.editable && S.plSet) {
@@ -1439,7 +1446,14 @@ function profBar(A) {
       <div class="pl-set-go"><button type="button" class="btn btn-default" data-act="plsave" data-fk="save"${S.plBusy ? ' disabled' : ''}>Save settings</button><span class="pl-quiet">Saved for the whole app. The next stage that runs uses it.</span></div></form>`;
   }
   return `<div class="pl-prof"><div class="pl-prof-row"><span class="pl-prof-l">Pipeline</span><div class="pl-filter" role="group" aria-label="Pipeline">${seg}</div>${adj}</div>
-    <p class="pl-quiet">${P.profile === 'wr' ? 'Judges win rate and steady months. Eval odds are shown, not asked.' : 'The original rules, for live accounts.'}</p>${panel}</div>`;
+    <p class="pl-quiet">${says}</p>${panel}</div>`;
+}
+async function pickMode(id) {
+  if (S.plBusy) return;
+  S.plBusy = true; S.plDraft = null; paintLib();
+  const r = await send('POST', '/api/tester/pipeline/mode', { mode: id });
+  S.plBusy = false;
+  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !(r.ok && r.json && r.json.ok !== false));
 }
 async function pickProfile(id) {
   if (S.plBusy) return;
@@ -2266,6 +2280,7 @@ function act(name, el) {
   else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
   else if (name === 'plfilter') { S.plFilter = el.dataset.f || 'all'; paintLib(); }
   else if (name === 'plprof') pickProfile(el.dataset.p);
+  else if (name === 'plmode') pickMode(el.dataset.m);
   else if (name === 'plset') { S.plSet = !S.plSet; paintLib(); }
   else if (name === 'plsave') saveSettings();
   else if (name === 'plidea') pickIdea(el.dataset.name);

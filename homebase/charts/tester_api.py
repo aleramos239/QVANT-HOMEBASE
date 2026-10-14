@@ -630,6 +630,23 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             with pipe_lock:
                 pipe_cache["at"] = None
 
+    @r.post("/pipeline/mode")
+    def pipeline_mode(request: Request, body: dict):
+        """The switch: {mode: "off" | "live" | "wr" | "payout"} -- the ONE pipeline that works, or none (owner, 2026-10-13)."""
+        write_ok(request)
+        json_body(request)
+        if body.get("mode") != "off" and Slots().quiet():     # switching one ON starts heavy work: not in the desk's 9:30 window (as PIPE_QUIET)
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        try:
+            return {"ok": True, "text": box.pipeline_set_mode(body.get("mode"))}
+        except blueprint_tools.Refused as e:
+            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
+        except ToolError as e:
+            return {"ok": False, "text": str(e)}
+        finally:
+            with pipe_lock:
+                pipe_cache["at"] = None
+
     @r.post("/pipeline/settings")
     def pipeline_settings(request: Request, body: dict):
         """Change the WR PIPELINE's numbers: {settings: {win_rate, month_floor, months, month_trades, max_target_r, risk_usd: [lo, hi]}}."""

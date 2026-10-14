@@ -404,6 +404,12 @@ class PipelineMixin:
             raise ToolError("profile: live or wr")
         return plain(self._pipe("profile", profile).get("text"))
 
+    def pipeline_set_mode(self, mode) -> str:
+        """Not a tool: the switch -- the ONE pipeline that works, or none (`pipe mode off|live|wr|payout`) -> one plain sentence."""
+        if mode not in ("off", "live", "wr", "payout"):
+            raise ToolError("mode: off, live, wr or payout")
+        return plain(self._pipe("mode", mode).get("text"))
+
     def pipeline_set_settings(self, settings) -> str:
         """Not a tool: change the WR PIPELINE's numbers (`pipe settings --set k=v ...`) -> one plain sentence."""
         if not isinstance(settings, dict) or not settings:

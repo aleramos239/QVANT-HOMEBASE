@@ -284,13 +284,23 @@ test('the pipeline pages talk to five pipeline routes only, and post nothing but
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
   // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
   assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
-    '/api/tester/pipeline/idea/', '/api/tester/pipeline/profile', '/api/tester/pipeline/run', '/api/tester/pipeline/settings']);
+    '/api/tester/pipeline/idea/', '/api/tester/pipeline/mode', '/api/tester/pipeline/profile', '/api/tester/pipeline/run', '/api/tester/pipeline/settings']);
   // 2026-10-10 (the owner): watch-only is gone -- any strategy on the Desk can run live; the Book only reads, and says "On the Desk" by the Lab's own list
   assert.doesNotMatch(LAB, /\/api\/tester\/watch|watchDo|plWatch|loadWatch|plunwatch|plpromote/, 'no watch list, no promote-from-the-Book');
   assert.match(LAB, /S\.desk && S\.desk\.has\(card\.name\)/, 'the Book row says On the Desk when a promoted Lab strategy of that name is there');
   const actions = [...PIPE.matchAll(/action: '(\w+)'/g)].map((m) => m[1]);
   assert.deepEqual([...new Set(actions)].sort(), ['add', 'approve', 'refuse']);
   assert.match(PIPE, /pipeRun\(\{ action: a \}\)/, 'start, pause and resume are posted as the helper names them');
+});
+
+test('the switch: one pipeline works or none; a choice that is not built cannot be pressed; an older toolkit keeps its two profiles', () => {
+  assert.match(PIPE, /const modes = Array\.isArray\(P\.modes\) \? P\.modes : null;/);
+  assert.match(PIPE, /data-act="plmode" data-m="\$\{esc\(o\.id\)\}"/);
+  assert.match(PIPE, /aria-pressed="\$\{o\.id === P\.mode\}"\$\{S\.plBusy \|\| o\.ready === false \? ' disabled' : ''\}/, 'not ready = disabled');
+  assert.match(PIPE, /: P\.options\.map\(/, 'no switch reported: the profiles as before');
+  assert.match(PIPE, /send\('POST', '\/api\/tester\/pipeline\/mode', \{ mode: id \}\)/);
+  assert.match(LAB, /else if \(name === 'plmode'\) pickMode\(el\.dataset\.m\);/);
+  for (const k of ['off', 'live', 'wr', 'payout']) assert.match(PIPE, new RegExp(`${k}: '`), `the bar says what ${k} is`);
 });
 
 test('one timer for the two views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {
