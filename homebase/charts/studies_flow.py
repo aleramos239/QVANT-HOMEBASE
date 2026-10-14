@@ -9,6 +9,14 @@ Wire keys (every part after the name is a number; a missing one takes its defaul
                                                                                   -> {dir, ago, px}
   tspeed:200   prints per second of the bar and a burst line = 3 x the median rate of the last n bars before it
                                                                                   -> {rate, burst, hot}
+  smt:6:36     NQ against ES, live: the last 6 bars (the window) against the 36 before them (the reference), over the
+               bars both markets have in the session. Bearish (dir -1) when exactly ONE market made a higher high
+               in the window than the reference's high; bullish (dir +1) when exactly one made a lower low. One
+               value on the bar the signal first appears (the developing bar counts, so it fires live; `live` says
+               the bar is still forming), none while it merely persists. The chart's own market's two peaks:
+               the window's extreme (`ago` bars back, at `px`) and the reference's (`aago`, `apx`); `lead` +1 when
+               THIS chart's market made the new extreme, -1 when the partner did
+                                                           -> {dir, ago, px, aago, apx, lead, live}
   press:5      buy / sell pressure (-100 .. +100, + = buyers) over an exponentially weighted window of about n
                bars (the newest weighs most): the aggressors' volume, the big prints, the sweeps and the orders each
                side sent, each as (buy - sell) / (buy + sell + a little); `p` is the blend (volume counts 3, the
@@ -17,10 +25,13 @@ Wire keys (every part after the name is a number; a missing one takes its defaul
 """
 from __future__ import annotations
 
+import bisect
+
 from .bars import BIG_MIN
 from .studies_ta import _Study, make_ta_num
 
 BURST_MULT = 3.0
+SMT_PARTNER = {"NQ": "ES", "ES": "NQ"}      # the market each reads against (the backtest's smt block: zones.PARTNER)
 
 
 class DeltaDiv(_Study):
@@ -143,11 +154,68 @@ class Pressure(_Study):
         return (sess, acc, pn, pv, cb, cs), out
 
 
+class SMT(_Study):
+    """Smart-money divergence, read live: the last `w` bars against the `l` before them, on the bars the chart's
+    market and its partner both have this session. `peer` is the partner's Stream (hub.link_peer); with none (a
+    market without a partner, a tick / volume chart) every value is None. Bars are matched by their start time, so
+    only a time chart can run it. A partner bar still forming counts as it stands: a closed bar's value is what it
+    was at its close, and the history a chart loads is rebuilt with both markets complete."""
+
+    peer = None
+
+    def __init__(self, w: int = 6, l: int = 36):
+        self.w, self.l = int(w), int(l)
+        super().__init__()
+
+    def initial(self):
+        # session, bars seen this session, the common bars (n, high, low, partner high, partner low) newest last,
+        # the direction the previous bar ended on
+        return (None, 0, (), 0)
+
+    def _partner(self, t):
+        p = self.peer
+        if p is None:
+            return None
+        cur = p.builder.cur if p.builder is not None else None
+        if cur is not None and cur.t == t:
+            return cur
+        i = bisect.bisect_left(p.bars, t, key=lambda b: b.t)
+        return p.bars[i] if i < len(p.bars) and p.bars[i].t == t else None
+
+    def step(self, st, bar):
+        sess, n, win, prev = st
+        if bar.session != sess:
+            sess, n, win, prev = bar.session, 0, (), 0
+        n += 1
+        pb = self._partner(bar.t)
+        if pb is None:
+            return (sess, n, win, prev), None
+        w, l = self.w, self.l
+        win = (win + ((n, bar.h, bar.l, pb.h, pb.l),))[-(w + l):]
+        if len(win) < w + l:
+            return (sess, n, win, prev), None
+        ref, cur = win[:-w], win[-w:]
+        hi_c, hi_r = max(cur, key=lambda e: e[1]), max(ref, key=lambda e: e[1])
+        lo_c, lo_r = min(cur, key=lambda e: e[2]), min(ref, key=lambda e: e[2])
+        bear = (hi_c[1] > hi_r[1]) != (max(e[3] for e in cur) > max(e[3] for e in ref))
+        bull = (lo_c[2] < lo_r[2]) != (min(e[4] for e in cur) < min(e[4] for e in ref))
+        d = 0 if bear == bull else -1 if bear else 1
+        out = None
+        if d and d != prev:
+            a, r = (hi_c, hi_r) if d < 0 else (lo_c, lo_r)
+            k = 1 if d < 0 else 2
+            made = a[k] > r[k] if d < 0 else a[k] < r[k]       # this chart's market made the new extreme
+            out = {"dir": d, "ago": n - a[0], "px": a[k], "aago": n - r[0], "apx": r[k],
+                   "lead": 1 if made else -1, "live": not bar.closed}
+        return (sess, n, win, d), out
+
+
 # name -> (class, parameters): each parameter is (default, minimum, maximum); a wire key may give them in order
 PARAMS = {
     "ddiv": (DeltaDiv, ((5, 1, 50),)),
     "tspeed": (TapeSpeed, ((200, 20, 2000),)),
     "press": (Pressure, ((5, 1, 50),)),
+    "smt": (SMT, ((6, 1, 50), (36, 2, 500))),
 }
 NAMES = tuple(PARAMS)
 
@@ -170,6 +238,12 @@ def warm_flow(name: str, rest: list) -> int:
         n = int(float(rest[0]))
     except (IndexError, ValueError):
         n = PARAMS[name][1][0][0]
+    if name == "smt":
+        try:
+            n += int(float(rest[1]))
+        except (IndexError, ValueError):
+            n += PARAMS[name][1][1][0]
+        return n + 2            # the window and the reference it is read against
     if name == "press":
         return 3 * n + 2        # an exponential window: 0.67^15 of the weight left after 3n bars at n = 5
     return 4 * n + 2 if name == "ddiv" else n + 1

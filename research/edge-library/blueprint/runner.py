@@ -47,6 +47,7 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
 import sys
 import time
 from functools import lru_cache
@@ -85,7 +86,17 @@ def default_workers(at=None) -> int:
         return min(int(n), S.MAX_WORKERS)
     a, b = (dt.time.fromisoformat(x) for x in c["desk_hours_et"])
     desk = at.weekday() < 5 and a <= at.time() < b
-    return max(1, min(c["workers"]["desk_hours" if desk else "other"], S.MAX_WORKERS))
+    return max(1, min(c["workers"]["desk_hours" if desk else "other"], S.MAX_WORKERS, memory_worker_cap()))
+
+
+def memory_worker_cap(gb_per_worker: float = 4.0) -> int:
+    """Workers this machine's RAM can carry: one per 4 GB of physical memory (24 GB -> 6). 12 workers + the build parent took
+    a 24 GB Mac into swap exhaustion and a watchdog panic (2026-10-13). A failed read leaves the cap off."""
+    try:
+        gb = int(subprocess.run(["sysctl", "-n", "hw.memsize"], capture_output=True, text=True, timeout=5).stdout) / 2**30
+        return max(1, int(gb // gb_per_worker))
+    except Exception:                                # noqa: BLE001 - an unreadable size must not stop a run
+        return 10**6
 
 
 def may_start(at=None) -> None:
@@ -149,10 +160,10 @@ def checked(spec) -> dict:
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN)):
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW)):
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table (BLUEPRINT.md line 0.2), the owner's session-anchored table "
                        f"(exits {OPEN!r}) or the family's own table (exits {OWN!r}, manual lane), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
-    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
+    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
@@ -166,6 +177,7 @@ def checked(spec) -> dict:
 
 
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
+OWN_LOW = "own_low"                                 # the family's OWN stop x the small targets (orb830.LOW_TGT_R), manual lane, owner 2026-10-12
 OWN = "own"                                         # the family's OWN exit cells (its unit_exits; orb830.orb_close: the stop at the far side of the range x 6 targets): the manual lane's spec files
 OPEN = "open"                                       # the owner's session-anchored table (families/blocks.menu_open: 60 cells; fvg_first_nq, 2026-10-06)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)

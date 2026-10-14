@@ -70,6 +70,25 @@ function plotPoints(points, bars) {
   return [...byTt.entries()].sort((a, b) => a[0] - b[0]).map(([time, value]) => ({ time, value }));
 }
 
+/* A strategy's own markers (ctx.mark -> bundle.plots.marks: a divergence, a signal that was not traded) as the
+   marker list cell.setExtraMarkers takes: the ones inside the loaded bars, newest `cap` kept (a chart with years
+   of bars must not try to draw thousands). A long mark sits below its bar with an up arrow, a short one above it
+   with a down arrow; a mark with no side is a quiet dot. `colors` = {up, down, flat}. */
+const MARKS_CAP = 1500;
+function strategyMarkers(marks, bars, barMs, colors, cap = MARKS_CAP) {
+  if (!bars || !bars.length || !marks || !marks.length) return [];
+  const start = bars[0].ms, end = barMs > 0 ? bars[bars.length - 1].ms + barMs : Infinity, out = [];
+  for (const m of marks) {
+    if (!(m.t_ms >= start && m.t_ms < end)) continue;
+    const side = m.side === 'long' || m.side === 'short' ? m.side : '';
+    const above = m.pos ? m.pos === 'above' : side === 'short';
+    out.push({ id: `mark:${m.name}:${m.t_ms}`, ms: m.t_ms, position: above ? 'aboveBar' : 'belowBar',
+      shape: side ? (above ? 'arrowDown' : 'arrowUp') : 'circle', size: side ? 1 : 0.6,
+      color: side === 'long' ? colors.up : side === 'short' ? colors.down : colors.flat, text: m.text || '' });
+  }
+  return out.length > cap ? out.slice(-cap) : out;
+}
+
 /* ---- series plots: which pane, and how they look ----
    A price-scale series (a moving average, a VWAP) belongs on the candles' own scale; anything else (an ADX, a
    0..1 reading, a distance in points) would be a flat line squashed against it, so it gets a sub-pane. Judged on
@@ -766,7 +785,11 @@ class Overlay {
     this.bar0 = bars.length ? bars[0].ms : null;
     this.cell.setExtraMarkers('tester', []);     // the trades are the primitive's now; never leave 2026-09-28's markers behind
     this.inRange = this.shows() && b ? tradesInRange(b.trades, bars, this.cell.barMs()) : [];
-    this.rebuildPlots(this.shows() && window.HBTesterUI.rules, b);
+    const on = this.shows() && window.HBTesterUI.rules;
+    this.rebuildPlots(on, b);
+    const P = this.cell.P || {};
+    this.cell.setExtraMarkers('tester-marks', on && b && b.plots
+      ? strategyMarkers(b.plots.marks, bars, this.cell.barMs(), { up: P.up || '#089981', down: P.down || '#F23645', flat: P.text2 || '#787B86' }) : []);
   }
 
   /* The run's series plots. A price-scale series joins the candles' pane; the rest share one sub-pane below
@@ -892,6 +915,7 @@ class Overlay {
     this.legend.remove();
     this.layer.remove();
     this.cell.setExtraMarkers('tester', []);
+    this.cell.setExtraMarkers('tester-marks', []);
   }
 }
 
@@ -927,7 +951,7 @@ function jump(i, target = null, opts = {}) {
   return runJump({ U: window.HBTesterUI, page: PAGE, tester: window.HBTester, cat: window.HBCatalog, chartFacts, windowJumps: WINDOW_JUMPS }, i, target, opts);
 }
 
-const api = { overlay, jump, runJump, setWindowJumps, windowCovers, windowEnd, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, plotPane, isConstant, valueAt,
+const api = { overlay, jump, runJump, setWindowJumps, windowCovers, windowEnd, settleFocus, focusTradeView, contextOf, viewShows, tradesInRange, sessionIndex, plotPoints, strategyMarkers, plotPane, isConstant, valueAt,
   showPlan, claudeAvoidsSelected, focusTrade, chartFacts, hlineStyle, hlineLabel, hlineTip, levelText, stackLabels, placeLabels, dedupeLevels, labelsFit,
   boxGeometry, fillSides, thinLabels, tradeTip, LABEL_MIN_PX, MIN_BOX_W };
 if (typeof window !== 'undefined') window.HBTesterLayer = api;

@@ -143,6 +143,10 @@ class LiveCtx:
             return
         self._out.append({"op": "plot", "name": name, "t_ms": t_ns // 1_000_000, "value": value})
 
+    def mark(self, name: str, t_ns: int, price: float, text: str = "", side: str = "", pos: str = "") -> None:
+        """A chart-only marker (the tester draws it); the live desk has no chart for it, so it is dropped."""
+        return None
+
     def hline(self, name: str, price: float, role: str = "level") -> dict:
         """Record a level the strategy placed, for the chart only -- it never reaches an order. Returns the
         record, which a strategy may still rename; the rename is display-only and is not sent."""

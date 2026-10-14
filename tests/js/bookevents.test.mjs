@@ -265,7 +265,7 @@ test('flow layer: bubbles of the heatmap and sweeps of the big prints, each only
   o.bub.draw(r.target); o.swp.draw(r.target);
   assert.equal(r.ctx.log.length, 0);
   o.destroy();
-  assert.equal(r.calls.detach, 3);                                  // bubbles, sweeps, and the stop-run / exhaustion layer
+  assert.equal(r.calls.detach, 4);                                  // bubbles, sweeps, the stop-run / exhaustion layer, and the gap boxes
 });
 
 function flowRig(indicators) {

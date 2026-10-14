@@ -342,7 +342,7 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 
 _CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
                 "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
-                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool}
+                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "bar_sizes": (tuple, list)}
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 
 
@@ -424,6 +424,9 @@ def static_meta(source: str) -> dict:
         if not all(isinstance(k, str) for k in names) or len(names) > 6 or len(set(names)) != len(names) \
                 or any(k not in keys for k in names):
             raise StaticError("desk_settings: up to 6 different input keys, each one of this strategy's inputs()")
+    if "bar_sizes" in meta and not all(isinstance(m, int) and not isinstance(m, bool) and m in (1, 5, 15)
+                                       for m in meta["bar_sizes"]):
+        raise StaticError("bar_sizes: a list of 1, 5 and / or 15 (minutes)")
     if "session_window" in meta and len(meta["session_window"]) != 2:
         raise StaticError("session_window: (start, end)")
     return meta

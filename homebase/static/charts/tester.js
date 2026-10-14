@@ -104,6 +104,104 @@ const ET = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', hour
   day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 const COSTS = [['qty', 'Qty', 1, 100, true], ['commission', 'Commission', 0, 100, false], ['slippage_ticks', 'Slippage (ticks)', 0, 20, false]];
 
+/* ---- run controls (the engine's backtest/controls.py, the same list): trade rules set on the run, for any strategy.
+   Everything is OFF by default; a run with none set sends no `controls` field at all and is the run it always was.
+   key -> [kind, default, lo | choices, hi]; kind time = a New York HH:MM. */
+const CONTROLS = {
+  entry_from: ['time', ''], entry_to: ['time', ''], flat_at: ['time', ''],
+  direction: ['choice', 'both', ['both', 'long', 'short']],
+  max_trades: ['int', 0, 0, 50], stop_wins: ['int', 0, 0, 50], stop_losses: ['int', 0, 0, 50], max_consec_losses: ['int', 0, 0, 50],
+  day_loss: ['float', 0, 0, 1e6], day_profit: ['float', 0, 0, 1e6], cooldown_min: ['int', 0, 0, 600], max_hold_min: ['int', 0, 0, 1440],
+  stop_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'none']], stop_pts: ['float', 0, 0, 5000], stop_atr: ['float', 0, 0, 50],
+  target_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'rr', 'none']], target_pts: ['float', 0, 0, 5000], target_atr: ['float', 0, 0, 50],
+  target_rr: ['float', 0, 0, 50],
+  bar_minutes: ['choice', 0, [0, 1, 5, 15]],
+  atr_minutes: ['choice', 5, [1, 5, 15]], atr_period: ['int', 14, 2, 200],
+};
+const CTL_NEEDS = [['stop_mode', 'fixed', 'stop_pts'], ['stop_mode', 'atr', 'stop_atr'], ['target_mode', 'fixed', 'target_pts'],
+  ['target_mode', 'atr', 'target_atr'], ['target_mode', 'rr', 'target_rr']];
+const CTL_TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
+/* Every field that is set and valid, none pruned (a heat-map keeps a number whose mode an axis will switch on). */
+function controlsFields(raw) {
+  const o = {};
+  for (const [k, [kind, def, a, b]] of Object.entries(CONTROLS)) {
+    const v = raw && raw[k];
+    if (v === undefined || v === null || v === '' || v === def) continue;
+    if (kind === 'time') { if (typeof v === 'string' && CTL_TIME.test(v)) o[k] = v; }
+    else if (kind === 'choice') { if (a.includes(v)) o[k] = v; }
+    else if (typeof v === 'number' && Number.isFinite(v) && v >= a && v <= b && (kind !== 'int' || Number.isInteger(v))) o[k] = v;
+  }
+  return o;
+}
+/* The rules as they are sent: only what is set and valid, a number only while its mode reads it. */
+function controlsClean(raw) {
+  const o = controlsFields(raw);
+  for (const [m, name, num] of CTL_NEEDS) if (o[m] !== name) delete o[num];
+  if (o.stop_mode !== 'atr' && o.target_mode !== 'atr') { delete o.atr_minutes; delete o.atr_period; }
+  return o;
+}
+/* What stops a run from going out, in words ('' when the rules are fine). */
+function controlsError(raw) {
+  const c = controlsClean(raw);
+  for (const [m, name, num] of CTL_NEEDS) if (c[m] === name && !c[num]) return `Trade rules: ${m === 'stop_mode' ? 'stop' : 'target'} ${name === 'rr' ? 'R multiple' : name === 'atr' ? 'ATR multiple' : 'points'} needed`;
+  if (c.entry_from && c.entry_to && c.entry_from >= c.entry_to) return 'Trade rules: the entry window ends before it starts';
+  if (c.flat_at && c.entry_from && c.flat_at <= c.entry_from) return 'Trade rules: flat time is before the entry window opens';
+  for (const [k, [kind, , a, b]] of Object.entries(CONTROLS)) {
+    const v = raw && raw[k];
+    if (v === undefined || v === null || v === '' || kind === 'time' || kind === 'choice') continue;
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < a || v > b || (kind === 'int' && !Number.isInteger(v))) return `Trade rules: ${k.replace(/_/g, ' ')} is ${kind === 'int' ? 'a whole number' : 'a number'} ${a} to ${b}`;
+  }
+  return '';
+}
+/* A page field's text onto the rules (a new object): '' or the default takes the rule off. */
+function setControl(raw, key, text) {
+  const spec = CONTROLS[key], o = { ...(raw || {}) };
+  if (!spec) return o;
+  if (text === '' || text == null) { delete o[key]; return o; }
+  o[key] = spec[0] === 'time' ? String(text) : spec[0] === 'choice' ? (typeof spec[2][0] === 'number' ? Number(text) : text) : Number(text);
+  return o;
+}
+
+/* ---- heat-map axes over the run settings (grid.py: an axis key `ctl.<field>`). The same words the Lab's Trade rules use. */
+const CTL_AXIS = 'ctl.';
+/* a number that only means something under one mode: an axis on it switches that mode on (0 = leave the mode alone) */
+const CTL_IMPLIES = { stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
+  target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'] };
+const CTL_LABELS = {
+  entry_from: 'Trade from (NY)', entry_to: 'Trade until (NY)', flat_at: 'Flat at (NY)', direction: 'Direction',
+  max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
+  day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
+  stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
+  target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length',
+};
+/* The run settings a heat-map may vary, in the order a person thinks of them. Signal bar only when the strategy offers sizes. */
+const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'stop_wins', 'stop_losses', 'max_trades',
+  'max_consec_losses', 'entry_from', 'entry_to', 'flat_at', 'direction', 'bar_minutes', 'day_loss', 'day_profit', 'cooldown_min',
+  'max_hold_min', 'stop_mode', 'target_mode', 'atr_minutes', 'atr_period'];
+const CTL_HINT = { time: 'e.g. 09:35, 10:00, off', choice: null, int: 'e.g. 0, 1, 2, 3  (0 = off)', float: 'e.g. 10, 15, 20  or  10:30:5' };
+/* One run setting as the same {key, label, type, choices?, min, max, step, default} a strategy input has. */
+function ctlInput(field) {
+  const spec = CONTROLS[field];
+  if (!spec) return null;
+  const [kind, def, a, b] = spec, key = CTL_AXIS + field, label = CTL_LABELS[field] || field;
+  if (kind === 'time') return { key, label, type: 'time', default: '', ctl: true };
+  if (kind === 'choice') return { key, label, type: 'choice', choices: a, default: def, ctl: true };
+  const step = field === 'stop_pts' || field === 'target_pts' ? 0.25 : kind === 'int' ? 1 : 0.1;
+  return { key, label, type: kind, min: a, max: b, step, default: def, ctl: true };
+}
+function ctlAxisInputs(s) {
+  const sizes = Array.isArray(s && s.bar_sizes) ? s.bar_sizes : [];
+  return CTL_AXIS_ORDER.filter((f) => f !== 'bar_minutes' || sizes.length).map(ctlInput).filter(Boolean)
+    .map((i) => (i.key === CTL_AXIS + 'bar_minutes' ? { ...i, choices: [0, ...sizes] } : i));
+}
+/* Everything a heat-map axis may be for strategy s: its own inputs, then the run settings. */
+function axisInput(s, key) {
+  if (typeof key === 'string' && key.startsWith(CTL_AXIS)) return ctlAxisInputs(s).find((i) => i.key === key) || null;
+  return (s.inputs || []).find((i) => i.key === key) || null;
+}
+const axisHint = (inp) => (inp.type === 'choice' ? `one of: ${inp.choices.map((c) => (c === 0 && inp.ctl ? '0' : c)).join(', ')}` : inp.type === 'bool' ? 'on, off'
+  : inp.type === 'time' ? CTL_HINT.time : inp.ctl ? CTL_HINT[inp.type] : 'e.g. 5, 10, 15  or  5:20:5');
+
 /* ---- formatting ---- */
 const neg = (s, v) => (v < 0 ? MINUS + s : s);
 /* `inf`: cap at 999 and show '∞' -- only Profit factor and RR are unbounded ratios that can blow up
@@ -132,6 +230,7 @@ const signed = (v) => Tr.usd(v) ?? '—';
 
 /* ---- the form ---- */
 function inputError(inp, v) {
+  if (inp.type === 'time') return v === '' || (typeof v === 'string' && CTL_TIME.test(v)) ? null : `${inp.label}: a time as HH:MM, or off`;
   if (inp.type === 'bool') return typeof v === 'boolean' ? null : `${inp.label}: on or off`;
   if (inp.type === 'choice') return inp.choices.includes(v) ? null : `${inp.label}: one of ${inp.choices.join(', ')}`;
   if (typeof v !== 'number' || !Number.isFinite(v)) return `${inp.label}: a number`;
@@ -155,6 +254,8 @@ function restore(saved, s) {
       wf: WF_MODES.includes(r.wf) ? r.wf : null };
   }
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
+  const ctl = controlsClean(saved.controls);       // only when something is set: the form of an old run is what it was
+  if (Object.keys(ctl).length) f.controls = ctl;
   if (!maxCellsError(saved.max_cells)) f.max_cells = saved.max_cells;
   if (typeof saved.prop_rules === 'string') f.prop_rules = saved.prop_rules;
   return f;
@@ -171,7 +272,7 @@ function rangeFromRun(rng) {
 function fromRun(run, s) {
   return restore({ strategy: run.strategy.id, inputs: run.inputs, range: rangeFromRun(run.range),
     qty: run.qty, commission: run.commission, slippage_ticks: run.slippage_ticks,
-    max_cells: run.max_cells, prop_rules: run.prop_rules }, s);
+    controls: run.controls && run.controls.rules, max_cells: run.max_cells, prop_rules: run.prop_rules }, s);
 }
 const isWalkforward = (f) => !!(f && f.range && f.range.wf);
 const isWfCompare = (f) => !!(f && f.range && f.range.wf === WF_COMPARE);
@@ -188,7 +289,7 @@ function problems(f, s) {
   }
   const { start, end } = rangeDates(r);
   if (start && end && start > end) return 'The start date is after the end date';
-  return null;
+  return controlsError(f.controls) || null;
 }
 /* The server's own range shape. The default preset stays `{kind: 'research'}` verbatim: the server
    owns the build days' dates, and the request is byte for byte the one this tester always sent. */
@@ -199,8 +300,9 @@ function rangeBody(r) {
 }
 /* The POST /api/tester/run body. */
 function body(f) {
+  const c = controlsClean(f.controls);
   return { strategy: f.strategy, inputs: { ...f.inputs }, range: rangeBody(f.range), qty: f.qty, commission: f.commission,
-    slippage_ticks: f.slippage_ticks, prop_rules: f.prop_rules };
+    slippage_ticks: f.slippage_ticks, prop_rules: f.prop_rules, ...(Object.keys(c).length ? { controls: c } : {}) };
 }
 const key = (f) => JSON.stringify(body(f));
 function runLabel(f, loadedKey) { return loadedKey && key(f) !== loadedKey ? 'Update report' : 'Run'; }
@@ -491,12 +593,15 @@ function parseValues(text, inp, maxCells) {
   if (!toks.length) return { error: `${inp.label}: enter values` };
   const out = [];
   for (const t of toks) {
-    if (inp.type === 'bool') {
+    if (inp.type === 'time') {
+      out.push(/^(off|none|-)$/i.test(t) ? '' : t);
+    } else if (inp.type === 'bool') {
       const v = { on: true, true: true, off: false, false: false }[t.toLowerCase()];
       if (v === undefined) return { error: `${inp.label}: on or off` };
       out.push(v);
     } else if (inp.type === 'choice') {
-      out.push(t);
+      const hit = inp.choices.find((c) => String(c) === t);
+      out.push(hit !== undefined ? hit : t);
     } else if (t.includes(':')) {
       const parts = t.split(':'), [a, b, st] = parts.map(Number);
       if (parts.length !== 3 || ![a, b, st].every(Number.isFinite) || !(st > 0) || a > b) return { error: `${inp.label}: ${RANGE_MSG}` };
@@ -521,7 +626,9 @@ function parseValues(text, inp, maxCells) {
   }
   return { values: out };
 }
-function valueLabel(v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : String(v); }
+function valueLabel(v) { return typeof v === 'boolean' ? (v ? 'on' : 'off') : v === '' ? 'off' : String(v); }
+/* A heat-map axis's values as headers: the server's own words when it sent them (0 = off, signal bar 0 = own). */
+const axisLabels = (a) => (Array.isArray(a.value_labels) && a.value_labels.length === a.values.length ? a.value_labels : a.values.map(valueLabel));
 /* The axis rows [{key, mode, text | from/to/steps}] (key '' = unused) -> {axes: [{key, values}]} or {error}. */
 function gridAxes(rows, s, maxCells) {
   // Rows and Columns are required; Panels is optional -- a role never shifts into an empty one's place
@@ -529,7 +636,7 @@ function gridAxes(rows, s, maxCells) {
   const used = rows.slice(0, 3).filter((r) => r.key);
   const axes = [];
   for (const r of used) {
-    const inp = s.inputs.find((i) => i.key === r.key);
+    const inp = axisInput(s, r.key);
     if (!inp) return { error: `Unknown parameter ${r.key}` };
     if (axes.some((a) => a.key === r.key)) return { error: `${inp.label} is picked twice` };
     const p = axisValues(r, inp, maxCells);
@@ -553,15 +660,38 @@ function gridProblems(f, s, rows) {
     const v = f[k];
     if (typeof v !== 'number' || !Number.isFinite(v) || v < lo || v > hi || (whole && !Number.isInteger(v))) return `${label}: ${lo} to ${hi}`;
   }
-  return null;
+  const r = f.range;
+  if (r && r.id === 'custom') {
+    const e = dateError(r.start, 'Start date') || dateError(r.end, 'End date');
+    if (e) return e;
+  }
+  return gridControlsError(f.controls, varied);
+}
+/* The shared trade rules of a heat-map, with the ones an axis varies set aside: a mode's number that an axis supplies is
+   not "missing", and a number whose mode is fixed elsewhere (stop points under an ATR stop) says so before the run does. */
+function gridControlsError(raw, varied) {
+  const rest = { ...(raw || {}) }, ax = [...varied].filter((k) => k.startsWith(CTL_AXIS)).map((k) => k.slice(CTL_AXIS.length));
+  for (const fld of ax) {
+    delete rest[fld];
+    const spec = CONTROLS[fld];
+    if (spec && (spec[0] === 'int' || spec[0] === 'float')) rest[fld] = Math.max(1, spec[2]);     // a stand-in: present
+  }
+  for (const fld of ax) {
+    const imp = CTL_IMPLIES[fld];
+    if (!imp || ax.includes(imp[0])) continue;
+    const have = rest[imp[0]];
+    if (have && have !== 'own' && have !== imp[1]) return `${CTL_LABELS[fld]} needs ${CTL_LABELS[imp[0]].toLowerCase()} = ${imp[1]}, but it is set to ${have}: set it back or vary it too`;
+  }
+  return controlsError(rest) || null;
 }
 /* The POST /api/tester/grid body: the range picker's own window, and the viewer's cell cap. */
 function gridBody(f, axes) {
   const varied = new Set(axes.map((a) => a.key));
+  const base = Object.fromEntries(Object.entries(controlsFields(f.controls)).filter(([k]) => !varied.has(CTL_AXIS + k)));
   return { strategy: f.strategy, inputs: Object.fromEntries(Object.entries(f.inputs).filter(([k]) => !varied.has(k))),
     axes: axes.map((a) => ({ key: a.key, values: [...a.values] })), range: rangeBody(f.range),
     qty: f.qty, commission: f.commission, slippage_ticks: f.slippage_ticks,
-    max_cells: f.max_cells, prop_rules: f.prop_rules };
+    max_cells: f.max_cells, prop_rules: f.prop_rules, ...(Object.keys(base).length ? { controls: base } : {}) };
 }
 function looksText(n) {
   n = Number.isFinite(n) ? n : 0;
@@ -573,8 +703,8 @@ function looksLine(n, err) { return err ? `looks counter unreadable: ${err}` : l
 function heatPanels(g) {
   const [ra, ca, pa] = g.axes, at = new Map(g.cells.map((c) => [c.coords.join(','), c.i]));
   return (pa ? pa.values : [null]).map((pv, p) => ({
-    title: pa ? `${pa.label} = ${valueLabel(pv)}` : null, rowLabel: ra.label, colLabel: ca.label,
-    rows: ra.values.map(valueLabel), cols: ca.values.map(valueLabel),
+    title: pa ? `${pa.label} = ${axisLabels(pa)[p]}` : null, rowLabel: ra.label, colLabel: ca.label,
+    rows: axisLabels(ra), cols: axisLabels(ca),
     cells: ra.values.map((_, r) => ca.values.map((__, c) => at.get((pa ? [r, c, p] : [r, c]).join(',')))) }));
 }
 function heatMaxAbs(g) {
@@ -835,7 +965,8 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
-  problems, inputError, body,
+  problems, inputError, body, CONTROLS, controlsClean, controlsFields, controlsError, setControl,
+  CTL_AXIS, CTL_LABELS, CTL_IMPLIES, ctlAxisInputs, axisInput, axisHint, axisLabels,
   key, runLabel, progress, pct, rate, num, dur, fmtEt, tiles, badges, propView, evalOptions, propShown, mcHeadline, mcTiles, mcHistogram, compareRows, paramsDiff,
   summaryRows, periodRows, sortTrades, tradeCells, equitySeries, reachSpec, toneOf };
 if (typeof window !== 'undefined') window.HBTester = api;

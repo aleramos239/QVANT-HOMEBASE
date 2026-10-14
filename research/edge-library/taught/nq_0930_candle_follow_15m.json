@@ -1,0 +1,39 @@
+{
+ "name": "nq_0930_candle_follow_15m",
+ "source": {
+  "title": "Owner's own idea, 2026-10-12: follow the 09:30 15-minute candle, stop at its extreme, target 0.75R"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "win_candle",
+  "settings": {
+   "start": "09:30",
+   "mode": "follow",
+   "k": 0.0,
+   "body_r": 0.0,
+   "body_pts": 0.0,
+   "vol_m": 0.0
+  },
+  "words": "Look at the 15-minute candle that opens at 09:30 ET (09:30-09:45). At its close, 09:45, enter at market in its direction: green = long, red = short, a doji = no trade. Stop at the candle's far extreme (its low for a long, its high for a short). Target 0.75 times the stop distance."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.75,
+  "max_trades": 1
+ },
+ "taught": [
+  "09:30 ET the 15-minute candle opens; at its close (09:45) enter in its direction",
+  "stop = the extreme of that candle on the far side (long: its low; short: its high)",
+  "target = 0.75 x the stop distance (0.75R)",
+  "one trade a day, flat by the engine's 15:58 ET if neither is hit"
+ ],
+ "not_run": [],
+ "control": "random"
+}

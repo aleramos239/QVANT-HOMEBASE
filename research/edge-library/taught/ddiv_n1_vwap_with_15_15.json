@@ -1,0 +1,50 @@
+{
+ "name": "ddiv_n1_vwap_with_15_15",
+ "source": {
+  "title": "Owner's idea, 2026-10-11 (try 2): ddiv with 1 bar each side + session VWAP 'with' filter, 15/15"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "eve",
+  "asia",
+  "london",
+  "pre",
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "ddiv",
+  "settings": {
+   "n": 1,
+   "gate": "vwap_dev",
+   "g_lvl": 0.0,
+   "g_side": "with"
+  },
+  "words": "Every time the chart's Delta divergence study marks a divergence with 1 bar each side (a swing high or low that the very next 5-minute bar confirms), against the session's cumulative delta, enter in its direction at that confirming close: a higher swing high on a lower cumulative delta = short, a lower swing low on a higher cumulative delta = long. Stop 15 points, target 15 points. Only trade it when the close is on the trade's side of the session VWAP: a short needs the close below VWAP, a long above it."
+ },
+ "exits": {
+  "stop_pts": 15,
+  "target_pts": 15,
+  "max_trades": 10
+ },
+ "taught": [
+  "[owner, 2026-10-11] every time it marks the divergence, enter in the corresponding direction; 15 points stop loss and 15 points take profit",
+  "[owner, 2026-10-11] mark it after 1 close: 1 bar each side instead of 5 (the confirmation is the next bar's close)",
+  "[owner, 2026-10-11] add VWAP: the 'with' side -- short below the session VWAP, long above it"
+ ],
+ "not_run": [
+  "VWAP: the engine's session VWAP of each session pass (it restarts at the pass's own start: 09:30 for nyam, 18:00 for eve, 00:00 for asia ...), not one VWAP from 18:00; 'with' = a long needs the signal bar's close above it, a short below it (0 sigma).",
+  "ENTRY PRICE: the chart draws the arrow on the swing bar, 1 bar (5 minutes on 5m) before it is known; the lane enters at the confirming close (the next bar's open), the first moment a trader could act. Trading the arrow's own bar is look-ahead and is NOT run.",
+  "SWING MEMORY: a day session's instance holds that day's bars from 00:00 ET, so its previous swing starts at 00:00; the chart's memory starts at 18:00 and carries across. The evening instance starts at 18:00 as the chart does. The cumulative delta always counts from 18:00.",
+  "SESSION PASSES: the seven passes run as independent instances (the lane's rule), each with its own cap of 10 trades; a trade of one pass may still be open when another pass enters, so up to two positions can overlap at a pass boundary.",
+  "DELTA SOURCE: the desk's own tick archive with an ESTIMATED aggressor side (88.6 % of minutes agree with the vendor's delta on NQ 2022-24); the chart's live study may classify a print differently.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay), one contract.",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only (2021-09-22 .. 2025-06-30)."
+ ],
+ "control": "random"
+}

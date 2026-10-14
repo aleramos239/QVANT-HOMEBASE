@@ -52,7 +52,11 @@ const ta = [
     key: (p) => `press:${p.length}`, label: (p) => `Buy/sell pressure ${p.length}`,
     desc: 'Which side pushes harder: volume, big prints, sweeps, orders; newest bars count most',
     /* `off`: a part line a NEW chart starts with hidden (the Style tab turns it on); the histogram is the blend of them */
-    lines: [line('p', 'Pressure', BLUE, 1, 'solid', { type: 'hist', tag: false }),
+    /* `bands`: |value| under the first is grey (even), under the second pale (a lean), over it solid (a clear push);
+       `words`: what the legend says in front of the number */
+    words: (x) => (x == null ? '' : x >= 25 ? 'Buyers pushing' : x >= 10 ? 'Buyers lean' : x <= -25 ? 'Sellers pushing'
+      : x <= -10 ? 'Sellers lean' : 'Even'),
+    lines: [line('p', 'Pressure', BLUE, 1, 'solid', { type: 'hist', tag: false, bands: [10, 25] }),
       line('tot', 'Session total', ORANGE, 2, 'solid', { tag: false }),
       line('vol', 'Volume', GREY, 1, 'dotted', { tag: false, off: true }),
       line('ord', 'Orders', '#00BCD4', 1, 'dotted', { tag: false, off: true }),
@@ -65,6 +69,18 @@ const ta = [
     marks: (v, P) => (v && v.dir
       ? { position: v.dir < 0 ? 'aboveBar' : 'belowBar', color: v.dir < 0 ? (P.down || DOWN) : (P.up || UP),
         shape: v.dir < 0 ? 'arrowDown' : 'arrowUp', text: 'Δ', size: 1, ago: v.ago }
+      : null) },
+  { id: 'smt', group: 'Structure', name: 'SMT divergence (NQ vs ES)',
+    params: [{ key: 'window', label: 'Bars in the window', type: 'int', min: 1, max: 50, def: 6 },
+      { key: 'reference', label: 'Bars it is compared with', type: 'int', min: 2, max: 500, def: 36 },
+      { key: 'arrow', label: 'Show the arrow', type: 'bool', def: true },
+      { key: 'labels', label: 'Write the words (SMT, and which market took the extreme)', type: 'bool', def: true }],
+    key: (p) => `smt:${p.window}:${p.reference}`, label: (p) => `SMT ${p.window}/${p.reference}`,
+    desc: 'NQ against ES, live: one makes a new high or low and the other does not',
+    lines: [],
+    marks: (v, P, p) => (v && v.dir && !(p && p.arrow === false)
+      ? { position: v.dir < 0 ? 'aboveBar' : 'belowBar', color: v.dir < 0 ? (P.down || DOWN) : (P.up || UP),
+        shape: v.dir < 0 ? 'arrowDown' : 'arrowUp', text: p && p.labels === false ? '' : 'SMT', size: 1, ago: v.ago }
       : null) },
 ];
 

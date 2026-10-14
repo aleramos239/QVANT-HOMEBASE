@@ -51,7 +51,7 @@ def stub_class(name: str, source: str) -> type[Strategy]:
              "session_independent": bool(meta.get("session_independent", False)),
              "inputs": classmethod(lambda cls: list(schema)), "__doc__": meta.get("doc") or None,
              "__module__": __name__}
-    for k in ("session_window", "bar_minutes", "bar_window", "placement_ms", "exec_root", "own_size"):
+    for k in ("session_window", "bar_minutes", "bar_window", "placement_ms", "exec_root", "own_size", "bar_sizes"):
         if k in meta:
             attrs[k] = tuple(meta[k]) if isinstance(meta[k], list) else meta[k]
     stub = type(f"Draft_{name}", (Strategy,), attrs)

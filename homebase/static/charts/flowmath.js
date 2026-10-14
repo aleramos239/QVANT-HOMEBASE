@@ -117,6 +117,49 @@ function stopRuns(bars, i0, i1, len, min) {
   return out;
 }
 
+/* The boxes of the `fvg` study (`key`, e.g. "fvg:0.25:14") among bars[0..upTo]: each run of bars on which one side's
+   newest unfilled gap stays the same (uh / ul up, dh / dl down) is one box, from the gap's first bar (two real bars
+   before the bar that confirmed it) to the last bar it was still open on. [{side: 1 | -1, from, to, top, bottom}]. */
+function fvgBoxes(bars, key, upTo) {
+  const n = Math.min(upTo, bars.length - 1), out = [];
+  const back = (i, k) => { let j = i; while (k > 0 && j > 0) { j--; if (!bars[j].blank) k--; } return j; };
+  for (const [side, hiPart, loPart] of [[1, 'uh', 'ul'], [-1, 'dh', 'dl']]) {
+    let start = -1, last = -1, top = null, bottom = null;
+    const shut = () => { if (start >= 0) out.push({ side, from: back(start, 2), to: last, top, bottom }); start = -1; };
+    for (let i = 0; i <= n; i++) {
+      const b = bars[i];
+      if (!b || b.blank) continue;                       // a closed hour holds the gap, it does not end it
+      const v = b.sv ? b.sv[key] : null, hi = v ? v[hiPart] : null, lo = v ? v[loPart] : null;
+      if (hi == null || lo == null) { shut(); continue; }
+      if (start >= 0 && (hi !== top || lo !== bottom)) shut();
+      if (start < 0) { start = i; top = hi; bottom = lo; }
+      last = i;
+    }
+    shut();
+  }
+  return out;
+}
+
+/* SMT divergences (the server's `smt` values, one on the bar a divergence first shows) among bars[i0..i1 + span]:
+   the line each draws on the chart's own market, from the reference's extreme to the window's. `ago` / `aago` count
+   real bars back from the bar that carries the value (a blank slot is no bar). [{i, from, to, y0, y1, dir, lead,
+   live}], from / to bar indexes; one whose start is left of the first loaded bar is left out. */
+function smtLines(bars, i0, i1, key, span = 60) {
+  const out = [], back = (i, n) => {
+    let j = i;
+    while (n > 0 && j > 0) { j--; if (!bars[j].blank) n--; }
+    return n > 0 ? -1 : j;
+  };
+  for (let i = Math.max(i0, 0); i <= Math.min(i1 + span, bars.length - 1); i++) {
+    const b = bars[i], v = b && !b.blank && b.sv ? b.sv[key] : null;
+    if (!v || !v.dir) continue;
+    const to = back(i, v.ago || 0), from = back(i, v.aago || 0);
+    if (to < 0 || from < 0 || from >= to) continue;
+    out.push({ i, from, to, y0: v.apx, y1: v.px, dir: v.dir, lead: v.lead, live: !!v.live });
+  }
+  return out;
+}
+
 /* Exhaustion among bars[i0..i1]: bar `at` pushes to a new extreme of the `len` bars before it on a delta of `mult`
    x their average |delta| or more, the next `wait` bars make no new extreme, and the last of them closes back past
    the push bar's midpoint -- the aggression went nowhere and was given back. Only confirmed ones (all `wait` bars
@@ -168,7 +211,7 @@ function valueArea(rows, poc, pct) {
   return { vah: rows[hi][0], val: rows[lo][0] };
 }
 
-const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions, valueArea };
+const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions, smtLines, fvgBoxes, valueArea };
 if (typeof window !== 'undefined') window.HBFlowMath = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

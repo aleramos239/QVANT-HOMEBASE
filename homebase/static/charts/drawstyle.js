@@ -30,7 +30,7 @@ const CAPS = ['none', 'arrow', 'circle'];
    no style object of their own. */
 // 2026-10-11: + the entry line's colour / width / style, the labels' text colour and weight, on hover or always (unset: the
 // Tool labels setting), which label parts show (each unset: the setting) and whether the played-out path shows
-const POS = ['profitColor', 'lossColor', 'fontSize', 'showLabels', 'entryColor', 'width', 'lineStyle', 'textColor', 'bold', 'hoverLabels', 'showTarget', 'showStop', 'showRR', 'showResult', 'showPrice', 'showPoints', 'showTicks', 'showMoney', 'showPath'];
+const POS = ['profitColor', 'lossColor', 'fontSize', 'showLabels', 'entryColor', 'width', 'lineStyle', 'textColor', 'bold', 'hoverLabels', 'showTarget', 'showStop', 'showRR', 'showResult', 'showPrice', 'showPoints', 'showTicks', 'showMoney', 'showPath', 'showZoneMoney'];
 const FIELDS = {
   trend: ['width', 'lineStyle', 'extendLeft', 'extendRight', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap', 'hoverLabels'],
   ray: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'startCap', 'endCap', 'hoverLabels'],
@@ -38,7 +38,7 @@ const FIELDS = {
   hline: ['width', 'lineStyle', 'axisLabel', ...TEXT, 'labelAlign'],
   vline: ['width', 'lineStyle', ...TEXT, 'timeLabel'],
   rect: ['width', 'lineStyle', 'fillColor', ...TEXT, 'border', 'midline', 'quarters', 'midStyle', 'extendRight', 'priceLabels', 'hoverLabels'],
-  fib: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'reverse', 'fontSize'],
+  fib: ['width', 'lineStyle', 'extendLeft', 'extendRight', 'levels', 'showLevels', 'showPrices', 'fill', 'fillOpacity', 'reverse', 'fontSize'],
   // 2026-10-11: an arrow is a line with a head; a channel a line and its parallel (the third point); a note its text; an
   // anchored VWAP a line from the bar it was dropped on
   arrow: ['width', 'lineStyle', ...TEXT, 'priceLabel', 'stats', 'hoverLabels'],
@@ -70,7 +70,7 @@ const DEFAULTS = {
   rect: { width: 1, lineStyle: 'solid', text: '', fontSize: 12, textColor: '#2962FF', bold: false, labelPos: 'top',
     border: true, midline: false, quarters: false, midStyle: 'dashed', extendRight: false, priceLabels: false },
   fib: { width: 1, lineStyle: 'solid', extendLeft: false, extendRight: false, levels: FIB_LEVELS, showLevels: true, showPrices: true,
-    fill: true, reverse: false, fontSize: 11 },
+    fill: true, fillOpacity: 8, reverse: false, fontSize: 11 },   // fillOpacity: the soft fill between levels, in percent (8 = how it looked before it was adjustable)
   arrow: { ...LINE_DEF },
   // no fillColor on a channel or a note: unset follows the theme (the same rule as a rectangle)
   channel: { width: 2, lineStyle: 'solid', extendLeft: false, extendRight: false, midline: false },
@@ -105,7 +105,7 @@ function isValidField(type, key, v) {
     case 'startCap': case 'endCap': return CAPS.includes(v);
     case 'profitColor': case 'lossColor': case 'entryColor': return isColor(v);
     case 'showLabels': case 'hoverLabels': case 'showTarget': case 'showStop': case 'showRR': case 'showResult':
-    case 'showPrice': case 'showPoints': case 'showTicks': case 'showMoney': case 'showPath': return typeof v === 'boolean';
+    case 'showPrice': case 'showPoints': case 'showTicks': case 'showMoney': case 'showPath': case 'showZoneMoney': return typeof v === 'boolean';
     case 'lineStyle': case 'midStyle': return LINE_STYLES.includes(v);
     case 'extendLeft': case 'extendRight': case 'axisLabel': case 'bold': case 'priceLabel': case 'stats': case 'timeLabel':
     case 'border': case 'midline': case 'quarters': case 'priceLabels': case 'showLevels': case 'showPrices': case 'fill': case 'reverse':
@@ -113,6 +113,7 @@ function isValidField(type, key, v) {
     case 'fillColor': case 'textColor': return isColor(v);
     case 'text': return typeof v === 'string' && v.length <= MAX_TEXT;
     case 'fontSize': return Number.isInteger(v) && v >= 10 && v <= 28;
+    case 'fillOpacity': return Number.isInteger(v) && v >= 0 && v <= 100;
     case 'labelPos': return (LABEL_POS[type] || []).includes(v);
     case 'labelAlign': return LABEL_ALIGN.includes(v);
     case 'levels': return Array.isArray(v) && v.length >= 1 && v.length <= MAX_FIB_LEVELS && v.every(isValidLevel);

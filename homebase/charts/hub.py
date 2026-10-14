@@ -28,13 +28,14 @@ import datetime as dt
 import threading
 import time
 from dataclasses import dataclass, field
+from types import SimpleNamespace
 
 from ..contracts import point_value, tick_size
 from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
 from .session import session_date
 from .studies import Profile, make
-from .studies_flow import NAMES as FLOW_NAMES, warm_flow
+from .studies_flow import NAMES as FLOW_NAMES, SMT_PARTNER, warm_flow
 from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
 from .tick import BUY, SideClassifier, Tick, from_row
 
@@ -102,6 +103,7 @@ class Stream:
     sessions: list = field(default_factory=list)   # [{date, contract, source, approx, gaps}]
     subs: dict = field(default_factory=dict)       # (conn, chart_id) -> bars already sent
     flows: dict = field(default_factory=dict)      # (conn, chart_id) -> whether that chart draws sweeps / bubbles
+    peer: "Stream | None" = None   # the partner market's stream (Hub.peers) that an smt study reads against
     dirty: bool = False
     reset: bool = False
     partial: bool = False   # prepare() hit BUILD_BUDGET_S before loading every completed session it wanted;
@@ -135,6 +137,8 @@ class Stream:
         if key in self.studies:
             return
         st = make(key, self.tick_size)
+        if hasattr(st, "peer"):
+            st.peer = self.peer
         if prime_sessions(key):
             for b in self.prime:      # earlier sessions: the study's memory, not part of this chart
                 st.push(b)
@@ -150,6 +154,8 @@ class Stream:
             self.values.pop(k, None)
         if "profile" not in want:
             self.profile = None
+        if not any(hasattr(st, "peer") for st in self.studies.values()):
+            self.peer = None
 
     def payload(self, fp: bool = True, big: bool = True, flow: bool = True) -> dict:
         """The history message: the most recent HISTORY_MAX bars, every
@@ -204,6 +210,7 @@ class Prepared:
     tape: list | None      # the today-list object the snapshot was taken from (None: no tape yet)
     upto: int               # how many of its ticks the snapshot covered
     today_date: dt.date | None   # self.today_date[root] read at the TOP of prepare() (torn-read guard)
+    peer: "Prepared | None" = None   # the partner market's stream an smt study in it reads (prepare_peer)
 
 
 class Hub:
@@ -219,6 +226,8 @@ class Hub:
                                             # the feed's own lateness (never negative: a feed is not ahead of the wall)
         self.streams: dict[tuple[str, str], Stream] = {}
         self.minutes: dict[str, Minutes] = {}
+        self.peers: dict[tuple[str, str], Stream] = {}  # streams nobody watches, kept for the smt studies that read
+                                                        # the partner market (link_peer); fed like any stream
         self._minutes_lock = threading.Lock()
         self.taps: list = []                # each (root, Tick) -> None, called for every live print, after its side is known
         self.log = lambda _m: None          # where a raising tap is reported (the service sets it), once a minute per tap
@@ -235,8 +244,10 @@ class Hub:
                                          "source": "live", "approx": False, "gaps": []}
         last = ticks[-1] if ticks else None
         self.clf[root] = SideClassifier(last.price if last else None, last.side if last else BUY)
+        for k in [k for k in self.peers if k[0] == root]:
+            del self.peers[k]
         for s in self.streams.values():
-            if s.root == root:
+            if s.root == root or (s.peer is not None and s.peer.root == root):
                 s.reset = True
 
     def on_ticks(self, root: str, rows: list[dict]) -> None:
@@ -244,7 +255,7 @@ class Hub:
             return
         if root not in self.clf:
             self.start_today(root, session_date(int(rows[0]["ts_ms"]), root), [])
-        streams = [s for s in self.streams.values() if s.root == root]
+        streams = [s for s in (*self.streams.values(), *self.peers.values()) if s.root == root]
         newest = None
         for r in rows:
             d = session_date(int(r["ts_ms"]), root)
@@ -279,6 +290,9 @@ class Hub:
                 for b in s.builder.add(tk):
                     s.commit(b)
                 s.dirty = True
+        for s in self.streams.values():
+            if s.peer is not None and s.peer.root == root:
+                s.dirty = True      # its smt value reads this market's developing bar
         if newest is not None:      # the feed's clock: this delivery's newest print against ours, as it came in
             self.lag_ms[root] = max(0, self.now_ms() - newest)
 
@@ -286,7 +300,7 @@ class Hub:
         """Close the time bars whose end has passed -- on each root's feed clock: now_ms less how late its
         feed runs (lag_ms, measured at its last delivery; the module docstring). A late estimate only holds
         a quiet bar open a little longer; the next print closes it anyway."""
-        for s in self.streams.values():
+        for s in (*self.peers.values(), *self.streams.values()):     # partners first: a chart's smt reads their closes
             for b in s.builder.on_clock(now_ms - self.lag_ms.get(s.root, 0)):
                 s.commit(b)
                 s.dirty = True
@@ -336,9 +350,14 @@ class Hub:
         if info:
             s.sessions.append(info)
         self._prime(s, root, spec, today, study_keys)
+        pp = self.prepare_peer(root, spec, study_keys)       # before the studies: an smt study reads it as it is added
+        if pp is not None:
+            s.peer = pp.stream
+        elif SMT_PARTNER.get(root) and spec.kind == "time":
+            s.peer = self.peers.get((SMT_PARTNER[root], spec.key))
         for k in study_keys:
             s.add_study(k)
-        return Prepared(root, spec, s, tape, upto, today_date)
+        return Prepared(root, spec, s, tape, upto, today_date, pp)
 
     def ensure_prime(self, s: "Stream", keys) -> None:
         """Worker thread: a study added to a stream that already exists may read more sessions than were primed."""
@@ -394,7 +413,43 @@ class Hub:
                 for b in s.builder.add(tk):
                     s.commit(b)
         self.streams[s.key] = s
+        if p.peer is not None:
+            self.link_peer(s, p.peer)
         return s
+
+    def prepare_peer(self, root: str, spec: BarSpec, keys) -> Prepared | None:
+        """Worker thread: the partner market's stream when `keys` holds an smt study that needs one this hub does
+        not have yet (a time chart of a root with a partner), else None. Hand the result to link_peer."""
+        partner = SMT_PARTNER.get(root)
+        if (partner is None or spec.kind != "time" or (partner, spec.key) in self.peers
+                or not any(str(k).split(":")[0] == "smt" for k in keys)):
+            return None
+        return self.prepare(partner, spec, [])
+
+    def link_peer(self, s: Stream, p: Prepared | None) -> None:
+        """Event loop: register the prepared partner stream (caught up with the ticks that arrived meanwhile) and
+        point `s` at it, so the smt studies added next read it. A partner torn by a reseed mid-prepare is left out:
+        the studies answer None until the chart subscribes again."""
+        root = SMT_PARTNER.get(s.root)
+        if root is None or s.spec.kind != "time":
+            return
+        key = (root, s.spec.key)
+        if p is not None and key not in self.peers:
+            tape = self.today.get(root)
+            if tape is p.tape and self.today_date.get(root) == p.today_date:
+                ps = p.stream
+                if tape is not None:
+                    for tk in tape[p.upto:]:
+                        for b in ps.builder.add(tk):
+                            ps.commit(b)
+                self.peers[key] = ps
+        s.peer = self.peers.get(key)
+
+    def _gc_peers(self) -> None:
+        """Drop the partner streams no chart's smt study reads any more."""
+        need = {s.peer.key for s in self.streams.values() if s.peer is not None}
+        for k in [k for k in self.peers if k not in need]:
+            del self.peers[k]
 
     def subscribe(self, s: Stream, sub: tuple, flow: bool = True) -> None:
         s.subs[sub] = len(s.bars)
@@ -408,6 +463,7 @@ class Hub:
             s.flows.pop(sub, None)
             if s.subs.pop(sub, None) is not None and not s.subs and s is not keep:
                 del self.streams[k]
+        self._gc_peers()
 
     def stream_of(self, sub: tuple) -> Stream | None:
         """The stream a chart (conn, chart id) is subscribed to."""
@@ -433,6 +489,7 @@ class Hub:
         chunk: list[Bar] = []
         infos: list[dict] = []
         taken, trimmed, i = 0, False, len(back)
+        used: list[dt.date] = []        # the sessions the chunk and `ahead` come from: the partner's bars for smt
         t0 = time.monotonic()
         with self.store.listing():       # one directory read per year folder, not three per session
             while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
@@ -446,6 +503,7 @@ class Hub:
                 if len(bs) > room:
                     bs, trimmed = bs[-room:], True
                 chunk[:0] = bs
+                used.append(back[i])
                 infos.insert(0, self.history.info(root, back[i]))
                 taken += 1
         # across the join: the page's first bars, as far as a study still remembers the chunk, and all of a
@@ -458,11 +516,19 @@ class Hub:
             for d in (x for x in dates if x >= cut):
                 if len(ahead) >= span:
                     break
+                used.append(d)
                 ahead.extend(b for b in self.history.bars(root, spec, d, memo=False) if b.t >= before_ms)
             ahead = ahead[:span]
+        pview = None
+        if SMT_PARTNER.get(root) and spec.kind == "time" and any(k.split(":")[0] == "smt" for k in keys):
+            pview = SimpleNamespace(bars=[b for d in sorted(set(used))
+                                          for b in self.history.bars(SMT_PARTNER[root], spec, d, memo=False)],
+                                    builder=None)
         studies, repair = {}, {}
         for k in keys:
             st = make(k, s.tick_size)
+            if hasattr(st, "peer"):
+                st.peer = pview
             studies[k] = [st.push(b) for b in chunk]
             repair[k] = [st.push(b) for b in ahead]
         return {"bars": [b.wire(s.tick_size, fp, big, flow) for b in chunk], "studies": studies, "repair": repair,
@@ -475,6 +541,7 @@ class Hub:
                 s.flows.pop(sub, None)
             if not s.subs:
                 del self.streams[k]
+        self._gc_peers()
 
     def drain(self) -> list[tuple[tuple, dict]]:
         """(subscriber, message) for everything that changed since the last drain."""
@@ -482,6 +549,7 @@ class Hub:
         for k, s in list(self.streams.items()):
             if s.reset:
                 del self.streams[k]
+                self._gc_peers()
                 out.extend((sub, {"type": "reset"}) for sub in s.subs)
                 continue
             n = len(s.bars)

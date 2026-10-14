@@ -892,3 +892,85 @@ def test_a_raising_tap_stops_neither_the_next_tap_nor_the_bars_and_logs_once_a_m
     clock[0] += 61_000
     hub.on_ticks("NQ", today[40:50])
     assert len(logs) == 2
+
+
+# ---- smt: the partner market's stream ----------------------------------------------------------------------------------------------------
+def smt_setup(tmp_path, today_rows=None):
+    base = tmp_path / "ticks"
+    t0 = session_ms(P, 9, 30)
+    for root, contract, seed, px in (("NQ", "NQZ6", 1, 100.0), ("ES", "ESZ6", 2, 50.0)):
+        rng, walk = random.Random(seed), []
+        for _ in range(900):                 # two independent walks: their highs and lows part ways somewhere
+            px += rng.choice((-0.25, 0.0, 0.25))
+            walk.append(px)
+        write_archive(base, root, P, contract, rows(t0, walk))
+    clock = [session_ms(D, 9, 31)]
+    hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: clock[0])
+    return hub, clock
+
+
+def open_smt(hub, root="NQ", keys=("smt:2:4",), sub=("conn", "c1"), spec=M1):
+    s = hub.attach(hub.prepare(root, spec, list(keys)))
+    hub.link_peer(s, hub.prepare_peer(root, spec, keys))     # as the server's sub does: no-op for a stream just attached
+    for k in keys:
+        s.add_study(k)
+    hub.subscribe(s, sub)
+    return s
+
+
+def test_an_smt_study_gets_the_partner_stream_and_reads_it(tmp_path):
+    hub, _ = smt_setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    hub.start_today("ES", D, [])
+    assert hub.prepare_peer("NQ", M1, ["vwap"]) is None            # no smt study: no partner needed
+    s = open_smt(hub)
+    assert set(hub.peers) == {("ES", M1.key)} and s.peer is hub.peers[("ES", M1.key)]
+    es = hub.peers[("ES", M1.key)]
+    st = make("smt:2:4")
+    st.peer = es
+    assert s.values["smt:2:4"] == [st.push(b) for b in s.bars]
+    assert any(v for v in s.values["smt:2:4"])                     # the two tapes do disagree somewhere
+
+
+def test_a_chart_without_a_partner_or_on_a_tick_bar_runs_smt_on_nothing(tmp_path):
+    hub, _ = smt_setup(tmp_path)
+    assert hub.prepare_peer("GC", M1, ["smt"]) is None
+    assert hub.prepare_peer("NQ", BarSpec("tick", 500), ["smt"]) is None
+    s = open_smt(hub, spec=BarSpec("tick", 500))
+    assert s.peer is None and not hub.peers
+    assert all(v is None for v in s.values["smt:2:4"])
+
+
+def test_the_partner_stream_is_fed_marks_dependants_dirty_and_goes_with_the_last_chart(tmp_path):
+    hub, _ = smt_setup(tmp_path)
+    t = session_ms(D, 9, 30)
+    hub.start_today("NQ", D, [])
+    hub.start_today("ES", D, [])
+    s = open_smt(hub)
+    es = hub.peers[("ES", M1.key)]
+    hub.drain()
+    assert not s.dirty
+    hub.on_ticks("ES", rows(t, [60.0, 60.25], first_id=1))
+    assert len(hub.today["ES"]) == 2 and es.builder.cur is not None and es.builder.cur.h == 60.25
+    assert s.dirty                                                 # its smt value reads that developing ES bar
+    hub.on_clock(t + 5 * 60_000)
+    assert len(es.bars) > 5 and es.builder.cur is None
+    hub.unsubscribe(("conn", "c1"))
+    assert not hub.streams and not hub.peers
+
+
+def test_reseeding_the_partner_resets_the_chart_that_reads_it(tmp_path):
+    hub, _ = smt_setup(tmp_path)
+    hub.start_today("NQ", D, [])
+    hub.start_today("ES", D, [])
+    s = open_smt(hub)
+    hub.start_today("ES", D, [])
+    assert s.reset and not hub.peers
+    assert hub.drain() == [(("conn", "c1"), {"type": "reset"})]
+
+
+def test_older_runs_smt_over_the_chunk_with_the_partner_s_bars_of_the_same_sessions(tmp_path):
+    hub, _ = smt_setup(tmp_path)
+    s = open_smt(hub)
+    ans = hub.older(s, s.bars[0].t)
+    assert "smt:2:4" in ans["studies"] and len(ans["studies"]["smt:2:4"]) == len(ans["bars"])

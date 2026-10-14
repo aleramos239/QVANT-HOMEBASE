@@ -165,3 +165,122 @@ def test_pressure_wire_key_defaults_and_limits():
         with pytest.raises(ValueError):
             make(bad, 0.25)
     assert warm_bars("press:20") >= 21
+
+
+# ---- smt: NQ against ES, live ------------------------------------------------------------------------------------------------------------
+from types import SimpleNamespace          # noqa: E402
+
+from homebase.charts.studies_flow import SMT      # noqa: E402
+
+
+def hl_bars(highs, lows=None, **kw):
+    lows = lows if lows is not None else [h - 1 for h in highs]
+    return [bar(i, h, l, **kw) for i, (h, l) in enumerate(zip(highs, lows))]
+
+
+def peer_of(highs, lows=None):
+    return SimpleNamespace(bars=hl_bars(highs, lows), builder=None)
+
+
+def smt_run(study, bars):
+    return [study.push(b) for b in bars]
+
+
+def test_smt_one_market_takes_the_high_the_other_does_not_is_bearish_once():
+    nq = [10, 11, 10, 9, 10, 13, 12]
+    es = [10, 11, 10, 9, 10, 10, 10]
+    st = SMT(2, 4)
+    st.peer = peer_of(es, [8] * 7)          # constant lows on both sides: nothing bullish
+    out = smt_run(st, hl_bars(nq, [8] * 7))
+    assert out[:5] == [None] * 5
+    assert out[5] == {"dir": -1, "ago": 0, "px": 13, "aago": 4, "apx": 11, "lead": 1, "live": False}
+    assert out[6] is None                    # still the same signal: no second mark
+
+
+def test_smt_the_partner_taking_the_high_is_the_chart_market_failing_it():
+    nq = [10, 11, 10, 9, 10, 10.5, 10.5]
+    es = [10, 11, 10, 9, 10, 13, 12]
+    st = SMT(2, 4)
+    st.peer = peer_of(es, [8] * 7)
+    out = smt_run(st, hl_bars(nq, [8] * 7))
+    assert out[5] == {"dir": -1, "ago": 0, "px": 10.5, "aago": 4, "apx": 11, "lead": -1, "live": False}
+
+
+def test_smt_both_taking_the_high_is_no_divergence_and_a_low_takes_the_bull_side():
+    both = SMT(2, 4)
+    both.peer = peer_of([10, 11, 10, 9, 10, 13], [8] * 6)
+    assert [v for v in smt_run(both, hl_bars([10, 11, 10, 9, 10, 14], [8] * 6)) if v] == []
+    lows_nq = [8, 7, 8, 9, 8, 5]
+    lows_es = [8, 7, 8, 9, 8, 7.5]
+    bull = SMT(2, 4)
+    bull.peer = peer_of([20] * 6, lows_es)
+    hits = [v for v in smt_run(bull, hl_bars([20] * 6, lows_nq)) if v]
+    assert hits == [{"dir": 1, "ago": 0, "px": 5, "aago": 4, "apx": 7, "lead": 1, "live": False}]
+
+
+def test_smt_the_developing_bar_fires_live_and_changes_nothing():
+    st = SMT(2, 4)
+    st.peer = peer_of([10, 11, 10, 9, 10, 10], [8] * 6)
+    bars = hl_bars([10, 11, 10, 9, 10, 13], [8] * 6)
+    for b in bars[:5]:
+        st.push(b)
+    before = st.state
+    forming = bars[5]
+    forming.closed = False
+    live = st.preview(forming)
+    assert live["dir"] == -1 and live["live"] is True
+    assert st.state is before
+    forming.closed = True
+    assert st.push(forming)["live"] is False
+
+
+def test_smt_the_live_signal_goes_when_the_partner_takes_the_extreme_too():
+    st = SMT(2, 4)
+    forming_es = bar(5, 10, 8, closed=False)
+    peer = SimpleNamespace(bars=hl_bars([10, 11, 10, 9, 10], [8] * 5), builder=SimpleNamespace(cur=forming_es))
+    st.peer = peer
+    bars = hl_bars([10, 11, 10, 9, 10, 13], [8] * 6)
+    for b in bars[:5]:
+        st.push(b)
+    forming = bars[5]
+    forming.closed = False
+    assert st.preview(forming)["dir"] == -1          # NQ at 13, ES still at 10: a divergence, live
+    forming_es.h = 13.5                              # ES makes its high too, while the minute is still open
+    assert st.preview(forming) is None               # nothing to mark any more: the page takes the mark off
+    forming_es.h = 10
+    assert st.preview(forming)["dir"] == -1          # and it is back if the partner's bar is rebuilt without it
+
+
+def test_smt_without_a_partner_or_without_its_bar_there_is_nothing_to_say():
+    none = SMT(2, 4)
+    assert smt_run(none, hl_bars([10, 11, 10, 9, 10, 13])) == [None] * 6
+    gap = SMT(2, 4)
+    gap.peer = SimpleNamespace(bars=[b for b in hl_bars([10, 11, 10, 9, 10, 10], [8] * 6) if b.t != 4 * MIN], builder=None)
+    out = smt_run(gap, hl_bars([10, 11, 10, 9, 10, 13], [8] * 6))
+    assert out[4] is None and out[5] is None         # one common bar short of window + reference: not enough yet
+
+
+def test_smt_a_partner_bar_still_forming_counts_as_it_stands():
+    st = SMT(1, 2)
+    forming = bar(2, 10, 8, closed=False)
+    st.peer = SimpleNamespace(bars=hl_bars([10, 11], [8, 8]), builder=SimpleNamespace(cur=forming))
+    out = smt_run(st, hl_bars([10, 11, 13], [8, 8, 8]))
+    assert out[2]["dir"] == -1 and out[2]["lead"] == 1
+
+
+def test_smt_a_new_session_starts_over():
+    st = SMT(2, 4)
+    st.peer = peer_of([10, 11, 10, 9, 10, 10, 10], [8] * 7)
+    bs = hl_bars([10, 11, 10, 9, 10, 13], [8] * 6)
+    bs.append(bar(6, 13, 8, session="2026-10-10"))
+    out = smt_run(st, bs)
+    assert out[5]["dir"] == -1 and out[6] is None and st.state[1] == 1
+
+
+def test_smt_wire_key_defaults_and_limits():
+    assert (make("smt").w, make("smt").l) == (6, 36)
+    assert (make("smt:3:20").w, make("smt:3:20").l) == (3, 20)
+    for bad in ("smt:0", "smt:51", "smt:6:1", "smt:6:501", "smt:6:36:1", "smt:x", "smt@300"):
+        with pytest.raises(ValueError):
+            make(bad)
+    assert warm_bars("smt") == 44 and warm_bars("smt:3:20") == 25

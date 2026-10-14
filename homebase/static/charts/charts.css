@@ -457,8 +457,11 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .dtb-num:focus, .dtb-select:focus { border-color: var(--accent); }
 .dialog.drawstyle { width: min(420px, 92vw); height: min(500px, 82vh); max-height: none; }   /* 2026-10-09: more settings, a Levels and a Visibility tab */
 .dialog.drawstyle .set-pane { overflow: auto; scrollbar-width: thin; }
-.dialog.drawstyle .fib-row { grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; height: 36px; }
+.dialog.drawstyle .set-row.fib-row { grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 10px; height: 36px; }
 .dialog.drawstyle .fib-row .set-num { width: 100%; }
+.dialog.drawstyle .set-op { display: flex; align-items: center; gap: 8px; }
+.dialog.drawstyle .set-op input[type="range"] { width: 120px; accent-color: var(--accent); }
+.dialog.drawstyle .set-op input[type="range"]:disabled { opacity: .4; }
 .dialog.drawstyle .fib-del { min-width: 28px; padding: 0 6px; }
 .dialog.drawstyle .vis-quick { height: auto; display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 0 2px; }
 .dialog.drawstyle .set-tabs { width: 96px; padding: 8px 4px; }

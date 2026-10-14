@@ -119,3 +119,31 @@ test('valueArea: from the busiest price outward until the share of volume is cov
   assert.deepEqual(M.valueArea([[1, 1]], 1, 70), { vah: 1, val: 1 });
   assert.equal(M.valueArea([], 1, 70), null);
 });
+
+test('smtLines: the chart market\'s two peaks joined, counted in real bars back from the confirming bar', () => {
+  const bars = Array.from({ length: 12 }, (_, i) => ({ h: 100 + i, l: 99 + i, sv: {} }));
+  bars[8].sv['smt:2:4'] = { dir: -1, ago: 1, px: 108, aago: 5, apx: 104, lead: -1, live: false };
+  assert.deepEqual(M.smtLines(bars, 0, 11, 'smt:2:4'), [{ i: 8, from: 3, to: 7, y0: 104, y1: 108, dir: -1, lead: -1, live: false }]);
+  assert.deepEqual(M.smtLines(bars, 0, 11, 'smt:6:36'), []);                     // another setting's key
+  bars[5].blank = true;                                                          // a closed hour is no bar: the start moves one slot
+  assert.equal(M.smtLines(bars, 0, 11, 'smt:2:4')[0].from, 2);
+  bars[3].sv['smt:2:4'] = { dir: 1, ago: 0, px: 90, aago: 9, apx: 95, lead: 1 }; // its start is left of the first loaded bar
+  assert.equal(M.smtLines(bars, 0, 11, 'smt:2:4').length, 1);
+  assert.equal(M.smtLines(bars, 9, 11, 'smt:2:4').length, 0, 'a divergence confirmed left of the view is not asked for');
+});
+
+test('fvgBoxes: one box per gap, from its first bar to the last bar it stayed open, no line to the next gap', () => {
+  const K = 'fvg:0.25:14';
+  const bars = Array.from({ length: 12 }, () => ({ sv: {} }));
+  for (const i of [4, 5, 6]) bars[i].sv[K] = { uh: 102, ul: 100, dh: null, dl: null };   // up gap open on bars 4-6
+  bars[7].sv[K] = { uh: null, ul: null, dh: null, dl: null };                            // filled
+  for (const i of [8, 9, 10]) bars[i].sv[K] = { uh: 110, ul: 108, dh: 99, dl: 97 };      // a newer up gap + a down gap
+  assert.deepEqual(M.fvgBoxes(bars, K, 11), [
+    { side: 1, from: 2, to: 6, top: 102, bottom: 100 },
+    { side: 1, from: 6, to: 10, top: 110, bottom: 108 },
+    { side: -1, from: 6, to: 10, top: 99, bottom: 97 }]);
+  assert.deepEqual(M.fvgBoxes(bars, 'fvg:1:14', 11), [], 'another setting\'s key');
+  bars[5].blank = true;                                                                  // a closed hour holds the gap open
+  assert.equal(M.fvgBoxes(bars, K, 11)[0].to, 6);
+  assert.equal(M.fvgBoxes(bars, K, 5).length, 1, 'only bars up to the one asked for');
+});

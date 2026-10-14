@@ -46,7 +46,7 @@ from .. import draftstore, strategies
 from ..contracts import commission_rt
 from . import drafthost, sandbox
 from ..paths import repo_root, state_dir
-from . import discipline, propsim, report
+from . import controls as ctlmod, discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
 from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
 from .tape import (ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason, effective_session_window, et_ns,
@@ -54,7 +54,7 @@ from .tape import (ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason,
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
 FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital",
-          "prop_rules"}
+          "prop_rules", "controls"}
 FINAL = {"done", "error", "cancelled"}
 PROGRESS_S = 0.5
 DAILY_LOOKBACK = dt.timedelta(days=400)     # > 250 sessions of daily bars for the ADX gate
@@ -81,6 +81,7 @@ def read_json(path: Path, default=None):
         return default
 
 
+MAX_MARKS = 50_000          # ctx.mark records kept in plots.json (the newest: a mark is one small record)
 MAX_PLOT_POINTS = 100_000   # points kept per ctx.plot series in plots.json (a 4-year 1-minute plot is 1.2 M: 300 MB for 7)
 
 
@@ -155,6 +156,9 @@ def validate(body, *, draft: tuple | None = None) -> dict:
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
             "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
+    rules = ctlmod.parse(body.get("controls"))      # run controls (controls.py): only when something is set, so a
+    if rules:                                       # request without them is byte for byte what it always was
+        req["controls"] = rules
     return drafthost.stamp(req, src) if src is not None else req
 
 
@@ -274,7 +278,9 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
                 note_open930(before[-1], t_before)
 
     costs = Costs(req["commission"], req["slippage_ticks"])
-    trades, skipped, no_trade, hlines = [], [], [], []
+    rules = ctlmod.Controls.from_dict(req.get("controls"))
+    blocked: dict[str, int] = {}
+    trades, skipped, no_trade, hlines, marks = [], [], [], [], []
     plots: dict[str, list] = {}
     last = 0.0
     for i, d in enumerate(days):
@@ -300,13 +306,16 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             continue
         strat.session_window = window
         prior = dailies[:bisect_left(daily_dates, d.isoformat())]
-        res = run_session(strat, tape, costs, qty=req["qty"], daily=prior)
+        res = run_session(strat, tape, costs, qty=req["qty"], daily=prior, controls=rules)
+        for why, n in res.blocked.items():
+            blocked[why] = blocked.get(why, 0) + n
         trades += [t.to_dict() for t in res.trades]
         if res.skip:
             no_trade.append({"date": d.isoformat(), "reason": res.skip})
         for k, pts in res.plots.items():
             plots.setdefault(k, []).extend(pts)
         hlines += res.hlines
+        marks += res.marks
 
     by_reason: dict[str, int] = {}
     for s in skipped:
@@ -328,6 +337,7 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             "inputs": req["inputs"], "strategy_config": req.get("strategy_config", {}),
             "range": req["range"], "qty": req["qty"],
             "commission": req["commission"], "slippage_ticks": req["slippage_ticks"],
+            **({"controls": {"rules": req["controls"], "blocked": blocked}} if req.get("controls") else {}),
             # `holdout`: this run READ the test days — a fact on the report, not a permission.
             # `holdout_reason` is retired (always null) and kept only so a bundle keeps its shape.
             "capital": req["capital"], "holdout": rng.holdout, "holdout_reason": None,
@@ -341,7 +351,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     write_json(run_dir / "equity.json", report.equity(trades))       # needs ts_ns; ms conversion is last
     write_json(run_dir / "trades.json", report.to_ms(trades))        # Item 6: entry_ns/exit_ns -> _ms
     plots, thinned = thin_plots(plots)
-    write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines, **({"thinned": thinned} if thinned else {})})
+    write_json(run_dir / "plots.json", {"plots": plots, "hlines": hlines, **({"marks": marks[-MAX_MARKS:]} if marks else {}),
+                                        **({"thinned": thinned} if thinned else {})})
     write_json(run_dir / "propsim.json", prop)
     write_json(run_dir / "run.json", meta)
     status.update(status="done", phase="done", done=len(days), updated=_now())

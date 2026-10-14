@@ -40,10 +40,10 @@ test('backtest.html carries the Lab: page label, the four panel toggles and pane
   assert.ok(HTML.indexOf('/tester.js') < HTML.indexOf('labcode.js'), 'the Lab reads HBTester');
 });
 
-test('the Lab chart is one chart with no tools: the rail, the symbol/indicator/layout buttons and the layout tabs are hidden', () => {
+test('the Lab chart is one chart with no tools: the rail, the symbol/layout buttons and the layout tabs are hidden (the Indicators button is the one tool it shows)', () => {
   const css = rd('charts/lab.css');
   assert.match(css, /\.lab-chart \.rail \{ display: none; \}/);
-  assert.match(css, /\.lab-chart \.toolbar > :not\(#tbFavs\):not\(\.lab-nav\) \{ display: none !important; \}/);
+  assert.match(css, /\.lab-chart \.toolbar > :not\(#tbFavs\):not\(\.lab-nav\):not\(#tbIndicators\) \{ display: none !important; \}/);
   assert.match(css, /\.lab-page \.tabstrip, \.lab-page #tbSettings \{ display: none !important; \}/);
   assert.match(HTML, /id="labNav"[^]*data-nav="-1"[^]*id="labNavText"[^]*data-nav="1"/);
   // the trade stepper lives in the chart's own toolbar (the Mac skin restyles it there, it does not move it), and shows only with trades
@@ -54,6 +54,7 @@ test('the Lab chart is one chart with no tools: the rail, the symbol/indicator/l
   assert.match(LAB, /function soloChart\(\)/);
   assert.match(LAB, /HBTesterLayer\.jump\(i, null, \{ contextMs: dayContext\(t\) \}\)/, 'a trade is framed inside its whole trading day');
   assert.match(LAB, /c\.update\(\{ indicators: \[\] \}\)/, 'the saved chart indicators are not part of the strategy');
+  assert.match(LAB, /let barred = false;\nfunction bareChart\(\) \{\n  if \(barred\) return;/, 'wiped ONCE when the page opens: what a person adds with the Indicators button stays');
 });
 
 test('the Arsenal view: with nothing open the welcome and the empty result step aside for one line of its own', () => {

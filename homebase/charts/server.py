@@ -111,7 +111,7 @@ MAX_DRAWING_WIDTH = 8
 # a position box (2026-10-11): zone colours, label size / colour / weight, whether labels show (showLabels), on hover or always
 # (hoverLabels), which label parts and the played-out path show, and its entry line's colour / width / style
 _POS_FIELDS = {"profitColor", "lossColor", "fontSize", "showLabels", "entryColor", "width", "lineStyle", "textColor", "bold",
-               "hoverLabels", "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath"}
+               "hoverLabels", "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath", "showZoneMoney"}
 # exactly the style fields each drawing type takes (drawstyle.js' FIELDS mirrors this)
 DRAWING_STYLE_FIELDS = {
     "trend": {"width", "lineStyle", "extendLeft", "extendRight", "priceLabel", "stats", "startCap", "endCap", "hoverLabels"} | _TEXT_FIELDS,
@@ -120,7 +120,7 @@ DRAWING_STYLE_FIELDS = {
     "hline": {"width", "lineStyle", "axisLabel", "labelAlign"} | _TEXT_FIELDS,
     "vline": {"width", "lineStyle", "timeLabel"} | _TEXT_FIELDS,
     "rect": {"width", "lineStyle", "fillColor", "border", "midline", "quarters", "midStyle", "extendRight", "priceLabels", "hoverLabels"} | _TEXT_FIELDS,
-    "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "reverse", "fontSize"},
+    "fib": {"width", "lineStyle", "extendLeft", "extendRight", "levels", "showLevels", "showPrices", "fill", "fillOpacity", "reverse", "fontSize"},
     "arrow": {"width", "lineStyle", "priceLabel", "stats", "hoverLabels"} | _TEXT_FIELDS,
     "channel": {"width", "lineStyle", "extendLeft", "extendRight", "fillColor", "midline"},
     "note": {"text", "fontSize", "textColor", "bold", "fillColor"},
@@ -130,7 +130,7 @@ DRAWING_STYLE_FIELDS = {
 }
 DRAWING_STYLE_BOOLS = ("extendLeft", "extendRight", "axisLabel", "bold", "priceLabel", "stats", "timeLabel", "border", "midline",
                        "quarters", "priceLabels", "showLevels", "showPrices", "fill", "reverse", "showLabels", "hoverLabels",
-                       "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath")
+                       "showTarget", "showStop", "showRR", "showResult", "showPrice", "showPoints", "showTicks", "showMoney", "showPath", "showZoneMoney")
 MAX_FIB_LEVELS, FIB_MIN, FIB_MAX = 16, -10, 10      # a retracement's levels: how many, and the ratios they may be
 DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a drawing shows on): bar seconds, at most a month
 MAX_DRAWING_LABEL_TEXT = 200
@@ -285,6 +285,11 @@ def check_style(kind: str, style) -> dict:
         if not isinstance(fs, int) or isinstance(fs, bool) or not 10 <= fs <= 28:
             raise ValueError("style.fontSize: a whole number from 10 to 28")
         out["fontSize"] = fs
+    if "fillOpacity" in style:
+        fo = style["fillOpacity"]
+        if not isinstance(fo, int) or isinstance(fo, bool) or not 0 <= fo <= 100:
+            raise ValueError("style.fillOpacity: a whole number from 0 to 100")
+        out["fillOpacity"] = fo
     if "textColor" in style:
         if not _valid_color(style["textColor"]):
             raise ValueError("style.textColor: #RRGGBB or rgba(r,g,b,a)")
@@ -1957,6 +1962,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                     if s is None:
                         s = hub.attach(await asyncio.to_thread(hub.prepare, root, spec, keys))
                     await asyncio.to_thread(hub.ensure_prime, s, keys)   # sessions the new studies read (noise band ...)
+                    # an smt study reads the partner market (NQ against ES): its stream is built beside this one
+                    hub.link_peer(s, await asyncio.to_thread(hub.prepare_peer, root, spec, keys))
                     if not s.subs:
                         s.retain(keys)      # the studies this chart no longer asks for stop running
                     for k in keys:

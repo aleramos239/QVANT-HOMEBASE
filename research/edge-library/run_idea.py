@@ -67,7 +67,7 @@ import run_menus as RM  # noqa: E402
 SPECS = W / "ideas" / "specs"
 RUNS = LB.RUNS                                         # the library's BUILD stores: what judge.py reads
 LOG = W / "out" / "run_idea.log"
-CAPS = {"runs": 2000, "cells": 80000, "wfs": 40}       # the candidate cap of this stage (module docstring)
+CAPS = {"runs": 2000, "cells": 120000, "wfs": 40}      # the candidate cap of this stage (module docstring); 80,000 -> 120,000 on 2026-10-13 (owner), as library.CAPS
 PERIOD = RM.PERIOD
 KEYS = ("name", "reason", "family", "markets", "bar_sizes", "sessions", "params", "fixed", "filters", "exits", "filter_exits",
         "limits")
@@ -164,7 +164,7 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
     if bad:
         raise SpecError(f"limits {bad}: one of {LIMIT_KEYS}")
     for key in ("exits", "filter_exits"):
-        if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open", "own"):      # 'blueprint' / 'open': set by blueprint/runner.py only (its 48-cell table; the session-anchored 60-cell table); 'own' = the family's own unit_exits (orb_close: the stop at the other side of the range)
+        if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open", "own", "own_low"):      # 'blueprint' / 'open': set by blueprint/runner.py only (its 48-cell table; the session-anchored 60-cell table); 'own' = the family's own unit_exits (orb_close: the stop at the other side of the range)
             raise SpecError(f"{key} {sp.get(key)!r}: 'standard' or 'extended'")
     filters = []
 

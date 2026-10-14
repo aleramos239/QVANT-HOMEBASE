@@ -715,9 +715,10 @@ function drawFib(ctx, d, geo, P, paneW, style, color, tick) {
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
   ctx.restore();
-  if (style.fill) {
+  const fillAlpha = (Number.isInteger(style.fillOpacity) ? style.fillOpacity : 8) / 100;      // 8 = the look before it was adjustable
+  if (style.fill && fillAlpha > 0) {
     for (let i = 0; i + 1 < rows.length; i++) {
-      ctx.fillStyle = withAlpha(rows[i + 1].color, 0.08);
+      ctx.fillStyle = withAlpha(rows[i + 1].color, fillAlpha);
       ctx.fillRect(left, Math.min(rows[i].y, rows[i + 1].y), right - left, Math.abs(rows[i + 1].y - rows[i].y));
     }
   }

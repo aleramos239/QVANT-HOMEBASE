@@ -55,6 +55,57 @@ def test_validate_grid_resolves_values_and_builds_one_single_run_request_per_cel
     assert (c["req"]["qty"], c["req"]["commission"], c["req"]["slippage_ticks"]) == (1, 4.0, 1.0)
 
 
+def test_an_axis_can_be_a_run_setting_and_each_cell_carries_its_own_rules():
+    g = validate_grid(gbody(axes=[{"key": "ctl.stop_pts", "values": [10, 20]},
+                                  {"key": "ctl.stop_losses", "values": [0, 1, 2]}]))
+    assert len(g["cells"]) == 6
+    a0, a1 = g["axes"]
+    assert (a0["key"], a0["label"], a0["ctl"], a0["values"]) == ("ctl.stop_pts", "Stop (points)", True, [10.0, 20.0])
+    assert a1["value_labels"] == ["off", "1", "2"]                       # 0 = no limit reads "off"
+    c = g["cells"][4]                                                    # stop 20, 1 loss
+    assert c["params"] == {"ctl.stop_pts": 20.0, "ctl.stop_losses": 1}
+    assert c["req"]["controls"] == {"stop_mode": "fixed", "stop_pts": 20.0, "stop_losses": 1}   # the mode came with the number
+    assert g["cells"][0]["req"]["controls"] == {"stop_mode": "fixed", "stop_pts": 10.0}          # 0 losses = off, not sent
+
+
+def test_a_run_setting_axis_mixes_with_a_strategy_input_and_shares_the_base_rules():
+    g = validate_grid(gbody(controls={"entry_from": "09:35", "max_trades": 2},
+                            axes=[{"key": "offset_pts", "values": [10, 12]},
+                                  {"key": "ctl.target_rr", "values": [1, 2, 3]}]))
+    assert g["controls"] == {"entry_from": "09:35", "max_trades": 2}
+    for c in g["cells"]:
+        assert c["req"]["controls"]["entry_from"] == "09:35" and c["req"]["controls"]["max_trades"] == 2
+        assert c["req"]["controls"]["target_mode"] == "rr"
+    assert g["cells"][5]["req"]["inputs"]["offset_pts"] == 12.0 and g["cells"][5]["req"]["controls"]["target_rr"] == 3.0
+
+
+def test_a_mode_axis_and_a_time_axis_and_the_signal_bar():
+    g = validate_grid(gbody(controls={"stop_pts": 15},
+                            axes=[{"key": "ctl.stop_mode", "values": ["own", "fixed"]},
+                                  {"key": "ctl.entry_to", "values": ["", "11:00"]},
+                                  {"key": "ctl.bar_minutes", "values": [0, 5]}]))
+    assert len(g["cells"]) == 8
+    assert g["axes"][1]["value_labels"] == ["off", "11:00"] and g["axes"][2]["value_labels"] == ["own", "5"]
+    own = g["cells"][0]["req"]
+    assert "controls" not in own or own["controls"].get("stop_mode") is None   # own stop: the number is dropped
+    last = g["cells"][7]["req"]["controls"]
+    assert last == {"stop_mode": "fixed", "stop_pts": 15.0, "entry_to": "11:00", "bar_minutes": 5}
+
+
+@pytest.mark.parametrize("axes,ctl,msg", [
+    ([{"key": "ctl.nope", "values": [1]}, {"key": "sl_pts", "values": [5]}], None, "unknown run setting"),
+    ([{"key": "ctl.stop_pts", "values": [10, 10]}, {"key": "sl_pts", "values": [5]}], None, "twice"),
+    ([{"key": "ctl.stop_pts", "values": [10, 99999]}, {"key": "sl_pts", "values": [5]}], None, "within"),
+    ([{"key": "ctl.entry_from", "values": ["25:00"]}, {"key": "sl_pts", "values": [5]}], None, "HH:MM"),
+    ([{"key": "ctl.stop_pts", "values": [10]}, {"key": "sl_pts", "values": [5]}], {"stop_mode": "atr"}, "needs stop type = fixed"),
+    ([{"key": "ctl.stop_mode", "values": ["own", "atr"]}, {"key": "sl_pts", "values": [5]}], None, "stop_atr: needed"),
+    ([{"key": "ctl.stop_pts", "values": [10]}, {"key": "sl_pts", "values": [5]}], {"zzz": 1}, "unknown field"),
+])
+def test_bad_run_setting_axes_are_refused(axes, ctl, msg):
+    with pytest.raises(ValueError, match=msg):
+        validate_grid(gbody(axes=axes, **({"controls": ctl} if ctl else {})))
+
+
 def test_the_cap_is_60_cells():
     ok = validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(6))},
                                    {"key": "sl_pts", "values": list(range(1, 11))}]))

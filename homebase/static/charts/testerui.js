@@ -1303,7 +1303,7 @@ let heatRowsStrategy = null;
    numeric inputs at their defaults. */
 function currentHeatRows() {
   if (heatRows && heatRowsStrategy === strategyId) return heatRows;
-  const schema = schemaFor(strategyId), keys = new Set(schema.inputs.map((i) => i.key));
+  const schema = schemaFor(strategyId), keys = new Set([...schema.inputs.map((i) => i.key), ...X.ctlAxisInputs(schema).map((i) => i.key)]);
   const saved = Array.isArray(store.heat[strategyId]) ? store.heat[strategyId] : null;
   const blank = { key: '', mode: 'list', text: '', from: '', to: '', steps: '' };
   const clean = (r) => ({ key: r.key, mode: r.mode === 'range' ? 'range' : 'list',
@@ -1335,8 +1335,15 @@ function axisRow(k, busy, sync = syncHeat) {
   sel.disabled = busy;
   sel.appendChild(optionEl('', k < 2 ? 'Pick a parameter' : '— none —'));
   for (const i of schema.inputs) sel.appendChild(optionEl(i.key, i.label));
+  const ctlIns = X.ctlAxisInputs(schema);       // the run settings (stop, target, signal bar, trades a day ...) vary the same way
+  if (ctlIns.length) {
+    const grp = document.createElement('optgroup');
+    grp.label = 'Trade rules';
+    for (const i of ctlIns) grp.appendChild(optionEl(i.key, i.label));
+    sel.appendChild(grp);
+  }
   sel.value = rows[k].key;
-  const inpOf = () => schema.inputs.find((i) => i.key === rows[k].key);
+  const inpOf = () => X.axisInput(schema, rows[k].key);
   const mode = page.mk('select', 'set-select tst-heat-mode');
   mode.setAttribute('aria-label', `${AXIS_ROLES[k]} value mode`);
   mode.appendChild(optionEl('list', 'List'));
@@ -1344,7 +1351,7 @@ function axisRow(k, busy, sync = syncHeat) {
   mode.value = rows[k].mode;
   const vals = page.mk('span', 'tst-heat-vals-wrap');
   const placeholder = (inp) => (!inp ? '' : inp.type === 'bool' ? 'on, off' : inp.type === 'choice' ? inp.choices.join(', ')
-    : 'e.g. 5, 10, 15  or  5:20:5');
+    : inp.type === 'time' ? 'e.g. 09:35, 10:00, off' : 'e.g. 5, 10, 15  or  5:20:5');
   function drawVals() {
     const inp = inpOf(), numeric = !!inp && (inp.type === 'int' || inp.type === 'float');
     mode.disabled = busy || !numeric;
@@ -1374,9 +1381,9 @@ function axisRow(k, busy, sync = syncHeat) {
     vals.appendChild(txt);
   }
   sel.onchange = () => {
-    const inp = schema.inputs.find((i) => i.key === sel.value);
+    const inp = X.axisInput(schema, sel.value);
     rows[k] = { ...rows[k], key: sel.value,
-      text: inp ? (inp.type === 'bool' ? 'on, off' : String(inp.default)) : '', from: '', to: '', steps: '' };
+      text: inp ? (inp.type === 'bool' ? 'on, off' : inp.ctl ? '' : String(inp.default)) : '', from: '', to: '', steps: '' };
     drawVals();
     saveHeatRows();
     sync();

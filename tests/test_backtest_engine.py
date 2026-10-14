@@ -4,7 +4,7 @@ from __future__ import annotations
 import datetime as dt
 from array import array
 
-from homebase.backtest.engine import Costs, build_bars, run_session, to_tick
+from homebase.backtest.engine import Costs, build_bars, run_session, split_flow, to_tick
 from homebase.backtest.tape import Tape, et_ns
 from homebase.strategies.base import Strategy
 
@@ -222,6 +222,71 @@ def test_bars_close_before_the_next_print_and_are_built_from_ticks():
     s = Script({}, bars=1)
     run_session(s, tp, Costs())
     assert [b.c for b in s.seen] == [101.0, 99.0]
+
+
+def test_split_flow_is_the_tick_rule_carried_across_bars_and_opt_in():
+    # 09:30 bar: 100 (no side yet), 101 up = buy 1, 101 again keeps buy 1, 100 down = sell 1
+    # 09:31 bar: 100 unchanged keeps the sell, 102 up = buy 1
+    rows = [("09:30:05", 100.0), ("09:30:10", 101.0), ("09:30:20", 101.0), ("09:30:30", 100.0),
+            ("09:31:05", 100.0), ("09:31:40", 102.0)]
+    tp = tape(rows)
+    bars = build_bars(tp.ts, tp.px, tp.size, 0, len(tp.ts), et_ns(D, "09:30"), et_ns(D, "09:32"), 1)
+    assert not hasattr(bars[0], "buy")
+    split_flow(tp.ts, tp.px, tp.size, 0, len(tp.ts), bars)
+    assert [(b.buy, b.sell) for b in bars] == [(2, 1), (1, 1)]
+    assert [b.v for b in bars] == [4, 2]                 # the bar's own fields are untouched
+
+    class Flow(Script):
+        needs_flow = True
+    for cls, has in ((Script, False), (Flow, True)):
+        s = cls({}, bars=1)
+        run_session(s, tp, Costs())
+        assert [hasattr(b, "buy") for b in s.seen] == [has, has]
+
+
+def test_a_scan_signal_acts_at_its_print_not_at_a_candle_close():
+    rows = [("09:30:05", 100.0), ("09:31:10", 101.0), ("09:31:11", 101.5), ("09:31:40", 102.0), ("09:33:00", 130.0)]
+    tp = tape(rows)
+    seen = {}
+
+    class Sig(Script):
+        def scan(self, tape_, lo, hi, t0, t1):
+            seen["args"] = (lo, hi, t0, t1)
+            return [(tape_.ts[1], ("long", tape_.px[1]))]
+
+        def on_signal(self, ctx, payload):
+            seen["now"] = ctx._s.now
+            side, x = payload
+            ctx.market(side, sl=x - 10, tp=x + 10, ref=x)
+
+    s = Sig({}, bars=1)
+    res = run_session(s, tp, Costs())
+    assert seen["args"] == (0, 5, et_ns(D, "09:25"), et_ns(D, "16:00"))
+    assert seen["now"] == tp.ts[1]                       # the clock is the print the scan named
+    t, = res.trades
+    assert t.side == "long" and et_ns(D, "09:31:10") <= t.entry_ns < et_ns(D, "09:32")
+    assert not Script({}).scan(tp, 0, 5, 0, 1)           # the base class: nothing to act on
+
+
+def test_a_mark_is_recorded_for_the_chart_and_never_reaches_an_order():
+    tp = tape([("09:30:05", 100.0), ("09:31:10", 101.0), ("09:33:00", 102.0)])
+
+    def drop(ctx, s):
+        ctx.mark("delta divergence", ctx.now_ns, 101.0, "\u0394", "long")
+        ctx.mark("note", ctx.now_ns, 102.0)
+        ctx.mark("short one", ctx.now_ns, 103.0, "S", "short")
+        ctx.mark("bad", ctx.now_ns, float("nan"))
+        ctx.mark("pinned", ctx.now_ns, 99.0, "x", "long", "above")
+
+    res = run_session(Script({"09:31": drop}), tp, Costs())
+    assert not res.trades
+    assert [(m["name"], m["price"], m["side"], m["pos"], m["text"]) for m in res.marks] == [
+        ("delta divergence", 101.0, "long", "below", "\u0394"),
+        ("note", 102.0, "", "below", ""),
+        ("short one", 103.0, "short", "above", "S"),
+        ("pinned", 99.0, "long", "above", "x"),
+    ]
+    assert all(isinstance(m["t_ms"], int) and m["t_ms"] > 0 for m in res.marks)
 
 
 # ---- Fix round 1 -----------------------------------------------------------

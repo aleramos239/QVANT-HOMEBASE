@@ -1,0 +1,13 @@
+{
+ "name": "orb0930_range_stop_tk",
+ "reason": "Owner's own ORB 2026-10-12: NQ 09:30 ET, the first 5-minute candle is the range, the first 1-minute close beyond it enters at market, stop at the other side of the range, target 1R among the six standard targets, entries to 11:00, flat 15:58, one trade a day.",
+ "family": "orb_close",
+ "markets": ["NQ"],
+ "bar_sizes": ["1"],
+ "sessions": ["nyam"],
+ "params": {"entry": ["market"]},
+ "fixed": {"or_min": "5", "start": "0930", "wait": "0"},
+ "filters": [],
+ "exits": "own",
+ "limits": {"max_tr": 1, "dir": "both"}
+}

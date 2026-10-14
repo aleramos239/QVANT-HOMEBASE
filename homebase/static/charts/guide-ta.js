@@ -30,7 +30,7 @@ G.add({
       'One line on the price pane, 2 pixels thick, purple at first. Pick its colour in Settings.',
       'More lines: "+ Add line" in Settings. Each line has its own anchor (say 6 pm or 9:30 am) and colour.',
       'It restarts at its anchor. The default anchor, Session, is the 18:00 New York open.',
-      'Optional bands, off by default: dashed lines above and below, in the same colour.',
+      'Optional bands, off by default: dashed lines above and below. Every line gets them, in its own colour.',
       'Band 1, 2 and 3 sit 1, 2 and 3 standard deviations away (the usual spread of price around the line).',
     ],
     read: [

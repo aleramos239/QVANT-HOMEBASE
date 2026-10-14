@@ -2,8 +2,8 @@
 desk hours, weekdays 08:00-16:15 ET -- a run holding a higher slot when desk hours begin finishes;
 no new one takes it) -- single tester runs,
 heat-map cells and script runs together, from EVERY checkout on this machine -- and none STARTS
-in the QUIET window (09:20-09:35 ET, weekdays), because the live desk's 9:30 bot shares the
-machine. A run already going keeps going; anything queued waits until 09:35.
+in a QUIET window. The 09:20-09:35 ET window that used to be one was removed on 2026-10-12 at
+the owner's word (QUIET is now empty); an override's own quiet windows still apply.
 
 State lives in one fixed per-machine dir, `shared_dir()` = ~/.homebase/tester (the env var
 HOMEBASE_TESTER_SHARED overrides it; the test suite always points it at a tmp dir):
@@ -34,9 +34,9 @@ ET = ZoneInfo("America/New_York")
 CAP = 2                                        # during desk hours (weekdays 08:00-16:15 ET)
 CAP_OFF_HOURS = 4                              # evenings, nights and weekends: the desk is idle
 DESK_HOURS = (dt.time(8, 0), dt.time(16, 15))  # [start, end) ET, Mon-Fri (covers the 08:30 GC event bot)
-QUIET = (dt.time(9, 20), dt.time(9, 35))      # [start, end) ET, Mon-Fri
-QUIET_MSG = "paused for the 9:30 window"
-QUIET_REFUSAL = f"{QUIET_MSG}: no backtest starts 09:20–09:35 ET on weekdays"
+QUIET = (dt.time(0, 0), dt.time(0, 0))        # [start, end) ET, Mon-Fri: EMPTY since 2026-10-12 (was 09:20-09:35)
+QUIET_MSG = "paused for a quiet window"
+QUIET_REFUSAL = f"{QUIET_MSG}: no backtest starts in it"
 ENV = "HOMEBASE_TESTER_SHARED"
 OVERRIDE_ENV = "HOMEBASE_TESTER_SLOTS_FILE"
 

@@ -29,3 +29,4 @@
 .dialog.indicator-settings .vl-rm { flex: none; width: 24px; height: 28px; border-radius: 4px; color: var(--text-2); font-size: 16px; }
 .dialog.indicator-settings .vl-rm:hover { background: var(--hover); color: var(--text); }
 .dialog.indicator-settings .vl-add { margin: 6px 0 10px; }
+.dialog.indicator-settings .vl-bands { flex: none; display: inline-flex; align-items: center; gap: 4px; color: var(--text-2); font-size: 12px; }

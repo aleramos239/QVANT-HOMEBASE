@@ -57,7 +57,7 @@ from ..backtest.tape import ARCHIVE, CACHE, ET, Tape, et_ns, stable_sorted
 from ..contracts import tick_size
 from ..paths import repo_root, state_dir
 from ..strategies.gc_nfpcpi import GCNfpCpi, calendar as csv_calendar
-from . import QUIET, _jsonl
+from . import _jsonl
 from .calendar import week_start
 
 STRATEGY_ID = GCNfpCpi.id                   # "gc_nfpcpi"
@@ -573,9 +573,9 @@ def _et(ns: int) -> str:
 
 def backtest_delay_s(now_ms: int) -> float:
     """Seconds to wait before the comparison may start: never 08:00-10:00 ET (the event
-    window, which holds QUIET 09:20-09:35); a start inside it is moved to 10:05 ET."""
+    window); a start inside it is moved to 10:05 ET."""
     t = dt.datetime.fromtimestamp(now_ms / 1000, ET)
-    blocked = BACKTEST_BLOCK[0] <= t.time() < BACKTEST_BLOCK[1] or QUIET[0] <= t.time() < QUIET[1]
+    blocked = BACKTEST_BLOCK[0] <= t.time() < BACKTEST_BLOCK[1]
     if not blocked:
         return 0.0
     target = dt.datetime.combine(t.date(), BACKTEST_AT, ET)

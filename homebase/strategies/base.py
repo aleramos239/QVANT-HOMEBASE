@@ -25,6 +25,8 @@ Orders (see homebase/backtest/engine.py for the fill law):
     chart and never traded: role is one of anchor | entry | sl | tp | level (default "level"), so
     the page styles a level without parsing its name. A strategy may rename a record it kept a
     reference to before the session ends (OpenStraddle marks the leg that never filled).
+  ctx.mark(name, t_ns, price, text="", side="", pos="") -- a marker the chart draws on the bar covering
+    t_ns (a divergence, a signal that was not traded); chart only. side long | short colours it; pos above | below.
 """
 from __future__ import annotations
 
@@ -95,6 +97,10 @@ class Strategy:
     session_window: tuple[str, str] = ("09:25", "16:00")   # ET [start, end)
     bar_minutes: int = 0                  # > 0: on_bar gets bars of this size
     bar_window: tuple[str, str] | None = None   # ET span bars are built over (default: session_window)
+    # The signal bar sizes (minutes) the run's "Signal bar" setting may swap bar_minutes for. Empty = the logic is tied to
+    # its own bar (a 5-minute candle body, a 15-minute opening range) and the setting is ignored, said so in the run.
+    bar_sizes: tuple[int, ...] = ()
+    bar_min_eff: int = 0                  # set by the engine each session: the bar size in force (bar_minutes or the run's swap)
     placement_ms: int = 85                # measured order-placement latency (research)
     # True = every session is independent: day state resets in on_session and anything older comes from
     # ctx.daily (the store), never from an earlier session of the SAME run. The walk-forward relies on it
@@ -121,6 +127,7 @@ class Strategy:
         return {"id": cls.id, "name": cls.name, "root": cls.root,
                 "session_window": list(cls.session_window),
                 "bar_minutes": cls.bar_minutes,
+                **({"bar_sizes": list(cls.bar_sizes)} if cls.bar_sizes else {}),
                 **({"exec_root": cls.exec_root} if cls.exec_root else {}),
                 **({"own_size": True} if cls.own_size else {}),
                 "inputs": [i.to_dict() for i in cls.inputs()]}
@@ -151,4 +158,18 @@ class Strategy:
         pass
 
     def on_bar(self, ctx, bar) -> None:
+        pass
+
+    # Acting on a print, not on a candle close (opt-in, tester only). `scan` runs once a session before the replay:
+    # it reads the session's prints (tape.ts / px / size, indices lo..hi, window start / end in ns) and returns
+    # [(print_ts_ns, payload), ...]; the engine then calls `on_signal(ctx, payload)` with the clock at that print,
+    # so an order placed there is the soonest a real one could be. A scan sees only the tape, never the position:
+    # on_signal decides (ctx.flat) whether to act.
+    # (The prior daily bars, when needs_daily() is True, are on self.scan_daily for the scan, as ctx.daily is later.)
+    scan_daily: list = []
+
+    def scan(self, tape, lo: int, hi: int, t0: int, t1: int):
+        return ()
+
+    def on_signal(self, ctx, payload) -> None:
         pass

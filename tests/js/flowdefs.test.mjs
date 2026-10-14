@@ -36,6 +36,19 @@ test('ddiv marks: a divergence at the swing, nothing otherwise', () => {
   assert.equal(m({ dir: 1, ago: 5, px: 4 }, {}).position, 'belowBar');
 });
 
+test('smt: its key carries both lengths, marks follow the direction and sit `ago` bars back', () => {
+  const d = D.ta.find((x) => x.id === 'smt');
+  assert.equal(d.key({ window: 6, reference: 36 }), 'smt:6:36');
+  assert.equal(d.group, 'Structure');
+  assert.equal(d.marks(null, {}), null);
+  assert.deepEqual(d.marks({ dir: -1, ago: 2, px: 12 }, {}), { position: 'aboveBar', color: '#F23645', shape: 'arrowDown', text: 'SMT', size: 1, ago: 2 });
+  assert.equal(d.marks({ dir: 1, ago: 0, px: 4 }, { up: '#0a0' }).color, '#0a0');
+  const v = { dir: -1, ago: 2, px: 12 };
+  assert.equal(d.marks(v, {}, { arrow: false }), null, 'arrow off: no triangle at all');
+  assert.equal(d.marks(v, {}, { labels: false }).text, '', 'words off: the triangle stays, without "SMT"');
+  assert.equal(d.marks(v, {}, { arrow: true, labels: true }).text, 'SMT');
+});
+
 test('bookValue: a number for one column, an object for the depth pair, null while the store has nothing', () => {
   const mean = (m) => (col) => (col in m ? m[col] : null);
   assert.equal(D.bookValue('bk:imb5', mean({ imb5: 0.25 })), 0.25);

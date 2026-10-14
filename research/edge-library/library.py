@@ -57,7 +57,7 @@ LEDGER = W / "ledger.csv"
 if str(ENGINE) not in sys.path:
     sys.path.insert(0, str(ENGINE))
 
-CAPS = {"runs": 2000, "cells": 80000, "wfs": 40}          # EDGE_SPEC user rule 5; cells 40,000 -> 50,000 by "STAGE 2b", -> 80,000 by "ADMISSION v2" part D (user): HARD
+CAPS = {"runs": 2000, "cells": 120000, "wfs": 40}         # EDGE_SPEC user rule 5; cells 40,000 -> 50,000 by "STAGE 2b", -> 80,000 by "ADMISSION v2" part D (user), -> 120,000 on 2026-10-13 (owner, the three-session search: "work on it until you find it"): HARD
 COLS = ("stage", "key", "kind", "family", "root", "tf", "period", "control", "seed", "runs", "cells", "null_cells", "wfs",
         "trades", "elapsed_s", "note", "finished_utc")
 # what a row of each kind counts against; 'null' = a null / control grid: counted in `null_cells`, which has NO cap

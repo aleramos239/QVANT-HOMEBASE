@@ -179,7 +179,10 @@ const api = { COL, CHUNK_MS, MAX_ROWS, covered, applyHistory, applyLive, meanAt,
 
 /* ---------------------------------------------------------------- browser */
 if (typeof window !== 'undefined') {
-  const pending = new Set(), blocked = new Map();
+  const pending = new Set(), blocked = new Map(), refused = new Map();   // refused: root -> the newest refusal {status, detail, at}
+
+  /* Why older history is missing, while it is: the server's refusal (a paused window, busy) in the last 5 minutes. */
+  api.refusal = (root) => { const r = refused.get(root); return r && Date.now() - r.at < 300_000 ? r : null; };
 
   /* Ask for what [from, to) lacks, one chunk at a time per root; never while backing off. */
   api.ensure = async function ensure(root, from, to) {
@@ -192,6 +195,7 @@ if (typeof window !== 'undefined') {
         const q = new URLSearchParams({ root, from_ms: String(a), to_ms: String(b) });
         const r = await fetch('/api/book/history?' + q);
         if (r.ok) {
+          refused.delete(root);
           const body = await r.json();
           // applyHistory's listeners run inside it and may ask again at once: hold the chunk off first, and lift the
           // hold only when the answer really covered it. A 200 whose t1 stops short (the server's clamp, a skewed
@@ -204,9 +208,11 @@ if (typeof window !== 'undefined') {
           let detail = null;
           try { detail = (await r.json()).detail; } catch (_) { /* no JSON body */ }
           blocked.set(key, Date.now() + retryAfter(r.status, detail));
+          refused.set(root, { status: r.status, detail: String(detail || ''), at: Date.now() });
         }
       } catch (_) {
         blocked.set(key, Date.now() + retryAfter(0, null));
+          refused.set(root, { status: 0, detail: '', at: Date.now() });
       } finally {
         pending.delete(key);
       }

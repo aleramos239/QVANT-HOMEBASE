@@ -436,10 +436,11 @@ class Cell {
   }
 
   /* What the calendar layer draws now: the events this chart shows (its Events settings) and where. A tick,
-     volume or range chart has no place for an event outside its bars. */
+     volume or range chart has no place for an event outside its bars. The folders, the line and its look are the
+     chart's Economic calendar indicator (catalog.js `events`); the currencies stay in Settings > Events. */
   eventsNow() {
-    const n = this.bars.length;
-    if (!n || !this.chart) return null;
+    const n = this.bars.length, ev = C.eventsView(this.cfg.indicators);   // no visible Economic calendar indicator: no flags
+    if (!n || !this.chart || !ev) return null;
     const ts = this.chart.timeScale(), time = this.isTime(), first = this.bars[0].ms, last = this.bars[n - 1].ms;
     const ctx = { bars: this.bars, isTime: time, barMs: this.barMs(), coord: (i) => ts.logicalToCoordinate(i) };
     const xOf = (t) => (!time && (t < first || t > last) ? null : window.HBDrawings.timeToX(t, ctx));
@@ -451,8 +452,8 @@ class Cell {
     // past the last bar the window reaches as many bar lengths on as the visible range does (a news at 10:00 seen at 09:30)
     const ahead = vr && time && this.barMs() > 0 ? Math.max(0, Math.ceil(vr.to) + 1 - (n - 1)) * this.barMs() : 0;
     const to = vr ? (this.bars[Math.min(n - 1, Math.ceil(vr.to) + 1)] || this.bars[n - 1]).ms + ahead : last;
-    return { events: window.HBEvents.shown(this.host.events(), this.R), xOf, lines: this.R.evLines, lineStyle: this.R.evLineStyle,
-      lineWidth: this.R.evLineWidth, from, to };
+    return { events: window.HBEvents.shown(this.host.events(), { ...this.R, ...ev }), xOf, lines: ev.evLines, lineStyle: ev.evLineStyle,
+      lineWidth: ev.evLineWidth, from, to };
   }
 
   redrawEvents() { if (this.evl) this.evl.redraw(); }
@@ -924,12 +925,18 @@ class Cell {
           for (const l of C.vwapLines(inst)) {   // more lines: each its own anchor and colour, the first line's width and dash
             line(inst, l.key, null, l.color, main.width, 0, { ...tagOpt(main), ...shapeOpt(main), lineStyle: dash(main.dash), visible: main.visible !== false });
           }
+          // The bands (the same ones, set once) belong to every line with bands on: the first line's in its Style colour,
+          // each more line's in its own colour (the band's opacity, width and dash are shared).
+          const bandLines = [{ key: k, color: null }, ...C.vwapLines(inst).filter((l) => l.bands !== false).map((l) => ({ key: l.key, color: l.color }))];
           for (let n = 1; n <= 3; n++) {
             if (!inst.params[`band${n}On`]) continue;
             const mult = inst.params[`band${n}Mult`] || n, bs = st[`band${n}`] || { color: P.band, width: 1, dash: 'dashed', visible: true };
-            for (const sign of [1, -1]) {   // part: the signed sd multiplier itself -- point() just applies it
-              line(inst, k, mult * sign, C.lineColor(bs), bs.width, 0,
-                { ...shapeOpt(bs), lineStyle: dash(bs.dash), lastValueVisible: false, visible: bs.visible !== false });
+            for (const b of bandLines) {
+              const col = b.color ? C.lineColor({ ...bs, color: b.color }) : C.lineColor(bs);
+              for (const sign of [1, -1]) {   // part: the signed sd multiplier itself -- point() just applies it
+                line(inst, b.key, mult * sign, col, bs.width, 0,
+                  { ...shapeOpt(bs), lineStyle: dash(bs.dash), lastValueVisible: false, visible: bs.visible !== false });
+              }
             }
           }
           break;
@@ -1064,12 +1071,15 @@ class Cell {
   statusFacts() {
     const n = this.bars.length, ts = this.chart.timeScale(), vr = ts.getVisibleLogicalRange();
     const i0 = vr ? Math.max(0, Math.floor(vr.from)) : 0, i1 = vr ? Math.min(n - 1, Math.ceil(vr.to)) : n - 1;
-    const f = { bars: this.bars, i0, i1, readable: !this.fp || this.fp.readable(), M: window.HBFlowMath, E: window.HBBookEvents };
+    const f = { bars: this.bars, i0, i1, readable: !this.fp || this.fp.readable(), M: window.HBFlowMath, E: window.HBBookEvents,
+      root: String((this.shown || this.cfg).root || '').toUpperCase(), time: this.isTime() };
     const Bk = window.HBBookStore, first = this.bars[i0], last = this.bars[i1];
     if (Bk && first && last) {
       const t0 = first.ms, t1 = last.ms + (this.isTime() ? this.barMs() : 0) + 1, root = this.cfg.root, cov = Bk.covered(root);
       f.book = { rows: Bk.rowCount(root), covered: cov.some((c) => c[0] < t1 && c[1] > t0),
-        live: cov.some((c) => c[1] >= Date.now() - 120000) };
+        live: cov.some((c) => c[1] >= Date.now() - 120000),
+        full: cov.some((c) => c[0] <= t0 + 60000 && c[1] >= Math.min(t1, Date.now()) - 120000),   // one stretch spans the whole view
+        refused: Bk.refusal ? Bk.refusal(root) : null };    // why older history is missing (a paused window, busy)
       if (this.cfg.indicators.some((x) => ['bigorders', 'absorb', 'pulled', 'iceberg'].includes(x.id))) f.episodes = Bk.episodes(root, t0, t1);
     }
     return f;
@@ -1228,7 +1238,9 @@ class Cell {
       // per-instance colour as their line, not the old fixed palette, once a style gives them one.
       const own = this.colorOf[r.inst.uid];
       const colors = { text: P.text, up: P.up, down: P.down, line: own || P.accent, vwap: own || P.vwap, cum: own || P.cum };
-      const vs = F.indValues && !(r.inst.opts && r.inst.opts.legend === false) ? C.legendValues(r.inst, b, colors, dt) : [];
+      // a plain-word reading ("Buyers pushing") is the answer itself, not a number: it shows even with "Indicator values" off
+      const off = r.inst.opts && r.inst.opts.legend === false;
+      const vs = off ? [] : C.legendValues(r.inst, b, colors, dt).filter((x) => F.indValues || x.word);
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -1238,6 +1250,10 @@ class Cell {
   onUpdate(m) {
     if (!this.chart || this.inflight.length || this.windowAt != null) return;   // a window is a past, not the live stream
     const touched = [];
+    /* a marker study's value on the developing bar: that bar is about to be replaced, so a mark it carried (SMT) is gone
+       if the new value is empty, and the markers must be drawn again for it to go */
+    const keys0 = this.markerStudyKeys(), dev = this.devel ? this.bars[this.bars.length - 1] : null;
+    const hadMark = !!(dev && dev.sv && keys0.some((k) => dev.sv[k] != null));
     const vals = (i, live) => { const o = {}; for (const k in m.studies) o[k] = live ? m.studies[k].live : m.studies[k].closed[i]; return o; };
     m.closed.forEach((b, i) => { b.sv = vals(i, false); if (i === 0 && this.devel) this.replaceLast(b); else this.append(b); touched.push(b); });
     if (m.live) { m.live.sv = vals(0, true); if (!m.closed.length && this.devel) this.replaceLast(m.live); else this.append(m.live); touched.push(m.live); }
@@ -1252,7 +1268,7 @@ class Cell {
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
     // a big print, or a value for a study drawn as markers (ddiv: the server puts it on the confirming bar), moves the markers
     const markKeys = this.markerStudyKeys();
-    if (touched.some((b) => (b.big && b.big.length) || (b.sv && markKeys.some((k) => b.sv[k] != null)))) this.drawMarkers();
+    if (hadMark || touched.some((b) => (b.big && b.big.length) || (b.sv && markKeys.some((k) => b.sv[k] != null)))) this.drawMarkers();
     this.syncLastColor();
     this.drawLevels(); this.syncFootprint();
     this.legend(this.hover);
@@ -1352,6 +1368,10 @@ class Cell {
       const x = C.lineValue(l.gen, v);
       if (x == null) return { time };
       if (l.gen.type !== 'hist') return { time, value: x };
+      if (l.gen.bands && !l.gen.fixed) {   // even = grey, a lean = pale, a clear push = solid (flowdefs.js `bands`)
+        const m = Math.abs(x);
+        return { time, value: x, color: m < l.gen.bands[0] ? 'rgba(120,123,134,.45)' : m < l.gen.bands[1] ? (x >= 0 ? P.upA : P.downA) : (x >= 0 ? P.up : P.down) };
+      }
       return l.gen.fixed ? { time, value: x } : { time, value: x, color: x >= 0 ? P.upA : P.downA };
     }
     if (typeof v === 'number') return { time, value: v };
@@ -1445,7 +1465,7 @@ class Cell {
       if (!t || !t.marks || inst.visible === false) continue;
       const k = C.serverKey(inst);
       for (let i = 0; i < this.bars.length; i++) {
-        const v = this.bars[i].sv && this.bars[i].sv[k], m = v ? t.marks(v, this.P) : null;
+        const v = this.bars[i].sv && this.bars[i].sv[k], m = v ? t.marks(v, this.P, inst.params) : null;
         if (!m) continue;
         let j = i, left = m.ago || 0;
         while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back

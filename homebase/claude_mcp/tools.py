@@ -71,11 +71,22 @@ _COSTS = {
                    "slippage_ticks": {"type": "number", "minimum": 0, "maximum": 20},
                    "capital": {"type": "number", "minimum": 1}},
     "additionalProperties": False}
+_CONTROLS = {
+    "type": "object", "description": "Trade rules for the run, enforced by the engine for any strategy (all off by "
+    "default): entry_from / entry_to / flat_at (NY HH:MM), direction (both|long|short), max_trades, stop_wins, "
+    "stop_losses, max_consec_losses, day_loss / day_profit ($, closed P&L), cooldown_min (after a loss), "
+    "max_hold_min, stop_mode (own|fixed|atr|none) with stop_pts or stop_atr, target_mode (own|fixed|atr|rr|none) "
+    "with target_pts / target_atr / target_rr, atr_minutes (1|5|15), atr_period.",
+    "additionalProperties": True}
 _INPUTS = {"type": "object", "description": "Strategy inputs by key (see list_strategies / read_strategy); "
                                             "anything left out takes its default.",
            "additionalProperties": True}
 _AXES = {"type": "array", "minItems": 2, "maxItems": 3,
-         "description": "2 or 3 numeric/bool/choice inputs to vary, each with its list of values.",
+         "description": "2 or 3 things to vary, each with its list of values: a strategy input by its key, or a "
+                        "RUN SETTING as `ctl.<field>` (ctl.stop_pts, ctl.target_rr, ctl.stop_losses, ctl.max_trades, "
+                        "ctl.entry_from, ctl.bar_minutes, ... the `controls` fields). A stop / target number switches "
+                        "its mode on by itself; a 0 or \"\" value = that rule off. A strategy's own `trigger` "
+                        "(instant / bar_close) is an input, so it can be an axis too.",
          "items": {"type": "object", "required": ["key", "values"],
                    "properties": {"key": {"type": "string"}, "values": {"type": "array", "minItems": 1}},
                    "additionalProperties": False}}
@@ -103,17 +114,17 @@ SPECS = [
     _spec("backtest", "Run one tick-replay backtest (exactly what the page's Run button does) and wait for it. "
           "Returns net $, Sharpe, win rate, profit factor, max drawdown, trades (all/long/short), a by-year "
           "table, data coverage and the prop-eval headline, plus the run_id for trades / montecarlo / prop_eval / "
-          "show_on_chart. Refused 09:20-09:35 ET on weekdays and queued behind the 2-backtest machine cap. "
+          "show_on_chart. Queued behind the 2-backtest machine cap. "
           "Pass run_id instead to keep waiting on a run started earlier. Walk-forward: use the walkforward tool.",
           {"strategy": {"type": "string"}, "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS,
-           "prop_rules": _PROP, "wait_s": _WAIT,
+           "controls": _CONTROLS, "prop_rules": _PROP, "wait_s": _WAIT,
            "run_id": {"type": "string", "description": "Wait on this existing run instead of starting one."}}),
     _spec("heatmap", "Run a parameter heat-map: every combination of 2-3 inputs' values is a full backtest "
           "(<= max_cells, default 60). Returns one row per cell (params, net $, Sharpe, WR, PF, max DD, trades) "
           "and the looks counter (at 5%, ~looks/20 cells look significant by luck). Pass grid_id to keep waiting "
           "on an existing heat-map.",
           {"strategy": {"type": "string"}, "axes": _AXES, "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS,
-           "prop_rules": _PROP, "max_cells": {"type": "integer", "minimum": 1, "maximum": 400},
+           "controls": _CONTROLS, "prop_rules": _PROP, "max_cells": {"type": "integer", "minimum": 1, "maximum": 400},
            "wait_s": _WAIT, "grid_id": {"type": "string", "description": "Wait on this existing heat-map."}}),
     _spec("walkforward", "Walk-forward over a heat-map grid: select the best cell on 1 month, test it on the next "
           "`ratio` months, step monthly, stitch the out-of-sample legs. Returns stitched OOS vs in-sample stats "
@@ -124,7 +135,7 @@ SPECS = [
           {"strategy": {"type": "string"}, "axes": _AXES, "ratio": {"type": "integer", "enum": [1, 2, 3], "default": 3},
            "metric": {"type": "string", "enum": ["net_profit", "sharpe", "profit_factor", "t_stat"]},
            "min_trades": {"type": "integer", "minimum": 1, "maximum": 1000},
-           "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS, "prop_rules": _PROP,
+           "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS, "controls": _CONTROLS, "prop_rules": _PROP,
            "max_cells": {"type": "integer", "minimum": 1, "maximum": 400}, "wait_s": _WAIT,
            "walkforward_id": {"type": "string", "description": "Wait on this existing walk-forward."},
            "test_months": {"type": "integer", "enum": [1, 2, 3],
@@ -492,13 +503,17 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         return "\n".join(parts)
 
     def t_backtest(self, strategy: str | None = None, inputs=None, range=None, costs=None,  # noqa: A002
-                   prop_rules=None, wait_s=None, run_id=None) -> str:
+                   prop_rules=None, wait_s=None, run_id=None, controls=None) -> str:
         if run_id is None:
             if not strategy:
                 raise ToolError("strategy: required (or run_id to wait on an existing run)")
             body = {"strategy": strategy, "inputs": inputs or {}, "range": range_body(range), **_costs(costs)}
             if prop_rules:
                 body["prop_rules"] = prop_rules
+            if controls:
+                if not isinstance(controls, dict):
+                    raise ToolError("controls: an object")
+                body["controls"] = controls
             run_id = self.c.post("/api/tester/run", body)["id"]
         st, final = self._wait(f"/api/tester/run/{_q(run_id)}", wait_s)
         if not final:
@@ -508,10 +523,14 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
             raise ToolError(f"Run {run_id} {st.get('status')}: {st.get('error') or ''}".strip())
         return bundle_summary(self._bundle({"run_id": run_id}), {"run_id": run_id})
 
-    def _grid_body(self, strategy, axes, inputs, range, costs, prop_rules, max_cells) -> dict:  # noqa: A002
+    def _grid_body(self, strategy, axes, inputs, range, costs, prop_rules, max_cells, controls=None) -> dict:  # noqa: A002
         if not strategy or not axes:
             raise ToolError("strategy and axes: required")
         body = {"strategy": strategy, "inputs": inputs or {}, "axes": axes, "range": range_body(range), **_costs(costs)}
+        if controls:
+            if not isinstance(controls, dict):
+                raise ToolError("controls: an object")
+            body["controls"] = controls
         if prop_rules:
             body["prop_rules"] = prop_rules
         if max_cells is not None:
@@ -519,9 +538,9 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         return body
 
     def t_heatmap(self, strategy=None, axes=None, inputs=None, range=None, costs=None,  # noqa: A002
-                  prop_rules=None, max_cells=None, wait_s=None, grid_id=None) -> str:
+                  prop_rules=None, max_cells=None, wait_s=None, grid_id=None, controls=None) -> str:
         if grid_id is None:
-            body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells)
+            body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells, controls)
             grid_id = self.c.post("/api/tester/grid", body)["id"]
         g, final = self._wait(f"/api/tester/grid/{_q(grid_id)}", wait_s)
         axes_l = g.get("axes") or []
@@ -552,12 +571,12 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
 
     def t_walkforward(self, strategy=None, axes=None, ratio=3, metric=None, min_trades=None, inputs=None,
                       range=None, costs=None, prop_rules=None, max_cells=None, wait_s=None,  # noqa: A002
-                      walkforward_id=None, test_months=None) -> str:
+                      walkforward_id=None, test_months=None, controls=None) -> str:
         if test_months is not None and (type(test_months) is not int or test_months not in (1, 2, 3)):
             raise ToolError("test_months: 1, 2 or 3")
         wid = walkforward_id
         if wid is None:
-            body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells)
+            body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells, controls)
             body["test_months"] = ratio
             if metric:
                 body["metric"] = metric

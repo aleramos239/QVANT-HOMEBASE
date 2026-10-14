@@ -41,7 +41,7 @@ from collections import deque
 from pathlib import Path
 
 from .. import draftstore, strategies
-from . import drafthost, runner
+from . import controls as ctlmod, drafthost, runner
 from .discipline import parse_range
 from .runner import RUN_ID, _now, read_json, write_json
 from .slots import QUIET_MSG, Slots, shared_dir
@@ -51,7 +51,8 @@ DEFAULT_MAX_CELLS = 60      # what the page's Max cells box starts at
 HARD_MAX_CELLS = 400        # ... and the most it, or any other client, may ask for
 WORKERS = 4                 # cell threads; each still needs a machine slot (slots.cap_at)
 FIELDS = {"strategy", "inputs", "axes", "range", "qty", "commission", "slippage_ticks", "capital",
-          "max_cells", "prop_rules"}
+          "max_cells", "prop_rules", "controls"}
+CTL = "ctl."                # an axis key that names a RUN SETTING (backtest/controls.py) rather than a strategy input
 SUMMARY_KEYS = ("net_profit", "sharpe", "trades", "win_rate", "profit_factor", "max_drawdown", "t_stat",
                 "avg_trade")
 FINAL = {"done", "error", "cancelled"}
@@ -71,10 +72,30 @@ def expand(axes: list[dict]) -> list[dict]:
             for i, coords in enumerate(itertools.product(*ranges))]
 
 
+def _ctl_cells(base_ctl: dict, params: dict) -> dict:
+    """One cell's run settings: the base, then the cell's own axis values. A number that only means something under
+    one mode (stop points under "fixed") switches that mode on unless the base or another axis already picked
+    one; a mode already set to something else is refused, in words."""
+    raw = dict(base_ctl)
+    chosen = {k[len(CTL):]: v for k, v in params.items() if k.startswith(CTL)}
+    raw.update(chosen)
+    for num, (mode, name) in ctlmod.IMPLIES.items():
+        if num not in chosen or not chosen[num] or mode in chosen:
+            continue
+        cur = raw.get(mode, "own")
+        if cur in ("own", name):
+            raw[mode] = name
+        else:
+            raise ValueError(f"{ctlmod.LABELS[num]}: needs {ctlmod.LABELS[mode].lower()} = {name}, "
+                             f"but it is set to {cur}")
+    return raw
+
+
 def validate_grid(body) -> dict:
     """The grid as it will run: resolved axes + one single-run request per cell, all over the
-    body's own range (the build days when it names none). ValueError (DisciplineError for a malformed
-    window) with a message for the page on anything refused."""
+    body's own range (the build days when it names none). An axis is a strategy input (its own key) or a
+    run setting (`ctl.<field>`, backtest/controls.py); `controls` in the body are the settings every cell shares.
+    ValueError (DisciplineError for a malformed window) with a message for the page on anything refused."""
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
     extra = sorted(set(body) - FIELDS)
@@ -91,16 +112,37 @@ def validate_grid(body) -> dict:
     schema = {i.key: i for i in cls.inputs()}
     keys = [a.get("key") if isinstance(a, dict) else None for a in axes_in]
     for k in keys:
-        if k not in schema:
+        if isinstance(k, str) and k.startswith(CTL):
+            if k[len(CTL):] not in ctlmod.SPEC:
+                raise ValueError(f"unknown run setting {k[len(CTL):]!r}")
+        elif k not in schema:
             raise ValueError(f"unknown input {k!r}")
     if len(set(keys)) != len(keys):
         raise ValueError("axes: a parameter appears twice")
     base = {k: v for k, v in (base or {}).items() if k not in keys}
+    base_ctl_in = body.get("controls")
+    if base_ctl_in is not None and not isinstance(base_ctl_in, dict):
+        raise ValueError("controls: a JSON object")
+    base_ctl = {}
+    for k, v in (base_ctl_in or {}).items():          # each field alone: a mode may still be waiting for its axis number
+        if k not in ctlmod.SPEC:
+            raise ValueError(f"controls: unknown field(s): {k}")
+        base_ctl[k] = ctlmod.coerce(k, v)
+    base_ctl = {k: v for k, v in base_ctl.items() if f"{CTL}{k}" not in keys}
     axes = []
     for a in axes_in:
         k, vals = a["key"], a.get("values")
         if not isinstance(vals, list) or not vals:
             raise ValueError(f"{k}: a list of values")
+        if k.startswith(CTL):
+            f = k[len(CTL):]
+            resolved = [ctlmod.coerce(f, v) for v in vals]
+            for j, v in enumerate(resolved):
+                if v in resolved[:j]:
+                    raise ValueError(f"{ctlmod.LABELS[f]}: {v!r} twice")
+            axes.append({"key": k, "label": ctlmod.LABELS[f], "type": ctlmod.SPEC[f][0], "ctl": True,
+                         "values": resolved, "value_labels": [ctlmod.value_label(f, v) for v in resolved]})
+            continue
         resolved = [strategies.resolve_inputs(cls.inputs(), {**base, k: v})[k] for v in vals]
         for j, v in enumerate(resolved):
             if v in resolved[:j]:
@@ -116,12 +158,24 @@ def validate_grid(body) -> dict:
     rng = parse_range(body.get("range"))         # DisciplineError on a malformed window; nothing else refuses
     cells = []
     for c in expand(axes):
-        req = runner.validate({"strategy": cls.id, "inputs": {**base, **c["params"]}, "range": body.get("range"),
-                               **common}, draft=draft)
+        sreq = {"strategy": cls.id, "inputs": {**base, **{k: v for k, v in c["params"].items() if not k.startswith(CTL)}},
+                "range": body.get("range"), **common}
+        raw_ctl = _ctl_cells(base_ctl, c["params"])
+        if raw_ctl:
+            sreq["controls"] = raw_ctl
+        try:
+            req = runner.validate(sreq, draft=draft)
+        except ValueError as e:
+            if raw_ctl and str(e).startswith("controls"):    # name the cell, so a person can tell which one
+                where = ", ".join(f"{a['label']} {a['value_labels'][j] if a.get('value_labels') else a['values'][j]}"
+                                  for a, j in zip(axes, c["coords"]))
+                raise ValueError(f"{e} (cell: {where})") from None
+            raise
         cells.append({**c, "req": req})
     first = cells[0]["req"]
     return {"strategy": cls.id, "strategy_name": cls.name, "axes": axes,
             "base": {k: v for k, v in first["inputs"].items() if k not in keys},
+            "controls": base_ctl,
             "range": rng.to_dict(), "max_cells": cap,
             **{k: first[k] for k in ("qty", "commission", "slippage_ticks", "capital", "prop_rules")},
             "cells": cells}

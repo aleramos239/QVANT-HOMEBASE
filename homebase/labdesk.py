@@ -68,7 +68,7 @@ FLAG_FILE = "lab_desk.on"                # in the checkout's state folder: this 
 REFRESH_S = 2.0                          # the store is re-read this often
 REQ_WAIT_S = 2.0                         # a request waits this long, at most, for the store's lock (in a thread)
 RUNNER_ALIVE_S = 20                      # the runner is alive while its heartbeat is at most this old
-QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: the 9:30 window (limits are not changed in it)
+QUIET = (dt.time(0, 0), dt.time(0, 0))   # weekdays ET: EMPTY since 2026-10-12 (was the 09:20-09:35 window: limits were not changed in it)
 OPEN = ("placing", "placed", "live")     # a round the engine still acts on
 
 NOT_ON_DESK = "That strategy is not on the Desk."

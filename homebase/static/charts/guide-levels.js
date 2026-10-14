@@ -1,10 +1,50 @@
 /* HBGuide entries: levels, ranges and structure, in plain words.
    levels, wk, mo, topen, vaprev, dhl are price levels; orb, sess, noise are ranges of a time window or of the day's open;
-   swing, equal, rmove, rswing, fvg are structure (turning points, gaps, ranges). Times are New York (ET). */
+   swing, equal, rmove, rswing, fvg are structure (turning points, gaps, ranges). events and headlines are the news
+   (calendar flags and headline dots). Times are New York (ET). */
 (function () {
 'use strict';
 const G = (typeof window !== 'undefined' && window.HBGuide) || require('./guide.js');
 G.add({
+  events: {
+    what: 'Marks scheduled news (jobs, inflation, rate decisions) on the chart: a flag for each, a line for the big ones.',
+    see: [
+      'A small coloured flag along the time axis for each calendar event. Hover a flag for the names, times and numbers.',
+      'Red = high impact, orange = medium, yellow = low, grey = a holiday. These are the calendar\'s folders.',
+      'A vertical line in the flag colour at every red and orange event. The line can be switched off or restyled.',
+    ],
+    read: [
+      'The flag sits at the minute the number comes out. Several events at one minute share one flag.',
+      'Red folders are the ones that move price most: jobs report, CPI, rate decisions.',
+      'Pick the folders in the indicator settings. Only red = a clean chart. Add orange for more.',
+      'The currency list (USD by default) is in Settings > Events.',
+    ],
+    use: [
+      'Be flat or small before a red event. Price can jump several points in one second.',
+      'Look at what price did at the last few red events on this market: that is its usual reaction.',
+      'Turn the indicator off (the eye) for a clean chart. It comes back as it was.',
+    ],
+    watch: 'Times are the scheduled ones. A number can be late, and the first move often reverses.',
+  },
+  headlines: {
+    what: 'Marks news headlines on the chart, and a bolt where price made a big move that had news behind it.',
+    see: [
+      'Small dots at the bar where a headline came out (only in "Every headline" mode).',
+      'A bolt above or below a bar: a fast move, 4 times the usual in 30 seconds, with a headline close to it.',
+      'Hover a dot or bolt to read the headline, its source and the time.',
+    ],
+    read: [
+      'Green bolt: the move was up. Red bolt: down. The move is measured on this chart\'s own market.',
+      '"Big moves that had news" shows only the bolts with a headline behind them. It is the quiet setting.',
+      '"Every headline" adds a dot for each one, so a busy day gets crowded.',
+    ],
+    use: [
+      'Use the bolt to ask "what was that move?" without opening the news list.',
+      'A bolt with no news on a quiet tape is a move from order flow, not from news.',
+      'Turn it off (the eye) when you want only price.',
+    ],
+    watch: 'A headline near a move does not prove it caused it. Many headlines arrive after price has moved.',
+  },
   levels: {
     what: "Six price lines: yesterday's high, low and close, the overnight high and low, and today's open.",
     see: [
@@ -175,15 +215,15 @@ G.add({
   fvg: {
     what: 'A hole in price left by a fast move: bar 3 sits fully above bar 1, or fully below it.',
     see: [
-      'Four flat lines: Up gap top and bottom in green, Down gap top and bottom in red.',
-      'The space between a pair of lines is the gap. The solid line is the edge facing where price went.',
+      'A shaded box for each gap: green for an up gap, red for a down gap. No lines join one gap to the next.',
+      'A box starts at the first of the three bars and runs right until price trades through it.',
       'The legend reads "FVG 0.25". The 0.25 is the smallest gap, in times ATR.',
     ],
     read: [
       'Take three bars in a row. If bar 3 low is above bar 1 high, price jumped up and left an up gap.',
       'A down gap is the reverse: bar 3 high is below bar 1 low.',
       'Gaps under 0.25 times the ATR (the typical bar size over 14 bars) are ignored.',
-      'Only the newest open gap on each side shows. A bar trading all the way through a gap closes it.',
+      'Only the newest open gap on each side is drawn. A bar trading all the way through a gap closes it.',
       'All gaps clear at the start of a new session.',
     ],
     use: [

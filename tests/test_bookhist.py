@@ -187,8 +187,8 @@ def test_paused_soon_looks_thirty_seconds_ahead_by_the_same_windows():
         return dt.datetime(y, mo, d, h, mi, s, tzinfo=ZoneInfo("America/New_York")).timestamp()
     assert paused_soon(at(2026, 10, 12, 8, 29, 25))                  # Monday: the release opens in 5 s
     assert paused_soon(at(2026, 10, 12, 8, 30, 10))                  # already open
-    assert paused_soon(at(2026, 10, 12, 9, 19, 45))                  # 9:20 in 15 s
-    assert paused_soon(at(2026, 10, 12, 9, 25, 0))                   # already open
+    assert paused_soon(at(2026, 10, 12, 9, 19, 45)) is None          # 09:20-09:35 is no paused window any more
+    assert paused_soon(at(2026, 10, 12, 9, 25, 0)) is None
     assert paused_soon(at(2026, 10, 12, 8, 28, 50)) is None          # 40 s early
     assert paused_soon(at(2026, 10, 12, 9, 19, 20)) is None
     assert paused_soon(at(2026, 10, 12, 8, 31, 0)) is None           # the release is over

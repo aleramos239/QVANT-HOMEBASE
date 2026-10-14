@@ -22,10 +22,11 @@ Inside the worker, DepthHistory decodes a file one gzip member at a time
 (parsed, then dropped: no whole-day transient) into int32 arrays, cached per
 path while its (inode, mtime, size) holds; a file that only grew decodes just
 its new members, a rewritten one (the recorder's torn-tail repair, a new inode)
-from the start. The paused windows -- 09:20-09:35 ET (tickfeed's quiet window)
-and 08:29:30-08:31:00 ET on weekdays (the data releases) -- are checked before
-the request and between members: Paused, answered 503, and the next request
-resumes the file where it stopped.
+from the start. The paused window -- 08:29:30-08:31:00 ET on weekdays (the
+data releases) -- is checked before the request and between members: Paused,
+answered 503, and the next request resumes the file where it stopped. (The
+09:20-09:35 ET quiet window no longer pauses history: removed 2026-10-12 at the
+owner's word -- it left the book indicators empty at the open.)
 """
 from __future__ import annotations
 
@@ -46,7 +47,6 @@ from pathlib import Path
 from typing import Callable, Optional
 
 from ..contracts import tick_size as contract_tick_size
-from . import QUIET
 from .session import ET, session_date
 
 SUFFIX = ".depth.jsonl.gz"     # depth.py's (not imported: the worker never loads the md feed's modules)
@@ -74,8 +74,6 @@ class Busy(Exception):
 def paused_reason(ts_s: float) -> Optional[str]:
     """Why history decoding is paused at epoch time ts_s, or None."""
     t = dt.datetime.fromtimestamp(ts_s, ET)
-    if QUIET[0] <= t.time() < QUIET[1]:
-        return "paused for the 9:30 window"
     if t.weekday() < 5 and RELEASE[0] <= t.time() < RELEASE[1]:
         return "paused for the 8:30 data release"
     return None
@@ -169,7 +167,7 @@ class DepthHistory:
         self.base = Path(base)
         self.tick_of = tick_of
         self.quiet = quiet
-        self.reason = lambda: reason() or "paused for the 9:30 window"
+        self.reason = lambda: reason() or "paused"
         self.cache_files = cache_files
         self._cache: OrderedDict[Path, _File] = OrderedDict()
         self._lock = threading.Lock()

@@ -50,6 +50,7 @@ EVE_END = -60                                       # the 18:00 / 20:00 candle s
 LAST_BUILD_DAY = "2025-06-30"                       # the 16:00 VWAP reads the prior session's tape: the build switch opens to here only
 TFS = ("1", "5", "15")
 STRUCT_TGT_R = (0.0, 0.5, 0.75, 1.0, 2.0, 3.0)      # the standard targets: none, then x the stop
+LOW_TGT_R = (0.25, 0.33, 0.4, 0.5)                  # exits "own_low" (owner 2026-10-12, a prop-firm win rate): targets UNDER the standard 0.5 x the stop
 
 # ---- the 16:00 anchored VWAP -------------------------------------------------------------------------------------------------------
 _VW16: dict = {}                                    # (root, trade date, tf) -> VWAP at each minute boundary 08:30 .. 11:01, or None
@@ -125,6 +126,11 @@ class OrbClose(Template):
         """The family's OWN exit cells (the owner's "stop at the range"): ONE stop, the other side of the range (stop_mode struct: the
         distance from the entry to the far edge), x the six standard targets. A spec file asks for them with exits "own"."""
         return [{"stop_mode": "struct", "stop_val": 1.0, "tgt_r": r} for r in STRUCT_TGT_R]
+
+    @classmethod
+    def unit_exits_low(cls, root):
+        """exits "own_low": the same stop (the far side of the range) x LOW_TGT_R, the small targets of a win-rate idea. 0.5 is the standard cell again."""
+        return [{"stop_mode": "struct", "stop_val": 1.0, "tgt_r": r} for r in LOW_TGT_R]
 
     def t_open(self) -> int:
         return OPEN if self.p["start"] == "0930" else RELEASE
@@ -257,15 +263,15 @@ def _own_exits(blocks) -> None:
     orig = blocks.exits
 
     def exits(kind: str, root: str, family: str) -> list:
-        if kind != "own":
+        if kind not in ("own", "own_low"):
             return orig(kind, root, family)
         cls = blocks.WRAPPED.get(family)
-        if cls is None or not hasattr(cls, "unit_exits"):
+        if cls is None or not hasattr(cls, "unit_exits" if kind == "own" else "unit_exits_low"):
             raise ValueError(f"exits 'own': {family!r} has no exit cells of its own (families that do: "
                              f"{sorted(n for n, c in blocks.WRAPPED.items() if hasattr(c, 'unit_exits'))})")
         if root not in S.MENU_STOP_PTS:
             raise KeyError(f"no menu for root {root!r}: {sorted(S.MENU_STOP_PTS)}")
-        return cls.unit_exits(root)
+        return cls.unit_exits(root) if kind == "own" else cls.unit_exits_low(root)
 
     exits.own_exits = True
     blocks.exits = exits

@@ -160,6 +160,24 @@ test('a live update carrying a delta-divergence value redraws the markers; one w
   assert.equal(rec.markers.length, 1);             // a hidden study draws nothing
 });
 
+test('a live mark goes when the developing bar stops showing it (SMT: the other market took the extreme too)', () => {
+  const { c, rec } = liveCell([{ uid: 'u', id: 'smt', params: { window: 6, reference: 36 }, visible: true }]);
+  c.bars.length = 0;
+  for (let i = 0; i < 8; i++) c.bars.push({ tt: 100 + i, ms: i * 60000, o: 1, h: 2, l: 0, c: 1, v: 1, d: 0, sv: {} });
+  const k = 'smt:6:36', live = (ms, v) => ({ closed: [], live: closedBar(ms), studies: { [k]: { closed: [], live: v } } });
+  c.onUpdate(live(8 * 60000, { dir: -1, ago: 2, px: 99, live: true }));
+  assert.equal(rec.markers.length, 1);
+  assert.equal(rec.markers[0].length, 1, 'the developing bar shows the divergence');
+  c.onUpdate(live(8 * 60000, null));                       // the partner made its extreme too: no divergence now
+  assert.equal(rec.markers.length, 2);
+  assert.equal(rec.markers[1].length, 0, 'the mark is taken off the chart');
+  c.onUpdate(live(8 * 60000, null));                       // nothing shown before, nothing shown now: no redraw
+  assert.equal(rec.markers.length, 2);
+  c.onUpdate(live(8 * 60000, { dir: 1, ago: 1, px: 1, live: true }));
+  c.onUpdate({ closed: [closedBar(8 * 60000)], live: null, studies: { [k]: { closed: [null], live: null } } });   // it closes without one
+  assert.equal(rec.markers[rec.markers.length - 1].length, 0, 'a bar that closes without it leaves none');
+});
+
 test('a big print still redraws the markers on an update (the existing trigger is kept)', () => {
   const { c, rec } = liveCell([{ uid: 'u', id: 'bigprints', params: { min: 1 }, visible: true }]);
   c.onUpdate({ closed: [closedBar(60000, { big: [[0, 0, 5, 1]] })], live: null, studies: {} });

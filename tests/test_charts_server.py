@@ -1554,7 +1554,7 @@ def test_a_position_takes_only_its_look():
     assert check_drawings([{**LONG, "style": look}])[0]["style"] == look
     more = {"entryColor": "#112233", "width": 3, "lineStyle": "dashed", "textColor": "#FFFFFF", "bold": True, "hoverLabels": False,
             "showTarget": False, "showStop": True, "showRR": False, "showResult": False, "showPrice": True,
-            "showPoints": False, "showTicks": False, "showMoney": False, "showPath": False}
+            "showPoints": False, "showTicks": False, "showMoney": False, "showPath": False, "showZoneMoney": False}
     assert check_drawings([{**LONG, "style": more}])[0]["style"] == more
     for bad in ({"profitColor": "green"}, {"fontSize": 9}, {"showLabels": "no"}, {"entryColor": "red"}, {"width": 9},
                 {"showTicks": 1}, {"hoverLabels": "hover"}, {"showPath": None}):
@@ -2173,7 +2173,7 @@ def test_the_new_settings_roundtrip_and_only_on_the_tool_they_belong_to():
         {**RECT, "style": {"border": False, "midline": True, "quarters": True, "midStyle": "dotted", "extendRight": True, "priceLabels": True}},
         {**HLINE, "style": {"labelAlign": "right"}},
         {**FIB, "style": {"levels": [{"v": 0, "on": True}, {"v": 0.705, "on": True, "color": "#112233"}, {"v": 1, "on": False}],
-                          "showLevels": False, "showPrices": True, "fill": False, "reverse": True, "extendRight": True, "fontSize": 14}},
+                          "showLevels": False, "showPrices": True, "fill": False, "fillOpacity": 30, "reverse": True, "extendRight": True, "fontSize": 14}},
     ]
     got = check_drawings(styled)
     assert [d["style"] for d in got] == [s["style"] for s in styled]
@@ -2196,6 +2196,8 @@ NEW_STYLE_BAD = [
     ("level without on", "fib", {"levels": [{"v": 0.5}]}), ("level on not a bool", "fib", {"levels": [{"v": 0.5, "on": 1}]}),
     ("level colour a name", "fib", {"levels": [{"v": 0.5, "on": True, "color": "red"}]}),
     ("fib fontSize too small", "fib", {"fontSize": 9}),
+    ("fib fillOpacity over 100", "fib", {"fillOpacity": 101}), ("fib fillOpacity a fraction", "fib", {"fillOpacity": 0.3}),
+    ("fib fillOpacity a bool", "fib", {"fillOpacity": True}), ("rect fillOpacity", "rect", {"fillOpacity": 30}),
 ]
 
 

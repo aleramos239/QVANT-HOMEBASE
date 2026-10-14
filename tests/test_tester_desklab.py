@@ -729,3 +729,32 @@ def test_open_in_the_lab_takes_a_built_in_twin_by_its_flag_and_only_the_known_on
     assert c.post("/api/tester/desklab/open", json={"name": "gc_nfp", "builtin": True}, headers=DESK).status_code == 404
     assert c.post("/api/tester/desklab/open", json={"name": "nq930", "builtin": False}, headers=DESK).status_code == 400
     assert c.get("/api/tester/lab-open").json() == {"name": None}
+
+
+def _edit_request(tmp_path, rid, **extra):
+    p = next((tmp_path / "state" / "tester" / "runs").glob(f"{rid}")) / "request.json"
+    req = json.loads(p.read_text())
+    req.update(extra)
+    p.write_text(json.dumps(req))
+
+
+def test_a_run_with_trade_rules_is_not_promoted_the_desk_does_not_apply_them(c, drafts_dir, make_run, tmp_path):
+    draft(drafts_dir)
+    rid = make_run()
+    _edit_request(tmp_path, rid, controls={"max_trades": 2, "stop_mode": "fixed", "stop_pts": 12.0})
+    r = promote(c, run_id=rid)
+    assert r.status_code == 409 and "Trade rules (max_trades, stop_mode, stop_pts)" in r.json()["detail"]
+    assert store.get("nq_bars") is None
+    assert promote(c, run_id=make_run()).status_code == 200          # the same code with no rules goes through
+
+
+def test_an_instant_entry_run_is_not_promoted_when_the_code_enters_print_by_print(c, drafts_dir, make_run, tmp_path):
+    scanning = CODE + "\n    def scan(self, tape, lo, hi, t0, t1):\n        return []\n"
+    draft(drafts_dir, scanning)
+    rid = make_run(scanning)
+    _edit_request(tmp_path, rid, inputs={"trigger": "instant"})
+    r = promote(c, run_id=rid)
+    assert r.status_code == 409 and "Entry is set to instant" in r.json()["detail"]
+    rid2 = make_run(scanning)
+    _edit_request(tmp_path, rid2, inputs={"trigger": "bar_close"})
+    assert promote(c, run_id=rid2).status_code == 200

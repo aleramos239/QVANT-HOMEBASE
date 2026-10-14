@@ -121,6 +121,8 @@ class Order:
     fill_sl: float | None = None
     fill_tp: float | None = None
     fill_ms: int | None = None      # when it filled (the print's time): where the moved bracket starts
+    # run controls only (controls.py): ("dist" | "none" | "own", pts) for the stop, same for the target
+    ov: tuple | None = None
 
 
 @dataclass(eq=False)
@@ -178,7 +180,9 @@ class SessionResult:
     trades: list = field(default_factory=list)
     plots: dict = field(default_factory=dict)     # name -> [[t_ms, value], ...]
     hlines: list = field(default_factory=list)    # [{name, price, date, role, t_ms, end_ms}]
+    marks: list = field(default_factory=list)     # [{name, t_ms, price, text, side, pos}]: ctx.mark, drawn on the chart only
     skip: str | None = None                       # the strategy's reason for no trade
+    blocked: dict = field(default_factory=dict)   # run controls: entries refused, by reason
 
 
 class Ctx:
@@ -215,8 +219,17 @@ class Ctx:
         price = None if price is None else to_tick(price, tick)
         sl = None if sl is None else to_tick(sl, tick)
         tp = None if tp is None else to_tick(tp, tick)
-        return self._s.new_order(SIDE[side], kind, price, int(qty or self.qty),
-                                 sl=sl, tp=tp, tp_rr=tp_rr, ref=ref)
+        n = int(qty or self.qty)
+        s, ov = self._s, None
+        if s.ctl is not None:                       # run controls: refuse here, or re-size the brackets
+            why = s.gate(s.now, SIDE[side])
+            if not why:
+                ov, sl, tp, tp_rr, why = s.override(SIDE[side], price, ref, sl, tp, tp_rr)
+            if why:
+                s.refuse(why)
+                return Order(0, SIDE[side], kind, price, n, 0, sl=sl, tp=tp, tp_rr=tp_rr, ref=ref,
+                             status="cancelled")
+        return s.new_order(SIDE[side], kind, price, n, sl=sl, tp=tp, tp_rr=tp_rr, ref=ref, ov=ov)
 
     def stop_entry(self, side: str, price: float, qty: int | None = None, sl=None, tp=None,
                    tp_rr=None) -> Order:
@@ -244,6 +257,17 @@ class Ctx:
     def plot(self, name: str, t_ns: int, value: float) -> None:
         self._s.res.plots.setdefault(name, []).append([t_ns // 1_000_000, value])
 
+    def mark(self, name: str, t_ns: int, price: float, text: str = "", side: str = "", pos: str = "") -> None:
+        """A point the strategy wants SEEN on the chart (a divergence, a signal that was not traded): a marker on
+        the bar covering `t_ns`, for the chart only -- it never reaches an order. `side` is "long" | "short" | ""
+        (colour); `pos` is "above" | "below" (default: above for a short, below otherwise). `name` groups the
+        marks of one kind (the legend of the page shows it on hover)."""
+        if price != price or price in (float("inf"), float("-inf")):
+            return
+        self._s.res.marks.append({"name": str(name), "t_ms": int(t_ns) // 1_000_000, "price": price,
+                                  "text": str(text)[:12], "side": side if side in ("long", "short") else "",
+                                  "pos": pos if pos in ("above", "below") else ("above" if side == "short" else "below")})
+
     def hline(self, name: str, price: float, role: str = "level") -> dict:
         """Record a level the strategy placed this session, for the chart only -- it never
         reaches an order. `role` is one of ROLES, so the page can style it without parsing
@@ -263,7 +287,8 @@ class Ctx:
 
 
 class _Sim:
-    def __init__(self, root, d, ts, px, lo, hi, costs: Costs, placement_ms: int, exec_root: str = ""):
+    def __init__(self, root, d, ts, px, lo, hi, costs: Costs, placement_ms: int, exec_root: str = "",
+                 controls=None):
         self.root, self.date = root, d
         self.ts, self.px, self.lo, self.hi = ts, px, lo, hi
         self.tick = tick_size(root)
@@ -278,6 +303,8 @@ class _Sim:
         self.res = SessionResult(d.isoformat())
         self._ids = 0
         self._ctx: Ctx | None = None   # set by run_session
+        self.ctl = controls            # run controls (controls.Controls) or None: the engine's one old path
+        self.st = {"entries": 0, "wins": 0, "losses": 0, "consec": 0, "pnl": 0.0, "last_loss": None}
 
     # ---- orders
     def new_order(self, side, kind, price, qty, **kw) -> Order:
@@ -291,6 +318,106 @@ class _Sim:
         if o.status == "working":
             o.status = "cancelled"
             self.orders.remove(o)
+
+    # ---- run controls (controls.py): all of this is skipped when `self.ctl` is None
+    def refuse(self, why: str) -> None:
+        self.res.blocked[why] = self.res.blocked.get(why, 0) + 1
+
+    def gate(self, t: int, side: int) -> str | None:
+        """Why a NEW entry on `side` may not be taken at time t (ns), or None."""
+        c, st, d = self.ctl, self.st, self.date
+        if c.entry_from and t < et_ns(d, c.entry_from):
+            return "outside the entry window"
+        if (c.entry_to and t >= et_ns(d, c.entry_to)) or (c.flat_at and t >= et_ns(d, c.flat_at)):
+            return "outside the entry window"
+        if c.direction != "both" and side != SIDE[c.direction]:
+            return "direction"
+        if c.max_trades and st["entries"] >= c.max_trades:
+            return "max trades a day"
+        if c.stop_wins and st["wins"] >= c.stop_wins:
+            return "stopped after wins"
+        if c.stop_losses and st["losses"] >= c.stop_losses:
+            return "stopped after losses"
+        if c.max_consec_losses and st["consec"] >= c.max_consec_losses:
+            return "losses in a row"
+        if c.day_loss and st["pnl"] <= -c.day_loss:
+            return "daily loss reached"
+        if c.day_profit and st["pnl"] >= c.day_profit:
+            return "daily profit reached"
+        if c.cooldown_min and st["last_loss"] is not None and t < st["last_loss"] + c.cooldown_min * 60_000_000_000:
+            return "cooling off"
+        return None
+
+    def atr(self, minutes: int, period: int) -> float | None:
+        """Mean true range of the last `period` closed `minutes` bars before now (the bar in progress is not
+        used), looking back over the whole tape (overnight included). None when there are not that many."""
+        step = minutes * 60_000_000_000
+        b1 = self.now - self.now % step
+        j1 = bisect_left(self.ts, b1, 0, self.hi)
+        rows, guard = [], period * 4 + 4
+        while len(rows) < period + 1 and guard > 0 and j1 > 0:
+            b0 = b1 - step
+            j0 = bisect_left(self.ts, b0, 0, j1)
+            if j1 > j0:
+                seg = self.px[j0:j1]
+                rows.append((max(seg), min(seg), seg[-1]))
+            b1, j1, guard = b0, j0, guard - 1
+        if len(rows) < period + 1:
+            return None
+        rows.reverse()
+        trs = [max(h - l, abs(h - pc), abs(l - pc)) for (h, l, _), (_, _, pc) in zip(rows[1:], rows)]
+        return sum(trs) / len(trs)
+
+    def override(self, side: int, price, ref, sl, tp, tp_rr):
+        """The stop / target the run controls ask for, as (ov, sl, tp, tp_rr, refusal). The planned levels are
+        measured from the entry's own reference; `_fill` re-measures them from the fill."""
+        c = self.ctl
+        if c.stop_mode == "own" and c.target_mode == "own":
+            return None, sl, tp, tp_rr, None
+        r = ref if ref is not None else price
+        if r is None:
+            r = self.px[self.i - 1] if self.i > self.lo else None
+        if r is None:
+            return None, sl, tp, tp_rr, "no price to size the bracket from"
+        a = None
+        if c.stop_mode == "atr" or c.target_mode == "atr":
+            a = self.atr(c.atr_minutes, c.atr_period)
+            if a is None:
+                return None, sl, tp, tp_rr, "atr warming up"
+
+        def dist(mode, pts, mult):
+            return max(pts if mode == "fixed" else mult * (a or 0.0), self.tick)
+
+        ov_sl, ov_tp = ("own", 0.0), ("own", 0.0)
+        if c.stop_mode == "none":
+            sl, ov_sl = None, ("none", 0.0)
+        elif c.stop_mode != "own":
+            d = dist(c.stop_mode, c.stop_pts, c.stop_atr)
+            sl, ov_sl = to_tick(r - side * d, self.tick), ("dist", d)
+        if c.target_mode != "own":
+            tp_rr = None
+            if c.target_mode == "none":
+                tp, ov_tp = None, ("none", 0.0)
+            elif c.target_mode == "rr":
+                tp_rr, tp = c.target_rr, None
+            else:
+                d = dist(c.target_mode, c.target_pts, c.target_atr)
+                tp, ov_tp = to_tick(r + side * d, self.tick), ("dist", d)
+        return (ov_sl, ov_tp), sl, tp, tp_rr, None
+
+    def control(self, what: str) -> None:
+        """A scheduled control event: flat_at, the end of the entry window, or the minute's time-stop check."""
+        if what == "flat":
+            self.flatten("time")
+        elif what == "close":
+            for o in [o for o in self.orders if o.role == "entry"]:
+                self.cancel(o)
+                self.refuse("outside the entry window")
+        elif what == "hold" and self.positions:
+            limit = self.ctl.max_hold_min * 60_000_000_000
+            k = self.i if self.i < self.hi else self.hi - 1
+            for pos in [p for p in self.positions if self.now - self.ts[p.entry_i] >= limit]:
+                self._close(pos, to_tick(self.px[k] - pos.side * self.slip, self.tick), k, "hold")
 
     def _trigger(self, o: Order, a: int, b: int) -> int:
         if o.kind == "market":
@@ -330,6 +457,13 @@ class _Sim:
         self.i = max(self.i, j)
 
     def _fill(self, o: Order, k: int) -> None:
+        if self.ctl is not None and o.role == "entry":
+            why = self.gate(int(self.ts[k]), o.side)        # a working order meets the rules at its FILL
+            if why:
+                self.cancel(o)
+                self.refuse(why)
+                return
+            self.st["entries"] += 1
         fill = self._fill_price(o, self.px[k])
         o.status = "filled"
         self.orders.remove(o)
@@ -350,6 +484,16 @@ class _Sim:
             sl = None if sl is None else to_tick(sl + d, self.tick)
             if o.tp_rr is None:
                 tp = None if tp is None else to_tick(tp + d, self.tick)
+        if o.ov is not None:                                # run controls: fixed / ATR distances from the FILL
+            (m_sl, d_sl), (m_tp, d_tp) = o.ov
+            if m_sl == "dist":
+                sl = to_tick(fill - o.side * d_sl, self.tick)
+            elif m_sl == "none":
+                sl = None
+            if m_tp == "dist":
+                tp = to_tick(fill + o.side * d_tp, self.tick)
+            elif m_tp == "none":
+                tp = None
         if o.tp_rr is not None and sl is not None:
             tp = to_tick(fill + o.side * o.tp_rr * abs(fill - sl), self.tick)
         self._ids += 1
@@ -387,6 +531,16 @@ class _Sim:
             mae_usd=round(mae * self.pv * pos.qty, 2), mfe_usd=round(mfe * self.pv * pos.qty, 2),
             bars=int(t1 // 60_000_000_000 - t0 // 60_000_000_000 + 1),
             seconds=round((t1 - t0) / 1e9, 3)))
+        if self.ctl is not None:
+            net, st = gross - comm, self.st
+            st["pnl"] += net
+            if net > 0:
+                st["wins"] += 1
+                st["consec"] = 0
+            elif net < 0:
+                st["losses"] += 1
+                st["consec"] += 1
+                st["last_loss"] = t1
 
     def flatten(self, reason: str) -> None:
         for o in list(self.orders):
@@ -419,7 +573,37 @@ def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int) -
     return out
 
 
-def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None = None) -> SessionResult:
+def split_flow(ts, px, size, lo: int, hi: int, bars: list[Bar]) -> None:
+    """Give each bar `buy` / `sell` volume by the tick rule (an uptick is a buy, a downtick a sell, an
+    unchanged price keeps the last side), carried across bars; the first print of the window has no side
+    yet and counts for neither. Opt-in (`needs_flow = True` on the strategy): set as plain attributes, so
+    a bar's fields, `asdict` and equality are what they always were. An estimate of the aggressor side,
+    not the desk's flow archive: the tester's tape holds price and size only."""
+    if not bars:
+        return
+    k = bisect_left(ts, bars[0].start_ns, lo, hi)
+    prev, side = (px[k] if k < hi else 0.0), 0
+    for b in bars:
+        k0 = bisect_left(ts, b.start_ns, k, hi)
+        k1 = bisect_left(ts, b.end_ns, k0, hi)
+        buy = sell = 0
+        for j in range(k0, k1):
+            p = px[j]
+            if p > prev:
+                side = 1
+            elif p < prev:
+                side = -1
+            prev = p
+            if side > 0:
+                buy += size[j]
+            elif side < 0:
+                sell += size[j]
+        b.buy, b.sell = buy, sell
+        k = k1
+
+
+def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None = None,
+                controls=None) -> SessionResult:
     """Replay one session's tape through one strategy instance."""
     d = tape.date
     w0, w1 = strategy.session_window
@@ -429,16 +613,41 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     ex = getattr(strategy, "exec_root", "") or ""
     if ex and not exec_ok(tape.root, ex):          # orders to a market's own micro only: never priced on another contract
         raise ValueError(f"exec_root: {tape.root} has no micro named {ex} here")
-    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, ex)
+    sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, ex, controls)
     ctx = sim._ctx = Ctx(sim, qty, daily or [])
     events: list[tuple] = [(t0, 0, 0, "session", None)]
-    if strategy.bar_minutes:
+    bm = strategy.bar_minutes
+    if bm and controls is not None and controls.bar_minutes:     # run control: the signal bar size
+        if controls.bar_minutes in (getattr(strategy, "bar_sizes", ()) or ()):
+            bm = controls.bar_minutes
+        else:
+            sim.refuse("signal bar size not offered by this strategy (its own bars used)")
+    strategy.bar_min_eff = bm                       # what scan() / on_bar read when the bar size was swapped
+    if bm:
         b0, b1 = strategy.bar_window or strategy.session_window
-        for n, b in enumerate(build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1),
-                                         strategy.bar_minutes)):
+        bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm)
+        if getattr(strategy, "needs_flow", False):
+            split_flow(ts, px, tape.size, lo, hi, bars)
+        for n, b in enumerate(bars):
             events.append((b.end_ns, 1, n, "bar", b))
+    scan = getattr(strategy, "scan", None)          # opt-in: the strategy names the prints it acts on (no candle close)
+    if scan is not None:
+        strategy.scan_daily = daily or []           # the prior daily bars (what ctx.daily holds), for a scan that needs them
+        try:
+            for n, (t, sig) in enumerate(scan(tape, lo, hi, t0, t1) or ()):
+                events.append((t, 1, 1_000_000 + n, "sig", sig))
+        except Exception as e:                      # noqa: BLE001 - one bad session, not a crashed run
+            sim.res.skip = f"strategy error: scan: {e}"
+            return sim.res
     for n, t in enumerate(strategy.times()):
         events.append((et_ns(d, t), 2, n, "time", t))
+    if controls is not None:                        # run controls: the scheduled halves (controls.py)
+        if controls.flat_at:
+            events.append((et_ns(d, controls.flat_at), 2, 10_000, "ctl", "flat"))
+        if controls.entry_to:
+            events.append((et_ns(d, controls.entry_to), 2, 10_001, "ctl", "close"))
+        if controls.max_hold_min:
+            events += [(t, 3, 0, "ctl", "hold") for t in range(t0 + 60_000_000_000, t1, 60_000_000_000)]
     events.sort(key=lambda e: e[:3])
     for t, _, _, kind, arg in events:
         if t >= t1:
@@ -450,6 +659,10 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
                 strategy.on_session(ctx)
             elif kind == "bar":
                 strategy.on_bar(ctx, arg)
+            elif kind == "sig":
+                strategy.on_signal(ctx, arg)
+            elif kind == "ctl":
+                sim.control(arg)
             else:
                 strategy.on_time(ctx, arg)
         except Exception as e:                      # noqa: BLE001 - one bad session, not a crashed run

@@ -236,6 +236,11 @@ def load(reload: bool = False) -> dict:
         _flex.apply()
     except Exception as e:                           # noqa: BLE001 - a broken layer must not hide the families it sits on
         ERRORS["_flex"] = f"open layer failed: {type(e).__name__}: {e}"
+    try:                                             # a flat time of its own (2026-10-12): `w_flat` on every wrapped family, off by default
+        from . import _flat
+        _flat.apply()
+    except Exception as e:                           # noqa: BLE001 - as the open layer: a broken mixin must not hide the families
+        ERRORS["_flat"] = f"flat time failed: {type(e).__name__}: {e}"
     return REGISTRY
 
 

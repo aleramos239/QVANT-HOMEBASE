@@ -100,7 +100,8 @@ function sessBoxes(inst) {
     .filter((b) => b.on !== false);
 }
 /* A VWAP holds its first line (anchor / customTime / bands, its Style) and up to VWAP_MORE_MAX more, each its own anchor
-   (session, RTH, a custom ET time, week, month) and colour, switched on and off; they share the first line's width and dash. */
+   (session, RTH, a custom ET time, week, month) and colour, switched on and off; they share the first line's width and dash.
+   The bands are set once for the whole VWAP; each more line draws them in its own colour unless its `bands` is false. */
 const VWAP_MORE_MAX = 5, VWAP_ANCHORS = ['eth', 'rth', 'custom', 'week', 'month'];
 function clampVwapLines(v) {
   const out = [];
@@ -109,6 +110,7 @@ function clampVwapLines(v) {
     const row = { anchor: VWAP_ANCHORS.includes(l.anchor) ? l.anchor : 'custom',
       customTime: (typeof l.customTime === 'string' && normalizeHHMM(l.customTime)) || '09:30', on: l.on !== false };
     if (typeof l.color === 'string' && /^#[0-9A-Fa-f]{6}$/.test(l.color)) row.color = l.color;
+    if (l.bands === false) row.bands = false;   // absent = the line draws the VWAP's bands too
     out.push(row);
   }
   return out;
@@ -200,11 +202,11 @@ const TA_DEFS = [
     lines: TA_RANGE },
   { id: 'fvg', group: 'Structure', name: 'Fair value gaps', key: (p) => `fvg:${p.min}:${p.length}`,
     params: [{ key: 'min', label: 'Smallest gap (x ATR)', type: 'num', min: 0, max: 10, step: 0.05, def: 0.25 },
-      { ...TA_LEN(14, 1, 200), label: 'ATR length' }],
+      { ...TA_LEN(14, 1, 200), label: 'ATR length' },
+      { key: 'opacity', label: 'Box fill (%)', type: 'int', min: 0, max: 100, def: 15 }],
     label: (p) => `FVG ${p.min}`,
-    desc: 'The newest unfilled gap each side in the session: bar 3 clear of bar 1',
-    lines: [TA_LINE('uh', 'Up gap top', TA_UP, 1, 'solid', TA_LVL), TA_LINE('ul', 'Up gap bottom', TA_UP, 1, 'dotted', TA_LVL),
-      TA_LINE('dh', 'Down gap top', TA_DOWN, 1, 'dotted', TA_LVL), TA_LINE('dl', 'Down gap bottom', TA_DOWN, 1, 'solid', TA_LVL)] },
+    desc: 'Boxes for the newest unfilled gap each side in the session: bar 3 clear of bar 1',
+    lines: [] },   // drawn as boxes by the flow overlay (flowlayer.js) from the study's uh / ul / dh / dl on each bar
   { id: 'wk', group: 'Levels', name: 'Prior week high / low / close + week open', params: [], key: () => 'wk', label: () => 'Week levels',
     desc: "Last week's high, low and close, and this week's open",
     lines: [TA_LINE('hi', 'Prior week high', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Prior week low', TA_UP, 1, 'solid', TA_LVL),
@@ -307,6 +309,17 @@ const CATALOG = [
       choices: [['soft', 'Soft'], ['normal', 'Normal'], ['strong', 'Strong']] },
     { key: 'palette', label: 'Colours', type: 'choice', def: 'fire',
       choices: [['fire', 'Fire'], ['ice', 'Ice'], ['mono', 'Grey']] }] },
+  { id: 'events', group: 'Calendar & news', name: 'Economic calendar', desc: 'Calendar events as flags on the chart; pick red, orange or yellow folders', params: [
+    { key: 'high', label: 'Red folder (high impact)', type: 'bool', def: true },
+    { key: 'medium', label: 'Orange folder (medium impact)', type: 'bool', def: true },
+    { key: 'low', label: 'Yellow folder (low impact)', type: 'bool', def: false },
+    { key: 'holiday', label: 'Grey folder (holidays)', type: 'bool', def: false },
+    { key: 'lines', label: 'Vertical line at a red or orange event', type: 'bool', def: true },
+    { key: 'lineStyle', label: 'Line style', type: 'choice', def: 'dotted', choices: [['solid', 'Solid'], ['dashed', 'Dashed'], ['dotted', 'Dotted']] },
+    { key: 'lineWidth', label: 'Line width', type: 'choice', def: '1', choices: [['1', '1'], ['2', '2'], ['3', '3'], ['4', '4']] }] },
+  { id: 'headlines', group: 'Calendar & news', name: 'News headlines', desc: 'News dots, and a bolt for a big move that had news behind it', params: [
+    { key: 'show', label: 'Show', type: 'choice', def: 'bursts',
+      choices: [['bursts', 'Big moves that had news'], ['all', 'Every headline and every big move']] }] },
   ...FLOW.catalog,
   ...TA_DEFS,
 ];
@@ -592,6 +605,40 @@ function sanitizePreset(id, payload) {
   return { params, style };
 }
 
+/* The two news indicators (2026-10-12). A chart shows the economic calendar only while an `events` indicator is on
+   it and visible, and headlines / big-move bolts only while a `headlines` one is: the folders, the line and the
+   mode are its params. A chart saved before this carried the same choices as chart settings (evHigh ... newsOnChart);
+   seedNews() turns those into the two indicators once (the cell then carries `newsInd`, so deleting one sticks). */
+const NEWS_LEGACY = { evHigh: true, evMedium: true, evLow: false, evHoliday: false, evLines: true, evLineStyle: 'dotted', evLineWidth: 1, newsOnChart: 'bursts' };
+function seedNews(indicators, settings) {
+  const out = Array.isArray(indicators) ? indicators.slice() : [];
+  const s = { ...NEWS_LEGACY, ...(settings && typeof settings === 'object' ? settings : {}) };
+  if (!out.some((x) => x.id === 'events')) {
+    const any = !!(s.evHigh || s.evMedium || s.evLow || s.evHoliday);
+    out.push(instance('events', any ? { high: !!s.evHigh, medium: !!s.evMedium, low: !!s.evLow, holiday: !!s.evHoliday,
+      lines: s.evLines !== false, lineStyle: s.evLineStyle, lineWidth: String(s.evLineWidth) } : { lines: s.evLines !== false,
+      lineStyle: s.evLineStyle, lineWidth: String(s.evLineWidth) }, { visible: any }));
+  }
+  if (!out.some((x) => x.id === 'headlines')) {
+    out.push(instance('headlines', { show: s.newsOnChart === 'all' ? 'all' : 'bursts' }, { visible: s.newsOnChart !== 'off' }));
+  }
+  return out;
+}
+/* What the calendar layer draws for a chart's indicators: null when no visible `events` indicator is on it, else
+   the settings HBEvents.shown() and the flag layer read (the countries stay a chart setting: Settings > Events). */
+function eventsView(indicators) {
+  const x = (indicators || []).find((i) => i.id === 'events' && i.visible !== false);
+  if (!x) return null;
+  const p = clampParams('events', x.params);
+  return { evHigh: p.high, evMedium: p.medium, evLow: p.low, evHoliday: p.holiday, evLines: p.lines, evLineStyle: p.lineStyle,
+    evLineWidth: Number(p.lineWidth) };
+}
+/* The `newsOnChart` mode a chart's indicators ask for: 'off' with no visible `headlines` indicator. */
+function newsMode(indicators) {
+  const x = (indicators || []).find((i) => i.id === 'headlines' && i.visible !== false);
+  return x ? clampParams('headlines', x.params).show : 'off';
+}
+
 function defaults() { return [instance('volume'), instance('vwap'), instance('levels'), instance('footprint')]; }
 
 /* The VWAP wire key (studies.py's VWAP anchor) for this instance's params: "vwap"/"vwap:rth" unchanged;
@@ -749,6 +796,11 @@ function baseLabel(inst) {
     case 'footprint': return p.imbalance > 0 ? `Footprint ${p.imbalance}×` : 'Footprint';
     case 'bigprints': return `Big prints ≥${p.min}`;
     case 'bigorders': return `Big orders ${p.multiple}×`;
+    case 'events': {
+      const f = [p.high && 'red', p.medium && 'orange', p.low && 'yellow', p.holiday && 'grey'].filter(Boolean);
+      return `Calendar ${f.length ? f.join('+') : 'none'}`;   // one word after the title: the legend's "indicator arguments" option
+    }
+    case 'headlines': return p.show === 'all' ? 'News all' : 'News bolts';
     default: return d.label ? d.label(p) : d.name;
   }
 }
@@ -809,7 +861,10 @@ function legendValues(inst, bar, colors, tick) {
         .map((ln) => ({ text: n2(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
       // lines that take turns (Supertrend's up / down side) show only the one in force
       const live = out.filter((x) => !x.pick || x.on);
-      return (live.length ? live : out.slice(0, 1)).map(({ text, color }) => ({ text, color }));
+      const shown = (live.length ? live : out.slice(0, 1)).map(({ text, color }) => ({ text, color }));
+      const say = t.words ? t.words(lineValue(t.lines[0], v)) : '';   // a word in front: who is winning, etc.
+      if (say) { const x = lineValue(t.lines[0], v); shown.unshift({ text: say, word: true, color: x >= 10 ? colors.up : x <= -10 ? colors.down : colors.text }); }
+      return shown;
     }
   }
 }
@@ -981,11 +1036,29 @@ function statusDrops(avail, items) {
   return out.sort((a, b) => a - b);
 }
 
+/* The "Best" group of the indicators dialog (2026-10-12): the ones the build-days prediction study found worth having, in
+   the order it ranked them, each with its verdict in plain words (shown under the name in that group). Like Favorites it is
+   no catalog group: a fixed list. Finding: 50-Permanent/Findings/2026-10-12-indicator-prediction-study-build-days.md */
+const BEST_GROUP = 'Best';
+const BEST = [
+  ['orb', 'Direction: price above or below the 15-minute range keeps going. The only one that did, a little.'],
+  ['atr', 'Size: how big the next moves will be. No direction. Use it for stops and targets.'],
+  ['vwap', 'A reference line for fair price. It does not forecast.'],
+  ['rvol', 'Size: busy bars are followed by bigger moves. Weak.'],
+  ['tspeed', 'Size: a fast tape is followed by bigger moves. Weak.'],
+  ['delta', 'Describes the bar just closed, on time. Forecasts nothing.'],
+  ['bigprints', 'Describes the bar: big prints and sweeps. Forecasts nothing.'],
+  ['footprint', 'Describes the bar: stacked imbalances per price. Forecasts nothing.'],
+];
+const BEST_NOTE = new Map(BEST);
+
 /* `favs`: the starred indicator ids, for the Favorites group (which is no catalog group: it is whatever is starred). */
 function filter(query, group = 'All', favs = []) {
   const q = String(query || '').trim().toLowerCase();
-  return CATALOG.filter((d) => (group === 'All' || (group === FAV_GROUP ? favs.includes(d.id) : d.group === group))
+  const hits = CATALOG.filter((d) => (group === 'All' || (group === FAV_GROUP ? favs.includes(d.id)
+    : group === BEST_GROUP ? BEST_NOTE.has(d.id) : d.group === group))
     && (!q || d.name.toLowerCase().includes(q) || d.group.toLowerCase().includes(q) || d.id.includes(q)));
+  return group === BEST_GROUP ? hits.sort((a, b) => BEST.findIndex(([i]) => i === a.id) - BEST.findIndex(([i]) => i === b.id)) : hits;
 }
 
 /* ---- starred indicators and drawing tools (2026-10-11) ----
@@ -1015,12 +1088,12 @@ function toggleId(list, id) { return list.includes(id) ? list.filter((x) => x !=
 function toolGroupOf(tool) { return TOOL_GROUPS.findIndex(([, tools]) => tools.includes(tool)); }
 
 const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOURITES, INTERVAL_GROUPS, LINE_COLORS, uid, def, clampParams, instance,
-  defaults, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, vwapLines, VWAP_MORE_MAX, VWAP_ANCHORS, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
+  defaults, seedNews, eventsView, newsMode, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, vwapLines, VWAP_MORE_MAX, VWAP_ANCHORS, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, styleControls, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
   SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
-  FAV_GROUP, TOOL_GROUPS, TOOL_FAV_DEFAULT, parseIdList, toggleId, toolGroupOf };
+  FAV_GROUP, BEST_GROUP, BEST, TOOL_GROUPS, TOOL_FAV_DEFAULT, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

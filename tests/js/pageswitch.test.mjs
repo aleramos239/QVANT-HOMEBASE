@@ -17,7 +17,7 @@ for (const [file, cur] of [['charts.html', 'charts'], ['backtest.html', 'backtes
     assert.match(nav, new RegExp(`data-page="${cur}" aria-current="page"`));
     assert.doesNotMatch(html, /tbDesk/);
     assert.doesNotMatch(html, /\?v=31/, 'every asset is bumped');
-    assert.match(html, /charts\.css\?v=42/);
+    assert.ok(+html.match(/charts\.css\?v=(\d+)/)[1] >= 42, 'the stylesheet is at or past the version this switcher shipped with');
   });
 }
 

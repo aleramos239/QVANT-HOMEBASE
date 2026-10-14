@@ -62,7 +62,7 @@ def _does(name: str) -> str:
     return rest if sep and len(head) <= 30 else said
 
 
-OPEN_KEYS = ("w_start", "w_end", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side")     # families/_flex.py KEYS: the open layer, on every family
+OPEN_KEYS = ("w_start", "w_end", "w_flat", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side")     # families/_flex.py KEYS (the open layer) + families/_flat.py w_flat (a flat time of its own, 2026-10-12): on every family
 
 
 def open_settings() -> list:

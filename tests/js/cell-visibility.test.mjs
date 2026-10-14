@@ -75,3 +75,12 @@ test('the eye tells every overlay layer, which repaints (a flow bubble layer wai
   assert.equal(told, 1);
   assert.equal(c.cfg.indicators[0].visible, false);
 });
+
+test('a VWAP\'s bands are drawn around every line that has bands on, each in its own colour', () => {
+  const { c } = chartCell([vwap({ params: { band1On: true, band1Mult: 1,
+    more: [{ anchor: 'rth', on: true, color: '#112233' }, { anchor: 'week', on: true, color: '#445566', bands: false }] } })]);
+  c.buildSeries();
+  const bands = c.lines.filter((l) => l.part != null);
+  assert.deepEqual(bands.map((l) => [l.src, l.part, l.s.opts.color]),
+    [['vwap', 1, '#aaaaaa'], ['vwap', -1, '#aaaaaa'], ['vwap:rth', 1, '#112233'], ['vwap:rth', -1, '#112233']]);   // week has bands off
+});

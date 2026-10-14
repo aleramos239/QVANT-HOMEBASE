@@ -148,6 +148,13 @@ function mount(box, host) {
           tin.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (e.repeat) return; settle(); } };
           row.append(tin);
         }
+        if (i > 0) {   // the bands (set below, once) follow every line that has this on
+          const bd = mk('input'); bd.type = 'checkbox'; bd.checked = obj.bands !== false;
+          bd.setAttribute('aria-label', `Line ${i + 1} bands`); bd.title = `Line ${i + 1}: draw the bands around it`;
+          bd.onchange = () => { if (bd.checked) delete obj.bands; else obj.bands = false; preview(); };
+          const bl = mk('label', 'vl-bands'); bl.append(bd, mk('span', '', 'Bands'));
+          row.append(bl);
+        }
         const sw = button('swatch'), dot = mk('i');
         dot.style.background = colourOf(i);
         sw.title = `Line ${i + 1} colour` + (i === 0 ? ' (its bands follow)' : '');

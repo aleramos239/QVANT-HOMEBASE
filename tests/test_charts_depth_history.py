@@ -237,8 +237,7 @@ def test_quiet_is_checked_between_members_and_the_decode_resumes_where_it_stoppe
 def test_the_paused_windows(monkeypatch):
     et = lambda d, hh, mm, ss=0: dt.datetime.combine(d, dt.time(hh, mm, ss), depthgrid.ET).timestamp()
     thu, sat = D, D + dt.timedelta(days=2)
-    assert paused_reason(et(thu, 9, 20)) == paused_reason(et(thu, 9, 34, 59)) == "paused for the 9:30 window"
-    assert paused_reason(et(thu, 9, 35)) is None
+    assert paused_reason(et(thu, 9, 20)) is None and paused_reason(et(thu, 9, 34, 59)) is None   # the 9:30 window: no pause (2026-10-12)
     assert paused_reason(et(thu, 8, 29, 30)) == paused_reason(et(thu, 8, 30, 59)) == "paused for the 8:30 data release"
     assert paused_reason(et(thu, 8, 29, 29)) is None and paused_reason(et(thu, 8, 31)) is None
     assert paused_reason(et(sat, 8, 30)) is None                      # no releases on a weekend
@@ -370,9 +369,9 @@ def test_the_route_answers_503_in_the_830_release_minute(tmp_path):
         assert r.status_code == 503 and r.json()["detail"] == "paused for the 8:30 data release"
 
 
-def test_the_route_answers_503_in_the_930_window(tmp_path):
+def test_the_route_is_not_paused_in_the_930_window(tmp_path):
     write_depth(tmp_path / "depth", [[line(T0, [[100.0, 5]], [[100.25, 7]])]])
     app = app_at(tmp_path, session_ms(D, 9, 25))
     with TestClient(app, base_url=BASE_URL) as c:
         r = c.get("/api/depth/history", params={"root": "NQ", "from_ms": T0 - 3_600_000, "to_ms": T0})
-        assert r.status_code == 503 and r.json()["detail"] == "paused for the 9:30 window"
+        assert r.status_code != 503, r.text

@@ -920,6 +920,15 @@ test('starred indicators: Favorites is a group of whatever is starred, not a cat
   assert.ok(C.filter('', 'All', []).length > 10, 'the other groups ignore the stars');
 });
 
+test('Best group: a fixed, ranked list of real indicators, each with a plain verdict, never a catalog group', () => {
+  assert.equal(C.BEST_GROUP, 'Best');
+  assert.ok(!C.GROUPS.includes(C.BEST_GROUP));
+  const ids = C.BEST.map(([id]) => id);
+  assert.deepEqual(C.filter('', C.BEST_GROUP, []).map((d) => d.id), ids, 'every id is in the catalog, in the study order');
+  assert.ok(C.BEST.every(([, note]) => note.length > 10 && note.length < 120), 'one short plain line each');
+  assert.deepEqual(C.filter('vwap', C.BEST_GROUP, []).map((d) => d.id), ['vwap'], 'the search still narrows it');
+});
+
 test('starred ids: junk is dropped, an emptied list stays empty, nothing stored gives the default', () => {
   const valid = ['trend', 'hline', 'fib'];
   assert.deepEqual(C.parseIdList(null, valid, ['trend']), ['trend']);
@@ -1101,6 +1110,12 @@ test('a VWAP holds more lines: each its own wire key, label and colour; none is 
   assert.equal(C.clampParams('vwap', { more: Array.from({ length: 9 }, () => ({})) }).more.length, C.VWAP_MORE_MAX);
 });
 
+test('a more line draws the VWAP bands unless its own bands flag is off', () => {
+  const p = C.clampParams('vwap', { more: [{ anchor: 'rth', bands: false }, { anchor: 'week', bands: true }, { anchor: 'month' }] });
+  assert.deepEqual(p.more.map((l) => l.bands), [false, undefined, undefined]);   // only an off flag is kept
+  assert.deepEqual(C.vwapLines(C.instance('vwap', p)).map((l) => l.bands !== false), [false, true, true]);
+});
+
 test('the legend shows one value per VWAP line, each in its line colour', () => {
   const inst = C.instance('vwap', { more: [{ anchor: 'custom', customTime: '09:30', color: '#112233' }] });
   const bar = { sv: { vwap: { vwap: 100 }, 'vwap:t0930': { vwap: 101.5 } } };
@@ -1108,4 +1123,60 @@ test('the legend shows one value per VWAP line, each in its line colour', () => 
   assert.equal(v.length, 2);
   assert.equal(v[1].color, '#112233');
   assert.match(v[1].text, /101\.5/);
+});
+
+// ---- the news indicators (2026-10-12): the calendar and the headlines are indicators, not chart settings
+
+test('a chart saved before the news indicators gets them once, from the settings it had', () => {
+  const out = C.seedNews([C.instance('volume')], { evHigh: true, evMedium: false, evLow: true, evLineStyle: 'dashed', evLineWidth: 2, newsOnChart: 'all' });
+  assert.deepEqual(out.map((x) => x.id), ['volume', 'events', 'headlines']);
+  assert.deepEqual(out[1].params, { high: true, medium: false, low: true, holiday: false, lines: true, lineStyle: 'dashed', lineWidth: '2' });
+  assert.equal(out[1].visible, true);
+  assert.deepEqual(out[2].params, { show: 'all' });
+});
+
+test('no overrides = the app defaults: red and orange folders, dotted lines, big moves with news', () => {
+  const [, ev, hl] = C.seedNews([C.instance('volume')], undefined);
+  assert.deepEqual(ev.params, { high: true, medium: true, low: false, holiday: false, lines: true, lineStyle: 'dotted', lineWidth: '1' });
+  assert.deepEqual(hl.params, { show: 'bursts' });
+});
+
+test('a chart that had the news switched off keeps it off: the indicator is there, hidden', () => {
+  const out = C.seedNews([], { evHigh: false, evMedium: false, evLow: false, evHoliday: false, newsOnChart: 'off' });
+  assert.equal(out.find((x) => x.id === 'events').visible, false);
+  assert.equal(out.find((x) => x.id === 'headlines').visible, false);
+  assert.equal(C.eventsView(out), null);
+  assert.equal(C.newsMode(out), 'off');
+});
+
+test('seeding never adds a second one and never touches the list it was given', () => {
+  const have = [C.instance('events', { high: false })];
+  const out = C.seedNews(have, {});
+  assert.equal(out.filter((x) => x.id === 'events').length, 1);
+  assert.equal(out.find((x) => x.id === 'events').params.high, false);
+  assert.equal(have.length, 1);
+});
+
+test('the calendar layer reads the visible Economic calendar indicator, nothing else', () => {
+  assert.equal(C.eventsView([C.instance('volume')]), null);          // none on the chart: no flags
+  const ind = C.instance('events', { high: true, medium: false, low: true, lines: false, lineStyle: 'solid', lineWidth: '3' });
+  assert.deepEqual(C.eventsView([ind]), { evHigh: true, evMedium: false, evLow: true, evHoliday: false, evLines: false,
+    evLineStyle: 'solid', evLineWidth: 3 });
+  assert.equal(C.eventsView([{ ...ind, visible: false }]), null);    // the eye is off
+});
+
+test('headlines: the mode is the indicator\'s choice, off when it is hidden or absent', () => {
+  assert.equal(C.newsMode([]), 'off');
+  assert.equal(C.newsMode([C.instance('headlines')]), 'bursts');
+  assert.equal(C.newsMode([C.instance('headlines', { show: 'all' })]), 'all');
+  assert.equal(C.newsMode([C.instance('headlines', { show: 'nope' })]), 'bursts');
+  assert.equal(C.newsMode([C.instance('headlines', { show: 'all' }, { visible: false })]), 'off');
+});
+
+test('the legend names the folders the calendar shows', () => {
+  assert.equal(C.label(C.instance('events')), 'Calendar red+orange');
+  assert.equal(C.label(C.instance('events', { high: true, medium: false })), 'Calendar red');
+  assert.equal(C.label(C.instance('events', { high: false, medium: false })), 'Calendar none');
+  assert.equal(C.label(C.instance('headlines', { show: 'all' })), 'News all');
+  assert.deepEqual(C.serverKeys([C.instance('events'), C.instance('headlines')]), []);   // nothing is asked of the server
 });

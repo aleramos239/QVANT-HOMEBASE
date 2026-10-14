@@ -417,3 +417,23 @@ test('focusTradeView: on a real chart the window asked for is the frame itself (
   assert.equal(X.focusTradeView(c, { entry_ms: 50000, exit_ms: 52000 }, { before: 20000, after: 30000 }), true);
   assert.deepEqual(set, [{ from: 28, to: 84 }]);
 });
+
+test('strategyMarkers: ctx.mark records inside the loaded bars become arrows (long below, short above), the rest are dropped', () => {
+  const C = { up: 'U', down: 'D', flat: 'F' };
+  const marks = [
+    { name: 'delta divergence', t_ms: 500, price: 1, text: 'Δ', side: 'long', pos: 'below' },   // before the first bar
+    { name: 'delta divergence', t_ms: 2100, price: 2, text: 'Δ', side: 'long', pos: 'below' },
+    { name: 'delta divergence', t_ms: 3000, price: 3, text: 'Δ', side: 'short', pos: 'above' },
+    { name: 'note', t_ms: 3500, price: 3, text: '', side: '', pos: '' },
+    { name: 'delta divergence', t_ms: 5000, price: 4, text: 'Δ', side: 'long', pos: 'below' },    // past the coverage end
+  ];
+  const m = X.strategyMarkers(marks, BARS, 1000, C);
+  assert.deepEqual(m.map((x) => [x.ms, x.position, x.shape, x.color, x.text]), [
+    [2100, 'belowBar', 'arrowUp', 'U', 'Δ'],
+    [3000, 'aboveBar', 'arrowDown', 'D', 'Δ'],
+    [3500, 'belowBar', 'circle', 'F', ''],
+  ]);
+  assert.deepEqual(X.strategyMarkers([], BARS, 1000, C), []);
+  assert.deepEqual(X.strategyMarkers(marks, [], 1000, C), []);
+  assert.equal(X.strategyMarkers(marks, BARS, 1000, C, 2).length, 2, 'the newest `cap` are kept');
+});

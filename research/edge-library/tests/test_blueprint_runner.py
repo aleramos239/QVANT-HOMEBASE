@@ -212,7 +212,7 @@ def test_workers_and_the_no_start_window(monkeypatch):
     assert " ".join(c["text"].split()) in " ".join((W / "out" / "blueprint" / "toolkit_plan.md").read_text().split())
     tue = lambda h, m: dt.datetime(2026, 10, 6, h, m, tzinfo=S.ET)  # noqa: E731
     got = [RUN.default_workers(t) for t in (tue(7, 59), tue(8, 0), tue(12, 0), tue(16, 14), tue(16, 15), tue(23, 0), SAT)]
-    assert got == [min(n, S.MAX_WORKERS) for n in (12, 4, 4, 4, 12, 12, 12)], got
+    assert got == [min(n, S.MAX_WORKERS, RUN.memory_worker_cap()) for n in (12, 4, 4, 4, 12, 12, 12)], got
     with at(tue(12, 0)):
         assert RUN.default_workers() == min(4, S.MAX_WORKERS)
     monkeypatch.setenv("BP_WORKERS_TODAY", "2026-10-06:12")                            # the owner's word for ONE day ("no strategies running"): that New York date only
@@ -250,7 +250,7 @@ def test_workers_and_the_no_start_window(monkeypatch):
                     RUN.run_build(SPEC, workers=workers, out_dir=o, ledger=led, days=DAYS, cells=CELLS)
                     raise AssertionError("the pass was not reached")
                 except Stop as e:
-                    assert e.args == (3,) and asked[-1] == min(want, S.MAX_WORKERS), (when, workers, asked, e.args)
+                    assert e.args == (3,) and asked[-1] == min(want, S.MAX_WORKERS, RUN.memory_worker_cap()) if workers is None else asked[-1] == min(want, S.MAX_WORKERS), (when, workers, asked, e.args)
     finally:
         RM.auto_workers, RUN._pass = keep
     assert not led.exists() and not list(o.glob("*/run.json"))

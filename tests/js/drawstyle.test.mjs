@@ -289,3 +289,12 @@ test('an arrow is a line with a head; a channel, a note and an anchored VWAP tak
   assert.equal(S.normalize('channel', undefined).midline, false);
   assert.equal(S.normalize('avwap', { width: 3 }).width, 3);
 });
+
+test('a retracement\'s fill opacity is a whole percent 0-100, defaulting to the old 8', () => {
+  assert.equal(S.normalize('fib', {}).fillOpacity, 8);
+  assert.equal(S.normalize('fib', { fillOpacity: 0 }).fillOpacity, 0);
+  assert.equal(S.normalize('fib', { fillOpacity: 35 }).fillOpacity, 35);
+  assert.equal(S.normalize('fib', { fillOpacity: 101 }).fillOpacity, 8);
+  assert.equal(S.normalize('fib', { fillOpacity: 0.3 }).fillOpacity, 8);
+  assert.equal('fillOpacity' in S.normalize('rect', { fillOpacity: 30 }), false);
+});

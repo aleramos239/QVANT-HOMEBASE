@@ -22,6 +22,7 @@ import pytest
 import families
 import flexind as FI
 import l2sim as S
+from families import _flat as FL
 from families import _flex as FM
 from families import blocks as B
 from families import flex as FX
@@ -82,7 +83,7 @@ def test_off_is_trade_for_trade_a_fresh_wrap(name):
                 st = c({"hold_to": "day", "tf": "5", "sess": s})
                 st.ROLLS = frozenset()
                 r = S.run_session(st, tape, costs=S.Costs(**getattr(c, "SCREEN_RUN", {})), daily=list(DAILY), on_error="raise")
-                out.append(({x: v for x, v in st.p.items() if x not in FM.KEYS}, r.trades))
+                out.append(({x: v for x, v in st.p.items() if x not in FM.KEYS + FL.KEYS}, r.trades))
             except Exception as e:                                                   # noqa: BLE001 - the same refusal from both is a match
                 out.append((type(e).__name__, str(e)))
         assert out[0] == out[1], (name, s)

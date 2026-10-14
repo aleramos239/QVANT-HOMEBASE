@@ -1052,3 +1052,140 @@ bp_test_worse,gc_fvg_nyam_long_early-GC-tf5-nyam-test-worse,grid,fvg,GC,5,bp_tes
 null_bp_test,gc_noise_mid_long_early__c1-GC-tf5-mid-test,null,random,GC,5,bp_test,c1,1-10,0,0,480,0,367452,708.26,"runs_bp_early/gc_noise_mid_long_early__c1-GC-tf5-mid-test: idea gc_noise_mid_long_early: its 10-seed random-entry pool of the test days, session mid",2026-10-11T05:56:49+00:00
 bp_test,gc_noise_mid_long_early-GC-tf5-mid-test,grid,noise_band,GC,5,bp_test,,,0,144,0,0,30322,708.26,"runs_bp_early/gc_noise_mid_long_early-GC-tf5-mid-test: idea gc_noise_mid_long_early: the locked variants on the test days, session mid",2026-10-11T05:56:49+00:00
 bp_test_worse,gc_noise_mid_long_early-GC-tf5-mid-test-worse,grid,noise_band,GC,5,bp_test,,,0,144,0,0,30369,148.86,"runs_bp_early/gc_noise_mid_long_early-GC-tf5-mid-test-worse: idea gc_noise_mid_long_early: the locked variants on the test days with worse fills (2 ticks + 250 ms), session mid",2026-10-11T05:59:18+00:00
+bp_build,nq_ny_or_close-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,142464,68.28,runs_bp/nq_ny_or_close-NQ-tf5: idea nq_ny_or_close,2026-10-13T03:11:21+00:00
+bp_build,nq_ny_or_fade-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,142464,119.98,runs_bp/nq_ny_or_fade-NQ-tf5: idea nq_ny_or_fade,2026-10-13T03:12:51+00:00
+bp_build,nq_ny_or_close-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,152448,145.46,runs_bp/nq_ny_or_close-NQ-tf1: idea nq_ny_or_close,2026-10-13T03:13:47+00:00
+bp_build,nq_ny_or_close-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,126576,104.65,runs_bp/nq_ny_or_close-NQ-tf15: idea nq_ny_or_close,2026-10-13T03:15:33+00:00
+bp_build,nq_ny_or_fade-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,152448,169.0,runs_bp/nq_ny_or_fade-NQ-tf1: idea nq_ny_or_fade,2026-10-13T03:15:41+00:00
+bp_build,nq_ny_or_close-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,143904,113.21,runs_bp/nq_ny_or_close-ES-tf5: idea nq_ny_or_close,2026-10-13T03:17:27+00:00
+bp_build,nq_ny_or_fade-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,126576,110.25,runs_bp/nq_ny_or_fade-NQ-tf15: idea nq_ny_or_fade,2026-10-13T03:17:32+00:00
+bp_build,nq_ny_or_fade-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,143904,70.44,runs_bp/nq_ny_or_fade-ES-tf5: idea nq_ny_or_fade,2026-10-13T03:18:43+00:00
+bp_build,nq_ny_vwap_cross-NQ-tf5,grid,vwap_ema_x,NQ,5,bp_build,,,0,144,0,0,64896,571.16,runs_bp/nq_ny_vwap_cross-NQ-tf5: idea nq_ny_vwap_cross,2026-10-13T03:20:25+00:00
+bp_build,nq_ny_vwap_reclaim-NQ-tf5,grid,vwap_flip,NQ,5,bp_build,,,0,144,0,0,113856,589.1,runs_bp/nq_ny_vwap_reclaim-NQ-tf5: idea nq_ny_vwap_reclaim,2026-10-13T03:20:26+00:00
+bp_build,nq_ny_or_retest-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,112560,689.04,runs_bp/nq_ny_or_retest-NQ-tf5: idea nq_ny_or_retest,2026-10-13T03:21:53+00:00
+bp_build,nq_ny_vwap_reclaim-NQ-tf1,grid,vwap_flip,NQ,1,bp_build,,,0,144,0,0,131328,413.92,runs_bp/nq_ny_vwap_reclaim-NQ-tf1: idea nq_ny_vwap_reclaim,2026-10-13T03:27:21+00:00
+bp_build,nq_ny_vwap_cross-NQ-tf1,grid,vwap_ema_x,NQ,1,bp_build,,,0,144,0,0,116064,432.7,runs_bp/nq_ny_vwap_cross-NQ-tf1: idea nq_ny_vwap_cross,2026-10-13T03:27:38+00:00
+bp_build,nq_ny_or_retest-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,135936,551.46,runs_bp/nq_ny_or_retest-NQ-tf1: idea nq_ny_or_retest,2026-10-13T03:31:05+00:00
+bp_build,nq_ny_vwap_reclaim-NQ-tf15,grid,vwap_flip,NQ,15,bp_build,,,0,144,0,0,46848,261.04,runs_bp/nq_ny_vwap_reclaim-NQ-tf15: idea nq_ny_vwap_reclaim,2026-10-13T03:31:42+00:00
+bp_build,nq_ny_vwap_cross-NQ-tf15,grid,vwap_ema_x,NQ,15,bp_build,,,0,144,0,0,26256,252.92,runs_bp/nq_ny_vwap_cross-NQ-tf15: idea nq_ny_vwap_cross,2026-10-13T03:31:51+00:00
+bp_build,nq_ny_vwap_cross-ES-tf5,grid,vwap_ema_x,ES,5,bp_build,,,0,144,0,0,62928,289.15,runs_bp/nq_ny_vwap_cross-ES-tf5: idea nq_ny_vwap_cross,2026-10-13T03:36:41+00:00
+bp_build,nq_ny_vwap_reclaim-ES-tf5,grid,vwap_flip,ES,5,bp_build,,,0,144,0,0,117072,302.91,runs_bp/nq_ny_vwap_reclaim-ES-tf5: idea nq_ny_vwap_reclaim,2026-10-13T03:36:45+00:00
+bp_build,nq_ny_or_retest-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,81408,360.55,runs_bp/nq_ny_or_retest-NQ-tf15: idea nq_ny_or_retest,2026-10-13T03:37:06+00:00
+bp_build,nq_ny_or_retest-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,111024,372.89,runs_bp/nq_ny_or_retest-ES-tf5: idea nq_ny_or_retest,2026-10-13T03:43:19+00:00
+bp_build,nq_ny_or_retest__htf60_with-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,63408,163.84,runs_bp/nq_ny_or_retest__htf60_with-NQ-tf5: idea nq_ny_or_retest: filter htf60 with,2026-10-13T03:47:05+00:00
+bp_build,nq_ny_or_retest__rvol_high-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,69120,163.84,runs_bp/nq_ny_or_retest__rvol_high-NQ-tf5: idea nq_ny_or_retest: filter rvol high,2026-10-13T03:47:05+00:00
+bp_build,nq_ny_or_retest__htf60+rvol_with+high-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,38544,163.84,runs_bp/nq_ny_or_retest__htf60+rvol_with+high-NQ-tf5: idea nq_ny_or_retest: filter htf60+rvol with+high,2026-10-13T03:47:05+00:00
+bp_build,nq_ny_or_retest__htf60_with-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,77424,261.45,runs_bp/nq_ny_or_retest__htf60_with-NQ-tf1: idea nq_ny_or_retest: filter htf60 with,2026-10-13T03:51:28+00:00
+bp_build,nq_ny_or_retest__rvol_high-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,107088,261.45,runs_bp/nq_ny_or_retest__rvol_high-NQ-tf1: idea nq_ny_or_retest: filter rvol high,2026-10-13T03:51:28+00:00
+bp_build,nq_ny_or_retest__htf60+rvol_with+high-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,59904,261.45,runs_bp/nq_ny_or_retest__htf60+rvol_with+high-NQ-tf1: idea nq_ny_or_retest: filter htf60+rvol with+high,2026-10-13T03:51:28+00:00
+bp_build,nq_ldn_vwap_reclaim_scr-NQ-tf5,grid,vwap_flip,NQ,5,bp_build,,,0,144,0,0,133536,449.62,runs_bp/nq_ldn_vwap_reclaim_scr-NQ-tf5: idea nq_ldn_vwap_reclaim_scr,2026-10-13T03:53:05+00:00
+bp_build,nq_ny_vwap_band_go-NQ-tf5,grid,ind_signal,NQ,5,bp_build,,,0,144,0,0,124032,537.33,runs_bp/nq_ny_vwap_band_go-NQ-tf5: idea nq_ny_vwap_band_go,2026-10-13T03:53:20+00:00
+bp_build,nq_ny_or_retest__htf60_with-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,51888,166.24,runs_bp/nq_ny_or_retest__htf60_with-NQ-tf15: idea nq_ny_or_retest: filter htf60 with,2026-10-13T03:54:15+00:00
+bp_build,nq_ny_or_retest__rvol_high-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,45120,166.24,runs_bp/nq_ny_or_retest__rvol_high-NQ-tf15: idea nq_ny_or_retest: filter rvol high,2026-10-13T03:54:15+00:00
+bp_build,nq_ny_or_retest__htf60+rvol_with+high-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,28848,166.24,runs_bp/nq_ny_or_retest__htf60+rvol_with+high-NQ-tf15: idea nq_ny_or_retest: filter htf60+rvol with+high,2026-10-13T03:54:15+00:00
+bp_build,nq_ldn_or_close_scr-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,177696,599.13,runs_bp/nq_ldn_or_close_scr-NQ-tf5: idea nq_ldn_or_close_scr,2026-10-13T03:55:33+00:00
+bp_build,nq_ny_or_retest__htf60_with-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,60768,177.94,runs_bp/nq_ny_or_retest__htf60_with-ES-tf5: idea nq_ny_or_retest: filter htf60 with,2026-10-13T03:57:14+00:00
+bp_build,nq_ny_or_retest__rvol_high-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,66960,177.94,runs_bp/nq_ny_or_retest__rvol_high-ES-tf5: idea nq_ny_or_retest: filter rvol high,2026-10-13T03:57:14+00:00
+bp_build,nq_ny_or_retest__htf60+rvol_with+high-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,36912,177.94,runs_bp/nq_ny_or_retest__htf60+rvol_with+high-ES-tf5: idea nq_ny_or_retest: filter htf60+rvol with+high,2026-10-13T03:57:14+00:00
+bp_build,nq_asia_or_close-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,170976,53.67,runs_bp/nq_asia_or_close-NQ-tf5: idea nq_asia_or_close,2026-10-13T03:58:39+00:00
+bp_build,nq_asia_or_close-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,174288,72.43,runs_bp/nq_asia_or_close-NQ-tf1: idea nq_asia_or_close,2026-10-13T03:59:52+00:00
+bp_build,nq_asia_or_close-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,167376,51.09,runs_bp/nq_asia_or_close-NQ-tf15: idea nq_asia_or_close,2026-10-13T04:00:44+00:00
+bp_build,nq_asia_or_close-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,172320,54.83,runs_bp/nq_asia_or_close-ES-tf5: idea nq_asia_or_close,2026-10-13T04:01:39+00:00
+bp_build,nq_ldn_vwap_reclaim_scr-NQ-tf1,grid,vwap_flip,NQ,1,bp_build,,,0,144,0,0,135504,568.95,runs_bp/nq_ldn_vwap_reclaim_scr-NQ-tf1: idea nq_ldn_vwap_reclaim_scr,2026-10-13T04:02:34+00:00
+bp_build,nq_asia_vwap_fade-NQ-tf5,grid,vwap_z,NQ,5,bp_build,,,0,192,0,0,89520,48.05,runs_bp/nq_asia_vwap_fade-NQ-tf5: idea nq_asia_vwap_fade,2026-10-13T04:02:59+00:00
+bp_build,nq_asia_vwap_fade-NQ-tf1,grid,vwap_z,NQ,1,bp_build,,,0,192,0,0,107184,70.13,runs_bp/nq_asia_vwap_fade-NQ-tf1: idea nq_asia_vwap_fade,2026-10-13T04:04:10+00:00
+bp_build,nq_asia_vwap_fade-NQ-tf15,grid,vwap_z,NQ,15,bp_build,,,0,192,0,0,71760,44.0,runs_bp/nq_asia_vwap_fade-NQ-tf15: idea nq_asia_vwap_fade,2026-10-13T04:04:54+00:00
+bp_build,nq_asia_vwap_fade-ES-tf5,grid,vwap_z,ES,5,bp_build,,,0,192,0,0,89520,49.6,runs_bp/nq_asia_vwap_fade-ES-tf5: idea nq_asia_vwap_fade,2026-10-13T04:05:44+00:00
+bp_build,nq_ny_vwap_band_go-NQ-tf1,grid,ind_signal,NQ,1,bp_build,,,0,144,0,0,134400,744.9,runs_bp/nq_ny_vwap_band_go-NQ-tf1: idea nq_ny_vwap_band_go,2026-10-13T04:05:46+00:00
+bp_build,nq_asia_vwap_reclaim-NQ-tf5,grid,vwap_flip,NQ,5,bp_build,,,0,144,0,0,111936,41.98,runs_bp/nq_asia_vwap_reclaim-NQ-tf5: idea nq_asia_vwap_reclaim,2026-10-13T04:06:47+00:00
+bp_build,nq_ldn_or_close_scr-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,178752,708.25,runs_bp/nq_ldn_or_close_scr-NQ-tf1: idea nq_ldn_or_close_scr,2026-10-13T04:07:22+00:00
+bp_build,nq_asia_vwap_reclaim-NQ-tf1,grid,vwap_flip,NQ,1,bp_build,,,0,144,0,0,114144,59.67,runs_bp/nq_asia_vwap_reclaim-NQ-tf1: idea nq_asia_vwap_reclaim,2026-10-13T04:07:48+00:00
+bp_build,nq_asia_vwap_reclaim-NQ-tf15,grid,vwap_flip,NQ,15,bp_build,,,0,144,0,0,110640,39.78,runs_bp/nq_asia_vwap_reclaim-NQ-tf15: idea nq_asia_vwap_reclaim,2026-10-13T04:08:28+00:00
+bp_build,nq_ldn_vwap_reclaim_scr-NQ-tf15,grid,vwap_flip,NQ,15,bp_build,,,0,144,0,0,125952,356.26,runs_bp/nq_ldn_vwap_reclaim_scr-NQ-tf15: idea nq_ldn_vwap_reclaim_scr,2026-10-13T04:08:31+00:00
+bp_build,nq_asia_vwap_reclaim-ES-tf5,grid,vwap_flip,ES,5,bp_build,,,0,144,0,0,113136,43.22,runs_bp/nq_asia_vwap_reclaim-ES-tf5: idea nq_asia_vwap_reclaim,2026-10-13T04:09:12+00:00
+bp_build,nq_ldn_vwap_fade-NQ-tf5,grid,vwap_z,NQ,5,bp_build,,,0,192,0,0,111120,56.93,runs_bp/nq_ldn_vwap_fade-NQ-tf5: idea nq_ldn_vwap_fade,2026-10-13T04:10:30+00:00
+bp_build,nq_ldn_vwap_fade-NQ-tf1,grid,vwap_z,NQ,1,bp_build,,,0,192,0,0,142416,80.63,runs_bp/nq_ldn_vwap_fade-NQ-tf1: idea nq_ldn_vwap_fade,2026-10-13T04:11:52+00:00
+bp_build,nq_ny_vwap_band_go-NQ-tf15,grid,ind_signal,NQ,15,bp_build,,,0,144,0,0,84528,411.16,runs_bp/nq_ny_vwap_band_go-NQ-tf15: idea nq_ny_vwap_band_go,2026-10-13T04:12:37+00:00
+bp_build,nq_ldn_vwap_fade-NQ-tf15,grid,vwap_z,NQ,15,bp_build,,,0,192,0,0,86448,52.0,runs_bp/nq_ldn_vwap_fade-NQ-tf15: idea nq_ldn_vwap_fade,2026-10-13T04:12:44+00:00
+bp_build,nq_ldn_vwap_fade-ES-tf5,grid,vwap_z,ES,5,bp_build,,,0,192,0,0,117408,57.99,runs_bp/nq_ldn_vwap_fade-ES-tf5: idea nq_ldn_vwap_fade,2026-10-13T04:13:43+00:00
+bp_build,nq_ldn_vwap_reclaim_scr-ES-tf5,grid,vwap_flip,ES,5,bp_build,,,0,144,0,0,133968,371.88,runs_bp/nq_ldn_vwap_reclaim_scr-ES-tf5: idea nq_ldn_vwap_reclaim_scr,2026-10-13T04:14:44+00:00
+bp_build,nq_ldn_or_close_scr-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,176352,453.99,runs_bp/nq_ldn_or_close_scr-NQ-tf15: idea nq_ldn_or_close_scr,2026-10-13T04:14:57+00:00
+bp_build,nq_ny_vwap_band_go-ES-tf5,grid,ind_signal,ES,5,bp_build,,,0,144,0,0,125328,334.69,runs_bp/nq_ny_vwap_band_go-ES-tf5: idea nq_ny_vwap_band_go,2026-10-13T04:18:12+00:00
+bp_build,nq_ldn_or_close_scr-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,178272,344.09,runs_bp/nq_ldn_or_close_scr-ES-tf5: idea nq_ldn_or_close_scr,2026-10-13T04:20:41+00:00
+bp_build,nq_ny_vwap_band_go_r2-NQ-tf5,grid,ind_signal,NQ,5,bp_build,,,0,144,0,0,103920,180.72,runs_bp/nq_ny_vwap_band_go_r2-NQ-tf5: idea nq_ny_vwap_band_go_r2,2026-10-13T13:04:29+00:00
+bp_build,nq_ny_or_retest_r3-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,108912,238.74,runs_bp/nq_ny_or_retest_r3-NQ-tf5: idea nq_ny_or_retest_r3,2026-10-13T13:05:29+00:00
+bp_build,nq_ny_vwap_band_go_r2-NQ-tf1,grid,ind_signal,NQ,1,bp_build,,,0,144,0,0,120048,295.26,runs_bp/nq_ny_vwap_band_go_r2-NQ-tf1: idea nq_ny_vwap_band_go_r2,2026-10-13T13:09:25+00:00
+bp_build,nq_ny_or_retest_r3-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,135936,382.44,runs_bp/nq_ny_or_retest_r3-NQ-tf1: idea nq_ny_or_retest_r3,2026-10-13T13:11:52+00:00
+bp_build,nq_ny_vwap_band_go_r2-NQ-tf15,grid,ind_signal,NQ,15,bp_build,,,0,144,0,0,84528,160.23,runs_bp/nq_ny_vwap_band_go_r2-NQ-tf15: idea nq_ny_vwap_band_go_r2,2026-10-13T13:12:06+00:00
+bp_build,nq_ny_vwap_band_go_r2-ES-tf5,grid,ind_signal,ES,5,bp_build,,,0,144,0,0,107616,208.7,runs_bp/nq_ny_vwap_band_go_r2-ES-tf5: idea nq_ny_vwap_band_go_r2,2026-10-13T13:15:35+00:00
+bp_build,nq_ny_or_retest_r3-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,71424,233.26,runs_bp/nq_ny_or_retest_r3-NQ-tf15: idea nq_ny_or_retest_r3,2026-10-13T13:15:46+00:00
+bp_build,nq_ldn_0830_or-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,144,0,0,87696,158.58,runs_bp/nq_ldn_0830_or-NQ-tf5: idea nq_ldn_0830_or,2026-10-13T13:17:50+00:00
+bp_build,nq_ny_or_retest_r3-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,107952,259.66,runs_bp/nq_ny_or_retest_r3-ES-tf5: idea nq_ny_or_retest_r3,2026-10-13T13:20:06+00:00
+bp_build,nq_ldn_0830_or-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,144,0,0,104064,244.75,runs_bp/nq_ldn_0830_or-NQ-tf1: idea nq_ldn_0830_or,2026-10-13T13:21:55+00:00
+bp_build,nq_ldn_0830_or-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,144,0,0,76656,298.11,runs_bp/nq_ldn_0830_or-NQ-tf15: idea nq_ldn_0830_or,2026-10-13T13:26:54+00:00
+bp_build,nq_ldn_0830_or-ES-tf5,grid,win_break,ES,5,bp_build,,,0,144,0,0,90528,346.15,runs_bp/nq_ldn_0830_or-ES-tf5: idea nq_ldn_0830_or,2026-10-13T13:32:41+00:00
+bp_build,nq_asia_liq_sweep-NQ-tf15,grid,liq,NQ,15,bp_build,,,0,192,0,0,19872,284.83,runs_bp/nq_asia_liq_sweep-NQ-tf15: idea nq_asia_liq_sweep,2026-10-13T21:09:18+00:00
+bp_build,nq_asia_liq_sweep-NQ-tf1,grid,liq,NQ,1,bp_build,,,0,192,0,0,16128,390.0,runs_bp/nq_asia_liq_sweep-NQ-tf1: idea nq_asia_liq_sweep,2026-10-13T21:15:48+00:00
+bp_build,nq_asia_liq_sweep-NQ-tf5,grid,liq,NQ,5,bp_build,,,0,192,0,0,16896,292.64,runs_bp/nq_asia_liq_sweep-NQ-tf5: idea nq_asia_liq_sweep,2026-10-13T21:20:41+00:00
+bp_build,nq_asia_liq_sweep-ES-tf15,grid,liq,ES,15,bp_build,,,0,192,0,0,20304,261.21,runs_bp/nq_asia_liq_sweep-ES-tf15: idea nq_asia_liq_sweep,2026-10-13T21:25:03+00:00
+bp_build,nq_asia_liq_sweep_r2-NQ-tf15,grid,liq,NQ,15,bp_build,,,0,192,0,0,58320,312.1,runs_bp/nq_asia_liq_sweep_r2-NQ-tf15: idea nq_asia_liq_sweep_r2,2026-10-13T21:31:12+00:00
+bp_build,nq_asia_liq_sweep_r2-NQ-tf1,grid,liq,NQ,1,bp_build,,,0,192,0,0,58224,530.88,runs_bp/nq_asia_liq_sweep_r2-NQ-tf1: idea nq_asia_liq_sweep_r2,2026-10-13T21:40:03+00:00
+bp_build,nq_asia_liq_sweep_r2-NQ-tf5,grid,liq,NQ,5,bp_build,,,0,192,0,0,57312,343.94,runs_bp/nq_asia_liq_sweep_r2-NQ-tf5: idea nq_asia_liq_sweep_r2,2026-10-13T21:45:47+00:00
+bp_build,nq_asia_liq_sweep_r2-ES-tf15,grid,liq,ES,15,bp_build,,,0,192,0,0,58416,277.83,runs_bp/nq_asia_liq_sweep_r2-ES-tf15: idea nq_asia_liq_sweep_r2,2026-10-13T21:50:26+00:00
+bp_build_worse,nq_asia_liq_sweep_r2-NQ-tf15-eve-worse,grid,liq,NQ,15,bp_build,,,0,192,0,0,58320,210.1,runs_bp/nq_asia_liq_sweep_r2-NQ-tf15-eve-worse: idea nq_asia_liq_sweep_r2: nq_asia_liq_sweep_r2-NQ-tf15 in session eve with worse fills (2 ticks + 250 ms),2026-10-13T22:01:04+00:00
+null_bp_test,nq_asia_liq_sweep_r2__c1-NQ-tf15-eve-test,null,random,NQ,15,bp_test,c1,1-10,0,0,480,0,346571,204.04,"runs_bp_test/nq_asia_liq_sweep_r2__c1-NQ-tf15-eve-test: idea nq_asia_liq_sweep: its 10-seed random-entry pool of the test days, session eve",2026-10-13T22:06:18+00:00
+bp_test,nq_asia_liq_sweep_r2-NQ-tf15-eve-test,grid,liq,NQ,15,bp_test,,,0,192,0,0,23616,204.04,"runs_bp_test/nq_asia_liq_sweep_r2-NQ-tf15-eve-test: idea nq_asia_liq_sweep: the locked variants on the test days, session eve",2026-10-13T22:06:18+00:00
+bp_test_worse,nq_asia_liq_sweep_r2-NQ-tf15-eve-test-worse,grid,liq,NQ,15,bp_test,,,0,192,0,0,23616,118.4,"runs_bp_test/nq_asia_liq_sweep_r2-NQ-tf15-eve-test-worse: idea nq_asia_liq_sweep: the locked variants on the test days with worse fills (2 ticks + 250 ms), session eve",2026-10-13T22:08:17+00:00
+bp_build,nq_ny_orb_rvol-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,368.12,runs_bp/nq_ny_orb_rvol-NQ-tf5: idea nq_ny_orb_rvol,2026-10-13T22:35:59+00:00
+bp_build,nq_ny_orb_rvol__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,64464,368.12,runs_bp/nq_ny_orb_rvol__rvol_high-NQ-tf5: idea nq_ny_orb_rvol: filter rvol high,2026-10-13T22:35:59+00:00
+bp_build,nq_ny_orb_rvol-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,133104,395.79,runs_bp/nq_ny_orb_rvol-ES-tf5: idea nq_ny_orb_rvol,2026-10-13T22:42:36+00:00
+bp_build,nq_ny_orb_rvol__rvol_high-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,64512,395.79,runs_bp/nq_ny_orb_rvol__rvol_high-ES-tf5: idea nq_ny_orb_rvol: filter rvol high,2026-10-13T22:42:36+00:00
+bp_build,nq_ny_orb_rvol-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,343.44,runs_bp/nq_ny_orb_rvol-NQ-tf15: idea nq_ny_orb_rvol,2026-10-13T22:48:21+00:00
+bp_build,nq_ny_orb_rvol__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,65376,343.44,runs_bp/nq_ny_orb_rvol__rvol_high-NQ-tf15: idea nq_ny_orb_rvol: filter rvol high,2026-10-13T22:48:21+00:00
+bp_build,nq_ny_orb_rvol_r2-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,192,0,0,168576,299.41,runs_bp/nq_ny_orb_rvol_r2-NQ-tf5: idea nq_ny_orb_rvol_r2,2026-10-13T22:54:34+00:00
+bp_build,nq_ny_orb_rvol_r2__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,192,0,0,80256,299.41,runs_bp/nq_ny_orb_rvol_r2__rvol_high-NQ-tf5: idea nq_ny_orb_rvol_r2: filter rvol high,2026-10-13T22:54:34+00:00
+bp_build,nq_ny_orb_rvol_r2-ES-tf5,grid,orb,ES,5,bp_build,,,0,192,0,0,171840,242.44,runs_bp/nq_ny_orb_rvol_r2-ES-tf5: idea nq_ny_orb_rvol_r2,2026-10-13T22:58:37+00:00
+bp_build,nq_ny_orb_rvol_r2__rvol_high-ES-tf5,grid,orb,ES,5,bp_build,,,0,192,0,0,82560,242.44,runs_bp/nq_ny_orb_rvol_r2__rvol_high-ES-tf5: idea nq_ny_orb_rvol_r2: filter rvol high,2026-10-13T22:58:38+00:00
+bp_build,nq_ny_orb_rvol_r2-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,192,0,0,168576,205.1,runs_bp/nq_ny_orb_rvol_r2-NQ-tf15: idea nq_ny_orb_rvol_r2,2026-10-13T23:02:03+00:00
+bp_build,nq_ny_orb_rvol_r2__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,192,0,0,83328,205.1,runs_bp/nq_ny_orb_rvol_r2__rvol_high-NQ-tf15: idea nq_ny_orb_rvol_r2: filter rvol high,2026-10-13T23:02:03+00:00
+bp_build,nq_ny_orb_rvol_r3-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,88128,83.33,runs_bp/nq_ny_orb_rvol_r3-NQ-tf5: idea nq_ny_orb_rvol_r3,2026-10-13T23:07:12+00:00
+bp_build,nq_ny_orb_rvol_r3__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,44880,83.33,runs_bp/nq_ny_orb_rvol_r3__rvol_high-NQ-tf5: idea nq_ny_orb_rvol_r3: filter rvol high,2026-10-13T23:07:12+00:00
+bp_build,nq_ny_orb_rvol_r3-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,86400,95.76,runs_bp/nq_ny_orb_rvol_r3-ES-tf5: idea nq_ny_orb_rvol_r3,2026-10-13T23:08:48+00:00
+bp_build,nq_ny_orb_rvol_r3__rvol_high-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,45072,95.76,runs_bp/nq_ny_orb_rvol_r3__rvol_high-ES-tf5: idea nq_ny_orb_rvol_r3: filter rvol high,2026-10-13T23:08:48+00:00
+bp_build,nq_ny_orb_rvol_r3-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,88128,90.48,runs_bp/nq_ny_orb_rvol_r3-NQ-tf15: idea nq_ny_orb_rvol_r3,2026-10-13T23:10:19+00:00
+bp_build,nq_ny_orb_rvol_r3__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,44976,90.48,runs_bp/nq_ny_orb_rvol_r3__rvol_high-NQ-tf15: idea nq_ny_orb_rvol_r3: filter rvol high,2026-10-13T23:10:19+00:00
+bp_build,nq_ny_orb_rvol_r4-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,81264,66.06,runs_bp/nq_ny_orb_rvol_r4-NQ-tf5: idea nq_ny_orb_rvol_r4,2026-10-13T23:12:34+00:00
+bp_build,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,40416,66.06,runs_bp/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5: idea nq_ny_orb_rvol_r4: filter rvol high,2026-10-13T23:12:34+00:00
+bp_build,nq_ny_orb_rvol_r4-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,82128,69.61,runs_bp/nq_ny_orb_rvol_r4-ES-tf5: idea nq_ny_orb_rvol_r4,2026-10-13T23:13:44+00:00
+bp_build,nq_ny_orb_rvol_r4__rvol_high-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,41664,69.61,runs_bp/nq_ny_orb_rvol_r4__rvol_high-ES-tf5: idea nq_ny_orb_rvol_r4: filter rvol high,2026-10-13T23:13:44+00:00
+bp_build,nq_ny_orb_rvol_r4-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,81264,63.8,runs_bp/nq_ny_orb_rvol_r4-NQ-tf15: idea nq_ny_orb_rvol_r4,2026-10-13T23:14:49+00:00
+bp_build,nq_ny_orb_rvol_r4__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,41760,63.8,runs_bp/nq_ny_orb_rvol_r4__rvol_high-NQ-tf15: idea nq_ny_orb_rvol_r4: filter rvol high,2026-10-13T23:14:49+00:00
+bp_build_worse,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-worse,grid,orb,NQ,5,bp_build,,,0,144,0,0,40416,31.58,runs_bp/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-worse: idea nq_ny_orb_rvol_r4: nq_ny_orb_rvol_r4__rvol_high-NQ-tf5 in session nyam with worse fills (2 ticks + 250 ms + a 100 ms late cancel),2026-10-13T23:16:38+00:00
+bp_build,nq_pre_orb_release-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,65040,45.39,runs_bp/nq_pre_orb_release-NQ-tf5: idea nq_pre_orb_release,2026-10-13T23:19:54+00:00
+bp_build,nq_pre_orb_release__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,38448,45.39,runs_bp/nq_pre_orb_release__rvol_high-NQ-tf5: idea nq_pre_orb_release: filter rvol high,2026-10-13T23:19:54+00:00
+bp_build,nq_pre_orb_release-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,65424,49.0,runs_bp/nq_pre_orb_release-ES-tf5: idea nq_pre_orb_release,2026-10-13T23:20:43+00:00
+bp_build,nq_pre_orb_release__rvol_high-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,38640,49.0,runs_bp/nq_pre_orb_release__rvol_high-ES-tf5: idea nq_pre_orb_release: filter rvol high,2026-10-13T23:20:43+00:00
+bp_build,nq_pre_orb_release-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,65040,46.8,runs_bp/nq_pre_orb_release-NQ-tf15: idea nq_pre_orb_release,2026-10-13T23:21:30+00:00
+bp_build,nq_pre_orb_release__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,40080,46.8,runs_bp/nq_pre_orb_release__rvol_high-NQ-tf15: idea nq_pre_orb_release: filter rvol high,2026-10-13T23:21:30+00:00
+bp_build,nq_ldn_open_candle-NQ-tf5,grid,open_candle,NQ,5,bp_build,,,0,144,0,0,59424,31.83,runs_bp/nq_ldn_open_candle-NQ-tf5: idea nq_ldn_open_candle,2026-10-13T23:24:49+00:00
+bp_build,nq_ldn_open_candle-ES-tf5,grid,open_candle,ES,5,bp_build,,,0,144,0,0,62208,34.57,runs_bp/nq_ldn_open_candle-ES-tf5: idea nq_ldn_open_candle,2026-10-13T23:25:24+00:00
+bp_build,nq_ldn_open_candle-NQ-tf15,grid,open_candle,NQ,15,bp_build,,,0,144,0,0,62544,32.89,runs_bp/nq_ldn_open_candle-NQ-tf15: idea nq_ldn_open_candle,2026-10-13T23:25:57+00:00
+bp_build,nq_ldn_thin_sweep-NQ-tf5,grid,liq,NQ,5,bp_build,,,0,192,0,0,16272,607.01,runs_bp/nq_ldn_thin_sweep-NQ-tf5: idea nq_ldn_thin_sweep,2026-10-14T00:43:20+00:00
+bp_build,nq_ldn_thin_sweep-ES-tf5,grid,liq,ES,5,bp_build,,,0,192,0,0,15360,289.68,runs_bp/nq_ldn_thin_sweep-ES-tf5: idea nq_ldn_thin_sweep,2026-10-14T00:48:10+00:00
+bp_build,nq_ldn_thin_sweep-NQ-tf15,grid,liq,NQ,15,bp_build,,,0,192,0,0,15552,547.73,runs_bp/nq_ldn_thin_sweep-NQ-tf15: idea nq_ldn_thin_sweep,2026-10-14T00:57:18+00:00
+bp_build,nq_pre_straddle_release-NQ-tf5,grid,straddle,NQ,5,bp_build,,,0,144,0,0,52992,48.83,runs_bp/nq_pre_straddle_release-NQ-tf5: idea nq_pre_straddle_release,2026-10-14T00:58:52+00:00
+bp_build,nq_pre_straddle_release-ES-tf5,grid,straddle,ES,5,bp_build,,,0,144,0,0,53040,49.37,runs_bp/nq_pre_straddle_release-ES-tf5: idea nq_pre_straddle_release,2026-10-14T00:59:42+00:00
+bp_build,nq_pre_straddle_release-NQ-tf15,grid,straddle,NQ,15,bp_build,,,0,144,0,0,51072,46.65,runs_bp/nq_pre_straddle_release-NQ-tf15: idea nq_pre_straddle_release,2026-10-14T01:00:28+00:00
+bp_build,nq_ldn_asia_range_break-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,126912,71.48,runs_bp/nq_ldn_asia_range_break-NQ-tf5: idea nq_ldn_asia_range_break,2026-10-14T01:03:38+00:00
+bp_build,nq_ldn_asia_range_break-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,129024,60.09,runs_bp/nq_ldn_asia_range_break-ES-tf5: idea nq_ldn_asia_range_break,2026-10-14T01:04:39+00:00
+bp_build,nq_ldn_asia_range_break-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,106752,53.32,runs_bp/nq_ldn_asia_range_break-NQ-tf15: idea nq_ldn_asia_range_break,2026-10-14T01:05:32+00:00
+bp_build,nq_ldn_asia_range_break_r2-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,126912,57.67,runs_bp/nq_ldn_asia_range_break_r2-NQ-tf5: idea nq_ldn_asia_range_break_r2,2026-10-14T01:06:58+00:00
+bp_build,nq_ldn_asia_range_break_r2-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,129024,60.09,runs_bp/nq_ldn_asia_range_break_r2-ES-tf5: idea nq_ldn_asia_range_break_r2,2026-10-14T01:07:59+00:00
+bp_build,nq_ldn_asia_range_break_r2-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,106752,53.8,runs_bp/nq_ldn_asia_range_break_r2-NQ-tf15: idea nq_ldn_asia_range_break_r2,2026-10-14T01:08:53+00:00
+bp_build,nq_ldn_pinbar_level-NQ-tf5,grid,pinbar,NQ,5,bp_build,,,0,144,0,0,74496,71.42,runs_bp/nq_ldn_pinbar_level-NQ-tf5: idea nq_ldn_pinbar_level,2026-10-14T01:10:44+00:00
+bp_build,nq_ldn_pinbar_level-ES-tf5,grid,pinbar,ES,5,bp_build,,,0,144,0,0,82608,72.24,runs_bp/nq_ldn_pinbar_level-ES-tf5: idea nq_ldn_pinbar_level,2026-10-14T01:11:57+00:00
+bp_build,nq_ldn_pinbar_level-NQ-tf15,grid,pinbar,NQ,15,bp_build,,,0,144,0,0,43536,63.77,runs_bp/nq_ldn_pinbar_level-NQ-tf15: idea nq_ldn_pinbar_level,2026-10-14T01:13:01+00:00
+null_bp_test,nq_ny_orb_rvol_r4__c1-NQ-tf5-nyam-test,null,random,NQ,5,bp_test,c1,1-10,0,0,480,0,391625,123.54,"runs_bp_test/nq_ny_orb_rvol_r4__c1-NQ-tf5-nyam-test: idea nq_ny_orb_rvol: its 10-seed random-entry pool of the test days, session nyam",2026-10-14T01:38:35+00:00
+bp_test,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test,grid,orb,NQ,5,bp_test,,,0,144,0,0,12336,123.54,"runs_bp_test/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test: idea nq_ny_orb_rvol: the locked variants on the test days, session nyam",2026-10-14T01:38:35+00:00
+bp_test_worse,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test-worse,grid,orb,NQ,5,bp_test,,,0,144,0,0,12336,20.38,"runs_bp_test/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test-worse: idea nq_ny_orb_rvol: the locked variants on the test days with worse fills (2 ticks + 250 ms + a 100 ms late cancel), session nyam",2026-10-14T01:38:56+00:00
+bp_build,nq_ny_or_retest_r4-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,47280,139.19,runs_bp/nq_ny_or_retest_r4-NQ-tf5: idea nq_ny_or_retest_r4,2026-10-14T01:48:46+00:00

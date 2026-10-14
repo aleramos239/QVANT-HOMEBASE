@@ -207,3 +207,11 @@ test('Tool labels setting: hover shows on hover or when selected, always / never
   assert.deepEqual(D.toolLabelParts({ posStop: false, posMoney: false }),
     { target: true, stop: false, rr: true, result: true, price: true, points: true, ticks: true, money: false });
 });
+
+test('zoneMoney: one contract at the target and the stop, whatever the box quantity; none without a point value', () => {
+  assert.deepEqual(P.zoneMoney(box('long', 30900, 30950, 30875, 5), 20, 0.25),
+    { profit: '+$1,000 · 1 contract', loss: '−$500 · 1 contract' });
+  assert.deepEqual(P.zoneMoney(box('short', 30900, 30850, 30925), 20, 0.25),
+    { profit: '+$1,000 · 1 contract', loss: '−$500 · 1 contract' });
+  assert.equal(P.zoneMoney(box('long', 30900, 30950, 30875), null, 0.25), null);
+});

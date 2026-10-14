@@ -126,6 +126,14 @@ function labels(d, pv, tick, show = {}) {
     center: `RR ${rr(d)} · Qty ${qty.toLocaleString('en-US')}` };
 }
 
+/* What ONE contract makes at the target and loses at the stop ("+$1,000 · 1 contract", "−$500 · 1 contract"): the same
+   for a long and a short, whatever the box's own quantity. null while the point value is unknown. */
+function zoneMoney(d, pv, tick) {
+  if (pv == null) return null;
+  const [E, T, S] = d.points, usd = (px) => fmtUsd(Math.abs(D.roundToTick(px - E.p, tick)) * pv);
+  return { profit: `+${usd(T.p)} · 1 contract`, loss: `${MINUS}${usd(S.p)} · 1 contract` };
+}
+
 /* How the planned trade played out on the chart's bars ([{ms, o, h, l, c}] ascending), honest about what bars
    cannot tell. Entered on the first bar from the one holding t0 whose range holds the entry (none up to t1:
    'none'). An entry bar that also reaches the target or stop, or a later bar reaching both, is 'ambiguous'.
@@ -216,14 +224,25 @@ function drawPosition(ctx, d, geo, P, pctx) {
     }
   }
   if (pctx.selected) ctx.strokeRect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(w), Math.round(bot - top));
-  if (st.showLabels === false || pctx.labels === false) return;
-  const parts = { ...(pctx.parts || {}) };      // the settings' parts, then this box's own (each only when it was set)
-  for (const [k, key] of PART_KEYS) if (typeof st[key] === 'boolean') parts[k] = st[key];
-  const lab = labels(d, pctx.pv, pctx.tick, parts), cx = left + w / 2, GAP = 4;
+  const cx = left + w / 2, GAP = 4;
   const fs = Number.isInteger(st.fontSize) && st.fontSize >= 10 && st.fontSize <= 28 ? st.fontSize : null, lh = fs ? fs + 4 : 16;
   ctx.font = (st.bold === true ? 'bold ' : '') + (fs ? pctx.font.replace(/\d+(\.\d+)?px/, `${fs}px`) : pctx.font);
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
+  // what one contract would make or lose, written inside each zone (always on, whatever the Tool labels setting says)
+  if (st.showZoneMoney !== false) {
+    const z = zoneMoney(d, pctx.pv, pctx.tick);
+    if (z) {
+      ctx.fillStyle = P.text;
+      const put = (text, yA, yB) => { if (Math.abs(yB - yA) >= lh + 2 && ctx.measureText(text).width + 8 <= w) ctx.fillText(text, cx, (yA + yB) / 2); };
+      put(z.profit, yE, yT);
+      put(z.loss, yE, yS);
+    }
+  }
+  if (st.showLabels === false || pctx.labels === false) return;
+  const parts = { ...(pctx.parts || {}) };      // the settings' parts, then this box's own (each only when it was set)
+  for (const [k, key] of PART_KEYS) if (typeof st[key] === 'boolean') parts[k] = st[key];
+  const lab = labels(d, pctx.pv, pctx.tick, parts);
   const label = (lines, bg, yAt) => {   // yAt(height) -> the label's top before clamping
     const bw = Math.max(...lines.map((s) => ctx.measureText(s).width)) + 16, bh = lines.length * lh + 4;
     const bx = Math.max(2, Math.min(cx - bw / 2, pctx.size.width - bw - 2));
@@ -240,7 +259,7 @@ function drawPosition(ctx, d, geo, P, pctx) {
 }
 
 const api = { WIDTH_BARS, RISK_PANE, MIN_RISK_TICKS, QTY_MAX, MINUS, isPosition, risk, create, handles, hitTest,
-  setHandle, near, fmtUsd, fmtPnl, rr, labels, outcome, validate, drawPosition };
+  setHandle, near, fmtUsd, fmtPnl, rr, labels, zoneMoney, outcome, validate, drawPosition };
 if (typeof window !== 'undefined') window.HBPosition = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

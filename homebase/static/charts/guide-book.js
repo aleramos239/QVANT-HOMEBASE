@@ -107,25 +107,24 @@ G.add({
   pressure: {
     what: 'Which side pushes harder, buyers or sellers, as one number from -100 to +100.',
     see: [
-      'A histogram in its own pane: green bars above zero, red below. Dashed lines at +10 (a lean) and +25 (a clear push), and the same below zero.',
+      'A word in the legend: Buyers pushing, Buyers lean, Even, Sellers lean or Sellers pushing.',
+      'Histogram bars: grey is even, pale green or red a lean (past 10), solid a clear push (past 25).',
       'A thick orange line: buy against sell volume for the whole session so far.',
-      'Four thin dotted parts are there too but start hidden: Volume grey, Orders cyan, Big prints violet, Sweeps green. Turn them on in the Style tab.',
+      'Four thin dotted parts start hidden: Volume, Orders, Big prints, Sweeps. Turn them on in the Style tab.',
     ],
     read: [
-      'An aggressive buyer hits the ask and wants in now. An aggressive seller hits the bid.',
-      'Above zero: buyers push harder. Below zero: sellers do. +100 is all buyers.',
-      'Past +10 is a lean, past +25 or -25 a clear push (about 1 bar in 25 on NQ). Near zero the two sides are even.',
-      'The bars blend four parts: volume (counts three times), big prints, sweeps (one order eating levels) and aggressive orders.',
-      'The newest bars count most, so the line turns with the move. Bars to weigh together: 5 by default, 1 is the bar alone.',
-      'A big print is 10+ contracts and at least 8 times the session average print, so ES and YM are judged on their own size.',
-      'A part with only a few contracts behind it is pulled toward zero, so one 10-lot print does not read +100.',
+      'Above zero: aggressive buyers push harder. Below zero: aggressive sellers do. +100 is all buyers.',
+      'Past +10 is a lean, past +25 or -25 a clear push (about 1 bar in 25 on NQ). Near zero the sides are even.',
+      'It blends volume (counts three times), big prints, sweeps and aggressive orders. The newest bars count most.',
+      'A big print is 10+ contracts and 8 times the session average print, so ES and YM are judged on their own size.',
+      'Bars to weigh together: 5 by default, 1 is the bar alone. Thin parts are pulled toward zero.',
     ],
     use: [
+      'Look for solid bars. Grey and pale bars are noise; only a run of solid ones says someone is in control.',
       'Bars and orange line both on one side: a steady push. Bars turning against the line: the push may fade.',
-      'Use it to see who is in control right now. On NQ build days it matched the same bar\'s move (about 0.3 correlation) and said nothing about the next 10 bars.',
       'Price rising while pressure is below zero can be a warning. It is evidence, not a signal.',
     ],
-    watch: 'It counts trades that already happened, so it describes the move, it does not forecast it. A part with no data is left out.',
+    watch: 'It counts trades that already happened, so it describes the move, it does not forecast it.',
   },
 
   ddiv: {
@@ -148,6 +147,28 @@ G.add({
       'Wait for price to react. Price can keep going despite the disagreement.',
     ],
     watch: 'It appears late, 5 bars after the swing, and the running delta restarts at every session start.',
+  },
+
+  smt: {
+    what: 'Compares NQ and ES live: marks the moment one makes a new high or low and the other does not.',
+    see: [
+      'A small arrow with "SMT" on the candles, and a dashed line joining two peaks (or two lows) of this chart.',
+      'Red arrow above a bar: a high that one market took and the other did not.',
+      'Green arrow below a bar: a low that one market took and the other did not.',
+      'The words next to the line say which market took it and which did not.',
+    ],
+    read: [
+      'Both markets usually move together. When only one pushes to a new extreme, the push is less trusted.',
+      'It looks at the last 6 bars and asks: did they beat the highest high (or lowest low) of the 36 bars before them?',
+      'If exactly one of NQ and ES did, that is a divergence. Both or neither: nothing is marked.',
+      'Both numbers are settings. It works on NQ and ES time charts only.',
+    ],
+    use: [
+      'It can warn that a push to a new high or low is not shared, near a level you already watch.',
+      'It is stronger at an obvious high or low than in the middle of a range.',
+      'Wait for price to react. Price can keep going despite the divergence.',
+    ],
+    watch: 'It fires live: a dotted line is a bar still forming and can vanish if the other market catches up before the bar closes.',
   },
 });
 })();

@@ -375,3 +375,78 @@ test('reachSpec: keep the interval when the history fits under the cap, else the
   assert.equal(X.reachSpec('tick:1000', now - 86400000, now), 'time:300');
   assert.equal(X.reachSpec('time:3600', Date.parse('2021-10-01T14:30:00Z'), now), 'time:3600');
 });
+
+test('run controls: nothing set sends nothing; only valid, used rules are sent', () => {
+  const f = X.defaults(STRAT);
+  assert.equal('controls' in X.body(f), false);
+  assert.deepEqual(X.controlsClean({ direction: 'both', max_trades: 0, stop_mode: 'own', entry_from: '' }), {});
+  const c = X.setControl(X.setControl(X.setControl({}, 'max_trades', '3'), 'stop_mode', 'atr'), 'stop_atr', '1.5');
+  assert.deepEqual(X.controlsClean({ ...c, stop_pts: 9, atr_minutes: 15 }), { max_trades: 3, stop_mode: 'atr', stop_atr: 1.5, atr_minutes: 15 });
+  assert.deepEqual(X.body({ ...f, controls: c }).controls, { max_trades: 3, stop_mode: 'atr', stop_atr: 1.5 });
+  assert.deepEqual(X.setControl({ max_trades: 3 }, 'max_trades', ''), {});
+  assert.equal(X.setControl({}, 'atr_minutes', '15').atr_minutes, 15);
+  // the signal bar: 0 = the strategy's own = not sent; 5 is sent as a number
+  assert.deepEqual(X.controlsClean({ bar_minutes: 0 }), {});
+  assert.deepEqual(X.controlsClean(X.setControl({}, 'bar_minutes', '5')), { bar_minutes: 5 });
+  assert.deepEqual(X.controlsClean({ bar_minutes: 3 }), {});
+});
+
+test('run controls: problems stop a run, restore keeps the good rules, a loaded run brings its rules back', () => {
+  const f = X.defaults(STRAT);
+  assert.match(X.problems({ ...f, controls: { stop_mode: 'fixed' } }, STRAT), /stop points needed/);
+  assert.match(X.problems({ ...f, controls: { entry_from: '10:00', entry_to: '09:30' } }, STRAT), /ends before it starts/);
+  assert.match(X.problems({ ...f, controls: { max_trades: 1.5 } }, STRAT), /whole number/);
+  assert.equal(X.problems({ ...f, controls: { max_trades: 2, entry_from: '09:30' } }, STRAT), null);
+  assert.deepEqual(X.restore({ ...f, controls: { max_trades: 2, nope: 1, direction: 'sideways' } }, STRAT).controls, { max_trades: 2 });
+  assert.equal('controls' in X.restore(f, STRAT), false);
+  assert.deepEqual(X.fromRun({ ...RUN, controls: { rules: { stop_wins: 2 }, blocked: {} } }, STRAT).controls, { stop_wins: 2 });
+});
+
+test('heat-map axes over the run settings: ctl.* keys parse, label and travel with the shared rules', () => {
+  const S = { ...STRAT, bar_sizes: [1, 5, 15] };
+  const f = X.defaults(S);
+  assert.equal(X.axisInput(S, 'ctl.stop_pts').label, 'Stop (points)');
+  assert.equal(X.axisInput(S, 'offset_pts').key, 'offset_pts');
+  assert.equal(X.axisInput(S, 'ctl.nope'), null);
+  // signal bar is offered only when the strategy lists sizes; 0 = its own
+  assert.equal(X.ctlAxisInputs(STRAT).some((i) => i.key === 'ctl.bar_minutes'), false);
+  assert.deepEqual(X.axisInput(S, 'ctl.bar_minutes').choices, [0, 1, 5, 15]);
+  // values: numbers, a range, times with "off", numeric choices, words
+  const num = X.axisInput(S, 'ctl.stop_pts');
+  assert.deepEqual(X.parseValues('10, 15, 20', num).values, [10, 15, 20]);
+  assert.deepEqual(X.parseValues('10:20:5', num).values, [10, 15, 20]);
+  const tm = X.axisInput(S, 'ctl.entry_from');
+  assert.deepEqual(X.parseValues('09:35, 10:00, off', tm).values, ['09:35', '10:00', '']);
+  assert.match(X.parseValues('9am', tm).error, /HH:MM/);
+  const bm = X.axisInput(S, 'ctl.bar_minutes');
+  assert.deepEqual(X.parseValues('0, 1, 5', bm).values, [0, 1, 5]);
+  assert.deepEqual(X.parseValues('long, short', X.axisInput(S, 'ctl.direction')).values, ['long', 'short']);
+  // the grid: a strategy input as Rows, a run setting as Columns, a run setting as Panels
+  const g = X.gridAxes([{ key: 'offset_pts', text: '5, 10' }, { key: 'ctl.stop_pts', text: '10, 20' }, { key: 'ctl.bar_minutes', text: '0, 5' }], S, 60);
+  assert.equal(g.error, undefined);
+  assert.deepEqual(g.axes.map((a) => a.key), ['offset_pts', 'ctl.stop_pts', 'ctl.bar_minutes']);
+  assert.equal(X.gridCount(g.axes), 8);
+  assert.match(X.gridAxes([{ key: 'ctl.stop_pts', text: '10' }, { key: 'ctl.stop_pts', text: '20' }], S, 60).error, /twice/);
+  // the shared rules go along, minus the ones an axis varies; a mode's number stays (the axis may switch the mode on)
+  const body = X.gridBody({ ...f, controls: { max_trades: 2, stop_pts: 9, stop_wins: 1 } }, g.axes);
+  assert.deepEqual(body.controls, { max_trades: 2, stop_wins: 1 });
+  assert.deepEqual(body.axes.map((a) => a.key), ['offset_pts', 'ctl.stop_pts', 'ctl.bar_minutes']);
+  assert.equal('controls' in X.gridBody(f, g.axes), false);
+  // headers: the server's words when it sent them, "off" for an empty time
+  assert.deepEqual(X.axisLabels({ values: [0, 5], value_labels: ['own', '5'] }), ['own', '5']);
+  assert.deepEqual(X.axisLabels({ values: ['', '09:35'] }), ['off', '09:35']);
+});
+
+test('heat-map problems: shared rules are checked with the axis-varied ones set aside', () => {
+  const f = X.defaults(STRAT);
+  const rows = [{ key: 'offset_pts', text: '5, 10' }, { key: 'ctl.stop_pts', text: '10, 20' }, { key: '', text: '' }];
+  // stop type fixed with no points is fine while an axis supplies the points
+  assert.equal(X.gridProblems({ ...f, controls: { stop_mode: 'fixed' } }, STRAT, rows), null);
+  // ... and still an error when nothing does
+  const rows2 = [{ key: 'offset_pts', text: '5, 10' }, { key: 'n', text: '1, 2' }, { key: '', text: '' }];
+  assert.match(X.gridProblems({ ...f, controls: { stop_mode: 'fixed' } }, STRAT, rows2), /points needed/);
+  // stop points on an axis under an ATR stop is a clash, said in words
+  assert.match(X.gridProblems({ ...f, controls: { stop_mode: 'atr', stop_atr: 1 } }, STRAT, rows), /needs stop type = fixed/);
+  // the time window is read against the shared rules
+  assert.match(X.gridProblems({ ...f, controls: { entry_from: '11:00', entry_to: '10:00' } }, STRAT, rows), /ends before it starts/);
+});

@@ -72,12 +72,20 @@ def test_the_route_refuses_bad_hosts_roots_and_ranges(tmp_path):
 
 def test_the_route_answers_503_in_the_paused_windows(tmp_path):
     write_day(tmp_path)
-    for now, why in ((session_ms(D, 8, 30, 10), "paused for the 8:30 data release"),
-                     (session_ms(D, 9, 25), "paused for the 9:30 window")):
+    for now, why in ((session_ms(D, 8, 30, 10), "paused for the 8:30 data release"),):
         app = app_at(tmp_path, now)
         with TestClient(app, base_url=BASE_URL) as c:
             r = c.get("/api/book/history", params={"root": "NQ", "from_ms": T0 - 3_600_000, "to_ms": T0})
             assert r.status_code == 503 and r.json()["detail"] == why
+
+
+def test_the_route_is_not_paused_in_the_930_window(tmp_path):
+    """09:20-09:35 ET is no longer a paused window for book history (2026-10-12): a request at 09:25 is served."""
+    write_day(tmp_path)
+    app = app_at(tmp_path, session_ms(D, 9, 25))
+    with TestClient(app, base_url=BASE_URL) as c:
+        r = c.get("/api/book/history", params={"root": "NQ", "from_ms": T0 - 3_600_000, "to_ms": T0})
+        assert r.status_code != 503, r.text
 
 
 def test_a_root_with_no_recorded_depth_is_an_empty_window_not_an_error(tmp_path):
