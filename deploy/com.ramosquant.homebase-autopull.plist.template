@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-autopull</string>
+  <key>ProgramArguments</key>
+  <array><string>__REPO__/deploy/autopull.sh</string></array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <!-- the mini only: pull GitHub main and restart the desk when it is safe (deploy/autopull.sh).
+       Not part of install.sh, so the laptop that pushes never pulls over itself. -->
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/autopull.out</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/autopull.out</string>
+</dict>
+</plist>
