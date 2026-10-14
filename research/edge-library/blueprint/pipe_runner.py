@@ -291,6 +291,21 @@ def _until(iso: str, sleep, idle_s: float) -> None:
         sleep(min(idle_s, left))
 
 
+def _idle(root: Path) -> None:
+    """While the queue has nothing to run: the PAYOUT PIPELINE's own work, when it is the one that is on and enabled -- a new set when the
+    pool or the accounts changed, the evening's rotation once a day (pay_build.idle). A fault here is said and never ends the runner."""
+    try:
+        from . import pipe_switch as SW
+        if SW.now(root) != "payout" or not SW.enabled("payout", root):
+            return
+        from . import pay_build
+        did = pay_build.idle(root)
+        if did["built"] or did["evening"]:
+            _log(root, "-", "-", "PAY", 0, ("a new set was built" if did["built"] else "") + (" " + did["evening"]["text"] if did["evening"] else ""))
+    except Exception as e:  # noqa: BLE001 - the set builder must never stop the idea runner
+        _say(f"payout: {type(e).__name__}: {e}")
+
+
 def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) -> int:
     """THE RUNNER (module docstring) -> 0. `ctx` is handed to every stage; once=True never sleeps."""
     root = PS.root(ctx.get("root"))
@@ -306,6 +321,7 @@ def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) ->
                 if once:
                     return 0
                 skip.clear()
+                _idle(root)
                 sleep(idle_s)
                 continue
             wait = _work(name, ctx, root, skip)
@@ -412,7 +428,7 @@ def listing(root=None) -> dict:
     now = PRL.active()
     from . import pipe_switch as SW            # ... and the switch: the ONE pipeline that works, or none (off | live | wr | payout)
     prof = {"profile": now, "label": PRL.label(now), "settings": PRL.settings(now), "editable": now == "wr",
-            "options": [{"id": k, "label": v[0]} for k, v in PRL.PROFILES.items()], "mode": SW.now(root), "modes": SW.options()}
+            "options": [{"id": k, "label": v[0]} for k, v in PRL.PROFILES.items()], "mode": SW.now(root), "modes": SW.options(root)}
     return api.result("pipe list", **s, pipeline=prof, text="\n".join(text),
                       next="" if s["running"] or not any(x.get("status") in PS.LIVE for x in s["ideas"]) else "bp.py pipe start runs the queue.")
 

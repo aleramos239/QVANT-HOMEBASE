@@ -424,6 +424,30 @@ def test_the_page_switches_a_pipeline_on_or_all_off(c, fake, proot):
     assert [x["argv"][:3] for x in fake.calls() if x["argv"][:2] == ["pipe", "mode"]] == [["pipe", "mode", "off"]]
 
 
+# ---------------------------------------------------------------- the payout pipeline's page, and the owner's lock
+
+def test_the_payout_page_reads_one_answer_and_the_owners_buttons_post_one_command(c, fake, proot):
+    r = c.post("/api/tester/pipeline/payout", json={"action": "nonsense"})
+    assert r.status_code == 200 and r.json()["ok"] is False and "enable, disable, build, tonight or requeue" in r.json()["text"]
+    assert not any(x["argv"][:2] == ["pipe", "payout"] for x in fake.calls())           # a word that is none never reaches the toolkit
+    for action in ("enable", "disable", "build"):
+        c.post("/api/tester/pipeline/payout", json={"action": action})
+    assert [x["argv"][2] for x in fake.calls() if x["argv"][:2] == ["pipe", "payout"]] == ["enable", "disable", "build"]
+    assert c.get("/api/tester/pipeline/payout").status_code == 409         # a toolkit from before the payout pipeline: its own refusal, said
+    answer = 'if pos[:2] == ["pipe", "payout"]:\n    out(result("pipe payout", enabled=False, payout=None, text="The PAYOUT PIPELINE is disabled. (bp.py pipe payout enable)"))\n'
+    fake.script.write_text(FAKE.replace(MARK, answer + MARK), encoding="utf-8")
+    got = c.get("/api/tester/pipeline/payout")
+    assert got.status_code == 200 and got.json() == {"enabled": False, "payout": None, "scores": [], "notices": [], "tonight": None, "text": "The PAYOUT PIPELINE is disabled."}
+    assert fake.calls()[-1]["argv"][:3] == ["pipe", "payout", "show"]
+
+
+def test_no_chat_tool_can_enable_or_run_the_payout_pipeline():
+    names = [str(s.get("name")) for s in pipeline_tools.SPECS]
+    assert names and not any("payout" in n for n in names)
+    chat = [inspect.getsource(getattr(pipeline_tools.PipelineMixin, n)) for n in dir(pipeline_tools.PipelineMixin) if n.startswith("t_")]
+    assert chat and not any("payout" in src for src in chat)
+
+
 # ---------------------------------------------------------------- the pipeline in use + its numbers
 
 def test_the_page_picks_the_pipeline_and_changes_the_wr_numbers(c, fake, proot):

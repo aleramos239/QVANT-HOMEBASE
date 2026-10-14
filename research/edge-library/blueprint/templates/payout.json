@@ -1,0 +1,33 @@
+{
+ "_about": "THE PAYOUT PIPELINE's numbers for THE SET (the owner, 2026-10-13; docs/superpowers/specs/2026-10-13-payout-pipeline-design.md). One idea is asked by templates/pipeline_payout.json; everything here is asked of the set of strategies that trade the funded accounts together. FIRST VERSION: every number is a first setting, the owner's to change, here and nowhere else. Read by blueprint/pay_rules.py.",
+ "slots": [
+  {"id": "evening", "label": "Evening", "from": "20:00", "to": "00:00"},
+  {"id": "night", "label": "Overnight", "from": "02:00", "to": "09:25"},
+  {"id": "day", "label": "New York", "from": "09:30", "to": "16:00"}
+ ],
+ "_slots": "The owner's three sessions, New York time: ONE strategy a slot, flat before the next. A trade counts for a slot only when it is entered AND closed inside it; `pool.in_slot` = the share of an idea's trades that must do so for the idea to be a member of that slot (the rest of its trades are left out of every number).",
+ "pool": {"in_slot": 0.8, "trades": 200},
+ "score": {"days": 60, "short_days": 20, "week": 5, "paths": 10000, "search_paths": 2000, "block": 5, "seed": 20261013, "request": "max", "max_bust": 0.5},
+ "_score": "THE MAIN SCORE = the expected payout a week across the accounts over `days` session days (12 weeks), with `short_days` (4 weeks) beside it. Days are drawn in runs of `block` session days so that winning and losing streaks stay together. `request` \"max\" = a payout is asked for when the MAXIMUM payout can be had (the owner: \"max payouts\"); \"min\" = as soon as any payout can. `max_bust` = SURVIVAL: a size and day rule may be chosen only when the account is lost in at most this share of the futures over `days` (the owner: \"both are important speed and survival\", \"its okay if some blow as long as in the end we are in profit\"); without it the most paid is always the biggest gamble. A first setting: his to change.",
+ "sizes": [1, 2, 3, 5, 7, 10, 15, 20, 30, 40, 50, 60, 80, 100, 120, 170, 250, 350],
+ "_sizes": "The size steps, in micros FOR EACH strategy of the set (one trades at a time: a slot is flat before the next). A step above what the funded account may trade from its first day (its contract limit, or the size its scaling plan starts at) is left out for that account.",
+ "day_rule": {"gain": [null, 0.25, 0.5, 0.75], "loss": [null, 0.25, 0.5]},
+ "_day_rule": "After a slot ends, the later slots of that day do not trade once the day is up by `gain` or down by `loss`, each a share of the account's drawdown (null = always trade). The owner: whichever performs best. A setting counts with its neighbours.",
+ "rotation": {"lookback": [20, 60], "within": [5, 10, 20], "bench": 2},
+ "_rotation": "THE FIXED RULE (the owner took the recommendation 2026-10-13): a strategy is in form when its own equity made a `lookback`-day high within the last `within` session days. Each slot keeps `bench` reserves; each evening the first one in form trades the next day, none in form = the slot stands down. The rule is kept only if it beats no rule on the build days with its neighbours.",
+ "proof": {"keep": 0.5},
+ "_proof": "A set is PROVEN when, on the unseen days (each member's ONE read, never used to choose it), its expected payout a week is above $0 and at least `keep` of what it was on the build days.",
+ "firms": {
+  "lucid": {"trader_share": 0.9},
+  "apex": {"trader_share": 1.0, "one_side": true, "min_target_r": 0.2}
+ },
+ "_firms": "`trader_share` = the trader's part of a payout (Lucid 90/10; Apex 100 % of the first $25,000). Apex funded accounts (research/prop-portfolio/2026-10-01-l2/APEX300_RULES.md, Apex's help centre read 2026-10-01): `one_side` = no entry rule that rests orders on both sides; `min_target_r` = the stop may be at most 5x the target, so a box needs a target of 0.2 R or more (a box with no target cannot go on). Every Apex account runs THE SAME set, so two of them are never on opposite sides. NOT in any number here: Apex's ban on automated trading on funded accounts (the owner's decision), its 30 % open-loss rule, half size until the safety net.",
+ "after_payout": {
+  "lucid-pro": {"cap_later": 2500},
+  "lucid-flex": {"max_count": 5},
+  "apex-legacy": {"uncapped_from": 6, "buffer_later_from": 4, "buffer_later": "lock_at"}
+ },
+ "_after_payout": "What the app's rule files do not say because they simulate the first payout only, by the start of the rule file's id. Lucid Pro: later payouts at most $2,500. Lucid Flex: five payouts, then the account leaves. Apex Legacy: payouts 1-5 at the cap, none from the 6th; from the 4th the balance that must stay is the drawdown + $100 (the conservative reading). After any payout the cycle starts again (winning days, traded days, largest day, cycle profit) and the floor is the locked one.",
+ "accounts": {"lucid": null, "apex": "apex-legacy-{k}k"},
+ "_accounts": "The rule file an account is scored on when the owner has not said: a Lucid account = the pipeline's own account (pipeline.json prop.account), an Apex funded account = the newest Apex Legacy file of its size. <pipeline root>/payout/accounts.json holds the accounts; its `rules` and `on` are the owner's to change."
+}

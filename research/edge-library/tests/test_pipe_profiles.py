@@ -34,7 +34,7 @@ def test_use_writes_the_state_file_and_the_environment_wins(monkeypatch):
     assert P.use("wr") == "wr" and P.active() == "wr" and P.STATE.read_text().strip() == "wr"
     monkeypatch.setenv("HB_PIPELINE", "live")
     assert P.active() == "live"
-    with pytest.raises(R.RuleError, match="one of live, wr"):
+    with pytest.raises(R.RuleError, match="one of live, wr, payout"):
         P.use("fast")
 
 

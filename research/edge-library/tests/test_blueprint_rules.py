@@ -211,7 +211,7 @@ def test_control_montecarlo_ranges_sizes_idea():
 
 def test_templates_that_disagree_do_not_load():
     t = {n: R.template(n) for n in R.NAMES}
-    assert R.check(t) == [] and set(R.NAMES) == {p.stem for p in R.T.glob("*.json")} - {"pipeline", "pipeline_wr"}      # (pipeline.json: the pipeline's own, pipe_rules.py)
+    assert R.check(t) == [] and set(R.NAMES) == {p.stem for p in R.T.glob("*.json")} - {"pipeline", "pipeline_wr", "pipeline_payout", "payout"}      # (the pipeline's own: pipe_rules.py, pay_rules.py)
 
     def broken(name, path, value, word):
         c = copy.deepcopy(t)

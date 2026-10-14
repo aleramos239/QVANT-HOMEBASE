@@ -246,7 +246,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,portfolio,mix,curve,executions,profile,settings,mode}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,portfolio,mix,curve,executions,profile,settings,mode,payout}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -263,6 +263,8 @@ def _parser() -> _Parser:
         ("profile", "the pipeline in use: LIVE PIPELINE (live accounts) or WR PIPELINE (high win rate, low R:R); `profile wr` chooses, no word shows"),
         ("settings", "the WR PIPELINE's win-rate numbers; --set key=value (repeat) changes them (win_rate, month_floor, months, month_trades, max_target_r, risk_usd=500-800)"),
         ("mode", "the switch: the ONE pipeline that works, or none; `mode off | live | wr | payout` chooses (a profile also starts the runner), no word shows"),
+        ("payout", "the PAYOUT PIPELINE's set for the funded accounts: show (the set on file) | build | tonight (the evening's rotation) | requeue (the stopped ideas "
+                   "go round again under its rules) | enable | disable (the owner's lock: disabled, none of it runs)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
@@ -290,6 +292,7 @@ def _parser() -> _Parser:
     pipes["profile"].add_argument("which", nargs="?", choices=["live", "wr"], help="the pipeline to use from now on (the runner takes it when it next starts)")
     pipes["settings"].add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="a number to change (repeat); risk_usd=500-800")
     pipes["mode"].add_argument("which", nargs="?", choices=["off", "live", "wr", "payout"], help="the pipeline that works from now on; off = none")
+    pipes["payout"].add_argument("what", nargs="?", default="show", choices=["show", "build", "tonight", "requeue", "enable", "disable"], help="default: show")
     pipes["pick"].add_argument("cell", nargs="?", help="the box's id, e.g. k0p4_pts45-r2 (not with --clear)")
     pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
@@ -435,8 +438,21 @@ def _pipe(a) -> dict:
             if a.which in SW.PR.PROFILES:           # on = working: the idea runner is started (it says `already` when one is)
                 pipe_runner.start(a.root)
         now = SW.now(a.root)
-        return {"ok": True, "command": "pipe mode", "mode": now, "modes": SW.options(),
+        return {"ok": True, "command": "pipe mode", "mode": now, "modes": SW.options(a.root),
                 "text": SW.said(now) + ". Choose with: bp.py pipe mode " + " | ".join(SW.CHOICES) + "."}
+    if a.sub == "payout":                           # the payout pipeline's set (pay_build), behind the owner's lock (pipe_switch)
+        from . import pipe_switch as SW
+        cmd = f"pipe payout {a.what}"
+        if a.what in ("enable", "disable"):
+            on = SW.enable("payout", a.what == "enable", a.root)
+            return {"ok": True, "command": cmd, "enabled": on, "mode": SW.now(a.root),
+                    "text": "The PAYOUT PIPELINE is enabled: it can be switched on." if on else "The PAYOUT PIPELINE is disabled: it cannot be switched on, built or run until the owner enables it."}
+        if not SW.enabled("payout", a.root):
+            if a.what != "show":
+                raise J.Refuse("the PAYOUT PIPELINE is disabled: the owner enables it in the Lab (the Pipeline bar). Nothing was run")
+            return {"ok": True, "command": cmd, "enabled": False, "payout": None, "scores": [], "notices": [], "tonight": None, "text": "The PAYOUT PIPELINE is disabled."}
+        from . import pay_build
+        return {**(pay_build.requeue(a.root) if a.what == "requeue" else pay_build.command(a.what, a.root)), "enabled": True}
     if a.sub == "settings":                         # the WR PIPELINE's numbers (pipe_rules.set_settings)
         from . import pipe_rules as PR
         from . import rules as RL

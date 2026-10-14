@@ -647,6 +647,35 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             with pipe_lock:
                 pipe_cache["at"] = None
 
+    @r.get("/pipeline/payout")
+    def pipeline_payout():
+        """The PAYOUT PIPELINE's page: {enabled, payout (the set on file), scores, notices, tonight, text}. Disabled: enabled false and nothing else."""
+        try:
+            return box.pipeline_payout()
+        except blueprint_tools.Refused as e:
+            raise HTTPException(409, pipeline_tools.page_refusal(e)) from None
+        except ToolError as e:
+            raise HTTPException(503, str(e)) from None
+
+    @r.post("/pipeline/payout")
+    def pipeline_payout_do(request: Request, body: dict):
+        """The owner's buttons of the Payout page: {action: "enable" | "disable" | "build" | "tonight" | "requeue"}. Only a page of this app can post it
+        (write_ok); no chat tool does."""
+        write_ok(request)
+        json_body(request)
+        action = body.get("action")
+        if action in ("build", "requeue") and Slots().quiet():     # heavy work: not in the desk's 9:30 window (as PIPE_QUIET)
+            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        try:
+            return {"ok": True, "text": box.pipeline_payout_do(action)}
+        except blueprint_tools.Refused as e:
+            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
+        except ToolError as e:
+            return {"ok": False, "text": str(e)}
+        finally:
+            with pipe_lock:
+                pipe_cache["at"] = None
+
     @r.post("/pipeline/settings")
     def pipeline_settings(request: Request, body: dict):
         """Change the WR PIPELINE's numbers: {settings: {win_rate, month_floor, months, month_trades, max_target_r, risk_usd: [lo, hi]}}."""

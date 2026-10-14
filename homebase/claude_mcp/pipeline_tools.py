@@ -410,6 +410,20 @@ class PipelineMixin:
             raise ToolError("mode: off, live, wr or payout")
         return plain(self._pipe("mode", mode).get("text"))
 
+    def pipeline_payout(self) -> dict:
+        """Not a tool: the Lab's Payout page in one answer (`pipe payout show`). While the payout pipeline is disabled the toolkit hands
+        nothing over, and neither does this: {enabled False, payout None}."""
+        got = self._pipe("payout", "show", timeout=self._pipe_look_s)
+        return {"enabled": bool(got.get("enabled")), "payout": got.get("payout"), "scores": got.get("scores") or [], "notices": got.get("notices") or [],
+                "tonight": got.get("tonight"), "text": plain(got.get("text"))}
+
+    def pipeline_payout_do(self, action) -> str:
+        """Not a tool: the OWNER'S buttons of the Lab's Payout page -- enable | disable (the lock), build, tonight, requeue -> one plain
+        sentence. NO CHAT TOOL REACHES THIS (the owner, 2026-10-13: disabled, "it cant be used by me or claude until i renable it")."""
+        if action not in ("enable", "disable", "build", "tonight", "requeue"):
+            raise ToolError("action: enable, disable, build, tonight or requeue")
+        return plain(self._pipe("payout", action).get("text"))
+
     def pipeline_set_settings(self, settings) -> str:
         """Not a tool: change the WR PIPELINE's numbers (`pipe settings --set k=v ...`) -> one plain sentence."""
         if not isinstance(settings, dict) or not settings:

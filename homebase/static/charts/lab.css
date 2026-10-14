@@ -637,6 +637,10 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .pl-fc i { font-style: normal; opacity: .6; margin-left: 2px; }
 .pl-fc.on { background: var(--hb-fg); color: var(--hb-bg, #fff); border-color: var(--hb-fg); }
 .pl-fc:disabled { opacity: .5; cursor: default; }
+/* the Payout page (2026-10-13): a notice of the sidebar's list, the row of its buttons */
+.pay-n { display: grid; gap: 3px; padding: 8px 10px 9px; font-size: 12px; line-height: 17px; overflow-wrap: anywhere; border-bottom: .5px solid var(--hb-hair); }
+.pay-n > span:last-child { color: var(--pl-ink2); }
+.pay-acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; margin: 28px 0 0; }
 .pl-prof { margin: 0 0 14px; padding-bottom: 12px; border-bottom: 1px solid var(--hb-line, rgba(127,127,127,.25)); }
 .pl-prof-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
 .pl-prof-l { font-size: 13px; font-weight: 600; }

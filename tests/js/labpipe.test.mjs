@@ -273,18 +273,19 @@ test('the whole book card: every fact, every account (one whose rules are not co
 const LAB = rd('charts/lab.js');
 const PIPE = LAB.slice(LAB.indexOf('/* ---- the strategy pipeline in the sidebar ----'), LAB.indexOf('function paintEditor()'));
 
-test('the view switcher lists the four views: Strategies, Arsenal, then Queue, Book', () => {
-  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\]\];/);
+test('the view switcher lists the five views: Strategies, Arsenal, then Queue, Book, Payout', () => {
+  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\], \['pp', 'Payout'\]\];/);
   assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint/, 'the Blueprint and Guide views are gone, with what only they called');
   assert.match(LAB, /if \(VIEW_IDS\.includes\(v\)\) S\.view = v;/, 'a stored view that is no longer listed opens Strategies');
 });
 
-test('the pipeline pages talk to five pipeline routes only, and post nothing but the six actions', () => {
+test('the pipeline pages talk to the pipeline routes only, and post nothing but the six actions', () => {
   assert.ok(PIPE.length > 2000, 'the section is there');
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
   // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
   assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
-    '/api/tester/pipeline/idea/', '/api/tester/pipeline/mode', '/api/tester/pipeline/profile', '/api/tester/pipeline/run', '/api/tester/pipeline/settings']);
+    '/api/tester/pipeline/idea/', '/api/tester/pipeline/mode', '/api/tester/pipeline/payout', '/api/tester/pipeline/profile', '/api/tester/pipeline/run',
+    '/api/tester/pipeline/settings']);
   // 2026-10-10 (the owner): watch-only is gone -- any strategy on the Desk can run live; the Book only reads, and says "On the Desk" by the Lab's own list
   assert.doesNotMatch(LAB, /\/api\/tester\/watch|watchDo|plWatch|loadWatch|plunwatch|plpromote/, 'no watch list, no promote-from-the-Book');
   assert.match(LAB, /S\.desk && S\.desk\.has\(card\.name\)/, 'the Book row says On the Desk when a promoted Lab strategy of that name is there');

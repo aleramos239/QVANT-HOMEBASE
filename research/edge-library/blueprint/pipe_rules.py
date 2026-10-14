@@ -39,7 +39,8 @@ from pathlib import Path
 
 from . import rules as R
 
-PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json"), "wr": ("WR PIPELINE", "pipeline_wr.json")}     # the pipelines to choose from (owner, 2026-10-13)
+PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json"), "wr": ("WR PIPELINE", "pipeline_wr.json"),      # the pipelines to choose from (owner, 2026-10-13)
+            "payout": ("PAYOUT PIPELINE", "pipeline_payout.json")}                                       # ... and the one that builds the set for the funded accounts
 STATE = Path(os.environ.get("HB_PIPELINE_STATE") or Path.home() / ".homebase" / "pipeline_profile")     # the chosen one; no file = live
 FILE = R.T / "pipeline.json"                       # the LIVE file; set to ANOTHER path (the tests point it at a copy) it is read instead of the profile's
 MODES = ("map", "variant")
