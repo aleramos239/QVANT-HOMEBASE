@@ -1203,10 +1203,18 @@ class TradovateAdapter(BrokerAdapter):
                                 "ids": [str(i) for i in ids], "unknown_contract": unknown})
 
     async def flatten_symbol(self, symbol: str) -> OrderResult:
-        """Close THIS account's position in ONE contract, then cancel only that
-        contract's working orders. Position read from the broker (unreadable is
-        not flat -> nothing done); the market order must be accepted before
-        anything is cancelled, so a refused order leaves the stop working."""
+        """Close THIS account's position in ONE contract the way Tradovate's own
+        Flatten does: order/liquidateposition -- the broker cancels the contract's
+        working orders and closes what IT holds with one market order, so the size
+        is never our position read, which lags the fills by seconds (2026-10-14:
+        five clicks on short 4 sent five Buy 4s). The read stays (unreadable is not
+        flat -> nothing done): it is the journal's net_before and the chart's
+        one-close-at-a-time guard, and flat, only the contract's orders are cancelled.
+        A liquidate the broker surely did not take (an error status, or no orderId)
+        falls back to our own market order for the read net, then the cancels -- the
+        market order must be accepted before anything is cancelled, so a refused one
+        leaves the stop working. One that may have closed (no answer, or an orderId
+        with a failure) is never followed by another close."""
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
@@ -1215,6 +1223,13 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=False, error=f"position unreadable ({e}) — nothing done")
         raw: dict = {"net_before": net}
         if net:
+            liq = raw["liquidate"] = await self._liquidate(symbol)
+            if liq["ok"]:
+                raw["market"] = {"ok": True, "order_id": liq["order_id"], "error": None}
+                return OrderResult(ok=True, raw=raw)
+            if liq["maybe"]:
+                return OrderResult(ok=False, raw=raw, error=f"the broker's close was not confirmed "
+                                   f"({liq['error']}) — check the position; nothing else sent")
             r = await self.place_order(OrderRequest(
                 symbol=symbol, side="Sell" if net > 0 else "Buy", qty=abs(net),
                 order_type="Market", text="homebase:chart-flat"))
@@ -1226,6 +1241,31 @@ class TradovateAdapter(BrokerAdapter):
         c = await self.cancel_symbol(symbol, exclude=own)   # never its own market order
         raw["cancel"] = {"ok": c.ok, "error": c.error, **(c.raw or {})}
         return OrderResult(ok=c.ok, error=c.error, raw=raw)
+
+    async def _liquidate(self, symbol: str) -> dict:
+        """order/liquidateposition for this account's one contract -> {ok, order_id, error,
+        maybe}. Its answer is a PlaceOrderResult: only failureReason Success (or none) with an
+        orderId is a close. `maybe`: the broker may have closed it -- no answer (a timeout, a
+        dropped socket) or an orderId carrying a failure; an error status or no orderId is a
+        definite no. Sent without isAutomated: a click on the chart is a person's order."""
+        sym = symbols.resolve_contract(symbol)
+        if self.live:
+            _log(f"{self.account_id}: LIVE LIQUIDATE {sym}")
+        try:
+            d = await self._ws.liquidate_position(account_id=self._acct_num,
+                                                  contract_id=await self.contract_id(symbol))
+        except RuntimeError as e:          # an error status, or no socket: nothing was sent through
+            return {"ok": False, "order_id": None, "error": str(e), "maybe": False}
+        except Exception as e:  # noqa: BLE001 — sent, but no answer
+            return {"ok": False, "order_id": None, "error": f"{type(e).__name__}: {e}", "maybe": True}
+        oid = d.get("orderId") if isinstance(d, dict) else None
+        if oid is None:
+            return {"ok": False, "order_id": None, "maybe": False,
+                    "error": _reject_reason(d) or "liquidate refused (no orderId returned)"}
+        if str(d.get("failureReason") or "Success") != "Success":
+            return {"ok": False, "order_id": str(oid), "maybe": True, "error": _reject_reason(d)}
+        self._order_symbols[int(oid)] = sym
+        return {"ok": True, "order_id": str(oid), "error": None, "maybe": False}
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
         if self._ws is None:

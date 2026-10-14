@@ -366,6 +366,71 @@ def test_flatten_symbol_refused_market_cancels_nothing(tmp_path):
     assert not any(e == "order/cancelorder" for e, _, _ in sent)
 
 
+# --- the X on a position closes the way Tradovate's own Flatten does (2026-10-14) ------------------
+# order/liquidateposition: the broker cancels the contract's working orders and closes what IT holds.
+# The broker() fakes above answer it 404, so the tests above are the fallback: our own market close.
+def liq_broker(liq, net=3):
+    base, sent = broker(positions=[{"accountId": ME, "contractId": CID[NQC], "netPos": net}],
+                        place={"orderId": 900})
+
+    def answer(endpoint, query, body):
+        d = base(endpoint, query, body)                   # records every frame
+        return liq if endpoint == "order/liquidateposition" else d
+    return answer, sent
+
+
+def test_flatten_symbol_is_the_brokers_own_liquidate_and_nothing_else(tmp_path):
+    answer, sent = liq_broker({"orderId": 950, "failureReason": "Success"})
+    ad = mkadapter(tmp_path, answer)
+    orders_nq_es(ad)
+    r = run(ad.flatten_symbol("NQ"))
+    assert r.ok is True and r.raw["net_before"] == 3
+    assert r.raw["market"] == {"ok": True, "order_id": "950", "error": None}
+    assert [(e, b) for e, _, b in sent if e != "position/list"] == [
+        ("order/liquidateposition", {"accountId": ME, "contractId": CID[NQC], "admin": False})]
+
+
+def test_flatten_symbol_when_flat_only_cancels_that_contracts_orders(tmp_path):
+    answer, sent = liq_broker({"orderId": 950, "failureReason": "Success"}, net=0)
+    ad = mkadapter(tmp_path, answer)
+    ad._contracts.update({CID[NQC]: NQC, CID[ESC]: ESC})
+    ad._orders.update({1: working(1, CID[NQC]), 2: working(2, CID[ESC], action="Buy")})
+    assert run(ad.flatten_symbol("NQ")).ok is True
+    assert [e for e, _, _ in sent] == ["position/list", "order/cancelorder"]
+
+
+def test_a_liquidate_refused_for_sure_falls_back_to_our_market_close(tmp_path):
+    for liq in (None,                                                          # an error status
+                {"failureReason": "Unauthorized", "failureText": "Access is denied"}):   # no order
+        answer, sent = liq_broker(liq)
+        ad = mkadapter(tmp_path, answer)
+        orders_nq_es(ad)
+        r = run(ad.flatten_symbol("NQ"))
+        assert r.raw["liquidate"]["ok"] is False and r.raw["market"]["order_id"] == "900"
+        eps = [e for e, _, _ in sent]
+        assert eps.index("order/liquidateposition") < eps.index("order/placeorder") \
+            < eps.index("order/cancelorder")
+        placed = next(b for e, _, b in sent if e == "order/placeorder")
+        assert (placed["action"], placed["orderQty"], placed["orderType"]) == ("Sell", 3, "Market")
+
+
+def test_a_liquidate_that_may_have_closed_is_never_doubled(tmp_path):
+    """No answer (a timeout, a dropped socket), or an order id that came back with a failure: the
+    broker may have closed the position. A market close on top would open one the other way."""
+    for liq in (TimeoutError(), {"orderId": 951, "failureReason": "RiskCheckTimeout",
+                                 "failureText": "risk check timed out"}):
+        answer, sent = liq_broker(None if isinstance(liq, Exception) else liq)
+        ad = mkadapter(tmp_path, answer)
+        orders_nq_es(ad)
+        if isinstance(liq, Exception):
+            async def boom(**kw):
+                raise liq
+            ad._ws.liquidate_position = boom
+        r = run(ad.flatten_symbol("NQ"))
+        assert r.ok is False and "check the position; nothing else sent" in r.error
+        assert not any(e in ("order/placeorder", "order/cancelorder") for e, _, _ in sent)
+
+
 def test_flatten_symbol_unreadable_position_does_nothing(tmp_path):
     answer, sent = broker(positions=None)
     ad = mkadapter(tmp_path, answer)

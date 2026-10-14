@@ -74,16 +74,22 @@ def test_an_unreadable_position_is_never_flat_with_the_contract_cached_or_not(tm
         run(ad.get_net_position("NQ"))
 
 
-def test_a_symbol_flatten_is_the_read_the_market_out_and_the_cancels(tmp_path):
-    answer, sent = broker(positions=long(3))
+LIQ_OK = {"orderId": 950, "failureReason": "Success"}
+
+
+def test_a_symbol_flatten_is_the_read_and_the_brokers_own_close(tmp_path):
+    base, sent = broker(positions=long(3))
+
+    def answer(endpoint, query, body):
+        d = base(endpoint, query, body)
+        return LIQ_OK if endpoint == "order/liquidateposition" else d
     ad = mkadapter(tmp_path, answer)
     ad._orders[1] = working(1, NQ)
     assert run(ad.flatten_symbol("NQ")).ok
-    assert eps(sent) == ["contract/find", "position/list", "order/placeorder", "order/cancelorder"]
+    assert eps(sent) == ["contract/find", "position/list", "order/liquidateposition"]   # it cancels too
     del sent[:]
-    ad._orders[1] = working(1, NQ)
     assert run(ad.flatten_symbol("NQ")).ok                            # from then on: no lookup at all
-    assert eps(sent) == ["position/list", "order/placeorder", "order/cancelorder"]
+    assert eps(sent) == ["position/list", "order/liquidateposition"]
 
 
 # --- the engine's flatten (the Kill, the clock, the strategy flatten) on the wire ---------------------
@@ -151,6 +157,8 @@ def reverse_desk(tmp_path, reads):
             return long(next(seq))
         if endpoint == "order/placeorder":
             return {"orderId": next(ids)}
+        if endpoint == "order/liquidateposition":
+            return {"orderId": next(ids), "failureReason": "Success"}
         return {} if endpoint == "order/cancelorder" else None
 
     ads["a1"] = wire_adapter(tmp_path, wire)
@@ -163,29 +171,30 @@ def reverse(desk, cid="r1"):
 
 def test_a_reverse_is_two_position_reads_the_close_and_the_open(tmp_path):
     """Before: contract/find + position/list, the same again inside the flatten, the close, one more
-    contract/find for the cancels, the open -- 7 round trips. Now 5 the first time, 4 after."""
+    contract/find for the cancels, the open -- 7 round trips. Now 5 the first time, 4 after. The
+    close is the broker's own (order/liquidateposition, 2026-10-14), the open is ours."""
     desk, ad, sent = reverse_desk(tmp_path, [2, 2, -2, -2])
     assert reverse(desk)["ok"]
     assert eps(sent) == ["contract/find", "position/list", "position/list",
-                         "order/placeorder", "order/placeorder"]
+                         "order/liquidateposition", "order/placeorder"]
     del sent[:]
     desk.mono.t += 11                                                 # the first open is confirmed by now
     assert reverse(desk, "r2")["ok"]                                  # short 2 now: back to long
-    assert eps(sent) == ["position/list", "position/list", "order/placeorder", "order/placeorder"]
-    close, open_ = [b for e, _, b in sent if e == "order/placeorder"]
-    assert (close["action"], close["orderQty"], open_["action"], open_["orderQty"]) == ("Buy", 2, "Buy", 2)
+    assert eps(sent) == ["position/list", "position/list", "order/liquidateposition", "order/placeorder"]
+    (open_,) = [b for e, _, b in sent if e == "order/placeorder"]
+    assert (open_["action"], open_["orderQty"]) == ("Buy", 2)
     steps = [(e["step"], e["ok"]) for e in journal(tmp_path) if e["event"] == "manual_reverse"]
     assert steps == [("flatten", True), ("open", True)] * 2
 
 
-def test_a_reverse_closes_what_the_broker_reports_at_the_close_not_what_it_read_before(tmp_path):
+def test_a_reverse_closes_what_the_broker_holds_not_what_it_read_before(tmp_path):
     """The position's own target took one contract between the reverse's read (+2) and the flatten's
-    own read (+1). That second read is KEPT: the close sells 1 -- selling the 2 read before would leave
-    the account short before the open even goes out."""
+    own read (+1). The close carries no size of ours: the broker closes what it holds (1) -- selling
+    the 2 read before would leave the account short before the open even goes out."""
     desk, ad, sent = reverse_desk(tmp_path, [2, 1])
     assert reverse(desk)["ok"]
-    close, open_ = [b for e, _, b in sent if e == "order/placeorder"]
-    assert (close["action"], close["orderQty"], close["text"]) == ("Sell", 1, "homebase:chart-flat")
+    assert eps(sent).count("order/liquidateposition") == 1
+    (open_,) = [b for e, _, b in sent if e == "order/placeorder"]
     assert (open_["action"], open_["orderQty"], open_["text"]) == ("Sell", 2, "homebase:chart-reverse")
     assert eps(sent).count("position/list") == 2
     flat = next(e for e in journal(tmp_path) if e["event"] == "manual_reverse" and e["step"] == "flatten")
@@ -214,5 +223,5 @@ def test_five_flatten_clicks_on_a_stale_short_four_send_one_close(tmp_path):
     assert [flat(f"f{i}")["refused"] for i in range(2, 6)] == [True] * 4
     desk.mono.t += 1.1                                                # past the 5-a-second limit
     assert flat("f6")["ok"]                                           # the broker shows 0 now
-    placed = [b for e, _, b in sent if e == "order/placeorder"]
-    assert [(b["action"], b["orderQty"], b["text"]) for b in placed] == [("Buy", 4, "homebase:chart-flat")]
+    assert eps(sent).count("order/liquidateposition") == 1             # ONE close, the broker's own
+    assert "order/placeorder" not in eps(sent)
