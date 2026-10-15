@@ -228,7 +228,7 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
     // the research blocks (labResHtml): pieces built from escaped holes
     'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
     // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
-    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends)']);
+    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days)']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });

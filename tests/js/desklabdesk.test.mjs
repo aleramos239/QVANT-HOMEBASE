@@ -573,7 +573,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=15"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=16"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));

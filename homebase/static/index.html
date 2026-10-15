@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=15"></script>
+<script src="/static/desklab.js?v=16"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -539,7 +539,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=9">
+<link rel="stylesheet" href="/static/apple.css?v=10">
 <link rel="stylesheet" href="/static/hb.css?v=7">
 <script src="/static/apple/web.js?v=2" data-tab="desk"></script>
 </head>
@@ -1992,7 +1992,7 @@ function groupView(id) {
       <span class="h">${esc(m.label)}${m.state ? ` · <span class="dim">${esc(m.state)}</span>` : ""}</span>
       <span class="t dim">${esc(m.build)}</span><span class="t net">${esc(m.unseen)}</span></div>`);
   const out = p.leftOut.map(x => `<div class="feed-row"><span class="h">${esc(x.label)}</span><span class="t dim">${esc(x.why)}</span></div>`);
-  const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends)}</div>` : "";
+  const curve = p.curve ? `<div class="sec"><h2>${esc(p.curve.title)}</h2>${eqPlot(p.curve.vals, p.curve.label, p.curve.total, p.curve.aria, p.curve.ends, p.curve.days)}</div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(p.title)}</h1><div class="sp mono">${esc(p.lead)}</div></div></div>
     <div class="sd-state"><b>${esc(p.kind)}</b> · ${esc(p.kindNote)}</div>
@@ -2206,7 +2206,7 @@ function loadEq(name) {
 /* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
 /* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
    hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
-function eqPlot(vals, label, total, aria, ends) {
+function eqPlot(vals, label, total, aria, ends, days, notes) {
   const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
   const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
   let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
@@ -2215,14 +2215,45 @@ function eqPlot(vals, label, total, aria, ends) {
   const ticks = [hi, mid, lo].filter((v, i, a) => a.indexOf(v) === i && (v === hi || v === lo || Math.min(Y(v) - Y(hi), Y(lo) - Y(v)) >= 22));
   const axis = (v) => (v < 0 ? "−$" : "$") + fmt(Math.abs(Math.round(v)), 0);
   const grid = ticks.map(v => `<line class="${v === 0 && lo < 0 ? "eq-zero" : "eq-grid"}" x1="0" y1="${Y(v).toFixed(1)}" x2="1000" y2="${Y(v).toFixed(1)}"/>`).join("");
+  /* With the days (ISO dates, one a value): dates along the bottom -- a label a few weeks apart, or a month apart on a long run --
+     and a hover that reads out the day under the pointer (see the .eq-plot handler below). `notes` adds a line a day. */
+  let xt = "", hover = "", attrs = "";
+  if (Array.isArray(days) && days.length === vals.length && vals.length > 1 && days.every((d) => /^\d{4}-\d\d-\d\d$/.test(d))) {
+    const n = vals.length, dd = (iso, o) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {...o, timeZone: "UTC"});
+    const spanD = (new Date(days[n - 1] + "T12:00:00Z") - new Date(days[0] + "T12:00:00Z")) / 864e5;
+    const pct = (i) => i / (n - 1) * 100;
+    let at = [];
+    if (spanD > 62) {                                                   // a long run: the first trading day of each month
+      let prev = "";
+      days.forEach((d, i) => { if (d.slice(0, 7) !== prev) { at.push(i); prev = d.slice(0, 7); } });
+      const step = Math.ceil(at.length / 6);
+      at = at.filter((_, k) => k % step === 0);
+    } else {                                                            // a short one: a day label every few days
+      const k = Math.min(5, n);
+      at = Array.from({length: k}, (_, j) => Math.round(j * (n - 1) / (k - 1)));
+    }
+    const labs = [];
+    at.forEach((i) => {
+      if (labs.length && pct(i) - labs[labs.length - 1].p < 15) return;
+      const jan = days[i].slice(5, 7) === "01";
+      labs.push({p: pct(i), t: spanD > 62 ? dd(days[i], {month: "short", ...(jan || !labs.length ? {year: "numeric"} : {})}) : dd(days[i], {month: "short", day: "numeric"})});
+    });
+    const endP = 100;
+    if (spanD > 62 && endP - labs[labs.length - 1].p >= 18) labs.push({p: endP, t: dd(days[n - 1], {month: "short", day: "numeric"})});
+    xt = `<div class="eq-x eq-xt">${labs.map((l) => `<span style="left:${l.p.toFixed(1)}%;transform:translateX(${l.p < 5 ? "0" : l.p > 95 ? "-100%" : "-50%"})">${esc(l.t)}</span>`).join("")}</div>`;
+    const data = {d: days, v: vals.map((v) => Math.round(v * 100) / 100), y: vals.map((v) => +(Y(v) / 190 * 100).toFixed(1))};
+    if (Array.isArray(notes) && notes.length === n) data.n = notes.map(String);
+    attrs = ` data-eq="${esc(JSON.stringify(data))}"`;
+    hover = `<i class="eq-rule" hidden></i><i class="eq-hov" hidden></i><div class="eq-tip" hidden></div>`;
+  }
   return `<div class="eq"><div class="lb"><span>${esc(label)}</span><b class="mono">${usdS(total)}</b></div>
-    <div class="eq-plot"><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
+    <div class="eq-plot"${attrs}><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
       <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
       ${grid}
       <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
     ${ticks.map(v => `<span class="eq-y" style="top:${(Y(v) / 190 * 100).toFixed(1)}%">${axis(v)}</span>`).join("")}
-    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i></div>
-    ${ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : ""}</div>`;
+    <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i>${hover}</div>
+    ${xt || (ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : "")}</div>`;
 }
 const shortDay = (iso) => new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {month: "short", day: "numeric", timeZone: "UTC"});
 function eqChart(name) {
@@ -2233,8 +2264,41 @@ function eqChart(name) {
   if (ks.length < 2) return `<div class="eq-empty">Not enough live days yet for a curve.</div>`;
   let cum = 0;
   const vals = ks.map(k => (cum += (days[k].net || 0), cum));
-  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day", [shortDay(ks[0]), shortDay(ks[ks.length - 1])]);
+  const notes = ks.map(k => { const t = days[k].trades || 0, w = days[k].wins || 0; return t ? `${t} trade${t === 1 ? "" : "s"} · ${w} win${w === 1 ? "" : "s"}` : ""; });
+  return eqPlot(vals, `After fees since ${shortDay(ks[0])}`, cum, "Cumulative net P&L after fees, by day", [shortDay(ks[0]), shortDay(ks[ks.length - 1])], ks, notes);
 }
+
+/* The hover on an equity curve: the day under the pointer -- its date, that day's result and the running total. One handler for
+   every curve on the page (the markup is painted again often); the numbers come from the plot's own data-eq. */
+(function () {
+  if (typeof document === "undefined" || typeof document.addEventListener !== "function") return;
+  let cur = null;
+  const hide = () => { if (!cur) return; for (const c of cur.el.querySelectorAll(".eq-rule, .eq-hov, .eq-tip")) c.hidden = true; cur = null; };
+  document.addEventListener("pointermove", (e) => {
+    const el = e.target && e.target.closest ? e.target.closest(".eq-plot[data-eq]") : null;
+    if (!el) { hide(); return; }
+    if (!cur || cur.el !== el) {
+      hide();
+      let d = null;
+      try { d = JSON.parse(el.getAttribute("data-eq")); } catch (_) { return; }
+      if (!d || !Array.isArray(d.v) || d.v.length < 2) return;
+      cur = {el, d, rule: el.querySelector(".eq-rule"), dot: el.querySelector(".eq-hov"), tip: el.querySelector(".eq-tip")};
+    }
+    const r = el.getBoundingClientRect(), n = cur.d.v.length;
+    const f = Math.max(0, Math.min(1, (e.clientX - r.left) / (r.width || 1))), i = Math.round(f * (n - 1)), x = i / (n - 1) * 100;
+    const v = cur.d.v[i], day = v - (i ? cur.d.v[i - 1] : 0), iso = cur.d.d[i];
+    const when = new Date(iso + "T12:00:00Z").toLocaleDateString("en-US", {weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC"});
+    cur.rule.style.left = x + "%"; cur.dot.style.left = x + "%"; cur.dot.style.top = cur.d.y[i] + "%";
+    cur.tip.innerHTML = `<b>${esc(when)}</b><span><i>Day</i><em class="mono ${day < 0 ? "neg" : day > 0 ? "pos" : ""}">${esc(usdS(day))}</em></span>`
+      + `<span><i>Total</i><em class="mono">${esc(usdS(v))}</em></span>${cur.d.n && cur.d.n[i] ? `<small>${esc(cur.d.n[i])}</small>` : ""}`;
+    cur.rule.hidden = cur.dot.hidden = cur.tip.hidden = false;
+    const px = x / 100 * r.width, tw = cur.tip.offsetWidth;                  // the tip sits right of the line, left when it would run off, never past the card's edge
+    cur.tip.style.left = Math.max(-10, Math.min(px + 12 > r.width - tw ? px - 12 - tw : px + 12, r.width - tw + 10)) + "px";
+    cur.tip.style.transform = "none";
+  });
+  if (document.documentElement && typeof document.documentElement.addEventListener === "function") document.documentElement.addEventListener("pointerleave", hide);   // the pointer left the window
+  document.addEventListener("scroll", hide, true);
+})();
 
 /* ---- Lab strategies: rows and page. Every value from the network goes through esc / jsArg. ---- */
 function labSideRow(w, sel) {
@@ -2264,7 +2328,7 @@ function labCurveHtml(lab) {
   let c;
   try { c = DeskLab.curve(DESKRES[lab]); } catch (_) { return ""; }
   if (!c) return "";
-  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends)}</div>`;
+  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days)}</div>`;
 }
 function todayLabRow(w) {
   const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w);

@@ -435,3 +435,17 @@ html.hb-apple .kvi.neg, html.hb-apple .v.neg { color: var(--a-label); }
 @media (prefers-reduced-motion: reduce) {
   html.hb-apple .app-main, html.hb-apple .scroll, html.hb-apple .hb-tb-scrim, html.hb-apple .switch::after { transition: none; }
 }
+
+/* hover on an equity curve (index.html, the .eq-plot handler) */
+html.hb-apple .eq-xt { position: relative; height: 13px; margin: 6px 0 0 50px; font-size: 10px; line-height: 13px; color: var(--a-label-2); font-variant-numeric: tabular-nums; }
+html.hb-apple .eq-xt span { position: absolute; top: 0; white-space: nowrap; }
+html.hb-apple .eq-plot[data-eq] { cursor: crosshair; }
+html.hb-apple .eq-rule { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--a-label-3); pointer-events: none; }
+html.hb-apple .eq-hov { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--a-accent-text); box-shadow: 0 0 0 3px var(--a-window); transform: translate(-50%, -50%); pointer-events: none; }
+html.hb-apple .eq-tip { position: absolute; top: 0; z-index: 5; min-width: 150px; padding: 8px 10px; border-radius: 10px; background: var(--a-window); border: .5px solid var(--a-sep); box-shadow: 0 6px 24px rgba(0,0,0,.16); font-size: 12px; line-height: 17px; color: var(--a-label); pointer-events: none; white-space: nowrap; }
+html.hb-apple .eq-tip b { display: block; font-weight: 600; margin-bottom: 2px; }
+html.hb-apple .eq-tip span { display: flex; justify-content: space-between; gap: 16px; }
+html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
+html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
+html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
+html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }

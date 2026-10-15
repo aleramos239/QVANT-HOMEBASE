@@ -228,6 +228,7 @@
       vals: c.vals.slice(),
       total: c.vals[c.vals.length - 1],
       ends: [from || DASH, to || DASH],
+      days: c.days.map(function (d) { return /^\d{4}-\d\d-\d\d$/.test(text(d)) ? text(d) : ""; }),
       aria: "Running net P&L after costs on the unseen days, by day",
     };
   }

@@ -142,7 +142,7 @@ test('Flatten on an account: nothing is sent on Cancel; a clean answer is one qu
 // ---- the equity curve -----------------------------------------------------------------------------
 test('the equity curve is straight steps with a dollar scale and its two dates -- never a smoothed line', () => {
   const ctx = vm.createContext({ esc: (v) => String(v), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
-  vm.runInContext(between('function eqPlot(vals, label, total, aria, ends) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
+  vm.runInContext(between('function eqPlot(vals, label, total, aria, ends, days, notes) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
   const html = ctx.eqPlot([-300, -824, 400, 1995, 1914], 'After fees since Sep 17', 1914, 'curve', ['Sep 17', 'Oct 9']);
   const d = / class="eq-line" d="([^"]+)"/.exec(html)[1];
   assert.doesNotMatch(d, /C /, 'no curve commands');
@@ -154,6 +154,24 @@ test('the equity curve is straight steps with a dollar scale and its two dates -
   const up = ctx.eqPlot([100, 250, 400], 'x', 400, 'curve');
   assert.deepEqual([...up.matchAll(/class="eq-y"[^>]*>([^<]+)</g)].map((m) => m[1]), ['$400', '$200', '$0'], 'all above zero: top, halfway, zero');
   assert.doesNotMatch(up, /eq-x/, 'no dates given, none shown');
+});
+
+test('an equity curve given its days shows dates along the bottom and carries the data its hover reads', () => {
+  const ctx = vm.createContext({ esc: (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;'), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
+  vm.runInContext(between('function eqPlot(vals, label, total, aria, ends, days, notes) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
+  const short = ['2026-09-17', '2026-09-18', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-28', '2026-09-29', '2026-09-30'];
+  const h = ctx.eqPlot([10, 20, 5, 30, 40, 35, 50, 60, 55, 70], 'x', 70, 'curve', ['Sep 17', 'Sep 30'], short, short.map((_, i) => `${i + 1} trades`));
+  assert.match(h, /class="eq-x eq-xt"/);
+  const labels = [...h.matchAll(/<span style="left:[^"]+">([^<]+)<\/span>/g)].map((m) => m[1]);
+  assert.ok(labels.length >= 4 && labels[0] === 'Sep 17' && labels[labels.length - 1] === 'Sep 30', 'a short run: day labels, first and last included: ' + labels);
+  const data = JSON.parse(/data-eq="([^"]+)"/.exec(h)[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+  assert.deepEqual([data.d.length, data.v.length, data.y.length, data.n[2]], [10, 10, 10, '3 trades']);
+  const long = Array.from({ length: 300 }, (_, i) => new Date(Date.UTC(2025, 6, 1) + i * 864e5 * 1.4).toISOString().slice(0, 10));
+  const l = ctx.eqPlot(long.map((_, i) => i * 10), 'x', 2990, 'curve', ['a', 'b'], long);
+  const ml = [...l.matchAll(/<span style="left:[^"]+">([^<]+)<\/span>/g)].map((m) => m[1]);
+  assert.ok(ml.length >= 4 && ml.length <= 10 && /^Jul 2025$/.test(ml[0]), 'a long run: months, the year on the first and on each January: ' + ml);
+  const bad = ctx.eqPlot([1, 2, 3], 'x', 3, 'curve', ['a', 'b'], ['2026-01-01', 'junk', '2026-01-03']);
+  assert.doesNotMatch(bad, /data-eq|eq-xt/, 'a day that is not a date: the plain two-date axis, no hover');
 });
 
 test('the strategy page says what each profit figure is: before fees, the fees, after fees -- and that an account row is the whole account', () => {

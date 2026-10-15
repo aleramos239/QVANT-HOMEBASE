@@ -492,7 +492,7 @@ function askTrade(host, done) {
   };
   inp.addEventListener('keydown', (e) => {
     e.stopPropagation();
-    if (e.key === 'Enter') { e.preventDefault(); close(true); }
+    if (e.key === 'Enter') { e.preventDefault(); if (!e.repeat) close(true); }
     else if (e.key === 'Escape') { e.preventDefault(); close(false); }
   });
   inp.addEventListener('blur', () => close(false));

@@ -462,3 +462,16 @@ body { font-size: 13px; line-height: 16px; }
 @media (prefers-reduced-motion: reduce) { .sh-chev { transition: none; } }
 
 
+
+/* hover on an equity curve: the day's rule, its point and a small card (index.html, the .eq-plot handler) */
+.eq-xt { position: relative; height: 13px; margin-top: 6px; font-size: 10px; line-height: 13px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.eq-xt span { position: absolute; top: 0; white-space: nowrap; }
+.eq-plot[data-eq] { cursor: crosshair; }
+.eq-rule { position: absolute; top: 0; bottom: 0; width: 0; border-left: 1px solid var(--muted-foreground); opacity: .55; pointer-events: none; }
+.eq-hov { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--foreground); box-shadow: 0 0 0 3px var(--background); transform: translate(-50%, -50%); pointer-events: none; }
+.eq-tip { position: absolute; top: 0; z-index: 5; min-width: 150px; padding: 8px 10px; border-radius: 10px; background: var(--background); border: .5px solid var(--hb-hair); box-shadow: 0 6px 24px rgba(0,0,0,.14); font-size: 12px; line-height: 17px; color: var(--foreground); pointer-events: none; white-space: nowrap; }
+.eq-tip b { display: block; font-weight: 600; margin-bottom: 2px; }
+.eq-tip span { display: flex; justify-content: space-between; gap: 16px; }
+.eq-tip i { font-style: normal; color: var(--muted-foreground); }
+.eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
+.eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--muted-foreground); }
