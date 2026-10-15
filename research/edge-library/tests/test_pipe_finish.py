@@ -585,7 +585,8 @@ def test_stage_6_under_the_funded_pipeline_the_box_must_fall_into_a_row_of_the_7
     a row of the 75 % table; a box that makes money but falls into no row is NOT PROVEN."""
     base(world)
     calls = six(world)
-    world.setattr(PR, "FILE", PR.R.T / PR.PROFILES["funded"][1])                              # (this module reads the law's file: the FUNDED PIPELINE's here)
+    keep = PR.FILE                                                                             # (this module reads the law's file: the FUNDED PIPELINE's here,
+    PR.FILE = PR.R.T / PR.PROFILES["funded"][1]                                                #  put back by hand: the module's own fixture puts the law's back after)
     PR._all.cache_clear()
     canned = OOS.test
 
@@ -611,6 +612,7 @@ def test_stage_6_under_the_funded_pipeline_the_box_must_fall_into_a_row_of_the_7
         c = TS.whole(ST.stage6(C, CTX), 6)
         assert (c["passed"], c["result"]) == (False, "not proven") and "NOT PROVEN, it fails P6.2" in c["text"] and "A fail is final" in c["text"]
     finally:
+        PR.FILE = keep
         PR._all.cache_clear()
 
 
