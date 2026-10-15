@@ -196,7 +196,7 @@ async function run() {
   if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { release(me); log(`<span class="err">${esc(pr)}</span>`); paintRes(); paintHead(); return; }
-  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); if (await openRecordRun(nb, f)) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
+  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); const shown = await openRecordRun(nb, f); paintRes(); paintHead(); if (shown) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
   paintRes(); paintHead();
   const r = await send('POST', '/api/tester/run', X.body(f));
   if (me.dead) return;
@@ -2403,6 +2403,8 @@ function paintRes() {
     settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
+  } else if (b.kind !== 'builtin' && b.kind !== 'pipe' && /BLUEPRINT RECORD/.test(b.code || '')) {
+    main = `<div class="rs-empty"><h3>A written record</h3><p>This file is the card and verdict of an idea the research engine already ran. It places no trades here, so Run has nothing to run. Run shows the idea's saved research-engine run when one with trades exists.</p></div>`;
   } else {
     main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
