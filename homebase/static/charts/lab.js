@@ -196,7 +196,7 @@ async function run() {
   if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { release(me); log(`<span class="err">${esc(pr)}</span>`); paintRes(); paintHead(); return; }
-  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); const shown = await openRecordRun(nb, f); paintRes(); paintHead(); if (shown) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
+  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); if (!P.res) setPanel('res', true); const shown = await openRecordRun(nb, f); paintRes(); paintHead(); if (shown) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
   paintRes(); paintHead();
   const r = await send('POST', '/api/tester/run', X.body(f));
   if (me.dead) return;
