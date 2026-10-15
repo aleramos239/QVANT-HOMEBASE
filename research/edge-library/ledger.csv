@@ -1189,3 +1189,37 @@ null_bp_test,nq_ny_orb_rvol_r4__c1-NQ-tf5-nyam-test,null,random,NQ,5,bp_test,c1,
 bp_test,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test,grid,orb,NQ,5,bp_test,,,0,144,0,0,12336,123.54,"runs_bp_test/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test: idea nq_ny_orb_rvol: the locked variants on the test days, session nyam",2026-10-14T01:38:35+00:00
 bp_test_worse,nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test-worse,grid,orb,NQ,5,bp_test,,,0,144,0,0,12336,20.38,"runs_bp_test/nq_ny_orb_rvol_r4__rvol_high-NQ-tf5-nyam-test-worse: idea nq_ny_orb_rvol: the locked variants on the test days with worse fills (2 ticks + 250 ms + a 100 ms late cancel), session nyam",2026-10-14T01:38:56+00:00
 bp_build,nq_ny_or_retest_r4-NQ-tf5,grid,win_break,NQ,5,bp_build,,,0,192,0,0,47280,139.19,runs_bp/nq_ny_or_retest_r4-NQ-tf5: idea nq_ny_or_retest_r4,2026-10-14T01:48:46+00:00
+bp_build,nq_ny_or_retest_r4-NQ-tf1,grid,win_break,NQ,1,bp_build,,,0,192,0,0,83376,273.83,runs_bp/nq_ny_or_retest_r4-NQ-tf1: idea nq_ny_or_retest_r4,2026-10-14T01:53:20+00:00
+bp_build,nq_ny_or_retest_r4-NQ-tf15,grid,win_break,NQ,15,bp_build,,,0,192,0,0,22704,137.98,runs_bp/nq_ny_or_retest_r4-NQ-tf15: idea nq_ny_or_retest_r4,2026-10-14T01:55:39+00:00
+bp_build,nq_ny_or_retest_r4-ES-tf5,grid,win_break,ES,5,bp_build,,,0,192,0,0,52032,152.48,runs_bp/nq_ny_or_retest_r4-ES-tf5: idea nq_ny_or_retest_r4,2026-10-14T01:58:11+00:00
+bp_build,nq_orb_base-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,148.68,runs_bp/nq_orb_base-NQ-tf5: idea nq_orb_base,2026-10-14T19:30:19+00:00
+bp_build,nq_orb_base-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,132.26,runs_bp/nq_orb_base-NQ-tf15: idea nq_orb_base,2026-10-14T19:32:32+00:00
+bp_build,nq_orb_base-ES-tf5,grid,orb,ES,5,bp_build,,,0,144,0,0,133104,254.93,runs_bp/nq_orb_base-ES-tf5: idea nq_orb_base,2026-10-14T19:36:49+00:00
+bp_build,nq_orb_f_vwap-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,492.94,runs_bp/nq_orb_f_vwap-NQ-tf5: idea nq_orb_f_vwap,2026-10-14T20:29:57+00:00
+bp_build,nq_orb_f_vwap__vwap_with-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,114288,492.94,runs_bp/nq_orb_f_vwap__vwap_with-NQ-tf5: idea nq_orb_f_vwap: filter vwap with,2026-10-14T20:29:57+00:00
+bp_build,nq_orb_f_ema50-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,566.51,runs_bp/nq_orb_f_ema50-NQ-tf5: idea nq_orb_f_ema50,2026-10-14T20:31:12+00:00
+bp_build,nq_orb_f_ema50__ema50_with-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,105696,566.51,runs_bp/nq_orb_f_ema50__ema50_with-NQ-tf5: idea nq_orb_f_ema50: filter ema50 with,2026-10-14T20:31:13+00:00
+bp_build,nq_orb_f_vwap-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,379.75,runs_bp/nq_orb_f_vwap-NQ-tf15: idea nq_orb_f_vwap,2026-10-14T20:36:18+00:00
+bp_build,nq_orb_f_vwap__vwap_with-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,103968,379.75,runs_bp/nq_orb_f_vwap__vwap_with-NQ-tf15: idea nq_orb_f_vwap: filter vwap with,2026-10-14T20:36:19+00:00
+bp_build,nq_orb_f_ema50-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,365.22,runs_bp/nq_orb_f_ema50-NQ-tf15: idea nq_orb_f_ema50,2026-10-14T20:37:19+00:00
+bp_build,nq_orb_f_ema50__ema50_with-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,0,365.22,runs_bp/nq_orb_f_ema50__ema50_with-NQ-tf15: idea nq_orb_f_ema50: filter ema50 with,2026-10-14T20:37:19+00:00
+bp_build,nq_orb_f_rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,307.33,runs_bp/nq_orb_f_rvol_high-NQ-tf5: idea nq_orb_f_rvol_high,2026-10-14T20:51:58+00:00
+bp_build,nq_orb_f_rvol_high__rvol_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,64464,307.33,runs_bp/nq_orb_f_rvol_high__rvol_high-NQ-tf5: idea nq_orb_f_rvol_high: filter rvol high,2026-10-14T20:51:58+00:00
+bp_build,nq_orb_f_adx_strong-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,309.71,runs_bp/nq_orb_f_adx_strong-NQ-tf5: idea nq_orb_f_adx_strong,2026-10-14T20:51:59+00:00
+bp_build,nq_orb_f_adx_strong__adx_strong-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,75984,309.71,runs_bp/nq_orb_f_adx_strong__adx_strong-NQ-tf5: idea nq_orb_f_adx_strong: filter adx strong,2026-10-14T20:51:59+00:00
+bp_build,nq_orb_f_rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,155.32,runs_bp/nq_orb_f_rvol_high-NQ-tf15: idea nq_orb_f_rvol_high,2026-10-14T20:54:34+00:00
+bp_build,nq_orb_f_rvol_high__rvol_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,65376,155.32,runs_bp/nq_orb_f_rvol_high__rvol_high-NQ-tf15: idea nq_orb_f_rvol_high: filter rvol high,2026-10-14T20:54:34+00:00
+bp_build,nq_orb_f_adx_strong-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,155.41,runs_bp/nq_orb_f_adx_strong-NQ-tf15: idea nq_orb_f_adx_strong,2026-10-14T20:54:36+00:00
+bp_build,nq_orb_f_adx_strong__adx_strong-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,82416,155.41,runs_bp/nq_orb_f_adx_strong__adx_strong-NQ-tf15: idea nq_orb_f_adx_strong: filter adx strong,2026-10-14T20:54:36+00:00
+bp_build,nq_orb_f_atrp_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,159.14,runs_bp/nq_orb_f_atrp_high-NQ-tf5: idea nq_orb_f_atrp_high,2026-10-14T21:38:29+00:00
+bp_build,nq_orb_f_atrp_high__atrp_high-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,130608,159.14,runs_bp/nq_orb_f_atrp_high__atrp_high-NQ-tf5: idea nq_orb_f_atrp_high: filter atrp high,2026-10-14T21:38:29+00:00
+bp_build,nq_orb_f_tspeed_fast-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,163.67,runs_bp/nq_orb_f_tspeed_fast-NQ-tf5: idea nq_orb_f_tspeed_fast,2026-10-14T21:38:33+00:00
+bp_build,nq_orb_f_tspeed_fast__tspeed_fast-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,63024,163.67,runs_bp/nq_orb_f_tspeed_fast__tspeed_fast-NQ-tf5: idea nq_orb_f_tspeed_fast: filter tspeed fast,2026-10-14T21:38:33+00:00
+bp_build,nq_orb_f_atrp_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,149.52,runs_bp/nq_orb_f_atrp_high-NQ-tf15: idea nq_orb_f_atrp_high,2026-10-14T21:41:00+00:00
+bp_build,nq_orb_f_atrp_high__atrp_high-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,0,149.52,runs_bp/nq_orb_f_atrp_high__atrp_high-NQ-tf15: idea nq_orb_f_atrp_high: filter atrp high,2026-10-14T21:41:00+00:00
+bp_build,nq_orb_f_tspeed_fast-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,160.34,runs_bp/nq_orb_f_tspeed_fast-NQ-tf15: idea nq_orb_f_tspeed_fast,2026-10-14T21:41:14+00:00
+bp_build,nq_orb_f_tspeed_fast__tspeed_fast-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,63024,160.34,runs_bp/nq_orb_f_tspeed_fast__tspeed_fast-NQ-tf15: idea nq_orb_f_tspeed_fast: filter tspeed fast,2026-10-14T21:41:14+00:00
+bp_build,nq_orb_f_level_clear-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,418.8,runs_bp/nq_orb_f_level_clear-NQ-tf5: idea nq_orb_f_level_clear,2026-10-14T21:49:12+00:00
+bp_build,nq_orb_f_level_clear__level_clear-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,32112,418.8,runs_bp/nq_orb_f_level_clear__level_clear-NQ-tf5: idea nq_orb_f_level_clear: filter level clear,2026-10-14T21:49:12+00:00
+bp_build,nq_orb_f_level_clear-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,405.18,runs_bp/nq_orb_f_level_clear-NQ-tf15: idea nq_orb_f_level_clear,2026-10-14T21:55:58+00:00
+bp_build,nq_orb_f_level_clear__level_clear-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,20016,405.18,runs_bp/nq_orb_f_level_clear__level_clear-NQ-tf15: idea nq_orb_f_level_clear: filter level clear,2026-10-14T21:55:58+00:00

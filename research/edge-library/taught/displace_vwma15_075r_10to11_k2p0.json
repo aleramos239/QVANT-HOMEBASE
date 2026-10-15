@@ -1,0 +1,17 @@
+{
+ "name": "displace_vwma15_075r_10to11_k2p0",
+ "source": {"video": "owner idea 2026-10-15", "title": "Displacement entry, stop at the displacement candle's extreme, 1:1", "channel": "owner", "url": ""},
+ "market": "NQ",
+ "bars": ["15"],
+ "sessions": ["nyam"],
+ "dir": "both",
+ "entry": {
+  "family": "displace",
+  "settings": {"k": 2.0, "mode": "follow", "close_r": 0.0, "gate": "price_vwma", "g_n": 20, "g_lvl": 0.0, "g_side": "with", "w_start": "10:00", "w_end": "11:00"},
+  "words": "In the New York morning (10:00-11:00 ET), a 15-minute candle whose body is at least 2.0 x ATR(14) of the 14 candles before it is a displacement. Enter at the close in its direction, only long above the 20-bar volume-weighted moving average of 15-minute bars and short below it. Stop at the displacement candle's other extreme (low for a long, high for a short), target 0.75R (1:0.75). One trade a day."
+ },
+ "exits": {"stop": "struct", "target_r": 0.75, "max_trades": 1},
+ "taught": ["[owner] displacement = body >= k x ATR(14) of prior candles", "[owner] stop = the displacement candle's extreme; target 0.75R (1:0.75); 09:30-11:00; one trade a day"],
+ "not_run": ["A stop floor of 0.25 x ATR applies when the candle's extreme is nearer than that.", "Build days only; the test days are not read."],
+ "control": "random"
+}
