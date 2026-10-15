@@ -250,6 +250,27 @@ function tkFilter(groups, q) {
   if (!words.length) return groups;
   return groups.map((g) => ({ ...g, items: g.items.filter((it) => { const t = tkText(it); return words.every((w) => t.includes(w)); }) })).filter((g) => g.items.length);
 }
+/* ---- the Strategies list's search ----
+   Every word typed must be in the strategy's name, its own title or its state; "_" "-" "." count as spaces, so "nq asia" finds nq_asia_liq_sweep.
+   Best first: the name starts with the words, then a word starts with it, then it is anywhere; ties keep the list's order.
+   When no row has every word in it, a row whose name holds the letters in order ("nqfvg" -> nq_am_fvg15) is offered instead. */
+const libNorm = (x) => String(x || '').toLowerCase().replace(/[_\-.]+/g, ' ');
+function libFilter(rows, q) {
+  const words = libNorm(q).split(/\s+/).filter(Boolean);
+  if (!words.length) return rows;
+  const hay = (r) => [libNorm(r.title), libNorm(r.name)];
+  const scored = rows.map((r, i) => {
+    const [t, n] = hay(r), all = `${t} ${n} ${libNorm(r.sub)}`;
+    if (!words.every((w) => all.includes(w))) return null;
+    const first = words[0], head = n.startsWith(words.join(' ')) || t.startsWith(words.join(' ')) ? 0 : n.startsWith(first) || t.startsWith(first) ? 1
+      : words.every((w) => ` ${n} ${t}`.includes(` ${w}`)) ? 2 : words.every((w) => `${n} ${t}`.includes(w)) ? 3 : 4;
+    return { r, i, head };
+  }).filter(Boolean);
+  if (scored.length) return scored.sort((a, b) => a.head - b.head || a.i - b.i).map((x) => x.r);
+  const letters = words.join('');
+  const inOrder = (h) => { let k = 0; for (const c of h.replace(/ /g, '')) if (c === letters[k]) k++; return k === letters.length; };
+  return letters.length > 1 ? rows.filter((r) => inOrder(libNorm(r.name)) || inOrder(libNorm(r.title))) : [];
+}
 const tkFind = (groups, id) => { for (const g of groups || []) { const it = g.items.find((x) => x.id === id); if (it) return it; } return null; };
 /* "runs" or "not yet: why"; null for a tool that is not a thing that runs on the build days (a skill, a script, a chat tool) */
 const tkStatus = (it) => (it.runs == null ? null : it.runs ? { tone: 'ok', text: 'runs' } : { tone: 'no', text: it.why_not ? `not yet: ${it.why_not}` : 'not yet' });
@@ -860,7 +881,7 @@ const payCurve = (scores) => (Array.isArray(scores) ? scores : []).filter((s) =>
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
-  tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
+  libFilter, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
   plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,

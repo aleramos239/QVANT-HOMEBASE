@@ -24,6 +24,7 @@ const [prev, next] = box.querySelectorAll('.lab-step-b'), txt = box.querySelecto
 const real = (d) => nav.querySelector(`[data-nav="${d}"]`);
 
 function sync() {
+  if (txt.querySelector('input')) return;                      // a trade number is being typed in the capsule
   const full = (document.getElementById('labNavText') || {}).textContent || '';
   const m = /^(\d+) of (\d+)/.exec(full.trim());
   const onChart = chart.contains(nav);                         // the page's own stepper is on the chart: this one is not needed
@@ -40,6 +41,12 @@ box.addEventListener('click', (e) => {
   if (!b || b.disabled) return;
   const r = real(b.dataset.step);
   if (r && !r.disabled) r.click();
+});
+// click the count and type the trade's number (lab.js asks in this text and calls sync when it is done)
+txt.setAttribute('aria-hidden', 'false');
+txt.addEventListener('click', (e) => {
+  if (e.target.closest('input') || !window.HBLabNav) return;
+  window.HBLabNav.ask(txt, sync);
 });
 new MutationObserver(sync).observe(nav, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'hidden', 'title'] });
 sync();

@@ -724,3 +724,20 @@ test('fm: a server error stays only under a box whose value is what was sent', (
   assert.deepEqual(L.fmKeepErrors({}, asked, asked), {});
   assert.deepEqual(L.fmKeepErrors(errs, null, asked), { form: errs.form }, 'no record of what was sent: only what is not a box stays');
 });
+
+test('the Strategies search: every word, "_" as a space, best match first, letters in order as a fallback', () => {
+  const R = [
+    { key: 'd:nq_asia_liq_sweep', name: 'nq_asia_liq_sweep', sub: 'Draft' },
+    { key: 'd:es_orb', name: 'es_orb', title: 'ES opening range', sub: 'Edited' },
+    { key: 'd:nq_am_fvg15', name: 'nq_am_fvg15', sub: 'Draft' },
+    { key: 'b:orb', name: 'orb_base', sub: 'NQ', lock: true },
+  ];
+  const keys = (q) => L.libFilter(R, q).map((r) => r.key);
+  assert.equal(L.libFilter(R, ''), R, 'no search keeps the list whole');
+  assert.deepEqual(keys('nq asia'), ['d:nq_asia_liq_sweep']);
+  assert.deepEqual(keys('NQ'), ['d:nq_asia_liq_sweep', 'd:nq_am_fvg15', 'b:orb'], 'a name or a state; the list order breaks ties');
+  assert.deepEqual(keys('orb'), ['b:orb', 'd:es_orb'], 'a name that starts with it comes before one that holds it');
+  assert.deepEqual(keys('opening'), ['d:es_orb'], 'the strategy\'s own title counts');
+  assert.deepEqual(keys('nqfvg'), ['d:nq_am_fvg15'], 'letters in order when nothing holds the word');
+  assert.deepEqual(keys('zzz'), []);
+});

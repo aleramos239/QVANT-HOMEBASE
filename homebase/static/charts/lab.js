@@ -16,7 +16,7 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plSet: false, plDraft: null, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', pay: null, payAt: 0, desk: null, deskBuiltins: new Set(), deskBusy: false,
+  view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plSet: false, plDraft: null, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', pay: null, payAt: 0, desk: null, deskBuiltins: new Set(), deskBusy: false,
   picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
@@ -436,6 +436,7 @@ function navTrades() {
 /* The stepper on the chart: previous, "3 of 42" and the trade in a few words, next. It shows only while a finished run with
    trades is on the chart (paintRes calls this, so it goes with the run). The words after the count are their own span: where the
    chart is narrow the page shows the count alone. */
+let navEditing = null;        // the element a typed trade number is being asked in (paintNav leaves it alone)
 function paintNav() {
   const nav = document.getElementById('labNav'), el = document.getElementById('labNavText');
   if (!nav || !el) return;
@@ -452,6 +453,7 @@ function paintNav() {
     const at = NAV_DATE.format(new Date(t.entry_ms));
     el.title = `Trade ${ti + 1} of ${n} · ${window.HBClock ? window.HBClock.within(at) : at} ET`;      // the app's one clock format
   }
+  if (navEditing === el) return;                         // the number is being typed: the box is not rewritten under it
   if (el.innerHTML !== html) el.innerHTML = html;        // (the text is a live region: the same words are not written twice)
 }
 function stepTrade(d) {
@@ -461,7 +463,46 @@ function stepTrade(d) {
   paintNav();
   jumpTo(ti);
 }
-document.getElementById('labNav')?.addEventListener('click', (e) => { const b = e.target.closest('[data-nav]'); if (b) stepTrade(Number(b.dataset.nav)); });
+/* Click the count and type the trade's number instead of stepping: Enter goes there (a number past either end goes to the
+   nearest trade), Escape or a click away leaves things as they were. `host` is the element that shows the count; `done` runs
+   when the box is closed. The chart's own capsule (labstep.js) asks in its text through window.HBLabNav. */
+function askTrade(host, done) {
+  const n = navTrades().length;
+  if (!n || !host || navEditing === host || navEditing) return;
+  const inp = document.createElement('input');
+  inp.type = 'text'; inp.inputMode = 'numeric'; inp.autocomplete = 'off'; inp.spellcheck = false;
+  inp.className = 'lab-nav-in'; inp.value = ti != null ? String(ti + 1) : ''; inp.placeholder = `1–${n}`;
+  inp.setAttribute('aria-label', `Go to trade, 1 to ${n}`);
+  navEditing = host;
+  host.textContent = '';
+  host.appendChild(inp);
+  inp.focus(); inp.select();
+  let closed = false;
+  const outside = (e) => { if (e.target !== inp) close(false); };      // a click anywhere else closes it, focused or not
+  document.addEventListener('pointerdown', outside, true);
+  const close = (go) => {
+    if (closed) return;
+    closed = true;
+    document.removeEventListener('pointerdown', outside, true);
+    const v = parseInt(String(inp.value).replace(/[^\d]/g, ''), 10);
+    navEditing = null;
+    host.textContent = '';
+    if (go && Number.isFinite(v) && v > 0) { ti = Math.min(n, v) - 1; paintNav(); jumpTo(ti); } else paintNav();
+    if (done) done();
+  };
+  inp.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); close(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); close(false); }
+  });
+  inp.addEventListener('blur', () => close(false));
+}
+window.HBLabNav = { ask: askTrade };
+document.getElementById('labNav')?.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-nav]');
+  if (b) { stepTrade(Number(b.dataset.nav)); return; }
+  if (e.target.closest('#labNavText') && !e.target.closest('input')) askTrade(document.getElementById('labNavText'));
+});
 // a trade picked in the full report's list moves the stepper too; and a run the tester has just been handed brings it up
 if (window.HBTesterUI && window.HBTesterUI.on) window.HBTesterUI.on(() => {
   const i = window.HBTesterUI.selected;
@@ -1144,12 +1185,10 @@ function libRows() {
   return { rows, builtins };
 }
 /* the rows as the list shows them, top to bottom (a folded group's rows are not shown) */
-const shownList = () => { const { rows, builtins } = libRows(); return S.groups ? C.shownRows(C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)), folded) : [...rows, ...builtins]; };
-function paintLib() {
-  const el = $('#labLib .in');
-  if (!el) return;
+const shownList = () => { const { rows, builtins } = libRows(); if (S.libQ.trim()) return C.libFilter([...rows, ...builtins], S.libQ); return S.groups ? C.shownRows(C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)), folded) : [...rows, ...builtins]; };
+/* the Strategies list under its search box: with a search, one flat list of what matches (best first); without, the groups */
+function libBody() {
   const { rows, builtins } = libRows();
-  if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
   const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''} title="${esc([r.title ? `${r.name}.py` : '', r.lock ? 'Read-only' : r.locked ? 'On the Desk: locked. Open it and press the lock to edit.' : ''].filter(Boolean).join(' · '))}">
         ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk && !S.groups ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
@@ -1161,7 +1200,26 @@ function paintLib() {
         ${s.name && !s.auto ? `<button class="hb-ib lb-more" data-act="group" data-g="${esc(s.name)}" data-n="${n}" aria-label="Rename or delete the group ${esc(s.name)}" title="Rename or delete" aria-haspopup="menu">${ICON_MORE}</button>` : ''}</div>
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
-  const top = el.scrollTop;
+  if (S.libQ.trim()) {
+    const hits = C.libFilter([...rows, ...builtins], S.libQ);
+    return hits.length ? hits.map(S.groups ? filed : item).join('') : `<div class="lb-empty">No strategy matches “${esc(S.libQ.trim())}”.</div>`;
+  }
+  return `${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
+    ${S.groups ? C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)).map(section).join('')
+      : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
+}
+/* the search box's own change: only the list under it is painted again, so the box keeps the caret */
+function paintLibList() {
+  const l = $('#libList');
+  if (!l) return;
+  if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());
+  l.innerHTML = libBody();
+}
+function paintLib() {
+  const el = $('#labLib .in');
+  if (!el) return;
+  if (S.picks.length) S.picks = C.prunePicks(S.picks, shownList());          // a row that is folded away, deleted or gone is no longer picked
+  const top = el.scrollTop, q = document.activeElement && document.activeElement.id === 'libQ' ? document.activeElement : null, at = q ? q.selectionStart : 0;
   const seg = viewSwitch();
   if (pipeOn()) { paintPipe(el, `<div class="lb-top lb-sw">${seg}</div>`, top); return; }      // its list here, its page in the middle
   if (S.view === 'tk') {
@@ -1169,11 +1227,12 @@ function paintLib() {
     el.scrollTop = top;
     return;
   }
+  const { rows, builtins } = libRows(), n = rows.length + builtins.length;
   el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" data-fk="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
-    ${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
-    ${S.groups ? C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)).map(section).join('')
-      : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
+    <div class="tk-find"><input id="libQ" type="search" placeholder="Find a strategy: ${n} in all" value="${esc(S.libQ)}" spellcheck="false" autocomplete="off" aria-label="Find a strategy"></div>
+    <div id="libList">${libBody()}</div>`;
   el.scrollTop = top;
+  if (q) { const n = $('#libQ'); if (n) { n.focus(); n.setSelectionRange(at, at); } }      // a repaint from elsewhere never takes the caret from the search box
 }
 
 /* ---- the arsenal in the sidebar ----
@@ -2401,6 +2460,7 @@ root.addEventListener('toggle', (e) => {
 root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
+  if (t.id === 'libQ') { S.libQ = t.value; paintLibList(); return; }
   if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
   if (t.id === 'edTa' && b && b.kind !== 'builtin' && !locked(b)) {
     const wasEmpty = !b.code.trim();
@@ -2449,6 +2509,11 @@ document.addEventListener('keydown', (e) => {          // (capture: before the m
   deleteStrategies(C.deleteTargets(S.picks, S.picks[0]));
 }, true);
 root.addEventListener('keydown', (e) => {
+  if (e.target.id === 'libQ') {          // the search box: Enter opens the best match, Escape clears it
+    if (e.key === 'Escape' && S.libQ) { e.preventDefault(); e.stopPropagation(); S.libQ = ''; e.target.value = ''; paintLibList(); }
+    else if (e.key === 'Enter' && !e.repeat) { const b = document.querySelector('#libList .lb-item'); if (b) { e.preventDefault(); b.click(); } }
+    return;
+  }
   if (inChart(e) || pipeOn()) return;        // (a pipeline view has the middle: the editor's keys save and run nothing from behind it)
   const b = buf(), t = e.target, mod = e.metaKey || e.ctrlKey;
   if (mod && e.key === 's') { e.preventDefault(); if (b && b.kind !== 'builtin') save(b); return; }
