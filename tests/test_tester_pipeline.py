@@ -418,7 +418,7 @@ def test_every_text_of_an_idea_is_plain_for_the_page(c, fake, proot):
 
 def test_the_page_switches_a_pipeline_on_or_all_off(c, fake, proot):
     r = c.post("/api/tester/pipeline/mode", json={"mode": "nonsense"})
-    assert r.status_code == 200 and r.json()["ok"] is False and "off, live, wr or payout" in r.json()["text"]
+    assert r.status_code == 200 and r.json()["ok"] is False and "off, live, wr, payout or funded" in r.json()["text"]
     assert not any(x["argv"][:2] == ["pipe", "mode"] for x in fake.calls())           # a word that is none never reaches the toolkit
     c.post("/api/tester/pipeline/mode", json={"mode": "off"})
     assert [x["argv"][:3] for x in fake.calls() if x["argv"][:2] == ["pipe", "mode"]] == [["pipe", "mode", "off"]]

@@ -113,7 +113,10 @@ MS = 1000                                           # milliseconds a second: a u
 
 
 def accounts() -> list:
-    """The accounts a book is mixed for: the pipeline's own first, then pipeline.json prop.book_accounts (each once)."""
+    """The accounts a book is mixed for: the pipeline's own first, then pipeline.json prop.book_accounts (each once). The FUNDED PIPELINE
+    (pipeline.json `funded`, the owner 2026-10-15): its funded account alone."""
+    if PR.funded():
+        return [PR.need("funded", "account")]
     return list(dict.fromkeys([PR.need("prop", "account"), *PR.need("prop", "book_accounts")]))
 
 
@@ -128,7 +131,7 @@ def both_sides(family):
 
 def _account(account) -> tuple:
     """(id, the rule file, {id, name, confirmed}) of an account; None = the pipeline's own. An id the app does not have: refused by name."""
-    A, rid = PO.app(), PR.need("prop", "account") if account is None else account
+    A, rid = PO.app(), (PR.need("funded", "account") if PR.funded() else PR.need("prop", "account")) if account is None else account
     try:
         r = A.load_rules(rid)
     except ValueError:
@@ -141,8 +144,10 @@ def rules(rid: str, r: dict) -> dict:
     biggest day (the rule file's `consistency`; None = it has none), one side only and no eval to pass (pipeline.json
     portfolio.one_side and funded_only: the design's word, the rule files do not carry it)."""
     need = PR.need("portfolio")
-    return {"fast": {"seconds": PR.need("box", "fast_seconds"), "share": need["fast_share"]}, "biggest_day": r.get("consistency"),
-            "one_side": rid in need["one_side"], "funded_only": rid in need["funded_only"]}
+    only = rid in need["funded_only"]
+    big = None if only and PR.funded() else r.get("consistency")     # the FUNDED PIPELINE: a rule file's consistency is the EVAL's (LucidFlex: checked at the pass)
+    return {"fast": {"seconds": PR.need("box", "fast_seconds"), "share": need["fast_share"]}, "biggest_day": big,
+            "one_side": rid in need["one_side"], "funded_only": only, **({"funded_line": True} if PR.funded() else {})}
 
 
 def _judged(rl: dict) -> list:
@@ -163,6 +168,9 @@ def _notes(r: dict, rl: dict) -> list:
         out.append(f"orders may rest on one side only here ({where}.one_side); the account's own rule file does not say so")
     if "consistency" not in r:
         out.append("the account's rule file does not say whether a biggest-day rule applies (no `consistency`): none was applied")
+    if rl.get("funded_line"):
+        out.append("the FUNDED PIPELINE: each strategy's unseen days must fall into a row of its table (win rate for its reward), and a mix must fall "
+                   "into a row with its trades a day (PF.1); the account's consistency rule is its eval's and is not applied to a funded account")
     return out
 
 
@@ -260,20 +268,44 @@ def _mix(names: tuple, by: dict, r: dict, rl: dict, need: dict, read) -> dict:
     drags = [m for m in without if not got[judged[0]] > without[m]]    # taking it away does not lower the odds
     rules_ = held([by[k]["x"] for k in names], got["size"], r, cal, rl)
     ok = all(v["holds"] is not False for v in rules_.values())
+    line = _line(names, by, r, cal, got) if rl.get("funded_line") else None
+    on = line is None or line["row"]["passed"] is True
     return {"members": list(names), "days": len(cal), **got, "rules": rules_, "without": without, "drags": drags, "allowed": not drags, "rules_hold": ok,
-            "margin": min(got[p] / need[p]["odds"] for p in judged), "meets": bool(not drags and ok and all(got[p] >= need[p]["odds"] for p in judged))}
+            **({"funded": line, "on_line": on} if line else {}),
+            "margin": min(got[p] / need[p]["odds"] for p in judged), "meets": bool(not drags and ok and on and all(got[p] >= need[p]["odds"] for p in judged))}
+
+
+def _line(names: tuple, by: dict, r: dict, cal: tuple, got: dict) -> dict:
+    """THE FUNDED LINE OF ONE MIX (pipeline.json `funded`, the owner 2026-10-15): row PF.1 -- the members' trades together fall into a row of the
+    table WITH their trades a day -- and the labels, which ask nothing: the daily Sharpe (R a day), the highest correlation of two members' days, the
+    worst day at the payout size against the account's drawdown."""
+    from . import pipe_funded as F
+    x, rr, per = F.group([(by[k]["x"], by[k]["market"]) for k in names], cal)
+    row = F.row("PF.1", x, None, cal, group=True, r=rr)
+    lab, s = PR.need("funded", "labels"), row["stats"]
+    worst = None
+    if got.get("payout_size"):
+        day = PO.days(PO.together([by[k]["x"] for k in names], got["payout_size"], r, list(cal)), r, list(cal))[0]
+        worst = float(day.min()) if len(day) else None
+    dd, corr = r.get("trailing_mll"), F.correlation(per)
+    share = None if worst is None or not dd else max(0.0, -worst) / dd
+    labels = {"daily_sharpe": {"value": s["sharpe_day"], "need": lab["daily_sharpe"], "holds": s["sharpe_day"] is not None and s["sharpe_day"] >= lab["daily_sharpe"]},
+              "correlation": {"value": corr, "need": lab["correlation"], "holds": None if corr is None else corr < lab["correlation"]},
+              "worst_day_floor": {"value": share, "worst_day": worst, "need": lab["worst_day_floor"], "holds": None if share is None else share <= lab["worst_day_floor"]}}
+    return {"row": row, "labels": labels}
 
 
 def _order(m: dict, judged: list) -> tuple:
     """The rank of a mix, the best first (module docstring): in order before not, then nearest the bar on its weaker number."""
-    return (not (m["allowed"] and m["rules_hold"]), -m["margin"], *[-m[p] for p in judged], len(m["members"]))
+    return (not (m["allowed"] and m["rules_hold"] and m.get("on_line", True)), -m["margin"], *[-m[p] for p in judged], len(m["members"]))
 
 
 def gap(m: dict, need: dict, judged: list) -> dict:
     """HOW FAR A MIX IS FROM THE BAR: the odds missing in each judged number (0 = at the bar; None = not judged on this account),
     the account rules that do not hold, the members that do not raise its odds."""
     return {**{p: max(0.0, need[p]["odds"] - m[p]) if p in judged else None for p in (EVAL, PAYOUT)},
-            "rules": [k for k in RULES if m["rules"][k]["holds"] is False], "drags": list(m["drags"])}
+            "rules": [k for k in RULES if m["rules"][k]["holds"] is False], "drags": list(m["drags"]),
+            **({"line": m["funded"]["row"]["text"]} if m.get("funded") and not m.get("on_line", True) else {})}
 
 
 # ================================================================ one account
@@ -288,6 +320,16 @@ def _barred(m: dict, rl: dict):
     return f"its entry rule ({m['family']}) rests orders on both sides (the block list), and on this account orders may rest on one side only" if two else None
 
 
+def _off_line(m: dict, rl: dict):
+    """Why a strategy cannot go in a mix of the FUNDED PIPELINE, or None: its unseen-day trades fall into no row of the funded table (pipe_funded.row:
+    P6.2 as stage 6 reads it -- a book card filed under another pipeline is held to it here)."""
+    if not rl.get("funded_line"):
+        return None
+    from . import pipe_funded as F
+    got = F.row("P6.2", m["x"], m["market"], m.get("calendar"))
+    return None if got["passed"] else f"its unseen days are off the funded line: {got['text']}"
+
+
 def build(account=None, root=None, members=None, paths=None, seed=None) -> dict:
     """THE BEST MIX OF THE BOOK FOR ONE ACCOUNT (module docstring): every mix the rules allow is tried, ranked, and the first is
     shown with its distance from the bar. Runs nothing, writes nothing. members = the strategies, instead of the book's."""
@@ -295,7 +337,7 @@ def build(account=None, root=None, members=None, paths=None, seed=None) -> dict:
     need, rl = {p: PR.need("portfolio", p) for p in (EVAL, PAYOUT)}, rules(rid, r)
     judged = _judged(rl)
     mem, unread = book(root) if members is None else (list(members), [])
-    out_ = {m["name"]: _barred(m, rl) for m in mem}
+    out_ = {m["name"]: _barred(m, rl) or _off_line(m, rl) for m in mem}
     left, by = [{"name": k, "why": why} for k, why in out_.items() if why], {m["name"]: m for m in mem if not out_[m["name"]]}
     twins = [{"a": a, "b": b, "family": by[a]["family"], "market": by[a]["market"]} for a, b in combinations(by, 2)
              if (by[a]["family"], by[a]["market"]) == (by[b]["family"], by[b]["market"])]
@@ -341,6 +383,18 @@ def _held_words(b: dict, rl: dict) -> str:
         + f" (at most {L._pc(rl['biggest_day'])}): {word[d['holds']]}"
 
 
+def _line_words(f: dict) -> list:
+    """The funded line of the best mix: its row, then the labels."""
+    lab, pc = f["labels"], lambda v: "-" if v is None else f"{v:.2f}"  # noqa: E731
+    word = {True: "held", False: "MISSED", None: "n/a"}
+    w = lab["worst_day_floor"]
+    return [f"  the funded line: {f['row']['text']}",
+            f"  labels (ask nothing): daily Sharpe {pc(lab['daily_sharpe']['value'])} (want {lab['daily_sharpe']['need']:g}+, {word[lab['daily_sharpe']['holds']]}); "
+            f"highest correlation of two members {pc(lab['correlation']['value'])} (want under {lab['correlation']['need']:g}, {word[lab['correlation']['holds']]}); "
+            f"worst day " + ("-" if w["worst_day"] is None else f"${w['worst_day']:,.0f}") + f" = {pc(w['value'])} of the drawdown "
+            f"(want {w['need']:g} or less, {word[w['holds']]})"]
+
+
 def _tail(a: dict) -> list:
     """What was tried, what was kept apart or left out and why, and what the rule file does not say."""
     n, k = len(a["mixes"]), len(a["members"])
@@ -366,12 +420,13 @@ def said(a: dict) -> list:
     size = f"{_mic(b['size'])}{each} for the eval, " + (f"{_mic(b['payout_size'])}{each} on the funded account" if b["payout_size"] else "no size the funded account may trade")
     does = {EVAL: "it passes the eval", PAYOUT: "it reaches the maximum payout"}
     short = lambda p: "not judged: this account has no eval to pass" if g[p] is None else f"{_pts(g[p])} short" if g[p] > 0 else "at the bar"  # noqa: E731
-    miss = [f"{_pts(g[p])} of {p} odds" for p in judged if g[p] > 0] + [RULES[k] for k in g["rules"]] \
+    miss = [f"{_pts(g[p])} of {p} odds" for p in judged if g[p] > 0] + [RULES[k] for k in g["rules"]] + ([g["line"]] if g.get("line") else []) \
         + ([f"{', '.join(g['drags'])} {'does' if len(g['drags']) == 1 else 'do'} not raise the mix's {judged[0]} odds"] if g["drags"] else [])
     return [f"{head}: the best mix found {'MEETS THE BAR' if b['meets'] else 'does not meet the bar'}. It is {names} ({size}; read on {b['days']} session days"
             + (" they share" * many) + ").",
             *[f"  {p}: {does[p]} within {need[p]['days']} trading days {PO._pc(b[p])} of the time (the bar: {L._pc(need[p]['odds'])} or more) -- {short(p)}" for p in (EVAL, PAYOUT)],
             f"  the account's rules: {_held_words(b, rl)}",
+            *(_line_words(b["funded"]) if b.get("funded") else []),
             *([f"  each member must raise the {judged[0]} odds: without {', without '.join(f'{m} {PO._pc(p)}' for m, p in b['without'].items())}; with all {PO._pc(b[judged[0]])}"]
               if many else []),
             f"  missing: {'; '.join(miss) if miss else 'nothing'}", *_tail(a)]

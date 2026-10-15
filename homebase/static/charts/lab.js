@@ -1514,7 +1514,8 @@ function pipeMain() {
    one, its numbers. A toolkit that reports no switch lists its two profiles as before; one that reports no profiles shows nothing
    here. The choice is the whole app's: the runner and every chat read it. A choice that is disabled (the Payout page's lock) cannot be pressed. */
 const MODE_SAYS = { off: 'No pipeline is working. Pick one to switch it on.', live: 'The original rules, for live accounts.',
-  wr: 'Judges win rate and steady months. Eval odds are shown, not asked.', payout: 'Tunes and rotates a small set for the funded accounts.' };
+  wr: 'Judges win rate and steady months. Eval odds are shown, not asked.', payout: 'Tunes and rotates a small set for the funded accounts.',
+  funded: 'Each strategy’s unseen days must fall into a row of the 75 % table (win rate for its reward). The group must reach the max payout on LucidFlex in 20 days 75 % of the time.' };
 const PSET = [['win_rate', 'Win rate at least', '%', 100, 50, 95, 1], ['month_floor', 'A steady month wins at least', '%', 100, 40, 90, 1],
   ['months', 'Share of steady months', '%', 100, 50, 100, 1], ['month_trades', 'Trades a month to count', '', 1, 3, 60, 1], ['max_target_r', 'Target at most', 'R', 1, 0.25, 3, 0.05]];
 function profBar(A) {

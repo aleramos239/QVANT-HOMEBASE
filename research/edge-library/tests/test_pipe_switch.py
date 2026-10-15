@@ -78,8 +78,18 @@ def test_a_word_that_is_none_is_refused_and_nothing_changes(root):
 
 
 def test_the_choices_are_off_and_the_profiles_in_the_bars_order(root):
-    assert [(o["id"], o["short"]) for o in SW.options(root)] == [("off", "Off"), ("live", "Live"), ("wr", "WR"), ("payout", "Payout")]
-    assert SW.said("off") == "No pipeline is on" and SW.said("payout") == "PAYOUT PIPELINE is on"
+    assert [(o["id"], o["short"]) for o in SW.options(root)] == [("off", "Off"), ("live", "Live"), ("wr", "WR"), ("payout", "Payout"), ("funded", "Funded")]
+    assert SW.said("off") == "No pipeline is on" and SW.said("payout") == "PAYOUT PIPELINE is on" and SW.said("funded") == "FUNDED PIPELINE is on"
+
+
+def test_the_funded_pipeline_has_no_lock_and_judges_one_idea_by_the_75_table_not_its_eval_odds(root):
+    assert SW.enabled("funded", root) and [o["ready"] for o in SW.options(root) if o["id"] == "funded"] == [True]
+    assert SW.choose("funded", root) == "funded" and PR.active() == "funded" and not PS.paused(root)
+    PR._all.cache_clear()
+    assert PR.funded() and PR.gates() == "prop" and PR.winlane("some_idea_a5-NQ-tf5") == "off" and ST._eval_asked("some_idea_a5-NQ-tf5") is False
+    SW.choose("live", root)
+    PR._all.cache_clear()
+    assert not PR.funded()
 
 
 def test_the_payout_rules_ask_one_idea_for_money_never_for_eval_odds_of_its_own(root):
@@ -113,7 +123,7 @@ def test_pipe_mode_shows_and_chooses_and_starts_the_runner_for_a_profile(root, m
 
 def test_the_payout_pipeline_is_disabled_until_the_owner_enables_it(root):
     assert SW.enabled("live", root) and not SW.enabled("payout", root)
-    assert [o["ready"] for o in SW.options(root)] == [True, True, True, False]
+    assert [o["ready"] for o in SW.options(root)] == [True, True, True, False, True]
     with pytest.raises(J.Refuse, match="disabled"):
         SW.choose("payout", root)
     assert SW.now(root) == "live" and not PS.paused(root) and PR.active() == "live"

@@ -426,7 +426,7 @@ def listing(root=None) -> dict:
              + " · queue: " + ("paused" if s["paused"] else "not paused")]
     from . import pipe_rules as PRL            # the pipeline in use rides along, so a page polling `pipe list` needs no second command
     now = PRL.active()
-    from . import pipe_switch as SW            # ... and the switch: the ONE pipeline that works, or none (off | live | wr | payout)
+    from . import pipe_switch as SW            # ... and the switch: the ONE pipeline that works, or none (off | live | wr | payout | funded)
     prof = {"profile": now, "label": PRL.label(now), "settings": PRL.settings(now), "editable": now == "wr",
             "options": [{"id": k, "label": v[0]} for k, v in PRL.PROFILES.items()], "mode": SW.now(root), "modes": SW.options(root)}
     return api.result("pipe list", **s, pipeline=prof, text="\n".join(text),

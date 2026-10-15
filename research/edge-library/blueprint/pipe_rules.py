@@ -8,6 +8,9 @@ typed in code. A change of a number is a change of the pipeline's rules (the own
   mode()               "variant" (the shipped default, the owner 2026-10-08: the hard rules are judged on ONE picked box, the map gets a loose
                        check) or "map" (the legacy behaviour: the whole 144-box map is judged); a file without the key reads "map"; any other
                        word: R.RuleError. `variant` = the numbers of variant mode (map_share, region_boxes, region_trades, floor_part)
+  funded()             True when the file's `funded.mode` is "ask" (the FUNDED PIPELINE, owner 2026-10-15): the picked box on the build days and
+                       its read of the unseen days must each fall into a row of `funded.rows` (pipe_funded.py), the eval odds are shown and not
+                       asked, and the portfolio is the funded account's alone. A file without `funded` (or "off"): nothing changes
   random_bar(tries)    the share of the random tables an idea must beat on its `tries`-th try: 1 - alpha / max(1, tries) --
                        the law's ladder of line 2.3 (95 %, 97.5 %, 98.3 %, 98.75 %, 99 %), carried on past its fifth round
   floor(root, part)    `part` of the market's cost floor of line 2.2, in dollars a trade: floor("NQ", 0.5) -> 35.0
@@ -40,12 +43,14 @@ from pathlib import Path
 from . import rules as R
 
 PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json"), "wr": ("WR PIPELINE", "pipeline_wr.json"),      # the pipelines to choose from (owner, 2026-10-13)
-            "payout": ("PAYOUT PIPELINE", "pipeline_payout.json")}                                       # ... and the one that builds the set for the funded accounts
+            "payout": ("PAYOUT PIPELINE", "pipeline_payout.json"),                                      # ... and the one that builds the set for the funded accounts
+            "funded": ("FUNDED PIPELINE", "pipeline_funded.json")}                                      # ... and the 75 % line of 2026-10-15 (pipe_funded.py)
 STATE = Path(os.environ.get("HB_PIPELINE_STATE") or Path.home() / ".homebase" / "pipeline_profile")     # the chosen one; no file = live
 FILE = R.T / "pipeline.json"                       # the LIVE file; set to ANOTHER path (the tests point it at a copy) it is read instead of the profile's
 MODES = ("map", "variant")
 GATES = ("law", "prop")
 WINLANE = ("off", "label", "ask")
+FUNDED = ("off", "ask")                             # the funded line (pipe_funded.py): off, or every box must fall into a row of `funded.rows`
 DECIMALS = 3                                        # the law prints the ladder of 2.3 to three decimals (98.3 % for 98.33 %)
 
 
@@ -116,6 +121,9 @@ def _load(path: str, stamp: int = 0) -> dict:
     c = (p.get("winlane") or {}).get("cards", [])
     if not isinstance(c, list) or not all(isinstance(x, str) and x for x in c):
         raise R.RuleError(f"pipeline.json winlane.cards = {c!r}: a list of card names (empty = every card)")
+    f = (p.get("funded") or {}).get("mode", FUNDED[0])
+    if f not in FUNDED:
+        raise R.RuleError(f"pipeline.json funded.mode = {f!r}: the funded line is one of {', '.join(FUNDED)}")
     if g == "prop":                                 # the numbers the prop gates ask, over the file's variant block (a copy: the file stays as written)
         p["variant"] = {**p["variant"], **(p["gates"].get("variant") or {})}
     return {k: v for k, v in p.items() if not k.startswith("_")}
@@ -168,6 +176,11 @@ def winlane(unit: str | None = None) -> str:
         return mode
     on = unit is not None and any(re.match(re.escape(c) + r"_[a-z]\d+(?:-|$)", str(unit)) for c in cards)
     return mode if on else WINLANE[0]
+
+
+def funded() -> bool:
+    """Is the funded line on (pipeline.json `funded.mode` "ask": the FUNDED PIPELINE, the owner 2026-10-15)? A file without `funded` is off."""
+    return (_all().get("funded") or {}).get("mode", FUNDED[0]) == "ask"
 
 
 def random_bar(tries: int) -> float:

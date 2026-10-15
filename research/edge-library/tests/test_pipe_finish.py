@@ -580,6 +580,40 @@ def test_stage_6_gives_every_idea_its_own_read_as_the_rule_file_says_and_carries
     TS.refused(lambda: ST.stage6(C, CTX), "same-idea relative")
 
 
+def test_stage_6_under_the_funded_pipeline_the_box_must_fall_into_a_row_of_the_75_table(world):
+    """THE FUNDED PIPELINE (the owner, 2026-10-15): with the prop gates' read (the box alone), row P6.2 asks that the box's unseen-day trades fall into
+    a row of the 75 % table; a box that makes money but falls into no row is NOT PROVEN."""
+    base(world)
+    calls = six(world)
+    world.setattr(PR, "FILE", PR.R.T / PR.PROFILES["funded"][1])                              # (this module reads the law's file: the FUNDED PIPELINE's here)
+    PR._all.cache_clear()
+    canned = OOS.test
+
+    def boxed(sub, **k):
+        return {**canned(sub, **k), "gates": {"only": ["box"], "box": 500.0, "labels": []}}
+
+    def trades(win: int, n: int = 40) -> dict:                                                 # NQ, a 20-point stop: 1 R = $400 a contract
+        rs = [1.0 if (i + 1) * win // n > i * win // n else -1.0 for i in range(n)]
+        return LB.pack([SY.trade(d, (r * 400 + LB.COMM_RT) / 10 - LB.MICRO_RT_USD) for d, r in zip(SY.weekdays(), rs)])
+
+    world.setattr(OOS, "test", boxed)
+    world.setattr(PO, "handed", lambda sub, root=None: {"calendar": SY.weekdays(), "span": SY.SPAN, "market": "NQ"})
+    try:
+        world.setattr(PO, "cell", lambda h, vid: trades(28))                                   # 70 % at 1 : 1
+        c = TS.whole(ST.stage6(C, CTX), 6)
+        assert c["passed"] is True and [x["line"] for x in c["lines"]][:2] == ["P6.1", "P6.2"] and c["lines"][1]["passed"] is True
+        assert "falls into the row 1 : 1 at 8 trades a day needs 62.5 % wins" in c["text"] and "the two lines asked" in c["text"]
+        assert c["rules"]["funded"]["account"] == "lucid-flex-50k@2026-10-11"
+        six(world)
+        world.setattr(OOS, "test", boxed)
+        world.setattr(PO, "handed", lambda sub, root=None: {"calendar": SY.weekdays(), "span": SY.SPAN, "market": "NQ"})
+        world.setattr(PO, "cell", lambda h, vid: trades(22))                                   # 55 % at 1 : 1: it makes money, and falls into no row
+        c = TS.whole(ST.stage6(C, CTX), 6)
+        assert (c["passed"], c["result"]) == (False, "not proven") and "NOT PROVEN, it fails P6.2" in c["text"] and "A fail is final" in c["text"]
+    finally:
+        PR._all.cache_clear()
+
+
 def test_stage_6_a_verdict_on_file_for_another_lock_is_not_this_locks(world):
     base(world)
     calls = six(world)

@@ -262,7 +262,7 @@ def _parser() -> _Parser:
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
         ("profile", "the pipeline in use: LIVE PIPELINE (live accounts) or WR PIPELINE (high win rate, low R:R); `profile wr` chooses, no word shows"),
         ("settings", "the WR PIPELINE's win-rate numbers; --set key=value (repeat) changes them (win_rate, month_floor, months, month_trades, max_target_r, risk_usd=500-800)"),
-        ("mode", "the switch: the ONE pipeline that works, or none; `mode off | live | wr | payout` chooses (a profile also starts the runner), no word shows"),
+        ("mode", "the switch: the ONE pipeline that works, or none; `mode off | live | wr | payout | funded` chooses (a profile also starts the runner), no word shows"),
         ("payout", "the PAYOUT PIPELINE's set for the funded accounts: show (the set on file) | build | tonight (the evening's rotation) | requeue (the stopped ideas "
                    "go round again under its rules) | enable | disable (the owner's lock: disabled, none of it runs)"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
@@ -291,7 +291,7 @@ def _parser() -> _Parser:
         pipes[name].add_argument("name", help="the pipeline card's name")
     pipes["profile"].add_argument("which", nargs="?", choices=["live", "wr"], help="the pipeline to use from now on (the runner takes it when it next starts)")
     pipes["settings"].add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="a number to change (repeat); risk_usd=500-800")
-    pipes["mode"].add_argument("which", nargs="?", choices=["off", "live", "wr", "payout"], help="the pipeline that works from now on; off = none")
+    pipes["mode"].add_argument("which", nargs="?", choices=["off", "live", "wr", "payout", "funded"], help="the pipeline that works from now on; off = none")
     pipes["payout"].add_argument("what", nargs="?", default="show", choices=["show", "build", "tonight", "requeue", "enable", "disable"], help="default: show")
     pipes["pick"].add_argument("cell", nargs="?", help="the box's id, e.g. k0p4_pts45-r2 (not with --clear)")
     pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")

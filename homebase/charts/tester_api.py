@@ -632,7 +632,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.post("/pipeline/mode")
     def pipeline_mode(request: Request, body: dict):
-        """The switch: {mode: "off" | "live" | "wr" | "payout"} -- the ONE pipeline that works, or none (owner, 2026-10-13)."""
+        """The switch: {mode: "off" | "live" | "wr" | "payout" | "funded"} -- the ONE pipeline that works, or none (owner, 2026-10-13)."""
         write_ok(request)
         json_body(request)
         if body.get("mode") != "off" and Slots().quiet():     # switching one ON starts heavy work: not in the desk's 9:30 window (as PIPE_QUIET)

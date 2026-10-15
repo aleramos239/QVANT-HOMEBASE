@@ -1,7 +1,7 @@
 """pipe_switch.py -- THE SWITCH (the owner, 2026-10-13: "let me switch on and off each pipeline, so i can either have one on and i pick
-which or none on"). ONE pipeline works, or none: `bp.py pipe mode [off | live | wr | payout]`, and the Lab's Pipeline bar.
+which or none on"). ONE pipeline works, or none: `bp.py pipe mode [off | live | wr | payout | funded]`, and the Lab's Pipeline bar.
 
-  CHOICES                     ("off", "live", "wr", "payout"): off, then the profiles of pipe_rules.PROFILES
+  CHOICES                     ("off", "live", "wr", "payout", "funded"): off, then the profiles of pipe_rules.PROFILES
   now(root=None) -> word      the one that is on, READ OFF THE DISK (this module keeps no file of its own):
                                 the idea queue is paused -> "off"          else -> the profile in use (pipe_rules.active)
                               so a pause put by hand (`pipe pause`) reads "off", and a resume by hand reads the profile again
@@ -35,7 +35,7 @@ OFF = "off"
 LOCKED = {"payout": "payout_enabled"}               # a choice with a lock: the file in the pipeline root that says it is enabled
 CHOICES = (OFF, *PR.PROFILES)
 LABELS = {OFF: "Off", **{k: v[0] for k, v in PR.PROFILES.items()}}
-SHORT = {OFF: "Off", "live": "Live", "wr": "WR", "payout": "Payout"}          # the bar's buttons: its label already says Pipeline
+SHORT = {OFF: "Off", "live": "Live", "wr": "WR", "payout": "Payout", "funded": "Funded"}          # the bar's buttons: its label already says Pipeline
 
 
 def now(root=None) -> str:

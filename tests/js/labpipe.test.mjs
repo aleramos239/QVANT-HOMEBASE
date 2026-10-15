@@ -301,7 +301,7 @@ test('the switch: one pipeline works or none; a choice that is not built cannot 
   assert.match(PIPE, /: P\.options\.map\(/, 'no switch reported: the profiles as before');
   assert.match(PIPE, /send\('POST', '\/api\/tester\/pipeline\/mode', \{ mode: id \}\)/);
   assert.match(LAB, /else if \(name === 'plmode'\) pickMode\(el\.dataset\.m\);/);
-  for (const k of ['off', 'live', 'wr', 'payout']) assert.match(PIPE, new RegExp(`${k}: '`), `the bar says what ${k} is`);
+  for (const k of ['off', 'live', 'wr', 'payout', 'funded']) assert.match(PIPE, new RegExp(`${k}: '`), `the bar says what ${k} is`);
 });
 
 test('one timer for the two views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {

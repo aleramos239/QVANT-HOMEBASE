@@ -340,15 +340,17 @@ def _box_rows(t: dict, cell: str, days=None) -> list:
 
 
 def _eval_asked(unit=None) -> bool:
-    """Does the eval-odds bar of mode "prop" ask of this unit? Yes, unless the win-rate lane is on for it: there the owner's first goal is the win rate and the odds are a label."""
-    return PR.prop_gates() and PR.winlane(unit) == "off"
+    """Does the eval-odds bar of mode "prop" ask of this unit? Yes, unless the win-rate lane is on for it (the owner's first goal there is the win rate) or
+    the funded line is on (the FUNDED PIPELINE: one box is judged by the 75 % table and the group by its payout odds): there the odds are a label."""
+    return PR.prop_gates() and PR.winlane(unit) == "off" and not PR.funded()
 
 
 def _asked_words(unit=None) -> str:
     """What a pick says it asks besides money and trades: the eval odds (mode "prop"), the win rate and its months (win-rate lane "ask")."""
     return ((f" and have {L._pc(PR.need('prop', 'eval'))} eval odds or more" if _eval_asked(unit) else "")
             + (f", win {L._pc(PR.need('winlane', 'win_rate'))} or more of its trades and have {L._pc(PR.need('winlane', 'months'))} of its months at "
-               f"{L._pc(PR.need('winlane', 'month_floor'))} wins or better" if PR.winlane(unit) == "ask" else ""))
+               f"{L._pc(PR.need('winlane', 'month_floor'))} wins or better" if PR.winlane(unit) == "ask" else "")
+            + (", and fall into a row of the funded 75 % table (win rate for its reward)" if PR.funded() else ""))
 
 
 def _holding(t: dict, cells: list, days=None) -> tuple:
@@ -407,6 +409,7 @@ def _one_box(t: dict, cell: str) -> dict:
     up = x["side"] > 0
     return {"root": t["root"], "net": t["net"][i:i + 1], "n": t["n"][i:i + 1], "ids": [cell], "unit": t["unit"], "days": t["days"], "sides": t.get("sides"),
             "long": float(x["net"][up].sum()), "short": float(x["net"][~up].sum()), "n_long": int(up.sum()), "n_short": int((~up).sum()), "trade_net": np.asarray(x["net"], np.float64), "trade_date": np.asarray(x["date"], np.int64),
+            "trade_risk": np.asarray(x["risk"], np.float64),
             "_st": t["_st"], "_u": t["_u"]}
 
 
@@ -971,6 +974,17 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         rows = [L._row("P6.1", None if net is None else bool(net > 0), net, 0, "the picked box " + ("has no trade on the unseen days" if net is None else
                        f"made {REC._usd(net)} on the unseen days (need above $0)"), box=net), *G.labels(rows, gate=())]
         rules["gates"] = gate
+    if gate and PR.funded():                        # THE FUNDED LINE (the owner, 2026-10-15): the box's unseen-day trades must fall into a row of the 75 % table
+        from . import pipe_funded as F
+        try:
+            got = PO.handed(sub, kw["root"])
+            line = F.row("P6.2", PO.cell(got, was["default"]), got["market"], got["calendar"])
+        except api.REFUSALS as e:
+            line = L._row("P6.2", False, None, None, f"the unseen-day trades of the box could not be read ({e}): it cannot be shown to fall into a row")
+        rows.insert(1, line)
+        rules["funded"] = {k: v for k, v in PR.need("funded").items() if not k.startswith("_")}
+        if line["passed"] is False and r.get("passed") is True:
+            r = {**r, "passed": False}
     head = (f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
             + (f" ({len(rel)} related idea{'s' * (len(rel) != 1)} read on these days before it)" if rel else ""))
     if r.get("passed") is not True:
@@ -980,7 +994,9 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     got = PO.handed(sub, kw["root"])                # what the freeze and the read leave for the prop simulator: the read's own store and days
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
-    holds = (f"the box {was['default']} makes money on those days (the one line asked; lines 4.1-4.9 are labels"
+    fund = next((x for x in rows if x["line"] == "P6.2"), None)
+    holds = (f"the box {was['default']} makes money on those days" + (f" and {fund['text'].split(': ', 1)[-1]}" if fund else "")
+             + (" (the two lines asked" if fund else " (the one line asked") + "; lines 4.1-4.9 are labels"
              + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
     return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}; on those days the box {was['default']} is a "
                  f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"], relatives=rel)

@@ -1,0 +1,108 @@
+75% MAX PAYOUT IN 20 WEEKDAYS - LucidFlex 50K (2026-10-15)
+
+Each row = the lowest win rate that still reaches 75%+ max payout
+at that RR and number of trades per day.
+
+RR (risk:win) | Trades/day | Win rate | Edge/trade | Risk/trade | Max payout | First payout
+--------------+------------+----------+------------+------------+------------+-------------
+1 : 0.5       | 4          | 80%      | +0.17R     | $500       | 77%        | 86%
+1 : 0.5       | 6          | 80%      | +0.17R     | $400       | 83%        | 86%
+1 : 0.5       | 8          | 80%      | +0.17R     | $300       | 85%        | 88%
+1 : 0.75      | 4          | 72.5%    | +0.24R     | $400       | 82%        | 86%
+1 : 0.75      | 6          | 70%      | +0.20R     | $300       | 76%        | 83%
+1 : 0.75      | 8          | 70%      | +0.20R     | $200       | 81%        | 90%
+1 : 1         | 4          | 65%      | +0.27R     | $300       | 79%        | 87%
+1 : 1         | 6          | 65%      | +0.27R     | $200       | 86%        | 95%
+1 : 1         | 8          | 62.5%    | +0.22R     | $200       | 76%        | 83%
+1 : 1.25      | 4          | 60%      | +0.32R     | $300       | 80%        | 83%
+1 : 1.25      | 6          | 57.5%    | +0.26R     | $200       | 75%        | 83%
+1 : 1.25      | 8          | 57.5%    | +0.26R     | $150       | 81%        | 90%
+1 : 1.5       | 4          | 55%      | +0.35R     | $200       | 78%        | 94%
+1 : 1.5       | 6          | 55%      | +0.35R     | $200       | 85%        | 88%
+1 : 1.5       | 8          | 52.5%    | +0.28R     | $150       | 78%        | 87%
+1 : 2         | 4          | 47.5%    | +0.40R     | $200       | 77%        | 88%
+1 : 2         | 6          | 47.5%    | +0.40R     | $150       | 83%        | 90%
+1 : 2         | 8          | 45%      | +0.32R     | $150       | 75%        | 79%
+1 : 2.5       | 4          | 42.5%    | +0.46R     | $200       | 79%        | 84%
+1 : 2.5       | 6          | 40%      | +0.37R     | $150       | 76%        | 81%
+1 : 2.5       | 8          | 40%      | +0.37R     | $100       | 76%        | 92%
+
+HOW TO READ
+- Trades/day = total trades across all strategies. The number of algos does not matter.
+- More trades/day = slightly lower win rate needed, smaller risk per trade. 6-8 a day is the sweet spot.
+- Risk/trade is about $150-300 at 6-8 trades a day. Bigger only if 4 or fewer.
+- Low RR needs a high win rate. High RR needs a low win rate but a bigger edge per trade.
+- Win rates move in 2.5% steps and the sim has noise: treat each row as +/- 2.5 points.
+- Closest to what the Desk shows (52-60% win, RR near 1): the 1:1.25 and 1:1.5 rows at 6-8 trades/day.
+  They need +0.26R to +0.35R per trade; the Desk makes about +0.09R today.
+
+MODEL
+Funded Flex account start, 20 weekdays, correlation .15, cost 0.03R per trade, 1,500 paths per cell.
+Trades treated as independent; unseen days were already read when strategies were promoted; one trade at a time is not modeled.
+Source: Obsidian/Vault/50-Permanent/Findings/2026-10-14-what-strategy-type-passes-eval-and-pays-max-in-5-weekdays.md (addenda 7, 7b, 7c)
+
+
+=====================================================================
+OTHER METRICS THAT MATTER (added 2026-10-15)
+=====================================================================
+
+1. DAILY SHARPE IS THE ONE NUMBER THAT DECIDES IT
+Every recipe on the 75% line has a daily Sharpe of about 0.45-0.60
+(average day / how much days swing). Win rate and RR are two ways of getting there.
+
+Recipe at 6 trades/day     | Daily Sharpe | Losing days | Worst day (1 in 100)
+---------------------------+--------------+-------------+---------------------
+80%   win, 1 : 0.5         | 0.58         | 34%         | -3.2R
+70%   win, 1 : 0.75        | 0.51         | 28%         | -4.4R
+65%   win, 1 : 1           | 0.57         | 37%         | -4.2R
+57.5% win, 1 : 1.25        | 0.48         | 27%         | -6.2R
+55%   win, 1 : 1.5         | 0.56         | 30%         | -6.2R
+47.5% win, 1 : 2           | 0.53         | 42%         | -6.2R
+40%   win, 1 : 2.5         | 0.44         | 29%         | -6.2R
+
+- The Desk today is about 0.17 on the same scale (about +0.09R per trade).
+- Test for a candidate group: daily Sharpe above ~0.5 = 75% in a month is on.
+- High win / low RR has smaller worst days. High RR needs more room under the trailing floor.
+
+2. WIN RATE STABILITY IS STEEP
+Recipe: 6 trades/day, 60% win, 1 : 1.25, $200 risk.
+
+True win rate        | Max payout | First payout
+---------------------+------------+-------------
+60% (as planned)     | 87%        | 90%
+57.5%                | 77%        | 84%
+55%                  | 64%        | 76%
+52.5%                | 50%        | 68%
+50%                  | 35%        | 55%
+
+- 5 points of win-rate drift costs about 20-25 points of max payout.
+- A win rate that flips between 65% and 55% month to month (average 60%) still gives 82%.
+  What hurts is a lower average, not a swingy one.
+- Judge a strategy on its weak half, not its best month.
+
+3. CORRELATION (strategies losing together)
+Correlation | Max payout | Daily Sharpe
+------------+------------+-------------
+0           | 93%        | 0.71
+0.15 (used) | 88%        | 0.59
+0.30        | 80%        | 0.50
+0.50        | 73%        | 0.43
+
+Ten strategies on the same NQ open act like two or three.
+Different markets and different times of day matter more than the number of algos.
+
+4. CONSISTENCY (the Lucid rules)
+- Flex has no payout consistency rule. One big day is fine. Profit must reach $4,000 for max payout.
+- LucidPro has a 40% largest-day rule. High-RR recipes (1:2, 1:2.5) get a few big days = riskier on Pro.
+  Low-RR, high-win recipes are safer there.
+- Worst day vs the trailing floor is the real check: a -6R day at $200 = -$1,200, over half the $2,000 floor.
+  Keep worst day x risk under about 40% of the floor.
+
+5. OTHERS WORTH TRACKING
+- Losing streaks: the 20-day clock punishes a bad first week; the floor only trails up on gains.
+- Open loss vs closed loss: Lucid counts open losses; deep intraday dips bust earlier than closed P&L shows.
+- Trade count: Desk unseen stats rest on 60-300 trades per strategy. A 60% win rate on 100 trades is really ~50-70%.
+
+RANKING A CANDIDATE
+Daily Sharpe of the group > 0.5, win rate on the weak half of the data (not the average),
+correlation to the rest of the portfolio < 0.3, worst day under 40% of the floor.

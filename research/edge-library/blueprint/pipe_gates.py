@@ -273,7 +273,18 @@ def variant_rows(b: dict, others: list) -> list:
     return labels([L._row("P3.2", _met(at, floor), at, floor, f"no trade (need an average trade {want if floor == 0 else 'of ' + want})" if at is None else
                           f"average trade {_fig(at, (floor,), '$')} (need {want})"),
                    L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]) + winlane(b)
+                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]) + winlane(b) + funded(b)
+
+
+def funded(b: dict) -> list:
+    """THE FUNDED LINE on the picked box `b` (pipeline.json `funded`, the owner 2026-10-15; pipe_funded.py) -> row P3.14, which ASKS: the box's
+    build-day trades fall into a row of the 75 % table. Off (any other profile): none. A box without its trades' stops has no R: the row says so and misses."""
+    if not PR.funded():
+        return []
+    from . import pipe_funded as F
+    if b.get("trade_net") is None or b.get("trade_risk") is None:
+        return [L._row("P3.14", False, None, None, "no list of the box's trades and stops: it cannot be shown to fall into a row")]
+    return [F.row("P3.14", {"net": b["trade_net"], "risk": b["trade_risk"], "date": b["trade_date"]}, b["root"])]
 
 
 def _consistent(b: dict, need: dict) -> list:
