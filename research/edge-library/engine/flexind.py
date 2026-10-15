@@ -51,7 +51,7 @@ TIER1 = ("NFP", "CPI", "PPI", "RETAIL", "GDP", "PCE")                 # the 08:3
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri")
 DAY_RULES = ("all", "news", "nonews", "rel0830", "rel1000", "tier1", "notier1", "nfp", "cpi", "ppi", "retail", "gdp", "pce", "claims", "fomc", "nofomc",
              "ism", "jolts", "umich", *WEEKDAYS, "month_end", "month_start", "opex")
-KINDS_DIR = ("rsi", "price_ema", "ema_x", "macd", "zscore", "stoch", "roc", "cci", "vwap_dev", "price_sma", "sma_x")
+KINDS_DIR = ("rsi", "price_ema", "ema_x", "macd", "zscore", "stoch", "roc", "cci", "vwap_dev", "price_sma", "sma_x", "price_vwma")
 KINDS_REGIME = ("adx", "atr_rank", "bbw_rank", "er")
 KINDS = KINDS_DIR + KINDS_REGIME
 
@@ -210,6 +210,18 @@ class PriceSma(Ind):
     def _step(self, o, h, l, c, v, vw, tr):
         self.w.append(c)
         return (c - sum(self.w) / self.n) / self._atr if len(self.w) >= self.n and self._atr else None
+
+
+class PriceVwma(Ind):
+    def _init(self):
+        self.w = deque(maxlen=self.n)
+
+    def _step(self, o, h, l, c, v, vw, tr):
+        self.w.append((c, v))
+        if len(self.w) < self.n or not self._atr:
+            return None
+        vol = sum(x[1] for x in self.w)
+        return (c - sum(x[0] * x[1] for x in self.w) / vol) / self._atr if vol > 0 else None
 
 
 class SmaX(Ind):
@@ -384,7 +396,7 @@ class Er(Ind):
 
 
 _KINDS = {"rsi": Rsi, "price_ema": PriceEma, "ema_x": EmaX, "macd": Macd, "zscore": ZScore, "stoch": Stoch, "roc": Roc, "cci": Cci,
-          "vwap_dev": VwapDev, "price_sma": PriceSma, "sma_x": SmaX, "adx": Adx, "atr_rank": AtrRank, "bbw_rank": BbwRank, "er": Er}
+          "vwap_dev": VwapDev, "price_sma": PriceSma, "sma_x": SmaX, "price_vwma": PriceVwma, "adx": Adx, "atr_rank": AtrRank, "bbw_rank": BbwRank, "er": Er}
 
 
 def make(kind: str, n: int, m: int = 0, s: int = 0) -> Ind:
@@ -397,7 +409,7 @@ def make(kind: str, n: int, m: int = 0, s: int = 0) -> Ind:
 def bars_needed(kind: str, n: int, m: int = 0, s: int = 0) -> int:
     """The tf bars since the restart before the indicator can have a value (the module docstring's table)."""
     return {"rsi": n + 1, "price_ema": n, "ema_x": max(n, m), "macd": max(n, m), "zscore": n, "stoch": n, "roc": n + 1, "cci": n,
-            "vwap_dev": 1, "price_sma": n, "sma_x": max(n, m), "adx": 2 * n, "atr_rank": n + ATR_N, "bbw_rank": n + 20, "er": n + 1}[kind]
+            "vwap_dev": 1, "price_sma": n, "price_vwma": n, "sma_x": max(n, m), "adx": 2 * n, "atr_rank": n + ATR_N, "bbw_rank": n + 20, "er": n + 1}[kind]
 
 
 # ---- the two reads -----------------------------------------------------------------------------------------------------------------

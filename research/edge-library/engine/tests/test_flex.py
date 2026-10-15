@@ -32,6 +32,7 @@ from test_orb830 import BASE, FILL, HI, LO, PX, breaks_up, day, got, hold, run, 
 MS0 = ns("00:00") // 1_000_000
 ORB = B.WRAPPED["orb_close"]
 IND, WBRK, WBRA, WCAN = (B.WRAPPED[n] for n in ("ind_signal", "win_break", "win_bracket", "win_candle"))
+DISP = B.WRAPPED["displace"]
 BIG = {"hold_to": "day", "stop_mode": "pts", "stop_val": 400.0, "tgt_r": 0.0}        # a stop and no target that a test day never reaches
 
 
@@ -281,6 +282,30 @@ def test_win_candle_gates_all_must_hold():
     assert trades(go(WCAN, {**p, "body_pts": 6.25}, base)[1]) == []
     assert [x[1] for x in trades(go(WCAN, {**p, "body_r": 0.7}, base)[1])] == ["long"]    # 6 / 8.25 = 0.727
     assert trades(go(WCAN, {**p, "body_r": 0.8}, base)[1]) == []
+
+
+def test_displace_is_the_first_body_over_k_atr_of_the_bars_before_it():
+    flat = [(PX, PX + TICK, PX - TICK, PX, 40)] * 960
+    a = S._sec("09:50") // 60
+    big = (PX, PX + 6.5, PX - TICK, PX + 6.0, 40)                       # body 6.0, close 0.5 under the high (range 6.5 + tick)
+    p = {"tf": "5", "sess": "nyam", "k": 2.0}
+    bars = list(flat)
+    bars[a:a + 5] = [big, hold(PX + 6.0), hold(PX + 6.0), hold(PX + 6.0), hold(PX + 6.0)]
+    t = trades(go(DISP, p, bars)[1])
+    assert [x[1] for x in t] == ["long"] and t[0][0] == S._sec("09:55") + FILL
+    assert [x[1] for x in trades(go(DISP, {**p, "mode": "fade"}, bars)[1])] == ["short"]
+    small = list(flat)
+    small[a:a + 5] = [(PX, PX + 2.0, PX - TICK, PX + 1.0, 40)] + [hold(PX + 1.0)] * 4
+    assert trades(go(DISP, {**p, "k": 10.0}, small)[1]) == []               # body 1.0 is under 10 x ATR
+    assert [x[1] for x in trades(go(DISP, {**p, "close_r": 0.25}, bars)[1])] == ["long"]
+    soft = list(flat)
+    soft[a:a + 5] = [(PX, PX + 6.5, PX - TICK, PX + 3.0, 40)] + [hold(PX + 3.0)] * 4   # body 3.0, close mid-range
+    assert trades(go(DISP, {**p, "k": 1.0, "close_r": 0.25}, soft)[1]) == []
+    assert [x[1] for x in trades(go(DISP, {**p, "k": 1.0}, soft)[1])] == ["long"]
+    twice = list(bars)
+    b = S._sec("10:20") // 60
+    twice[b:b + 5] = [(PX + 6.0, PX + 6.0 + TICK, PX - 1.0, PX - 0.5, 40)] + [hold(PX - 0.5)] * 4
+    assert len(trades(go(DISP, p, twice)[1])) == 1                         # one trade a session
 
 
 # ---- the layer on the new families ------------------------------------------------------------------------------------------------------------------

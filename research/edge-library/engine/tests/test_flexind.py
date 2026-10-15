@@ -187,3 +187,16 @@ def test_price_sma_and_sma_x_are_the_plain_mean_over_atr():
             assert sx.v == pytest.approx((sum(c[i - 19:i + 1]) / 20 - sum(c[i - 49:i + 1]) / 50) / sx.atr())
         else:
             assert ps.v is None and sx.v is None
+
+
+def test_price_vwma_is_the_volume_weighted_mean_over_atr():
+    v = F.make("price_vwma", 3)
+    bars = [(10, 11, 9, 10, 1), (10, 12, 10, 12, 3), (12, 13, 11, 11, 2), (11, 12, 10, 12, 4)]
+    for o, h, l, c, vol in bars:
+        v.update(o, h, l, c, vol)
+    num = 12 * 3 + 11 * 2 + 12 * 4
+    assert abs(v.v - (12 - num / 9) / v.atr()) < 1e-9
+    z = F.make("price_vwma", 2)
+    for o, h, l, c, vol in bars[:3]:
+        z.update(o, h, l, c, 0)
+    assert z.v is None

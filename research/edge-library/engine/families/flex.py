@@ -1,4 +1,4 @@
-"""flex -- THREE ENTRY RULES THE OPEN LAYER ADDS (owner 2026-10-11: "any indicator in any setting, any time window"). Written from the rules below
+"""flex -- FIVE ENTRY RULES THE OPEN LAYER ADDS (owner 2026-10-11: "any indicator in any setting, any time window"). Written from the rules below
 before any result. NQ, ES and GC (no Level-2 feature: FEATURES = ()), 1 contract, hold_to = 'day' (flat 15:58 ET), the standard exit table.
 The nine settings of the open layer (families/_flex.py: an entry window, a day rule, an indicator gate) are on every one of them.
 
@@ -32,6 +32,13 @@ win_candle -- THE CANDLE OF ANY START, followed (or faded) at its close.
   * SIGNAL    = green -> long, red -> short, a doji none; gates all off at 0: `k` range >= k x ATR(14) of the bars before it, `body_r` body
                 >= body_r x its range, `vol_m` volume >= vol_m x the median of the same bar over 14 dates, `body_pts` body >= that many points.
   * ENTRY     = `mode` follow: a market order at the close in its direction; fade: against it. Structure stop = the candle's other extreme.
+
+displace -- A DISPLACEMENT CANDLE, followed (or faded) at its close (owner 2026-10-15).
+  * CANDLE    = ANY tf bar that closes inside the entry window / session pass (the open layer's w_start / w_end clip it).
+  * SIGNAL    = its body |close - open| >= `k` x ATR(14) of the bars BEFORE it (the ATR of the closed bars up to the previous one: the bar itself
+                is never in its own yardstick); `close_r` > 0 also needs the close in the outer `close_r` of its range (0 = off). A doji none.
+  * ENTRY     = `mode` follow: a market order at the close, green long / red short; fade: against it. The FIRST such bar is the trade;
+                one trade a session (max_tr 1); structure stop = the candle's other extreme, the exit cell's stop and target.
 
 REGISTRATION as orb830.py: join_blocks() puts the families into families/blocks.py's BASES and WRAPPED once. Tests: engine/tests/test_flex.py.
 """
@@ -229,6 +236,27 @@ class WinCandle(Template):
         self._mkt(ctx, side, struct=l if side == "long" else h)
 
 
+class Displace(Template):
+    """displace (module docstring)."""
+    DEFAULTS = {"k": 1.5, "close_r": 0.0, "mode": "follow", "max_tr": 1}
+    SCHEMA = {"k": ("float", 0.1, 10), "close_r": ("float", 0, 0.5), "mode": ("choice", ("follow", "fade"))}
+    WARM = 14                                        # the yardstick is a full 14-bar ATR; before that it is the evening's carried close
+    SCREEN_TFS = TFS
+    FEATURES = ()
+
+    def fam_signal(self, ctx):
+        p = self.p
+        o, h, l, c = self.O[-1], self.H[-1], self.L[-1], self.C[-1]
+        rng, body = h - l, abs(c - o)
+        if c == o or not self.atr_p or rng <= 0 or body < float(p["k"]) * self.atr_p:
+            return
+        cr = float(p["close_r"])
+        if cr > 0 and min(h - c, c - l) > cr * rng:
+            return
+        side = "long" if (c > o) == (p["mode"] == "follow") else "short"
+        self._mkt(ctx, side, struct=l if side == "long" else h)
+
+
 FAMILIES = {
     "ind_signal": (IndSignal, {}, False,
                    "ind_signal: an indicator (rsi, price_ema, ema_x, macd, zscore, stoch, roc, cci, vwap_dev, price_sma, sma_x; any period) crosses its line "
@@ -264,6 +292,14 @@ FAMILIES = {
                                  "or sellers who could not wait.",
                     "complexity": 5,
                     "variants": [{"start": "09:30", "k": 0.0}, {"start": "09:30", "k": 1.0}, {"start": "09:30", "k": 1.5}]}),
+    "displace": (Displace, {}, False,
+                 "displace: a tf bar closes with a body >= k x ATR(14) of the bars before it (optional: the close in the outer close_r of its "
+                 "range) -> a market entry with it (follow) or against it (fade); the first such bar of the session, one trade a session",
+                 {"rationale": "A candle several times the recent typical size shows orders that had to be filled at any price: price has "
+                               "been pushed away from where the other side wanted to trade, and the first such push of a session is "
+                               "where the momentum or the trapped side shows itself.",
+                  "complexity": 4,
+                  "variants": [{"k": 1.0}, {"k": 1.5}, {"k": 2.0}]}),
 }
 
 

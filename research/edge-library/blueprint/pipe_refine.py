@@ -40,7 +40,7 @@ GATE = {                                    # gate kind -> its textbook settings
     "er": (10, 26, 9, 0.3), "adx": (14, 26, 9, 20.0), "atr_rank": (20, 26, 9, 0.5), "bbw_rank": (60, 26, 9, 0.5),
     "rsi": (14, 26, 9, 10.0), "price_ema": (20, 26, 9, 0.5), "ema_x": (9, 21, 9, 0.0), "macd": (12, 26, 9, 0.0), "zscore": (20, 26, 9, 1.0),
     "stoch": (14, 26, 9, 30.0), "roc": (10, 26, 9, 0.2), "cci": (20, 26, 9, 100.0), "vwap_dev": (1, 26, 9, 1.0),
-    "price_sma": (50, 26, 9, 0.5), "sma_x": (20, 50, 9, 0.0)}
+    "price_sma": (50, 26, 9, 0.5), "sma_x": (20, 50, 9, 0.0), "price_vwma": (20, 26, 9, 0.0)}
 HINT = {                                    # what a missed row points at: the moves worth a look first (a pointer, never an order)
     "P3.11": ("regime", "indicator", "window"), "P3.12": ("days", "regime", "window"), "P3.13": ("regime", "sides"),
     "P1": ("regime", "sides", "days"), "P2": ("regime", "days", "sides")}
