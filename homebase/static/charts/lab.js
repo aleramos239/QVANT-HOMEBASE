@@ -81,7 +81,7 @@ async function openKey(key) {
   }
   paintAll();
   if (b && b.kind !== 'builtin') queueValidate(b, 0);
-  S.run = S.run && S.run.key === key ? S.run : null;
+  S.run = S.run && S.run.key === key ? S.run : (S.active && !S.active.dead && S.active.key === key ? S.active : null);   // coming back to a strategy that is still running shows its progress
   paintRes();
   if (b && b.kind !== 'new' && !S.run) restoreLastRun(b);
   setHash(b);
@@ -163,28 +163,47 @@ function formOf(b) {
   S.forms[id] = f;
   return f;
 }
+/* One backtest runs at a time. Clicking Run shows "Running" at once (the checks and the save come first and can take a
+   moment); starting another strategy's run stops the one in flight instead of doing nothing. */
+function release(run) {
+  run.dead = true;
+  if (S.active === run) { S.active = null; S.busy = false; }
+  if (S.run === run) S.run = null;
+}
 async function run() {
   const b = buf();
-  if (!b || S.busy) return;
-  if (b.kind !== 'builtin') {
-    if (!b.code.trim()) return;
-    const v = await validateNow(b);
-    if (!v || !v.ok) { log(`<span class="err">Fix the script first: ${esc(C.statusOf(v).text)}</span>`); return; }
-    if (isDirty(b) || b.kind === 'new') { if (!(await save(b))) return; }
+  if (!b) return;
+  if (S.busy && S.active && !S.active.dead) {
+    if (S.active.key === b.key) return;                              // this one is already running
+    const prev = S.active; prev.dead = true;
+    if (prev.rid) send('POST', `/api/tester/run/${encodeURIComponent(prev.rid)}/cancel`);
+    log(`Stopped the run of <b>${esc(prev.name || 'the other strategy')}</b> to run this one.`);
   }
-  const nb = buf(), f = formOf(nb);
-  if (!f) return;
+  if (b.kind !== 'builtin' && !b.code.trim()) return;
+  const me = { key: b.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: '', name: b.kind === 'builtin' ? b.id : b.name, dead: false };
+  S.busy = true; S.active = me; S.run = me;
+  paintRes(); paintHead();
+  if (b.kind !== 'builtin') {
+    const v = await validateNow(b);
+    if (me.dead) return;
+    if (!v || !v.ok) { release(me); log(`<span class="err">Fix the script first: ${esc(C.statusOf(v).text)}</span>`); paintRes(); paintHead(); return; }
+    if (isDirty(b) || b.kind === 'new') { if (!(await save(b))) { release(me); paintRes(); paintHead(); return; } }
+    if (me.dead) return;
+  }
+  const nb = buf(), f = nb ? formOf(nb) : null;
+  if (!f || !nb) { release(me); paintRes(); paintHead(); return; }
+  me.key = nb.key; me.strategy = f.strategy; me.name = nb.kind === 'builtin' ? nb.id : nb.name;
+  if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
-  if (pr) { log(`<span class="err">${esc(pr)}</span>`); return; }
-  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code) && await openRecordRun(nb, f)) return;
-  S.busy = true;
-  S.run = { key: nb.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: f.strategy };
+  if (pr) { release(me); log(`<span class="err">${esc(pr)}</span>`); paintRes(); paintHead(); return; }
+  if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); if (await openRecordRun(nb, f)) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
   paintRes(); paintHead();
   const r = await send('POST', '/api/tester/run', X.body(f));
-  if (!r.ok) { S.busy = false; S.run = null; log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
-  S.run.rid = r.json.id;
-  log(`Running <b>${esc(nb.kind === 'builtin' ? nb.id : nb.name)}</b> over ${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} inside the sandbox…`);
-  poll(S.run);
+  if (me.dead) return;
+  if (!r.ok) { release(me); log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
+  me.rid = r.json.id;
+  log(`Running <b>${esc(me.name)}</b> over ${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} inside the sandbox…`);
+  poll(me);
 }
 /* A "Blueprint record" file is the written card of an idea the research engine already ran: the script itself places no
    trades, so running it here would only ever say 0 trades. Show the idea's own latest run with trades instead. */
@@ -204,27 +223,33 @@ async function openRecordRun(nb, f) {
   return true;
 }
 async function poll(run) {
-  while (S.run === run) {
+  const viewing = () => S.run === run;                               // the user may have gone to another strategy meanwhile: the run still finishes
+  const settle = () => {
+    if (S.active === run) { S.active = null; S.busy = false; }
+    if (!viewing() && !S.run && S.cur === run.key) S.run = run;     // back on its strategy with nothing else open: show it
+  };
+  while (!run.dead) {
     const r = await send('GET', `/api/tester/run/${encodeURIComponent(run.rid)}`);
-    if (S.run !== run) return;
-    if (r.ok) { run.st = r.json; paintRes(); }
+    if (run.dead) return;
+    if (r.ok) { run.st = r.json; if (viewing()) paintRes(); }
     const s = r.ok ? r.json.status : 'error';
     if (s === 'done') {
       const bd = await send('GET', `/api/tester/run/${encodeURIComponent(run.rid)}/bundle`);
-      if (S.run !== run) return;
+      if (run.dead) return;
       run.bundle = bd.ok ? bd.json : null;
-      S.busy = false;
+      settle(); run.dead = true;
+      const who = viewing() ? '' : ` <b>${esc(run.name || '')}</b>`;
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
-        log(`Ran in the sandbox · <b>${esc(String(a.trades ?? 0))} trades</b> · <a data-act="show">Show trades on the chart ›</a>`);
+        log(`Ran${who} in the sandbox · <b>${esc(String(a.trades ?? 0))} trades</b>${viewing() ? ' · <a data-act="show">Show trades on the chart ›</a>' : ' · open the strategy to see it'}`);
         const held = run.bundle.run.controls && run.bundle.run.controls.blocked;
         if (held && Object.keys(held).length) log(`Trade rules held back ${esc(Object.entries(held).map(([k, n]) => `${n} × ${k}`).join(', '))}`);
       } else log('<span class="err">The run finished but its report could not be loaded</span>');
-      paintRes(); paintHead(); syncChart();
+      paintRes(); paintHead(); if (viewing()) syncChart();
       return;
     }
     if (s === 'error' || s === 'cancelled') {
-      S.busy = false;
+      settle(); run.dead = true;
       const msg = s === 'cancelled' ? 'Cancelled' : `Failed: ${esc((r.json && r.json.error) || r.error || 'unknown error')}`;
       log(`<span class="${s === 'error' ? 'err' : ''}">${msg}</span>`);
       run.st = { ...(run.st || {}), status: s }; paintRes(); paintHead();
@@ -233,7 +258,12 @@ async function poll(run) {
     await new Promise((res) => setTimeout(res, 550));
   }
 }
-async function cancelRun() { if (S.run && S.run.rid && S.busy) await send('POST', `/api/tester/run/${encodeURIComponent(S.run.rid)}/cancel`); }
+async function cancelRun() {
+  const a = S.active;
+  if (!a || a.dead) return;
+  if (!a.rid) { release(a); log('Cancelled'); paintRes(); paintHead(); return; }     // still checking or saving: nothing is out yet
+  await send('POST', `/api/tester/run/${encodeURIComponent(a.rid)}/cancel`);
+}
 
 /* ---- the workspace: four panels, shown or hidden; Code and Chart share the middle ---- */
 const PANELS = ['lib', 'code', 'chart', 'res'];
@@ -1900,7 +1930,7 @@ function paintHead() {
   const b = buf(), doc = document.getElementById('labDoc'), acts = document.getElementById('labActs');
   if (!doc || !acts) return;
   if (!b) { doc.innerHTML = ''; acts.innerHTML = ''; return; }
-  const ro = b.kind === 'builtin', busy = S.busy, dirty = isDirty(b);
+  const ro = b.kind === 'builtin', busy = !!(S.busy && S.active && S.active.key === b.key), dirty = isDirty(b);
   let cls = '', text = '', tip = '';
   if (ro) text = 'Built-in · read-only';
   else if (locked(b)) { cls = ''; text = 'On the Desk · locked'; tip = 'It is the code the Desk copied. Press the lock to edit it; the copy on the Desk changes only when you promote it again.'; }
@@ -2128,7 +2158,7 @@ function heatPaint() {
 }
 async function heatRun() {
   const b = buf();
-  if (!b || S.busy) return;
+  if (!b || (S.busy && S.active && S.active.key === b.key)) return;
   if (b.kind !== 'builtin') {
     if (!b.code.trim()) return;
     const v = await validateNow(b);
@@ -2345,7 +2375,7 @@ function paintRes() {
   if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
   const r = S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
   let main = '', settingsDone = false;
-  if (r && !r.bundle && (S.busy || (r.st && r.st.status === 'queued'))) {
+  if (r && !r.bundle && !r.dead && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
     main = `<div class="rs-h"><b>Backtest</b></div><div class="rs-prog"><div class="t">${esc(p.text || 'Starting…')}</div><div class="rs-bar${ind ? ' ind' : ''}"><i style="width:${ind ? 38 : Math.round(p.frac * 100)}%"></i></div>
       <button class="btn btn-outline btn-sm" data-act="cancel">Cancel</button></div>`;
