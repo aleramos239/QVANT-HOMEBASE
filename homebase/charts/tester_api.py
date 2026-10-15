@@ -1229,8 +1229,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(409, str(e)) from None
 
     @r.get("/runs")
-    def recent_runs():
-        return manager.runs_list()
+    def recent_runs(limit: int = 50, strategy: str | None = None):
+        return manager.runs_list(max(1, min(int(limit), 500)), strategy)
 
     def known_grid(gid: str):
         try:

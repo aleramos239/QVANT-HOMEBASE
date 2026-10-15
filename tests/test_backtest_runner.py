@@ -389,3 +389,17 @@ def test_bundle_bytes_reads_a_missing_or_broken_file_as_null(tmp_path):
     got = json.loads(runner.read_bundle_bytes(d))
     assert got["equity"] is None and got["propsim"] is None
     assert got == runner.read_bundle(d)
+
+
+def test_runs_list_can_ask_for_one_strategy_beyond_the_newest_fifty(tmp_path):
+    m = RunManager(tmp_path / "t", archive=nq_archive(tmp_path / "ticks"), cache=tmp_path / "cache")
+    import json
+    for i in range(60):
+        d = m.runs / f"20261013-18{i:02d}00-draft_x_{i}-a{i:03d}"
+        d.mkdir(parents=True)
+        (d / "request.json").write_text(json.dumps({"strategy": "draft_old" if i == 0 else "draft_new", "created": "c"}))
+        (d / "status.json").write_text(json.dumps({"status": "done"}))
+    assert len(m.runs_list()) == 50 and all(r["strategy"] == "draft_new" for r in m.runs_list())
+    old = m.runs_list(50, "draft_old")
+    assert [r["strategy"] for r in old] == ["draft_old"]
+    assert len(m.runs_list(5, "draft_new")) == 5

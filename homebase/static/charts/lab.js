@@ -208,7 +208,7 @@ async function run() {
 /* A "Blueprint record" file is the written card of an idea the research engine already ran: the script itself places no
    trades, so running it here would only ever say 0 trades. Show the idea's own latest run with trades instead. */
 async function openRecordRun(nb, f) {
-  const l = await send('GET', '/api/tester/runs?limit=200');
+  const l = await send('GET', `/api/tester/runs?limit=50&strategy=${encodeURIComponent(f.strategy)}`);     // asks for this idea's runs only: it can be older than the newest 50
   const list = l.ok && l.json ? (Array.isArray(l.json) ? l.json : l.json.runs || []) : [];
   const mine = list.filter((x) => x && x.strategy === f.strategy && x.status === 'done' && (x.trades || 0) > 0);
   const hit = mine[0];

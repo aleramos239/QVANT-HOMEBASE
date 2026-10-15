@@ -508,11 +508,17 @@ class RunManager:
             except ValueError:
                 pass
 
-    def runs_list(self, limit: int = 50) -> list[dict]:
+    def runs_list(self, limit: int = 50, strategy: str | None = None) -> list[dict]:
+        """Newest first. `strategy` keeps only that strategy's runs, taken from all of them, so an older run is
+        found even when 50 newer ones of other strategies sit in front of it."""
         out = []
         for d in sorted((p for p in self.runs.iterdir() if RUN_ID.match(p.name)),
-                        key=lambda p: p.name, reverse=True)[:limit]:
+                        key=lambda p: p.name, reverse=True):
+            if len(out) >= limit:
+                break
             req = read_json(d / "request.json", {}) or {}
+            if strategy is not None and req.get("strategy") != strategy:
+                continue
             st = read_json(d / "status.json", {}) or {}
             meta = read_json(d / "run.json", {}) or {}
             allc = ((meta.get("report") or {}).get("summary") or {}).get("all") or {}
