@@ -42,7 +42,7 @@ from .client import Client, ToolError
 from .desk_client import DeskClient
 
 ET = ZoneInfo("America/New_York")
-QUIET = (dt.time(9, 10), dt.time(9, 35))          # weekdays ET: no OPERATE tool starts here
+QUIET = (dt.time(0, 0), dt.time(0, 0))          # EMPTY since 2026-10-16 (was 09:10-09:35: no OPERATE tool starts)
 EXPORT_PREFIX = "/api/export/"
 LAUNCHD_LABELS = {"desk": "com.ramosquant.homebase", "charts": "com.ramosquant.homebase-charts",
                   "ticks": "com.ramosquant.homebase-ticks"}

@@ -28,6 +28,37 @@ def _outside_the_quiet_window(monkeypatch):
     monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 12, 0, tzinfo=slots.ET))
 
 
+# The 09:20-09:35 ET windows were EMPTIED on 2026-10-16 (owner: no limit at 9:30). The machinery stays, so the
+# tests that prove it (refuse inside the window, wait out its end, stop mid-batch) run against the OLD windows,
+# put back here for every test but tests/test_quiet_windows_removed.py, which pins production's empty ones.
+_OLD_WINDOWS = {
+    "homebase.charts": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.charts.server": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.charts.export": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.charts.tickfeed": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.ticks": {"QUIET": (dt.time(9, 20), dt.time(9, 35)), "CHARTS_QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.leveltimer": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
+    "homebase.server": {"GONE_QUIET": (dt.time(9, 20), dt.time(9, 35)),
+                        "GONE_CHECK_QUIET": (dt.time(9, 10), dt.time(9, 35)),
+                        "FEED_QUIET": (dt.time(9, 20), dt.time(9, 35)),
+                        "RENEW_QUIET": (dt.time(9, 19, 30), dt.time(9, 35))},
+    "homebase.broker.tradovate": {"RENEW_QUIET": (dt.time(9, 19, 30), dt.time(9, 35))},
+    "homebase.claude_mcp.desk_tools": {"QUIET": (dt.time(9, 10), dt.time(9, 35))},
+}
+
+
+@pytest.fixture(autouse=True)
+def _old_quiet_windows(request, monkeypatch):
+    if request.node.fspath.basename == "test_quiet_windows_removed.py":
+        return
+    import importlib
+    for mod, names in _OLD_WINDOWS.items():
+        m = importlib.import_module(mod)
+        for name, val in names.items():
+            if hasattr(m, name):
+                monkeypatch.setattr(m, name, val)
+
+
 @pytest.fixture(autouse=True)
 def _no_broker_connections(monkeypatch):
     """Tests never open broker connections (GOTCHAS): a test that reaches the Tradovate

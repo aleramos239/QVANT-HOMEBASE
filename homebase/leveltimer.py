@@ -40,7 +40,7 @@ from .levels import SHAPES, compute_geometry, is_early_close_skip
 from .timer import _orders_in, _positions_in
 
 ET = ZoneInfo("America/New_York")
-QUIET = (dt.time(9, 20), dt.time(9, 35))     # weekdays: no market-data request
+QUIET = (dt.time(0, 0), dt.time(0, 0))     # EMPTY since 2026-10-16 (was 09:20-09:35: no market-data request)
 TICK_S = 0.2
 STAGE_LEAD_EXTRA_MIN = 5       # the quote is subscribed this long before the last bar the ATR needs begins
 HISTORY_AFTER_S = 180          # history is read this long after the subscription (it closes the partial minute)

@@ -60,8 +60,8 @@ SIBLING_INTERVAL_S = 0.25  # engine.sibling_tick: the close watch on the other e
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
                            # successful sync at least this much later still misses it
-GONE_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: never unbook/remove in here
-GONE_CHECK_QUIET = (dt.time(9, 10), dt.time(9, 35))   # ... and never a confirming re-sync
+GONE_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:20-09:35: never unbook/remove)
+GONE_CHECK_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:10-09:35: no confirming re-sync)
 GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
 ADD_MANY_MAX = 60           # accounts in one "add several" (a prop firm hands out ~20)
@@ -73,7 +73,7 @@ READINESS_FROM = (9, 25)
 FEED_FROM = (8, 55)        # the price feed runs through the RTH day, weekdays
 FEED_UNTIL = (16, 10)
 FEED_RETRY_S = 30
-FEED_QUIET = (dt.time(9, 20), dt.time(9, 35))   # weekdays ET: no non-urgent feed (re)connect
+FEED_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:20-09:35: no non-urgent feed (re)connect)
 
 
 def _equity_path() -> Path:

@@ -42,8 +42,8 @@ INSTRUCTIONS = (
     "Desk bridge: desk_status / desk_journal / desk_readiness / data_coverage / services_health read the live "
     "trading desk; account_reconnect and account_remove are its only two safe write actions. No tool anywhere "
     "in this server can place or cancel an order, flatten, kill, arm/disarm, book/unbook an account or touch a "
-    "strategy or chart-trading switch -- there is no trading tool, live or in the tester. Every desk write is "
-    "refused 09:20-09:35 ET on weekdays, same as the tester's own jobs.")
+    "strategy or chart-trading switch -- there is no trading tool, live or in the tester. No desk write or "
+    "tester job is paused at 9:30: the 09:20-09:35 ET window was removed on 2026-10-16 at the owner's word.")
 
 
 def _log(msg: str) -> None:
