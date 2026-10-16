@@ -70,6 +70,15 @@ def test_a_daytime_run_spends_at_most_its_pages_and_the_next_one_goes_on(tmp_pat
     assert held(path, ticks[:16 * 60 + 1])
 
 
+def test_a_full_run_by_day_is_not_capped_at_the_daytime_pages(tmp_path, monkeypatch):
+    """Refresh data's --full: the same daytime run, without DAY_ROOT_PAGES -- the hole is filled in one run."""
+    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET),
+                                          page=2)
+    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), cache={}, day=True, full=True))
+    assert len(broker.asked) > T.DAY_ROOT_PAGES
+    assert held(path, ticks[:16 * 60 + 1])
+
+
 def test_a_daytime_run_gives_each_root_its_share_of_the_pages(tmp_path, monkeypatch):
     """2026-10-05 14:54, the live stream thinned and every root's tape to fetch: NQ took 38 of the
     run's 45 pages, ES the other 7, thirteen roots none. Now DAY_ROOT_PAGES a root, in priority

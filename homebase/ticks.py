@@ -781,7 +781,8 @@ def _et_span(a: dt.datetime, b: dt.datetime) -> str:
 async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                  base: Path = ARCHIVE, ws: TradovateWS | None = None,
                  now: dt.datetime | None = None, *, cache: dict | None = None,
-                 day: bool | None = None, charts_usage: Path | None = None) -> list[dict]:
+                 day: bool | None = None, charts_usage: Path | None = None,
+                 full: bool = False) -> list[dict]:
     """Fetch what the plan names, merging each piece into its session's archive
     file as it lands, then merge the live recordings no fetch touched. At night
     (outside 08:00-17:05 ET on weekdays) it runs until done or 08:00 and waits
@@ -791,7 +792,10 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
     when it was cut short is merged all the same. Says nothing when there is
     nothing to do. Returns the last manifest written per session; raises
     NoMdToken (once the live recordings are merged) when the desk has no md
-    token on disk -- run() waits for one."""
+    token on disk -- run() waits for one. full (the Refresh data button): by day, but
+    without the DAY_PAGES / DAY_ROOT_PAGES caps -- it still stops at 09:20-09:35, on a
+    rate-limit reply and when the live login's hour is spent (the shared cap), so the
+    charts keep their share."""
     now = now or now_et()
     day = deadline_passed(now) if day is None else day
     cache = {} if cache is None else cache
@@ -803,7 +807,7 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
         conn = ws if isinstance(ws, MDConn) else MDConn(ws, Budget(cache.setdefault(MD_USED, []),
                                                                     charts_usage, day))
         own = ws is None
-        budget = DAY_PAGES if day else None
+        budget = DAY_PAGES if day and not full else None
         spent: dict = {}            # root -> its pages of this run (by day: DAY_ROOT_PAGES at most)
         refused: set = set()        # sessions whose merge was refused in this run: no more of their pieces now
         grace = dt.timedelta(minutes=SESSION_GRACE_MIN)
@@ -1045,6 +1049,9 @@ def main(argv=None) -> int:
                     help="write each recent front-month file's hour-by-hour coverage into its "
                          "manifest (data files untouched), then the report (no market data)")
     ap.add_argument("--sessions", type=int, default=30, help="sessions per root the report covers")
+    ap.add_argument("--full", action="store_true",
+                    help="by day too, without the per-run page caps (the Refresh data button); still never "
+                         "09:20-09:35 ET, and it stops when the live login's hour is spent")
     fm = ap.add_argument_group("Massive gap-fill (manual, off by default; homebase.tickmassive)")
     fm.add_argument("--fill-from-massive", action="store_true",
                     help="fill the archive from Massive flat files (env MASSIVE_S3_KEY / MASSIVE_S3_SECRET)")
@@ -1080,7 +1087,7 @@ def main(argv=None) -> int:
             log(str(e))
             return 1
         return 0
-    return run(roots, [dt.date.fromisoformat(a.date)] if a.date else None, base, a.sessions)
+    return run(roots, [dt.date.fromisoformat(a.date)] if a.date else None, base, a.sessions, full=a.full)
 
 
 def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
@@ -1097,7 +1104,7 @@ def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
 
 
 def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
-        token_wait_s: float = TOKEN_WAIT_S, token_poll_s: float = TOKEN_POLL_S) -> int:
+        token_wait_s: float = TOKEN_WAIT_S, token_poll_s: float = TOKEN_POLL_S, full: bool = False) -> int:
     """One run of the job (launchd: hourly, on load, 17:20 and 05:30): fetch
     and merge whatever is missing (record), then the data watchdog (data_watch),
     then the coverage report when the run changed something or the last report
@@ -1120,7 +1127,8 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
                 while True:
                     try:
                         written += asyncio.run(record(roots, dates, base, cache=cache,
-                                                      charts_usage=state_dir() / "charts" / "md_usage.json"))
+                                                      charts_usage=state_dir() / "charts" / "md_usage.json",
+                                                      full=full))
                         break
                     except NoMdToken as ex:
                         written += ex.written

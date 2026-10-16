@@ -2,7 +2,9 @@
 SEPARATE process (this service also records live ticks, so a fetch that waits out the broker's rate limit
 must never sit on its event loop).
 
-    ``python -m homebase.ticks``    the hourly/nightly job, by hand: fetches from Tradovate's tick history
+    ``python -m homebase.ticks --full``  the hourly/nightly job, by hand, without the daytime page caps (a click
+                                    wants everything the broker still has; it stops when the live login's hour
+                                 is spent, so the charts keep theirs -- click again to go on): fetches from Tradovate's tick history
                                     exactly what the archive and the live recording lack, for every root
                                     (homebase.ticks.ROOTS), merges it, then rewrites the coverage report
 
@@ -49,7 +51,7 @@ def _now() -> str:
 def plan(python: str) -> list[dict]:
     """The steps, in order: {key, label, argv}. One: Tradovate's tick history, nothing bought."""
     return [{"key": "broker", "label": "Fetch missing ticks from Tradovate",
-             "argv": [python, "-m", "homebase.ticks"]}]
+             "argv": [python, "-m", "homebase.ticks", "--full"]}]
 
 
 def coverage_summary(path: Path) -> dict | None:
