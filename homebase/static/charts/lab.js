@@ -173,6 +173,7 @@ function release(run) {
 async function run() {
   const b = buf();
   if (!b) return;
+  S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
     const prev = S.active; prev.dead = true;
@@ -216,7 +217,7 @@ async function openRecordRun(nb, f) {
   const bd = await send('GET', `/api/tester/run/${encodeURIComponent(hit.id)}/bundle`);
   if (!bd.ok || !bd.json) return false;
   S.busy = false;
-  S.run = { key: nb.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: f.strategy };
+  S.run = { key: nb.key, rid: hit.id, st: { status: 'done' }, bundle: bd.json, strategy: f.strategy, record: true };
   const rg = (hit.range && (hit.range.label || hit.range.id)) || '';
   log(`<b>${esc(nb.name || f.strategy)}</b> is a written record: its script places no trades, so this is its saved research-engine run${rg ? ` (${esc(rg)})` : ''} · <b>${esc(String(hit.trades))} trades</b> · <a data-act="show">Show trades on the chart ›</a>`);
   paintRes(); paintHead(); syncChart();
@@ -2310,12 +2311,15 @@ function deskState(b) {
   const dirty = isDirty(b), sha = dirty ? '' : shaNow(b.code);
   const r = S.run && S.run.key === b.key && !S.run.grid ? S.run : null;      // (a heat-map cell has no run of its own to promote)
   /* the hash only tells the same code on the Desk from other code; it never gates Promote -- the Desk judges the run when it is asked */
+  /* a written record's run is the research engine's, not the file's code: the Desk would refuse it (the file places no orders) */
+  if (r && r.record) return { label: 'Promote to Desk', hint: RECORD_NO_DESK, disabled: true, action: null };
   return C.promoteState({ kind: 'draft', dirty, hasRun: !!(r && r.bundle && r.rid), row: (S.desk && S.desk.get(b.name)) || null, sha });
 }
+const RECORD_NO_DESK = 'Cannot go on the Desk: this file is a written record and places no orders. Rebuild the idea as a real strategy first.';
 /* The hint of the row, as a line under the group: what a keyboard or a screen reader reaches (the row's title is for the mouse). */
 function deskNote(b) {
   const st = deskState(b);
-  return st ? `<div class="rs-take" id="deskHint">${esc(st.hint)}</div>` : '';
+  return st ? `<div class="rs-take" id="deskHint">${esc(st.hint)}</div>${S.deskErr ? `<div class="rs-take err" role="alert">${esc(S.deskErr)}</div>` : ''}` : '';
 }
 function deskRows(b) {
   const st = deskState(b);
@@ -2337,11 +2341,11 @@ function deskGo() {
 async function promoteToDesk(b) {
   const r = S.run && S.run.key === b.key ? S.run : null;
   if (!r || !r.rid || !r.bundle || r.grid) return;      // a heat-map cell has no run of its own to promote
-  S.deskBusy = true; paintRes();
+  S.deskBusy = true; S.deskErr = ''; paintRes();
   const a = await send('POST', '/api/tester/desklab/promote', { name: b.name, run_id: r.rid });
   S.deskBusy = false;
   const j = a.json || {};
-  if (!a.ok || j.ok === false) log(`<span class="err">${esc(String(j.detail || a.error || 'It did not work.'))}</span>`);
+  if (!a.ok || j.ok === false) { S.deskErr = String(j.detail || a.error || 'It did not work.'); log(`<span class="err">${esc(S.deskErr)}</span>`); }
   else for (const line of C.deskSaid(j)) log(esc(line));
   await loadDesk();
   paintRes(); paintLib();
