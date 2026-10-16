@@ -331,6 +331,13 @@ def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) ->
                 _until(wait, sleep, idle_s)
 
 
+def _python() -> str:
+    """The research Python (numpy, pandas, pyarrow) when the repo has it, else this one: a runner started from a bare system Python
+    stops every idea at stage 1 with "No module named 'pyarrow'"."""
+    venv = W.parent.parent / ".venv-research" / "bin" / "python"
+    return str(venv) if venv.exists() else sys.executable
+
+
 def start(root=None) -> dict:
     """The runner as a detached process (jobs.start's way) -> {"pid", "already"}; already = one is working, nothing started."""
     r = PS.root(root)
@@ -338,7 +345,7 @@ def start(root=None) -> dict:
         return {"pid": _pid(r), "already": True}
     r.mkdir(parents=True, exist_ok=True)
     with open(r / OUT, "ab") as out:
-        p = subprocess.Popen([sys.executable, str(W / "bp.py"), "pipe", "_loop", f"--root={r}"], stdin=subprocess.DEVNULL, stdout=out, stderr=out,
+        p = subprocess.Popen([_python(), str(W / "bp.py"), "pipe", "_loop", f"--root={r}"], stdin=subprocess.DEVNULL, stdout=out, stderr=out,
                              start_new_session=True, cwd=str(W))
     (r / PID).write_text(str(p.pid))
     return {"pid": p.pid, "already": False}

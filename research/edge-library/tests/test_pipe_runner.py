@@ -456,7 +456,9 @@ def test_start_is_a_detached_child_or_says_one_is_working(root, monkeypatch):
     Child.made.clear()
     assert PR.start(root) == {"pid": 4242, "already": False}
     (argv, kw), = Child.made
-    assert argv == [sys.executable, str(W / "bp.py"), "pipe", "_loop", f"--root={root}"]
+    assert argv == [PR._python(), str(W / "bp.py"), "pipe", "_loop", f"--root={root}"]
+    venv = W.parent.parent / ".venv-research" / "bin" / "python"
+    assert PR._python() == (str(venv) if venv.exists() else sys.executable)
     assert kw["stdin"] == PR.subprocess.DEVNULL and kw["start_new_session"] is True and kw["cwd"] == str(W)
     assert kw["stdout"] is kw["stderr"] and str(kw["stdout"].name) == str(root / PR.OUT) and kw["stdout"].mode == "ab"
     assert (root / PR.PID).read_text() == "4242"
