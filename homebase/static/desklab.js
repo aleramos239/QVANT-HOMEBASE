@@ -232,6 +232,15 @@
       aria: "Running net P&L after costs on the unseen days, by day",
     };
   }
+  // Realized reward:risk (average win over average loss) and the Sharpe of the unseen run; dashes when the run does not carry them.
+  function unseenExtras(u) {
+    var rr = num(u.rr), sh = num(u.sharpe);
+    var label = typeof u.rr_label === "string" && /^1:\d/.test(u.rr_label) ? u.rr_label : rr === null ? DASH : "1:" + rr.toFixed(2);
+    return [
+      { k: "Realized RR", v: label },
+      { k: "Sharpe", v: sh === null ? DASH : sh.toFixed(2) },
+    ];
+  }
   var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected cheque"];
   function results(res) {
     var wait = !res || typeof res !== "object";
@@ -244,7 +253,7 @@
     return {
       unseen: {
         title: "Unseen days (OOS)",
-        rows: u ? [{ k: "Days", v: from && to ? from + " – " + to : DASH }].concat(figures({ run: u })) : [],
+        rows: u ? [{ k: "Days", v: from && to ? from + " – " + to : DASH }].concat(figures({ run: u }), unseenExtras(u)) : [],
         note: wait ? RES_WAIT : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {

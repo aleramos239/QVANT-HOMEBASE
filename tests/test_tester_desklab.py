@@ -518,7 +518,8 @@ def write_run(tmp_path, rid, name="nq_bars", code=CODE, rng=UNSEEN, inputs=None,
     (d / "trades.json").write_text("[]")
     if status == "done":
         (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs, "qty": qty, "range": rng,
-                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net}}}}))
+                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net, "rr": 2.81, "rr_label": "1:2.81",
+                                                                                 "sharpe": 0.43}}}}))
     return rid
 
 
@@ -551,7 +552,8 @@ def test_results_show_the_saved_unseen_run_of_this_copy_and_the_prop_sim_of_both
     newest = write_run(tmp_path, "20261011-130000-draft_nq_bars-bb02", inputs={"lookback": "8", "sl_pts": 20, "tp_pts": 40.0})
     res = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
     assert res["unseen"] == {"id": newest, "range": UNSEEN, "net": 900.0, "trades": 41, "win_rate": 48.8,
-                             "profit_factor": 1.31, "max_drawdown": -2100.0}
+                             "profit_factor": 1.31, "max_drawdown": -2100.0,
+                             "rr": 2.81, "rr_label": "1:2.81", "sharpe": 0.43}
     assert res["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
     assert tester_api.DESKLAB_PROP == "lucid-pro-50k-no-dll@2026-10-11"
     assert scored == [tester_api.DESKLAB_PROP] * 2, "each run is scored once, on the pipeline's account (LucidPro no-DLL), and kept"
@@ -687,7 +689,8 @@ def write_twin_run(tmp_path, rid, rec, rng=UNSEEN, inputs=None, qty=None, status
     (d / "trades.json").write_text("[]")
     if status == "done":
         (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs, "qty": qty, "range": rng,
-                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net}}}}))
+                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net, "rr": 2.81, "rr_label": "1:2.81",
+                                                                                 "sharpe": 0.43}}}}))
     return rid
 
 

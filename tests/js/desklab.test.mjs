@@ -261,7 +261,7 @@ test('the research blocks: the unseen days and the prop sim, every word escaped,
   const hostile = '<img src=x onerror=alert(1)>';
   const esc = (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const head = { account: hostile, eval_pass_p: 0.41, bust_p: 0.59, median_days_to_pass: 14, funded_payout_p: 0.3, funded_expected_cheque: 602 };
-  const res = { nq_orb: { unseen: { range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66, profit_factor: 1.18, max_drawdown: -12397 },
+  const res = { nq_orb: { unseen: { range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66, profit_factor: 1.18, max_drawdown: -12397, rr: 2.81, rr_label: '1:2.81', sharpe: 0.43 },
     prop: { build: head, unseen: null } } };
   const ctx = vm.createContext({ DeskLab: D, DESKRES: res, esc, hostile });
   vm.runInContext(`${LABVIEW.slice(LABVIEW.indexOf('function labResHtml('), LABVIEW.indexOf('function todayLabRow('))}
@@ -269,6 +269,8 @@ test('the research blocks: the unseen days and the prop sim, every word escaped,
   assert.match(ctx.html, /^<div class="labres" data-for="lab_nq_orb">/);
   assert.match(ctx.html, /<div class="figs labres-unseen" data-h="Unseen days \(OOS\)"><div class="f"><div class="k">Days<\/div><div class="v mono">Jul 2025 – Oct 2026<\/div><\/div>/);
   assert.match(ctx.html, /<div class="k">Net<\/div><div class="v mono">\+\$16,342<\/div>/);
+  assert.match(ctx.html, /<div class="k">Realized RR<\/div><div class="v mono">1:2\.81<\/div>/);
+  assert.match(ctx.html, /<div class="k">Sharpe<\/div><div class="v mono">0\.43<\/div>/);
   assert.match(ctx.html, /<div class="f fh"><div class="k"><\/div><div class="v mono">Build<\/div><div class="v mono">Unseen<\/div><\/div>/);
   assert.match(ctx.html, /<div class="k">Passes the eval<\/div><div class="v mono">41%<\/div><div class="v mono">—<\/div>/);
   assert.doesNotMatch(ctx.html + ctx.none, /<img/);
@@ -1085,12 +1087,14 @@ test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing',
 
 test('results: the saved run on the unseen days and the prop sim of both runs, in words', () => {
   const head = { account: 'LucidFlex 50K', eval_pass_p: 0.3688, bust_p: 0.6312, median_days_to_pass: 13, funded_payout_p: 0.3326, funded_expected_cheque: 602.3 };
-  const unseen = { id: 'r', range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66.2, profit_factor: 1.183, max_drawdown: -12397 };
+  const unseen = { id: 'r', range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66.2, profit_factor: 1.183, max_drawdown: -12397, rr: 2.814, rr_label: '1:2.81', sharpe: 0.431 };
   const full = D.results({ unseen, prop: { build: { ...head, eval_pass_p: 0.41 }, unseen: head } });
   assert.equal(full.unseen.title, 'Unseen days (OOS)');
   assert.deepEqual(full.unseen.rows.map((r) => [r.k, r.v]), [['Days', 'Jul 2025 – Oct 2026'], ['Net', '+$16,342'], ['Win rate', '66%'],
-    ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397']]);
+    ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Realized RR', '1:2.81'], ['Sharpe', '0.43']]);
   assert.equal(full.unseen.note, '');
+  // an older saved run has no label: the ratio is written the same way; no figures at all -> dashes
+  assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-2).map((r) => r.v), ['1:0.50', '—']);
   assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
   assert.deepEqual(full.prop.head, ['Build', 'Unseen']);
   assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
@@ -1119,7 +1123,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
     const w = D.results(bad);
     assert.deepEqual([w.unseen.rows, w.unseen.note, w.prop.rows, w.prop.note], [[], 'Reading…', [], 'Reading…']);
   }
-  assert.deepEqual(D.results({ unseen: { range: {} }, prop: {} }).unseen.rows.map((r) => r.v), ['—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(D.results({ unseen: { range: {} }, prop: {} }).unseen.rows.map((r) => r.v), ['—', '—', '—', '—', '—', '—', '—', '—']);
 });
 
 test('curve: the unseen run\'s running total, or nothing', () => {

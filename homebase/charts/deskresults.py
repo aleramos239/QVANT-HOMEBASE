@@ -49,9 +49,13 @@ def unseen_only(rng) -> bool:
 PENDING = ("queued", "running", None)      # a run's status.json while it is waiting or going (None: not written yet)
 
 
+# Read off the unseen run's summary besides the headline: the realized reward:risk (avg win / avg loss) and its label, the Sharpe.
+EXTRA = ("rr", "rr_label", "sharpe")
+
+
 def unseen_state(runs: Path, rec: dict) -> dict:
     """Where the unseen-days run of THIS copy stands -- the same code, settings and size, read off the saved requests:
-    {"state": "done", "run": {id, range, net, trades, win_rate, profit_factor, max_drawdown}} for the newest finished one,
+    {"state": "done", "run": {id, range, net, trades, win_rate, profit_factor, max_drawdown, rr, rr_label, sharpe}} for the newest finished one,
     {"state": "pending"} while one waits or goes, {"state": "failed"} for one that ended in error or was cancelled (it is
     never started again by itself), {"state": "none"} when there is none."""
     want = resolved_params(rec)
@@ -68,7 +72,8 @@ def unseen_state(runs: Path, rec: dict) -> dict:
             summary = (((run or {}).get("report") or {}).get("summary") or {}).get("all") if isinstance(run, dict) else None
             if isinstance(summary, dict):
                 return {"state": "done", "run": {"id": d.name, "range": run.get("range"),
-                                                 **{ours: summary.get(theirs) for ours, theirs in HEADLINE}}}
+                                                 **{ours: summary.get(theirs) for ours, theirs in HEADLINE},
+                                                 **{k: summary.get(k) for k in EXTRA}}}
         seen.add("pending" if status in PENDING else "failed")
     return {"state": "pending" if "pending" in seen else "failed" if seen else "none"}
 
