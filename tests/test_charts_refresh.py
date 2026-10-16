@@ -44,7 +44,7 @@ def manager(tmp_path, codes=(0,), clock=WED_NOON, holds=None, cov=None):
         return FakeProc(queue[i], holds[i] if holds else None)
 
     m = R.RefreshManager(tmp_path / "state", python="py", cwd=tmp_path, clock=lambda: clock, popen=popen,
-                         coverage_path=cov or tmp_path / "cov.json")
+                         coverage_path=cov or tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock")
     return m, calls
 
 
@@ -137,7 +137,7 @@ def test_a_missing_binary_is_an_error_not_a_crash(tmp_path):
     def popen(argv, **kw):
         raise FileNotFoundError("py")
     m = R.RefreshManager(tmp_path / "state", python="py", cwd=tmp_path, clock=lambda: WED_NOON, popen=popen,
-                         coverage_path=tmp_path / "cov.json")
+                         coverage_path=tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock")
     m.start()
     assert wait_final(m)["status"] == "error"
 
@@ -147,7 +147,7 @@ def client(tmp_path, **kw):
     app = FastAPI()
     app.include_router(R.refresh_router(lambda request: None, tmp_path / "state", python="py", cwd=tmp_path,
                                         clock=lambda: WED_NOON, popen=lambda argv, **k: FakeProc(),
-                                        coverage_path=tmp_path / "cov.json", **kw))
+                                        coverage_path=tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock", **kw))
     return TestClient(app, base_url="http://localhost:8852")
 
 
@@ -166,7 +166,7 @@ def test_a_second_start_is_409(tmp_path):
     app = FastAPI()
     app.include_router(R.refresh_router(lambda request: None, tmp_path / "state", python="py", cwd=tmp_path,
                                         clock=lambda: WED_NOON, popen=lambda argv, **k: FakeProc(hold=hold),
-                                        coverage_path=tmp_path / "cov.json"))
+                                        coverage_path=tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock"))
     c = TestClient(app, base_url="http://localhost:8852")
     assert c.post("/api/refresh").status_code == 200
     r = c.post("/api/refresh")
@@ -187,3 +187,17 @@ def test_the_post_is_behind_the_write_guard(tmp_path):
     assert c.post("/api/refresh").status_code == 403
     assert c.post("/api/refresh/cancel").status_code == 403
     assert c.get("/api/refresh").status_code == 200
+
+
+def test_a_click_while_the_hourly_job_holds_the_archive_lock_says_so(tmp_path):
+    """The tick job never waits for its lock: started under another run it ends at once, and the button used to
+    show "Done" with nothing fetched. It is refused up front instead, naming the cause."""
+    import fcntl
+    m, calls = manager(tmp_path)
+    with open(tmp_path / "ticks.lock", "a") as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(ValueError, match="hourly tick job is already fetching"):
+            m.start()
+    assert calls == [] and m.status()["status"] == "idle"
+    m.start()                                   # lock released: starts normally
+    assert wait_final(m)["status"] == "done"

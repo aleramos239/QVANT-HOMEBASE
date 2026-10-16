@@ -25,6 +25,7 @@ ONE refresh at a time (start() refuses a second); cancel() ends the running job.
 from __future__ import annotations
 
 import datetime as dt
+import fcntl
 import json
 import subprocess
 import sys
@@ -62,13 +63,14 @@ def coverage_summary(path: Path) -> dict | None:
 class RefreshManager:
     def __init__(self, base: Path, *, python: str | None = None, cwd: Path | None = None,
                  clock: Callable[[], dt.datetime] | None = None, popen=subprocess.Popen,
-                 coverage_path: Path | None = None):
+                 coverage_path: Path | None = None, lock_path: Path | None = None):
         self.dir = Path(base) / "refresh"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.python, self.cwd = python or sys.executable, Path(cwd) if cwd else repo_root()
         self.clock = clock or (lambda: dt.datetime.now(dt.timezone.utc))
         self.popen = popen
         self.coverage_path = coverage_path or state_dir() / "tick_coverage.json"
+        self.lock_path = lock_path or state_dir() / "ticks.lock"
         self._lock = threading.Lock()
         self._proc = None
         self._cancelled = False
@@ -87,6 +89,20 @@ class RefreshManager:
         with self._lock:
             return json.loads(json.dumps(self._status))
 
+    def _archive_busy(self) -> bool:
+        """True while another tick run (the hourly launchd job) holds the archive lock. A click then would start a
+        job that ends at once (it never waits for the lock) and the button would say "Done" having fetched nothing."""
+        try:
+            with open(self.lock_path, "a") as f:
+                try:
+                    fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except BlockingIOError:
+                    return True
+                fcntl.flock(f, fcntl.LOCK_UN)
+        except OSError:
+            return False
+        return False
+
     def _save(self) -> None:
         write_json(self.dir / "status.json", self._status)
 
@@ -96,6 +112,9 @@ class RefreshManager:
                 raise ValueError("a refresh is already running")
             if in_quiet(self.clock()):
                 raise ValueError("not 09:20–09:35 ET on weekdays (the 9:30 window): refresh after 09:35")
+            if self._archive_busy():
+                raise ValueError("the hourly tick job is already fetching (see homebase/.state/ticks.log); "
+                                 "it is the same job, so wait for it to finish, then refresh again")
             steps = plan(self.python)
             self._cancelled = False
             self._status = {"status": "running", "step": steps[0]["key"], "started": _now(),
