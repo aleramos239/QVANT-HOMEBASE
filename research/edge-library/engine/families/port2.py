@@ -243,11 +243,26 @@ class Rsi2(Template):
 class FirstBarMom(Template):
     """First-bar momentum. Hypothesis: a session's first tf bar with range >= k x ATR (ATR before that bar)
     is momentum ignition; follow its direction at its close. struct stop = the bar's opposite extreme.
-    Asia lacks ATR history at 00:00 (no trades until 3 tf bars exist, so effectively none)."""
-    DEFAULTS = {"k": 1.5}
-    SCHEMA = {"k": ("float", 0.2, 10)}                                                             # as pp_first_bar_mom
+    Asia lacks ATR history at 00:00 (no trades until 3 tf bars exist, so effectively none).
+    The owner's displacement tests on the 08:30 candle (2026-10-10), every one a size gate on the SAME signal bar, off at 0:
+      k        range (high - low) >= k x ATR(14) of the bars before it                       (A)
+      body_r   body |close - open| >= body_r x the bar's range (little wick, closes near its extreme)   (B)
+      vol_m    the bar's volume >= vol_m x the median volume of the same clock bar on the 14 dates before   (D)
+      body_pts body |close - open| >= body_pts points                                           (E)
+    """
+    DEFAULTS = {"k": 1.5, "start": "session", "body_r": 0.0, "vol_m": 0.0, "body_pts": 0.0}
+    SCHEMA = {"k": ("float", 0, 10),                                                               # as pp_first_bar_mom (0 = no displacement: any candle that closes up or down)
+              "start": ("choice", ("session", "0830")),    # 0830 = the candle that opens at 08:30 ET (the data release): ONE
+                                                           # session 08:30-11:00 (id "pre"); its first tf bar is the signal bar
+              "body_r": ("float", 0, 1), "vol_m": ("float", 0, 50), "body_pts": ("float", 0, 1000)}
     SCREEN_TFS = TFS
     FEATURES = ()
+
+    def fam_filter(self, ids):
+        return ids if self.p["start"] == "session" else [s for s in ids if s == "pre"]
+
+    def fam_sessions(self):
+        return {} if self.p["start"] == "session" else {"pre": (30600, 39600)}
 
     def fam_signal(self, ctx):
         if self.sn != 1 or not self.atr_p:
@@ -255,6 +270,17 @@ class FirstBarMom(Template):
         o, h, l, c = self.O[-1], self.H[-1], self.L[-1], self.C[-1]
         if h - l < float(self.p["k"]) * self.atr_p or c == o:
             return
+        body = abs(c - o)
+        if body < float(self.p["body_r"]) * (h - l) or body < float(self.p["body_pts"]):
+            return
+        vm = float(self.p["vol_m"])
+        if vm > 0:
+            rv = getattr(self, "blk_rvol", None)
+            if rv is None:
+                raise RuntimeError("first_bar_mom vol_m needs the Blocks mixin (blk_rvol)")
+            sig = rv()                                  # (the bar's volume, the median of the same clock bar over 14 dates) or None
+            if sig is None or sig[0] < vm * sig[1]:
+                return
         self._mkt(ctx, "long" if c > o else "short", struct=l if c > o else h)
 
 

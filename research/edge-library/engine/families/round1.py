@@ -292,14 +292,79 @@ class VaReclaim(Template):
             self.used[g] = True
 
 
+# ---- the 16:00 anchored VWAP (orb_confirm vwap = on) ----------------------------------------------------------------------
+_VW16: dict = {}                                    # (root, trade date iso) -> VWAP at each minute boundary 08:30 .. 11:01, or None
+
+
+def vwap16_series(root: str, iso: str, prior_iso: str, tf: int = 0):
+    """The volume-weighted average price of every print from 16:00 ET of the PRIOR session date to each minute boundary of the
+    trade date from 08:30 to 11:01 ET (index (sec - 30600) // 60; a print AT the boundary is not in it) -> array, or None when
+    the prior or the trade date has no tape, or the two tapes are different contracts (a roll day: the prices are not comparable).
+    The prior session's tape ends at 17:00 ET; the trade date's tape starts at 18:00 ET the evening before.
+    tf > 0: the VWAP of tf-MINUTE BARS, as a chart draws it: sum(hlc3 x volume) / sum(volume) over the bars of the clock grid
+    (16:00, 16:15, ...) that have COMPLETED by the boundary; the value at a boundary is the last completed bar's (no look-ahead)."""
+    import datetime as dt
+    key = (root, iso, tf)
+    if key in _VW16:
+        return _VW16[key]
+    out = None
+    try:
+        d, p = dt.date.fromisoformat(iso), dt.date.fromisoformat(prior_iso)
+        tp = S.load_tape(p, root, allow_holdout=S.ALLOW_BP)           # the BUILD switch: opens to 2025-06-30 only
+        td = S.load_tape(d, root, allow_holdout=S.ALLOW_BP)
+        if tp is not None and td is not None and len(tp.ts) and len(td.ts) and tp.contract == td.contract:
+            lo = int(np.searchsorted(tp.ts, S.et_ns(p, "16:00"), side="left"))
+            grid = S.et_ns(d, "00:00") + np.arange(30600, 39661, 60, dtype=np.int64) * S.NS
+            if tf <= 0:
+                p0 = float((tp.px[lo:] * tp.size[lo:]).sum())
+                v0 = float(tp.size[lo:].sum())
+                cpv = np.concatenate([[0.0], np.cumsum(td.px * td.size)])
+                cv = np.concatenate([[0.0], np.cumsum(td.size, dtype=np.float64)])
+                idx = np.searchsorted(td.ts, grid, side="left")
+                den = v0 + cv[idx]
+                if v0 > 0:
+                    out = (p0 + cpv[idx]) / den
+            else:
+                w = tf * 60 * S.NS                  # the bar grid: UTC offsets are whole hours, so ET quarter hours are UTC's too
+                ts = np.concatenate([tp.ts[lo:], td.ts])
+                px = np.concatenate([tp.px[lo:], td.px])
+                sz = np.concatenate([tp.size[lo:], td.size]).astype(np.float64)
+                k = ts // w
+                st = np.flatnonzero(np.concatenate([[True], k[1:] != k[:-1]]))
+                en = np.concatenate([st[1:], [len(k)]]) - 1
+                hi_, lo_, vol = np.maximum.reduceat(px, st), np.minimum.reduceat(px, st), np.add.reduceat(sz, st)
+                ok = vol > 0
+                tp3 = ((hi_ + lo_ + px[en]) / 3.0)[ok]
+                bend = ((k[st] + 1) * w)[ok]
+                cum_pv, cum_v = np.cumsum(tp3 * vol[ok]), np.cumsum(vol[ok])
+                j = np.searchsorted(bend, grid, side="right") - 1      # the last bar that has completed by the boundary
+                if len(bend) and (j >= 0).all():
+                    out = cum_pv[j] / cum_v[j]
+    except Exception:                               # noqa: BLE001 - a day without a usable VWAP has no trade
+        out = None
+    _VW16[key] = out
+    return out
+
+
 # ---- N3 orb_confirm -------------------------------------------------------------------------------------------------------
 class OrbConfirm(Template):
-    """N3 (module docstring). Range = the first or_min minutes from 09:30; a tf bar that ends after the range and closes
-    above its high -> market long (dir long) / below its low -> market short (dir short). One trade per instance.
+    """N3 (module docstring). Range = the first or_min minutes from 09:30 (start 0830: from 08:30, one session 08:30-11:00); a tf bar that ends after the range and closes
+    above its high -> market long (dir long) / below its low -> market short (dir short); dir both = the first close
+    outside the range either way. or_min 5 / 15 / 30 / 60. One trade per instance. entry limit = instead of the
+    market order a LIMIT rests at the broken edge (a buy at the range high after a close above, a sell at the range low after a
+    close below) for `wait` minutes (0 = to the session's last 5 minutes); one signal a session, filled or not.
     The struct stop (author cell) = the other side of the range."""
-    DEFAULTS = {"or_min": "15", "dir": "long", "max_tr": 1, "auth": "off"}
-    SCHEMA = {"or_min": ("choice", ("15", "30", "60")), "dir": ("choice", ("long", "short")), "auth": ("choice", ("off", "on"))}
+    DEFAULTS = {"or_min": "15", "dir": "long", "max_tr": 1, "auth": "off", "entry": "market", "wait": "0", "start": "0930", "vwap": "off", "vwap_tf": "0"}
+    SCHEMA = {"or_min": ("choice", ("5", "15", "30", "60")), "dir": ("choice", ("long", "short", "both")),
+              "auth": ("choice", ("off", "on")), "entry": ("choice", ("market", "limit")),
+              "wait": ("choice", ("5", "10", "15", "30", "60", "0")),
+              "start": ("choice", ("0930", "0830")),
+              "vwap_tf": ("choice", ("0", "15")),        # 0 = the VWAP of every print; 15 = of 15-minute bars (hlc3 x volume), last completed bar
+              "vwap": ("choice", ("off", "on", "first"))}  # long only above, short only below the VWAP anchored at 16:00 ET of the prior
+                                                          # session; on = a break against it is skipped, the next break may trade;
+                                                          # first = the FIRST break decides: against it, no trade that day      # 0830 = the range starts at the 08:30 ET data release: ONE session 08:30-11:00 (id "pre")
     SCREEN_TFS = ("1", "5", "15")
+    SCREEN_RUN = {"strict_limit": True}             # only a limit entry reads it
     FEATURES = ()
     X_S = 55800                                     # the author cell: flat 15:30 ET, no entry from then on
 
@@ -307,11 +372,22 @@ class OrbConfirm(Template):
     def author_cells(cls, root, tf):
         return [({"auth": "on"}, {"stop_mode": "struct", "stop_val": 1.5, "tgt_r": 0.0})]
 
+    def t_open(self) -> int:
+        """Seconds after 00:00 ET at which the range starts: 09:30, or 08:30 (start 0830)."""
+        return OPEN if self.p["start"] == "0930" else OPEN - 3600
+
     def fam_filter(self, ids):
-        return [s for s in ids if s in NY]
+        return [s for s in ids if s in (NY if self.p["start"] == "0930" else ("pre",))]
+
+    def fam_sessions(self):
+        # start 0830: the family's own window for "pre" = 08:30-11:00 (one instance a day: one trade a day); entries stop 5 min before
+        return {} if self.p["start"] == "0930" else {"pre": (self.t_open(), 39600)}
 
     def fam_day(self, ctx):
         self.r = None
+
+    def fam_session(self, ctx, s):
+        self.used = False                           # entry limit: the session's one signal
 
     def fam_times(self):
         return [_hms(self.X_S)] if self.p["auth"] == "on" else []
@@ -322,21 +398,40 @@ class OrbConfirm(Template):
             ctx.flatten("time")
 
     def fam_signal(self, ctx):
-        r_end = OPEN + int(self.p["or_min"]) * 60
+        r_end = self.t_open() + int(self.p["or_min"]) * 60
         end = bar_end(self)
         if end <= r_end or (self.p["auth"] == "on" and end >= self.X_S):
             return
         if self.r is None:
-            self.r = self.rng(OPEN, r_end)
+            self.r = self.rng(self.t_open(), r_end)
             if self.r is None:
                 return
         hi, lo = self.r
         c = self.C[-1]
-        if self.p["dir"] == "long":
-            if c > hi:
-                self._mkt(ctx, "long", struct=lo)
-        elif c < lo:
-            self._mkt(ctx, "short", struct=hi)
+        d = self.p["dir"]                           # both = the first close outside the range, either way (max_tr 1)
+        lim = self.p["entry"] == "limit"
+        if self.used and (lim or self.p["vwap"] == "first"):   # entry limit: one signal a session, filled or not; vwap first: the
+            return                                                # first break decided the day
+        side = "long" if d != "short" and c > hi else "short" if d != "long" and c < lo else None
+        if side is None:
+            return
+        if self.p["vwap"] != "off":                 # on: a break against the 16:00 VWAP is no signal, the next break may be;
+            vs = vwap16_series(self.root, self.day, self.dl[-1]["date"], int(self.p["vwap_tf"])) if self.dl else None    # first: no trade that day
+            k = (end - 30600) // 60
+            if vs is None or not 0 <= k < len(vs):
+                return
+            v = float(vs[k])
+            if self.p["vwap"] == "first":
+                self.used = True
+            if not (c > v if side == "long" else c < v):
+                return
+        if lim:                                     # a LIMIT rests AT the broken edge (the retest), `wait` minutes (0 = to the
+            self.used = True                        # session's end)
+            w = int(self.p["wait"])
+            self._lim(ctx, side, hi if side == "long" else lo, struct=lo if side == "long" else hi,
+                      ttl=max(1, w // self.tf) if w else None)
+        else:
+            self._mkt(ctx, side, struct=lo if side == "long" else hi)
 
 
 # ---- N4 late_mom ----------------------------------------------------------------------------------------------------------
@@ -598,5 +693,5 @@ FAMILIES.update({f"straddle_tight_{t.replace(':', '')}": _tight_entry(t) for t i
 
 # entry windows, ET seconds after 00:00 of the trade date [first, last]: the smoke's "entries outside the window" count
 ENTRY_WINDOWS = {"vwap_trend_pull": (VwapTrendPull.T0, VwapTrendPull.T1 + 59), "late_mom": (LateMom.AT_S, LateMom.AT_S + 59),
-                 "open_fade": (OPEN, 39600 - 1), "orb_confirm": (OPEN + 15 * 60, 57480 - 1),
+                 "open_fade": (OPEN, 39600 - 1), "orb_confirm": (OPEN - 3600 + 5 * 60, 57480 - 1),
                  **{f"straddle_tight_{t.replace(':', '')}": (S.clock_sec(t) - 1, S.clock_sec(t) + 299) for t in TIGHT_TIMES}}

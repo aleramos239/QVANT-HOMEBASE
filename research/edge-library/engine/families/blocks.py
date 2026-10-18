@@ -354,6 +354,29 @@ def menu_open(root: str) -> list:
     return [{**st, "tgt_r": r} for st in stops for r in OPEN_TGT_R]
 
 
+RANGE_STOPS = (1.0, 0.75, 0.5, 0.25)               # x the structure's height (the opening range of orb_confirm)
+
+
+def menu_range(root: str) -> list:
+    """THE EXIT TABLE OF A RANGE-STOP TEST (the owner, 2026-10-10: the full range, then 75 / 50 / 25 % of it as the stop): 4 stops
+    of the family's structure height ("rng") x the six standard targets = 24 cells, stops outer and targets inner. A family without
+    a structure refuses it (exits())."""
+    if root not in S.MENU_STOP_PTS:
+        raise KeyError(f"no menu for root {root!r}: {sorted(S.MENU_STOP_PTS)}")
+    return [{"stop_mode": "rng", "stop_val": v, "tgt_r": r} for v in RANGE_STOPS for r in OPEN_TGT_R]
+
+
+def menu_struct(root: str) -> list:
+    """THE EXIT TABLE OF A STRUCT-STOP TEST (the owner, 2026-10-10: "stop at the range"): ONE stop, the other side of the opening
+    range (stop_mode "struct": the distance from the entry to the far edge), x the six standard targets = 6 cells."""
+    if root not in S.MENU_STOP_PTS:
+        raise KeyError(f"no menu for root {root!r}: {sorted(S.MENU_STOP_PTS)}")
+    return [{"stop_mode": "struct", "stop_val": 1.0, "tgt_r": r} for r in OPEN_TGT_R]
+
+
+STRUCT_FAMILIES = ("orb_confirm",)                 # the families that hand a structure edge to the order (_mkt / _lim struct=)
+
+
 def menu_blueprint(root: str) -> list:
     """THE EXIT TABLE OF THE BLUEPRINT (BLUEPRINT.md section 2; blueprint/templates/exit_menu.json): the 32 standard cells
     first (same order, same ids: a store of the 32 keeps its cells), then the 8 standard stops x the targets 0.5 and 0.75 x
@@ -373,7 +396,15 @@ def exits(kind: str, root: str, family: str) -> list:
         return menu_blueprint(root)
     if kind == "open":
         return menu_open(root)
-    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint' or 'open'")
+    if kind == "range":
+        if family not in HEIGHTS:
+            raise ValueError(f"exits 'range': {family!r} has no structure height to take a stop of")
+        return menu_range(root)
+    if kind == "struct":
+        if family not in STRUCT_FAMILIES:
+            raise ValueError(f"exits 'struct': {family!r} does not hand a structure edge to its orders ({list(STRUCT_FAMILIES)})")
+        return menu_struct(root)
+    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint', 'open', 'range' or 'struct'")
 
 
 COMBO, MAX_FILTERS = "+", 2                         # a unit may hold several filters at once: ("ote+pdz", "in+with"); at most 2 (BLUEPRINT.md 0.2)
@@ -638,7 +669,8 @@ def _h_orb(st):
 
 
 def _h_orb_confirm(st):
-    return _range_after(st, OPEN, OPEN + int(st.p["or_min"]) * 60)
+    a = st.t_open()                                 # 09:30, or 08:30 (start 0830)
+    return _range_after(st, a, a + int(st.p["or_min"]) * 60)
 
 
 def _h_ib(st):

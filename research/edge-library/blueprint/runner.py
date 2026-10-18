@@ -149,10 +149,10 @@ def checked(spec) -> dict:
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN)):
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), ("range", "range"), ("struct", "struct")):
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table (BLUEPRINT.md line 0.2) or the owner's session-anchored table "
                        f"(exits {OPEN!r}), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
-    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
+    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), ("range", "range"), ("struct", "struct")):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
