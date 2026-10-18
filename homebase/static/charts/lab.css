@@ -751,3 +751,14 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .mix-c { min-width: 44px; text-align: center !important; }
 .mix-c.self { color: var(--hb-fg2); }
 .mix-left { margin: 0; padding-left: 18px; font-size: var(--hb-fs-sm); }
+
+/* ---- A/B compare (labab.js, the owner 2026-10-18): the group builder's sheet, its two pickers on top ---- */
+.ab .mix-out { flex: 1; }
+.ab-picks { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; align-items: center; padding: 10px 18px; border-bottom: .5px solid var(--hb-hair); }
+.ab-pick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; align-items: center; }
+.ab-pick select { grid-column: 2; min-width: 0; height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-sm); outline: none; }
+.ab-pick select:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.ab-tag { grid-row: span 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: #fff; font-size: 13px; }
+.ab-A .ab-tag { background: #2962FF; } .ab-B .ab-tag { background: #E8A23A; }
+.ab-t td:not(:first-child), .ab-t th:not(:first-child) { min-width: 96px; }
+.ab-diff td { white-space: normal; max-width: 320px; overflow-wrap: anywhere; text-align: left !important; }
