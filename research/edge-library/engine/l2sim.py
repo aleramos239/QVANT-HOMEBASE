@@ -478,12 +478,10 @@ def load_tape(d, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool
     Raises HoldoutSealed for a 2025+ date unless allow_exam=True (= allow_holdout=True); allow_check=True opens 2025 only."""
     d = _date(d)
     check_holdout(d, allow_level(allow_holdout, allow_exam, allow_check))
-    if root != "NQ":
+    p = tape_path(d, root) if root == "NQ" else None
+    if p is None or not p.exists():                 # ES / GC always; NQ for a session with no parquet yet (2026-09-23 on): the tester's own tape
         p = hb_tape_path(d, root)
         return None if p is None else read_hb_tape(p, root, d)
-    p = tape_path(d, root)
-    if not p.exists():
-        return None
     import pyarrow.parquet as pq
     pf = pq.ParquetFile(p)
     t = pf.read(columns=["ts_ns", "price", "size"])
@@ -513,7 +511,8 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
         check_holdout(start, level)
     out = set()
     for y in range(start.year, end.year + 1):
-        files = (TAPE_DIR / root / str(y)).glob("*/*.parquet") if root == "NQ" else (ARCHIVE / root / str(y)).glob("*.json")
+        files = (list((TAPE_DIR / root / str(y)).glob("*/*.parquet")) + list((HB_TAPE / root).glob(f"{y}-*.tape")) if root == "NQ"
+                 else (ARCHIVE / root / str(y)).glob("*.json"))             # NQ: the parquet dates, and the tester's tapes of the sessions after them
         for p in files:
             try:
                 d = dt.date.fromisoformat(p.name[:10])

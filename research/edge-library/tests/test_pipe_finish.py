@@ -603,7 +603,7 @@ def test_stage_6_under_the_funded_pipeline_the_box_must_fall_into_a_row_of_the_7
         world.setattr(PO, "cell", lambda h, vid: trades(28))                                   # 70 % at 1 : 1
         c = TS.whole(ST.stage6(C, CTX), 6)
         assert c["passed"] is True and [x["line"] for x in c["lines"]][:2] == ["P6.1", "P6.2"] and c["lines"][1]["passed"] is True
-        assert "falls into the row 1 : 1 at 8 trades a day needs 62.5 % wins" in c["text"] and "the two lines asked" in c["text"]
+        assert "falls into the row 1 : 1 at 8 trades a day needs 62.5 % wins" in c["text"] and "the three lines asked, P6.1, 4.4, P6.2" in c["text"]
         assert c["rules"]["funded"]["account"] == "lucid-flex-50k@2026-10-11"
         six(world)
         world.setattr(OOS, "test", boxed)
@@ -614,6 +614,29 @@ def test_stage_6_under_the_funded_pipeline_the_box_must_fall_into_a_row_of_the_7
     finally:
         PR.FILE = keep
         PR._all.cache_clear()
+
+
+def test_stage_6_does_not_read_the_unseen_days_twice_for_one_box(world):
+    """2026-10-17: another idea of the same family whose read was of the same box (market, session, bar and default) stops this one before the read."""
+    base(world)
+    calls = six(world)
+    twin = add("pfx_orb", 7)                                                                   # the same family (orb), the same market and session
+    ran(twin, 6, hand(6, {"sub": f"{twin}_a5", "bar": "5", "way": 0, "filter": None}, 2, result="proven on history"))
+    d = ROOT / "ideas" / f"{twin}_a5"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "lock.json").write_text(json.dumps({"home": {"market": "NQ", "session": "nyam", "bar": "5"}, "default": "or_min15_atr3-r1"}))
+    (d / "test.json").write_text(json.dumps({"passed": True}))
+    try:
+        c = ST.stage6(C, CTX)
+        assert (c["passed"], c["result"], c["lines"], c["same_box_as"]) == (False, "same box read", [], f"{twin}_a5") and calls["test"] == []
+        assert "is the box pfx_orb_a5 already read on the unseen days" in c["text"] and "no read is spent" in c["text"]
+        (d / "lock.json").write_text(json.dumps({"home": {"market": "NQ", "session": "nyam", "bar": "5"}, "default": "or_min30_atr3-r1"}))     # another box: read
+        c = ST.stage6(C, CTX)
+        assert c["passed"] is True and len(calls["test"]) == 1
+    finally:
+        (d / "lock.json").unlink()
+        (d / "test.json").unlink()
+        (ROOT / "p" / twin / "stages" / "6.json").unlink()                                 # (the twin's card leaves nothing for the tests after this one)
 
 
 def test_stage_6_a_verdict_on_file_for_another_lock_is_not_this_locks(world):

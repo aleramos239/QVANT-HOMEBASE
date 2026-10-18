@@ -460,29 +460,47 @@ def _pct(v: float, digits: int = 3) -> str:
     return f"{100 * v:.{digits}g} %"
 
 
+BOX_LUCK = 0.5                                      # a read that asked the box alone (prop mode before 2026-10-17): an idea with no edge nets above $0 about 1 time in 2
+
+
 def luck(root=None) -> dict:
-    """`pipe luck`: the luck count (module docstring) -> one result."""
-    alpha, done, fam, reads = 1 - R.need(RANDOM), [x for x in PS.ideas(root) if x.get("status") not in PS.LIVE], {}, []
+    """`pipe luck`: the luck count (module docstring) -> one result. EVERY read counts: an idea's stage-6 card with rows and the older stage-6
+    cards under stages_old (a box read and then run again as another box). Each read's luck is that of the gate it was asked: 1 - the need of
+    line 4.4 where 4.4 was asked (the law, and prop mode since 2026-10-17), BOX_LUCK where the box alone was. `passes_now`: it would pass the
+    gate as it is asked now (the box above $0 AND above line 4.4's bar)."""
+    alpha, need, done, fam, reads = 1 - R.need(RANDOM), R.need(RANDOM), [x for x in PS.ideas(root) if x.get("status") not in PS.LIVE], {}, []
     for x in done:
-        six = PS.stages(x["name"], root).get(6) or {}
         f = fam.setdefault(_dash(x.get("family")), {"ideas": 0, "read": 0, "passed": 0})
         f["ideas"] += 1
-        if not six.get("lines"):                    # no read of the unseen days (a stage 6 that was refused leaves a card without rows)
-            continue
-        ok = six.get("passed") is True
-        reads.append({"name": x["name"], "family": x.get("family"), "passed": ok, "beat": next((r.get("number") for r in six["lines"] if r.get("line") == RANDOM), None)})
-        f["read"], f["passed"] = f["read"] + 1, f["passed"] + ok
-    n, k = len(reads), sum(r["passed"] for r in reads)
-    most, one = alpha * n, 1 - (1 - alpha) ** n
+        cards = [(PS.stages(x["name"], root).get(6) or {}, False), *((c, True) for c in PS.old_stage(x["name"], 6, root))]
+        for six, older in cards:
+            if not six.get("lines"):                # no read of the unseen days (a stage 6 that was refused leaves a card without rows)
+                continue
+            ok = six.get("passed") is True
+            beat = next((r.get("number") for r in six["lines"] if r.get("line") == RANDOM), None)
+            asked = RANDOM in (((six.get("rules") or {}).get("gates") or {}).get("only") or [RANDOM])    # no gates on the card = the law: 4.4 was asked
+            reads.append({"name": x["name"] + (" (an older box)" if older else ""), "family": x.get("family"), "passed": ok, "beat": beat,
+                          "asked_random": asked, "luck": alpha if asked else BOX_LUCK,
+                          "passes_now": bool(ok and beat is not None and beat > need) if not asked else ok})
+            f["read"], f["passed"] = f["read"] + 1, f["passed"] + ok
+    n, k, now = len(reads), sum(r["passed"] for r in reads), sum(r["passes_now"] for r in reads)
+    most, one = sum(r["luck"] for r in reads), 0.0
+    for r in reads:
+        one = 1 - (1 - one) * (1 - r["luck"])      # the chance of one or more lucky passes
+
+    box_only = sum(not r["asked_random"] for r in reads)
     for r in reads:
         r["by_luck"] = min(1.0, (1 - r["beat"]) * n) if r["passed"] and r["beat"] is not None else None
-    said = f"{n} idea{'s' * (n != 1)} read on the unseen days, {k} passed; luck alone gives at most {most:.2g}"
+    said = (f"{n} read{'s' * (n != 1)} of the unseen days, {k} passed as asked at the time, {now} pass{'es' * (now == 1)} the gate as asked now "
+            f"(the box above $0 AND line {RANDOM}); luck alone gives at most {most:.2g}")
     text = [f"The luck count: {len(done)} idea{'s' * (len(done) != 1)} with a verdict, {said}."]
     if n:
-        text += [f"What luck gives: an idea with no edge beats {_pct(1 - alpha)} of the random tables (line {RANDOM}) 1 time in {1 / alpha:.3g}, and it must hold "
-                 f"every other line of the read too. In {n} read{'s' * (n != 1)} that is at most {most:.2g} lucky pass{'es' * (most != 1)}, and at most "
-                 f"a {_pct(one)} chance of one or more."]
+        text += [f"What luck gives: an idea with no edge beats {_pct(1 - alpha)} of the random tables (line {RANDOM}) 1 time in {1 / alpha:.3g}"
+                 + (f"; {box_only} of these read{'s' * (n != 1)} asked the box alone (prop mode before 2026-10-17), which an idea with no edge passes about "
+                    f"1 time in {1 / BOX_LUCK:.3g}" if box_only else "")
+                 + f". In {n} read{'s' * (n != 1)} that is at most {most:.2g} lucky pass{'es' * (most != 1)}, and at most a {_pct(one)} chance of one or more."]
         text += [f"  {r['name']}: beat {_pct(r['beat'], 4)} of the random tables on the unseen days -- by luck at most {_pct(r['by_luck'])} over the {n} read{'s' * (n != 1)}"
+                 + ("" if r["passes_now"] else f"; it would NOT pass the gate as asked now (line {RANDOM} needs above {_pct(need)})")
                  for r in reads if r["by_luck"] is not None]
         text += ["By family (ideas, read, passed): " + " · ".join(f"{a} {f['ideas']}, {f['read']}, {f['passed']}"
                                                                    for a, f in sorted(fam.items(), key=lambda kv: (-kv[1]["read"], -kv[1]["ideas"], kv[0])) if f["read"]),

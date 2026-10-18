@@ -88,6 +88,7 @@ def _pct(v) -> str:
 
 
 GATE_ROWS = ("P3.2", "P3.3")                       # prop mode: the rows of a box that still ask on the build days (average trade above $0, enough trades)
+RANDOM = "4.4"                                     # the read's line on the random tables: a gate of the unseen days in prop mode too (2026-10-17)
 
 
 def _met(v, floor: float) -> bool:

@@ -333,6 +333,11 @@ def stages(name, root=None) -> dict:
     return {n: got[n] for n in sorted(got) if got[n] is not None}
 
 
+def old_stage(name, n: int, root=None) -> list:
+    """The older cards of stage n under stages_old (a box that did not hold, an idea run again), oldest first; [] when there are none."""
+    return [c for c in (_json(p) for p in sorted((_dir(name, root) / "stages_old").glob(f"*/{int(n)}.json"))) if c is not None]
+
+
 def ledger(name, root=None) -> Path:
     return _dir(name, root) / "ledger.csv"
 

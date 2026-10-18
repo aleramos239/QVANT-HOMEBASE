@@ -127,7 +127,9 @@ Variant mode as above, with THREE things that ask and every other line a LABEL (
   1. the picked box makes money on the build days after costs: P3.2 (an average trade ABOVE $0) and P3.3 (the trades an average needs)
   2. its eval odds on the pipeline's account -- the PLAIN row, open losses counted, within prop.days -- are prop.eval (40 %) or more: read in
      _holding, so the boxes the pick is made among, and row P1.3, already hold it
-  3. it still makes money on the unseen days: oos.test(only=("box",)) -- the default box's own net on the test days above $0
+  3. it still makes money on the unseen days: oos.test(only=("box", "4.4")) -- the default box's own net on the test days above $0, AND the
+     locked map beats 95 % of the random tables on those days (line 4.4; a gate again since 2026-10-17: a box above $0 alone is what an idea
+     with no edge does about 1 time in 2, so the book's passes were mostly luck)
 The map's own share of profitable boxes (P1.1), the sides, the other markets, P3.7-P3.10, the proof of stage 4 (P4.1, P4.2), the lock's 3.3-3.8, the
 worse fills (lock `labelled`) and lines 4.1-4.9 are read and printed and ask nothing; stage 4 therefore always passes, stage 5 is "locked" when the
 code check and the build's own rows stand, and the book card adds `equity` (at a new high or in drawdown) and `fees` (an eval's fee against the
@@ -953,6 +955,24 @@ def _accounts() -> list:
     return list(dict.fromkeys([PR.need("prop", "account"), *PR.need("prop", "book_accounts")]))
 
 
+def _same_box_read(name: str, picked: dict, box: str, ideas_root, pipe_root) -> str | None:
+    """The sub-idea of ANOTHER pipeline idea of the same family whose read of the unseen days was of THIS box in the same market, session and
+    bar (a lock.json beside a test.json in the toolkit's root; the idea's present box, or an older one under stages_old) -> that sub, or None.
+    2026-10-17: the days are not read twice for one box -- nq_noise_gx_pm_long_v2 and _t3_v2 had both read k0p3_pts30-r0p5 as two passes."""
+    me, card = PS.state(name, pipe_root), PS.card(name, pipe_root)
+    home = (card.get("market"), card.get("session"), str(picked.get("bar")))
+    for other in PS.ideas(pipe_root):
+        if other["name"] == name or other.get("family") != me.get("family"):
+            continue
+        subs = [(c.get("picked") or {}).get("sub") for c in [PS.stages(other["name"], pipe_root).get(6) or {}, *PS.old_stage(other["name"], 6, pipe_root)]]
+        for osub in [s for s in dict.fromkeys(subs) if s]:
+            d = api.ideastore().idea_dir(osub, ideas_root)         # (not _carded: a sub whose card is gone is no twin)
+            lock = REC._json(d / "lock.json") if (d / "test.json").exists() else None
+            if lock and lock.get("default") == box and (lock["home"].get("market"), lock["home"].get("session"), str(lock["home"].get("bar"))) == home:
+                return osub
+    return None
+
+
 @_stage
 def stage6(name: str, ctx: dict, progress=None) -> dict:
     """THE ONE READ of the unseen days for the locked heat map, and on a pass the label off its test trades (module docstring)."""
@@ -962,18 +982,26 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     r = REC._json(REC._carded(sub, kw["root"]) / "test.json")
     again = bool(r and r.get("lines") and r.get("lock") == was["lock"])      # the verdict of THIS lock's read is on file: it is read, the days are not
     if not again:
+        twin = _same_box_read(name, picked, was["default"], kw["root"], ctx.get("root"))
+        if twin:                                    # the same box of the same idea family, market, session and bar was read already: no second read of it
+            return _card(6, t0, False, "same box read", [], f"{sub}: its box {was['default']} is the box {twin} already read on the unseen days "
+                         "(the same family, market, session and bar). The days are not read twice for one box: this idea stops, and no read is spent",
+                         picked, tries, rules, same_box_as=twin)
         with _switch(name, ctx):
             r = OOS.test(sub, confirm=True, root=kw["root"], workers=kw["workers"], out=PS.runs_test(ctx.get("root")), ledger=kw["ledger"],
                          days=(ctx.get("tiny") or {}).get("test_days"), relatives_ok=not rules["test"]["one_read_a_slot"],
-                         **({"only": ("box",)} if PR.prop_gates() else {}))
+                         **({"only": ("box", G.RANDOM)} if PR.prop_gates() else {}))
     rows, rng, rel = r["lines"], r.get("range") or {}, list(r.get("relatives") or [])        # rel: the related ideas read on these days before this one
     rules.update(lines={x["line"]: x["need"] for x in rows}, range=rng)
-    gate = r.get("gates")                           # mode "prop": the read was asked for the box alone (oos.run(only=)); 4.1-4.9 are labels
+    gate = r.get("gates")                           # mode "prop": the read was asked for the box and line 4.4 (oos.run(only=)); the other 4.x are labels
     if gate:
         net = gate.get("box")
         rows = [L._row("P6.1", None if net is None else bool(net > 0), net, 0, "the picked box " + ("has no trade on the unseen days" if net is None else
-                       f"made {REC._usd(net)} on the unseen days (need above $0)"), box=net), *G.labels(rows, gate=())]
+                       f"made {REC._usd(net)} on the unseen days (need above $0)"), box=net), *G.labels(rows, gate=(G.RANDOM,))]
         rules["gates"] = gate
+        rnd = next((x for x in rows if x["line"] == G.RANDOM), None)
+        if rnd is not None and rnd["passed"] is False and r.get("passed") is True:        # a verdict on file from before line 4.4 was a gate (2026-10-17)
+            r = {**r, "passed": False}
     if gate and PR.funded():                        # THE FUNDED LINE (the owner, 2026-10-15): the box's unseen-day trades must fall into a row of the 75 % table
         from . import pipe_funded as F
         try:
@@ -995,8 +1023,10 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
     fund = next((x for x in rows if x["line"] == "P6.2"), None)
-    holds = (f"the box {was['default']} makes money on those days" + (f" and {fund['text'].split(': ', 1)[-1]}" if fund else "")
-             + (" (the two lines asked" if fund else " (the one line asked") + "; lines 4.1-4.9 are labels"
+    asked = ["P6.1", G.RANDOM, *(["P6.2"] if fund else [])]
+    holds = (f"the box {was['default']} makes money on those days and the map beats {100 * R.need(G.RANDOM):g} % of the random tables"
+             + (f" and {fund['text'].split(': ', 1)[-1]}" if fund else "")
+             + f" (the {({2: 'two', 3: 'three'}.get(len(asked), len(asked)))} lines asked, {', '.join(asked)}; the other 4.x lines are labels"
              + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
     return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}; on those days the box {was['default']} is a "
                  f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"], relatives=rel)
