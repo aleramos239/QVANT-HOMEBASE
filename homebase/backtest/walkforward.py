@@ -81,20 +81,23 @@ from collections import Counter
 from pathlib import Path
 
 from . import drafthost, report
-from .discipline import RESEARCH_END, RESEARCH_START
+from .discipline import HOLDOUT_START, RESEARCH_END, RESEARCH_START
 from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
 from .runner import read_json, report_holes, write_json
 
 SELECT_MONTHS = 1
 TEST_MONTHS = 3            # the default OOS side of the ratio (1:3); 1 and 2 are the other choices
 RATIOS = (1, 2, 3)
+ROLL_SELECT = 3            # the 3:1 scheme (owner, 2026-10-18): select on 3 months, test the next 1 ...
+ROLL_STEP = 4              # ... then the next block: blocks, never rolling (owner, 2026-10-18) -- a month is in OR out
 STEP_MONTHS = 1
 METRICS = {"net_profit": "Net $", "sharpe": "Sharpe", "profit_factor": "Profit factor", "t_stat": "t-stat"}
 DEFAULT_METRIC = "net_profit"
 DEFAULT_MIN_TRADES = 5
 MAX_MIN_TRADES = 1000
+HOLDOUT = HOLDOUT_START.strftime("%Y-%m")     # the first unseen month
 STAT_KEYS = ("net_profit", "trades", "win_rate", "profit_factor", "sharpe", "max_drawdown", "avg_trade", "t_stat",
-             "skipped_by_error")
+             "rr", "rr_label", "skipped_by_error")
 TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that month → lowest cell index"
 
 
@@ -105,7 +108,27 @@ def ratio(v) -> int:
     return v
 
 
-def stitch_rule(test_months: int = TEST_MONTHS) -> str:
+def select_window(select_months, test_months: int) -> int:
+    """The selection side: 1 (the 1:N schemes), or ROLL_SELECT for 3:1 -- which tests exactly 1 month."""
+    if type(select_months) is not int or select_months not in (SELECT_MONTHS, ROLL_SELECT):
+        raise ValueError(f"select_months: {SELECT_MONTHS} or {ROLL_SELECT} (the 3:1 walk-forward)")
+    if select_months == ROLL_SELECT and test_months != 1:
+        raise ValueError(f"select_months {ROLL_SELECT} is the 3:1 walk-forward: it tests 1 month (test_months 1)")
+    return select_months
+
+
+def ratio_label(test_months: int, select_months: int = SELECT_MONTHS) -> str:
+    return f"{select_months}:{test_months}"
+
+
+def step_of(select_months: int) -> int:
+    return ROLL_STEP if select_months == ROLL_SELECT else STEP_MONTHS
+
+
+def stitch_rule(test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS) -> str:
+    if select_months == ROLL_SELECT:
+        return ("blocks: 3 months to pick, the next 1 to trade, then the next block -- every month is in-sample or "
+                "out-of-sample, never both")
     seq = ", ".join(str(k * test_months) for k in range(3))
     return (f"steps {seq}, … (phase 0), each holding its pick for its full {test_months}-month test window: "
             "the test windows tile the OOS months once each, never overlapping")
@@ -131,11 +154,19 @@ def month_list(start: dt.date, end: dt.date) -> list[str]:
         y, m = nxt.year, nxt.month
 
 
-def steps(months: list[str], test_months: int = TEST_MONTHS) -> list[dict]:
-    """Step k selects on months[k] and tests on the next `test_months`; a partial last window is dropped."""
-    n = len(months) - SELECT_MONTHS - test_months + 1
-    return [{"k": k, "select": months[k], "test": months[k + SELECT_MONTHS:k + SELECT_MONTHS + test_months]}
-            for k in range(0, max(n, 0), STEP_MONTHS)]
+def steps(months: list[str], test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS) -> list[dict]:
+    """Step k selects on months[k : k+select_months] and tests on the next `test_months`; a partial last
+    window is dropped. `select` is the month ('2021-10'); at 3:1 it is the label '2021-10 → 2021-12' and
+    `select_ms` holds the months, and the steps are BLOCKS (k = 0, 4, 8, ...: Jan-Mar -> Apr, May-Jul -> Aug)."""
+    n = len(months) - select_months - test_months + 1
+    out = []
+    for k in range(0, max(n, 0), step_of(select_months)):
+        sel = months[k:k + select_months]
+        s = {"k": k, "select": sel[0], "test": months[k + select_months:k + select_months + test_months]}
+        if len(sel) > 1:
+            s.update(select=f"{sel[0]} → {sel[-1]}", select_ms=sel)
+        out.append(s)
+    return out
 
 
 def chain(n_steps: int, phase: int = 0, test_months: int = TEST_MONTHS) -> list[int]:
@@ -209,12 +240,17 @@ def chain_months(months: list[str], test_months: int) -> list[str]:
 
 
 def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
-            capital: float, test_months: int = TEST_MONTHS, shared_months: list[str] | None = None) -> dict:
-    """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell.
+            capital: float, test_months: int = TEST_MONTHS, shared_months: list[str] | None = None,
+            select_months: int = SELECT_MONTHS) -> dict:
+    """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell
+    (at 3:1 of every cell: a 3-month window is scored on its own trades, as one run over those months).
+
+    3:1 (select_months 3, test_months 1): blocks -- every step is in the chain and no two windows share a
+    month, so the in-sample side is the selection months' own record, as clean as the out-of-sample one.
 
     `shared_months` (a compare job): also the stitched chain restricted to those months, under the
     key `stitched_shared` -- the caller pops it, so the ordinary result shape is unchanged."""
-    st = steps(months, test_months)
+    st = steps(months, test_months, select_months)
     params = {c["i"]: c["params"] for c in cells}
     cache: dict[int, tuple[list, list]] = {}
 
@@ -224,14 +260,20 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         tr, sk = cache[i]
         return _in(set(ms), tr), _in(set(ms), sk)
 
+    def scores(sel_ms: list[str]) -> dict:
+        if select_months == SELECT_MONTHS:
+            return {c["i"]: c["months"].get(sel_ms[0]) for c in cells}
+        return {c["i"]: _stats(*leg(c["i"], sel_ms), capital) for c in cells}
+
     rows, prev = [], None
     for s in st:
-        i = pick({c["i"]: c["months"].get(s["select"]) for c in cells}, metric, min_trades)
+        by_cell = scores(s.get("select_ms", [s["select"]]))
+        i = pick(by_cell, metric, min_trades)
         row = {"k": s["k"], "select": s["select"], "test": [s["test"][0], s["test"][-1]], "cell": i,
                "params": params[i] if i is not None else None, "is": None, "oos": None, "stitched": False,
                "changed": None}
         if i is not None:
-            row["is"] = next(c["months"][s["select"]] for c in cells if c["i"] == i)
+            row["is"] = by_cell[i]
             row["oos"] = _stats(*leg(i, s["test"]), capital)
         if s["k"] > 0:
             row["changed"] = (i != prev) if (i is not None and prev is not None) else None
@@ -243,13 +285,22 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         were chosen on, so both sides of the same chain can be read against each other."""
         tr, sk, covered = [], [], []
         for k in chain(len(st), phase, test_months):
-            ms = st[k]["test"] if side == "test" else [st[k]["select"]]
+            ms = st[k]["test"] if side == "test" else st[k].get("select_ms", [st[k]["select"]])
             covered += ms
             if rows[k]["cell"] is not None:
                 t, s = leg(rows[k]["cell"], ms)
                 tr += t
                 sk += s
         return tr, sk, covered
+
+    # the pick for the month after the window: chosen on its last whole months, not tested yet (the Desk's notice)
+    nxt = None
+    if len(months) >= select_months:
+        last = months[-select_months:]
+        y, m = map(int, last[-1].split("-"))
+        j = pick(scores(last), metric, min_trades)
+        nxt = {"select": last[0] if len(last) == 1 else f"{last[0]} → {last[-1]}", "select_ms": last,
+               "for": f"{y + m // 12}-{m % 12 + 1:02d}", "cell": j, "params": params[j] if j is not None else None}
 
     tr0, sk0, covered0 = stitched(0)
     tri, ski, coveredi = stitched(0, "select")
@@ -274,6 +325,10 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
                                    "trades": round((stats["trades"] or 0) / n, 4)}
 
     pm_oos, pm_is = per_month(oos, len(covered0)), per_month(ins, len(coveredi))
+
+    def _side(ms: list[str]) -> dict:
+        st_ = _stats(_in(set(ms), tr0), _in(set(ms), sk0), capital, ms or None)
+        return {"stats": st_, "months": ms, "n_months": len(ms), "per_month": per_month(st_, len(ms))}
     d_pm = None if pm_oos is None or pm_is is None else round(pm_oos["net_profit"] - pm_is["net_profit"], 2)
     tested = set(covered0)
     extra = {}
@@ -301,18 +356,23 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
             "legs": {"n": n_leg, "no_pick": no_pick, "profitable": prof, "partial": partial,
                      "pct_profitable": round(prof / n_leg * 100, 2) if n_leg else None}}
     return {**extra,
-        "scheme": {"select_months": SELECT_MONTHS, "test_months": test_months, "step_months": STEP_MONTHS,
-                   "ratio": f"1:{test_months}",
+        "scheme": {"select_months": select_months, "test_months": test_months, "step_months": step_of(select_months),
+                   "ratio": ratio_label(test_months, select_months),
                    "metric": metric, "metric_label": METRICS.get(metric, metric), "min_trades": min_trades,
-                   "tie_break": TIE_BREAK, "stitch": stitch_rule(test_months)},
+                   "tie_break": TIE_BREAK, "stitch": stitch_rule(test_months, select_months)},
         "window": {"start": months[0] if months else None, "end": months[-1] if months else None},
         "n_cells": len(cells), "n_steps": len(st), "looks": len(cells) * len(st),
-        "steps": rows,
+        "steps": rows, "next": nxt,
         "stitched": {"stats": oos, "equity": report.equity(trades_ns), "trades": report.to_ms(trades_ns),
                      "months": covered0, "legs": chain(len(st), 0, test_months),
                      "n_months": len(covered0), "per_month": pm_oos,
-                     "uncovered": [m for m in months[SELECT_MONTHS:] if m not in tested] if st else []},
-        "stitched_is": {"stats": ins, "months": coveredi, "n_months": len(coveredi), "per_month": pm_is},
+                     "uncovered": [m for m in months[select_months:] if m not in tested
+                                   and m not in {x for s_ in st for x in s_.get("select_ms", ())}] if st else []},
+        "stitched_is": {"stats": ins, "months": coveredi, "n_months": len(coveredi), "per_month": pm_is,
+                        "equity": report.equity(sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"])))},
+        # the stitched out-of-sample record cut at the test days' start: its build-days months and its unseen-days months
+        "split": {side: _side(ms) for side, ms in (("build", [m for m in covered0 if m < HOLDOUT]),
+                                                   ("unseen", [m for m in covered0 if m >= HOLDOUT]))},
         # the drop is PER MONTH: the two sides' totals span different month counts (review I2)
         "drop": {"net_profit_per_month": d_pm,
                  "pct": None if d_pm is None or not pm_is["net_profit"]
@@ -446,17 +506,19 @@ def compare_scheme(start: str | None = None, end: str | None = None) -> dict:
             "runnable": all(v["n_steps"] for v in by.values())}
 
 
-def scheme(start: str | None = None, end: str | None = None, test_months: int = TEST_MONTHS) -> dict:
+def scheme(start: str | None = None, end: str | None = None, test_months: int = TEST_MONTHS,
+           select_months: int = SELECT_MONTHS) -> dict:
     """What the page needs before a job exists (review M5: the step count comes from here, not a
     client constant) -- for the ratio and window the picker currently shows. A window too short
     for one full cycle reports 0 steps rather than failing: the page says so in its own words."""
     n = ratio(test_months)                       # an invalid ratio is a 400, never silently 1:3 (review M4)
+    sel = select_window(select_months, n)
     s = dt.date.fromisoformat(start) if start else RESEARCH_START
     e = dt.date.fromisoformat(end) if end else RESEARCH_END
-    st = steps(month_list(s, e), n)
+    st = steps(month_list(s, e), n, sel)
     return {"n_steps": len(st), "first_select": st[0]["select"] if st else None,
             "last_select": st[-1]["select"] if st else None,
-            "select_months": SELECT_MONTHS, "test_months": n, "step_months": STEP_MONTHS,
+            "select_months": sel, "test_months": n, "step_months": step_of(sel),
             "ratios": list(RATIOS), "default_test_months": TEST_MONTHS,
             "window": {"start": s.isoformat(), "end": e.isoformat()},
             "metrics": [[k, v] for k, v in METRICS.items()], "default_metric": DEFAULT_METRIC,
@@ -485,6 +547,10 @@ def validate_wf(body) -> dict:
     if compare and "test_months" in b:
         raise ValueError("compare runs 1:1, 1:2 and 1:3 together: send it without test_months")
     test_months = ratio(b.pop("test_months", TEST_MONTHS))
+    select_months = b.pop("select_months", SELECT_MONTHS)
+    if compare and select_months != SELECT_MONTHS:
+        raise ValueError("compare runs 1:1, 1:2 and 1:3 together: send it without select_months")
+    select_months = select_window(select_months, test_months)
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")
@@ -512,14 +578,15 @@ def validate_wf(body) -> dict:
                             "n_steps_by": {str(n): v for n, v in by.items()},
                             "tie_break": TIE_BREAK, "stitch": "; ".join(f"1:{n}: {stitch_rule(n)}" for n in RATIOS)}
         return g
-    st = steps(months, test_months)
+    st = steps(months, test_months, select_months)
     if not st:
-        raise ValueError(f"{g['range']['label']} at 1:{test_months}: too short for one full walk-forward cycle "
-                         f"({SELECT_MONTHS} selection month + {test_months} test month(s) of whole calendar months)")
+        raise ValueError(f"{g['range']['label']} at {ratio_label(test_months, select_months)}: too short for one "
+                         f"full walk-forward cycle ({select_months} selection month(s) + {test_months} test month(s) "
+                         "of whole calendar months)")
     g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
-                        "select_months": SELECT_MONTHS, "test_months": test_months, "step_months": STEP_MONTHS,
+                        "select_months": select_months, "test_months": test_months, "step_months": step_of(select_months),
                         "months": months, "n_steps": len(st), "tie_break": TIE_BREAK,
-                        "stitch": stitch_rule(test_months)}
+                        "stitch": stitch_rule(test_months, select_months)}
     return g
 
 
@@ -611,7 +678,8 @@ class WalkForwardManager(GridManager):
                     per = None
                     result = compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
                                      min_trades=cfg["min_trades"], capital=capital,
-                                     test_months=cfg.get("test_months", TEST_MONTHS))
+                                     test_months=cfg.get("test_months", TEST_MONTHS),
+                                     select_months=cfg.get("select_months", SELECT_MONTHS))
             except Exception as e:  # noqa: BLE001 -- the page must see why
                 err = f"selection failed: {type(e).__name__}: {e}"
         with self._cv:
@@ -671,7 +739,8 @@ class WalkForwardManager(GridManager):
                 raise ValueError(f"walk-forward {gid} has no 1:{n} scheme")
             return read_json(d / f"result-{n}.json")
         if test_months is not None and ratio(test_months) != cfg.get("test_months", TEST_MONTHS):
-            raise ValueError(f"walk-forward {gid} is 1:{cfg.get('test_months', TEST_MONTHS)}, not 1:{test_months}")
+            raise ValueError(f"walk-forward {gid} is {ratio_label(cfg.get('test_months', TEST_MONTHS), cfg.get('select_months', SELECT_MONTHS))}, "
+                             f"not 1:{test_months}")
         return read_json(d / "result.json")
 
     def compare(self, gid: str) -> dict:
@@ -691,4 +760,5 @@ class WalkForwardManager(GridManager):
             g["metric"] = (j.get("walkforward") or {}).get("metric")
             g["compare"] = bool((j.get("walkforward") or {}).get("compare"))
             g["test_months"] = (j.get("walkforward") or {}).get("test_months")
+            g["select_months"] = (j.get("walkforward") or {}).get("select_months", SELECT_MONTHS)
         return out

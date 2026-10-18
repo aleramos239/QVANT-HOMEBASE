@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=17"></script>
+<script src="/static/desklab.js?v=19"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -2318,7 +2318,7 @@ function labResHtml(lab, view) {
   const cell = (x) => `<div class="v mono">${esc(x)}</div>`;
   const f = (k, vals, head) => `<div class="${head ? "f fh" : "f"}"><div class="k">${esc(k)}</div>${vals.map(cell).join("")}</div>`;
   const note = (t) => `<div class="labres-note">${esc(t)}</div>`;
-  const unseen = v.unseen.rows.length ? v.unseen.rows.map(r => f(r.k, [r.v])).join("") : note(v.unseen.note);
+  const unseen = v.unseen.rows.length ? v.unseen.rows.map(r => f(r.k, [r.v])).join("") + (v.unseen.note ? note(v.unseen.note) : "") : note(v.unseen.note);
   const prop = v.prop.rows.length ? f("", v.prop.head, true) + v.prop.rows.map(r => f(r.k, [r.build, r.unseen])).join("") : note(v.prop.note);
   return `<div class="labres" data-for="${esc(view)}">
     <div class="sec"><h2>${esc(v.unseen.title)}</h2><div class="figs labres-unseen" data-h="${esc(v.unseen.title)}">${unseen}</div></div>

@@ -844,6 +844,57 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except (HTTPException, KeyError, ValueError, OSError):      # a run that was deleted or cannot be read: nothing to show
             return None
 
+    wf_lock = threading.Lock()
+
+    def ensure_wf(rec: dict) -> dict:
+        """The state of the record's 3:1 walk-forward (deskresults.wf_state); when there is none, start it -- once, as
+        ensure_unseen does. {"state": "unfit", "why"} for a strategy the walk-forward cannot search, {"state": "changed"}
+        when the Lab's code is no longer the promoted copy (a run of it would never match). Never raises."""
+        today = slots.et_now().date()
+        try:
+            with wf_lock:
+                try:
+                    got = deskresults.wf_state(wfs.grids, rec, today)
+                except ValueError as e:
+                    return {"state": "unfit", "why": str(e)}
+                if got["state"] != "none" or not DESKLAB_AUTO_UNSEEN:
+                    return got
+                try:
+                    src = draftstore.read(rec["name"])
+                except (FileNotFoundError, ValueError, OSError):
+                    return {"state": "changed"}
+                if hashlib.sha256(src.encode("utf-8")).hexdigest() != rec.get("sha256"):
+                    return {"state": "changed"}
+                try:
+                    wfs.submit(deskresults.wf_request(rec, today))
+                except Exception:      # noqa: BLE001 -- not now: refused in words by the tester, or not working
+                    return got
+                return deskresults.wf_state(wfs.grids, rec, today)
+        except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
+            return {"state": "none"}
+
+    def wf_block(rec: dict) -> dict:
+        """The card's unseen block from the 3:1 walk-forward: {unseen, unseen_state, curve, pick, why, prop_unseen}."""
+        got = ensure_wf(rec)
+        out = {"unseen": None, "unseen_state": got["state"], "curve": None, "pick": None, "why": got.get("why"),
+               "prop_unseen": None}
+        if got["state"] != "done":
+            return out
+        try:
+            res = wfs.result(got["id"])
+        except (ValueError, KeyError, OSError):
+            out["unseen_state"] = "failed"
+            return out
+        trades = (res.get("stitched") or {}).get("trades") or []
+        out.update(unseen=deskresults.wf_summary(got["id"], res), curve=deskresults.curve_of_trades(trades),
+                   pick=deskresults.wf_pick(rec, res))
+        try:
+            out["prop_unseen"] = deskresults.prop_headline(_rescore(("wf", got["id"]), lambda: {"run": {}, "trades": trades},
+                                                                    DESKLAB_PROP))
+        except (HTTPException, KeyError, ValueError, OSError):
+            pass
+        return out
+
     def warm_desklab_results() -> None:
         """Score every promoted strategy's (and the two built-in straddles' twins') saved runs, so the Desk's first results
         ask is a cache hit (about 16 prop sims: 25-90 s cold; a new run was 3-4 s on the next ask). One pass; the chart
@@ -852,10 +903,16 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         try:
             for rec in store.listing():
                 with desk_res_lock:
-                    for rid in ((rec.get("run") or {}).get("id"),
-                                ((deskresults.unseen_state(manager.runs, rec) or {}).get("run") or {}).get("id")):
-                        if rid:
-                            prop_of(rid)
+                    rid = (rec.get("run") or {}).get("id")
+                    if rid:
+                        prop_of(rid)
+                    try:
+                        st = deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
+                        if st["state"] == "done":
+                            tr = (wfs.result(st["id"]).get("stitched") or {}).get("trades") or []
+                            _rescore(("wf", st["id"]), lambda: {"run": {}, "trades": tr}, DESKLAB_PROP)
+                    except Exception:      # noqa: BLE001 -- the route computes it on ask
+                        pass
             for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
                 try:
                     rec = deskresults.builtin_rec(desk_id)
@@ -877,12 +934,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         out = {}
         with desk_res_lock:
             for rec in store.listing():
-                build, got = (rec.get("run") or {}).get("id"), ensure_unseen(rec)
-                unseen = got.get("run")
-                out[rec["name"]] = {"unseen": unseen, "unseen_state": got["state"],
-                                    "curve": deskresults.curve_of(manager.runs, unseen["id"]) if unseen else None,
-                                    "prop": {"build": prop_of(build) if build else None,
-                                             "unseen": prop_of(unseen["id"]) if unseen else None}}
+                # the unseen days ARE the 3:1 walk-forward's stitched out-of-sample record (owner, 2026-10-18)
+                build, w = (rec.get("run") or {}).get("id"), wf_block(rec)
+                out[rec["name"]] = {"unseen": w["unseen"], "unseen_state": w["unseen_state"], "curve": w["curve"],
+                                    "walkforward": True, "pick": w["pick"], "why": w["why"],
+                                    "prop": {"build": prop_of(build) if build else None, "unseen": w["prop_unseen"]}}
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
             for desk_id in deskresults.BUILTIN_TWINS:
@@ -951,7 +1007,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             trades = read_json(d / "trades.json", None)
             trades = trades.get("trades") if isinstance(trades, dict) else trades
             store.put(store.snapshot(name, source, meta, {"run": run, "trades": trades}, run_id, notes))
-        ensure_unseen(store.get(name))      # its unseen days are read by themselves, so its Desk panel shows them (owner 2026-10-11)
+        ensure_wf(store.get(name))          # its unseen days (the 3:1 walk-forward) run by themselves (owner 2026-10-11, 2026-10-18)
         return {"ok": True, "name": name, "notes": notes}
 
     def desklab_remove(name: str) -> dict:
@@ -1388,7 +1444,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         return wfs.cancel(wid)
 
     @r.get("/walkforward-scheme")
-    def walkforward_scheme(test_months: str | None = None, start: str | None = None, end: str | None = None):
+    def walkforward_scheme(test_months: str | None = None, start: str | None = None, end: str | None = None,
+                           select_months: str | None = None):
         """The page reads its step count from here rather than assuming one (review M5) — now for
         the ratio and the window the range picker currently shows. `test_months` is parsed strictly:
         "2" is 1:2, "2.0" or "5" is a 400, never coerced."""
@@ -1397,7 +1454,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 return walkforward.compare_scheme(start=start, end=end)
             n = walkforward.TEST_MONTHS if test_months is None else (
                 int(test_months) if test_months.isdigit() else test_months)
-            return walkforward.scheme(start=start, end=end, test_months=n)
+            sel = walkforward.SELECT_MONTHS if select_months is None else (
+                int(select_months) if select_months.isdigit() else select_months)
+            return walkforward.scheme(start=start, end=end, test_months=n, select_months=sel)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 

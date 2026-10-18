@@ -130,12 +130,13 @@ SPECS = [
            "controls": _CONTROLS, "prop_rules": _PROP, "max_cells": {"type": "integer", "minimum": 1, "maximum": 400},
            "wait_s": _WAIT, "grid_id": {"type": "string", "description": "Wait on this existing heat-map."}}),
     _spec("walkforward", "Walk-forward over a heat-map grid: select the best cell on 1 month, test it on the next "
-          "`ratio` months, step monthly, stitch the out-of-sample legs. Returns stitched OOS vs in-sample stats "
+          "`ratio` months, step monthly, stitch the out-of-sample legs. ratio \"3:1\" instead runs blocks: select on 3 "
+          "months, test the next 1, then the next block (75% in-sample / 25% out-of-sample; a month is never both). Returns stitched OOS vs in-sample stats "
           "(per month), the drop, pick stability and the per-step table. The strategy must be "
           "session_independent. Pass walkforward_id to keep waiting on an existing one. A 1:1 · 1:2 · 1:3 compare "
           "job (started from the chart page) returns its side-by-side stitched OOS summary; pass test_months with "
           "its walkforward_id for one scheme's full result.",
-          {"strategy": {"type": "string"}, "axes": _AXES, "ratio": {"type": "integer", "enum": [1, 2, 3], "default": 3},
+          {"strategy": {"type": "string"}, "axes": _AXES, "ratio": {"enum": [1, 2, 3, "3:1"], "default": 3},
            "metric": {"type": "string", "enum": ["net_profit", "sharpe", "profit_factor", "t_stat"]},
            "min_trades": {"type": "integer", "minimum": 1, "maximum": 1000},
            "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS, "controls": _CONTROLS, "prop_rules": _PROP,
@@ -580,7 +581,10 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         wid = walkforward_id
         if wid is None:
             body = self._grid_body(strategy, axes, inputs, range, costs, prop_rules, max_cells, controls)
-            body["test_months"] = ratio
+            if ratio == "3:1":
+                body["select_months"], body["test_months"] = 3, 1
+            else:
+                body["test_months"] = ratio
             if metric:
                 body["metric"] = metric
             if min_trades is not None:

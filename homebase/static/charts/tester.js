@@ -37,7 +37,10 @@ const RANGES = [
 ];
 const WF_RATIOS = [1, 2, 3];
 const WF_COMPARE = 'compare';
-const WF_MODES = [...WF_RATIOS, WF_COMPARE];
+const WF_ROLL = '3:1';     // blocks: select on 3 months, test the next 1, then the next block -- never rolling (owner, 2026-10-18)
+const WF_MODES = [...WF_RATIOS, WF_ROLL, WF_COMPARE];
+/* The ratio as it is spoken: '3:1' for the rolling scheme, '1:N' for the others. */
+const wfRatioText = (wf) => (wf === WF_ROLL ? WF_ROLL : `1:${wf}`);
 const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September',
   'October', 'November', 'December'];
@@ -77,7 +80,7 @@ function pillLabel(r) {
   const base = !r || r.id !== 'custom' ? preset(r ? r.id : 'research').label
     : (parseDate(r.start) && parseDate(r.end) ? `${prettyDate(r.start)} — ${prettyDate(r.end)}` : 'Custom date range');
   if (r && r.wf === WF_COMPARE) return `${base} · WF compare`;
-  return r && r.wf ? `${base} · WF 1:${r.wf}` : base;
+  return r && r.wf ? `${base} · WF ${wfRatioText(r.wf)}` : base;
 }
 const ymOf = (y, m) => `${y}-${String(m).padStart(2, '0')}`;
 function shiftMonth(ym, delta) {
@@ -263,7 +266,7 @@ function restore(saved, s) {
   const r = saved.range || {};
   if (RANGES.some((x) => x.id === r.id)) {
     f.range = { id: r.id, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '',
-      wf: WF_MODES.includes(r.wf) ? r.wf : null };
+      wf: WF_MODES.includes(r.wf) ? r.wf : null, ...(['is', 'oos', 'both'].includes(r.side) ? { side: r.side } : {}) };   // side: the Lab's 3:1 view
   }
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
   const ctl = controlsClean(saved.controls);       // only when something is set: the form of an old run is what it was
@@ -758,11 +761,15 @@ const WF_NEEDS_GRID = 'Pick the parameters to search on the Heat-map tab first.'
    the job's identity -- switching the ratio can never show the other one's result. */
 function wfBody(f, axes, metric, minTrades) {
   if (f.range.wf === WF_COMPARE) return { ...gridBody(f, axes), metric, min_trades: minTrades, compare: true };
+  if (f.range.wf === WF_ROLL) return { ...gridBody(f, axes), metric, min_trades: minTrades, select_months: 3, test_months: 1 };
   return { ...gridBody(f, axes), metric, min_trades: minTrades, test_months: f.range.wf || 3 };
 }
 /* A job's mode as the pill spells it: its ratio N, or 'compare' -- what the pill must equal for its result to show. */
-function wfModeOf(cfg) { return cfg && cfg.compare ? WF_COMPARE : (cfg ? cfg.test_months : null); }
-function wfModeLabel(cfg) { return wfModeOf(cfg) === WF_COMPARE ? '1:1 · 1:2 · 1:3 compare' : `1:${cfg && cfg.test_months}`; }
+function wfModeOf(cfg) {
+  if (!cfg) return null;
+  return cfg.compare ? WF_COMPARE : (cfg.select_months === 3 ? WF_ROLL : cfg.test_months);
+}
+function wfModeLabel(cfg) { const m = wfModeOf(cfg); return m === WF_COMPARE ? '1:1 · 1:2 · 1:3 compare' : wfRatioText(m); }
 function wfProblems(f, s, rows, minTrades) {
   if (!rows || !rows[0] || !rows[0].key || !rows[1] || !rows[1].key) return WF_NEEDS_GRID;
   const g = gridProblems(f, s, rows);
@@ -848,7 +855,7 @@ const WF_STEP_HEADERS = ['Select', 'Test', 'Chosen params', 'Net', 'Trades', 'Sh
 function paramsLabel(axes, params) { return axes.map((a) => `${a.label} ${valueLabel(params[a.key])}`).join(' · '); }
 function wfStepRows(r, axes) {
   return r.steps.map((s) => {
-    const head = [s.select, span(s.test[0], s.test[1])];
+    const head = [s.select, s.test[0] === s.test[1] ? s.test[0] : span(s.test[0], s.test[1])];
     if (s.cell == null) {
       return { cells: [...head, `no pick (no cell with ≥ ${r.scheme.min_trades} trades)`, ...Array(9).fill('—')],
         stitched: !!s.stitched, changed: s.changed, isTone: '', oosTone: '' };
@@ -865,14 +872,15 @@ function wfStability(r) {
     + ` · ${int(np)} month${np === 1 ? '' : 's'} with no pick`;
 }
 function wfPhases(r) {
+  if (r.phases.length < 2) return '';     // 3:1 tests every step: one chain, no other start month
   const rest = r.phases.filter((p) => p.phase > 0).map((p) => `phase ${p.phase} ${signed(p.net_profit)}`).join(' · ');
   return `Chain phase check (same picks, chain started 1 or 2 months later): ${rest}`;
 }
 function wfScheme(r) {
   const c = r.scheme, w = r.window || {};
   const win = w.start && w.end ? `${w.start} → ${w.end} · ` : '';
-  return `${win}Walk-forward 1:${c.test_months} — select on ${c.select_months} month by ${c.metric_label} `
-    + `(≥ ${c.min_trades} trades), test the next ${c.test_months}, stepping monthly · ${int(r.n_steps)} steps `
+  return `${win}Walk-forward ${c.ratio || wfRatioText(c.test_months)} — select on ${c.select_months} month${c.select_months === 1 ? '' : 's'} by ${c.metric_label} `
+    + `(≥ ${c.min_trades} trades), test the next ${c.test_months}, ${c.step_months === 4 ? 'then the next block' : 'stepping monthly'} · ${int(r.n_steps)} steps `
     + `· stitched: ${c.stitch}`;
 }
 
@@ -973,7 +981,7 @@ function strategyLabel(s) {
 }
 const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, maxCellsError, cellsWarning, stepValues, axisValues,
   parseValues, valueLabel, gridAxes, gridCount, gridProblems, gridBody, looksText, looksLine, heatPanels, heatMaxAbs,
-  WF_METRICS, WF_RATIOS, WF_COMPARE, WF_MODES, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
+  WF_METRICS, WF_RATIOS, WF_COMPARE, WF_ROLL, WF_MODES, wfRatioText, signed, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
   wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, wfSchemeProblem, WF_COMPARE_TOO_SHORT, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,

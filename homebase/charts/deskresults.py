@@ -1,6 +1,8 @@
 """What the Desk's panel shows of a promoted Lab strategy's research: its saved run on the unseen days, and the prop sim's
 headline of a run. READ-ONLY and small: run folders as the tester left them (request.json, status.json, run.json).
 Nothing here runs a strategy, and no test day is read: a strategy with no saved run on the unseen days has none to show."""
+import calendar
+import datetime as dt
 from pathlib import Path
 
 from .. import strategies
@@ -138,7 +140,11 @@ def curve_of(runs: Path, run_id: str) -> dict | None:
     One point per day with a trade, in date order (a day without one holds the line flat, as the Desk's own curve does).
     None for a run with fewer than two trading days or trades that cannot be read."""
     t = read_json(runs / run_id / "trades.json", None)
-    t = t.get("trades") if isinstance(t, dict) else t
+    return curve_of_trades(t.get("trades") if isinstance(t, dict) else t)
+
+
+def curve_of_trades(t) -> dict | None:
+    """curve_of over a trade list itself (a walk-forward's stitched trades)."""
     if not isinstance(t, list):
         return None
     by_day: dict[str, float] = {}
@@ -162,3 +168,125 @@ def prop_headline(prop) -> dict | None:
     if not isinstance(head, dict):
         return None
     return {"account": (prop.get("rules") or {}).get("label"), **{k: head.get(k) for k in PROP_KEYS}}
+
+
+# ---------------------------------------------------------------- the unseen days as the 3:1 walk-forward (owner, 2026-10-18)
+# The card's "Unseen days" is the stitched out-of-sample record of the 3:1 walk-forward in BLOCKS over all the data (pick on 3
+# whole months, trade the next 1, then the next block; never rolling), searched over the settings the Desk lets the owner change. Its pick for this month is shown
+# beside it when it differs from what runs: the owner changes the setting; nothing switches by itself.
+WF_START = discipline.RESEARCH_START
+WF_AXES_MAX = 3
+NUDGE = (0.75, 1.0, 1.25)     # shortcut: a number setting is searched at its value and +-25 %; a per-setting grid when one is asked for
+
+
+def wf_end(today) -> str:
+    """The last day of the last whole month: the job stays the same all month and runs again when a month completes."""
+    return (today.replace(day=1) - dt.timedelta(days=1)).isoformat()
+
+
+def _axis_values(s: dict, cur):
+    kind = s.get("type")
+    if kind == "choice":
+        return [str(c) for c in s.get("choices") or []]
+    if kind == "bool":
+        return [False, True]
+    if kind in ("int", "float") and isinstance(cur, (int, float)) and not isinstance(cur, bool):
+        step, lo, hi = s.get("step") or 0, s.get("min"), s.get("max")
+        out = []
+        for k in NUDGE:
+            v = cur * k
+            if step:
+                v = round(round(v / step) * step, 6)
+            if kind == "int":
+                v = int(round(v))
+            if (lo is not None and v < lo) or (hi is not None and v > hi) or v in out:
+                continue
+            out.append(v)
+        return out
+    return []
+
+
+def wf_axes(rec: dict) -> list[dict]:
+    """The walk-forward's search: the first WF_AXES_MAX adjustable settings with 2+ values each. ValueError (the card's
+    sentence) when fewer than 2 qualify: the tester's grid needs 2 or 3."""
+    params = resolved_params(rec)
+    axes = []
+    for s in rec.get("settings") or []:
+        if not isinstance(s, dict) or not isinstance(s.get("key"), str):
+            continue
+        vals = _axis_values(s, params.get(s["key"]))
+        if len(vals) >= 2:
+            axes.append({"key": s["key"], "values": vals})
+        if len(axes) == WF_AXES_MAX:
+            break
+    if len(axes) < 2:
+        raise ValueError("No walk-forward: it needs 2 or 3 settings the Desk can change, and this strategy has "
+                         f"{len(axes)}.")
+    return axes
+
+
+def wf_request(rec: dict, today) -> dict:
+    """The tester walk-forward 3:1 for this copy: all the data to the last whole month, its settings, size and costs."""
+    keys = {a["key"] for a in wf_axes(rec)}
+    return {"strategy": rec["id"], "inputs": {k: v for k, v in (rec.get("params") or {}).items() if k not in keys},
+            "axes": wf_axes(rec), "range": {"kind": "custom", "start": WF_START.isoformat(), "end": wf_end(today)},
+            "qty": rec.get("qty") or 1, "commission": rec.get("commission"), "slippage_ticks": rec.get("slippage_ticks"),
+            "select_months": 3, "test_months": 1}
+
+
+def wf_state(grids: Path, rec: dict, today) -> dict:
+    """Where this copy's 3:1 walk-forward stands (same code, base settings, search, size and window), newest first:
+    {"state": "done", "id"}, {"state": "pending"}, {"state": "failed"} (never started again by itself), {"state": "none"}."""
+    want = wf_request(rec, today)
+    base = {k: v for k, v in resolved_params(rec).items() if k not in {a["key"] for a in want["axes"]}}
+    seen = set()
+    for d in sorted(grids.glob(f"*-{rec.get('id')}-*"), key=lambda p: p.name, reverse=True):
+        g, c0 = read_json(d / "grid.json", None), read_json(d / "cells" / "00" / "request.json", None)
+        if not isinstance(g, dict) or not isinstance(c0, dict) or g.get("strategy") != rec.get("id"):
+            continue
+        cfg, rng = g.get("walkforward") or {}, g.get("range") or {}
+        if c0.get("draft_sha256") != rec.get("sha256") or cfg.get("select_months") != 3 or g.get("qty") != want["qty"] \
+                or cfg.get("step_months") != 4:                  # a rolling job of before the blocks (2026-10-18) is not this
+            continue
+        if (rng.get("start"), rng.get("end")) != (want["range"]["start"], want["range"]["end"]):
+            continue
+        if [(a.get("key"), [_value(v) for v in a.get("values") or []]) for a in g.get("axes") or []] != \
+                [(a["key"], [_value(v) for v in a["values"]]) for a in want["axes"]] or not same_settings(g.get("base"), base):
+            continue
+        if g.get("status") == "done":
+            return {"state": "done", "id": d.name}
+        seen.add("failed" if g.get("status") in ("error", "cancelled") else "pending")
+    return {"state": "pending" if "pending" in seen else "failed" if seen else "none"}
+
+
+def realized_rr(trades: list) -> float | None:
+    nets = [t.get("net") for t in trades if isinstance(t, dict) and isinstance(t.get("net"), (int, float))]
+    wins, losses = [n for n in nets if n > 0], [n for n in nets if n < 0]
+    if not wins or not losses:
+        return None
+    return round((sum(wins) / len(wins)) / abs(sum(losses) / len(losses)), 2)
+
+
+def wf_summary(wid: str, result: dict) -> dict:
+    """The stitched out-of-sample record in the card's shape (run_summary's keys), plus the scheme."""
+    so = result.get("stitched") or {}
+    st, ms = so.get("stats") or {}, so.get("months") or []
+    last = f"{ms[-1]}-{calendar.monthrange(*map(int, ms[-1].split('-')))[1]:02d}" if ms else None
+    rng = {"start": f"{ms[0]}-01", "end": last} if ms else None
+    return {"id": wid, "range": rng, "walkforward": (result.get("scheme") or {}).get("ratio"),
+            **{ours: st.get(theirs) for ours, theirs in HEADLINE},
+            "rr": st.get("rr") if st.get("rr") is not None else realized_rr(so.get("trades") or []),
+            "rr_label": st.get("rr_label"), "sharpe": st.get("sharpe")}
+
+
+def wf_pick(rec: dict, result: dict) -> dict | None:
+    """This month's 3:1 pick when it differs from the settings the strategy runs: {for, pick, running}; None when they agree
+    (or there is no pick: no cell had enough trades)."""
+    nxt = result.get("next") or {}
+    pick = nxt.get("params")
+    if not isinstance(pick, dict):
+        return None
+    running = resolved_params(rec)
+    if all(_value(running.get(k)) == _value(v) for k, v in pick.items()):
+        return None
+    return {"for": nxt.get("for"), "pick": pick, "running": {k: running.get(k) for k in pick}}

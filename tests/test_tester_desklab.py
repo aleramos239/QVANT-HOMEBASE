@@ -523,51 +523,8 @@ def write_run(tmp_path, rid, name="nq_bars", code=CODE, rng=UNSEEN, inputs=None,
     return rid
 
 
-def test_results_show_the_saved_unseen_run_of_this_copy_and_the_prop_sim_of_both_runs(c, tmp_path, drafts_dir, make_run, monkeypatch):
-    scored = []
-
-    def fake(trades, req):
-        scored.append(req["prop_rules"])
-        return {"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False
-    monkeypatch.setattr(tester_api, "_run_propsim", fake)
-    draft(drafts_dir)
-    build = make_run()
-    (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
-    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
-    got = c.get("/api/tester/desklab/results", headers=DESK)
-    assert got.headers["access-control-allow-origin"] == DESK["origin"]
-    assert lab_results(c) == {"nq_bars": {"unseen": None, "unseen_state": "none", "curve": None, "prop": {
-        "build": {"account": "LucidFlex 50K", **HEAD}, "unseen": None}}}
-    # runs that are NOT this copy on the unseen days: other code, other settings, another size, all the data, not finished
-    write_run(tmp_path, "20261011-120001-draft_nq_bars-aa01", code=CODE + "# other\n")
-    write_run(tmp_path, "20261011-120002-draft_nq_bars-aa02", inputs={"lookback": 9, "sl_pts": 20.0, "tp_pts": 40.0})
-    write_run(tmp_path, "20261011-120003-draft_nq_bars-aa03", qty=1)
-    write_run(tmp_path, "20261011-120004-draft_nq_bars-aa04", rng={**UNSEEN, "start": "2021-09-22"})
-    write_run(tmp_path, "20261011-120005-draft_nq_bars-aa05", status="running")
-    write_run(tmp_path, "20261011-120006-draft_nq_bars-aa06", rng=RANGE)
-    r = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
-    assert r["unseen"] is None and r["unseen_state"] == "pending", "the one that is still running is the copy's own, not a result"
-    # the copy's own: the newest one, with a setting saved as text counted the same
-    write_run(tmp_path, "20261011-110000-draft_nq_bars-bb01", net=100.0)
-    newest = write_run(tmp_path, "20261011-130000-draft_nq_bars-bb02", inputs={"lookback": "8", "sl_pts": 20, "tp_pts": 40.0})
-    res = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
-    assert res["unseen"] == {"id": newest, "range": UNSEEN, "net": 900.0, "trades": 41, "win_rate": 48.8,
-                             "profit_factor": 1.31, "max_drawdown": -2100.0,
-                             "rr": 2.81, "rr_label": "1:2.81", "sharpe": 0.43}
-    assert res["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
-    assert tester_api.DESKLAB_PROP == "lucid-pro-50k-no-dll@2026-10-11"
-    assert scored == [tester_api.DESKLAB_PROP] * 2, "each run is scored once, on the pipeline's account (LucidPro no-DLL), and kept"
 
 
-def test_results_answer_the_desk_page_only_and_a_lost_run_has_no_prop_sim(c, tmp_path, drafts_dir, make_run):
-    assert c.get("/api/tester/desklab/results", headers=EVIL).status_code == 403
-    assert lab_results(c) == {}
-    draft(drafts_dir)
-    build = make_run()
-    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
-    (tmp_path / "state" / "tester" / "runs" / build / "status.json").write_text(json.dumps({"id": build, "status": "error"}))
-    assert lab_results(c) == {"nq_bars": {
-        "unseen": None, "unseen_state": "none", "curve": None, "prop": {"build": None, "unseen": None}}}
 
 
 def test_a_setting_the_record_leaves_out_is_the_codes_default_when_a_run_is_matched(tmp_path, monkeypatch):
@@ -585,8 +542,94 @@ def test_a_setting_the_record_leaves_out_is_the_codes_default_when_a_run_is_matc
     assert got and got["id"] == "20261011-140000-draft_nq_bars-cc01"
 
 
-def test_a_promote_starts_the_unseen_days_run_once_and_a_failed_one_is_not_started_again(c, tmp_path, drafts_dir, make_run, monkeypatch):
-    from homebase.backtest.runner import RunManager
+
+
+
+
+# ---- the unseen days are the 3:1 walk-forward (owner, 2026-10-18): the stitched out-of-sample months of a rolling search over the
+# settings the Desk may change, and its pick for this month when it differs from what runs ----
+CODE_SET = CODE.replace("    session_independent = True\n", "    session_independent = True\n    desk_settings = (\"sl_pts\", \"tp_pts\")\n")
+
+
+def write_wf(tmp_path, rec, today, status="done", result=None, sha256=None):
+    """A walk-forward job folder as the tester leaves it, built from the Desk's own request (deskresults.wf_request)."""
+    from homebase.backtest import walkforward
+    g = walkforward.validate_wf(deskresults.wf_request(rec, today))
+    cells = g.pop("cells")
+    gid = f"{today:%Y%m%d}-120000-{rec['id']}-{len(list((tmp_path / 'state' / 'tester' / 'walkforward').glob('*'))):04x}"
+    d = tmp_path / "state" / "tester" / "walkforward" / gid
+    (d / "cells" / "00").mkdir(parents=True)
+    (d / "cells" / "00" / "request.json").write_text(json.dumps({**cells[0]["req"], **({"draft_sha256": sha256} if sha256 else {})}))
+    (d / "grid.json").write_text(json.dumps({"id": gid, **g, "status": status, "total": len(cells), "done": len(cells),
+                                             "cells": [{"i": c["i"], "params": c["params"], "status": status} for c in cells]}))
+    if result is not None:
+        (d / "result.json").write_text(json.dumps(result))
+    return gid
+
+
+def wf_result(pick):
+    t = [{"date": "2022-01-03", "net": 300.0, "entry_ms": 1, "exit_ms": 2}, {"date": "2022-01-04", "net": -100.0, "entry_ms": 3, "exit_ms": 4}]
+    return {"scheme": {"ratio": "3:1"}, "next": {"for": "2026-10", "params": pick},
+            "stitched": {"stats": {**SUMMARY, "sharpe": 0.5}, "months": ["2022-01", "2026-09"], "trades": t}}
+
+
+def test_a_strategy_with_no_settings_to_search_says_so(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    monkeypatch.setattr(tester_api, "_run_propsim", lambda trades, req: ({"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False))
+    assert c.get("/api/tester/desklab/results", headers=EVIL).status_code == 403
+    draft(drafts_dir)
+    build = make_run()
+    (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
+    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
+    got = c.get("/api/tester/desklab/results", headers=DESK)
+    assert got.headers["access-control-allow-origin"] == DESK["origin"]
+    assert lab_results(c) == {"nq_bars": {
+        "unseen": None, "unseen_state": "unfit", "curve": None, "walkforward": True, "pick": None,
+        "why": "No walk-forward: it needs 2 or 3 settings the Desk can change, and this strategy has 0.",
+        "prop": {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": None}}}
+
+
+def test_the_search_is_each_setting_at_its_value_and_25_percent_either_side():
+    rec = {"params": {"a": 20.0, "b": 3, "c": "x"}, "source": "", "settings": [
+        {"key": "a", "type": "float", "min": 0.5, "max": 1000.0, "step": 0.25},
+        {"key": "b", "type": "int", "min": 3, "max": 10, "step": 1},
+        {"key": "c", "type": "choice", "choices": ["x", "y"]}, {"key": "d", "type": "bool"}]}
+    assert deskresults.wf_axes(rec) == [{"key": "a", "values": [15.0, 20.0, 25.0]}, {"key": "b", "values": [3, 4]},
+                                        {"key": "c", "values": ["x", "y"]}], "below its min is left out; 3 settings at most"
+    assert deskresults.wf_end(dt.date(2026, 10, 18)) == "2026-09-30" and deskresults.wf_end(dt.date(2026, 1, 1)) == "2025-12-31"
+
+
+def test_the_card_shows_the_stitched_record_its_prop_sim_and_this_months_pick(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    scored = []
+
+    def fake(trades, req):
+        scored.append(len(trades))
+        return {"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False
+    monkeypatch.setattr(tester_api, "_run_propsim", fake)
+    at_et(monkeypatch, 2026, 10, 18, 12, 0)
+    draft(drafts_dir, CODE_SET)
+    build = make_run(CODE_SET)
+    (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
+    assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
+    rec, today = store.get("nq_bars"), dt.date(2026, 10, 18)
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "none"
+    write_wf(tmp_path, rec, today, result=wf_result({"sl_pts": 20.0, "tp_pts": 40.0}), sha256="other code")   # not this copy
+    write_wf(tmp_path, rec, dt.date(2026, 9, 18), result=wf_result({"sl_pts": 20.0, "tp_pts": 40.0}))        # last month's window
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "none"
+    gid = write_wf(tmp_path, rec, today, result=wf_result({"sl_pts": 25.0, "tp_pts": 40.0}))
+    r = lab_results(c)["nq_bars"]
+    assert r["unseen"] == {"id": gid, "range": {"start": "2022-01-01", "end": "2026-09-30"}, "walkforward": "3:1",
+                           "net": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0,
+                           "rr": 3.0, "rr_label": None, "sharpe": 0.5}
+    assert r["curve"] == {"days": ["2022-01-03", "2022-01-04"], "vals": [300.0, 200.0]}
+    assert r["pick"] == {"for": "2026-10", "pick": {"sl_pts": 25.0, "tp_pts": 40.0}, "running": {"sl_pts": 20.0, "tp_pts": 40.0}}
+    assert r["prop"]["unseen"] == {"account": "LucidFlex 50K", **HEAD} and 2 in scored
+    # the pick agrees with what runs: no notice
+    write_wf(tmp_path, rec, today, result=wf_result({"sl_pts": 20.0, "tp_pts": 40.0}))
+    assert lab_results(c)["nq_bars"]["pick"] is None
+
+
+def test_a_promote_starts_the_walkforward_once_and_a_failed_one_is_not_started_again(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    from homebase.backtest.walkforward import WalkForwardManager
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
     at_et(monkeypatch, 2026, 10, 12, 12, 0)
     calls, refuse = [], []
@@ -595,45 +638,33 @@ def test_a_promote_starts_the_unseen_days_run_once_and_a_failed_one_is_not_start
         if refuse:
             raise ValueError("Backtests do not start 09:20-09:35 ET.")
         calls.append(body)
-        write_run(tmp_path, f"20261012-12000{len(calls)}-draft_nq_bars-dd0{len(calls)}", status="queued")
+        write_wf(tmp_path, store.get("nq_bars"), dt.date(2026, 10, 12), status="queued")
         return "x"
-    monkeypatch.setattr(RunManager, "submit", fake_submit)
-    draft(drafts_dir)
-    # refused at the promote: the record is made, nothing started, and the next ask of the results tries again
+    monkeypatch.setattr(WalkForwardManager, "submit", fake_submit)
+    draft(drafts_dir, CODE_SET)
     refuse.append(1)
-    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True and calls == []
-    assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "none"
+    assert promote(c, run_id=make_run(CODE_SET), headers=DESK).json()["ok"] is True and calls == []
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "none"
     refuse.clear()
-    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
+    got = lab_results(c)["nq_bars"]
     assert got["unseen_state"] == "pending" and got["unseen"] is None and len(calls) == 1
-    # the request reads the unseen days as promoted: its own settings, size and costs
-    body = calls[0]
-    assert body == {"strategy": "draft_nq_bars", "inputs": {"lookback": 8, "sl_pts": 20.0, "tp_pts": 40.0},
-                    "range": {"kind": "custom", "start": "2025-07-01", "end": "2026-10-12"}, "qty": 2,
-                    "commission": 2.5, "slippage_ticks": 0.0}
-    # waiting or going: asked again, nothing more starts
+    assert calls[0] == {"strategy": "draft_nq_bars", "inputs": {"lookback": 8},
+                        "axes": [{"key": "sl_pts", "values": [15.0, 20.0, 25.0]}, {"key": "tp_pts", "values": [30.0, 40.0, 50.0]}],
+                        "range": {"kind": "custom", "start": "2021-09-22", "end": "2026-09-30"}, "qty": 2,
+                        "commission": 2.5, "slippage_ticks": 0.0, "select_months": 3, "test_months": 1}
     for _ in range(2):
-        assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "pending"
+        assert lab_results(c)["nq_bars"]["unseen_state"] == "pending"
     assert len(calls) == 1
-    # it ended in error: shown as failed, and never started again by itself
-    run_dir = tmp_path / "state" / "tester" / "runs" / "20261012-120001-draft_nq_bars-dd01"
-    (run_dir / "status.json").write_text(json.dumps({"id": run_dir.name, "status": "error"}))
+    gdir = next((tmp_path / "state" / "tester" / "walkforward").glob("*-draft_nq_bars-*"))
+    g = json.loads((gdir / "grid.json").read_text())
+    (gdir / "grid.json").write_text(json.dumps({**g, "status": "error"}))
     for _ in range(2):
-        assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]["unseen_state"] == "failed"
-    assert len(calls) == 1
-    # a re-promote of the same copy does not read the unseen days again either
-    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True and len(calls) == 1
-
-
-def test_a_promote_starts_nothing_when_the_copys_unseen_run_is_already_saved(c, tmp_path, drafts_dir, make_run, monkeypatch):
-    from homebase.backtest.runner import RunManager
-    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
-    monkeypatch.setattr(RunManager, "submit", lambda self, body: (_ for _ in ()).throw(AssertionError("a run was started")))
-    draft(drafts_dir)
-    write_run(tmp_path, "20261011-110000-draft_nq_bars-ee01")
-    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
-    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
-    assert got["unseen_state"] == "done" and got["unseen"]["id"] == "20261011-110000-draft_nq_bars-ee01"
+        assert lab_results(c)["nq_bars"]["unseen_state"] == "failed"
+    assert promote(c, run_id=make_run(CODE_SET), headers=DESK).json()["ok"] is True and len(calls) == 1
+    # the Lab's code changed since the promote: a run of it would never match, so none starts
+    (gdir / "grid.json").unlink()
+    draft(drafts_dir, CODE_SET + "# newer\n")
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "changed" and len(calls) == 1
 
 
 def test_the_curve_of_an_unseen_run_is_its_running_total_by_day_after_costs(tmp_path):
@@ -653,15 +684,6 @@ def test_the_curve_of_an_unseen_run_is_its_running_total_by_day_after_costs(tmp_
     assert deskresults.curve_of(runs, "r1") is None
 
 
-def test_the_results_carry_the_curve_of_the_unseen_run(c, tmp_path, drafts_dir, make_run, monkeypatch):
-    monkeypatch.setattr(tester_api, "_run_propsim", lambda trades, req: ({"rules": {"label": "x"}, "headline": HEAD, "breach": {}}, False))
-    draft(drafts_dir)
-    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
-    rid = write_run(tmp_path, "20261011-130000-draft_nq_bars-ff01")
-    (tmp_path / "state" / "tester" / "runs" / rid / "trades.json").write_text(json.dumps(
-        [{"date": "2025-07-01", "net": 100.0}, {"date": "2025-07-02", "net": -40.0}]))
-    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq_bars"]
-    assert got["curve"] == {"days": ["2025-07-01", "2025-07-02"], "vals": [100.0, 60.0]}
 
 
 def test_the_desks_show_on_chart_carries_a_run_the_lab_page_takes_once_with_the_strategy(c, drafts_dir):

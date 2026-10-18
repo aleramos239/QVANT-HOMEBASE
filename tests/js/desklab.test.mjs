@@ -1189,3 +1189,19 @@ test('the group writes go to the chart service by name, and a group id is only a
   assert.ok(handlers.length >= 4);
   for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
 });
+
+test('the unseen days are the 3:1 walk-forward: its title, its states and this month\'s pick', () => {
+  const run = { range: { start: '2022-01-01', end: '2026-09-30' }, net: 1234.5, trades: 41, win_rate: 48.8, profit_factor: 1.31,
+    max_drawdown: -2100, rr: 3, sharpe: 0.5 };
+  const done = D.results({ walkforward: true, unseen: run, unseen_state: 'done', prop: {},
+    pick: { for: '2026-10', pick: { sl_pts: 25, tp_pts: 40 }, running: { sl_pts: 20, tp_pts: 40 } } });
+  assert.equal(done.unseen.title, 'Unseen days · walk-forward 3:1');
+  assert.equal(done.unseen.rows[0].v, 'Jan 2022 – Sep 2026');
+  assert.equal(done.unseen.note, '3:1 pick for Oct 2026: sl pts 25 · tp pts 40 (running: sl pts 20 · tp pts 40). Change it in Setup if you agree.');
+  assert.equal(D.results({ walkforward: true, unseen: run, unseen_state: 'done', pick: null, prop: {} }).unseen.note, '');
+  assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
+  assert.equal(D.results({ walkforward: true, unseen: null, unseen_state: 'unfit', why: 'No walk-forward: x.', prop: {} }).unseen.note, 'No walk-forward: x.');
+  assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
+  assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-03', '2022-01-04'], vals: [300, 200] } }).title,
+    'Unseen days (walk-forward 3:1), after costs');
+});

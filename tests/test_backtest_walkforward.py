@@ -890,3 +890,68 @@ def test_the_selection_side_sharpe_grid_is_only_the_non_contiguous_selection_mon
     assert r["stitched_is"]["stats"]["sharpe"] == new
     assert new > old                                                 # the old grid understated the IS Sharpe
     assert r["drop"]["sharpe"] == round(r["stitched"]["stats"]["sharpe"] - new, 4)
+
+
+# ---------------------------------------------------------------- 3:1 (owner, 2026-10-18)
+
+def test_3to1_is_blocks_three_months_in_then_one_out():
+    """The owner, 2026-10-18: "jan-march in sample the april oos then may-july in sample then august oos" --
+    every month is in-sample or out-of-sample, never both."""
+    months = [f"2022-{m:02d}" for m in range(1, 10)]                 # Jan..Sep: blocks Jan-Mar->Apr, May-Jul->Aug; Sep left
+    st = wf.steps(months, 1, 3)
+    assert [(s["select_ms"], s["test"]) for s in st] == [
+        (["2022-01", "2022-02", "2022-03"], ["2022-04"]), (["2022-05", "2022-06", "2022-07"], ["2022-08"])]
+    assert st[0]["select"] == "2022-01 → 2022-03"
+    ins = {m for s in st for m in s["select_ms"]}
+    assert not ins & {m for s in st for m in s["test"]}, "no month is both"
+    # cell 0 wins Jan alone, but cell 1 wins Jan-Mar as one window: the 3 months are scored together
+    nets = {0: (100, -50, -50, 10, 30, 30, 30, -20, 5), 1: (10, 10, 10, -30, -10, -10, -10, 40, 5)}
+    tr = {i: [t for m, n in zip(months, nets[i]) for t in trades(m, [n] * 5)] for i in (0, 1)}
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=1, select_months=3)
+    assert r["scheme"]["ratio"] == "3:1" and r["scheme"]["step_months"] == 4 and r["n_steps"] == 2 and r["looks"] == 4
+    s0, s1 = r["steps"]
+    assert (s0["cell"], s0["is"]["net_profit"], s0["is"]["trades"], s0["oos"]["net_profit"]) == (1, 150, 15, -150)
+    assert (s1["cell"], s1["is"]["net_profit"], s1["oos"]["net_profit"]) == (0, 450, -100)       # May-Jul: 0 wins
+    assert r["stitched"]["months"] == ["2022-04", "2022-08"] and r["stitched"]["stats"]["net_profit"] == -250
+    assert r["stitched"]["uncovered"] == ["2022-09"] and len(r["phases"]) == 1
+    # the in-sample side: the blocks' own months, once each, with its own curve
+    si = r["stitched_is"]
+    assert si["months"] == ["2022-01", "2022-02", "2022-03", "2022-05", "2022-06", "2022-07"]
+    assert si["stats"]["net_profit"] == 600 and si["per_month"]["net_profit"] == 100
+    assert si["equity"]["equity"][-1] == 600
+    assert "rr" in r["stitched"]["stats"] and "rr_label" in si["stats"]          # realized RR rides along (all losses here: None)
+    # this month's pick: chosen on the window's last 3 whole months (Jul-Sep: cell 0 +75, cell 1 +175)
+    nx = r["next"]
+    assert (nx["select_ms"], nx["for"]) == (["2022-07", "2022-08", "2022-09"], "2022-10")
+    assert (nx["cell"], nx["params"]) == (1, {"offset_pts": 11.0})
+
+
+def test_3to1_is_a_job_of_its_own_and_only_tests_one_month():
+    g = wf.validate_wf(wbody(select_months=3, test_months=1))
+    c = g["walkforward"]
+    assert (c["select_months"], c["test_months"], c["step_months"]) == (3, 1, 4)
+    assert c["n_steps"] == len(wf.steps(c["months"], 1, 3)) == (len(c["months"]) - 4) // 4 + 1
+    assert wf.validate_wf(wbody())["walkforward"]["select_months"] == 1
+    for bad in ({"select_months": 3, "test_months": 3}, {"select_months": 2, "test_months": 1},
+                {"select_months": 3.0, "test_months": 1}, {"select_months": 3, "compare": True}):
+        with pytest.raises(ValueError, match="select_months"):
+            wf.validate_wf(wbody(**bad))
+    sc = wf.scheme(test_months=1, select_months=3)
+    assert sc["select_months"] == 3 and sc["n_steps"] == c["n_steps"] and sc["step_months"] == 4
+
+
+def test_the_stitched_record_is_cut_into_its_build_and_unseen_days():
+    months = [f"2025-{m:02d}" for m in range(1, 9)]                  # Jan-Mar -> Apr (build), May-Jul -> Aug (unseen)
+    tr = {0: [t for m, n in zip(months, (10, 10, 10, 50, 10, 10, 10, 70)) for t in trades(m, [n] * 5)], 1: []}
+    cells = [{"i": 0, "params": {"offset_pts": 10.0}, "months": wf.month_stats(tr[0], [], 50_000.0, months)},
+             {"i": 1, "params": {"offset_pts": 11.0}, "months": wf.month_stats([], [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=1, select_months=3)
+    b, u = r["split"]["build"], r["split"]["unseen"]
+    assert (b["months"], u["months"]) == (["2025-04"], ["2025-08"])
+    assert (b["stats"]["net_profit"], u["stats"]["net_profit"]) == (250, 350)
+    assert b["stats"]["net_profit"] + u["stats"]["net_profit"] == r["stitched"]["stats"]["net_profit"]
+    assert u["per_month"]["net_profit"] == 350

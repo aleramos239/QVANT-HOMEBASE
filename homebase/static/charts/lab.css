@@ -644,6 +644,12 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .heat-c:disabled { cursor: default; opacity: .55; }
 .heat-c:focus-visible { outline: 0; box-shadow: 0 0 0 1.5px var(--hb-accent); }
 .heat-looks, .heat-foot { margin-top: 8px; font-size: var(--hb-fs-sm); color: var(--hb-fg2); line-height: 1.4; }
+#wfRes .rs-tiles { padding: 8px 0 4px; }
+#wfRes .heat-title { margin-top: 10px; }
+.wf-scroll { overflow-x: auto; margin-top: 8px; }
+.wf-steps { table-layout: auto; min-width: 640px; }
+.wf-steps td { font-size: var(--hb-fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 4px; }
+.wf-steps tr.wf-chain td { background: var(--hb-fill); }
 
 /* Pipeline picker, Passed filter, WR settings */
 .pl-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
@@ -765,3 +771,37 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .ab-A .ab-tag { background: #2962FF; } .ab-B .ab-tag { background: #E8A23A; }
 .ab-t td:not(:first-child), .ab-t th:not(:first-child) { min-width: 96px; }
 .ab-diff td { white-space: normal; max-width: 320px; overflow-wrap: anywhere; text-align: left !important; }
+#wfRes .up { color: var(--up); }
+#wfRes .down { color: var(--down); }
+#wfRes .rs-tile .v { font-size: 15px; white-space: nowrap; }
+.wf-hint { grid-column: 1 / -1; font-size: var(--hb-fs-sm); color: var(--hb-fg2); line-height: 1.4; }
+.wf-main { padding: 0 2px 12px; }
+.wf-split { table-layout: auto; margin-top: 6px; }
+.wf-split th, .wf-split td { font-size: var(--hb-fs-sm); text-align: right; white-space: nowrap; padding: 3px 4px; font-variant-numeric: tabular-nums; }
+.wf-split tbody th { text-align: left; width: auto; }
+.wf-split td.up { color: var(--up); }
+.wf-split td.down { color: var(--down); }
+/* the walk-forward laid out like a run (2026-10-18) */
+.wf-main { padding: 0; }
+.wf-main .rs-kv b.up { color: var(--up); }
+.wf-main .rs-kv b.down { color: var(--down); }
+.wf-kv2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; gap: 6px; }
+.wf-kv2 b, .wf-kv2 > span:not(:first-child) { text-align: right; }
+.wf-kvh { height: 28px; font-size: 11px; font-weight: 600; color: var(--hb-fg2); }
+.wf-pick { height: auto; min-height: 36px; padding-top: 8px; padding-bottom: 8px; font-weight: 600; line-height: 1.35; }
+.wf-steps-box { margin-top: 10px; }
+.wf-steps-box .wf-scroll { padding: 0 8px 10px; margin-top: 0; }
+.wf-main .wf-kv2 > span:not(:first-child), .wf-main .wf-kv2 > b { justify-self: end; text-align: right; }
+.wf-main .rs-kv.wf-kv2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; gap: 6px; }
+/* the Apple skin's #labRes .rs-kv rules are stronger: the walk-forward's own rows win with its own id */
+#labRes #wfRes .rs-kv.wf-kv2 { display: grid; grid-template-columns: minmax(0, 1fr) 84px 84px; gap: 6px; }
+#labRes #wfRes .rs-kv.wf-kvh { min-height: 28px; }
+#labRes #wfRes .wf-kvh span { font-size: 11px; font-weight: 600; color: var(--hb-fg2); }
+#labRes #wfRes .rs-kv b.up { color: var(--up); }
+#labRes #wfRes .rs-kv b.down { color: var(--down); }
+#labRes #wfRes .wf-pick span { font-weight: 600; }
+.eq-line2 { fill: none; stroke: var(--hb-fg2); stroke-width: 1.5; stroke-linejoin: round; opacity: .55; vector-effect: non-scaling-stroke; }
+.wf-key { display: inline-block; width: 10px; height: 2px; border-radius: 1px; vertical-align: middle; margin-right: 4px; background: currentColor; }
+.wf-key.oos { background: var(--hb-accent); }
+.wf-key.is { background: var(--hb-fg2); opacity: .55; }
+#labRes #wfRes .rs-trio { grid-template-columns: repeat(2, 1fr); row-gap: 12px; }

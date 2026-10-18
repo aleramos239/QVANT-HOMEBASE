@@ -177,7 +177,7 @@ function persist() {
    otherwise the ordinary single run (Run / Update report). */
 function runLabelFor() {
   if (X.isWfCompare(form)) return 'Run walk-forward compare';
-  return X.isWalkforward(form) ? `Run walk-forward 1:${form.range.wf}` : X.runLabel(form, loadedKey);
+  return X.isWalkforward(form) ? `Run walk-forward ${X.wfRatioText(form.range.wf)}` : X.runLabel(form, loadedKey);
 }
 
 function tickForRoot(root_) {
@@ -334,6 +334,9 @@ function fillRangeMenu(m) {
     m.appendChild(page.menuItem(`Walk-forward 1:${n}`, `select on 1 month, test on the next ${n}`,
       () => setRange({ wf: on ? null : n }), on));       // picking the active one again turns it off
   }
+  const rollOn = form.range.wf === X.WF_ROLL;
+  m.appendChild(page.menuItem(`Walk-forward ${X.WF_ROLL}`, 'blocks: select on 3 months, test the next 1, then the next block',
+    () => setRange({ wf: rollOn ? null : X.WF_ROLL }), rollOn));
   const cmpOn = form.range.wf === X.WF_COMPARE;
   m.appendChild(page.menuItem('Walk-forward compare 1:1 · 1:2 · 1:3', 'one grid run, the three out-of-sample results side by side',
     () => setRange({ wf: cmpOn ? null : X.WF_COMPARE }), cmpOn));
@@ -1818,7 +1821,8 @@ function renderWfOverview(container, r) {
   if ((r.stitched.equity.t_ms || []).length) wfChartHandle = miniChart(chartWrap, r.stitched.equity, palette());
   else chartWrap.appendChild(page.mk('div', 'bp-empty', 'No out-of-sample trades in the stitched chain'));
   container.appendChild(page.mk('div', 'tst-kv-line', X.wfStability(r)));
-  container.appendChild(page.mk('div', 'tst-kv-line', X.wfPhases(r)));
+  const ph = X.wfPhases(r);
+  if (ph) container.appendChild(page.mk('div', 'tst-kv-line', ph));
   if (r.skipped_by_error) container.appendChild(page.mk('div', 'tst-err', `${r.skipped_by_error} strategy-error sessions inside the test legs`));
 }
 function wfStepTable(r) {
@@ -1965,11 +1969,12 @@ function loadWfResult(wid, token, compare = false) {
 /* The step count comes from the server for the ratio AND the window the pill shows (review M5), never
    from a client constant. Re-fetched whenever either changes; the previous answer is kept meanwhile. */
 function loadWfScheme() {
-  const d = X.rangeDates(form.range), n = form.range.wf || 3;
-  const key = `${n}|${d.start}|${d.end}`;
+  const d = X.rangeDates(form.range), roll = form.range.wf === X.WF_ROLL, n = roll ? 1 : (form.range.wf || 3);
+  const key = `${n}|${roll}|${d.start}|${d.end}`;
   if (wfSchemeKey === key || wfSchemePromise) return;
   wfSchemeKey = key;
   const q = new URLSearchParams({ test_months: String(n), start: d.start || '', end: d.end || '' });
+  if (roll) q.set('select_months', '3');
   wfSchemePromise = fetch(`/api/tester/walkforward-scheme?${q}`).then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
     .then((sc) => { wfScheme = sc; syncHeat(); })
     .catch(() => { wfSchemeKey = null; /* the preview stays as it was; the next render retries */ })

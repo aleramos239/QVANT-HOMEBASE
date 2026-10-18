@@ -33,7 +33,7 @@ const CMP = { compare: true, window: { start: '2021-01', end: '2024-12' }, n_cel
   shared_months: { months: [], n: 44, span: ['2021-02', '2024-10'] } };
 
 test('the compare mode rides the range pill: label, restore and run body', () => {
-  assert.deepEqual(X.WF_MODES, [1, 2, 3, 'compare']);
+  assert.deepEqual(X.WF_MODES, [1, 2, 3, '3:1', 'compare']);
   assert.equal(X.pillLabel({ id: 'research', wf: 'compare' }), 'Build · Sep 2021 – Jun 2025 · WF compare');
   assert.equal(X.pillLabel({ id: 'research', wf: 2 }), 'Build · Sep 2021 – Jun 2025 · WF 1:2');
   const f = X.restore({ ...X.defaults(STRAT), range: { id: 'research', start: '', end: '', wf: 'compare' } }, STRAT);
@@ -172,4 +172,13 @@ test('the shared view labels a partly shared leg as one step judged on its share
   assert.equal(row('legs_pct').label, '% of steps profitable (a partly shared leg judged on its shared months)');
   assert.deepEqual(row('legs').cells.map((c) => c.text), ['44', '22 (1 partly shared)', '15']);
   assert.equal(X.wfCompareTable(part, 'full').rows.find((r) => r.key === 'legs').label, 'Steps (stitched legs)');
+});
+
+test('3:1 rides the range pill: label, run body and the job it matches', () => {
+  assert.equal(X.pillLabel({ id: 'research', wf: '3:1' }), 'Build · Sep 2021 – Jun 2025 · WF 3:1');
+  const f = { range: { id: 'research', wf: '3:1' } };
+  assert.equal(X.wfModeOf({ select_months: 3, test_months: 1 }), '3:1');
+  assert.equal(X.wfModeOf({ select_months: 1, test_months: 1 }), 1);
+  assert.equal(X.wfModeLabel({ select_months: 3, test_months: 1 }), '3:1');
+  assert.equal(X.wfRatioText(f.range.wf), '3:1');
 });
