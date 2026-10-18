@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=23"></script>
+<script src="/static/desklab.js?v=24"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -539,7 +539,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=10">
+<link rel="stylesheet" href="/static/apple.css?v=11">
 <link rel="stylesheet" href="/static/hb.css?v=7">
 <script src="/static/apple/web.js?v=2" data-tab="desk"></script>
 </head>
@@ -1871,11 +1871,11 @@ function deskLabRun(name) {               // the id of its saved run on the unse
   const u = DESKRES[name] && DESKRES[name].unseen;
   return u && typeof u.id === "string" ? u.id : null;
 }
-async function openDeskLabInLab(name, withRun) {      // the Lab page, on this strategy (withRun: and its unseen-days run on the chart)
+async function openDeskLabInLab(name) {      // the Lab page, on this strategy -- on "3:1 out-of-sample" with its walk-forward loaded
   // The Mac app turns this link into a tab switch and drops the #strategy part, so the chart service is told first:
   // the Lab page takes the ask when it is shown (in a browser the link itself carries it).
-  const run = withRun ? deskLabRun(name) : null;
-  if (!DEMO) await chartPost("/api/tester/desklab/open", run ? {name, run} : {name});
+  const res = DESKRES[name], wf = res && res.walkforward === true ? deskLabRun(name) : null;
+  if (!DEMO) await chartPost("/api/tester/desklab/open", wf ? {name, wf} : {name});
   location.href = location.protocol + "//" + location.hostname + ":8852/backtest?v=33#strategy=" + encodeURIComponent(name);
 }
 /* A built-in Desk strategy (nq930, gc_nfp) has no Lab copy: the tester holds a twin of it (DESKRES[name].twin, read from the chart service),
@@ -2068,27 +2068,31 @@ function dayHeadline(names) {
   const dow = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z").getUTCDay();
   const stale = DESK_STALE ? " Last known state." : "";
   if (!ST.armed) return ["Disarmed.", "Signals are journaled only. Nothing is sent to a broker." + stale];
-  if (dow === 0 || dow === 6) return ["Markets are closed.", plural(n, "strategy", "strategies") + " armed." + stale];
+  const onTxt = "Desk armed · " + plural(n, "strategy", "strategies") + " on." + stale;      // the desk is armed; strategies are on or off
+  // Sunday from 18:00 ET the futures trade again: the Desk's day is the 9:30 session, so say when that is, not "closed"
+  if (dow === 0 && now != null && now >= 18 * 60) return ["Futures are open. The Desk's day starts Monday at 9:30.", onTxt];
+  if (dow === 0 || dow === 6) return ["Markets are closed.", onTxt];
   const flat = live.some(v => v.cfg.kind === "lab")      // a booked Lab strategy armed: the day ends at the latest armed flat time
     ? Math.max(...live.map(v => hmin(v.cfg.flat_et) ?? 955))
     : hmin((live[0] || nonLab[0] || strategies[0] || {cfg: {}}).cfg.flat_et) ?? 955;
-  if (now == null) return ["Armed.", plural(n, "strategy", "strategies") + " armed." + stale];
-  if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, plural(n, "strategy", "strategies") + " armed." + stale];
+  if (now == null) return ["Armed.", onTxt];
+  if (now < OPEN_MIN) return [`Opens in ${lenTxt(OPEN_MIN - now)}.`, onTxt];
   if (now < flat) {
     const inPos = live.filter(v => v.day_status === "live").length;
     const working = live.filter(v => v.day_status === "placed" || v.day_status === "placing").length;
     const done = live.filter(v => v.day_status === "done").length;
     const l1 = inPos ? `${plural(inPos, "strategy", "strategies")} in a position.` : working ? "Orders are working." : "In session.";
-    return [l1, `${n} armed · ${done} done today.` + stale];
+    return [l1, `${n} on · ${done} done today.` + stale];
   }
   const rows = strategies.map(todayPnl).filter(p => p != null);
   const tot = rows.reduce((a, p) => a + p, 0);
   return ["Session closed.", (rows.length ? `Today ${usdS(tot)}.` : "No trades today.") + stale];
 }
 
-function dayTimeline() {
+function dayTimeline(names) {
   const pct = (m) => Math.max(0, Math.min(100, (m - 540) / 420 * 100));
-  const strategies = Object.values(ST.strategies || {});
+  const vis = new Set(names || Object.keys(ST.strategies || {}));      // only the strategies the page shows (an archived straddle is not)
+  const strategies = Object.entries(ST.strategies || {}).filter(([n]) => vis.has(n)).map(([, v]) => v);
   const own = strategies.filter(v => v.cfg.kind !== "lab");      // a Lab strategy sets its own times: never the day bar's
   // when no Desk strategy is armed, a Lab strategy WITH an account booked is the bar's (its Flat mark only: it has no cancel time of its own)
   const armedOwn = own.find(v => v.cfg.enabled && !v.cfg.shadow);
@@ -2099,15 +2103,16 @@ function dayTimeline() {
   // a booked Lab strategy armed: the bar's Flat mark is the latest armed flat time (with none, the reference's, as always)
   const flatEt = labsOn.length ? [armedOwn, ...own.filter(v => v.cfg.enabled && !v.cfg.shadow), ...labsOn.map(([, v]) => v)].filter(Boolean).reduce(later).cfg.flat_et : ref.flat_et;
   const cancel = hmin(ref.cancel_et) ?? 775, flat = hmin(flatEt) ?? 955;
-  const oneMark = !labRef && cancel === flat;      // the cancel and the flat time are one moment: one label, one tick
+  const noCancel = !!labRef || !own.length;      // a Lab strategy has no cancel time of its own: only a built-in straddle draws one
+  const oneMark = !noCancel && cancel === flat;      // the cancel and the flat time are one moment: one label, one tick
   const now = etMin(ST.et_now) ?? 540;
   const date = new Date(String(ST.et_now).slice(0, 10) + "T12:00:00Z")
     .toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric", timeZone: "UTC"});
   const lab = (m, t, cls) => `<span class="${cls}" style="left:${pct(m).toFixed(2)}%">${esc(t)}</span>`;
   return `<div class="tl-head"><span><b>Today</b>${esc(date)}</span><span class="mono">${esc(hbClock(String(ST.et_now).slice(11, 16)))} ET</span></div>
-    <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${labRef ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(flatEt || "15:55")}">
-      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${labRef || oneMark ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
-      <div class="tl-labels">${lab(OPEN_MIN, hbClock("9:30") + " Open", "tl-t strong at-start")}${labRef || oneMark ? "" : lab(cancel, hbClock(ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, hbClock(flatEt || "15:55") + (oneMark ? " Cancel unfilled, flat" : " Flat"), "tl-t at-end")}</div>
+    <div class="tl" role="img" aria-label="The trading day: open at 9:30, ${noCancel ? "" : `unfilled entries cancelled at ${esc(ref.cancel_et || "12:55")}, `}flat at ${esc(flatEt || "15:55")}">
+      <div class="tl-track"><i class="tl-done" style="width:${pct(now).toFixed(2)}%"></i>${noCancel || oneMark ? "" : `<i class="tl-tick" style="left:${pct(cancel).toFixed(2)}%"></i>`}<i class="tl-tick" style="left:${pct(flat).toFixed(2)}%"></i><i class="tl-open" style="left:${pct(OPEN_MIN).toFixed(2)}%"></i><i class="tl-now" style="left:${pct(now).toFixed(2)}%"></i></div>
+      <div class="tl-labels">${lab(OPEN_MIN, hbClock("9:30") + " Open", "tl-t strong at-start")}${noCancel || oneMark ? "" : lab(cancel, hbClock(ref.cancel_et || "12:55") + " Cancel unfilled", "tl-t")}${lab(flat, hbClock(flatEt || "15:55") + (oneMark ? " Cancel unfilled, flat" : " Flat"), "tl-t at-end")}</div>
     </div>`;
 }
 
@@ -2208,8 +2213,10 @@ function loadEq(name) {
 /* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
 /* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
    hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
-function eqPlot(vals, label, total, aria, ends, days, notes) {
-  const lo = Math.min(0, ...vals), hi = Math.max(0, ...vals), span = hi - lo || 1;
+function eqPlot(vals, label, total, aria, ends, days, notes, second) {
+  // second: a quieter line on the same days (the 3:1's build months beside its unseen ones)
+  const both = Array.isArray(second) && second.length === vals.length ? vals.concat(second) : vals;
+  const lo = Math.min(0, ...both), hi = Math.max(0, ...both), span = hi - lo || 1;
   const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
   let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
   for (let i = 1; i < vals.length; i++) d += ` H ${X(i).toFixed(1)} V ${Y(vals[i]).toFixed(1)}`;
@@ -2252,7 +2259,7 @@ function eqPlot(vals, label, total, aria, ends, days, notes) {
     <div class="eq-plot"${attrs}><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
       <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
       ${grid}
-      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/><path class="eq-line" d="${d}"/></svg>
+      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/>${both !== vals ? `<path class="eq-line2" d="${second.map((v, i) => `${i ? (" H " + X(i).toFixed(1) + " V") : "M " + X(0).toFixed(1)} ${Y(v).toFixed(1)}`).join("")}"/>` : ""}<path class="eq-line" d="${d}"/></svg>
     ${ticks.map(v => `<span class="eq-y" style="top:${(Y(v) / 190 * 100).toFixed(1)}%">${axis(v)}</span>`).join("")}
     <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i>${hover}</div>
     ${xt || (ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : "")}</div>`;
@@ -2333,7 +2340,7 @@ function labCurveHtml(lab) {
   let c;
   try { c = DeskLab.curve(DESKRES[lab]); } catch (_) { return ""; }
   if (!c) return "";
-  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days)}</div>`;
+  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build)}</div>`;
 }
 function todayLabRow(w) {
   const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w);
@@ -2353,7 +2360,7 @@ function todayLabRow(w) {
 function labView(name) {
   const w = DESKLAB.strategies.find(x => x.name === name);
   if (!w) return `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${esc(DeskLab.missingText(DESKLAB_OK))}</div>`;
-  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name, hasRun = !!(DESKRES[w.name] && DESKRES[w.name].unseen && DESKRES[w.name].unseen.id);
+  const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w), t = w.today || {}, busy = DESKLAB_BUSY === name;
   const rebuilt = DeskLab.rebuiltNote(w, DESKLAB.runner);
   const isDay = (d) => /^\d{4}-\d\d-\d\d$/.test(String(d));
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
@@ -2380,8 +2387,7 @@ function labView(name) {
     ${notes.length ? `<div class="sec"><h2>On an account the Desk would refuse:</h2><div class="agroup feed static">${notes.join("")}</div></div>` : ""}
     <div class="sec"><h2>Accounts</h2><button class="btn btn-quiet noarrow btn-sm" disabled title="${esc(DeskLab.ACCOUNTS_CAPTION)}">+ Assign an account</button>
       <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
-    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy">Open in the Lab</button>
-      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
+    <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
@@ -2459,7 +2465,6 @@ function labShadowNet(name, s) {
 }
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
-  const hasRun = !!(DESKRES[lab.name || ""] && DESKRES[lab.name || ""].unseen && DESKRES[lab.name || ""].unseen.id);
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
   const ro = DeskLab.readOnly(s), lock = DeskLab.accountsLock(s), shadow = DeskLab.inShadow(s, book);
   const sw = `<button class="switch" role="switch" aria-label="${esc(nm)} on or off" aria-checked="${on}"
@@ -2512,8 +2517,7 @@ function labDeskView(name, s) {
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
-      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy">Open in the Lab</button>
-      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
+      <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
@@ -2691,7 +2695,7 @@ function renderMain(names, issues) {
     const [l1, l2] = dayHeadline(names);
     const l2h = esc(l2).replace(/(Today )([−+]?\$[\d,]+)/, (m, a, b) => `${a}<span class="amt${b[0] === "+" ? " pos" : ""}">${b}</span>`);
     $("#dayTitle").innerHTML = `${esc(l1)}<br><span>${l2h}</span>`;
-    $("#dayTl").innerHTML = dayTimeline();
+    $("#dayTl").innerHTML = dayTimeline(names);
     $("#stratList").innerHTML = names.map(n => todayRow(n, ST.strategies[n])).join("") + labRowsHtml(todayLabRow)
       || `<div class="feed-empty" style="padding:28px 26px">No strategies are showing. Use Manage algos to bring one back.</div>`;
     $("#todayFoot").innerHTML = todayFoot(issues);

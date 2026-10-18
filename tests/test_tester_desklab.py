@@ -588,7 +588,7 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     build = make_run()
     (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
     assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
-    assert lab_results(c) == {"nq_bars": {"build": None, "unseen": None, "unseen_state": "none", "curve": None, "walkforward": True,
+    assert lab_results(c) == {"nq_bars": {"build": None, "unseen": None, "unseen_state": "none", "curve": None, "curve_build": None, "walkforward": True,
                                           "prop": {"build": None, "unseen": None}}}
     rec, today = store.get("nq_bars"), dt.date(2026, 10, 18)
     req = deskresults.wf_request(rec, today)
@@ -603,6 +603,7 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
                            "rr": 3.0, "rr_label": "1:3.00", "sharpe": 0.5}
     assert r["build"]["net"] == 4000.0 and r["build"]["range"] == {"start": "2022-01-01", "end": "2026-07-31"}
     assert r["curve"] == {"days": ["2022-04-04", "2022-04-05"], "vals": [300.0, 200.0]}
+    assert r["curve_build"] is None, "one in-sample trade is not a curve (two days at least)"
     assert r["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
     assert sorted(set(scored)) == [1, 2], "each side's own trades are scored: in-sample 1, out-of-sample 2"
 

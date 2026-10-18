@@ -170,3 +170,17 @@ def test_the_runner_hosts_the_day_again_when_a_setting_changes():
     a = rec(params={"open_min": "5"})
     b = rec(params={"open_min": "1"})
     assert host._key(a) != host._key(b)
+
+
+def test_the_status_block_carries_each_settings_own_label_from_the_records_code(paths):
+    """The Setup card reads "Risk a trade ($)", not "risk" (owner 2026-10-18): the labels come from the record's own text (its
+    static meta, never run), read from the file because the desk's copy of a record has no code."""
+    from fastapi.testclient import TestClient
+    from homebase.charts.lab_templates import BAR_BREAKOUT
+    from tests.test_server_lab import make_client
+    store.put(rec(source=BAR_BREAKOUT, sha256="cd"))
+    app = make_client()
+    with TestClient(app, base_url="http://127.0.0.1:8850") as c:
+        labels = status(c)["lab"]["labels"]
+        app.state.labdesk.close()
+    assert labels["lookback"] and labels["sl_pts"] and set(labels) == {i["key"] for i in draftstore.static_meta(BAR_BREAKOUT)["inputs"]}

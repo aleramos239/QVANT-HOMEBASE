@@ -289,6 +289,7 @@ h1, h2, h3, .card-title { letter-spacing: -0.02em; }
 .eq-grid { stroke: var(--hb-hair); stroke-width: 1; vector-effect: non-scaling-stroke; }
 .eq-zero { stroke: var(--muted-foreground); stroke-width: 1; stroke-dasharray: 3 5; opacity: .6; vector-effect: non-scaling-stroke; }
 .eq-line { fill: none; stroke: var(--foreground); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.eq-line2 { fill: none; stroke: var(--muted-foreground); stroke-width: 1.6; opacity: .55; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .eq-area { fill: url(#hbEqFill); }
 .eq-dot { position: absolute; width: 10px; height: 10px; border-radius: 50%; background: var(--foreground); box-shadow: 0 0 0 4px var(--background); transform: translate(-50%, -50%); }
 .eq-empty { margin-top: 34px; padding: 36px 0; font-size: 14px; color: var(--muted-foreground); border-top: .5px solid var(--hb-hair); border-bottom: .5px solid var(--hb-hair); }

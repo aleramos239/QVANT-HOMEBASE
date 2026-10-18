@@ -32,14 +32,14 @@ test('a disarmed desk says so, and that nothing goes to a broker', () => {
 
 test('armed before the open: how long until 9:30 and how many strategies are armed', () => {
   const api = load(status('2026-10-01T09:12:00-0400'));
-  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', '1 strategy armed.']);
+  assert.deepEqual([...api.dayHeadline([])], ['Opens in 18 min.', 'Desk armed · 1 strategy on.']);
   const early = load(status('2026-10-01T07:00:00-0400')).dayHeadline([]);
   assert.equal(early[0], 'Opens in 2 h 30 min.');
 });
 
 test('a shadow strategy is not counted as armed; an off one neither', () => {
   const st = status('2026-10-01T09:12:00-0400', { strategies: { a: strat(), b: strat({ shadow: true }), c: strat({ enabled: false }) } });
-  assert.equal(load(st).dayHeadline([])[1], '1 strategy armed.');
+  assert.equal(load(st).dayHeadline([])[1], 'Desk armed · 1 strategy on.');
 });
 
 test('in session: who is in a position, and a closed session reports the day with a real minus sign', () => {

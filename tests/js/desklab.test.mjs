@@ -228,7 +228,7 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
     // the research blocks (labResHtml): pieces built from escaped holes
     'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
     // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
-    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days)']);
+    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build)']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });
@@ -797,6 +797,10 @@ test('deskSetupRows: a strategy with its own limits lists its size and settings,
   // one that sizes each trade itself has no cap: the account's size is its most (owner, 2026-10-18: "remove the cap")
   const sized = D.deskSetupRows(deskStrat({ mode_today: null, auto: true, own_size: true, params: { risk: 500 } }), row(), []);
   assert.deepEqual(sized[3], ['Contracts', 'Set on each account']);
+  // the Setup card uses the strategy's own labels; a "($)" one shows dollars
+  const named = D.deskSetupRows(deskStrat({ mode_today: null, auto: true, own_size: true, params: { risk: 500, rr: '0.5' },
+    labels: { risk: 'Risk a trade ($)', rr: 'Target (x the stop)' } }), row(), []);
+  assert.deepEqual(named.slice(4, 6), [['Risk a trade', '$500'], ['Target (x the stop)', '0.5']]);
 });
 
 test('deskSetupRows: the settings the Desk lets the owner change are controls, not read-only rows', () => {
@@ -1215,9 +1219,21 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
   assert.deepEqual(done.unseen.head, ['Build', 'Unseen']);
   assert.deepEqual([done.unseen.rows[0].k, done.unseen.rows[0].b, done.unseen.rows[0].v], ['Net', '+$4,000', '+$1,235']);   // no Days row: the months interleave
   assert.deepEqual(done.unseen.rows.slice(1, 3).map((r) => r.k), ['Win rate', 'Realized RR']);           // RR right under the win rate
+  assert.equal(done.unseen.rows.some((r) => r.k === 'Max drawdown') && !done.unseen.rows.some((r) => r.k === 'Deepest drawdown'), true);
   assert.equal(done.unseen.note, '');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-03', '2022-01-04'], vals: [300, 200] } }).title,
     'Unseen days (walk-forward 3:1), after costs');
+});
+
+test('the 3:1 curve: build and unseen running totals on one day axis, each carrying its last value', () => {
+  const c = D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] },
+    curve_build: { days: ['2021-10-04', '2022-01-05'], vals: [20, 60] } });
+  assert.deepEqual(c.days, ['2021-10-04', '2022-01-04', '2022-01-05', '2022-01-06']);
+  assert.deepEqual(c.vals, [0, 100, 100, 150]);
+  assert.deepEqual(c.build, [20, 20, 60, 60]);
+  assert.equal(c.total, 150);
+  assert.equal(c.notes[2], 'Unseen $100 · Build $60');
+  assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
 });

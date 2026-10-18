@@ -178,6 +178,7 @@ class LabDesk:
                                          # before one is thrown away (it may hold what the change replaced)
         self._seen_utc: dt.datetime | None = None    # the runner's heartbeat, as last read
         self._said: tuple | None = None  # (error text, monotonic) of the last lab_refresh_error line
+        self._label_cache: dict = {}     # (sha256, name) -> {input key: label} (_labels)
         self._said_busy = False          # lab_store_busy / lab_store_error are journaled once each
         self._said_err = False
         self._said_view: set = set()     # (strategy, error) of the lab_view_error lines
@@ -755,6 +756,22 @@ class LabDesk:
         return {str(k)[:40]: v for k, v in list(got.items())[:40]
                 if isinstance(v, (bool, int, float)) or (isinstance(v, str) and len(v) <= 40)}
 
+    def _labels(self, name: str) -> dict:
+        """{input key: its own label} from the record's text (static meta only, never run), so the Setup card reads "Risk a
+        trade ($)" and not "risk". Kept per code (sha256): the status is asked every second. {} when it cannot be read."""
+        rec = labcfg.record_of(self.cfg, name) or {}
+        key = (rec.get("sha256"), rec.get("name"))
+        if key not in self._label_cache:
+            try:
+                from .draftstore import static_meta
+                full = store.get(labcfg.store_name(name), self._at) or {}      # the desk's copy has no code: the file, once per sha
+                self._label_cache[key] = {str(i["key"]): str(i.get("label") or i["key"])
+                                          for i in static_meta(full.get("source") or "").get("inputs") or []
+                                          if isinstance(i, dict) and i.get("key")}
+            except Exception:  # noqa: BLE001 -- an unreadable text keeps the plain keys
+                self._label_cache[key] = {}
+        return self._label_cache[key]
+
     def _settings(self, name: str) -> list:
         """The adjustable settings' specs the record carries ([] for a strategy that declares none): plain values only."""
         got = (labcfg.record_of(self.cfg, name) or {}).get("settings")
@@ -779,6 +796,7 @@ class LabDesk:
                     "params": self._params(name),                    # the settings it was promoted with
                     "settings": self._settings(name),                # the ones of them the Setup panel may change
                     "own_size": (labcfg.record_of(self.cfg, name) or {}).get("own_size") is True,   # sizes itself: no Desk size
+                    "labels": self._labels(name),                    # each setting's own label (the Setup card's words)
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
                     "runner": self._runner(), "rounds": self._rounds(name),

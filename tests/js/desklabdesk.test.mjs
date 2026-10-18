@@ -573,7 +573,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=23"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=24"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -769,8 +769,8 @@ test('c4 the Today headline and the day bar are what they were when a Lab strate
   // with an account booked it is armed like any other
   const e = mk({ ...two, lab_nq_orb: deskStrat({ state: 'waiting' }) }, BOOKED);
   friday(e);
-  assert.match(e.api.dayHeadline([])[1], /^3 armed/);
-  assert.match(c.api.dayHeadline([])[1], /^2 armed/);
+  assert.match(e.api.dayHeadline([])[1], /^3 on/);
+  assert.match(c.api.dayHeadline([])[1], /^2 on/);
 });
 
 test('m1 the switch\'s tooltip says where the orders go, on the page and on the Today row', () => {

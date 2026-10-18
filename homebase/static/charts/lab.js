@@ -2338,6 +2338,17 @@ async function wfPoll(w, token) {
     await new Promise((res) => setTimeout(res, 1500));
   }
 }
+/* The Desk's "Open in the Lab": its 3:1 walk-forward, already run -- the Range goes to "3:1 out-of-sample" and the result loads. */
+function wfOpen(wid, tries = 20) {
+  const b = buf(), f = b && formOf(b);
+  if (!f) { if (tries > 0) setTimeout(() => wfOpen(wid, tries - 1), 300); return; }      // the strategy is still opening
+  f.range = { id: 'all', start: '', end: '', wf: X.WF_ROLL, side: 'oos' };
+  const w = wfLabState(f), token = ++w.token;
+  w.id = wid; w.err = ''; w.starting = true; w.job = null; w.result = null; S.wfStepsOpen = false;
+  if (!P.res) setPanel('res', true);
+  paintRes(); paintHead();
+  wfPoll(w, token);
+}
 async function wfCancel() {
   const b = buf(), f = b && formOf(b);
   if (!f) return;
@@ -2739,6 +2750,8 @@ async function takeDeskAsk() {
   if (builtin) { if (S.builtins.some((x) => x.id === name)) selectBuiltin(name); }
   else if (S.drafts.some((d) => d.name === name)) selectDraft(name);
   if (run) showRunOnChart(run).then((ok) => log(ok ? 'Its run on the unseen days is on the chart: the list under it steps through every trade.' : 'The chart did not take that run: turn Chart off and on to try again.'));
+  const wf = r.json && typeof r.json.wf === 'string' && /^[0-9a-z_-]+$/.test(r.json.wf) ? r.json.wf : '';    // the Desk's 3:1 of it
+  if (wf && !builtin) wfOpen(wf);
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') takeDeskAsk(); });
 window.addEventListener('focus', takeDeskAsk);

@@ -880,7 +880,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         """The card's block from the 3:1 walk-forward of the strategy as set: {build, unseen, unseen_state, curve, prop_build,
         prop_unseen} -- build = its in-sample months, unseen = its out-of-sample months."""
         got = ensure_wf(rec)
-        out = {"build": None, "unseen": None, "unseen_state": got["state"], "curve": None, "prop_build": None, "prop_unseen": None}
+        out = {"build": None, "unseen": None, "unseen_state": got["state"], "curve": None, "curve_build": None,
+               "prop_build": None, "prop_unseen": None}
         if got["state"] != "done":
             return out
         try:
@@ -890,7 +891,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return out
         oos, ins = (res.get("stitched") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("trades") or []
         out.update(unseen=deskresults.wf_summary(got["id"], res), build=deskresults.wf_summary(got["id"], res, "stitched_is"),
-                   curve=deskresults.curve_of_trades(oos),
+                   curve=deskresults.curve_of_trades(oos), curve_build=deskresults.curve_of_trades(ins),
                    prop_unseen=wf_prop(("wf", got["id"]), oos), prop_build=wf_prop(("wf-is", got["id"]), ins))
         return out
 
@@ -934,7 +935,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
                 w = wf_block(rec)
                 out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "unseen_state": w["unseen_state"],
-                                    "curve": w["curve"], "walkforward": True,
+                                    "curve": w["curve"], "curve_build": w["curve_build"], "walkforward": True,
                                     "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"]}}
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
@@ -1075,13 +1076,14 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 draftstore.set_group(twin, rec.get("group_was"))
         return {"ok": True, "name": name}
 
-    open_ask = {"name": None, "run": None, "builtin": False, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
+    open_ask = {"name": None, "run": None, "wf": None, "builtin": False, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
 
-    def desklab_open(name: str, run: str | None = None, builtin: bool = False) -> dict:
+    def desklab_open(name: str, run: str | None = None, builtin: bool = False, wf: str | None = None) -> dict:
         """The Desk page asks the Lab page to show one draft. The Mac app drops a link's #fragment when it switches
         tab, so the ask waits here and the Lab page takes it (GET /lab-open) the moment it is shown. `run`: a finished run of
         it to put on the chart as well (the Desk's "Show on chart"). `builtin`: the name is a built-in tester strategy (the twin
-        of one of the Desk's own straddles), not a draft."""
+        of one of the Desk's own straddles), not a draft. `wf`: its 3:1 walk-forward, opened as "3:1 out-of-sample" (the Desk's
+        "Open in the Lab" for a promoted strategy, 2026-10-18)."""
         if builtin:
             if name not in deskresults.BUILTIN_TWINS.values():
                 raise HTTPException(404, "That strategy is not in the Lab.")
@@ -1090,17 +1092,23 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 draftstore.read(name)
             except (FileNotFoundError, ValueError, OSError):
                 raise HTTPException(404, "That strategy is not in the Lab.") from None
+        if wf is not None:
+            try:
+                wfs.dir(wf)
+            except KeyError:
+                raise HTTPException(404, "That walk-forward is not saved.") from None
         open_ask["name"], open_ask["run"], open_ask["builtin"], open_ask["at"] = name, run, bool(builtin), time.monotonic()
+        open_ask["wf"] = wf
         return {"ok": True, "name": name}
 
     @r.get("/lab-open")
     def lab_open_take():
         """The Lab page takes the Desk's ask, once: {name} (null when none, or one older than two minutes)."""
-        name, run, at, builtin = open_ask["name"], open_ask["run"], open_ask["at"], open_ask["builtin"]
-        open_ask["name"] = open_ask["run"] = None
+        name, run, at, builtin, wf = open_ask["name"], open_ask["run"], open_ask["at"], open_ask["builtin"], open_ask["wf"]
+        open_ask["name"] = open_ask["run"] = open_ask["wf"] = None
         open_ask["builtin"] = False
         fresh = bool(name) and time.monotonic() - at <= 120
-        return {"name": name if fresh else None, **({"run": run} if fresh and run else {}),
+        return {"name": name if fresh else None, **({"run": run} if fresh and run else {}), **({"wf": wf} if fresh and wf else {}),
                 **({"builtin": True} if fresh and builtin else {})}
 
     def desklab_onoff(name: str, on: bool) -> dict:
@@ -1129,6 +1137,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             run = body.get("run") if what == "open" and isinstance(body, dict) else None
             if run is not None and (not isinstance(run, str) or not re.fullmatch(r"[0-9a-z_-]{1,120}", run)):
                 raise HTTPException(400, "run: a finished run's id")
+            wf = body.get("wf") if what == "open" and isinstance(body, dict) else None
+            if wf is not None and (not isinstance(wf, str) or not re.fullmatch(r"[0-9a-z_-]{1,160}", wf)):
+                raise HTTPException(400, "wf: a walk-forward's id")
             builtin = body.get("builtin") if what == "open" and isinstance(body, dict) else None
             if builtin is not None and builtin is not True:
                 raise HTTPException(400, "builtin: true")
@@ -1136,6 +1147,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 keys = {"name", "run"}
             if what == "open" and builtin is not None:
                 keys = keys | {"builtin"}
+            if what == "open" and wf is not None:
+                keys = keys | {"wf"}
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
@@ -1151,7 +1164,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "open":
-                    done = await asyncio.to_thread(desklab_open, name, run, builtin is True)
+                    done = await asyncio.to_thread(desklab_open, name, run, builtin is True, wf)
                 elif what in ("archive", "filed", "restore", "archive_builtin", "restore_builtin"):
                     done = await asyncio.to_thread({"archive": desklab_archive, "filed": desklab_filed, "restore": desklab_restore,
                                                     "archive_builtin": desklab_archive_builtin,

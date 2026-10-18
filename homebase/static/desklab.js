@@ -226,11 +226,38 @@
       cheque === null ? DASH : dollars(Math.round(Math.max(0, cheque)))];
   }
   // The unseen run's running total, for the curve under the Desk page: null when there is no run or fewer than two days.
+  function okCurve(c) {
+    if (!c || !Array.isArray(c.vals) || !Array.isArray(c.days) || c.vals.length < 2 || c.vals.length !== c.days.length) return false;
+    for (var i = 0; i < c.vals.length; i++) if (num(c.vals[i]) === null) return false;
+    return true;
+  }
+  // Two running totals on one day axis: each day of either, each series carrying its last value (0 before its first day).
+  function alignCurves(a, b) {
+    var days = a.days.concat(b.days).filter(function (d, i, all) { return all.indexOf(d) === i; }).sort();
+    var walk = function (c) {
+      var j = 0, last = 0;
+      return days.map(function (d) { while (j < c.days.length && c.days[j] <= d) { last = c.vals[j]; j++; } return last; });
+    };
+    return { days: days, a: walk(a), b: walk(b) };
+  }
   function curve(res) {
     var c = res && typeof res === "object" ? res.curve : null;
-    if (!c || !Array.isArray(c.vals) || !Array.isArray(c.days) || c.vals.length < 2 || c.vals.length !== c.days.length) return null;
-    for (var i = 0; i < c.vals.length; i++) if (num(c.vals[i]) === null) return null;
+    if (!okCurve(c)) return null;
     var from = monthOf(c.days[0]), to = monthOf(c.days[c.days.length - 1]);
+    var cb = res.walkforward === true && okCurve(res.curve_build) ? res.curve_build : null;
+    if (cb) {      // the 3:1's build (in-sample) and unseen (out-of-sample) months, one line each (owner 2026-10-18)
+      var al = alignCurves(c, cb), money = function (v) { return (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-US"); };
+      return {
+        title: "Walk-forward 3:1 · build and unseen days, after costs",
+        label: "Unseen (dark) · Build (light)",
+        vals: al.a, build: al.b,
+        total: c.vals[c.vals.length - 1],
+        ends: [monthOf(al.days[0]) || DASH, monthOf(al.days[al.days.length - 1]) || DASH],
+        days: al.days,
+        notes: al.days.map(function (d, i) { return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]); }),
+        aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, by day",
+      };
+    }
     return {
       title: res.walkforward === true ? "Unseen days (walk-forward 3:1), after costs" : "Unseen days, after costs",
       label: "Running total",
@@ -268,6 +295,7 @@
       var rr = rows.findIndex(function (x) { return x.k === "Realized RR"; });      // right under Win rate (owner 2026-10-18)
       var at = rows.findIndex(function (x) { return x.k === "Win rate"; });
       if (rr > at && at >= 0) rows.splice(at + 1, 0, rows.splice(rr, 1)[0]);
+      if (wf) rows.forEach(function (x) { if (x.k === "Deepest drawdown") x.k = "Max drawdown"; });      // fits the two columns
       return rows;
     };
     var rows = u ? runRows(u) : [];
@@ -778,7 +806,7 @@
     // A strategy that carries its own limits has none to show: its size and its settings are the setup.
     var own = lab.auto === true && isObj(lab.params);
     // a strategy that sizes each trade itself has no Desk size and no cap: the size set on each account is its most (owner 2026-10-18)
-    var limitRows = own ? [["Contracts", lab.own_size === true ? "Set on each account" : l[1].v]].concat(paramRows(lab.params, lab.settings)) : [
+    var limitRows = own ? [["Contracts", lab.own_size === true ? "Set on each account" : l[1].v]].concat(paramRows(lab.params, lab.settings, lab.labels)) : [
       ["Trades a day", l[0].v],
       ["Most contracts", l[1].v],
       ["Most at risk", l[2].v],
@@ -797,12 +825,13 @@
   }
   // The settings a strategy was promoted with, one row each: "stop pts  25".
   // The ones the Desk lets the owner change (`settings`) are controls in the Setup panel, not read-only rows.
-  function paramRows(params, settings) {
-    var skip = {};
+  function paramRows(params, settings, labels) {
+    var skip = {}, lab = isObj(labels) ? labels : {};
     (Array.isArray(settings) ? settings : []).forEach(function (s) { if (isObj(s) && typeof s.key === "string") skip[s.key] = true; });
     return Object.keys(params).filter(function (k) { return !skip[k]; }).map(function (k) {
-      var v = params[k];
-      return [k.replace(/_/g, " "), v === true ? "on" : v === false ? "off" : text(String(v))];
+      var v = params[k], name = typeof lab[k] === "string" && lab[k] ? lab[k] : k.replace(/_/g, " ");
+      var usd = /\s*\(\$\)$/.test(name) && typeof v === "number";          // "Risk a trade ($)" 500 -> "Risk a trade" $500
+      return [usd ? name.replace(/\s*\(\$\)$/, "") : name, v === true ? "on" : v === false ? "off" : usd ? "$" + v.toLocaleString("en-US") : text(String(v))];
     });
   }
 

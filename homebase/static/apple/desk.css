@@ -195,6 +195,7 @@ html.hb-apple .eq svg { display: block; width: 100%; height: 190px; color: var(-
 html.hb-apple .eq-grid { stroke: var(--a-sep); stroke-width: 1; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-zero { stroke: var(--a-label-3); stroke-width: 1; stroke-dasharray: 3 4; opacity: 1; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-line { fill: none; stroke: var(--a-accent-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+html.hb-apple .eq-line2 { fill: none; stroke: var(--a-label-3); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-area { fill: url(#hbEqFill); }
 html.hb-apple .eq-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--a-accent-text); box-shadow: 0 0 0 3px var(--a-window); transform: translate(-50%, -50%); }
 html.hb-apple .eq-empty { margin: 20px 0 0; padding: 26px 14px; border: 0; border-radius: 12px; background: var(--a-group); font-size: 13px; line-height: 16px; color: var(--a-label-2); text-align: center; }
@@ -449,3 +450,5 @@ html.hb-apple .eq-tip i { font-style: normal; color: var(--a-label-2); }
 html.hb-apple .eq-tip em { font-style: normal; font-variant-numeric: tabular-nums; }
 html.hb-apple .eq-tip em.pos { color: var(--a-green, var(--a-label)); }
 html.hb-apple .eq-tip small { display: block; margin-top: 2px; font-size: 11px; color: var(--a-label-2); }
+/* the Desk's right-hand group (status, Disarm, Kill) is wide: below 1360 px the centred page switcher would sit under it, so it flows */
+@media (max-width: 1360px) { html.hb-apple .hb-tb-c { position: static; transform: none; flex: none; } }
