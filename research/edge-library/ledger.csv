@@ -1223,3 +1223,7 @@ bp_build,nq_orb_f_level_clear-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,132192,4
 bp_build,nq_orb_f_level_clear__level_clear-NQ-tf5,grid,orb,NQ,5,bp_build,,,0,144,0,0,32112,418.8,runs_bp/nq_orb_f_level_clear__level_clear-NQ-tf5: idea nq_orb_f_level_clear: filter level clear,2026-10-14T21:49:12+00:00
 bp_build,nq_orb_f_level_clear-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,132192,405.18,runs_bp/nq_orb_f_level_clear-NQ-tf15: idea nq_orb_f_level_clear,2026-10-14T21:55:58+00:00
 bp_build,nq_orb_f_level_clear__level_clear-NQ-tf15,grid,orb,NQ,15,bp_build,,,0,144,0,0,20016,405.18,runs_bp/nq_orb_f_level_clear__level_clear-NQ-tf15: idea nq_orb_f_level_clear: filter level clear,2026-10-14T21:55:58+00:00
+bp_build,nq_asia_liq_sweep_fixed-NQ-tf15,grid,liq,NQ,15,bp_build,,,0,192,0,0,26352,559.43,runs_bp/nq_asia_liq_sweep_fixed-NQ-tf15: idea nq_asia_liq_sweep_fixed,2026-10-18T00:28:08+00:00
+bp_build,nq_asia_liq_sweep_fixed-NQ-tf1,grid,liq,NQ,1,bp_build,,,0,192,0,0,29184,705.59,runs_bp/nq_asia_liq_sweep_fixed-NQ-tf1: idea nq_asia_liq_sweep_fixed,2026-10-18T00:39:54+00:00
+bp_build,nq_asia_liq_sweep_fixed-NQ-tf5,grid,liq,NQ,5,bp_build,,,0,192,0,0,28128,488.98,runs_bp/nq_asia_liq_sweep_fixed-NQ-tf5: idea nq_asia_liq_sweep_fixed,2026-10-18T00:48:04+00:00
+bp_build,nq_asia_liq_sweep_fixed-ES-tf15,grid,liq,ES,15,bp_build,,,0,192,0,0,27936,278.18,runs_bp/nq_asia_liq_sweep_fixed-ES-tf15: idea nq_asia_liq_sweep_fixed,2026-10-18T00:52:42+00:00

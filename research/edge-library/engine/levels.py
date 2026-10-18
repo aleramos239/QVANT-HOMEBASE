@@ -10,7 +10,8 @@ level), so nothing here looks ahead. A level that cannot be had (a roll day, no 
     lon0205   today's early London range 02:00-05:00 ET    (known from 05:00)
     ldn       today's London range 03:00-08:25 ET          (known from 08:25)
     asia2000  the EVENING BEFORE: 20:00-24:00 ET of the previous calendar day, from the tape's prints before 00:00 (never traded: a level
-              only; at least EV_MIN prints, else none)
+              only; at least EV_MIN prints, else none). Known from 00:00 of the trade date: an `eve` session, which trades inside that
+              evening, never has it (2026-10-14 look-ahead: before this cap it read the whole evening it was trading in).
     d5        the high / low of the 5 trade dates before today (the daily bars; none when a contract roll lies inside them)
     wk        the PRIOR WEEK's high / low (batch 6; the chart's `wk`): the trade dates of the last ISO week that is not today's, from the daily
               bars; none when a contract roll lies inside them, or today is the week's first date and no earlier week is held.
@@ -327,8 +328,8 @@ def levels(st, which: str = "all") -> dict:
         elif name in WINDOWS:
             a, b = WINDOWS[name]
             v = st.rng(a, b) if _now_s(st) >= b else None
-        elif name == "asia2000":
-            v = _evening(st)
+        elif name == "asia2000":                                # known from 00:00 of the trade date only: an `eve` session trades inside it
+            v = _evening(st) if st._cx.now_ns >= S.et_ns(st._cx.date, EV_END) else None
         elif name == "sw":
             v = _swing(st)
         elif name == "eq":

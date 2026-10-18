@@ -147,6 +147,31 @@ def test_the_evening_level_reads_the_prints_of_2000_to_2400_and_needs_30_of_them
     assert cls.asked and all("asia2000" not in x for _, x in cls.asked)
 
 
+def eve_levels(tape):
+    """The levels known at every decision of the `eve` segment (18:00-01:55, the evening before the trade date) of `tape`."""
+    cls = type("V", (Lv,), {"asked": []})
+    st = cls({"hold_to": "day", **QUIET, "tf": "5", "sess": "eve"})
+    st.ROLLS = frozenset()
+    S.run_session(st, tape, daily=daily(), on_error="raise", window=st.eve_window, segment="eve")
+    return dict(cls.asked)
+
+
+def test_the_evening_level_is_not_known_inside_the_evening_it_covers():
+    """2026-10-14 look-ahead: an `eve` session (18:00-01:55, the evening before the trade date) trades INSIDE 20:00-24:00. The evening
+    level is known only from 00:00 of the trade date; before that it is left out, and garbling the prints after any cut inside the
+    evening moves nothing known at or before the cut."""
+    tape = tape_of(day_bars(flatg(90)))
+    eve = eve_levels(tape)
+    assert eve and max(eve) < 0                                                # every decision of the segment lies before 00:00
+    assert all("asia2000" not in x for x in eve.values()), sorted(s for s, x in eve.items() if "asia2000" in x)[:3]
+    assert all({"pd", "d5"} <= set(x) for x in eve.values())                   # the levels of days that HAVE ended stay
+    for cut in ("20:30", "22:00", "23:45"):
+        cut_ns = S.et_ns(PREV, cut)
+        cut_s = (cut_ns - ns("00:00")) // S.NS
+        dirty = eve_levels(garble(tape, cut_ns))
+        assert {s: x for s, x in dirty.items() if s <= cut_s} == {s: x for s, x in eve.items() if s <= cut_s}, cut
+
+
 def test_rolls_remove_the_levels_of_the_prior_days():
     day = D.isoformat()
     for rolls, gone in (({day}, {"pd", "d5"}), ({daily()[-3]["date"]}, {"d5"}), ({daily()[-6]["date"]}, set())):
