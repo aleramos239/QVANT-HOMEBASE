@@ -109,9 +109,11 @@ test('one row, never two: until the Desk knows it, the Step A row draws it; the 
 
 test('the Strategies count in a folded sidebar does not count the same strategy twice', () => {
   const side = SLICE('function renderSide(', '/* ---- strategy detail ---- */');
-  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two), and a strategy in a group is counted in its group
+  // the count is the rows under Strategies: a Lab row the Desk holds is its own row (one row, never two); the groups sit inside
+  // Strategies (2026-10-18), so a strategy in a group is counted there once
   assert.match(side, /DESKLAB\.strategies\.filter\(w => !labOnDesk\(w\)\)\.map/);
-  assert.match(side, /freeNames\.length \+ freeLab\.length/);
+  assert.match(side, /head\("strat", "Strategies", names\.length \+ labIds\.length/);
+  assert.match(side, /strat \+ labRows \+ groupBlocks/);
 });
 
 test('the Desk\'s own page is shown for a #lab=<name> link or a Lab view once the Desk knows the strategy', () => {

@@ -113,6 +113,10 @@ html.hb-apple .hb-side .sh-btn { -webkit-appearance: none; appearance: none; bor
 html.hb-apple .hb-side .sh-btn[onclick^="openAlgoMgr"], html.hb-apple .hb-side .sh-btn[onclick^="openGroupMgr"] { -webkit-mask: var(--sf-ellipsis) center / 13px auto no-repeat; mask: var(--sf-ellipsis) center / 13px auto no-repeat; }
 /* a group's own "open its page" button: a chevron, lit while its page is the one shown */
 html.hb-apple .hb-side .sh-btn[onclick^="setView('group'"] { -webkit-mask: var(--sf-chevron-right) center / 7px 10px no-repeat; mask: var(--sf-chevron-right) center / 7px 10px no-repeat; }
+/* a group inside Strategies: a smaller, indented header that folds its own rows; Strategies' own buttons sit side by side */
+html.hb-apple .hb-side .sh.sub { margin-top: 6px; padding-left: 14px; }
+html.hb-apple .hb-side .sh-acts { display: flex; gap: 2px; }
+html.hb-apple .hb-side .sh-btn.grp-new { -webkit-mask: var(--sf-folder) center / 14px auto no-repeat; mask: var(--sf-folder) center / 14px auto no-repeat; }
 html.hb-apple .hb-side .sh-btn[aria-current="page"] { background: var(--a-label-vibrant); }
 html.hb-apple .hb-side .sh-btn:hover { background: var(--a-label-vibrant); }
 html.hb-apple .hb-side .side-more { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: block; width: calc(100% - 20px); height: 24px; margin: 0 10px; padding: 0 11px 0 39px;

@@ -826,7 +826,6 @@
       <div style="display:flex;gap:8px;align-items:center">
         <input id="groupNewName" autocomplete="off" spellcheck="false" maxlength="40" placeholder="e.g. Eval — Lucid 50K"
           onkeydown="if(event.key==='Enter'&&!event.repeat){event.preventDefault();addGroup()}">
-        <select id="groupNewKind" aria-label="What the group is for" class="grp-sel"></select>
         <button class="btn btn-default btn-sm" onclick="addGroup()">Add group</button>
       </div></div>
     <div id="groupList"></div>
@@ -2167,11 +2166,12 @@ function renderSide(names, hiddenCount, issues) {
   const inGroup = new Set(DESKGROUPS.groups.flatMap(g => g.members));
   const freeNames = names.filter(n => !inGroup.has(n)), freeLab = labIds.filter(id => !inGroup.has(id));
   const strat = freeNames.map(n => rowOf[n]).join(""), labRows = freeLab.map(id => rowOf[id] || "").join("");
+  /* the groups sit inside Strategies, after the strategies in no group (owner 2026-10-18): each one folds on its own */
   const groupBlocks = DESKGROUPS.groups.map(g => {
     const k = "g:" + g.id, rows = g.members.map(id => rowOf[id]).filter(Boolean);
     const opened = sel("group", g.id) !== "";
     const open = `<button class="sh-btn" title="Open ${esc(g.name)}" aria-label="Open ${esc(g.name)}"${opened ? ' aria-current="page" style="color:var(--foreground)"' : ""} onclick="setView('group',${jsArg(g.id)})">›</button>`;
-    return head(k, esc(g.name), rows.length, open) + (SIDE_FOLD[k] ? "" : rows.join("") || `<div class="side-more">No strategy yet</div>`);
+    return head(k, esc(g.name), rows.length, open).replace('class="sh', 'class="sh sub') + (SIDE_FOLD[k] ? "" : rows.join("") || `<button class="side-more" onclick="openGroupMgr()">Empty · add strategies</button>`);
   }).join("");
   const rank = (a) => a.env === "live" ? 0 : a.env === "paper" ? 2 : 1;
   const accts = Object.entries(ST.accounts || {}).sort((a, b) => rank(a[1]) - rank(b[1]));
@@ -2187,10 +2187,8 @@ function renderSide(names, hiddenCount, issues) {
     <button class="nav${sel("today")}" onclick="setView('today')" aria-current="${sel("today") ? "page" : "false"}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
       <span>Today</span><span></span></button>
-    ${head("groups", "Groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Manage groups" aria-label="Manage groups" onclick="openGroupMgr()">⋯</button>`)}
-    ${SIDE_FOLD.groups ? "" : groupBlocks || `<button class="side-more" onclick="openGroupMgr()">New group…</button>`}
-    ${head("strat", "Strategies", freeNames.length + freeLab.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
-    ${SIDE_FOLD.strat ? "" : strat + labRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
+    ${head("strat", "Strategies", names.length + labIds.length, `<span class="sh-acts"><button class="sh-btn grp-new" title="Groups: new, delete, add or remove strategies" aria-label="Manage groups" onclick="openGroupMgr()">+</button><button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button></span>`)}
+    ${SIDE_FOLD.strat ? "" : strat + labRows + groupBlocks + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
       + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
@@ -3964,18 +3962,14 @@ function renderAlgoMgr() {
 function openAlgoMgr() { renderAlgoMgr(); showOverlay("algoOverlay"); }
 function closeAlgoMgr() { hideOverlay("algoOverlay"); }
 
-/* ---- group manager popup: add, rename, retype and delete groups, and say which group each strategy is in. Every change is one
-   write to the chart service (groupPost) and a repaint from its answer; nothing here touches a strategy or an account. ---- */
-function groupKindOptions(cur) {
-  return DeskLab.GROUP_KINDS.map(k => `<option value="${esc(k.k)}"${k.k === cur ? " selected" : ""}>${esc(k.label)}</option>`).join("");
-}
+/* ---- group manager popup: add, rename and delete groups, and say which group each strategy is in (no type picker since
+   2026-10-18: a new group is "together"). Every change is one write to the chart service (groupPost) and a repaint from its
+   answer; nothing here touches a strategy or an account. ---- */
 function renderGroupMgr(force) {
   const ov = $("#groupOverlay");
   if (!ov || !ST || !ov.classList.contains("open")) return;
   const a = document.activeElement;
   if (!force && a && ov.contains(a) && a.matches("#groupList input, #groupList select")) return;      // never wipe a field being used
-  const kindSel = $("#groupNewKind");
-  if (!kindSel.options.length) kindSel.innerHTML = groupKindOptions("eval");
   const groups = DESKGROUPS.groups;
   $("#groupCount").textContent = groups.length + " group" + (groups.length === 1 ? "" : "s");
   const known = [];                    // every strategy a group may take: [id, label]
@@ -3986,7 +3980,6 @@ function renderGroupMgr(force) {
   const glist = groups.map(g => `<div class="acct" style="padding:8px 0;gap:8px;align-items:center">
       <input class="grp-sel" value="${esc(g.name)}" maxlength="40" spellcheck="false" aria-label="Name of ${esc(g.name)}" style="flex:1;min-width:0;max-width:none"
         onchange="renameGroup(${jsArg(g.id)}, this.value)">
-      <select class="grp-sel" aria-label="What ${esc(g.name)} is for" onchange="groupPost('kind', {id: ${jsArg(g.id)}, kind: this.value})">${groupKindOptions(g.kind)}</select>
       <span class="hint" style="font-size:11.5px;white-space:nowrap">${g.members.length} in it</span>
       <button class="btn btn-outline btn-sm" onclick="deleteGroup(${jsArg(g.id)})">Delete</button></div>`).join("");
   const slist = known.map(([id, label]) => {
@@ -4005,7 +3998,7 @@ function closeGroupMgr() { hideOverlay("groupOverlay"); }
 async function addGroup() {
   const name = $("#groupNewName").value.trim();
   if (!name) { toast("Give the group a name."); $("#groupNewName").focus(); return; }
-  if (await groupPost("create", {name, kind: $("#groupNewKind").value})) {
+  if (await groupPost("create", {name})) {
     $("#groupNewName").value = "";
     toast(`${name} is added. Pick its strategies below.`);
   }
