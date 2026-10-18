@@ -1,0 +1,41 @@
+{
+ "name": "owner_candle_break_15_gc_nyam_nocap",
+ "source": {
+  "title": "Owner's idea in chat, 2026-10-18: a 15-minute candle that closes beyond the previous candle's wick, entered with it; stop at the candle extreme, 1:0.5; NY morning, no daily cap; no EMA; on GC (owner, 2026-10-18)"
+ },
+ "market": "GC",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {
+   "mode": "break"
+  },
+  "words": "On 15-minute candles, when a candle closes above the previous candle's high, go long at the close; when it closes below the previous candle's low, go short. Stop at the candle's extreme, target half the risk (1 : 0.5)."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.5,
+  "max_trades": 20
+ },
+ "taught": [
+  "[chat 2026-10-18] now lets start the new idea and add it to sweep, lets just try if the candle closes over the previous candles wick we enter, same stop idea and tp",
+  "[chat 2026-10-18] (the setting of the saved sweep: 15-minute candles, NY morning, 1 trade a day; this sheet without the EMA)",
+  "[chat 2026-10-18] now try it without the 1 trade a day limit",
+  "[chat 2026-10-18] lets try it on es and gc (this sheet: GC)"
+ ],
+ "not_run": [
+  "THE WICK: 'closes over the previous candle's wick' is read as a close strictly above the previous candle's high (long) or strictly below its low (short); a close on it is nothing.",
+  "THE STOP: the sweeping candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars, as every structure stop of the engine.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no trade is held overnight.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "THE CAP: none (the lane's 20 a session); one position at a time, so a signal while a trade is open is not taken."
+ ],
+ "control": "random"
+}
