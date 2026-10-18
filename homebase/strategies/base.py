@@ -21,6 +21,7 @@ Orders (see homebase/backtest/engine.py for the fill law):
   ctx.stop_entry / ctx.limit_entry / ctx.market -> Order;  ctx.oco(a, b);
   ctx.cancel(order);  ctx.flatten();  ctx.move_brackets_to_fill = True;
   ctx.plot(name, t_ns, value);  ctx.skip(reason);
+  ctx.daily (needs_daily) / ctx.hourly (needs_hourly): the bars of the sessions before today, read at the session start;
   ctx.hline(name, price, role=...) -> the record -- the levels the strategy PLACED, drawn on the
     chart and never traded: role is one of anchor | entry | sl | tp | level (default "level"), so
     the page styles a level without parsing its name. A strategy may rename a record it kept a
@@ -142,6 +143,11 @@ class Strategy:
     def needs_daily(self) -> bool:
         """True = ctx.daily must carry the completed daily bars before today."""
         return False
+
+    def needs_hourly(self) -> int:
+        """n > 0 = ctx.hourly must carry the 1-hour closes of the n complete sessions before today, today's contract only, oldest
+        first, as [[end_ns, close], ...] (backtest/hourly.py; at most 30 sessions). 0 = none (ctx.hourly is [])."""
+        return 0
 
     def provenance(self) -> dict:
         """The resolved runtime configuration a run actually used -- cancel/flat

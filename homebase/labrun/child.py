@@ -4,7 +4,7 @@
 
 One JSON object a line on stdin, one reply a line on stdout (stderr is free text):
   {"op": "init", "name", "source", "params", "qty", "date"}  -> {"ok": true, "meta": {...}} | {"ok": false, "error"}
-  {"op": "event", "kind": "session"|"bar"|"time", "t_ns", "arg", "last_price", "flat", "updates", ["daily"]}
+  {"op": "event", "kind": "session"|"bar"|"time", "t_ns", "arg", "last_price", "flat", "updates", ["daily"], ["hourly"]}
                                                               -> {"ok": true, "intents": [...]} | {"ok": false, "error"}
   {"op": "stop"}                                               -> the child exits 0
 The strategy runs against a LiveCtx: its orders come back as intents and nothing here places an order. A strategy's own
@@ -45,6 +45,7 @@ def _init(msg: dict):
     meta = {"root": root, "session_window": list(strategy.session_window), "bar_minutes": strategy.bar_minutes,
             "bar_window": list(bw) if bw else None, "placement_ms": strategy.placement_ms,
             "times": list(strategy.times()), "needs_daily": bool(strategy.needs_daily()),
+            "needs_hourly": int(strategy.needs_hourly() or 0),
             **({"exec_root": ex} if ex else {}),       # only a strategy that trades its market's micro says so
             "trades_on": bool(strategy.trades_on(day))}
     return strategy, ctx, meta
@@ -56,6 +57,7 @@ def _event(strategy, ctx: LiveCtx, msg: dict) -> list[dict]:
         raise ValueError("an event line needs flat, true or false")
     if kind == "session":
         ctx.daily = msg.get("daily") or []
+        ctx.hourly = msg.get("hourly") or []
     ctx.begin(msg["t_ns"], msg.get("last_price"), msg["flat"], msg.get("updates") or [])
     try:
         if kind == "session":

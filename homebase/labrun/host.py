@@ -43,7 +43,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ..backtest import sandbox, slots
+from ..backtest import hourly as hourlymod, sandbox, slots
 from ..backtest.engine import Costs, build_bars
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
@@ -90,6 +90,7 @@ TOO_MANY = "Too many orders at once."
 BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 NO_YESTERDAY = "Yesterday's prices are not stored yet."
+NO_HOURLY = "The earlier hours' prices could not be read."
 TOO_LATE = "Started too late to follow today."
 EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
@@ -202,7 +203,8 @@ def well_set(meta, root, exec_root: str = "") -> bool:
             and (meta.get("bar_window") is None or _window(meta["bar_window"]))
             and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
             and isinstance(times, list) and len(times) <= 500 and all(_at_eve(t, _HMS) for t in times)
-            and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool))
+            and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool)
+            and _int(meta.get("needs_hourly", 0)) and 0 <= meta.get("needs_hourly", 0) <= hourlymod.MAX_SESSIONS)
 
 
 def words(it: dict, tick: float) -> str:
@@ -247,6 +249,20 @@ def daily_bars(root: str, d: dt.date, tapes: TapeStore | None = None) -> list:
         if bar is not None:
             out.append(bar)
     return out
+
+
+_HOUR_CACHE: dict = {}          # (root) -> {date: (contract, hours)}: a session's 1-hour closes, read once per process
+
+
+def hourly_closes(root: str, d: dt.date, n: int, tapes: TapeStore | None = None) -> list:
+    """The 1-hour closes of the n complete sessions before d, read as the tester reads them (backtest/hourly.prior)."""
+    return hourlymod.prior(tapes or TapeStore(), root, d, n, _HOUR_CACHE.setdefault(root, {}))
+
+
+def _session_of(end_ns: int) -> dt.date:
+    """The session date of a 1-hour close: an hour ending after 17:00 ET belongs to the next day's session."""
+    t = dt.datetime.fromtimestamp(end_ns / 1e9, ET)
+    return t.date() + dt.timedelta(days=1) if (t.hour, t.minute) > (17, 0) else t.date()
 
 
 def sandboxed(argv: list, run_dir: Path) -> subprocess.Popen:
@@ -527,7 +543,7 @@ class StrategyDay:
     desk / send / tell / resume: DESK MODE (see that section below). With no `desk` none of it is reached: the day is
     hosted in shadow, as it always was."""
 
-    def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
+    def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, hourly=None, deadline_s: float = DEADLINE_S,
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None, now_ns: int | None = None,
                  desk: DeskSide | None = None, send=None, tell=None, resume=None, flat_et: str | None = None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
@@ -550,7 +566,8 @@ class StrategyDay:
         self._evening = False                        # a window that opens the evening before the date (set by _start)
         self._desk_init(desk, send, tell, resume, now_ns, flat_et)    # (desk mode's own fields; nothing read or sent)
         try:
-            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns)
+            self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns,
+                        hourly if hourly is not None else hourly_closes)
         except _Stop as e:
             self._stopped(str(e), e.detail)
         except Exception as e:  # noqa: BLE001 -- whatever broke, its child must not outlive the attempt
@@ -558,7 +575,7 @@ class StrategyDay:
         self._changed()
 
     # ---- the start
-    def _start(self, record: dict, spawn, daily, start_s: float, late, now_ns) -> None:
+    def _start(self, record: dict, spawn, daily, start_s: float, late, now_ns, hourly=None) -> None:
         run_dir = proc = None
         try:
             run_dir = Path(tempfile.mkdtemp(prefix="hb-labrun-"))
@@ -609,6 +626,8 @@ class StrategyDay:
         self._bar_next, self._bar_end = et_ns(self.date, b0), et_ns(self.date, b1)
         self._root = root
         self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
+        self._hourly_n = meta.get("needs_hourly", 0)
+        self._hourly = hourly if self._hourly_n else None      # ... and so are the earlier sessions' 1-hour closes
         self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"], ex)
         if self._desk is not None:
             self._desk_start()
@@ -723,10 +742,26 @@ class StrategyDay:
             raise _Stop(NO_YESTERDAY, f"the newest daily bar is {newest if isinstance(newest, str) else 'none'}")
         return bars
 
+    def _session_hourly(self) -> list | None:
+        """The earlier sessions' 1-hour closes, for a strategy that asks (needs_hourly): read when its session event fires.
+        Fail closed: closes that cannot be read, or whose newest is of a session older than the session day before, stop
+        the day before the strategy sees anything. None (nothing is sent) for a strategy that does not ask; [] on a roll
+        day (no earlier session of today's contract)."""
+        if self._hourly is None:
+            return None
+        try:
+            hours = self._hourly(self._root, self.date, self._hourly_n) if callable(self._hourly) else list(self._hourly)
+        except OSError as e:
+            raise _Stop(NO_HOURLY, f"{type(e).__name__}: {e}") from None
+        if hours and _session_of(hours[-1][0]) < _before(self.date):
+            raise _Stop(NO_YESTERDAY, f"the newest 1-hour close is of {_session_of(hours[-1][0]).isoformat()}")
+        return hours
+
     def _event(self, t: int, _prio, _n, kind: str, arg) -> None:
         if self._desk is not None:                   # desk mode: the orders go to the Desk, nothing is filled here
             return self._desk_event(t, kind, arg)
         daily = self._session_daily() if kind == "session" else None     # (it may stop the day: before anything runs)
+        hours = self._session_hourly() if kind == "session" else None
         f = self.fills
         f.advance_to(t)
         f.now(t)
@@ -737,6 +772,8 @@ class StrategyDay:
                "updates": f.updates()}
         if kind == "session":
             msg["daily"] = daily
+            if hours is not None:
+                msg["hourly"] = hours
         seen = {"flat": f.flat, "working_entries": f.working_entries, "entries_today": self._entries,
                 "last_price": last, "now_hhmm": _since(self._t0, t) if self._evening else _hms(t)[:5],
                 "prices_late": self._late.late or self._silent}
@@ -991,6 +1028,8 @@ class StrategyDay:
                "updates": line.get("updates") or []}
         if line["kind"] == "session":
             msg["daily"] = line.get("daily")
+            if "hourly" in line:
+                msg["hourly"] = line["hourly"]
         intents = self._child.ask(msg, self._deadline).get("intents")
         if not isinstance(intents, list) or not all(well_formed(i) for i in intents):
             raise _Stop(GONE)
@@ -1003,6 +1042,7 @@ class StrategyDay:
             return self._desk_replay(t, kind)
         side, f = self._desk, self.fills
         daily = self._session_daily() if kind == "session" else None     # (it may stop the day: before anything runs)
+        hours = self._session_hourly() if kind == "session" else None
         f.advance_to(t)
         f.now(t)
         if kind == "session":
@@ -1013,6 +1053,8 @@ class StrategyDay:
                 "updates": side.updates()}
         if kind == "session":
             line["daily"] = daily
+            if hours is not None:
+                line["hourly"] = hours
         self._tell(line)                             # BEFORE the child is asked
         intents = self._ask(line)
         self._tell({"seq": seq, "intents": intents})
@@ -1432,11 +1474,11 @@ class StrategyDay:
         self._saved_key = None
         self._changed()
 
-def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, deadline_s: float = DEADLINE_S,
+def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, hourly=None, deadline_s: float = DEADLINE_S,
             batch: int = BATCH) -> dict:
     """A whole list of prints (ts_ns, price, size) through one StrategyDay, `batch` at a time, the prints' own times
     as the clock. No network, no files. Returns {"summary": the day summary, "trades": the engine's trade dicts}."""
-    day = StrategyDay(record, date, spawn=spawn, daily=daily or [], deadline_s=deadline_s)
+    day = StrategyDay(record, date, spawn=spawn, daily=daily or [], hourly=hourly or [], deadline_s=deadline_s)
     try:
         for i in range(0, len(rows), batch):
             part = rows[i:i + batch]

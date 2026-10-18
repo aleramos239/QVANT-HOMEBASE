@@ -377,6 +377,62 @@ def test_a_strategy_that_does_not_need_daily_bars_is_never_stopped_for_them(days
     assert day.state == "running" and day.summary()["why"] is None
 
 
+HOURLY = HEAD + '''class Hr(Strategy):
+    id, name, root = "h", "Hr", "NQ"
+
+    def needs_hourly(self):
+        return 2
+
+    def on_session(self, ctx):
+        ctx.plot("hours", ctx.now_ns, float(len(ctx.hourly)))
+'''
+
+
+def hours_of(*days_):
+    """[[end_ns, close], ...]: two closes of each session date given (10:00 and 11:00 ET)."""
+    return [[et_ns(dt.date.fromisoformat(x), hm), 1.0] for x in days_ for hm in ("10:00", "11:00")]
+
+
+def test_the_hours_reach_the_session_event_only_when_the_strategy_asks_and_are_read_once(days):
+    asked = []
+
+    def hourly(root, d, n):
+        asked.append((root, d, n))
+        return hours_of("2024-03-01", "2024-03-04")
+
+    day = days(HOURLY, hourly=hourly)
+    day.on_ticks(ticks("09:24:58", [21000.0]))
+    assert asked == []                                                       # not before its session event ...
+    day.on_ticks(ticks("09:25:00", [21000.0]))
+    day.on_ticks(ticks("09:26:00", [21000.0]))
+    assert asked == [("NQ", D, 2)] and day.fills.result.plots == {"hours": [[ms_of("09:25"), 4.0]]}     # ... once
+    other = days(MARKET_930, hourly=lambda root, d, n: asked.append("no"))   # it does not ask: never read
+    other.on_ticks(ticks("09:25:00", [21000.0]))
+    assert other.state == "running" and len(asked) == 1
+
+
+def test_a_roll_day_runs_with_no_hours_and_stale_or_unreadable_hours_stop_the_day(days):
+    roll = days(HOURLY, hourly=lambda root, d, n: [])
+    roll.on_ticks(ticks("09:25:00", [21000.0]))
+    assert roll.state == "running" and roll.fills.result.plots == {"hours": [[ms_of("09:25"), 0.0]]}
+    stale = days(HOURLY, hourly=lambda root, d, n: hours_of("2024-02-29", "2024-03-01"))     # Monday's not stored yet
+    stale.on_ticks(ticks("09:25:00", [21000.0] * 3))
+    assert (stale.state, stale.summary()["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
+    assert stale.detail == "the newest 1-hour close is of 2024-03-01" and stale.fills.result.plots == {}
+
+    def broken(root, d, n):
+        raise OSError("disk")
+    bad = days(HOURLY, hourly=broken)
+    bad.on_ticks(ticks("09:25:00", [21000.0]))
+    assert (bad.state, bad.summary()["why"]) == ("stopped", "The earlier hours' prices could not be read.")
+    assert bad.detail == "OSError: disk"
+
+
+def test_an_evening_close_belongs_to_the_next_sessions_date():
+    assert host._session_of(et_ns(dt.date(2024, 3, 4), "19:00")) == dt.date(2024, 3, 5)
+    assert host._session_of(et_ns(dt.date(2024, 3, 4), "17:00")) == dt.date(2024, 3, 4)
+
+
 def test_an_event_that_breaks_in_the_runner_itself_stops_the_day(days, monkeypatch):
     """Not the strategy's fault, but a day that lost an event half way cannot be trusted: stop it and say so (M9: in
     plain words; what broke is kept for the journal)."""

@@ -144,11 +144,13 @@ class Child:
         return self.send({"op": "init", "name": name, "source": source, "params": params or {}, "qty": qty,
                           "date": date})
 
-    def event(self, kind, arg=None, t_ns=T0, last_price=None, flat=True, updates=(), daily=None) -> dict:
+    def event(self, kind, arg=None, t_ns=T0, last_price=None, flat=True, updates=(), daily=None, hourly=None) -> dict:
         ev = {"op": "event", "kind": kind, "t_ns": t_ns, "arg": arg, "last_price": last_price, "flat": flat,
               "updates": list(updates)}
         if daily is not None:
             ev["daily"] = daily
+        if hourly is not None:
+            ev["hourly"] = hourly
         return self.send(ev)
 
     def stop(self) -> int:
@@ -181,7 +183,7 @@ def test_init_replies_with_the_meta_block(child):
     r = child.init(STRADDLE)
     assert r == {"ok": True, "meta": {"root": "NQ", "session_window": ["09:25", "16:00"], "bar_minutes": 0,
                                       "bar_window": None, "placement_ms": 40, "times": ["09:30:00", "15:55:00"],
-                                      "needs_daily": False, "trades_on": True}}
+                                      "needs_daily": False, "needs_hourly": 0, "trades_on": True}}
 
 
 def test_meta_of_a_bar_strategy(child):
@@ -343,3 +345,29 @@ def test_only_the_exact_value_1_opens_either_switch(switch):
         assert c.init(STRADDLE)["ok"] is False and c.p.wait(timeout=30) == 1
     finally:
         c.close()
+
+
+HOURS = """
+from homebase.strategies.base import Strategy
+
+
+class Hours(Strategy):
+    id, name, root = "h", "Hours", "NQ"
+    session_window = ("09:00", "12:00")
+
+    def needs_hourly(self):
+        return 3
+
+    def on_session(self, ctx):
+        ctx.plot("hours", ctx.now_ns, float(len(ctx.hourly)))
+        ctx.plot("last", ctx.now_ns, ctx.hourly[-1][1] if ctx.hourly else -1.0)
+"""
+
+
+def test_a_strategy_that_asks_for_hours_says_so_and_gets_them_at_the_session_event(child):
+    assert child.init(HOURS)["meta"]["needs_hourly"] == 3
+    r = child.event("session", t_ns=T0, hourly=[[1, 10.0], [2, 11.5]])
+    assert r["intents"] == [{"op": "plot", "name": "hours", "t_ms": T0 // 1_000_000, "value": 2.0},
+                            {"op": "plot", "name": "last", "t_ms": T0 // 1_000_000, "value": 11.5}]
+    r = child.event("session", t_ns=T0)                                      # none sent: an empty list, never the old ones
+    assert [i["value"] for i in r["intents"]] == [0.0, -1.0]

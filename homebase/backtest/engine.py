@@ -198,6 +198,7 @@ class Ctx:
         self.point_value = sim.pv
         self.qty = qty
         self.daily = daily
+        self.hourly: list = []                  # [[end_ns, close], ...] of the earlier sessions (Strategy.needs_hourly)
         self.move_brackets_to_fill = False
 
     @property
@@ -716,8 +717,8 @@ def split_flow(ts, px, size, lo: int, hi: int, bars: list[Bar]) -> None:
 
 
 def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None = None,
-                controls=None) -> SessionResult:
-    """Replay one session's tape through one strategy instance."""
+                controls=None, hourly: list | None = None) -> SessionResult:
+    """Replay one session's tape through one strategy instance. hourly: ctx.hourly (the earlier sessions' 1-hour closes)."""
     d = tape.date
     w0, w1 = strategy.session_window
     t0, t1 = et_ns(d, w0), et_ns(d, w1)
@@ -728,6 +729,7 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
         raise ValueError(f"exec_root: {tape.root} has no micro named {ex} here")
     sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, ex, controls)
     ctx = sim._ctx = Ctx(sim, qty, daily or [])
+    ctx.hourly = list(hourly or [])
     events: list[tuple] = [(t0, 0, 0, "session", None)]
     bm = strategy.bar_minutes
     if bm and controls is not None and controls.bar_minutes:     # run control: the signal bar size

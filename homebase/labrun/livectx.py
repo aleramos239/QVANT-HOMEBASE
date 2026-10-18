@@ -55,6 +55,7 @@ class LiveCtx:
         self.point_value = point_value
         self.qty = qty
         self.daily = daily
+        self.hourly: list = []                 # [[end_ns, close], ...] of the earlier sessions (Strategy.needs_hourly)
         self.move_brackets_to_fill = False
         self._now = 0
         self._last: float | None = None
