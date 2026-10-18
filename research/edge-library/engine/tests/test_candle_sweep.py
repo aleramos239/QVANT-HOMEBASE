@@ -279,13 +279,53 @@ def test_ema1h_reads_only_the_hours_that_have_ended(monkeypatch):
     assert len(got) == 2 and got[0] == got[1]
 
 
+# ---- (iv c) candles of the family's own size (candle) ----------------------------------------------------------------------------------
+
+def three(c):
+    """The 3-minute candle 09:27-09:30 green (open 15000, high 15012, low 14996, close 15010); 09:30-09:33 sweeps its low and closes at c."""
+    return {"09:28": m(PX, PX + TICK, 14996.0, PX), "09:29": m(PX, 15012.0, PX - TICK, 15010.0),
+            "09:31": m(PX, PX + TICK, 14990.0, PX), "09:32": m(PX, max(PX + TICK, c), min(PX - TICK, c), c)}
+
+
+def test_three_minute_candles_sweep_and_close_back_like_the_bars():
+    p = {"tf": "1", "candle": 3}
+    assert signals(p, day({})) == []
+    assert signals(p, day(three(15005.0))) == [(sec(9, 33), "long")]
+    assert signals(p, day(three(14998.0))) == [] and signals({**p, "back": "range"}, day(three(14998.0))) == [(sec(9, 33), "long")]
+    log, _ = orders({**p, "stop_mode": "struct", "tgt_r": 0.5}, day(three(15005.0)))
+    assert log == [(sec(9, 33), "long", 14990.0, 14990.0, 15005.0 + 0.5 * 15.0)]           # the candle's own low, half the distance
+    assert signals({"tf": "1"}, day(three(15005.0))) != signals(p, day(three(15005.0)))      # off: the 1-minute bars decide instead
+
+
+@pytest.mark.parametrize("n", [5, 15, 30])
+@pytest.mark.parametrize("sess", ["london", "nyam", "mid", "pm"])
+def test_candles_of_5_15_30_minutes_give_the_signals_of_those_bars(n, sess):
+    k = 0
+    for seed in (3, 8, 11, 21):
+        bars = rand_bars(960, seed, p0=PX, step=4.0 if seed % 2 else 8.0)
+        for back in ("range", "body"):
+            want = signals({"tf": str(n), "sess": sess, "back": back}, bars)
+            assert signals({"tf": "1", "candle": n, "sess": sess, "back": back}, bars) == want, (seed, back)
+            k += len(want)
+    assert k > 0
+
+
+def test_candles_with_the_ema_read_the_candle_close(monkeypatch):
+    with_prior(monkeypatch, 14000.0)
+    assert [x[1] for x in orders({"tf": "1", "candle": 3, "ema1h": 50}, day(three(15005.0)))[0]] == ["long"]
+    with_prior(monkeypatch, 16000.0)
+    assert orders({"tf": "1", "candle": 3, "ema1h": 50}, day(three(15005.0)))[0] == []
+
+
 # ---- (v) the settings and the registry -----------------------------------------------------------------------------------------------------
 
 def test_the_settings_and_their_limits():
     d, sc = CS.CandleSweep.defaults(), CS.CandleSweep.schema()
-    assert (d["back"], d["ema1h"], d["max_tr"], d["dir"]) == ("body", 0, 20, "both")
+    assert (d["back"], d["ema1h"], d["candle"], d["max_tr"], d["dir"]) == ("body", 0, 0, 20, "both")
     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
-    for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5}):
+    assert sc["candle"] == ("int", 0, 60)
+    for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
+                {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):
         with pytest.raises(ValueError):
             CS.CandleSweep({"tf": "15", **bad})
 

@@ -3,13 +3,21 @@ before any result: "on the 15 minute timeframe we look at the previous candle; i
 it, we enter: sweep the previous candle's low, reverse and close higher within the body = long, vice versa short; stop at the candle
 extreme, 1 : 0.5". No Level-2 feature is read (FEATURES = ()): NQ, ES and GC, 1 contract, hold_to = 'day' (flat 15:58 ET).
 
-    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h (+ the Template's max_tr, dir)
+    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h, candle (+ the Template's max_tr, dir)
 
 THE RULE (fixed here, before any run):
   * BARS. The instance's own tf bars (the owner's bar is 15 minutes): the bar that has just closed (THIS bar) and the one before it (the
     PREVIOUS bar) of the same instance, from 00:00 ET of the trade date (an evening idea: from 18:00 of the evening before). The previous bar
     may lie before the session start: it is simply the bar before. A clock slot without a print makes no bar, so after a hole the previous bar
     is the last bar that traded.
+  * CANDLES OF ANY SIZE (the owner, 2026-10-18: "test 3 minute"; the engine's bars are 1 / 5 / 15 / 30 only). `candle` = N > 0 minutes
+    (0 = off, the default: the tf bars above): the family builds its own N-minute candles from the 1-minute bars (needs tf 1), on ET clock
+    multiples of N from 00:00 (an evening idea: they run on from 18:00, the multiples are the same), a candle = the 1-minute bars whose
+    start lies in it (a minute without a print adds nothing). A candle is judged once, at the first 1-minute close at or after its end
+    (on time when its last minute traded; a minute late after a hole); THIS bar / the PREVIOUS bar below are then the candle that has just
+    ended and the candle before it. The order, the structure level and the EMA's close are that candle's. The Template's own bits stay on
+    the 1-minute bars: the 0.25 ATR floor of a structure stop is the 1-minute ATR(14), WARM is 3 minutes, the session window is read at
+    the 1-minute close. With N = 5 / 15 / 30 on days without holes the signals are the tf 5 / 15 / 30 run's, from the third candle on.
   * SWEEP. THIS bar's low is strictly below the PREVIOUS bar's low (a long setup); its high strictly above the previous high (a short setup).
   * BACK. Read at THIS bar's close, strictly: `back` = where the close must come back to, for a long (the short is the mirror)
         range   above the previous bar's low (back inside its range)
@@ -41,7 +49,7 @@ REGISTRATION. As families/sfp.py: families/__init__.py picks this module up by i
 into families/blocks.py's BASES / WRAPPED when this module is imported; blocks.py stays byte for byte as it was.
 
 COMPLEXITY 4 = the previous bar + beyond its high / low + a close back to `back` -> market against it + both at once = no trade
-(+1 with ema1h: the side of the 1-hour EMA).
+(+1 with ema1h: the side of the 1-hour EMA; +1 with candle: candles of its own size).
 Tests: engine/tests/test_candle_sweep.py."""
 from __future__ import annotations
 
@@ -112,21 +120,54 @@ def signal(po, ph, pl, pc, h, l, c, back):
 
 
 class CandleSweep(Template):
-    """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the tf bar that has just closed."""
-    DEFAULTS = {"back": "body", "ema1h": 0, "max_tr": 20}
-    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "max_tr": ("int", 1, 20)}
+    """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
+    close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
+    DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "max_tr": 20}
+    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
 
+    def __init__(self, params: dict | None = None):
+        super().__init__(params)
+        if self.p["candle"] and self.p["tf"] != "1":
+            raise ValueError(f"candle_sweep: candle = {self.p['candle']} builds its own candles from the 1-minute bars: it needs tf 1, "
+                             f"not {self.p['tf']}")
+
     def fam_day(self, ctx):
-        self.go = 0
+        self.go, self.sx = 0, None
+        self.cd, self.mi, self.done = [], 0, 0
 
     def fam_update(self, ctx):
         self.go = 0
+        if self.p["candle"]:
+            return self._candles()
         if self.nb < 2:
             return
         O, H, L, C = self.O, self.H, self.L, self.C
         self.go = signal(O[-2], H[-2], L[-2], C[-2], H[-1], L[-1], C[-1], self.p["back"])
+        self.sx = (L[-1], H[-1], C[-1])
+
+    def _candles(self):
+        w, M, cd = self.p["candle"] * 60, self.M, self.cd
+        for i in range(self.mi, len(M)):                # the new 1-minute bars go into their candle
+            s, o, h, l, c, _ = M[i]
+            k = s // w
+            if cd and cd[-1][0] == k:
+                x = cd[-1]
+                x[2], x[3], x[4] = max(x[2], h), min(x[3], l), c
+            else:
+                cd.append([k, o, h, l, c])
+        self.mi = len(M)
+        if not cd:
+            return
+        now = (M[-1][0] // 60 + 1) * 60                 # the clock close of the 1-minute bar that has just closed
+        j = len(cd) if (cd[-1][0] + 1) * w <= now else len(cd) - 1          # the candles that have ended
+        if j > self.done:
+            self.done = j
+            if j >= 2:
+                (_, po, ph, pl, pc), (_, _, h, l, c) = cd[j - 2], cd[j - 1]
+                self.go = signal(po, ph, pl, pc, h, l, c, self.p["back"])
+                self.sx = (l, h, c)
 
     def ema1h(self, ctx):
         """The 1-hour EMA at this decision (module docstring), or None."""
@@ -137,12 +178,12 @@ class CandleSweep(Template):
     def fam_signal(self, ctx):
         if self.go and self.p["ema1h"]:
             e = self.ema1h(ctx)
-            if e is None or (self.C[-1] - e) * self.go <= 0:
+            if e is None or (self.sx[2] - e) * self.go <= 0:
                 return
         if self.go > 0:
-            self._mkt(ctx, "long", struct=self.L[-1])
+            self._mkt(ctx, "long", struct=self.sx[0])
         elif self.go < 0:
-            self._mkt(ctx, "short", struct=self.H[-1])
+            self._mkt(ctx, "short", struct=self.sx[1])
 
 
 FAMILIES = {

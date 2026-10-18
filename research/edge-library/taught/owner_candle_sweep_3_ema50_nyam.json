@@ -1,0 +1,49 @@
+{
+ "name": "owner_candle_sweep_3_ema50_nyam",
+ "source": {
+  "title": "Owner's idea in chat, 2026-10-17: 3-minute previous-candle sweep, close back inside its body, stop at the candle extreme, 1:0.5; with the 1-hour EMA 50 (long above, short below); run on 3-minute candles built from the 1-minute bars (owner, 2026-10-18)"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {
+   "back": "body",
+   "ema1h": 50,
+   "candle": 3
+  },
+  "words": "On 3-minute candles look at the previous candle. If this candle sweeps the previous candle's low and closes back higher, inside its body, go long at the close; if it sweeps the previous candle's high and closes back lower, inside its body, go short. Stop at the candle's extreme, target half the risk (1 : 0.5). Only long when price is above the 1-hour EMA 50, only short when it is below."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.5,
+  "max_trades": 20
+ },
+ "taught": [
+  "[chat 2026-10-17] test on the 15 minute timeframe",
+  "[chat 2026-10-17] we look at the previous candle: if we sweep a high or low, then close back inside within it, we enter",
+  "[chat 2026-10-17] sweep the previous candle's low, reverse and close higher within the body = long; vice versa = short",
+  "[chat 2026-10-17] stop at the candle extreme and 1:0.5",
+  "[chat 2026-10-17] now add a 1 hour ema and only long above and short below (length 50, the owner's pick)",
+  "[chat 2026-10-18] test 3 minute -- build it then save it so we dont have to re build it",
+  "[chat 2026-10-17] test all sessions (this sheet: nyam)"
+ ],
+ "not_run": [
+  "THE BODY: 'close higher within the body' is read as a close above the bottom of the previous candle's body (a long); a close past its top counts too.",
+  "3-MINUTE CANDLES: the engine has no 3-minute bars; the family builds them from the 1-minute bars on clock multiples of 3 minutes and judges each at the first 1-minute close at or after its end (a minute late after a minute without a print). The random control enters on the 1-minute bars.",
+  "THE 1-HOUR EMA: EMA(50) of the 1-hour closes (the last print of each whole ET hour that has ended; empty hours make none), carried across days back to 150 closes, the contract's first day or 30 sessions; seeded with the oldest close. The signal bar's close must be strictly above it (long) or below it (short); with fewer than 50 closes (the days right after a contract roll) there is no trade.",
+  "THE STOP: the sweeping candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 1-minute bars (the engine runs on 1-minute bars; the family builds the 3-minute candles), as every structure stop of the engine.",
+  "THE CAP: none was given; the lane caps 20 trades a session; one position at a time, so a sweep while a trade is open is not taken.",
+  "A SWEEP OF BOTH SIDES that closes back inside the body is no trade.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no trade is held overnight.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only."
+ ],
+ "control": "random"
+}
