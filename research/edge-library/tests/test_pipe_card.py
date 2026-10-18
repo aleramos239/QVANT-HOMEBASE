@@ -171,6 +171,18 @@ def test_an_sfp_card_passes_stage_0_with_the_swing_size_as_its_setting():
     fails({**c, "ways": [{**sf, "values": ["15", "30", "30"]}]}, "P0.2")
 
 
+def test_a_candle_sweep_card_passes_stage_0_on_15_minute_bars_with_back_as_its_setting():
+    cs = {"family": "candle_sweep", "main_setting": "back", "values": ["range", "body", "far"], "fixed": {}, "limits": {}}
+    c = card(name="candle_sweep_open", why="Stops beyond the last candle are run and the bar closes back.", loser="Traders who chase the break of the candle.",
+             ways=[cs], indicators=[], bars=["15"])
+    subs = passes(c)
+    assert [(x["name"], x["bar"]) for x in subs] == [("candle_sweep_open_a15", "15")]
+    assert subs[0]["spec"]["run"]["params"] == {"back": ["range", "body", "far"]}
+    for s in ("asia", "london", "pre", "nyam", "mid", "pm", "eve"):
+        passes({**c, "session": s})
+    fails({**c, "ways": [{**cs, "values": ["range", "body", "wick"]}]}, "P0.2")                  # wick is not a line of the rule
+
+
 def test_an_ib_touch_card_passes_stage_0_with_the_range_length_as_its_setting():
     it = {"family": "ib_touch", "main_setting": "ib_min", "values": ["15", "30", "60"], "fixed": {}, "limits": {}}
     c = card(name="ib_touch_open", why="The first return to the morning range meets the orders resting at its edge.",
