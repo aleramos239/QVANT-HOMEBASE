@@ -280,7 +280,7 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
    Without them (the Buy/Sell block, the chart menu) the body is exactly what it always was.
    `surface`: 'chart' (the Sell/qty/Buy block) or 'panel' (the order panel) picks that surface's one-click switch;
    anything else (the chart menu) reads the general one (HBTrade.oneClickKey). */
-function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null, surface = null }) {
+function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null, surface = null, onSent = null }) {
   const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell.tick, pv = cell.pv ?? null;
@@ -339,8 +339,10 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
     return T.orderBody({ clientId: T.clientId(), accounts: resolved.accounts, root, side, qty, type, price: px, sl, tp,
       trigger: trig, tif: tf });
   };
+  // onSent(body): the body about to leave (the order panel arms its breakeven on it); never for a preview or a refusal
+  const send = (m) => { const b = build(m); if (b && onSent) onSent(b); return b; };
   const origin = { surface, cell, side };   // fast-paper: that button reads "sending" while this order is in flight
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, build, origin); return; }   // not right after a replay
+  if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, send, origin); return; }   // not right after a replay
   const preview = build(gate);
   // shown === gate.accounts here, so only the inferType re-check can abort a preview -- the market moved
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
@@ -348,7 +350,7 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
   confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent', oneClickPref: T.oneClickKey(surface) })
-    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, build, origin); } });
+    .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, send, origin); } });
 }
 
 function symbolAction(cell, kind, root) {
@@ -372,7 +374,7 @@ function symbolAction(cell, kind, root) {
 /* A line may be moved / closed only while every one of its legs is on an account the desk lists as tradable. */
 const NOT_TRADABLE = "That line's account can't trade from the chart right now";
 
-function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
+function moveLine(cell, line, price, root, tick, { onCancel, noConfirm = false } = {}) {
   if (!T.canDrag(line)) { if (onCancel) onCancel(); return; }   // a Stop Limit can't be moved: cancel and place again
   const g = () => lineGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); if (onCancel) onCancel(); return; }
@@ -396,7 +398,8 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
     if (!T.legsWithin(line, m.accounts)) { D().toast('err', 'Accounts changed — review and try again'); return null; }
     return line.legs.map((leg) => ({ client_id: T.clientId(), account: leg.account, order_id: leg.order_id, price: rounded }));
   };
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build); return; }
+  // noConfirm: an armed auto-breakeven firing -- agreed to when its order was placed (the owner, 2026-10-18)
+  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('modify', g, build); return; }
   const title = T.actionTitle('modify', { root, line, from: line.price, to: price }, tick);
   const rows = acctRows(accountIds);
   confirm({ title, rows, action: 'Move', live: hasLive(rows) })
@@ -409,7 +412,7 @@ function moveLine(cell, line, price, root, tick, { onCancel } = {}) {
    refuses: nothing sent). What the confirm shows -- accounts, kind, price and the position's size per account
    (`expected_net`: the desk refuses if it changed since) -- is frozen and is exactly what is sent. Exits are GTC, and
    the confirm says so (the GTC warning, as any GTC order's). */
-function addExit(cell, line, kind, price, root, tick, { onCancel } = {}) {
+function addExit(cell, line, kind, price, root, tick, { onCancel, noConfirm = false } = {}) {
   const cancel = (msg) => { if (msg) D().toast('err', msg); if (onCancel) onCancel(); };
   if (!line || line.kind !== 'position' || (kind !== 'sl' && kind !== 'tp')) return cancel(null);
   const g = () => lineGate(cell, root), gate = g();
@@ -428,7 +431,7 @@ function addExit(cell, line, kind, price, root, tick, { onCancel } = {}) {
     if (T.exitDropError(line, kind, at, q ? q.last : null)) { D().toast('err', 'Price moved through your stop/target — nothing sent'); return null; }
     return T.exitsBody({ clientId: T.clientId(), accounts, root, kind, price: at, expected });
   };
-  if (T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, build); return; }
+  if (noConfirm || T.sendsWithoutConfirm(D().prefs, cell.cfg)) { guardedSend('exits', g, build); return; }   // noConfirm: as moveLine's
   const rows = acctRows(accounts);
   const ghost = T.exitGhost(line, kind, at), usd = T.usd(T.linePnl(ghost, null));
   confirm({ title: T.exitsTitle(line, kind, at, tick), rows, note: usd ? `If it fills: ${usd}` : '', warn: T.GTC_WARN,

@@ -1796,3 +1796,40 @@ test('exit lines: ticks from the entry on the chip, and a zone from the entry to
   assert.deepEqual(T.exitZones([sl, { kind: 'position', price: 30905, legs: [] }], P), [{ from: 30905, to: 30880, color: 'r' }]);
   assert.deepEqual(T.exitZones([two], P), []);
 });
+
+test('beStop: a long\'s stop one tick above its entry, a short\'s one below; move its one SL, else add one', () => {
+  const pos = (side, extra = {}) => ({ kind: 'position', side, price: 30900, legs: [{ account: 'a' }], ...extra });
+  const sl = { kind: 'sl', price: 30880, legs: [{ account: 'a' }] };
+  assert.deepEqual(T.beStop(pos('Buy'), [], 0.25), { action: 'add', price: 30900.25 });
+  assert.deepEqual(T.beStop(pos('Sell'), [], 0.25), { action: 'add', price: 30899.75 });
+  assert.deepEqual(T.beStop(pos('Buy'), [sl], 0.25), { action: 'move', line: sl, price: 30900.25 });
+  assert.ok(T.beStop(pos('Buy'), [sl, { ...sl, price: 30870 }], 0.25).error, 'two stops: no guess');
+  assert.ok(T.beStop(pos('Buy', { legs: [{ account: 'a' }, { account: 'b' }] }), [sl], 0.25).error, 'a stop on only some accounts');
+  assert.ok(T.beStop(pos('Buy'), [{ kind: 'order', legs: [{ account: 'a', pending: true }] }], 0.25).error, 'pending');
+  assert.ok(T.beStop({ kind: 'sl' }, [], 0.25).error);
+});
+
+test('beArmStep: waits for the fill, fires at the level, drops when flat, refused, or old', () => {
+  const at = 1e9, arm = { side: 'Buy', level: 30920, accounts: ['a'], at, seen: false };
+  const pos = { kind: 'position', side: 'Buy', key: 'p', legs: [{ account: 'a' }] };
+  const order = { kind: 'order', legs: [{ account: 'a' }] };
+  assert.deepEqual(T.beArmStep(arm, [order], 30930, at + 60e3), { wait: true, seen: false }, 'resting: waits');
+  assert.deepEqual(T.beArmStep(arm, [], 30930, at + 5e3), { wait: true, seen: false }, 'just sent: waits');
+  assert.equal(T.beArmStep(arm, [], 30930, at + 20e3).drop, 'no order');
+  assert.deepEqual(T.beArmStep(arm, [pos], 30919.75, at + 1), { wait: true, seen: true });
+  assert.deepEqual(T.beArmStep(arm, [pos], 30920, at + 1), { fire: [pos] });
+  assert.deepEqual(T.beArmStep({ ...arm, side: 'Sell', level: 30880 }, [{ ...pos, side: 'Sell' }], 30880, at + 1).fire.length, 1);
+  assert.ok(T.beArmStep(arm, [{ ...pos, side: 'Sell' }], 30930, at + 1).wait, 'the other side is not its trade');
+  assert.ok(T.beArmStep(arm, [{ ...pos, legs: [{ account: 'b' }] }], 30930, at + 1).wait, 'another account is not its trade');
+  assert.equal(T.beArmStep({ ...arm, seen: true }, [], 30930, at + 1).drop, 'flat');
+  assert.equal(T.beArmStep(arm, [pos], 30930, at + 9 * 3600e3).drop, 'expired');
+});
+
+test('beStop never loosens: a stop already at or past breakeven + 1 is left alone', () => {
+  const g = { kind: 'position', side: 'Buy', price: 30900, legs: [{ account: 'a' }] };
+  const sl = (price) => ({ kind: 'sl', price, legs: [{ account: 'a' }] });
+  assert.equal(T.beStop(g, [sl(30910)], 0.25).action, 'none');
+  assert.equal(T.beStop(g, [sl(30900.25)], 0.25).action, 'none');
+  assert.equal(T.beStop({ ...g, side: 'Sell' }, [sl(30890)], 0.25).action, 'none');
+  assert.equal(T.beStop({ ...g, side: 'Sell' }, [sl(30910)], 0.25).action, 'move');
+});

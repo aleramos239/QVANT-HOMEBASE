@@ -668,6 +668,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .tl-chip.view .tl-text { background: var(--panel); color: var(--c); }   /* read-only: no drag, no × (its account can't trade from the chart now) */
 .tl-x { width: 22px; color: var(--c); display: grid; place-items: center; }
 .tl-x:hover { background: var(--hover); }
+.tl-be { padding: 0 6px; color: var(--c); font-size: 11px; font-weight: 600; border-left: 1px solid var(--border); }   /* a position's stop to BE + 1 tick */
+.tl-be:hover:not(:disabled) { background: var(--hover); }
 .tl-chip.bot .tl-text { background: var(--panel); color: var(--c); cursor: default; }
 .tl-chip.ghost { pointer-events: none; opacity: .92; }
 .tl-chip.ghost.bad .tl-text { background: var(--panel); color: var(--c); text-decoration: line-through; }   /* refused (marketable, or the position already has that exit): won't send */
@@ -836,6 +838,9 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .op-fields:not(:has(.op-field:not([hidden]))) { display: none; }
 .op-field { display: grid; grid-template-columns: minmax(0, 1fr) 148px; align-items: center; gap: 8px; }
 .op-field input[type="range"] { width: 100%; accent-color: var(--accent); }   /* Chart preview: shading */
+.op-rr .op-lab { white-space: nowrap; }   /* TP as a typed reward-to-risk ("1 : 2.5") */
+.op-armed { display: flex; flex-direction: column; gap: 4px; }   /* armed breakevens, each with a Cancel */
+.op-armrow { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: #E8A23A; }
 .op-lab { color: var(--text-2); font-size: 13px; }
 .op-in, .op-sel { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
   font-size: 13px; font-variant-numeric: tabular-nums; }

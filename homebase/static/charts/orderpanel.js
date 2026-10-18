@@ -39,6 +39,7 @@ let prefQty = null;                     // the shared quantity (the chart's Buy/
 const st = {                            // the form, as typed (strings for fields)
   side: 'Buy', type: 'Market', price: '', trigger: '', limit: '', qty: '1', riskOn: false, risk: '',
   tp: { on: false, unit: 'ticks', value: '' }, sl: { on: false, unit: 'ticks', value: '' }, tif: 'Day',
+  be: { on: false, unit: 'ticks', value: '' },   // auto-breakeven: the level that moves the stop to entry + 1 tick
   exitsOpen: true, extraOpen: false, lookOpen: false,
 };
 /* How the order's preview looks on the chart (the user, 2026-10-18: "let me play with it"); kept in this browser. */
@@ -49,6 +50,7 @@ function setLook(k, v) {
   look[k] = v;
   try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private window: this session only */ }
   paint();
+  document.dispatchEvent(new Event('hb-order-look'));   // the desk's own order lines (tradelines.js) take the look too
 }
 const needDefault = { price: true, trigger: true, limit: true };   // fill from the last price when next shown
 
@@ -83,7 +85,8 @@ function field(label, key) {
 /* ---- the form's numbers for one chart: the exits' triples, the size, and panelOrder's verdict ----
    Typed numbers are read strictly (fix round 1): qty digits only, $ and prices plain decimals -- anything else
    (commas, hex, exponents) is refused with its reason, never guessed at. */
-const EXIT_NAMES = { tp: 'Take profit', sl: 'Stop loss' };
+const EXIT_NAMES = { tp: 'Take profit', sl: 'Stop loss', be: 'Breakeven' };
+const BE_COLOR = '#E8A23A';
 const blank = (v) => String(v == null ? '' : v).trim() === '';
 function exitVal(k) { return st[k].unit === 'price' ? T.parseDecimal(st[k].value, true) : T.parseUsd(st[k].value); }
 function compute(cell) {
@@ -109,6 +112,8 @@ function compute(cell) {
   } else qty = T.parseQty(st.qty);
   const qd = Number.isInteger(qty) && qty >= 1 ? qty : 1;   // the $ figures: the whole order's
   const sl = triple('sl', slEntry, qd), tp = triple('tp', tpEntry, qd);
+  // the breakeven level sits on the profit side, as a TP does
+  const be = st.be.on ? T.exitTriple({ unit: st.be.unit, value: exitVal('be'), side, entry: tpEntry, tick, pv, kind: 'tp', qty: qd }) : null;
   // a Stop Limit's worst-fill loss at its SL (from the limit), when the limit is not the trigger
   const worst = type === 'StopLimit' && sl && tpEntry != null && tpEntry !== slEntry && pv > 0
     ? T.riskTicks(tpEntry, sl.price, tick) * tick * pv * qd : null;
@@ -116,23 +121,24 @@ function compute(cell) {
   const exitPx = (k, t) => (!st[k].on ? null : t ? t.price : st[k].unit === 'price' ? exitVal(k) : NaN);
   const lim = D().state && D().state.limits;
   const qtyMax = Math.min(T.PANEL_QTY_MAX, lim && lim.max_order_qty > 0 ? lim.max_order_qty : T.PANEL_QTY_MAX);
-  const order = formError(type, qty, risk, sl, pv, qd, tick) || T.panelOrder({ side, type, qty: st.riskOn ? null : qty, price, trigger,
+  const order = formError(type, qty, risk, sl, pv, qd, tick, be) || T.panelOrder({ side, type, qty: st.riskOn ? null : qty, price, trigger,
     sl: exitPx('sl', sl), tp: exitPx('tp', tp), tif: st.tif, risk, quote: q, nowMs: now, tick, pv, qtyMax });
-  return { root, tick, q, now, sl, tp, qty, order, worst, entry: tpEntry, slEntry };
+  return { root, tick, q, now, sl, tp, be, qty, order, worst, entry: tpEntry, slEntry };
 }
 /* What the user typed that can't be read, as {ok: false, error}; null when every shown field is readable. */
-function formError(type, qty, risk, sl, pv, qd, tick) {
+function formError(type, qty, risk, sl, pv, qd, tick, be) {
   const bad = (error) => ({ ok: false, error });
   if (!st.riskOn && !Number.isFinite(qty)) return bad(blank(st.qty) ? 'Enter the quantity' : 'Quantity: whole contracts, digits only');
   if (st.riskOn && !blank(st.risk) && !Number.isFinite(risk)) return bad('USD risk: digits and one decimal point only');
   const shown = type === 'StopLimit' ? [['trigger', 'Trigger'], ['limit', 'Limit']] : type === 'Market' ? [] : [['price', 'Price']];
   for (const [k, name] of shown) if (!blank(st[k]) && !Number.isFinite(T.parseDecimal(st[k], true))) return bad(`${name}: digits and one decimal point only`);
-  for (const k of ['tp', 'sl']) {
+  for (const k of ['tp', 'sl', 'be']) {
     if (st[k].on && !blank(st[k].value) && !Number.isFinite(exitVal(k))) return bad(`${EXIT_NAMES[k]}: digits and one decimal point only`);
   }
   if (st.sl.on && st.sl.unit === 'usd' && !sl && exitVal('sl') > 0 && pv > 0) {
     return bad(`Stop loss is under one tick (${T.money(tick * pv * qd)} a tick at this size)`);
   }
+  if (st.be.on && !be) return bad(blank(st.be.value) ? 'Enter the breakeven level, or turn it off' : 'Breakeven: at least one tick on the profit side');
   return null;
 }
 
@@ -207,7 +213,7 @@ function build() {
   const exits = coll('Exits', 'exitsOpen');
   ui.exits = exits;
   ui.ex = {};
-  for (const [k, label] of [['tp', 'Take profit'], ['sl', 'Stop loss']]) {
+  for (const [k, label] of [['tp', 'Take profit'], ['sl', 'Stop loss'], ['be', 'Breakeven']]) {
     const box = mk('div', 'op-exit'), top = mk('div', 'op-swrow');
     const s = sw(label);
     s.onclick = () => { st[k].on = !st[k].on; paint(); };
@@ -222,6 +228,19 @@ function build() {
     row.append(inp, sel);
     const sub = mk('div', 'op-note');
     box.append(top, row, sub);
+    if (k === 'tp') {   // the TP as a multiple of the SL's distance, typed (the owner, 2026-10-18): "1 : 2.5"
+      ui.rr = mk('label', 'op-field op-rr');
+      ui.rrIn = mk('input', 'op-in');
+      ui.rrIn.type = 'text'; ui.rrIn.inputMode = 'decimal'; ui.rrIn.autocomplete = 'off';
+      ui.rrIn.setAttribute('aria-label', 'Reward to risk');
+      ui.rrIn.addEventListener('input', () => { const n = T.parseDecimal(ui.rrIn.value, true); if (n > 0) setTpR(n); });
+      ui.rr.append(mk('span', 'op-lab', 'Reward : risk  1 :'), ui.rrIn);
+      box.append(ui.rr);
+    }
+    if (k === 'be') {   // its armed breakevens on this symbol, each with a Cancel
+      ui.beArmed = mk('div', 'op-armed');
+      box.append(ui.beArmed);
+    }
     exits.body.appendChild(box);
     ui.ex[k] = { box, sw: s, inp, sel, sub, row };
   }
@@ -338,7 +357,9 @@ function sendNow() {
   const c = compute(cell);
   if (!c.order.ok) { paint(); D().toast('err', c.order.error); return; }
   const o = c.order;
-  UI().placeOrder({ cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
+  const beLevel = st.be.on && c.be ? c.be.price : null;   // compute refused the order if BE is on without a level
+  const onSent = beLevel == null ? null : (b) => armBe({ root: c.root, side: o.side, level: beLevel, accounts: b.accounts });
+  UI().placeOrder({ onSent, cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
     tif: o.tif, exits: { sl: o.sl, tp: o.tp }, surface: 'panel' });
 }
 
@@ -359,6 +380,17 @@ function setUnit(k, unit) {
   e.inp.value = st[k].value;
   paint();
 }
+/* TP = n × the SL's ticks from the entry (whole ticks), in the TP's own unit; switched on if it was off. */
+function setTpR(n) {
+  const cell = selectedCell();
+  if (!cell || !cell.shown) return;
+  const sl = compute(cell).sl;
+  if (!sl) { D().toast('err', 'Set a stop loss first'); return; }
+  const unit = st.tp.unit;
+  st.tp = { on: true, unit: 'ticks', value: String(Math.max(1, Math.round(sl.ticks * n))) };
+  ui.ex.tp.inp.value = st.tp.value;
+  if (unit !== 'ticks') setUnit('tp', unit); else paint();
+}
 function setRisk(on) {
   if (on && st.sl.unit === 'usd') setUnit('sl', 'ticks');   // the risk IS the stop's $: the SL is set in ticks or price
   st.riskOn = on;
@@ -369,6 +401,8 @@ function setRisk(on) {
    symbol change. */
 function resetExits() {
   const p = D().prefs;
+  st.be = { on: false, unit: 'ticks', value: '' };
+  if (ui) { ui.ex.be.inp.value = ''; ui.ex.be.sel.value = 'ticks'; }
   for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks]]) {
     st[k] = { on: n > 0, unit: 'ticks', value: n > 0 ? String(n) : '' };
     if (ui) { ui.ex[k].inp.value = st[k].value; ui.ex[k].sel.value = 'ticks'; }
@@ -457,7 +491,7 @@ function paint() {
 
   // exits
   paintColl(ui.exits);
-  for (const k of ['tp', 'sl']) {
+  for (const k of ['tp', 'sl', 'be']) {
     const e = ui.ex[k], x = st[k], tr = c[k];
     paintSwitch(e.sw, x.on);
     e.row.hidden = !x.on;
@@ -466,11 +500,20 @@ function paint() {
     if (e.sel.value !== x.unit) e.sel.value = x.unit;
     const usdOpt = [...e.sel.options].find((o) => o.value === 'usd');
     if (usdOpt) usdOpt.disabled = k === 'sl' && st.riskOn;
-    e.sub.textContent = !tr ? (blank(x.value) ? `Enter the ${k === 'tp' ? 'take profit' : 'stop loss'}` : '—')
+    if (k === 'tp') {   // the box shows the ratio the exits make now (dragged or typed), unless it is being typed in
+      ui.rr.hidden = !st.sl.on;
+      ui.rrIn.disabled = !c.sl;
+      ui.rrIn.placeholder = c.sl ? '' : 'set a stop loss';
+      const now = c.sl && c.tp && c.sl.ticks > 0 ? String(Number((c.tp.ticks / c.sl.ticks).toFixed(2))) : '';
+      if (!focused(ui.rrIn) && ui.rrIn.value !== now) ui.rrIn.value = now;
+    }
+    e.sub.textContent = !tr ? (blank(x.value) ? `Enter the ${EXIT_NAMES[k].toLowerCase()} level` : '—')
+      : k === 'be' ? `At ${Cat.fmtPrice(tr.price, c.tick)} (${tr.ticks}t) the stop moves to entry + 1 tick`
       : exitSub(x.unit, tr, c.tick, exitVal(k), k === 'sl' ? c.worst : null);
   }
 
   paintPreview(cell, c);
+  paintArmed(root);
   paintColl(ui.look);
   paintSwitch(ui.lookSw, look.on);
   for (const p of ui.lookSel) if (p.sel.value !== String(look[p.key])) p.sel.value = String(look[p.key]);
@@ -524,7 +567,8 @@ function paintPreview(cell, c) {
   const P = cell.P, want = {};
   if (c.entry != null) {
     const n = c.order.ok ? c.order.qty : c.qty, size = Number.isInteger(n) && n >= 1 ? ` ${n} contract${n === 1 ? '' : 's'}` : '';
-    want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${st.side.toUpperCase()}${size}` };
+    const rr = c.tp && c.sl && c.sl.ticks > 0 ? ` · 1:${(c.tp.ticks / c.sl.ticks).toFixed(1)}` : '';   // reward to risk
+    want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${st.side.toUpperCase()}${size}${rr}` };
   }
   for (const k of ['tp', 'sl']) {
     const t = c[k];
@@ -532,12 +576,15 @@ function paintPreview(cell, c) {
     const usd = t.usd == null ? null : (k === 'tp' ? '+' : '\u2212') + T.money(t.usd);   // the whole order's $ at that line
     want[k] = { price: t.price, color: k === 'tp' ? P.up : P.down, title: [k.toUpperCase() + (usd ? ` ${usd}` : ''), `${t.ticks}t`].join(' · ') };
   }
-  for (const k of ['entry', 'tp', 'sl']) {
+  if (c.be) want.be = { price: c.be.price, color: BE_COLOR, title: `BE · ${c.be.ticks}t → stop to entry+1` };
+  for (const a of arms) if (a.root === c.root) want[`armed:${a.id}`] = { price: a.level, color: BE_COLOR, title: 'BE ARMED · stop to entry+1' };
+  for (const k of new Set([...Object.keys(want), ...Object.keys(pre.lines)])) {
     const w = want[k], line = pre.lines[k];
     if (!w) { if (line) { series.removePriceLine(line); delete pre.lines[k]; } continue; }
     // a Market's entry IS the last price: its own axis label would only push above the last price's
     const o = { price: w.price, color: w.color, title: look.labels === 'scale' ? w.title : '', lineWidth: look.width, lineStyle: look.style,
       axisLabelVisible: k !== 'entry' || st.type !== 'Market' };
+    if (k.startsWith('armed:')) o.lineStyle = 0;   // a live order's breakeven: solid, whatever the preview's look
     if (line) line.applyOptions(o); else pre.lines[k] = series.createPriceLine(o);
   }
   const tags = look.labels === 'line' ? Object.entries(want).map(([key, w]) => ({ key, price: w.price, text: w.title, color: w.color })) : [];
@@ -565,6 +612,7 @@ function grabAt(cell, e) {
   const { y } = paneXY(cell, e);
   let best = null;
   for (const [k, line] of Object.entries(pre.lines)) {
+    if (k.startsWith('armed:')) continue;   // an armed breakeven is the sent order's: cancelled from the panel, not dragged
     const ly = pre.series.priceToCoordinate(line.options().price), d = ly == null ? Infinity : Math.abs(ly - y);
     if (d <= GRAB_PX && (!best || d < best.d)) best = { k, d };
   }
@@ -609,9 +657,9 @@ function dragTo(cell, k, price) {
     needDefault[f] = false;
     ui.f[f].inp.value = st[f];
   } else {
-    const c = compute(cell), from = k === 'tp' ? c.entry : c.slEntry;
+    const c = compute(cell), from = k === 'sl' ? c.slEntry : c.entry;
     if (from == null) return;
-    const above = (k === 'tp') === (st.side === 'Buy');   // a long's TP and a short's SL sit above the entry
+    const above = (k !== 'sl') === (st.side === 'Buy');   // a long's TP / breakeven and a short's SL sit above the entry
     const p = above ? Math.max(price, from + cell.tick) : Math.min(price, from - cell.tick);
     const unit = st[k].unit;
     st[k].unit = 'price';
@@ -619,6 +667,66 @@ function dragTo(cell, k, price) {
     if (unit !== 'price') setUnit(k, unit);   // back to the typed unit, re-expressed (ticks / $)
   }
   paint();
+}
+/* ---- auto-breakeven (the owner, 2026-10-18): an order sent with Breakeven on arms {root, side, level, accounts}; once
+   its position is open and the last trade reaches the level, the position's stop goes to entry + 1 tick (HBTrade.beStop:
+   moved, or added; never loosened) with no confirm -- agreed to when the order was sent. HBTrade.beArmStep decides;
+   each position line fires once. Kept in this browser: it works while a Charts page is open. ---- */
+const BE_KEY = 'hb.beArms';
+let arms = (() => { try { const a = JSON.parse(localStorage.getItem(BE_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } })();
+function saveArms() { try { localStorage.setItem(BE_KEY, JSON.stringify(arms)); } catch (_) { /* this session only */ } }
+function armBe(a) {
+  arms.push({ ...a, id: T.clientId(), at: Date.now(), seen: false, done: [], sentAt: 0 });
+  saveArms();
+}
+function dropBe(id) { arms = arms.filter((a) => a.id !== id); saveArms(); paint(); }
+function chartFor(root) {
+  const C = window.HBCharts, sel = selectedCell();
+  if (sel && sel.shown && sel.shown.root === root) return sel;
+  return C ? C.cells.find((x) => x && x.shown && x.shown.root === root && x.chart) || null : null;
+}
+function watchBe() {
+  if (!arms.length || UI().busy() || !D().state) return;
+  for (const a of arms) {
+    const cell = chartFor(a.root);
+    if (!cell) continue;   // no chart of that symbol open: it waits
+    const groups = T.linesFor(D().state, a.root, UI().editableIds(cell));
+    const q = T.freshQuote(D().quotes[a.root], page.clockMs());
+    const r = T.beArmStep(a, groups, q ? q.last : null, Date.now());
+    if (r.drop) { dropBe(a.id); return; }
+    if (r.seen && !a.seen) { a.seen = true; saveArms(); }
+    if (!r.fire) continue;
+    if (Date.now() - a.sentAt < 3000) return;   // the last move is still landing in the desk's state
+    for (const g of r.fire.filter((x) => !a.done.includes(x.key))) {
+      const s = T.beStop(g, groups, cell.tick);
+      a.done.push(g.key);   // each position line once, whatever happens next
+      a.sentAt = Date.now();
+      saveArms();
+      if (s.error) { D().toast('err', `Breakeven: ${s.error}`); continue; }
+      if (s.action === 'none') continue;
+      D().toast('ok', `Breakeven reached — stop to ${Cat.fmtPrice(s.price, cell.tick)}`);
+      if (s.action === 'move') UI().moveLine(cell, s.line, s.price, a.root, cell.tick, { noConfirm: true });
+      else UI().addExit(cell, g, 'sl', s.price, a.root, cell.tick, { noConfirm: true });
+      return;   // one send at a time (the in-flight lock); the next pass takes the next line
+    }
+    if (r.fire.every((x) => a.done.includes(x.key))) { dropBe(a.id); return; }
+  }
+}
+let armedKey = null;
+function paintArmed(root) {
+  const mine = arms.filter((a) => a.root === root);
+  const key = JSON.stringify(mine.map((a) => [a.id, a.level, a.seen]));
+  if (key === armedKey) return;
+  armedKey = key;
+  const tick = (selectedCell() || {}).tick;
+  ui.beArmed.replaceChildren(...mine.map((a) => {
+    const row = mk('div', 'op-armrow'), x = mk('button', 'op-link', 'Cancel');
+    x.type = 'button';
+    x.onclick = () => dropBe(a.id);
+    row.append(mk('span', '', `Armed: ${a.side} at ${Cat.fmtPrice(a.level, tick)}${a.seen ? '' : ' (waiting for the fill)'}`), x);
+    return row;
+  }));
+  ui.beArmed.hidden = !mine.length;
 }
 /* S1: the red ring round Send and its LIVE tag while the selected chart's next order reaches a LIVE account (`ids`:
    HBTradeUI.liveCue, the send path's own set); none otherwise. */
@@ -691,7 +799,7 @@ function pickPrice(price) {
   if (!inp || !cell || !cell.shown || !Number.isFinite(price)) return;
   const k = inp.dataset.pick, v = fmtIn(T.roundTick(price, cell.tick), cell.tick);
   inp.value = v;
-  if (k === 'tp' || k === 'sl') st[k].value = v;
+  if (k in EXIT_NAMES) st[k].value = v;
   else { st[k] = v; needDefault[k] = false; }
   paint();
   setTimeout(() => { if (document.contains(inp)) inp.focus(); }, 0);   // keep picking: focus stays on the field
@@ -714,12 +822,12 @@ function mount(pg, container) {
   build();
   ui.qty.value = st.qty;
   resetExits();
-  D().on(() => paint());                 // desk / quote / prefs events: patch in place, never rebuild
+  D().on(() => { paint(); watchBe(); });   // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(paint, 1000);   // a quote going stale with no event; the chart's lines follow the last trade even while closed   // a quote going stale with no event (a Market's exits then refuse)
+  setInterval(() => { paint(); watchBe(); }, 1000);   // a quote going stale with no event; the lines follow the last trade even while closed
   paint();
 }
 
-window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible, startPreviewDrag };
+window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible, startPreviewDrag, look: () => look };
 })();

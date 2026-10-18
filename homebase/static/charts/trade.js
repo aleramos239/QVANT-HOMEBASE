@@ -679,6 +679,43 @@ function exitTicks(g, tick) {
   const a = avg.size === 1 ? [...avg][0] : null;
   return tick > 0 && Number.isFinite(a) ? `${Math.round(Math.abs(g.price - a) / tick)}t` : null;
 }
+/* A position chip's "BE+1" (the owner, 2026-10-18): its stop one tick into profit past its entry -- a long's at entry
+   + 1 tick, a short's at entry − 1. Moves the position's one SL ({action: 'move', line, price}), or adds one when it
+   has none ({action: 'add', price}); {action: 'none'} when its stop is already there or past it (never loosened);
+   {error} when that can't be done in one step. The send path (moveLine / addExit) still refuses a stop the market is
+   already through. */
+function beStop(g, groups, tick) {
+  if (!g || g.kind !== 'position' || !(tick > 0) || !Number.isFinite(g.price)) return { error: 'Not a position' };
+  const price = roundTick(g.price + (g.side === 'Buy' ? tick : -tick), tick);
+  const mine = new Set(g.legs.map((l) => l.account));
+  const own = (groups || []).filter((x) => x !== g && x.legs.some((l) => mine.has(l.account)));
+  if (own.some((x) => x.legs.some((l) => l.pending === true))) return { error: 'An order on this position is still pending — try again once it fills' };
+  const sls = own.filter((x) => x.kind === 'sl');
+  if (!sls.length) return { action: 'add', price };
+  const covers = sls.length === 1 && [...mine].every((a) => sls[0].legs.some((l) => l.account === a));
+  if (!covers) return { error: 'This position has more than one stop — move them one by one' };
+  const past = g.side === 'Buy' ? sls[0].price >= price : sls[0].price <= price;
+  return past ? { action: 'none', price } : { action: 'move', line: sls[0], price };
+}
+/* An armed auto-breakeven (the order panel's Breakeven, the owner 2026-10-18) against the desk's lines now.
+   arm = {side, level, accounts, at (ms sent), seen (its position was seen)}. Fires once the position on its side is
+   open on its accounts and the last trade reaches the level; drops once that position is gone (the trade is over),
+   or when 15 s after the send there is neither a position nor a working order (refused, cancelled), and after 8 hours
+   whatever happened (kept in the browser: an old arm must never fire on a later trade).
+   -> {fire: [position lines]} | {wait: true, seen} | {drop: reason} */
+const BE_GRACE_MS = 15000, BE_MAX_MS = 8 * 3600e3;
+function beArmStep(arm, groups, last, now) {
+  if (now - arm.at > BE_MAX_MS) return { drop: 'expired' };
+  const mine = (x) => x.legs.some((l) => arm.accounts.includes(l.account));
+  const pos = (groups || []).filter((x) => x.kind === 'position' && x.side === arm.side && mine(x));
+  if (!pos.length) {
+    if (arm.seen) return { drop: 'flat' };
+    const working = (groups || []).some((x) => x.kind === 'order' && mine(x));
+    return working || now - arm.at < BE_GRACE_MS ? { wait: true, seen: false } : { drop: 'no order' };
+  }
+  const hit = Number.isFinite(last) && (arm.side === 'Buy' ? last >= arm.level : last <= arm.level);
+  return hit ? { fire: pos } : { wait: true, seen: true };
+}
 /* The shaded zones (HBTradeLines.Zones) for the desk's SL / TP lines: each from its position's entry to its price. */
 function exitZones(groups, P) {
   const out = [];
@@ -1629,7 +1666,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, exitZones, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, exitZones, beStop, beArmStep, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,

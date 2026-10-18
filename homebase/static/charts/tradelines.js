@@ -250,6 +250,8 @@ class Overlay {
 
     this.unsub = window.HBDeskClient.on(() => this.render());
     this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
+    this.onLook = () => this.render();   // the order panel's "Chart preview" look changed: these lines take it too
+    document.addEventListener('hb-order-look', this.onLook);
     this.unsubTrade = window.HBTradeUI.onTradeChange(() => this.render());   // this (or any) chart's trade config / a LIVE arm
     this.render();
   }
@@ -306,6 +308,7 @@ class Overlay {
     // every account's lines; any tradable desk account's are editable (HBTradeUI.lineMode), not only this chart's
     const groups = T.linesFor(Dc.state, root, window.HBTradeUI.editableIds(this.cell));
     const busy = window.HBTradeUI.busy();
+    const L = window.HBOrderPanel && window.HBOrderPanel.look ? window.HBOrderPanel.look() : { style: 0, width: 1, shade: 12 };
     const seen = new Set();
     for (const g of groups) {
       seen.add(g.key);
@@ -313,14 +316,14 @@ class Overlay {
       let it = this.items.get(g.key);
       if (!it) {
         const line = this.cell.candles.createPriceLine({ price: g.price, color: T.lineColor(g, this.cell.P),
-          lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: '' });
+          lineWidth: L.width, lineStyle: L.style, axisLabelVisible: true, title: '' });
         const chip = this.buildChip();
         it = { g, line, chip };
         this.items.set(g.key, it);
         this.layer.appendChild(chip);
       } else {
         it.g = g;
-        it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P) });
+        it.line.applyOptions({ price: g.price, color: T.lineColor(g, this.cell.P), lineWidth: L.width, lineStyle: L.style });
       }
       this.wireChip(it, !g.editable, busy);
       this.paint(it);
@@ -331,7 +334,7 @@ class Overlay {
       it.chip.remove();
       this.items.delete(key);
     }
-    this.zones.set(T.exitZones(groups, this.cell.P));
+    this.zones.set(T.exitZones(groups, this.cell.P), [], L.shade / 100);
     this.sync();
   }
 
@@ -345,7 +348,13 @@ class Overlay {
     chip.btn.className = 'tl-x';
     chip.btn.setAttribute('aria-label', 'Close');
     chip.btn.textContent = '×';
-    chip.append(chip.text, chip.btn);
+    chip.be = document.createElement('button');   // a position's stop to breakeven + 1 tick
+    chip.be.type = 'button';
+    chip.be.className = 'tl-be';
+    chip.be.textContent = 'BE+1';
+    chip.be.title = 'Stop to breakeven + 1 tick';
+    chip.be.hidden = true;
+    chip.append(chip.text, chip.be, chip.btn);
     return chip;
   }
 
@@ -360,6 +369,20 @@ class Overlay {
     chip.btn.hidden = readonly;
     chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
     chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(this.cell, it.g, this.root, this.cell.tick);
+    chip.be.hidden = readonly || g.kind !== 'position';
+    chip.be.disabled = busy;
+    chip.be.onclick = readonly || busy ? null : () => this.breakeven(it.g);
+  }
+
+  /* BE+1: the position's stop to one tick past its entry (HBTrade.beStop), through the usual send paths -- moving
+     its SL, or adding one -- with their confirm, gates and the marketable-stop refusal. */
+  breakeven(g) {
+    const UI = window.HBTradeUI, c = this.cell;
+    const r = T.beStop(g, T.linesFor(window.HBDeskClient.state, this.root, UI.editableIds(c)), c.tick);
+    if (r.error) { window.HBDeskClient.toast('err', r.error); return; }
+    if (r.action === 'none') { window.HBDeskClient.toast('err', 'The stop is already at or past breakeven + 1 tick'); return; }
+    if (r.action === 'move') UI.moveLine(c, r.line, r.price, this.root, c.tick, { onCancel: () => this.render() });
+    else UI.addExit(c, g, 'sl', r.price, this.root, c.tick, { onCancel: () => this.render() });
   }
 
   paint(it) {
@@ -754,6 +777,7 @@ class Overlay {
     this.unsub();
     this.unsubBusy();
     this.unsubTrade();
+    document.removeEventListener('hb-order-look', this.onLook);
     if (this.unsubPaper) this.unsubPaper();
     for (const it of [...this.items.values(), ...this.botItems.values(), ...this.paperItems.values()]) this.cell.candles.removePriceLine(it.line);
     this.items.clear();
