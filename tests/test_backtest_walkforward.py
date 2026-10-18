@@ -955,3 +955,19 @@ def test_the_stitched_record_is_cut_into_its_build_and_unseen_days():
     assert (b["stats"]["net_profit"], u["stats"]["net_profit"]) == (250, 350)
     assert b["stats"]["net_profit"] + u["stats"]["net_profit"] == r["stitched"]["stats"]["net_profit"]
     assert u["per_month"]["net_profit"] == 350
+
+
+def test_3to1_with_nothing_to_search_is_the_strategy_as_set_in_blocks():
+    """The Lab's default Range is 3:1 in-sample (owner, 2026-10-18): with no heat-map settings it runs the strategy as set,
+    one cell, and every block 'picks' it -- even a block with too few trades."""
+    g = wf.validate_wf({"strategy": "nq930", "inputs": {"adx_gate": False}, "select_months": 3, "test_months": 1})
+    assert len(g["cells"]) == 1 and g["axes"] == [] and g["walkforward"]["step_months"] == 4
+    with pytest.raises(ValueError, match="axes"):
+        wf.validate_wf(wbody(axes=[AXES[0]], select_months=3, test_months=1))          # one axis is still refused
+    months = [f"2022-{m:02d}" for m in range(1, 9)]
+    tr = [t for m, n in zip(months, (10, 0, 0, -20, 30, 30, 30, 40)) for t in (trades(m, [n] * 5) if n else [])]
+    cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=1, select_months=3)
+    assert [s["cell"] for s in r["steps"]] == [0, 0], "Jan-Mar has 5 trades only; it is still the pick"
+    assert r["stitched"]["stats"]["net_profit"] == -100 + 200 and r["next"]["cell"] == 0

@@ -268,7 +268,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     rows, prev = [], None
     for s in st:
         by_cell = scores(s.get("select_ms", [s["select"]]))
-        i = pick(by_cell, metric, min_trades)
+        i = pick(by_cell, metric, min_trades) if len(cells) > 1 else cells[0]["i"]     # one cell: nothing to choose
         row = {"k": s["k"], "select": s["select"], "test": [s["test"][0], s["test"][-1]], "cell": i,
                "params": params[i] if i is not None else None, "is": None, "oos": None, "stitched": False,
                "changed": None}
@@ -298,7 +298,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     if len(months) >= select_months:
         last = months[-select_months:]
         y, m = map(int, last[-1].split("-"))
-        j = pick(scores(last), metric, min_trades)
+        j = pick(scores(last), metric, min_trades) if len(cells) > 1 else cells[0]["i"]
         nxt = {"select": last[0] if len(last) == 1 else f"{last[0]} → {last[-1]}", "select_ms": last,
                "for": f"{y + m // 12}-{m % 12 + 1:02d}", "cell": j, "params": params[j] if j is not None else None}
 
@@ -558,7 +558,7 @@ def validate_wf(body) -> dict:
     if not isinstance(metric, str) or metric not in METRICS:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")
     min_trades = _min_trades(b.pop("min_trades", DEFAULT_MIN_TRADES))
-    g = validate_grid(b)
+    g = validate_grid(b, min_axes=0)      # no axes = one cell, the strategy as set: each block 'picks' it
     if not getattr(drafthost.resolve(g["strategy"]), "session_independent", False):   # a draft: its stub
         raise ValueError(f"{g['strategy']}: not flagged session-independent, so a month cannot be sliced "
                          "out of one full-window run -- the walk-forward refuses it")

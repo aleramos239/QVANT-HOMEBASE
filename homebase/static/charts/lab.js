@@ -158,7 +158,9 @@ function formOf(b) {
   const meta = metaOf(b);
   if (!meta) return null;
   const id = b.kind === 'builtin' ? b.id : `draft_${b.name}`;
+  const fresh = !S.forms[id];
   const f = X.restore(S.forms[id] ? { ...S.forms[id], strategy: id } : null, { ...meta, id });
+  if (fresh) f.range = { id: 'all', start: '', end: '', wf: X.WF_ROLL, side: 'is' };   // the Lab's default: 3:1 in-sample (owner, 2026-10-18)
   f.strategy = id;
   S.forms[id] = f;
   return f;
@@ -1984,7 +1986,7 @@ function settingsHtml(b) {
   const spent = end && end >= X.rangeSpec('test').start;
   return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
-      ${wfSel ? '<div class="wf-hint">Run walks forward over the settings picked in Heat map below, in blocks: pick on 3 months, trade the next 1, then the next block.</div>' : ''}
+      ${wfSel ? '<div class="wf-hint">Run splits the data into blocks: 3 months in, the next 1 out, then the next block. Pick settings in Heat map below to let each block choose the best of them.</div>' : ''}
       ${!wfSel && f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
       ${spent && !wfSel ? '<div class="warn">This reaches July 2025 or later, the test days: one read, only for a locked strategy. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
@@ -2171,7 +2173,7 @@ async function heatCell(i) {
    whole months and trades it the next 1, then the next block (never rolling); 1:N picks on 1 month and trades the next N. It runs over the
    Range's two 3:1 choices, over all the data (the owner's window). The words are tester.js (wfBody, wfTiles, wfStepRows, ...); the
    server is /api/tester/walkforward. */
-const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Pick the settings to search in Heat map below, then Run. Each month is traded on the pick made on the 3 months before it.</p></div>';
+const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to split the data into blocks: 3 months in-sample, the next 1 out-of-sample, then the next block. To let each block pick the best setting, choose what to vary in Heat map below.</p></div>';
 /* The Range list's two 3:1 choices (the owner, 2026-10-18): one walk-forward over all the data, seen from either side --
    in-sample = the 3-month windows the picks were made on, out-of-sample = each next month, traded on that pick. */
 const WF_RANGE_OPTS = [['wf31_is', '3:1 in-sample'], ['wf31_oos', '3:1 out-of-sample'], ['wf31_both', '3:1 in + out-of-sample']];
@@ -2206,6 +2208,7 @@ function wfSplitHtml(r) {
 /* What to trade now: the best of the searched settings on the last 3 whole months -- the setting the Desk would tell the owner
    to switch to. Under it, how often the pick moved from block to block, and the blocks where no setting had enough trades. */
 function wfPickRows(r, axes) {
+  if (!axes || !axes.length) return '';                  // the strategy as set: nothing was chosen
   const n = r.next, st = r.stability || {};
   const pick = !n ? '—' : !n.params ? 'No setting (too few trades on those months)' : (axes || []).map((a) => `${a.label} ${X.valueLabel(n.params[a.key])}`).join(' · ');
   return `<div class="rs-gh">${esc(n ? `What to trade in ${wfMon(n.for)}` : 'What to trade now')}</div><div class="rs-group">
@@ -2237,7 +2240,7 @@ function wfResHtml(f) {
   const amt = (v) => `${v > 0 ? 'Up' : v < 0 ? 'Down' : 'Flat at'} <b>$${Math.abs(Math.round(v || 0)).toLocaleString('en-US')}</b>`;
   const hero = s.net_profit || 0;
   const take = side === 'is'
-    ? `${amt(hero)} over <b>${one.n_months} months</b>${esc(span(one))}: the months the picks were made on.`
+    ? `${amt(hero)} over <b>${one.n_months} months</b>${esc(span(one))}: ${r.n_cells > 1 ? 'the months the picks were made on' : 'the in-sample months'}.`
     : side === 'both'
       ? `<span class="wf-key oos"></span>Out-of-sample ${amt(so.stats.net_profit)} over ${so.n_months} months · <span class="wf-key is"></span>in-sample ${amt(si.stats.net_profit)} over ${si.n_months} months.`
       : `${amt(hero)} over <b>${one.n_months} months</b>${esc(span(one))}, each traded on the pick from the 3 months before it.`;
@@ -2258,7 +2261,7 @@ function wfResHtml(f) {
       ${row('Max drawdown', (x) => (x.stats.max_drawdown == null ? '—' : money0(x.stats.max_drawdown)), (x) => x.stats.max_drawdown)}
       ${row('Sharpe', (x) => X.num(x.stats.sharpe))}</div>
       ${wfSplitHtml(r)}${wfPickRows(r, axes)}${wfStepsHtml(r, axes)}
-      <div class="heat-foot">${esc(`${r.n_cells} settings searched · ${r.looks} looks counted`)}</div>`;
+      <div class="heat-foot">${esc(r.n_cells > 1 ? `${r.n_cells} settings searched · ${r.looks} looks counted` : 'The strategy as set: nothing searched')}</div>`;
   }
   return `${head}
     <div class="rs-trio"><div><b>${esc(X.num(s.profit_factor, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(s.win_rate))}</b><span>Win rate</span></div><div><b>${esc(rr(s))}</b><span>Realized RR</span></div><div><b>${esc(X.num(s.sharpe))}</b><span>Sharpe</span></div></div>
@@ -2269,7 +2272,7 @@ function wfResHtml(f) {
       ${d.net_profit_per_month == null ? '' : wfKv('Out-of-sample vs in-sample', `${money0(d.net_profit_per_month)} a month`, wfTone(d.net_profit_per_month))}</div>
     ${wfPickRows(r, axes)}
     ${wfStepsHtml(r, axes)}
-    <div class="heat-foot">${esc(`${r.n_cells} settings searched · ${r.looks} looks counted`)}</div>`;
+    <div class="heat-foot">${esc(r.n_cells > 1 ? `${r.n_cells} settings searched · ${r.looks} looks counted` : 'The strategy as set: nothing searched')}</div>`;
 }
 function wfPaint() {
   const b = buf(), f = b && formOf(b), meta = b && metaOf(b);
@@ -2289,9 +2292,10 @@ async function wfRun() {
   }
   const nb = buf(), f = formOf(nb), meta = { ...metaOf(nb), id: f.strategy };
   if (!f.range.wf) return;
-  const h = heatState(f), w = wfLabState(f), err = X.gridProblems(f, meta, h.rows);
+  const h = heatState(f), w = wfLabState(f), search = h.rows.some((r) => r.key);
+  const err = search ? X.gridProblems(f, meta, h.rows) : X.problems(f, meta);   // no heat-map settings: the strategy as set
   if (err) { log(`<span class="err">${esc(err)}</span>`); return; }
-  const bodyObj = X.wfBody(f, X.gridAxes(h.rows, meta, f.max_cells).axes, 'net_profit', 5);
+  const bodyObj = X.wfBody(f, search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [], 'net_profit', 5);
   const token = ++w.token;
   w.err = ''; w.starting = true; w.job = null; w.result = null; S.wfStepsOpen = false;
   wfPaint();
