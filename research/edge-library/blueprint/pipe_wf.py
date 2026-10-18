@@ -2,13 +2,15 @@
 unseen days, it should still be 75% in and 25% out of sample"; docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md, addendum).
 
 Every box of the locked table on every day: its build store (2021-09-22 .. 2025-06-30) and the one read of the test days (2025-07-01 ..
-latest), joined. Step k picks on months k..k+2 and trades the pick in month k+3; the month steps on by one, so every month from the 4th on
-is tested once, by a box picked only on the three months before it.
+latest), joined. BLOCKS, NOT ROLLING (the owner, 2026-10-18: "jan-march in sample the aprile oos then may-july in sample then august oos
+etc, 3 month in then the next out on repeat"): a block picks on 3 months and trades the pick in the 4th, and the next block starts after
+it. Every month is either in-sample or out-of-sample, never both.
 
   months(calendar) -> ["2021-10", ...]          the calendar's months; the first is dropped when it starts after its 7th day
   holds(net, need)  -> bool                     the pipeline's box rows on one window: P3.2 (average trade above $0), P3.3 (`need`
                                                 trades or more) and P3.15 (pipe_gates.wr_rr)
-  walk(boxes, rows, ms, select, need, today)    -> {"picks": [{month, window, cell | None}], "next": {month, window, cell | None}}
+  walk(boxes, rows, ms, select, need, today, step)  -> {"picks": [{month, window, cell | None}], "next": {month, window, cell | None}}
+                                                one pick a block of `step` months (select + 1: blocks)
                                                 the pick of a window = the MIDDLE of the boxes that hold, by average trade
                                                 (pipe_stages._pick: never the best); no box holds = the month stands aside
   stitch(boxes, picks)  -> one box's trade arrays: each month's pick, in that month
@@ -74,11 +76,11 @@ def _after(month: str) -> str:
     return f"{y + m // 12}-{m % 12 + 1:02d}"
 
 
-def walk(boxes: dict, rows: list, ms: list, select: int, need: int, today: str) -> dict:
+def walk(boxes: dict, rows: list, ms: list, select: int, need: int, today: str, step: int = 4) -> dict:
     """The picks of every step and `next`: the pick on the last `select` months of data before `today`'s month, for the month after them
     (`stale` when that is not today's month: the data ends earlier)."""
     picks = [{"month": ms[k + select], "window": ms[k:k + select], "cell": _window_pick(boxes, rows, ms[k:k + select], need)}
-             for k in range(max(0, len(ms) - select))]
+             for k in range(0, max(0, len(ms) - select), step)]
     done = [m for m in ms if m < today[:7]][-select:]
     month = _after(done[-1]) if done else today[:7]
     nxt = {"month": month, "window": done, "cell": _window_pick(boxes, rows, done, need) if len(done) == select else None, "stale": month != today[:7]}
@@ -147,7 +149,7 @@ def run(spec: dict, lock: dict, build_out, test_out, u: dict, build_days: list, 
     calendar = sorted({*build_days, *(st_t["meta"].get("calendar") or [])})
     wf = PR.need("walkforward")
     ms = months(calendar)
-    got = walk(boxes, J.table(st_b, u), ms, wf["select_months"], wf["window_trades"], today or RUN.clock().date().isoformat())
+    got = walk(boxes, J.table(st_b, u), ms, wf["select_months"], wf["window_trades"], today or RUN.clock().date().isoformat(), wf["step_months"])
     x = stitch(boxes, got["picks"])
     tested = {p["month"] for p in got["picks"]}
     c, need = lock["control"], sorted({i.rsplit("_", 1)[-1] for i in ids})

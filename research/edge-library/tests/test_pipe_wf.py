@@ -2,8 +2,8 @@
 
 1. months: the calendar's months, a first month that starts after its 7th day left out
 2. holds: a box on a window needs an average trade above $0, enough trades and row P3.15
-3. walk: every month from the 4th on is traded by the pick of the 3 months before it -- the MIDDLE box by average trade of those that
-   hold, never the best; no box holds = the month stands aside; `next` = the pick on the last 3 whole months before today
+3. walk: BLOCKS (the owner, 2026-10-18): pick on 3 months, trade the 4th, the next block starts after it -- the MIDDLE box by average
+   trade of those that hold, never the best; no box holds = the month stands aside; `next` = the pick on the last 3 whole months
 4. stitch: each month's pick, in that month only (no look-ahead: a month's trades never come from a box picked on it)
 5. against_random and rows: the stitched net against its random draws; P6.1-P6.4
 No store, no engine. Under a second.
@@ -23,6 +23,7 @@ import judge as J  # noqa: E402
 from blueprint import pipe_wf as WF  # noqa: E402
 
 MS = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+MS9 = [f"2022-{m:02d}" for m in range(1, 10)]
 
 
 def box(per_month: dict) -> dict:
@@ -63,14 +64,23 @@ def test_each_month_is_traded_by_the_middle_pick_of_the_three_months_before_it()
     b = box({m: win(20, 100.0) for m in MS})                                  # the middle one
     c = box({m: win(20, 50.0, -20.0) for m in MS})
     got = WF.walk({"c0": a, "c1": b, "c2": c}, ROWS, MS, 3, 15, "2022-06-02")
-    assert [(p["month"], p["window"], p["cell"]) for p in got["picks"]] == [("2022-04", MS[0:3], "c1"), ("2022-05", MS[1:4], "c1")]
+    assert [(p["month"], p["window"], p["cell"]) for p in got["picks"]] == [("2022-04", MS[0:3], "c1")]          # one block in 5 months
     assert got["next"] == {"month": "2022-06", "window": MS[2:5], "cell": "c1", "stale": False}
+
+
+def test_blocks_do_not_overlap_three_in_then_one_out_on_repeat():
+    a = box({m: win(20) for m in MS9})
+    got = WF.walk({"c0": a}, ROWS, MS9, 3, 15, "2022-10-02", 4)
+    assert [(p["window"], p["month"]) for p in got["picks"]] == [(MS9[0:3], "2022-04"), (MS9[4:7], "2022-08")]      # Jan-Mar -> Apr, May-Jul -> Aug
+    used = [m for p in got["picks"] for m in [*p["window"], p["month"]]]
+    assert len(used) == len(set(used))                                        # no month is both in- and out-of-sample
 
 
 def test_a_month_with_no_box_that_holds_stands_aside_and_a_pick_reads_only_its_window():
     a = box({"2022-01": win(20), "2022-02": win(20), "2022-03": win(20), "2022-04": [-500.0] * 20, "2022-05": win(20)})
     got = WF.walk({"c0": a}, ROWS, MS, 3, 15, "2022-05-20")
-    assert [p["cell"] for p in got["picks"]] == ["c0", None]                  # May's window Feb-Apr loses: May stands aside
+    assert [p["cell"] for p in got["picks"]] == ["c0"]                        # the block Jan-Mar -> Apr
+    assert WF.walk({"c0": a}, ROWS, MS, 3, 15, "2022-05-20", 1)["picks"][1]["cell"] is None      # a window that loses (Feb-Apr) picks nothing: it stands aside
     assert got["next"] == {"month": "2022-05", "window": MS[1:4], "cell": None, "stale": False}     # today in May: the window is Feb..Apr
     assert WF.walk({"c0": a}, ROWS, MS, 3, 15, "2022-09-01")["next"]["month"] == "2022-06" and WF.walk({"c0": a}, ROWS, MS, 3, 15, "2022-09-01")["next"]["stale"] is True      # data ends in May: the pick is for June, said stale
     x = WF.stitch({"c0": a}, got["picks"])

@@ -125,8 +125,9 @@ the walk-forward session are in `docs/superpowers/specs/2026-10-18-walkforward-3
 - **Data.** Stage 6 still runs the one read of the test days (oos.test) so every box of the locked table has its trades on
   2025-07-01 .. latest. With the build store (every box, 2021-09-22 .. 2025-06-30) that is every box on every day: no new engine
   switch. The read's own lines (box, 4.4, 4.1-4.9) become labels.
-- **Months.** The calendar's months; the first month is dropped when it starts after its 7th day (2021-09). Step k picks on months
-  k..k+2 and trades month k+3; every month from the 4th on is tested once.
+- **Months.** The calendar's months; the first month is dropped when it starts after its 7th day (2021-09). BLOCKS (the owner, later
+  the same day: "3 month in then the next out on repeat", "i dont want to use rolling"): a block picks on 3 months and trades the 4th,
+  and the next block starts after it (`walkforward.step_months` 4). No month is both in- and out-of-sample.
 - **The pick per window** = the pipeline's own: the boxes whose window trades hold P3.2 (average trade above $0), P3.3 (at least
   `walkforward.window_trades`, 15 -- Claude's call: the 200-trade rule scaled to 3 of 45 months) and P3.15; the middle of them by
   average trade (`_outward`). No box holds: the month stands aside ($0, no trade).

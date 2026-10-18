@@ -987,7 +987,7 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         rules.update(walkforward=PR.need("walkforward"), gates=r.get("gates"))
         rows = wf["rows"] + G.labels([x for x in rows if x["line"] != "P6.1"], gate=())
         span = f"{wf['months'][0]} .. {wf['months'][-1]}" if wf["months"] else "no test month"
-        said = (f"{sub}: the 3:1 walk-forward over {len(wf['months'])} test months ({span}; each picked on the 3 months before it"
+        said = (f"{sub}: the 3:1 walk-forward in blocks over {len(wf['months'])} test months ({span}; each picked on the 3 months before it"
                 + (f", {len(wf['stood_aside'])} stood aside" if wf["stood_aside"] else "") + "); the pick for "
                 + f"{wf['next']['month']}: {wf['next']['cell'] or 'none (no box holds on the last 3 months)'}")
         summary = {k: wf[k] for k in ("months", "stood_aside", "next")} | {"picks": [{"month": q["month"], "cell": q["cell"]} for q in wf["picks"]],

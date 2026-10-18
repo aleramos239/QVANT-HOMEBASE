@@ -116,8 +116,9 @@ Not passed → back to phase 2 as a new round when one is left (it counts), othe
 
 > **In the pipeline since 2026-10-18 (the owner): phase 4 is a 3:1 walk-forward.** "The 3 month is the new build days and the 1
 > month is the new unseen days, it should still be 75% in and 25% out of sample." The pipeline still runs the one read below (so
-> every box has its trades on the test days), then every month from the 4th on is traded by the box picked on the 3 months before
-> it (the pipeline's own pick: the middle box by average trade of those that make money, have 15+ trades and win 3 points over the
+> every box has its trades on the test days), then in BLOCKS (the owner: "3 month in then the next out on repeat", not rolling) a box
+> is picked on 3 months and traded in the 4th, and the next block starts after it (Oct-Dec 2021 pick, Jan 2022 test, Feb-Apr pick,
+> May test, ...): the box picked on the 3 months before it (the pipeline's own pick: the middle box by average trade of those that make money, have 15+ trades and win 3 points over the
 > breakeven of their realized reward-to-risk; none = the month stands aside). The stitched test months decide: net above $0, above
 > 95 % of the random tables (each month its pick's exit cell), the win rate rule, 200+ trades. Lines 4.1-4.9 are read and shown,
 > and ask nothing. The tuning windows reach into the test days: "tune only on build days" no longer holds for the pipeline. The
