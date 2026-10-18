@@ -280,7 +280,8 @@ function confirm({ title, rows = [], note = '', warn = '', each = '', live = fal
    Without them (the Buy/Sell block, the chart menu) the body is exactly what it always was.
    `surface`: 'chart' (the Sell/qty/Buy block) or 'panel' (the order panel) picks that surface's one-click switch;
    anything else (the chart menu) reads the general one (HBTrade.oneClickKey). */
-function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null, surface = null, onSent = null }) {
+function placeOrder({ cell, root, side, type, price = null, qty, exits = undefined, trigger = null, tif = null, surface = null, onSent = null,
+  split = null }) {
   const g = () => cellGate(cell, root), gate = g();
   if (gate.mode !== 'on') { D().toast('err', gate.reason); return; }
   const tick = cell.tick, pv = cell.pv ?? null;
@@ -309,7 +310,8 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
       return;
     }
     // the exits' side, frozen with them: a Stop Limit's SL beyond its trigger, TP beyond its limit
-    const bad = T.exitSideError(side, type === 'StopLimit' ? trig : ref, ref, sl, tp, type === 'StopLimit');
+    const bad = T.exitSideError(side, type === 'StopLimit' ? trig : ref, ref, sl, tp, type === 'StopLimit')
+      || (split ? T.exitSideError(side, type === 'StopLimit' ? trig : ref, ref, null, T.roundTick(split.tp, tick), type === 'StopLimit') : null);
     if (bad) { D().toast('err', bad); return; }
   } else {
     // N1: a Market order that would attach a bracket (a nonzero SL/TP tick pref) needs a fresh quote to compute
@@ -340,7 +342,15 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
       trigger: trig, tif: tf });
   };
   // onSent(body): the body about to leave (the order panel arms its breakeven on it); never for a preview or a refusal
-  const send = (m) => { const b = build(m); if (b && onSent) onSent(b); return b; };
+  // split: the partial take profit -- the one body as two brackets (HBTrade.splitOrder), sent one after the other
+  const send = (m) => {
+    const b = build(m);
+    if (b == null) return b;
+    const out = split ? T.splitOrder(b, { qty: split.qty, tp: T.roundTick(split.tp, tick) }) : b;
+    if (out == null) { D().toast('err', 'The partial take profit no longer fits this order — nothing sent'); return null; }
+    if (onSent) onSent(b);
+    return out;
+  };
   const origin = { surface, cell, side };   // fast-paper: that button reads "sending" while this order is in flight
   if (T.sendsWithoutConfirm(D().prefs, cell.cfg, surface)) { guardedSend('order', g, send, origin); return; }   // not right after a replay
   const preview = build(gate);
@@ -348,7 +358,9 @@ function placeOrder({ cell, root, side, type, price = null, qty, exits = undefin
   // between the chart-menu's right-click (where `type` was inferred) and picking the item just now.
   if (preview == null) return;
   const c = T.confirmOrder(preview, D().state, D().quotes[root], pv, tick);
-  confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note: c.bracket,
+  if (split && !T.splitOrder(preview, { qty: split.qty, tp: T.roundTick(split.tp, tick) })) { D().toast('err', 'The partial take profit does not fit this order'); return; }
+  const note = split ? [c.bracket, T.splitNote(preview, { qty: split.qty, tp: T.roundTick(split.tp, tick) }, tick)].join(' · ') : c.bracket;
+  confirm({ title: c.title, rows: c.accounts.map((a) => ({ label: a.label, env: a.env })), note,
     warn: c.warn, each: c.each, live: c.live, action: side, tone: side === 'Sell' ? 'down' : 'accent', oneClickPref: T.oneClickKey(surface) })
     .then((ok) => { if (ok) { confirmedAfterReplay(cell); guardedSend('order', g, send, origin); } });
 }

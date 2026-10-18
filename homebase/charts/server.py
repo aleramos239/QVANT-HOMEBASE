@@ -49,7 +49,8 @@ from .known import Known
 from . import lagwatch
 from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
-from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, register as register_paperbook
+from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, is_paper_id, register as register_paperbook
+from .exitrunner import ExitRunner, register as register_exitrunner
 from .presets import MAX_PRESET_BYTES, PresetsStore
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
@@ -716,6 +717,34 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     book = None if replay else PaperBooks(sd / "paper", roots=roots, clock_ms=lambda: clock(), log=log,
                                           quote_of=quotes.quote_of, book_of=depth_book, on_change=paper_push.kick)
     recorder = None if replay else LiveRecorder(base)
+
+    # the server's breakeven / trailing-stop runner (exitrunner.py, the owner 2026-10-18): live only, like the book
+    def runner_views() -> dict:
+        out = {a["id"]: a for a in ((link.state or {}).get("accounts") or []) if isinstance(a, dict)} if link is not None else {}
+        out.update({v["id"]: v for v in (book.views() if book is not None else [])})
+        return out
+
+    def runner_last(root: str):
+        q = quotes.snapshot().get(root) or {}
+        fresh = q.get("last") is not None and q.get("ts_ms") is not None and clock() - q["ts_ms"] <= 10_000
+        return q["last"] if fresh else None
+
+    async def runner_send(action: str, body: dict) -> dict:
+        ids = body.get("accounts") or [body.get("account")]
+        if all(is_paper_id(x) for x in ids):
+            if book is None:
+                return {"detail": "no paper book"}
+            try:
+                return book.act(action, body)
+            except Exception as e:  # noqa: BLE001 — the runner records it on the arm
+                return {"detail": str(e)}
+        if link is None:
+            return {"detail": "no desk link"}
+        _status, data = await link.post(action, {**body, "quotes": quotes.snapshot()})
+        return data
+
+    runner = None if replay else ExitRunner(sd / "exit_arms.json", views=runner_views, last_of=runner_last,
+                                            send=runner_send, clock=lambda: clock() / 1000.0, log=log)
     conns: set[Conn] = set()
     desk_fan = Fanout()                   # desk events fanned out to every page, bounded per page
 
@@ -1245,6 +1274,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tasks.append(asyncio.create_task(news_loop()))
         if link is not None:
             tasks.append(asyncio.create_task(link.run()))
+        if runner is not None:
+            tasks.append(asyncio.create_task(runner.run()))
         if depth is not None:
             tasks.append(asyncio.create_task(depth.run()))
         if paper.enabled:
@@ -1425,6 +1456,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     register_desk(app, link=link, quotes=quotes, browser_write_ok=browser_write_ok)
     register_paperbook(app, books=book, browser_write_ok=browser_write_ok)
+    register_exitrunner(app, runner=runner, browser_write_ok=browser_write_ok)
     def fan_count(msg: dict) -> int:
         """The tester router's only notify callback: progress/grid updates and POST /api/tester/show.
         2026-09-28 three-tabs plan: the Strategy Tester lives on the Backtest tab only now, so this

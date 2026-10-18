@@ -40,12 +40,19 @@ const st = {                            // the form, as typed (strings for field
   side: 'Buy', type: 'Market', price: '', trigger: '', limit: '', qty: '1', riskOn: false, risk: '',
   tp: { on: false, unit: 'ticks', value: '' }, sl: { on: false, unit: 'ticks', value: '' }, tif: 'Day',
   be: { on: false, unit: 'ticks', value: '' },   // auto-breakeven: the level that moves the stop to entry + 1 tick
+  tr: { on: false, unit: 'ticks', value: '', after: 'fill' },
+  p1: { on: false, unit: 'ticks', value: '', qty: '1' },   // partial take profit: `qty` contracts at TP1, the rest at the TP   // trailing stop: its distance; starts at the fill or after BE
   exitsOpen: true, extraOpen: false, lookOpen: false,
 };
 /* How the order's preview looks on the chart (the user, 2026-10-18: "let me play with it"); kept in this browser. */
 const LOOK_KEY = 'hb.orderPreviewLook';
 const LOOK0 = { on: true, style: 0, width: 1, shade: 12, labels: 'line' };
 const look = (() => { try { return { ...LOOK0, ...JSON.parse(localStorage.getItem(LOOK_KEY) || 'null') }; } catch (_) { return { ...LOOK0 }; } })();
+/* Where an order's breakeven / trailing stop runs (the owner, 2026-10-18): 'chart' (this page, while it is open) or
+   'server' (the chart service's runner, exitrunner.py: with the page closed too). Kept in this browser. */
+const RUN_KEY = 'hb.exitRunOn';
+let runOn = (() => { try { return localStorage.getItem(RUN_KEY) === 'server' ? 'server' : 'chart'; } catch (_) { return 'chart'; } })();
+function setRunOn(v) { runOn = v; try { localStorage.setItem(RUN_KEY, v); } catch (_) { /* this session only */ } paint(); }
 function setLook(k, v) {
   look[k] = v;
   try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private window: this session only */ }
@@ -85,7 +92,7 @@ function field(label, key) {
 /* ---- the form's numbers for one chart: the exits' triples, the size, and panelOrder's verdict ----
    Typed numbers are read strictly (fix round 1): qty digits only, $ and prices plain decimals -- anything else
    (commas, hex, exponents) is refused with its reason, never guessed at. */
-const EXIT_NAMES = { tp: 'Take profit', sl: 'Stop loss', be: 'Breakeven' };
+const EXIT_NAMES = { tp: 'Take profit', p1: 'Partial take profit', sl: 'Stop loss', be: 'Breakeven', tr: 'Trailing stop' };
 const BE_COLOR = '#E8A23A';
 const blank = (v) => String(v == null ? '' : v).trim() === '';
 function exitVal(k) { return st[k].unit === 'price' ? T.parseDecimal(st[k].value, true) : T.parseUsd(st[k].value); }
@@ -111,9 +118,13 @@ function compute(cell) {
     qty = one ? T.qtyFromRisk(risk, T.riskTicks(tpEntry, one.price, tick), tick, pv) : 0;
   } else qty = T.parseQty(st.qty);
   const qd = Number.isInteger(qty) && qty >= 1 ? qty : 1;   // the $ figures: the whole order's
-  const sl = triple('sl', slEntry, qd), tp = triple('tp', tpEntry, qd);
+  // a partial take profit leaves the TP the rest of the contracts: its $ is theirs
+  const n1 = T.parseQty(st.p1.qty), rest = st.p1.on && Number.isInteger(n1) && n1 >= 1 && n1 < qd ? qd - n1 : null;
+  const sl = triple('sl', slEntry, qd), tp = triple('tp', tpEntry, rest ?? qd);
   // the breakeven level sits on the profit side, as a TP does
   const be = st.be.on ? T.exitTriple({ unit: st.be.unit, value: exitVal('be'), side, entry: tpEntry, tick, pv, kind: 'tp', qty: qd }) : null;
+  // the trail's distance: only its ticks (and $) count, so any entry will do when there is none yet
+  const tr = st.tr.on ? T.exitTriple({ unit: st.tr.unit, value: exitVal('tr'), side, entry: tpEntry ?? 0, tick, pv, kind: 'sl', qty: qd }) : null;
   // a Stop Limit's worst-fill loss at its SL (from the limit), when the limit is not the trigger
   const worst = type === 'StopLimit' && sl && tpEntry != null && tpEntry !== slEntry && pv > 0
     ? T.riskTicks(tpEntry, sl.price, tick) * tick * pv * qd : null;
@@ -121,23 +132,36 @@ function compute(cell) {
   const exitPx = (k, t) => (!st[k].on ? null : t ? t.price : st[k].unit === 'price' ? exitVal(k) : NaN);
   const lim = D().state && D().state.limits;
   const qtyMax = Math.min(T.PANEL_QTY_MAX, lim && lim.max_order_qty > 0 ? lim.max_order_qty : T.PANEL_QTY_MAX);
-  const order = formError(type, qty, risk, sl, pv, qd, tick, be) || T.panelOrder({ side, type, qty: st.riskOn ? null : qty, price, trigger,
+  const p1 = st.p1.on ? T.exitTriple({ unit: st.p1.unit, value: exitVal('p1'), side, entry: tpEntry, tick, pv, kind: 'tp', qty: n1 >= 1 ? n1 : 1 }) : null;
+  const order = formError(type, qty, risk, sl, pv, qd, tick, be, tr) || p1Error(p1, n1, tp, qd) || T.panelOrder({ side, type, qty: st.riskOn ? null : qty, price, trigger,
     sl: exitPx('sl', sl), tp: exitPx('tp', tp), tif: st.tif, risk, quote: q, nowMs: now, tick, pv, qtyMax });
-  return { root, tick, q, now, sl, tp, be, qty, order, worst, entry: tpEntry, slEntry };
+  return { root, tick, q, now, sl, tp, be, tr, p1, n1, rest, qty, order, worst, entry: tpEntry, slEntry };
 }
 /* What the user typed that can't be read, as {ok: false, error}; null when every shown field is readable. */
-function formError(type, qty, risk, sl, pv, qd, tick, be) {
+/* The partial take profit's own checks: it needs the TP, sits before it, and leaves at least one contract for it. */
+function p1Error(p1, n1, tp, qd) {
+  if (!st.p1.on) return null;
+  const bad = (error) => ({ ok: false, error });
+  if (!st.tp.on || !tp) return bad('The partial take profit needs the take profit on');
+  if (!p1) return bad(blank(st.p1.value) ? 'Enter the partial take profit level' : 'Partial take profit: at least one tick on the profit side');
+  if (qd < 2) return bad('A partial take profit needs at least 2 contracts');
+  if (!(Number.isInteger(n1) && n1 >= 1 && n1 < qd)) return bad(`Contracts at the partial: 1 to ${qd - 1}`);
+  if (p1.ticks >= tp.ticks) return bad('The partial take profit must come before the take profit');
+  return null;
+}
+function formError(type, qty, risk, sl, pv, qd, tick, be, tr) {
   const bad = (error) => ({ ok: false, error });
   if (!st.riskOn && !Number.isFinite(qty)) return bad(blank(st.qty) ? 'Enter the quantity' : 'Quantity: whole contracts, digits only');
   if (st.riskOn && !blank(st.risk) && !Number.isFinite(risk)) return bad('USD risk: digits and one decimal point only');
   const shown = type === 'StopLimit' ? [['trigger', 'Trigger'], ['limit', 'Limit']] : type === 'Market' ? [] : [['price', 'Price']];
   for (const [k, name] of shown) if (!blank(st[k]) && !Number.isFinite(T.parseDecimal(st[k], true))) return bad(`${name}: digits and one decimal point only`);
-  for (const k of ['tp', 'sl', 'be']) {
+  for (const k of ['tp', 'p1', 'sl', 'be', 'tr']) {
     if (st[k].on && !blank(st[k].value) && !Number.isFinite(exitVal(k))) return bad(`${EXIT_NAMES[k]}: digits and one decimal point only`);
   }
   if (st.sl.on && st.sl.unit === 'usd' && !sl && exitVal('sl') > 0 && pv > 0) {
     return bad(`Stop loss is under one tick (${T.money(tick * pv * qd)} a tick at this size)`);
   }
+  if (st.tr.on && !tr) return bad(blank(st.tr.value) ? 'Enter the trailing distance, or turn it off' : 'Trailing stop: at least one tick');
   if (st.be.on && !be) return bad(blank(st.be.value) ? 'Enter the breakeven level, or turn it off' : 'Breakeven: at least one tick on the profit side');
   return null;
 }
@@ -213,7 +237,7 @@ function build() {
   const exits = coll('Exits', 'exitsOpen');
   ui.exits = exits;
   ui.ex = {};
-  for (const [k, label] of [['tp', 'Take profit'], ['sl', 'Stop loss'], ['be', 'Breakeven']]) {
+  for (const [k, label] of [['tp', 'Take profit'], ['p1', 'Partial take profit'], ['sl', 'Stop loss'], ['be', 'Breakeven'], ['tr', 'Trailing stop']]) {
     const box = mk('div', 'op-exit'), top = mk('div', 'op-swrow');
     const s = sw(label);
     s.onclick = () => { st[k].on = !st[k].on; paint(); };
@@ -223,7 +247,10 @@ function build() {
     inp.setAttribute('aria-label', `${label} value`);
     inp.addEventListener('input', () => { st[k].value = inp.value; paint(); });
     sel.setAttribute('aria-label', `${label} unit`);
-    for (const [u, text] of UNITS) { const o = mk('option', '', text); o.value = u; sel.appendChild(o); }
+    for (const [u, text] of UNITS) {
+      if (k === 'tr' && u === 'price') continue;   // a trail is a distance, never a price
+      const o = mk('option', '', text); o.value = u; sel.appendChild(o);
+    }
     sel.onchange = () => setUnit(k, sel.value);
     row.append(inp, sel);
     const sub = mk('div', 'op-note');
@@ -237,13 +264,41 @@ function build() {
       ui.rr.append(mk('span', 'op-lab', 'Reward : risk  1 :'), ui.rrIn);
       box.append(ui.rr);
     }
-    if (k === 'be') {   // its armed breakevens on this symbol, each with a Cancel
-      ui.beArmed = mk('div', 'op-armed');
-      box.append(ui.beArmed);
+    if (k === 'p1') {   // how many contracts close there
+      ui.p1Row = mk('label', 'op-field');
+      ui.p1Qty = mk('input', 'op-in');
+      ui.p1Qty.type = 'text'; ui.p1Qty.inputMode = 'numeric'; ui.p1Qty.autocomplete = 'off';
+      ui.p1Qty.setAttribute('aria-label', 'Contracts at the partial take profit');
+      ui.p1Qty.addEventListener('input', () => { st.p1.qty = ui.p1Qty.value; paint(); });
+      ui.p1Row.append(mk('span', 'op-lab', 'Contracts at TP1'), ui.p1Qty);
+      box.append(ui.p1Row);
+    }
+    if (k === 'tr') {   // when it starts
+      const at = mk('label', 'op-field');
+      ui.trAfter = mk('select', 'op-sel');
+      for (const [v, text] of [['fill', 'At the fill'], ['be', 'After breakeven']]) { const o = mk('option', '', text); o.value = v; ui.trAfter.appendChild(o); }
+      ui.trAfter.onchange = () => { st.tr.after = ui.trAfter.value; paint(); };
+      at.append(mk('span', 'op-lab', 'Starts'), ui.trAfter);
+      ui.trAt = at;
+      box.append(at);
+    }
+    if (k === 'be' || k === 'tr') {   // its armed breakevens / trails on this symbol, each with a Cancel
+      ui.armed = ui.armed || {};
+      ui.armed[k] = mk('div', 'op-armed');
+      box.append(ui.armed[k]);
     }
     exits.body.appendChild(box);
     ui.ex[k] = { box, sw: s, inp, sel, sub, row };
   }
+
+  // where the breakeven / trailing stop run
+  ui.runRow = mk('label', 'op-field');
+  ui.runOn = mk('select', 'op-sel');
+  for (const [v, text] of [['chart', 'This chart'], ['server', 'The server']]) { const o = mk('option', '', text); o.value = v; ui.runOn.appendChild(o); }
+  ui.runOn.onchange = () => setRunOn(ui.runOn.value);
+  ui.runOn.title = 'This chart: while this page is open. The server: keeps working with the page or browser closed.';
+  ui.runRow.append(mk('span', 'op-lab', 'BE + trail run on'), ui.runOn);
+  exits.body.appendChild(ui.runRow);
 
   // Extra settings: time in force for a resting order
   const extra = coll('Extra settings', 'extraOpen');
@@ -357,9 +412,21 @@ function sendNow() {
   const c = compute(cell);
   if (!c.order.ok) { paint(); D().toast('err', c.order.error); return; }
   const o = c.order;
-  const beLevel = st.be.on && c.be ? c.be.price : null;   // compute refused the order if BE is on without a level
-  const onSent = beLevel == null ? null : (b) => armBe({ root: c.root, side: o.side, level: beLevel, accounts: b.accounts });
-  UI().placeOrder({ onSent, cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
+  // compute refused the order if BE / the trail is on without its value
+  const beLevel = st.be.on && c.be ? c.be.price : null, trDist = st.tr.on && c.tr ? c.tr.ticks : null;
+  const after = st.tr.after;
+  const onSent = beLevel == null && trDist == null ? null : (b) => {
+    const base = { root: c.root, side: o.side, accounts: b.accounts };
+    if (runOn === 'server') {   // the BE first: the trail may wait for it by id
+      const be = beLevel == null ? Promise.resolve(null) : serverArm({ ...base, kind: 'be', level: beLevel });
+      if (trDist != null) be.then((x) => serverArm({ ...base, kind: 'trail', dist: trDist, be_id: after === 'be' && x ? x.id : null }));
+      return;
+    }
+    const be = beLevel == null ? null : armBe({ ...base, kind: 'be', level: beLevel });
+    if (trDist != null) armBe({ ...base, kind: 'trail', dist: trDist, best: null, beId: after === 'be' && be ? be.id : null });
+  };
+  const split = st.p1.on && c.p1 ? { qty: c.n1, tp: c.p1.price } : null;   // compute refused a partial that doesn't fit
+  UI().placeOrder({ onSent, split, cell, root: c.root, side: o.side, type: o.type, price: o.price, trigger: o.trigger, qty: o.qty,
     tif: o.tif, exits: { sl: o.sl, tp: o.tp }, surface: 'panel' });
 }
 
@@ -402,7 +469,9 @@ function setRisk(on) {
 function resetExits() {
   const p = D().prefs;
   st.be = { on: false, unit: 'ticks', value: '' };
-  if (ui) { ui.ex.be.inp.value = ''; ui.ex.be.sel.value = 'ticks'; }
+  st.tr = { on: false, unit: 'ticks', value: '', after: st.tr.after };
+  st.p1 = { on: false, unit: 'ticks', value: '', qty: st.p1.qty };
+  if (ui) for (const k of ['be', 'tr', 'p1']) { ui.ex[k].inp.value = ''; ui.ex[k].sel.value = 'ticks'; }
   for (const [k, n] of [['tp', p.tpTicks], ['sl', p.slTicks]]) {
     st[k] = { on: n > 0, unit: 'ticks', value: n > 0 ? String(n) : '' };
     if (ui) { ui.ex[k].inp.value = st[k].value; ui.ex[k].sel.value = 'ticks'; }
@@ -491,7 +560,7 @@ function paint() {
 
   // exits
   paintColl(ui.exits);
-  for (const k of ['tp', 'sl', 'be']) {
+  for (const k of ['tp', 'p1', 'sl', 'be', 'tr']) {
     const e = ui.ex[k], x = st[k], tr = c[k];
     paintSwitch(e.sw, x.on);
     e.row.hidden = !x.on;
@@ -507,9 +576,20 @@ function paint() {
       const now = c.sl && c.tp && c.sl.ticks > 0 ? String(Number((c.tp.ticks / c.sl.ticks).toFixed(2))) : '';
       if (!focused(ui.rrIn) && ui.rrIn.value !== now) ui.rrIn.value = now;
     }
+    if (k === 'p1') {
+      ui.p1Row.hidden = !x.on;
+      if (!focused(ui.p1Qty) && ui.p1Qty.value !== x.qty) ui.p1Qty.value = x.qty;
+    }
+    if (k === 'tr') {
+      ui.trAt.hidden = !x.on;
+      if (ui.trAfter.value !== x.after) ui.trAfter.value = x.after;
+      ui.trAfter.options[1].disabled = !st.be.on;   // "after breakeven" needs a breakeven
+    }
     e.sub.textContent = !tr ? (blank(x.value) ? `Enter the ${EXIT_NAMES[k].toLowerCase()} level` : '—')
       : k === 'be' ? `At ${Cat.fmtPrice(tr.price, c.tick)} (${tr.ticks}t) the stop moves to entry + 1 tick`
-      : exitSub(x.unit, tr, c.tick, exitVal(k), k === 'sl' ? c.worst : null);
+      : k === 'p1' ? `${c.n1 >= 1 ? c.n1 : '?'} at ${Cat.fmtPrice(tr.price, c.tick)} (${tr.ticks}t${tr.usd == null ? '' : `, ${T.money(tr.usd)}`}); the rest at the take profit`
+      : k === 'tr' ? `The stop follows the best price ${tr.ticks}t${tr.usd == null ? '' : ` (${T.money(tr.usd)})`} behind, in ${T.trailStep(tr.ticks)}t steps${x.after === 'be' && st.be.on ? ', once breakeven is reached' : ''}`
+      : exitSub(x.unit, tr, c.tick, exitVal(k), k === 'sl' ? c.worst : null) + (k === 'tp' && c.rest != null ? ` · ${c.rest} contracts` : '');
   }
 
   paintPreview(cell, c);
@@ -518,6 +598,9 @@ function paint() {
   paintSwitch(ui.lookSw, look.on);
   for (const p of ui.lookSel) if (p.sel.value !== String(look[p.key])) p.sel.value = String(look[p.key]);
   if (ui.shade.value !== String(look.shade)) ui.shade.value = String(look.shade);
+
+  ui.runRow.hidden = !st.be.on && !st.tr.on;
+  if (ui.runOn.value !== runOn) ui.runOn.value = runOn;
 
   // extra settings: time in force for a resting order only (a Market order is Day)
   paintColl(ui.extra);
@@ -567,17 +650,21 @@ function paintPreview(cell, c) {
   const P = cell.P, want = {};
   if (c.entry != null) {
     const n = c.order.ok ? c.order.qty : c.qty, size = Number.isInteger(n) && n >= 1 ? ` ${n} contract${n === 1 ? '' : 's'}` : '';
-    const rr = c.tp && c.sl && c.sl.ticks > 0 ? ` · 1:${(c.tp.ticks / c.sl.ticks).toFixed(1)}` : '';   // reward to risk
+    // reward to risk; with a partial, the average reward of all the contracts (TP1's and the TP's)
+    const reward = !c.tp ? null : c.p1 && c.rest != null ? (c.n1 * c.p1.ticks + c.rest * c.tp.ticks) / (c.n1 + c.rest) : c.tp.ticks;
+    const rr = reward != null && c.sl && c.sl.ticks > 0 ? ` · 1:${(reward / c.sl.ticks).toFixed(1)}` : '';
     want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${st.side.toUpperCase()}${size}${rr}` };
   }
   for (const k of ['tp', 'sl']) {
     const t = c[k];
     if (!t) continue;
     const usd = t.usd == null ? null : (k === 'tp' ? '+' : '\u2212') + T.money(t.usd);   // the whole order's $ at that line
-    want[k] = { price: t.price, color: k === 'tp' ? P.up : P.down, title: [k.toUpperCase() + (usd ? ` ${usd}` : ''), `${t.ticks}t`].join(' · ') };
+    const n = k === 'tp' && c.rest != null ? `${c.rest} ct` : null;   // with a partial, the contracts left for the TP
+    want[k] = { price: t.price, color: k === 'tp' ? P.up : P.down, title: [k.toUpperCase() + (usd ? ` ${usd}` : ''), n, `${t.ticks}t`].filter(Boolean).join(' · ') };
   }
+  if (c.p1) want.p1 = { price: c.p1.price, color: P.up, title: [`TP1${c.p1.usd == null ? '' : ` +${T.money(c.p1.usd)}`}`, `${c.n1} ct`, `${c.p1.ticks}t`].join(' · ') };
   if (c.be) want.be = { price: c.be.price, color: BE_COLOR, title: `BE · ${c.be.ticks}t → stop to entry+1` };
-  for (const a of arms) if (a.root === c.root) want[`armed:${a.id}`] = { price: a.level, color: BE_COLOR, title: 'BE ARMED · stop to entry+1' };
+  for (const a of allArms()) if (a.root === c.root && a.kind !== 'trail') want[`armed:${a.id}`] = { price: a.level, color: BE_COLOR, title: 'BE ARMED · stop to entry+1' };
   for (const k of new Set([...Object.keys(want), ...Object.keys(pre.lines)])) {
     const w = want[k], line = pre.lines[k];
     if (!w) { if (line) { series.removePriceLine(line); delete pre.lines[k]; } continue; }
@@ -676,8 +763,10 @@ const BE_KEY = 'hb.beArms';
 let arms = (() => { try { const a = JSON.parse(localStorage.getItem(BE_KEY) || '[]'); return Array.isArray(a) ? a : []; } catch (_) { return []; } })();
 function saveArms() { try { localStorage.setItem(BE_KEY, JSON.stringify(arms)); } catch (_) { /* this session only */ } }
 function armBe(a) {
-  arms.push({ ...a, id: T.clientId(), at: Date.now(), seen: false, done: [], sentAt: 0 });
+  const arm = { ...a, id: T.clientId(), at: Date.now(), seen: false, done: [], sentAt: 0 };
+  arms.push(arm);
   saveArms();
+  return arm;
 }
 function dropBe(id) { arms = arms.filter((a) => a.id !== id); saveArms(); paint(); }
 function chartFor(root) {
@@ -696,6 +785,7 @@ function watchBe() {
     if (r.drop) { dropBe(a.id); return; }
     if (r.seen && !a.seen) { a.seen = true; saveArms(); }
     if (!r.fire) continue;
+    if (a.kind === 'trail') { if (trail(a, cell, groups, r.fire, q.last)) return; continue; }
     if (Date.now() - a.sentAt < 3000) return;   // the last move is still landing in the desk's state
     for (const g of r.fire.filter((x) => !a.done.includes(x.key))) {
       const s = T.beStop(g, groups, cell.tick);
@@ -712,21 +802,71 @@ function watchBe() {
     if (r.fire.every((x) => a.done.includes(x.key))) { dropBe(a.id); return; }
   }
 }
+/* One pass of an armed trailing stop: its best price since the fill, then the move trailStop calls for (one send;
+   true when it sent). Its own errors are said once; it keeps trailing. */
+function trail(a, cell, groups, pos, last) {
+  const best = a.best == null ? last : a.side === 'Buy' ? Math.max(a.best, last) : Math.min(a.best, last);
+  if (best !== a.best) { a.best = best; saveArms(); }
+  if (a.beId && arms.some((x) => x.id === a.beId)) return false;   // "after breakeven": not yet
+  if (Date.now() - a.sentAt < 2000) return false;                   // the last move is still landing
+  for (const g of pos) {
+    const s = T.trailStop(g, groups, a.best, a.dist, last, cell.tick);
+    if (s.error) { if (!a.warned) { a.warned = true; saveArms(); D().toast('err', `Trailing stop: ${s.error}`); } continue; }
+    if (s.action === 'none') continue;
+    a.sentAt = Date.now();
+    saveArms();
+    if (s.action === 'move') UI().moveLine(cell, s.line, s.price, a.root, cell.tick, { noConfirm: true });
+    else UI().addExit(cell, g, 'sl', s.price, a.root, cell.tick, { noConfirm: true });
+    return true;
+  }
+  return false;
+}
+/* ---- the server runner's arms (exitrunner.py): armed with the order, read back every 2 s, cancelled here ---- */
+let serverArms = [];
+async function serverCall(path, body) {
+  const r = await fetch(`/api/exitrunner${path}`, body === undefined ? {} : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(typeof data.detail === 'string' ? data.detail : `the server answered ${r.status}`);
+  return data;
+}
+function serverArm(body) {
+  return serverCall('/arm', body).then((a) => { serverArms.push(a); paint(); return a; })
+    .catch((e) => { D().toast('err', `Not armed on the server: ${e.message} — the order itself was sent`); return null; });
+}
+function pollServerArms() {
+  serverCall('').then((d) => { serverArms = Array.isArray(d.arms) ? d.arms : []; }).catch(() => { /* not available (replay): none */ });
+}
+function cancelArm(a) {
+  if (!a.server) { dropBe(a.id); return; }
+  serverCall('/cancel', { id: a.id }).then(() => { serverArms = serverArms.filter((x) => x.id !== a.id); paint(); })
+    .catch((e) => D().toast('err', `Cancel failed: ${e.message}`));
+}
+/* Every arm this page knows: its own, and the server's (marked `server`, its fields read as the page's). */
+function allArms() {
+  return [...arms, ...serverArms.map((a) => ({ ...a, server: true, beId: a.be_id, error: a.error }))];
+}
 let armedKey = null;
 function paintArmed(root) {
-  const mine = arms.filter((a) => a.root === root);
-  const key = JSON.stringify(mine.map((a) => [a.id, a.level, a.seen]));
+  const every = allArms(), mine = every.filter((a) => a.root === root);
+  const key = JSON.stringify(mine.map((a) => [a.id, a.level, a.seen, a.best, a.error, every.some((x) => x.id === a.beId)]));
   if (key === armedKey) return;
   armedKey = key;
-  const tick = (selectedCell() || {}).tick;
-  ui.beArmed.replaceChildren(...mine.map((a) => {
-    const row = mk('div', 'op-armrow'), x = mk('button', 'op-link', 'Cancel');
-    x.type = 'button';
-    x.onclick = () => dropBe(a.id);
-    row.append(mk('span', '', `Armed: ${a.side} at ${Cat.fmtPrice(a.level, tick)}${a.seen ? '' : ' (waiting for the fill)'}`), x);
-    return row;
-  }));
-  ui.beArmed.hidden = !mine.length;
+  const tick = (selectedCell() || {}).tick, px = (v) => Cat.fmtPrice(v, tick);
+  for (const k of ['be', 'tr']) {
+    const list = mine.filter((a) => (a.kind === 'trail') === (k === 'tr'));
+    ui.armed[k].replaceChildren(...list.map((a) => {
+      const row = mk('div', 'op-armrow'), x = mk('button', 'op-link', 'Cancel');
+      x.type = 'button';
+      x.onclick = () => cancelArm(a);
+      const wait = !a.seen ? ' (waiting for the fill)' : a.beId && every.some((y) => y.id === a.beId) ? ' (waiting for breakeven)' : '';
+      const where = a.server ? ' · server' : '';
+      const text = (k === 'be' ? `Armed: ${a.side} at ${px(a.level)}${wait}`
+        : `Trailing ${a.dist}t (${a.side})${a.best != null ? ` · best ${px(a.best)}` : ''}${wait}`) + where + (a.error ? ` — ${a.error}` : '');
+      row.append(mk('span', '', text), x);
+      return row;
+    }));
+    ui.armed[k].hidden = !list.length;
+  }
 }
 /* S1: the red ring round Send and its LIVE tag while the selected chart's next order reaches a LIVE account (`ids`:
    HBTradeUI.liveCue, the send path's own set); none otherwise. */
@@ -825,7 +965,9 @@ function mount(pg, container) {
   D().on(() => { paint(); watchBe(); });   // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(() => { paint(); watchBe(); }, 1000);   // a quote going stale with no event; the lines follow the last trade even while closed
+  setInterval(() => { paint(); watchBe(); }, 1000);
+  pollServerArms();
+  setInterval(pollServerArms, 2000);   // the server runner's arms: fired, dropped, their best price, their errors   // a quote going stale with no event; the lines follow the last trade even while closed
   paint();
 }
 

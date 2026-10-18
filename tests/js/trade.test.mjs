@@ -1833,3 +1833,34 @@ test('beStop never loosens: a stop already at or past breakeven + 1 is left alon
   assert.equal(T.beStop({ ...g, side: 'Sell' }, [sl(30890)], 0.25).action, 'none');
   assert.equal(T.beStop({ ...g, side: 'Sell' }, [sl(30910)], 0.25).action, 'move');
 });
+
+test('trailStop: follows the best price at its distance, only tightening, in steps, never into the market', () => {
+  const g = { kind: 'position', side: 'Buy', price: 30900, legs: [{ account: 'a' }] };
+  const sl = (price) => ({ kind: 'sl', price, legs: [{ account: 'a' }] });
+  assert.equal(T.trailStep(20), 4);
+  assert.equal(T.trailStep(3), 1);
+  // best 30910, 20 ticks (5.00) -> 30905; the stop at 30890 moves
+  assert.deepEqual(T.trailStop(g, [sl(30890)], 30910, 20, 30909, 0.25), { action: 'move', line: sl(30890), price: 30905 });
+  // only 3 ticks tighter than the stop (step 4): wait
+  assert.equal(T.trailStop(g, [sl(30904.25)], 30910, 20, 30909, 0.25).action, 'none');
+  // never looser
+  assert.equal(T.trailStop(g, [sl(30907)], 30910, 20, 30909, 0.25).action, 'none');
+  // the market fell to the trail price: wait rather than send a marketable stop
+  assert.equal(T.trailStop(g, [sl(30890)], 30910, 20, 30905, 0.25).action, 'none');
+  // no stop yet: add one
+  assert.equal(T.trailStop(g, [], 30910, 20, 30909, 0.25).action, 'add');
+  // a short mirrored
+  assert.deepEqual(T.trailStop({ ...g, side: 'Sell' }, [sl(30920)], 30890, 20, 30891, 0.25).price, 30895);
+  assert.ok(T.beArmStep({ kind: 'trail', side: 'Buy', accounts: ['a'], at: 1, seen: true }, [g], 30000, 2).fire, 'a trail fires at any price');
+});
+
+test('splitOrder: the partial take profit as two brackets with the same stop', () => {
+  const b = T.orderBody({ clientId: 'c1', accounts: ['a'], root: 'NQ', side: 'Buy', qty: 3, type: 'Market', sl: 30880, tp: 30940 });
+  assert.deepEqual(T.splitOrder(b, { qty: 1, tp: 30920 }), [
+    { ...b, client_id: 'c1-1', qty: 1, tp_price: 30920 },
+    { ...b, client_id: 'c1-2', qty: 2 },
+  ]);
+  for (const bad of [{ qty: 0, tp: 30920 }, { qty: 3, tp: 30920 }, { qty: 1.5, tp: 30920 }, { qty: 1, tp: NaN }]) assert.equal(T.splitOrder(b, bad), null);
+  assert.equal(T.splitOrder({ ...b, tp_price: undefined }, { qty: 1, tp: 30920 }), null, 'no TP: nothing to split');
+  assert.match(T.splitNote(b, { qty: 1, tp: 30920 }, 0.25), /1 at TP1 30,920\.00 · 2 at TP 30,940\.00/);
+});

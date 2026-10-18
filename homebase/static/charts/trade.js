@@ -686,7 +686,11 @@ function exitTicks(g, tick) {
    already through. */
 function beStop(g, groups, tick) {
   if (!g || g.kind !== 'position' || !(tick > 0) || !Number.isFinite(g.price)) return { error: 'Not a position' };
-  const price = roundTick(g.price + (g.side === 'Buy' ? tick : -tick), tick);
+  return stopTo(g, groups, roundTick(g.price + (g.side === 'Buy' ? tick : -tick), tick), 1, tick);
+}
+/* The position's stop to `price`: its one SL moved there, or one added; 'none' unless that tightens it by at least
+   `step` ticks (a stop is never loosened). beStop and trailStop share it. */
+function stopTo(g, groups, price, step, tick) {
   const mine = new Set(g.legs.map((l) => l.account));
   const own = (groups || []).filter((x) => x !== g && x.legs.some((l) => mine.has(l.account)));
   if (own.some((x) => x.legs.some((l) => l.pending === true))) return { error: 'An order on this position is still pending — try again once it fills' };
@@ -694,11 +698,22 @@ function beStop(g, groups, tick) {
   if (!sls.length) return { action: 'add', price };
   const covers = sls.length === 1 && [...mine].every((a) => sls[0].legs.some((l) => l.account === a));
   if (!covers) return { error: 'This position has more than one stop — move them one by one' };
-  const past = g.side === 'Buy' ? sls[0].price >= price : sls[0].price <= price;
-  return past ? { action: 'none', price } : { action: 'move', line: sls[0], price };
+  const gain = (g.side === 'Buy' ? price - sls[0].price : sls[0].price - price) / tick;
+  return gain >= step - 1e-9 ? { action: 'move', line: sls[0], price } : { action: 'none', price };
+}
+/* An armed trailing stop (the order panel's Trailing stop, the owner 2026-10-18): the stop follows the best price since
+   the fill at `dist` ticks -- a long's at best − dist -- moving only when that tightens it by trailStep(dist) ticks, and
+   never while the last trade is at or through that price (the move would be refused as marketable). */
+const trailStep = (dist) => Math.max(1, Math.round(dist / 5));
+function trailStop(g, groups, best, dist, last, tick) {
+  if (!g || g.kind !== 'position' || !(tick > 0) || !(dist >= 1) || !Number.isFinite(best)) return { error: 'Not a position' };
+  const buy = g.side === 'Buy', price = roundTick(best + (buy ? -dist : dist) * tick, tick);
+  if (Number.isFinite(last) && (buy ? price >= last : price <= last)) return { action: 'none', price };
+  return stopTo(g, groups, price, trailStep(dist), tick);
 }
 /* An armed auto-breakeven (the order panel's Breakeven, the owner 2026-10-18) against the desk's lines now.
-   arm = {side, level, accounts, at (ms sent), seen (its position was seen)}. Fires once the position on its side is
+   arm = {kind ('be' | 'trail'), side, level, accounts, at (ms sent), seen (its position was seen)}. A trail fires on
+   every pass while its position is open (trailStop decides the move); a breakeven fires once the position on its side is
    open on its accounts and the last trade reaches the level; drops once that position is gone (the trade is over),
    or when 15 s after the send there is neither a position nor a working order (refused, cancelled), and after 8 hours
    whatever happened (kept in the browser: an old arm must never fire on a later trade).
@@ -713,7 +728,8 @@ function beArmStep(arm, groups, last, now) {
     const working = (groups || []).some((x) => x.kind === 'order' && mine(x));
     return working || now - arm.at < BE_GRACE_MS ? { wait: true, seen: false } : { drop: 'no order' };
   }
-  const hit = Number.isFinite(last) && (arm.side === 'Buy' ? last >= arm.level : last <= arm.level);
+  // a trailing stop works the whole time its position is open; a breakeven once the last trade reaches its level
+  const hit = Number.isFinite(last) && (arm.kind === 'trail' || (arm.side === 'Buy' ? last >= arm.level : last <= arm.level));
   return hit ? { fire: pos } : { wait: true, seen: true };
 }
 /* The shaded zones (HBTradeLines.Zones) for the desk's SL / TP lines: each from its position's entry to its price. */
@@ -833,6 +849,17 @@ function orderTitle(b, tick) {
   const what = b.type === 'Market' ? 'at market' : `${TYPE_NAMES[b.type] || b.type} @ ${Cat.fmtPrice(b.price, tick)}`;
   const trig = b.type === 'StopLimit' ? ` (trigger ${Cat.fmtPrice(b.trigger_price, tick)})` : '';
   return `${b.side} ${b.qty} ${b.root} ${what}${trig}${b.tif ? ` · ${b.tif}` : ''}`;
+}
+/* Partial take profit (the owner, 2026-10-18): one order body as TWO brackets with the same SL -- split.qty contracts
+   to split.tp, the rest to the body's own TP -- each its own client id, so the broker manages each pair by itself.
+   null when it can't be made (no TP, a size that is not 1 .. qty − 1). */
+function splitOrder(b, split) {
+  if (!b || !split || b.tp_price == null || !Number.isInteger(split.qty) || split.qty < 1 || split.qty >= b.qty || !Number.isFinite(split.tp)) return null;
+  return [{ ...b, client_id: `${b.client_id}-1`, qty: split.qty, tp_price: split.tp },
+    { ...b, client_id: `${b.client_id}-2`, qty: b.qty - split.qty }];
+}
+function splitNote(b, split, tick) {
+  return `Split: ${split.qty} at TP1 ${Cat.fmtPrice(split.tp, tick)} · ${b.qty - split.qty} at TP ${Cat.fmtPrice(b.tp_price, tick)}`;
 }
 function confirmOrder(b, state, quote, pv, tick) {
   const accts = accountsOf(state).filter((a) => b.accounts.includes(a.id));
@@ -1666,7 +1693,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, exitZones, beStop, beArmStep, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, exitZones, beStop, beArmStep, trailStop, trailStep, splitOrder, splitNote, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,
