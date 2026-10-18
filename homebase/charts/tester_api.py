@@ -848,15 +848,12 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     def ensure_wf(rec: dict) -> dict:
         """The state of the record's 3:1 walk-forward (deskresults.wf_state); when there is none, start it -- once, as
-        ensure_unseen does. {"state": "unfit", "why"} for a strategy the walk-forward cannot search, {"state": "changed"}
-        when the Lab's code is no longer the promoted copy (a run of it would never match). Never raises."""
+        ensure_unseen does. {"state": "changed"} when the Lab's code is no longer the promoted copy (a run of it would never
+        match). Never raises."""
         today = slots.et_now().date()
         try:
             with wf_lock:
-                try:
-                    got = deskresults.wf_state(wfs.grids, rec, today)
-                except ValueError as e:
-                    return {"state": "unfit", "why": str(e)}
+                got = deskresults.wf_state(wfs.grids, rec, today)
                 if got["state"] != "none" or not DESKLAB_AUTO_UNSEEN:
                     return got
                 try:
@@ -873,11 +870,17 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
             return {"state": "none"}
 
+    def wf_prop(key: tuple, trades: list):
+        try:
+            return deskresults.prop_headline(_rescore(key, lambda: {"run": {}, "trades": trades}, DESKLAB_PROP))
+        except (HTTPException, KeyError, ValueError, OSError):
+            return None
+
     def wf_block(rec: dict) -> dict:
-        """The card's unseen block from the 3:1 walk-forward: {unseen, unseen_state, curve, pick, why, prop_unseen}."""
+        """The card's block from the 3:1 walk-forward of the strategy as set: {build, unseen, unseen_state, curve, prop_build,
+        prop_unseen} -- build = its in-sample months, unseen = its out-of-sample months."""
         got = ensure_wf(rec)
-        out = {"unseen": None, "unseen_state": got["state"], "curve": None, "pick": None, "why": got.get("why"),
-               "prop_unseen": None}
+        out = {"build": None, "unseen": None, "unseen_state": got["state"], "curve": None, "prop_build": None, "prop_unseen": None}
         if got["state"] != "done":
             return out
         try:
@@ -885,14 +888,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except (ValueError, KeyError, OSError):
             out["unseen_state"] = "failed"
             return out
-        trades = (res.get("stitched") or {}).get("trades") or []
-        out.update(unseen=deskresults.wf_summary(got["id"], res), curve=deskresults.curve_of_trades(trades),
-                   pick=deskresults.wf_pick(rec, res))
-        try:
-            out["prop_unseen"] = deskresults.prop_headline(_rescore(("wf", got["id"]), lambda: {"run": {}, "trades": trades},
-                                                                    DESKLAB_PROP))
-        except (HTTPException, KeyError, ValueError, OSError):
-            pass
+        oos, ins = (res.get("stitched") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("trades") or []
+        out.update(unseen=deskresults.wf_summary(got["id"], res), build=deskresults.wf_summary(got["id"], res, "stitched_is"),
+                   curve=deskresults.curve_of_trades(oos),
+                   prop_unseen=wf_prop(("wf", got["id"]), oos), prop_build=wf_prop(("wf-is", got["id"]), ins))
         return out
 
     def warm_desklab_results() -> None:
@@ -903,14 +902,12 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         try:
             for rec in store.listing():
                 with desk_res_lock:
-                    rid = (rec.get("run") or {}).get("id")
-                    if rid:
-                        prop_of(rid)
-                    try:
+                    try:                    # the card's two prop sims: the 3:1's in- and out-of-sample months
                         st = deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
                         if st["state"] == "done":
-                            tr = (wfs.result(st["id"]).get("stitched") or {}).get("trades") or []
-                            _rescore(("wf", st["id"]), lambda: {"run": {}, "trades": tr}, DESKLAB_PROP)
+                            res = wfs.result(st["id"])
+                            wf_prop(("wf", st["id"]), (res.get("stitched") or {}).get("trades") or [])
+                            wf_prop(("wf-is", st["id"]), (res.get("stitched_is") or {}).get("trades") or [])
                     except Exception:      # noqa: BLE001 -- the route computes it on ask
                         pass
             for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
@@ -934,11 +931,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         out = {}
         with desk_res_lock:
             for rec in store.listing():
-                # the unseen days ARE the 3:1 walk-forward's stitched out-of-sample record (owner, 2026-10-18)
-                build, w = (rec.get("run") or {}).get("id"), wf_block(rec)
-                out[rec["name"]] = {"unseen": w["unseen"], "unseen_state": w["unseen_state"], "curve": w["curve"],
-                                    "walkforward": True, "pick": w["pick"], "why": w["why"],
-                                    "prop": {"build": prop_of(build) if build else None, "unseen": w["prop_unseen"]}}
+                # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
+                w = wf_block(rec)
+                out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "unseen_state": w["unseen_state"],
+                                    "curve": w["curve"], "walkforward": True,
+                                    "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"]}}
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
             for desk_id in deskresults.BUILTIN_TWINS:
@@ -947,6 +944,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     got = deskresults.unseen_state(manager.runs, rec)
                     build, unseen = deskresults.build_run_id(manager.runs, rec), got.get("run")
                     out[desk_id] = {"unseen": unseen, "unseen_state": got["state"], "manual": True, "twin": rec["id"],
+                                    "build": deskresults.run_summary(manager.runs, build) if build else None,
                                     "curve": deskresults.curve_of(manager.runs, unseen["id"]) if unseen else None,
                                     "prop": {"build": prop_of(build) if build else None,
                                              "unseen": prop_of(unseen["id"]) if unseen else None}}

@@ -1085,6 +1085,20 @@ test('final wave I1: windowNote is the Desk\'s note as it sends it, or nothing',
   assert.equal(D.windowNote(null), '');
 });
 
+test('results: a Desk straddle sends its build run too, so the block reads Build | Unseen at the Desk\'s setting', () => {
+  const run = (net) => ({ id: 'r', range: { start: '2021-09-22', end: '2025-06-30' }, net, trades: 945, win_rate: 26.6, profit_factor: 0.97, max_drawdown: -17337, rr: 2.7, sharpe: -0.1 });
+  const both = D.results({ build: run(-5850), unseen: { ...run(26322), range: { start: '2025-07-01', end: '2026-10-11' } }, manual: true, prop: {} });
+  assert.equal(both.unseen.title, 'Backtest · build and unseen days');
+  assert.deepEqual(both.unseen.head, ['Build', 'Unseen']);
+  assert.deepEqual(both.unseen.rows.slice(0, 2).map((r) => [r.k, r.b, r.v]), [['Days', 'Sep 2021 – Jun 2025', 'Jul 2025 – Oct 2026'], ['Net', '−$5,850', '+$26,322']]);
+  assert.equal(both.unseen.note, '');
+  // no unseen run at this setting: the Build column stays, the Unseen one is dashes, and the note says why
+  const only = D.results({ build: run(-5850), unseen: null, unseen_state: 'none', manual: true, prop: {} });
+  assert.deepEqual(only.unseen.rows.map((r) => r.v), Array(8).fill('—'));
+  assert.equal(only.unseen.note, "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.");
+  assert.equal(D.results({ unseen: null, prop: {} }).unseen.head, null, 'a Lab strategy keeps its one column');
+});
+
 test('results: the saved run on the unseen days and the prop sim of both runs, in words', () => {
   const head = { account: 'LucidFlex 50K', eval_pass_p: 0.3688, bust_p: 0.6312, median_days_to_pass: 13, funded_payout_p: 0.3326, funded_expected_cheque: 602.3 };
   const unseen = { id: 'r', range: { start: '2025-07-01', end: '2026-10-11' }, net: 16341.5, trades: 305, win_rate: 66.2, profit_factor: 1.183, max_drawdown: -12397, rr: 2.814, rr_label: '1:2.81', sharpe: 0.431 };
@@ -1190,17 +1204,15 @@ test('the group writes go to the chart service by name, and a group id is only a
   for (const h of handlers) for (const m of h.matchAll(/\$\{([^}]*)\}/g)) assert.match(m[1], /^jsArg\([\w.]+\)$/, h);
 });
 
-test('the unseen days are the 3:1 walk-forward: its title, its states and this month\'s pick', () => {
-  const run = { range: { start: '2022-01-01', end: '2026-09-30' }, net: 1234.5, trades: 41, win_rate: 48.8, profit_factor: 1.31,
-    max_drawdown: -2100, rr: 3, sharpe: 0.5 };
-  const done = D.results({ walkforward: true, unseen: run, unseen_state: 'done', prop: {},
-    pick: { for: '2026-10', pick: { sl_pts: 25, tp_pts: 40 }, running: { sl_pts: 20, tp_pts: 40 } } });
-  assert.equal(done.unseen.title, 'Unseen days · walk-forward 3:1');
-  assert.equal(done.unseen.rows[0].v, 'Jan 2022 – Sep 2026');
-  assert.equal(done.unseen.note, '3:1 pick for Oct 2026: sl pts 25 · tp pts 40 (running: sl pts 20 · tp pts 40). Change it in Setup if you agree.');
-  assert.equal(D.results({ walkforward: true, unseen: run, unseen_state: 'done', pick: null, prop: {} }).unseen.note, '');
+test('build and unseen days are the 3:1 walk-forward of the strategy as set: two columns, its states', () => {
+  const run = (net, start, end) => ({ range: { start, end }, net, trades: 41, win_rate: 48.8, profit_factor: 1.31, max_drawdown: -2100, rr: 3, sharpe: 0.5 });
+  const done = D.results({ walkforward: true, build: run(4000, '2021-10-01', '2026-07-31'), unseen: run(1234.5, '2022-01-01', '2026-08-31'),
+    unseen_state: 'done', prop: {} });
+  assert.equal(done.unseen.title, 'Walk-forward 3:1 · build and unseen days');
+  assert.deepEqual(done.unseen.head, ['Build', 'Unseen']);
+  assert.deepEqual([done.unseen.rows[0].b, done.unseen.rows[0].v], ['Oct 2021 – Jul 2026', 'Jan 2022 – Aug 2026']);
+  assert.equal(done.unseen.note, '');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
-  assert.equal(D.results({ walkforward: true, unseen: null, unseen_state: 'unfit', why: 'No walk-forward: x.', prop: {} }).unseen.note, 'No walk-forward: x.');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-03', '2022-01-04'], vals: [300, 200] } }).title,
     'Unseen days (walk-forward 3:1), after costs');

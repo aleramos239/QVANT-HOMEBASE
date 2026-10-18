@@ -962,8 +962,10 @@ def test_3to1_with_nothing_to_search_is_the_strategy_as_set_in_blocks():
     one cell, and every block 'picks' it -- even a block with too few trades."""
     g = wf.validate_wf({"strategy": "nq930", "inputs": {"adx_gate": False}, "select_months": 3, "test_months": 1})
     assert len(g["cells"]) == 1 and g["axes"] == [] and g["walkforward"]["step_months"] == 4
+    one = wf.validate_wf(wbody(axes=[AXES[0]], select_months=3, test_months=1))       # one setting: the best of its values
+    assert len(one["cells"]) == 2 and [a["key"] for a in one["axes"]] == ["offset_pts"]
     with pytest.raises(ValueError, match="axes"):
-        wf.validate_wf(wbody(axes=[AXES[0]], select_months=3, test_months=1))          # one axis is still refused
+        wf.validate_wf(wbody(axes=AXES + AXES[:1] + [{"key": "adx_gate", "values": [False]}], select_months=3, test_months=1))   # 4 is too many
     months = [f"2022-{m:02d}" for m in range(1, 9)]
     tr = [t for m, n in zip(months, (10, 0, 0, -20, 30, 30, 30, 40)) for t in (trades(m, [n] * 5) if n else [])]
     cells = [{"i": 0, "params": {}, "months": wf.month_stats(tr, [], 50_000.0, months)}]

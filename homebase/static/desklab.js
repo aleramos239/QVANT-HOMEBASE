@@ -201,24 +201,15 @@
   var RUNNING_UNSEEN = "Reading the unseen days now. This shows here when it is done.";
   var FAILED_UNSEEN = "The unseen-days run did not finish. Run it again from the Lab.";
   var NO_PROP = "No prop sim: its backtest run is not saved any more.";
-  // A promoted strategy's unseen days are the 3:1 walk-forward's stitched out-of-sample months (owner, 2026-10-18).
-  var WF_TITLE = "Unseen days · walk-forward 3:1";
+  // A promoted strategy's build and unseen days are the 3:1 walk-forward of the strategy as set: its in-sample months (Build) and
+  // its out-of-sample months (Unseen), in blocks (owner, 2026-10-18).
+  var WF_TITLE = "Walk-forward 3:1 · build and unseen days";
   var WF_NOTES = {
     none: "The 3:1 walk-forward has not run yet. It starts by itself.",
     pending: "Running the 3:1 walk-forward over all the data now. This shows here when it is done.",
     failed: "The 3:1 walk-forward did not finish. Run it again from the Lab.",
     changed: "The Lab's code changed since it was promoted. Promote it again to run its walk-forward.",
   };
-  function settingsText(o) {     // {stop_pts: 30, rr: "3"} -> "stop pts 30 · rr 3"
-    return Object.keys(o || {}).map(function (k) { return k.replace(/_/g, " ") + " " + text(String(o[k])); }).join(" · ");
-  }
-  // This month's 3:1 pick when it differs from what runs: the owner changes it in Setup; nothing switches by itself.
-  function pickNote(pick) {
-    if (!isObj(pick) || !isObj(pick.pick)) return "";
-    var m = monthOf(text(pick["for"]) + "-01");
-    return "3:1 pick for " + (m || "this month") + ": " + settingsText(pick.pick) + " (running: " + settingsText(pick.running)
-      + "). Change it in Setup if you agree.";
-  }
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function share(v) {            // 0.3688 -> "37%"
     v = num(v);
@@ -266,14 +257,24 @@
     var prop = (!wait && res.prop && typeof res.prop === "object") ? res.prop : {};
     var b = prop.build && typeof prop.build === "object" ? prop.build : null;
     var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
-    var range = (u && u.range) || {}, from = monthOf(range.start), to = monthOf(range.end);
     var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu);
-    var wf = !wait && res.walkforward === true;
+    // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build | Unseen
+    var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
+    var runRows = function (run) {
+      var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
+      return [{ k: "Days", v: f && t ? f + " – " + t : DASH }].concat(figures({ run: run }), unseenExtras(run));
+    };
+    var rows = u ? runRows(u) : [], wf = !wait && res.walkforward === true;
+    if (bu) {
+      var br = runRows(bu);
+      rows = br.map(function (r, i) { return { k: r.k, b: r.v, v: u ? rows[i].v : DASH }; });
+    }
     return {
       unseen: {
-        title: wf ? WF_TITLE : "Unseen days (OOS)",
-        rows: u ? [{ k: "Days", v: from && to ? from + " – " + to : DASH }].concat(figures({ run: u }), unseenExtras(u)) : [],
-        note: wait ? RES_WAIT : wf ? (u ? pickNote(res.pick) : res.unseen_state === "unfit" ? text(res.why) : WF_NOTES[res.unseen_state] || WF_NOTES.none)
+        title: wf ? WF_TITLE : bu ? "Backtest · build and unseen days" : "Unseen days (OOS)",
+        head: bu ? ["Build", "Unseen"] : null,
+        rows: rows,
+        note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {

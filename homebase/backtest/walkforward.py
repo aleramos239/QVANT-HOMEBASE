@@ -342,6 +342,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     counts = Counter(p for p in picks if p is not None)
     top = min(counts.items(), key=lambda kv: (-kv[1], kv[0])) if counts else None
     oos, ins = _stats(tr0, sk0, capital, covered0), _stats(tri, ski, capital, coveredi)
+    tri_ns = sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"]))
     if rolling:                                 # overlapping windows: each leg's own Sharpe / drawdown
         legs_is = [rows[k]["is"] for k in chain(len(st), 0, test_months) if rows[k]["is"]]
         sh = [x["sharpe"] for x in legs_is if x["sharpe"] is not None]
@@ -399,7 +400,8 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
                      "uncovered": [m for m in months[select_months:] if m not in tested
                                    and m not in {x for s_ in st for x in s_.get("select_ms", ())}] if st else []},
         "stitched_is": {"stats": ins, "months": coveredi, "n_months": len(coveredi), "per_month": pm_is,
-                        "equity": None if rolling else report.equity(sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"])))},
+                        "equity": None if rolling else report.equity(tri_ns),
+                        "trades": None if rolling else report.to_ms(tri_ns)},     # blocks: the in-sample months' own trades (the Desk's prop sim)
         # the stitched out-of-sample record cut at the test days' start: its build-days months and its unseen-days months
         "split": {side: _side(ms) for side, ms in (("build", [m for m in covered0 if m < HOLDOUT]),
                                                    ("unseen", [m for m in covered0 if m >= HOLDOUT]))},
@@ -590,7 +592,7 @@ def validate_wf(body) -> dict:
     if not isinstance(metric, str) or metric not in METRICS:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")
     min_trades = _min_trades(b.pop("min_trades", DEFAULT_MIN_TRADES))
-    g = validate_grid(b, min_axes=0)      # no axes = one cell, the strategy as set: each block 'picks' it
+    g = validate_grid(b, min_axes=0)      # 0-3 axes: none = one cell, the strategy as set; one = the best of its values
     if not getattr(drafthost.resolve(g["strategy"]), "session_independent", False):   # a draft: its stub
         raise ValueError(f"{g['strategy']}: not flagged session-independent, so a month cannot be sliced "
                          "out of one full-window run -- the walk-forward refuses it")

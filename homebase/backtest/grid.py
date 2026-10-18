@@ -107,8 +107,8 @@ def validate_grid(body, min_axes: int = 2) -> dict:
     if base is not None and not isinstance(base, dict):
         raise ValueError("inputs: a JSON object")
     axes_in = body.get("axes", [] if min_axes == 0 else None)
-    if not isinstance(axes_in, list) or not min_axes <= len(axes_in) <= 3 or len(axes_in) == 1:
-        raise ValueError("axes: 2 or 3 parameters, each {key, values}" + (" (or none)" if min_axes == 0 else ""))
+    if not isinstance(axes_in, list) or not min_axes <= len(axes_in) <= 3:
+        raise ValueError("axes: 2 or 3 parameters, each {key, values}" if min_axes else "axes: up to 3 parameters, each {key, values}")
     schema = {i.key: i for i in cls.inputs()}
     keys = [a.get("key") if isinstance(a, dict) else None for a in axes_in]
     for k in keys:
