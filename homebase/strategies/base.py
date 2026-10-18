@@ -115,6 +115,9 @@ class Strategy:
     # True = every order carries its own size (qty=...) and the Desk sends that size, never above the size set on
     # the account. False (the default): size is set on the Desk, per account.
     own_size: bool = False
+    # The most trades a day the Desk lets it take (1..20). 0 (the default): the most it took in one day of the backtest it was
+    # promoted from (labrun.store.auto_limits). A rule that may need more than five years of data showed sets its own.
+    max_trades_day: int = 0
 
     def __init__(self, params: dict | None = None):
         self.p = resolve_inputs(self.inputs(), params)

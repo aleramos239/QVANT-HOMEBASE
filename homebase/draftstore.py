@@ -366,7 +366,8 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 
 _CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
                 "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
-                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "bar_sizes": (tuple, list)}
+                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "bar_sizes": (tuple, list),
+                "max_trades_day": int}
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 
 
@@ -429,7 +430,7 @@ def static_meta(source: str) -> dict:
         for t in targets:
             if isinstance(t, ast.Name) and t.id in _CLASS_ATTRS and st.value is not None:
                 v = _lit(st.value, t.id)
-                if not isinstance(v, _CLASS_ATTRS[t.id]) or (t.id == "bar_minutes" and isinstance(v, bool)):
+                if not isinstance(v, _CLASS_ATTRS[t.id]) or (t.id in ("bar_minutes", "max_trades_day") and isinstance(v, bool)):
                     raise StaticError(f"{t.id}: wrong type ({type(v).__name__})")
                 meta[t.id] = list(v) if isinstance(v, (tuple, list)) else v
         if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef)) and st.name == "inputs":
@@ -451,6 +452,8 @@ def static_meta(source: str) -> dict:
     if "bar_sizes" in meta and not all(isinstance(m, int) and not isinstance(m, bool) and m in (1, 5, 15)
                                        for m in meta["bar_sizes"]):
         raise StaticError("bar_sizes: a list of 1, 5 and / or 15 (minutes)")
+    if "max_trades_day" in meta and not 0 <= meta["max_trades_day"] <= 20:
+        raise StaticError("max_trades_day: 1 to 20 (0 = the most it took in one day of its backtest)")
     if "session_window" in meta and len(meta["session_window"]) != 2:
         raise StaticError("session_window: (start, end)")
     return meta

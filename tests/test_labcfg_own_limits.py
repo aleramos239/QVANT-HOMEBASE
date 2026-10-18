@@ -23,9 +23,9 @@ def test_derive_limits_from_the_record():
     assert labcfg.derive_limits(own_rec(session_window=["09:25", "16:00"])) == LabLimits(1, 4, 0.0, "15:54", "15:55")
     # a window that ends earlier: flat is the window's end
     assert labcfg.derive_limits(own_rec(session_window=["09:25", "11:30"])) == LabLimits(1, 4, 0.0, "11:29", "11:30")
-    # no cap of 10 any more (owner, 2026-10-11): the tested size stands, up to the tester's own largest (100)
+    # no cap of 10 any more (owner, 2026-10-11), and none of 100 either (2026-10-18, main 86d0d7da): the tested size stands
     assert labcfg.derive_limits(own_rec(qty=40)).max_qty == 40
-    assert labcfg.derive_limits(own_rec(qty=400)).max_qty == 100
+    assert labcfg.derive_limits(own_rec(qty=400)).max_qty == 400
 
 
 def test_a_record_without_them_has_none_and_a_bad_one_has_none():
@@ -150,3 +150,21 @@ def test_the_runner_books_a_strategy_with_its_own_limits_and_lets_typed_ones_win
     typed = {**s, "limits": LIMITS}
     assert deskside.limits_of(typed, r) == LIMITS
     assert deskside.booked({**s, "limits": {**LIMITS, "flat_et": "16:30"}}, r) is None     # typed and unreadable: not the own ones
+
+
+def test_a_strategy_may_say_its_own_most_trades_a_day():
+    """2026-10-18 (the owner: "on the desk it trades until its in profit"): a rule that can take more trades in a day than its
+    backtest ever did declares `max_trades_day`; the record carries that, not the backtest's most."""
+    import pytest
+    from homebase import draftstore
+    from tests.test_micro_exec import draft
+    meta = draftstore.static_meta(draft("max_trades_day = 5"))
+    assert meta["max_trades_day"] == 5 and "max_trades_day" not in draftstore.static_meta(draft())
+    for bad in ("max_trades_day = 21", "max_trades_day = -1", "max_trades_day = True", 'max_trades_day = "5"'):
+        with pytest.raises(draftstore.StaticError):
+            draftstore.static_meta(draft(bad))
+    trades = [{"date": "2025-01-02"}, {"date": "2025-01-02"}]
+    assert store.snapshot("pp", "x", meta, {"run": {"qty": 4}, "trades": trades}, "r1", [])["auto_limits"] == {"max_trades_day": 5}
+    plain = draftstore.static_meta(draft("max_trades_day = 0"))       # 0 = the backtest's most, as before
+    assert store.snapshot("pp", "x", plain, {"run": {"qty": 4}, "trades": trades}, "r1", [])["auto_limits"] == {"max_trades_day": 2}
+    assert labcfg.derive_limits(own_rec(auto_limits={"max_trades_day": 5})).max_trades_day == 5

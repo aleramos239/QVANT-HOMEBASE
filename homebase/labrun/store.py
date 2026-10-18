@@ -171,6 +171,8 @@ def snapshot(name: str, source: str, meta: dict, bundle: dict, run_id: str, note
     run = bundle.get("run") or {}
     summary = (((run.get("report") or {}).get("summary") or {}).get("all")) or {}
     auto = auto_limits(bundle.get("trades")) or {"max_trades_day": OWN_TRADES_DAY}
+    if meta.get("max_trades_day"):              # the strategy says its own most (Strategy.max_trades_day)
+        auto = {"max_trades_day": meta["max_trades_day"]}
     snap = {"auto_limits": auto, "name": name, "id": f"draft_{name}", "label": meta.get("name") or name, "root": meta.get("root"), "source": source,
             "sha256": hashlib.sha256(source.encode("utf-8")).hexdigest(), "params": dict(run.get("inputs") or {}),
             "qty": run.get("qty"),
