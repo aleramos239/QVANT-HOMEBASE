@@ -125,7 +125,7 @@ and --json out.
                                                                              never the app's idea folder
   bp.py taught check <sheet>                                              THE TAUGHT LANE (taught.py): a video's rule run exactly as
   bp.py taught run <sheet> [--workers=N] [--days=d1,d2]                      taught -- its own entry settings, ONE exit cell with its
-  bp.py taught show <name> | list                                            own stop, target and cap, nine cells (the stop and the
+  bp.py taught show <name> | list | lab <name>                               own stop, target and cap, nine cells (the stop and the
                                                                              target at 75 / 100 / 125 %), the pipeline's random-entry
                                                                              control; no heat map, no pick. `check` prints what runs
                                                                              beside what was taught and what was not run and runs
@@ -268,14 +268,17 @@ def _parser() -> _Parser:
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
-    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list}")
+    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab}")
     taught = {name: ts.add_parser(name, allow_abbrev=False, help=text) for name, text in (
         ("check", "validate a rule sheet and print what will run beside what was taught (runs nothing)"),
         ("run", "run the sheet on the build days (--days = a smoke run on named days, never a verdict)"),
-        ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"))}
+        ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"),
+        ("lab", "the taught cell of a full run as a finished run of the tester page, to step through its trades (checked against the store)"))}
     taught["check"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, or - for stdin")
     taught["run"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, - for stdin, or the name of a sheet on file")
     taught["show"].add_argument("name", help="the sheet's name")
+    taught["lab"].add_argument("name", help="the sheet's name")
+    taught["lab"].add_argument("--workers", type=int, help="worker processes for the run again (default 6)")
     taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
     taught["run"].add_argument("--days", help="a smoke run: named build days, d1,d2")
     for x in taught.values():

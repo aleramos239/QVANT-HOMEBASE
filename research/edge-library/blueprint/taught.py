@@ -9,6 +9,7 @@ target, its own cap, and a small neighbourhood so that fragility shows. No heat 
     bp.py taught run <sheet> [--root=DIR] [--workers=N] [--days=d1,d2]
     bp.py taught show <name> [--root=DIR]            the last result again
     bp.py taught list [--root=DIR]                   one row a sheet on file
+    bp.py taught lab <name> [--root=DIR] [--workers=N]   the taught cell of the full run on the tester page (Show on chart)
     root = --root, else HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught.  <root>/<name>/{sheet.json, runs/, ledger.csv, runner.log,
     result.json}; a run on named days (--days) is a SMOKE RUN: <root>/<name>/smoke/ and never a verdict.
 
@@ -98,7 +99,7 @@ SIDES = ("both", "long", "short")
 STEPS = (0.75, 1.0, 1.25)                           # the neighbours: 75 %, 100 % and 125 % of the taught stop and of the taught target
 CENTRE = 1.0
 WINDOW = re.compile(r"^(\d{1,2}):(\d{2})-(\d{1,2}):(\d{2})$")
-CHECK, RUN_, SHOW, LIST = "taught check", "taught run", "taught show", "taught list"
+CHECK, RUN_, SHOW, LIST, LAB = "taught check", "taught run", "taught show", "taught list", "taught lab"
 STEADY = ("P3.8", "P3.9", "P3.10")                  # the rows of how steadily the box made its money: `kind` steadiness (a later change is one line)
 LIMITS = ("One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.",
           "The family's settings and the exits are the video's own: nothing was tuned, searched or picked.",
@@ -1099,6 +1100,55 @@ def listing(root=None) -> dict:
     return api.result(LIST, None, rows=rows, text=text)
 
 
+def lab(name: str, root=None, workers=None) -> dict:
+    """`bp.py taught lab <name>`: THE TAUGHT CELL ON THE TESTER PAGE, to step through its trades on the chart (the owner, 2026-10-18). Per
+    bar of the FULL run (never a smoke run): the taught cell is run again on the same build days for its prices (a store keeps time, net
+    and stop distance only), held against the store (the same number of trades and the same net, else the code changed since the store
+    was written and nothing is written), and written as a finished tester run by homebase/backtest/importrun.py (the app's own Python)
+    under draft_<name> -> {runs: [{bar, run_id, trades, net}]}. A mirror: nothing is tuned, booked or read beyond the build days."""
+    import subprocess
+    import tempfile
+    base = where(root) / str(name)
+    f = base / "result.json"
+    if not f.exists():
+        raise J.Refuse(f"{name}: no full result under {where(root)} (a smoke run is never shown): bp.py taught run <sheet> first")
+    doc = json.loads(f.read_text())
+    plan = doc["plan"]
+    centre = next(c["id"] for c in plan["cells"] if c.get("centre"))
+    blocks, market = _blocks(), plan["market"]
+    days = [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), market, allow_holdout=RUN.PERIOD)]
+    w = max(1, min(int(workers or 6), S.MAX_WORKERS))
+    runs = []
+    for st in (x for x in doc["stores"] if x["kind"] == "unit"):
+        d = base / "runs" / st["key"]
+        meta, z = json.loads((d / "run.json").read_text()), np.load(d / "cells.npz")
+        k = [c["id"] for c in meta["cells"]].index(centre)
+        net, n = float(z["net"][int(z["off"][k]):int(z["off"][k + 1])].sum()), int(z["off"][k + 1] - z["off"][k])
+        cell = meta["cells"][k]
+        res = RM.merge(S.run_many([(blocks.WRAPPED[meta["family"]], cell["inputs"])], period=RUN.PERIOD, days=days, root=market, workers=w,
+                                  **RUN._engine(RUN._kw(meta["family"], meta.get("filter")))))
+        trades = res["trades"]
+        if res["skipped_by_error"] or len(trades) != n or abs(sum(t["net"] for t in trades) - net) >= 0.01:
+            raise J.Refuse(f"{st['key']} {centre}: run again it has {len(trades):,} trades and ${sum(t['net'] for t in trades):,.0f} where its store has "
+                           f"{n:,} and ${net:,.0f}: the code changed since the store was written; run the sheet again under a new name")
+        bar, sess = cell["inputs"]["tf"], cell["inputs"]["sess"]
+        title = f"{name}: taught cell {centre} ({market} {sess} {bar}m)"
+        note = (f"taught lane, {name}: the taught cell {centre} on the build days ({days[0]} .. {days[-1]}), 1 contract after costs; "
+                f"the rule as the sheet says it (bp.py taught show {name})")
+        with tempfile.TemporaryDirectory(prefix="taught_lab_") as tmp:
+            tf_ = Path(tmp) / "trades.json"
+            tf_.write_text(json.dumps({"trades": trades}))
+            p = subprocess.run([str(S.REPO / ".venv" / "bin" / "python"), "-B", "-m", "homebase.backtest.importrun", str(tf_), "--strategy", f"draft_{name}",
+                                "--root", market, "--name", title[:80], "--start", days[0], "--end", days[-1], "--sessions", str(len(days)),
+                                "--note", note], cwd=str(S.REPO), capture_output=True, text=True, timeout=300, stdin=subprocess.DEVNULL)
+        if p.returncode != 0 or not p.stdout.strip():
+            raise J.Refuse(f"importrun answered {p.returncode}: {(p.stderr or p.stdout).strip()[-300:] or 'nothing'}")
+        runs.append({"bar": bar, "run_id": p.stdout.strip().splitlines()[-1], "trades": n, "net": net})
+    text = "\n".join(f"{name} {r['bar']}-minute bars: tester run {r['run_id']} ({r['trades']:,} trades, ${r['net']:,.0f}); "
+                     "show it with show_on_chart run_id" for r in runs)
+    return api.result(LAB, name, runs=runs, text=text)
+
+
 def command(sub: str, arg=None, root=None, *, days=None, workers=None, draws=None, progress=None) -> dict:
     """The command line's one entry (blueprint/cli.py): `taught <sub>`."""
     if sub == "check":
@@ -1117,4 +1167,8 @@ def command(sub: str, arg=None, root=None, *, days=None, workers=None, draws=Non
         return show(arg, root)
     if sub == "list":
         return listing(root)
-    raise J.Refuse(f"taught {sub}: one of check, run, show, list")
+    if sub == "lab":
+        if arg is None:
+            raise J.Refuse("taught lab needs the sheet's name: bp.py taught lab <name>")
+        return lab(arg, root, workers=workers)
+    raise J.Refuse(f"taught {sub}: one of check, run, show, list, lab")
