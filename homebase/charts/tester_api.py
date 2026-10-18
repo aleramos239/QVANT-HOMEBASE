@@ -197,6 +197,7 @@ from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from ..labrun import door, store
 from .desk import DESK_URL
+from . import groupmix
 from ..labrun.host import session_today
 from . import DEFAULT_ROOTS, deskgroups, deskresults, lab_forms, lab_templates, reviewpack
 from .paperbook import DESK_ORIGINS, _cors, desk_origin_refusal
@@ -550,6 +551,43 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         if not isinstance(sid, str) or sid not in known_ids:
             raise HTTPException(404, f"no strategy {sid!r}")
         return grouped(draftstore.set_status, sid, status)
+
+    @r.post("/groupmix")
+    def group_mix(request: Request, body: dict):
+        """The Lab's group builder (groupmix.py): {members: [{strategy, size}], prop_rules} -> each member's latest build-days
+        run at its size, cut to the days all of them cover: each one's numbers, the group's as one account, how alike their
+        days are, and the prop sim of the merged ledger on `prop_rules`. Reads saved runs only; nothing is run or written."""
+        write_ok(request)
+        json_body(request)
+        ms, rule = body.get("members"), body.get("prop_rules")
+        if set(body) - {"members", "prop_rules"} or not isinstance(ms, list) or not 2 <= len(ms) <= 12:
+            raise HTTPException(400, "{members: 2 to 12 of {strategy, size}, prop_rules}")
+        members, left = [], []
+        for m in ms:
+            sid, k = (m or {}).get("strategy"), (m or {}).get("size", 1)
+            if not isinstance(sid, str) or isinstance(k, bool) or not isinstance(k, (int, float)) \
+                    or not groupmix.SIZE_MIN <= k <= groupmix.SIZE_MAX:
+                raise HTTPException(400, f"a member is {{strategy, size {groupmix.SIZE_MIN:g} to {groupmix.SIZE_MAX:g}}}")
+            run = groupmix.build_run(manager.runs_list(limit=200, strategy=sid))
+            trades = ledger_of(run["id"]) if run else None
+            if not trades:
+                left.append({"strategy": sid, "why": "no finished build-days run with trades: run it on the build days first"})
+                continue
+            members.append({"name": sid, "size": float(k), "run": run, "trades": trades})
+        if len({m["name"] for m in members}) != len(members):
+            raise HTTPException(400, "a strategy is in the group twice")
+        if len(members) < 2:
+            return {"left_out": left, "error": "at least two members need a build-days run"}
+        try:
+            got = groupmix.mix(members)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        ledger = got.pop("ledger")
+        prop = None
+        if rule:
+            key = ("mix", tuple((m["name"], m["run"]["id"], m["size"]) for m in members))
+            prop = deskresults.prop_headline(_rescore(key, lambda: {"run": {}, "trades": ledger, "propsim": None}, rule))
+        return {**got, "left_out": left, "prop": prop}
 
     # ---- the blueprint toolkit in the Lab: the tools every chat has, listed and run from the page ------------
     box = _Blueprint()

@@ -708,3 +708,46 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .am-rz-ne { top: 0; right: 0; cursor: nesw-resize; } .am-rz-sw { bottom: 0; left: 0; cursor: nesw-resize; }
 .am-rz-nw { top: 0; left: 0; cursor: nwse-resize; } .am-rz-se { bottom: 0; right: 0; cursor: nwse-resize; }
 html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-height: calc(100vh - 16px); padding: 0; }
+
+/* ---- the group builder (labmix.js, the owner 2026-10-18): a sheet over the Lab ---- */
+.mix { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 24px; background: rgb(0 0 0 / .28); }
+.mix-in { width: min(1180px, 100%); height: min(860px, 100%); display: flex; flex-direction: column; border-radius: 16px; background: var(--hb-glass-strong); backdrop-filter: blur(24px); box-shadow: var(--hb-glass-shadow); color: var(--hb-fg); overflow: hidden; }
+.mix-head { display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: .5px solid var(--hb-hair); }
+.mix-head h2 { margin: 0; font-size: 16px; }
+.mix-sub { color: var(--hb-fg2); font-size: var(--hb-fs-sm); }
+.mix-x { margin-left: auto; }
+.mix-body { flex: 1; min-height: 0; display: grid; grid-template-columns: 300px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); }
+.mix-side { display: flex; flex-direction: column; gap: 8px; min-height: 0; padding: 12px; border-right: .5px solid var(--hb-hair); }
+.mix-q, .mix-rule select, .mix-size { height: 28px; padding: 0 9px; border: 0; border-radius: 8px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-ui); outline: none; }
+.mix-q:focus, .mix-size:focus, .mix-rule select:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.mix-keep, .mix-rule { display: flex; align-items: center; gap: 8px; font-size: var(--hb-fs-sm); color: var(--hb-fg2); }
+.mix-rule select { flex: 1; min-width: 0; }
+.mix-list { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.mix-pick { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 9px; cursor: pointer; }
+.mix-pick:hover { background: var(--hb-fill); }
+.mix-pick.on { background: var(--hb-accent-soft); }
+.mix-nm { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.mix-nm b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mix-nm small { color: var(--hb-fg2); font-size: var(--hb-fs-sm); }
+.mix-size { width: 52px; text-align: right; }
+.mix-out { min-height: 0; overflow-y: auto; padding: 14px 18px 24px; }
+.mix-out h3 { margin: 18px 0 8px; font-size: 13px; }
+.mix-note { color: var(--hb-fg2); font-size: var(--hb-fs-sm); margin: 4px 0; }
+.mix-err { color: #F23645; }
+.mix-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.mix-tile { display: flex; flex-direction: column; gap: 2px; padding: 9px 11px; border-radius: 10px; background: var(--hb-fill); }
+.mix-tile span { color: var(--hb-fg2); font-size: var(--hb-fs-sm); }
+.mix-tile b { font-size: 16px; font-variant-numeric: tabular-nums; }
+.mix .up { color: #1F9D55; } .mix .dn { color: #F23645; }
+.mix-curve { width: 100%; height: 220px; display: block; border-radius: 10px; background: var(--hb-fill); }
+.mix-zero { stroke: var(--hb-hair); stroke-width: 1; stroke-dasharray: 3 3; }
+.mix-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: var(--hb-fs-sm); color: var(--hb-fg2); }
+.mix-legend i { display: inline-block; width: 10px; height: 3px; margin-right: 5px; vertical-align: middle; border-radius: 2px; }
+.mix-range { margin-left: auto; }
+.mix-t { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; font-size: var(--hb-fs-sm); font-variant-numeric: tabular-nums; }
+.mix-t th, .mix-t td { padding: 5px 9px; text-align: right; border-bottom: .5px solid var(--hb-hair); white-space: nowrap; }
+.mix-t th:first-child, .mix-t td:first-child { text-align: left; }
+.mix-corr th { max-width: 220px; overflow: hidden; text-overflow: ellipsis; }
+.mix-c { min-width: 44px; text-align: center !important; }
+.mix-c.self { color: var(--hb-fg2); }
+.mix-left { margin: 0; padding-left: 18px; font-size: var(--hb-fs-sm); }
