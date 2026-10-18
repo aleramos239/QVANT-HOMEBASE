@@ -206,6 +206,7 @@ from . import pipe_gates as G
 from . import pipe_prop as PP
 from . import pipe_rules as PR
 from . import pipe_store as PS
+from . import pipe_wf as WF
 from . import propodds as PO
 from . import records as REC
 from . import rules as R
@@ -951,6 +952,15 @@ def _same_box_read(name: str, picked: dict, box: str, ideas_root, pipe_root) -> 
     return None
 
 
+def _walk(sub: str, kw: dict, ctx: dict) -> dict:
+    """THE 3:1 WALK-FORWARD of a locked sub-idea off its build store and its read of the test days (pipe_wf.run)."""
+    _, plan, specs = _idea(sub, kw)
+    lock = REC._json(REC._carded(sub, kw["root"]) / "lock.json") or {}
+    h = lock["home"]
+    u = T.bp_unit(specs[0], h["market"], h["bar"], h["session"], "", T.filter_of(specs[0], REC.rule_filter(plan)))
+    return WF.run(specs[0], lock, Path(h["folder"]), PS.runs_test(ctx.get("root")), u, T.build_days(u, kw["days"]))
+
+
 @_stage
 def stage6(name: str, ctx: dict, progress=None) -> dict:
     """THE ONE READ of the unseen days for the locked heat map, and on a pass the label off its test trades (module docstring)."""
@@ -972,6 +982,23 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
                          **({"only": ("box", G.RANDOM)} if PR.edge_gates() else {}))
     rows, rng, rel = r["lines"], r.get("range") or {}, list(r.get("relatives") or [])        # rel: the related ideas read on these days before this one
     rules.update(lines={x["line"]: x["need"] for x in rows}, range=rng)
+    if edge:                                        # THE 3:1 WALK-FORWARD decides (the owner, 2026-10-18; pipe_wf.py): the read's own lines are labels
+        wf = _walk(sub, kw, ctx)
+        rules.update(walkforward=PR.need("walkforward"), gates=r.get("gates"))
+        rows = wf["rows"] + G.labels([x for x in rows if x["line"] != "P6.1"], gate=())
+        span = f"{wf['months'][0]} .. {wf['months'][-1]}" if wf["months"] else "no test month"
+        said = (f"{sub}: the 3:1 walk-forward over {len(wf['months'])} test months ({span}; each picked on the 3 months before it"
+                + (f", {len(wf['stood_aside'])} stood aside" if wf["stood_aside"] else "") + "); the pick for "
+                + f"{wf['next']['month']}: {wf['next']['cell'] or 'none (no box holds on the last 3 months)'}")
+        summary = {k: wf[k] for k in ("months", "stood_aside", "next")} | {"picks": [{"month": q["month"], "cell": q["cell"]} for q in wf["picks"]],
+                                                                          "p_beat": wf["random"].get("p_beat"), "split": wf["split"]}
+        if not wf["passed"]:
+            bad = [x for x in wf["rows"] if x["passed"] is not True]
+            return _card(6, t0, False, "not proven", rows, f"{said}: NOT PROVEN, it fails {', '.join(x['line'] for x in bad)} ({bad[0]['text']}). "
+                         "A fail is final: no re-tune, no second read", picked, tries, rules, relatives=rel, walkforward=summary)
+        return _card(6, t0, True, "proven on history", rows, f"{said}: PROVEN ON HISTORY -- its test months make money, beat "
+                     f"{100 * R.need(G.RANDOM):g} % of the random tables, win over the breakeven of their reward-to-risk and hold enough trades",
+                     picked, tries, rules, relatives=rel, walkforward=summary)
     gate = r.get("gates")                           # mode "edge": the read was asked for the box and line 4.4 (oos.run(only=)); the other 4.x are labels
     if gate:
         net = gate.get("box")
@@ -981,29 +1008,16 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         rnd = next((x for x in rows if x["line"] == G.RANDOM), None)
         if rnd is not None and rnd["passed"] is False and r.get("passed") is True:        # a verdict on file from before line 4.4 was a gate (2026-10-17)
             r = {**r, "passed": False}
-    if edge and r.get("passed") is True:            # P3.15 again, on the unseen trades (the owner, 2026-10-18: "+3 everywhere")
-        try:
-            line = {**G.wr_rr(PO.cell(PO.handed(sub, kw["root"]), was["default"])["net"]), "line": "P6.3"}
-            line["text"] = "P6.3" + line["text"][len(G.WR_RR):] + " (row P3.15 on the unseen days)"
-        except api.REFUSALS as e:
-            line = L._row("P6.3", False, None, None, f"the unseen-day trades of the box could not be read ({e}): no win rate to hold against its reward-to-risk")
-        rows.insert(1, line)
-        if line["passed"] is False:
-            r = {**r, "passed": False}
     head = (f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
             + (f" ({len(rel)} related idea{'s' * (len(rel) != 1)} read on these days before it)" if rel else ""))
     if r.get("passed") is not True:
         bad = [x for x in rows if x["passed"] is False] if gate else [x for x in rows if x["passed"] is not True]
         return _card(6, t0, False, "not proven", rows, f"{head}: NOT PROVEN, it fails {', '.join(x['line'] for x in bad)} ({bad[0]['text'] if bad else r.get('verdict')}). "
                      "A fail is final: no re-tune, no second read", picked, tries, rules, relatives=rel)
-    wr = next((x for x in rows if x["line"] == "P6.3"), None)
-    asked = ["P6.1", G.RANDOM, *(["P6.3"] if wr else [])]
+    asked = ["P6.1", G.RANDOM]
     holds = (f"the box {was['default']} makes money on those days and the map beats {100 * R.need(G.RANDOM):g} % of the random tables"
-             + (" and its win rate is over the breakeven of its reward-to-risk" if wr else "")
              + f" (the {({2: 'two', 3: 'three'}.get(len(asked), len(asked)))} lines asked, {', '.join(asked)}; the other 4.x lines are labels"
              + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
-    if edge:
-        return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}", picked, tries, rules, relatives=rel)
     got = PO.handed(sub, kw["root"])                # what the freeze and the read leave for the prop simulator: the read's own store and days
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
@@ -1064,7 +1078,7 @@ def _edge_numbers(x: dict, calendar) -> dict:
     per = lambda v: None if v is None or not loss else v / loss  # noqa: E731
     return {"trades": f["trades"], "days": len(days), "win_rate": row["number"], "realized_rr": row.get("rr"), "breakeven_wr": row.get("breakeven"),
             "avg_r": per(f["avg_trade"]), "net": f["net"], "net_per_year": f["net"] / len(days) * YEAR if days else None,
-            "sharpe": float(day.mean()) / sd * np.sqrt(YEAR) if sd > 0 else None, "months_positive": won / months if months else None,
+            "sharpe": float(day.mean() / sd * np.sqrt(YEAR)) if sd > 0 else None, "months_positive": won / months if months else None,
             "biggest_day_share": f["biggest_day_share"], "worst_drawdown": f["worst_drawdown"], "worst_drawdown_r": per(f["worst_drawdown"]),
             "month_wr": {"lowest": rates[0] if rates else None, "median": float(np.median(rates)) if rates else None, "months": len(rates)}}
 
@@ -1140,14 +1154,23 @@ def stage7(name: str, ctx: dict, progress=None) -> dict:
     lock = REC._json(REC._carded(sub, kw["root"]) / "lock.json") or {}
     if lock.get("hash") != was["lock"]:
         raise J.Refuse(f"the lock of {sub} on file ({lock.get('hash') or 'none'}) is not the one stage 5 froze ({was['lock']}): no book card is made of it")
-    got = PO.handed(sub, kw["root"])
-    x = PO.cell(got, was["default"])
-    facts = _facts(x, got["calendar"], box["fast_seconds"])
+    if edge:                                        # the unseen record is the 3:1 walk-forward's stitched test months (pipe_wf.py)
+        if not six.get("walkforward"):              # stage 6 passed under other rules (before 2026-10-18, or mode "law"): it is judged again first
+            raise J.Refuse(f"{name}: its stage 6 was not the 3:1 walk-forward; run it again under the rules now in force (bp.py pipe rerun {name})")
+        wf = _walk(sub, kw, ctx)
+        x, cal, span = wf["x"], wf["calendar"], [wf["months"][0], wf["months"][-1]] if wf["months"] else []
+    else:
+        got = PO.handed(sub, kw["root"])
+        x, cal, span = PO.cell(got, was["default"]), got["calendar"], list(got["span"])
+    facts = _facts(x, cal, box["fast_seconds"])
     usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
     if edge:
-        unseen = _edge_numbers(x, got["calendar"])
+        unseen = _edge_numbers(x, cal)
         tag = _tag(unseen)
-        money = {"tag": tag, "numbers": {"build": was.get("build"), "unseen": unseen}}
+        money = {"tag": tag, "numbers": {"build": was.get("build"), "unseen": unseen},
+                 "walkforward": {"months": len(wf["months"]), "span": span, "stood_aside": wf["stood_aside"], "next": wf["next"],
+                                 "picks": [{"month": q["month"], "cell": q["cell"]} for q in wf["picks"]], "p_beat": wf["random"].get("p_beat"),
+                                 "split": wf["split"]}}
         said = f"tagged {tag.upper().replace('+', ' + ')}; on the unseen days: {_said(unseen)}"
     else:
         prop = six.get("prop")
@@ -1159,18 +1182,19 @@ def stage7(name: str, ctx: dict, progress=None) -> dict:
             "market": card["market"], "session": card["session"], "bar": picked["bar"], "filter": picked["filter"],
             "rule": {"spec": lock.get("spec"), "default": was["default"], "lock": was["lock"]},
             **money, **{k: facts[k] for k in ("hours", "trades", "days_traded")},
-            **({} if edge else {"win_days_month": _win_days(x, got["calendar"], own, prop[own]["size"])}),
+            **({} if edge else {"win_days_month": _win_days(x, cal, own, prop[own]["size"])}),
             **{k: facts[k] for k in ("winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor", "net")},
             "equity": facts["equity"], **({} if edge else {"fees": _fees(prop)}), "gates": PR.gates(),
             "tries": tries, "relatives_read": len(six.get("relatives") or []),
             "stages": {str(n): {"passed": c.get("passed"), "result": c.get("result"), "text": (str(c.get("text") or "").splitlines() or [""])[0]}
                        for n, c in cards.items() if n in NAMES and n < max(NAMES)},
             "utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
-    return _card(7, t0, None, "awaiting owner", [], f"{name} waits for the owner's look: {sub}, box {was['default']}, {said} -- "
-                 f"{facts['trades']:,} trades on {facts['days_traded']:,} of {len(got['calendar']):,} unseen session days, net {usd(facts['net'])} at one contract, "
+    return _card(7, t0, None, "awaiting owner", [], f"{name} waits for the owner's look: {sub}, " + (f"box for {wf['next']['month']}: {wf['next']['cell'] or 'none'}" if edge else f"box {was['default']}")
+                 + f", {said} -- "
+                 f"{facts['trades']:,} trades on {facts['days_traded']:,} of {len(cal):,} unseen session days, net {usd(facts['net'])} at one contract, "
                  f"worst drawdown {usd(facts['worst_drawdown'])}, {facts['winning_months'][0]} of {facts['winning_months'][1]} months won "
                  f"(bp.py pipe approve {name}, or bp.py pipe refuse {name} --why=TEXT)", picked, tries,
-                 {**({"edge": PR.need("edge")} if edge else {"prop": PR.need("prop")}), "box": box, "unseen": list(got["span"])}, book=book)
+                 {**({"edge": PR.need("edge")} if edge else {"prop": PR.need("prop")}), "box": box, "unseen": span}, book=book)
 
 
 STAGES = {0: stage0, 1: stage1, 2: stage2, 3: stage3, 4: stage4, 5: stage5, 6: stage6, 7: stage7}

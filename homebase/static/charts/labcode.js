@@ -551,7 +551,10 @@ function plBookFull(card, stages) {
       ['Average trade', plMoney(c.avg_trade)], ['Profit factor', plFixed(c.profit_factor, 2)], ['Net profit', plMoney(c.net)], ['Worst day', plMoney(c.worst_day)],
       ['Worst drawdown', plMoney(c.worst_drawdown)], ['Biggest day, share of profit', plPct(c.biggest_day_share)],
       ['Trades under 5 seconds, share of profit', plPct(c.fast_profit_share)], ['Heat maps tried', plWhole(c.tries)], ['Came from', plText(c.source)]],
-    numbers: c.numbers ? ['build', 'unseen'].filter((k) => c.numbers[k]).map((k) => ({ name: k === 'build' ? 'Build days' : 'Unseen days', rows: plEdgeRows(c.numbers[k]) })) : [],
+    numbers: [...(c.walkforward ? [{ name: '3:1 walk-forward', rows: [['Test months', `${plWhole(c.walkforward.months)}${Array.isArray(c.walkforward.span) && c.walkforward.span.length === 2 ? ` · ${c.walkforward.span[0]} – ${c.walkforward.span[1]}` : ''}`],
+      ['Months stood aside', plWhole((c.walkforward.stood_aside || []).length)], ['Beats random entries', plPct(c.walkforward.p_beat)],
+      [`Box for ${plText(c.walkforward.next && c.walkforward.next.month)}`, plText(c.walkforward.next && c.walkforward.next.cell)]] }] : []),
+      ...(c.numbers ? ['build', 'unseen'].filter((k) => c.numbers[k]).map((k) => ({ name: k === 'build' ? 'Build days' : k === 'unseen' && c.walkforward ? 'Test months' : 'Unseen days', rows: plEdgeRows(c.numbers[k]) })) : [])],
     accounts: plAccounts(c).map((p) => ({ name: plAccountName(p), rows: [['Pass the eval in 30 days', `${plPct(p.eval)}${plNum(p.eval) == null ? '' : plMicros(p.size)}`],
       ['Full payout in 30 days', `${plPct(p.payout)}${plNum(p.payout) == null ? '' : plMicros(p.payout_size)}`], ['Label', plCap(p.label)]] })),
     stages: Object.entries((c.stages && typeof c.stages === 'object' && c.stages) || {}).sort((a, b) => Number(a[0]) - Number(b[0]))

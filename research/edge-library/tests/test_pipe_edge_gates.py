@@ -295,3 +295,29 @@ def test_the_tag_is_live_plus_prop_only_when_sharpe_and_months_both_hold():
     assert ST._tag({"sharpe": 0.99, "months_positive": 0.9}) == "live"
     assert ST._tag({"sharpe": 2.0, "months_positive": 0.59}) == "live"
     assert ST._tag({"sharpe": None, "months_positive": 1.0}) == "live" and ST._tag({}) == "live"
+
+
+# ================================================================ 8. stage 6 is the 3:1 walk-forward (2026-10-18)
+
+def test_stage_6_decides_by_the_walk_forward_and_keeps_the_reads_lines_as_labels(monkeypatch):
+    lock = "L1"
+    read = {"lock": lock, "passed": False, "lines": [{"line": "4.4", "passed": False, "number": 0.5, "need": 0.95, "text": "4.4 FAIL beats 50 %"}],
+            "range": {"start": "2025-07-01", "end": "2026-09-22"}, "relatives": [], "gates": {"only": ["box", "4.4"], "box": -10.0}}
+    five = {"picked": {"sub": "s", "cell": "c1", "bar": "5"}, "tries": 1, "locked": {"default": "c1", "lock": lock}}
+    monkeypatch.setattr(ST, "_before", lambda name, ctx, n: five)
+    monkeypatch.setattr(ST, "_kw", lambda name, ctx: {"root": None, "out": None, "ledger": None, "days": None, "cells": None, "workers": None, "draws": None})
+    monkeypatch.setattr(ST.REC, "_json", lambda p: read)
+    monkeypatch.setattr(ST.REC, "_carded", lambda sub, root: Path("/nowhere"))
+
+    def walk(rows_ok):
+        out = [{"line": k, "passed": ok, "number": 1, "need": 0, "text": f"{k} {'PASS' if ok else 'FAIL'} x"} for k, ok in zip(("P6.1", "P6.2", "P6.3", "P6.4"), rows_ok)]
+        return {"rows": out, "passed": all(rows_ok), "months": ["2022-01", "2026-09"], "stood_aside": [], "picks": [{"month": "2022-01", "cell": "c1"}],
+                "next": {"month": "2026-10", "window": [], "cell": "c2"}, "random": {"p_beat": 0.97}, "split": {}}
+    monkeypatch.setattr(ST, "_walk", lambda sub, kw, ctx: walk((True, True, True, True)))
+    c = ST.stage6("wf_idea", {})
+    assert (c["passed"], c["result"]) == (True, "proven on history") and c["walkforward"]["next"]["cell"] == "c2"
+    assert [r["line"] for r in c["lines"][:4]] == ["P6.1", "P6.2", "P6.3", "P6.4"] and c["lines"][4]["passed"] is None      # the read's 4.4: a label
+    assert "the pick for 2026-10: c2" in c["text"]
+    monkeypatch.setattr(ST, "_walk", lambda sub, kw, ctx: walk((True, False, True, True)))
+    c = ST.stage6("wf_idea", {})
+    assert (c["passed"], c["result"]) == (False, "not proven") and "fails P6.2" in c["text"]

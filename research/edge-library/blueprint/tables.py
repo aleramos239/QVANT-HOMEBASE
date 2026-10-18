@@ -389,6 +389,21 @@ def avg_trade(st: dict, u: dict, ids: list):
 
 # ================================================================ the test days: the stores of the ONE read (runner.run_test)
 
+def test_store(out: Path, key: str, rng: dict, lock_hash: str) -> tuple:
+    """A store of THE ONE READ as the judge reads it -> (store, where). Refused: no store; runner.guard_test (the seal: written by the
+    engine's test switch, exactly the frozen range `rng`, the read of the lock `lock_hash`); a trade dated outside the range."""
+    out = Path(out)
+    f, where = out / key / "run.json", f"{out.name}/{key}"
+    if not f.exists():
+        raise J.Refuse(f"no store {where}: the read of the test days has not written it")
+    RUN.guard_test(json.loads(f.read_text()), where, rng["start"], rng["end"], lock_hash)
+    st = J.store({"dir": out, "key": key})
+    lo, hi = S._date(rng["start"]).toordinal(), S._date(rng["end"]).toordinal()
+    if len(st["date"]) and (int(st["date"].min()) < lo or int(st["date"].max()) > hi):
+        raise J.Refuse(f"store {where} holds a trade dated outside {rng['start']} .. {rng['end']}: it is not read")
+    return st, where
+
+
 def tested(spec: dict, lock: dict, out_dir=None) -> dict:
     """THE TABLE DATA OF THE ONE READ of a frozen idea, from the three stores runner.run_test wrote for its lock:
       net, n            the LOCKED variants (the lock's list: no second look at which ones count) on the session days the
@@ -408,18 +423,7 @@ def tested(spec: dict, lock: dict, out_dir=None) -> dict:
     if u["key"] != h["key"]:
         raise J.Refuse(f"the settings name the unit {u['key']}, the lock froze {h['key']}")
     rng, K = lock["test_range"][root], RUN.test_keys(u["key"], lock["store"], root, tf, sess)
-    lo, hi = S._date(rng["start"]).toordinal(), S._date(rng["end"]).toordinal()
-
-    def opened(key: str) -> tuple:
-        f, where = out / key / "run.json", f"{out.name}/{key}"
-        if not f.exists():
-            raise J.Refuse(f"no store {where}: the read of the test days has not written it")
-        RUN.guard_test(json.loads(f.read_text()), where, rng["start"], rng["end"], lock["hash"])
-        st = J.store({"dir": out, "key": key})
-        if len(st["date"]) and (int(st["date"].min()) < lo or int(st["date"].max()) > hi):
-            raise J.Refuse(f"store {where} holds a trade dated outside {rng['start']} .. {rng['end']}: it is not read")
-        return st, where
-
+    opened = lambda key: test_store(out, key, rng, lock["hash"])  # noqa: E731
     (st, where), (wst, _), (pst, pwhere) = opened(K["table"]), opened(K["worse"]), opened(K["pool"])
     ids = list(lock["variants"])
     for s, key in ((st, K["table"]), (wst, K["worse"])):

@@ -114,6 +114,17 @@ It says early whether the idea fits the account. It proves nothing: line 5.5 is 
 
 Not passed → back to phase 2 as a new round when one is left (it counts), otherwise shelved.
 
+> **In the pipeline since 2026-10-18 (the owner): phase 4 is a 3:1 walk-forward.** "The 3 month is the new build days and the 1
+> month is the new unseen days, it should still be 75% in and 25% out of sample." The pipeline still runs the one read below (so
+> every box has its trades on the test days), then every month from the 4th on is traded by the box picked on the 3 months before
+> it (the pipeline's own pick: the middle box by average trade of those that make money, have 15+ trades and win 3 points over the
+> breakeven of their realized reward-to-risk; none = the month stands aside). The stitched test months decide: net above $0, above
+> 95 % of the random tables (each month its pick's exit cell), the win rate rule, 200+ trades. Lines 4.1-4.9 are read and shown,
+> and ask nothing. The tuning windows reach into the test days: "tune only on build days" no longer holds for the pipeline. The
+> house law (CLAUDE.md, the owner's yes, 2026-10-18) retires the one read and "tune only on build days" for every route: the
+> out-of-sample method is the rolling 3:1 walk-forward over all data. `bp.py test` stays in the code because the pipeline uses it
+> to get the test-day trades. `blueprint/pipe_wf.py`; spec `docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`.
+
 ### Phase 4 — Out-of-sample test, 1 Jul 2025 → Sep 2026, one read. Approved for a real eval when all of these are true
 | # | Requirement | The number |
 |---|---|---|

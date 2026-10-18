@@ -115,3 +115,24 @@ eval or a funded account is a later step on the Desk, not a pipeline gate.
   on trade nets used by both reads.
 - The Book card's layout for the tag and the shown numbers.
 - The test fixtures' shape.
+
+## Addendum, 2026-10-18 later: stage 6 is a 3:1 walk-forward (the owner)
+
+The owner: "the 3 month is the new build days and the 1 month is the new unseen days, it should still be 75% in and 25% out of
+sample"; keep the early stages (0-5 on the build days, they weed out weak ideas) and replace the final test. Decisions taken in
+the walk-forward session are in `docs/superpowers/specs/2026-10-18-walkforward-3to1-design.md`, section 3.
+
+- **Data.** Stage 6 still runs the one read of the test days (oos.test) so every box of the locked table has its trades on
+  2025-07-01 .. latest. With the build store (every box, 2021-09-22 .. 2025-06-30) that is every box on every day: no new engine
+  switch. The read's own lines (box, 4.4, 4.1-4.9) become labels.
+- **Months.** The calendar's months; the first month is dropped when it starts after its 7th day (2021-09). Step k picks on months
+  k..k+2 and trades month k+3; every month from the 4th on is tested once.
+- **The pick per window** = the pipeline's own: the boxes whose window trades hold P3.2 (average trade above $0), P3.3 (at least
+  `walkforward.window_trades`, 15 -- Claude's call: the 200-trade rule scaled to 3 of 45 months) and P3.15; the middle of them by
+  average trade (`_outward`). No box holds: the month stands aside ($0, no trade).
+- **Stops on the stitched record** (rows P6.1-P6.4): net above $0; win rate at or above the realized-R:R breakeven + 3 points;
+  beats 95 % of random tables (each month's pick's exit cell, drawn from that month's pool -- the build pool before 2025-07, the
+  read's own pool after -- with the lock's draw seed and draws, summed over months); and at least `variant.region_trades` (200)
+  trades in all.
+- **Book card.** `numbers.unseen` = the stitched record; `walkforward` = {picks by month, months stood aside, `next`: the pick on
+  the last 3 whole months = the box to trade this month}. The tag reads the stitched record.

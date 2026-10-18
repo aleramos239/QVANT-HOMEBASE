@@ -266,6 +266,9 @@ test('a book card of the one pipeline (2026-10-18): its tag and its unseen-day n
   assert.deepEqual(Object.fromEntries(full.numbers[0].rows).Sharpe, '0.90');
   assert.deepEqual(L.plBookFull({ ...card, numbers: { unseen: {} } }, []).numbers[0].rows.every(([, v]) => v === '—'), true, 'a number missing shows —');
   assert.deepEqual(L.plBookFull(BOOK, []).numbers, [], 'an older card has no numbers, only its accounts');
+  const wf = L.plBookFull({ ...card, walkforward: { months: 57, span: ['2022-01', '2026-09'], stood_aside: ['2023-02'], p_beat: 0.9702, next: { month: '2026-10', cell: 'k0p2_pts30-r2' } } }, []);
+  assert.deepEqual(wf.numbers.map((n) => n.name), ['3:1 walk-forward', 'Build days', 'Test months'], 'the walk-forward first, its stitched months as the test');
+  assert.deepEqual(wf.numbers[0].rows, [['Test months', '57 · 2022-01 – 2026-09'], ['Months stood aside', '1'], ['Beats random entries', '97 %'], ['Box for 2026-10', 'k0p2_pts30-r2']]);
 });
 
 test('the whole book card: every fact, every account (one whose rules are not confirmed says so), each stage\'s first line', () => {
