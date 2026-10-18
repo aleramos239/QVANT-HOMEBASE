@@ -220,12 +220,14 @@ def delete(name: str, base: Path | None = None) -> bool:
 
 # ---------------------------------------------------------------- groups (the Lab's strategy list)
 # One small file beside the drafts says which group a strategy is shown under:
-#     <drafts dir>/groups.json = {"groups": [names, in the order they were made], "members": {strategy id: group}}
+#     <drafts dir>/groups.json = {"groups": [names, in the order they were made], "members": {strategy id: group},
+#                                 "status": {strategy id: keep | testing | dead}}   (status: only once one is set)
 # A strategy id is a built-in's id or a draft's draft_<name>; a strategy is in at most one group. Grouping
 # only ever writes this file: no strategy file is edited, moved or deleted for it.
 
 GROUPS_FILE = "groups.json"
 GROUP_MAX = 40
+STATUSES = ("keep", "testing", "dead")         # a strategy's status in the Lab list (the owner, 2026-10-18)
 _SID_RE = re.compile(r"^[A-Za-z0-9_]{1,80}$")
 _GROUPS_LOCK = threading.Lock()                # one read-change-write at a time (the routes run in worker threads)
 
@@ -256,15 +258,19 @@ def read_groups(base: Path | None = None) -> dict:
     try:
         raw = json.loads(p.read_text(encoding="utf-8"))
         if not isinstance(raw, dict) or not isinstance(raw.get("groups", []), list) \
-                or not isinstance(raw.get("members", {}), dict):
-            raise ValueError("expected {groups: [...], members: {...}}")
+                or not isinstance(raw.get("members", {}), dict) or not isinstance(raw.get("status", {}), dict):
+            raise ValueError("expected {groups: [...], members: {...}, status?: {...}}")
         names = [validate_group(g) for g in raw.get("groups", [])]
         members = {k: validate_group(g) for k, g in raw.get("members", {}).items()}
+        status = raw.get("status", {})
+        if any(not _SID_RE.fullmatch(k) or v not in STATUSES for k, v in status.items()):
+            raise ValueError(f"a status is one of {', '.join(STATUSES)}")
     except FileNotFoundError:
         return {"groups": [], "members": {}}
     except (OSError, ValueError) as e:
         raise GroupsUnreadable(f"{p.name} does not read ({e}): fix the file or remove it") from None
-    return {"groups": list(dict.fromkeys(names + list(members.values()))), "members": members}
+    out = {"groups": list(dict.fromkeys(names + list(members.values()))), "members": members}
+    return {**out, "status": dict(status)} if status else out
 
 
 def _edit_groups(change, base: Path | None) -> dict:
@@ -319,6 +325,24 @@ def remove_group(name, base: Path | None = None) -> dict:
         old = _group_in(st, name, need=True)
         st["groups"].remove(old)
         st["members"] = {k: g for k, g in st["members"].items() if g != old}
+    return _edit_groups(change, base)
+
+
+def set_status(sid, status, base: Path | None = None) -> dict:
+    """A strategy's status in the Lab list: keep, testing or dead -- or none (None or ""). Only this file changes."""
+    if not isinstance(sid, str) or not _SID_RE.fullmatch(sid):
+        raise ValueError("strategy: a built-in's id or a draft's draft_<name>")
+    if status not in (None, "") and status not in STATUSES:
+        raise ValueError(f"status: one of {', '.join(STATUSES)}, or none")
+
+    def change(st):
+        marks = st.setdefault("status", {})
+        if status:
+            marks[sid] = status
+        else:
+            marks.pop(sid, None)
+        if not marks:
+            st.pop("status")
     return _edit_groups(change, base)
 
 

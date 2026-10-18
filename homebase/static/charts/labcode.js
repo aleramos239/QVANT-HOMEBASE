@@ -271,6 +271,31 @@ function libFilter(rows, q) {
   const inOrder = (h) => { let k = 0; for (const c of h.replace(/ /g, '')) if (c === letters[k]) k++; return k === letters.length; };
   return letters.length > 1 ? rows.filter((r) => inOrder(libNorm(r.name)) || inOrder(libNorm(r.title))) : [];
 }
+/* ---- the list's status, sort and filter (the owner, 2026-10-18) ----
+   A strategy's status is the owner's own mark (groups.json "status": keep | testing | dead); the list can show only
+   some (Dead hidden by default), only one market, and be sorted instead of grouped. */
+const MARKS = { keep: 'Keep', testing: 'Testing', dead: 'Dead' };
+const LIB_SORTS = [['groups', 'Groups'], ['name', 'A–Z'], ['edited', 'Newest'], ['status', 'Status']];
+const LIB_SHOWS = [['live', 'Not dead'], ['all', 'All'], ['keep', 'Keep'], ['testing', 'Testing'], ['none', 'No status'], ['dead', 'Dead']];
+const markOf = (r, groups) => (r && r.id && groups && groups.status && groups.status[r.id]) || '';
+function libShow(rows, groups, show, market) {
+  return rows.filter((r) => {
+    const m = markOf(r, groups);
+    const ok = show === 'all' ? true : show === 'none' ? !m : show === 'keep' || show === 'testing' || show === 'dead' ? m === show : m !== 'dead';
+    return ok && (!market || r.root === market);
+  });
+}
+const MARK_RANK = { keep: 0, testing: 1, '': 2, dead: 3 };
+function libSort(rows, groups, sort) {
+  const nm = (r) => libNorm(r.title || r.name);
+  const byName = (a, b) => (nm(a) < nm(b) ? -1 : nm(a) > nm(b) ? 1 : 0);
+  const by = { name: byName, edited: (a, b) => String(b.modified || '').localeCompare(String(a.modified || '')),
+    status: (a, b) => MARK_RANK[markOf(a, groups)] - MARK_RANK[markOf(b, groups)] };
+  const f = by[sort];
+  if (!f) return rows;
+  return rows.map((r, i) => ({ r, i })).sort((a, b) => f(a.r, b.r) || byName(a.r, b.r) || a.i - b.i).map((x) => x.r);
+}
+const libMarkets = (rows) => [...new Set(rows.map((r) => r.root).filter(Boolean))].sort();
 const tkFind = (groups, id) => { for (const g of groups || []) { const it = g.items.find((x) => x.id === id); if (it) return it; } return null; };
 /* "runs" or "not yet: why"; null for a tool that is not a thing that runs on the build days (a skill, a script, a chat tool) */
 const tkStatus = (it) => (it.runs == null ? null : it.runs ? { tone: 'ok', text: 'runs' } : { tone: 'no', text: it.why_not ? `not yet: ${it.why_not}` : 'not yet' });
@@ -881,7 +906,7 @@ const payCurve = (scores) => (Array.isArray(scores) ? scores : []).filter((s) =>
 
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
-  libFilter, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
+  libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
   PL_LAST, PL_MARKETS, PL_SESSIONS, PL_SIDES, PL_WAYS, PL_INDS, plSession, plSide, plTone, plCount, plLive, plControl, plDots,
   plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,

@@ -1084,6 +1084,14 @@ async function deleteNow(names) {
    The groups and who is in them are the server's: one file beside the strategies, and no strategy's own file is
    ever changed for it. Which sections are folded shut is this browser's. */
 const folded = new Set();
+/* the list's sort, status filter and market (the owner, 2026-10-18): kept in this browser */
+const LIST_KEY = 'hb.labList';
+const listView = (() => { try { return { sort: 'groups', show: 'live', market: '', ...JSON.parse(localStorage.getItem(LIST_KEY) || '{}') }; } catch (_) { return { sort: 'groups', show: 'live', market: '' }; } })();
+function setListView(k, v) {
+  listView[k] = v;
+  try { localStorage.setItem(LIST_KEY, JSON.stringify(listView)); } catch (_) { /* this session only */ }
+  paintLibList();
+}
 try { for (const g of JSON.parse(localStorage.getItem('hb_lab_folded') || '[]')) folded.add(String(g)); } catch (_) { /* private mode: all open */ }
 const saveFolded = () => { try { localStorage.setItem('hb_lab_folded', JSON.stringify([...folded])); } catch (_) { /* private mode */ } };
 function foldGroup(el) {
@@ -1106,11 +1114,20 @@ async function regroup(path, body) {
 /* a row's ⋯: the one group this strategy is listed under */
 function fileMenu(el) {
   const { id, name, row } = el.dataset, to = [...S.groups.groups, ''], cur = S.groups.members[id] || '';
+  const mark = (S.groups.status || {})[id] || '', marks = [...Object.entries(C.MARKS), ['', 'No status']];
   const targets = row ? C.deleteTargets(S.picks, row) : [];       // a saved strategy's row also deletes: itself, or every picked one when it is picked
-  menu(el, `${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? '<small>✓</small>' : ''}</button>`).join('')}<hr>` : ''}
+  menu(el, `<h6>Status</h6>${marks.map(([m, t]) => `<button class="row" data-pick="st:${m}"><span>${t}</span>${m === mark ? '<small>✓</small>' : ''}</button>`).join('')}<hr>
+    ${to.length > 1 ? `<h6>Move to</h6>${to.map((g, i) => `<button class="row" data-pick="${i}"><span>${esc(g || 'Ungrouped')}</span>${g === cur ? '<small>✓</small>' : ''}</button>`).join('')}<hr>` : ''}
     <button class="row" data-pick="new"><span>New group…</span></button>${row ? `<hr><button class="row" data-pick="delete"><span>${esc(C.deleteItem(S.picks, row))}</span></button>` : ''}`,
   async (pick) => {
     if (pick === 'delete') return deleteStrategies(targets);
+    if (String(pick).startsWith('st:')) {
+      const m = String(pick).slice(3);
+      if (m === mark) return;
+      const r = await regroup('/status', { strategy: id, status: m || null });
+      if (!r.ok) log(`<span class="err">Status not set: ${esc(r.error)}</span>`);
+      return;
+    }
     if (pick === 'new') return nameGroup('', id, name);
     if (to[pick] === cur) return;
     const r = await regroup('/move', { strategy: id, group: to[pick] });
@@ -1210,18 +1227,26 @@ function libRows() {
       const b = S.bufs.get(`d:${d.name}`), dirty = b && isDirty(b);
       const bad = b && b.valid ? !b.valid.ok : !d.ok;
       const own = ownName(d.name), state = bad ? 'Needs a fix' : dirty ? 'Edited' : 'Draft';
-      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
+      return { key: `d:${d.name}`, id: d.id, name: d.name, title: own, root: (d.meta && d.meta.root) || '', modified: d.modified || '', locked: !!(S.desk && S.desk.has(d.name) && !S.unlocked.has(d.name)), dirty: !!dirty, sub: state, dot: bad ? 'err' : dirty ? 'off' : '', flag: bad ? '!' : '', desk: !!(S.desk && S.desk.has(d.name)) };
     })];
-  const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', lock: true, desk: S.deskBuiltins.has(s.id) }));
+  const builtins = S.builtins.map((s) => ({ key: `b:${s.id}`, id: s.id, name: s.name || s.id, sub: s.root || '', root: s.root || '', lock: true, desk: S.deskBuiltins.has(s.id) }));
   return { rows, builtins };
 }
 /* the rows as the list shows them, top to bottom (a folded group's rows are not shown) */
-const shownList = () => { const { rows, builtins } = libRows(); if (S.libQ.trim()) return C.libFilter([...rows, ...builtins], S.libQ); return S.groups ? C.shownRows(C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)), folded) : [...rows, ...builtins]; };
+/* what the list shows: the status / market filter first; then a search (best first), a sort (flat), or the groups */
+function listShape() {
+  const { rows, builtins } = libRows(), keep = (l) => C.libShow(l, S.groups, listView.show, listView.market);
+  const r = keep(rows), b = keep(builtins), all = [...r, ...b];
+  if (S.libQ.trim()) return { flat: C.libFilter(all, S.libQ), search: true, r, b };
+  if (listView.sort !== 'groups') return { flat: C.libSort(all, S.groups, listView.sort), r, b };
+  return S.groups ? { secs: C.withDeskGroup(C.sections(all, S.groups)), r, b } : { flat: null, r, b };
+}
+const shownList = () => { const v = listShape(); return v.flat || (v.secs ? C.shownRows(v.secs, folded) : [...v.r, ...v.b]); };
 /* the Strategies list under its search box: with a search, one flat list of what matches (best first); without, the groups */
 function libBody() {
-  const { rows, builtins } = libRows();
-  const item = (r) => `<button class="lb-item${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''} title="${esc([r.title ? `${r.name}.py` : '', r.lock ? 'Read-only' : r.locked ? 'On the Desk: locked. Open it and press the lock to edit.' : ''].filter(Boolean).join(' · '))}">
-        ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${esc(r.sub)}</small>${r.desk && !S.groups ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
+  const v = listShape(), { r: rows, b: builtins } = v;
+  const item = (r) => `<button class="lb-item${C.markOf(r, S.groups) === 'dead' ? ' dead' : ''}${S.cur === r.key ? ' sel' : ''}${S.picks.includes(r.key) ? ' picked' : ''}" data-key="${esc(r.key)}" aria-current="${S.cur === r.key}"${C.canPick(r) ? ` aria-selected="${S.picks.includes(r.key)}"` : ''} title="${esc([r.title ? `${r.name}.py` : '', r.lock ? 'Read-only' : r.locked ? 'On the Desk: locked. Open it and press the lock to edit.' : ''].filter(Boolean).join(' · '))}">
+        ${r.lock || r.locked ? ICON_LOCK : ICON_DOC}<span class="it"><b>${esc(r.title || r.name)}</b><small>${markPill(r)}${esc(r.sub)}</small>${r.desk && !S.groups ? '<i class="lb-desk" title="On the Desk page">On the Desk</i>' : ''}</span>${r.lock ? '<span></span>' : `<span class="lb-flag">${r.flag}</span>`}</button>`;
   /* with groups: each one a section that folds, then Ungrouped. A saved strategy's row carries a ⋯ that moves it. */
   const filed = (r) => (r.id ? `<div class="lb-row">${item(r)}<button class="hb-ib lb-more" data-act="file" data-id="${esc(r.id)}" data-name="${esc(r.name)}"${C.canPick(r) ? ` data-row="${esc(r.key)}"` : ''} aria-label="${C.canPick(r) ? `Move ${esc(r.name)} to a group, or delete it` : `Move ${esc(r.name)} to a group`}" title="${C.canPick(r) ? 'Move to a group, or delete' : 'Move to a group'}" aria-haspopup="menu">${ICON_MORE}</button></div>` : item(r));
   const section = (s) => {
@@ -1231,13 +1256,25 @@ function libBody() {
         ${s.name && !s.auto ? `<button class="hb-ib lb-more" data-act="group" data-g="${esc(s.name)}" data-n="${n}" aria-label="Rename or delete the group ${esc(s.name)}" title="Rename or delete" aria-haspopup="menu">${ICON_MORE}</button>` : ''}</div>
       <div class="lb-gb">${s.rows.map(filed).join('') || '<div class="lb-empty">Move a strategy here from its ⋯</div>'}</div></div>`;
   };
-  if (S.libQ.trim()) {
-    const hits = C.libFilter([...rows, ...builtins], S.libQ);
-    return hits.length ? hits.map(S.groups ? filed : item).join('') : `<div class="lb-empty">No strategy matches “${esc(S.libQ.trim())}”.</div>`;
+  if (v.flat) {
+    return v.flat.length ? v.flat.map(S.groups ? filed : item).join('')
+      : `<div class="lb-empty">${v.search ? `No strategy matches “${esc(S.libQ.trim())}”.` : 'No strategy with this status or market.'}</div>`;
   }
   return `${rows.length ? '' : '<div class="lb-empty">Nothing here yet. Press + to paste a script or start from a template.</div>'}
-    ${S.groups ? C.withDeskGroup(C.sections([...rows, ...builtins], S.groups)).map(section).join('')
+    ${v.secs ? v.secs.map(section).join('')
       : `${rows.map(item).join('')}<div class="lb-sh">Built-in</div>${builtins.map(item).join('')}`}`;
+}
+/* a row's status as a small pill before its sub-line */
+function markPill(r) { const m = C.markOf(r, S.groups); return m ? `<i class="lb-mark m-${m}">${C.MARKS[m]}</i>` : ''; }
+/* Sort, Show (by status) and Market, under the search box */
+function listTools(all) {
+  const opt = (v, t, cur) => `<option value="${esc(v)}"${v === cur ? ' selected' : ''}>${esc(t)}</option>`;
+  const mk = C.libMarkets(all);
+  return `<div class="lb-tools">
+    <select id="libSort" aria-label="Sort the list" title="Sort">${C.LIB_SORTS.map(([v, t]) => opt(v, t, listView.sort)).join('')}</select>
+    <select id="libShow" aria-label="Show by status" title="Show">${C.LIB_SHOWS.map(([v, t]) => opt(v, t, listView.show)).join('')}</select>
+    <select id="libMkt" aria-label="Market" title="Market">${opt('', 'Markets', listView.market)}${mk.map((m) => opt(m, m, listView.market)).join('')}</select>
+  </div>`;
 }
 /* the search box's own change: only the list under it is painted again, so the box keeps the caret */
 function paintLibList() {
@@ -1261,6 +1298,7 @@ function paintLib() {
   const { rows, builtins } = libRows(), n = rows.length + builtins.length;
   el.innerHTML = `<div class="lb-top lb-sw">${seg}<button class="hb-ib" data-act="new" data-fk="new" aria-label="New strategy" title="New strategy">${ICON_PLUS}</button></div>
     <div class="tk-find"><input id="libQ" type="search" placeholder="Find a strategy: ${n} in all" value="${esc(S.libQ)}" spellcheck="false" autocomplete="off" aria-label="Find a strategy"></div>
+    ${listTools([...rows, ...builtins])}
     <div id="libList">${libBody()}</div>`;
   el.scrollTop = top;
   if (q) { const n = $('#libQ'); if (n) { n.focus(); n.setSelectionRange(at, at); } }      // a repaint from elsewhere never takes the caret from the search box
@@ -2498,6 +2536,7 @@ root.addEventListener('input', (e) => {
   if (inChart(e)) return;
   const b = buf(), t = e.target;
   if (t.id === 'libQ') { S.libQ = t.value; paintLibList(); return; }
+  if (t.id === 'libSort' || t.id === 'libShow' || t.id === 'libMkt') { setListView({ libSort: 'sort', libShow: 'show', libMkt: 'market' }[t.id], t.value); return; }
   if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
   if (t.id === 'edTa' && b && b.kind !== 'builtin' && !locked(b)) {
     const wasEmpty = !b.code.trim();

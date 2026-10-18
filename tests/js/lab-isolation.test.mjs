@@ -83,6 +83,8 @@ test('grouping only ever posts to the groups routes: it never saves, rewrites or
 
 test('against a chart service from before groups the list is the plain one it was: no sections, no row menus', () => {
   assert.match(LAB, /if \(g\.ok\) S\.groups = g\.json;\s*\n\s*else if \(g\.status\) \{[^\n]*\n\s*S\.groups = null;/);
-  assert.match(LAB, /S\.groups \? C\.withDeskGroup\(C\.sections\(\[\.\.\.rows, \.\.\.builtins\], S\.groups\)\)\.map\(section\)\.join\(''\)\s*\n\s*: `\$\{rows\.map\(item\)\.join\(''\)\}<div class="lb-sh">Built-in<\/div>\$\{builtins\.map\(item\)\.join\(''\)\}`/);
+  // no groups: listShape gives no sections, and the list is the plain one with its Built-in header
+  assert.match(LAB, /return S\.groups \? \{ secs: C\.withDeskGroup\(C\.sections\(all, S\.groups\)\), r, b \} : \{ flat: null, r, b \};/);
+  assert.match(LAB, /\$\{v\.secs \? v\.secs\.map\(section\)\.join\(''\)\s*\n\s*: `\$\{rows\.map\(item\)\.join\(''\)\}<div class="lb-sh">Built-in<\/div>\$\{builtins\.map\(item\)\.join\(''\)\}`/);
   assert.match(LAB, /\$\{S\.groups \? '<hr><button data-pick="group">/, 'New group is offered only when there are groups to make');
 });

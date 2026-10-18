@@ -235,3 +235,32 @@ def test_grouping_changes_neither_the_catalog_nor_the_drafts_listing(tmp_path, d
         c.post("/api/tester/groups/move", json={"strategy": "draft_nq_bars", "group": "Opening range"}, headers=OK)
         assert c.get("/api/tester/strategies").content == catalog
         assert c.get("/api/tester/drafts").content == drafts
+
+
+# ---------------------------------------------------------------- a strategy's status (the owner, 2026-10-18)
+
+def test_a_status_is_kept_beside_the_groups_and_only_while_one_is_set(drafts_dir):
+    draftstore.set_group("draft_a", "Gold")
+    st = draftstore.set_status("draft_a", "keep")
+    assert st["status"] == {"draft_a": "keep"} and on_disk(drafts_dir) == st == draftstore.read_groups()
+    assert draftstore.set_status("nq930", "dead")["status"] == {"draft_a": "keep", "nq930": "dead"}
+    draftstore.set_status("draft_a", None)
+    st = draftstore.set_status("nq930", "")
+    assert st == {"groups": ["Gold"], "members": {"draft_a": "Gold"}}, "no status left: no status key"
+    for bad in ("maybe", 1):
+        with pytest.raises(ValueError):
+            draftstore.set_status("draft_a", bad)
+    (drafts_dir / "groups.json").write_text(json.dumps({"groups": [], "members": {}, "status": {"draft_a": "sure"}}))
+    with pytest.raises(draftstore.GroupsUnreadable):
+        draftstore.read_groups()
+
+
+def test_the_status_route(tmp_path, drafts_dir):
+    with client(tmp_path) as c:
+        r = c.post("/api/tester/groups/status", json={"strategy": "nq930", "status": "testing"}, headers=OK)
+        assert r.status_code == 200 and r.json()["status"] == {"nq930": "testing"}
+        assert c.get("/api/tester/groups").json()["status"] == {"nq930": "testing"}
+        assert c.post("/api/tester/groups/status", json={"strategy": "draft_nope", "status": "keep"}, headers=OK).status_code == 404
+        assert c.post("/api/tester/groups/status", json={"strategy": "nq930", "status": "sure"}, headers=OK).status_code == 400
+        assert c.post("/api/tester/groups/status", json={"strategy": "nq930", "status": "keep"}, headers=EVIL).status_code == 403
+        assert "status" not in c.post("/api/tester/groups/status", json={"strategy": "nq930", "status": None}, headers=OK).json()

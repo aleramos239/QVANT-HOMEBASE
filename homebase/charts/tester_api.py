@@ -543,6 +543,14 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             raise HTTPException(404, f"no strategy {sid!r}")
         return grouped(draftstore.set_group, sid, group)
 
+    @r.post("/groups/status")
+    def set_status(request: Request, body: dict):
+        sid, status = group_body(request, body, "strategy", "status")
+        known_ids = builtin_ids() | {draftstore.draft_id(n) for n, _ in draftstore.list_files()}
+        if not isinstance(sid, str) or sid not in known_ids:
+            raise HTTPException(404, f"no strategy {sid!r}")
+        return grouped(draftstore.set_status, sid, status)
+
     # ---- the blueprint toolkit in the Lab: the tools every chat has, listed and run from the page ------------
     box = _Blueprint()
     bp_specs = {s["name"]: s for s in blueprint_tools.SPECS}

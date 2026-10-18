@@ -741,3 +741,26 @@ test('the Strategies search: every word, "_" as a space, best match first, lette
   assert.deepEqual(keys('nqfvg'), ['d:nq_am_fvg15'], 'letters in order when nothing holds the word');
   assert.deepEqual(keys('zzz'), []);
 });
+
+test('the list by status and market, Dead hidden by default; sorted by name, last edited or status', () => {
+  const rows = [
+    { id: 'draft_b', name: 'b_orb', root: 'NQ', modified: '2026-10-01' },
+    { id: 'draft_a', name: 'a_vwap', root: 'ES', modified: '2026-10-09' },
+    { id: 'draft_c', name: 'c_dead', root: 'NQ', modified: '2026-10-05' },
+    { id: 'nq930', name: 'NQ 9:30', root: 'NQ' },
+    { name: 'Untitled' },                                        // not saved yet: no id, no status
+  ];
+  const g = { groups: [], members: {}, status: { draft_b: 'keep', draft_c: 'dead', nq930: 'testing' } };
+  const names = (l) => l.map((r) => r.name);
+  assert.deepEqual(names(L.libShow(rows, g, 'live', '')), ['b_orb', 'a_vwap', 'NQ 9:30', 'Untitled']);
+  assert.deepEqual(names(L.libShow(rows, g, 'all', '')).length, 5);
+  assert.deepEqual(names(L.libShow(rows, g, 'dead', '')), ['c_dead']);
+  assert.deepEqual(names(L.libShow(rows, g, 'none', '')), ['a_vwap', 'Untitled']);
+  assert.deepEqual(names(L.libShow(rows, g, 'keep', 'NQ')), ['b_orb']);
+  assert.deepEqual(names(L.libShow(rows, { groups: [], members: {} }, 'live', 'ES')), ['a_vwap'], 'no status file: nothing is dead');
+  assert.deepEqual(names(L.libSort(rows, g, 'name')), ['a_vwap', 'b_orb', 'c_dead', 'NQ 9:30', 'Untitled']);
+  assert.deepEqual(names(L.libSort(rows, g, 'edited')).slice(0, 3), ['a_vwap', 'c_dead', 'b_orb']);
+  assert.deepEqual(names(L.libSort(rows, g, 'status')), ['b_orb', 'NQ 9:30', 'a_vwap', 'Untitled', 'c_dead']);
+  assert.equal(L.libSort(rows, g, 'groups'), rows, 'groups: left to the sections');
+  assert.deepEqual(L.libMarkets(rows), ['ES', 'NQ']);
+});
