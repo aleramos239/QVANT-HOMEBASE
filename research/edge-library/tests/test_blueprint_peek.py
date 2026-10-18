@@ -2,7 +2,8 @@
 
 (a) THE CARD THAT FOOLED EVERY PHASE: nq_asia_liq_sweep (liq sweep, levels all, NQ, the evening session, 15-minute bars, entries
     from w_start, held to 01:55) FAILS on real build days -- on every cut inside its window, and the value that moves is the evening
-    level asia2000 (engine/levels.py reads all of 20:00-24:00 of the evening it trades) and no other level.
+    level asia2000 and no other level. The bug is PINNED by the fixture `uncapped`: levels.levels with the asia2000 read as it was
+    until 2026-10-17 (all of 20:00-24:00 of the evening before, at any moment), so the proof holds whether or not levels.py is fixed.
 (b) The same evening card on the prior day's levels only, and New York morning cards (the liq sweep on every level, a Donchian
     break with the level filter) PASS: the line names a real look-ahead, not the evening or the levels as such.
 (c) The parts, without a tape: the cut times (inside the card's window, the same for the same day), the book rows a garbled pass
@@ -34,6 +35,32 @@ ASIA = {"tf": "15", "sess": "eve", "hold_to": "day", "max_tr": 1, "mode": "sweep
 ASIA_VARIANTS = [{"w_start": w} for w in ("18:00", "19:00", "20:00", "21:00")]
 
 
+@pytest.fixture
+def uncapped(monkeypatch):
+    """engine/levels.py as it was before the owner's fix of 2026-10-17: asia2000 = the high / low of every print of 20:00-24:00 of the
+    evening before the trade date (at least EV_MIN of them), known at ANY moment -- inside that evening too. Written out here, so it
+    does not lean on the module's own helpers; the levels keep the order of levels.NAMES (the liq trigger takes the first price)."""
+    import levels as LV
+    real = LV.levels
+
+    def evening(st):
+        s, d = st._cx._s, st._cx.date
+        i, j = np.searchsorted(s.ts, [S.et_ns(d - dt.timedelta(days=1), "20:00"), S.et_ns(d, "00:00")])
+        return (float(s.px[i:j].max()), float(s.px[i:j].min())) if j - i >= LV.EV_MIN else None
+
+    def levels(st, which="all"):
+        out = real(st, which)
+        if which not in ("all", "asia2000"):
+            return out
+        out.pop("asia2000", None)
+        v = evening(st)
+        if v is not None:
+            out["asia2000"] = v
+        return {k: out[k] for k in (*LV.NAMES, *out) if k in out} if which == "all" else out
+
+    monkeypatch.setattr(LV, "levels", levels)
+
+
 def cells(fixed: dict, variants: list) -> list:
     """A store's cells as run.json keeps them: one exit (xi 0) per variant, the full inputs."""
     return [{"id": f"v{i}", "vi": i, "xi": 0, "variant": v, "exit": EXIT, "inputs": {**fixed, **v}} for i, v in enumerate(variants)]
@@ -51,7 +78,7 @@ def days(n: int = 4) -> list:
 
 # ================================================================ (a) the card that fooled every phase
 
-def test_the_asia_liq_sweep_card_looks_ahead_and_the_evening_level_is_what_moves():
+def test_the_asia_liq_sweep_card_looks_ahead_and_the_evening_level_is_what_moves(uncapped):
     r = P.read("liq", "NQ", ["eve"], cells(ASIA, ASIA_VARIANTS), days=days())
     assert r["line"] == "1.7" and r["passed"] is False and r["text"].startswith("1.7 FAIL the rule looks ahead: on ")
     assert r["cuts"] >= 9 and r["number"] == r["cuts"]                         # every cut lies in 18:00-23:59, before the evening level's window ends
@@ -124,7 +151,7 @@ def test_differ_names_the_first_thing_that_moved_at_or_before_the_cut():
                           "level asia2000 15,040 / 14,960 -> 15,398.25 / 14,960")
 
 
-def test_of_store_reads_an_engine_store_and_not_a_hand_made_one():
+def test_of_store_reads_an_engine_store_and_not_a_hand_made_one(uncapped):
     with tempfile.TemporaryDirectory() as tmp:
         hand = Path(tmp) / "hand-NQ-tf5"
         hand.mkdir()
