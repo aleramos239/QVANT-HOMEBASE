@@ -27,7 +27,8 @@ THE RULE (fixed here, before any run):
   * TURN (the owner, 2026-10-18: "if the first candle is bearish, the candle that sweeps the wick and closes within the body must be
     bullish, and vice versa"). `turn` = on (off, the default: every run before it is unchanged): a long also needs the PREVIOUS bar red
     (close < open) and THIS bar green (close > open); a short needs the previous bar green and this bar red. A doji (close = open) is
-    neither colour.
+    neither colour. `turn` = same (the owner, 2026-10-18: "it must be green green or red red"): a long needs the previous bar AND
+    this bar green, a short both red.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -114,12 +115,15 @@ def ema_last(closes, n: int):
     return e
 
 
-def signal(po, ph, pl, pc, o, h, l, c, back, turn=False):
+def signal(po, ph, pl, pc, o, h, l, c, back, turn="off"):
     """+1 long / -1 short / 0: THIS bar (o, h, l, c) against the PREVIOUS bar (po, ph, pl, pc) (module docstring, THE RULE, TURN)."""
     lo_line = {"range": pl, "body": min(po, pc), "far": max(po, pc)}[back]
     hi_line = {"range": ph, "body": max(po, pc), "far": min(po, pc)}[back]
-    long = l < pl and c > lo_line and (not turn or (pc < po and c > o))
-    short = h > ph and c < hi_line and (not turn or (pc > po and c < o))
+    long, short = l < pl and c > lo_line, h > ph and c < hi_line
+    if turn == "on":                                # the previous bar the other colour, this bar the trade's
+        long, short = long and pc < po and c > o, short and pc > po and c < o
+    elif turn == "same":                            # both bars the trade's colour
+        long, short = long and pc > po and c > o, short and pc < po and c < o
     return 0 if long == short else (1 if long else -1)
 
 
@@ -127,7 +131,7 @@ class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
     DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "turn": "off", "max_tr": 20}
-    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on")),
+    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")),
               "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
@@ -149,7 +153,7 @@ class CandleSweep(Template):
         if self.nb < 2:
             return
         O, H, L, C = self.O, self.H, self.L, self.C
-        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"] == "on")
+        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"])
         self.sx = (L[-1], H[-1], C[-1])
 
     def _candles(self):
@@ -171,7 +175,7 @@ class CandleSweep(Template):
             self.done = j
             if j >= 2:
                 (_, po, ph, pl, pc), (_, o, h, l, c) = cd[j - 2], cd[j - 1]
-                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"] == "on")
+                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"])
                 self.sx = (l, h, c)
 
     def ema1h(self, ctx):

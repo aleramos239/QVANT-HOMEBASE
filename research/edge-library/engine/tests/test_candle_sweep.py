@@ -178,7 +178,7 @@ def test_dir_runs_one_side_only():
 
 # ---- (iv) the written rule on random days --------------------------------------------------------------------------------------------------
 
-def reference(bars, tf, sess, back, turn=False):
+def reference(bars, tf, sess, back, turn="off"):
     """The rule restated from the docstring on full days of minute bars from 00:00 (every clock slot has a print)."""
     s0, s1 = S.SESS[sess]
     tb = [(bars[j][0], max(b[1] for b in bars[j:j + tf]), min(b[2] for b in bars[j:j + tf]), bars[j + tf - 1][3])
@@ -189,8 +189,11 @@ def reference(bars, tf, sess, back, turn=False):
         (po, ph, pl, pc), (o, h, l, c) = tb[k - 1], tb[k]
         lo = {"range": pl, "body": min(po, pc), "far": max(po, pc)}[back]
         hi = {"range": ph, "body": max(po, pc), "far": min(po, pc)}[back]
-        long = l < pl and c > lo and (not turn or (pc < po and c > o))
-        short = h > ph and c < hi and (not turn or (pc > po and c < o))
+        long, short = l < pl and c > lo, h > ph and c < hi
+        if turn == "on":
+            long, short = long and pc < po and c > o, short and pc > po and c < o
+        elif turn == "same":
+            long, short = long and pc > po and c > o, short and pc < po and c < o
         if long != short and s0 < end <= s1 and end < s1 - 300:
             out.append((end, "long" if long else "short"))
     return out
@@ -236,15 +239,25 @@ def test_turn_needs_a_red_then_green_candle_for_a_long_and_green_then_red_for_a_
     assert signals(on, day(doji)) == [] and signals({}, day(doji)) == [(sec(9, 45), "long")]
 
 
+def test_turn_same_needs_both_bars_the_trades_colour():
+    same = {"turn": "same"}
+    assert signals(same, day(long_bar(15005.0))) == [(sec(9, 45), "long")]            # green, then green back into its body
+    assert signals(same, day(red_long(15002.0))) == []                                 # red before a long: no
+    assert signals(same, day(long_bar(14999.0))) == [] and signals({"back": "range"}, day(long_bar(14999.0))) == [(sec(9, 45), "long")]
+    assert signals(same, day(short_bar(14995.0))) == [(sec(9, 45), "short")]           # red, then red back into its body
+    assert signals(same, day(green_short(14998.0))) == []                              # green before a short: no
+
+
 @pytest.mark.parametrize("tf", [5, 15])
 @pytest.mark.parametrize("sess", ["london", "nyam", "pm"])
 def test_turn_signals_equal_the_written_rule_on_random_days(tf, sess):
     n = 0
     for seed in (3, 8, 11, 21, 5, 13):
         bars = rand_bars(960, seed, p0=PX, step=4.0 if seed % 2 else 8.0)
-        want = reference(bars, tf, sess, "body", turn=True)
-        assert signals({"back": "body", "tf": str(tf), "sess": sess, "turn": "on"}, bars) == want, seed
-        n += len(want)
+        for turn in ("on", "same"):
+            want = reference(bars, tf, sess, "body", turn=turn)
+            assert signals({"back": "body", "tf": str(tf), "sess": sess, "turn": turn}, bars) == want, (seed, turn)
+            n += len(want)
     assert n > 0
 
 
@@ -361,7 +374,7 @@ def test_the_settings_and_their_limits():
     d, sc = CS.CandleSweep.defaults(), CS.CandleSweep.schema()
     assert (d["back"], d["ema1h"], d["candle"], d["max_tr"], d["dir"]) == ("body", 0, 0, 20, "both")
     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
-    assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on")) and d["turn"] == "off"
+    assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on", "same")) and d["turn"] == "off"
     for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
                 {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):
         with pytest.raises(ValueError):
