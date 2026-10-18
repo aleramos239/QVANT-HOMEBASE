@@ -8,6 +8,7 @@ Synthetic days with EXACT numbers cover each behaviour (a flat day at 15000 with
 signal list against an independent restatement of the rule at every bar size, session and `back`; the real BUILD days check the invariants
 (window, one position, flat 15:58) at 1 worker. No net, win rate or profit factor is read.
 """
+import numpy as np
 import pytest
 
 import families
@@ -209,13 +210,82 @@ def test_the_signals_equal_the_written_rule_on_random_days(tf, sess, back):
         assert n > 0, "the random days never swept a candle: the comparison would be empty"
 
 
+# ---- (iv b) the 1-hour EMA (ema1h) -------------------------------------------------------------------------------------------------------
+
+def test_hour_closes_are_the_last_print_of_each_whole_hour_that_has_ended():
+    t0 = ns("00:00")
+    H = CS.HOUR
+    ts = np.array([t0 + 10, t0 + H - 5, t0 + H + 1, t0 + 2 * H + 7, t0 + 2 * H + 9, t0 + 3 * H + 1], np.int64)
+    px = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+    assert CS.hour_closes(ts, px, t0, t0 + 3 * H + 30).tolist() == [2.0, 3.0, 5.0]       # the 03:00 hour has not ended
+    assert CS.hour_closes(ts, px, t0, t0 + 3 * H).tolist() == [2.0, 3.0, 5.0]
+    assert CS.hour_closes(ts, px, t0, t0 + 3 * H - 1).tolist() == [2.0, 3.0]
+    assert CS.hour_closes(ts, px, t0 + H, t0 + 3 * H).tolist() == [3.0, 5.0]
+    assert CS.hour_closes(ts, px, t0, t0 + H - 1).tolist() == []
+
+
+def test_ema_last_is_seeded_with_the_first_close_and_needs_n_closes():
+    assert CS.ema_last([1.0, 2.0], 3) is None
+    a = 2.0 / 4
+    e = 10.0
+    for c in (12.0, 9.0, 15.0):
+        e += a * (c - e)
+    assert CS.ema_last([10.0, 12.0, 9.0, 15.0], 3) == pytest.approx(e)
+
+
+def with_prior(monkeypatch, level, n=150):
+    seen = []
+
+    def fake(st, need):
+        seen.append(need)
+        return np.full(n, level)
+    monkeypatch.setattr(CS, "prior_closes", fake)
+    return seen
+
+
+def test_ema1h_lets_a_long_above_the_ema_and_a_short_below_it_only(monkeypatch):
+    with_prior(monkeypatch, 14000.0)                                                   # the EMA sits far under 15000
+    assert [x[1] for x in orders({"ema1h": 50}, day(long_bar(15005.0)))[0]] == ["long"]
+    assert orders({"ema1h": 50}, day(short_bar(14995.0)))[0] == []
+    with_prior(monkeypatch, 16000.0)                                                   # far over it
+    assert orders({"ema1h": 50}, day(long_bar(15005.0)))[0] == []
+    assert [x[1] for x in orders({"ema1h": 50}, day(short_bar(14995.0)))[0]] == ["short"]
+    assert [x[1] for x in orders({"ema1h": 0}, day(long_bar(15005.0)))[0]] == ["long"]     # off: no EMA is read
+
+
+def test_ema1h_with_too_few_closes_is_no_trade_and_asks_for_three_times_n(monkeypatch):
+    seen = with_prior(monkeypatch, 14000.0, n=0)
+    assert orders({"ema1h": 50}, day(long_bar(15005.0)))[0] == []                      # today holds 9 hour closes (00:00 .. 09:00), not 50
+    assert seen == [150 - 9]
+    assert [x[1] for x in orders({"ema1h": 9}, day(long_bar(15005.0)))[0]] == ["long"]   # 9 closes are enough for EMA(9): 15000 < 15005
+
+
+def test_ema1h_reads_only_the_hours_that_have_ended(monkeypatch):
+    with_prior(monkeypatch, 14000.0)
+    got = []
+
+    class Look(CS.CandleSweep):
+        def ema1h(self, ctx):
+            e = super().ema1h(ctx)
+            got.append(e)
+            return e
+    base = day(long_bar(15005.0))
+    run({"ema1h": 50}, base, Look)
+    moved = list(base)
+    for i in range(9 * 60, 9 * 60 + 15):                                               # the 09:00 hour has not ended at 09:45
+        o, h, l, c, v = moved[i]
+        moved[i] = (o + 3, h + 3, l + 3, c + 3, v)
+    run({"ema1h": 50}, moved, Look)
+    assert len(got) == 2 and got[0] == got[1]
+
+
 # ---- (v) the settings and the registry -----------------------------------------------------------------------------------------------------
 
 def test_the_settings_and_their_limits():
     d, sc = CS.CandleSweep.defaults(), CS.CandleSweep.schema()
-    assert (d["back"], d["max_tr"], d["dir"]) == ("body", 20, "both")
-    assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20)
-    for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}):
+    assert (d["back"], d["ema1h"], d["max_tr"], d["dir"]) == ("body", 0, 20, "both")
+    assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
+    for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5}):
         with pytest.raises(ValueError):
             CS.CandleSweep({"tf": "15", **bad})
 
