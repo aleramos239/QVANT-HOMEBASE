@@ -29,6 +29,9 @@ function setPrefs(patch) {
   emit('prefs');
 }
 function on(fn) { subs.add(fn); return () => subs.delete(fn); }
+/* Every fill the desk reports ({account, fill}), whoever placed it -- sounds.js; called before the views move on. */
+const anyFills = new Set();
+function onAnyFill(fn) { anyFills.add(fn); return () => anyFills.delete(fn); }
 /* Coalesced to one call per frame: a burst of account events redraws once. */
 function emit(why) {
   if (queued) { queued.add(why); return; }
@@ -55,6 +58,7 @@ function onMessage(m) {
     if (i >= 0) list[i] = d; else list.push(d);
   } else if (m.event === 'bot') desk.state.bot = d;
   else if (m.event === 'fill') {
+    if (d && d.fill) for (const fn of [...anyFills]) { try { fn(d); } catch (e) { console.error(e); } }
     if (d && d.fill) {
       if (ours.has(String(d.fill.order_id))) fillToast(d);
       else if (unclaimed.push(d) > UNCLAIMED_MAX) unclaimed.shift();
@@ -178,7 +182,7 @@ function merged() { return T.withPaper(desk.state, window.HBPaperClient ? window
 
 window.HBDeskClient = {
   get state() { return merged(); }, get down() { return desk.down; }, quotes: desk.quotes,
-  get prefs() { return desk.prefs; }, setPrefs, on, onMessage, send, toast, botHistory,
+  get prefs() { return desk.prefs; }, setPrefs, on, onAnyFill, onMessage, send, toast, botHistory,
   mode: (cellTrade) => T.tradeMode({ state: merged(), down: desk.down }, cellTrade),   // ONE chart's mode, from its own {accounts}
   gate: () => T.deskGate(desk),                        // the desk-level half alone (null: up and on)
   bookChanged: () => emit('account'),                  // the PAPER account changed (app.js, on a /ws paperbook push)

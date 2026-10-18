@@ -35,6 +35,7 @@ const asPrecision = (v) => (v === '' ? null : Number(v));
    algo?: true (the chart's desk algo: host.algoChoices / host.setAlgo, not a setting),
    accounts?: true (the Trading tab's ACCOUNTS list: the chart's own accounts, not a setting),
    pref?: {key, kind?: 'switch', min, max, note} (a viewer-wide trade preference: host.prefs / host.setPrefs),
+   sound?: {kind: 'switch' | 'volume' | 'event', key?} (HBSounds, this browser's: on / volume / an event's sound),
    caption?: text (a plain note line, no control)}. */
 const TABS = [
   { id: 'symbol', label: 'Symbol', icon: 'candles', sections: [
@@ -150,6 +151,15 @@ const TABS = [
       { caption: 'Every chart. Off: that surface asks to confirm first.' },
     ]],
   ] },
+  // trade sounds (the owner, 2026-10-18): this browser's, every chart, off until switched on; changed at once
+  { id: 'sounds', label: 'Sounds', icon: 'alert', sections: [
+    ['SOUNDS', [
+      { label: 'Play sounds', sound: { kind: 'switch' } },
+      { label: 'Volume', sound: { kind: 'volume' } },
+      { caption: 'Every chart, this browser. The ▶ plays a sound.' },
+    ]],
+    ['WHEN', (window.HBSounds ? window.HBSounds.EVENTS : []).map(([key, label]) => ({ label, sound: { kind: 'event', key } }))],
+  ] },
   { id: 'data', label: 'Data', icon: 'download', sections: [
     ['REFRESH', [
       { refresh: true },
@@ -179,7 +189,8 @@ function mount(box, host) {
   }]));
   // 2026-09-28 three-tabs plan: the host offers no trade capabilities at all on a page with no trading
   // module (the Backtest tab) -- the Trading tab itself has nothing to show there, so it is left out.
-  const tabList = host.accountRows ? TABS : TABS.filter((t) => t.id !== 'trading');
+  const tabList = (host.accountRows ? TABS : TABS.filter((t) => t.id !== 'trading'))
+    .filter((t) => t.id !== 'sounds' || (host.accountRows && window.HBSounds));   // trade sounds: a trading page only
   // host.tab: which tab to open on (the order panel's "Change" opens Trading); anything else starts on Symbol
   let work = S.normalize(cell.settings()), tab = Math.max(0, tabList.findIndex((t) => t.id === host.tab)), done = false, raf = 0;
   const swatches = new Map();   // colour key -> the <i> inside its swatch button
@@ -733,6 +744,43 @@ function mount(box, host) {
     return box;
   }
 
+  /* A Sounds row's control (HBSounds): the master switch, the volume, or one event's sound with a ▶ to hear it. */
+  function soundCtl(r, ctl) {
+    const Snd = window.HBSounds, cur = Snd.get(), { kind, key } = r.sound;
+    if (kind === 'switch') {
+      const sw = button('switch' + (cur.on ? ' on' : ''));
+      sw.setAttribute('role', 'switch');
+      sw.setAttribute('aria-checked', String(cur.on));
+      sw.setAttribute('aria-label', r.label);
+      sw.onclick = () => {
+        Snd.set({ on: !Snd.get().on });
+        const on = Snd.get().on;
+        sw.classList.toggle('on', on);
+        sw.setAttribute('aria-checked', String(on));
+        if (on) Snd.play(Snd.get().events.entry !== 'off' ? Snd.get().events.entry : 'pop');
+      };
+      ctl.append(sw);
+    } else if (kind === 'volume') {
+      const v = mk('input', 'set-range');
+      v.type = 'range'; v.min = '0'; v.max = '100'; v.step = '5';
+      v.value = String(Math.round(cur.volume * 100));
+      v.setAttribute('aria-label', r.label);
+      v.oninput = () => Snd.set({ volume: Number(v.value) / 100 });
+      v.onchange = () => Snd.play('ding');
+      ctl.append(v);
+    } else {
+      const s = mk('select', 'set-select');
+      s.setAttribute('aria-label', r.label);
+      for (const [v, text] of [...Snd.SOUNDS, ['off', 'Off']]) { const o = mk('option', '', text); o.value = v; s.append(o); }
+      s.value = cur.events[key] || 'off';
+      const hear = button('set-play', '▶');
+      hear.title = 'Play it';
+      hear.setAttribute('aria-label', `Play the ${r.label.toLowerCase()} sound`);
+      hear.onclick = () => { if (s.value !== 'off') Snd.play(s.value); };
+      s.onchange = () => { Snd.set({ events: { [key]: s.value } }); if (s.value !== 'off') Snd.play(s.value); };
+      ctl.append(s, hear);
+    }
+  }
   function row(r) {
     if (r.accounts) {   // the ACCOUNTS list: a block of its own, not a label + control row
       const el = mk('div', 'set-accts');
@@ -789,6 +837,7 @@ function mount(box, host) {
       ctl.append(n);
       if (unit) ctl.append(mk('span', 'set-unit', unit));
     }
+    if (r.sound) soundCtl(r, ctl);
     if (r.pref) {   // a viewer-wide trade preference (the one-click switches): every chart's, not this one's
       const { key, kind, min, max, note } = r.pref, cur = host.prefs ? host.prefs() : {};
       if (kind === 'switch') {

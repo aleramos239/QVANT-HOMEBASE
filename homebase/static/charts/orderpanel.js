@@ -795,6 +795,7 @@ function watchBe() {
       if (s.error) { D().toast('err', `Breakeven: ${s.error}`); continue; }
       if (s.action === 'none') continue;
       D().toast('ok', `Breakeven reached — stop to ${Cat.fmtPrice(s.price, cell.tick)}`);
+      if (window.HBSounds) window.HBSounds.event('moved');
       if (s.action === 'move') UI().moveLine(cell, s.line, s.price, a.root, cell.tick, { noConfirm: true });
       else UI().addExit(cell, g, 'sl', s.price, a.root, cell.tick, { noConfirm: true });
       return;   // one send at a time (the in-flight lock); the next pass takes the next line
@@ -815,6 +816,7 @@ function trail(a, cell, groups, pos, last) {
     if (s.action === 'none') continue;
     a.sentAt = Date.now();
     saveArms();
+    if (window.HBSounds) window.HBSounds.event('moved');
     if (s.action === 'move') UI().moveLine(cell, s.line, s.price, a.root, cell.tick, { noConfirm: true });
     else UI().addExit(cell, g, 'sl', s.price, a.root, cell.tick, { noConfirm: true });
     return true;
@@ -834,7 +836,13 @@ function serverArm(body) {
     .catch((e) => { D().toast('err', `Not armed on the server: ${e.message} — the order itself was sent`); return null; });
 }
 function pollServerArms() {
-  serverCall('').then((d) => { serverArms = Array.isArray(d.arms) ? d.arms : []; }).catch(() => { /* not available (replay): none */ });
+  serverCall('').then((d) => {
+    const next = Array.isArray(d.arms) ? d.arms : [];
+    // the server moved a stop since the last look (an arm's sent_at went up): its sound
+    if (next.some((a) => { const was = serverArms.find((x) => x.id === a.id); return was && a.sent_at > was.sent_at; })
+      && window.HBSounds) window.HBSounds.event('moved');
+    serverArms = next;
+  }).catch(() => { /* not available (replay): none */ });
 }
 function cancelArm(a) {
   if (!a.server) { dropBe(a.id); return; }

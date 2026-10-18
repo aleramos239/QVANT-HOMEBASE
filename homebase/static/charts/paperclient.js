@@ -99,6 +99,10 @@ const unclaimed = new Map();
 function accounts() { return book.accounts; }
 function limits() { return book.limits; }
 function onFill(fn) { fillSubs.add(fn); return () => fillSubs.delete(fn); }
+/* Every new fill on a paper account ({...fill, account}), whoever placed it -- sounds.js; called before the views move
+   on, so the order that filled is still the one last seen. */
+const anyFills = new Set();
+function onAnyFill(fn) { anyFills.add(fn); return () => anyFills.delete(fn); }
 function announce(list) { for (const f of list) for (const fn of [...fillSubs]) { try { fn(f); } catch (e) { console.error(e); } } }
 /* A /ws {"type":"paperbook", accounts, limits} push: the latest views; announces fills of our own orders it adds
    ({...fill, account}) -- or keeps them for send() when their order's answer has not landed yet. Anything that is
@@ -106,19 +110,21 @@ function announce(list) { for (const f of list) for (const fn of [...fillSubs]) 
 function onBook(m) {
   const list = (m && Array.isArray(m.accounts) ? m.accounts : [])
     .filter((a) => a && typeof a === 'object' && typeof a.id === 'string' && PAPER_ID_RE.test(a.id));
-  const fresh = [], seen = new Set();
+  const fresh = [], seen = new Set(), all = [];
   for (const a of list) {
     for (const f of Array.isArray(a.fills) ? a.fills : []) {
       if (!f) continue;
       const k = `${a.id}:${f.id}`;
       seen.add(k);
       if (!seenFills || seenFills.has(k)) continue;           // history, or already looked at
+      all.push({ ...f, account: a.id });
       if (ours.has(`${a.id}:${f.order_id}`)) fresh.push({ ...f, account: a.id });
       else unclaimed.set(k, { ...f, account: a.id });
     }
   }
   for (const k of [...unclaimed.keys()]) if (!seen.has(k)) unclaimed.delete(k);
   seenFills = seen;
+  for (const f of all) for (const fn of [...anyFills]) { try { fn(f); } catch (e) { console.error(e); } }
   book.accounts = list;
   book.limits = (m && m.limits) || null;
   announce(fresh);
@@ -156,5 +162,5 @@ async function createAccount(name, startBalance) {
   return { status, data };
 }
 
-window.HBPaperClient = { strategies, state, on, onMessage, history, accounts, limits, onBook, onFill, send, createAccount };
+window.HBPaperClient = { strategies, state, on, onMessage, history, accounts, limits, onBook, onFill, onAnyFill, send, createAccount };
 })();
