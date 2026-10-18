@@ -32,6 +32,7 @@ THE RULE (fixed here, before any run):
     chart's do: today's from 18:00 of the evening before up to the decision, before them the sessions before today (each 18:00 of its
     evening before to 17:00), newest back, until 3 x n closes are held (the EMA's start has faded below 1 %), the first session of the
     contract (a roll day) or 30 sessions. Seeded with the oldest close, then e += 2 / (n + 1) x (close - e).
+    The sessions before today are read with the blueprint BUILD key (to 2025-06-30, as orb830): a read of the unseen days refuses.
 
 NO LOOK-AHEAD, where it could hide: the test reads the two tf bars that have closed (O / H / L / C of each), nothing after them; the
 decision's clock is the tf bar's close, taken from the last 1-minute bar the Template has added.
@@ -71,7 +72,7 @@ def session_closes(root: str, iso: str):
     """The 1-hour closes of one whole session (18:00 ET of its evening before to 17:00), from its tape; None = no tape."""
     key = (root, iso)
     if key not in _CLOSES:
-        t, d = S.load_tape(iso, root), S._date(iso)
+        t, d = S.load_tape(iso, root, allow_holdout=S.ALLOW_BP), S._date(iso)     # build days only (as orb830): a test-day read refuses
         _CLOSES[key] = None if t is None or not len(t.ts) else \
             hour_closes(t.ts, t.px, S.et_ns(d - dt.timedelta(days=1), "18:00"), S.et_ns(d, "17:00"))
     return _CLOSES[key]
