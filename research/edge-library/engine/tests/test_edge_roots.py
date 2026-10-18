@@ -20,8 +20,9 @@ import sim_validate as V
 D = dt.date(2023, 3, 14)
 T0 = S.et_ns(D, "09:30")
 RUNS = S.REPO / "homebase" / ".state" / "tester" / "runs"
-ES_BUNDLES = [("straddle", "20260930-172655-draft_pp_es_straddle-3074"), ("orb", "20260930-172525-draft_pp_es_orb-fe82"),
-              ("donchian", "20260930-172817-draft_pp_es_donchian-a235")]            # RE screen runs (in-sample, sess all)
+ES_BUNDLES = [("straddle", "20261017-225406-draft_pp_es_straddle-5768"), ("orb", "20261017-225408-draft_pp_es_orb-0941"),
+              ("donchian", "20261017-225409-draft_pp_es_donchian-201f")]            # RE screen runs again (2021-2024, sess all, tf 30/5/15;
+                                                                                    # the 2026-09-30 ones were pruned 2026-10-17; ~/.homebase/tester_keep.json holds these)
 
 
 def tape(root, prints, d=D):
@@ -116,6 +117,8 @@ def test_level2_features_and_options_are_nq_only():
 
 @pytest.mark.parametrize("fam,rid", ES_BUNDLES, ids=[b[0] for b in ES_BUNDLES])
 def test_es_reproduces_the_es_pilot_tester_bundle_on_one_quarter(fam, rid):
+    if not (RUNS / rid / "run.json").exists():      # the tester's prune (3 days, 2026-10-17) took the 2026-09-30 bundles: a run of the Lab, not a file of this repo
+        pytest.skip(f"tester run {rid} is not on this machine: run draft_pp_es_{fam} again in the Lab (in-sample, sess all) and put its id in ES_BUNDLES")
     run = json.loads((RUNS / rid / "run.json").read_text())
     assert run["range"]["end"] < "2025-01-01" and not run["range"]["holdout"] and run["strategy"]["root"] == "ES"
     assert (run["qty"], run["commission"], run["slippage_ticks"], run["engine"]) == (1, 4.0, 1.0, "tick-2")
