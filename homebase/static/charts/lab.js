@@ -1992,9 +1992,24 @@ const HEAT_SUGGEST = { 'ctl.stop_pts': '10, 15, 20, 25', 'ctl.stop_atr': '1, 1.5
   'ctl.target_rr': '1, 2, 3', 'ctl.stop_wins': '0, 1, 2', 'ctl.stop_losses': '0, 1, 2', 'ctl.max_trades': '0, 1, 2, 3', 'ctl.max_consec_losses': '0, 2, 3',
   'ctl.entry_from': '09:35, 10:00, 10:30', 'ctl.entry_to': '10:30, 11:30, 12:00', 'ctl.flat_at': '11:30, 15:55', 'ctl.direction': 'both, long, short',
   'ctl.day_loss': '0, 500, 1000', 'ctl.day_profit': '0, 1000, 2000', 'ctl.cooldown_min': '0, 5, 15, 30', 'ctl.max_hold_min': '0, 15, 30, 60',
-  'ctl.stop_mode': 'own, fixed, atr', 'ctl.target_mode': 'own, fixed, rr', 'ctl.atr_minutes': '1, 5, 15', 'ctl.atr_period': '7, 14, 21' };
+  'ctl.stop_mode': 'own, fixed, atr, candle', 'ctl.target_mode': 'own, fixed, rr', 'ctl.atr_minutes': '1, 5, 15', 'ctl.atr_period': '7, 14, 21',
+  'ctl.be_after_pts': '0, 5, 10, 15, 20', 'ctl.trail_pts': '0, 5, 10, 15, 20', 'ctl.trail_after_pts': '0, 5, 10', 'ctl.stop_candle_ticks': '0, 2, 4, 8',
+  'ctl.exit_line': 'off, vwap, vwap_rth, ema20, ema50', 'ctl.be_offset_ticks': '0, 1, 4', 'ctl.exit_line_min': '1, 5, 15' };
 const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 'the strategy\'s own stop', 'ctl.target_pts': 'the strategy\'s own target',
-  'ctl.target_atr': 'the strategy\'s own target', 'ctl.target_rr': 'the strategy\'s own target', 'ctl.bar_minutes': 'the strategy\'s own bar' };
+  'ctl.target_atr': 'the strategy\'s own target', 'ctl.target_rr': 'the strategy\'s own target', 'ctl.bar_minutes': 'the strategy\'s own bar',
+  'ctl.be_after_pts': 'no breakeven', 'ctl.trail_pts': 'no trailing stop', 'ctl.trail_after_pts': 'trail from the fill' };
+/* The Exit lab (the owner, 2026-10-18): the heat map set up to try exits on this strategy's own entries -- breakeven x a trailing
+   stop, and its own stop vs the signal candle's. 0 / own = the strategy as it is. Run it on the build days. */
+const EXIT_LAB = [['ctl.be_after_pts', '0, 5, 10, 15, 20'], ['ctl.trail_pts', '0, 5, 10, 15, 20'], ['ctl.stop_mode', 'own, candle']];
+function exitLab() {
+  const b = buf(), f = b && formOf(b);
+  if (!f) return;
+  const h = heatState(f);
+  if (heatBusy(h)) return;
+  h.rows = EXIT_LAB.map(([key, text]) => ({ key, text }));
+  S.heatOpen = true;
+  paintRes();
+}
 function heatSuggest(inp) {
   if (!inp) return '';
   if (HEAT_SUGGEST[inp.key]) return HEAT_SUGGEST[inp.key];
@@ -2043,6 +2058,7 @@ function heatSettingsHtml(f, meta) {
     <div class="grid heat-grid">${heatPickHtml(f, meta, h)}
       <div class="sep"></div>
       <div class="heat-note${chk.bad ? ' bad' : ''}" id="heatNote">${esc(chk.note)}</div>
+      <button class="btn btn-sm btn-outline heat-exit" data-act="exitlab"${busy ? ' disabled' : ''} title="Fill the heat map with exits to try on this strategy: breakeven × trailing stop × own vs candle stop">Exit lab</button>
       <button class="btn btn-sm heat-run" data-act="${busy ? 'heatcancel' : 'heatrun'}" id="heatBtn"${!busy && (chk.bad || !chk.n) ? ' disabled' : ''}>${busy ? 'Cancel' : 'Run heat map'}</button>
     </div>
     <div class="heat-res" id="heatRes">${heatResHtml(f, meta)}</div></details>`;
@@ -2144,7 +2160,8 @@ async function heatCell(i) {
 /* ---- Trade rules (2026-10-12): the engine's run controls (backtest/controls.py, mirrored in tester.js) as a settings group.
    Off by default; they hold for every strategy here, whatever its code does. A mode select repaints so only the number it
    reads shows; every number field blank = that rule off. */
-const RULE_AUX = new Set(['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'atr_minutes', 'atr_period']);
+const RULE_AUX = new Set(['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'atr_minutes', 'atr_period', 'stop_candle_ticks',
+  'be_offset_ticks', 'trail_after_pts', 'exit_line_min']);
 function rulesHtml(f, meta) {
   const raw = f.controls || {}, c = X.controlsClean(raw), D = X.CONTROLS;
   const n = Object.keys(c).filter((k) => !RULE_AUX.has(k)).length;
@@ -2174,10 +2191,18 @@ function rulesHtml(f, meta) {
       ${num('cooldown_min', 'Cool off after a loss (min)', 'Minutes with no new entry after a losing trade')}
       ${num('max_hold_min', 'Close after (min held)', 'A trade open this long is closed at the next print')}
       <div class="sep"></div>
-      ${sel('stop_mode', 'Stop', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['none', 'No stop']], 'Replaces the strategy\'s stop, measured from the fill')}
-      ${stopMode === 'fixed' ? num('stop_pts', 'Stop (points)', 'Distance from the fill', 0.25) : stopMode === 'atr' ? num('stop_atr', 'Stop (× ATR)', 'Multiple of the ATR at the entry', 0.1) : ''}
+      ${sel('stop_mode', 'Stop', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['candle', 'Signal candle'], ['none', 'No stop']], 'Replaces the strategy\'s stop, measured from the fill')}
+      ${stopMode === 'fixed' ? num('stop_pts', 'Stop (points)', 'Distance from the fill', 0.25) : stopMode === 'atr' ? num('stop_atr', 'Stop (× ATR)', 'Multiple of the ATR at the entry', 0.1)
+        : stopMode === 'candle' ? num('stop_candle_ticks', 'Past the candle (ticks)', 'The stop sits this many ticks past the last closed signal candle\'s high / low', 1).replace('placeholder="off"', 'placeholder="0"') : ''}
       ${sel('target_mode', 'Target', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['rr', 'R multiple of the stop'], ['none', 'No target']], 'Replaces the strategy\'s target, measured from the fill')}
       ${tgtMode === 'fixed' ? num('target_pts', 'Target (points)', 'Distance from the fill', 0.25) : tgtMode === 'atr' ? num('target_atr', 'Target (× ATR)', 'Multiple of the ATR at the entry', 0.1) : tgtMode === 'rr' ? num('target_rr', 'Target (× stop)', 'Multiple of the stop distance', 0.25) : ''}
+      <div class="sep"></div>
+      ${num('be_after_pts', 'Breakeven after (points)', 'Once the trade is this far in profit, the stop moves to the fill + 1 tick (never looser)', 0.25)}
+      ${num('be_offset_ticks', 'Breakeven + (ticks)', 'How far into profit the breakeven stop sits (used with Breakeven after)', 1).replace('placeholder="off"', 'placeholder="1"')}
+      ${num('trail_pts', 'Trailing stop (points)', 'The stop follows the best price since the fill by this much, tick by tick, only tighter', 0.25)}
+      ${num('trail_after_pts', 'Trail after (points)', 'Start trailing once the trade is this far in profit (empty: from the fill; used with Trailing stop)', 0.25).replace('placeholder="off"', 'placeholder="0"')}
+      ${sel('exit_line', 'Exit on close through', [['', 'Off'], ['vwap', 'VWAP (from the Globex open)'], ['vwap_rth', 'VWAP (from 09:30)'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50']], 'Close the trade when a bar closes back through this line: a long below it, a short above')}
+      ${c.exit_line ? sel('exit_line_min', 'Exit line bars', [[1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar the close is read on') : ''}
       ${usesAtr ? `${sel('atr_minutes', 'ATR bars', [[1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar size the ATR is read on')}${num('atr_period', 'ATR length', 'Bars averaged: the mean true range of the last N closed bars before the entry', 1).replace('placeholder="off"', 'placeholder="14"')}` : ''}
     </div></details>`;
 }
@@ -2351,6 +2376,7 @@ function act(name, el) {
   else if (name === 'run') run();
   else if (name === 'cancel') cancelRun();
   else if (name === 'heatrun') heatRun();
+  else if (name === 'exitlab') exitLab();
   else if (name === 'heatcancel') heatCancel();
   else if (name === 'heatcell') heatCell(Number(el.dataset.i));
   else if (name === 'show') showOnChart(false);
@@ -2437,7 +2463,7 @@ root.addEventListener('input', (e) => {
     if (!f) return;
     if (t.dataset.c) {
       f.controls = X.setControl(f.controls, t.dataset.c, t.value);
-      if (t.tagName === 'SELECT' && /_mode$/.test(t.dataset.c)) paintRes();     // only the number this mode reads shows
+      if (t.tagName === 'SELECT' && /_mode$|^exit_line$/.test(t.dataset.c)) paintRes();     // only the number this mode reads shows
     } else if (t.dataset.in) {
       const inp = (meta.inputs || []).find((i) => i.key === t.dataset.in);
       f.inputs[inp.key] = inp.type === 'bool' ? t.checked : inp.type === 'choice' ? t.value : t.value === '' ? NaN : Number(t.value);

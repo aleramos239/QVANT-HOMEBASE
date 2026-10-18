@@ -134,6 +134,8 @@ class Position:
     order_price: float | None
     sl: Order | None = None
     tp: Order | None = None
+    be: Order | None = None         # run controls: the breakeven's trigger (a touch, never a fill)
+    trail: Order | None = None      # run controls: the trailing stop's next ratchet (a touch)
 
 
 @dataclass
@@ -304,6 +306,8 @@ class _Sim:
         self._ids = 0
         self._ctx: Ctx | None = None   # set by run_session
         self.ctl = controls            # run controls (controls.Controls) or None: the engine's one old path
+        self.sig_min = 1               # run controls: the signal bar (minutes) a candle stop reads (run_session sets it)
+        self.lines: dict = {}          # run controls: bar end ns -> (close, line) for exit_line (run_session fills it)
         self.st = {"entries": 0, "wins": 0, "losses": 0, "consec": 0, "pnl": 0.0, "last_loss": None}
 
     # ---- orders
@@ -368,6 +372,64 @@ class _Sim:
         trs = [max(h - l, abs(h - pc), abs(l - pc)) for (h, l, _), (_, _, pc) in zip(rows[1:], rows)]
         return sum(trs) / len(trs)
 
+    def candle(self) -> tuple | None:
+        """(low, high) of the last CLOSED signal bar (sig_min minutes) before now -- at a bar's close, that bar -- or None."""
+        step = self.sig_min * 60_000_000_000
+        b1 = self.now - self.now % step
+        j0, j1 = bisect_left(self.ts, b1 - step, 0, self.hi), bisect_left(self.ts, b1, 0, self.hi)
+        if j1 <= j0:
+            return None
+        seg = self.px[j0:j1]
+        return min(seg), max(seg)
+
+    def set_stop(self, pos: "Position", price: float, k: int) -> None:
+        """Breakeven / trailing: the position's stop to `price` -- only tighter, and only at least a tick on the safe side
+        of print k (a stop at or through the price would be refused at a broker); it can trigger from the NEXT print."""
+        t = self.tick
+        price = to_tick(price, t)
+        if tick_cmp(pos.side * (self.px[k] - price), t, t) < 0:
+            return
+        if pos.sl is not None:
+            if tick_cmp(pos.side * (price - pos.sl.price), 0.0, t) <= 0:
+                return
+            pos.sl.price, pos.sl.min_i = price, max(pos.sl.min_i, k + 1)
+            return
+        self._ids += 1
+        pos.sl = Order(self._ids, -pos.side, "stop", price, pos.qty, k + 1, role="sl", pos=pos)
+        self.orders.append(pos.sl)
+
+    def touch(self, pos: "Position", role: str, level: float, k: int) -> Order:
+        """A breakeven / trailing trigger: a stop-type touch on the position's own side (a long's at or above the level),
+        that moves the stop when it triggers and never fills."""
+        self._ids += 1
+        o = Order(self._ids, pos.side, "stop", to_tick(level, self.tick), pos.qty, k + 1, role=role, pos=pos)
+        self.orders.append(o)
+        return o
+
+    def arm(self, pos: "Position", k: int) -> None:
+        """Run controls on a fresh position: its breakeven trigger and its trailing stop."""
+        c = self.ctl
+        if c.be_after_pts:
+            pos.be = self.touch(pos, "be", pos.entry_px + pos.side * c.be_after_pts, k)
+        if c.trail_pts:
+            if c.trail_after_pts:
+                pos.trail = self.touch(pos, "trail", pos.entry_px + pos.side * c.trail_after_pts, k)
+            else:
+                self.set_stop(pos, pos.entry_px - pos.side * c.trail_pts, k)
+                pos.trail = self.touch(pos, "trail", pos.entry_px + pos.side * self.tick, k)
+
+    def ratchet(self, o: Order, k: int) -> None:
+        """A breakeven / trailing trigger touched at print k: the stop moves (BE once; the trail follows print k, the best
+        since the last ratchet, and waits for the next tick beyond it)."""
+        pos, c = o.pos, self.ctl
+        if o.role == "be":
+            pos.be = None
+            self.set_stop(pos, pos.entry_px + pos.side * c.be_offset_ticks * self.tick, k)
+            return
+        best = self.px[k]
+        self.set_stop(pos, best - pos.side * c.trail_pts, k)
+        pos.trail = self.touch(pos, "trail", best + pos.side * self.tick, k)
+
     def override(self, side: int, price, ref, sl, tp, tp_rr):
         """The stop / target the run controls ask for, as (ov, sl, tp, tp_rr, refusal). The planned levels are
         measured from the entry's own reference; `_fill` re-measures them from the fill."""
@@ -391,6 +453,13 @@ class _Sim:
         ov_sl, ov_tp = ("own", 0.0), ("own", 0.0)
         if c.stop_mode == "none":
             sl, ov_sl = None, ("none", 0.0)
+        elif c.stop_mode == "candle":
+            ext = self.candle()
+            if ext is None:
+                return None, sl, tp, tp_rr, "no closed signal candle"
+            buf = c.stop_candle_ticks * self.tick
+            sl = to_tick(ext[0] - buf if side > 0 else ext[1] + buf, self.tick)
+            ov_sl = ("level", sl)
         elif c.stop_mode != "own":
             d = dist(c.stop_mode, c.stop_pts, c.stop_atr)
             sl, ov_sl = to_tick(r - side * d, self.tick), ("dist", d)
@@ -413,6 +482,13 @@ class _Sim:
             for o in [o for o in self.orders if o.role == "entry"]:
                 self.cancel(o)
                 self.refuse("outside the entry window")
+        elif what == "line" and self.positions:
+            v = self.lines.get(self.now)                    # this bar's close and the line, both at its close
+            if v is not None:
+                close, line = v
+                k = self.i if self.i < self.hi else self.hi - 1
+                for pos in [p for p in self.positions if self.ts[p.entry_i] < self.now and p.side * (close - line) < 0]:
+                    self._close(pos, to_tick(self.px[k] - pos.side * self.slip, self.tick), k, "line")
         elif what == "hold" and self.positions:
             limit = self.ctl.max_hold_min * 60_000_000_000
             k = self.i if self.i < self.hi else self.hi - 1
@@ -457,6 +533,11 @@ class _Sim:
         self.i = max(self.i, j)
 
     def _fill(self, o: Order, k: int) -> None:
+        if o.role in ("be", "trail"):                       # run controls: a touch moves the stop, nothing fills
+            o.status = "filled"
+            self.orders.remove(o)
+            self.ratchet(o, k)
+            return
         if self.ctl is not None and o.role == "entry":
             why = self.gate(int(self.ts[k]), o.side)        # a working order meets the rules at its FILL
             if why:
@@ -488,6 +569,8 @@ class _Sim:
             (m_sl, d_sl), (m_tp, d_tp) = o.ov
             if m_sl == "dist":
                 sl = to_tick(fill - o.side * d_sl, self.tick)
+            elif m_sl == "level":                           # the candle's extreme: at least a tick past the fill
+                sl = d_sl if tick_cmp(o.side * (fill - d_sl), self.tick, self.tick) >= 0 else to_tick(fill - o.side * self.tick, self.tick)
             elif m_sl == "none":
                 sl = None
             if m_tp == "dist":
@@ -507,9 +590,11 @@ class _Sim:
         o.fill_px, o.fill_sl, o.fill_tp = fill, sl, tp      # recording only (Order.fill_px)
         o.fill_ms = int(self.ts[k]) // 1_000_000
         self.positions.append(pos)
+        if self.ctl is not None:
+            self.arm(pos, k)
 
     def _close(self, pos: Position, fill: float, k: int, reason: str) -> None:
-        for x in (pos.sl, pos.tp):
+        for x in (pos.sl, pos.tp, pos.be, pos.trail):
             if x is not None:
                 self.cancel(x)
         self.positions.remove(pos)
@@ -573,6 +658,34 @@ def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int) -
     return out
 
 
+def exit_lines(ts, px, size, hi: int, d, t0: int, t1: int, kind: str, minutes: int) -> dict:
+    """Run controls' exit_line: {bar end ns: (close, line)} for every `minutes` bar ending inside (t0, t1), the line at
+    that bar's close -- vwap from the tape's first print (the Globex open), vwap_rth from 09:30, ema20 / ema50 of the bar
+    closes from the tape's first print. Bars before a line exists are left out."""
+    if hi <= 0:
+        return {}
+    step = minutes * 60_000_000_000
+    start = et_ns(d, "09:30") if kind == "vwap_rth" else int(ts[0])
+    bars = build_bars(ts, px, size, 0, hi, start - start % step, t1, minutes)
+    n = int(kind[3:]) if kind.startswith("ema") else 0
+    a, ema, pv, vol, out = (2.0 / (n + 1)) if n else 0.0, None, 0.0, 0, {}
+    i0 = 0
+    for b in bars:
+        if n:
+            ema = b.c if ema is None else ema + a * (b.c - ema)
+            line = ema
+        else:
+            i0 = bisect_left(ts, b.start_ns, i0, hi)
+            i1 = bisect_left(ts, b.end_ns, i0, hi)
+            pv += sum(p * s for p, s in zip(px[i0:i1], size[i0:i1]))
+            vol += sum(size[i0:i1])
+            i0 = i1
+            line = pv / vol if vol else None
+        if line is not None and t0 < b.end_ns < t1:
+            out[b.end_ns] = (b.c, line)
+    return out
+
+
 def split_flow(ts, px, size, lo: int, hi: int, bars: list[Bar]) -> None:
     """Give each bar `buy` / `sell` volume by the tick rule (an uptick is a buy, a downtick a sell, an
     unchanged price keeps the last side), carried across bars; the first print of the window has no side
@@ -623,6 +736,7 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
         else:
             sim.refuse("signal bar size not offered by this strategy (its own bars used)")
     strategy.bar_min_eff = bm                       # what scan() / on_bar read when the bar size was swapped
+    sim.sig_min = bm or 1                           # run controls: the candle a candle stop reads
     if bm:
         b0, b1 = strategy.bar_window or strategy.session_window
         bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm)
@@ -648,6 +762,9 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
             events.append((et_ns(d, controls.entry_to), 2, 10_001, "ctl", "close"))
         if controls.max_hold_min:
             events += [(t, 3, 0, "ctl", "hold") for t in range(t0 + 60_000_000_000, t1, 60_000_000_000)]
+        if controls.exit_line:
+            sim.lines = exit_lines(ts, px, tape.size, hi, d, t0, t1, controls.exit_line, controls.exit_line_min)
+            events += [(t, 3, 1, "ctl", "line") for t in sim.lines]
     events.sort(key=lambda e: e[:3])
     for t, _, _, kind, arg in events:
         if t >= t1:

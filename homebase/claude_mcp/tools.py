@@ -75,8 +75,11 @@ _CONTROLS = {
     "type": "object", "description": "Trade rules for the run, enforced by the engine for any strategy (all off by "
     "default): entry_from / entry_to / flat_at (NY HH:MM), direction (both|long|short), max_trades, stop_wins, "
     "stop_losses, max_consec_losses, day_loss / day_profit ($, closed P&L), cooldown_min (after a loss), "
-    "max_hold_min, stop_mode (own|fixed|atr|none) with stop_pts or stop_atr, target_mode (own|fixed|atr|rr|none) "
-    "with target_pts / target_atr / target_rr, atr_minutes (1|5|15), atr_period.",
+    "max_hold_min, stop_mode (own|fixed|atr|candle|none) with stop_pts or stop_atr (candle: past the last closed "
+    "signal candle by stop_candle_ticks), target_mode (own|fixed|atr|rr|none) with target_pts / target_atr / target_rr, "
+    "atr_minutes (1|5|15), atr_period; exits: be_after_pts (breakeven: stop to the fill + be_offset_ticks, default 1, "
+    "once that far in profit), trail_pts (tick trailing stop; trail_after_pts to start it later), exit_line "
+    "(vwap|vwap_rth|ema20|ema50: out when an exit_line_min bar closes back through it).",
     "additionalProperties": True}
 _INPUTS = {"type": "object", "description": "Strategy inputs by key (see list_strategies / read_strategy); "
                                             "anything left out takes its default.",

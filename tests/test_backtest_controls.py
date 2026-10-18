@@ -252,3 +252,87 @@ def test_signal_bar_size_parse():
     assert parse({"bar_minutes": 0}) == {} and parse({"bar_minutes": "5"}) == {"bar_minutes": 5}
     with pytest.raises(ValueError, match="bar_minutes"):
         parse({"bar_minutes": 3})
+
+
+# ---- the Exit lab's exits (the owner, 2026-10-18): breakeven, a tick trailing stop, the candle stop, the line exit
+def test_new_exit_fields_parse_and_drop_what_nothing_reads():
+    assert parse({"be_offset_ticks": 3, "trail_after_pts": 2, "stop_candle_ticks": 2, "exit_line_min": 15}) == {}
+    assert parse({"be_after_pts": 4}) == {"be_after_pts": 4.0}
+    assert parse({"stop_mode": "candle", "stop_candle_ticks": 2})["stop_candle_ticks"] == 2
+    assert parse({"exit_line": "ema20", "exit_line_min": "1"}) == {"exit_line": "ema20", "exit_line_min": 1}
+    with pytest.raises(ValueError):
+        parse({"exit_line": "sma9"})
+    with pytest.raises(ValueError):
+        parse({"be_offset_ticks": 1.5, "be_after_pts": 4})
+
+
+def test_breakeven_moves_the_stop_one_tick_into_profit_once_the_price_has_run():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 104.0), ("09:32", 101.0), ("09:33", 100.25), ("09:34", 100.0),
+            ("09:40", 95.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=95.0)}, {"be_after_pts": 4}).trades
+    assert (t.exit_reason, t.exit_price, t.sl) == ("sl", 100.25, 100.25)
+    t, = go(rows, {"09:30:00": long_at(sl=95.0)}, {"be_after_pts": 5}).trades       # never reached 105: the old stop
+    assert (t.exit_price, t.sl) == (95.0, 95.0)
+    t, = go(rows, {"09:30:00": long_at(sl=95.0)}, {"be_after_pts": 4, "be_offset_ticks": 0}).trades
+    assert t.exit_price == 100.0
+    gap = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 104.0), ("09:32", 101.0), ("09:33", 99.0)]
+    t, = go(gap, {"09:30:00": long_at(sl=95.0)}, {"be_after_pts": 4}).trades
+    assert (t.sl, t.exit_price) == (100.25, 99.0), "a gap through the moved stop costs the gap (the fill law)"
+    short = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 96.0), ("09:32", 99.75), ("09:33", 101.0)]
+    t, = go(short, {"09:30:00": short_at(sl=105.0)}, {"be_after_pts": 4}).trades
+    assert (t.exit_price, t.sl) == (99.75, 99.75)
+
+
+def test_breakeven_never_loosens_a_tighter_stop():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 104.0), ("09:32", 101.0), ("09:33", 99.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=101.0)}, {"be_after_pts": 4}).trades
+    assert t.sl == 101.0 and t.exit_price == 101.0
+
+
+def test_trailing_stop_follows_the_best_print_and_only_tightens():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 101.0), ("09:32", 103.0), ("09:33", 102.5),
+            ("09:34", 101.5), ("09:35", 101.0), ("09:40", 90.0)]
+    t, = go(rows, {"09:30:00": long_at()}, {"trail_pts": 2}).trades
+    assert (t.exit_reason, t.exit_price, t.sl) == ("sl", 101.0, 101.0)      # best 103 -> stop 101; 102.5 never loosened it
+    t, = go(rows, {"09:30:00": long_at()}, {"trail_pts": 2, "trail_after_pts": 4}).trades
+    assert t.exit_reason == "eod" and t.sl is None                          # never 4 points up: no stop was set
+    t, = go(rows, {"09:30:00": long_at(sl=99.5)}, {"trail_pts": 2, "trail_after_pts": 3}).trades
+    assert t.exit_price == 101.0                                           # 103 reached: trailing from there
+
+
+def test_candle_stop_sits_past_the_last_closed_candle():
+    rows = [("09:29:00", 100.0), ("09:29:20", 98.0), ("09:29:40", 101.0), ("09:29:59", 100.0), ("09:30:05", 100.0),
+            ("09:31", 98.5), ("09:32", 97.75), ("09:33", 90.0)]
+    t, = go(rows, {"09:30:00": long_at(sl=50.0)}, {"stop_mode": "candle", "stop_candle_ticks": 1}).trades
+    assert (t.sl, t.exit_price) == (97.75, 97.75)
+    t, = go(rows, {"09:30:00": long_at()}, {"stop_mode": "candle", "target_mode": "rr", "target_rr": 1}).trades
+    assert (t.sl, t.tp) == (98.0, 102.0)                                    # 1 x (100 - 98)
+    t, = go(rows, {"09:30:00": short_at()}, {"stop_mode": "candle", "stop_candle_ticks": 2}).trades
+    assert t.sl == 101.5
+    high = [("09:29:00", 102.0), ("09:29:59", 103.0), ("09:30:05", 100.0), ("09:31", 90.0)]   # the candle is all above the fill
+    t, = go(high, {"09:30:00": long_at()}, {"stop_mode": "candle"}).trades
+    assert t.sl == 99.75, "never at or past the fill: one tick past it"
+    res = go([("09:28:00", 100.0), ("09:30:05", 100.0)], {"09:30:00": long_at()}, {"stop_mode": "candle"})   # 09:29 had no print
+    assert res.trades == [] and res.blocked == {"no closed signal candle": 1}
+
+
+def test_line_exit_closes_on_a_bar_close_through_vwap_at_the_next_print():
+    rows = [("09:30:01", 100.0), ("09:30:30", 101.0), ("09:31:10", 99.0), ("09:31:50", 98.0), ("09:32:05", 97.0), ("09:40", 90.0)]
+    t, = go(rows, {"09:30:00": long_at()}, {"exit_line": "vwap_rth", "exit_line_min": 1}).trades
+    # 09:31 bar closes 101 over vwap 100.5: held; 09:32 bar closes 98 under vwap 99.5: out at the 09:32:05 print
+    assert (t.exit_reason, t.exit_price) == ("line", 97.0)
+    up = [("09:30:01", 100.0), ("09:30:30", 101.0), ("09:31:10", 102.0), ("09:31:50", 103.0), ("09:40", 104.0)]
+    t, = go(up, {"09:30:00": long_at()}, {"exit_line": "vwap_rth", "exit_line_min": 1}).trades
+    assert t.exit_reason == "eod"
+    t, = go(rows, {"09:30:00": short_at()}, {"exit_line": "vwap_rth", "exit_line_min": 1}).trades
+    assert t.exit_reason == "line" and t.exit_price == 99.0                 # 09:31 bar closed 101 over vwap: out at 09:31:10
+
+
+def test_ema_line_is_built_from_closed_bars_only():
+    from homebase.backtest.engine import exit_lines
+    tp = tape([(f"09:{m:02d}:30", 100.0 + m) for m in range(30, 40)])
+    lines = exit_lines(tp.ts, tp.px, tp.size, len(tp.ts), D, et_ns(D, "09:25"), et_ns(D, "16:00"), "ema20", 1)
+    first = min(lines)
+    assert first == et_ns(D, "09:31:00") and lines[first] == (130.0, 130.0)     # seeded with the first close
+    close, line = lines[et_ns(D, "09:32:00")]
+    assert close == 131.0 and abs(line - (130.0 + 2 / 21 * 1.0)) < 1e-9

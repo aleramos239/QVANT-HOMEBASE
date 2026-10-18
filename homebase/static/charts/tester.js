@@ -112,9 +112,13 @@ const CONTROLS = {
   direction: ['choice', 'both', ['both', 'long', 'short']],
   max_trades: ['int', 0, 0, 50], stop_wins: ['int', 0, 0, 50], stop_losses: ['int', 0, 0, 50], max_consec_losses: ['int', 0, 0, 50],
   day_loss: ['float', 0, 0, 1e6], day_profit: ['float', 0, 0, 1e6], cooldown_min: ['int', 0, 0, 600], max_hold_min: ['int', 0, 0, 1440],
-  stop_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'none']], stop_pts: ['float', 0, 0, 5000], stop_atr: ['float', 0, 0, 50],
+  stop_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'candle', 'none']], stop_pts: ['float', 0, 0, 5000], stop_atr: ['float', 0, 0, 50],
+  stop_candle_ticks: ['int', 0, 0, 200],
   target_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'rr', 'none']], target_pts: ['float', 0, 0, 5000], target_atr: ['float', 0, 0, 50],
   target_rr: ['float', 0, 0, 50],
+  // the Exit lab's exits (the owner, 2026-10-18): breakeven, a tick trailing stop, a close through a line
+  be_after_pts: ['float', 0, 0, 5000], be_offset_ticks: ['int', 1, 0, 100], trail_pts: ['float', 0, 0, 5000], trail_after_pts: ['float', 0, 0, 5000],
+  exit_line: ['choice', '', ['', 'vwap', 'vwap_rth', 'ema20', 'ema50']], exit_line_min: ['choice', 5, [1, 5, 15]],
   bar_minutes: ['choice', 0, [0, 1, 5, 15]],
   atr_minutes: ['choice', 5, [1, 5, 15]], atr_period: ['int', 14, 2, 200],
 };
@@ -138,6 +142,11 @@ function controlsClean(raw) {
   const o = controlsFields(raw);
   for (const [m, name, num] of CTL_NEEDS) if (o[m] !== name) delete o[num];
   if (o.stop_mode !== 'atr' && o.target_mode !== 'atr') { delete o.atr_minutes; delete o.atr_period; }
+  // a number another field switches on means nothing without it (controls.py parse: the same rules, the same request)
+  if (o.stop_mode !== 'candle') delete o.stop_candle_ticks;
+  if (!o.be_after_pts) delete o.be_offset_ticks;
+  if (!o.trail_pts) delete o.trail_after_pts;
+  if (!o.exit_line) delete o.exit_line_min;
   return o;
 }
 /* What stops a run from going out, in words ('' when the rules are fine). */
@@ -166,16 +175,19 @@ function setControl(raw, key, text) {
 const CTL_AXIS = 'ctl.';
 /* a number that only means something under one mode: an axis on it switches that mode on (0 = leave the mode alone) */
 const CTL_IMPLIES = { stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
-  target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'] };
+  target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'], stop_candle_ticks: ['stop_mode', 'candle'] };
 const CTL_LABELS = {
   entry_from: 'Trade from (NY)', entry_to: 'Trade until (NY)', flat_at: 'Flat at (NY)', direction: 'Direction',
   max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
   stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
   target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length',
+  stop_candle_ticks: 'Candle stop buffer (ticks)', be_after_pts: 'Breakeven after (points)', be_offset_ticks: 'Breakeven + (ticks)',
+  trail_pts: 'Trailing stop (points)', trail_after_pts: 'Trail after (points)', exit_line: 'Exit on close through', exit_line_min: 'Exit line bars (min)',
 };
 /* The run settings a heat-map may vary, in the order a person thinks of them. Signal bar only when the strategy offers sizes. */
-const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'stop_wins', 'stop_losses', 'max_trades',
+const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'be_after_pts', 'trail_pts', 'trail_after_pts',
+  'stop_candle_ticks', 'exit_line', 'be_offset_ticks', 'exit_line_min', 'stop_wins', 'stop_losses', 'max_trades',
   'max_consec_losses', 'entry_from', 'entry_to', 'flat_at', 'direction', 'bar_minutes', 'day_loss', 'day_profit', 'cooldown_min',
   'max_hold_min', 'stop_mode', 'target_mode', 'atr_minutes', 'atr_period'];
 const CTL_HINT = { time: 'e.g. 09:35, 10:00, off', choice: null, int: 'e.g. 0, 1, 2, 3  (0 = off)', float: 'e.g. 10, 15, 20  or  10:30:5' };
@@ -186,7 +198,7 @@ function ctlInput(field) {
   const [kind, def, a, b] = spec, key = CTL_AXIS + field, label = CTL_LABELS[field] || field;
   if (kind === 'time') return { key, label, type: 'time', default: '', ctl: true };
   if (kind === 'choice') return { key, label, type: 'choice', choices: a, default: def, ctl: true };
-  const step = field === 'stop_pts' || field === 'target_pts' ? 0.25 : kind === 'int' ? 1 : 0.1;
+  const step = /_pts$/.test(field) ? 0.25 : kind === 'int' ? 1 : 0.1;
   return { key, label, type: kind, min: a, max: b, step, default: def, ctl: true };
 }
 function ctlAxisInputs(s) {
@@ -199,7 +211,7 @@ function axisInput(s, key) {
   if (typeof key === 'string' && key.startsWith(CTL_AXIS)) return ctlAxisInputs(s).find((i) => i.key === key) || null;
   return (s.inputs || []).find((i) => i.key === key) || null;
 }
-const axisHint = (inp) => (inp.type === 'choice' ? `one of: ${inp.choices.map((c) => (c === 0 && inp.ctl ? '0' : c)).join(', ')}` : inp.type === 'bool' ? 'on, off'
+const axisHint = (inp) => (inp.type === 'choice' ? `one of: ${inp.choices.map((c) => (c === 0 && inp.ctl ? '0' : c === '' ? 'off' : c)).join(', ')}` : inp.type === 'bool' ? 'on, off'
   : inp.type === 'time' ? CTL_HINT.time : inp.ctl ? CTL_HINT[inp.type] : 'e.g. 5, 10, 15  or  5:20:5');
 
 /* ---- formatting ---- */
@@ -601,7 +613,8 @@ function parseValues(text, inp, maxCells) {
       out.push(v);
     } else if (inp.type === 'choice') {
       const hit = inp.choices.find((c) => String(c) === t);
-      out.push(hit !== undefined ? hit : t);
+      // a choice whose "off" is '' (exit_line): off / none / - is that
+      out.push(hit !== undefined ? hit : inp.choices.includes('') && /^(off|none|-)$/i.test(t) ? '' : t);
     } else if (t.includes(':')) {
       const parts = t.split(':'), [a, b, st] = parts.map(Number);
       if (parts.length !== 3 || ![a, b, st].every(Number.isFinite) || !(st > 0) || a > b) return { error: `${inp.label}: ${RANGE_MSG}` };
