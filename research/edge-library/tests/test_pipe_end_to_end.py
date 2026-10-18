@@ -220,8 +220,8 @@ def test_one_card_goes_the_whole_way_and_waits_for_the_owner(world):
     assert [c["passed"] for c in cards.values()] == [True] * 7 + [None]
     assert [c["result"] for c in cards.values()] == ["pass", "strict", "pass", "skipped", "pass", "locked", "proven on history", "awaiting owner"]
     assert [c["tries"] for c in cards.values()] == [0] + [2] * 7 and all(c["picked"] == st["picked"] for n, c in cards.items() if n)
-    assert [x["line"] for x in cards[2]["lines"]] == ["1.1", "1.2", "1.3", "1.4", "P2.5"] and all(x["passed"] is True for x in cards[2]["lines"])     # the machine check: real
-    assert cards[2]["lines"][4]["trades"] >= 1 and cards[2]["lines"][4]["off"] == 0
+    assert [x["line"] for x in cards[2]["lines"]] == ["1.1", "1.2", "1.3", "1.4", "1.7", "P2.5"] and all(x["passed"] is True for x in cards[2]["lines"])     # the machine check: real
+    assert cards[2]["lines"][5]["trades"] >= 1 and cards[2]["lines"][5]["off"] == 0
     assert [x["line"] for x in cards[4]["lines"]] == ["P4.1", "P4.2"] and cards[4]["rules"]["random_bar"] == PR.random_bar(2)
     assert [x["line"] for x in cards[5]["lines"]] == [*TF.BOXL, "P5.9"] and cards[5]["locked"]["default"] in cards[5]["text"]
     log = [x.split("\t") for x in (ROOT / RN.LOG).read_text().splitlines()]                    # one line a finished stage, in their order

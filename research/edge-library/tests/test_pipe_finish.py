@@ -53,6 +53,7 @@ import test_pipe_stages as TS  # noqa: E402
 from blueprint import api  # noqa: E402
 from blueprint import checks as CH  # noqa: E402
 from blueprint import freeze as FRZ  # noqa: E402
+from blueprint import peek as PK  # noqa: E402
 from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import lines as L  # noqa: E402
 from blueprint import oos as OOS  # noqa: E402
@@ -194,7 +195,7 @@ def fakes(mp, check=(), build=(), lock=None) -> dict:
 
     def code_check(name, **k):
         calls["check"].append({"name": name, **k, "env": env()})
-        return {"ok": True, "lines": [row(f"1.{i}", None if i == 6 else f"1.{i}" not in off) for i in range(1, 7)], "saved": [f"{name}/check.json"]}
+        return {"ok": True, "lines": [row(f"1.{i}", None if i == 6 else f"1.{i}" not in off) for i in range(1, 8)], "saved": [f"{name}/check.json"]}
 
     def build(name, reason, **k):
         calls["build"].append({"name": name, "reason": reason, **k, "env": env()})
@@ -268,7 +269,7 @@ def test_stage_5_asks_the_code_check_on_the_heat_maps_own_home_store_and_a_false
     calls = fakes(world, check=("1.2",))
     c = TS.whole(ST.stage5(C, CTX), 5)
     assert (c["passed"], c["result"], c["picked"], c["tries"]) == (False, "fail", four["picked"], 2) and c["code_problem"] is True
-    assert lines(c) == ["1.1", "1.2", "1.3", "1.4"] and c["text"].startswith(f"CODE PROBLEM ({C}_a5, its home store {C}_a5-NQ-tf5): 1.2 FAIL")
+    assert lines(c) == ["1.1", "1.2", "1.3", "1.4", "1.7"] and c["text"].startswith(f"CODE PROBLEM ({C}_a5, its home store {C}_a5-NQ-tf5): 1.2 FAIL")
     assert calls["build"] == [] and calls["lock"] == [] and c["check"] == [f"{C}_a5/check.json"]
     (k,) = calls["check"]
     assert (k["name"], k["store"], k["looked"], k["root"], k["out"]) == (f"{C}_a5", f"{C}_a5-NQ-tf5", True, ROOT / "ideas", ROOT / "runs")
@@ -374,7 +375,7 @@ def test_stage_5_a_locked_idea_is_six_rows_the_prop_label_and_what_was_locked(wo
                                                                          "payout": 0.7, "label": PP.ALONE, "stress": {"size": 5, "payout_size": 3, "eval": 0.4, "payout": 0.5, "table": []},
                                                                          "text": f"PROP CHECK canned on {OWN} -- STANDS ALONE."}}}
     assert f"the middle box {cell} (of 2 that make money" in c["text"] and f"lock {HASH}" in c["text"] and "STANDS ALONE" in c["text"]
-    assert c["rules"]["lines"] == {k: 0.5 for k in BOXL} and c["rules"]["checked"] == ["1.1", "1.2", "1.3", "1.4"]
+    assert c["rules"]["lines"] == {k: 0.5 for k in BOXL} and c["rules"]["checked"] == ["1.1", "1.2", "1.3", "1.4", "1.7"]
     (o,) = calls["odds"]                                                                       # the default box's BUILD trades on the build days, the pipeline's account
     assert (o["trades"], o["calendar"], o["account"]) == (len(J.cellx(st, cell, "nyam")["net"]), TI.DAYS, OWN)
     # every command got the pipeline's folders, the idea's own ledger and the tiny run's days -- never the repo's
@@ -414,8 +415,22 @@ def test_stage_5_runs_in_its_order_and_reads_the_build_on_file(world):
 
 # ================================================================ stage 5, once for real (tiny)
 
+def once_17(mp) -> None:
+    """Line 1.7 replays the card on build days (it reads the engine by design): read the first time stage 5 asks, reused after, so a
+    no_engine block still proves that the lock itself runs nothing."""
+    rows, real = {}, PK.of_store
+
+    def once(t, *a, **k):
+        if t["where"] not in rows:
+            rows[t["where"]] = real(t, *a, **k)
+        return rows[t["where"]]
+
+    mp.setattr(PK, "of_store", once)
+
+
 def test_a_tiny_real_stage_5_after_a_strict_pass_no_box_a_failed_box_locked_and_again(world):
     four = upto4(world, S, 2, "strict")
+    once_17(world)
     chart(world)
     sub, home, kw = f"{S}_a5", f"{S}_a5-NQ-tf5", ST._kw(S, CTX)
     d, worse = ROOT / "ideas" / sub, ROOT / "runs" / f"{home}-nyam-worse"

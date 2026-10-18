@@ -320,18 +320,18 @@ def test_what_the_toolkit_refuses_goes_up_to_the_runner(world):
 def test_stage_2_reads_the_code_checks_lines_and_the_prices_and_saves_the_check(world):
     first = one(world)
     c = whole(ST.stage2(NAME, CTX), 2)
-    assert lines(c) == ["1.1", "1.2", "1.3", "1.4", "P2.5"] and [x["passed"] for x in c["lines"]] == [True] * 5, [x["text"] for x in c["lines"]]
+    assert lines(c) == ["1.1", "1.2", "1.3", "1.4", "1.7", "P2.5"] and [x["passed"] for x in c["lines"]] == [True] * 6, [x["text"] for x in c["lines"]]
     assert (c["passed"], c["result"], c["picked"], c["tries"]) == (True, "pass", first["picked"], 2) and "code_problem" not in c
-    p = c["lines"][4]
+    p = c["lines"][5]
     assert p["text"].startswith("P2.5 PASS the middle box (") and "within 1 tick of the low .. high of its 1-minute bar" in p["text"]
     assert p["trades"] >= 1 and (p["off"], p["limit_fills"], p["not_checked"], p["exceptions"]) == (0, 0, 0, []) and p["cell"] in p["text"]
     assert p["need"] == {"slack_ticks": 1.0, "tick": 0.25} == {"slack_ticks": R.template("costs")["normal"]["slippage_ticks"], "tick": R.template("costs")["contract"]["NQ"]["tick"]}
     chk = TI.read(ROOT / "ideas" / A5 / "check.json")                                         # the sub-idea's code check, on ITS home store: what the lock reads
     assert c["check"] == [str(ROOT / "ideas" / A5 / "check.json")] and chk["command"] == "code-check" and chk["name"] == A5
     assert chk["source"]["kind"] == "store" and Path(chk["source"]["where"]).resolve() == (ROOT / "runs" / HOME).resolve()
-    assert [x["line"] for x in chk["lines"]] == ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]
+    assert [x["line"] for x in chk["lines"]] == ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
     assert not (ROOT / "ideas" / A1 / "check.json").exists()                                  # the heat map that did not move on is not checked
-    assert c["rules"]["lines"] == ["1.1", "1.2", "1.3", "1.4"] and c["rules"]["slippage_ticks"] == 1.0 and 2 not in PS.stages(NAME, ROOT)
+    assert c["rules"]["lines"] == ["1.1", "1.2", "1.3", "1.4", "1.7"] and c["rules"]["slippage_ticks"] == 1.0 and 2 not in PS.stages(NAME, ROOT)
 
 
 def test_stage_2_a_false_line_of_the_code_check_is_a_code_problem_and_no_price_is_read(world):
@@ -344,7 +344,7 @@ def test_stage_2_a_false_line_of_the_code_check_is_a_code_problem_and_no_price_i
     world.setattr(api, "code_check", off)
     world.setattr(RUN, "cell_trades", lambda *a, **k: (_ for _ in ()).throw(AssertionError("the price check ran")))
     c = whole(ST.stage2(NAME, CTX), 2)
-    assert (c["passed"], c["result"]) == (False, "fail") and c["code_problem"] is True and lines(c) == ["1.1", "1.2", "1.3", "1.4"]
+    assert (c["passed"], c["result"]) == (False, "fail") and c["code_problem"] is True and lines(c) == ["1.1", "1.2", "1.3", "1.4", "1.7"]
     assert c["text"].startswith("CODE PROBLEM") and "1.2 FAIL 1 overlap" in c["text"] and c["picked"] == PICK
 
 
@@ -418,13 +418,13 @@ def test_stage_2_a_wrong_price_is_a_code_problem_and_a_day_without_a_tape_is_not
     one(world)
     world.setattr(ST, "_minute_bars", lambda root, iso: None)
     c = whole(ST.stage2(NAME, CTX), 2)
-    assert c["passed"] is True and "code_problem" not in c and c["lines"][4]["passed"] is None and c["text"].endswith("not read: P2.5")
+    assert c["passed"] is True and "code_problem" not in c and c["lines"][5]["passed"] is None and c["text"].endswith("not read: P2.5")
     real = RUN._levels().session_arrays
     world.setattr(ST, "_minute_bars", MINUTE_BARS)
     world.setattr(RUN._levels(), "session_arrays", lambda tape, tf: (lambda e, h, l_: (e, h + 50.0, l_ + 50.0))(*real(tape, tf)))      # the bars 50 points away
     c = whole(ST.stage2(NAME, CTX), 2)
-    assert (c["passed"], c["result"]) == (False, "fail") and c["code_problem"] is True and c["lines"][4]["passed"] is False
-    assert c["text"].startswith("CODE PROBLEM") and "P2.5 FAIL" in c["text"] and c["lines"][4]["off"] >= 2
+    assert (c["passed"], c["result"]) == (False, "fail") and c["code_problem"] is True and c["lines"][5]["passed"] is False
+    assert c["text"].startswith("CODE PROBLEM") and "P2.5 FAIL" in c["text"] and c["lines"][5]["off"] >= 2
 
 
 # ================================================================ stage 3: the indicators

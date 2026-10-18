@@ -39,6 +39,7 @@ import test_pipe_stages as TS  # noqa: E402
 from blueprint import api  # noqa: E402
 from blueprint import freeze as FRZ  # noqa: E402
 from blueprint import pipe_card as PC  # noqa: E402
+from blueprint import peek as PK  # noqa: E402
 from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
 
@@ -393,8 +394,8 @@ def test_stage_2_reads_the_price_check_of_the_picked_box(world):
     one = first(world)
     cell = one["picked"]["cell"]
     c = TS.whole(ST.stage2(NAME, CTX), 2)
-    assert TS.lines(c) == ["1.1", "1.2", "1.3", "1.4", "P2.5"] and c["passed"] is True
-    p = c["lines"][4]
+    assert TS.lines(c) == ["1.1", "1.2", "1.3", "1.4", "1.7", "P2.5"] and c["passed"] is True
+    p = c["lines"][5]
     assert p["cell"] == cell and p["text"].startswith(f"P2.5 PASS the picked box ({cell}): every entry and exit price")
     assert c["picked"] == one["picked"] and "the middle box" not in p["text"]
 
@@ -600,6 +601,14 @@ def test_a_tiny_real_stage_5_locks_the_picked_survivor_and_refuses_a_box_that_is
     st, _ = T._open(kw["out"], u["key"])
     T._labels(st, u)
     ids = J.table_stats(J.table(st, u))["ids"]
+    rows17, real17 = {}, PK.of_store
+
+    def once(t, *a, **k):                           # line 1.7 replays the card on build days (it reads the engine by design): read in (1), reused after
+        if t["where"] not in rows17:
+            rows17[t["where"]] = real17(t, *a, **k)
+        return rows17[t["where"]]
+
+    world.setattr(PK, "of_store", once)
     # (1) a box that does not make money both ways -- the worse-fills table is not there yet, so the stage's first (refused) lock writes it
     middle = REC.middle
     world.setattr(REC, "middle", lambda rows, ids, worse=None: middle(rows, ids) if worse is None else (None, []))      # (nothing survives)
