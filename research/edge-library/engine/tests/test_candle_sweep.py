@@ -214,6 +214,40 @@ def test_the_signals_equal_the_written_rule_on_random_days(tf, sess, back):
         assert n > 0, "the random days never swept a candle: the comparison would be empty"
 
 
+# ---- (iv 0) mode = break: a close beyond the previous candle's wick, with it ---------------------------------------------------------------
+
+def test_break_mode_follows_a_close_beyond_the_previous_wick_with_the_same_structure_stop():
+    brk = {"mode": "break"}
+    up = {**GREEN, "09:35": m(PX, 15014.0, 15003.0, 15013.0), "09:44": m(15013.0, 15014.0, 15012.5, 15013.0)}   # closes 15013 > the 15012 high
+    assert signals(brk, day(up)) == [(sec(9, 45), "long")]
+    log, _ = orders({**brk, "stop_mode": "struct", "tgt_r": 0.5}, day(up))
+    assert log == [(sec(9, 45), "long", PX - TICK, PX - TICK, 15019.5)]               # stop at this bar's own low, target 0.5 x 13.25 (on the tick)
+    on_high = {**GREEN, "09:44": m(PX, 15012.0, PX - TICK, 15012.0)}                  # closes ON the previous high: nothing
+    assert signals(brk, day(on_high)) == []
+    assert signals(brk, day(long_bar(15005.0))) == [] and signals({}, day(long_bar(15005.0))) == [(sec(9, 45), "long")]   # a sweep is no break
+    down = {**RED, "09:44": m(PX, PX + TICK, 14987.0, 14987.5)}                        # closes 14987.5 < the 14988 low
+    assert signals(brk, day(down)) == [(sec(9, 45), "short")]
+
+
+@pytest.mark.parametrize("tf", [5, 15])
+@pytest.mark.parametrize("sess", ["london", "nyam", "pm"])
+def test_break_signals_equal_the_written_rule_on_random_days(tf, sess):
+    s0, s1 = S.SESS[sess]
+    n = 0
+    for seed in (3, 8, 11, 21):
+        bars = rand_bars(960, seed, p0=PX, step=4.0 if seed % 2 else 8.0)
+        tb = [(max(b[1] for b in bars[j:j + tf]), min(b[2] for b in bars[j:j + tf]), bars[j + tf - 1][3]) for j in range(0, len(bars) - tf + 1, tf)]
+        want = []
+        for k in range(2, len(tb)):
+            end = (k + 1) * tf * 60
+            (ph, pl, _), (_, _, c) = tb[k - 1], tb[k]
+            if (c > ph or c < pl) and s0 < end <= s1 and end < s1 - 300:
+                want.append((end, "long" if c > ph else "short"))
+        assert signals({"mode": "break", "tf": str(tf), "sess": sess}, bars) == want, seed
+        n += len(want)
+    assert n > 0
+
+
 # ---- (iv a) turn: the previous candle one colour, the sweeping candle the other -----------------------------------------------------
 
 def red_long(c):
@@ -402,6 +436,7 @@ def test_the_settings_and_their_limits():
     assert (d["back"], d["ema1h"], d["candle"], d["max_tr"], d["dir"]) == ("body", 0, 0, 20, "both")
     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
     assert sc["dir930"] == ("choice", ("off", "with")) and d["dir930"] == "off"
+    assert sc["mode"] == ("choice", ("sweep", "break")) and d["mode"] == "sweep"
     assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on", "same")) and d["turn"] == "off"
     for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
                 {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):
