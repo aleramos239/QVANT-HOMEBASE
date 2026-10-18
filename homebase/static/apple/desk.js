@@ -88,7 +88,8 @@
     /* ---- after each repaint of the page: which view, the title, the inspector's borrowed nodes ---- */
     const vToday = $('#viewToday'), vStrat = $('#viewStrat'), vAct = $('#viewActivity');
     const status_ = () => { try { return ST; } catch (_) { return null; } };          // the page's own state (read only)
-    const viewOf = () => (vStrat && !vStrat.hidden) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
+    const archived = () => { try { return VIEW && VIEW.k === 'archive'; } catch (_) { return false; } };      // the Archive list: no strategy in the inspector
+    const viewOf = () => (vStrat && !vStrat.hidden && !archived()) ? 'strat' : (vAct && !vAct.hidden) ? 'activity' : 'today';
     const fmtN = (v) => (v == null || v === '' ? '—' : String(+v === Math.round(+v) ? Math.round(+v) : +v));
     const hm = (t) => { const m = /^(\d{1,2}):(\d\d)/.exec(String(t || '')); const s = m ? String(parseInt(m[1], 10)) + ':' + m[2] : ''; return s && window.HBClock ? window.HBClock.text(s) : s; };
     const row = (k, v) => el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: k }), el('span', { class: 'hb-row-v', text: v }));
@@ -213,6 +214,8 @@
           tb.title(t ? t.textContent : 'Strategy', sd ? sd.textContent : '');
         } else if (v === 'activity') {
           tb.title('Activity', 'Every alert, order and fill');
+        } else if (archived()) {
+          tb.title('Archive', 'Off the Desk and kept');
         } else {
           let date = '';
           if (st && st.et_now) {

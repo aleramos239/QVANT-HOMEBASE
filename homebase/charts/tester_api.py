@@ -96,6 +96,10 @@
                                           while the desk's sidecar, <name>.desk.json, holds book rows)
     POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
                                           (the desklab routes answer the desk page's exact origins)
+    POST /api/tester/desklab/archive     {name} -> {ok, name}: Archive, step 1 -- a switched-off copy is kept (store.ARCHIVE_DIR);
+                                          step 2 is the Desk's own Remove; step 3, filed {name}, files its Lab draft under the
+                                          "Archive" group (409 while it is still on the Desk). GET /desklab lists them as `archived`
+    POST /api/tester/desklab/restore     {name} -> {ok, name}: back on the Desk, switched off, no account; its Lab group as before
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -161,6 +165,7 @@ uniformly rather than routed around it. POSTs additionally pass browser_write_ok
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import datetime as dt
 import hashlib
 import inspect
@@ -214,7 +219,8 @@ def desk_strategy_ids() -> list[str]:
                   if isinstance(k, str) and isinstance(v, dict) and (v.get("cfg") or {}).get("kind") != "lab")
 
 
-DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open")
+DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open", "archive", "filed", "restore")
+ARCHIVE_GROUP = "Archive"     # the Lab group an archived strategy's draft is filed under (the owner, 2026-10-18)
 DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
 ON_THE_DESK = "It is on the Desk. Remove it from the Desk first."   # a draft with a promoted record is not deleted
@@ -808,7 +814,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                         "days": [{**{k: d.get(k) for k in DESKLAB_DAY_KEYS}, "rebuilt": d.get("rebuilt") is True}
                                  for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
         beat = store.get_runner() or {}
-        return watch_answer(request, {"strategies": out, "builtins": desk_strategy_ids(), "runner": {
+        archived = [{k: rec.get(k) for k in ("name", "label", "root", "run", "archived_utc", "promoted_utc")} for rec in store.archived()]
+        return watch_answer(request, {"strategies": out, "archived": archived, "builtins": desk_strategy_ids(), "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
 
     def runner_alive(seen) -> bool:
@@ -964,6 +971,42 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
+    # ---- Archive (the owner, 2026-10-18): off the Desk, kept, put back on with one click. The page runs it in three steps
+    # ---- so the Desk's own Remove (with its "Flatten it first." and its accounts coming off) stays the one way off the Desk:
+    # ---- archive = a copy is kept; the Desk removes it; filed = its Lab draft goes under the "Archive" group.
+    def desklab_archive(name: str) -> dict:
+        if store.archive_copy(name) is None:
+            raise HTTPException(404, "That strategy is not on the Desk.")
+        return {"ok": True, "name": name}
+
+    def lab_group(sid: str):
+        try:
+            return draftstore.read_groups()["members"].get(sid)
+        except draftstore.GroupsUnreadable:
+            return None
+
+    def desklab_filed(name: str) -> dict:
+        sid, was = draftstore.draft_id(name), lab_group(draftstore.draft_id(name))
+        if store.archive_note(name, was, keep=was == ARCHIVE_GROUP) is None:
+            raise HTTPException(409, "It is still on the Desk, so it was not archived.")
+        if name in {n for n, _ in draftstore.list_files()}:
+            with contextlib.suppress(draftstore.GroupsUnreadable, ValueError):     # the archive holds it either way
+                draftstore.set_group(sid, ARCHIVE_GROUP)
+        return {"ok": True, "name": name}
+
+    def desklab_restore(name: str) -> dict:
+        try:
+            rec = store.restore(name)
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+        if rec is None:
+            raise HTTPException(404, "That strategy is not in the archive.")
+        sid = draftstore.draft_id(name)
+        if lab_group(sid) == ARCHIVE_GROUP:
+            with contextlib.suppress(draftstore.GroupsUnreadable, ValueError):
+                draftstore.set_group(sid, rec.get("group_was"))
+        return {"ok": True, "name": name}
+
     open_ask = {"name": None, "run": None, "builtin": False, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
 
     def desklab_open(name: str, run: str | None = None, builtin: bool = False) -> dict:
@@ -1012,7 +1055,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 body = await request.json()
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
-            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"}}[what]
+            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"},
+                    "archive": {"name"}, "filed": {"name"}, "restore": {"name"}}[what]
             run = body.get("run") if what == "open" and isinstance(body, dict) else None
             if run is not None and (not isinstance(run, str) or not re.fullmatch(r"[0-9a-z_-]{1,120}", run)):
                 raise HTTPException(400, "run: a finished run's id")
@@ -1039,6 +1083,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "open":
                     done = await asyncio.to_thread(desklab_open, name, run, builtin is True)
+                elif what in ("archive", "filed", "restore"):
+                    done = await asyncio.to_thread({"archive": desklab_archive, "filed": desklab_filed,
+                                                    "restore": desklab_restore}[what], name)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)

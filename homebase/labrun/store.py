@@ -13,6 +13,10 @@ this module talks to a service. Remove deletes the record only: the days and the
                                         (the runner and the chart service read it); listing() skips it (its stem is not
                                         a strategy name)
 
+    <root>/.archive/<name>.json         an ARCHIVED strategy (2026-10-18, the owner): its record as it was, switched off, plus
+                                        `archived_utc` and `group_was` (its Lab group before it was filed under "Archive").
+                                        Off the Desk until restore() puts it back; the days and the journal stay where they are
+
     <root>/desk.lock                    the ONE desk that owns the sidecars holds a flock on it for its whole life
                                         (desk_lock); a second desk on this store reads only
 
@@ -209,6 +213,68 @@ def remove(name: str, at=None) -> bool:
             return True
         except FileNotFoundError:
             return False
+
+
+ARCHIVE_DIR = ".archive"                 # a dot first: never a strategy's name (NAME_RE), never listed as one
+
+
+def _arch_file(name, at=None) -> Path:
+    return root(at) / ARCHIVE_DIR / f"{_name(name)}.json"
+
+
+def archive_copy(name: str, at=None) -> dict | None:
+    """Step 1 of Archive: a copy of the record, switched off, in the archive (the record itself stays: the Desk takes it
+    off next, with its own checks). None: no record. An earlier copy keeps its `group_was` (a retry after a refusal)."""
+    with write_lock(at):
+        rec = _read(_file(name, at))
+        if rec is None:
+            return None
+        was = _read(_arch_file(name, at)) or {}
+        out = {**rec, "enabled": False, "archived_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+               "group_was": was.get("group_was")}
+        _write(_arch_file(name, at), out)
+        return out
+
+
+def archive_note(name: str, group_was, keep: bool = False, at=None) -> dict | None:
+    """Step 3 of Archive: the Lab group it had, written on the copy (keep: leave the one written before). None: no copy,
+    or the record is still on the Desk."""
+    with write_lock(at):
+        f = _arch_file(name, at)
+        rec = _read(f)
+        if rec is None or _file(name, at).exists():
+            return None
+        rec = {**rec, "group_was": rec.get("group_was") if keep else group_was}
+        _write(f, rec)
+        return rec
+
+
+def archived(at=None) -> list:
+    """The archived strategies that are off the Desk, the latest archived first (a copy whose record is still on the Desk
+    is a step 1 that the Desk refused: not archived)."""
+    d = root(at) / ARCHIVE_DIR
+    out = []
+    for f in sorted(d.glob("*.json")) if d.is_dir() else []:
+        if NAME_RE.fullmatch(f.stem) and not _file(f.stem, at).exists():
+            rec = _read(f)
+            if rec is not None and rec.get("name") == f.stem:
+                out.append(rec)
+    return sorted(out, key=lambda s: str(s.get("archived_utc") or ""), reverse=True)
+
+
+def restore(name: str, at=None) -> dict | None:
+    """The archived record back on the Desk, switched off, with no account (the Desk books none until the owner does).
+    None: not in the archive. ValueError: a record of that name is on the Desk."""
+    with write_lock(at):
+        f, a = _file(name, at), _arch_file(name, at)
+        if f.exists():
+            raise ValueError("A strategy of that name is on the Desk.")
+        rec = _read(a)
+        if rec is None:
+            return None
+        _write(f, {k: v for k, v in rec.items() if k not in ("archived_utc", "group_was")} | {"enabled": False})
+        a.unlink()
+        return rec
 
 
 def listing(at=None) -> list:

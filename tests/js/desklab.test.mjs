@@ -366,8 +366,8 @@ test('missingText: Loading until a read finished, "not answering" after a failed
 });
 
 test('the page reads the list\'s outcome: only a good read can say the strategy is gone', () => {
-  assert.match(HTML, /let DESKLAB = \{strategies: \[\], runner: null\}, DESKLAB_OK = null,/);
-  assert.match(LABBLOCK, /next = \{strategies: DESKLAB\.strategies, runner: null\}; ok = false;/);
+  assert.match(HTML, /let DESKLAB = \{strategies: \[\], archived: \[\], runner: null\}, DESKLAB_OK = null,/);
+  assert.match(LABBLOCK, /next = \{strategies: DESKLAB\.strategies, archived: DESKLAB\.archived, runner: null\}; ok = false;/);
   assert.match(LABBLOCK, /DESKLAB = next; DESKLAB_OK = ok;/);
   assert.doesNotMatch(LABVIEW, /DeskLab\.GONE/, 'the page never picks the sentence itself');
 });

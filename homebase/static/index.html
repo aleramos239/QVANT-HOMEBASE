@@ -1765,7 +1765,7 @@ const dayPill = (st) => `<span class="${STATUS_PILL[st] || "pill idle"}" title="
 let VIEW = {k: "today"};
 try {
   const v = JSON.parse(localStorage.getItem("hb_view") || "null");
-  if (v && ["today", "strat", "activity", "lab", "group"].includes(v.k)) VIEW = v;
+  if (v && ["today", "strat", "activity", "lab", "group", "archive"].includes(v.k)) VIEW = v;
 } catch (_) {}
 let SIDE_ALL = false;
 /* The sidebar's sections fold (2026-10-09): a header with a chevron hides its rows; what is folded is remembered per browser. */
@@ -1781,7 +1781,7 @@ function toggleSide(k) {
    writes down its orders and nothing is sent -- and writes a summary of the day. This page only reads them, and switches or removes one by name. The desk
    itself does not know a Lab strategy yet: nothing here calls its /api/strategy, /api/book or /api/strategy-flatten.
    The words and numbers come from desklab.js (DeskLab). */
-let DESKLAB = {strategies: [], runner: null}, DESKLAB_OK = null, DESKLAB_BUSY = "";   // DESKLAB_OK: null = no read finished yet, false = the last one failed
+let DESKLAB = {strategies: [], archived: [], runner: null}, DESKLAB_OK = null, DESKLAB_BUSY = "";   // DESKLAB_OK: null = no read finished yet, false = the last one failed
 const DESKLAB_NAME = /^[a-z][a-z0-9_]{1,39}$/;
 /* The Lab's "On the Desk" link is /#lab=<name>. It is used once: the address is cleared, so a reload does not open it again. */
 function labHashName() {
@@ -1828,10 +1828,11 @@ async function loadDeskLab() {
     if (!r.ok) throw new Error("HTTP " + r.status);
     const j = await r.json();
     next = {strategies: (Array.isArray(j.strategies) ? j.strategies : []).filter(w => w && DESKLAB_NAME.test(String(w.name))),
+            archived: (Array.isArray(j.archived) ? j.archived : []).filter(w => w && DESKLAB_NAME.test(String(w.name))),
             runner: j.runner && typeof j.runner === "object" ? {alive: j.runner.alive === true} : null};
   } catch (_) {
     // the chart service does not answer: its runner is not reachable either, so no strategy is shown as running
-    next = {strategies: DESKLAB.strategies, runner: null}; ok = false;
+    next = {strategies: DESKLAB.strategies, archived: DESKLAB.archived, runner: null}; ok = false;
   }
   const key = (d) => JSON.stringify(d);
   const changed = DESKLAB_OK !== ok || key(next) !== key(DESKLAB);
@@ -2184,7 +2185,8 @@ function renderSide(names, hiddenCount, issues) {
     ${head("groups", "Groups", DESKGROUPS.groups.length, `<button class="sh-btn" title="Manage groups" aria-label="Manage groups" onclick="openGroupMgr()">⋯</button>`)}
     ${SIDE_FOLD.groups ? "" : groupBlocks || `<button class="side-more" onclick="openGroupMgr()">New group…</button>`}
     ${head("strat", "Strategies", freeNames.length + freeLab.length, `<button class="sh-btn" title="Manage algos" aria-label="Manage algos" onclick="openAlgoMgr()">⋯</button>`)}
-    ${SIDE_FOLD.strat ? "" : strat + labRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")}
+    ${SIDE_FOLD.strat ? "" : strat + labRows + (hiddenCount ? `<button class="side-more" onclick="openAlgoMgr()">${hiddenCount} hidden · Manage</button>` : "")
+      + ((DESKLAB.archived || []).length || VIEW.k === "archive" ? `<button class="side-more${sel("archive")}" onclick="setView('archive')">Archive · ${(DESKLAB.archived || []).length}</button>` : "")}
     ${head("accts", "Accounts", accts.length, `<button class="sh-btn" title="Add account" aria-label="Add account" onclick="openConnect()">+</button>`)}
     ${SIDE_FOLD.accts ? "" : acctRows + more}
     ${head("act", "Activity", 0, "")}
@@ -2377,6 +2379,7 @@ function labView(name) {
       <div class="mcap">${esc(DeskLab.ACCOUNTS_CAPTION)}</div></div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)})" title="The Lab page, on this strategy">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(w.name)}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
+      <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Off the Desk and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeDeskLab(${jsArg(w.name)})"${busy ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
 
@@ -2508,6 +2511,7 @@ function labDeskView(name, s) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")}, true)"${hasRun ? "" : " disabled"} title="Its run on the unseen days, on the chart, trade by trade">Show on chart</button>
+      <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
@@ -2579,6 +2583,50 @@ async function removeLabStrat(name) {
   await refresh();
   loadDeskLab();
 }
+/* ARCHIVE (the owner, 2026-10-18): off the Desk, switched off, kept; Restore puts it back. Three steps: the chart service keeps a copy,
+   then the Desk's own Remove takes it off (refused while a trade is open: "Flatten it first."; its accounts come off), then its Lab
+   draft is filed under the "Archive" group. deskId: its Desk id when the Desk holds it (lab_<name>), else the chart service removes it. */
+async function archiveLabStrat(name, deskId) {
+  if (!name || DESKLAB_BUSY || DEMO) return;
+  const label = deskId ? stratLabel(deskId) : name;
+  if (!await confirmDlg(`Archive ${label}?`, "It comes off the Desk, switched off, and its accounts come off. Its history is kept. Restore it from Archive any time.", "Archive", false)) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  let r = await chartPost("/api/tester/desklab/archive", {name}), err = null;
+  if (r && r.ok === true) {
+    if (deskId) { try { r = await post("/api/lab-remove", {strategy: deskId}); } catch (e) { err = e || new Error("no answer"); } }
+    else r = await chartPost("/api/tester/desklab/remove", {name});
+  }
+  if (!err && r && r.ok === true) r = await chartPost("/api/tester/desklab/filed", {name});
+  DESKLAB_BUSY = "";
+  if (!err && r && r.ok === true) {
+    if ((VIEW.k === "strat" && VIEW.name === deskId) || (VIEW.k === "lab" && VIEW.name === name)) VIEW = {k: "archive"};
+    toast(`${label} is archived. Restore it from Archive any time.`);
+  } else toast(`Could not archive ${label}: ${DeskLab.refusalText(r, err)}`, 7000);
+  if (deskId) await refresh();
+  loadDeskLab();
+}
+async function restoreArchived(name) {
+  if (DESKLAB_BUSY || DEMO) return;
+  const w = (DESKLAB.archived || []).find(x => x.name === name), label = w ? DeskLab.label(w) : name;
+  DESKLAB_BUSY = name; if (ST) render();
+  const r = await chartPost("/api/tester/desklab/restore", {name});
+  DESKLAB_BUSY = "";
+  if (r && r.ok === true) toast(`${label} is back on the Desk, switched off, with no account.`);
+  else toast(`Could not restore ${label}: ${(r && r.detail) || "no answer"}`, 7000);
+  await loadDeskLab();
+  refresh();
+}
+function archiveView() {
+  const rows = (DESKLAB.archived || []).map(w => {
+    const f = DeskLab.figures(w), day = String(w.archived_utc || "").slice(0, 10), busy = DESKLAB_BUSY === w.name;
+    return `<div class="feed-row"><span class="h"><b>${esc(DeskLab.label(w))}</b> · ${esc(w.root || "")}${day ? " · archived " + esc(shortDay(day)) : ""}<br>
+      <small class="dim">${f.map(x => esc(x.k + " " + x.v)).join(" · ")}</small></span>
+      <button class="btn btn-outline btn-sm" onclick="restoreArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk, switched off, with no account">Restore</button></div>`;
+  }).join("");
+  return `<button class="back" onclick="setView('today')">‹ Today</button>
+    <div class="sd-top"><div><h1 class="sd-title">Archive</h1><div class="sp">Off the Desk and switched off. Restore puts one back, switched off, with no account.</div></div></div>
+    <div class="sec">${rows ? `<div class="agroup feed static">${rows}</div>` : `<div class="eq-empty">Nothing is archived.</div>`}</div>`;
+}
 /* Clear an old trade the Desk no longer owns: the Desk does it only when the account is flat and no old order is working, and says why not. */
 const LAB_CLEARING = new Map();      // "strategy@account" -> Infinity while a clear is out, then when it was answered ok
 const labClearing = (name, account) => { const t = LAB_CLEARING.get(name + "@" + account); return t !== undefined && (t === Infinity || Date.now() - t < 3000); };
@@ -2596,7 +2644,7 @@ async function clearLabBlock(name, account) {
 
 function renderMain(names, issues) {
   $("#viewToday").hidden = VIEW.k !== "today";
-  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group";
+  $("#viewStrat").hidden = VIEW.k !== "strat" && VIEW.k !== "lab" && VIEW.k !== "group" && VIEW.k !== "archive";
   $("#viewActivity").hidden = VIEW.k !== "activity";
   if (VIEW.k === "today") {
     const [l1, l2] = dayHeadline(names);
@@ -2609,6 +2657,7 @@ function renderMain(names, issues) {
   } else if (VIEW.k === "strat") $("#viewStrat").innerHTML = stratView(VIEW.name);
   else if (VIEW.k === "lab") $("#viewStrat").innerHTML = labSafe(() => labView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
   else if (VIEW.k === "group") $("#viewStrat").innerHTML = labSafe(() => groupView(VIEW.name), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${GROUP_FAULT}</div>`);
+  else if (VIEW.k === "archive") $("#viewStrat").innerHTML = labSafe(() => archiveView(), `<button class="back" onclick="setView('today')">‹ Today</button><div class="feed-empty">${LAB_FAULT}</div>`);
 }
 
 function render() {

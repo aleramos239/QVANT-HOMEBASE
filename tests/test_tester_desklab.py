@@ -171,7 +171,7 @@ def test_promoting_again_replaces_the_record_and_keeps_the_history(c, drafts_dir
 
 def test_the_list_shows_today_the_days_and_whether_the_runner_is_alive(c, drafts_dir, make_run, tmp_path):
     at = tmp_path / "desklab"
-    assert c.get("/api/tester/desklab").json() == {"strategies": [], "builtins": [], "runner": {"alive": False, "seen_utc": None, "prices": {}}}
+    assert c.get("/api/tester/desklab").json() == {"strategies": [], "archived": [], "builtins": [], "runner": {"alive": False, "seen_utc": None, "prices": {}}}
     draft(drafts_dir)
     promote(c, run_id=make_run())
     today = slots.et_now().date().isoformat()                                  # conftest pins this to 2026-09-28
@@ -761,3 +761,46 @@ def test_an_instant_entry_run_is_not_promoted_when_the_code_enters_print_by_prin
     rid2 = make_run(scanning)
     _edit_request(tmp_path, rid2, inputs={"trigger": "bar_close"})
     assert promote(c, run_id=rid2).status_code == 200
+
+
+def test_archive_and_restore(c, drafts_dir, make_run, tmp_path):
+    """Archive (the owner, 2026-10-18): a copy is kept, the record comes off, the Lab draft goes under "Archive"; Restore puts
+    it back switched off and the draft back in its group. The history never moves."""
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    draftstore.set_group("draft_nq_bars", "Ideas")
+    store.put_day("nq_bars", {"date": "2026-09-25", "state": "done"}, tmp_path / "desklab")
+    post = lambda what, name="nq_bars": c.post(f"/api/tester/desklab/{what}", json={"name": name})
+    assert post("archive").json() == {"ok": True, "name": "nq_bars"}
+    early = post("filed")                                       # the Desk has not taken it off: not archived
+    assert early.status_code == 409 and early.json()["detail"] == "It is still on the Desk, so it was not archived."
+    assert c.get("/api/tester/desklab").json()["archived"] == []
+    assert post("remove").json()["removed"] is True             # step 2 (the Desk's own Remove on the real page)
+    assert post("filed").json() == {"ok": True, "name": "nq_bars"}
+    got = c.get("/api/tester/desklab").json()
+    assert got["strategies"] == [] and [w["name"] for w in got["archived"]] == ["nq_bars"]
+    assert got["archived"][0]["run"]["net"] == SUMMARY["net_profit"]
+    assert draftstore.read_groups()["members"]["draft_nq_bars"] == "Archive"
+    assert post("filed").json()["ok"] is True                    # again: the group it had before is kept, not "Archive"
+    assert (tmp_path / "desklab" / "nq_bars" / "days" / "2026-09-25.json").is_file()
+    assert post("restore").json() == {"ok": True, "name": "nq_bars"}
+    back = c.get("/api/tester/desklab").json()
+    assert back["archived"] == [] and back["strategies"][0]["name"] == "nq_bars" and back["strategies"][0]["enabled"] is False
+    assert "archived_utc" not in store.get("nq_bars") and "group_was" not in store.get("nq_bars")
+    assert draftstore.read_groups()["members"]["draft_nq_bars"] == "Ideas"
+    assert post("restore").status_code == 409                   # it is on the Desk now
+    assert post("archive", "nq_none").status_code == 404
+
+
+def test_restore_refused_while_a_namesake_is_on_the_desk(c, drafts_dir, make_run, tmp_path):
+    draft(drafts_dir)
+    rid = make_run()
+    promote(c, run_id=rid)
+    c.post("/api/tester/desklab/archive", json={"name": "nq_bars"})
+    c.post("/api/tester/desklab/remove", json={"name": "nq_bars"})
+    c.post("/api/tester/desklab/filed", json={"name": "nq_bars"})
+    assert draftstore.read_groups()["members"].get("draft_nq_bars") == "Archive"
+    promote(c, run_id=rid)                                      # promoted again from the Lab meanwhile
+    assert c.get("/api/tester/desklab").json()["archived"] == []
+    r = c.post("/api/tester/desklab/restore", json={"name": "nq_bars"})
+    assert r.status_code == 409 and r.json()["detail"] == "A strategy of that name is on the Desk."
