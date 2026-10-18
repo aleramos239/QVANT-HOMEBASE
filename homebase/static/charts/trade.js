@@ -665,13 +665,29 @@ function canDrag(g) { return g.kind !== 'position' && g.type !== 'StopLimit'; }
 /* A position's chip is just side, size and P&L ("LONG 1 · −$20", 2026-09-27: the user's call), plus "· 2 accts" when it
    merges several accounts (review of d6bdb2e: its × / exit drag acts on every one of them, so that must show); the
    account names go in the chip's tooltip (lineTitle). Order / SL / TP lines still name theirs. */
-function lineText(g, last) {
+function lineText(g, last, tick) {
   if (g.kind === 'order') return [lineLabel(g), whoText(g)].join(' · ');
   if (g.kind === 'position') {
     const many = new Set(g.legs.map((l) => l.who)).size > 1;
     return [lineLabel(g), usd(linePnl(g, last)), many ? whoText(g) : null].filter(Boolean).join(' · ');
   }
-  return [lineLabel(g), usd(linePnl(g, last)), whoText(g)].filter(Boolean).join(' · ');
+  return [lineLabel(g), usd(linePnl(g, last)), exitTicks(g, tick), whoText(g)].filter(Boolean).join(' · ');
+}
+/* An SL / TP line's distance from its position's entry, "100t" -- only when every leg shares one entry. */
+function exitTicks(g, tick) {
+  const avg = new Set(g.legs.map((l) => l.avg));
+  const a = avg.size === 1 ? [...avg][0] : null;
+  return tick > 0 && Number.isFinite(a) ? `${Math.round(Math.abs(g.price - a) / tick)}t` : null;
+}
+/* The shaded zones (HBTradeLines.Zones) for the desk's SL / TP lines: each from its position's entry to its price. */
+function exitZones(groups, P) {
+  const out = [];
+  for (const g of groups) {
+    if (g.kind !== 'sl' && g.kind !== 'tp') continue;
+    const avg = new Set(g.legs.map((l) => l.avg)), a = avg.size === 1 ? [...avg][0] : null;
+    if (Number.isFinite(a)) out.push({ from: a, to: g.price, color: g.kind === 'tp' ? P.up : P.down });
+  }
+  return out;
 }
 /* The accounts a line holds, every one by name, for its chip's tooltip: "…041, …047". */
 function lineTitle(g) { return [...new Set(((g && g.legs) || []).map((l) => l.who))].join(', '); }
@@ -1613,7 +1629,7 @@ function routeSend(action, body, send) {
 
 const api = { PREFS_KEY, BOT_NAMES, parsePrefs, prefsText, oneClickKey, short, rootOf, orderPrice, isPending, abbr, inferType, menuText,
   roundTick, bracket, orderBody, clientId, tradeMode, usd, money, pnl, rrText, linesFor, linePnl, lineLabel,
-  lineText, lineTitle, lineColor, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
+  lineText, lineTitle, lineColor, exitZones, canDrag, withPrice, exitKinds, exitKindAt, exitRefusal, EXIT_DRAG_PX, pastClick, pendingMoveError, exitGhost, exitDropError, expectedNet, exitsBody, exitsTitle, orderTitle, confirmOrder, actionTitle, resultToasts, fillText, fillMarkers, execArrow, botName, positionRows, orderRows, fillRows, accountRows, etTime, diffRows,
   algoName, algoLabel, algoChoices, algoAccounts, botPill, botToday, algoOverlay, etMs, etDateOf, pastRunMarkers, pastRunFlags,
   algoFillMarkers, nearestTip, historySig,
   killConfirm, killToasts, killBlock, killSold,

@@ -35,11 +35,21 @@ let visible = false;                    // HBPanelShell.setVisible: the panel is
 let seen = { cell: null, root: null };  // the chart the form was last painted for
 let formRoot = null;                    // the symbol the form's prices were typed for (reset when it changes)
 let acctKey = null, logoRoot = null;
+let prefQty = null;                     // the shared quantity (the chart's Buy/Sell box) the form last took
 const st = {                            // the form, as typed (strings for fields)
   side: 'Buy', type: 'Market', price: '', trigger: '', limit: '', qty: '1', riskOn: false, risk: '',
   tp: { on: false, unit: 'ticks', value: '' }, sl: { on: false, unit: 'ticks', value: '' }, tif: 'Day',
-  exitsOpen: true, extraOpen: false,
+  exitsOpen: true, extraOpen: false, lookOpen: false,
 };
+/* How the order's preview looks on the chart (the user, 2026-10-18: "let me play with it"); kept in this browser. */
+const LOOK_KEY = 'hb.orderPreviewLook';
+const LOOK0 = { on: true, style: 0, width: 1, shade: 12, labels: 'line' };
+const look = (() => { try { return { ...LOOK0, ...JSON.parse(localStorage.getItem(LOOK_KEY) || 'null') }; } catch (_) { return { ...LOOK0 }; } })();
+function setLook(k, v) {
+  look[k] = v;
+  try { localStorage.setItem(LOOK_KEY, JSON.stringify(look)); } catch (_) { /* private window: this session only */ }
+  paint();
+}
 const needDefault = { price: true, trigger: true, limit: true };   // fill from the last price when next shown
 
 /* ---- small helpers ---- */
@@ -84,7 +94,8 @@ function compute(cell) {
   const price = type === 'Limit' || type === 'Stop' ? px(st.price) : type === 'StopLimit' ? px(st.limit) : null;
   const trigger = type === 'StopLimit' ? px(st.trigger) : null;
   const rt = (v) => (Number.isFinite(v) ? T.roundTick(v, tick) : null);
-  const last = q && q.last != null ? q.last : null;
+  // no quote (market shut): the chart's last close, so the exits still preview -- panelOrder refuses the send
+  const bars = cell.bars || [], last = q && q.last != null ? q.last : bars.length ? bars[bars.length - 1].c : null;
   const slEntry = type === 'Market' ? last : type === 'StopLimit' ? rt(trigger) : rt(price);
   const tpEntry = type === 'Market' ? last : rt(price);   // a Stop Limit's LIMIT: its TP's entry and its worst fill
   const triple = (k, entry, qty) => (st[k].on ? T.exitTriple({ unit: st[k].unit, value: exitVal(k), side, entry, tick, pv, kind: k, qty }) : null);
@@ -107,7 +118,7 @@ function compute(cell) {
   const qtyMax = Math.min(T.PANEL_QTY_MAX, lim && lim.max_order_qty > 0 ? lim.max_order_qty : T.PANEL_QTY_MAX);
   const order = formError(type, qty, risk, sl, pv, qd, tick) || T.panelOrder({ side, type, qty: st.riskOn ? null : qty, price, trigger,
     sl: exitPx('sl', sl), tp: exitPx('tp', tp), tif: st.tif, risk, quote: q, nowMs: now, tick, pv, qtyMax });
-  return { root, tick, q, now, sl, tp, qty, order, worst };
+  return { root, tick, q, now, sl, tp, qty, order, worst, entry: tpEntry, slEntry };
 }
 /* What the user typed that can't be read, as {ok: false, error}; null when every shown field is readable. */
 function formError(type, qty, risk, sl, pv, qd, tick) {
@@ -174,7 +185,12 @@ function build() {
   const urow = mk('label', 'op-field');
   ui.qty = mk('input', 'op-in');
   ui.qty.type = 'text'; ui.qty.inputMode = 'numeric'; ui.qty.autocomplete = 'off';
-  ui.qty.addEventListener('input', () => { st.qty = ui.qty.value; paint(); });
+  ui.qty.addEventListener('input', () => {
+    st.qty = ui.qty.value;
+    const n = T.parseQty(st.qty);
+    if (Number.isInteger(n) && n >= 1) D().setPrefs({ qty: n });   // the chart's Buy/Sell box shows the same size
+    paint();
+  });
   ui.risk = mk('input', 'op-in');
   ui.risk.type = 'text'; ui.risk.inputMode = 'decimal'; ui.risk.autocomplete = 'off'; ui.risk.placeholder = 'USD';
   ui.risk.addEventListener('input', () => { st.risk = ui.risk.value; paint(); });
@@ -222,7 +238,34 @@ function build() {
   ui.tifNote = mk('div', 'op-note');
   extra.body.append(tifRow, ui.tifNote);
 
-  ui.form.append(tiles, types, fields, units, exits.box, extra.box);
+  // Chart preview: how the entry / TP / SL preview looks (.op-look: never greyed, it works with Trading off too)
+  const lk = coll('Chart preview', 'lookOpen');
+  lk.box.classList.add('op-look');
+  ui.look = lk;
+  const lrow = mk('div', 'op-swrow');
+  ui.lookSw = sw('Show on chart');
+  ui.lookSw.onclick = () => setLook('on', !look.on);
+  lrow.append(mk('span', 'op-sub', 'Show on chart'), ui.lookSw);
+  const pick = (label, key, opts, num) => {
+    const row = mk('label', 'op-field'), sel = mk('select', 'op-sel');
+    for (const [v, text] of opts) { const o = mk('option', '', text); o.value = String(v); sel.appendChild(o); }
+    sel.onchange = () => setLook(key, num ? Number(sel.value) : sel.value);
+    row.append(mk('span', 'op-lab', label), sel);
+    return { row, sel, key };
+  };
+  ui.lookSel = [
+    pick('Line', 'style', [[0, 'Solid'], [2, 'Dashed'], [1, 'Dotted']], true),
+    pick('Thickness', 'width', [[1, '1'], [2, '2'], [3, '3'], [4, '4']], true),
+    pick('Labels', 'labels', [['line', 'On the line'], ['scale', 'On the price scale']], false),
+  ];
+  const srow = mk('label', 'op-field');
+  ui.shade = mk('input');
+  ui.shade.type = 'range'; ui.shade.min = '0'; ui.shade.max = '40'; ui.shade.step = '2';
+  ui.shade.setAttribute('aria-label', 'Shading');
+  ui.shade.oninput = () => setLook('shade', Number(ui.shade.value));
+  srow.append(mk('span', 'op-lab', 'Shading'), ui.shade);
+  lk.body.append(lrow, ...ui.lookSel.map((p) => p.row), srow);
+  ui.form.append(tiles, types, fields, units, exits.box, extra.box, lk.box);
 
   // the chart's accounts (outside the greyed form: "Change" works on a chart with Trading off)
   const accts = mk('div', 'op-accts');
@@ -271,7 +314,20 @@ function coll(title, key) {
 /* ---- the send: a pointer click, or Enter / Space on the focused button -- never a held key (HBTrade.wireSend,
    shared with the chart's Buy/Sell block) ---- */
 function send() {
-  if (UI().busy() || ui.send.disabled) return;
+  if (ui.send.disabled) return;
+  sendNow();
+}
+/* The chart's ENTRY tag clicked (the panel may be closed, so the Send button's state is not read): this chart's
+   trading gate first, then the very same send -- placeOrder's confirm, gates and checks. */
+function sendFromChart(cell) {
+  if (cell !== selectedCell()) return;
+  paint();
+  const m = UI().effectiveMode(cell);
+  if (m.mode !== 'on') { D().toast('err', m.reason); return; }
+  sendNow();
+}
+function sendNow() {
+  if (UI().busy()) return;
   const cell = selectedCell();   // resolved NOW, at the click -- never a chart kept from a paint
   if (!cell || !cell.shown) { D().toast('err', 'No chart selected — nothing sent'); return; }
   if (cell !== seen.cell || cell.shown.root !== seen.root) {
@@ -328,6 +384,11 @@ function symbolChanged() {
 /* ---- paint: texts, classes and disabled states in place ---- */
 function paint() {
   if (!ui) return;
+  const pq = D().prefs.qty;
+  if (pq !== prefQty) {   // the chart's Buy/Sell box changed the size: the form follows (never while typing in it)
+    prefQty = pq;
+    if (!focused(ui.qty) && T.parseQty(st.qty) !== pq) st.qty = ui.qty.value = String(pq);
+  }
   const cell = selectedCell(), root = cell && cell.shown ? cell.shown.root : null;
   if (cell !== seen.cell || root !== seen.root) {
     if (seen.cell && cell !== seen.cell) flashPending = true;   // shown once this chart's accounts paint (it may still be loading)
@@ -337,7 +398,11 @@ function paint() {
     if (formRoot !== null) symbolChanged();
     formRoot = root;
   }
-  if (!visible) { flashPending = false; return; }
+  if (!visible) {   // closed: the chart keeps the order's lines (they still drag, and the ENTRY tag still sends)
+    flashPending = false;
+    paintPreview(root ? cell : null, root ? compute(cell) : null);
+    return;
+  }
 
   // header: the badge (rebuilt only on a symbol change), the root and its name
   if (root !== logoRoot) { logoRoot = root; ui.logo.replaceChildren(...(root ? [window.HBCell.badgeEl(root, 20)] : [])); }
@@ -345,6 +410,7 @@ function paint() {
     ui.sym.textContent = cell ? (cell.cfg && cell.cfg.root) || '—' : '—';
     ui.name.textContent = '';
     el.classList.add('off');
+    paintPreview(null, null);
     paintIdle(cell ? 'Loading the chart…' : 'No chart selected');
     return;
   }
@@ -404,6 +470,12 @@ function paint() {
       : exitSub(x.unit, tr, c.tick, exitVal(k), k === 'sl' ? c.worst : null);
   }
 
+  paintPreview(cell, c);
+  paintColl(ui.look);
+  paintSwitch(ui.lookSw, look.on);
+  for (const p of ui.lookSel) if (p.sel.value !== String(look[p.key])) p.sel.value = String(look[p.key]);
+  if (ui.shade.value !== String(look.shade)) ui.shade.value = String(look.shade);
+
   // extra settings: time in force for a resting order only (a Market order is Day)
   paintColl(ui.extra);
   ui.tifRow.hidden = st.type === 'Market';
@@ -422,6 +494,131 @@ function paint() {
   ui.send.classList.toggle('sending', !!T.sendingSide(UI().sending(), 'panel', null));   // fast-paper: pressed until it resolves
   ui.send.disabled = !!reason;
   ui.reason.textContent = m.mode !== 'on' ? '' : reason;   // the mode's reason already shows under the accounts
+}
+/* The order's preview (the user, 2026-10-18): on the selected chart, an ENTRY line and the TP / SL lines where each
+   would sit if the order went now (a Market's follow the last trade), labelled "TP +$500 · 100t", with a green band
+   from the entry to the TP and a red one to the SL. Its look (line, thickness, shading, where the labels go) is the panel's "Chart preview".
+   It stays when the panel is closed; its "Show on chart" switch hides it. */
+let pre = { series: null, lines: {}, zones: null, cell: null, hover: null };
+function paintPreview(cell, c) {
+  const series = cell && cell.P && look.on ? cell.candles : null;
+  if (pre.series !== series) {   // another chart, or this one rebuilt its series: the old lines go with the old series
+    try {
+      for (const l of Object.values(pre.lines)) pre.series.removePriceLine(l);
+      if (pre.zones) pre.series.detachPrimitive(pre.zones);
+    } catch (_) { /* its chart is gone */ }
+    if (pre.cell) { pre.cell.box.removeEventListener('pointermove', pre.hover); delete pre.cell.el.dataset.opGrab; delete pre.cell.el.dataset.opClick; }
+    pre = { series, lines: {}, zones: null, cell: series ? cell : null, hover: null };
+    if (series) {
+      pre.zones = new window.HBTradeLines.Zones();
+      series.attachPrimitive(pre.zones);
+      pre.hover = (e) => {   // the hand over the ENTRY tag, ↕ over a line that drags
+        const tag = onEntryTag(cell, e), grab = !tag && grabAt(cell, e);
+        if (tag) cell.el.dataset.opClick = ''; else delete cell.el.dataset.opClick;
+        if (grab) cell.el.dataset.opGrab = ''; else delete cell.el.dataset.opGrab;
+      };
+      cell.box.addEventListener('pointermove', pre.hover);
+    }
+  }
+  if (!series) return;
+  const P = cell.P, want = {};
+  if (c.entry != null) {
+    const n = c.order.ok ? c.order.qty : c.qty, size = Number.isInteger(n) && n >= 1 ? ` ${n} contract${n === 1 ? '' : 's'}` : '';
+    want.entry = { price: c.entry, color: st.side === 'Buy' ? P.accent : P.down, title: `ENTRY · ${st.side.toUpperCase()}${size}` };
+  }
+  for (const k of ['tp', 'sl']) {
+    const t = c[k];
+    if (!t) continue;
+    const usd = t.usd == null ? null : (k === 'tp' ? '+' : '\u2212') + T.money(t.usd);   // the whole order's $ at that line
+    want[k] = { price: t.price, color: k === 'tp' ? P.up : P.down, title: [k.toUpperCase() + (usd ? ` ${usd}` : ''), `${t.ticks}t`].join(' · ') };
+  }
+  for (const k of ['entry', 'tp', 'sl']) {
+    const w = want[k], line = pre.lines[k];
+    if (!w) { if (line) { series.removePriceLine(line); delete pre.lines[k]; } continue; }
+    // a Market's entry IS the last price: its own axis label would only push above the last price's
+    const o = { price: w.price, color: w.color, title: look.labels === 'scale' ? w.title : '', lineWidth: look.width, lineStyle: look.style,
+      axisLabelVisible: k !== 'entry' || st.type !== 'Market' };
+    if (line) line.applyOptions(o); else pre.lines[k] = series.createPriceLine(o);
+  }
+  const tags = look.labels === 'line' ? Object.entries(want).map(([key, w]) => ({ key, price: w.price, text: w.title, color: w.color })) : [];
+  pre.zones.set(c.entry == null ? [] : ['tp', 'sl'].filter((k) => want[k]).map((k) => ({ from: c.entry, to: want[k].price, color: want[k].color })),
+    tags, look.shade / 100);
+}
+/* ---- dragging the preview's lines on the chart (the user, 2026-10-18): the TP, the SL, and a resting order's
+   entry. The chart's press goes here first (app.js onPick). Dragging only rewrites the form -- in the exit's own unit
+   (ticks stay ticks) -- and never sends anything; an exit stops one tick short of its entry's wrong side.
+   A click (no drag) on the ENTRY tag sends the order, as the panel's Send would. A Market's entry can't move: dragging
+   it away places an exit instead ('new') -- toward profit the TP, the other way the SL -- switched on if it was off. ---- */
+const GRAB_PX = 6, CLICK_PX = 4;
+function paneXY(cell, e) {
+  const r = cell.chart.panes()[0].getHTMLElement().getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+function onEntryTag(cell, e) {
+  const line = pre.lines.entry, hit = pre.zones && pre.zones.hits.find((h) => h.key === 'entry');
+  if (pre.cell !== cell || !line || !hit || !cell.chart || cell.priceAtEvent(e) == null) return false;
+  const { x, y } = paneXY(cell, e), ly = pre.series.priceToCoordinate(line.options().price);
+  return ly != null && Math.abs(y - ly) <= 9 && x >= hit.x && x <= hit.x + hit.w;
+}
+function grabAt(cell, e) {
+  if (pre.cell !== cell || !cell.chart || cell.priceAtEvent(e) == null) return null;
+  const { y } = paneXY(cell, e);
+  let best = null;
+  for (const [k, line] of Object.entries(pre.lines)) {
+    const ly = pre.series.priceToCoordinate(line.options().price), d = ly == null ? Infinity : Math.abs(ly - y);
+    if (d <= GRAB_PX && (!best || d < best.d)) best = { k, d };
+  }
+  return best && (best.k === 'entry' && st.type === 'Market' ? 'new' : best.k);
+}
+function startPreviewDrag(cell, e) {
+  const tag = onEntryTag(cell, e);
+  let k = tag ? (st.type === 'Market' ? 'new' : 'entry') : grabAt(cell, e);
+  if (!k) return false;
+  const x0 = e.clientX, y0 = e.clientY;
+  let moved = false;
+  const move = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - x0, ev.clientY - y0) < CLICK_PX) return;
+    moved = true;
+    const p = cell.priceAtEvent(ev);
+    if (p == null) return;
+    if (k === 'new') {   // the first move off the entry decides which exit this drag places
+      const entry = compute(cell).entry;
+      if (entry == null || p === entry) return;
+      k = (p > entry) === (st.side === 'Buy') ? 'tp' : 'sl';
+      st[k].on = true;
+    }
+    dragTo(cell, k, p);
+  };
+  const stop = (ev) => {
+    window.removeEventListener('pointermove', move, true);
+    window.removeEventListener('pointerup', stop, true);
+    window.removeEventListener('pointercancel', stop, true);
+    window.removeEventListener('blur', stop);
+    if (tag && !moved && ev && ev.type === 'pointerup') sendFromChart(cell);
+  };
+  window.addEventListener('pointermove', move, true);
+  window.addEventListener('pointerup', stop, true);
+  window.addEventListener('pointercancel', stop, true);
+  window.addEventListener('blur', stop);
+  return true;
+}
+function dragTo(cell, k, price) {
+  if (k === 'entry') {
+    const f = st.type === 'StopLimit' ? 'limit' : 'price';
+    st[f] = fmtIn(price, cell.tick);
+    needDefault[f] = false;
+    ui.f[f].inp.value = st[f];
+  } else {
+    const c = compute(cell), from = k === 'tp' ? c.entry : c.slEntry;
+    if (from == null) return;
+    const above = (k === 'tp') === (st.side === 'Buy');   // a long's TP and a short's SL sit above the entry
+    const p = above ? Math.max(price, from + cell.tick) : Math.min(price, from - cell.tick);
+    const unit = st[k].unit;
+    st[k].unit = 'price';
+    st[k].value = ui.ex[k].inp.value = fmtIn(p, cell.tick);
+    if (unit !== 'price') setUnit(k, unit);   // back to the typed unit, re-expressed (ticks / $)
+  }
+  paint();
 }
 /* S1: the red ring round Send and its LIVE tag while the selected chart's next order reaches a LIVE account (`ids`:
    HBTradeUI.liveCue, the send path's own set); none otherwise. */
@@ -504,7 +701,7 @@ function pickPrice(price) {
    size-driven behaviour, only whether it's worth painting at all). */
 function setVisible(v) {
   visible = !!v;
-  if (visible) paint();
+  paint();
 }
 function setRoot() { paint(); }   // the selected chart (or its symbol) changed: the panel re-reads it
 
@@ -520,9 +717,9 @@ function mount(pg, container) {
   D().on(() => paint());                 // desk / quote / prefs events: patch in place, never rebuild
   UI().onBusyChange(() => paint());
   UI().onTradeChange(() => paint());     // a chart's Trading switch / accounts, a LIVE arm
-  setInterval(() => { if (visible) paint(); }, 1000);   // a quote going stale with no event (a Market's exits then refuse)
+  setInterval(paint, 1000);   // a quote going stale with no event; the chart's lines follow the last trade even while closed   // a quote going stale with no event (a Market's exits then refuse)
   paint();
 }
 
-window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible };
+window.HBOrderPanel = { mount, setRoot, pickPrice, wantsPick, setVisible, startPreviewDrag };
 })();

@@ -209,6 +209,13 @@ function hostFor(id) {
       // the order panel's price field has focus and the SELECTED chart is pressed: the press fills that field (the
       // price under the pointer, tick-rounded) and does nothing else -- no pan, no drawing, no order
       const OP = window.HBOrderPanel;
+      // or it grabs one of the order panel's preview lines (TP / SL / a resting entry): the drag only edits the form
+      if (e && e.button === 0 && cells.indexOf(cell) === selected && OP && OP.startPreviewDrag(cell, e)) {
+        e.preventDefault();
+        e.stopPropagation();
+        cell.swallowClicks();
+        return;
+      }
       if (e && e.button === 0 && cells.indexOf(cell) === selected && OP && OP.wantsPick()) {
         const price = cell.priceAtEvent(e);
         if (price != null) {

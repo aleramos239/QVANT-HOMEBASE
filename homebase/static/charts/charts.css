@@ -166,6 +166,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .panel[data-cursor="crosshair"] .chart * { cursor: crosshair !important; }
 .panel[data-cursor="move"] .chart * { cursor: move !important; }
 .panel[data-cursor="grabbing"] .chart * { cursor: grabbing !important; }
+.panel[data-op-grab] .chart * { cursor: ns-resize !important; }   /* over an order-panel preview line: drag it */
+.panel[data-op-click] .chart * { cursor: pointer !important; }    /* over its ENTRY tag: click to send */
 
 /* the per-chart gear, in the axis corner; shown on hover (TradingView) */
 .cell-gear { position: absolute; right: 0; bottom: 0; z-index: 7; display: grid; place-items: center; opacity: 0;
@@ -785,7 +787,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .op-name { min-width: 0; color: var(--text-2); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .op-order { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .op-form { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; padding: 12px 14px 4px; display: flex; flex-direction: column; gap: 12px; }
-.opanel.off .op-form { opacity: .45; pointer-events: none; }   /* Trading off on this chart: greyed, nothing to press */
+.opanel.off .op-form > :not(.op-look) { opacity: .45; pointer-events: none; }   /* Trading off on this chart: greyed, nothing to press */
 
 /* ---- the DOM tab: the Level 2 ladder (2026-09-27 charts-depth plan, Task 1). Read-only: no row is a button. */
 .dom-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
@@ -833,6 +835,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .op-fields { display: flex; flex-direction: column; gap: 8px; }
 .op-fields:not(:has(.op-field:not([hidden]))) { display: none; }
 .op-field { display: grid; grid-template-columns: minmax(0, 1fr) 148px; align-items: center; gap: 8px; }
+.op-field input[type="range"] { width: 100%; accent-color: var(--accent); }   /* Chart preview: shading */
 .op-lab { color: var(--text-2); font-size: 13px; }
 .op-in, .op-sel { width: 100%; height: 32px; padding: 0 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel);
   font-size: 13px; font-variant-numeric: tabular-nums; }

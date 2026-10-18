@@ -1786,3 +1786,13 @@ test('W1: deskStatusParts -- the never-cut state, the parts that may step out, t
   const off = T.deskStatusParts({ state: { ...STATE, enabled: false } });
   assert.deepEqual([off.dot, off.state, off.why, off.limits, off.link], ['warn', 'Chart trading is off on the desk', '', '', true]);
 });
+
+test('exit lines: ticks from the entry on the chip, and a zone from the entry to each SL / TP', () => {
+  const sl = { kind: 'sl', price: 30880, qty: 1, legs: [{ avg: 30905, who: '…047', s: 1, qty: 1, pv: 20 }] };
+  assert.equal(T.lineText(sl, 30910, 0.25), `SL 1 · ${M}$500 · 100t · …047`);
+  const two = { ...sl, legs: [...sl.legs, { ...sl.legs[0], avg: 30900 }] };
+  assert.ok(!T.lineText(two, 30910, 0.25).includes('t ·'), 'no ticks when the legs entered at different prices');
+  const P = { up: 'g', down: 'r' };
+  assert.deepEqual(T.exitZones([sl, { kind: 'position', price: 30905, legs: [] }], P), [{ from: 30905, to: 30880, color: 'r' }]);
+  assert.deepEqual(T.exitZones([two], P), []);
+});

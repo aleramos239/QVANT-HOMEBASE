@@ -34,6 +34,58 @@ class Hook {
   detached() { cancelAnimationFrame(this.raf); this.raf = 0; }
 }
 
+/* Shaded price bands across the pane (TradingView's long/short look, the user 2026-10-18): green from an entry to its
+   TP, red to its SL. set([{from, to, color}], tags, alpha) -- the order panel's preview uses one too, with tags: the
+   lines' labels drawn ON each line at the pane's right edge ([{price, text, color}]). */
+class Zones {
+  constructor() {
+    this.list = []; this.tags = []; this.hits = []; this.alpha = 0.12;
+    this._views = [{ zOrder: () => 'bottom', renderer: () => ({ draw: (t) => this.draw(t) }) },   // bands under the candles
+      { zOrder: () => 'top', renderer: () => ({ draw: (t) => this.drawTags(t) }) }];              // tags over them
+  }
+  attached({ series, requestUpdate }) { this.series = series; this.requestUpdate = requestUpdate; }
+  detached() { this.series = this.requestUpdate = null; }
+  updateAllViews() {}
+  paneViews() { return this._views; }
+  set(list, tags = [], alpha = 0.12) {
+    const key = JSON.stringify([list, tags, alpha]);
+    if (key === this.key) return;
+    this.key = key; this.list = list; this.tags = tags; this.alpha = alpha;
+    if (this.requestUpdate) this.requestUpdate();
+  }
+  draw(target) {
+    if (!this.series || !this.list.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.globalAlpha = this.alpha;
+      for (const z of this.list) {
+        const y1 = this.series.priceToCoordinate(z.from), y2 = this.series.priceToCoordinate(z.to);
+        if (y1 == null || y2 == null) continue;
+        ctx.fillStyle = z.color;
+        ctx.fillRect(0, Math.min(y1, y2), mediaSize.width, Math.abs(y2 - y1));
+      }
+      ctx.globalAlpha = 1;
+    });
+  }
+  drawTags(target) {
+    if (!this.series || !this.tags.length) return;
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.font = '600 11px -apple-system, BlinkMacSystemFont, system-ui, sans-serif';
+      ctx.textBaseline = 'middle';
+      this.hits = [];   // where each tag sits ({key, x, w}, pane pixels): the order panel's click on its ENTRY tag
+      for (const t of this.tags) {
+        const y = this.series.priceToCoordinate(t.price);
+        if (y == null) continue;
+        const w = ctx.measureText(t.text).width + 12, x = mediaSize.width - w - 8;
+        this.hits.push({ key: t.key, x, w });
+        ctx.fillStyle = t.color;
+        ctx.beginPath(); ctx.roundRect(x, y - 9, w, 18, 4); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillText(t.text, x + 6, y + 0.5);
+      }
+    });
+  }
+}
+
 /* The execution arrows (HBTrade.fillMarkers / execArrow): a canvas series primitive, so the chart itself repaints
    them on every scroll, zoom and autoscale -- nothing is rebuilt. Each arrow sits on the bar that holds its fill
    (HBDrawings.barIndexAt; none before the first loaded bar or past the last one's end). */
@@ -193,6 +245,8 @@ class Overlay {
     cell.candles.attachPrimitive(this.hook);
     this.arrows = new ExecArrows(cell);   // the execution arrows (2026-09-27): drawn here, not as series markers
     cell.candles.attachPrimitive(this.arrows);
+    this.zones = new Zones();   // green / red bands from each position's entry to its TP / SL
+    cell.candles.attachPrimitive(this.zones);
 
     this.unsub = window.HBDeskClient.on(() => this.render());
     this.unsubBusy = window.HBTradeUI.onBusyChange(() => this.render());
@@ -259,7 +313,7 @@ class Overlay {
       let it = this.items.get(g.key);
       if (!it) {
         const line = this.cell.candles.createPriceLine({ price: g.price, color: T.lineColor(g, this.cell.P),
-          lineWidth: 1, lineStyle: g.kind === 'position' ? 0 : 2, axisLabelVisible: true, title: '' });
+          lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title: '' });
         const chip = this.buildChip();
         it = { g, line, chip };
         this.items.set(g.key, it);
@@ -277,6 +331,7 @@ class Overlay {
       it.chip.remove();
       this.items.delete(key);
     }
+    this.zones.set(T.exitZones(groups, this.cell.P));
     this.sync();
   }
 
@@ -309,7 +364,7 @@ class Overlay {
 
   paint(it) {
     const Dc = window.HBDeskClient, q = Dc.quotes[this.root];
-    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null);
+    it.chip.text.textContent = T.lineText(it.g, q ? q.last : null, this.cell.tick);
     it.chip.style.setProperty('--c', T.lineColor(it.g, this.cell.P));
     it.chip.classList.toggle('paper', !!it.g.paper);   // a PAPER account's line (Task 2): its colour comes via --c
   }
@@ -711,7 +766,7 @@ class Overlay {
     this.badges.remove();
     this.pbadge.remove();
     this.pstats.remove();
-    if (this.cell.chart) { this.cell.candles.detachPrimitive(this.hook); this.cell.candles.detachPrimitive(this.arrows); }
+    if (this.cell.chart) { this.cell.candles.detachPrimitive(this.hook); this.cell.candles.detachPrimitive(this.arrows); this.cell.candles.detachPrimitive(this.zones); }
     this.cell.setExtraMarkers('fills', []);   // the key the pre-arrow markers used: never left behind
     this.cell.setExtraMarkers('bots', []);
     this.cell.setExtraMarkers('paper', []);
@@ -728,5 +783,5 @@ function mk(tag, cls, text) {
 function liveTag() { const t = mk('span', 'tr-live', 'LIVE'); t.hidden = true; return t; }
 function sideLabel(tag, text) { const l = mk('span', 'tr-lbl'); l.append(tag, ' ', text); return l; }   // the space: a screen reader says "LIVE SELL", not "LIVESELL"
 
-window.HBTradeLines = { overlay: (cell, page) => new Overlay(cell, page) };
+window.HBTradeLines = { overlay: (cell, page) => new Overlay(cell, page), Zones };
 })();
