@@ -59,6 +59,7 @@ variant of line 3.1 (is this strategy good enough?).
 | 1.4 | With a stop and a target on, winners pay about the target and losers cost about the stop, in dollars; exceptions are listed |
 | 1.5 | 10 trades are looked at on the chart (the first 5 and 5 at random): entry and exit sit where the rule says. *(10 is my number; the course gives none)* |
 | 1.6 | After any change to the code, the earlier trade list is reproduced exactly before a new run counts |
+| 1.7 | No look-ahead, read by code: on 30 build days, with every print (and book row) from 3 random moments inside its own trading window on garbled, nothing the rule decided up to that moment changes: its orders, bars, levels and fills. *(30 and 3 are my numbers; the course gives none)* |
 
 ### Phase 2 — Build, 22 Sep 2021 → 30 Jun 2025. Approved for the out-of-sample test when all of these are true
 | # | Requirement | The number |
@@ -111,6 +112,12 @@ the end-of-day running total to the lowest point reached, a day's close or its w
 Shown at the lock, never a pass line (owner, 2026-10-07): the default variant's prop odds on the BUILD days for the account of
 line 3.6, read as line 5.5 reads them (open losses count, the "live is worse" row, each phase at its best size, no day limit).
 It says early whether the idea fits the account. It proves nothing: line 5.5 is judged on the test days, in phase 5.
+
+**Too good to trust (owner's tripwire, 2026-10-15).** A one-rule idea (no filter) whose default variant shows on the build days a
+t above 6, a profit factor above 3, or a win rate above 85 % at a target of 0.75R or less is not frozen: it is audited for
+look-ahead first, and frozen only on the owner's word once he has seen the audit (`bp.py lock <name> --audited="..."`, kept in
+lock.json). nq_asia_liq_sweep reached the eval card at 88.8 % won, profit factor 4.5, t 12, all of it from a level that read the
+evening it traded. (Toolkit: `blueprint/freeze.py` `TOO_GOOD`, the four numbers in one place.)
 
 Not passed → back to phase 2 as a new round when one is left (it counts), otherwise shelved.
 
@@ -241,6 +248,7 @@ one strategy, and the owner's.
 |---|---|
 | 0.7 When it should lose | Owner, 2026-10-06. Course, extra lesson: a drawdown the idea's reason implies is the premium, a backtest without it is a red flag, and a filter that only erases it is overfitting |
 | 1.1-1.6 Code check | Course, lessons 6-7: his own first runs were wrong on entry time, trade count and weekend holds. The rest of the blueprint guards against luck, not against a wrong test |
+| 1.7 No look-ahead | 2026-10-15: nq_asia_liq_sweep passed every phase (88.8 % won, PF 4.5) on a level that read the evening it traded. The engine's own tests garbled only from New York morning moments, so the evening read was never caught. Now every card is replayed with the tape garbled from moments inside its OWN window (`blueprint/peek.py`) |
 | 2.1 60 % green | A floor against one lucky setting. Not evidence of an edge (48 %) |
 | 2.2 and 4.3 Cost floor | Course, lesson 8. The only build number that moved the odds. His floor is before costs; this one is after costs, so it is stricter |
 | 2.3 and 4.4 Random entries | A rising, volatile market pays most exit tables. Only this separates the entry from the market |

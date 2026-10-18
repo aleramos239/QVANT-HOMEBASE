@@ -12,8 +12,14 @@ REFUSED unless, for the idea on file:
   * its LATEST build round has every line 2.1-2.9 in its result and none failed (null = the line does not apply) -- a round
     that was started and has no result, a smoke run, a round whose card was changed afterwards: refused
   * a CODE CHECK is on file for the round's home store with every line that is read true: 1.1-1.5 TRUE (1.5 = the owner
-    looked at the 10 trades), 1.6 not failed -- and TRUE when the engine or the family code changed since the store was
-    written (the earlier trade list reproduced by a fresh run: line 1.6)
+    looked at the 10 trades), 1.7 TRUE (no look-ahead, peek.py: a check from before 2026-10-15 has no 1.7 and is run again),
+    1.6 not failed -- and TRUE when the engine or the family code changed since the store was written (the earlier trade list
+    reproduced by a fresh run: line 1.6)
+  * TOO GOOD (owner's tripwire, 2026-10-15, after nq_asia_liq_sweep froze at 88.8 % won, PF 4.5, t 12 on build days -- all of it
+    a look-ahead): a ONE-RULE idea (no filter) whose default variant shows on the build days a t of its trades above
+    TOO_GOOD["t"], OR a profit factor above TOO_GOOD["pf"], OR a win rate above TOO_GOOD["win"] at a target of
+    TOO_GOOD["win_at_target_r"] R or less, is refused: a look-ahead audit first. `audited` (bp.py lock --audited="...", on the
+    owner's word only, after he has seen the audit) lets it through; the words and what tripped are kept in lock.json `audit`.
 THEN (start() refuses, run() works):
   1. THE WORSE-FILLS TABLE of the home table on the build days (runner.run_worse: the engine's STRESS, 2 ticks + 250 ms,
      + the 100 ms late cancel for a two-sided bracket). One tape pass; a table that is stored is never run again.
@@ -74,7 +80,27 @@ from . import tables as T
 
 LOCK_WAIT = 240.0                                   # seconds `lock` waits by itself for the worse-fills pass (the connector gives a command 300)
 KEEP = ("hash",)                                    # what the hash is not taken over: itself
-PLAIN = ("1.1", "1.2", "1.3", "1.4", "1.5")         # the lines of the code check that are read on every store: each must be TRUE
+PLAIN = ("1.1", "1.2", "1.3", "1.4", "1.5", "1.7")  # the lines of the code check that are read on every store: each must be TRUE
+TOO_GOOD = {"t": 6.0, "pf": 3.0, "win": 0.85, "win_at_target_r": 0.75}     # THE "TOO GOOD" TRIPWIRE (module docstring): one rule, build days
+
+
+def too_good(trades, tgt_r) -> list:
+    """What trips the TOO_GOOD wire on the default variant's build trades (net in dollars each) and its target (R; 0 = none)
+    -> the readings that are over, in words (an empty list = nothing trips)."""
+    import numpy as np
+    x = np.asarray(trades, np.float64)
+    if len(x) < 2:
+        return []
+    sd, win, loss = float(x.std(ddof=1)), float(x[x > 0].sum()), float(-x[x < 0].sum())
+    t = float(x.mean()) / sd * len(x) ** 0.5 if sd > 0 else float("inf")
+    pf, wr, out = (win / loss if loss > 0 else float("inf")), float((x > 0).mean()), []
+    if t > TOO_GOOD["t"]:
+        out.append(f"t {t:.1f} (above {TOO_GOOD['t']:g})")
+    if pf > TOO_GOOD["pf"]:
+        out.append(f"profit factor {pf:.2f} (above {TOO_GOOD['pf']:g})")
+    if 0 < float(tgt_r or 0) <= TOO_GOOD["win_at_target_r"] and wr > TOO_GOOD["win"]:
+        out.append(f"win rate {100 * wr:.1f} % at a {float(tgt_r):g}R target (above {100 * TOO_GOOD['win']:g} % at {TOO_GOOD['win_at_target_r']:g}R or less)")
+    return out
 
 
 def digest(lock: dict) -> str:
@@ -179,6 +205,10 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
     if off or chk.get("ok") is False:
         why = "the owner has not looked at the 10 trades on the chart yet (line 1.5): run it again with --looked" if off == ["1.5"] else \
             f"line{'s' * (len(off) != 1)} {', '.join(off)} {'are' if len(off) != 1 else 'is'} not true"
+        if "1.7" not in marks:
+            why += " -- it has no look-ahead line 1.7 (a code check from before 2026-10-15): run the code check again"
+        elif marks["1.7"] is False:
+            why += " -- line 1.7 says the rule LOOKS AHEAD: fix the code that reads the future first"
         raise J.Refuse(f"the code check of {name} on file is not passed: {why} ({home})")
     src, asked, here = chk.get("source") or {}, chk.get("asked") or {}, (folder / key).resolve()
     same = lambda p: bool(p) and Path(str(p)).expanduser().resolve() == here  # noqa: E731
@@ -194,7 +224,7 @@ def _checked(d: Path, folder: Path, key: str, family: str) -> None:
                        f"exactly before anything counts (line 1.6: bp.py code-check {name} --store=<a fresh run> --same-as={key}, then --looked)")
 
 
-def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=(), default=None, labels=()) -> dict:
+def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, waive=(), default=None, labels=(), audited=None) -> dict:
     """EVERYTHING OF THE FREEZE THAT NEEDS NO RUN -> the arguments of run() (JSON: a job keeps them). An idea that is frozen
     already comes back as {"idea", "root", "frozen": True}: run() then only shows its lock. Refused here: module docstring,
     and what the runner refuses before a pass (the no-start window, the ledger's cap, another run in the store folder)."""
@@ -251,7 +281,8 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     return {"idea": name, "root": None if root is None else str(root), "frozen": False, "round_": n, "heavy": not rows[0]["skipped"], "workers": workers,
             "out": None if out is None else str(out), "ledger": None if ledger is None else str(ledger), "days": days, "cells": cells, "block": block,
             "draws": test.get("draws"), "box": test.get("box"), "build_avg_trade": test.get("build_avg_trade"), **({"waived": waived} if waived else {}),
-            **({"default": str(default)} if default else {}), **({"labels": [str(x) for x in labels]} if labels else {})}
+            **({"default": str(default)} if default else {}), **({"labels": [str(x) for x in labels]} if labels else {}),
+            **({"audited": str(audited)} if audited else {})}
 
 
 def _choose(rows: list, ids: list, worse: dict, pick, addr: str, labels=()) -> tuple:
@@ -276,7 +307,7 @@ def _choose(rows: list, ids: list, worse: dict, pick, addr: str, labels=()) -> t
 
 
 def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, draws=None,
-        progress=None, box=None, build_avg_trade=None, waived=None, default=None, labels=None) -> dict:
+        progress=None, box=None, build_avg_trade=None, waived=None, default=None, labels=None, audited=None) -> dict:
     """THE FREEZE ITSELF, with what start() returned: the worse-fills table of the home on the build days (when it is not
     stored), the default variant, lock.json (module docstring), the Lab's copies -> the result: lines 3.1 and 3.2, the
     lock's hash, the default and the test range. Beyond the agreed keys: lock (lock.json as it is on file), hash, default,
@@ -315,7 +346,15 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
     if default is None:
         raise J.Refuse(f"no variant of {u['addr']} makes money on build AND on build with worse fills ({RUN.worse_words(wst['meta']['worse'])}): there is "
                        "no default variant, so there is nothing to freeze (line 3.1)")
-    said, box = box == "said", [fn(T.box(st, u, default, days)) for fn in L.BOX]      # lines 3.3-3.8: the default variant on its own
+    alone, said = T.box(st, u, default, days), box == "said"
+    exit_ = next((c.get("exit") or {} for c in (REC._json(folder / key / "run.json") or {}).get("cells") or [] if c.get("id") == default), {})
+    tripped = [] if filt else too_good(alone["trades"], exit_.get("tgt_r"))      # THE "TOO GOOD" TRIPWIRE: one rule only (module docstring)
+    if tripped and not audited and not said:        # (said: TEST ONLY, module docstring: a 3-day table's numbers trip nothing)
+        raise J.Refuse(f"TOO GOOD TO TRUST: the default variant {default} of {u['addr']} shows on the build days " + ", ".join(tripped)
+                       + ". One rule rarely does that; a rule that reads the future does. Nothing is frozen: audit it for look-ahead first -- every value the "
+                       "rule reads at a decision (levels, ranges, bars, the book): is it known at that moment? Only when the owner has seen the audit and says "
+                       f"so: bp.py lock {name} --audited=\"what was checked\"")
+    box = [fn(alone) for fn in L.BOX]               # lines 3.3-3.8: the default variant on its own
     asked = [x for x in box if not x["passed"] and x["line"] not in set(labels or ())]      # (labels: the pipeline's prop gates, module docstring: read, kept, ask nothing)
     if not said and asked:                          # (said: TEST ONLY, module docstring)
         raise J.Refuse(f"the default variant {default} of {u['addr']} does not meet every line read on it before the freeze -- "
@@ -341,6 +380,8 @@ def run(idea, root=None, frozen=False, round_=None, heavy=None, workers=None, ou
             "montecarlo": {"runs": mc["runs"], "seed": mc["seed"]},
             "code": code(sp["family"]), "stores": {k: store_hash(folder, k) for k in keys},
             "test_range": {m: _range(m, m == h["market"], **_reads(filt)) for m in markets}}
+    if tripped and audited:                           # the tripwire went off and the owner's audit let it through: his words and what tripped, in the hash
+        lock["audit"] = {"tripped": tripped, "audited": str(audited)}
     if labels:                                        # lines that were read and kept and asked nothing (run(labels=): the pipeline's prop gates): in the hash
         lock["labelled"] = sorted(str(x) for x in labels)
     if waived:                                        # build lines that failed and were not asked (start(waive=): the pipeline's 2.5): written down, in the hash

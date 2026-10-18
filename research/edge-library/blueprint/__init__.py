@@ -9,6 +9,8 @@ code. Plan: out/blueprint/toolkit_plan.md. Front door: ../bp.py. judge.py stays 
               pool in one tape pass per market and bar size -> runs_bp/; the worse-fills table of the freeze; and run_test,
               THE ONLY CALLER of the engine's switch for the test days (for a read that is claimed) -> runs_bp_test/
   checks.py   the code check: lines 1.1-1.6 on a store or a plain trades file
+  peek.py     line 1.7 of the code check: no look-ahead -- the card replayed on build days with the tape garbled from moments
+              inside its window; nothing decided before the moment may move
   records.py  THE IDEA'S RECORD in the app's idea folder: the card (lines 0.1-0.7), the build with its counted rounds (the
               card names the tables; the reason is saved before the run; every line 2.1-2.9 is saved), the status
   jobs.py     long commands as jobs: --wait, a detached child, `bp.py job <id>`

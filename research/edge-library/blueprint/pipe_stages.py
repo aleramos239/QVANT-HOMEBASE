@@ -211,7 +211,7 @@ from . import runner as RUN
 from . import tables as T
 
 NAMES = {0: "idea card", 1: "raw heat map", 2: "machine check", 3: "indicators", 4: "proof", 5: "pick one box and lock", 6: "unseen days", 7: "the owner's look"}
-CHECKED = ("1.1", "1.2", "1.3", "1.4")              # the lines of the code check a machine reads alone (1.5 is a look at a chart, 1.6 waits for a change to the code)
+CHECKED = ("1.1", "1.2", "1.3", "1.4", "1.7")       # the lines of the code check a machine reads alone (1.5 is a look at a chart, 1.6 waits for a change to the code; 1.7 = no look-ahead)
 SHOWN = 20                                          # trades listed in a row (their count is always whole)
 REASON = "pipeline: stages 1 to 4 passed"           # the reason of a sub-idea's ONE build round (line 2.9 asks for it before the run)
 OTHERS = "2.5"                                      # the build's line on the other markets: after a low pass the build is the first to read it

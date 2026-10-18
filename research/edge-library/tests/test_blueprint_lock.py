@@ -179,6 +179,11 @@ def test_what_a_freeze_refuses():
     no("1.2")
     F.hand_check(NAME, root, KEY, marks={"1.6": False})                          # the earlier trade list was NOT reproduced
     no("1.6")
+    F.hand_check(NAME, root, KEY, marks={"1.7": False})                          # the rule looks ahead (line 1.7, blueprint/peek.py)
+    assert "LOOKS AHEAD" in no("1.7")
+    chk = F.read(d / "check.json")                                               # a code check from before line 1.7 was there: run again
+    (d / "check.json").write_text(json.dumps(dict(chk, lines=[x for x in chk["lines"] if x["line"] != "1.7"])))
+    assert "run the code check again" in no("no look-ahead line 1.7")
     F.hand_check(NAME, root, "bpl_other-NQ-tf15")                                # a passed check -- of another store
     assert "runs/bpl_lok-NQ-tf15" in no("not of the home store")
     F.hand_check(NAME, root, KEY, source={"kind": "trades", "where": str(F.tmp() / "trades.json")})
@@ -625,6 +630,32 @@ def test_the_lock_keeps_the_builds_average_trade_and_the_lines_of_the_default():
     mine = [f(data) for f in L.BOX]
     assert [(x["line"], x["passed"], x["text"]) for x in lock["box"]] == [(x["line"], x["passed"], x["text"]) for x in mine]
     assert [x["line"] for x in r["lines"]] == [f"3.{i}" for i in range(1, 9)] and [x["text"] for x in r["lines"]][2:] == [x["text"] for x in mine]
+
+
+def test_a_one_rule_idea_that_is_too_good_is_refused_for_a_look_ahead_audit():
+    """THE "TOO GOOD" TRIPWIRE (freeze.TOO_GOOD; owner 2026-10-15): a one-rule idea whose default variant shows a t above 6, a profit
+    factor above 3, or a win rate above 85 % at a target of 0.75R or less on the build days is not frozen until the owner has seen a
+    look-ahead audit; his words and what tripped are kept in the lock, under its hash."""
+    many = [50.0] * 90 + [-100.0] * 10                                            # 90 % won, profit factor 4.5
+    got = FRZ.too_good(many, 0.5)
+    assert len(got) == 3 and got[0].startswith("t 7.") and got[0].endswith("(above 6)") and got[1] == "profit factor 4.50 (above 3)"
+    assert got[2] == "win rate 90.0 % at a 0.5R target (above 85 % at 0.75R or less)"
+    assert FRZ.too_good(many, 1.0) == FRZ.too_good(many, 0) == got[:2]         # the win rate is held at a target of 0.75R or less only
+    assert FRZ.too_good([100.0] * 55 + [-100.0] * 45, 0.5) == [] and FRZ.too_good([], 0.5) == []
+    assert FRZ.TOO_GOOD == {"t": 6.0, "pf": 3.0, "win": 0.85, "win_at_target_r": 0.75}
+    root, keep = F.fresh(NAME, "toogood"), dict(FRZ.TOO_GOOD)
+    try:
+        FRZ.TOO_GOOD["pf"] = -1.0                                                  # every table trips: the wire is under test here, not a 3-day table's figures
+        with F.tiny(box=None):
+            why = F.refused(lambda: FRZ.lock(NAME, root), "TOO GOOD TO TRUST")
+        assert "profit factor" in why and "audit it for look-ahead" in why and "--audited=" in why and not (root / NAME / "lock.json").exists()
+        with F.tiny():                                                             # said (the tiny runs, TEST ONLY): nothing refuses; the audit is kept
+            lock = FRZ.lock(NAME, root, audited="every level and range read at a decision is known then")["lock"]
+        assert lock["audit"]["audited"] == "every level and range read at a decision is known then" and lock["audit"]["tripped"]
+        assert all("profit factor" in x for x in lock["audit"]["tripped"]) and lock["hash"] == FRZ.digest(lock)
+    finally:
+        FRZ.TOO_GOOD.clear()
+        FRZ.TOO_GOOD.update(keep)
 
 
 def test_no_test_day_was_opened_and_nothing_was_written_outside_the_temp_folder():

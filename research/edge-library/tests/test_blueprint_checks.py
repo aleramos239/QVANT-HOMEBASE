@@ -50,7 +50,7 @@ PV, TICK, COMM = 20.0, 0.25, 4.0                              # NQ: dollars a po
 DAYS = ["2022-03-15", "2022-03-16", "2022-03-17", "2022-03-18", "2022-03-21", "2022-03-22", "2022-03-23", "2022-03-24", "2022-11-25",
         "2024-05-14", "2025-06-27", "2025-06-30"]            # build days; 2022-11-25 is a half day; the last one ends the build
 CONTRACT = ("ok", "command", "name", "status", "phase", "round", "lines", "text", "next", "job", "saved", "error")     # plan section 8
-LINES = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]
+LINES = ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6", "1.7"]
 STATED = dict(market="NQ", sessions=["nyam"], max_per_day=2)
 HOME = Path.home() / ".homebase"
 _T: dict = {"keep": tempfile.TemporaryDirectory(prefix="bp_checks_")}
@@ -127,8 +127,9 @@ def test_a_clean_list_passes():
     assert list(r)[:len(CONTRACT)] == list(CONTRACT)
     assert [r[k] for k in ("ok", "command", "name", "status", "phase", "round", "job", "saved", "error")] == [True, "code-check", "list", None, 1, None, None, [], None]
     assert [x["line"] for x in r["lines"]] == LINES and all(x["text"].startswith(x["line"] + " ") for x in r["lines"])
-    assert [x["passed"] for x in r["lines"]] == [True, True, True, True, True, None] and r["passed"] is True and r["failed"] == [] and r["not_applicable"] == ["1.6"]
+    assert [x["passed"] for x in r["lines"]] == [True, True, True, True, True, None, None] and r["passed"] is True and r["failed"] == [] and r["not_applicable"] == ["1.6", "1.7"]
     b = by(r)
+    assert b["1.7"]["text"] == "1.7 n/a  a trades file cannot be replayed: the look-ahead check runs on a store of the engine (--store)"
     assert b["1.1"]["text"] == "1.1 PASS every one of the 12 trades is entered inside the stated window (sessions nyam)" and (b["1.1"]["number"], b["1.1"]["need"]) == (0, 0)
     assert b["1.2"]["text"] == "1.2 PASS one position at a time and flat by 15:58 ET (13:13 on half days): no overlap and no late exit in 12 trades"
     assert (b["1.2"]["overlaps"], b["1.2"]["late"], b["1.2"]["need"]) == (0, 0, R.need("1.2"))
@@ -221,7 +222,7 @@ def test_each_planted_bad_trade_is_caught_by_its_own_line():
     # what a list does not state cannot be read: the line does not apply, and the phase is not passed on it
     thin = [{k: t[k] for k in ("date", "side", "entry_ms", "exit_ms", "net")} for t in clean()]
     r = A.code_check("thin", trades=saved(thin, "thin"), market="NQ", looked=True)
-    assert [x["passed"] for x in r["lines"]] == [None, True, None, None, True, None] and r["passed"] is False and r["not_applicable"] == ["1.1", "1.3", "1.4", "1.6"]
+    assert [x["passed"] for x in r["lines"]] == [None, True, None, None, True, None, None] and r["passed"] is False and r["not_applicable"] == ["1.1", "1.3", "1.4", "1.6", "1.7"]
     assert "give --sessions or --window" in by(r)["1.1"]["text"] and "give --max-per-day" in by(r)["1.3"]["text"] and "no stop and target" in by(r)["1.4"]["text"]
 
 
@@ -256,7 +257,7 @@ def test_line_1_6_the_earlier_trade_list_is_reproduced_exactly():
     a = saved(clean(), "earlier")
     r = check(clean(), "now", looked=True, same_as=a)
     x = by(r)["1.6"]
-    assert x["passed"] is True and (x["number"], x["need"]) == (0, 0) and r["not_applicable"] == [] and r["passed"] is True
+    assert x["passed"] is True and (x["number"], x["need"]) == (0, 0) and r["not_applicable"] == ["1.7"] and r["passed"] is True      # (a trades file: 1.7 is not read)
     assert x["text"] == "1.6 PASS the earlier trade list is reproduced exactly: 12 trades in 1 list (earlier.json)"
     rows = clean()
     rows[3]["net"] += 0.01                                  # one cent on one trade
@@ -295,7 +296,8 @@ def test_a_store_is_read_with_what_it_states():
     p = store("hand-NQ-tf5", {"pts10-r2": clean(), "pts10-r0": no_target(clean())})
     r = A.code_check("hand", store=p, looked=True)
     b = by(r)
-    assert [x["passed"] for x in r["lines"]] == [True, True, True, True, True, None] and r["passed"] is True and r["name"] == "hand"
+    assert [x["passed"] for x in r["lines"]] == [True, True, True, True, True, None, None] and r["passed"] is True and r["name"] == "hand"
+    assert b["1.7"]["text"].startswith("1.7 n/a ") and "is not a store of the engine (family 'hand')" in b["1.7"]["text"]      # hand-made: nothing to replay
     assert r["source"] == {"kind": "store", "where": str(p), "market": "NQ", "lists": 2, "trades": 20}      # 12, and the 8 of them without a target exit
     assert b["1.1"]["text"] == "1.1 PASS every one of the 20 trades is entered inside the stated window (sessions nyam)"
     assert b["1.3"]["text"] == "1.3 PASS never more than the stated maximum of 2 a session and day: the most is 1 (20 trades in 2 lists)"
@@ -385,13 +387,14 @@ def test_the_command():
     rc, txt = _run(argv)
     lines = txt.rstrip("\n").split("\n")
     assert rc == 0 and txt.rstrip("\n") == r["text"] and lines[0] == f"CODE CHECK of cmd: 12 trades in 1 list, market NQ ({p})"
-    assert lines[1:7] == [x["text"] for x in r["lines"]] and lines[7:17] == [ln for ln in lines if ln.startswith("  #")] and len(lines) == 18
-    assert lines[17] == "RESULT: fails 1.5; not read: 1.6. Phase 1 is passed only when every line is true."
+    assert lines[1:8] == [x["text"] for x in r["lines"]] and lines[8:18] == [ln for ln in lines if ln.startswith("  #")] and len(lines) == 19
+    assert lines[18] == "RESULT: fails 1.5; not read: 1.6, 1.7. Phase 1 is passed only when every line is true."
     rc, js = _run(argv + ["--looked", f"--same-as={e}", *last])
     d = json.loads(js)
     assert rc == 0 and js.count("\n") == 1 and js.isascii() and list(d)[:len(CONTRACT)] == list(CONTRACT) and d["name"] == "cmd" and d["passed"] is True
     assert d == json.loads(json.dumps(A.code_check("cmd", trades=p, looked=True, same_as=e, root=tmp() / "ideas", **STATED)))
-    assert d["text"].split("\n")[-1] == "RESULT: every line is true. Phase 1 is passed." and d["next"].startswith("Phase 1 is passed")
+    assert d["text"].split("\n")[-1] == ("RESULT: every line that is read is true; 1.7 (look-ahead) is not read here: the freeze needs it read on the home store. "
+                                         "Phase 1 is passed.") and d["next"].startswith("Phase 1 is passed")
     assert d["saved"] == [] and not (tmp() / "ideas").exists()                  # no idea of that name on file: printed, nothing saved
     rc, js = _run(["code-check", "cmd", f"--trades={p}", "--market=NQ", "--window=09:30-11:00", "--max-per-day=2", "--json"])
     assert rc == 0 and json.loads(js)["lines"][0]["passed"] is True
@@ -429,8 +432,8 @@ def test_the_result_is_saved_with_the_idea_when_the_idea_is_on_file():
     rc, js = _run(["code-check", "cc_idea", "--looked", f"--root={root}", "--json"])
     d = json.loads(js)
     assert rc == 0 and d["passed"] is True and d["source"] == r["source"] and d["asked"] == r["asked"] and d["look"] == r["look"] and d["saved"] == [str(f)]
-    assert json.loads(f.read_text()) == d and [x["passed"] for x in d["lines"]] == [True, True, True, True, True, None]
-    assert [x["passed"] for x in IS.read_idea("cc_idea", root)["lines"]] == [True, True, True, True, True, None]
+    assert json.loads(f.read_text()) == d and [x["passed"] for x in d["lines"]] == [True, True, True, True, True, None, None]
+    assert [x["passed"] for x in IS.read_idea("cc_idea", root)["lines"]] == [True, True, True, True, True, None, None]
     # a new source replaces the one on file; the root may come from the environment
     s2 = store("cc-NQ-tf5", {"pts10-r2": clean(), "pts10-r0": no_target(clean())}, folder="cc_stores")
     keep = os.environ["HOMEBASE_IDEAS_ROOT"]

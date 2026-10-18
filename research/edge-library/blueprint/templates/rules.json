@@ -79,6 +79,18 @@
  "1.6": {
   "text": "After any change to the code, the earlier trade list is reproduced exactly before a new run counts"
  },
+ "1.7": {
+  "text": "No look-ahead, read by code: on 30 build days, with every print (and book row) from 3 random moments inside its own trading window on garbled, nothing the rule decided up to that moment changes: its orders, bars, levels and fills. *(30 and 3 are my numbers; the course gives none)*",
+  "need": {
+   "days": 30,
+   "cuts": 3
+  },
+  "also": {
+   "seed": 20261015,
+   "settings": 8
+  },
+  "note": "added 2026-10-15 after nq_asia_liq_sweep passed every phase on a level that read the evening it traded (levels.py asia2000). The days are spread evenly over the build range, the moments drawn with the seed inside the card's sessions; one exit cell per variant, at most 8 variants (blueprint/peek.py). Garbling = the engine tests' own (engine/tests/test_blocks.py garble)"
+ },
  "2.1": {
   "text": "Most settings make money",
   "number": "more than 60 % of variants profitable",

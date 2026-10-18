@@ -8,7 +8,7 @@ connector agreed on (toolkit plan, section 8); cli.py prints it, or its `text`.
   build(spec, reason, ...)  phase 2 on the build range for ONE table of a spec in run_idea's format that has no record
                             (`--spec-file`): runs what is missing (runner.run_build), then lines 2.1-2.9          (step 4)
   pools(roots, tfs)         the random-entry control pools of the build range, alone
-  code_check(name, ...)     phase 1: lines 1.1-1.6 on a store or a trades file (checks.py); saved as the idea's check.json
+  code_check(name, ...)     phase 1: lines 1.1-1.6 on a store or a trades file (checks.py), 1.7 on a store (peek.py); saved as the idea's check.json
                             when the app has the idea on file (homebase/ideastore.py), only printed when it has not
 THE IDEA'S RECORD -- the card (phase 0), the build of an idea with its counted rounds, the status -- is records.py (plan
 steps 5 and 6): `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`.
@@ -189,7 +189,8 @@ def pools(roots, tfs, workers=None, out=None, ledger=None, days=None, cells=None
 
 def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, looked: bool = False, cell=None, market=None, sessions=None, window=None,
                max_per_day=None, root=None, out=None) -> dict:
-    """`bp.py code-check <name> [--store=K | --trades=FILE] [--looked]`: PHASE 1, lines 1.1 to 1.6 (checks.py) on a store
+    """`bp.py code-check <name> [--store=K | --trades=FILE] [--looked]`: PHASE 1, lines 1.1 to 1.6 (checks.py) and 1.7 (peek.py: no
+    look-ahead, the card's own instances replayed on build days with the tape garbled from moments inside its window) on a store
     of the research engine (its key in the store folder `out`, or its path) or on a plain trades file.
       same_as      the earlier store or file line 1.6 holds the list against (after a change to the code)
       looked       the owner looked at the 10 trades line 1.5 named, and each sits where the rule says
@@ -199,7 +200,8 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     its check.json; an idea that is not on file is only printed. `asked` = the source and what was stated: with no source
     named, the one of the idea's check on file is read again -- so the owner's later `--looked` needs nothing repeated.
     Beyond the agreed keys: source, asked, look (the 10 trades), failed, not_applicable, passed. passed = lines 1.1-1.5
-    all TRUE and 1.6 not failed (1.6 waits for a change to the code; a line that cannot be read is not a pass).
+    all TRUE and 1.6 and 1.7 not failed (1.6 waits for a change to the code; 1.7 is read on a store of the engine only, and the
+    freeze asks it TRUE; a line that cannot be read is not a pass). BP_TEST_RUN's `days` (TEST ONLY) are 1.7's days.
     Refused: any day on or after 2025-07-01 (checks.seal, runner.guard); no source; a tester run id (not built yet)."""
     given = {k: v for k, v in (("store", store), ("trades", trades), ("run_id", run_id)) if v is not None}
     if len(given) > 1:
@@ -220,15 +222,20 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     t = CH.load(asked.get("store"), asked.get("trades"), out, **stated)
     e = None if asked.get("same_as") is None else CH.load(*((asked["same_as"], None) if _is_store(asked["same_as"], out) else (None, asked["same_as"])),
                                                          out, market=stated["market"] or t["root"])
-    rows = [CH.window(t), CH.one_position(t), CH.count(t), CH.payoff(t), CH.chart(t, looked, asked.get("cell")), CH.reproduced(t, e)]
+    from . import peek as PK
+    from . import records as REC
+    rows = [CH.window(t), CH.one_position(t), CH.count(t), CH.payoff(t), CH.chart(t, looked, asked.get("cell")), CH.reproduced(t, e),
+            PK.of_store(t, asked.get("cell"), days=REC._test_run(root).get("days"))]
     look = rows[4].pop("look")
     failed, na = [x["line"] for x in rows if x["passed"] is False], [x["line"] for x in rows if x["passed"] is None]
     passed = not failed and all(x["passed"] is True for x in rows[:5])
     asked = {**asked, **{"store" if "store" in asked else "trades": t["where"]}, **({"same_as": e["where"]} if e else {})}      # as they were found
     r = result("code-check", name, lines=rows, source={"kind": t["kind"], "where": t["where"], "market": t["root"], "lists": len(t["lists"]), "trades": len(t["net"])},
                asked=asked, look=look, failed=failed, not_applicable=na, passed=passed)
+    wait = "; ".join(x for x in ("1.6 waits for a change to the code" if "1.6" in na else "",
+                                 "1.7 (look-ahead) is not read here: the freeze needs it read on the home store" if "1.7" in na else "") if x)
     res = ("every line is true. Phase 1 is passed." if passed and not na else
-           f"every line that is read is true; {', '.join(na)} waits for a change to the code. Phase 1 is passed." if passed else
+           f"every line that is read is true; {wait}. Phase 1 is passed." if passed else
            "; ".join(x for x in (f"fails {', '.join(failed)}" if failed else "", f"not read: {', '.join(na)}" if na else "") if x)
            + ". Phase 1 is passed only when every line is true.")
     wide = max([3] + [len(str(k["trade"])) for k in look])
@@ -239,7 +246,9 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
                              + (f"  (trade date {k['date']})" if " " in k["entry_et"] else "") + (f"  ({k['list']})" if t["kind"] == "store" else "") for k in look]
                           + [f"RESULT: {res}"])
     r["next"] = ("Phase 1 is passed: the numbers of this code can be trusted. The build is next (bp.py build)." if passed else
-                 "Look at the 10 trades on the chart, then run the code check again with --looked." if failed == ["1.5"] and not [x for x in na if x != "1.6"] else
+                 "The rule looks ahead (line 1.7): it reads prints that had not happened yet at its decision. Nothing it made on history counts: "
+                 "fix the code that reads the future (the line names the value that moved), then check again." if "1.7" in failed else
+                 "Look at the 10 trades on the chart, then run the code check again with --looked." if failed == ["1.5"] and not [x for x in na if x not in ("1.6", "1.7")] else
                  "Fix what fails, state what is not read, and run the code check again: nothing is built on numbers that are not checked.")
     if file:                                        # the idea is on file: the result is its check.json (it carries its own path)
         r["saved"] = [str(file)]

@@ -184,7 +184,7 @@ def bp(argv: list, stdin=None, **env) -> tuple:
 def hand_check(name: str, root, key: str, folder=None, looked: bool = True, **more) -> dict:
     """The idea's code check as `bp.py code-check <name> --store=<key> --looked` saves it, written by hand."""
     where = str((OUT if folder is None else Path(folder)) / key)
-    marks = {"1.1": True, "1.2": True, "1.3": True, "1.4": True, "1.5": bool(looked), "1.6": None, **more.pop("marks", {})}
+    marks = {"1.1": True, "1.2": True, "1.3": True, "1.4": True, "1.5": bool(looked), "1.6": None, "1.7": True, **more.pop("marks", {})}
     rows = [{"line": k, "passed": v, "number": None, "need": None, "text": f"{k} {'n/a ' if v is None else 'PASS' if v else 'FAIL'} (written by a test)"}
             for k, v in marks.items()]
     r = {**A.result("code-check", name, lines=rows), "source": {"kind": "store", "where": where, "market": "NQ", "lists": 6, "trades": 12},

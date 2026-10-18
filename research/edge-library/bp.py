@@ -7,7 +7,7 @@ Python: <repo>/.venv-research/bin/python (python3 -m venv .venv-research && pip 
 
   bp.py card <name> --spec=- | --spec=FILE                           PHASE 0: lines 0.1-0.7 off the idea card ({"name", "card",
                                                                      "run"} as JSON); saved in the app, with its Lab draft
-  bp.py code-check <name> --store=KEY | --trades=FILE [--looked]     PHASE 1: lines 1.1-1.6 on a store or a trades file
+  bp.py code-check <name> --store=KEY | --trades=FILE [--looked]     PHASE 1: lines 1.1-1.7 on a store or a trades file
   bp.py build <name> --reason=TEXT [--wait=S]                        PHASE 2, ONE ROUND of the idea on file, on the build range
                                                                      2021-09-22 .. 2025-06-30: the reason is saved first, what
                                                                      is missing is run, lines 2.1-2.9 are read and saved, the
@@ -24,7 +24,10 @@ Python: <repo>/.venv-research/bin/python (python3 -m venv .venv-research && pip 
                                                                      the latest round passes 2.1-2.9 and the code check of its
                                                                      home store is passed; the default variant = the middle of
                                                                      the variants that make money on build and on build with
-                                                                     worse fills; lock.json under one hash, the test range frozen
+                                                                     worse fills; lock.json under one hash, the test range frozen.
+                                                                     A one-rule idea TOO GOOD on build (t > 6, PF > 3, or win
+                                                                     > 85 % at a target of 0.75R or less) is refused for a
+                                                                     look-ahead audit (--audited="..." on the owner's word)
   bp.py test <name> --confirm [--wait=S] [--second-look]             PHASE 4, THE ONE READ of the test days, 2025-07-01 on
                                                                      (blueprint/oos.py): the read is written to the one-read
                                                                      log FIRST, then lines 4.1-4.9. Refused when a read is on

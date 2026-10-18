@@ -8,7 +8,7 @@ and --json out.
                                                                              "run"} as JSON); a whole card is saved in the app
                                                                              (card.md, spec.json, the Lab draft), a card with a
                                                                              line missing is refused with the line named
-  bp.py code-check <name> [--store=KEY | --trades=FILE] [--looked]        PHASE 1: lines 1.1-1.6 on a store of the engine (its
+  bp.py code-check <name> [--store=KEY | --trades=FILE] [--looked]        PHASE 1: lines 1.1-1.7 on a store of the engine (its
         [--same-as=STORE|FILE] [--cell=ID] [--market=NQ] [--sessions=a,b]    key in runs_bp/, or a path such as runs/orb-NQ-tf15)
         [--window=HH:MM-HH:MM] [--max-per-day=N]                             or on a trades file; saved as the idea's check.json
                                                                              when the app has the idea; no source = the one of
@@ -32,12 +32,14 @@ and --json out.
   bp.py job <id> [--wait=S]                                               keep waiting on a build that answered "running": by
                                                                              the id alone; the answer is the build's own
   bp.py pools [--roots=NQ,ES,GC] [--tf=1,5,15,30]                         the random-entry control pools of the build range
-  bp.py lock <name> [--wait=S]                                            PHASE 3, THE FREEZE (freeze.py): refused unless the
+  bp.py lock <name> [--wait=S] [--audited=TEXT]                           PHASE 3, THE FREEZE (freeze.py): refused unless the
                                                                              latest round passes 2.1-2.9 and the code check of
                                                                              its home store is passed; runs the worse-fills
                                                                              table of the build days, picks the default variant,
                                                                              writes lock.json under one hash. Prints the hash,
-                                                                             the default and the test range
+                                                                             the default and the test range. A one-rule idea that
+                                                                             is TOO GOOD (freeze.TOO_GOOD) is refused for a
+                                                                             look-ahead audit; --audited only on the owner's word
   bp.py test <name> --confirm [--wait=S] [--second-look]                  PHASE 4, THE ONE READ of the test days (oos.py): the
         [--tester=DIR]                                                       read is written to the one-read log FIRST, then
                                                                              the locked variants, their control and the worse
@@ -191,7 +193,7 @@ def _parser() -> _Parser:
     b.add_argument("--round", type=int, help="--spec-file: 1 .. 5, the bar of line 2.3 (default 1)")
     b.add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the build goes on as a job")
     b.add_argument("--tester", metavar="DIR", help="the tester's base folder the default variant's run goes to (default: the app's own)")
-    c = add("code-check", "phase 1: lines 1.1-1.6 on a store or a trades file")
+    c = add("code-check", "phase 1: lines 1.1-1.7 on a store or a trades file")
     c.add_argument("name", help="the idea's name")
     c.add_argument("--store", metavar="KEY", help="a store of the engine: its key in the store folder, or its path")
     c.add_argument("--trades", metavar="FILE", help="a trades file: a JSON list of trades")
@@ -213,6 +215,8 @@ def _parser() -> _Parser:
     p.add_argument("--tf", default="1,5,15,30")
     lk = add("lock", "phase 3: the freeze -- the rule, the variant list, the default variant, the control and the costs under one hash")
     lk.add_argument("name", help="the idea's name")
+    lk.add_argument("--audited", metavar="TEXT", help="ONLY on the owner's word, after he has seen a look-ahead audit: lets a one-rule idea that is "
+                                                       "TOO GOOD (freeze.TOO_GOOD) be frozen; the words are kept in lock.json")
     t = add("test", "phase 4: the ONE read of the test days (2025-07-01 on), lines 4.1-4.9")
     t.add_argument("name", help="the idea's name")
     t.add_argument("--confirm", action="store_true", help="the owner has said to run the one read: it cannot be taken back")
@@ -341,7 +345,7 @@ def _lock(a) -> dict:
     job = JOBS.running(a.name, a.root)
     if job and JOBS.command(job, a.root) == "lock":
         return JOBS.wait(job, a.root, wait)
-    kw = FRZ.start(a.name, a.root, workers=a.workers)       # every refusal that needs no run comes back at once, never as a job
+    kw = FRZ.start(a.name, a.root, workers=a.workers, audited=a.audited)       # every refusal that needs no run comes back at once, never as a job
     return _job(kw, a, "lock", wait) if kw.get("heavy") else FRZ.run(**kw)
 
 
