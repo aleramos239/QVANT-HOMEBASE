@@ -3,7 +3,7 @@ before any result: "on the 15 minute timeframe we look at the previous candle; i
 it, we enter: sweep the previous candle's low, reverse and close higher within the body = long, vice versa short; stop at the candle
 extreme, 1 : 0.5". No Level-2 feature is read (FEATURES = ()): NQ, ES and GC, 1 contract, hold_to = 'day' (flat 15:58 ET).
 
-    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h, candle (+ the Template's max_tr, dir)
+    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h, candle, turn (+ the Template's max_tr, dir)
 
 THE RULE (fixed here, before any run):
   * BARS. The instance's own tf bars (the owner's bar is 15 minutes): the bar that has just closed (THIS bar) and the one before it (the
@@ -24,6 +24,10 @@ THE RULE (fixed here, before any run):
         body    above the bottom of the previous bar's body, min(open, close) (the owner's words: "close higher within the body")
         far     above the top of the previous bar's body, max(open, close)
     A close past the far side of the body counts for `body` too: the owner's "within" is read as "back into it", not "and no further".
+  * TURN (the owner, 2026-10-18: "if the first candle is bearish, the candle that sweeps the wick and closes within the body must be
+    bullish, and vice versa"). `turn` = on (off, the default: every run before it is unchanged): a long also needs the PREVIOUS bar red
+    (close < open) and THIS bar green (close > open); a short needs the previous bar green and this bar red. A doji (close = open) is
+    neither colour.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -49,7 +53,7 @@ REGISTRATION. As families/sfp.py: families/__init__.py picks this module up by i
 into families/blocks.py's BASES / WRAPPED when this module is imported; blocks.py stays byte for byte as it was.
 
 COMPLEXITY 4 = the previous bar + beyond its high / low + a close back to `back` -> market against it + both at once = no trade
-(+1 with ema1h: the side of the 1-hour EMA; +1 with candle: candles of its own size).
+(+1 with ema1h: the side of the 1-hour EMA; +1 with candle: candles of its own size; +1 with turn: the two colours).
 Tests: engine/tests/test_candle_sweep.py."""
 from __future__ import annotations
 
@@ -110,20 +114,21 @@ def ema_last(closes, n: int):
     return e
 
 
-def signal(po, ph, pl, pc, h, l, c, back):
-    """+1 long / -1 short / 0: THIS bar (h, l, c) against the PREVIOUS bar (po, ph, pl, pc) (module docstring, THE RULE)."""
+def signal(po, ph, pl, pc, o, h, l, c, back, turn=False):
+    """+1 long / -1 short / 0: THIS bar (o, h, l, c) against the PREVIOUS bar (po, ph, pl, pc) (module docstring, THE RULE, TURN)."""
     lo_line = {"range": pl, "body": min(po, pc), "far": max(po, pc)}[back]
     hi_line = {"range": ph, "body": max(po, pc), "far": min(po, pc)}[back]
-    long = l < pl and c > lo_line
-    short = h > ph and c < hi_line
+    long = l < pl and c > lo_line and (not turn or (pc < po and c > o))
+    short = h > ph and c < hi_line and (not turn or (pc > po and c < o))
     return 0 if long == short else (1 if long else -1)
 
 
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "max_tr": 20}
-    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "max_tr": ("int", 1, 20)}
+    DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "turn": "off", "max_tr": 20}
+    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on")),
+              "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
 
@@ -144,7 +149,7 @@ class CandleSweep(Template):
         if self.nb < 2:
             return
         O, H, L, C = self.O, self.H, self.L, self.C
-        self.go = signal(O[-2], H[-2], L[-2], C[-2], H[-1], L[-1], C[-1], self.p["back"])
+        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"] == "on")
         self.sx = (L[-1], H[-1], C[-1])
 
     def _candles(self):
@@ -165,8 +170,8 @@ class CandleSweep(Template):
         if j > self.done:
             self.done = j
             if j >= 2:
-                (_, po, ph, pl, pc), (_, _, h, l, c) = cd[j - 2], cd[j - 1]
-                self.go = signal(po, ph, pl, pc, h, l, c, self.p["back"])
+                (_, po, ph, pl, pc), (_, o, h, l, c) = cd[j - 2], cd[j - 1]
+                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"] == "on")
                 self.sx = (l, h, c)
 
     def ema1h(self, ctx):
