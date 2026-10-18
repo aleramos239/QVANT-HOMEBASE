@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=21"></script>
+<script src="/static/desklab.js?v=22"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -2509,8 +2509,7 @@ function labDeskView(name, s) {
     <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
-    ${labCurveHtml(row.name)}
-    <div class="figs">${DeskLab.figures(row).map(fig).join("")}</div>${labResHtml(row.name, name)}` : ""}
+    ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
     <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy">Open in the Lab</button>

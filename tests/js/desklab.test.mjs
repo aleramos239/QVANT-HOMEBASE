@@ -1213,7 +1213,7 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
     unseen_state: 'done', prop: {} });
   assert.equal(done.unseen.title, 'Walk-forward 3:1 · build and unseen days');
   assert.deepEqual(done.unseen.head, ['Build', 'Unseen']);
-  assert.deepEqual([done.unseen.rows[0].b, done.unseen.rows[0].v], ['Oct 2021 – Jul 2026', 'Jan 2022 – Aug 2026']);
+  assert.deepEqual([done.unseen.rows[0].k, done.unseen.rows[0].b, done.unseen.rows[0].v], ['Net', '+$4,000', '+$1,235']);   // no Days row: the months interleave
   assert.equal(done.unseen.note, '');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);

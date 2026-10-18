@@ -63,6 +63,7 @@
     // a strategy: its setup (read-only but for a straddle's target RR), then the page's own figures, links and actions
     const setupBox = el('div', { class: 'hb-box', id: 'hbSetup' });
     const figsBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbFigs' });
+    let figsSec = null;      // hidden when it has nothing: a Lab strategy's backtest is its 3:1 block below (owner 2026-10-18)
     const figsH = el('div', { class: 'hb-isec-h', text: 'Live results' });      // "Backtest" for a Lab one
     // a Lab strategy's research (the page's own .labres blocks): its saved run on the unseen days, and the prop sim
     const unseenH = el('div', { class: 'hb-isec-h', text: 'Unseen days (OOS)' }), unseenBox = el('div', { class: 'hb-box hb-figs-box', id: 'hbUnseen' });
@@ -73,7 +74,7 @@
     const actsBox = el('div', { class: 'hb-acts', id: 'hbActs' });
     const stratPage = el('div', { class: 'hb-ipage', id: 'hbInspStrat' },
       el('section', { class: 'hb-isec' }, el('div', { class: 'hb-isec-h', text: 'Setup' }), setupBox),
-      el('section', { class: 'hb-isec' }, figsH, figsBox),
+      figsSec = el('section', { class: 'hb-isec' }, figsH, figsBox),
       unseenSec, propSec,
       el('section', { class: 'hb-isec hb-isec-links' }, el('div', { class: 'hb-isec-h', text: 'More' }), linksBox),
       actsBox);
@@ -191,6 +192,7 @@
           const none = [...vStrat.children].find((n) => n.classList.contains('eq-empty') && /No live trades/.test(n.textContent)) || null;
           if (figs || none || links || acts) {
             figsBox.replaceChildren(...(figs ? [figs] : none ? [el('div', { class: 'hb-row hb-row-note', text: 'No live trades yet.' })] : []));
+            figsSec.hidden = !figsBox.childElementCount;
             if (none && !figs) none.remove();
             linksBox.replaceChildren(...(links ? [links] : []));
             actsBox.replaceChildren(...(acts ? [acts] : []));

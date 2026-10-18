@@ -260,11 +260,13 @@
     var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu);
     // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build | Unseen
     var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
+    var wf = !wait && res.walkforward === true;
     var runRows = function (run) {
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
-      return [{ k: "Days", v: f && t ? f + " – " + t : DASH }].concat(figures({ run: run }), unseenExtras(run));
+      var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
+      return days.concat(figures({ run: run }), unseenExtras(run));
     };
-    var rows = u ? runRows(u) : [], wf = !wait && res.walkforward === true;
+    var rows = u ? runRows(u) : [];
     if (bu) {
       var br = runRows(bu);
       rows = br.map(function (r, i) { return { k: r.k, b: r.v, v: u ? rows[i].v : DASH }; });

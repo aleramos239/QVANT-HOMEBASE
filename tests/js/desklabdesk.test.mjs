@@ -169,7 +169,7 @@ test('the page: state, note, Limits, Today, Matched the backtest, Accounts, and 
   assert.match(html, /removeLabStrat\(&quot;lab_nq_orb&quot;\)"[^>]*>Remove from Desk</);
   assert.doesNotMatch(html, /Test fire|testFire/);
   assert.doesNotMatch(html, /Accounts come with the Desk update/, 'the Step A caption is not on the Desk\'s page');
-  assert.match(html, /class="figs"/, 'the figures stay in .figs: the skin moves them into its inspector');
+  assert.doesNotMatch(html, /<div class="figs">/, 'no Backtest figures: its backtest is the 3:1 build + unseen block (owner 2026-10-18)');
   assert.match(html, /<div class="sd-actions">/);
 });
 
@@ -573,7 +573,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=21"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=22"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
