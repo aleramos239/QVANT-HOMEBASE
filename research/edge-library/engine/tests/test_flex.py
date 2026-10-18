@@ -419,3 +419,38 @@ def test_real_build_days_new_families_one_trade_a_day_inside_the_pass_and_the_sa
 def test_real_build_days_the_day_rule_runs_only_its_days():
     days, r = _real(WBRK, {"tf": "5", "sess": "nyam", "r_start": "09:30", "r_end": "09:45", "days": "mon"}, n=10)
     assert all(dt.date.fromisoformat(t["date"]).weekday() == 0 for t in r["trades"])
+
+
+# ---- the release-direction setting (rel_dir, owner 2026-10-15) ----------------------------------------------------------------------------------
+def _rel(monkeypatch, first, direction):
+    monkeypatch.setattr(FM.FI, "first_release", lambda iso: first)
+    monkeypatch.setattr(FM.RC, "direction", lambda root, iso, m: direction)
+
+
+def test_rel_dir_trades_only_the_side_of_the_first_release_candle(monkeypatch):
+    bars = day(breaks_up("09:36"))                                                          # the family's own signal: a long at 09:37
+    want = [(sec(9, 37, FILL), "long", HI + 4, LO, None)]
+    _rel(monkeypatch, "2025-01-14", 1)
+    assert got(run(ORB, BASE, {"rel_dir": "with"}, bars)[1]) == want                       # the first candle went up: a long may trade
+    assert got(run(ORB, BASE, {"rel_dir": "against"}, bars)[1]) == []                      # against it: the long is blocked
+    _rel(monkeypatch, "2025-01-14", -1)
+    assert got(run(ORB, BASE, {"rel_dir": "with"}, bars)[1]) == []                         # the first candle went down: no long
+    assert got(run(ORB, BASE, {"rel_dir": "against"}, bars)[1]) == want
+    _rel(monkeypatch, "2025-01-14", 0)
+    assert got(run(ORB, BASE, {"rel_dir": "with"}, bars)[1]) == []                         # a candle that did not move: neither side
+    _rel(monkeypatch, "2025-01-14", None)
+    assert got(run(ORB, BASE, {"rel_dir": "with"}, bars)[1]) == []                         # the first day had no tape: no trade
+    assert got(run(ORB, BASE, {"rel_dir": "off"}, bars)[1]) == want                        # off: the family as it was
+
+
+def test_rel_dir_runs_only_second_release_days_and_refuses_a_bad_value(monkeypatch):
+    d = dt.date(2025, 2, 4)
+    monkeypatch.setattr(FM.FI, "first_release", lambda iso: None)
+    assert ORB({**BASE, "rel_dir": "off"}).trades_on(d)
+    assert not ORB({**BASE, "rel_dir": "with"}).trades_on(d)                               # not a second-release day: not run
+    monkeypatch.setattr(FM.FI, "first_release", lambda iso: "2025-02-03")
+    assert ORB({**BASE, "rel_dir": "with"}).trades_on(d)
+    with pytest.raises(ValueError):
+        ORB({**BASE, "rel_dir": "sideways"})
+    with pytest.raises(ValueError):
+        ORB({**BASE, "rel_dir": "with", "rel_min": 7})

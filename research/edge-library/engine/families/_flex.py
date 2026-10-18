@@ -13,6 +13,11 @@ family without them is trade for trade what it was (engine/tests/test_flex.py ho
   gate             off | an indicator of flexind.KINDS, read at the decision on the closed tf bars since the restart, with g_n (its main
                    period), g_m (the slow period: ema_x, macd), g_s (the macd signal), g_lvl (the line: flexind's table), g_side with | against.
                    No value yet (too few bars): both sides blocked, as the filter blocks do.
+  rel_dir          off | with | against (owner 2026-10-15). On the SECOND inflation release of a week (CPI after PPI or PPI after CPI,
+                   flexind.first_release) only the side of the FIRST release's candle may trade: `with` = its direction, `against` = the
+                   other. The candle is the price move from just before 08:30:00 to `rel_min` (1 | 5 | 15 | 30) minutes after, read from
+                   cache/relcandle_<ROOT>.npz (relcandle.py: build days only). Any other day is not run; a first candle that did not move,
+                   or a first-release day with no tape, blocks both sides. Off: nothing changes.
 
 HOMEBASE_FLEX=0 in the environment switches the layer off (the parity tests and a store check use it); the settings then do not exist.
 """
@@ -21,9 +26,10 @@ from __future__ import annotations
 import os
 
 import flexind as FI
+import relcandle as RC
 from l2sim import NS, clock_sec
 
-KEYS = ("w_start", "w_end", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side")
+KEYS = ("w_start", "w_end", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side", "rel_dir", "rel_min")
 
 
 def window(txt: str, what: str):
@@ -39,10 +45,12 @@ def window(txt: str, what: str):
 
 class FlexMods:
     """The settings of the open layer (module docstring), in front of a wrapped family class."""
-    DEFAULTS = {"w_start": "", "w_end": "", "days": "all", "gate": "off", "g_n": 14, "g_m": 26, "g_s": 9, "g_lvl": 0.0, "g_side": "with"}
+    DEFAULTS = {"w_start": "", "w_end": "", "days": "all", "gate": "off", "g_n": 14, "g_m": 26, "g_s": 9, "g_lvl": 0.0, "g_side": "with",
+                "rel_dir": "off", "rel_min": 5}
     SCHEMA = {"w_start": ("str",), "w_end": ("str",), "days": ("choice", FI.DAY_RULES), "gate": ("choice", ("off",) + FI.KINDS),
               "g_n": ("int", 1, 500), "g_m": ("int", 1, 500), "g_s": ("int", 1, 500), "g_lvl": ("float", -1000.0, 1000.0),
-              "g_side": ("choice", ("with", "against"))}
+              "g_side": ("choice", ("with", "against")), "rel_dir": ("choice", ("off", "with", "against")),
+              "rel_min": ("choice", RC.MINUTES)}
 
     def __init__(self, params: dict | None = None):
         super().__init__(params)
@@ -51,16 +59,23 @@ class FlexMods:
         if self._fx_a is not None and self._fx_b is not None and self._fx_b <= self._fx_a:
             raise ValueError(f"w_end {p['w_end']!r} is not after w_start {p['w_start']!r}")
         self._fx_gi = None
+        self._fx_rel = 0                                 # the first release's direction on a rel_dir day (on_session)
         if p["gate"] != "off":
             FI.make(p["gate"], p["g_n"], p["g_m"], p["g_s"])     # a bad period is refused at construction
 
     def trades_on(self, d) -> bool:
-        return super().trades_on(d) and FI.day_ok(d.isoformat(), self.p["days"])
+        iso = d.isoformat()
+        return (super().trades_on(d) and FI.day_ok(iso, self.p["days"])
+                and (self.p["rel_dir"] == "off" or FI.first_release(iso) is not None))
 
     def on_session(self, ctx):
         super().on_session(ctx)
         p = self.p
         self._fx_gi = FI.make(p["gate"], p["g_n"], p["g_m"], p["g_s"]) if p["gate"] != "off" else None
+        self._fx_rel = 0
+        if p["rel_dir"] != "off":
+            first = FI.first_release(ctx.date.isoformat())
+            self._fx_rel = (RC.direction(ctx.root, first, int(p["rel_min"])) or 0) if first is not None else 0
 
     def fam_update(self, ctx):
         super().fam_update(ctx)
@@ -74,6 +89,10 @@ class FlexMods:
         if self._fx_a is not None or self._fx_b is not None:
             t = (self._cx.now_ns - self.t0) // NS
             if (self._fx_a is not None and t < self._fx_a) or (self._fx_b is not None and t >= self._fx_b):
+                return False
+        if self.p["rel_dir"] != "off":
+            r = self._fx_rel                             # 0 = the first candle did not move / has no tape: neither side
+            if r == 0 or (side == "long") != ((r > 0) == (self.p["rel_dir"] == "with")):
                 return False
         g = self._fx_gi
         return g is None or FI.gate_ok(g, side, self.p["g_side"], self.p["g_lvl"])

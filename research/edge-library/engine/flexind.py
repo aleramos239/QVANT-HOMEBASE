@@ -50,7 +50,8 @@ ATR_N = 14
 TIER1 = ("NFP", "CPI", "PPI", "RETAIL", "GDP", "PCE")                 # the 08:30 releases that move the whole tape (judge.TIER1)
 WEEKDAYS = ("mon", "tue", "wed", "thu", "fri")
 DAY_RULES = ("all", "news", "nonews", "rel0830", "rel1000", "tier1", "notier1", "nfp", "cpi", "ppi", "retail", "gdp", "pce", "claims", "fomc", "nofomc",
-             "ism", "jolts", "umich", *WEEKDAYS, "month_end", "month_start", "opex")
+             "ism", "jolts", "umich", "second_release", *WEEKDAYS, "month_end", "month_start", "opex")
+PAIR = ("CPI", "PPI")                                                 # the two inflation releases of one month (second_release)
 KINDS_DIR = ("rsi", "price_ema", "ema_x", "macd", "zscore", "stoch", "roc", "cci", "vwap_dev", "price_sma", "sma_x", "price_vwma")
 KINDS_REGIME = ("adx", "atr_rank", "bbw_rank", "er")
 KINDS = KINDS_DIR + KINDS_REGIME
@@ -71,10 +72,27 @@ def _has(iso: str, times=None, types=None) -> bool:
     return any((times is None or t in times) and (types is None or ty in types) for t, ty in _events().get(iso, ()))
 
 
+def first_release(iso: str):
+    """The ISO date of the FIRST inflation release when `iso` is the SECOND one, else None. A second-release day is the 08:30 CPI (or PPI) of a
+    week whose PPI (or CPI) came out on an EARLIER weekday of the same Monday-Sunday week; the calendar alone says it (cache/events.csv)."""
+    d = dt.date.fromisoformat(iso)
+    own = {ty for t, ty in _events().get(iso, ()) if t == "08:30" and ty in PAIR}
+    if len(own) != 1:                                                 # none, or both on one day: no "second"
+        return None
+    (other,) = set(PAIR) - own
+    for back in range(1, d.weekday() + 1):                            # Monday .. the day before: the same ISO week only
+        e = (d - dt.timedelta(days=back)).isoformat()
+        if _has(e, ("08:30",), (other,)):
+            return e
+    return None
+
+
 def day_ok(iso: str, rule: str) -> bool:
     """Is the trade date `iso` a day of the rule (module docstring)? An unknown rule raises: a typo must not trade every day."""
     if rule == "all":
         return True
+    if rule == "second_release":                                      # the later of CPI / PPI of a week that holds both
+        return first_release(iso) is not None
     d = dt.date.fromisoformat(iso)
     if rule in WEEKDAYS:
         return d.weekday() == WEEKDAYS.index(rule)

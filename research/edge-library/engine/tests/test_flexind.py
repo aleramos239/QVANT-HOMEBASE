@@ -200,3 +200,19 @@ def test_price_vwma_is_the_volume_weighted_mean_over_atr():
     for o, h, l, c, vol in bars[:3]:
         z.update(o, h, l, c, 0)
     assert z.v is None
+
+
+def test_second_release_is_the_later_of_cpi_and_ppi_of_one_week():
+    # PPI Tue 2024-... : read from the calendar itself, so the check follows the file, not a remembered date
+    rows = list(__import__("csv").DictReader(F.EVENTS.open()))
+    at = {(r["date"], r["type"]) for r in rows if r["time_et"] == "08:30" and r["type"] in ("CPI", "PPI")}
+    assert F.first_release("2021-10-14") == "2021-10-13" and F.day_ok("2021-10-14", "second_release")      # CPI Wed, PPI Thu
+    assert F.first_release("2021-10-13") is None and not F.day_ok("2021-10-13", "second_release")          # the first release is no second
+    assert not F.day_ok("2025-01-10", "second_release")                                                     # NFP is not one of the pair
+    for d, ty in at:                                                                                        # every second release has its partner earlier, same ISO week
+        f = F.first_release(d)
+        if f is not None:
+            other = "PPI" if ty == "CPI" else "CPI"
+            assert (f, other) in at and f < d
+            assert __import__("datetime").date.fromisoformat(f).isocalendar()[:2] == __import__("datetime").date.fromisoformat(d).isocalendar()[:2]
+    assert "second_release" in F.DAY_RULES
