@@ -1,0 +1,46 @@
+{
+ "name": "owner_candle_sweep_15_nyam_1tr_turn",
+ "source": {
+  "title": "Owner's idea in chat, 2026-10-17: 15-minute previous-candle sweep, close back inside its body, stop at the candle extreme, 1:0.5; NY morning, 1 trade a day, NO EMA, colours turn=on (owner, 2026-10-18)"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "dir": "both",
+ "entry": {
+  "family": "candle_sweep",
+  "settings": {
+   "back": "body",
+   "turn": "on"
+  },
+  "words": "On 15-minute bars look at the previous candle. If this candle sweeps the previous candle's low and closes back higher, inside its body, go long at the close; if it sweeps the previous candle's high and closes back lower, inside its body, go short. Stop at the candle's extreme, target half the risk (1 : 0.5). The previous candle must be bearish and the sweeping candle bullish for a long; bullish then bearish for a short."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.5,
+  "max_trades": 1
+ },
+ "taught": [
+  "[chat 2026-10-17] test on the 15 minute timeframe",
+  "[chat 2026-10-17] we look at the previous candle: if we sweep a high or low, then close back inside within it, we enter",
+  "[chat 2026-10-17] sweep the previous candle's low, reverse and close higher within the body = long; vice versa = short",
+  "[chat 2026-10-17] stop at the candle extreme and 1:0.5",
+  "[chat 2026-10-18] test and show me the metrics for 1 trade a day and compare with no limit",
+  "[chat 2026-10-17] test all sessions (this sheet: nyam)",
+  "[chat 2026-10-18] now give me same table but for Red->green / green->red and Green->green / red->red, remove the ema"
+ ],
+ "not_run": [
+  "THE BODY: 'close higher within the body' is read as a close above the bottom of the previous candle's body (a long); a close past its top counts too.",
+  "THE STOP: the sweeping candle's extreme, measured from its close and placed from the fill at the next bar's open; floored at 0.25 x ATR(14) of the 15-minute bars, as every structure stop of the engine.",
+  "A SWEEP OF BOTH SIDES that closes back inside the body is no trade.",
+  "FLAT: every trade is flat by 15:58 ET (13:13 on half days); no trade is held overnight.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: build days only.",
+  "THE CAP: 1 trade a day (the first signal of NY morning that passes the EMA side); one session pass, so it is the day's cap."
+ ],
+ "control": "random"
+}
