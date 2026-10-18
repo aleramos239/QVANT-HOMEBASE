@@ -1,0 +1,31 @@
+{
+ "name": "candle930_gc0830_break_tk",
+ "reason": "Owner's manual test (2026-10-18): GC 08:30 ET 1-minute candle on news days, straddled: OCO stops one tick beyond its high / low; stop 2x the candle among the 20-stop own table; days rel0830 / nfp / cpi; one trade a day, flat 15:58; build days only.",
+ "family": "candle930",
+ "markets": [
+  "GC"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "pre"
+ ],
+ "params": {
+  "days": [
+   "rel0830",
+   "nfp",
+   "cpi"
+  ]
+ },
+ "fixed": {
+  "start": "08:30",
+  "entry": "break"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

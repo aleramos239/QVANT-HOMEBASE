@@ -1,0 +1,31 @@
+{
+ "name": "candle930_close_r_tk",
+ "reason": "Owner's manual test (2026-10-17): NQ 09:30 candle (1- and 5-minute) followed at its close, stop at its other extreme, strong-candle measure 2 close in the outer share of the range; own exits (targets incl. 1R); one trade a day, flat 15:58; build days only.",
+ "family": "candle930",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1",
+  "5"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "close_r": [
+   0.1,
+   0.2,
+   0.3
+  ]
+ },
+ "fixed": {
+  "start": "09:30"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}
