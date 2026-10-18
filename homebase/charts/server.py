@@ -644,7 +644,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                now_ms=None, state: Path | None = None, calendar_fetch=None,
                desk_factory=None, fake_desk_factory=None, news_fetch=None, depth_roots=None,
                depth_base: Path | None = None, paper_day: bool = False,
-               paper_backtest=None, depth_executor=None, md_connect=None) -> FastAPI:
+               paper_backtest=None, depth_executor=None, md_connect=None, refresh_kw: dict | None = None) -> FastAPI:
     if paper_day and not replay:
         raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
     roots = app_roots = [r.upper() for r in roots]
@@ -783,15 +783,18 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         tape was built at startup. When the archive files' stamp moved, load the union in a worker
         thread (the big read never touches the loop), splice onto it whatever the hub tape holds that
         the files do not yet (the last second's unflushed ticks), and reseed the hub with the result --
-        what a gap refill already does. Only on a change: a stat per poll, a read per repair."""
-        d = session_date(clock(), root)
+        what a gap refill already does. Only on a change: a stat per poll, a read per repair.
+        The session is the one the charts HOLD, not the clock's: after 18:00 with no tick yet (a weekend, a feed
+        that is down) the clock names the next session while the charts still show the one that closed, and a
+        fill landing in its files then reached them only at the roll (2026-10-16's hole, all weekend)."""
+        d = hub.today_date.get(root) or session_date(clock(), root)
         stamp = await asyncio.to_thread(store.archive_stamp, root, d)
         if stamp is None or stamp == repair_seen.get(root):
             return
         t0 = clock()
         sess = await asyncio.to_thread(store.load, root, d)
         await _quiet_wait()                         # never reset the charts across the 9:30 fire
-        if sess is None or hub.today_date.get(root) != d or session_date(clock(), root) != d:
+        if sess is None or hub.today_date.get(root) != d:
             return                                  # the session rolled meanwhile: the next poll decides
         ticks = splice_tail(sess.ticks, hub.today.get(root, ()), t0 - REPAIR_SPLICE_MS)
         repair_seen[root] = stamp
@@ -800,6 +803,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
 
     past_due: set[str] = set()                  # roots with a repaired past session their open charts still show as it was
     past_reset_at: dict[str, float] = {}        # root -> when (time.monotonic) its charts last reloaded for one
+    refresh_kick: dict = {}                     # {"loop", "ev"} while repair_loop runs: a finished Refresh data run wakes it
+
+    def after_refresh(_status: dict) -> None:
+        """The Refresh data button's run ended (on its own thread): the repair loop's next turn starts now and reloads
+        EVERY open chart from the files -- the memo dropped, no PAST_REDRAW_S wait -- so what the run filled shows
+        at once, whatever session it landed in."""
+        loop, ev = refresh_kick.get("loop"), refresh_kick.get("ev")
+        if loop is not None and ev is not None:
+            loop.call_soon_threadsafe(ev.set)
 
     async def _past_check() -> None:
         """The same for a PAST session: the tick job goes on filling a session's files for a day or two after
@@ -825,8 +837,17 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 log(f"{root}: a past session's files changed -- {len(held)} chart stream(s) reload")
 
     async def repair_loop() -> None:
+        kick = refresh_kick["ev"] = asyncio.Event()
+        refresh_kick["loop"] = asyncio.get_running_loop()
         while True:
-            await asyncio.sleep(REPAIR_POLL_S)      # not the `sleep` seam: tests patch it to 0
+            with suppress(asyncio.TimeoutError):    # not the `sleep` seam: tests patch it to 0
+                await asyncio.wait_for(kick.wait(), REPAIR_POLL_S)
+            if kick.is_set():                       # Refresh data finished: every chart, now
+                kick.clear()
+                history.clear()
+                past_reset_at.clear()
+                past_due.update(roots)
+                log("Refresh data finished -- every open chart reloads from the files")
             for root in roots:
                 try:
                     await _repair_check(root)
@@ -1446,7 +1467,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                               Path(state) / "export" if state else None)
     app.include_router(export_rt)
 
-    refresh_rt = refresh_router(browser_write_ok, Path(state) if state else None)
+    refresh_rt = refresh_router(browser_write_ok, Path(state) if state else None, **{
+        "md_ready": lambda: bool(T.accounts_by_env()["live"]),     # the live login's md token: the fill pages on no other
+        "on_finish": after_refresh, **(refresh_kw or {})})
     app.include_router(refresh_rt)
 
     @app.get("/api/settings")

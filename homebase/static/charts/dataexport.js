@@ -172,6 +172,15 @@ function refreshView(st) {
   if (s === 'error') return { text: `Failed: ${st.note || 'unknown error'}`, busy: false, tone: 'err' };
   const bits = [];
   const c = st.coverage;
+  const k = c && c.classes;
+  if (k) {      // the report's classes: what a click can still fill, and what no click can
+    const n = (x) => `${fmtInt(x)} session${x === 1 ? '' : 's'}`;
+    let text = 'Done, charts reloaded. ' + (k.filling
+      ? `${n(k.filling)} still ${k.filling === 1 ? 'has gaps' : 'have gaps'} Tradovate has: click Refresh again.`
+      : 'Every gap Tradovate still has is filled.');
+    if (k.lost) text += ` ${n(k.lost)} keep${k.lost === 1 ? 's' : ''} holes Tradovate no longer has.`;
+    return { text, busy: false, tone: '' };
+  }
   if (c && c.sessions) {
     bits.push(`${fmtInt(c.complete || 0)} of ${fmtInt(c.sessions)} recent sessions complete`);
     if (c.missing) bits.push(`${fmtInt(c.missing)} missing`);

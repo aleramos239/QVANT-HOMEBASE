@@ -34,7 +34,7 @@ class FakeProc:
             self.hold.set()
 
 
-def manager(tmp_path, codes=(0,), clock=WED_NOON, holds=None, cov=None):
+def manager(tmp_path, codes=(0,), clock=WED_NOON, holds=None, cov=None, **kw):
     calls = []
     queue = list(codes)
 
@@ -44,7 +44,7 @@ def manager(tmp_path, codes=(0,), clock=WED_NOON, holds=None, cov=None):
         return FakeProc(queue[i], holds[i] if holds else None)
 
     m = R.RefreshManager(tmp_path / "state", python="py", cwd=tmp_path, clock=lambda: clock, popen=popen,
-                         coverage_path=cov or tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock")
+                         coverage_path=cov or tmp_path / "cov.json", lock_path=tmp_path / "ticks.lock", **kw)
     return m, calls
 
 
@@ -80,6 +80,38 @@ def test_a_failed_step_stops_the_run_and_names_it(tmp_path):
     assert st["status"] == "error" and len(calls) == 1
     assert "Fetch missing ticks" in st["note"] and "exit 1" in st["note"]
     assert [s["state"] for s in st["steps"]] == ["error"]
+
+
+def test_no_tradovate_login_is_refused_saying_so(tmp_path):
+    """2026-10-17: every login on the desk refused its renewal; a click would wait 5 min and say Done, nothing fetched."""
+    m, calls = manager(tmp_path, md_ready=lambda: False)
+    with pytest.raises(ValueError, match="not connected on the Desk"):
+        m.start()
+    assert calls == [] and m.status() == {"status": "idle"}
+
+
+def test_a_job_that_gave_up_waiting_for_the_login_is_an_error_not_done(tmp_path):
+    m, _ = manager(tmp_path, codes=(R.NO_TOKEN_EXIT,), md_ready=lambda: True)
+    m.start()
+    st = wait_final(m)
+    assert st["status"] == "error" and st["note"] == R.NO_LOGIN
+
+
+def test_every_ending_tells_the_charts(tmp_path):
+    """on_finish: the chart service reloads every open chart from the files -- after a cancel or a failure too (what
+    the run filled before it stopped is on disk)."""
+    for codes, final in (((0,), "done"), ((1,), "error")):
+        seen = []
+        m, _ = manager(tmp_path / final, codes=codes, on_finish=seen.append)
+        m.start()
+        wait_final(m)
+        t0 = time.monotonic()
+        while not seen and time.monotonic() - t0 < 5:
+            time.sleep(0.01)
+        assert [s["status"] for s in seen] == [final]
+    boom = manager(tmp_path / "boom", on_finish=lambda st: 1 / 0)[0]
+    boom.start()
+    assert wait_final(boom)["status"] == "done"                 # a hook that throws never breaks the run
 
 
 def test_only_one_refresh_at_a_time(tmp_path):

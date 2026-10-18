@@ -19,6 +19,10 @@ is already on disk wins a disagreement of time, price or quote (the archive
 file, then the live recording, then a fresh fetch). A tick id that comes back
 with a different time or price is a conflict: the on-disk version stays and it
 is counted; more than CONFLICTS_REFUSED refuse the merge (the originals stay).
+When every one of them is against the live recording, the refusal says so (LiveIdSpace): after a
+feed outage Tradovate's live stream can number trades a few lower than its history does (GC / SI
+2026-10-08..09: the same trade 8 / 9 lower from the reconnect on), and the session is then merged
+WITHOUT its live recording -- for good: the manifest's live_excluded -- and filled from the history.
 
 A different SIZE at the same id, time and price is the same trade counted
 differently, and the SMALLER size is the trade's own. Since 2026-10-01 the live
@@ -85,7 +89,7 @@ SIZE_BOTH_WAYS_SHARE = 0.01             # than this AND this share of the ids it
                                         # unit or another feed (every id); 20 keeps a stray handful out of a small overlap
 HISTORY_COMMIT_MIN = 45                 # the broker publishes tick history a whole hour at a time, some minutes after
                                         # the hour ends: before that the hour is thin (see verified_spans)
-MERGE_RULES = 3                        # bump when a merge rule loosens: sessions refused under an older rule retry
+MERGE_RULES = 4                        # bump when a merge rule loosens: sessions refused under an older rule retry
 ID_SPACE_REFUSED = 5                    # more same trades under different ids than this: refuse too
 SOURCES_KEPT = 40                       # the manifest's merge log keeps this many entries
 
@@ -93,6 +97,11 @@ SOURCES_KEPT = 40                       # the manifest's merge log keeps this ma
 class MergeRefused(RuntimeError):
     """The merge would not be exact (conflicting ids, an unreadable original):
     nothing is written and the original stays."""
+
+
+class LiveIdSpace(MergeRefused):
+    """Refused for conflicting ids, every one of them against the live recording: the live stream
+    numbered the trades otherwise than the broker's history (homebase.ticks.store merges without it)."""
 
 
 # ------------------------------------------------------------------ rows
@@ -222,6 +231,7 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
     per_source: dict[str, set] = {}
     read: dict[str, int] = {}
     conflicts: list[int] = []
+    conflict_in: list[str] = []         # the source each conflicting row came from (its holder is another one)
     sized: dict[str, list] = {}         # per source: [ids it sizes smaller than what was held, larger, ids shared]
     lowered: set = set()                # ids whose held size a later source lowered
     overlap = quotes_filled = quote_disagreements = 0
@@ -248,6 +258,7 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
             way[2] += 1
             if (int(have[TS]), float(have[PX])) != (int(r[TS]), float(r[PX])):
                 conflicts.append(k)
+                conflict_in.append(name)
                 continue                                    # the first source's version stays
             if int(r[SZ]) < int(have[SZ]):                  # same trade, sized differently: the smaller size
                 way[0] += 1                                 # is the trade's own (a thinned print holds more)
@@ -265,8 +276,12 @@ def merge(sources, massive_new: list[tuple] = (), edge_ms: int = MASSIVE_EDGE_MS
         for k, c in here.items():
             noid[k] = max(noid[k], c)
     if len(conflicts) > CONFLICTS_REFUSED:
-        raise MergeRefused(f"{len(conflicts)} tick ids disagree between sources (time/price), "
-                           f"e.g. {conflicts[:5]} -- not one id space; nothing merged")
+        why = (f"{len(conflicts)} tick ids disagree between sources (time/price), "
+               f"e.g. {conflicts[:5]} -- not one id space; nothing merged")
+        live = per_source.get("live", set())
+        if live and all(n == "live" or k in live for k, n in zip(conflicts, conflict_in)):
+            raise LiveIdSpace(why + " (every one against the live recording)")
+        raise MergeRefused(why)
     for name, (smaller, larger, shared) in sized.items():
         if min(smaller, larger) > max(SIZE_BOTH_WAYS_MIN, SIZE_BOTH_WAYS_SHARE * shared):
             raise MergeRefused(f"of the {shared} ticks {name} shares, {smaller} are sized smaller and {larger} "
@@ -822,15 +837,20 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
                   end: dt.datetime, fetched: list[tuple] = (), fetched_source: dict | None = None,
                   include_live: bool = True, massive_new: list[tuple] = (),
                   massive_source: dict | None = None, only_if_added: bool = False,
-                  seams: int = 1) -> dict | None:
+                  seams: int = 1, live_excluded: dict | None = None) -> dict | None:
     """Merge whatever this session has -- `fetched` broker rows, the live
     recording (if `include_live`), the archive file on disk, `massive_new` --
     into its archive file. Returns the new manifest, or None when there is
     nothing at all (or, with only_if_added, when neither Massive nor the live
     file adds anything: the file is left as it is). Raises MergeRefused
     (nothing written) if the file on disk cannot be read or the ids disagree.
-    `seams` (merge()'s own doc) is the number of holes/edges massive_new is filling."""
+    `seams` (merge()'s own doc) is the number of holes/edges massive_new is filling.
+    `live_excluded` ({why, ...}): without the live recording, now and in every later merge of the
+    session (the manifest keeps it) -- it numbers its ticks otherwise than the history (LiveIdSpace)."""
     prev = load_manifest(path)
+    excluded = live_excluded or prev.get("live_excluded")
+    if excluded:
+        include_live = False
     sources: list = []                  # (name, rows), on disk first: it wins a disagreement
     new_sources: list[dict] = []
     if isinstance(fetched_source, dict):             # one fetch's entry
@@ -867,6 +887,8 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
         fields = tuple(read_header(path))
         man = build_manifest(root=root, contract=contract, date=date, start=start, end=end, m=m,
                              fields=fields, path=path, prev=prev, new_sources=new_sources)
+        if excluded:
+            man["live_excluded"] = excluded
         write_manifest(path, man)
         return man
     if massive_source is not None:
@@ -879,5 +901,7 @@ def merge_session(path: Path, *, root: str, contract: str, date: dt.date, start:
     fields = write_rows(path, m)
     man = build_manifest(root=root, contract=contract, date=date, start=start, end=end, m=m,
                          fields=fields, path=path, prev=prev, new_sources=new_sources)
+    if excluded:
+        man["live_excluded"] = excluded
     write_manifest(path, man)
     return man

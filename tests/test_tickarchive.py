@@ -125,6 +125,37 @@ def test_ids_that_disagree_wholesale_refuse_the_merge_and_leave_every_file(tmp_p
     assert not list(path.parent.glob("*.tmp"))
 
 
+def shifted_live(n, by=8):
+    """2026-10-09 GC/SI: after a feed outage Tradovate's live stream numbered each trade `by` lower than its history."""
+    return [tick(i + by)[:A.ID] + (str(1000 + i),) + tick(i + by)[A.ID + 1:] for i in range(n)]
+
+
+def test_a_live_recording_in_another_id_space_is_named_as_such(tmp_path):
+    """Every conflict involves the live recording: LiveIdSpace (still a MergeRefused), not a plain refusal."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    merge_session(path, fetched=[tick(i) for i in range(100)], fetched_source={"kind": "history"}, include_live=False)
+    write_live(A.live_path(path), shifted_live(100))
+    with pytest.raises(A.LiveIdSpace, match="live recording"):
+        merge_session(path)
+    with pytest.raises(A.MergeRefused) as e:                     # archive vs history: not the live recording's doing
+        merge_session(path, fetched=[tick(i, price=1.0) for i in range(100)], fetched_source={"kind": "history"},
+                      include_live=False)
+    assert not isinstance(e.value, A.LiveIdSpace)
+
+
+def test_a_session_merged_without_its_live_recording_keeps_it_out(tmp_path):
+    """Merged once without the live recording (live_excluded), the session's later merges leave it out too, and say so."""
+    path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
+    write_live(A.live_path(path), shifted_live(100))
+    man = merge_session(path, fetched=[tick(i) for i in range(50)], fetched_source={"kind": "history"},
+                        include_live=False, live_excluded={"why": "another id space"})
+    assert man["live_excluded"]["why"] == "another id space"
+    man = merge_session(path, fetched=[tick(i) for i in range(50, 100)], fetched_source={"kind": "history"})
+    assert man["live_excluded"]["why"] == "another id space"
+    assert not any(s.get("kind") == "live" for s in A.prior_sources(man))
+    assert [r[A.TS] for r in A.read_rows(path)[1]] == [tick(i)[A.TS] for i in range(100)]   # the history's, all of it
+
+
 def test_a_write_that_does_not_verify_leaves_the_original(tmp_path, monkeypatch):
     path = T.archive_path("NQ", DAY, "NQZ6", tmp_path)
     merge_session(path, fetched=[tick(i) for i in range(5)], fetched_source={"kind": "history"})

@@ -497,6 +497,7 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .set-paper-form .set-num.set-in { width: 150px; }
 .set-paper-form .set-num.set-in-num { width: 96px; }
 .set-paper-form .set-acct-err { flex-basis: 100%; }
+.set-data > .set-acct-err { white-space: normal; }   /* the Data tab's refusals are sentences: read whole, not cut */
 .set-acct-bal { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .set-why { padding: 6px 0 2px; color: var(--warn); font-size: 12px; }
 .set-note { padding: 6px 0 2px; color: var(--text-2); font-size: 12px; }

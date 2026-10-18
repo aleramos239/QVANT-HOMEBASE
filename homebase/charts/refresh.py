@@ -15,8 +15,10 @@ lists it as "lost".
 It is the job the launchd schedule already runs (deploy/com.ramosquant.homebase-ticks.plist.template) and
 takes the archive's own lock, so a click during the hourly run breaks nothing: the run in progress does the
 work and this one ends at once. It never opens an order path -- it only reads the broker's tick history and
-writes ~/futures_ticks. It never starts 09:20-09:35 ET (it checks itself), and the button refuses then too,
-saying why, rather than start a run that does nothing.
+writes ~/futures_ticks. It needs the desk's Tradovate login (the md token the desk writes): with none on disk the
+click is refused, saying so, rather than "done" with nothing fetched. When the run ends the chart service reloads
+every open chart (on_finish), so what it filled shows at once. It never starts 09:20-09:35 ET (it checks
+itself), and the button refuses then too, saying why, rather than start a run that does nothing.
 
     <state>/refresh/status.json   {status: idle|running|done|error|cancelled, step, steps: [{key, label, state, note}],
                                    started, finished, coverage?}
@@ -42,6 +44,9 @@ from .export import in_quiet, read_json, write_json
 from .tester_api import host_ok
 
 FINAL = ("done", "error", "cancelled")
+NO_LOGIN = ("Tradovate's live login is not connected on the Desk (no valid market-data token), so nothing can be "
+            "fetched: reconnect it on the Desk, then refresh")
+NO_TOKEN_EXIT = 3       # ticks.NO_TOKEN_EXIT: the job waited for the desk's token and gave up
 
 
 def _now() -> str:
@@ -65,7 +70,8 @@ def coverage_summary(path: Path) -> dict | None:
 class RefreshManager:
     def __init__(self, base: Path, *, python: str | None = None, cwd: Path | None = None,
                  clock: Callable[[], dt.datetime] | None = None, popen=subprocess.Popen,
-                 coverage_path: Path | None = None, lock_path: Path | None = None):
+                 coverage_path: Path | None = None, lock_path: Path | None = None,
+                 md_ready: Callable[[], bool] | None = None, on_finish: Callable[[dict], None] | None = None):
         self.dir = Path(base) / "refresh"
         self.dir.mkdir(parents=True, exist_ok=True)
         self.python, self.cwd = python or sys.executable, Path(cwd) if cwd else repo_root()
@@ -73,6 +79,8 @@ class RefreshManager:
         self.popen = popen
         self.coverage_path = coverage_path or state_dir() / "tick_coverage.json"
         self.lock_path = lock_path or state_dir() / "ticks.lock"
+        self.md_ready = md_ready        # () -> is the desk's md token on disk valid? None: not checked
+        self.on_finish = on_finish      # (final status) -> None, from the run's thread: the charts reload
         self._lock = threading.Lock()
         self._proc = None
         self._cancelled = False
@@ -114,6 +122,8 @@ class RefreshManager:
                 raise ValueError("a refresh is already running")
             if in_quiet(self.clock()):
                 raise ValueError("not 09:20–09:35 ET on weekdays (the 9:30 window): refresh after 09:35")
+            if self.md_ready is not None and not self.md_ready():
+                raise ValueError(NO_LOGIN)
             if self._archive_busy():
                 raise ValueError("the hourly tick job is already fetching (see homebase/.state/ticks.log); "
                                  "it is the same job, so wait for it to finish, then refresh again")
@@ -159,6 +169,10 @@ class RefreshManager:
                 if cancelled:
                     self._set_step(s["key"], "cancelled")
                     break
+                if code == NO_TOKEN_EXIT:
+                    failed = NO_LOGIN
+                    self._set_step(s["key"], "error", "no Tradovate login")
+                    break
                 if code:
                     failed = f"{s['label']} failed (exit {code}) -- see {self.dir / 'log.txt'}"
                     self._set_step(s["key"], "error", f"exit {code}")
@@ -173,6 +187,12 @@ class RefreshManager:
             if cov:
                 self._status["coverage"] = cov
             self._save()
+            final = json.loads(json.dumps(self._status))
+        if self.on_finish is not None:
+            try:            # whatever the run filled (a cancelled or failed one too) is on disk: show it
+                self.on_finish(final)
+            except Exception:  # noqa: BLE001 -- a reload that cannot start never turns a run into a crash
+                pass
 
     def cancel(self) -> dict:
         with self._lock:

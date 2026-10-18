@@ -467,6 +467,28 @@ def test_no_token_within_five_minutes_gives_up_quietly_until_the_next_run(tmp_pa
     assert "still no valid md token" in out and "run failed" not in out
 
 
+def test_a_click_with_no_token_says_so_instead_of_done(tmp_path, monkeypatch, capsys):
+    """The Refresh data button (--full) read exit 0 as Done although nothing could be fetched (2026-10-17: every
+    login on the desk refused, the hourly runs logged "no valid md token" for hours). A click exits NO_TOKEN_EXIT."""
+    d = TokenDesk(tmp_path, monkeypatch, after=None)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == T.NO_TOKEN_EXIT
+    (tmp_path / "later").mkdir()
+    d = TokenDesk(tmp_path / "later", monkeypatch, after=2)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0      # the desk came back within the wait
+
+
+def test_a_click_always_rewrites_the_coverage_report(tmp_path, monkeypatch):
+    """The button shows the report's numbers: a click with nothing to fetch still rewrites it; an hourly run does not."""
+    d = TokenDesk(tmp_path, monkeypatch, after=0)
+    (d.state / "acct.tokens.json").write_text('{"md_access_token": "t", "expiration_time": "%s"}'
+                                              % (dt.datetime.now(dt.timezone.utc) + dt.timedelta(hours=1)).isoformat())
+    reports = []
+    monkeypatch.setattr(T, "coverage_report", lambda *a, **k: reports.append(1))
+    monkeypatch.setattr(T, "data_watch", lambda *a, **k: None)
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0 and reports == []
+    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0 and reports == [1]
+
+
 def test_the_wait_ends_at_0920_and_a_late_run_does_not_wait_into_the_window(tmp_path, monkeypatch, capsys):
     d = TokenDesk(tmp_path, monkeypatch, after=None, now=dt.datetime(2026, 9, 30, 9, 18, 45, tzinfo=ET))
     assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
@@ -506,6 +528,48 @@ def test_a_refusal_under_an_older_merge_rule_is_tried_again(tmp_path):
     assert not T.refused_still(cache, "NQ", D, path)
     cache[T.REFUSED][f"NQ {D}"]["rules"] = A.MERGE_RULES
     assert T.refused_still(cache, "NQ", D, path)
+
+
+def _shifted(rows, by=8):
+    """GC / SI 2026-10-09: from a reconnect on, the live stream numbered each trade `by` lower than the history."""
+    return [{**rows[i + by], "id": rows[i]["id"]} for i in range(len(rows) - by)]
+
+
+def test_a_live_recording_numbered_otherwise_is_left_out_not_refused_for_days(tmp_path, monkeypatch, capsys):
+    """GC 2026-10-09: 228 ids disagreed, all against the live recording; every run refused, and the 20 hole-hours it
+    fetched were thrown away until the broker no longer had them. Now the session merges without the recording."""
+    ticks = _minute_ticks(D)
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    start, end = T.session_bounds(D)
+    A.merge_session(path, root="NQ", contract="NQZ6", date=D, start=start, end=end,
+                    fetched=[A.row_of(r) for r in ticks[:300]], fetched_source={"kind": "history"})
+    _write_live(A.live_path(path), _shifted(ticks))
+    cache: dict = {}
+    man = T.store("NQ", D, "NQZ6", path, start, end, fetched=[A.row_of(r) for r in ticks[300:600]],
+                  entry={"kind": "history"}, cache=cache)
+    assert man is not None and "LiveIdSpace" in man["live_excluded"]["why"]
+    assert _ids(path) == [r["id"] for r in ticks[:600]]                 # the history's, none of the recording's
+    assert T.REFUSED not in cache and "merged without it" in capsys.readouterr().out
+    assert T.promote_live(("NQ",), tmp_path, dt.datetime(2026, 9, 30, 20, 0, tzinfo=ET), cache=cache) == []
+
+
+def test_missing_asks_the_history_for_what_an_excluded_live_recording_covers(tmp_path, monkeypatch):
+    nw = NoWait(monkeypatch, now=dt.datetime(2026, 9, 29, 20, 0, tzinfo=ET))
+    ticks = _minute_ticks(D)
+    path = T.archive_path("NQ", D, "NQZ6", tmp_path)
+    start, end = T.session_bounds(D)
+    A.merge_session(path, root="NQ", contract="NQZ6", date=D, start=start, end=end,
+                    fetched=[A.row_of(r) for r in ticks[:300]], fetched_source={"kind": "history"}, include_live=False)
+    _write_live(A.live_path(path), ticks[300:])                     # the recording holds the rest of the session
+
+    def inside():                                                   # asked within the recording's stretch
+        return [g for g in T.missing("NQ", D, tmp_path, nw.now, {})[0]
+                if g[0] < ticks[-1]["ts_ms"] and g[1] > ticks[300]["ts_ms"]]
+    assert inside() == []
+    A.merge_session(path, root="NQ", contract="NQZ6", date=D, start=start, end=end,
+                    live_excluded={"why": "LiveIdSpace"})
+    gaps = inside()
+    assert gaps and gaps[0][0] <= ticks[300]["ts_ms"] and gaps[-1][1] >= ticks[-1]["ts_ms"]
 
 
 def test_a_recorder_that_kept_a_tick_a_minute_is_one_job_not_one_per_minute(tmp_path, monkeypatch):
@@ -699,7 +763,9 @@ def test_the_sessions_refused_under_the_size_rule_are_tried_again(tmp_path):
     path.parent.mkdir(parents=True)
     path.write_bytes(b"x")
     cache = {T.REFUSED: {f"NQ {D}": {"stamp": T.files_stamp(path), "rules": 2, "why": "sizes"}}}
-    assert A.MERGE_RULES == 3 and not T.refused_still(cache, "NQ", D, path)
+    assert A.MERGE_RULES >= 3 and not T.refused_still(cache, "NQ", D, path)
+    cache[T.REFUSED][f"NQ {D}"]["rules"] = 3       # GC / SI 2026-10-08..09, refused before LiveIdSpace (rules 4)
+    assert A.MERGE_RULES == 4 and not T.refused_still(cache, "NQ", D, path)
 
 
 def test_ids_still_missing_after_a_thinned_fetch_are_asked_again_until_the_broker_has_them(tmp_path, monkeypatch):

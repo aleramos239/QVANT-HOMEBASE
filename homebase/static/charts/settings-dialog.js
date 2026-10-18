@@ -224,8 +224,9 @@ function mount(box, host) {
     const btn = button('btn btn-primary', 'Refresh data'), cancel = button('btn btn-ghost', 'Cancel');
     const line = mk('div', 'set-note');
     const note = mk('div', 'set-note',
-      'Checks the last 3 days for all six markets, fetches the missing ticks from Tradovate and adds them. '
-      + 'Nothing is replaced. Takes a few minutes; the hourly and nightly runs finish the rest. Old gaps Tradovate no longer has stay missing.');
+      'Checks the last 3 days for all six markets, fetches every missing tick Tradovate still has, adds it, then '
+      + 'reloads every chart. Nothing is replaced. Takes a few minutes. Tradovate keeps about 1-2 days, and the '
+      + 'latest hour only from ~45 min after it ends; older gaps stay missing. Needs the Desk connected to Tradovate.');
     cancel.hidden = true;
     line.hidden = true;
     refreshBox = { btn, cancel, line };

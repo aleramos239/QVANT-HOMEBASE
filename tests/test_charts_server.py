@@ -1982,6 +1982,62 @@ def test_a_repair_landing_in_the_archive_reaches_a_running_service_without_a_res
     assert loaded_in and loop_thread and not any(loaded_in)      # every repair load ran off the event loop's thread
 
 
+def test_a_fill_after_the_close_reaches_the_session_the_charts_still_hold(tmp_path, monkeypatch):
+    """2026-10-16: the feed died at 10:04 and the fill landed in Friday's archive overnight. From 18:00 the clock
+    names Monday's session, but no tick has come to roll the charts over: they still hold Friday's tape, built from
+    the live file. The repair check looked only at the clock's session, so Friday's chart kept its hole all weekend.
+    It looks at the session the charts hold."""
+    base = tmp_path / "ticks"
+    write_gz(base / "NQ" / "2026" / f"{D}_NQZ6.live.csv.gz", rows(session_ms(D, 9, 40), [100.0, 100.25], first_id=100))
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 0.05)
+    now = [session_ms(D, 9, 45)]
+    app = create_app(roots=["NQ"], base=base, feed_factory=IdleFeed, now_ms=lambda: now[0], state=tmp_path / "state")
+    sub = {"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []}
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), D) == 2
+            now[0] = session_ms(D + dt.timedelta(days=1), 19, 0)      # 19:00 ET after D's close: the next session
+            write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 11, 0), [90.0] * 7, first_id=1), complete=False)
+            assert next_within(ws, "reset", within_s=10)
+            ws.send_json(sub)
+            assert volume_of(next_of(ws, "history"), D) == 9             # 2 live + 7 filled after the close
+
+
+def test_a_finished_refresh_reloads_every_open_chart_at_once(tmp_path, monkeypatch):
+    """The Refresh data button: when its run ends, every open chart reloads from the files right away -- not on the
+    next minute's poll, not after PAST_REDRAW_S, and whether or not its own files moved."""
+    base = tmp_path / "ticks"
+    write_archive(base, "NQ", P, "NQZ6", rows(session_ms(P, 9, 30), [100.0] * 5), complete=False)
+    monkeypatch.setattr("homebase.charts.server.REPAIR_POLL_S", 3600.0)       # no poll: only the click's own kick
+    monkeypatch.setattr("homebase.charts.server.PAST_REDRAW_S", 3600.0)
+
+    class Proc:
+        def wait(self):
+            write_archive(base, "NQ", P, "NQZ6", rows(session_ms(P, 9, 30), [100.0] * 5)
+                          + rows(session_ms(P, 11, 0), [101.0] * 7, first_id=50), complete=False)
+            return 0
+
+        def terminate(self):
+            pass
+
+    app = create_app(roots=["NQ", "ES"], base=base, feed_factory=IdleFeed, now_ms=lambda: session_ms(D, 9, 45),
+                     state=tmp_path / "state", refresh_kw={
+                         "md_ready": lambda: True, "popen": lambda *a, **k: Proc(),
+                         "coverage_path": tmp_path / "cov.json", "lock_path": tmp_path / "ticks.lock"})
+    with TestClient(app, base_url="http://127.0.0.1:8852") as client:
+        with client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
+            ws.send_json({"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []})
+            assert volume_of(next_of(ws, "history"), P) == 5
+            ws.send_json({"op": "sub", "id": "b", "root": "es", "spec": "time:60", "studies": []})
+            next_of(ws, "history")
+            assert client.post("/api/refresh").status_code == 200
+            ids = {next_within(ws, "reset", within_s=10)["id"], next_within(ws, "reset", within_s=10)["id"]}
+            assert ids == {"a", "b"}                                      # ES's files never moved: it reloads too
+            ws.send_json({"op": "sub", "id": "a", "root": "nq", "spec": "time:60", "studies": []})
+            assert volume_of(next_of(ws, "history"), P) == 12
+
+
 # ------------------------------------------------------------------ a past session repaired under an open chart
 class IdleFeed:
     """A live feed that delivers nothing: the service runs, its loops poll."""

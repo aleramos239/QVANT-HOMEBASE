@@ -96,6 +96,7 @@ LIVE_LOOKBACK_DAYS = 30     # live recordings merged into the archive this far b
 PAGE_INTERVAL_S = 36.0      # <= 100 requests/hour: the chart service shares this login's 180/hour (its refills <= 60/h + a start-up burst of one getChart per root)
 TOKEN_WAIT_S = 300          # no md token on disk yet (the desk still reconnecting after a wake): wait this long...
 TOKEN_POLL_S = 30           # ...looking every this often, then give up until the next run
+NO_TOKEN_EXIT = 3           # --full (the Refresh data button) gave up for want of that token: the button says why
 PENALTY_MAX = 6             # give up a session after this many penalties in a row
 DEADLINE_ET = dt.time(8, 0)  # a night run stops here; daytime runs are capped (DAY_PAGES)
 FIELDS = ("ts_ms", "price", "size", "bid", "ask", "bid_size", "ask_size", "id")
@@ -412,12 +413,20 @@ def store(root: str, date: dt.date, contract: str, path: Path, start: dt.datetim
     read/write error, nothing about the data itself) is never cached refused -- its condition may no
     longer hold by the next run, and caching it would leave a session silently unfilled after the
     disk hiccup (or whatever it was) passed. None either way, or with nothing to write."""
+    entries = [entry] if isinstance(entry, dict) else list(entry or [])
+    kw = dict(root=root, contract=contract, date=date, start=start, end=end, fetched=fetched,
+              fetched_source=[{k: v for k, v in x.items() if not k.startswith("_")} for x in entries] or None)
     try:
-        entries = [entry] if isinstance(entry, dict) else list(entry or [])
-        return tickarchive.merge_session(
-            path, root=root, contract=contract, date=date, start=start, end=end,
-            fetched=fetched, fetched_source=[{k: v for k, v in x.items() if not k.startswith("_")}
-                                             for x in entries] or None, include_live=include_live)
+        try:
+            return tickarchive.merge_session(path, include_live=include_live, **kw)
+        except tickarchive.LiveIdSpace as e:
+            # GC / SI 2026-10-08..09: refused for days, until the broker no longer had what it fetched. The
+            # history is the trades' own numbering: the session goes on without its live recording, for good,
+            # and missing() then asks the history for all of it while the broker still has it
+            log(f"{root} {date} {contract}: the live recording numbers its ticks otherwise than Tradovate's "
+                f"history ({e}) — merged without it; the whole session is fetched from the history")
+            return tickarchive.merge_session(path, include_live=False, live_excluded={
+                "why": f"{type(e).__name__}: {e}", "at_utc": tickarchive.now_utc()}, **kw)
     except Exception as e:  # noqa: BLE001 — a bad file must not stop the night; the original stays
         refused = isinstance(e, tickarchive.MergeRefused)
         what = "MERGE REFUSED" if refused else "MERGE FAILED"
@@ -695,13 +704,16 @@ def missing(root: str, date: dt.date, base: Path, now: dt.datetime, cache: dict,
             "end": end, "over": over, "last_id": None}
     if horizon <= s_ms or refused_still(cache, root, date, path, now):
         return [], info
+    man = tickarchive.load_manifest(path)
     fa = tickarchive.file_runs(path, cache) if path.exists() else _EMPTY
-    fl = tickarchive.file_runs(tickarchive.live_path(path), cache)
+    # a live recording numbered otherwise than the history (tickarchive.LiveIdSpace) vouches for nothing:
+    # what the archive lacks is asked of the history, all of it
+    fl = _EMPTY if man.get("live_excluded") else tickarchive.file_runs(tickarchive.live_path(path), cache)
     runs = tickarchive.union_runs(fa["runs"], fl["runs"])
     # Massive rows do not count: while the broker still has a stretch, its ticks (with bid/ask)
     # are fetched and take over (tickarchive.merge); a stretch it no longer has is not a job
     spans = tickarchive.merge_spans(
-        tickarchive.verified_spans(tickarchive.prior_sources(tickarchive.load_manifest(path)))
+        tickarchive.verified_spans(tickarchive.prior_sources(man))
         + [tuple(x) for x in cache.get(ASKED, {}).get(f"{root} {date}", [])])
     gaps, between = [], []              # `between` two held ticks: asked whatever a fetch vouched (above)
     if not runs:
@@ -930,11 +942,14 @@ def promote_live(roots, base: Path, now: dt.datetime, days: int = LIVE_LOOKBACK_
             for lp in sorted((base / root / str(date.year)).glob(f"{tag}_*{tickarchive.LIVE_SUFFIX}")):
                 contract = lp.name[len(tag) + 1:-len(tickarchive.LIVE_SUFFIX)]
                 path = archive_path(root, date, contract, base)
-                if tickarchive.live_merged(tickarchive.load_manifest(path), tickarchive.live_stamp(lp)) \
+                held = tickarchive.load_manifest(path)
+                if held.get("live_excluded") or tickarchive.live_merged(held, tickarchive.live_stamp(lp)) \
                         or refused_still(cache, root, date, path):
                     continue
                 man = store(root, date, contract, path, start, end, cache=cache)
-                if man is not None:
+                if man is not None and man.get("live_excluded"):
+                    out.append(man)                 # store() said why: merged without the recording
+                elif man is not None:
                     live = next((s for s in reversed(man["sources"]) if s.get("kind") == "live"), {})
                     log(f"{root} {date} {contract}: live recording merged ({live.get('ticks', 0):,} ticks, "
                         f"{live.get('only_in_live', 0):,} the archive lacked) — file {man['ticks']:,} ticks"
@@ -1113,11 +1128,12 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
     progress (the lock) is left to it. A run that fails ONLY for want of a valid md token
     (it ran right after a wake, before the desk reconnected and wrote one) waits for the
     token and retries within itself, every token_poll_s for up to token_wait_s, then gives
-    up quietly until the next run; it never logs in."""
+    up quietly until the next run; it never logs in. A click (full) that gives up so exits
+    NO_TOKEN_EXIT, for the Refresh data button to say why nothing was fetched."""
     if in_quiet(now_et()):
         return 0
     cache_path = state_dir() / "tick_runs.json"
-    rc = 0
+    rc, no_token = 0, False
     try:
         with archive_lock(state_dir() / "ticks.lock"):
             cache = load_cache(cache_path)
@@ -1139,6 +1155,7 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
                         if not found:
                             log("still no valid md token — the desk is not connected; "
                                 "nothing fetched, the next run tries again")
+                            no_token = True
                             break
             except Exception as e:  # noqa: BLE001
                 log(f"run failed: {type(e).__name__}: {e}")
@@ -1150,11 +1167,12 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
                     tickarchive.atomic_write(cache_path, json.dumps(cache).encode())
                 except OSError as e:
                     log(f"could not save {cache_path.name}: {e}")
-                if written or rc or report_due(state_dir() / "tick_coverage.json"):
+                # a click (full) always: the button shows the report's numbers, so they must be this run's
+                if written or rc or full or report_due(state_dir() / "tick_coverage.json"):
                     coverage_report(roots, base, sessions)
     except Busy:
         return 0                                  # the run in progress does the work
-    return rc
+    return NO_TOKEN_EXIT if no_token and full and not rc else rc
 
 
 if __name__ == "__main__":
