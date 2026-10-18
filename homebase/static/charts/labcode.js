@@ -516,9 +516,24 @@ const plMicros = (v) => (plNum(v) == null ? '' : ` at ${v} micro${v === 1 ? '' :
 /* The accounts of a book card, the pipeline's own first (the order the card keeps them in). */
 const plAccounts = (card) => Object.values((card && card.prop && typeof card.prop === 'object' && card.prop) || {}).filter((p) => p && typeof p === 'object');
 const plAccountName = (p) => `${plText(p.name)}${p.confirmed === false ? ' (rules not confirmed)' : ''}`;
-/* A book card as the Book lists it: {name, label, tone, sub, account, rows: [[what, value]]}. A value that is missing shows "—". */
+/* The edge numbers of a card (the owner, 2026-10-18: one pipeline, tagged Live or Live + Prop), one side: build or unseen. -> [[what, value]] */
+const plR = (v, d = 2) => (plNum(v) == null ? DASH : `${v.toFixed(d)}R`);
+const plEdgeRows = (n) => { const x = n || {}, m = x.month_wr || {};
+  return [['Win rate', plPct(x.win_rate)], ['Breakeven win rate', plPct(x.breakeven_wr)], ['Reward-to-risk (realized)', plFixed(x.realized_rr, 2)],
+    ['Average trade', plR(x.avg_r)], ['Net per year, one contract', plMoney(x.net_per_year)], ['Sharpe', plFixed(x.sharpe, 2)],
+    ['Months positive', plPct(x.months_positive)], ['Worst month win rate', plPct(m.lowest)], ['Worst drawdown', plR(x.worst_drawdown_r, 1)],
+    ['Biggest day, share of profit', plPct(x.biggest_day_share)]]; };
+const plTagLabel = (t) => (t === 'live+prop' ? 'Live + Prop' : t === 'live' ? 'Live' : null);
+/* A book card as the Book lists it: {name, label, tone, sub, account, rows: [[what, value]]}. A value that is missing shows "—".
+   A card of edge mode (it has a `tag`) shows its tag and its unseen-day numbers; an older card its prop label and odds. */
 function plBookCard(card) {
-  const c = card || {}, own = plAccounts(c)[0] || {};
+  const c = card || {}, own = plAccounts(c)[0] || {}, tag = plTagLabel(c.tag);
+  if (tag) {
+    const u = (c.numbers && c.numbers.unseen) || {};
+    return { name: plText(c.name), label: tag, tone: c.tag === 'live+prop' ? 'ok' : '', sub: [plText(c.market), plSession(c.session), plBar(c.bar)].join(' · '), account: '',
+      rows: [['Win rate', plPct(u.win_rate)], ['Reward-to-risk (realized)', plFixed(u.realized_rr, 2)], ['Sharpe', plFixed(u.sharpe, 2)],
+        ['Months positive', plPct(u.months_positive)], ['Hours it trades', plPair(c.hours, '–')], ['Worst drawdown', plR(u.worst_drawdown_r, 1)]] };
+  }
   return { name: plText(c.name), label: plCap(c.label), tone: c.label === 'stands alone' ? 'ok' : '',
     sub: [plText(c.market), plSession(c.session), plBar(c.bar)].join(' · '), account: own.name ? plAccountName(own) : '',
     rows: [['Pass the eval in 30 days', plPct(own.eval)], ['Full payout in 30 days', plPct(own.payout)], ['Hours it trades', plPair(c.hours, '–')],
@@ -536,6 +551,7 @@ function plBookFull(card, stages) {
       ['Average trade', plMoney(c.avg_trade)], ['Profit factor', plFixed(c.profit_factor, 2)], ['Net profit', plMoney(c.net)], ['Worst day', plMoney(c.worst_day)],
       ['Worst drawdown', plMoney(c.worst_drawdown)], ['Biggest day, share of profit', plPct(c.biggest_day_share)],
       ['Trades under 5 seconds, share of profit', plPct(c.fast_profit_share)], ['Heat maps tried', plWhole(c.tries)], ['Came from', plText(c.source)]],
+    numbers: c.numbers ? ['build', 'unseen'].filter((k) => c.numbers[k]).map((k) => ({ name: k === 'build' ? 'Build days' : 'Unseen days', rows: plEdgeRows(c.numbers[k]) })) : [],
     accounts: plAccounts(c).map((p) => ({ name: plAccountName(p), rows: [['Pass the eval in 30 days', `${plPct(p.eval)}${plNum(p.eval) == null ? '' : plMicros(p.size)}`],
       ['Full payout in 30 days', `${plPct(p.payout)}${plNum(p.payout) == null ? '' : plMicros(p.payout_size)}`], ['Label', plCap(p.label)]] })),
     stages: Object.entries((c.stages && typeof c.stages === 'object' && c.stages) || {}).sort((a, b) => Number(a[0]) - Number(b[0]))
@@ -828,82 +844,6 @@ function fmFirstError(errors, order) {
   return keys.length ? e[keys[0]] : '';
 }
 
-/* ---- the payout pipeline's page (2026-10-13): words and marks only. Every number is the server's (GET /api/tester/pipeline/payout):
-   the page judges nothing, and while the pipeline is disabled the server hands nothing over. ---- */
-const PAY_SLOTS = { evening: 'Evening', night: 'Overnight', day: 'New York' };
-const paySlot = (id) => PAY_SLOTS[id] || plCap(id);
-/* Is the set proven? -> { label, tone, text }: the chip beside the title and the sentence under it. */
-function payProof(d) {
-  if (!d || !d.group || !Object.values(d.sets || {}).some((s) => s && s.size != null)) return { label: 'No set', tone: '', text: '' };
-  if (d.proven) return { label: 'Proven', tone: 'ok', text: `On the unseen days it pays ${plMoney(d.unseen.per_week)} a week.` };
-  if (d.unseen) return { label: 'Not proven', tone: 'err', text: `On the unseen days it pays ${plMoney(d.unseen.per_week)} a week. It may not go on a real account.` };
-  const w = Array.isArray(d.waiting) ? d.waiting : [];
-  return { label: 'Not proven yet', tone: '', text: w.length ? `${w.map((x) => `${x.name}: ${x.why}`).join('; ')}. It may not go on a real account.` : '' };
-}
-/* The four numbers on top. */
-function payTiles(d) {
-  const g = d && d.group;
-  if (!g) return [];
-  const n = Array.isArray(g.accounts) ? g.accounts.length : 0;
-  return [{ k: 'Expected payout a week', v: plMoney(g.per_week), tone: g.per_week > 0 ? 'pos' : '' },
-    { k: 'With worse fills', v: plMoney(d.worse), tone: '' },
-    { k: 'Any payout in 12 weeks', v: plPct(g.p_paid), tone: '' },
-    { k: 'Accounts that survive', v: plNum(g.survivors) == null ? DASH : `${g.survivors.toFixed(1)} of ${n}`, tone: '' }];
-}
-/* One strategy of a slot in words: its name, its box, how often it wins, what it adds; its reserves. */
-function payMember(m) {
-  if (!m) return 'Nobody';
-  const adds = plNum(m.adds) == null ? '' : `, adds ${plMoney(m.adds)} a week`;
-  const read = m.read === true ? '' : ', not read on the unseen days yet';
-  const bench = Array.isArray(m.bench) && m.bench.length ? `. Reserves: ${m.bench.map((b) => b.name).join(', ')}` : '';
-  return `${m.name} (${m.cell}), wins ${plPct(m.win_rate)} of its trades${adds}${read}${bench}`;
-}
-function payDayRule(s) {
-  const up = plNum(s.gain) == null ? '' : `up ${plMoney(s.gain * s.mll)}`, down = plNum(s.loss) == null ? '' : `down ${plMoney(s.loss * s.mll)}`;
-  return up || down ? `Stop for the day once it is ${[up, down].filter(Boolean).join(' or ')}` : 'Always trade';
-}
-/* The sets, one for each kind of account: [{ title, slots: [[slot, words]], facts: [[k, v]], note }]. */
-function paySets(d) {
-  return Object.values((d && d.sets) || {}).map((s) => ({
-    title: `${plText(s.account_name)} × ${(s.accounts || []).length}`,
-    slots: ((d && d.slots) || []).map((x) => [`${x.label} (${x.from}–${x.to})`, payMember((s.slots || {})[x.id])]),
-    facts: [['Size', plNum(s.size) == null ? 'No size keeps the account alive often enough' : `${s.size} micro${s.size === 1 ? '' : 's'} for each strategy`],
-      ['Day rule', payDayRule(s)],
-      ['Rotation', s.rotation ? `Trade a strategy only after a ${s.rotation.lookback}-day equity high within ${s.rotation.within} days` : 'None: it did not beat no rule'],
-      ['Expected payout a week', plMoney(s.per_week)],
-      ['Rule file', `${plText(s.rules)}${s.confirmed ? '' : ' (not confirmed by you)'}`]],
-    note: s.friendly ? 'These numbers are the friendly reading: the floor of this account trails its intraday high, and the true odds are lower.' : '' }));
-}
-/* The accounts, one row each: what it is expected to pay, how often it pays, how often it is lost. */
-function payAccounts(d) {
-  const by = Object.fromEntries((((d && d.group) || {}).accounts || []).map((a) => [a.id, a]));
-  return ((d && d.accounts) || []).map((a) => {
-    const g = by[a.id];
-    const words = !a.on ? 'Off' : !g ? 'Not scored' : `${plMoney(g.per_week)} a week, pays in ${plPct(g.p_paid)}, lost in ${plPct(g.p_bust)}`;
-    return [`${a.id}${a.assumed ? ' (type assumed)' : ''}`, `${plMoney(a.balance)} · ${words}`];
-  });
-}
-/* What trades the next session, from the evening's read: [[account and slot, the strategy or "Stand down"]]. */
-function payTonight(t, d) {
-  const out = [];
-  for (const [rid, slots] of Object.entries((t && t.slots) || {})) {
-    const s = ((d && d.sets) || {})[rid] || {}, name = s.account_name || rid;
-    for (const [slot, v] of Object.entries(slots || {})) {
-      if ((s.slots || {})[slot]) out.push([`${name}, ${paySlot(slot)}`, (v && v.trades) || 'Stand down']);      // a slot the set has nobody for is not listed
-    }
-  }
-  return out;
-}
-/* A notice of the list: { when, title, tone, text }. A switch is the one the owner acts on. */
-function payNotice(n) {
-  const kind = String((n && n.kind) || ''), d = new Date(String((n && n.utc) || ''));
-  const when = Number.isNaN(d.getTime()) ? '' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-  return { when, title: kind === 'switch' ? 'Switch the set' : kind === 'built' ? 'New set built' : kind === 'set' ? 'Tonight’s set' : plCap(kind || 'note'),
-    tone: kind === 'switch' ? 'run' : '', text: String((n && n.text) || '') };
-}
-/* The main score over time, as the curve helper reads a curve: one point a build. */
-const payCurve = (scores) => (Array.isArray(scores) ? scores : []).filter((s) => s && plNum(s.per_week) != null).map((s) => [s.utc, null, s.per_week]);
-
 const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, statusOf, lineCount, ago, sections, withDeskGroup, ON_DESK, INDENT,
   shownRows, canPick, pickRange, prunePicks, rowClick, draftName, deleteItem, deleteTargets, deleteConfirm, deleteConfirmHtml, deleteLine, goneLine, unsavedLine, deleteKey, isTyping,
   libFilter, MARKS, LIB_SORTS, LIB_SHOWS, markOf, libShow, libSort, libMarkets, tkFilter, tkFind, tkStatus, tkMarkets, tkSpan, tkParts, tkGutter, tkClip, tkDedent,
@@ -911,8 +851,7 @@ const api = { highlight, tab, enter, comment, nameError, suggestName, metaLine, 
   plPick, plMark, plWayLine, plIndLine, plWay, plInd, plForm, plCard, plCanSend,
   plUsable, plRules, plMainSetting, plIndicators, plSessionsFor, plNeed, plValueError, plSettingWords, plPrefill,
   FM_LATEST, fmShown, fmKeys, fmKinds, fmSides, fmWords, fmHasValue, fmKindValue, fmFit, fmSetMarket, fmStarts, fmSize, fmSuggest, fmStart, fmSwitch, fmFill, fmNumberError, fmErrors, fmAnswers, fmFirstError, fmId, fmKeepErrors,
-  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid,
-  paySlot, payProof, payTiles, payMember, payDayRule, paySets, payAccounts, payTonight, payNotice, payCurve };
+  plPct, plMoney, plBookCard, plBookFull, plSigned, plBookLine, plCurveTiles, plCurvePath, plCurveAt, plCurveRead, plExecSaid, promoteState, deskSaid };
 if (typeof window !== 'undefined') window.HBLabCode = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

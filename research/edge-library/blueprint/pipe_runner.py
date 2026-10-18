@@ -64,9 +64,6 @@ THE STAGES ARE LOADED WHEN ONE IS ASKED FOR (stage_fn), never with this module: 
                                      `pipe near`: THE NEAR MISSES. Every idea that stopped on a verdict before the unseen days (stages 1-5), with
                                      the rows it missed and how far its WORST row was from its need, the closest first. A near miss is not a
                                      pass: the board keeps what stopped close in sight. Runs nothing
-  command("portfolio", account=ID)   `pipe portfolio [--account=ID]`: STAGE 8, the best mix of the book's strategies for each account and how far
-                                     it is from the portfolio's bar (pipe_portfolio.portfolio, loaded when it is asked for). Runs nothing; saves
-                                     one file an account under <root>/portfolios
   listing / show / booked / command  `pipe list`, `pipe show`, `pipe book` and every `bp.py pipe <sub>` as ONE result object
                                      (api.result("pipe <sub>", ...)) with a text for a person
 
@@ -110,7 +107,7 @@ MARK = {True: "PASS", False: "FAIL", None: "n/a"}   # a stage card's verdict, as
 WHY = 80                                            # characters of a state's why on a row of `pipe list`
 AGAIN = dt.timedelta(minutes=1)                     # the window closed between a stage's refusal and the look: step again in a minute
 TRIES, GAP = 3, 0.1                                 # the runner's tries for its lock: `pipe list` holds it for an instant to see whether one works
-SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "near", "portfolio")
+SUBS = ("add", "list", "show", "start", "pause", "resume", "approve", "refuse", "book", "rerun", "pick", "luck", "near")
 NEAR, NEAR_TEXT, NEAR_STAGES = 15, 110, (1, 2, 3, 4, 5)   # the near misses: the rows shown, the characters of a row's text, the stages that stop on a verdict before the unseen days
 RANDOM = "4.4"                                      # the read's line on the random tables: its bar is what an idea with no edge passes by luck
 
@@ -291,21 +288,6 @@ def _until(iso: str, sleep, idle_s: float) -> None:
         sleep(min(idle_s, left))
 
 
-def _idle(root: Path) -> None:
-    """While the queue has nothing to run: the PAYOUT PIPELINE's own work, when it is the one that is on and enabled -- a new set when the
-    pool or the accounts changed, the evening's rotation once a day (pay_build.idle). A fault here is said and never ends the runner."""
-    try:
-        from . import pipe_switch as SW
-        if SW.now(root) != "payout" or not SW.enabled("payout", root):
-            return
-        from . import pay_build
-        did = pay_build.idle(root)
-        if did["built"] or did["evening"]:
-            _log(root, "-", "-", "PAY", 0, ("a new set was built" if did["built"] else "") + (" " + did["evening"]["text"] if did["evening"] else ""))
-    except Exception as e:  # noqa: BLE001 - the set builder must never stop the idea runner
-        _say(f"payout: {type(e).__name__}: {e}")
-
-
 def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) -> int:
     """THE RUNNER (module docstring) -> 0. `ctx` is handed to every stage; once=True never sleeps."""
     root = PS.root(ctx.get("root"))
@@ -321,7 +303,6 @@ def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) ->
                 if once:
                     return 0
                 skip.clear()
-                _idle(root)
                 sleep(idle_s)
                 continue
             wait = _work(name, ctx, root, skip)
@@ -433,9 +414,8 @@ def listing(root=None) -> dict:
              + " · queue: " + ("paused" if s["paused"] else "not paused")]
     from . import pipe_rules as PRL            # the pipeline in use rides along, so a page polling `pipe list` needs no second command
     now = PRL.active()
-    from . import pipe_switch as SW            # ... and the switch: the ONE pipeline that works, or none (off | live | wr | payout | funded)
-    prof = {"profile": now, "label": PRL.label(now), "settings": PRL.settings(now), "editable": now == "wr",
-            "options": [{"id": k, "label": v[0]} for k, v in PRL.PROFILES.items()], "mode": SW.now(root), "modes": SW.options(root)}
+    from . import pipe_switch as SW            # ... and the switch: the pipeline works, or it does not (off | live)
+    prof = {"profile": now, "label": PRL.label(now), "mode": SW.now(root), "modes": SW.options(root)}
     return api.result("pipe list", **s, pipeline=prof, text="\n".join(text),
                       next="" if s["running"] or not any(x.get("status") in PS.LIVE for x in s["ideas"]) else "bp.py pipe start runs the queue.")
 
@@ -548,8 +528,8 @@ def near(root=None, top: int = NEAR) -> dict:
 def booked(root=None) -> dict:
     """`pipe book`: one row a book card; then the luck count's line, once an idea was read on the unseen days."""
     cards = PS.book(root)
-    rows = [tuple(_dash(c.get(k)) for k in ("name", "label", "family", "market", "session", "bar")) for c in cards]
-    text = _table(("name", "label", "family", "market", "session", "bar"), rows) if rows else ["the book is empty"]
+    rows = [(_dash(c.get("name")), _dash(c.get("tag") or c.get("label")), *(_dash(c.get(k)) for k in ("family", "market", "session", "bar"))) for c in cards]
+    text = _table(("name", "tag", "family", "market", "session", "bar"), rows) if rows else ["the book is empty"]
     lk = luck(root)
     if lk["read"]:
         text += ["", f"luck count: {lk['said']} (bp.py pipe luck)"]
@@ -579,7 +559,7 @@ def pick(name, cell=None, why=None, root=None, clear: bool = False) -> dict:
                       next=f"bp.py pipe rerun {name} runs it again from stage 0 (a stopped idea only); a new idea takes it at its stage 1.")
 
 
-def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False, account=None) -> dict:
+def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
     if sub == "add":
@@ -594,9 +574,6 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
         return luck(root)
     if sub == "near":
         return near(root)
-    if sub == "portfolio":
-        from . import pipe_portfolio                # the prop simulator's walks: loaded when the mix is asked for, never with the runner
-        return pipe_portfolio.portfolio(root, account)
     if sub == "rerun":
         return rerun(name, root)
     if sub == "pick":

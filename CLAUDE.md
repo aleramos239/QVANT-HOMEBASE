@@ -1,11 +1,11 @@
 # Homebase — rules for assistants working in this repo
 
-## The payout pipeline is the owner's to switch on (2026-10-13)
+## One pipeline (2026-10-18)
 
-`bp.py pipe payout` and Lab > Payout build a set of session strategies for the funded accounts
-(`docs/superpowers/specs/2026-10-13-payout-pipeline-design.md`). It ships DISABLED. Never run `bp.py pipe payout enable`,
-never choose it with `bp.py pipe mode payout`, and never write its lock file (`payout_enabled` in the pipeline root): only
-the owner turns it on, from the Lab. While it is disabled none of its commands runs, for anyone.
+The strategy pipeline is ONE pipeline (`docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`): it judges a strategy at one
+contract after costs, with no prop simulator, and tags a pass Live or Live + Prop. The WR, PAYOUT and FUNDED pipelines and the group step
+are retired and their code is removed. Never bring the payout pipeline back or write its lock file (`payout_enabled`): only the owner can
+decide that.
 
 ## Strategy work follows the blueprint (house law, 2026-10-05)
 

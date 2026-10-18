@@ -862,7 +862,7 @@ def _read_bar(plan: dict, tf: str, out: Path, named, pools: dict, stop_c, tries:
         x = J.cellx(st, c["id"], None, u)
         bx = T.box(st, u, c["id"], named)
         b = ST._one_box(t, c["id"])
-        rows = [r for r in G.variant_rows(b, []) if r["line"] not in ("P3.6", "P3.11", "P3.12", "P3.13")] + [fn(bx) for fn in L.BOX] + [G.reshuffle_box(b)]
+        rows = [r for r in G.variant_rows(b, []) if r["line"] not in ("P3.6", "P3.11", "P3.12", "P3.13", "P3.15")] + [fn(bx) for fn in L.BOX] + [G.reshuffle_box(b)]
         real = float(t["net"][i].sum())
         for side in plan["control"]["sides"]:
             line = "P4.2" if side == "both" else "P4.2s"

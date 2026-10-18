@@ -601,7 +601,8 @@ def test_no_gate_number_is_typed_in_the_module():
     src = (W / "blueprint" / "pipe_stages.py").read_text(encoding="utf-8")
     typed = {t.string for t in tokenize.generate_tokens(io.StringIO(src).readline) if t.type == tokenize.NUMBER}
     # 0-7 the stages, counts and indexes · 20 rows listed · 1000 and 1_000_000 ms / ns · 1e-6 a float's slack · 0.01 a cent (records.show's) · 0.0 an empty table
-    assert typed <= {"0", "1", "2", "3", "4", "5", "6", "7", "20", "1000", "1_000_000", "1e-6", "0.01", "0.0"}, sorted(typed)
+    # · 252 session days a year (YEAR: the Sharpe's and the net a year's calendar, no gate)
+    assert typed <= {"0", "1", "2", "3", "4", "5", "6", "7", "20", "252", "1000", "1_000_000", "1e-6", "0.01", "0.0"}, sorted(typed)
 
 
 if __name__ == "__main__":

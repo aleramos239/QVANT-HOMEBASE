@@ -670,74 +670,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(503, pipe_cache["error"])
             return pipe_cache["body"]
 
-    @r.post("/pipeline/profile")
-    def pipeline_profile(request: Request, body: dict):
-        """Choose the pipeline in use: {profile: "live" | "wr"} (LIVE PIPELINE for live accounts, WR PIPELINE for win rate)."""
-        write_ok(request)
-        json_body(request)
-        try:
-            return {"ok": True, "text": box.pipeline_set_profile(body.get("profile"))}
-        except blueprint_tools.Refused as e:
-            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
-        except ToolError as e:
-            return {"ok": False, "text": str(e)}
-        finally:
-            with pipe_lock:
-                pipe_cache["at"] = None
-
     @r.post("/pipeline/mode")
     def pipeline_mode(request: Request, body: dict):
-        """The switch: {mode: "off" | "live" | "wr" | "payout" | "funded"} -- the ONE pipeline that works, or none (owner, 2026-10-13)."""
+        """The switch: {mode: "off" | "live"} -- the pipeline works, or it does not (one pipeline since 2026-10-18)."""
         write_ok(request)
         json_body(request)
         if body.get("mode") != "off" and Slots().quiet():     # switching one ON starts heavy work: not in a quiet window of the tester (as PIPE_QUIET)
             raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): do it later")
         try:
             return {"ok": True, "text": box.pipeline_set_mode(body.get("mode"))}
-        except blueprint_tools.Refused as e:
-            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
-        except ToolError as e:
-            return {"ok": False, "text": str(e)}
-        finally:
-            with pipe_lock:
-                pipe_cache["at"] = None
-
-    @r.get("/pipeline/payout")
-    def pipeline_payout():
-        """The PAYOUT PIPELINE's page: {enabled, payout (the set on file), scores, notices, tonight, text}. Disabled: enabled false and nothing else."""
-        try:
-            return box.pipeline_payout()
-        except blueprint_tools.Refused as e:
-            raise HTTPException(409, pipeline_tools.page_refusal(e)) from None
-        except ToolError as e:
-            raise HTTPException(503, str(e)) from None
-
-    @r.post("/pipeline/payout")
-    def pipeline_payout_do(request: Request, body: dict):
-        """The owner's buttons of the Payout page: {action: "enable" | "disable" | "build" | "tonight" | "requeue"}. Only a page of this app can post it
-        (write_ok); no chat tool does."""
-        write_ok(request)
-        json_body(request)
-        action = body.get("action")
-        if action in ("build", "requeue") and Slots().quiet():     # heavy work: not in a quiet window of the tester (as PIPE_QUIET)
-            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): do it later")
-        try:
-            return {"ok": True, "text": box.pipeline_payout_do(action)}
-        except blueprint_tools.Refused as e:
-            return {"ok": False, "text": pipeline_tools.page_refusal(e)}
-        except ToolError as e:
-            return {"ok": False, "text": str(e)}
-        finally:
-            with pipe_lock:
-                pipe_cache["at"] = None
-
-    @r.post("/pipeline/settings")
-    def pipeline_settings(request: Request, body: dict):
-        """Change the WR PIPELINE's numbers: {settings: {win_rate, month_floor, months, month_trades, max_target_r, risk_usd: [lo, hi]}}."""
-        write_ok(request)
-        json_body(request)
-        try:
-            return {"ok": True, "text": box.pipeline_set_settings(body.get("settings"))}
         except blueprint_tools.Refused as e:
             return {"ok": False, "text": pipeline_tools.page_refusal(e)}
         except ToolError as e:

@@ -102,12 +102,12 @@ mode the map gets a LOOSE check and ONE box is picked right after it; every hard
           that HOLD EVERY LINE A BOX IS HELD TO ON THE BUILD DAYS (_box_rows: stage 3's rows P3.2-P3.10 and the lock's lines 3.3-3.8; not the
           proof of stage 4, not the worse fills of the lock) -- row P1.3, at least `variant.pick_boxes` of them (pipe_gates.holding). The map with
           the most such boxes moves on (then the more boxes at the floor, the bigger average trade, the first), and of its boxes the MIDDLE one
-          BY PROP ODDS (_pick: the odds to pass the eval on the pipeline's account, then the payout odds, then judge.TIE_RULE; never the best) is
+          BY AVERAGE TRADE (_pick, _avg: then judge.TIE_RULE; never the best; by prop odds until 2026-10-18) is
           in `picked` as `cell` (the box id) and `variant` (its main-setting value) next to sub / bar / way / filter, and on the card as `box`.
           No map with enough such boxes: the idea stops here, and row P1.3 says which lines the boxes miss. The owner's own pick
           (bp.py pipe pick) is still any box at the floor
           THE NEXT BOX (next_box; the owner, 2026-10-09): the card also keeps `candidates` -- every box that holds, of every map that passed, in
-          the order they are tried (_outward: from the middle outward by prop odds; the moved-on map's first). A stage that says no to the PICKED
+          the order they are tried (_outward: from the middle outward by average trade -- by prop odds until 2026-10-18, in both modes; the moved-on map's first). A stage that says no to the PICKED
           BOX and not to the idea (its card's `next_box`: stage 4's proof; stage 5's "no box" with worse fills or "box failed") does not stop the
           idea while a candidate is left: the runner makes the next one the pick, counts one more try (the random bar rises) and runs stages 2 on
           again -- at most `variant.box_tries` boxes an idea. The unseen days are still read ONCE, for the first box that is locked
@@ -122,18 +122,18 @@ mode the map gets a LOOSE check and ONE box is picked right after it; every hard
           nothing (waive=, lock.json `waived`; the owner, 2026-10-08: the hard rules are the picked variant's); any other False line is still a CODE PROBLEM
   stages 6 and 7  unchanged. A stage of variant mode on an idea whose stage 1 picked no box (_cell) is refused: `bp.py pipe rerun <name>`.
 
-PROP GATES (pipeline.json gates.mode "prop", the shipped default since 2026-10-10; the owner, after the Matteo Conti interview: "go off what he says").
-Variant mode as above, with THREE things that ask and every other line a LABEL (pipe_gates.label: passed None, `held`, `label` HELD / MISSED):
+EDGE GATES (pipeline.json gates.mode "edge", the shipped default since 2026-10-18; the owner: ONE pipeline, judged by the strategy's own numbers at
+one contract after costs, no prop simulator -- docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md; mode "prop" of 2026-10-10 is retired).
+Variant mode as above, with these lines that ask and every other line a LABEL (pipe_gates.label: passed None, `held`, `label` HELD / MISSED):
   1. the picked box makes money on the build days after costs: P3.2 (an average trade ABOVE $0) and P3.3 (the trades an average needs)
-  2. its eval odds on the pipeline's account -- the PLAIN row, open losses counted, within prop.days -- are prop.eval (40 %) or more: read in
-     _holding, so the boxes the pick is made among, and row P1.3, already hold it
+  2. its win rate is at or above the breakeven of its REALIZED reward-to-risk plus edge.wr_cushion: P3.15 (pipe_gates.wr_rr) -- read in _holding,
+     so the boxes the pick is made among already hold it; the pick is the middle of them by average trade (_avg, _outward), never the best
   3. it still makes money on the unseen days: oos.test(only=("box", "4.4")) -- the default box's own net on the test days above $0, AND the
-     locked map beats 95 % of the random tables on those days (line 4.4; a gate again since 2026-10-17: a box above $0 alone is what an idea
-     with no edge does about 1 time in 2, so the book's passes were mostly luck)
+     locked map beats 95 % of the random tables on those days (line 4.4); and on a pass, P3.15 again on the unseen trades (row P6.3)
 The map's own share of profitable boxes (P1.1), the sides, the other markets, P3.7-P3.10, the proof of stage 4 (P4.1, P4.2), the lock's 3.3-3.8, the
-worse fills (lock `labelled`) and lines 4.1-4.9 are read and printed and ask nothing; stage 4 therefore always passes, stage 5 is "locked" when the
-code check and the build's own rows stand, and the book card adds `equity` (at a new high or in drawdown) and `fees` (an eval's fee against the
-expected cheque). The CODE CHECK (1.1-1.4) and the PRICE CHECK (P2.5) stay hard: they say the code is right. Mode "law" is the file as it was.
+worse fills (lock `labelled`) and lines 4.1-4.9 are read and printed and ask nothing. Stage 5 keeps the box's numbers on the build days (`locked.build`,
+_edge_numbers); stage 7's book card carries `tag` ("live" | "live+prop": _tag, edge.prop) and `numbers` {build, unseen}, and no prop odds, label or fees.
+The CODE CHECK (1.1-1.4) and the PRICE CHECK (P2.5) stay hard: they say the code is right. Mode "law" is the file as it was, prop label included.
 
 THE PRICE CHECK (P2.5). The middle box of the heat map (records.middle: the middle of the boxes that made money; when none
 did, the box with the most trades, and the row says so) is run again for its prices (runner.cell_trades: a store keeps
@@ -341,25 +341,9 @@ def _box_rows(t: dict, cell: str, days=None) -> list:
     return G.variant_rows(_one_box(t, cell), []) + G.labels([fn(T.box(t["_st"], t["_u"], cell, days)) for fn in L.BOX], gate=())
 
 
-def _eval_asked(unit=None) -> bool:
-    """Does the eval-odds bar of mode "prop" ask of this unit? Yes, unless the win-rate lane is on for it (the owner's first goal there is the win rate) or
-    the funded line is on (the FUNDED PIPELINE: one box is judged by the 75 % table and the group by its payout odds): there the odds are a label."""
-    return PR.prop_gates() and PR.winlane(unit) == "off" and not PR.funded()
-
-
-def _asked_words(unit=None) -> str:
-    """What a pick says it asks besides money and trades: the eval odds (mode "prop"), the win rate and its months (win-rate lane "ask")."""
-    return ((f" and have {L._pc(PR.need('prop', 'eval'))} eval odds or more" if _eval_asked(unit) else "")
-            + (f", win {L._pc(PR.need('winlane', 'win_rate'))} or more of its trades and have {L._pc(PR.need('winlane', 'months'))} of its months at "
-               f"{L._pc(PR.need('winlane', 'month_floor'))} wins or better" if PR.winlane(unit) == "ask" else "")
-            + (", and fall into a row of the funded 75 % table (win rate for its reward)" if PR.funded() else ""))
-
-
 def _holding(t: dict, cells: list, days=None) -> tuple:
-    """(the boxes of `cells` that hold every row of _box_rows, {line: how many of `cells` miss it}). In mode "prop" the rows that ask are P3.2 and
-    P3.3 (the others are labels: passed None), and the boxes that hold them must also have the eval odds of pipeline.json prop.eval or more
-    (the PLAIN row of _odds, `>=`: the owner's "40 % or more"); the boxes that miss it are counted under "eval odds". With the win-rate lane on
-    (pipeline.json winlane.mode "label" or "ask", the owner 2026-10-12) the eval odds are SHOWN (the pick still ranks by them) and not asked."""
+    """(the boxes of `cells` that hold every row of _box_rows, {line: how many of `cells` miss it}). In mode "edge" the rows that ask are P3.2,
+    P3.3 and P3.15 (the others are labels: passed None). No prop odds are read (the owner, 2026-10-18)."""
     good, missed = [], {}
     for c in cells:
         bad = [x["line"] for x in _box_rows(t, c, days) if x["passed"] is False]
@@ -367,28 +351,17 @@ def _holding(t: dict, cells: list, days=None) -> tuple:
             missed[k] = missed.get(k, 0) + 1
         if not bad:
             good.append(c)
-    if _eval_asked(t.get("unit")) and good:
-        bar, got = PR.need("prop", "eval"), _odds(t, good, days)
-        keep = [c for c in good if got[c]["eval"] >= bar]
-        if len(keep) < len(good):
-            missed["eval odds"] = len(good) - len(keep)
-        good = keep
     return good, missed
 
 
-def _odds(t: dict, cells: list, days=None) -> dict:
-    """{box: THE PROP CHECK of its build trades on the pipeline's account (pipe_prop.odds, as row P5.9 reads the locked box)}."""
-    own, cal = PR.need("prop", "account"), T.build_days(t["_u"], days)
-    seen = t.setdefault("_odds", {})                # a box's odds are read once a table: the pick asks again for the boxes the gate has already read
-    for c in cells:
-        key = (c, own, str(days))
-        if key not in seen:
-            seen[key] = PP.odds(J.cellx(t["_st"], c, t["_u"]["sess"], t["_u"]), cal, own)
-    return {c: seen[(c, own, str(days))] for c in cells}
+def _avg(rows: list, cells: list) -> dict:
+    """{box: (its average trade after costs,)} off the judge's table rows: what the pick ranks the boxes by (the owner, 2026-10-18: no prop odds)."""
+    by = {r["id"]: r for r in rows}
+    return {c: (by[c]["net"] / by[c]["trades"] if by[c]["trades"] else float("-inf"),) for c in cells}
 
 
 def _outward(rows: list, odds: dict) -> list:
-    """THE ORDER THE BOXES ARE TRIED IN: the boxes of `odds` ({box: (its odds to pass the eval, its payout odds)}) ranked by those odds, then by
+    """THE ORDER THE BOXES ARE TRIED IN: the boxes of `odds` ({box: (its average trade,)}: _avg) ranked by it, then by
     the judge's tie rule (net to the cent, variant order) -- and read FROM THE MIDDLE OUTWARD: the middle one first (an even count: the lower of
     the two middle ones), then the next lower, the next higher, and so on. The best box is never first."""
     by = {r["id"]: r for r in rows}
@@ -398,7 +371,7 @@ def _outward(rows: list, odds: dict) -> list:
 
 
 def _pick(rows: list, odds: dict):
-    """THE PICK: the first box of _outward -- the MIDDLE of the boxes by prop odds, never the best. None: no box."""
+    """THE PICK: the first box of _outward -- the MIDDLE of the boxes by average trade, never the best. None: no box."""
     return (_outward(rows, odds) or [None])[0]
 
 
@@ -495,7 +468,7 @@ def stage1(name: str, ctx: dict, progress=None) -> dict:
 
 def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) -> dict:
     """Stage 1 in variant mode: the LOOSE check of each map (G.variant_map), row P1.3 of each map that passed it (the boxes at the floor that hold
-    every line of a box: _holding, G.holding), the map with the most such boxes, and THE PICK -- the middle of them by prop odds, never the
+    every line of a box: _holding, G.holding), the map with the most such boxes, and THE PICK -- the middle of them by average trade, never the
     best (_pick) -- written into the card and into `picked` (cell, variant)."""
     tabs = [_table(specs[0], plan, kw) for _, _, plan, specs in subs]
     res = [G.variant_map(t) for t in tabs]
@@ -522,31 +495,28 @@ def _stage1_variant(t0: float, kw: dict, subs: list, rules: dict, owner=None) ->
     else:
         if gate[i]["passed"] is False:
             return _card(1, t0, False, "fail", rows, f"no heat map has a box to pick: {s['name']} -- {gate[i]['text']}: the idea is dropped{said}", None, len(res), rules, tables=tables)
-        cands, o = [], None
+        cands = []
         for k in sorted(ok, key=lambda k: (len(held[k][0]), res[k]["qualifying"], res[k]["avg_trade"], -k), reverse=True):      # this map's boxes first, then the other maps'
-            got = _odds(tabs[k], held[k][0], kw["days"])
-            for c in _outward(J.table(tabs[k]["_st"], tabs[k]["_u"]), {c: (x["eval"], x["payout"]) for c, x in got.items()}):
-                o = o or got[c]
-                cands.append({"sub": subs[k][0]["name"], "bar": subs[k][0]["bar"], "way": subs[k][0]["way"], "cell": c, "account": got[c]["account"]["id"],
-                              **{a: got[c][a] for a in ("eval", "payout", "size", "payout_size")}})
+            jt = J.table(tabs[k]["_st"], tabs[k]["_u"])
+            got = _avg(jt, held[k][0])
+            for c in _outward(jt, got):
+                cands.append({"sub": subs[k][0]["name"], "bar": subs[k][0]["bar"], "way": subs[k][0]["way"], "cell": c, "avg_trade": got[c][0]})
         cell = cands[0]["cell"]
-        odds = {a: cands[0][a] for a in ("account", "eval", "payout", "size", "payout_size")}
         more = min(len(cands), PR.need("variant", "box_tries")) - 1
         said += ((f"; if this box does not hold at the proof or cannot be locked, the next of {more} more box{'es' * (more != 1)} that hold{'s' * (more == 1)} every line "
-                  "is tried, each one more try of the random bar") if not PR.prop_gates() else
+                  "is tried, each one more try of the random bar") if not PR.edge_gates() else
                  f"; the other {more} box{'es' * (more != 1)} that hold{'s' * (more == 1)} the gates {'is' if more == 1 else 'are'} kept as the next picks") if more > 0 else ""
-        what = (f"make money after costs with enough trades{_asked_words(s['name'])}" if PR.prop_gates() else
+        what = ("make money after costs with enough trades and a win rate over the breakeven of their reward-to-risk" if PR.edge_gates() else
                 "hold every line a box is held to on the build days")
-        how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 and not PR.prop_gates() else
-               f"the one box of its {res[i]['qualifying']} that makes money after costs with enough trades{_asked_words(s['name'])}" if len(good) == 1 else
-               f"the middle, by its odds to pass the eval on {o['account']['name']}, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that {what} "
-               "(never the best)")
+        how = (f"the one box of its {res[i]['qualifying']} at the floor that holds every line a box is held to on the build days" if len(good) == 1 and not PR.edge_gates() else
+               f"the one box of its {res[i]['qualifying']} that {what}" if len(good) == 1 else
+               f"the middle, by average trade, of the {len(good)} boxes (of {res[i]['qualifying']} at the floor) that {what} (never the best)")
     box = _box_card(t, cell)
     return _card(1, t0, True, "pass", rows, f"{s['name']} moves on ({res[i]['text']}); {len(res)} heat map{'s' * (len(res) != 1)} judged. THE PICK: box {cell} -- {how}: "
                  f"average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
                  f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone{said}",
                  {"sub": s["name"], "bar": s["bar"], "way": s["way"], "filter": None, "cell": cell, "variant": box["variant"], **({"by": "owner"} if owner else {})},
-                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"], "holding": len(good), "odds": odds}, candidates=cands, tried=[])
+                 len(res), rules, tables=tables, box={**box, "qualifying": res[i]["qualifying"], "holding": len(good)}, candidates=cands, tried=[])
 
 
 def next_box(name: str, ctx: dict, failed: dict):
@@ -575,7 +545,7 @@ def next_box(name: str, ctx: dict, failed: dict):
     head = str(one.get("text") or "").split(" THE PICK:")[0]
     return {**one, "picked": {"sub": nxt["sub"], "bar": nxt["bar"], "way": nxt["way"], "filter": None, "cell": nxt["cell"], "variant": box["variant"]},
             "tries": one["tries"] + 1, "tried": tried,
-            "box": {**box, "qualifying": tab["qualifying"], "holding": tab["holding"], "odds": {a: nxt[a] for a in ("account", "eval", "payout", "size", "payout_size")}},
+            "box": {**box, "qualifying": tab["qualifying"], "holding": tab["holding"]},
             "text": f"{head} THE PICK: box {nxt['cell']} of {nxt['sub']} -- box {len(tried) + 1} of at most {min(cap, len(cands))} that hold every line a box is held to on the "
                     f"build days: {was['cell']} did not hold at stage {failed['stage']} ({why}): average trade {usd(box['avg_trade'])} on {box['trades']:,} trades, "
                     f"long {usd(box['long'])} and short {usd(box['short'])}; the hard rules are judged on this box alone, at the random bar of try {one['tries'] + 1}"}
@@ -809,7 +779,7 @@ def _stage4_variant(t0: float, kw: dict, picked: dict, tries: int, plan: dict, s
     (G.reshuffle_box); only when it holds, (b) the same box of the random-entry control tables -- the same exit cell, the same days, the same
     number of trades a day (tables.built(box=): judge.c1_table on that one cell) -- is beaten above the bar of the idea's `tries`."""
     cell = _cell(picked)
-    prop = PR.prop_gates()                          # the proof is shown, not asked (module docstring, PROP GATES)
+    prop = PR.edge_gates()                          # the proof is shown, not asked (module docstring, PROP GATES)
     rows = [G.reshuffle_box(_one_box(_table(specs[0], plan, kw), cell))]
     if rows[0]["passed"] is False and not prop:
         return _card(4, t0, False, "fail", rows, f"the reshuffled runs of the picked box {cell} do not hold, so the random entries are not run: {rows[0]['text']}", picked, tries, rules, next_box=True)
@@ -880,13 +850,15 @@ def _box(u: dict, kw: dict, pick=None):
 def stage5(name: str, ctx: dict, progress=None) -> dict:
     """The code check of the heat map's own home store, its one build round, then the lock: the middle box alone (module docstring)."""
     t0, kw, four = time.monotonic(), _kw(name, ctx), _before(name, ctx, 4)
-    picked, tries, own = four["picked"], four["tries"], PR.need("prop", "account")
+    picked, tries = four["picked"], four["tries"]
+    edge = PR.edge_gates()                          # edge mode: no prop check; the box's own numbers on the build days instead (the owner, 2026-10-18)
+    own = None if edge else PR.need("prop", "account")
     sub, with_ = picked["sub"], (f" with {picked['filter'].replace('_', ' ', 1)}" if picked["filter"] else "")
     variant = _variant()
     pick = _cell(picked) if variant else None       # the box the pipeline picked at stage 1, which the lock takes as its default
     the_box = "the picked box" if variant else "the middle box"
     _, plan, specs = _idea(sub, kw)
-    h, rules = plan["home"], {"prop": PR.need("prop"), "checked": list(CHECKED)}
+    h, rules = plan["home"], {**({} if edge else {"prop": PR.need("prop")}), "checked": list(CHECKED)}
     u = T.bp_unit(specs[0], h["market"], h["bar"], h["session"], "", T.filter_of(specs[0], REC.rule_filter(plan)))
     needs = lambda rows: {**rules, "lines": {x["line"]: x["need"] for x in rows}}  # noqa: E731
     with _switch(name, ctx):
@@ -915,7 +887,7 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
                          f"indicator on: {bad[0]['text']}", picked, tries, needs(rows))
         try:
             r = FRZ.lock(sub, **_cmd(kw), **({"waive": waive} if waive else {}), **({"default": pick} if variant else {}),
-                         **({"labels": LOCK_LABELS} if PR.prop_gates() else {}))
+                         **({"labels": LOCK_LABELS} if PR.edge_gates() else {}))
         except J.Refuse:
             got = _box(u, kw, pick) if variant else _box(u, kw)
             if got is None or (got[0] is not None and all(x["passed"] is not False for x in got[1])):
@@ -933,19 +905,25 @@ def stage5(name: str, ctx: dict, progress=None) -> dict:
     home, default = lock["home"], lock["default"]
     rows = G.labels([x for x in r["lines"] if x["line"] in {b["line"] for b in lock["box"]}], gate=())      # (mode "prop": 3.3-3.8 are labels)
     st, _ = T._open(Path(home["folder"]), home["key"])
-    prop = _prop(J.cellx(st, default, home["session"], u), T.build_days(u, kw["days"]), [own])
-    p = prop[own]
-    if PR.prop_gates():                             # the worse fills the lock did not ask for: said, so the card shows what was set aside
+    bx, cal = J.cellx(st, default, home["session"], u), T.build_days(u, kw["days"])
+    if edge:                             # the worse fills the lock did not ask for: said, so the card shows what was set aside
         ok = default in set(lock.get("survivors") or ())
         rows.append(G.label(L._row("P5.10", ok, None, None, f"the box {default} " + ("makes money" if ok else "does NOT make money") + " on the build days with worse fills "
                                    "(2 ticks + 250 ms)")))
+    shown_whole = list(lock.get("waived") or [])
+    whole = f"; the build's lines about the whole map were shown, not asked: {', '.join(shown_whole)}" if variant and shown_whole else ""
+    head = (f"{sub}{with_} is locked: {the_box} {default} (of {len(lock['survivors'])} that make money with normal and with worse "
+            f"fills), lock {lock['hash']}")
+    if edge:
+        nums = _edge_numbers(bx, cal)
+        return _card(5, t0, True, "locked", rows, f"{head}; on the build days: {_said(nums)}{whole}", picked, tries, needs(rows),
+                     locked={"default": default, "lock": lock["hash"], "build": nums})
+    prop = _prop(bx, cal, [own])
+    p = prop[own]
     rows.append(L._row("P5.9", None, None, {k: rules["prop"][k] for k in ("days", "eval", "payout")}, p["text"], account=own,
                        **{k: p[k] for k in ("label", "eval", "payout", "size", "payout_size")}))
-    shown_whole = list(lock.get("waived") or [])
-    return _card(5, t0, True, "locked", rows, f"{sub}{with_} is locked: {the_box} {default} (of {len(lock['survivors'])} that make money with normal and with worse "
-                 f"fills), lock {lock['hash']}; on the build days it is a {p['label'].upper()} on {p['name']} (a label, not a gate)"
-                 + (f"; the build's lines about the whole map were shown, not asked: {', '.join(shown_whole)}" if variant and shown_whole else ""), picked, tries, needs(rows[:-1]),
-                 locked={"default": default, "lock": lock["hash"], "prop": prop})
+    return _card(5, t0, True, "locked", rows, f"{head}; on the build days it is a {p['label'].upper()} on {p['name']} (a label, not a gate){whole}",
+                 picked, tries, needs(rows[:-1]), locked={"default": default, "lock": lock["hash"], "prop": prop})
 
 
 # ================================================================ stage 6: the unseen days, read once
@@ -978,7 +956,8 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
     """THE ONE READ of the unseen days for the locked heat map, and on a pass the label off its test trades (module docstring)."""
     t0, kw, five = time.monotonic(), _kw(name, ctx), _before(name, ctx, 5)
     picked, tries, was = five["picked"], five["tries"], five["locked"]
-    sub, rules = picked["sub"], {"prop": PR.need("prop"), "test": PR.need("test")}
+    edge = PR.edge_gates()
+    sub, rules = picked["sub"], {**({} if edge else {"prop": PR.need("prop")}), "test": PR.need("test")}
     r = REC._json(REC._carded(sub, kw["root"]) / "test.json")
     again = bool(r and r.get("lines") and r.get("lock") == was["lock"])      # the verdict of THIS lock's read is on file: it is read, the days are not
     if not again:
@@ -990,10 +969,10 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         with _switch(name, ctx):
             r = OOS.test(sub, confirm=True, root=kw["root"], workers=kw["workers"], out=PS.runs_test(ctx.get("root")), ledger=kw["ledger"],
                          days=(ctx.get("tiny") or {}).get("test_days"), relatives_ok=not rules["test"]["one_read_a_slot"],
-                         **({"only": ("box", G.RANDOM)} if PR.prop_gates() else {}))
+                         **({"only": ("box", G.RANDOM)} if PR.edge_gates() else {}))
     rows, rng, rel = r["lines"], r.get("range") or {}, list(r.get("relatives") or [])        # rel: the related ideas read on these days before this one
     rules.update(lines={x["line"]: x["need"] for x in rows}, range=rng)
-    gate = r.get("gates")                           # mode "prop": the read was asked for the box and line 4.4 (oos.run(only=)); the other 4.x are labels
+    gate = r.get("gates")                           # mode "edge": the read was asked for the box and line 4.4 (oos.run(only=)); the other 4.x are labels
     if gate:
         net = gate.get("box")
         rows = [L._row("P6.1", None if net is None else bool(net > 0), net, 0, "the picked box " + ("has no trade on the unseen days" if net is None else
@@ -1002,16 +981,14 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         rnd = next((x for x in rows if x["line"] == G.RANDOM), None)
         if rnd is not None and rnd["passed"] is False and r.get("passed") is True:        # a verdict on file from before line 4.4 was a gate (2026-10-17)
             r = {**r, "passed": False}
-    if gate and PR.funded():                        # THE FUNDED LINE (the owner, 2026-10-15): the box's unseen-day trades must fall into a row of the 75 % table
-        from . import pipe_funded as F
+    if edge and r.get("passed") is True:            # P3.15 again, on the unseen trades (the owner, 2026-10-18: "+3 everywhere")
         try:
-            got = PO.handed(sub, kw["root"])
-            line = F.row("P6.2", PO.cell(got, was["default"]), got["market"], got["calendar"])
+            line = {**G.wr_rr(PO.cell(PO.handed(sub, kw["root"]), was["default"])["net"]), "line": "P6.3"}
+            line["text"] = "P6.3" + line["text"][len(G.WR_RR):] + " (row P3.15 on the unseen days)"
         except api.REFUSALS as e:
-            line = L._row("P6.2", False, None, None, f"the unseen-day trades of the box could not be read ({e}): it cannot be shown to fall into a row")
+            line = L._row("P6.3", False, None, None, f"the unseen-day trades of the box could not be read ({e}): no win rate to hold against its reward-to-risk")
         rows.insert(1, line)
-        rules["funded"] = {k: v for k, v in PR.need("funded").items() if not k.startswith("_")}
-        if line["passed"] is False and r.get("passed") is True:
+        if line["passed"] is False:
             r = {**r, "passed": False}
     head = (f"{sub} on the unseen days {rng.get('start')} .. {rng.get('end')}" + (" (its verdict was on file: the days are not read twice)" if again else "")
             + (f" ({len(rel)} related idea{'s' * (len(rel) != 1)} read on these days before it)" if rel else ""))
@@ -1019,15 +996,17 @@ def stage6(name: str, ctx: dict, progress=None) -> dict:
         bad = [x for x in rows if x["passed"] is False] if gate else [x for x in rows if x["passed"] is not True]
         return _card(6, t0, False, "not proven", rows, f"{head}: NOT PROVEN, it fails {', '.join(x['line'] for x in bad)} ({bad[0]['text'] if bad else r.get('verdict')}). "
                      "A fail is final: no re-tune, no second read", picked, tries, rules, relatives=rel)
+    wr = next((x for x in rows if x["line"] == "P6.3"), None)
+    asked = ["P6.1", G.RANDOM, *(["P6.3"] if wr else [])]
+    holds = (f"the box {was['default']} makes money on those days and the map beats {100 * R.need(G.RANDOM):g} % of the random tables"
+             + (" and its win rate is over the breakeven of its reward-to-risk" if wr else "")
+             + f" (the {({2: 'two', 3: 'three'}.get(len(asked), len(asked)))} lines asked, {', '.join(asked)}; the other 4.x lines are labels"
+             + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
+    if edge:
+        return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}", picked, tries, rules, relatives=rel)
     got = PO.handed(sub, kw["root"])                # what the freeze and the read leave for the prop simulator: the read's own store and days
     prop = _prop(PO.cell(got, was["default"]), got["calendar"], _accounts())
     p = prop[PR.need("prop", "account")]
-    fund = next((x for x in rows if x["line"] == "P6.2"), None)
-    asked = ["P6.1", G.RANDOM, *(["P6.2"] if fund else [])]
-    holds = (f"the box {was['default']} makes money on those days and the map beats {100 * R.need(G.RANDOM):g} % of the random tables"
-             + (f" and {fund['text'].split(': ', 1)[-1]}" if fund else "")
-             + f" (the {({2: 'two', 3: 'three'}.get(len(asked), len(asked)))} lines asked, {', '.join(asked)}; the other 4.x lines are labels"
-             + (f", missed: {', '.join(gate['labels'])}" if gate.get("labels") else ", all held") + ")") if gate else "every line 4.1-4.9 holds"
     return _card(6, t0, True, "proven on history", rows, f"{head}: PROVEN ON HISTORY, {holds}; on those days the box {was['default']} is a "
                  f"{p['label'].upper()} on {p['name']} (a label, not a gate)", picked, tries, rules, prop=prop, label=p["label"], relatives=rel)
 
@@ -1054,6 +1033,57 @@ def _facts(x: dict, calendar, fast) -> dict:
             "biggest_day_share": share(day.max()) if len(day) else None, "fast_profit_share": share(net[dur <= fast].sum()),
             "worst_day": float(day.min()) if len(day) else None, "worst_drawdown": L._drawdown(day, opn),
             "avg_trade": total / len(net) if len(net) else None, "profit_factor": None if pf in (None, float("inf")) else pf, "net": total}
+
+
+YEAR = 252                                          # session days a year: a calendar fact, not a gate (Sharpe, net a year)
+
+
+def _edge_numbers(x: dict, calendar) -> dict:
+    """THE SHOWN NUMBERS of edge mode (the owner, 2026-10-18), off one box's trades at one contract after costs and the session days they were run on
+    (a day without a trade = $0): win_rate, realized_rr, breakeven_wr, avg_r (the average trade in units of the average loss), net, net_per_year
+    (per 252 session days), sharpe (daily: mean / spread of the session days' net, x sqrt 252; None: under two days or no spread), months_positive
+    (share of the months with a trade that end above $0), biggest_day_share, worst_drawdown and worst_drawdown_r (open losses counted, in units of
+    the average loss), month_wr {lowest, median, months} (the months with 3 trades or more), trades, days. None where a number has no meaning."""
+    f = _facts(x, calendar, 0)
+    net = np.asarray(x["net"], np.float64)
+    row = G.wr_rr(net)
+    loss = float(-net[net <= 0].mean()) if (net <= 0).any() else None
+    days = sorted({*LB._ordinals(calendar).tolist(), *{int(d) for d in x["date"]}})
+    by = {}
+    for d, n in zip(x["date"], net):
+        by[int(d)] = by.get(int(d), 0.0) + float(n)
+    day = np.array([by.get(d, 0.0) for d in days])
+    sd = float(day.std(ddof=1)) if len(day) > 1 else 0.0
+    mo = {}
+    for d, n in zip(x["date"], net):
+        k = dt.date.fromordinal(int(d)).strftime("%Y-%m")
+        w, c = mo.get(k, (0, 0))
+        mo[k] = (w + int(n > 0), c + 1)
+    rates = sorted(w / c for w, c in mo.values() if c >= 3)
+    won, months = f["winning_months"]
+    per = lambda v: None if v is None or not loss else v / loss  # noqa: E731
+    return {"trades": f["trades"], "days": len(days), "win_rate": row["number"], "realized_rr": row.get("rr"), "breakeven_wr": row.get("breakeven"),
+            "avg_r": per(f["avg_trade"]), "net": f["net"], "net_per_year": f["net"] / len(days) * YEAR if days else None,
+            "sharpe": float(day.mean()) / sd * np.sqrt(YEAR) if sd > 0 else None, "months_positive": won / months if months else None,
+            "biggest_day_share": f["biggest_day_share"], "worst_drawdown": f["worst_drawdown"], "worst_drawdown_r": per(f["worst_drawdown"]),
+            "month_wr": {"lowest": rates[0] if rates else None, "median": float(np.median(rates)) if rates else None, "months": len(rates)}}
+
+
+def _tag(unseen: dict) -> str:
+    """THE TAG of a pass (the owner, 2026-10-18): "live+prop" when its unseen days have a Sharpe of edge.prop.sharpe or more AND edge.prop.months_positive
+    of their months above $0, else "live"."""
+    bar = PR.need("edge", "prop")
+    ok = (unseen.get("sharpe") is not None and unseen["sharpe"] >= bar["sharpe"]
+          and unseen.get("months_positive") is not None and unseen["months_positive"] >= bar["months_positive"])
+    return "live+prop" if ok else "live"
+
+
+def _said(n: dict) -> str:
+    """The shown numbers in one line for a card's text."""
+    f = lambda v, k="{:.2f}": "n/a" if v is None else k.format(v)  # noqa: E731
+    return (f"win rate {f(n['win_rate'], '{:.1%}')} at reward-to-risk {f(n['realized_rr'])} (breakeven {f(n['breakeven_wr'], '{:.1%}')}), "
+            f"average trade {f(n['avg_r'], '{:.2f}R')}, net {'n/a' if n['net'] is None else REC._usd(n['net'])} at one contract, Sharpe {f(n['sharpe'])}, "
+            f"{f(n['months_positive'], '{:.0%}')} of months positive, worst drawdown {f(n['worst_drawdown_r'], '{:.1f}R')}")
 
 
 def _equity(days: list, day) -> dict | None:
@@ -1102,32 +1132,45 @@ def _win_days(x: dict, calendar, account: str, size) -> float | None:
 def stage7(name: str, ctx: dict, progress=None) -> dict:
     """THE BOOK CARD of an idea that passed its read, for the owner's look: put together from what is on file (module docstring)."""
     t0, kw, six = time.monotonic(), _kw(name, ctx), _before(name, ctx, 6)
-    root, picked, tries, own, box = ctx.get("root"), six["picked"], six["tries"], PR.need("prop", "account"), PR.need("box")
+    root, picked, tries, box = ctx.get("root"), six["picked"], six["tries"], PR.need("box")
+    edge = PR.edge_gates()
+    own = None if edge else PR.need("prop", "account")
     card, cards, sub = PS.card(name, root), PS.stages(name, root), picked["sub"]
     was = _before(name, ctx, 5)["locked"]
     lock = REC._json(REC._carded(sub, kw["root"]) / "lock.json") or {}
     if lock.get("hash") != was["lock"]:
         raise J.Refuse(f"the lock of {sub} on file ({lock.get('hash') or 'none'}) is not the one stage 5 froze ({was['lock']}): no book card is made of it")
     got = PO.handed(sub, kw["root"])
-    x, prop = PO.cell(got, was["default"]), six["prop"]
+    x = PO.cell(got, was["default"])
     facts = _facts(x, got["calendar"], box["fast_seconds"])
     usd = lambda v: "n/a" if v is None else REC._usd(v)  # noqa: E731
+    if edge:
+        unseen = _edge_numbers(x, got["calendar"])
+        tag = _tag(unseen)
+        money = {"tag": tag, "numbers": {"build": was.get("build"), "unseen": unseen}}
+        said = f"tagged {tag.upper().replace('+', ' + ')}; on the unseen days: {_said(unseen)}"
+    else:
+        prop = six.get("prop")
+        if prop is None:                            # stage 6 ran in mode "edge" (no prop check on its card): it is read again under the rules now in force
+            raise J.Refuse(f"{name}: its stage 6 was read in mode \"edge\" and has no prop check; run it again under mode \"law\" (bp.py pipe rerun {name})")
+        money = {"label": prop[own]["label"], "prop": {a: {k: p.get(k) for k in BOOK_PROP} for a, p in prop.items()}}
+        said = f"a {money['label'].upper()} on {prop[own]['name']}"
     book = {"name": name, "sub": sub, "family": card["ways"][picked["way"]]["family"], "source": card.get("source"), "ref": card.get("ref"), "why": card.get("why"),
             "market": card["market"], "session": card["session"], "bar": picked["bar"], "filter": picked["filter"],
             "rule": {"spec": lock.get("spec"), "default": was["default"], "lock": was["lock"]},
-            "label": prop[own]["label"], "prop": {a: {k: p.get(k) for k in BOOK_PROP} for a, p in prop.items()},
-            **{k: facts[k] for k in ("hours", "trades", "days_traded")}, "win_days_month": _win_days(x, got["calendar"], own, prop[own]["size"]),
+            **money, **{k: facts[k] for k in ("hours", "trades", "days_traded")},
+            **({} if edge else {"win_days_month": _win_days(x, got["calendar"], own, prop[own]["size"])}),
             **{k: facts[k] for k in ("winning_months", "biggest_day_share", "fast_profit_share", "worst_day", "worst_drawdown", "avg_trade", "profit_factor", "net")},
-            "equity": facts["equity"], "fees": _fees(prop), "gates": PR.gates(),
+            "equity": facts["equity"], **({} if edge else {"fees": _fees(prop)}), "gates": PR.gates(),
             "tries": tries, "relatives_read": len(six.get("relatives") or []),
             "stages": {str(n): {"passed": c.get("passed"), "result": c.get("result"), "text": (str(c.get("text") or "").splitlines() or [""])[0]}
                        for n, c in cards.items() if n in NAMES and n < max(NAMES)},
             "utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
-    return _card(7, t0, None, "awaiting owner", [], f"{name} waits for the owner's look: {sub}, box {was['default']}, a {book['label'].upper()} on {prop[own]['name']} -- "
+    return _card(7, t0, None, "awaiting owner", [], f"{name} waits for the owner's look: {sub}, box {was['default']}, {said} -- "
                  f"{facts['trades']:,} trades on {facts['days_traded']:,} of {len(got['calendar']):,} unseen session days, net {usd(facts['net'])} at one contract, "
                  f"worst drawdown {usd(facts['worst_drawdown'])}, {facts['winning_months'][0]} of {facts['winning_months'][1]} months won "
                  f"(bp.py pipe approve {name}, or bp.py pipe refuse {name} --why=TEXT)", picked, tries,
-                 {"prop": PR.need("prop"), "box": box, "unseen": list(got["span"])}, book=book)
+                 {**({"edge": PR.need("edge")} if edge else {"prop": PR.need("prop")}), "box": box, "unseen": list(got["span"])}, book=book)
 
 
 STAGES = {0: stage0, 1: stage1, 2: stage2, 3: stage3, 4: stage4, 5: stage5, 6: stage6, 7: stage7}

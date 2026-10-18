@@ -573,7 +573,7 @@ def test_the_commands_end_to_end(root, monkeypatch, cards, tmp_path):
     rc, r = run(["pipe", "approve", "fvg_open", R])
     assert rc == 2 and "fvg_open is refused" in r["error"]
     rc, out = TI._run(["pipe", "book", R])
-    assert rc == 0 and out.splitlines() == ["name     label         family  market  session  bar", "fvg_mid  stands alone  fvg     NQ      nyam     5"]
+    assert rc == 0 and out.splitlines() == ["name     tag           family  market  session  bar", "fvg_mid  stands alone  fvg     NQ      nyam     5"]
     rc, out = TI._run(["pipe", "list", R])
     assert rc == 0 and out.splitlines()[-2:] == ["2 ideas: 1 book, 1 refused", "runner: not working · queue: not paused"]
     assert "fvg_open  fvg     refused      7      0  too few trades a week" in out.splitlines()[1:3]

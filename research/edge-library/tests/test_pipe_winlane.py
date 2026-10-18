@@ -24,10 +24,10 @@ day = lambda y, m, d: dt.date(y, m, d).toordinal()          # noqa: E731
 def lane(tmp_path):
     """lane("ask") points the rules file at a copy of the shipped pipeline.json with winlane.mode set; the file and the cache are put back."""
     keep = P.FILE
-    d = json.loads((R.T / "pipeline_wr.json").read_text(encoding="utf-8"))
+    d = json.loads((R.T / "pipeline.json").read_text(encoding="utf-8"))
 
     def use(mode, **numbers):
-        d["winlane"] = {**d["winlane"], "mode": mode, "cards": [], **numbers}       # (no cards: the lane is on every unit, as the tests' boxes have none)
+        d["winlane"] = {**d["winlane"], "mode": mode, "cards": [], "max_target_r": 1.0, **numbers}       # (no cards: the lane is on every unit; the retired WR file's target cap)
         f = tmp_path / "pipeline.json"
         f.write_text(json.dumps(d), encoding="utf-8")
         P.FILE = f
@@ -50,13 +50,10 @@ def rows(b) -> dict:
     return {r["line"]: r for r in G.winlane(b)}
 
 
-def test_the_shipped_lane_asks_on_every_card_with_the_owners_numbers_and_off_prints_nothing(lane, monkeypatch):
-    monkeypatch.setenv("HB_PIPELINE", "wr")                                                # (the WR PIPELINE's file, templates/pipeline_wr.json)
-    P._all.cache_clear()
-    keep = {k: v for k, v in P.need("winlane").items() if k != "_about"}                # (a nested note is part of the level)
-    assert keep == {"mode": "ask", "cards": [], "max_target_r": 1.0, "risk_usd": [500, 800], "win_rate": 0.7, "month_floor": 0.6, "months": 0.9, "month_trades": 10}
+def test_the_shipped_lane_is_off_on_every_card_and_prints_nothing(lane):
+    """One pipeline since 2026-10-18: the win rate is SHOWN on the book card (the edge numbers), the lane asks nothing and prints no row."""
     for unit in ("nq_ib_break_nyam_wl_a5-NQ-tf5", "nq_donch_first_nyam_slow_a5-NQ-tf5", None):
-        assert P.winlane(unit) == "ask"                                                   # no `cards` = every card (owner, 2026-10-13)
+        assert P.winlane(unit) == "off"
     lane("off")
     assert P.winlane() == "off" and G.winlane(months({1: 14})) == []
 
@@ -140,10 +137,10 @@ def test_in_variant_rows_the_lane_adds_nothing_when_off_and_two_rows_when_on(lan
     box = {**one, **months({m: 14 for m in range(1, 11)})}
     lane("off")
     base = [r["line"] for r in G.variant_rows(box, [])]
-    assert "P3.11" not in base and base[-3:] == ["P3.8", "P3.9", "P3.10"]
+    assert "P3.11" not in base and base[-4:] == ["P3.8", "P3.9", "P3.10", "P3.15"]           # (edge mode: P3.15 last)
     lane("ask")
     on = [r["line"] for r in G.variant_rows(box, [])]
-    assert on == base + ["P3.11", "P3.12", "P3.13"]
+    assert on == base[:-1] + ["P3.11", "P3.12", "P3.13", "P3.15"]
     lane("label")
     marks = {r["line"]: r["passed"] for r in G.variant_rows(box, [])}
     assert marks["P3.11"] is None and marks["P3.12"] is None                    # a label asks nothing

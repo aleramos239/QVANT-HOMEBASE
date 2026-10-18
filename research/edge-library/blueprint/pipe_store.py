@@ -15,7 +15,6 @@ every card ever added. It stores what it is given and reads it back: it checks n
         order.jsonl                  the queue: {name, utc, inbox}, one line an add
         pause                        there = the runner stops after the stage in hand
         book/<name>.json             the book card of an idea the owner approved
-        portfolios/<account>.json    the portfolio builder's last answer for an account (pipe_portfolio.py: `bp.py pipe portfolio`)
         runner.lock, runner.log      the runner's (pipe_runner.py)
 
     root(arg=None) -> Path                              the pipeline root

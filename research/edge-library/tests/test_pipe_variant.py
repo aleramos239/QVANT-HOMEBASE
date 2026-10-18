@@ -42,7 +42,7 @@ from blueprint import pipe_card as PC  # noqa: E402
 from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
 
-PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_prop_gates.py reads mode "prop"
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_edge_gates.py reads mode "edge"
 from blueprint import pipe_stages as ST  # noqa: E402
 from blueprint import pipe_store as PS  # noqa: E402
 from blueprint import records as REC  # noqa: E402
@@ -96,17 +96,14 @@ def zero(name: str = NAME) -> dict:
     return ran(0, ST.stage0(add(name), CTX), name)
 
 
-SAME = {"eval": 0.0, "payout": 0.0, "size": None, "payout_size": None, "account": {"id": "the-account", "name": "the account"}}
-
-
 def qualify(mp, five=None, one=0, hold=None, odds=None) -> None:
     """G.variant_map answers by bar size: the 5-minute map passes with `five` boxes at the floor (None = all of its boxes), the 1-minute one with `one`
     (0 = it fails). The cells are the first ones of each table. The rows are the real gate's. THE PICK'S TWO READINGS are canned too (3 build days
     hold no line of a box): a box at the floor holds every line unless `hold` names the boxes that do (the others miss line 3.5), and every box has
-    the same prop odds unless `odds` = {box: (eval, payout)} says otherwise -- so with neither the pick is the middle box by build net, the tie rule's."""
+    the same average trade unless `odds` = {box: (average trade,)} says otherwise -- so with neither the pick is the middle box by build net, the tie rule's."""
     real = G.variant_map
     mp.setattr(ST, "_box_rows", lambda t, c, days=None: [] if hold is None or c in hold else [{"line": "3.5", "passed": False}])
-    mp.setattr(ST, "_odds", lambda t, cells, days=None: {c: {**SAME, **dict(zip(("eval", "payout"), (odds or {}).get(c, (0.0, 0.0))))} for c in cells})
+    mp.setattr(ST, "_avg", lambda rows, cells: {c: ((odds or {}).get(c, (0.0,))[0],) for c in cells})
 
     def canned(t):
         r = real(t)
@@ -202,7 +199,7 @@ def test_stage_1_picks_the_middle_qualifying_box_and_writes_it_into_the_card(wor
     assert TS.lines(c) == ["P1.1", "P1.2", "P1.1", "P1.2", "P1.3"]                             # P1.3 only of a map that passed the loose check
     p13 = c["lines"][-1]
     assert (p13["passed"], p13["number"], p13["need"], p13["sub"]) == (True, len(ids), PR.need("variant", "pick_boxes"), A5)
-    assert c["box"]["holding"] == len(ids) and c["box"]["odds"] == {"account": "the-account", "eval": 0.0, "payout": 0.0, "size": None, "payout_size": None}
+    assert c["box"]["holding"] == len(ids) and "odds" not in c["box"]                            # no prop odds since 2026-10-18
 
 
 def test_the_pick_is_the_middle_box_by_prop_odds_never_the_best_then_the_tie_rule():
@@ -217,16 +214,16 @@ def test_the_pick_is_the_middle_box_by_prop_odds_never_the_best_then_the_tie_rul
     assert all(ST._pick(rows, {k: odds[k] for k in ks}) != max(ks, key=lambda k: odds[k]) for ks in (("c0", "c1", "c2"), ("c1", "c4"), tuple(odds)))
 
 
-def test_stage_1_picks_among_the_boxes_that_hold_every_line_of_a_box_by_their_prop_odds(world):
+def test_stage_1_picks_among_the_boxes_that_hold_every_line_of_a_box_by_their_average_trade(world):
     """The owner, 2026-10-09: a box at the floor that misses a line of a box is no candidate; of those that hold every line the middle one by the odds
-    to pass the eval is picked. Each box's lines are read off its own build trades (_box_rows: stage 3's rows and the lock's 3.3-3.8)."""
+    by average trade is picked (2026-10-18: no prop odds). Each box's lines are read off its own build trades (_box_rows: stage 3's rows and the lock's 3.3-3.8)."""
     first(world)                                                                               # the stores are on file now
     rows, ids = table_rows()
     a, b, c3 = ids[:3]
-    qualify(world, hold=(a, b, c3), odds={a: (0.5, 0.0), b: (0.1, 0.0), c3: (0.3, 0.0)})
+    qualify(world, hold=(a, b, c3), odds={a: (50.0,), b: (10.0,), c3: (30.0,)})
     c = TS.whole(ST.stage1(NAME, CTX), 1)
-    assert c["passed"] is True and c["picked"]["cell"] == c3 and c["box"]["holding"] == 3 and c["box"]["odds"]["eval"] == 0.3
-    assert "the middle, by its odds to pass the eval on the account, of the 3 boxes" in c["text"] and f"(of {len(ids)} at the floor)" in c["text"] and "never the best" in c["text"]
+    assert c["passed"] is True and c["picked"]["cell"] == c3 and c["box"]["holding"] == 3
+    assert "the middle, by average trade, of the 3 boxes" in c["text"] and f"(of {len(ids)} at the floor)" in c["text"] and "never the best" in c["text"]
     p13 = c["lines"][-1]
     assert (p13["line"], p13["passed"], p13["number"]) == ("P1.3", True, 3) and p13["missed"] == {"3.5": len(ids) - 3} and f"3.5 by {len(ids) - 3}" in p13["text"]
     qualify(world, hold=(b,))
@@ -323,7 +320,7 @@ def test_stage_1_keeps_every_box_that_holds_as_a_candidate_in_the_order_they_are
     c = TS.whole(ST.stage1(NAME, CTX), 1)
     assert c["picked"]["sub"] == A5 and c["tried"] == [] and [(x["sub"], x["bar"]) for x in c["candidates"]] == [(A5, "5")] * 3 + [(A1, "1")] * 2
     assert c["candidates"][0]["cell"] == c["picked"]["cell"] and len({(x["sub"], x["cell"]) for x in c["candidates"]}) == 5
-    assert all(set(x) == {"sub", "bar", "way", "cell", "account", "eval", "payout", "size", "payout_size"} for x in c["candidates"])
+    assert all(set(x) == {"sub", "bar", "way", "cell", "avg_trade"} for x in c["candidates"])
     assert "the next of 4 more boxes that hold every line is tried, each one more try of the random bar" in c["text"]
     with world.context() as m:
         m.setattr(PR, "need", lambda *k: 2 if k == ("variant", "box_tries") else REAL_NEED(*k))
@@ -347,7 +344,7 @@ def test_the_next_box_becomes_the_pick_with_one_more_try_until_none_is_left(worl
     assert two["picked"] == {"sub": b["sub"], "bar": b["bar"], "way": b["way"], "filter": None, "cell": b["cell"], "variant": two["box"]["variant"]}
     assert two["tries"] == one["tries"] + 1 and two["passed"] is True and two["candidates"] == one["candidates"]
     assert two["tried"] == [{"sub": a["sub"], "cell": a["cell"], "stage": 4, "why": "P4.1 FAIL 61 % of the runs"}]
-    assert two["box"]["cell"] == b["cell"] and two["box"]["odds"]["account"] == "the-account" and two["box"]["holding"] == 2
+    assert two["box"]["cell"] == b["cell"] and two["box"]["holding"] == 2
     assert f"THE PICK: box {b['cell']} of {b['sub']} -- box 2 of at most 3" in two["text"] and f"{a['cell']} did not hold at stage 4 (P4.1 FAIL 61 % of the runs)" in two["text"]
     assert f"at the random bar of try {one['tries'] + 1}" in two["text"] and two["text"].startswith(one["text"].split(" THE PICK:")[0])
     ran(1, two)

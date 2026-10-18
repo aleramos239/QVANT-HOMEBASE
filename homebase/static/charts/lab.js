@@ -16,13 +16,13 @@ const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" str
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
-  view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plSet: false, plDraft: null, plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', pay: null, payAt: 0, desk: null, deskBuiltins: new Set(), deskBusy: false,
+  view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
   picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
-   'pq' (its Queue), 'pb' (its Book), 'pp' (the Payout set for the funded accounts). A stored view that is no longer one of these opens Strategies. */
-const VIEWS = [['lib', 'Strategies'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book'], ['pp', 'Payout']];
+   'pq' (its Queue), 'pb' (its Book). A stored view that is no longer one of these opens Strategies. */
+const VIEWS = [['lib', 'Strategies'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book']];
 const PIPE_VIEWS = PIPE_TABS.map(([v]) => v), VIEW_IDS = [...VIEWS, ...PIPE_TABS].map(([v]) => v);
 const pipeOn = () => PIPE_VIEWS.includes(S.view);      // a pipeline view is open: the middle of the page is its own
 try { const v = localStorage.getItem('hb_lab_view'); if (VIEW_IDS.includes(v)) S.view = v; } catch (_) { /* private mode: strategies */ }
@@ -1194,11 +1194,11 @@ const ICON_CHEV = '<svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="
    Six views used to sit in two rows of segmented buttons. Now the sidebar's head is ONE button that names the view
    on show; it opens a short menu in two groups -- the library of strategies, and the pipeline that tests ideas. */
 const VIEW_GROUPS = [['Library', VIEWS, { lib: 'Your saved scripts and the built-in ones', tk: 'Every block, chat tool, skill and script, read-only' }],
-  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage', pp: 'The set for your funded accounts' }]];
+  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage' }]];
 const ICON_UPDOWN = '<svg class="lb-ud" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.2 5 2.2l3 3M2 8.8l3 3 3-3"/></svg>';
 function viewName(v) { const t = [...VIEWS, ...PIPE_TABS].find(([id]) => id === v); return t ? t[1] : 'Strategies'; }
 function viewSwitch() {
-  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Arsenal, Queue, Book and Payout"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
+  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Arsenal, Queue and Book"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
 }
 function viewMenu(anchor) {
   const html = VIEW_GROUPS.map(([group, views, why]) => `<h6>${group}</h6>${views.map(([v, t]) =>
@@ -1408,7 +1408,6 @@ function plSelect() {
   S.plIdea = C.plPick(names, S.plIdea);
   S.plCard = C.plPick((A.book || []).map((c) => c.name), S.plCard);
   if (S.view === 'pq' && S.plIdea) loadIdea(S.plIdea);
-  if (S.view === 'pp') loadPayout();
   if (S.view === 'pb') {
     const card = (A.book || []).find((c) => c && c.name === S.plCard);
     if (card) loadCurve(card.name, String(card.utc || ''));
@@ -1513,7 +1512,6 @@ function pipeSide() {
   if (!L) return '<div class="lb-empty" role="status">Loading…</div>';
   if (!L.data) return `<div class="lb-empty" role="status">${esc(L.error)}</div>`;
   const A = L.data;
-  if (S.view === 'pp') return paySide();
   if (S.view === 'pb') {
     const book = A.book || [];
     if (!book.length) return '<div class="lb-empty">No strategies yet.</div>';
@@ -1547,68 +1545,24 @@ function pipeMain() {
   if (!L.data) return `<div class="pp"><p class="pp-lead" role="status">${esc(L.error)}</p></div>`;
   const stale = L.stale ? '<p class="pp-note pl-stale" role="status">Can’t reach the app. Showing the last known state.</p>' : '';
   const said = S.plSaid ? `<div class="pl-said${S.plSaid.bad ? ' bad' : ''}" role="status"><pre>${esc(S.plSaid.text)}</pre><button class="hb-ib" data-act="plhide" data-fk="hide" aria-label="Hide this message" title="Hide">×</button></div>` : '';
-  return `<div class="pp">${stale}${said}${profBar(L.data)}${S.view === 'pq' ? queueMain(L.data) : S.view === 'pp' ? payMain() : bookMain(L.data)}</div>`;
+  return `<div class="pp">${stale}${said}${profBar(L.data)}${S.view === 'pq' ? queueMain(L.data) : bookMain(L.data)}</div>`;
 }
-/* THE SWITCH: which pipeline works -- Off, Live, WR or Payout; one at a time, or none (the owner, 2026-10-13) -- and, for the WR
-   one, its numbers. A toolkit that reports no switch lists its two profiles as before; one that reports no profiles shows nothing
-   here. The choice is the whole app's: the runner and every chat read it. A choice that is disabled (the Payout page's lock) cannot be pressed. */
-const MODE_SAYS = { off: 'No pipeline is working. Pick one to switch it on.', live: 'The original rules, for live accounts.',
-  wr: 'Judges win rate and steady months. Eval odds are shown, not asked.', payout: 'Tunes and rotates a small set for the funded accounts.',
-  funded: 'Each strategy’s unseen days must fall into a row of the 75 % table (win rate for its reward). The group must reach the max payout on LucidFlex in 20 days 75 % of the time.' };
-const PSET = [['win_rate', 'Win rate at least', '%', 100, 50, 95, 1], ['month_floor', 'A steady month wins at least', '%', 100, 40, 90, 1],
-  ['months', 'Share of steady months', '%', 100, 50, 100, 1], ['month_trades', 'Trades a month to count', '', 1, 3, 60, 1], ['max_target_r', 'Target at most', 'R', 1, 0.25, 3, 0.05]];
+/* THE SWITCH: the pipeline works, or it does not (one pipeline since 2026-10-18). The choice is the whole app's: the runner and every chat read it. */
+const MODE_SAYS = { off: 'The pipeline is off. Press On to start it.',
+  live: 'Each idea is judged at one contract after costs: it makes money, beats random entries, and wins 3 points more often than its reward-to-risk needs. A pass is tagged Live, or Live + Prop when its Sharpe and months positive are steady too.' };
 function profBar(A) {
   const P = A && A.profile;
-  if (!P || !Array.isArray(P.options)) return '';
-  const modes = Array.isArray(P.modes) ? P.modes : null;
-  const seg = modes
-    ? modes.map((o) => `<button class="pl-fc${o.id === P.mode ? ' on' : ''}" data-act="plmode" data-m="${esc(o.id)}" data-fk="mode:${esc(o.id)}" aria-pressed="${o.id === P.mode}"${S.plBusy || o.ready === false ? ' disabled' : ''}${o.ready === false ? ' title="Disabled. Enable it on the Payout page."' : ''}>${esc(o.short || o.label)}</button>`).join('')
-    : P.options.map((o) => `<button class="pl-fc${o.id === P.profile ? ' on' : ''}" data-act="plprof" data-p="${esc(o.id)}" data-fk="prof:${esc(o.id)}" aria-pressed="${o.id === P.profile}"${S.plBusy ? ' disabled' : ''}>${esc(o.label)}</button>`).join('');
-  const says = modes ? (MODE_SAYS[P.mode] || '') : P.profile === 'wr' ? MODE_SAYS.wr : MODE_SAYS.live;
-  const adj = P.editable ? `<button class="btn btn-outline pl-adj" data-act="plset" data-fk="set" aria-expanded="${!!S.plSet}">${S.plSet ? 'Hide settings' : 'Adjust settings'}</button>` : '';
-  let panel = '';
-  if (P.editable && S.plSet) {
-    const s = P.settings || {}, d = S.plDraft || {};
-    const val = (k, mul) => (d[k] != null ? d[k] : s[k] != null ? Math.round(s[k] * mul * 100) / 100 : '');
-    const rk = Array.isArray(s.risk_usd) ? s.risk_usd : [500, 800];
-    panel = `<form class="pl-set" onsubmit="return false">${PSET.map(([k, lab, unit, mul, lo, hi, step]) =>
-      `<label><span>${esc(lab)}</span><input type="number" inputmode="decimal" data-pset="${k}" data-fk="ps:${k}" min="${lo}" max="${hi}" step="${step}" value="${esc(val(k, mul))}">${unit ? `<i>${unit}</i>` : ''}</label>`).join('')}
-      <label><span>Risk per trade</span><input type="number" data-pset="risk_lo" data-fk="ps:lo" min="50" max="5000" step="50" value="${esc(d.risk_lo != null ? d.risk_lo : rk[0])}"><i>to</i><input type="number" data-pset="risk_hi" data-fk="ps:hi" min="50" max="5000" step="50" value="${esc(d.risk_hi != null ? d.risk_hi : rk[1])}"><i>$</i></label>
-      <div class="pl-set-go"><button type="button" class="btn btn-default" data-act="plsave" data-fk="save"${S.plBusy ? ' disabled' : ''}>Save settings</button><span class="pl-quiet">Saved for the whole app. The next stage that runs uses it.</span></div></form>`;
-  }
-  return `<div class="pl-prof"><div class="pl-prof-row"><span class="pl-prof-l">Pipeline</span><div class="pl-filter" role="group" aria-label="Pipeline">${seg}</div>${adj}</div>
-    <p class="pl-quiet">${says}</p>${panel}</div>`;
+  if (!P || !Array.isArray(P.modes)) return '';
+  const seg = P.modes.map((o) => `<button class="pl-fc${o.id === P.mode ? ' on' : ''}" data-act="plmode" data-m="${esc(o.id)}" data-fk="mode:${esc(o.id)}" aria-pressed="${o.id === P.mode}"${S.plBusy ? ' disabled' : ''}>${esc(o.short || o.label)}</button>`).join('');
+  return `<div class="pl-prof"><div class="pl-prof-row"><span class="pl-prof-l">Pipeline</span><div class="pl-filter" role="group" aria-label="Pipeline">${seg}</div></div>
+    <p class="pl-quiet">${MODE_SAYS[P.mode] || ''}</p></div>`;
 }
 async function pickMode(id) {
   if (S.plBusy) return;
-  S.plBusy = true; S.plDraft = null; paintLib();
+  S.plBusy = true; paintLib();
   const r = await send('POST', '/api/tester/pipeline/mode', { mode: id });
   S.plBusy = false;
   pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !(r.ok && r.json && r.json.ok !== false));
-}
-async function pickProfile(id) {
-  if (S.plBusy) return;
-  S.plBusy = true; S.plDraft = null; paintLib();
-  const r = await send('POST', '/api/tester/pipeline/profile', { profile: id });
-  S.plBusy = false;
-  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !(r.ok && r.json && r.json.ok !== false));
-}
-async function saveSettings() {
-  const d = S.plDraft || {}, P = S.pl && S.pl.data && S.pl.data.profile, s = (P && P.settings) || {};
-  const out = {};
-  for (const [k, , , mul] of PSET) if (d[k] != null && d[k] !== '') out[k] = Math.round(Number(d[k]) / mul * 1000) / 1000;
-  if (d.risk_lo != null || d.risk_hi != null) {
-    const rk = Array.isArray(s.risk_usd) ? s.risk_usd : [500, 800];
-    out.risk_usd = [Number(d.risk_lo != null ? d.risk_lo : rk[0]), Number(d.risk_hi != null ? d.risk_hi : rk[1])];
-  }
-  if (!Object.keys(out).length) return pipeSaid('Nothing changed.', false);
-  if (Object.values(out).some((v) => Array.isArray(v) ? v.some(Number.isNaN) : Number.isNaN(v))) return pipeSaid('Every setting is a number.', true);
-  S.plBusy = true; paintLib();
-  const r = await send('POST', '/api/tester/pipeline/settings', { settings: out });
-  S.plBusy = false;
-  const ok = r.ok && r.json && r.json.ok !== false;
-  if (ok) S.plDraft = null;
-  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !ok);
 }
 /* The Queue's page: the count and the ONE button on top, always; under them the selected idea in full -- why it stopped (the ONE
    line), its card in words, every stage that ran with PASS / FAIL / — and its lines as the server wrote them. An idea that passed
@@ -1649,79 +1603,9 @@ function bookMain(A) {
     ${plResults(b.name, true)}
     <h3>The card</h3>${plKv(full.facts)}
     <p class="pp-note">Money is for one contract, after costs, on the days it had never seen.</p>
-    <h3>Accounts</h3>${full.accounts.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('') || '<p class="pp-note">None on this card.</p>'}
+    ${full.numbers.length ? `<h3>Numbers</h3>${full.numbers.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('')}` : `<h3>Accounts</h3>${full.accounts.map((a) => `<h4 class="pl-h4">${esc(a.name)}</h4>${plKv(a.rows)}`).join('') || '<p class="pp-note">None on this card.</p>'}`}
     <h3>Stages</h3>${full.stages.map((s) => plStage(s.n, s.name, s.mark, s.text)).join('') || '<p class="pp-note">None on this card.</p>'}</article>`;
 }
-/* ---- the Payout page (2026-10-13): the set the payout pipeline built for the funded accounts ----
-   ONE answer of the chart service (GET /api/tester/pipeline/payout), asked when the view opens, after one of its buttons, and at most
-   every 20 s while it is open. THE LOCK is the owner's: while the pipeline is disabled the server hands nothing over and the page
-   shows the one button that enables it. What the page can post: enable, disable, build, requeue (two presses). It places no order and
-   reaches no account: a switch of the set is a NOTICE in the list, and the owner makes the switch himself. */
-let payLoading = false;
-async function loadPayout(force = false) {
-  if (payLoading || (!force && S.pay && Date.now() - S.payAt < 20000)) return;
-  payLoading = true;
-  const r = await send('GET', '/api/tester/pipeline/payout');
-  payLoading = false;
-  S.payAt = Date.now();
-  const ok = r.ok && !!r.json, was = S.pay;
-  const next = ok ? { data: r.json, text: JSON.stringify(r.json), error: '' } : { data: null, text: '', error: String(r.error || 'No answer') };
-  S.pay = next;
-  if ((!was || was.text !== next.text || was.error !== next.error) && S.view === 'pp') paintLib();
-}
-function paySide() {
-  const P = S.pay;
-  if (!P) return '<div class="lb-empty" role="status">Loading…</div>';
-  if (!P.data) return `<div class="lb-empty" role="status">${esc(P.error)}</div>`;
-  if (!P.data.enabled) return '<div class="lb-empty">Disabled.</div>';
-  const ns = [...(P.data.notices || [])].reverse();
-  if (!ns.length) return '<div class="lb-empty">No notices yet.</div>';
-  return `<div class="pl-list">${ns.map((n) => {
-    const x = C.payNotice(n);
-    return `<div class="pay-n"><span class="tk-nm"><b>${esc(x.title)}</b>${x.when ? plChip(x.when, x.tone) : ''}</span><span>${esc(x.text)}</span></div>`;
-  }).join('')}</div>`;
-}
-function payMain() {
-  const P = S.pay, busy = S.plBusy ? ' disabled' : '';
-  if (!P) return '<p class="pp-lead" role="status">Loading…</p>';
-  if (!P.data) return `<p class="pp-lead" role="status">${esc(P.error)}</p>`;
-  const D = P.data, d = D.payout;
-  if (!D.enabled) {
-    return `<div class="pp-empty"><h2>Payout</h2><p>The payout pipeline is disabled. Nothing of it runs, for you or for Claude, until you enable it here.</p>
-      <button class="btn btn-default" data-act="paydo" data-a="enable" data-fk="pay:enable"${busy}>Enable</button></div>`;
-  }
-  const armed = S.plArmed === 'pay:requeue';
-  const acts = `<div class="pay-acts"><button class="btn btn-outline" data-act="paydo" data-a="build" data-fk="pay:build"${busy}>Build the set now</button>
-    <button class="btn btn-outline" data-act="paydo" data-a="requeue" data-fk="pay:requeue"${busy}>${armed ? 'Yes, send them round again' : 'Send the stopped ideas round again'}</button>
-    <button class="btn btn-ghost" data-act="paydo" data-a="disable" data-fk="pay:disable"${busy}>Disable</button></div>
-    ${armed ? '<p class="pp-note">Each idea that gets through reads its unseen days once. That read cannot be taken back.</p>' : ''}`;
-  if (!d) return `<div class="pp-empty"><h2>Payout</h2><p>No set is built yet. It is built while the payout pipeline is the one that is on, or now.</p>${acts}</div>`;
-  const proof = C.payProof(d), tiles = C.payTiles(d), g = C.plCurvePath(C.payCurve(D.scores), EQ_W, EQ_H, EQ_PAD), tonight = C.payTonight(D.tonight, d);
-  const sets = C.paySets(d).map((s) => `<h4 class="pl-h4">${esc(s.title)}</h4>${plKv(s.slots)}${plKv(s.facts)}${s.note ? `<p class="pp-note">${esc(s.note)}</p>` : ''}`).join('');
-  return `<article class="pp-doc" aria-label="Payout"><div class="tk-head"><h2>Payout</h2>${plChip(proof.label, proof.tone)}</div>
-    <p class="pl-say">${esc(String(D.text || '').split('\n')[0])}</p>${proof.text ? `<p class="pp-note">${esc(proof.text)}</p>` : ''}
-    ${tiles.length ? `<div class="pl-tiles">${tiles.map((t) => `<div class="pl-tile"><span>${esc(t.k)}</span><b class="${t.tone}">${esc(t.v)}</b></div>`).join('')}</div>` : ''}
-    ${g ? `<figure class="pl-eq ${g.up ? 'pos' : 'neg'}"><svg viewBox="0 0 ${EQ_W} ${EQ_H}" preserveAspectRatio="none" role="img" aria-label="Expected payout a week at each build: ${esc(C.plMoney(g.last))} now">
-      <path class="pl-eq-area" d="${esc(g.area)}"/><line class="pl-eq-zero" x1="${EQ_PAD}" x2="${EQ_W - EQ_PAD}" y1="${esc(g.zero)}" y2="${esc(g.zero)}"/>
-      <path class="pl-eq-line" d="${esc(g.line)}"/><circle class="pl-eq-dot" cx="${g.dot[0]}" cy="${g.dot[1]}" r="3.5"/></svg>
-      <figcaption><span>before the first build</span><span>expected payout a week, at each build</span><span>${esc(C.plMoney(g.last))}</span></figcaption></figure>` : ''}
-    <h3>Tonight</h3>${tonight.length ? plKv(tonight) : '<p class="pp-note">The evening’s read has not run yet. Until it does, the set below is the one to run.</p>'}
-    <h3>The set</h3>${sets || '<p class="pp-note">No account is on.</p>'}
-    <h3>Accounts</h3>${plKv(C.payAccounts(d))}
-    <h3>What to know</h3><ul class="pl-ul">${(d.notes || []).map((n) => `<li>${esc(n)}</li>`).join('')}</ul>
-    ${acts}</article>`;
-}
-/* One of the page's buttons. Sending the stopped ideas round again takes two presses: each one that gets through reads its unseen days. */
-async function payDo(a) {
-  if (S.plBusy) return;
-  if (a === 'requeue' && S.plArmed !== 'pay:requeue') { S.plArmed = 'pay:requeue'; paintLib(); return; }
-  S.plArmed = ''; S.plBusy = true; paintLib();
-  const r = await send('POST', '/api/tester/pipeline/payout', { action: a });
-  S.plBusy = false;
-  await loadPayout(true);
-  pipeSaid(r.ok && r.json ? String(r.json.text || '') : String(r.error || ''), !(r.ok && r.json && r.json.ok !== false));
-}
-
 /* Both halves painted: only what changed is put in the page, the scroll stays (a new selection starts at the top) and so does the keyboard. */
 let plPage = '', plMain = null;
 function paintPipe(side, head, sideTop) {
@@ -2485,11 +2369,7 @@ function act(name, el) {
   else if (name === 'viewmenu') { if (menuEl && menuEl.dataset.for === 'view') closeMenu(); else viewMenu(el); }
   else if (name === 'plctl') { const c = S.pl && S.pl.data ? C.plControl(S.pl.data) : null; if (c && c.enabled) pipeActions(c.actions); }
   else if (name === 'plfilter') { S.plFilter = el.dataset.f || 'all'; paintLib(); }
-  else if (name === 'plprof') pickProfile(el.dataset.p);
   else if (name === 'plmode') pickMode(el.dataset.m);
-  else if (name === 'paydo') payDo(el.dataset.a);
-  else if (name === 'plset') { S.plSet = !S.plSet; paintLib(); }
-  else if (name === 'plsave') saveSettings();
   else if (name === 'plidea') pickIdea(el.dataset.name);
   else if (name === 'plbook') pickCard(el.dataset.name);
   else if (name === 'plapprove') approveIdea();
@@ -2499,10 +2379,6 @@ function act(name, el) {
   else if (name === 'plexec') showExecutions(el.dataset.name);
   else if (name === 'tkblock') codeSheet(el.dataset.id);
 }
-root.addEventListener('input', (e) => {          // a WR setting being typed: kept, so a refresh of the Queue does not wipe it
-  const t = e.target;
-  if (t && t.dataset && t.dataset.pset) S.plDraft = Object.assign(S.plDraft || {}, { [t.dataset.pset]: t.value });
-});
 root.addEventListener('click', (e) => {
   if (inChart(e)) return;
   const lib = e.target.closest('[data-key]');

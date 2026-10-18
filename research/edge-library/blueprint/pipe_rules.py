@@ -8,17 +8,17 @@ typed in code. A change of a number is a change of the pipeline's rules (the own
   mode()               "variant" (the shipped default, the owner 2026-10-08: the hard rules are judged on ONE picked box, the map gets a loose
                        check) or "map" (the legacy behaviour: the whole 144-box map is judged); a file without the key reads "map"; any other
                        word: R.RuleError. `variant` = the numbers of variant mode (map_share, region_boxes, region_trades, floor_part)
-  funded()             True when the file's `funded.mode` is "ask" (the FUNDED PIPELINE, owner 2026-10-15): the picked box on the build days and
-                       its read of the unseen days must each fall into a row of `funded.rows` (pipe_funded.py), the eval odds are shown and not
-                       asked, and the portfolio is the funded account's alone. A file without `funded` (or "off"): nothing changes
   random_bar(tries)    the share of the random tables an idea must beat on its `tries`-th try: 1 - alpha / max(1, tries) --
                        the law's ladder of line 2.3 (95 %, 97.5 %, 98.3 %, 98.75 %, 99 %), carried on past its fifth round
   floor(root, part)    `part` of the market's cost floor of line 2.2, in dollars a trade: floor("NQ", 0.5) -> 35.0
-  gates()              "prop" (the shipped default, the owner 2026-10-10: only three things ask -- the picked box makes money on the build days,
-                       its eval odds are prop.eval or more, it still makes money on the unseen days; every other line is a LABEL) or "law"
-                       (every line asks, the pipeline as it was). A file without `gates` reads "law". In "prop" the file's `gates.variant`
-                       numbers are laid over `variant`, so need("variant") says what the mode asks; any other word: R.RuleError
-  prop_gates()         gates() == "prop"
+  gates()              "edge" (the shipped default, the owner 2026-10-18: ONE pipeline judged by the strategy's own size-free numbers at one
+                       contract -- the picked box makes money after costs with enough trades, its win rate is over the breakeven of its
+                       REALIZED reward-to-risk plus `edge.wr_cushion` (row P3.15), on the build days and again on the unseen days, and the
+                       locked map beats 95 % of the random tables there (line 4.4); no prop simulator; every other line is a LABEL) or "law"
+                       (every line asks, the pipeline as it was). A file without `gates` reads "law". In "edge" the file's `gates.variant`
+                       numbers are laid over `variant`, so need("variant") says what the mode asks; any other word: R.RuleError.
+                       Mode "prop" (2026-10-10 to 10-18: the 40 % eval-odds gate) is retired: the docs/superpowers/specs/2026-10-18 design
+  edge_gates()         gates() == "edge"
   winlane(unit=None)   "off" (the shipped default: no win-rate rows), "label" (rows P3.11 and P3.12 are printed on every box and ask nothing) or "ask"
                        (they ask); a file without `winlane` reads "off"; any other word: R.RuleError. The numbers: need("winlane", ...).
                        `winlane.cards` (a list of card names; empty or missing = every card) says WHICH ideas the lane is on: a heat map
@@ -42,15 +42,12 @@ from pathlib import Path
 
 from . import rules as R
 
-PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json"), "wr": ("WR PIPELINE", "pipeline_wr.json"),      # the pipelines to choose from (owner, 2026-10-13)
-            "payout": ("PAYOUT PIPELINE", "pipeline_payout.json"),                                      # ... and the one that builds the set for the funded accounts
-            "funded": ("FUNDED PIPELINE", "pipeline_funded.json")}                                      # ... and the 75 % line of 2026-10-15 (pipe_funded.py)
+PROFILES = {"live": ("LIVE PIPELINE", "pipeline.json")}       # ONE pipeline (the owner, 2026-10-18); WR, PAYOUT and FUNDED are retired
 STATE = Path(os.environ.get("HB_PIPELINE_STATE") or Path.home() / ".homebase" / "pipeline_profile")     # the chosen one; no file = live
 FILE = R.T / "pipeline.json"                       # the LIVE file; set to ANOTHER path (the tests point it at a copy) it is read instead of the profile's
 MODES = ("map", "variant")
-GATES = ("law", "prop")
+GATES = ("law", "edge")
 WINLANE = ("off", "label", "ask")
-FUNDED = ("off", "ask")                             # the funded line (pipe_funded.py): off, or every box must fall into a row of `funded.rows`
 DECIMALS = 3                                        # the law prints the ladder of 2.3 to three decimals (98.3 % for 98.33 %)
 
 
@@ -74,14 +71,12 @@ def check(p: dict) -> list:
 
 
 def active() -> str:
-    """The profile in use: HB_PIPELINE (the environment), else the word in the state file (`bp.py pipe profile wr`), else "live". An unknown word: R.RuleError."""
+    """The profile in use: "live", the one there is. A word left in HB_PIPELINE or the state file by a retired profile (wr, payout, funded) reads live."""
     try:
         word = (os.environ.get("HB_PIPELINE") or (STATE.read_text(encoding="utf-8").strip() if STATE.exists() else "") or "live").lower()
     except OSError:
         word = "live"
-    if word not in PROFILES:
-        raise R.RuleError(f"pipeline profile {word!r}: one of {', '.join(PROFILES)}")
-    return word
+    return word if word in PROFILES else "live"
 
 
 def label(profile: str | None = None) -> str:
@@ -121,11 +116,14 @@ def _load(path: str, stamp: int = 0) -> dict:
     c = (p.get("winlane") or {}).get("cards", [])
     if not isinstance(c, list) or not all(isinstance(x, str) and x for x in c):
         raise R.RuleError(f"pipeline.json winlane.cards = {c!r}: a list of card names (empty = every card)")
-    f = (p.get("funded") or {}).get("mode", FUNDED[0])
-    if f not in FUNDED:
-        raise R.RuleError(f"pipeline.json funded.mode = {f!r}: the funded line is one of {', '.join(FUNDED)}")
-    if g == "prop":                                 # the numbers the prop gates ask, over the file's variant block (a copy: the file stays as written)
+    if g == "edge":                                 # the numbers the edge gates ask, over the file's variant block (a copy: the file stays as written)
         p["variant"] = {**p["variant"], **(p["gates"].get("variant") or {})}
+        e = p.get("edge") or {}
+        need = {"wr_cushion": (0.0, 0.5), "sharpe": (0.0, 10.0), "months_positive": (0.0, 1.0)}
+        got = {"wr_cushion": e.get("wr_cushion"), **{k: (e.get("prop") or {}).get(k) for k in ("sharpe", "months_positive")}}
+        bad = [k for k, (lo, hi) in need.items() if isinstance(got[k], bool) or not isinstance(got[k], (int, float)) or not lo <= got[k] <= hi]
+        if bad:
+            raise R.RuleError(f"pipeline.json edge: {', '.join(bad)} missing or out of range (wr_cushion 0-0.5, prop.sharpe 0-10, prop.months_positive 0-1)")
     return {k: v for k, v in p.items() if not k.startswith("_")}
 
 
@@ -158,13 +156,13 @@ def mode() -> str:
 
 
 def gates() -> str:
-    """"prop" (only the three gates of the owner's 2026-10-10 word ask; the rest are labels) or "law" (every line asks); a file without `gates` is "law"."""
+    """"edge" (the owner's 2026-10-18 rules: module docstring) or "law" (every line asks); a file without `gates` is "law"."""
     return (_all().get("gates") or {}).get("mode", GATES[0])
 
 
-def prop_gates() -> bool:
-    """Is the pipeline asking only the three gates of mode "prop" (module docstring)?"""
-    return gates() == "prop"
+def edge_gates() -> bool:
+    """Is the pipeline asking only the stops of mode "edge" (module docstring)?"""
+    return gates() == "edge"
 
 
 def winlane(unit: str | None = None) -> str:
@@ -178,11 +176,6 @@ def winlane(unit: str | None = None) -> str:
     return mode if on else WINLANE[0]
 
 
-def funded() -> bool:
-    """Is the funded line on (pipeline.json `funded.mode` "ask": the FUNDED PIPELINE, the owner 2026-10-15)? A file without `funded` is off."""
-    return (_all().get("funded") or {}).get("mode", FUNDED[0]) == "ask"
-
-
 def random_bar(tries: int) -> float:
     """The random bar of an idea's `tries`-th try (a share, held strictly as line 2.3 is): 1 - alpha / max(1, tries)."""
     return _bar(_all()["proof"]["random_alpha"], tries)
@@ -192,39 +185,3 @@ def floor(root: str, part: float) -> float:
     """`part` of the market's cost floor (line 2.2), in dollars a trade. A market without a floor: R.RuleError."""
     _all()
     return R.need("2.2", root) * part
-
-
-# ---- the win-rate settings the Lab page edits (owner, 2026-10-13): numbers of the WR PIPELINE's `winlane` block only; LIVE is never written from a page
-SETTINGS = {"win_rate": (0.5, 0.95), "month_floor": (0.4, 0.9), "months": (0.5, 1.0), "month_trades": (3, 60), "max_target_r": (0.25, 3.0)}
-
-
-def settings(profile: str | None = None) -> dict:
-    """The numbers a page may show (and, for the WR profile, change): {key: value}, risk_usd as [low, high]."""
-    p = profile or active()
-    f = R.T / PROFILES[p][1]
-    lane = (json.loads(f.read_text(encoding="utf-8")).get("winlane") or {})
-    return {k: lane.get(k) for k in (*SETTINGS, "risk_usd")}
-
-
-def set_settings(changes: dict, profile: str = "wr") -> dict:
-    """Write `changes` into the winlane block of the WR file. Only SETTINGS keys and risk_usd; each inside its range; LIVE: refused. -> the new settings."""
-    if profile != "wr":
-        raise R.RuleError("only the WR PIPELINE's numbers are changed from here; LIVE PIPELINE is edited in its file with the owner's word")
-    f = R.T / PROFILES[profile][1]
-    d = json.loads(f.read_text(encoding="utf-8"))
-    lane = d.setdefault("winlane", {})
-    for k, v in changes.items():
-        if k == "risk_usd":
-            if not (isinstance(v, (list, tuple)) and len(v) == 2 and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v) and 0 < v[0] <= v[1] <= 5000):
-                raise R.RuleError("risk_usd: [low, high] dollars, 0 < low <= high <= 5000")
-            lane[k] = [int(v[0]), int(v[1])]
-            continue
-        if k not in SETTINGS:
-            raise R.RuleError(f"{k}: not a setting (one of {', '.join(SETTINGS)}, risk_usd)")
-        lo, hi = SETTINGS[k]
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or not lo <= v <= hi:
-            raise R.RuleError(f"{k}: a number from {lo:g} to {hi:g}")
-        lane[k] = int(v) if k == "month_trades" else float(v)
-    f.write_text(json.dumps(d, indent=1, ensure_ascii=False) + "\n", encoding="utf-8")
-    _all.cache_clear()
-    return settings(profile)

@@ -49,9 +49,12 @@ some should just be for the individual strategy that will pass"). The map gets a
   reshuffle_box(b, rng=None)      STAGE 4 -> row P4.1 for the one box: its average trade is at the floor in `proof.reshuffle` of the
                                   reshuffled runs (the same runs as line 2.8's)
   random(p_beat, tries, what)     (above) `what` names the random tables the share was read against
-PROP GATES (pipeline.json gates.mode "prop", the owner 2026-10-10; pipe_rules.prop_gates): of the rows below only P3.2 (an average trade ABOVE
-$0 after costs: a floor of 0 is read strictly) and P3.3 (enough trades for an average) still ask on the build days, with the eval odds read by
-the stage (pipe_stages._holding); every other row of variant mode is still read and printed as a LABEL (label(): passed None, `held` = what it
+  wr_rr(trade_net)                ROW P3.15 (edge mode) off a box's trades, one contract after costs: win rate (net above $0) against
+                                  1 / (1 + realized R:R) + edge.wr_cushion, realized R:R = average winning trade / |average losing trade|.
+                                  No losing trade: the R:R has no number and the row passes. No winning trade: it fails.
+EDGE GATES (pipeline.json gates.mode "edge", the owner 2026-10-18; pipe_rules.edge_gates): of the rows below only P3.2 (an average trade ABOVE
+$0 after costs: a floor of 0 is read strictly), P3.3 (enough trades for an average) and P3.15 (the win rate over the breakeven of the box's
+REALIZED reward-to-risk plus edge.wr_cushion: wr_rr) ask on the build days; every other row of variant mode is still read and printed as a LABEL (label(): passed None, `held` = what it
 said, `label` = HELD / MISSED). A label asks nothing, so no consumer's `passed is False` sees it. gates.variant lays its numbers over `variant`.
 THE COMPARISONS: a share of boxes is "over" (strict) · an average trade "at or above" · trades "or more" · an indicator "higher"
 than the raw table (strict) · the other markets "at least" · the reshuffled runs "or more" · the random bar "above" (strict).
@@ -87,8 +90,9 @@ def _pct(v) -> str:
     return f"{100 * v:.4f}".rstrip("0").rstrip(".") + " %"
 
 
-GATE_ROWS = ("P3.2", "P3.3")                       # prop mode: the rows of a box that still ask on the build days (average trade above $0, enough trades)
-RANDOM = "4.4"                                     # the read's line on the random tables: a gate of the unseen days in prop mode too (2026-10-17)
+WR_RR = "P3.15"                                    # edge mode: the win rate over the breakeven of the realized reward-to-risk (2026-10-18)
+GATE_ROWS = ("P3.2", "P3.3", WR_RR)                # edge mode: the rows of a box that still ask on the build days
+RANDOM = "4.4"                                     # the read's line on the random tables: a gate of the unseen days (2026-10-17)
 
 
 def _met(v, floor: float) -> bool:
@@ -114,8 +118,8 @@ def label(row: dict) -> dict:
 
 
 def labels(rows: list, gate=GATE_ROWS) -> list:
-    """The rows of a box as the gates read them: in mode "prop" every row that is not one of `gate` becomes a label; in mode "law" the rows as they are."""
-    return list(rows) if not PR.prop_gates() else [r if r["line"] in gate else label(r) for r in rows]
+    """The rows of a box as the gates read them: in mode "edge" every row that is not one of `gate` becomes a label; in mode "law" the rows as they are."""
+    return list(rows) if not PR.edge_gates() else [r if r["line"] in gate else label(r) for r in rows]
 
 
 def _boxes(t: dict) -> tuple:
@@ -196,10 +200,10 @@ def variant_map(t: dict) -> dict:
             L._row("P1.2", q >= need["region_boxes"], q, need["region_boxes"],
                    f"{q} of {m} boxes have an average trade {'above $0' if floor == 0 else 'of ' + _fig(floor, (floor,), '$') + ' or more'} with {_fig(need['region_trades'])} or more trades "
                    f"(need at least {need['region_boxes']})", boxes=m, floor=floor, trades=need["region_trades"])]
-    if PR.prop_gates():                             # the share of boxes profitable is a label: one box that makes money is enough to look at
+    if PR.edge_gates():                             # the share of boxes profitable is a label: one box that makes money is enough to look at
         rows[0] = label(rows[0])
     bad = [r["line"] for r in rows if r["passed"] is False]       # (a label, passed None, asks nothing)
-    head = (f"pass: {q} of {m} boxes make money after costs with enough trades" if PR.prop_gates() else
+    head = (f"pass: {q} of {m} boxes make money after costs with enough trades" if PR.edge_gates() else
             f"pass: over {L._pc(need['map_share'])} of boxes profitable and {q} boxes at the floor with enough trades")
     return {"result": "fail" if bad else "pass", "avg_trade": x["avg_trade"], "qualifying": q, "cells": cells, "lines": rows,
             "text": f"fail: {', '.join(bad)} {'is' if len(bad) == 1 else 'are'} missed" if bad else head}
@@ -211,7 +215,7 @@ def holding(n: int, q: int, missed: dict) -> dict:
     of the boxes miss it}: the row says them, the most missed first."""
     need = PR.need("variant", "pick_boxes")
     said = ", ".join(f"{k} by {v}" for k, v in sorted(missed.items(), key=lambda kv: (-kv[1], kv[0])))
-    what = (f"make{'s' * (n == 1)} money after costs with enough trades and {L._pc(PR.need('prop', 'eval'))} eval odds or more on the build days" if PR.prop_gates() else
+    what = (f"make{'s' * (n == 1)} money after costs with enough trades and a win rate over the breakeven of their reward-to-risk on the build days" if PR.edge_gates() else
             f"hold{'s' * (n == 1)} every line a box is held to on the build days")
     return L._row("P1.3", n >= need, n, need, f"{n} of its {q} boxes at the floor {what} "
                   f"(need at least {need})" + (f"; the lines missed: {said}" if said else ""), boxes=q, missed=dict(missed))
@@ -274,18 +278,29 @@ def variant_rows(b: dict, others: list) -> list:
     return labels([L._row("P3.2", _met(at, floor), at, floor, f"no trade (need an average trade {want if floor == 0 else 'of ' + want})" if at is None else
                           f"average trade {_fig(at, (floor,), '$')} (need {want})"),
                    L._row("P3.3", bool(n >= count), n, count, f"{_fig(n, (count,))} trades (need {_fig(count, (count,))})"),
-                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]) + winlane(b) + funded(b)
+                   side, markets, _without_best(b, need["without_best_trades"]), *_consistent(b, need)]) + winlane(b) + \
+        ([wr_rr(b.get("trade_net"))] if PR.edge_gates() else [])
 
 
-def funded(b: dict) -> list:
-    """THE FUNDED LINE on the picked box `b` (pipeline.json `funded`, the owner 2026-10-15; pipe_funded.py) -> row P3.14, which ASKS: the box's
-    build-day trades fall into a row of the 75 % table. Off (any other profile): none. A box without its trades' stops has no R: the row says so and misses."""
-    if not PR.funded():
-        return []
-    from . import pipe_funded as F
-    if b.get("trade_net") is None or b.get("trade_risk") is None:
-        return [L._row("P3.14", False, None, None, "no list of the box's trades and stops: it cannot be shown to fall into a row")]
-    return [F.row("P3.14", {"net": b["trade_net"], "risk": b["trade_risk"], "date": b["trade_date"]}, b["root"])]
+def wr_rr(trade_net) -> dict:
+    """Row P3.15 (module docstring): the win rate against the breakeven of the REALIZED reward-to-risk, plus edge.wr_cushion."""
+    cushion = PR.need("edge", "wr_cushion")
+    t = np.asarray([] if trade_net is None else trade_net, np.float64)
+    if not len(t):
+        return L._row(WR_RR, False, None, None, "no trade: no win rate to hold against its reward-to-risk")
+    win = t > 0
+    rate = round(float(win.mean()), 9)
+    if not win.any():
+        return L._row(WR_RR, False, rate, None, f"win rate 0 % on {len(t)} trades: no winning trade", rr=None, breakeven=None)
+    w, lo = float(t[win].mean()), float(-t[~win].mean()) if (~win).any() else 0.0
+    if lo <= 0:
+        return L._row(WR_RR, True, rate, None, f"win rate {L._pc(rate)} on {len(t)} trades and no losing trade: the reward-to-risk has no number", rr=None, breakeven=None)
+    rr = w / lo
+    be = 1 / (1 + rr)
+    need = round(be + cushion, 9)
+    return L._row(WR_RR, bool(rate >= need), rate, need,
+                  f"win rate {L._pc(rate)} on {len(t)} trades at a realized reward-to-risk of {rr:.2f} (average win {_fig(w, (), '$')}, average loss {_fig(lo, (), '$')}): "
+                  f"breakeven {L._pc(be)}, need {L._pc(need)} or more (+{cushion * 100:g} points)", rr=round(rr, 9), breakeven=round(be, 9))
 
 
 def _consistent(b: dict, need: dict) -> list:

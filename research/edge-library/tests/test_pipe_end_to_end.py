@@ -62,7 +62,7 @@ from blueprint import pipe_card as PC  # noqa: E402
 from blueprint import pipe_prop as PP  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
 
-PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_prop_gates.py reads mode "prop"
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_edge_gates.py reads mode "edge"
 from blueprint import pipe_runner as RN  # noqa: E402
 from blueprint import pipe_stages as ST  # noqa: E402
 from blueprint import pipe_store as PS  # noqa: E402
@@ -291,9 +291,10 @@ def test_the_book_card_holds_what_the_design_asks_and_the_owner_approves_it(worl
     row = next(x.split() for x in out.splitlines() if x.startswith(f"{A} "))
     assert rc == 0 and row[:5] == [A, "orb", "book", "7", "2"] and "1 book" in out
     rc, out = TI._run(["pipe", "book", R_])
-    assert rc == 0 and out.splitlines()[0].split() == ["name", "label", "family", "market", "session", "bar"]
+    assert rc == 0 and out.splitlines()[0].split() == ["name", "tag", "family", "market", "session", "bar"]
     assert [x.split("  ")[0] for x in out.splitlines()[1:2]] == [A] and b["label"] in out.splitlines()[1] and out.splitlines()[1].split()[-4:] == ["orb", "NQ", "nyam", "5"]
-    assert out.splitlines()[2:] == ["", "luck count: 1 idea read on the unseen days, 1 passed; luck alone gives at most 0.05 (bp.py pipe luck)"]      # the Book's last line
+    assert out.splitlines()[2:] == ["", "luck count: 1 read of the unseen days, 1 passed as asked at the time, 1 passes the gate as asked now (the box above $0 AND line 4.4); "
+                                    "luck alone gives at most 0.05 (bp.py pipe luck)"]      # the Book's last line
     rc, r = cli(["pipe", "book"])
     assert rc == 0 and r["book"] == [b]
 

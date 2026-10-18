@@ -253,6 +253,21 @@ test('a book card in the list: its label, where it trades, the two 30-day odds o
   assert.equal(L.plBookCard(null).name, '—');
 });
 
+test('a book card of the one pipeline (2026-10-18): its tag and its unseen-day numbers, build and unseen on the full card', () => {
+  const u = { win_rate: 0.55, realized_rr: 1.2, breakeven_wr: 0.4545, avg_r: 0.21, net_per_year: 12000, sharpe: 1.4, months_positive: 0.7,
+    worst_drawdown_r: 6.5, biggest_day_share: 0.08, month_wr: { lowest: 0.31, median: 0.55, months: 12 } };
+  const card = { name: 'x', market: 'NQ', session: 'nyam', bar: '5', hours: ['09:31', '11:42'], tag: 'live+prop', numbers: { build: { ...u, sharpe: 0.9 }, unseen: u } };
+  assert.deepEqual(L.plBookCard(card), { name: 'x', label: 'Live + Prop', tone: 'ok', sub: 'NQ · New York morning · 5-minute bars', account: '',
+    rows: [['Win rate', '55 %'], ['Reward-to-risk (realized)', '1.20'], ['Sharpe', '1.40'], ['Months positive', '70 %'], ['Hours it trades', '09:31 – 11:42'], ['Worst drawdown', '6.5R']] });
+  assert.deepEqual([L.plBookCard({ ...card, tag: 'live' }).label, L.plBookCard({ ...card, tag: 'live' }).tone], ['Live', '']);
+  const full = L.plBookFull(card, []);
+  assert.deepEqual(full.numbers.map((n) => n.name), ['Build days', 'Unseen days']);
+  assert.deepEqual(Object.fromEntries(full.numbers[1].rows)['Breakeven win rate'], '45 %');
+  assert.deepEqual(Object.fromEntries(full.numbers[0].rows).Sharpe, '0.90');
+  assert.deepEqual(L.plBookFull({ ...card, numbers: { unseen: {} } }, []).numbers[0].rows.every(([, v]) => v === '—'), true, 'a number missing shows —');
+  assert.deepEqual(L.plBookFull(BOOK, []).numbers, [], 'an older card has no numbers, only its accounts');
+});
+
 test('the whole book card: every fact, every account (one whose rules are not confirmed says so), each stage\'s first line', () => {
   const full = L.plBookFull(BOOK, STAGES), fact = Object.fromEntries(full.facts);
   assert.equal(full.why, 'Gaps at the open fill fast.');
@@ -273,8 +288,9 @@ test('the whole book card: every fact, every account (one whose rules are not co
 const LAB = rd('charts/lab.js');
 const PIPE = LAB.slice(LAB.indexOf('/* ---- the strategy pipeline in the sidebar ----'), LAB.indexOf('function paintEditor()'));
 
-test('the view switcher lists the five views: Strategies, Arsenal, then Queue, Book, Payout', () => {
-  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\], \['pp', 'Payout'\]\];/);
+test('the view switcher lists the four views: Strategies, Arsenal, then Queue, Book (the Payout page is retired, 2026-10-18)', () => {
+  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\]\];/);
+  assert.doesNotMatch(LAB, /payMain|paySide|loadPayout|'pp'/, 'no Payout page');
   assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint/, 'the Blueprint and Guide views are gone, with what only they called');
   assert.match(LAB, /if \(VIEW_IDS\.includes\(v\)\) S\.view = v;/, 'a stored view that is no longer listed opens Strategies');
 });
@@ -284,8 +300,7 @@ test('the pipeline pages talk to the pipeline routes only, and post nothing but 
   const urls = [...LAB.matchAll(/['"`](\/api\/tester\/pipeline[^'"`$?]*)/g)].map((m) => m[1]);
   // 2026-10-09 (the owner): a Book strategy's curve and its executions on the chart are read too -- two views that run nothing
   assert.deepEqual([...new Set(urls)].sort(), ['/api/tester/pipeline', '/api/tester/pipeline/curve/', '/api/tester/pipeline/executions',
-    '/api/tester/pipeline/idea/', '/api/tester/pipeline/mode', '/api/tester/pipeline/payout', '/api/tester/pipeline/profile', '/api/tester/pipeline/run',
-    '/api/tester/pipeline/settings']);
+    '/api/tester/pipeline/idea/', '/api/tester/pipeline/mode', '/api/tester/pipeline/run']);       // (payout, profile, settings: retired 2026-10-18)
   // 2026-10-10 (the owner): watch-only is gone -- any strategy on the Desk can run live; the Book only reads, and says "On the Desk" by the Lab's own list
   assert.doesNotMatch(LAB, /\/api\/tester\/watch|watchDo|plWatch|loadWatch|plunwatch|plpromote/, 'no watch list, no promote-from-the-Book');
   assert.match(LAB, /S\.desk && S\.desk\.has\(card\.name\)/, 'the Book row says On the Desk when a promoted Lab strategy of that name is there');
@@ -294,14 +309,13 @@ test('the pipeline pages talk to the pipeline routes only, and post nothing but 
   assert.match(PIPE, /pipeRun\(\{ action: a \}\)/, 'start, pause and resume are posted as the helper names them');
 });
 
-test('the switch: one pipeline works or none; a choice that is not built cannot be pressed; an older toolkit keeps its two profiles', () => {
-  assert.match(PIPE, /const modes = Array\.isArray\(P\.modes\) \? P\.modes : null;/);
+test('the switch: the one pipeline is on or off; a toolkit that reports no switch shows no bar', () => {
+  assert.match(PIPE, /if \(!P \|\| !Array\.isArray\(P\.modes\)\) return '';/);
   assert.match(PIPE, /data-act="plmode" data-m="\$\{esc\(o\.id\)\}"/);
-  assert.match(PIPE, /aria-pressed="\$\{o\.id === P\.mode\}"\$\{S\.plBusy \|\| o\.ready === false \? ' disabled' : ''\}/, 'not ready = disabled');
-  assert.match(PIPE, /: P\.options\.map\(/, 'no switch reported: the profiles as before');
   assert.match(PIPE, /send\('POST', '\/api\/tester\/pipeline\/mode', \{ mode: id \}\)/);
   assert.match(LAB, /else if \(name === 'plmode'\) pickMode\(el\.dataset\.m\);/);
-  for (const k of ['off', 'live', 'wr', 'payout', 'funded']) assert.match(PIPE, new RegExp(`${k}: '`), `the bar says what ${k} is`);
+  for (const k of ['off', 'live']) assert.match(PIPE, new RegExp(`${k}: '`), `the bar says what ${k} is`);
+  assert.doesNotMatch(LAB, /plprof|plsave|data-pset|pipeline\/settings|pipeline\/profile/, 'no profile picker, no WR settings');
 });
 
 test('one timer for the two views: never while hidden, never two requests at once, the last state kept when the app cannot be reached', () => {

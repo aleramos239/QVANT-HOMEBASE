@@ -36,7 +36,7 @@ from blueprint import pipe_gates as G  # noqa: E402
 from blueprint import pipe_rules as P  # noqa: E402
 from blueprint import rules as R  # noqa: E402
 
-PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_prop_gates.py reads mode "prop"
+PIPE_GATES = "law"                                  # written for the file of mode "law" (conftest.py); tests/test_pipe_edge_gates.py reads mode "edge"
 FILE = pipe_law.file()
 
 @pytest.fixture

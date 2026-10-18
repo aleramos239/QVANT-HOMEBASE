@@ -101,8 +101,7 @@ and --json out.
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
   bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
-  bp.py pipe portfolio [--account=ID]                                        that takes every queued idea through stages 0-7 by
-  bp.py pipe mix [--market=NQ] [--names=a,b] [--left-out]                    (`mix`: the build-day mix, pipe_mix.py: read-only)
+  bp.py pipe mode [off | live]                                               that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
                                                                              cards; `approve` / `refuse` = the owner's word on an
@@ -115,11 +114,8 @@ and --json out.
                                                                              how many passed, and what luck alone gives (pipe_runner.luck).
                                                                              `near` = the near misses: what stopped closest to a line
                                                                              before the unseen days, the closest first (pipe_runner.near).
-                                                                             `portfolio` = STAGE 8: the best mix of the book's strategies
-                                                                             for each account of a book card (or the one of --account),
-                                                                             its odds against the portfolio's bar and what is missing
-                                                                             (pipe_portfolio.py). Runs nothing; saves one file an account
-                                                                             under the pipeline's portfolios/.
+                                                                             ONE pipeline since 2026-10-18 (edge mode: no prop simulator;
+                                                                             a pass is tagged live or live+prop).
                                                                              For `pipe`, --root is the PIPELINE's own folder
                                                                              (HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline):
                                                                              never the app's idea folder
@@ -246,7 +242,7 @@ def _parser() -> _Parser:
     bl = add("blocks", "everything an idea can be built from without writing code, and what version 1 refuses")
     bc = add("blockcode", "the same blocks as a browsable list, each with the code that implements it (the Lab's Toolkit view)")
     pp = add("pipe", "the strategy pipeline: pipeline cards in, each one taken through stages 0-7 by the runner (--root here = the PIPELINE's folder)")
-    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,portfolio,mix,curve,executions,profile,settings,mode,payout}")
+    ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,curve,executions,mode}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
         ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
@@ -257,14 +253,8 @@ def _parser() -> _Parser:
         ("luck", "the luck count: ideas read on the unseen days, how many passed, and what luck alone gives"),
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("refine", "a near miss's next version: no --move lists what it missed and the moves; --move KIND=VALUE --why=TEXT files ONE child card (regime, indicator, days, window, sides)"),
-        ("portfolio", "stage 8: the best mix of the book's strategies for each account, its odds against the portfolio's bar, what is missing (runs nothing)"),
-        ("mix", "the MIX on the build days: the ideas whose picked box fails only steadiness rows, read together on the pipeline's own rows (build days only; never the unseen days)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
-        ("profile", "the pipeline in use: LIVE PIPELINE (live accounts) or WR PIPELINE (high win rate, low R:R); `profile wr` chooses, no word shows"),
-        ("settings", "the WR PIPELINE's win-rate numbers; --set key=value (repeat) changes them (win_rate, month_floor, months, month_trades, max_target_r, risk_usd=500-800)"),
-        ("mode", "the switch: the ONE pipeline that works, or none; `mode off | live | wr | payout | funded` chooses (a profile also starts the runner), no word shows"),
-        ("payout", "the PAYOUT PIPELINE's set for the funded accounts: show (the set on file) | build | tonight (the evening's rotation) | requeue (the stopped ideas "
-                   "go round again under its rules) | enable | disable (the owner's lock: disabled, none of it runs)"),
+        ("mode", "the switch: the pipeline works, or it does not; `mode off | live` chooses (live also starts the runner), no word shows"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
@@ -292,18 +282,11 @@ def _parser() -> _Parser:
     pipes["refine"].add_argument("--why", metavar="TEXT", help="the reason for this one change, 8 words or more (written before the run)")
     for name in ("show", "approve", "refuse", "rerun", "pick", "curve", "executions"):
         pipes[name].add_argument("name", help="the pipeline card's name")
-    pipes["profile"].add_argument("which", nargs="?", choices=["live", "wr"], help="the pipeline to use from now on (the runner takes it when it next starts)")
-    pipes["settings"].add_argument("--set", action="append", default=[], metavar="KEY=VALUE", help="a number to change (repeat); risk_usd=500-800")
-    pipes["mode"].add_argument("which", nargs="?", choices=["off", "live", "wr", "payout", "funded"], help="the pipeline that works from now on; off = none")
-    pipes["payout"].add_argument("what", nargs="?", default="show", choices=["show", "build", "tonight", "requeue", "enable", "disable"], help="default: show")
+    pipes["mode"].add_argument("which", nargs="?", choices=["off", "live"], help="live = the pipeline works; off = it does not")
     pipes["pick"].add_argument("cell", nargs="?", help="the box's id, e.g. k0p4_pts45-r2 (not with --clear)")
     pipes["pick"].add_argument("--clear", action="store_true", help="take the owner's pick away")
     pipes["refuse"].add_argument("--why", metavar="TEXT", help="the owner's reason (kept with the idea)")
     pipes["pick"].add_argument("--why", metavar="TEXT", help="the owner's reason for the box (kept with the idea)")
-    pipes["portfolio"].add_argument("--account", metavar="ID", help="one account: a rule file of the app's prop simulator (default: every account of a book card)")
-    pipes["mix"].add_argument("--market", metavar="NQ|ES|GC", help="one market's mix (default: every market that has two members or more)")
-    pipes["mix"].add_argument("--names", metavar="a,b,c", help="a what-if: these members only (they must be members the rule admits)")
-    pipes["mix"].add_argument("--left-out", action="store_true", dest="left_out", help="list the ideas the rule leaves out, and why")
     pipes["_loop"].add_argument("--once", action="store_true", help="everything that can run now, then end")
     for x in pipes.values():
         x.add_argument("--root", metavar="DIR", help="the PIPELINE's folder (default HOMEBASE_PIPELINE_ROOT, else ~/.homebase/pipeline) -- not the app's idea folder: "
@@ -425,16 +408,7 @@ def _pipe(a) -> dict:
             raise J.Refuse(f"the card {where} {'is not there' if isinstance(e, OSError) else 'does not read as JSON'}: {e}") from None
         if card is None:
             raise J.Refuse(f"no card {where}: the pipeline card as JSON")
-    if a.sub == "profile":                          # the pipelines to choose from (pipe_rules.PROFILES): shows the one in use, or chooses
-        from . import pipe_rules as PR
-        if a.which:
-            PR.use(a.which)
-        now = PR.active()
-        return {"ok": True, "command": "pipe profile", "profile": now, "label": PR.label(now), "settings": PR.settings(now), "editable": now == "wr",
-                "options": [{"id": k, "label": v[0]} for k, v in PR.PROFILES.items()],
-                "text": f"{PR.label(now)} is in use" + (" (chosen now: restart the runner with `pipe pause` / `pipe start` for it to take it)" if a.which else "")
-                        + ". Choose with: bp.py pipe profile live | wr. Profiles: " + ", ".join(f"{k} = {v[0]}" for k, v in PR.PROFILES.items()) + "."}
-    if a.sub == "mode":                             # the switch (pipe_switch): ONE pipeline works, or none
+    if a.sub == "mode":                             # the switch (pipe_switch): the pipeline works, or it does not
         from . import pipe_switch as SW
         if a.which:
             SW.choose(a.which, a.root)
@@ -443,46 +417,14 @@ def _pipe(a) -> dict:
         now = SW.now(a.root)
         return {"ok": True, "command": "pipe mode", "mode": now, "modes": SW.options(a.root),
                 "text": SW.said(now) + ". Choose with: bp.py pipe mode " + " | ".join(SW.CHOICES) + "."}
-    if a.sub == "payout":                           # the payout pipeline's set (pay_build), behind the owner's lock (pipe_switch)
-        from . import pipe_switch as SW
-        cmd = f"pipe payout {a.what}"
-        if a.what in ("enable", "disable"):
-            on = SW.enable("payout", a.what == "enable", a.root)
-            return {"ok": True, "command": cmd, "enabled": on, "mode": SW.now(a.root),
-                    "text": "The PAYOUT PIPELINE is enabled: it can be switched on." if on else "The PAYOUT PIPELINE is disabled: it cannot be switched on, built or run until the owner enables it."}
-        if not SW.enabled("payout", a.root):
-            if a.what != "show":
-                raise J.Refuse("the PAYOUT PIPELINE is disabled: the owner enables it in the Lab (the Pipeline bar). Nothing was run")
-            return {"ok": True, "command": cmd, "enabled": False, "payout": None, "scores": [], "notices": [], "tonight": None, "text": "The PAYOUT PIPELINE is disabled."}
-        from . import pay_build
-        return {**(pay_build.requeue(a.root) if a.what == "requeue" else pay_build.command(a.what, a.root)), "enabled": True}
-    if a.sub == "settings":                         # the WR PIPELINE's numbers (pipe_rules.set_settings)
-        from . import pipe_rules as PR
-        from . import rules as RL
-        ch = {}
-        for kv in a.set:
-            k, _, v = kv.partition("=")
-            try:
-                ch[k.strip()] = [float(x) for x in v.split("-")] if k.strip() == "risk_usd" else float(v)
-            except ValueError:
-                raise J.Refuse(f"{kv!r}: KEY=NUMBER (risk_usd=500-800)") from None
-        try:
-            now = PR.set_settings(ch) if ch else PR.settings("wr")
-        except RL.RuleError as e:
-            raise J.Refuse(str(e)) from None
-        return {"ok": True, "command": "pipe settings", "settings": now, "text": "WR PIPELINE numbers: " + ", ".join(f"{k} {v}" for k, v in now.items() if v is not None)}
     if a.sub == "refine":                           # a near miss's next version (pipe_refine): reads stores, files one child card, runs nothing
         from . import pipe_refine
         return pipe_refine.refine(a.name, a.root, moves=a.move, sets=a.set, why=a.why)
-    if a.sub == "mix":                              # the mix on the build days (pipe_mix): it reads stores, runs nothing, never opens the unseen days
-        from . import pipe_mix
-        return pipe_mix.command(a.root, market=getattr(a, "market", None), names=[x for x in (getattr(a, "names", None) or "").split(",") if x] or None,
-                                left_out=bool(getattr(a, "left_out", False)))
     if a.sub in ("curve", "executions"):               # the views (pipe_view): they read a store, run nothing
         from . import pipe_view
         return getattr(pipe_view, a.sub)(a.name, a.root)
     return pipe_runner.command(a.sub, getattr(a, "name", None), a.root, card=card, inbox=getattr(a, "inbox", False), why=getattr(a, "why", None),
-                               once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False), account=getattr(a, "account", None))
+                               once=getattr(a, "once", False), cell=getattr(a, "cell", None), clear=getattr(a, "clear", False))
 
 
 def _taught(a) -> dict:

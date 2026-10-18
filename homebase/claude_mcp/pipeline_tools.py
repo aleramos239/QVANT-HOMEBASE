@@ -283,7 +283,7 @@ SPECS = [
                                                     "with the idea). Not read for approve."}},
           ["name", "decision"]),
     _spec("pipeline_book", "Pipeline, the book: the strategies that passed every stage and that the owner approved, "
-          "one row each -- its name, its label (stands alone, or helper), its entry rule, market, session and bar "
+          "one row each -- its name, its tag (live, or live+prop; an older card: its label, stands alone or helper), its entry rule, market, session and bar "
           "size. Runs nothing."),
     _spec("pipeline_refine", "Pipeline, the REFINER: a near miss's next version, ONE change at a time (use it instead of adding new cards "
           "until something lands). Without move: what the idea missed, its round (of 5), how many variants the family has tried and the moves "
@@ -393,50 +393,16 @@ class PipelineMixin:
     def pipeline_state(self) -> dict:
         """Not a tool: the Lab's Queue, Book and Guide in one answer (`pipe list` and `pipe book`, two commands)."""
         got, book = self._pipe("list", timeout=self._pipe_look_s), self._pipe("book", timeout=self._pipe_look_s)
-        profile = got.get("pipeline") if isinstance(got.get("pipeline"), dict) else None   # LIVE / WR and the WR numbers; an older toolkit has none
+        profile = got.get("pipeline") if isinstance(got.get("pipeline"), dict) else None   # the switch (off | live); an older toolkit has none
         return {"profile": profile, "runner": {"running": bool(got.get("running")), "paused": bool(got.get("paused"))},
                 "counts": counts(got.get("ideas")), "ideas": [_plain_row(s) for s in rows(got.get("ideas"))],
                 "book": [_plain_book(c) for c in book.get("book") or []], "stages": STAGES}
 
-    def pipeline_set_profile(self, profile) -> str:
-        """Not a tool: choose the pipeline in use (`pipe profile live|wr`) -> one plain sentence."""
-        if profile not in ("live", "wr"):
-            raise ToolError("profile: live or wr")
-        return plain(self._pipe("profile", profile).get("text"))
-
     def pipeline_set_mode(self, mode) -> str:
-        """Not a tool: the switch -- the ONE pipeline that works, or none (`pipe mode off|live|wr|payout|funded`) -> one plain sentence."""
-        if mode not in ("off", "live", "wr", "payout", "funded"):
-            raise ToolError("mode: off, live, wr, payout or funded")
+        """Not a tool: the switch -- the pipeline works or it does not (`pipe mode off|live`) -> one plain sentence."""
+        if mode not in ("off", "live"):
+            raise ToolError("mode: off or live")
         return plain(self._pipe("mode", mode).get("text"))
-
-    def pipeline_payout(self) -> dict:
-        """Not a tool: the Lab's Payout page in one answer (`pipe payout show`). While the payout pipeline is disabled the toolkit hands
-        nothing over, and neither does this: {enabled False, payout None}."""
-        got = self._pipe("payout", "show", timeout=self._pipe_look_s)
-        return {"enabled": bool(got.get("enabled")), "payout": got.get("payout"), "scores": got.get("scores") or [], "notices": got.get("notices") or [],
-                "tonight": got.get("tonight"), "text": plain(got.get("text"))}
-
-    def pipeline_payout_do(self, action) -> str:
-        """Not a tool: the OWNER'S buttons of the Lab's Payout page -- enable | disable (the lock), build, tonight, requeue -> one plain
-        sentence. NO CHAT TOOL REACHES THIS (the owner, 2026-10-13: disabled, "it cant be used by me or claude until i renable it")."""
-        if action not in ("enable", "disable", "build", "tonight", "requeue"):
-            raise ToolError("action: enable, disable, build, tonight or requeue")
-        return plain(self._pipe("payout", action).get("text"))
-
-    def pipeline_set_settings(self, settings) -> str:
-        """Not a tool: change the WR PIPELINE's numbers (`pipe settings --set k=v ...`) -> one plain sentence."""
-        if not isinstance(settings, dict) or not settings:
-            raise ToolError("settings: an object of numbers")
-        sets = []
-        for k, v in settings.items():
-            if k == "risk_usd" and isinstance(v, list) and len(v) == 2:
-                sets.append(f"--set=risk_usd={v[0]}-{v[1]}")
-            elif isinstance(v, (int, float)) and not isinstance(v, bool) and isinstance(k, str) and k.replace("_", "").isalnum():
-                sets.append(f"--set={k}={v}")
-            else:
-                raise ToolError(f"{k}: a number")
-        return plain(self._pipe("settings", *sets).get("text"))
 
     def pipeline_idea(self, name) -> dict:
         """Not a tool: one idea for its page (`pipe show`): its card as it was added, its state with the page's label,
