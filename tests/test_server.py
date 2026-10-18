@@ -374,19 +374,6 @@ def test_accounts_remove_refused_while_placing_placed_or_live_today(client):
                        json={"account": "main"}).json()["ok"] is True
 
 
-def test_accounts_remove_from_mcp_refused_in_the_930_window(client):
-    import datetime as dt
-    from zoneinfo import ZoneInfo
-    engine = client.app.state.engine
-    engine.now_et = lambda: dt.datetime(2026, 9, 23, 9, 15, tzinfo=ZoneInfo("America/New_York"))  # Wed
-    r = client.post("/api/accounts/remove", json={"account": "main", "source": "mcp"})
-    assert r.status_code == 409 and "09:10-09:35" in r.json()["detail"]
-    assert "main" in client.app.state.cfg.accounts
-    # the same request from the dashboard (no source: mcp) is not window-gated
-    assert client.post("/api/accounts/remove",
-                       json={"account": "main"}).json()["ok"] is True
-
-
 def test_manual_reconnect_endpoint(client):
     r = client.post("/api/accounts/reconnect", json={"account": "main"}).json()
     assert r["ok"] is True and r["results"]["main"]["ok"] is True

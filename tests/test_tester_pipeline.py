@@ -314,21 +314,6 @@ def test_what_the_route_refuses(c, fake, proot):
     assert c.get("/api/tester/pipeline").status_code == 200 and c.get("/api/tester/pipeline", headers={"host": "evil.example"}).status_code == 403
 
 
-def test_nothing_that_can_start_heavy_work_is_started_from_the_page_in_the_930_window(c, fake, proot, monkeypatch):
-    seed(proot, "orb_one", "awaiting_owner")
-    seed(proot, "orb_two", "awaiting_owner")
-    monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: True)
-    for action, more in (("add", {"card": CARD}), ("start", {}), ("resume", {})):
-        r = run(c, action, **more)
-        assert r.status_code == 409 and "09:20" in r.json()["detail"] and "09:35" in r.json()["detail"], action
-    assert fake.calls() == [] and tester_api.PIPE_QUIET == ("add", "start", "resume")
-    assert run(c, "add", card="not a card").status_code == 400, "a bad shape is a bad shape at any hour"
-    assert run(c, "pause").json()["ok"] is True, "the owner can always pause"
-    assert run(c, "approve", name="orb_one").json()["ok"] is True and run(c, "refuse", name="orb_two", why="not now").json()["ok"] is True
-    assert c.get("/api/tester/pipeline").status_code == 200 and c.get("/api/tester/pipeline/idea/orb_one").status_code == 200      # looking is always allowed
-    assert asked(fake) == ["pause", "approve", "refuse", "list", "book", "show"]
-
-
 def test_the_page_runs_the_tools_and_nothing_else(c):
     """The route knows six actions and each is a tool of pipeline_tools: no stage can be skipped and no pass line
     changed from the page, and nothing of the desk is reachable from here."""

@@ -16,8 +16,7 @@ path untouched.  Per strategy, all times ET, weekdays only:
 Fail-safe by construction (same spirit as the 9:30 timer): no coverage, no ATR, no fresh print, a leg already
 through the price, a roll between the stage and the fire, an early-close day, a strategy killed today, a day that
 already acted -> NO fire, journaled with why.  A fire never repeats (once a day, restarts included: the journal
-is read).  After the accept window closes an unfired strategy is MISSED, journaled.  No market-data request is
-made 09:20-09:35 ET (the 9:30 window): the history is read before it.
+is read).  After the accept window closes an unfired strategy is MISSED, journaled.
 
 The price watcher: while a "levels" trade is open the quote stays subscribed and every tick the engine's
 check_takes(prices) is run -- the day_take backstop to the broker-side take limit.
@@ -40,7 +39,6 @@ from .levels import SHAPES, compute_geometry, is_early_close_skip
 from .timer import _orders_in, _positions_in
 
 ET = ZoneInfo("America/New_York")
-QUIET = (dt.time(0, 0), dt.time(0, 0))     # EMPTY since 2026-10-16 (was 09:20-09:35: no market-data request)
 TICK_S = 0.2
 STAGE_LEAD_EXTRA_MIN = 5       # the quote is subscribed this long before the last bar the ATR needs begins
 HISTORY_AFTER_S = 180          # history is read this long after the subscription (it closes the partial minute)
@@ -53,10 +51,6 @@ PRE_FIRE_MAX_AGE_S = 5.0       # the newest print must be this fresh at an on-ti
 CURRENT_MAX_AGE_S = 1.5        # ... and at a late one
 PRICE_MAX_AGE_S = 5.0          # a take-watcher price older than this is unknown (no decision)
 STAMP_SKEW_S = 5.0             # a push's own stamp is used for its minute only within this of its receive time
-
-
-def in_quiet(now: dt.datetime) -> bool:
-    return now.weekday() < 5 and QUIET[0] <= now.time() < QUIET[1]
 
 
 def _t(s: str) -> dt.time:
@@ -83,7 +77,7 @@ class LevelTimer:
         self._by_contract: dict[str, TickBars] = {}
         self._hist: dict[str, dict] = {}             # symbol -> {"ok", "at" (retry clock), "error"}
         self._md_retry_at = float("-inf")
-        self._drop: list[str] = []                   # yesterday's quote subscriptions, released outside the quiet window
+        self._drop: list[str] = []                   # yesterday's quote subscriptions, released once the socket is up
         self._err_at: dict[str, float] = {}
         self.days: dict = {}
         self._decided_day: tuple = (None, {})
@@ -160,8 +154,7 @@ class LevelTimer:
         return md
 
     async def _keep_md(self, now: dt.datetime) -> bool:
-        """The socket is up (rebuilt now if it is not; at most every MD_RETRY_S, never by the password login in
-        the quiet window).  A failure is journaled and tried again -- it never ends the day by itself."""
+        """The socket is up (rebuilt now if it is not; at most every MD_RETRY_S).  A failure is journaled and tried again -- it never ends the day by itself."""
         if self._md is not None and self._md.connected:
             return True
         t = self._now().timestamp()
@@ -240,7 +233,7 @@ class LevelTimer:
                     self._journal("level_watch_resubscribed", symbol=sym)
 
     async def _release_old(self, now: dt.datetime) -> None:
-        if self._drop and self._md is not None and self._md.connected and not in_quiet(now):
+        if self._drop and self._md is not None and self._md.connected:
             for sub in self._drop:
                 try:
                     await self._md.unsubscribe_quote(sub)
@@ -295,7 +288,7 @@ class LevelTimer:
 
     async def _history(self, symbol: str, now: dt.datetime, stage_at: dt.datetime) -> None:
         h = self._hist.setdefault(symbol, {"ok": False, "at": 0.0})
-        if in_quiet(now) or now < stage_at + dt.timedelta(seconds=HISTORY_AFTER_S):
+        if now < stage_at + dt.timedelta(seconds=HISTORY_AFTER_S):
             return
         bars = self._bars.get(symbol)
         if h["ok"] and bars is not None and bars.coverage(int(self._now().timestamp() * 1000))[0]:
@@ -448,7 +441,7 @@ class LevelTimer:
     async def _audit(self, name, s, st, now, fire_at) -> None:
         """ATR parity, once, after the fire: the exact 1-minute bars vs the ATR the fire used (built from
         prints plus the history read before the open).  Journal only; never a decision."""
-        if (now - fire_at).total_seconds() < AUDIT_AFTER_S or in_quiet(now):
+        if (now - fire_at).total_seconds() < AUDIT_AFTER_S:
             return
         st["audited"] = True
         bars = self._bars.get(s.symbol)
@@ -491,7 +484,7 @@ class LevelTimer:
                 continue
             if px is not None and self._now().timestamp() - seen <= PRICE_MAX_AGE_S:
                 prices[symbol] = px
-            if not self._needed(symbol) and not in_quiet(now):
+            if not self._needed(symbol):
                 sub = self._subs.pop(symbol, None)
                 self._by_contract.pop(contract, None)
                 if sub is not None:

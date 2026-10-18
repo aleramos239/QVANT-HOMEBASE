@@ -30,8 +30,9 @@ treat the line as a requirement, not a suggestion.
   it moved to its own process.
 - **No new market-data requests.** The broker allows 180 chart requests per hour per login and a
   burst penalises every request for an hour. Reuse what is already streaming.
-- **The 09:20–09:35 ET window is sacred** — the desk's 9:30 bot shares this machine. Nothing new
-  starts in it: no backtest, no heavy decode, no market-data re-login.
+- **No 9:30 pause since 2026-10-16** (the owner's word; its code went on 2026-10-17). The fire's own guards stay:
+  the 09:28–09:31 broker-socket guard (`broker/tradovate.py` `renewal_due`) and the 09:29:50–09:30:30 view pause.
+  The tester's only quiet windows are the override file's (`~/.homebase/tester_slots.json`).
 
 ## Money paths
 
@@ -41,11 +42,11 @@ treat the line as a requirement, not a suggestion.
   quantity, accounts. Never recompute at send.
 - **A kill or flatten acts on its own position only**, capped at its own filled quantity, and never
   removes protection from a position it cannot fully attribute.
-- **No planned broker socket drop 09:19:30–09:35 ET on weekdays.** A token renewal drops
+- **No planned broker socket drop inside the 09:28–09:31 ET fire guard on weekdays.** A token renewal drops
   the socket, so 09:10–09:19:30 (clear of the 09:20 market-data connect) it renews early
-  any token expiring before 10:10: nothing then comes due before 10:00. Inside the window
+  any token expiring before 10:10: nothing then comes due before 10:00. Inside the guard
   only a socket that would die there anyway is dropped — never one that lives through
-  09:28–09:31, never 09:30:00–09:30:30 while the fire's orders may be in flight
+  09:31, never 09:30:00–09:30:30 while the fire's orders may be in flight
   (`broker/tradovate.py` `renewal_due`, judged on the token the socket rides, not the
   latest one). Anything new that closes or rebuilds a broker socket keeps out of that
   window too. A rebuild still in flight at 09:30:00 makes the fire refuse that account

@@ -294,18 +294,6 @@ def test_grid_requests_the_rules_refuse(tmp_path):
         assert c.get("/api/tester/grids").json() == []
 
 
-def test_a_single_run_request_in_the_quiet_window_is_refused_with_the_pause_text(tmp_path, monkeypatch):
-    from homebase.backtest import slots
-    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
-    with client(tmp_path) as c:
-        r = c.post("/api/tester/run", json=RUN)
-        assert r.status_code == 400 and "paused for the 9:30 window" in r.json()["detail"]
-        gid = c.post("/api/tester/grid", json=GRID).json()["id"]      # a grid may queue; its cells wait
-        st = c.get(f"/api/tester/grid/{gid}").json()
-        assert st["paused"] == "paused for the 9:30 window" and st["status"] == "queued"
-        c.post(f"/api/tester/grid/{gid}/cancel")
-
-
 def test_a_corrupt_looks_counter_is_a_409_on_looks_and_a_400_on_a_new_grid(tmp_path, tester_shared):
     (tester_shared / "looks.json").write_text("{torn")
     with client(tmp_path) as c:
@@ -373,11 +361,11 @@ def test_walkforward_requests_the_rules_refuse(tmp_path):
 
 def test_a_queued_walkforward_can_be_cancelled_and_has_no_result(tmp_path, monkeypatch):
     from homebase.backtest import slots
-    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
+    monkeypatch.setattr(slots.Slots, "try_acquire", lambda self: None)        # every slot busy: the job queues and waits
     with client(tmp_path) as c:
         wid = c.post("/api/tester/walkforward", json=WF).json()["id"]
         st = c.get(f"/api/tester/walkforward/{wid}").json()
-        assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and st["eta_s"] is None
+        assert st["status"] == "queued" and st.get("paused") is None and st["eta_s"] is None
         assert c.post(f"/api/tester/walkforward/{wid}/cancel", headers=EVIL).status_code == 403
         assert c.post(f"/api/tester/walkforward/{wid}/cancel").json()["status"] == "cancelled"
         assert c.get(f"/api/tester/walkforward/{wid}/result").status_code == 409

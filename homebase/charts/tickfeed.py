@@ -9,7 +9,7 @@ to 5 min, so a flapping socket can neither burn the hour nor trip the auth
 captcha. Each (re)connect reads the freshest md token the desk has on disk.
 
 A symbol the feed refuses is isolated: the other roots stay subscribed, it
-is asked again every 10 min (never 09:20-09:35 ET) and on every reconnect.
+is asked again every 10 min and on every reconnect.
 A fresh socket that refuses EVERY root is replaced, but no faster than that
 10-min retry: a login that refuses everything must not spend 11 getCharts
 per 5 s-5 min backoff step (~187 in the first hour, over the 180 budget).
@@ -28,7 +28,7 @@ plus one more hook that acts only weekdays 09:10-09:19:30 ET:
 
 Early rebuild (RECYCLE, 2026-09-28): the desk renews its tokens early then, so
 a socket still on the OLD md token would die at that token's expiry, maybe
-inside 09:20-09:35 while the user trades the open from these charts. In that
+at the open while the user trades it from these charts. In that
 window, at most once a day, a socket riding an md token other than the
 freshest one on disk for its login is rebuilt on it through `_switch` on the
 same login: make-before-break (the old socket serves until the new one is
@@ -48,7 +48,7 @@ from typing import Awaitable, Callable, Optional
 
 from .. import symbols
 from .. import ticks as T
-from . import MD_ENV, QUIET
+from . import MD_ENV
 from .session import ET, session_date
 
 MD_ENVS = ("live", "demo")
@@ -57,7 +57,7 @@ HEALTHY_S = 600          # a connection that lived this long resets the backoff
 RETRY_REFUSED_S = 600    # a root the feed refused is asked again after this, then 2x, 4x ... (and on every reconnect)
 RETRY_REFUSED_MAX = 4 * 3600   # ... but at least every 4 h: a refused root must not eat the NQ/ES refill budget
 # The desk renews its tokens early, weekdays 09:10-09:19:30 ET (broker/tradovate.py): a socket
-# still on the OLD md token dies at that token's expiry -- maybe inside 09:20-09:35, the open.
+# still on the OLD md token dies at that token's expiry -- maybe at the open.
 # In that same window the socket is rebuilt on the freshest md token on disk, make-before-break
 # (_switch): the old one serves until the new one is subscribed and installed.
 RECYCLE = (dt.time(9, 10), dt.time(9, 19, 30))   # weekdays ET, = the desk's early-renewal window
@@ -79,12 +79,6 @@ def session_contract(root: str, ts_s: float) -> str:
     if any(ch.isdigit() for ch in root) and root.upper() not in T.ROOTS:
         return symbols.resolve_contract(root)
     return symbols.front_month(root.upper(), session_date(int(ts_s * 1000), root))
-
-
-def in_quiet(ts_s: float) -> bool:
-    """Is epoch time ts_s inside the 09:20-09:35 ET window around the 9:30
-    fire, when this process sends no optional md requests?"""
-    return QUIET[0] <= dt.datetime.fromtimestamp(ts_s, ET).time() < QUIET[1]
 
 
 class SwitchInProgress(RuntimeError):
@@ -310,22 +304,6 @@ class TickFeed:
             self._retry_n.setdefault(r, 1)
         return [r for r in self.refused if now >= self._retry_at[r]]
 
-    def _quiet(self) -> bool:
-        """Inside the 09:20-09:35 ET window around the 9:30 fire."""
-        return in_quiet(self._now())
-
-    def _extend_past_quiet(self, wait: float) -> float:
-        """If reconnecting `wait` seconds from now would land inside the
-        quiet window, push the wait out to end exactly at QUIET[1] (09:35 ET)
-        instead: a refused-all reconnect costs one getChart per root, and
-        that must never fire inside the 9:30 desk's window."""
-        now = self._now()
-        when = dt.datetime.fromtimestamp(now + wait, ET)
-        if QUIET[0] <= when.time() < QUIET[1]:
-            end = when.replace(hour=QUIET[1].hour, minute=QUIET[1].minute, second=0, microsecond=0)
-            return end.timestamp() - now
-        return wait
-
     async def run(self) -> None:
         """main's connection loop, unchanged, plus the two switch hooks marked SWITCH.
         Whatever way this exits (stop, cancel, a crash), a pending switch is answered."""
@@ -382,12 +360,8 @@ class TickFeed:
                         except Exception:  # noqa: BLE001 — recorded in self.recycle
                             pass
                         continue
-                    due = self._refused_due() if self.refused else []
-                    if due and not self._quiet():
-                        for r in due:
-                            if self._quiet():   # a round can straddle 09:20; re-check every root, not once
-                                break
-                            await self._start(r)
+                    for r in (self._refused_due() if self.refused else []):
+                        await self._start(r)
                 if not self._stop:
                     self.error = "md socket closed"
             except Exception as e:  # noqa: BLE001 — any failure = reconnect with backoff
@@ -407,11 +381,6 @@ class TickFeed:
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
-                wait = self._extend_past_quiet(wait)
-            elif attempt >= 1:
-                # the first reconnect goes at once (the charts at the open); a reconnect that
-                # already failed waits out 09:20-09:35 rather than keep hitting md at the 9:30 fire
-                wait = self._extend_past_quiet(wait)
             await self._backoff(wait)
             attempt += 1
 
@@ -485,8 +454,6 @@ class TickFeed:
         old = self.ws if self.connected else None
         cand = None
         try:
-            if self._quiet():
-                raise RuntimeError("the 9:30 window is open — keeping the previous login")
             cand = await self._connect_env(env)
             got = getattr(cand, "environment", env)
             if got != env:
@@ -497,9 +464,6 @@ class TickFeed:
             refused: dict = {}
             ok: list = []
             for i, r in enumerate(self.roots):
-                if self._quiet():   # the 9:30 window opened mid-switch
-                    raise RuntimeError("the 9:30 window opened during the switch — "
-                                       "keeping the previous login")
                 if recycle and i:
                     await self._sleep(RECYCLE_PACE_S)
                 try:

@@ -10,10 +10,6 @@ data_watch.json) straight off disk, same as this package's own draftstore reads/
 request goes out for it. `desk_readiness` adds the watchdog's one line to the desk's own checks.
 
 OPERATE tools (account_reconnect, account_remove, export_start, export_status) all:
-  * refuse inside the 09:10-09:35 ET weekday window -- cheaply, before any request (2026-09-29
-    review: widened from 09:20, to match the desk's own server-side MCP refusal window on
-    account_remove -- GONE_CHECK_QUIET in server.py -- rather than the tester tools' narrower
-    "not 09:20-09:35 ET", which stays as it was: no live account is at risk there);
   * go through a client that sends the Origin header the target's write-guard wants (netguard on
     the desk, the same origin check on the charts service);
   * pass `source: "mcp"` on desk writes, so the desk's own journal (already written by these two
@@ -42,7 +38,6 @@ from .client import Client, ToolError
 from .desk_client import DeskClient
 
 ET = ZoneInfo("America/New_York")
-QUIET = (dt.time(0, 0), dt.time(0, 0))          # EMPTY since 2026-10-16 (was 09:10-09:35: no OPERATE tool starts)
 EXPORT_PREFIX = "/api/export/"
 LAUNCHD_LABELS = {"desk": "com.ramosquant.homebase", "charts": "com.ramosquant.homebase-charts",
                   "ticks": "com.ramosquant.homebase-ticks"}
@@ -61,15 +56,6 @@ def _q(s: str) -> str:
     """Same one-liner tools.py's own _q uses for a path segment -- duplicated, not imported: tools.py
     imports DeskMixin from this module, so the reverse import would be circular."""
     return urllib.parse.quote(str(s), safe="")
-
-
-def _in_quiet(now: dt.datetime) -> bool:
-    return now.weekday() < 5 and QUIET[0] <= now.time() < QUIET[1]
-
-
-def _refuse_if_quiet(now: dt.datetime) -> None:
-    if _in_quiet(now):
-        raise ToolError("refused: not 09:10-09:35 ET on weekdays (the 9:30 window) -- try again after 09:35")
 
 
 def _usd(v):
@@ -230,7 +216,7 @@ SPECS = [
           "reconciles positions, exactly like the dashboard's Reconnect button. Named account: only "
           "that one, and only if it's disconnected. No account named: every disconnected account "
           "(never a healthy one). Pass force=true to reconnect a specific account (or, with none "
-          "named, every account) even if it's already connected. Refused 09:10-09:35 ET on weekdays.",
+          "named, every account) even if it's already connected.",
           {"account": {"type": "string", "description": "An account id (default: every "
                       "disconnected account)."},
            "force": {"type": "boolean", "description": "Reconnect even an already-connected "
@@ -238,12 +224,10 @@ SPECS = [
     _spec("account_remove", "Remove one account from the pool: unassigns it from every strategy, "
           "closes its connection, drops it. Refused (409) unless the account is connected with its "
           "caches seeded, its cached view shows no position in any symbol and no working order, and "
-          "it is not placing, placed or live in any strategy today -- and refused 09:10-09:35 ET on "
-          "weekdays (both here and, again, on the desk itself).",
+          "it is not placing, placed or live in any strategy today.",
           {"account": {"type": "string"}}, ["account"]),
     _spec("export_start", "Start a data export job on the charts service (candles, ticks, level 1 "
-          "quotes or level 2 depth, to a CSV file); refused 09:10-09:35 ET on weekdays and while "
-          "another export runs.",
+          "quotes or level 2 depth, to a CSV file); refused while another export runs.",
           {"root": {"type": "string", "description": "e.g. NQ."},
            "type": {"type": "string", "enum": ["candles", "ticks", "level1", "level2"]},
            "start": {"type": "string", "description": "YYYY-MM-DD"},
@@ -258,7 +242,7 @@ SPECS = [
                       "description": "level2 only, default 10."}},
           ["root", "type", "start", "end"]),
     _spec("export_status", "An export job's status (queued/running/done/error/cancelled, "
-          "progress, and its file once done). Refused 09:10-09:35 ET on weekdays.",
+          "progress, and its file once done).",
           {"id": {"type": "string", "description": "A job id from export_start."}}, ["id"]),
 ]
 
@@ -449,7 +433,6 @@ class DeskMixin:
         was already fine). Named + already connected + no force: refused outright, before any
         write. No account named: every disconnected account (or, with force, every account) --
         the desk's own endpoint takes one account at a time, so this loops."""
-        _refuse_if_quiet(self._now_et())
         force = bool(force)
         accounts = (self.desk.get("/api/status") or {}).get("accounts") or {}
         if account:
@@ -476,7 +459,6 @@ class DeskMixin:
                 + _table(["account", "result", "detail"], rows))
 
     def t_account_remove(self, account: str) -> str:
-        _refuse_if_quiet(self._now_et())
         r = self.desk.post("/api/accounts/remove", {"account": account, "source": "mcp"})
         return f"Removed {r.get('removed', account)}." if r.get("ok") else f"Could not remove {account}."
 
@@ -494,7 +476,6 @@ class DeskMixin:
     def t_export_start(self, root: str, type: str, start: str, end: str, contract=None,  # noqa: A002
                        timeframe=None, hours=None, tz=None, ts_format=None, format=None,  # noqa: A002
                        levels=None) -> str:
-        _refuse_if_quiet(self._now_et())
         body = {"root": root, "type": type, "start": start, "end": end}
         for k, v in (("contract", contract), ("timeframe", timeframe), ("hours", hours), ("tz", tz),
                     ("ts_format", ts_format), ("format", format), ("levels", levels)):
@@ -505,7 +486,6 @@ class DeskMixin:
         return f"Export {jid} started ({root} {type} {start}..{end}).\nNext: export_status(id={jid!r})"
 
     def t_export_status(self, id: str) -> str:  # noqa: A002
-        _refuse_if_quiet(self._now_et())
         r = self._export_call("GET", f"/api/export/{_q(id)}")
         lines = [f"Export {id}: {r.get('status')}" + (f" ({r.get('phase')})" if r.get("phase") else "")]
         if r.get("sessions_total"):

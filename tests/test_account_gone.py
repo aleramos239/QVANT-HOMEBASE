@@ -229,26 +229,22 @@ def test_a_changed_login_never_unbooks_or_removes(desk, monkeypatch, err):
     assert "apex049" in desk.app.state.parked                   # parked, nothing else
 
 
-def test_nothing_is_rechecked_0910_0935_nor_removed_0920_0935(desk, monkeypatch):
+def test_the_recheck_and_the_removal_run_through_the_open_too(desk, monkeypatch):
+    """No 09:10-09:35 hold since 2026-10-16: the confirming re-sync comes GONE_CONFIRM_S after the sighting, whatever the clock."""
     desk.clock.et = dt.datetime(2026, 9, 29, 9, 5, tzinfo=ET)
     calls = _fails_with(desk.adapters["apex049"], _gone_err())
     _loop(desk, monkeypatch, passes=2, step=5)                   # first sighting 09:05
     _loop(desk, monkeypatch, passes=340, step=5)                 # to ~09:33
-    assert calls["n"] == 1                                       # no re-check 09:10-09:35
-    assert "apex049" in desk.cfg.accounts
-    _loop(desk, monkeypatch, passes=40, step=5)                  # past 09:35
     assert calls["n"] == 2 and "apex049" not in desk.cfg.accounts
 
 
-def test_a_confirmed_removal_waits_out_0920_0935(desk, monkeypatch):
+def test_a_confirmed_removal_at_0922_is_not_held(desk, monkeypatch):
     _fails_with(desk.adapters["apex049"], _gone_err())
     _loop(desk, monkeypatch, passes=2, step=5)
     desk.clock.advance(GONE_CONFIRM_S)
     desk.clock.et = dt.datetime(2026, 9, 29, 9, 22, tzinfo=ET)
     desk.post("/api/accounts/reconnect", json={"account": "apex049"})   # confirms
     _loop(desk, monkeypatch, passes=100, step=5)                 # to ~09:30
-    assert "apex049" in desk.cfg.accounts and _booked(desk, "apex049") == ["nq930", "gc830"]
-    _loop(desk, monkeypatch, passes=80, step=5)                  # past 09:35
     assert "apex049" not in desk.cfg.accounts
 
 

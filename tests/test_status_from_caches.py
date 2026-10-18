@@ -71,7 +71,7 @@ def test_one_refresh_per_user_covers_the_siblings_and_a_push_in_flight_wins(tmp_
     assert mb["balance"] == 48000.0 and mb["open_positions"] == []   # the push won
 
 
-def test_the_refresh_is_one_per_user_and_skipped_in_a_cooldown_and_at_the_fire(desk):
+def test_the_refresh_is_one_per_user_and_skipped_in_a_cooldown(desk):
     calls = []
     for aid, ad in desk.adapters.items():
         async def refresh(siblings=(), aid=aid):
@@ -81,9 +81,6 @@ def test_the_refresh_is_one_per_user_and_skipped_in_a_cooldown_and_at_the_fire(d
     desk.app.state.engine.now_et = lambda: et["now"]
     run(desk.app.state.refresh_snapshots())
     assert calls == [("dead", ["live"])]                        # both entries, one read
-    et["now"] = et["now"].replace(hour=9, minute=29)
-    run(desk.app.state.refresh_snapshots())
-    assert len(calls) == 1                                      # never around the fire
     et["now"] = et["now"].replace(hour=10)
     desk.app.state.login_budget.note_error(KEY, S429)
     run(desk.app.state.refresh_snapshots())

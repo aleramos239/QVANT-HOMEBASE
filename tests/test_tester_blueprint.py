@@ -95,7 +95,7 @@ def test_what_the_route_refuses(c, monkeypatch):
     assert c.post("/api/tester/blueprint/run", content=json.dumps({"tool": "blueprint_blocks"}), headers={"content-type": "text/plain"}).status_code in (415, 422)
     monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: True)
     r = run(c, "blueprint_blocks")
-    assert r.status_code == 409 and "09:20" in r.json()["detail"]
+    assert r.status_code == 409 and "quiet window" in r.json()["detail"]
     assert c.get("/api/tester/blueprint").status_code == 200                      # looking is always allowed
 
 

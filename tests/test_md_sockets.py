@@ -213,26 +213,6 @@ def test_no_recycle_from_091930(tmp_path, monkeypatch):
                                                           # and then waits for 09:35 (below)
 
 
-def test_a_non_urgent_feed_reconnect_waits_for_0935(tmp_path, monkeypatch):
-    app, log, current, made = feed_app(tmp_path, monkeypatch, {"nq10am": bars_strategy()})
-    step = app.state.feed_step
-    run(step(mon(9, 0)))
-    made[0].closed = True                                 # it died (its token expired)
-    for t in (mon(9, 20), mon(9, 27), mon(9, 30), mon(9, 34, 59)):
-        assert run(step(t)) == []
-    assert len(made) == 1                                 # no md request 09:20-09:35
-    run(step(mon(9, 35)))
-    assert len(made) == 2 and made[1].connected and made[1].watched == [("NQ", 1)]
-
-
-def test_a_feed_started_inside_the_window_waits_too(tmp_path, monkeypatch):
-    app, log, current, made = feed_app(tmp_path, monkeypatch, {"nq10am": bars_strategy()})
-    run(app.state.feed_step(mon(9, 22)))                  # e.g. a desk restart at 09:22
-    assert made == []
-    run(app.state.feed_step(mon(9, 19, 59)))              # before 09:20 it connects at once
-    assert len(made) == 1
-
-
 def test_a_strategy_that_needs_bars_inside_the_window_is_never_deferred(tmp_path, monkeypatch):
     app, log, current, made = feed_app(tmp_path, monkeypatch,
                                        {"early": bars_strategy(start="09:25", until="09:40")})
@@ -240,51 +220,3 @@ def test_a_strategy_that_needs_bars_inside_the_window_is_never_deferred(tmp_path
     assert len(made) == 1 and made[0].connected
 
 
-def test_a_strategy_opening_at_0935_exactly_is_not_deferred_past_its_first_bar(tmp_path,
-                                                                              monkeypatch):
-    app, log, current, made = feed_app(tmp_path, monkeypatch,
-                                       {"at935": bars_strategy(start="09:35", until="09:50")})
-    run(app.state.feed_step(mon(9, 22)))
-    assert len(made) == 1 and made[0].connected
-    (tmp_path / "b").mkdir()
-    app2, _, _, made2 = feed_app(tmp_path / "b", monkeypatch,
-                                 {"at936": bars_strategy(start="09:36", until="09:50")})
-    run(app2.state.feed_step(mon(9, 22)))
-    assert made2 == []                                    # 09:36: the 09:35 reconnect is in time
-
-
-def test_a_new_bars_subscription_waits_for_0935_too(tmp_path, monkeypatch):
-    app, log, current, made = feed_app(tmp_path, monkeypatch, {"nq10am": bars_strategy()})
-    step = app.state.feed_step
-    run(step(mon(9, 0)))
-    app.state.cfg.strategies["es10am"] = bars_strategy(symbol="ES")   # enabled mid-morning
-    run(step(mon(9, 25)))
-    assert made[0].watched == [("NQ", 1)]
-    run(step(mon(9, 35)))
-    assert made[0].watched == [("NQ", 1), ("ES", 1)]
-
-
-def test_readiness_says_a_deferred_feed_is_waiting_not_broken():
-    from zoneinfo import ZoneInfo
-    from homebase.engine import Engine
-    from homebase.server import compute_readiness
-    cfg = AppCfg(armed=True,
-                 accounts={"main": AccountCfg(keyring_key="k", account_name="MAIN")},
-                 book={"nq10am": [{"account": "main", "qty": 1}]},
-                 strategies={"nq10am": bars_strategy()})
-
-    def feed_check(h, m, strategies=None):
-        now = dt.datetime(*MON, h, m, tzinfo=ZoneInfo("America/New_York"))
-        if strategies:
-            cfg.strategies = strategies
-        eng = Engine(cfg, {"main": FakeAdapter("main")},
-                     now_fn=lambda: now.astimezone(dt.timezone.utc),
-                     root=__import__("pathlib").Path("/tmp"))
-        r = compute_readiness(now, cfg, eng, {"main": {"connected": True}},
-                              {"connected": False, "watching": {}})
-        return next(c for c in r["checks"] if c["label"] == "Price feed")
-
-    got = feed_check(9, 25)
-    assert got["level"] == "warn" and "09:35" in got["detail"]
-    assert feed_check(9, 40)["level"] == "bad"
-    assert feed_check(9, 25, {"early": bars_strategy(start="09:25", until="09:40")})["level"] == "bad"

@@ -8,13 +8,9 @@ Spec: docs/superpowers/specs/2026-09-25-live-charts-design.md
 """
 from __future__ import annotations
 
-import datetime as dt
 import os
 
 PORT = 8852
-# ET wall-clock window around the 9:30 fire in which this process sends no
-# optional md requests (gap refills, refused-symbol retries)
-QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (owner: no limit at 9:30); was 09:20-09:35 ET
 # the live recorder captures the nightly tick archive's symbols
 # (homebase.ticks.ROOTS, the archive's six roots): the nightly job
 # merges this recording into the archive (it holds the first hours of every

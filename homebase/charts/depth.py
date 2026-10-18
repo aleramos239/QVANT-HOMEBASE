@@ -14,10 +14,7 @@ any page has a chart on; a root nobody watches any more is unsubscribed
 LINGER_S after its last viewer left, unless it is recorded. A refused
 subscription (an error, an errorText, a p-ticket penalty, or a reply with no
 subscriptionId) is that root's status error and is asked again every
-RETRY_S, never before a penalty's p-time, and on every reconnect. Inside the
-09:20-09:35 ET quiet window (tickfeed.in_quiet) no retry and no new-demand
-subscription is sent; they wait for 09:35. A recorded root's first ask and a
-re-subscribe after a reconnect still go.
+RETRY_S, never before a penalty's p-time, and on every reconnect.
 
 Tradovate sends a FULL snapshot per DOM event, so each event replaces the
 book. The event carries only a contractId: the subscribeDOM reply's
@@ -61,7 +58,6 @@ from . import parse_depth_roots as parse_roots  # noqa: F401 — re-exported
 from .desk import Fanout
 from .session import session_date
 from .store import ARCHIVE as TICK_ARCHIVE
-from .tickfeed import in_quiet
 
 DEPTH_ARCHIVE = Path.home() / "futures_depth"
 SUFFIX = ".depth.jsonl.gz"
@@ -338,8 +334,7 @@ class Depth:
         self._cid: dict[int, str] = {}              # contractId (the reply's subscriptionId) -> root
         self.modes: dict[str, str] = {}             # root -> the subscribe reply's `mode` when it is not "RealTime"
         self._inflight: set[str] = set()
-        self._resub: set[str] = set()               # subscribed on a socket since lost: re-asked even
-                                                    # inside the 09:20-09:35 quiet window
+        self._resub: set[str] = set()               # subscribed on a socket since lost: re-asked first
         self.errors: dict[str, str] = {}            # root -> why its subscription was refused
         self._retry_at: dict[str, float] = {}
         self._viewers: dict[Hashable, str] = {}     # (conn, chart id) -> root
@@ -577,13 +572,8 @@ class Depth:
             return
         want = list(dict.fromkeys([*self.record, *sorted(self._count)]))
         self._resub &= set(want)
-        # 09:20-09:35 ET: no retries and no new demand (they wait for 09:35); a recorded
-        # root's first ask and a re-subscribe after a reconnect still go
-        quiet = in_quiet(self._wall_ms() / 1000)
         for root in want:
             if root in self.subscribed or root in self._inflight or now < self._retry_at.get(root, -math.inf):
-                continue
-            if quiet and (root in self.errors or (root not in self.record and root not in self._resub)):
                 continue
             self._inflight.add(root)
             self._spawn(self._subscribe(ws, root))

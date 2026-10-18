@@ -173,14 +173,14 @@ def tester_day(record: dict, date, *, base: Path, archive, cache, python: str, t
     (stored), a gap, a missing print at a fire time), no slot came free in `slot_wait_s`, the sandbox is not working,
     the run takes longer than `timeout_s` (it is stopped) or fails; StrategyFailed when the strategy raised that day;
     DoesNotTrade when it does not trade that day. It WAITS in line for its slot (the caller is a worker thread), and
-    the line never lets a backtest start 09:20-09:35 ET on a weekday. launch: runner.launch (the tests', a stand-in)."""
+    the line never lets a backtest start in a quiet window of the override file. launch: runner.launch (the tests', a stand-in)."""
     d = date if isinstance(date, dt.date) else dt.date.fromisoformat(date)
     name, launch = record["name"], launch or runner.launch
     if not stored(record["root"], d, archive, cache):    # before a slot is asked for: nothing to run yet
         raise MatchUnavailable("the day's prices are not stored yet")
     end = time.monotonic() + slot_wait_s
     slot = (slots or Slots()).acquire(lambda: time.monotonic() >= end)
-    if slot is None:                                 # none came free in time (or the 09:20-09:35 window outlasted it)
+    if slot is None:                                 # none came free in time (or a quiet window outlasted it)
         raise MatchUnavailable("the tester is busy")
     run_dir = proc = None
     try:

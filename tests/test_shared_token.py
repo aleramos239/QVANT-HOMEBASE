@@ -80,12 +80,10 @@ def test_one_renewal_per_user_and_every_sibling_socket_rebuilt(tmp_path):
     assert a._ws.closed == 1 and b._ws.closed == 1
 
 
-def test_the_fire_window_rule_is_unchanged_for_shared_tokens(tmp_path):
-    a, b, auth, clock = _pair(tmp_path, at(9, 27), at(9, 36, 30))  # would die after 9:35
+def test_the_fire_guard_rule_is_unchanged_for_shared_tokens(tmp_path):
+    a, b, auth, clock = _pair(tmp_path, at(9, 29, 30), at(9, 36, 30))  # inside the fire guard, lives past 09:31
     assert run(_both(a, b)) == [False, False]
     assert auth.renews == 0 and a._ws.closed == 0 and b._ws.closed == 0
-    clock["now"] = at(9, 29, 30)                                    # inside the fire guard
-    assert run(_both(a, b)) == [False, False] and auth.renews == 0
 
 
 def test_the_early_renewal_before_0920_is_one_per_user(tmp_path):

@@ -807,14 +807,6 @@ def test_a_compare_job_keeps_to_the_two_slot_cap_and_the_930_pause(tmp_path, fak
     assert len(spawned) == 2                                   # the machine-wide cap: two at once, one queued
     assert sorted(c["status"] for c in m.status(wid)["cells"]) == ["queued", "running", "running"]
     m.cancel(wid)
-    # inside 09:20-09:35 ET nothing starts: the job queues and says so
-    monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
-    before = len(spawned)
-    wid2 = m.submit(wbody(compare=True))
-    time.sleep(0.3)
-    st = m.status(wid2)
-    assert st["status"] == "queued" and st["paused"] == "paused for the 9:30 window" and len(spawned) == before
-    m.cancel(wid2)
     release.set()
 
 

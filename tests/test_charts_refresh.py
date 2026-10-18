@@ -126,13 +126,6 @@ def test_only_one_refresh_at_a_time(tmp_path):
     wait_final(m)
 
 
-def test_never_in_the_930_window(tmp_path):
-    m, calls = manager(tmp_path, clock=WED_0930)
-    with pytest.raises(ValueError, match="09:35"):
-        m.start()
-    assert calls == [] and m.status() == {"status": "idle"}
-
-
 def test_cancel_ends_the_running_job(tmp_path):
     hold = threading.Event()
     m, calls = manager(tmp_path, holds=[hold])

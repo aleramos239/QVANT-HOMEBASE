@@ -1,5 +1,5 @@
-"""The global backtest cap (2 processes, single runs + grid cells together) and the QUIET window
-(no backtest STARTS 09:20-09:35 ET on weekdays: the live desk shares the machine)."""
+"""The global backtest cap (2 processes in desk hours, 4 outside; single runs + grid cells together) and
+the override file's quiet windows (no backtest STARTS inside one)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -13,7 +13,7 @@ import pytest
 from homebase.backtest import grid, slots
 from homebase.backtest.grid import GridManager
 from homebase.backtest.runner import RunManager, read_json, write_json
-from homebase.backtest.slots import QUIET_MSG, Slots, in_quiet
+from homebase.backtest.slots import Slots, in_quiet
 
 ET = ZoneInfo("America/New_York")
 MON = dt.date(2026, 9, 28)          # a Monday
@@ -31,21 +31,11 @@ class Clock:
         return self.t
 
 
-def test_the_quiet_window_is_0920_to_0935_et_on_weekdays():
-    assert not in_quiet(et(MON, "09:19:59"))
-    assert in_quiet(et(MON, "09:20:00"))
-    assert in_quiet(et(MON, "09:34:59"))
-    assert not in_quiet(et(MON, "09:35:00"))
-    assert in_quiet(et(MON + dt.timedelta(days=4), "09:25:00"))           # Friday
-    assert not in_quiet(et(MON + dt.timedelta(days=5), "09:25:00"))       # Saturday
-    assert not in_quiet(et(MON - dt.timedelta(days=1), "09:25:00"))       # Sunday
-    # an aware clock in another zone is converted to ET first: 13:25 UTC in September = 09:25 ET
-    assert in_quiet(dt.datetime(2026, 9, 28, 13, 25, tzinfo=dt.timezone.utc))
-    # winter (EST, UTC-5): 14:25 UTC on Mon 2026-01-05 is 09:25 ET; 13:25 UTC is 08:25 ET
-    assert in_quiet(dt.datetime(2026, 1, 5, 14, 25, tzinfo=dt.timezone.utc))
-    assert not in_quiet(dt.datetime(2026, 1, 5, 13, 25, tzinfo=dt.timezone.utc))
-    assert not in_quiet(dt.datetime(2026, 1, 5, 14, 35, tzinfo=dt.timezone.utc))
-    assert QUIET_MSG == "paused for the 9:30 window"
+def test_there_is_no_fixed_quiet_window(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOMEBASE_TESTER_SLOTS_FILE", str(tmp_path / "none.json"))   # no override file
+    for hms in ("09:19:59", "09:20:00", "09:25:00", "09:34:59", "09:35:00"):
+        assert not in_quiet(et(MON, hms))
+    assert not in_quiet(dt.datetime(2026, 9, 28, 13, 25, tzinfo=dt.timezone.utc))   # 09:25 ET in September
 
 
 def test_the_shared_dir_is_per_machine_and_env_overridable(tmp_path, monkeypatch, tester_shared):
@@ -70,7 +60,8 @@ def test_two_slots_shared_by_every_holder_of_the_same_dir(tmp_path):
     s2.close(); s3.close()
 
 
-def test_no_slot_starts_inside_the_quiet_window(tmp_path):
+def test_no_slot_starts_inside_an_override_quiet_window(tmp_path, monkeypatch):
+    _ov(tmp_path, monkeypatch, {"quiet": [{"from": "2026-09-28T09:20", "to": "2026-09-28T09:35"}]})
     clock = Clock(et(MON, "09:25:00"))
     s = Slots(tmp_path / "slots", clock=clock, poll=0.01)
     assert s.quiet() and s.try_acquire() is None
@@ -155,24 +146,20 @@ def test_a_slot_passed_to_a_child_is_held_as_long_as_the_child_lives(tmp_path):
     got.close()
 
 
-def test_runner_exec_takes_its_own_slot_and_the_quiet_guard_unless_it_inherited_one(tmp_path, monkeypatch, capsys):
+def test_runner_exec_takes_its_own_slot_unless_it_inherited_one(tmp_path, monkeypatch):
     from homebase.backtest import runner
     from tests.backtest_util import nq_archive
     monkeypatch.setattr(runner.os, "nice", lambda n: 0)      # exec renices itself; not the test process
     archive = nq_archive(tmp_path / "ticks")
     rid = runner.prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"}}, tmp_path)
     d = tmp_path / "runs" / rid
-    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "09:25:00"))
     argv = ["exec", str(d), "--archive", str(archive), "--cache", str(tmp_path / "cache")]
-    assert runner.main(argv) == 2
-    assert QUIET_MSG in capsys.readouterr().err
-    assert read_json(d / "status.json")["status"] == "queued"          # never started
-    # a child the managers launched inherited its slot: no guard, no second slot
+    # a child the managers launched inherited its slot: no second slot
     inherited = Slots(clock=Clock(et(MON, "09:19:00"))).try_acquire()
     assert runner.main(argv + ["--slot-fd", str(inherited.fileno())]) == 0
     inherited.close()
     assert read_json(d / "status.json")["status"] == "done"
-    # outside the window, a bare exec waits for a free slot like everything else
+    # a bare exec waits for a free slot like everything else
     monkeypatch.setattr(slots, "et_now", lambda: et(MON, "12:00:00"))
     hog = [Slots().try_acquire(), Slots().try_acquire()]
     rid2 = runner.prepare({"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"}}, tmp_path)
@@ -187,21 +174,6 @@ def test_runner_exec_takes_its_own_slot_and_the_quiet_guard_unless_it_inherited_
         h.close()
     t.join(20)
     assert out == [0] and read_json(d2 / "status.json")["status"] == "done"
-
-
-def test_a_script_run_in_the_quiet_window_exits_2(tmp_path, monkeypatch, capsys):
-    from homebase.backtest import runner
-    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "09:30:00"))
-    assert runner.main(["run", "--strategy", "nq930", "--base", str(tmp_path)]) == 2
-    assert QUIET_MSG in capsys.readouterr().err
-    assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").glob("2*"))
-
-
-def test_a_single_run_request_inside_the_quiet_window_is_refused(tmp_path):
-    m = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=Clock(et(MON, "09:21:00"))))
-    with pytest.raises(ValueError, match=QUIET_MSG):
-        m.submit({"strategy": "nq930", "range": {"kind": "research"}})
-    assert not any((tmp_path / "runs").glob("2*"))                     # nothing prepared
 
 
 # ---------------------------------------------------------------- fake children for both managers
@@ -317,25 +289,6 @@ def test_off_hours_four_single_runs_run_at_once_and_never_more(tmp_path, live):
     assert live.peak == 4
 
 
-def test_a_single_run_never_starts_beside_another_inside_the_quiet_window(tmp_path, live):
-    clock = Clock(et(MON, "09:19:00"))
-    runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
-    a = runs.submit(RUN)
-    assert until(lambda: live.now == 1)                                 # started before the window
-    hog = Slots(tmp_path / "slots", clock=clock).try_acquire()          # the other slot is busy for now
-    b = runs.submit(RUN)
-    clock.t = et(MON, "09:21:00")
-    hog.close()                                                         # a slot is free, but it's 09:21
-    time.sleep(0.3)
-    assert _ids(live) == [a] and runs.status(b)["status"] == "queued" and runs.status(b)["paused"] == QUIET_MSG
-    with pytest.raises(ValueError, match=QUIET_MSG):
-        runs.submit(RUN)                                                # and a new request is refused, as before
-    clock.t = et(MON, "09:35:00")
-    assert until(lambda: live.now == 2)                                 # beside the one still running
-    live.release.set()
-    assert until(lambda: runs.status(a)["status"] == runs.status(b)["status"] == "done", 10)
-
-
 def test_cancelling_one_of_two_running_runs_stops_only_that_one(tmp_path, live):
     clock = Clock(et(MON, "12:00:00"))
     runs = RunManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
@@ -358,46 +311,12 @@ def test_shutdown_stops_every_running_single_run(tmp_path, live):
     live.release.set()
 
 
-def test_a_grid_queued_in_the_quiet_window_waits_and_resumes_at_0935(tmp_path, live):
-    clock = Clock(et(MON, "09:19:00"))
-    grids = GridManager(tmp_path, slots=Slots(tmp_path / "slots", clock=clock, poll=0.01))
-    live.release.set()
-    clock.t = et(MON, "09:25:00")
-    gid = grids.submit(GRID)                                            # a grid may queue; its cells wait
-    time.sleep(0.3)
-    st = grids.status(gid)
-    assert live.started == [] and st["status"] == "queued" and st["paused"] == QUIET_MSG
-    assert all(c["status"] == "queued" for c in st["cells"])
-    clock.t = et(MON, "09:35:00")
-    assert until(lambda: grids.status(gid)["status"] == "done")
-    st = grids.status(gid)
-    assert len(live.started) == 4 and "paused" not in st and st["looks"] == 4
-
-
-def test_a_single_run_queued_before_0920_does_not_start_until_0935(tmp_path, live):
-    clock = Clock(et(MON, "09:19:59"))
-    s = Slots(tmp_path / "slots", clock=clock, poll=0.01)
-    hog = [s.try_acquire(), s.try_acquire()]                            # both slots busy at 09:19:59
-    runs = RunManager(tmp_path, slots=s)
-    rid = runs.submit({"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"}})
-    clock.t = et(MON, "09:22:00")
-    for h in hog:
-        h.close()                                                       # slots free, but it's the quiet window
-    time.sleep(0.3)
-    st = runs.status(rid)
-    assert live.started == [] and st["status"] == "queued" and st["paused"] == QUIET_MSG
-    live.release.set()
-    clock.t = et(MON, "09:35:01")
-    assert until(lambda: runs.status(rid)["status"] == "done")
-    assert "paused" not in runs.status(rid)
-
-
 def test_the_default_clock_is_the_module_clock_read_at_each_call(tmp_path, monkeypatch):
     s = Slots(tmp_path / "slots")
-    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "09:30:00"))
-    assert s.quiet()
-    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "09:36:00"))
-    assert not s.quiet()
+    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "12:00:00"))
+    assert s.cap == 2                                                    # desk hours
+    monkeypatch.setattr(slots, "et_now", lambda: et(MON, "20:00:00"))
+    assert s.cap == 4
 
 
 def test_the_cap_is_two_in_desk_hours_and_four_off_hours(tmp_path):
@@ -440,13 +359,13 @@ def test_override_raises_the_cap_in_desk_hours_until_its_end(tmp_path, monkeypat
     assert slots.cap_at(et(dt.date(2026, 10, 5), "20:00")) == 4
 
 
-def test_override_quiet_window_blocks_starts_and_keeps_the_default_one(tmp_path, monkeypatch):
+def test_override_quiet_window_blocks_starts(tmp_path, monkeypatch):
     _ov(tmp_path, monkeypatch, {"quiet": [{"from": "2026-10-02T08:15", "to": "2026-10-02T08:45"}]})
     assert not in_quiet(et(FRI, "08:14:59"))
     assert in_quiet(et(FRI, "08:15"))
     assert in_quiet(et(FRI, "08:44:59"))
     assert not in_quiet(et(FRI, "08:45"))
-    assert in_quiet(et(FRI, "09:25"))                                    # the 09:20-09:35 rule stays
+    assert not in_quiet(et(FRI, "09:25"))                                # no fixed 09:20-09:35 rule any more
     assert not in_quiet(et(MON + dt.timedelta(days=7 + 4), "08:30"))     # other days unaffected
     assert Slots(tmp_path / "s", clock=Clock(et(FRI, "08:30"))).try_acquire() is None
 

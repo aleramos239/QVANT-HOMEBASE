@@ -56,7 +56,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..contracts import tick_size as contract_tick_size
 from ..paths import repo_root, state_dir
-from . import QUIET
 from .bars import BarSpec, build as build_bars
 from .depth import DEPTH_ARCHIVE, read_depth
 from .session import ET, always_open
@@ -510,13 +509,6 @@ def _alive(pid) -> bool:
         return False
 
 
-def in_quiet(now: dt.datetime) -> bool:
-    """09:20-09:35 ET on a weekday -- the 9:30 bot's window (GOTCHAS: "Nothing new starts in it:
-    no backtest, no heavy decode..."); a multi-session export is exactly that heavy a decode."""
-    t = (now if now.tzinfo else now.replace(tzinfo=ET)).astimezone(ET)
-    return t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]
-
-
 class _AdoptedProc:
     """A subprocess.Popen stand-in for a job _recover() found still alive after an unclean
     restart: this process never launched it, so there is no real Popen handle -- only its pid.
@@ -617,8 +609,6 @@ class ExportManager:
         with self._lock:
             if self._active is not None:
                 raise ValueError("an export is already running — wait for it, or cancel it, first")
-            if in_quiet(self.clock()):
-                raise ValueError("not 09:20–09:35 ET on weekdays (the 9:30 window): export after 09:35")
             jid = f"{dt.datetime.now():%Y%m%d-%H%M%S}-{secrets.token_hex(4)}"
             d = self.jobs / jid
             d.mkdir(parents=True)

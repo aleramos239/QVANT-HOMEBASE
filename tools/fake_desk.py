@@ -1053,7 +1053,8 @@ class LabRig:
             except Exception as e:  # noqa: BLE001
                 m = {"connected": False, "error": f"metrics: {e}"}
             accounts[aid] = {"label": a.label or a.account_name or aid,
-                             "env": "paper" if a.paper else "live" if a.live else "demo", "cooldown_s": 0, **m}
+                             "env": "paper" if a.paper else "live" if a.live else "demo", "cooldown_s": 0, **m,
+                             "day": engine.day_view(aid)}      # as the real route: the day take in force, the day's closed P&L, the lock
         recs = self.journal_cache.records(self.root / "journal.jsonl")
         if recs is not self._live["recs"]:
             self._live.update(recs=recs, live=live_metrics(recs))

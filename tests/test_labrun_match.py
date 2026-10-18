@@ -282,14 +282,6 @@ def test_the_worker_waits_twenty_minutes_for_a_slot_by_default():
     assert inspect.signature(match.tester_day).parameters["slot_wait_s"].default == match.SLOT_WAIT_S
 
 
-def test_no_backtest_starts_in_the_quiet_window_however_long_the_worker_waits(tmp_path, fake):
-    quiet = Slots(tmp_path / "slots", cap=1, poll=0.02, clock=lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=host.ET))
-    f = fake()
-    with pytest.raises(MatchUnavailable, match="the tester is busy"):
-        match.tester_day(RECORD, D1, launch=f, slots=quiet, slot_wait_s=0.3, **dirs(tmp_path))
-    assert f.procs == []
-
-
 # ---------------------------------------------------------------- C1: the day must be in the archive first
 def test_a_day_whose_recording_is_not_merged_into_the_archive_yet_is_not_stored_even_if_a_fragment_exists(tmp_path, fake):
     """The tick job merges the day's recording into the archive after the close and logs it in the manifest as a

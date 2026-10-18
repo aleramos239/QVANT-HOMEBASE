@@ -215,7 +215,7 @@ class DepthHistory:
     # ---- the grid
 
     def grid(self, root: str, frm: int, to: int, cols: int, now_ms: int | None = None) -> bytes:
-        """The grid as JSON bytes. ValueError: a bad root or range. Paused: the 9:30 window."""
+        """The grid as JSON bytes. ValueError: a bad root or range. Paused: a quiet window of the tester."""
         if not root.isalnum():
             raise ValueError(f"bad root {root!r}")
         frm, to = int(frm), int(to)

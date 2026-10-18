@@ -40,7 +40,7 @@ from . import secrets_store
 from .broker.base import AccountNotOnLogin, BrokerAdapter, OrderRequest
 from .broker.login_budget import LoginBudget, LoginDeferred, is_rate_limited
 from .broker.paper import BASE_URL as PAPER_URL, PaperAdapter
-from .broker.tradovate import RENEW_EARLY_FROM, RENEW_QUIET, TradovateAdapter
+from .broker.tradovate import RENEW_EARLY_FROM, RENEW_EARLY_UNTIL, TradovateAdapter
 from .engine import Engine, _hhmm
 from .feed import MarketFeed
 from .marketdata import TradovateMD
@@ -60,8 +60,6 @@ SIBLING_INTERVAL_S = 0.25  # engine.sibling_tick: the close watch on the other e
 RECONNECT_INTERVAL_S = 5   # cheap now: reconnects reuse the token
 GONE_CONFIRM_S = 300       # an account missing from its login is removed only when a 2nd
                            # successful sync at least this much later still misses it
-GONE_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:20-09:35: never unbook/remove)
-GONE_CHECK_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:10-09:35: no confirming re-sync)
 GONE_CHECK_TIMEOUT_S = 30  # a confirming re-sync runs in its own task, at most this long
 NOTICES_KEPT = 10
 ADD_MANY_MAX = 60           # accounts in one "add several" (a prop firm hands out ~20)
@@ -73,7 +71,6 @@ READINESS_FROM = (9, 25)
 FEED_FROM = (8, 55)        # the price feed runs through the RTH day, weekdays
 FEED_UNTIL = (16, 10)
 FEED_RETRY_S = 30
-FEED_QUIET = (dt.time(0, 0), dt.time(0, 0))   # EMPTY since 2026-10-16 (was 09:20-09:35: no non-urgent feed (re)connect)
 
 
 def _equity_path() -> Path:
@@ -172,25 +169,11 @@ def feed_window(now_et) -> bool:
     return dt.time(*FEED_FROM) <= now_et.time() <= dt.time(*FEED_UNTIL)
 
 
-def feed_deferred(now_et, strategies: dict) -> bool:
-    """Weekdays 09:20-09:35 ET a price-feed (re)connect or a new bars subscription --
-    market-data requests on the login the 9:30 bot's quote may ride -- waits for 09:35,
-    unless an enabled bars strategy's accept window opens by 09:35 and is not over (it needs
-    bars then, and one opening at 09:35 exactly must not lose its first bar to the wait).
-    The (re)connect at 09:35 loads the warm-up history again, so a rule that starts later
-    (nq10am: 09:59) loses nothing."""
-    t = now_et.time()
-    if now_et.weekday() >= 5 or not FEED_QUIET[0] <= t < FEED_QUIET[1]:
-        return False
-    return not any(_hhmm(s.accept_from_et) <= FEED_QUIET[1] and t <= _hhmm(s.accept_until_et)
-                   for s in strategies.values())
-
-
 def feed_recycle_window(now_et) -> bool:
     """Weekdays, the early-renewal window (09:10-09:19:30 ET, broker/tradovate.py): a feed
     on an older md token than its login now holds is rebuilt on the new one before 09:20,
-    so it cannot die at the old token's expiry inside 09:20-09:35."""
-    return now_et.weekday() < 5 and RENEW_EARLY_FROM <= now_et.time() < RENEW_QUIET[0]
+    so it cannot die at the old token's expiry around the 9:30 fire."""
+    return now_et.weekday() < 5 and RENEW_EARLY_FROM <= now_et.time() < RENEW_EARLY_UNTIL
 
 
 def _rides_older_token(feed) -> bool:
@@ -356,10 +339,6 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
             else:
                 checks.append({"level": "ok", "label": "Price feed",
                                "detail": "live bars flowing"})
-        elif feed_deferred(now_et, {n: enabled[n] for n in bars}):
-            checks.append({"level": "warn", "label": "Price feed",
-                           "detail": "down — reconnects at 09:35 (no market-data requests around "
-                                     "the 9:30 fire); " + ", ".join(bars) + " needs bars only later"})
         else:
             checks.append({"level": "bad", "label": "Price feed",
                            "detail": "down — " + ", ".join(bars) + " cannot see price"})
@@ -531,16 +510,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         tail = _login_key(aid).rsplit(":", 1)[-1].split("_", 1)[0]
         return tail.capitalize() if tail else "Tradovate"
 
-    def _in_gone_quiet(now_et, span=GONE_QUIET) -> bool:
-        return now_et.weekday() < 5 and span[0] <= now_et.time() < span[1]
-
     _listed: dict[str, set[str]] = {}        # login key -> account names its last probe listed
     _add_lock = asyncio.Lock()               # one "add accounts" at a time
-
-    def _refuse_adding_now() -> None:
-        if _in_gone_quiet(engine.now_et()):
-            raise HTTPException(409, "refused: accounts aren't added 09:20-09:35 ET on weekdays "
-                                "(the 9:30 window) — try again after 09:35")
 
     def _on_desk(key: str, name: str) -> str | None:
         """The desk entry that already carries this broker account of this login: pinned
@@ -605,13 +576,10 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         if f is not None and f.connected and feed_recycle_window(now_et) \
                 and _rides_older_token(f):
             # an early renewal rolled its login's md token: rebuild now, on the new one --
-            # riding the old one, it would die at that token's expiry, maybe in 09:20-09:35
+            # riding the old one, it would die at that token's expiry, maybe at the 9:30 fire
             await _feed_close("recycled onto the renewed market-data token before 09:20")
             f = None
-        deferred = feed_deferred(now_et, strategies)
         if f is None or not f.connected:
-            if deferred:
-                return []      # no md (re)connect around the 9:30 fire: at 09:35, with history
             if _t.time() < feed_box["retry_at"]:
                 return []
             try:
@@ -833,8 +801,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     def _note_gone(aid: str, e: AccountNotOnLogin) -> None:
         """A successful sync listed the login's accounts and this entry's is not among
         them. The first sighting parks it and journals account_gone; one at least
-        GONE_CONFIRM_S later confirms: _gone_step then unbooks and removes it (outside
-        09:20-09:35). Never evidence: a failed, 429'd or empty sync (no listing), a login
+        GONE_CONFIRM_S later confirms: _gone_step then unbooks and removes it. Never evidence: a failed, 429'd or empty sync (no listing), a login
         whose Tradovate user changed, or one where not only a MINORITY of the login's
         pinned entries is missing -- that is a changed login, not a closed account: park,
         warn, touch nothing."""
@@ -913,8 +880,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     async def _gone_step() -> None:
         """Accounts that left their login: one confirming re-sync GONE_CONFIRM_S after the
-        first sighting (never 09:10-09:35 ET), then -- confirmed -- unbook and remove
-        (never 09:20-09:35 ET). The bookings are kept in case it comes back."""
+        first sighting, then -- confirmed -- unbook and remove. The bookings are kept in case it
+        comes back."""
         import time as _t
         if not _gone:
             return
@@ -924,8 +891,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 _gone.pop(aid, None)
                 continue
             if g["confirmed"]:
-                if _in_gone_quiet(now_et):
-                    continue
                 g["booked"] = {n: [dict(r) for r in rows if r.get("account") == aid]
                                for n, rows in cfg.book.items()
                                if any(r.get("account") == aid for r in rows)}
@@ -936,8 +901,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 _notice(line, account=aid)
                 continue
             t = _gone_tasks.get(aid)
-            if (t is None or t.done()) and _t.time() >= g["next_check"] \
-                    and not _in_gone_quiet(now_et, GONE_CHECK_QUIET):
+            if (t is None or t.done()) and _t.time() >= g["next_check"]:
                 g["next_check"] = _t.time() + GONE_CONFIRM_S
                 _gone_tasks[aid] = asyncio.create_task(_gone_check(aid))
 
@@ -945,8 +909,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         """Every chart-service paper account is an account of the desk's pool (assignable to an algo in
         + Assign) -- one per paper id, labelled "<name> (paper)". Added here, never by hand; removed only
         with the account on the Charts page (its adapter then fails to read the book and drops out of
-        the readiness checks). Never adds during the 9:30 window, and a service that is down adds nothing."""
-        if not (background or paper_client is not None) or _in_gone_quiet(engine.now_et()):
+        the readiness checks). A service that is down adds nothing."""
+        if not (background or paper_client is not None):
             return                   # a test app reaches no service it was not handed
         try:
             r = await paper_http.get("/api/paper/accounts")
@@ -994,10 +958,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     async def _refresh_snapshots() -> None:
         """The caches' slow refresh: ONE position/list + cashBalance/list per
         Tradovate user (its lists cover every account under the login), on the first
-        connected entry that can do it. Skipped for a user in a 429 cool-down and
-        09:20-09:35 ET (the fire's socket carries only the fire)."""
-        if _in_gone_quiet(engine.now_et()):
-            return
+        connected entry that can do it. Skipped for a user in a 429 cool-down."""
         by_user: dict[tuple, list] = {}
         for aid, ad in list(adapters.items()):
             if aid in cfg.accounts and ad.connected and hasattr(ad, "refresh_snapshot"):
@@ -1420,9 +1381,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         """Validate a login (saved or new; demo by default, live on request)
         with a throwaway probe and return every account under it. Nothing is
         added to the pool yet — that is /api/accounts/add, one per account."""
-        # the probe is a real login that re-rolls the login's shared token: never
-        # in the 9:30 window, like the adds it leads to
-        _refuse_adding_now()
+        # the probe is a real login that re-rolls the login's shared token
         body = await request.json()
         env = "live" if str(body.get("env") or "").lower() == "live" else "demo"
         saved = str(body.get("saved_key") or "")
@@ -1475,7 +1434,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         body = await request.json()
         key = str(body.get("key") or "")
         account_name = str(body.get("account_name") or "").strip()
-        _refuse_adding_now()
         if not key or not secrets_store.get_credentials(key):
             raise HTTPException(400, "unknown login key")
         if not account_name:
@@ -1502,8 +1460,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         a strategy: booking stays the account holder's call. One at a time, on the shared
         token the wizard's probe left (reconnect, no login): N accounts cost the probe's
         ONE login, and the batch stops at the first failure that could spend another
-        (a login refused, a socket error), so it never turns into N logins. Refused
-        09:20-09:35 ET on weekdays, before and between accounts.
+        (a login refused, a socket error), so it never turns into N logins.
         Answers one row per requested account: added (connected or not, with why),
         exists (already on the desk) or failed (with the reason)."""
         body = await request.json()
@@ -1520,7 +1477,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             raise HTTPException(400, "accounts: a list of account names required")
         if len(names) > ADD_MANY_MAX:
             raise HTTPException(400, f"at most {ADD_MANY_MAX} accounts at a time")
-        _refuse_adding_now()
         if not key or not secrets_store.get_credentials(key):
             raise HTTPException(400, "unknown login key")
         listed = _listed.get(key)
@@ -1534,8 +1490,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 low = name.lower()
                 row = {"name": name}
                 rows.append(row)
-                if not stop and _in_gone_quiet(engine.now_et()):
-                    stop = "adding stops 09:20-09:35 ET (the 9:30 window)"
                 if stop:
                     row.update(status="failed", error=f"not tried — {stop}")
                     continue
@@ -1604,7 +1558,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/strategy-rr")
     async def strategy_rr(request: Request):
         """Set a straddle's target as a multiple of its stop: tp_pts = round(sl_pts * rr, 4).
-        Refused 09:20-09:35 ET on weekdays and while the strategy has working orders or an open
+        Refused while the strategy has working orders or an open
         position today (the target is read when the legs go out and when they re-price)."""
         body = await request.json()
         name = str(body.get("strategy") or "")
@@ -1616,9 +1570,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         rr = body.get("rr")
         if isinstance(rr, bool) or not isinstance(rr, (int, float)) or not 0.25 <= rr <= 20:
             raise HTTPException(400, "rr must be a number from 0.25 to 20")
-        if _in_gone_quiet(engine.now_et()):
-            raise HTTPException(409, "refused: the target isn't changed 09:20-09:35 ET on weekdays "
-                                "(the 9:30 window) — try again after 09:35")
         busy = [st.account for st in engine.day_states(name)
                 if st.status in ("placing", "placed", "live", "error")]
         if busy:
@@ -1700,9 +1651,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         close its adapter, drop it. Refused (409) unless the adapter is
         connected with its caches seeded, its cached view shows no position
         in any symbol and no working order, and today's day-states show it
-        neither placing, placed nor live. An MCP-sourced request is also
-        refused 09:10-09:35 ET on weekdays, server-side (never only the
-        tool's own client-side check). This is NOT the path the login-loop
+        neither placing, placed nor live. This is NOT the path the login-loop
         fix's automatic gone-account removal takes (_gone_step -> _drop_account
         directly) -- that keeps removing a truly gone account on its own terms.
         A paper account is refused while it exists on the Charts page (remove it there);
@@ -1725,9 +1674,6 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             if aid in listed:
                 raise HTTPException(409, "a paper account is managed on the Charts page — remove it there")
         from_mcp = str(body.get("source") or "") == "mcp"
-        if from_mcp and _in_gone_quiet(engine.now_et(), GONE_CHECK_QUIET):
-            raise HTTPException(409, "refused: not 09:10-09:35 ET on weekdays "
-                                "(the 9:30 window) — try again after 09:35")
         ad = adapters.get(aid)
         readable = (ad is not None and ad.connected
                     and getattr(ad, "caches_seeded", False))
@@ -1910,8 +1856,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/lab-limits")
     async def lab_limits(request: Request):
         """Set a promoted Lab strategy's limits: {strategy, limits: {max_trades_day, max_qty, max_risk_usd,
-        last_entry_et, flat_et}}. A bad field is a 400 with its sentence; refused (409) 09:20-09:35 ET on
-        weekdays and while it has a round open."""
+        last_entry_et, flat_et}}. A bad field is a 400 with its sentence; refused (409) while it has a
+        round open."""
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "{strategy, limits}")
@@ -1925,8 +1871,8 @@ def create_app(cfg: config_mod.AppCfg | None = None,
     @app.post("/api/lab-settings")
     async def lab_settings(request: Request):
         """Change the settings a promoted Lab strategy declared adjustable: {strategy, settings: {key: value}}. A bad
-        key or value is a 400 with its sentence; refused (409) while its session runs, 09:20-09:35 ET on weekdays,
-        and while it has a round open. Takes effect from its next session."""
+        key or value is a 400 with its sentence; refused (409) while its session runs and while it has a round
+        open. Takes effect from its next session."""
         body = await request.json()
         if not isinstance(body, dict):
             raise HTTPException(400, "{strategy, settings}")

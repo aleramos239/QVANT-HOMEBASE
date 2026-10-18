@@ -190,13 +190,6 @@ def test_a_bad_draft_request_is_a_clear_400(tmp_path):
         assert r.status_code == 400
 
 
-def test_no_draft_run_starts_in_the_quiet_window(tmp_path, monkeypatch):
-    write_template()
-    with client(tmp_path) as c:
-        monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 9, 25, tzinfo=slots.ET))
-        r = c.post("/api/tester/run", json={"strategy": "draft_my_orb", "range": MARCH})
-        assert r.status_code == 400 and "09:20" in r.json()["detail"]
-
 
 def test_a_draft_backtests_end_to_end_in_the_sandbox_and_runs_the_validated_snapshot(tmp_path):
     write_template()

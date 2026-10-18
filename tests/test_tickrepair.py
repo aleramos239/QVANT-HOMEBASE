@@ -93,20 +93,6 @@ def test_a_daytime_run_gives_each_root_its_share_of_the_pages(tmp_path, monkeypa
     assert sorted(m["root"] for m in out) == ["ES", "NQ", "YM"] and {m["ticks"] for m in out} == {16}
 
 
-def test_not_one_request_between_0920_and_0935(tmp_path, monkeypatch):
-    nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 9, 19, 30, tzinfo=ET),
-                                          page=2)
-    run(T.record(roots=("NQ",), dates=[D], base=tmp_path, ws=object(), day=True))
-    assert len(broker.asked) == 1                              # 09:19:30; the next page would be 09:20:06
-    monkeypatch.setattr(T, "state_dir", lambda: tmp_path / "state")
-    nw.now = dt.datetime(2026, 9, 29, 9, 25, tzinfo=ET)
-
-    async def never(*a, **k):
-        raise AssertionError("a run inside 09:20-09:35")
-    monkeypatch.setattr(T, "record", never)
-    assert T.run(("NQ",), [D], tmp_path) == 0
-
-
 def test_a_rate_limit_reply_ends_the_daytime_run(tmp_path, monkeypatch, capsys):
     nw, ticks, broker, path = battery_day(tmp_path, monkeypatch, dt.datetime(2026, 9, 29, 10, 10, tzinfo=ET))
     asked = []
@@ -178,14 +164,6 @@ def test_the_cache_follows_a_rewritten_file(tmp_path):
     _write_live(tmp, ticks[:5])
     os.replace(tmp, p)                                         # a merge: a new file, maybe smaller
     assert [r[:2] for r in A.file_runs(p, cache)["runs"]] == [[1, 5]]
-
-
-@pytest.mark.parametrize("t,quiet", [((9, 19, 59), False), ((9, 20), True), ((9, 34, 59), True), ((9, 35), False)])
-def test_the_quiet_window_is_the_charts_own(t, quiet):
-    from homebase.charts import QUIET
-    assert T.QUIET == QUIET
-    assert T.in_quiet(dt.datetime(2026, 9, 29, *t, tzinfo=ET)) is quiet
-    assert not T.in_quiet(dt.datetime(2026, 9, 27, *t, tzinfo=ET))     # Sunday
 
 
 def test_a_lost_connection_ends_the_night_run_with_one_line(tmp_path, monkeypatch, capsys):
@@ -487,13 +465,6 @@ def test_a_click_always_rewrites_the_coverage_report(tmp_path, monkeypatch):
     monkeypatch.setattr(T, "data_watch", lambda *a, **k: None)
     assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0 and reports == []
     assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep, full=True) == 0 and reports == [1]
-
-
-def test_the_wait_ends_at_0920_and_a_late_run_does_not_wait_into_the_window(tmp_path, monkeypatch, capsys):
-    d = TokenDesk(tmp_path, monkeypatch, after=None, now=dt.datetime(2026, 9, 30, 9, 18, 45, tzinfo=ET))
-    assert T.run(("NQ",), [D], tmp_path, sleep=d.sleep) == 0
-    assert d.sleeps == [30, 30] and d.now == dt.datetime(2026, 9, 30, 9, 19, 45, tzinfo=ET)   # the next 30 s would cross 09:20
-    assert d.calls == 1 and "still no valid md token" in capsys.readouterr().out
 
 
 def test_only_a_missing_token_is_waited_out(tmp_path, monkeypatch, capsys):

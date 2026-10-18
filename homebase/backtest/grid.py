@@ -22,7 +22,7 @@ looks.json.migrated.
 The chart service owns a GridManager: cells go FIFO through a pool of WORKERS threads, each
 waiting on its own child process, so the service's event loop never runs a backtest. A cell
 starts only once it holds a machine-wide backtest slot (slots.py: 2 at once shared with single
-runs, none starting 09:20-09:35 ET on weekdays -- the grid then reads `paused`).
+runs, none starting in a quiet window of the tester's override file -- the grid then reads `paused`).
 """
 from __future__ import annotations
 
@@ -439,7 +439,7 @@ class GridManager:
                     self._cv.wait()
                 if self._stopping:
                     return
-            # a slot first (the global cap, the QUIET window); let go if the queue empties meanwhile
+            # a slot first (the global cap, a quiet window of the override file); let go if the queue empties meanwhile
             slot = self.slots.acquire(cancelled=self._idle)
             if slot is None:
                 continue

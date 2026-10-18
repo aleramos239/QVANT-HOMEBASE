@@ -15,8 +15,8 @@ RunManager (submit / status / cancel / runs / bundle) that launches
 `python -m homebase.backtest.runner exec <run_dir> --no-lock` with its own interpreter,
 FIFO — never in the service's event loop — and only once it holds one of the
 machine-wide backtest slots (slots.py: 2 at once in desk hours, 4 outside them, shared
-with the heat-map's cells; none starting 09:20-09:35 ET on weekdays; a request in that
-window is refused, a run already queued waits and its status reads `paused`). Runs
+with the heat-map's cells; none starting in a quiet window of the override file; a request in
+such a window is refused, a run already queued waits and its status reads `paused`). Runs
 that each hold a slot run side by side. A script run
 (`python -m homebase.backtest.runner run --strategy nq930 ...`) executes in the
 script's process, holding a slot of its own, and writes into the same runs dir, so the
@@ -546,7 +546,7 @@ class RunManager:
                     self._wake.clear()
                     continue
                 rid = self._q[0]
-            # a slot first (the global cap, the QUIET window); give up if the run is cancelled meanwhile
+            # a slot first (the global cap, a quiet window of the override file); give up if the run is cancelled meanwhile
             slot = self.slots.acquire(cancelled=lambda: self._head() != rid)
             if slot is None:
                 continue
@@ -712,7 +712,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="a DRAFT run (sandboxed): read the shared --cache, build any missing tape here")
     ex.add_argument("--slot-fd", type=int, default=None,
                     help="an inherited backtest slot (the chart service passes it); without one, exec "
-                         "takes its own slot and refuses the 09:20-09:35 ET window")
+                         "takes its own slot and waits out a quiet window of the override file")
     run = sub.add_parser("run", help="validate + run in this process (scripts, the assistant)")
     run.add_argument("--strategy", required=True)
     run.add_argument("--input", action="append", default=[], help="key=value (JSON value)")

@@ -3,9 +3,9 @@
   * HOMEBASE_TESTER_SHARED -> a fresh tmp dir per test, so no test ever touches the real
     per-machine ~/.homebase/tester (the backtest slots and looks.json); runner children
     started by a test inherit it through the environment;
-  * the QUIET-window clock -> a Monday noon ET, so tests that start runs never fail for being
-    executed between 09:20 and 09:35 ET on a weekday. A test that needs the window injects its
-    own clock (Slots(clock=...)) or re-patches slots.et_now."""
+  * the tester's clock -> a Monday noon ET (desk hours: the cap is 2), so a test that counts
+    slots never depends on when it runs. A test that needs another time injects its own clock
+    (Slots(clock=...)) or re-patches slots.et_now."""
 from __future__ import annotations
 
 import datetime as dt
@@ -24,39 +24,8 @@ def tester_shared(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _outside_the_quiet_window(monkeypatch):
+def _a_monday_noon(monkeypatch):
     monkeypatch.setattr(slots, "et_now", lambda: dt.datetime(2026, 9, 28, 12, 0, tzinfo=slots.ET))
-
-
-# The 09:20-09:35 ET windows were EMPTIED on 2026-10-16 (owner: no limit at 9:30). The machinery stays, so the
-# tests that prove it (refuse inside the window, wait out its end, stop mid-batch) run against the OLD windows,
-# put back here for every test but tests/test_quiet_windows_removed.py, which pins production's empty ones.
-_OLD_WINDOWS = {
-    "homebase.charts": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.charts.server": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.charts.export": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.charts.tickfeed": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.ticks": {"QUIET": (dt.time(9, 20), dt.time(9, 35)), "CHARTS_QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.leveltimer": {"QUIET": (dt.time(9, 20), dt.time(9, 35))},
-    "homebase.server": {"GONE_QUIET": (dt.time(9, 20), dt.time(9, 35)),
-                        "GONE_CHECK_QUIET": (dt.time(9, 10), dt.time(9, 35)),
-                        "FEED_QUIET": (dt.time(9, 20), dt.time(9, 35)),
-                        "RENEW_QUIET": (dt.time(9, 19, 30), dt.time(9, 35))},
-    "homebase.broker.tradovate": {"RENEW_QUIET": (dt.time(9, 19, 30), dt.time(9, 35))},
-    "homebase.claude_mcp.desk_tools": {"QUIET": (dt.time(9, 10), dt.time(9, 35))},
-}
-
-
-@pytest.fixture(autouse=True)
-def _old_quiet_windows(request, monkeypatch):
-    if request.node.fspath.basename == "test_quiet_windows_removed.py":
-        return
-    import importlib
-    for mod, names in _OLD_WINDOWS.items():
-        m = importlib.import_module(mod)
-        for name, val in names.items():
-            if hasattr(m, name):
-                monkeypatch.setattr(m, name, val)
 
 
 @pytest.fixture(autouse=True)

@@ -1535,8 +1535,8 @@ class Runner:
     ~/.homebase/desklab).
 
     A finished day's match with the tester (labrun/match.py) starts when it is due (match_due: ten minutes after its
-    end, never before 17:35 ET of its date), by the stream's clock, in a worker thread of its own (never in the
-    09:20-09:35 ET window on a weekday; the worker waits in line for a backtest slot), and its answer is written
+    end, never before 17:35 ET of its date), by the stream's clock, in a worker thread of its own (the worker
+    waits in line for a backtest slot), and its answer is written
     into the day file and the journal by this thread. `matcher(record, date, trades) -> {"ok", "text"}` (default: the
     real tester, in the sandbox); a "not checked yet" is asked again every MATCH_RETRY_NS, MATCH_RETRIES times.
 
@@ -1858,8 +1858,7 @@ class Runner:
                 self._plan(rec, date, match_due(date, 0), trades=trades)
 
     def _start_matches(self, now_ms: int) -> None:
-        """Answers in; then each match that is due starts in a worker thread -- never 09:20-09:35 ET on a weekday,
-        and never for a day that was promoted again meanwhile (its file is another promotion's)."""
+        """Answers in; then each match that is due starts in a worker thread -- never for a day that was promoted again meanwhile (its file is another promotion's)."""
         self._collect()
         now = now_ms * 1_000_000
         due = [m for m in self._matches.values() if not m.over and not m.running and m.due_ns <= now]

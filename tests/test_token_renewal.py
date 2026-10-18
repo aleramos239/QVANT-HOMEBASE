@@ -1,5 +1,5 @@
-"""Token renewal keeps socket drops out of 09:20-09:35 ET on weekdays (the 9:30 fire); it
-renews early, 09:10-09:20, instead. No network: injected clocks, a fake socket, the auth's
+"""Token renewal keeps socket drops out of the 09:28-09:31 ET fire guard on weekdays; it
+renews early, 09:10-09:19:30, instead (the 09:19:30-09:35 hold went on 2026-10-16; the guard stays). No network: injected clocks, a fake socket, the auth's
 renew/login replaced, and any real HTTP call fails the test (tests/conftest.py).
 
 A renewal rolls the token, and a rolled token means the socket is closed and rebuilt by the
@@ -49,25 +49,24 @@ def ts(h, m, s=0, day=MON) -> float:
     ((9, 10, 0), (10, 9, 59), (True, "early")),
     ((9, 19, 29), (10, 9, 59), (True, "early")),
     ((9, 19, 29), (10, 10, 0), (False, "normal")),        # lasts: nothing due before 10:00
-    ((9, 19, 30), (9, 45, 59), (False, "quiet")),         # 09:19:30: clear of the 09:20 md connect
-    ((9, 19, 59), (9, 45, 59), (False, "quiet")),
-    ((9, 19, 30), (9, 33, 0), (True, "expires_in_window")),
+    ((9, 19, 30), (9, 45, 59), (False, "normal")),        # 09:19:30: the early zone is over; the normal rule again
+    ((9, 19, 59), (9, 45, 59), (False, "normal")),
+    ((9, 19, 30), (9, 33, 0), (False, "normal")),          # 13.5 min left
     ((9, 15, 0), (10, 35, 0), (False, "normal")),         # a fresh token
-    # quiet 09:20-09:35: held even with < 10 min left, if it lives past 09:36
-    ((9, 20, 0), (9, 40, 0), (False, "quiet")),
-    ((9, 27, 0), (9, 36, 30), (False, "quiet")),          # 9.5 min left: the old rule dropped here
-    ((9, 29, 55), (9, 36, 0), (False, "quiet")),
-    ((9, 34, 59), (9, 40, 0), (False, "quiet")),          # 5 min left, held to the window's end
-    ((9, 35, 0), (9, 40, 0), (True, "normal")),           # window over: renewed at once
-    # a token that would EXPIRE before 09:36 is renewed at once, outside the fire guard
-    ((9, 20, 0), (9, 33, 0), (True, "expires_in_window")),
-    ((9, 20, 0), (9, 35, 59), (True, "expires_in_window")),
-    ((9, 27, 59), (9, 33, 0), (True, "expires_in_window")),
+    # 09:20-09:35 outside the fire guard: the normal rule (the 2026-10-16 word: no hold there)
+    ((9, 20, 0), (9, 40, 0), (False, "normal")),
+    ((9, 27, 0), (9, 36, 30), (True, "normal")),           # 9.5 min left: renewed, its rebuild lands before the guard
+    ((9, 29, 55), (9, 36, 0), (False, "fire_guard")),      # inside the guard, lives past 09:31: held
+    ((9, 34, 59), (9, 40, 0), (True, "normal")),           # 5 min left
+    ((9, 35, 0), (9, 40, 0), (True, "normal")),
+    ((9, 20, 0), (9, 33, 0), (False, "normal")),           # 13 min left
+    ((9, 20, 0), (9, 35, 59), (False, "normal")),
+    ((9, 27, 59), (9, 33, 0), (True, "normal")),           # 5 min left
     # fire guard 09:28-09:31: a socket whose token lives past 09:31 is never dropped...
     ((9, 28, 0), (9, 33, 0), (False, "fire_guard")),
     ((9, 29, 0), (9, 31, 0), (False, "fire_guard")),
     ((9, 30, 59), (9, 33, 0), (False, "fire_guard")),
-    ((9, 31, 0), (9, 33, 0), (True, "expires_in_window")),   # ...and is renewed right after
+    ((9, 31, 0), (9, 33, 0), (True, "normal")),              # ...and is renewed right after (2 min left)
     # ...one that dies inside it: dropped while a rebuild still fits before the fire...
     ((9, 28, 0), (9, 30, 59), (True, "expires_in_guard")),
     ((9, 29, 44), (9, 30, 40), (True, "expires_in_guard")),
@@ -86,9 +85,10 @@ def test_the_rule_on_a_weekday(now, expires, want):
     assert renewal_due(at(*now), ts(*expires)) == want
 
 
-def test_an_unknown_expiry_is_never_renewed_inside_the_window():
-    assert renewal_due(at(9, 25), 0.0) == (False, "quiet")
-    assert renewal_due(at(12, 0), 0.0) == (True, "normal")        # as before, outside it
+def test_an_unknown_expiry_is_never_renewed_inside_the_fire_guard():
+    assert renewal_due(at(9, 29), 0.0) == (False, "fire_guard")
+    assert renewal_due(at(9, 25), 0.0) == (True, "normal")        # outside the guard: the normal rule
+    assert renewal_due(at(12, 0), 0.0) == (True, "normal")
 
 
 def test_weekends_have_no_window():
@@ -96,11 +96,11 @@ def test_weekends_have_no_window():
     assert renewal_due(at(9, 15, day=SAT), ts(9, 40, day=SAT)) == (False, "normal")
 
 
-def test_the_window_is_eastern_time_in_winter_too():
-    # 14:25 UTC is 09:25 EST (it would be 10:25 EDT)
-    now = dt.datetime(2026, 12, 14, 14, 25, tzinfo=dt.timezone.utc)
-    assert renewal_due(now, ts(9, 34, day=WINTER_MON)) == (True, "expires_in_window")
-    assert renewal_due(now, ts(9, 40, day=WINTER_MON)) == (False, "quiet")
+def test_the_fire_guard_is_eastern_time_in_winter_too():
+    # 14:29 UTC is 09:29 EST (it would be 10:29 EDT): inside the fire guard
+    now = dt.datetime(2026, 12, 14, 14, 29, tzinfo=dt.timezone.utc)
+    assert renewal_due(now, ts(9, 34, day=WINTER_MON)) == (False, "fire_guard")
+    assert renewal_due(now, ts(9, 30, 40, day=WINTER_MON)) == (True, "expires_in_guard")
     early = dt.datetime(2026, 12, 14, 14, 15, tzinfo=dt.timezone.utc)   # 09:15 EST
     assert renewal_due(early, ts(9, 45, day=WINTER_MON)) == (True, "early")
 
@@ -185,10 +185,11 @@ def mkadapter(tmp_path, now, expires, *, renew_error=None):
     return ad, Auth(ad, ad._now, expires, renew_error), clock
 
 
-def test_the_old_rule_would_have_dropped_the_socket_at_0927_now_it_holds(tmp_path):
+def test_at_0927_with_9_5_min_left_the_socket_is_renewed_before_the_fire_guard(tmp_path):
+    """The 09:19:30-09:35 hold went on 2026-10-16: the normal rule again, and the rebuild lands before 09:28."""
     ad, auth, _ = mkadapter(tmp_path, at(9, 27), at(9, 36, 30))     # 9.5 min left
-    assert run(ad._renew_if_needed()) is False
-    assert auth.renews == 0 and ad._ws.closed == 0 and ad._auth.access_token == "old"
+    assert run(ad._renew_if_needed()) is True
+    assert auth.renews == 1 and ad._ws.closed == 1 and ad._auth.access_token == "new1"
 
 
 def test_an_early_renewal_at_091929_rolls_the_token_and_drops_the_socket(tmp_path):
@@ -215,8 +216,8 @@ def test_an_early_renewal_never_spends_a_login(tmp_path):
     assert (auth.renews, auth.logins) == (1, 1)
 
 
-def test_a_token_that_would_expire_in_the_window_is_renewed_at_its_first_check(tmp_path):
-    ad, auth, _ = mkadapter(tmp_path, at(9, 20, 3), at(9, 33))
+def test_a_token_with_under_10_min_left_at_0924_is_renewed_as_the_normal_rule_says(tmp_path):
+    ad, auth, _ = mkadapter(tmp_path, at(9, 24), at(9, 33))
     assert run(ad._renew_if_needed()) is True
     assert ad._ws.closed == 1 and ad._auth.access_token == "new1"
 

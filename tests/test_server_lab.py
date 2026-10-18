@@ -321,15 +321,9 @@ def test_limits_bodies_that_are_not_limits(client):
     assert client.cfg.strategies["nq930"].flat_et == "15:55" and store.get_desk("pp_orb") is None
 
 
-def test_limits_are_not_changed_in_the_930_window(client):
-    client.engine.now_et = lambda: dt.datetime(2026, 9, 30, 9, 25, tzinfo=ET)   # a Wednesday
-    r = set_limits(client)
-    assert r.status_code == 409 and r.json()["detail"] == "Not 09:20-09:35 ET. Try again after 09:35."
-    assert status(client)["lab"]["limits"] is None
-    for ok in (dt.datetime(2026, 9, 30, 9, 19, 59, tzinfo=ET), dt.datetime(2026, 9, 30, 9, 35, tzinfo=ET),
-               dt.datetime(2026, 10, 3, 9, 25, tzinfo=ET)):                      # before, after, a Saturday
-        client.engine.now_et = lambda ok=ok: ok
-        assert set_limits(client).status_code == 200
+def test_limits_are_changed_at_0925_too(client):
+    client.engine.now_et = lambda: dt.datetime(2026, 9, 30, 9, 25, tzinfo=ET)   # a Wednesday: no 9:30 window any more
+    assert set_limits(client).status_code == 200
 
 
 @pytest.mark.parametrize("st", ["placing", "placed", "live"])
@@ -940,20 +934,6 @@ def test_a_save_never_stands_still_for_a_store_another_process_holds(client):
         done()
     asyncio.run(client.labdesk.refresh())                                        # the next refresh writes it
     assert store.get_desk("pp_orb")["book"] == []
-
-
-# ---- item 4
-@pytest.mark.parametrize("when, allowed", [
-    ((2026, 9, 30, 9, 19, 59), True), ((2026, 9, 30, 9, 20, 0), False), ((2026, 9, 30, 9, 34, 59), False),
-    ((2026, 9, 30, 9, 35, 0), True), ((2026, 10, 3, 9, 30, 0), True)])           # a Wednesday; the last one a Saturday
-def test_the_quiet_windows_edges_for_limits(client, when, allowed):
-    client.engine.now_et = lambda: dt.datetime(*when, tzinfo=ET)
-    r = set_limits(client)
-    if allowed:
-        assert r.status_code == 200
-    else:
-        assert r.status_code == 409 and r.json()["detail"] == "Not 09:20-09:35 ET. Try again after 09:35."
-        assert status(client)["lab"]["limits"] is None
 
 
 # ---- item 5 (the reviewer's probe 2)

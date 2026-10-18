@@ -359,36 +359,6 @@ def et_ms(h, m):
     return int(dt.datetime.combine(D, dt.time(h, m), ET).timestamp() * 1000)
 
 
-def test_no_retry_or_new_demand_subscription_inside_the_0920_0935_quiet_window():
-    async def go():
-        wall = [et_ms(9, 19)]
-        gc = symbols.resolve_contract("GC")
-        feed, d, clock = make(record=("NQ", "ES"), ws=FakeWS({NQ: 111, ES: 222, gc: 333}),
-                              wall=lambda: wall[0])
-        feed.ws.refuse[ES] = RuntimeError("md/subscribeDOM failed: status=403")
-        await connect(d)                                     # 09:19: both asked, ES refused
-        assert subs(feed.ws) == [NQ, ES]
-        feed.ws.refuse.clear()
-        wall[0] = et_ms(9, 20)
-        p = Page()
-        d.view((p, "a"), "GC", p.send, p.room)               # new demand in the window
-        clock.t += 600                                        # ES's retry falls due in the window
-        await connect(d)
-        assert subs(feed.ws) == [NQ, ES]
-        # a reconnect inside the window re-subscribes what was subscribed, and nothing else
-        feed.ws = FakeWS({NQ: 111, ES: 222, gc: 333})
-        wall[0] = et_ms(9, 30)
-        await connect(d)
-        assert subs(feed.ws) == [NQ]
-        wall[0] = et_ms(9, 34) + 59_000
-        await connect(d)
-        assert subs(feed.ws) == [NQ]
-        wall[0] = et_ms(9, 35)                               # deferred to 09:35
-        await connect(d)
-        assert sorted(subs(feed.ws)) == sorted([NQ, ES, gc])
-    run(go())
-
-
 def test_a_reconnect_sends_viewers_an_empty_book():
     async def go():
         feed, d, clock = make(record=("NQ",))

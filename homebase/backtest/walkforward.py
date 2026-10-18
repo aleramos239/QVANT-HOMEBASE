@@ -35,7 +35,7 @@ the chain never tests out-of-sample. The OOS trades travel with the result for t
 
 Execution (the per-month cache). Each cell runs ONCE over the whole window as an ordinary
 heat-map cell (grid.GridManager: the same `runner exec` child, the machine-wide 2-slot cap, FCFS tickets,
-no starts 09:20-09:35 ET). Sessions are independent -- a strategy declares it (Strategy.session_independent;
+no starts in a quiet window of the override file). Sessions are independent -- a strategy declares it (Strategy.session_independent;
 the walk-forward refuses one that does not): its day state resets every session and daily bars come from
 the store, not the range -- so a cell's trades inside month m ARE a single run over month m
 (tests/test_backtest_walkforward.py pins that on real ticks, gate off and on). A cell skips the full-window
@@ -55,7 +55,7 @@ the grid ONCE -- the cells are exactly a 1:N job's cells, since a cell always ru
 whatever the ratio -- then selects and stitches it three times, at 1:1, 1:2 and 1:3, from the same
 per-month cache. The three schemes therefore share the window, the grid, the costs, Select-by and
 Min-trades by construction, cost 1x the backtests (not 3x), and are one job for cancel / progress /
-reload-resume, queued through the same 2-slot cap and the 09:20-09:35 ET pause. Each scheme's full
+reload-resume, queued through the same 2-slot cap and the override file's quiet windows. Each scheme's full
 result is written as result-N.json (the ordinary 1:N result shape, served by `result(id, N)`), and
 compare.json holds only their STITCHED OUT-OF-SAMPLE numbers side by side (compare_summary: no
 in-sample figure crosses into it). Looks: a month's pick depends only on that month's grid, so the

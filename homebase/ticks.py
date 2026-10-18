@@ -19,7 +19,7 @@ a 116-page burst drew "Rate limit exceeded" penalties for the next hour).
 So pages are paced (<= 100/hour: the chart service shares the login). At
 night (outside 08:00-17:05 ET on weekdays) a run goes on until done or 08:00
 and waits out a penalty (p-time, then its p-ticket); by day a run spends at
-most DAY_PAGES pages (DAY_ROOT_PAGES a root), never runs 09:20-09:35 ET, and
+most DAY_PAGES pages (DAY_ROOT_PAGES a root), and
 a penalty or a refused connection ends it until the next run. The job's requests plus the chart
 service's (it publishes them, charts/md_usage.json) stay under SHARED_MD_CAP
 an hour. Only the LIVE login's md budget is spent -- never the demo (Apex)
@@ -71,7 +71,6 @@ from . import config as config_mod
 from . import symbols
 from . import tickarchive
 from .broker.tradovate_ws import TradovateWS
-from .charts import QUIET as CHARTS_QUIET
 from .marketdata import MD_DEMO, MD_LIVE
 from .paths import state_dir
 
@@ -656,16 +655,10 @@ STALE_MS = 15 * 60 * 1000       # a running session's recording this far behind 
 DAY_PAGES = 45                  # a daytime run's pages: the chart service keeps most of the login's 180/h
 DAY_ROOT_PAGES = 15             # ... and one root's share of them: with the live stream thinned every root needs
                                 # its whole tape from the history, and NQ alone took 38 of the 45 (2026-10-05 14:54)
-QUIET = CHARTS_QUIET            # 09:20-09:35 ET, around the 9:30 fire: not one request (the charts' own)
 _EMPTY = {"runs": []}
 ASKED = "_asked"                # cache key: stretches the broker had nothing for, and no file holds
 MD_USED = "_md"                 # cache key: this job's chart requests in the last hour (epoch s)
 EMPTY_ONCE = "_empty"           # cache key: stretches that got ONE empty reply (a second, later, vouches)
-
-
-def in_quiet(now: dt.datetime) -> bool:
-    t = now.astimezone(ET)
-    return t.weekday() < 5 and QUIET[0] <= t.time() < QUIET[1]
 
 
 def _ms(t: dt.datetime) -> int:
@@ -799,13 +792,13 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
     file as it lands, then merge the live recordings no fetch touched. At night
     (outside 08:00-17:05 ET on weekdays) it runs until done or 08:00 and waits
     out a rate-limit reply; by day it spends at most DAY_PAGES pages
-    (DAY_ROOT_PAGES a root), never inside 09:20-09:35 ET, and a rate-limit reply
+    (DAY_ROOT_PAGES a root), and a rate-limit reply
     or a refused connection ends it until the next run. What a fetch had paged
     when it was cut short is merged all the same. Says nothing when there is
     nothing to do. Returns the last manifest written per session; raises
     NoMdToken (once the live recordings are merged) when the desk has no md
     token on disk -- run() waits for one. full (the Refresh data button): by day, but
-    without the DAY_PAGES / DAY_ROOT_PAGES caps -- it still stops at 09:20-09:35, on a
+    without the DAY_PAGES / DAY_ROOT_PAGES caps -- it still stops on a
     rate-limit reply and when the live login's hour is spent (the shared cap), so the
     charts keep their share."""
     now = now or now_et()
@@ -872,7 +865,7 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
             for expiry, _, _, date, key, s, e, why in jobs:
                 st = sessions[key]
                 root, contract = st["root"], st["contract"]
-                if in_quiet(now_et()) or (budget is not None and budget <= 0):
+                if budget is not None and budget <= 0:
                     break
                 if not day and deadline_passed():
                     log(f"deadline {DEADLINE_ET} ET — the daytime runs take it from here")
@@ -886,8 +879,7 @@ async def record(roots=ROOTS, dates: list[dt.date] | None = None,
                 t0 = time.perf_counter()
                 try:
                     rows, stats = await fetch_session(
-                        conn, contract, s, e, expiry=expiry, max_pages=left, deadline=not day,
-                        halt=lambda: in_quiet(now_et()), penalty_stop=day)
+                        conn, contract, s, e, expiry=expiry, max_pages=left, deadline=not day, penalty_stop=day)
                 except Exception as ex:  # noqa: BLE001 — nothing was paged
                     if cut_short(ex, contract, f"{root} {date} {contract} {_et_span(s, e)}"):
                         break
@@ -1065,8 +1057,8 @@ def main(argv=None) -> int:
                          "manifest (data files untouched), then the report (no market data)")
     ap.add_argument("--sessions", type=int, default=30, help="sessions per root the report covers")
     ap.add_argument("--full", action="store_true",
-                    help="by day too, without the per-run page caps (the Refresh data button); still never "
-                         "09:20-09:35 ET, and it stops when the live login's hour is spent")
+                    help="by day too, without the per-run page caps (the Refresh data button); it still stops "
+                         "when the live login's hour is spent")
     fm = ap.add_argument_group("Massive gap-fill (manual, off by default; homebase.tickmassive)")
     fm.add_argument("--fill-from-massive", action="store_true",
                     help="fill the archive from Massive flat files (env MASSIVE_S3_KEY / MASSIVE_S3_SECRET)")
@@ -1107,10 +1099,8 @@ def main(argv=None) -> int:
 
 def _wait_for_token(left: float, poll_s: float, sleep) -> tuple[bool, float]:
     """Poll the token files (a read of the disk -- never a login) every poll_s until one
-    is valid or `left` seconds are used up, or 09:20-09:35 ET begins. (found, seconds left)."""
+    is valid or `left` seconds are used up. (found, seconds left)."""
     while left > 0:
-        if in_quiet(now_et()) or in_quiet(now_et() + dt.timedelta(seconds=poll_s)):
-            return False, left           # never wait into 09:20-09:35
         sleep(poll_s)
         left -= poll_s
         if _valid_md_tokens(config_mod.load(unknown="ignore").accounts.items()):
@@ -1124,14 +1114,11 @@ def run(roots, dates, base: Path, sessions: int = 30, *, sleep=time.sleep,
     and merge whatever is missing (record), then the data watchdog (data_watch),
     then the coverage report when the run changed something or the last report
     is REPORT_EVERY old. Silent when there is nothing to do and the data is
-    fine; never inside 09:20-09:35 ET; a run already in
-    progress (the lock) is left to it. A run that fails ONLY for want of a valid md token
+    fine; a run already in progress (the lock) is left to it. A run that fails ONLY for want of a valid md token
     (it ran right after a wake, before the desk reconnected and wrote one) waits for the
     token and retries within itself, every token_poll_s for up to token_wait_s, then gives
     up quietly until the next run; it never logs in. A click (full) that gives up so exits
     NO_TOKEN_EXIT, for the Refresh data button to say why nothing was fetched."""
-    if in_quiet(now_et()):
-        return 0
     cache_path = state_dir() / "tick_runs.json"
     rc, no_token = 0, False
     try:

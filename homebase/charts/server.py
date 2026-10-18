@@ -30,7 +30,7 @@ from .. import netguard, symbols
 from .. import ticks as T
 from ..contracts import tick_size as contract_tick_size
 from ..paths import state_dir
-from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS, QUIET      # QUIET: never refill across the 9:30 fire
+from . import DEFAULT_ROOTS, DEPTH_RECORD_ROOTS
 from .bars import BarSpec
 from .barreplay import BarReplay
 from .bookhist import MAX_SPAN_MS as BOOK_MAX_SPAN_MS, BookPool
@@ -136,9 +136,6 @@ DRAWING_VIS_MAX_S = 31 * 86400                      # `vis` (which intervals a d
 MAX_DRAWING_LABEL_TEXT = 200
 # Task 4 app-settings plan, Fix round 1 (review of bdaccbd):
 BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_BUSY + "error"
-MD_SWITCH_MARGIN_START = dt.time(9, 15)   # I4: a margin before QUIET[0] itself -- a switch's own
-                                          # duration is unbounded (connect + up to 11 getChart
-                                          # timeouts + p-ticket retries), so QUIET[0] is too late
 MD_SWITCH_COOLDOWN_S = 600         # I3: at most one switch ATTEMPT every 10 min
 MD_SWITCH_BUDGET_HEADROOM = 120    # I3/N4: refuse a switch once the TARGET login is this close to 180/h
 MD_SWITCH_TIMEOUT_S = 600          # N3: the PUT never waits longer than this for the feed
@@ -793,7 +790,6 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             return
         t0 = clock()
         sess = await asyncio.to_thread(store.load, root, d)
-        await _quiet_wait()                         # never reset the charts across the 9:30 fire
         if sess is None or hub.today_date.get(root) != d:
             return                                  # the session rolled meanwhile: the next poll decides
         ticks = splice_tail(sess.ticks, hub.today.get(root, ()), t0 - REPAIR_SPLICE_MS)
@@ -827,7 +823,6 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         for root in sorted(past_due):
             if time.monotonic() - past_reset_at.get(root, -math.inf) < PAST_REDRAW_S:
                 continue
-            await _quiet_wait()
             past_due.discard(root)
             past_reset_at[root] = time.monotonic()
             held = [s for s in hub.streams.values() if s.root == root]
@@ -858,18 +853,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             except Exception as e:  # noqa: BLE001 — nor this one
                 log(f"past sessions: repair pickup: {type(e).__name__}: {e}")
 
-    async def _quiet_wait() -> None:
-        while QUIET[0] <= dt.datetime.fromtimestamp(clock() / 1000, ET).time() < QUIET[1]:
-            await sleep(15)
-
     async def _paced_sleep(s: float) -> None:
-        """Passed to refill() as its own inter-page/penalty pacing hook: after
-        every such pause, also hold until the clock clears the 9:30 fire.
-        refill() paces slowly enough (~21s/page, longer after a penalty) that
-        a run started just before 09:20 would otherwise keep paging deep into
-        the quiet window — the one-time pre-check below only covers page 1."""
+        """Passed to refill() as its own inter-page/penalty pacing hook."""
         await sleep(s)
-        await _quiet_wait()
 
     async def _refill(root: str, contract: str, since_ms: int | None) -> None:
         """After a (re)subscribe: fetch what the socket missed, within
@@ -916,10 +902,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         try:
             while root in refill_pending:
                 entry = refill_pending[root]
-                await _quiet_wait()                     # covers page 1 (later pages: _paced_sleep)
                 async with refill_lock:
                     del refill_pending[root]            # now RUNNING: a new request becomes a follow-up
-                    await _quiet_wait()                 # may have queued past 09:20 for the lock
                     frm, contract = entry["frm"], entry["contract"]
                     to = clock()
                     if to - frm < 2000:
@@ -1433,15 +1417,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                   for a in (s.get("accounts") or {}).values())
 
     def md_switch_refused() -> str | None:
-        """None, or the one sentence the Settings dialog shows: refused from MD_SWITCH_MARGIN
-        (a margin before the 09:20 quiet window itself -- review I4: a switch's own connect +
-        up to 11 x 15 s getChart timeouts + p-ticket retries has no bounded duration, so the
-        window's OWN start is too late a check) through 09:35 ET on a weekday, or while the desk
-        reports a bot actually working (any status, any strategy -- not just today's booked
-        ones)."""
-        t = dt.datetime.fromtimestamp(clock() / 1000, ET)
-        if t.weekday() < 5 and MD_SWITCH_MARGIN_START <= t.time() < QUIET[1]:
-            return "Not while the 9:30 bot is working — try after 09:35."
+        """None, or the one sentence the Settings dialog shows: refused while the desk reports a bot
+        actually working (any status, any strategy -- not just today's booked ones)."""
         if bot_placing():
             return "Not while the 9:30 bot is working — try after 09:35."
         return None
@@ -1520,9 +1497,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         ATTEMPT, successful or not (429, review I3 -- a switch costs roughly 2 requests per root,
         subscribe plus its gap refill, so unthrottled clicking can spend the whole hourly budget
         in under ten); the TARGET login too close to its own hourly budget to afford one
-        switch's worth of requests (429); the 09:20-09:35 ET weekday window or a bot working
-        (423). Any OTHER failure -- a bad connect, an environment mismatch, every root refused,
-        the window opening mid-switch -- is TickFeed's own RuntimeError (502); nothing else is
+        switch's worth of requests (429); a bot working (423). Any OTHER failure -- a bad connect,
+        an environment mismatch, every root refused -- is TickFeed's own RuntimeError (502); nothing else is
         allowed to reach this route as an unhandled 500. A feed that has not answered in
         MD_SWITCH_TIMEOUT_S is 504; the switch still finishes and keeps the file right.
 
@@ -1817,7 +1793,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # the liquidity heatmap's history (depthgrid.py): the recorded depth files as a down-sampled grid, built
     # in ONE spawned worker process (never this process, never the default thread pool), one request at a
     # time (busy -> 503, never queued), <= 2 MB, never past now (a replay's own clock in a replay: no
-    # look-ahead), and never decoded 09:20-09:35 ET or 08:29:30-08:31 ET on weekdays, by the wall clock
+    # look-ahead), and never decoded 08:29:30-08:31 ET on weekdays, by the wall clock
     # (the service's clock when live, so tests can place it)
     def depth_wall_ms() -> float:
         return time.time() * 1000 if replay else clock()

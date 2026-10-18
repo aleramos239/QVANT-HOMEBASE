@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 
 from homebase import symbols
 from homebase.charts.hub import Hub, Stream
-from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE_BYTES, QUIET, Conn, Throttle,
+from homebase.charts.server import (MAX_DRAWINGS, MAX_PRESET_BYTES, MAX_TEMPLATE_BYTES, Conn, Throttle,
                                     check_drawings, check_template_name, create_app)
 from homebase.charts.session import session_range_ms
 from homebase.charts.store import read_table
@@ -422,69 +422,6 @@ def test_refill_coalesces_same_root_requests_while_pending(tmp_path, monkeypatch
     assert nq_calls[0]["frm"] == session_ms(D, 9, 10)
 
 
-def test_refill_holds_the_quiet_window_while_paging(tmp_path, monkeypatch):
-    """refill() paces pages ~21s apart; a refill starting just before 09:20
-    must not let ANY page request land inside 09:20-09:35, however many pages
-    it takes to page through the window. A fake, instantly-advancing clock
-    (driven by the monkeypatched `sleep` seam) simulates real elapsed time
-    with no actual wall-clock wait."""
-    clock_ms = [session_ms(D, 9, 19, 50)]
-
-    async def fake_sleep(s):
-        clock_ms[0] += int(s * 1000)
-
-    monkeypatch.setattr("homebase.charts.server.sleep", fake_sleep)
-
-    request_times: list = []
-
-    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
-        request_times.append(clock_ms[0])                # page 0: no pre-sleep, same as refill()
-        for _ in range(1, max_pages):
-            await sleep(21)                               # refill()'s own PAGE_INTERVAL_S pacing
-            request_times.append(clock_ms[0])
-        return [], frm
-
-    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
-
-    class FakeFeed:
-        def __init__(self, roots, on_ticks, on_subscribed=None):
-            self.on_ticks, self.on_subscribed, self.ws = on_ticks, on_subscribed, None
-
-        def count_request(self):
-            pass
-
-        def budget_used(self):
-            return 0
-
-        async def run(self):
-            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(D, 8, 0)))
-            while True:
-                await asyncio.sleep(0.01)
-
-        def stop(self):
-            pass
-
-        def status(self):
-            return {"mode": "live", "connected": True, "error": None, "roots": {},
-                    "budget_hour": 0, "reconnects": 0}
-
-    base = tmp_path / "ticks"
-    app = create_app(roots=["NQ"], base=base, feed_factory=FakeFeed,
-                     now_ms=lambda: clock_ms[0], state=tmp_path / "state")
-    with TestClient(app):
-        deadline = time.time() + 5
-        while len(request_times) < 20 and time.time() < deadline:
-            time.sleep(0.02)
-
-    assert len(request_times) == 20
-
-    def in_quiet(ms):
-        t = dt.datetime.fromtimestamp(ms / 1000, ET).time()
-        return QUIET[0] <= t < QUIET[1]
-
-    assert not any(in_quiet(t) for t in request_times), request_times
-
-
 def test_flush_runs_even_when_chart_work_raises(tmp_path, monkeypatch):
     """The recorder's flush must not share fate with hub.on_clock()/drain():
     even if chart bookkeeping raises on every pump tick, ticks the feed
@@ -673,70 +610,6 @@ def test_refill_running_gets_a_followup_not_absorbed(tmp_path, monkeypatch):
     lo, hi = session_ms(D, 9, 45, 30), session_ms(D, 9, 46)
     covered = any(a <= lo and b >= hi for _, a, b in calls) or any(a <= lo and b >= hi for a, b in gaps)
     assert covered, "the 09:45:30 -> 09:46:00 stretch was neither fetched nor marked as a gap"
-
-
-def test_refill_rechecks_quiet_window_after_the_lock(tmp_path, monkeypatch):
-    """The pre-lock _quiet_wait() can be stale by the time the lock is
-    actually granted (another root's fetch can run long enough to cross into
-    09:20); page 0 has no pre-sleep of its own. Reproduces the reviewer's
-    probe_quiet_after_lock.py: ES sends page 0 at 09:19:58 and releases the
-    lock at 09:20:01; the queued NQ refill must not then send its own page 0
-    at 09:20:01."""
-    clock_ms = [session_ms(D, 9, 19, 58)]
-
-    async def fake_sleep(s):
-        clock_ms[0] += int(s * 1000)
-
-    monkeypatch.setattr("homebase.charts.server.sleep", fake_sleep)
-
-    reqs: list = []
-
-    async def fake_refill(ws, contract, frm, to, *, max_pages, sleep=None, on_request=None):
-        reqs.append((contract, clock_ms[0]))          # page 0: refill() sends it with no pre-sleep
-        await asyncio.sleep(0.05)                       # real yield: the other root queues on the lock
-        clock_ms[0] += 3000                              # round trip + unpack; one page covered the gap
-        return [], frm
-
-    monkeypatch.setattr("homebase.charts.server.refill", fake_refill)
-
-    class FakeFeed:
-        def __init__(self, roots, on_ticks, on_subscribed=None):
-            self.on_subscribed, self.ws = on_subscribed, None
-
-        def count_request(self):
-            pass
-
-        def budget_used(self):
-            return 0
-
-        async def run(self):
-            asyncio.create_task(self.on_subscribed("ES", "ESZ6", session_ms(D, 9, 19, 0)))
-            asyncio.create_task(self.on_subscribed("NQ", "NQZ6", session_ms(D, 9, 19, 0)))
-            while True:
-                await asyncio.sleep(0.01)
-
-        def stop(self):
-            pass
-
-        def status(self):
-            return {"mode": "live", "connected": True, "error": None, "roots": {},
-                    "budget_hour": 0, "reconnects": 0}
-
-    app = create_app(roots=["ES", "NQ"], base=tmp_path / "ticks", feed_factory=FakeFeed,
-                     now_ms=lambda: clock_ms[0], state=tmp_path / "state")
-    with TestClient(app):
-        deadline = time.time() + 5
-        while len(reqs) < 2 and time.time() < deadline:
-            time.sleep(0.02)
-        time.sleep(0.1)
-
-    assert len(reqs) == 2, reqs
-
-    def in_quiet(ms):
-        t = dt.datetime.fromtimestamp(ms / 1000, ET).time()
-        return QUIET[0] <= t < QUIET[1]
-
-    assert not any(in_quiet(ms) for _, ms in reqs), reqs
 
 
 def test_a_failed_subscribe_leaves_no_orphaned_stream_or_pending_update(tmp_path, monkeypatch):

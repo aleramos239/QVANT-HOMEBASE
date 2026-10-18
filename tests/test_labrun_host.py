@@ -1740,17 +1740,12 @@ def test_a_day_switched_off_or_not_today_is_never_matched(desk):
     assert k.file()["state"] == "off" and k.matcher.calls == []
 
 
-def test_the_match_never_starts_09_20_to_09_35_on_a_weekday(desk):
+def test_the_match_of_the_session_before_runs_at_09_21_too(desk):
+    """No 9:30 window since 2026-10-16: a restart at 09:21 matches the previous session's done day at once."""
     f = a_finished_day(desk)
     mon = f.with_name(f"{MON}.json")                                         # the session before: done, no match yet
     mon.write_text(json.dumps({**json.loads(f.read_text()), "date": MON.isoformat(), "match": None}))
     k = restart(desk, "09:21:00")
-    assert k.matcher.calls == []
-    for hms in ("09:25:00", "09:34:59"):
-        k.clock(hms)
-        k.r.sync()
-        assert k.matcher.calls == []
-    k.clock("09:35:00")
     assert [c[:2] for c in k.matcher.calls] == [("lab_x", MON)]              # (today's own is not due before 17:35)
     assert json.loads(mon.read_text())["match"] == MATCHED and json.loads(f.read_text())["match"] is None
 

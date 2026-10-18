@@ -392,100 +392,6 @@ def test_every_root_refused_on_a_fresh_socket_reconnects_within_the_md_budget():
     assert "every symbol refused" in st["error"] and "status=500" in st["roots"]["NQ"]["error"]
 
 
-def test_refused_all_wait_is_extended_to_clear_the_quiet_window():
-    """A reconnect due while every root is refused must not land inside
-    09:20-09:35 ET: from 09:12 the plain max(backoff, RETRY_REFUSED_S) wait
-    (600 s) would land at 09:22 -- it must be extended to end at 09:35
-    instead, so the reconnect's getChart round never fires inside the
-    window."""
-    t0 = dt.datetime(2026, 9, 24, 9, 12, tzinfo=ET).timestamp()     # a Thursday
-    clock = [t0]
-    slept = []
-
-    async def connect():
-        return RaisingWS({symbols.resolve_contract(r): RuntimeError("md/getChart failed: status=500 data=None")
-                          for r in ("NQ", "BTC")})
-
-    async def sleep(s):
-        slept.append(s)
-        await asyncio.sleep(0)
-        clock[0] += s
-        feed.stop()                      # one cycle is enough to see the computed wait
-
-    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
-    run(feed.run())
-    assert slept == [23 * 60]            # 09:12 -> 09:35, not the plain 600 s (which lands at 09:22)
-
-
-def test_a_refused_root_is_not_retried_inside_the_0920_0935_quiet_window():
-    t0 = dt.datetime(2026, 9, 24, 9, 12, tzinfo=ET).timestamp()     # a Thursday
-    clock = [t0]
-    btc = symbols.resolve_contract("BTC")
-    asked = []
-
-    class WS(FakeWS):
-        async def request(self, ep, body=""):
-            if body["symbol"] == btc:
-                asked.append(dt.datetime.fromtimestamp(clock[0], ET).time())
-                self.sent.append((ep, body))
-                return {"errorText": "no entitlement"}
-            return await super().request(ep, body)
-
-    ws = WS()
-
-    async def connect():
-        return ws
-
-    async def sleep(_s):
-        await asyncio.sleep(0)
-        clock[0] += 60                   # each 1 s wait jumps a minute
-        if clock[0] >= t0 + 45 * 60:     # to 09:57
-            feed.stop()
-
-    feed = TickFeed(["NQ", "BTC"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
-    run(feed.run())
-    # 09:22 falls in the window: asked at 09:35; then twice the wait (review 5): 09:55
-    assert asked == [dt.time(9, 12), dt.time(9, 35), dt.time(9, 55)]
-
-
-def test_a_refused_retry_round_stops_mid_round_when_the_quiet_window_opens():
-    """A retry round can straddle 09:20: with 3 refused roots and each
-    request taking real time (15 s here, like a real getChart round-trip),
-    the round must stop the instant a root's turn lands inside 09:20-09:35,
-    leaving the rest for the next scheduled round -- the OLD code checked
-    _quiet() once for the whole round and would have sent all 3."""
-    t0 = dt.datetime(2026, 9, 24, 9, 9, 14, tzinfo=ET).timestamp()   # a Thursday
-    clock = [t0]
-    fail = {symbols.resolve_contract(r) for r in ("BTC", "GC", "SI")}
-
-    class SlowRefusingWS(FakeWS):
-        async def request(self, ep, body=""):
-            self.sent.append((ep, body))
-            if body["symbol"] in fail:
-                clock[0] += 15            # a refusal round-trip costs real time too
-                return {"errorText": "no entitlement"}
-            n = len(self.sent)
-            return {"historicalId": 10 + n, "realtimeId": 100 + n}
-
-    ws = SlowRefusingWS()
-
-    async def connect():
-        return ws
-
-    async def sleep(s):
-        await asyncio.sleep(0)
-        clock[0] += s
-        if clock[0] >= t0 + 700:         # past the partial round, short of the next one at 09:35
-            feed.stop()
-
-    feed = TickFeed(["NQ", "BTC", "GC", "SI"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
-    run(feed.run())
-    retried = [b["symbol"] for _, b in ws.sent[4:]]     # calls after the 4 initial subscribes
-    # each root keeps its own clock (refused 15 s apart): BTC and GC come due before 09:20,
-    # SI's turn is 09:20:14 -- inside the window, so it waits for it to close
-    assert retried == [symbols.resolve_contract("BTC"), symbols.resolve_contract("GC")]
-
-
 # ------------------------------------------------------------------ switch_md
 # Task 4 (2026-09-27 app-settings plan), fix round 2. switch_md only leaves a request that
 # run() services. Every test drives a real run() and, after the switch's outcome, LETS IT KEEP
@@ -707,49 +613,6 @@ def test_a_failed_switch_leaves_the_old_socket_serving_and_run_carries_on(case):
         assert not cand.connected                             # the candidate was closed
     assert f.budget_used("demo") == 2                         # the target's requests are charged
     assert f.budget_used("live") == len(getattr(cand, "sent", []))   # to the target (I3/N4)
-
-
-def test_the_930_window_opening_mid_switch_aborts_and_nothing_follows_inside_it():
-    old = FakeWS()
-    t0 = dt.datetime(2026, 9, 24, 9, 19, 58, tzinfo=ET).timestamp()
-    rig = Rig(["NQ", "ES"], ordinary=lambda: old, now0=t0)
-
-    class Clocked(FakeWS):
-        async def request(self, ep, body=""):
-            rig.clock[0] += 5                                 # the second root lands at 09:20:0x
-            return await super().request(ep, body)
-
-    cand = Clocked()
-    rig.env_socks["live"] = cand
-    rig.clock[0] = t0
-
-    async def body():
-        while not rig.feed.connected:
-            await asyncio.sleep(0)
-        rig.clock[0] = t0                                     # the switch starts at 09:19:58
-        with pytest.raises(RuntimeError, match="9:30 window opened"):
-            await rig.feed.switch_md("live")
-        await rig.polls(60)                                   # a minute on, inside the window
-        _still_serving(rig, old)
-
-    rig.drive(body)
-    assert len(cand.sent) == 1 and not cand.connected and rig.feed.md_env == "demo"
-
-
-def test_a_switch_asked_inside_the_window_never_connects():
-    old = FakeWS()
-    rig = Rig(["NQ"], ordinary=lambda: old, env_socks={"live": FakeWS()},
-              now0=dt.datetime(2026, 9, 24, 9, 25, tzinfo=ET).timestamp())
-
-    async def body():
-        await rig.up()
-        with pytest.raises(RuntimeError, match="9:30 window"):
-            await rig.feed.switch_md("live")
-        await rig.polls(10)
-        _still_serving(rig, old)
-
-    rig.drive(body)
-    assert [k for k, _ in rig.connects] == ["ordinary"]
 
 
 def test_a_failed_switch_then_a_real_drop_reconnects_normally_on_the_old_login():
@@ -1059,7 +922,7 @@ def _tok(ws, token):
 def test_the_rebuild_window_is_the_desks_early_renewal_window():
     from homebase.broker import tradovate
     from homebase.charts.tickfeed import RECYCLE
-    assert RECYCLE == (tradovate.RENEW_EARLY_FROM, tradovate.RENEW_QUIET[0])
+    assert RECYCLE == (tradovate.RENEW_EARLY_FROM, tradovate.RENEW_EARLY_UNTIL)
 
 
 def test_a_socket_on_an_older_md_token_is_rebuilt_make_before_break_before_0920():
@@ -1266,22 +1129,3 @@ def test_the_feed_publishes_its_hourly_chart_requests_for_the_tick_job(tmp_path)
     assert got == {"requests": {"live": [1_790_003_000.0, 1_790_004_000.0], "demo": [1_790_003_000.0]}}
 
 
-def test_a_failed_reconnect_waits_out_the_0930_window_but_the_first_one_goes_at_once():
-    t0 = dt.datetime(2026, 9, 24, 9, 24, tzinfo=ET).timestamp()
-    clock, waits, tries = [t0], [], []
-
-    async def connect():
-        tries.append(clock[0])
-        raise OSError("network is down")
-
-    async def sleep(s):
-        await asyncio.sleep(0)
-        waits.append(s)
-        clock[0] += s
-        if len(tries) >= 3:
-            feed.stop()
-
-    feed = TickFeed(["NQ"], lambda *a: None, connect=connect, sleep=sleep, now=lambda: clock[0])
-    run(feed.run())
-    assert waits[0] == 5                                   # the first reconnect: at once
-    assert dt.datetime.fromtimestamp(tries[2], ET).time() >= dt.time(9, 35)   # then past 09:35

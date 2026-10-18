@@ -24,7 +24,7 @@ on=False), attach() never called) the desk never reads the store, never tries it
     LabDesk.refresh()      every 2 s (run()): the store is read in a thread, the config is changed on the loop. Skipped
                            while the chart views are paused (a bot is placing, the seconds around a fire) and while a
                            request is writing. It never waits for the store's lock.
-    LabDesk.set_limits     the owner's limits, checked (labcfg.parse_limits); not 09:20-09:35 ET, not with a round open,
+    LabDesk.set_limits     the owner's limits, checked (labcfg.parse_limits); not with a round open,
                            not below a size already booked.
     LabDesk.check_book     asked before EVERY strategy's book write: for a Lab strategy its limits, its size cap,
                            one broker account once, and no account taken off while it has a round open. Strategies of
@@ -68,13 +68,11 @@ FLAG_FILE = "lab_desk.on"                # in the checkout's state folder: this 
 REFRESH_S = 2.0                          # the store is re-read this often
 REQ_WAIT_S = 2.0                         # a request waits this long, at most, for the store's lock (in a thread)
 RUNNER_ALIVE_S = 20                      # the runner is alive while its heartbeat is at most this old
-QUIET = (dt.time(0, 0), dt.time(0, 0))   # weekdays ET: EMPTY since 2026-10-12 (was the 09:20-09:35 window: limits were not changed in it)
 OPEN = ("placing", "placed", "live")     # a round the engine still acts on
 
 NOT_ON_DESK = "That strategy is not on the Desk."
 SET_LIMITS_FIRST = "Set the limits first."
 FLATTEN_FIRST = "Flatten it first."
-NOT_NOW = "Not 09:20-09:35 ET. Try again after 09:35."
 NOT_SAVED = "Could not save it. Try again."
 RECORD_CHANGED = "This strategy changed. Try again."
 BOOKED_FOR_MORE = "An account is booked for more. Lower its size first."
@@ -262,10 +260,6 @@ class LabDesk:
         a = self.cfg.accounts.get(aid)
         return (a.label or a.account_name or aid) if a is not None else aid
 
-    def _in_quiet(self) -> bool:
-        now = self.engine.now_et()
-        return now.weekday() < 5 and QUIET[0] <= now.time() < QUIET[1]
-
     def _need(self, name) -> None:
         if not self.is_lab(name):
             raise Refused(NOT_ON_DESK, 404)
@@ -442,7 +436,7 @@ class LabDesk:
     # ------------------------------------------------------------ limits
     async def set_limits(self, name: str, body) -> dict:
         """ValueError: a bad field, with its sentence. Refused: the Lab side is off, not a Lab strategy (404), another
-        desk owns the store, the 9:30 window, a round open, an account booked for more than the new cap, or the
+        desk owns the store, a round open, an account booked for more than the new cap, or the
         sidecar could not be written. Nothing changes on a refusal."""
         if not self.on:
             raise Refused(SWITCHED_OFF)
@@ -450,8 +444,6 @@ class LabDesk:
         self._must_own()
         rec = labcfg.record_of(self.cfg, name)
         limits = labcfg.parse_limits(body, rec)
-        if self._in_quiet():
-            raise Refused(NOT_NOW)
         why = self._open_why(name)
         if why is not None:
             raise Refused(why)
@@ -483,15 +475,15 @@ class LabDesk:
         """The settings the strategy declared adjustable (record `settings`), written into the record's params; the
         runner takes them from its next session (its own settings key changes). ValueError: a setting that is not
         adjustable or a bad value. Refused: the Lab side is off, not a Lab strategy (404), another desk owns the store,
-        the strategy's session is running (change it before the window opens or after it closes), the 9:30 window, a
-        round open, or the record changed / could not be written. Nothing changes on a refusal."""
+        the strategy's session is running (change it before the window opens or after it closes), a round open, or
+        the record changed / could not be written. Nothing changes on a refusal."""
         if not self.on:
             raise Refused(SWITCHED_OFF)
         self._need(name)
         self._must_own()
         rec = labcfg.record_of(self.cfg, name)
         changes = labcfg.parse_settings(body, rec)
-        if self._in_quiet() or self._in_session(rec):
+        if self._in_session(rec):
             w = rec.get("session_window") or ["", ""]
             raise Refused(f"Not while it is in session. Change it before {w[0]} or after {w[1]} ET.")
         why = self._open_why(name)

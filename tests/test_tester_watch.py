@@ -66,7 +66,3 @@ def test_executions_writes_the_run_once_and_asks_the_chart_pages(c, calls):
     assert calls["exec"] == ["nq_x"]
 
 
-def test_executions_never_moves_a_chart_in_the_930_window(c, calls, monkeypatch):
-    monkeypatch.setattr(tester_api.Slots, "quiet", lambda self: True)
-    r = c.post("/api/tester/pipeline/executions", json={"name": "nq_x"})
-    assert r.status_code == 409 and "9:30 window" in r.json()["detail"] and calls["exec"] == []

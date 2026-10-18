@@ -18,7 +18,6 @@ from homebase.claude_mcp.client import Client, ToolError
 from homebase.claude_mcp.desk_client import DeskClient
 
 ET = ZoneInfo("America/New_York")
-IN_QUIET = dt.datetime(2026, 9, 29, 9, 27, tzinfo=ET)      # a Tuesday, inside 09:20-09:35 ET
 OUTSIDE_QUIET = dt.datetime(2026, 9, 29, 10, 0, tzinfo=ET)
 
 
@@ -360,63 +359,8 @@ def test_account_remove_description_matches_the_servers_actual_refusal_rules():
     position or a working order"."""
     from homebase.claude_mcp.desk_tools import SPECS
     desc = next(s["description"] for s in SPECS if s["name"] == "account_remove")
-    for phrase in ("caches seeded", "no working order", "placing, placed or live",
-                  "09:10-09:35"):
+    for phrase in ("caches seeded", "no working order", "placing, placed or live"):
         assert phrase in desc, f"account_remove description missing {phrase!r}"
-
-
-@pytest.mark.parametrize("tool,args", [
-    ("account_reconnect", {}), ("account_remove", {"account": "sim041"}),
-    ("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01", "end": "2026-01-02",
-                      "timeframe": "1m"}),
-    ("export_status", {"id": "20260101-000000-abcd1234"}),
-])
-def test_every_operate_tool_is_refused_in_the_930_window(desk, charts, tool, args):
-    b = box(desk, charts, now=IN_QUIET)
-    with pytest.raises(ToolError, match="09:10-09:35"):
-        b.call(tool, args)
-    assert not desk.requests and not charts.requests
-
-
-@pytest.mark.parametrize("tool,args", [
-    ("account_reconnect", {}), ("account_remove", {"account": "sim041"}),
-    ("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01", "end": "2026-01-02",
-                      "timeframe": "1m"}),
-    ("export_status", {"id": "20260101-000000-abcd1234"}),
-])
-def test_every_operate_tool_is_refused_at_915_too(desk, charts, tool, args):
-    """2026-09-29 review: the OPERATE quiet window widened from 09:20 to 09:10 -- 09:15 used to
-    be allowed and now must be refused, same as 09:27."""
-    at_915 = dt.datetime(2026, 9, 29, 9, 15, tzinfo=ET)
-    b = box(desk, charts, now=at_915)
-    with pytest.raises(ToolError, match="09:10-09:35"):
-        b.call(tool, args)
-    assert not desk.requests and not charts.requests
-
-
-def test_the_930_window_only_applies_on_weekdays_and_exact_minutes(desk, charts):
-    saturday = dt.datetime(2026, 9, 26, 9, 27, tzinfo=ET)   # a Saturday at the same clock time
-    b = box(desk, charts, now=saturday)
-    b.call("account_reconnect", {})   # does not raise
-    assert desk.requests
-
-
-# ---------------------------------------------------------------- export
-
-def test_export_start_and_status_request_shape(desk, charts):
-    charts.routes[("POST", "/api/export/start")] = {"id": "20260101-000000-abcd1234"}
-    charts.routes[("GET", "/api/export/20260101-000000-abcd1234")] = {
-        "id": "20260101-000000-abcd1234", "status": "running", "phase": "reading",
-        "sessions_done": 1, "sessions_total": 4, "rows": 1000}
-    b = box(desk, charts)
-    text = b.call("export_start", {"root": "NQ", "type": "candles", "start": "2026-01-01",
-                                   "end": "2026-01-02", "timeframe": "1m"})
-    assert charts.last("POST")["route"] == "/api/export/start"
-    assert charts.last("POST")["body"] == {"root": "NQ", "type": "candles", "start": "2026-01-01",
-                                           "end": "2026-01-02", "timeframe": "1m"}
-    assert "20260101-000000-abcd1234" in text
-    text = b.call("export_status", {"id": "20260101-000000-abcd1234"})
-    assert "running" in text and "reading" in text and "1/4" in text
 
 
 def test_export_status_quotes_the_id_like_the_tester_tools(desk, charts):

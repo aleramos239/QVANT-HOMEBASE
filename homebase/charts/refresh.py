@@ -17,8 +17,7 @@ takes the archive's own lock, so a click during the hourly run breaks nothing: t
 work and this one ends at once. It never opens an order path -- it only reads the broker's tick history and
 writes ~/futures_ticks. It needs the desk's Tradovate login (the md token the desk writes): with none on disk the
 click is refused, saying so, rather than "done" with nothing fetched. When the run ends the chart service reloads
-every open chart (on_finish), so what it filled shows at once. It never starts 09:20-09:35 ET (it checks
-itself), and the button refuses then too, saying why, rather than start a run that does nothing.
+every open chart (on_finish), so what it filled shows at once.
 
     <state>/refresh/status.json   {status: idle|running|done|error|cancelled, step, steps: [{key, label, state, note}],
                                    started, finished, coverage?}
@@ -40,7 +39,7 @@ from typing import Callable
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from ..paths import repo_root, state_dir
-from .export import in_quiet, read_json, write_json
+from .export import read_json, write_json
 from .tester_api import host_ok
 
 FINAL = ("done", "error", "cancelled")
@@ -120,8 +119,6 @@ class RefreshManager:
         with self._lock:
             if self._status.get("status") == "running":
                 raise ValueError("a refresh is already running")
-            if in_quiet(self.clock()):
-                raise ValueError("not 09:20–09:35 ET on weekdays (the 9:30 window): refresh after 09:35")
             if self.md_ready is not None and not self.md_ready():
                 raise ValueError(NO_LOGIN)
             if self._archive_busy():

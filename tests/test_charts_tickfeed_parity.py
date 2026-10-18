@@ -20,7 +20,8 @@ from homebase.charts.tickfeed import BACKOFF_S, HEALTHY_S, RETRY_REFUSED_S, Refu
 
 class MainFeed(TickFeed):
     """main's TickFeed.run() and the two methods it calls, verbatim. Everything else
-    (status, _on_event, _quiet, ...) is shared with TickFeed and unchanged from main."""
+    (status, _on_event, ...) is shared with TickFeed and unchanged from main; the 9:30 window's
+    lines went from both on 2026-10-17."""
 
     async def subscribe(self, root: str) -> str:
         try:
@@ -100,11 +101,9 @@ class MainFeed(TickFeed):
                 next_retry = self._now() + RETRY_REFUSED_S
                 while not self._stop and self.connected:
                     await self._sleep(1)
-                    if self.refused and self._now() >= next_retry and not self._quiet():
+                    if self.refused and self._now() >= next_retry:
                         next_retry = self._now() + RETRY_REFUSED_S
                         for r in list(self.refused):
-                            if self._quiet():   # a round can straddle 09:20; re-check every root, not once
-                                break
                             await self._start(r)
                 if not self._stop:
                     self.error = "md socket closed"
@@ -125,7 +124,6 @@ class MainFeed(TickFeed):
             wait = BACKOFF_S[min(attempt, len(BACKOFF_S) - 1)]
             if refused_all:
                 wait = max(wait, RETRY_REFUSED_S)   # each such round costs one getChart per root
-                wait = self._extend_past_quiet(wait)
             await self._sleep(wait)
             attempt += 1
 

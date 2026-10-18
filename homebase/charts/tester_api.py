@@ -58,7 +58,7 @@
                                           checks and the ONE command of the pipeline tool every chat has; `text` is one
                                           plain sentence for the page (pipeline_tools.page_said), and for a refusal of
                                           the toolkit ok false with its own reason, without its command line. add /
-                                          start / resume are refused 09:20-09:35 ET on weekdays (they can start heavy
+                                          start / resume are refused in a quiet window of the tester (they can start heavy
                                           work); pause and the owner's yes or no never are
     GET  /api/tester/desklab             Lab strategies promoted to the Desk (homebase.labrun.store): {strategies: [each
                                           record WITHOUT its code, plus `today` (the day summary of the session day the
@@ -99,7 +99,7 @@
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
-                                          (JSON only; refused 09:20-09:35 ET on weekdays; the page picks the
+                                          (JSON only; refused in a quiet window of the tester; the page picks the
                                           chart -- testerlayer.showPlan)
     GET  /api/tester/prop-rules          prop-eval rule sets [{id, name, version, confirmed}]
     POST /api/tester/run                 {strategy, inputs, range, qty, commission,
@@ -225,7 +225,7 @@ DESKLAB_PROP = "lucid-pro-50k-no-dll@2026-10-11"   # the account every Desk pane
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
-PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in the desk's 9:30 window
+PIPE_QUIET = ("add", "start", "resume")      # what can start heavy work: not in a quiet window of the tester
 PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start | pause | resume} | "
               "{action: approve, name} | {action: refuse, name, why}")
 
@@ -570,8 +570,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         tool, args = body.get("tool"), body.get("args", {})
         if set(body) - {"tool", "args"} or not isinstance(tool, str) or tool not in bp_specs or not isinstance(args, dict):
             raise HTTPException(400, "{tool: one of " + ", ".join(bp_specs) + ", args: {...}}")
-        if Slots().quiet():       # the desk's 9:30 window: nothing is started from the page then
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): run it after 09:35")
+        if Slots().quiet():       # a quiet window of the tester: nothing is started from the page then
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): run it later")
         if "wait_s" in bp_specs[tool]["inputSchema"]["properties"]:      # a page never holds a request for an hour
             w = args.get("wait_s", LAB_WAIT_S)
             args = {**args, "wait_s": LAB_WAIT_S if isinstance(w, bool) or not isinstance(w, int) else max(0, min(w, LAB_WAIT_S))}
@@ -635,8 +635,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         """The switch: {mode: "off" | "live" | "wr" | "payout" | "funded"} -- the ONE pipeline that works, or none (owner, 2026-10-13)."""
         write_ok(request)
         json_body(request)
-        if body.get("mode") != "off" and Slots().quiet():     # switching one ON starts heavy work: not in the desk's 9:30 window (as PIPE_QUIET)
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        if body.get("mode") != "off" and Slots().quiet():     # switching one ON starts heavy work: not in a quiet window of the tester (as PIPE_QUIET)
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): do it later")
         try:
             return {"ok": True, "text": box.pipeline_set_mode(body.get("mode"))}
         except blueprint_tools.Refused as e:
@@ -664,8 +664,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         write_ok(request)
         json_body(request)
         action = body.get("action")
-        if action in ("build", "requeue") and Slots().quiet():     # heavy work: not in the desk's 9:30 window (as PIPE_QUIET)
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        if action in ("build", "requeue") and Slots().quiet():     # heavy work: not in a quiet window of the tester (as PIPE_QUIET)
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): do it later")
         try:
             return {"ok": True, "text": box.pipeline_payout_do(action)}
         except blueprint_tools.Refused as e:
@@ -714,8 +714,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 or ("name" in keys and not isinstance(name, str))
                 or ("why" in keys and not (isinstance(why, str) and why.strip()))):
             raise HTTPException(400, PIPE_SHAPE)
-        if action in PIPE_QUIET and Slots().quiet():     # the desk's 9:30 window: nothing is started from the page then
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): do it after 09:35")
+        if action in PIPE_QUIET and Slots().quiet():     # a quiet window of the tester: nothing is started from the page then
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): do it later")
         try:                      # the checks and the ONE command of the tool a chat has, answered in one plain sentence
             return {"ok": True, "text": box.pipeline_do(action, card=card, inbox=bool(inbox), name=name, why=why)}
         except blueprint_tools.Refused as e:     # the toolkit said no: its own reason, without its command line; nothing was changed
@@ -756,8 +756,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         last traded day. Answers {run_id, trades, of, start, end, pages}."""
         if not pipeline_tools.NAME_RE.fullmatch(name):
             raise HTTPException(404, f"no idea {name!r}")
-        if Slots().quiet():       # the desk's 9:30 window: never move a chart or decode history then
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): show it after 09:35")
+        if Slots().quiet():       # a quiet window of the tester: never move a chart or decode history then
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): show it later")
         try:
             got = await asyncio.to_thread(box.pipeline_executions, name)
         except blueprint_tools.Refused as e:
@@ -825,7 +825,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     def ensure_unseen(rec: dict) -> dict:
         """The state of the record's unseen-days run (deskresults.unseen_state); when there is none, start it -- once: a run
-        that failed or was cancelled is not started again by itself. A start the tester refuses (the 09:20-09:35 ET window,
+        that failed or was cancelled is not started again by itself. A start the tester refuses (a quiet window of the tester,
         a sandbox that is down) leaves the state as it was, and the next ask tries again. Never raises."""
         try:
             with unseen_lock:
@@ -1152,8 +1152,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         write_ok(request)
         if not netguard.is_json(request.headers.get("content-type")):
             raise HTTPException(415, "send JSON (Content-Type: application/json)")
-        if Slots().quiet():       # the desk's 9:30 window: never move a chart or decode history then
-            raise HTTPException(409, "not 09:20–09:35 ET on weekdays (the 9:30 window): show it after 09:35")
+        if Slots().quiet():       # a quiet window of the tester: never move a chart or decode history then
+            raise HTTPException(409, "paused for a quiet window of the tester (tester_slots.json): show it later")
         try:
             body = await request.json()
         except ValueError:

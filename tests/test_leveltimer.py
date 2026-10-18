@@ -337,18 +337,6 @@ def test_a_desk_that_starts_after_the_window_misses_the_day_once(rig):
     assert len(rig.events("level_missed")) == 1 and rig.md.subs == []
 
 
-def test_no_market_data_request_in_the_quiet_window(tmp_path, monkeypatch):
-    """09:20-09:35: no history read, and a (re)connect never takes the password login."""
-    r = Rig(tmp_path, monkeypatch)
-    r.tick(8, 55, 5)
-    r.md.connected = False                                       # the socket died before the quiet window
-    r.md.fail_history = False
-    n = r.md.history_calls
-    r.tick(9, 25, 0)
-    assert r.md.history_calls == n                               # no read at 09:25 ...
-    assert len(r.md.connects) == 2 and set(r.md.connects) == {False}     # ... and the rebuild never takes a password login
-
-
 def test_a_weekend_does_nothing(tmp_path, monkeypatch):
     r = Rig(tmp_path, monkeypatch, date=dt.date(2026, 9, 12))
     r.tick(8, 55, 5)
@@ -391,7 +379,7 @@ def test_the_watcher_market_flattens_a_take_the_limit_missed_and_the_quote_is_ke
     rig.ad.net = 4
     mono = {"t": 50.0}
     rig.eng._mono = lambda: mono["t"]
-    rig.clock.at(9, 40, 0)                                       # after the quiet window
+    rig.clock.at(9, 40, 0)                                       # well after the fire
     rig.md.last_px = st.take_px
     run(rig.lt.tick())                                           # touched: the grace starts
     assert rig.md.unsubs == [] and rig.ad.orders == []           # the quote is kept while a trade is open
@@ -445,7 +433,7 @@ def test_the_atr_audit_compares_the_exact_bars_after_the_fire(rig):
     rig.day_to_the_fire()
     rig.clock.at(9, 31, 0)
     run(rig.lt.tick())
-    assert rig.events("level_atr_parity") == []                  # inside the quiet window: no md request
+    assert rig.events("level_atr_parity") == []                  # 60 s after the fire: the audit waits AUDIT_AFTER_S
     rig.clock.at(9, 36, 0)
     run(rig.lt.tick())
     p, = rig.events("level_atr_parity")

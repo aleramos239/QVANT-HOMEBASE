@@ -283,7 +283,7 @@ def test_no_token_renewal_drop_around_the_0830_fire():
     # outside those windows the old rule is unchanged
     assert renewal_due(at_et(7, 0), exp(7, 5)) == (True, "normal")
     assert renewal_due(at_et(8, 51), exp(9, 20)) == (False, "normal")
-    assert renewal_due(at_et(9, 25), exp(9, 45)) == (False, "quiet")      # the 09:30 rule, as before
+    assert renewal_due(at_et(9, 25), exp(9, 45)) == (False, "normal")     # 20 min left; the 09:19:30-09:35 hold went 2026-10-16 (the 09:28-09:31 guard stays)
 
 
 def test_readiness_is_silent_on_other_days_and_flags_an_ungated_gc_nfp_on_nfp_day(tmp_path):

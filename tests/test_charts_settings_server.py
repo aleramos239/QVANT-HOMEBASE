@@ -147,16 +147,6 @@ def test_the_clock_format_is_one_app_wide_choice_kept_beside_the_md_login(tmp_pa
         assert store.clock() == "24h" and store.get() == {"md": "demo"}
 
 
-def test_refused_inside_the_0920_0935_et_window_on_a_weekday(tmp_path):
-    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                   now_ms=lambda: session_ms(D, 9, 25))   # D is a Thursday
-    with TestClient(app, base_url=BASE_URL) as c:
-        r = c.put("/api/settings", json={"md": "live"})
-        assert r.status_code == 423
-        assert "09:35" in r.json()["detail"]
-        assert c.get("/api/settings").json()["md"] == "demo"   # untouched
-
-
 def test_refused_while_the_desk_reports_a_bot_working(tmp_path):
     """C3: the desk pauses its OWN view publishing for the whole "placing" span (trading.py's
     _views_paused), so this process's DeskLink.state never actually holds "placing" -- BOT_BUSY
@@ -309,16 +299,18 @@ def test_i3_a_second_switch_within_the_cooldown_is_refused(tmp_path):
 
 
 def test_i3_a_refused_attempt_does_not_itself_start_the_cooldown(tmp_path):
-    """A PUT refused before ever touching switch_md (bad value, the window, a bot working) must
-    not count as an "attempt" -- only a call that actually reaches feed.switch_md does."""
-    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                   now_ms=lambda: session_ms(D, 9, 25))   # inside the window: every PUT refused
+    """A PUT refused before ever touching switch_md (bad value, a bot working) must not count as
+    an "attempt" -- only a call that actually reaches feed.switch_md does."""
+    link_box = []
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()}, link_box=link_box)
     with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: link_box)
+        link_box[0].state = {"bot": {"strategies": {"nq930": {"accounts": {"acct1": {"status": "live"}}}}}}
         for _ in range(3):
-            assert c.put("/api/settings", json={"md": "live"}).status_code == 423
-        # nothing here ever reached switch_md, so a later, allowed PUT is not cooled down either
-        # (re-checked once the window test below proves the window itself, not the cooldown,
-        # is what refused these three)
+            assert c.put("/api/settings", json={"md": "live"}).status_code == 423   # a bot working: every PUT refused
+        # nothing here ever reached switch_md, so once the bot is idle the next PUT is not cooled down
+        link_box[0].state = {"bot": {"strategies": {"nq930": {"accounts": {"acct1": {"status": "idle"}}}}}}
+        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
 
 
 def test_i3_a_switch_refused_by_the_md_budget_headroom(tmp_path):
@@ -338,56 +330,23 @@ def test_i3_a_switch_refused_by_the_md_budget_headroom(tmp_path):
         assert c.get("/api/settings").json()["md"] == "demo"
 
 
-# ---- I4: the refusal window has a margin before 09:20 itself, and boundary/DST coverage (M4) ----
+# ---- I4 (2026-10-17): the 09:15-09:35 refusal window of a switch is gone; only a working bot refuses ----
 
-def test_i4_refused_from_a_margin_before_0920_through_0935_on_a_weekday(tmp_path):
-    def app_at(hh, mm, ss=0):
-        # each case gets its own state dir: app_with persists settings.json under tmp_path, and
-        # a PUT that succeeds in an earlier case must not make a LATER case's fresh feed start
-        # already on "live" (its own no-op check would then bypass the window check entirely)
-        case = tmp_path / f"m{hh:02d}{mm:02d}{ss:02d}"
-        return app_with(case, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                        now_ms=lambda: session_ms(D, hh, mm, ss))   # D is a Thursday
-
-    with TestClient(app_at(9, 14, 59), base_url=BASE_URL) as c:
-        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
-    with TestClient(app_at(9, 15, 0), base_url=BASE_URL) as c:
-        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
-    with TestClient(app_at(9, 19, 59), base_url=BASE_URL) as c:
-        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
-    with TestClient(app_at(9, 34, 59), base_url=BASE_URL) as c:
-        assert c.put("/api/settings", json={"md": "live"}).status_code == 423
-    with TestClient(app_at(9, 35, 0), base_url=BASE_URL) as c:
-        assert c.put("/api/settings", json={"md": "live"}).status_code == 200
-
-
-def test_i4_the_window_only_applies_on_weekdays(tmp_path):
-    saturday = dt.date(2026, 9, 26)
-    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                   now_ms=lambda: session_ms(saturday, 9, 25))
+def test_i4_a_switch_at_0925_on_a_weekday_is_not_refused_for_the_time(tmp_path):
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()}, now_ms=lambda: session_ms(D, 9, 25))   # D is a Thursday
     with TestClient(app, base_url=BASE_URL) as c:
         assert c.put("/api/settings", json={"md": "live"}).status_code == 200
-
-
-def test_i4_the_window_holds_across_a_dst_change(tmp_path):
-    for d in (dt.date(2026, 3, 9), dt.date(2026, 11, 2)):   # US DST start/end, both weekdays
-        app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                       now_ms=lambda d=d: session_ms(d, 9, 25))
-        with TestClient(app, base_url=BASE_URL) as c:
-            r = c.put("/api/settings", json={"md": "live"})
-            assert r.status_code == 423, d
 
 
 # ---- M2: GET /api/settings carries a masked account id per login, read live, never hard-coded ----
 
-def test_m2_get_settings_carries_an_accounts_block(tmp_path):
+def test_m2_get_settings_carries_an_accounts_block(tmp_path, monkeypatch):
+    # accounts_by_env reads the machine's own config + token files; the route's job is the masking
+    monkeypatch.setattr("homebase.ticks.accounts_by_env", lambda: {"live": "1552885", "demo": None})
     app = app_with(tmp_path, {"demo": FakeMdWS()})
     with TestClient(app, base_url=BASE_URL) as c:
         d = c.get("/api/settings").json()
-        assert set(d["accounts"]) == {"live", "demo"}
-        # this worktree ships no config.json (a machine-local secret file): both read as None,
-        # never a stub or a hard-coded number
-        assert d["accounts"] == {"live": None, "demo": None}
+        assert d["accounts"] == {"live": "···885", "demo": None}      # last 3 characters only; None passes through
 
 
 # ---- M6 / M-d: the file is written first and put back on failure; never a second switch ----
@@ -578,12 +537,14 @@ def test_every_other_origin_is_refused_on_settings_and_status(tmp_path):
 
 
 def test_a_refusal_after_the_origin_check_is_still_readable_by_the_desk_page(tmp_path):
-    """A PUT refused for an ordinary reason (here, the 09:20-09:35 ET window) must still carry
-    the desk origin's CORS header and the real detail -- never just an opaque network failure."""
+    """A PUT refused for an ordinary reason (here, a bot working) must still carry the desk
+    origin's CORS header and the real detail -- never just an opaque network failure."""
     desk = {"origin": "http://localhost:8850"}
-    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()},
-                   now_ms=lambda: session_ms(D, 9, 25))
+    link_box = []
+    app = app_with(tmp_path, {"demo": FakeMdWS(), "live": FakeMdWS()}, link_box=link_box)
     with TestClient(app, base_url=BASE_URL) as c:
+        wait_for(lambda: link_box)
+        link_box[0].state = {"bot": {"strategies": {"nq930": {"accounts": {"acct1": {"status": "live"}}}}}}
         r = c.put("/api/settings", json={"md": "live"}, headers=desk)
         assert r.status_code == 423 and r.headers["access-control-allow-origin"] == "http://localhost:8850"
         assert "09:35" in r.json()["detail"]

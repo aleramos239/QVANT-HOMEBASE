@@ -130,15 +130,6 @@ def test_only_a_straddle_with_a_stop_can_be_changed(client):                    
     assert cfg.strategies["lv"].rr == 0.0 and cfg.strategies["nostop"].rr == 0.0
 
 
-@pytest.mark.parametrize("hm,code", [((9, 19), 200), ((9, 20), 409), ((9, 34), 409), ((9, 35), 200)])
-def test_refused_inside_the_930_window_on_a_weekday(client, hm, code):             # noqa: F811
-    client.app.state.engine.now_et = lambda: dt.datetime(2026, 9, 30, *hm, tzinfo=ET)       # a Wednesday
-    r = post(client, strategy="nq930", rr=2)
-    assert r.status_code == code
-    if code == 409:
-        assert "09:20-09:35" in r.json()["detail"] and client.app.state.cfg.strategies["nq930"].rr == 0.0
-
-
 def test_the_weekend_is_not_quiet(client):                                          # noqa: F811
     client.app.state.engine.now_et = lambda: dt.datetime(2026, 10, 3, 9, 30, tzinfo=ET)     # a Saturday
     assert post(client, strategy="nq930", rr=2).status_code == 200

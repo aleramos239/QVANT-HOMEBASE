@@ -421,14 +421,6 @@ def test_export_manager_refuses_a_second_job_while_one_is_active(tmp_path):
         mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
 
 
-def test_export_manager_refuses_to_start_in_the_930_quiet_window(tmp_path):
-    monday_925 = dt.datetime(2026, 9, 28, 9, 25, tzinfo=ET)
-    assert monday_925.weekday() == 0
-    mgr = app_manager(tmp_path, clock=lambda: monday_925)
-    with pytest.raises(ValueError, match="09:20"):
-        mgr.submit({"root": "NQ", "type": "ticks", "start": D.isoformat(), "end": D.isoformat()})
-
-
 def test_export_manager_cancel_kills_the_child_cleans_the_part_file_and_marks_cancelled(tmp_path):
     """Drives cancel()'s mechanics directly against a real (but otherwise unrelated) child
     process standing in for an in-flight export -- deterministic, unlike racing a real export

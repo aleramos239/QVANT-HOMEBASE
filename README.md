@@ -104,9 +104,9 @@ These ship in `config.py` defaults. All times are ET. Each trades at most once a
 - **Daily rules for levels strategies.** `day_take` and `day_lock` stop an
   account for the day. A real (non-paper) account sits out until the strategy's
   `ack_open_loss` is set.
-- **Quiet window, 09:20–09:35 ET on weekdays.** No optional market-data
-  requests, no new backtests, no adding accounts, and no desk writes from the
-  MCP server.
+- **No 9:30 quiet window.** The 09:20–09:35 ET pause on data requests,
+  backtests, account adds and MCP desk writes was removed on 2026-10-16 at the
+  owner's word. The fire's own socket guard and view pause stay.
 - **Network guard.** The desk refuses any request whose `Host` is not loopback
   or listed in `allowed_hosts`. Writes also need a JSON body, and an allowed
   `Origin` when one is sent. `/api/trade/*` needs the desk key and a loopback

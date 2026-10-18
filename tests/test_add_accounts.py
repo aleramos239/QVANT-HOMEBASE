@@ -183,32 +183,11 @@ def test_needs_a_lookup_first_and_a_known_login(client):
                            json={"key": KEY, "accounts": bad}).status_code == 400
 
 
-@pytest.mark.parametrize("hm", [(9, 20), (9, 27), (9, 34)])
-def test_refused_in_the_930_window(client, world, hm):
-    look_up(client)
-    clock(client, *hm)
-    r = add(client, ["APEX-1"])
-    assert r.status_code == 409 and "09:20-09:35" in r.json()["detail"]
-    assert "apex-1" not in client.app.state.cfg.accounts
-    single = client.post("/api/accounts/add", json={"key": KEY, "account_name": "APEX-1"})
-    assert single.status_code == 409
-
-
 @pytest.mark.parametrize("hm,day", [((9, 19), 30), ((9, 35), 30), ((9, 27), 26)])   # 26 = a Saturday
 def test_allowed_outside_the_window(client, hm, day):
     look_up(client)
     clock(client, *hm, day=day)
     assert add(client, ["APEX-1"]).json()["added"] == 1
-
-
-def test_the_window_opening_mid_batch_stops_it(client):
-    look_up(client)
-    times = iter([dt.datetime(2026, 9, 30, 9, 19, 59, tzinfo=ET)] * 3 +      # request check + 1st account
-                 [dt.datetime(2026, 9, 30, 9, 20, 1, tzinfo=ET)] * 20)
-    client.app.state.engine.now_et = lambda: next(times)
-    r = add(client, EVALS[:3]).json()
-    st = [x["status"] for x in r["results"]]
-    assert st == ["added", "failed", "failed"] and "09:20-09:35" in r["results"][1]["error"]
 
 
 def test_an_entry_that_had_to_log_in_again_stops_the_batch(client, world):
