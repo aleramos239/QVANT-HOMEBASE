@@ -379,8 +379,11 @@ button.lb-sh[aria-expanded="true"] .lb-chev { transform: rotate(90deg); }
 .tk-find input { width: 100%; height: 28px; padding: 0 10px; border: 0; border-radius: 9px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-ui); outline: none; }
 .tk-find input:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 /* the Strategies list's Sort / Show / Market (the owner, 2026-10-18) */
-.lb-tools { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; padding: 0 4px 6px; }
-.lb-tools select { min-width: 0; height: 26px; padding: 0 6px; border: 0; border-radius: 8px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-sm); outline: none; }
+.lb-tools { display: flex; gap: 4px; padding: 0 4px 6px; }
+/* compact pills sized to their words, with a small arrow of their own (the browser's own one left no room for the words) */
+.lb-tools select { flex: 1 1 auto; min-width: 0; height: 26px; padding: 0 13px 0 6px; border: 0; border-radius: 8px; color: var(--hb-fg); font-size: 11.5px;
+  text-overflow: ellipsis; outline: none; cursor: pointer; -webkit-appearance: none; appearance: none;
+  background: var(--hb-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 3.5 5 6.5 8 3.5' fill='none' stroke='%238E8E93' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") no-repeat right 4px center / 8px 8px; }
 .lb-tools select:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
 /* a strategy's status: a pill before its sub-line; a dead one is dimmed */
 .lb-mark { display: inline-block; margin-right: 5px; padding: 0 5px; border-radius: 5px; font-style: normal; font-size: 10px; font-weight: 600; line-height: 15px; }
