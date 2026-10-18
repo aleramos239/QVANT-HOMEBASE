@@ -3930,7 +3930,9 @@ $("#acctOverlay").addEventListener("click", (e) => {
 /* ---- algo manager popup: choose which algos show on the home page ---- */
 function renderAlgoMgr() {
   if (!ST || !window.AlgoVisibility) return;
-  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts);
+  const shelved = archivedBuiltins();       // an archived built-in lives in Archive, not here (unless it can trade or holds anything)
+  const rows = window.AlgoVisibility.computeVisibility(ST.strategies, ST.book, HIDDEN_ALGOS, ST.accounts)
+    .filter(a => a.locked || !shelved.includes(a.name));
   $("#algoCount").textContent = rows.length + " algo" + (rows.length === 1 ? "" : "s");
   $("#algoList").innerHTML = rows.length
     ? rows.map(a => {
@@ -3973,7 +3975,8 @@ function renderGroupMgr(force) {
   const groups = DESKGROUPS.groups;
   $("#groupCount").textContent = groups.length + " group" + (groups.length === 1 ? "" : "s");
   const known = [];                    // every strategy a group may take: [id, label]
-  for (const n of Object.keys(ST.strategies || {})) known.push([n, stratLabel(n)]);
+  const shelved = archivedBuiltins();       // an archived built-in is not offered (one already in a group still shows)
+  for (const n of Object.keys(ST.strategies || {})) if (!shelved.includes(n)) known.push([n, stratLabel(n)]);
   for (const w of labSafe(() => DESKLAB.strategies.filter(x => !labOnDesk(x)), [])) known.push(["lab_" + w.name, labSafe(() => DeskLab.label(w), w.name)]);
   const have = new Set(known.map(k => k[0]));
   for (const g of groups) for (const id of g.members) if (!have.has(id)) { have.add(id); known.push([id, id + " (not on the Desk any more)"]); }
