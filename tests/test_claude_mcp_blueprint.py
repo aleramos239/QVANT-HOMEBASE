@@ -457,21 +457,21 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
     b.call("blueprint_code_check", {"name": NAME, "run_id": "20261006-010203-draft_nq_orb_pre-abcd", "looked": False})
     assert fake.argv() == ["code-check", NAME, "--run-id=20261006-010203-draft_nq_orb_pre-abcd", *end]
     b.call("blueprint_build", {"name": NAME, "reason": "the plain idea, as carded"})
-    assert fake.argv() == ["build", NAME, "--reason=the plain idea, as carded", "--wait=120", *end]
+    assert fake.argv() == ["build", NAME, "--reason=the plain idea, as carded", "--wait=45", *end]
     b.call("blueprint_build", {"name": "slow_idea", "job_id": "job-slow_idea-1", "wait_s": 30})
     assert fake.argv() == ["job", "job-slow_idea-1", "--wait=30", *end]
     b.call("blueprint_lock", {"name": NAME})
     assert fake.argv() == ["lock", NAME, *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True})
-    assert fake.argv() == ["test", NAME, "--confirm", "--wait=120", *end]
+    assert fake.argv() == ["test", NAME, "--confirm", "--wait=45", *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True, "job_id": "job-test-7", "wait_s": 0})
     assert fake.argv() == ["job", "job-test-7", "--wait=0", *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": True})
-    assert fake.argv() == ["test", NAME, "--confirm", "--early-look", "--wait=120", *end]
+    assert fake.argv() == ["test", NAME, "--confirm", "--early-look", "--wait=45", *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": False, "wait_s": 30})
     assert fake.argv() == ["test", NAME, "--confirm", "--wait=30", *end]
     b.call("blueprint_test", {"name": NAME, "confirm": True, "early_look": True, "job_id": "job-test-7"})
-    assert fake.argv() == ["job", "job-test-7", "--wait=120", *end]                   # a job is waited on as it was started
+    assert fake.argv() == ["job", "job-test-7", "--wait=45", *end]                   # a job is waited on as it was started
     b.call("blueprint_sim", {"name": NAME, "account": ACCOUNT, "attempts": 3, "fee_budget": 345})
     assert fake.argv() == ["sim", NAME, f"--account={ACCOUNT}", "--attempts=3", "--fee-budget=345", *end]
     b.call("blueprint_eval_card", {"name": NAME})
@@ -510,7 +510,7 @@ def test_each_tool_runs_its_command_as_the_contract_has_it(fake, ideas_root):
 
 def test_the_wait_is_the_testers_own_default_and_cap(fake, ideas_root):
     b = box()
-    for asked, sent in ((None, 120), (0, 0), (45, 45), (99_999, 3600), (-5, 0)):
+    for asked, sent in ((None, 45), (0, 0), (45, 45), (99_999, 3600), (-5, 0)):
         b.call("blueprint_build", {"name": NAME, "reason": "r", **({} if asked is None else {"wait_s": asked})})
         assert f"--wait={sent}" in fake.argv()
 
@@ -530,7 +530,7 @@ def test_an_option_cannot_be_smuggled_in_through_a_name_an_id_or_a_reason(fake, 
             b.call("blueprint_status", {"job_id": bad})
     assert fake.calls() == []
     b.call("blueprint_build", {"name": NAME, "reason": "-5 ticks: a tighter stop --json"})
-    assert fake.argv() == ["build", NAME, "--reason=-5 ticks: a tighter stop --json", "--wait=120", *tail(ideas_root)]
+    assert fake.argv() == ["build", NAME, "--reason=-5 ticks: a tighter stop --json", "--wait=45", *tail(ideas_root)]
     b.call("blueprint_code_check", {"name": NAME, "store": "--looked"})
     assert fake.argv() == ["code-check", NAME, "--store=--looked", *tail(ideas_root)]
     b.call("blueprint_eval_card", {"name": NAME, "account": "--fills=-"})
@@ -675,7 +675,7 @@ def test_a_long_build_returns_its_job_and_the_same_tool_keeps_waiting(fake, idea
                     "(running · table 3 of 12). Call blueprint_build(name='slow_idea', job_id='job-slow_idea-1') "
                     "to keep waiting.")
     text = b.call("blueprint_build", {"name": "slow_idea", "job_id": "job-slow_idea-1"})        # no reason: it is on file
-    assert fake.argv() == ["job", "job-slow_idea-1", "--wait=120", *tail(ideas_root)]
+    assert fake.argv() == ["job", "job-slow_idea-1", "--wait=45", *tail(ideas_root)]
     assert text.splitlines()[0] == "Blueprint build · slow_idea · LEAD · phase 2 · round 1"
     assert "Lines: 8 passed · 0 FAILED · 1 not judged or does not apply (2.7)" in text
     assert "Next: Lock it: blueprint_lock." in text
@@ -767,7 +767,7 @@ def test_an_early_look_needs_the_yes_is_labelled_and_never_proves_the_idea(fake,
         assert "or as an early look, after his clear yes in chat" in str(e.value)
     assert len(fake.calls()) == started and not (ideas_root / "good_idea" / "early_look").exists()
     out = b.call("blueprint_test", {"name": "good_idea", "confirm": True, "early_look": True}).splitlines()
-    assert fake.argv() == ["test", "good_idea", "--confirm", "--early-look", "--wait=120", *tail(ideas_root)]
+    assert fake.argv() == ["test", "good_idea", "--confirm", "--early-look", "--wait=45", *tail(ideas_root)]
     assert out[0] == "Blueprint test · good_idea · LEAD · phase 4"
     assert "EARLY LOOK: every line 4.1-4.9 is true. It proves nothing." in out
     assert "4.1 PASS words about 4.1 [EARLY LOOK]" in out and "Lines: 7 passed · 0 FAILED" in out

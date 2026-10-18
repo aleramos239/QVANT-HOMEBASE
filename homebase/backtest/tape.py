@@ -351,9 +351,9 @@ def _warm_one(args) -> str:
 
 
 WARM_FROM = dt.date(2021, 9, 22)      # the build days' first session: nothing older is ever asked for
-# Markets the owner does not work on (2026-10-06: the FX pairs, ZN, NG, RTY, YM, CL): warm-all leaves them
-# alone. Their ticks stay in the archive; a run on one still builds its own days on first use.
-WARM_SKIP = frozenset({"6B", "6E", "6J", "ZN", "NG", "RTY", "YM", "CL"})
+# The app's six markets (2026-10-07). Any other root in the archive is left alone: a run on one still
+# builds its own days on first use.
+WARM = ("NQ", "ES", "YM", "RTY", "GC", "SI")
 
 
 def warm_all(jobs: int = 2) -> None:
@@ -367,7 +367,7 @@ def warm_all(jobs: int = 2) -> None:
     from concurrent.futures import ProcessPoolExecutor
     store = TapeStore()
     today = dt.date.today()
-    roots = sorted(p.name for p in store.archive.iterdir() if p.is_dir() and p.name not in WARM_SKIP)
+    roots = [r for r in WARM if (store.archive / r).is_dir()]
     for root in roots:
         days = store.sessions(root, WARM_FROM, today)
         todo = [d for d in days if not store.cached(root, d)]

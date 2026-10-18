@@ -31,3 +31,7 @@ research/edge-library/runs_bp/c1o-*/cells.npz
 
 # merge leftovers
 *.orig
+
+# research: the pipeline runner's own log and lock (rewritten on every run)
+research/edge-library/runs_bp/runner.log
+research/edge-library/runs_bp/runner.lock

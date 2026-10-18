@@ -65,7 +65,7 @@ from .. import draftstore, ideastore, paths
 from .client import ToolError
 
 ENV_BP, ENV_PYTHON = "HOMEBASE_BP", "HOMEBASE_BP_PYTHON"
-DEFAULT_WAIT_S, MAX_WAIT_S = 120, 3600   # tools.py's own, repeated (it imports this module); a test holds them equal
+DEFAULT_WAIT_S, MAX_WAIT_S = 45, 3600    # tools.py's own, repeated (it imports this module); a test holds them equal
 GRACE_S = 60.0                           # past --wait: the toolkit's own start-up and saving
 SHORT_S = 300.0                          # not a job: blocks, card, code check, lock, sim, portfolio, eval card, status, views
 RUNNING = ("queued", "running")

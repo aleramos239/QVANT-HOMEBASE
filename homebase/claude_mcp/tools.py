@@ -31,7 +31,7 @@ from .pipeline_tools import PipelineMixin
 
 ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
-DEFAULT_WAIT_S = 120           # short: the stdio loop is single-threaded, so a long wait blocks every call
+DEFAULT_WAIT_S = 45            # under the client's 60 s limit: the stdio loop is single-threaded, so a long wait blocks every call
 MAX_WAIT_S = 3600
 PRESETS = {"build": ("2021-09-22", "2025-06-30"), "test": ("2025-07-01", None), "all": ("2021-01-01", None),
            # the old names (before the blueprint's dates, 2026-10-06): kept so an older call still runs

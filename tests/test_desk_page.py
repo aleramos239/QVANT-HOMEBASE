@@ -85,10 +85,10 @@ def test_the_desk_page_for_a_lab_strategy_posts_to_the_desks_own_routes():
 
 
 def test_the_asset_versions_are_bumped():
-    assert '<script src="/static/desklab.js?v=15"></script>' in HTML                 # 15: a Desk straddle's unseen note (14: Desk groups (13: shorter curve label (12: the unseen-days curve under the page (11: the panel says when the unseen days are being read (10: the unseen-days run and the prop sim in the panel (9: adjustable settings; 8: one clock)
+    assert '<script src="/static/desklab.js?v=17"></script>' in HTML                 # 17: the page's current bundle (15: a Desk straddle's unseen note; 14: Desk groups; 13: shorter curve label; 12: the unseen-days curve; 11: the panel says when the unseen days are being read; 10: the unseen-days run and the prop sim; 9: adjustable settings; 8: one clock)
     assert '<script src="/static/desklabset.js?v=2"></script>' in HTML
-    assert all(f'desklab.js?v={n}"' not in HTML for n in (1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13))
-    assert '"version": 21' in (STATIC / "apple" / "manifest.json").read_text()     # 21: Show on chart + tighter prop columns (20: a group's wider figure columns (19: the group buttons' icons (18: the inspector for a Desk group (17: a Lab strategy's unseen-days run and prop sim in the inspector (16: no watch-only page; 15: the Setup panel's controls; 14: one corner for every bubble, one clock, the stepper on the chart)
+    assert all(f'desklab.js?v={n}"' not in HTML for n in range(1, 17))
+    assert '"version": 24' in (STATIC / "apple" / "manifest.json").read_text()     # 24: the current skin bundle (21: Show on chart + tighter prop columns (20: a group's wider figure columns (19: the group buttons' icons (18: the inspector for a Desk group (17: a Lab strategy's unseen-days run and prop sim in the inspector (16: no watch-only page; 15: the Setup panel's controls; 14: one corner for every bubble, one clock, the stepper on the chart)
 
 
 def test_the_old_step_a_caption_is_not_on_the_desks_page_for_a_lab_strategy():
