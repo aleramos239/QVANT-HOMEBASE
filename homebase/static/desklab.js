@@ -771,7 +771,8 @@
     var mark = Array.isArray(lab.mark) ? lab.mark : [], sha = text(mark[0]);
     // A strategy that carries its own limits has none to show: its size and its settings are the setup.
     var own = lab.auto === true && isObj(lab.params);
-    var limitRows = own ? [["Contracts", l[1].v]].concat(paramRows(lab.params, lab.settings)) : [
+    // a strategy that sizes each trade itself has no Desk size and no cap: the size set on each account is its most (owner 2026-10-18)
+    var limitRows = own ? [["Contracts", lab.own_size === true ? "Set on each account" : l[1].v]].concat(paramRows(lab.params, lab.settings)) : [
       ["Trades a day", l[0].v],
       ["Most contracts", l[1].v],
       ["Most at risk", l[2].v],

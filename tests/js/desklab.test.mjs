@@ -794,6 +794,9 @@ test('deskSetupRows: a strategy with its own limits lists its size and settings,
   const typed = D.deskSetupRows(deskStrat({ mode_today: null, auto: false, params: { stop_pts: 25 } }), row(), []);
   assert.equal(typed.some((r) => r[0] === 'Trades a day'), true);
   assert.equal(D.accountsLock(own).locked, false);                      // its own limits: accounts can be assigned
+  // one that sizes each trade itself has no cap: the account's size is its most (owner, 2026-10-18: "remove the cap")
+  const sized = D.deskSetupRows(deskStrat({ mode_today: null, auto: true, own_size: true, params: { risk: 500 } }), row(), []);
+  assert.deepEqual(sized[3], ['Contracts', 'Set on each account']);
 });
 
 test('deskSetupRows: the settings the Desk lets the owner change are controls, not read-only rows', () => {

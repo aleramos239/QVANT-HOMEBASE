@@ -778,6 +778,7 @@ class LabDesk:
                     "auto": labcfg.auto_of(self.cfg, name),          # its limits are its own: nothing to fill in
                     "params": self._params(name),                    # the settings it was promoted with
                     "settings": self._settings(name),                # the ones of them the Setup panel may change
+                    "own_size": (labcfg.record_of(self.cfg, name) or {}).get("own_size") is True,   # sizes itself: no Desk size
                     "state": took["state"], "why": took["why"],
                     "trades_today": took["trades_today"], "mode_today": took["mode_today"],
                     "runner": self._runner(), "rounds": self._rounds(name),
