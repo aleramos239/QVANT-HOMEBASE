@@ -1445,7 +1445,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
 
     @r.get("/walkforward-scheme")
     def walkforward_scheme(test_months: str | None = None, start: str | None = None, end: str | None = None,
-                           select_months: str | None = None):
+                           select_months: str | None = None, step_months: str | None = None):
         """The page reads its step count from here rather than assuming one (review M5) — now for
         the ratio and the window the range picker currently shows. `test_months` is parsed strictly:
         "2" is 1:2, "2.0" or "5" is a 400, never coerced."""
@@ -1456,7 +1456,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 int(test_months) if test_months.isdigit() else test_months)
             sel = walkforward.SELECT_MONTHS if select_months is None else (
                 int(select_months) if select_months.isdigit() else select_months)
-            return walkforward.scheme(start=start, end=end, test_months=n, select_months=sel)
+            step = None if step_months is None else (int(step_months) if step_months.isdigit() else step_months)
+            return walkforward.scheme(start=start, end=end, test_months=n, select_months=sel, step_months=step)
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 

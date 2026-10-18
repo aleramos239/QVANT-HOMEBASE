@@ -20,7 +20,9 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
 - **Out-of-sample = the 3:1 walk-forward in BLOCKS over all data** (owner, 2026-10-18; spec
   `docs/superpowers/specs/2026-10-18-walkforward-3to1-design.md`): pick on 3 whole months, trade the next 1, then the next block
   (Jan-Mar pick → Apr trade, May-Jul pick → Aug trade, ...), stitch the traded months, 2021-09-22 → the last whole month. Every month
-  is in-sample OR out-of-sample, never both. NEVER rolling (the owner, 2026-10-18). The one test-days read
+  is in-sample OR out-of-sample, never both. **Blocks are ALWAYS the default** -- Lab, Desk, pipeline, chat tools. ROLLING (pick on the
+  last 3 months, trade the next 1, step a month) only when the owner picks it: the Lab's Range "3:1 rolling", or he tells Claude to use
+  rolling (`walkforward(ratio="3:1", rolling=true)`) (the owner, 2026-10-18). The one test-days read
   (2025-07-01 on, once, for a locked strategy) is RETIRED, and so is "tune only on the build days". In the pipeline each window takes
   the pipeline's own pick (the middle passing box, never the best); the Desk card's "Unseen days" is this record, and the Desk only
   says when this month's pick differs: the owner changes the setting, nothing switches by itself.

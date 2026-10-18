@@ -172,7 +172,8 @@ def prop_headline(prop) -> dict | None:
 
 # ---------------------------------------------------------------- the unseen days as the 3:1 walk-forward (owner, 2026-10-18)
 # The card's "Unseen days" is the stitched out-of-sample record of the 3:1 walk-forward in BLOCKS over all the data (pick on 3
-# whole months, trade the next 1, then the next block; never rolling), searched over the settings the Desk lets the owner change. Its pick for this month is shown
+# whole months, trade the next 1, then the next block -- always the default; rolling only when the owner asks), searched over the
+# settings the Desk lets the owner change. Its pick for this month is shown
 # beside it when it differs from what runs: the owner changes the setting; nothing switches by itself.
 WF_START = discipline.RESEARCH_START
 WF_AXES_MAX = 3
@@ -231,7 +232,7 @@ def wf_request(rec: dict, today) -> dict:
     return {"strategy": rec["id"], "inputs": {k: v for k, v in (rec.get("params") or {}).items() if k not in keys},
             "axes": wf_axes(rec), "range": {"kind": "custom", "start": WF_START.isoformat(), "end": wf_end(today)},
             "qty": rec.get("qty") or 1, "commission": rec.get("commission"), "slippage_ticks": rec.get("slippage_ticks"),
-            "select_months": 3, "test_months": 1}
+            "select_months": 3, "test_months": 1, "step_months": 4}
 
 
 def wf_state(grids: Path, rec: dict, today) -> dict:
@@ -246,7 +247,7 @@ def wf_state(grids: Path, rec: dict, today) -> dict:
             continue
         cfg, rng = g.get("walkforward") or {}, g.get("range") or {}
         if c0.get("draft_sha256") != rec.get("sha256") or cfg.get("select_months") != 3 or g.get("qty") != want["qty"] \
-                or cfg.get("step_months") != 4:                  # a rolling job of before the blocks (2026-10-18) is not this
+                or cfg.get("step_months") != 4:                  # a rolling job is not this copy's blocks run
             continue
         if (rng.get("start"), rng.get("end")) != (want["range"]["start"], want["range"]["end"]):
             continue

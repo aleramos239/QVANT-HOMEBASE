@@ -19,7 +19,7 @@
   }
  },
  "walkforward": {
-  "_about": "STAGE 6 IS A 3:1 WALK-FORWARD IN BLOCKS (the owner, 2026-10-18: \"3 month in then the next out on repeat\", \"i dont want to use rolling\"): a block picks on `select_months` months and trades the pick in the next `test_months`; the next block starts `step_months` later, so the blocks do not overlap (Oct-Dec 2021 pick, Jan 2022 test, Feb-Apr pick, May test, ...). The pick = the middle of the boxes whose window trades make money, have `window_trades` trades or more and hold P3.15. window_trades 15 is Claude's call: line 2.4's 200 trades scaled to 3 of the 45 build months. Read by blueprint/pipe_wf.py.",
+  "_about": "STAGE 6 IS A 3:1 WALK-FORWARD IN BLOCKS, ALWAYS THE DEFAULT (the owner, 2026-10-18: \"make the block the default always but keep the rolling as an option\"): a block picks on `select_months` months and trades the pick in the next `test_months`; the next block starts `step_months` later (4 = blocks: Oct-Dec 2021 pick, Jan 2022 test, Feb-Apr pick, May test, ...; 1 = rolling, only when the owner asks for it). The pick = the middle of the boxes whose window trades make money, have `window_trades` trades or more and hold P3.15. window_trades 15 is Claude's call: line 2.4's 200 trades scaled to 3 of the 45 build months. Read by blueprint/pipe_wf.py.",
   "select_months": 3,
   "test_months": 1,
   "step_months": 4,

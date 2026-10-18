@@ -61,7 +61,7 @@ def test_need_walks_the_file_and_refuses_what_it_does_not_have():
     assert P.need("mode") == "variant" and P.mode() == "variant"                                  # the owner, 2026-10-08: the hard rules are judged on ONE picked variant
     assert P.need("variant") == {"map_share": 0.5, "region_boxes": 1, "region_trades": 200, "pick_boxes": 1, "box_tries": 5, "floor_part": 0.0, "without_best_trades": 0.05, "months_won": 0.7, "best_month_share": 0.1, "losing_day_streak": 8}      # the loose check of the map, and the one box's numbers: mode "edge" lays region_boxes 1 and floor_part 0 over the file's 25 and 1.0
     assert set(P.need()) == {"mode", "gates", "edge", "walkforward", "variant", "winlane", "card", "raw", "indicator", "proof", "box", "test", "prop"}      # the whole file, its notes left out (no portfolio, no mix; stage 6 a 3:1 walk-forward: 2026-10-18)
-    assert {k: v for k, v in P.need("walkforward").items() if k != "_about"} == {"select_months": 3, "test_months": 1, "step_months": 4, "window_trades": 15}      # blocks: 3 in, 1 out, then the next block
+    assert {k: v for k, v in P.need("walkforward").items() if k != "_about"} == {"select_months": 3, "test_months": 1, "step_months": 4, "window_trades": 15}      # blocks, always the default (owner 2026-10-18)
     assert "raw.nope" in refused(lambda: P.need("raw", "nope"), "pipeline.json has no")
     refused(lambda: P.need("nope"), "nope")
     refused(lambda: P.need("raw", "low", "share", "deeper"), "raw.low.share.deeper")               # a number has nothing under it

@@ -89,7 +89,8 @@ SELECT_MONTHS = 1
 TEST_MONTHS = 3            # the default OOS side of the ratio (1:3); 1 and 2 are the other choices
 RATIOS = (1, 2, 3)
 ROLL_SELECT = 3            # the 3:1 scheme (owner, 2026-10-18): select on 3 months, test the next 1 ...
-ROLL_STEP = 4              # ... then the next block: blocks, never rolling (owner, 2026-10-18) -- a month is in OR out
+ROLL_STEP = 4              # ... then the next block: BLOCKS, ALWAYS the default -- a month is in OR out (owner, 2026-10-18)
+ROLL_STEPS = (4, 1)        # 4 = blocks; 1 = rolling, only when the owner picks it (the Lab's Range, or asking Claude)
 STEP_MONTHS = 1
 METRICS = {"net_profit": "Net $", "sharpe": "Sharpe", "profit_factor": "Profit factor", "t_stat": "t-stat"}
 DEFAULT_METRIC = "net_profit"
@@ -121,11 +122,29 @@ def ratio_label(test_months: int, select_months: int = SELECT_MONTHS) -> str:
     return f"{select_months}:{test_months}"
 
 
-def step_of(select_months: int) -> int:
-    return ROLL_STEP if select_months == ROLL_SELECT else STEP_MONTHS
+def step_of(select_months: int, step_months: int | None = None) -> int:
+    if select_months != ROLL_SELECT:
+        return STEP_MONTHS
+    return ROLL_STEP if step_months is None else step_months
 
 
-def stitch_rule(test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS) -> str:
+def step_window(step_months, select_months: int) -> int:
+    """3:1's step: 4 (blocks, the default) or 1 (rolling); the 1:N schemes always step a month."""
+    if step_months is None:
+        return step_of(select_months)
+    if select_months != ROLL_SELECT:
+        if step_months != STEP_MONTHS:
+            raise ValueError("step_months: only the 3:1 walk-forward steps by blocks")
+        return STEP_MONTHS
+    if type(step_months) is not int or step_months not in ROLL_STEPS:
+        raise ValueError("step_months: 4 (blocks) or 1 (rolling) for the 3:1 walk-forward")
+    return step_months
+
+
+def stitch_rule(test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS, step_months: int | None = None) -> str:
+    if select_months == ROLL_SELECT and step_of(select_months, step_months) == 1:
+        return ("rolling: pick on the last 3 months, trade the next 1, step a month -- every month after the first 3 is "
+                "traded on a pick made before it; the picking windows overlap")
     if select_months == ROLL_SELECT:
         return ("blocks: 3 months to pick, the next 1 to trade, then the next block -- every month is in-sample or "
                 "out-of-sample, never both")
@@ -154,13 +173,14 @@ def month_list(start: dt.date, end: dt.date) -> list[str]:
         y, m = nxt.year, nxt.month
 
 
-def steps(months: list[str], test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS) -> list[dict]:
+def steps(months: list[str], test_months: int = TEST_MONTHS, select_months: int = SELECT_MONTHS,
+          step_months: int | None = None) -> list[dict]:
     """Step k selects on months[k : k+select_months] and tests on the next `test_months`; a partial last
     window is dropped. `select` is the month ('2021-10'); at 3:1 it is the label '2021-10 → 2021-12' and
     `select_ms` holds the months, and the steps are BLOCKS (k = 0, 4, 8, ...: Jan-Mar -> Apr, May-Jul -> Aug)."""
     n = len(months) - select_months - test_months + 1
     out = []
-    for k in range(0, max(n, 0), step_of(select_months)):
+    for k in range(0, max(n, 0), step_of(select_months, step_months)):
         sel = months[k:k + select_months]
         s = {"k": k, "select": sel[0], "test": months[k + select_months:k + select_months + test_months]}
         if len(sel) > 1:
@@ -241,16 +261,19 @@ def chain_months(months: list[str], test_months: int) -> list[str]:
 
 def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min_trades: int,
             capital: float, test_months: int = TEST_MONTHS, shared_months: list[str] | None = None,
-            select_months: int = SELECT_MONTHS) -> dict:
+            select_months: int = SELECT_MONTHS, step_months: int | None = None) -> dict:
     """cells: [{i, params, months: {m: stats}}]; trades_of(i) -> (trades_ms, skipped) of a PICKED cell
     (at 3:1 of every cell: a 3-month window is scored on its own trades, as one run over those months).
 
-    3:1 (select_months 3, test_months 1): blocks -- every step is in the chain and no two windows share a
-    month, so the in-sample side is the selection months' own record, as clean as the out-of-sample one.
+    3:1 (select_months 3, test_months 1): every step is in the chain. Blocks (step 4, the default): no two windows
+    share a month, so the in-sample side is the selection months' own record. Rolling (step 1, only when asked for):
+    the windows overlap (a month sits in up to 3), so the in-sample side's Sharpe is the legs' mean, its drawdown the
+    worst leg's, and it has no curve -- overlapping legs added together would mean nothing.
 
     `shared_months` (a compare job): also the stitched chain restricted to those months, under the
     key `stitched_shared` -- the caller pops it, so the ordinary result shape is unchanged."""
-    st = steps(months, test_months, select_months)
+    st = steps(months, test_months, select_months, step_months)
+    rolling = select_months == ROLL_SELECT and step_of(select_months, step_months) == 1
     params = {c["i"]: c["params"] for c in cells}
     cache: dict[int, tuple[list, list]] = {}
 
@@ -319,6 +342,12 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     counts = Counter(p for p in picks if p is not None)
     top = min(counts.items(), key=lambda kv: (-kv[1], kv[0])) if counts else None
     oos, ins = _stats(tr0, sk0, capital, covered0), _stats(tri, ski, capital, coveredi)
+    if rolling:                                 # overlapping windows: each leg's own Sharpe / drawdown
+        legs_is = [rows[k]["is"] for k in chain(len(st), 0, test_months) if rows[k]["is"]]
+        sh = [x["sharpe"] for x in legs_is if x["sharpe"] is not None]
+        dd = [x["max_drawdown"] for x in legs_is if x["max_drawdown"] is not None]
+        ins["sharpe"] = round(sum(sh) / len(sh), 4) if sh else None
+        ins["max_drawdown"] = max(dd, key=abs) if dd else None
 
     def per_month(stats: dict, n: int) -> dict | None:
         return None if not n else {"net_profit": round((stats["net_profit"] or 0.0) / n, 2),
@@ -356,10 +385,11 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
             "legs": {"n": n_leg, "no_pick": no_pick, "profitable": prof, "partial": partial,
                      "pct_profitable": round(prof / n_leg * 100, 2) if n_leg else None}}
     return {**extra,
-        "scheme": {"select_months": select_months, "test_months": test_months, "step_months": step_of(select_months),
+        "scheme": {"select_months": select_months, "test_months": test_months, "step_months": step_of(select_months, step_months),
+                   "rolling": rolling,
                    "ratio": ratio_label(test_months, select_months),
                    "metric": metric, "metric_label": METRICS.get(metric, metric), "min_trades": min_trades,
-                   "tie_break": TIE_BREAK, "stitch": stitch_rule(test_months, select_months)},
+                   "tie_break": TIE_BREAK, "stitch": stitch_rule(test_months, select_months, step_months)},
         "window": {"start": months[0] if months else None, "end": months[-1] if months else None},
         "n_cells": len(cells), "n_steps": len(st), "looks": len(cells) * len(st),
         "steps": rows, "next": nxt,
@@ -369,7 +399,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
                      "uncovered": [m for m in months[select_months:] if m not in tested
                                    and m not in {x for s_ in st for x in s_.get("select_ms", ())}] if st else []},
         "stitched_is": {"stats": ins, "months": coveredi, "n_months": len(coveredi), "per_month": pm_is,
-                        "equity": report.equity(sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"])))},
+                        "equity": None if rolling else report.equity(sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"])))},
         # the stitched out-of-sample record cut at the test days' start: its build-days months and its unseen-days months
         "split": {side: _side(ms) for side, ms in (("build", [m for m in covered0 if m < HOLDOUT]),
                                                    ("unseen", [m for m in covered0 if m >= HOLDOUT]))},
@@ -507,18 +537,19 @@ def compare_scheme(start: str | None = None, end: str | None = None) -> dict:
 
 
 def scheme(start: str | None = None, end: str | None = None, test_months: int = TEST_MONTHS,
-           select_months: int = SELECT_MONTHS) -> dict:
+           select_months: int = SELECT_MONTHS, step_months: int | None = None) -> dict:
     """What the page needs before a job exists (review M5: the step count comes from here, not a
     client constant) -- for the ratio and window the picker currently shows. A window too short
     for one full cycle reports 0 steps rather than failing: the page says so in its own words."""
     n = ratio(test_months)                       # an invalid ratio is a 400, never silently 1:3 (review M4)
     sel = select_window(select_months, n)
+    step = step_window(step_months, sel)
     s = dt.date.fromisoformat(start) if start else RESEARCH_START
     e = dt.date.fromisoformat(end) if end else RESEARCH_END
-    st = steps(month_list(s, e), n, sel)
+    st = steps(month_list(s, e), n, sel, step)
     return {"n_steps": len(st), "first_select": st[0]["select"] if st else None,
             "last_select": st[-1]["select"] if st else None,
-            "select_months": sel, "test_months": n, "step_months": step_of(sel),
+            "select_months": sel, "test_months": n, "step_months": step,
             "ratios": list(RATIOS), "default_test_months": TEST_MONTHS,
             "window": {"start": s.isoformat(), "end": e.isoformat()},
             "metrics": [[k, v] for k, v in METRICS.items()], "default_metric": DEFAULT_METRIC,
@@ -551,6 +582,7 @@ def validate_wf(body) -> dict:
     if compare and select_months != SELECT_MONTHS:
         raise ValueError("compare runs 1:1, 1:2 and 1:3 together: send it without select_months")
     select_months = select_window(select_months, test_months)
+    step_months = step_window(b.pop("step_months", None), select_months)
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")
@@ -578,15 +610,15 @@ def validate_wf(body) -> dict:
                             "n_steps_by": {str(n): v for n, v in by.items()},
                             "tie_break": TIE_BREAK, "stitch": "; ".join(f"1:{n}: {stitch_rule(n)}" for n in RATIOS)}
         return g
-    st = steps(months, test_months, select_months)
+    st = steps(months, test_months, select_months, step_months)
     if not st:
         raise ValueError(f"{g['range']['label']} at {ratio_label(test_months, select_months)}: too short for one "
                          f"full walk-forward cycle ({select_months} selection month(s) + {test_months} test month(s) "
                          "of whole calendar months)")
     g["walkforward"] = {"metric": metric, "metric_label": METRICS[metric], "min_trades": min_trades,
-                        "select_months": select_months, "test_months": test_months, "step_months": step_of(select_months),
+                        "select_months": select_months, "test_months": test_months, "step_months": step_months,
                         "months": months, "n_steps": len(st), "tie_break": TIE_BREAK,
-                        "stitch": stitch_rule(test_months, select_months)}
+                        "stitch": stitch_rule(test_months, select_months, step_months)}
     return g
 
 
@@ -679,7 +711,8 @@ class WalkForwardManager(GridManager):
                     result = compute(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
                                      min_trades=cfg["min_trades"], capital=capital,
                                      test_months=cfg.get("test_months", TEST_MONTHS),
-                                     select_months=cfg.get("select_months", SELECT_MONTHS))
+                                     select_months=cfg.get("select_months", SELECT_MONTHS),
+                                     step_months=cfg.get("step_months"))
             except Exception as e:  # noqa: BLE001 -- the page must see why
                 err = f"selection failed: {type(e).__name__}: {e}"
         with self._cv:

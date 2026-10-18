@@ -651,7 +651,7 @@ def test_a_promote_starts_the_walkforward_once_and_a_failed_one_is_not_started_a
     assert calls[0] == {"strategy": "draft_nq_bars", "inputs": {"lookback": 8},
                         "axes": [{"key": "sl_pts", "values": [15.0, 20.0, 25.0]}, {"key": "tp_pts", "values": [30.0, 40.0, 50.0]}],
                         "range": {"kind": "custom", "start": "2021-09-22", "end": "2026-09-30"}, "qty": 2,
-                        "commission": 2.5, "slippage_ticks": 0.0, "select_months": 3, "test_months": 1}
+                        "commission": 2.5, "slippage_ticks": 0.0, "select_months": 3, "test_months": 1, "step_months": 4}
     for _ in range(2):
         assert lab_results(c)["nq_bars"]["unseen_state"] == "pending"
     assert len(calls) == 1

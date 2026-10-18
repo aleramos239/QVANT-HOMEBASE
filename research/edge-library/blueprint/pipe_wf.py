@@ -2,15 +2,15 @@
 unseen days, it should still be 75% in and 25% out of sample"; docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md, addendum).
 
 Every box of the locked table on every day: its build store (2021-09-22 .. 2025-06-30) and the one read of the test days (2025-07-01 ..
-latest), joined. BLOCKS, NOT ROLLING (the owner, 2026-10-18: "jan-march in sample the aprile oos then may-july in sample then august oos
-etc, 3 month in then the next out on repeat"): a block picks on 3 months and trades the pick in the 4th, and the next block starts after
-it. Every month is either in-sample or out-of-sample, never both.
+latest), joined. BLOCKS, ALWAYS THE DEFAULT (the owner, 2026-10-18: "make the block the default always but keep the rolling as an
+option"): a block picks on 3 months and trades the pick in the 4th, and the next block starts after it -- every month is in-sample or
+out-of-sample, never both (pipeline.json walkforward.step_months 4). step 1 = rolling, only when the owner asks for it.
 
   months(calendar) -> ["2021-10", ...]          the calendar's months; the first is dropped when it starts after its 7th day
   holds(net, need)  -> bool                     the pipeline's box rows on one window: P3.2 (average trade above $0), P3.3 (`need`
                                                 trades or more) and P3.15 (pipe_gates.wr_rr)
   walk(boxes, rows, ms, select, need, today, step)  -> {"picks": [{month, window, cell | None}], "next": {month, window, cell | None}}
-                                                one pick a block of `step` months (select + 1: blocks)
+                                                one pick every `step` months (select + 1: blocks, the default; 1: rolling, on request)
                                                 the pick of a window = the MIDDLE of the boxes that hold, by average trade
                                                 (pipe_stages._pick: never the best); no box holds = the month stands aside
   stitch(boxes, picks)  -> one box's trade arrays: each month's pick, in that month

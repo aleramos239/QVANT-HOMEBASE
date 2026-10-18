@@ -266,7 +266,7 @@ function restore(saved, s) {
   const r = saved.range || {};
   if (RANGES.some((x) => x.id === r.id)) {
     f.range = { id: r.id, start: ISO.test(r.start) ? r.start : '', end: ISO.test(r.end) ? r.end : '',
-      wf: WF_MODES.includes(r.wf) ? r.wf : null, ...(['is', 'oos', 'both'].includes(r.side) ? { side: r.side } : {}) };   // side: the Lab's 3:1 view
+      wf: WF_MODES.includes(r.wf) ? r.wf : null, ...(['is', 'oos', 'both'].includes(r.side) ? { side: r.side } : {}), ...(r.step === 1 ? { step: 1 } : {}) };   // side: the Lab's 3:1 view
   }
   for (const [k, , lo, hi, whole] of COSTS) { const v = saved[k]; if (typeof v === 'number' && v >= lo && v <= hi && (!whole || Number.isInteger(v))) f[k] = v; }
   const ctl = controlsClean(saved.controls);       // only when something is set: the form of an old run is what it was
@@ -761,7 +761,7 @@ const WF_NEEDS_GRID = 'Pick the parameters to search on the Heat-map tab first.'
    the job's identity -- switching the ratio can never show the other one's result. */
 function wfBody(f, axes, metric, minTrades) {
   if (f.range.wf === WF_COMPARE) return { ...gridBody(f, axes), metric, min_trades: minTrades, compare: true };
-  if (f.range.wf === WF_ROLL) return { ...gridBody(f, axes), metric, min_trades: minTrades, select_months: 3, test_months: 1 };
+  if (f.range.wf === WF_ROLL) return { ...gridBody(f, axes), metric, min_trades: minTrades, select_months: 3, test_months: 1, step_months: f.range.step === 1 ? 1 : 4 };
   return { ...gridBody(f, axes), metric, min_trades: minTrades, test_months: f.range.wf || 3 };
 }
 /* A job's mode as the pill spells it: its ratio N, or 'compare' -- what the pill must equal for its result to show. */

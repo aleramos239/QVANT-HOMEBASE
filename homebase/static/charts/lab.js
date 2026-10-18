@@ -1986,7 +1986,7 @@ function settingsHtml(b) {
   const spent = end && end >= X.rangeSpec('test').start;
   return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
-      ${wfSel ? '<div class="wf-hint">Run splits the data into blocks: 3 months in, the next 1 out, then the next block. Pick settings in Heat map below to let each block choose the best of them.</div>' : ''}
+      ${wfSel ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: each month is traded on the best of the Heat map settings over the 3 months before it, then it steps a month.' : 'Run splits the data into blocks: 3 months in, the next 1 out, then the next block. Pick settings in Heat map below to let each block choose the best of them; for a search you can pick 3:1 rolling.'}</div>` : ''}
       ${!wfSel && f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
       ${spent && !wfSel ? '<div class="warn">This reaches July 2025 or later, the test days: one read, only for a locked strategy. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
@@ -2176,10 +2176,13 @@ async function heatCell(i) {
 const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to split the data into blocks: 3 months in-sample, the next 1 out-of-sample, then the next block. To let each block pick the best setting, choose what to vary in Heat map below.</p></div>';
 /* The Range list's two 3:1 choices (the owner, 2026-10-18): one walk-forward over all the data, seen from either side --
    in-sample = the 3-month windows the picks were made on, out-of-sample = each next month, traded on that pick. */
-const WF_RANGE_OPTS = [['wf31_is', '3:1 in-sample'], ['wf31_oos', '3:1 out-of-sample'], ['wf31_both', '3:1 in + out-of-sample']];
+const WF_RANGE_OPTS = [['wf31_is', '3:1 in-sample'], ['wf31_oos', '3:1 out-of-sample'], ['wf31_both', '3:1 in + out-of-sample'],
+  ['wf31r_both', '3:1 rolling · in + out-of-sample']];
 const WF_SIDE_TEXT = { is: 'in-sample', oos: 'out-of-sample', both: 'in + out-of-sample' };
 const wfSide = (f) => (WF_SIDE_TEXT[f.range.side] ? f.range.side : 'oos');
-const wfRangeVal = (r) => (r && r.wf === X.WF_ROLL ? `wf31_${WF_SIDE_TEXT[r.side] ? r.side : 'oos'}` : '');
+const wfRolling = (r) => !!(r && r.wf === X.WF_ROLL && r.step === 1);
+const wfRangeVal = (r) => (r && r.wf === X.WF_ROLL ? (wfRolling(r) ? 'wf31r_both' : `wf31_${WF_SIDE_TEXT[r.side] ? r.side : 'oos'}`) : '');
+/* Blocks are ALWAYS the default (the owner, 2026-10-18); rolling is only ever picked by hand, here or by asking Claude. */
 function wfLabState(f) {
   return S.wf[f.strategy] || (S.wf[f.strategy] = { job: null, result: null, id: '', token: 0, starting: false, err: '' });
 }
@@ -2224,8 +2227,12 @@ function wfStepsHtml(r, axes) {
     ${rows.map((row) => `<tr>${row.cells.map((c, i) => `<td class="${i === 3 ? row.isTone : i === 6 ? row.oosTone : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></details>`;
 }
+/* blocks and rolling are different runs: a result shows only under the Range choice it was run for */
+const wfJobFits = (f, job) => !job || !job.walkforward || (job.walkforward.step_months === 1) === wfRolling(f.range);
 function wfResHtml(f) {
-  const w = wfLabState(f), job = w.job, r = w.result;
+  const w = wfLabState(f);
+  if (!wfJobFits(f, w.job) && !w.starting) return '';
+  const job = w.job, r = w.result;
   if (w.err) return `<div class="rs-empty"><h3>The walk-forward failed</h3><p>${esc(w.err)}</p></div>`;
   if (w.starting && !job) return '<div class="rs-prog"><div class="t">Starting the walk-forward…</div><div class="rs-bar ind"><i style="width:38%"></i></div></div>';
   if (!job) return '';
@@ -2242,7 +2249,9 @@ function wfResHtml(f) {
   const take = side === 'is'
     ? `${amt(hero)} over <b>${one.n_months} months</b>${esc(span(one))}: ${r.n_cells > 1 ? 'the months the picks were made on' : 'the in-sample months'}.`
     : side === 'both'
-      ? `<span class="wf-key oos"></span>Out-of-sample ${amt(so.stats.net_profit)} over ${so.n_months} months · <span class="wf-key is"></span>in-sample ${amt(si.stats.net_profit)} over ${si.n_months} months.`
+      ? (r.scheme.rolling
+        ? `Out-of-sample ${amt(so.stats.net_profit)} over ${so.n_months} months, each traded on the best setting of the 3 months before it. In-sample ${amt((si.per_month || {}).net_profit)} a month on those windows (they overlap, so no total).`
+        : `<span class="wf-key oos"></span>Out-of-sample ${amt(so.stats.net_profit)} over ${so.n_months} months · <span class="wf-key is"></span>in-sample ${amt(si.stats.net_profit)} over ${si.n_months} months.`)
       : `${amt(hero)} over <b>${one.n_months} months</b>${esc(span(one))}, each traded on the pick from the 3 months before it.`;
   const rr = (x) => x.rr_label || (x.rr == null ? '—' : `1:${Number(x.rr).toFixed(2)}`);
   const d = r.drop || {};
@@ -2253,10 +2262,11 @@ function wfResHtml(f) {
   if (side === 'both') {
     const row = (k, f, t) => `<div class="rs-kv wf-kv2"><span>${esc(k)}</span><b class="${t ? wfTone(t(si)) : ''}">${esc(f(si))}</b><b class="${t ? wfTone(t(so)) : ''}">${esc(f(so))}</b></div>`;
     const net = (x) => x.stats.net_profit, pmn = (x) => (x.per_month || {}).net_profit;
+    const ov = (x) => x === si && r.scheme.rolling;          // rolling's in-sample windows overlap: no months / total / trade count
     return `${head}<div class="rs-gh">In-sample and out-of-sample</div><div class="rs-group">
       <div class="rs-kv wf-kv2 wf-kvh"><span></span><span>In</span><span>Out</span></div>
-      ${row('Months', (x) => String(x.n_months || 0))}${row('Net / month', (x) => money0(pmn(x) || 0), pmn)}${row('Total net', (x) => money0(net(x) || 0), net)}
-      ${row('Trades', (x) => String(x.stats.trades ?? '—'))}${row('Profit factor', (x) => X.num(x.stats.profit_factor, 2, true))}
+      ${row('Months', (x) => (ov(x) ? '—' : String(x.n_months || 0)))}${row('Net / month', (x) => money0(pmn(x) || 0), pmn)}${row('Total net', (x) => (ov(x) ? '—' : money0(net(x) || 0)), (x) => (ov(x) ? null : net(x)))}
+      ${row('Trades', (x) => (ov(x) ? '—' : String(x.stats.trades ?? '—')))}${row('Profit factor', (x) => X.num(x.stats.profit_factor, 2, true))}
       ${row('Win rate', (x) => X.rate(x.stats.win_rate))}${row('Realized RR', (x) => rr(x.stats))}
       ${row('Max drawdown', (x) => (x.stats.max_drawdown == null ? '—' : money0(x.stats.max_drawdown)), (x) => x.stats.max_drawdown)}
       ${row('Sharpe', (x) => X.num(x.stats.sharpe))}</div>
@@ -2508,8 +2518,8 @@ function paintRes() {
   WFEQ = null; WFEQ2 = null;
   if (wfF && wfF.range.wf) {
     const wr = wfLabState(wfF).result, sd = wfSide(wfF);
-    if (wr) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
-    main = `<div class="rs-h"><b>Walk-forward ${esc(X.wfRatioText(wfF.range.wf))} · ${WF_SIDE_TEXT[wfSide(wfF)]}</b><span>All data</span></div>
+    if (wr && wfJobFits(wfF, wfLabState(wfF).job)) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
+    main = `<div class="rs-h"><b>Walk-forward ${esc(X.wfRatioText(wfF.range.wf))}${wfRolling(wfF.range) ? ' rolling' : ''} · ${WF_SIDE_TEXT[wfSide(wfF)]}</b><span>All data</span></div>
       <div class="wf-main" id="wfRes">${wfResHtml(wfF) || WF_EMPTY}</div>`;
   } else if (r && !r.bundle && !r.dead && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
@@ -2657,9 +2667,9 @@ root.addEventListener('input', (e) => {
       t.classList.toggle('bad', !!X.inputError(inp, f.inputs[inp.key]));
       if (inp.type === 'choice') paintRes();          // the group's summary names the choices
     } else if (t.dataset.f === 'range') {
-      const side = /^wf31_(is|oos|both)$/.test(t.value) ? t.value.slice(5) : null;
-      S.wfStepsOpen = false;                                                  // Month by month opens by hand only
-      f.range = side ? { id: 'all', start: f.range.start, end: f.range.end, wf: X.WF_ROLL, side }     // 3:1 runs over all the data
+      const side = /^wf31_(is|oos|both)$/.test(t.value) ? t.value.slice(5) : t.value === 'wf31r_both' ? 'both' : null;
+      S.wfStepsOpen = false;                                                  // Block by block opens by hand only
+      f.range = side ? { id: 'all', start: f.range.start, end: f.range.end, wf: X.WF_ROLL, side, ...(t.value === 'wf31r_both' ? { step: 1 } : {}) }     // 3:1 runs over all the data
         : { id: t.value, start: f.range.start, end: f.range.end, wf: null };
       paintRes(); paintHead();
     }

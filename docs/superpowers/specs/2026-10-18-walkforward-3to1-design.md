@@ -93,3 +93,18 @@ Tester engine: `ROLL_STEP = 4` (blocks), `stitched_is.equity`, realized RR (`rr`
 ignores rolling jobs (`step_months` must be 4). Lab Range: "3:1 in-sample", "3:1 out-of-sample", "3:1 in + out-of-sample" (both
 curves on one chart, the two sides in two columns); Block by block fold closed by default. Pipeline: the pipeline session
 (`pipe_wf.py`, `pipeline.json walkforward.step_months 4`).
+
+## Blocks by default, rolling with a heat map (2026-10-18, latest)
+
+The owner: "default is not rolling its the block but when we use heatmap its the rolling". One variant (nothing searched):
+blocks. A search over several variants: rolling (more tested months, re-picks every month as it would be traded). Engine:
+`step_months` 4 (blocks, default) or 1 (rolling) for 3:1; rolling's in-sample side has no curve and no total (windows
+overlap). Lab: Range "3:1 rolling · in + out-of-sample"; picking Heat map settings moves a 3:1 Range to rolling, clearing
+them moves it back to blocks. Desk card: rolling (it searches the Desk settings). Pipeline: the pipeline session.
+
+## Final rule (2026-10-18, latest): blocks always the default, rolling by hand
+
+The owner: "make the block the default always but keep the rolling as an option that i can manually tell claude to use rolling or
+in the lab i can manually put rolling when the heatmap is on". Blocks everywhere by default (Lab, Desk card, pipeline, chat tool);
+rolling only by hand: the Lab's Range "3:1 rolling · in + out-of-sample", the chat tool's `rolling=true`, or pipeline.json
+`walkforward.step_months` 1 when the owner says so. The Lab no longer switches by itself.

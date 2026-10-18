@@ -182,3 +182,12 @@ test('3:1 rides the range pill: label, run body and the job it matches', () => {
   assert.equal(X.wfModeLabel({ select_months: 3, test_months: 1 }), '3:1');
   assert.equal(X.wfRatioText(f.range.wf), '3:1');
 });
+
+test('3:1 is blocks by default and rolling when the range says so (a heat-map search)', () => {
+  const f = { strategy: 's', inputs: {}, range: { id: 'all', wf: '3:1', side: 'is' }, qty: 1, commission: 4, slippage_ticks: 1, max_cells: 60 };
+  assert.equal(X.wfBody(f, [], 'net_profit', 5).step_months, 4);
+  assert.equal(X.wfBody({ ...f, range: { ...f.range, side: 'both', step: 1 } }, [], 'net_profit', 5).step_months, 1);
+  const s = { id: 's', inputs: [] };
+  assert.equal(X.restore({ strategy: 's', range: { id: 'all', wf: '3:1', side: 'both', step: 1 } }, s).range.step, 1);
+  assert.equal(X.restore({ strategy: 's', range: { id: 'all', wf: '3:1', side: 'is', step: 7 } }, s).range.step, undefined);
+});

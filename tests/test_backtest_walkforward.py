@@ -971,3 +971,39 @@ def test_3to1_with_nothing_to_search_is_the_strategy_as_set_in_blocks():
                    capital=50_000.0, test_months=1, select_months=3)
     assert [s["cell"] for s in r["steps"]] == [0, 0], "Jan-Mar has 5 trades only; it is still the pick"
     assert r["stitched"]["stats"]["net_profit"] == -100 + 200 and r["next"]["cell"] == 0
+
+
+def test_3to1_rolling_for_a_heat_map_steps_a_month():
+    """The owner, 2026-10-18: blocks by default, rolling when a heat map is searched -- pick on the last 3 months,
+    trade the next 1, step a month; the in-sample windows overlap, so that side has no curve."""
+    months = ["2022-01", "2022-02", "2022-03", "2022-04", "2022-05"]
+    st = wf.steps(months, 1, 3, 1)
+    assert [(s["select_ms"], s["test"]) for s in st] == [
+        (["2022-01", "2022-02", "2022-03"], ["2022-04"]), (["2022-02", "2022-03", "2022-04"], ["2022-05"])]
+    tr = {0: trades("2022-01", [100] * 5) + trades("2022-02", [-50] * 5) + trades("2022-03", [-50] * 5)
+          + trades("2022-04", [10] * 5) + trades("2022-05", [20] * 5),
+          1: trades("2022-01", [10] * 5) + trades("2022-02", [10] * 5) + trades("2022-03", [10] * 5)
+          + trades("2022-04", [-30] * 5) + trades("2022-05", [40] * 5)}
+    cells = [{"i": i, "params": {"offset_pts": 10.0 + i}, "months": wf.month_stats(tr[i], [], 50_000.0, months)}
+             for i in (0, 1)]
+    r = wf.compute(cells, months, trades_of=lambda i: (tr[i], []), metric="net_profit", min_trades=5,
+                   capital=50_000.0, test_months=1, select_months=3, step_months=1)
+    assert r["scheme"]["rolling"] is True and r["scheme"]["step_months"] == 1 and r["n_steps"] == 2
+    s0, s1 = r["steps"]
+    assert (s0["cell"], s0["oos"]["net_profit"], s1["cell"], s1["is"]["net_profit"], s1["oos"]["net_profit"]) == (1, -150, 1, -50, 200)
+    assert r["stitched"]["months"] == ["2022-04", "2022-05"] and r["stitched"]["stats"]["net_profit"] == 50
+    si = r["stitched_is"]
+    assert si["n_months"] == 6 and si["equity"] is None
+    assert si["stats"]["max_drawdown"] == max((s0["is"]["max_drawdown"], s1["is"]["max_drawdown"]), key=abs)
+
+
+def test_the_3to1_step_is_blocks_by_default_or_rolling_on_request():
+    assert wf.validate_wf(wbody(select_months=3, test_months=1))["walkforward"]["step_months"] == 4
+    g = wf.validate_wf(wbody(select_months=3, test_months=1, step_months=1))
+    assert g["walkforward"]["step_months"] == 1 and g["walkforward"]["n_steps"] == len(g["walkforward"]["months"]) - 3
+    assert "rolling" in g["walkforward"]["stitch"]
+    for bad in ({"select_months": 3, "test_months": 1, "step_months": 2}, {"test_months": 3, "step_months": 4},
+                {"select_months": 3, "test_months": 1, "step_months": 1.0}):
+        with pytest.raises(ValueError, match="step_months"):
+            wf.validate_wf(wbody(**bad))
+    assert wf.scheme(test_months=1, select_months=3, step_months=1)["step_months"] == 1
