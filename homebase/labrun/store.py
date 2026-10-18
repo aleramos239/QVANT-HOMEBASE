@@ -277,6 +277,39 @@ def restore(name: str, at=None) -> dict | None:
         return rec
 
 
+BUILTINS_FILE = "_builtins.json"         # in the archive: the Desk's own strategies (nq930 ...) archived; "_" first: no record's name
+
+
+def _builtins(at=None) -> Path:
+    return root(at) / ARCHIVE_DIR / BUILTINS_FILE
+
+
+def archive_builtin(name: str, group_was, keep: bool = False, at=None) -> dict:
+    """A Desk built-in noted as archived (the page has switched it off; the Desk keeps it, hidden). keep: an earlier note's
+    `group_was` stays (archived twice)."""
+    with write_lock(at):
+        got = _read(_builtins(at)) or {}
+        was = got.get(_name(name)) or {}
+        got[name] = {"archived_utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"),
+                     "group_was": was.get("group_was") if keep and was else group_was}
+        _write(_builtins(at), got)
+        return got[name]
+
+
+def restore_builtin(name: str, at=None) -> dict | None:
+    """The built-in's note taken off (it shows on the Desk again, as it is: switched off). None: it was not archived."""
+    with write_lock(at):
+        got = _read(_builtins(at)) or {}
+        rec = got.pop(_name(name), None)
+        if rec is not None:
+            _write(_builtins(at), got)
+        return rec
+
+
+def archived_builtins(at=None) -> dict:
+    return _read(_builtins(at)) or {}
+
+
 def listing(at=None) -> list:
     """Every promoted strategy, the latest promoted first; a file that does not read is left out."""
     d = root(at)

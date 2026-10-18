@@ -100,6 +100,9 @@
                                           step 2 is the Desk's own Remove; step 3, filed {name}, files its Lab draft under the
                                           "Archive" group (409 while it is still on the Desk). GET /desklab lists them as `archived`
     POST /api/tester/desklab/restore     {name} -> {ok, name}: back on the Desk, switched off, no account; its Lab group as before
+    POST /api/tester/desklab/archive_builtin | restore_builtin {name}: one of the Desk's own strategies (nq930, gc_nfp), switched
+                                          off by the page first, noted as archived (the page hides it) / shown again; its tester
+                                          twin goes to / leaves the Lab's "Archive" group. Listed in `archived` with builtin: true
     POST /api/tester/show                {run_id | grid_id + cell, focus?: {trade_index | date | time_ms}}
                                           -> tells every open chart page (/ws `tester_show`) to load that run or
                                           heat-map cell into the Strategy Tester and show it on a chart
@@ -219,7 +222,7 @@ def desk_strategy_ids() -> list[str]:
                   if isinstance(k, str) and isinstance(v, dict) and (v.get("cfg") or {}).get("kind") != "lab")
 
 
-DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open", "archive", "filed", "restore")
+DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open", "archive", "filed", "restore", "archive_builtin", "restore_builtin")
 ARCHIVE_GROUP = "Archive"     # the Lab group an archived strategy's draft is filed under (the owner, 2026-10-18)
 DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
@@ -815,6 +818,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                                  for d in store.days(name, DESKLAB_DAYS) if store.same_promotion(d, rec)]})
         beat = store.get_runner() or {}
         archived = [{k: rec.get(k) for k in ("name", "label", "root", "run", "archived_utc", "promoted_utc")} for rec in store.archived()]
+        archived += [{"name": k, "builtin": True, "archived_utc": v.get("archived_utc")} for k, v in store.archived_builtins().items()]
         return watch_answer(request, {"strategies": out, "archived": archived, "builtins": desk_strategy_ids(), "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
 
@@ -1007,6 +1011,29 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 draftstore.set_group(sid, rec.get("group_was"))
         return {"ok": True, "name": name}
 
+    def desklab_archive_builtin(name: str) -> dict:
+        """One of the Desk's own strategies (nq930, gc_nfp): the page has switched it off, after the Desk's checks; here it is noted
+        as archived (the page hides it) and its tester twin is filed under the Lab's "Archive" group."""
+        if name not in desk_strategy_ids():
+            raise HTTPException(404, "That is not one of the Desk's own strategies.")
+        twin = deskresults.BUILTIN_TWINS.get(name)
+        was = lab_group(twin) if twin else None
+        store.archive_builtin(name, was, keep=was == ARCHIVE_GROUP)
+        if twin:
+            with contextlib.suppress(draftstore.GroupsUnreadable, ValueError):
+                draftstore.set_group(twin, ARCHIVE_GROUP)
+        return {"ok": True, "name": name}
+
+    def desklab_restore_builtin(name: str) -> dict:
+        rec = store.restore_builtin(name)
+        if rec is None:
+            raise HTTPException(404, "That strategy is not in the archive.")
+        twin = deskresults.BUILTIN_TWINS.get(name)
+        if twin and lab_group(twin) == ARCHIVE_GROUP:
+            with contextlib.suppress(draftstore.GroupsUnreadable, ValueError):
+                draftstore.set_group(twin, rec.get("group_was"))
+        return {"ok": True, "name": name}
+
     open_ask = {"name": None, "run": None, "builtin": False, "at": 0.0}      # the Desk page's "Open in the Lab": one request, kept for a short while
 
     def desklab_open(name: str, run: str | None = None, builtin: bool = False) -> dict:
@@ -1056,7 +1083,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
             keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"},
-                    "archive": {"name"}, "filed": {"name"}, "restore": {"name"}}[what]
+                    "archive": {"name"}, "filed": {"name"}, "restore": {"name"},
+                    "archive_builtin": {"name"}, "restore_builtin": {"name"}}[what]
             run = body.get("run") if what == "open" and isinstance(body, dict) else None
             if run is not None and (not isinstance(run, str) or not re.fullmatch(r"[0-9a-z_-]{1,120}", run)):
                 raise HTTPException(400, "run: a finished run's id")
@@ -1083,9 +1111,10 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "open":
                     done = await asyncio.to_thread(desklab_open, name, run, builtin is True)
-                elif what in ("archive", "filed", "restore"):
-                    done = await asyncio.to_thread({"archive": desklab_archive, "filed": desklab_filed,
-                                                    "restore": desklab_restore}[what], name)
+                elif what in ("archive", "filed", "restore", "archive_builtin", "restore_builtin"):
+                    done = await asyncio.to_thread({"archive": desklab_archive, "filed": desklab_filed, "restore": desklab_restore,
+                                                    "archive_builtin": desklab_archive_builtin,
+                                                    "restore_builtin": desklab_restore_builtin}[what], name)
                 else:
                     done = await asyncio.to_thread(desklab_onoff, name, body["on"])
             except ValueError as e:                  # a name the store will not take (the heartbeat's own file name)

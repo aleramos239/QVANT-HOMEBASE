@@ -2431,6 +2431,7 @@ function stratView(name) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${twin ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
+      <button class="btn btn-outline btn-sm" onclick="archiveBuiltin(${jsArg(name)})"${DESKLAB_BUSY || ((ST.book && ST.book[name]) || []).length ? " disabled" : ""} title="Switched off and off the Desk's list, kept. Restore it from Archive any time.">Archive</button>
       <button class="btn btn-outline btn-sm" onclick="removeBuiltin(${jsArg(name)})"${hide.locked ? " disabled" : ""} title="${esc(hide.locked ? hide.reason + ". Switch it off first." : "Takes it off the Desk's list. Bring it back from Manage algos; its settings and history stay.")}">Remove from Desk</button>${test}</div>
     ${hide.locked ? `<div class="mcap">Remove from Desk: ${esc(hide.reason)}. Switch it off first.</div>` : ""}`;
 }
@@ -2616,8 +2617,46 @@ async function restoreArchived(name) {
   await loadDeskLab();
   refresh();
 }
+/* A built-in (nq930, gc_nfp) is the Desk's own: it cannot leave the Desk's config, so Archive switches it off here and notes it on the
+   chart service, and the page hides it. Refused while an account is assigned or it has anything open today (the hide rule). Restore shows it
+   again, switched off. */
+function archivedBuiltins() { return (DESKLAB.archived || []).filter(w => w && w.builtin === true).map(w => w.name); }
+async function archiveBuiltin(name) {
+  const s = ST && ST.strategies && ST.strategies[name];
+  if (!s || DESKLAB_BUSY || DEMO) return;
+  const N = stratLabel(name), book = (ST.book && ST.book[name]) || [], info = hideInfo(name);
+  if (book.length) return toast(`${N} has accounts assigned. Take them off first.`, 7000);
+  if (info.locked) return toast(`${N} cannot be archived now: ${info.reason}.`, 7000);
+  if (!await confirmDlg(`Archive ${N}?`, "It is switched off and comes off the Desk's list. Its settings and history stay. Restore it from Archive any time.", "Archive", false)) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  let r = {ok: true}, err = null;
+  if (s.cfg.enabled) { try { r = await post("/api/strategy", {strategy: name, enabled: false}); } catch (e) { err = e || new Error("no answer"); } }
+  const why = s.cfg.enabled ? answerWhy(r, err) : "";
+  if (!why) r = await chartPost("/api/tester/desklab/archive_builtin", {name});
+  DESKLAB_BUSY = "";
+  if (!why && r && r.ok === true) {
+    if (VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "archive"};
+    toast(`${N} is switched off and archived. Restore it from Archive any time.`);
+  } else toast(`Could not archive ${N}: ${why || (r && r.detail) || "no answer"}`, 7000);
+  await loadDeskLab();
+  refresh();
+}
+async function restoreBuiltin(name) {
+  if (DESKLAB_BUSY || DEMO) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  const r = await chartPost("/api/tester/desklab/restore_builtin", {name});
+  DESKLAB_BUSY = "";
+  toast(r && r.ok === true ? `${stratLabel(name)} is back on the Desk, switched off.` : `Could not restore ${stratLabel(name)}: ${(r && r.detail) || "no answer"}`, 7000);
+  await loadDeskLab();
+  refresh();
+}
 function archiveView() {
   const rows = (DESKLAB.archived || []).map(w => {
+    if (w.builtin === true) {
+      const day = String(w.archived_utc || "").slice(0, 10);
+      return `<div class="feed-row"><span class="h"><b>${esc(stratLabel(w.name))}</b> · the Desk's own${day ? " · archived " + esc(shortDay(day)) : ""}</span>
+        <button class="btn btn-outline btn-sm" onclick="restoreBuiltin(${jsArg(w.name)})"${DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk's list, switched off">Restore</button></div>`;
+    }
     const f = DeskLab.figures(w), day = String(w.archived_utc || "").slice(0, 10), busy = DESKLAB_BUSY === w.name;
     return `<div class="feed-row"><span class="h"><b>${esc(DeskLab.label(w))}</b> · ${esc(w.root || "")}${day ? " · archived " + esc(shortDay(day)) : ""}<br>
       <small class="dim">${f.map(x => esc(x.k + " " + x.v)).join(" · ")}</small></span>
@@ -2691,8 +2730,9 @@ function render() {
          onclick="dismissReady()">&times;</button>`;
   } else strip.style.display = "none";
 
+  const shelved = archivedBuiltins();       // archived built-ins hide by the same rule as Manage algos: one that can trade or holds anything shows
   const algoVis = window.AlgoVisibility
-    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS, s.accounts)
+    ? window.AlgoVisibility.computeVisibility(s.strategies, s.book, HIDDEN_ALGOS.concat(shelved), s.accounts)
     : Object.keys(s.strategies).map(n => ({name: n, visible: true}));
   const visibleNames = new Set(algoVis.filter(a => a.visible).map(a => a.name));
   const names = Object.keys(s.strategies).filter(n => visibleNames.has(n))
@@ -2701,7 +2741,7 @@ function render() {
   if (VIEW.k === "strat" && !names.includes(VIEW.name)) VIEW = {k: "today"};
   if (VIEW.k === "group" && DESKGROUPS.ok === true && !groupOf(VIEW.name)) VIEW = {k: "today"};      // a group removed (here or elsewhere)
   ISSUE_LVL = probs.some(c => c.level === "bad") ? "bad" : "warn";
-  renderSide(names, algoVis.filter(a => !a.visible).length, probs.length);
+  renderSide(names, algoVis.filter(a => !a.visible && !shelved.includes(a.name)).length, probs.length);
   renderMain(names, probs.length);
   // the views were rebuilt: an + Assign menu that lived in them is gone -- so is its hold on updates
   if (ASG_OPEN && !document.contains(ASG_OPEN.menu)) {

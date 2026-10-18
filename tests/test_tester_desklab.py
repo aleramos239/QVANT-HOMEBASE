@@ -804,3 +804,21 @@ def test_restore_refused_while_a_namesake_is_on_the_desk(c, drafts_dir, make_run
     assert c.get("/api/tester/desklab").json()["archived"] == []
     r = c.post("/api/tester/desklab/restore", json={"name": "nq_bars"})
     assert r.status_code == 409 and r.json()["detail"] == "A strategy of that name is on the Desk."
+
+
+def test_a_builtin_is_archived_and_restored(c, monkeypatch):
+    """nq930 / gc_nfp stay in the Desk's config: Archive notes them (the page switched them off and hides them) and files the tester
+    twin under the Lab's "Archive" group; Restore takes the note off and the twin back to its group. Only the Desk's own ids."""
+    monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: ["gc_nfp", "nq930"])
+    draftstore.set_group("gc_nfpcpi", "Ideas")
+    post = lambda what, name: c.post(f"/api/tester/desklab/{what}", json={"name": name})
+    assert post("archive_builtin", "gc_nfp").json() == {"ok": True, "name": "gc_nfp"}
+    assert post("archive_builtin", "gc_nfp").json()["ok"] is True                # twice: the group it had is kept
+    (row,) = c.get("/api/tester/desklab").json()["archived"]
+    assert row["name"] == "gc_nfp" and row["builtin"] is True
+    assert draftstore.read_groups()["members"]["gc_nfpcpi"] == "Archive"
+    assert post("archive_builtin", "nq_bars").status_code == 404                # not one of the Desk's own
+    assert post("restore_builtin", "gc_nfp").json() == {"ok": True, "name": "gc_nfp"}
+    assert c.get("/api/tester/desklab").json()["archived"] == []
+    assert draftstore.read_groups()["members"]["gc_nfpcpi"] == "Ideas"
+    assert post("restore_builtin", "gc_nfp").status_code == 404
