@@ -264,7 +264,11 @@
     var runRows = function (run) {
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
       var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
-      return days.concat(figures({ run: run }), unseenExtras(run));
+      var rows = days.concat(figures({ run: run }), unseenExtras(run));
+      var rr = rows.findIndex(function (x) { return x.k === "Realized RR"; });      // right under Win rate (owner 2026-10-18)
+      var at = rows.findIndex(function (x) { return x.k === "Win rate"; });
+      if (rr > at && at >= 0) rows.splice(at + 1, 0, rows.splice(rr, 1)[0]);
+      return rows;
     };
     var rows = u ? runRows(u) : [];
     if (bu) {

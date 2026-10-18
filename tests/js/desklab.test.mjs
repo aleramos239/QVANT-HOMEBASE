@@ -1108,10 +1108,10 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   const full = D.results({ unseen, prop: { build: { ...head, eval_pass_p: 0.41 }, unseen: head } });
   assert.equal(full.unseen.title, 'Unseen days (OOS)');
   assert.deepEqual(full.unseen.rows.map((r) => [r.k, r.v]), [['Days', 'Jul 2025 – Oct 2026'], ['Net', '+$16,342'], ['Win rate', '66%'],
-    ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Realized RR', '1:2.81'], ['Sharpe', '0.43']]);
+    ['Realized RR', '1:2.81'], ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Sharpe', '0.43']]);
   assert.equal(full.unseen.note, '');
   // an older saved run has no label: the ratio is written the same way; no figures at all -> dashes
-  assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-2).map((r) => r.v), ['1:0.50', '—']);
+  assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(3, 4).concat(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-1)).map((r) => r.v), ['1:0.50', '—']);
   assert.equal(full.prop.title, 'Prop sim · LucidFlex 50K');
   assert.deepEqual(full.prop.head, ['Build', 'Unseen']);
   assert.deepEqual(full.prop.rows.map((r) => [r.k, r.build, r.unseen]), [['Passes the eval', '41%', '37%'], ['Busts the eval', '63%', '63%'],
@@ -1214,6 +1214,7 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
   assert.equal(done.unseen.title, 'Walk-forward 3:1 · build and unseen days');
   assert.deepEqual(done.unseen.head, ['Build', 'Unseen']);
   assert.deepEqual([done.unseen.rows[0].k, done.unseen.rows[0].b, done.unseen.rows[0].v], ['Net', '+$4,000', '+$1,235']);   // no Days row: the months interleave
+  assert.deepEqual(done.unseen.rows.slice(1, 3).map((r) => r.k), ['Win rate', 'Realized RR']);           // RR right under the win rate
   assert.equal(done.unseen.note, '');
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'pending', prop: {} }).unseen.note, /^Running the 3:1 walk-forward/);
   assert.match(D.results({ walkforward: true, unseen: null, unseen_state: 'changed', prop: {} }).unseen.note, /Promote it again/);
