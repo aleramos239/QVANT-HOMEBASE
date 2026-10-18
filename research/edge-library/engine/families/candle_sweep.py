@@ -3,7 +3,7 @@ before any result: "on the 15 minute timeframe we look at the previous candle; i
 it, we enter: sweep the previous candle's low, reverse and close higher within the body = long, vice versa short; stop at the candle
 extreme, 1 : 0.5". No Level-2 feature is read (FEATURES = ()): NQ, ES and GC, 1 contract, hold_to = 'day' (flat 15:58 ET).
 
-    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h, candle, turn (+ the Template's max_tr, dir)
+    candle_sweep   bar-based 1/5/15/30   all seven sessions; settings back, ema1h, candle, turn, dir930 (+ the Template's max_tr, dir)
 
 THE RULE (fixed here, before any run):
   * BARS. The instance's own tf bars (the owner's bar is 15 minutes): the bar that has just closed (THIS bar) and the one before it (the
@@ -29,6 +29,10 @@ THE RULE (fixed here, before any run):
     (close < open) and THIS bar green (close > open); a short needs the previous bar green and this bar red. A doji (close = open) is
     neither colour. `turn` = same (the owner, 2026-10-18: "it must be green green or red red"): a long needs the previous bar AND
     this bar green, a short both red.
+  * THE 09:30-10:00 DIRECTION (the owner, 2026-10-18: "look at the direction from 9:30-10 and only trade in that direction"). `dir930`
+    = with (off, the default): the open of the first 1-minute bar at or after 09:30 ET against the close of the last 1-minute bar
+    before 10:00 sets the day's side -- up = longs only, down = shorts only, equal or no bar = no trade. It is known from the decision
+    at or after 10:00 on, so an earlier decision (the 09:45 close) never trades with it; it never changes later in the day.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -54,7 +58,8 @@ REGISTRATION. As families/sfp.py: families/__init__.py picks this module up by i
 into families/blocks.py's BASES / WRAPPED when this module is imported; blocks.py stays byte for byte as it was.
 
 COMPLEXITY 4 = the previous bar + beyond its high / low + a close back to `back` -> market against it + both at once = no trade
-(+1 with ema1h: the side of the 1-hour EMA; +1 with candle: candles of its own size; +1 with turn: the two colours).
+(+1 with ema1h: the side of the 1-hour EMA; +1 with candle: candles of its own size; +1 with turn: the two colours; +1 with
+dir930: the side of the 09:30-10:00 move).
 Tests: engine/tests/test_candle_sweep.py."""
 from __future__ import annotations
 
@@ -130,8 +135,8 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off"):
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "turn": "off", "max_tr": 20}
-    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")),
+    DEFAULTS = {"back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "max_tr": 20}
+    SCHEMA = {"back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")),
               "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
@@ -145,6 +150,7 @@ class CandleSweep(Template):
     def fam_day(self, ctx):
         self.go, self.sx = 0, None
         self.cd, self.mi, self.done = [], 0, 0
+        self.d930 = None
 
     def fam_update(self, ctx):
         self.go = 0
@@ -184,7 +190,19 @@ class CandleSweep(Template):
         today = hour_closes(s.ts, s.px, S.et_ns(d - dt.timedelta(days=1), "18:00"), ctx.now_ns)
         return ema_last(np.concatenate((prior_closes(self, 3 * n - len(today)), today)), n)
 
+    def dir930(self):
+        """+1 / -1 / 0: the 09:30-10:00 ET move of the day (module docstring), 0 before it is known."""
+        if self.d930 is None:
+            M = self.M
+            if not M or (M[-1][0] // 60 + 1) * 60 < 36000:
+                return 0
+            w = [m for m in M if 34200 <= m[0] < 36000]
+            self.d930 = 0 if not w else (w[-1][4] > w[0][1]) - (w[-1][4] < w[0][1])
+        return self.d930
+
     def fam_signal(self, ctx):
+        if self.go and self.p["dir930"] == "with" and self.dir930() != self.go:
+            return
         if self.go and self.p["ema1h"]:
             e = self.ema1h(ctx)
             if e is None or (self.sx[2] - e) * self.go <= 0:

@@ -261,6 +261,33 @@ def test_turn_signals_equal_the_written_rule_on_random_days(tf, sess):
     assert n > 0
 
 
+# ---- (iv d) dir930: only the side of the 09:30-10:00 move ------------------------------------------------------------------------------
+
+def later(edits, minutes):
+    """The same minute edits `minutes` later in the day."""
+    out = {}
+    for t, x in edits.items():
+        h, mm = map(int, t.split(":"))
+        k = h * 60 + mm + minutes
+        out["%02d:%02d" % (k // 60, k % 60)] = x
+    return out
+
+
+def test_dir930_trades_only_the_side_of_the_0930_1000_move_and_never_before_10():
+    up = {"09:59": m(PX, 15002.0, PX - TICK, 15002.0)}                                 # 09:30 open 15000 -> 10:00 close 15002: up
+    down = {"09:59": m(PX, PX + TICK, 14998.0, 14998.0)}
+    p = {"dir930": "with"}
+    sweep = later(long_bar(15005.0), 45)                                               # the green bar 10:00-10:15, its sweep 10:15-10:30
+    assert [x[:2] for x in orders(p, day({**up, **sweep}))[0]] == [(sec(10, 15), "long")]          # (the green bar sweeps 09:45-10:00 too)
+    assert orders(p, day({**down, **sweep}))[0] == []
+    assert [x[:2] for x in orders({}, day({**down, **sweep}))[0]] == [(sec(10, 15), "long")]      # off: no side is read
+    short = later(short_bar(14995.0), 45)
+    assert [x[:2] for x in orders(p, day({**down, **short}))[0]] == [(sec(10, 15), "short")]
+    assert orders(p, day({**up, **short}))[0] == []
+    assert orders(p, day(long_bar(15005.0)))[0] == [] and orders({}, day(long_bar(15005.0)))[0] != []   # 09:45: the move is not known yet
+    assert orders(p, day({**later(long_bar(15005.0), 45)}))[0] == []                  # a flat 09:30-10:00: no side, no trade
+
+
 # ---- (iv b) the 1-hour EMA (ema1h) -------------------------------------------------------------------------------------------------------
 
 def test_hour_closes_are_the_last_print_of_each_whole_hour_that_has_ended():
@@ -374,6 +401,7 @@ def test_the_settings_and_their_limits():
     d, sc = CS.CandleSweep.defaults(), CS.CandleSweep.schema()
     assert (d["back"], d["ema1h"], d["candle"], d["max_tr"], d["dir"]) == ("body", 0, 0, 20, "both")
     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
+    assert sc["dir930"] == ("choice", ("off", "with")) and d["dir930"] == "off"
     assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on", "same")) and d["turn"] == "off"
     for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
                 {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):
