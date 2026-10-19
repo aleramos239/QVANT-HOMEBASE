@@ -262,7 +262,7 @@ class HTF(Study):
         super().__init__()
 
     def initial(self):
-        return (self.inner.initial(), None, None)
+        return (self.inner.initial(), None, None, None)
 
     def _key(self, bar):
         if self.sec >= 86400:
@@ -282,19 +282,21 @@ class HTF(Study):
                    buy=agg.buy + bar.buy, sell=agg.sell + bar.sell, n=agg.n + bar.n)
 
     def step(self, st, bar):
-        inner_state, key, agg = st
+        inner_state, key, agg, last = st
         k = self._key(bar)
         if agg is not None and k == key:
             agg = self._merge(agg, bar)
         else:
             if agg is not None:                      # the higher bar that just ended joins the inner study's history
-                inner_state, _ = self.inner.step(inner_state, agg)
+                inner_state, last = self.inner.step(inner_state, agg)
             agg = self._merge(None, bar)
+        if getattr(self.inner, "HTF_CLOSED", False):  # a gap is a pattern of finished bars: what the last finished one showed
+            return (inner_state, k, agg, last), last
         _, value = self.inner.step(inner_state, agg)
-        return (inner_state, k, agg), value
+        return (inner_state, k, agg, last), value
 
 
-HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema")
+HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema", "fvg")
 HTF_MAX_S = 86400       # any timeframe from a second to a day: the page's box takes "15m", "1h", "90s"
 REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
             "cumdelta": CumDelta, "levels": Levels}

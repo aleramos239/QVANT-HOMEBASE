@@ -129,7 +129,7 @@ class Overlay {
     if (!g) return;
     const f = this.frame();
     if (!f) return;
-    const key = `fvg:${g.params.min}:${g.params.length}`;
+    const key = window.HBCatalog.serverKey(g);      // with the gap timeframe ("fvg:0.25:14@300") when one is set
     const op = Number.isFinite(+g.params.opacity) ? Math.max(0, Math.min(100, +g.params.opacity)) : 15;
     const wx = f.XI(Math.max(f.i0, 1)) - f.XI(Math.max(f.i0, 1) - 1), half = (Number.isFinite(wx) && wx > 0 ? wx : 8) / 2;
     const A = window.HBDrawings.withAlpha;

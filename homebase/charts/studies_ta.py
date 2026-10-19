@@ -408,7 +408,10 @@ class WindowRange(_Study):
 class FairValueGap(_Study):
     """families/fvg.py's gap on the chart's own bars: three bars of the session, bar 3's low above bar 1's high (an up gap)
     or bar 3's high below bar 1's low (down), at least `k` x ATR(`n`) high and never less than a tick. Per side the
-    NEWEST gap not yet filled: a later bar trading through its far edge ends it. The gap is known at bar 3's close."""
+    NEWEST gap not yet filled: a later bar trading through its far edge ends it. The gap is known at bar 3's close.
+    On a longer timeframe ("fvg:0.25:14@300") it reads finished higher bars only (HTF_CLOSED): no gap from a bar still
+    forming, so the box does not redraw every chart bar; it shows from the first chart bar after bar 3's close."""
+    HTF_CLOSED = True
 
     def __init__(self, k: float = 0.25, n: int = 14, tick: float = 0.25):
         self.k, self.n, self.tick = float(k), int(n), float(tick)

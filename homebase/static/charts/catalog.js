@@ -325,7 +325,7 @@ const CATALOG = [
 ];
 /* A study may be read on a longer timeframe (2026-10-11; server studies.HTF, wire key "ema:20@3600"): the window and
    smoothing ones take a Timeframe input, "Chart" (0) = the chart's own bars. */
-const HTF_IDS = ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema'];
+const HTF_IDS = ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema', 'fvg'];
 /* The timeframe is typed, any length from a second to a day: "15m", "1h", "90s", "4h", "1D" (a bare number is minutes). */
 function parseTf(text) {
   const m = /^\s*(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?\s*$/i.exec(String(text == null ? '' : text));

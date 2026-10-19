@@ -822,6 +822,7 @@ test('technical indicators: wire keys, labels and style keys come from the defin
   assert.equal(k('sess', { from: '10:00', to: '10:00' }), 'sess:1080:180', 'a window with no length falls back');
   assert.equal(k('fvg', {}), 'fvg:0.25:14');
   assert.equal(k('fvg', { min: 0.5, length: 20 }), 'fvg:0.5:20');
+  assert.equal(k('fvg', { tf: '300' }), 'fvg:0.25:14@300', 'gaps of the 5-minute bars on any chart');
   assert.equal(k('wk', {}), 'wk');
   assert.equal(k('mo', {}), 'mo');
   assert.equal(k('topen', { time: '08:30' }), 'topen:510');

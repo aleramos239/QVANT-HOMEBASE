@@ -536,6 +536,20 @@ def test_fair_value_gaps_are_the_engines_three_bar_rule_and_end_when_filled():
         make("fvg:99")
 
 
+def test_fair_value_gaps_on_a_longer_timeframe_read_the_5_minute_bars_of_a_1_minute_chart():
+    base = ms(2026, 10, 7, 9, 30)
+    s = make("fvg:0:14@300")
+    five = [(101, 99)] * 15 + [(102, 100), (110, 103), (112, 106)]  # 5-minute bars: 15 flat, then bar 3's low 106 > bar 1's 102
+    got = None
+    for j, (h, l) in enumerate(five):
+        for m in range(5):                                           # each 5-minute bar as five 1-minute bars
+            got = s.push(mk((h + l) / 2, h=h, l=l, t=base + (5 * j + m) * 60000))
+    assert got == {"uh": 103, "ul": 101, "dh": None, "dl": None}     # bar 3 still forming: only the gap bar 2 closed
+    got = s.push(mk(110, h=111, l=109, t=base + 5 * len(five) * 60000))
+    assert got == {"uh": 106, "ul": 102, "dh": None, "dl": None}     # bar 3 closed: the 5-minute gap, on the next 1-minute bar
+    assert make("fvg:0:14").push(mk(100, t=base)) is None and warm_bars("fvg:0.25:14@300") == 5 * 143
+
+
 def test_week_and_month_levels_are_the_prior_period_and_this_periods_open():
     d = [("2026-10-05", 100, 110, 90, 105), ("2026-10-06", 106, 120, 100, 118), ("2026-10-12", 119, 125, 115, 124),
          ("2026-10-13", 124, 130, 118, 128)]

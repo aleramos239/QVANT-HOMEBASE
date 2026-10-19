@@ -47,7 +47,7 @@ function of(inst, f) {
     return countNote(n, `Lower "Minimum size" (now ${p.min})`);
   }
   if (id === 'fvg' && f.M && f.M.fvgBoxes) {
-    const key = `fvg:${p.min}:${p.length}`;
+    const key = need('HBCatalog', './catalog.js').serverKey(inst);      // the gap timeframe's key too ("fvg:0.25:14@300")
     const n = f.M.fvgBoxes(f.bars, key, f.i1).filter((b) => b.to >= f.i0).length;
     return n > 0 ? info(`${noun(n, 'gap', 'gaps')} in view`) : info('No open gap in view');
   }
