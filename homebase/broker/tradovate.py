@@ -1341,13 +1341,36 @@ class TradovateAdapter(BrokerAdapter):
             return OrderResult(ok=False, error=str(e))
 
     async def cancel_all(self) -> OrderResult:
+        """Cancel every working order of THIS account. Tradovate has no cancel-all
+        call (the old order/cancelallorders answered 404 on every account, Kill all
+        2026-10-19): read order/list and send order/cancelorder per working order.
+        The pushed cache's working orders join the list, so an unreadable list still
+        cancels what we know of (and says the list failed). TooLate = already filled
+        or cancelled: not working any more, so not an error."""
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
+        errors: list[str] = []
         try:
-            await self._ws.cancel_all_orders(self._acct_num)
-            return OrderResult(ok=True)
-        except Exception as e:
-            return OrderResult(ok=False, error=str(e))
+            listed = await self._ws.order_list() or []
+        except Exception as e:  # noqa: BLE001 — still cancel what the cache knows
+            listed = []
+            errors.append(f"order list unreadable ({e}): cancelled the known orders only")
+        orders = [(o.get("id"), o) for o in listed] + list(self._orders.items())
+        ids = sorted({int(i) for i, o in orders if i is not None
+                      and o.get("accountId") == self._acct_num
+                      and o.get("ordStatus") in self._WORKING_STATUSES})
+        res = await asyncio.gather(*(self.cancel_order_by_id(str(i)) for i in ids),
+                                   return_exceptions=True)
+        failed = 0
+        for i, r in zip(ids, res):
+            if isinstance(r, Exception):
+                failed += 1
+                errors.append(f"{i}: {r}")
+            elif not r.ok and (r.raw or {}).get("failureReason") != "TooLate":
+                failed += 1
+                errors.append(f"{i}: {r.error}")
+        return OrderResult(ok=not errors, error="; ".join(errors) or None,
+                           raw={"cancelled": len(ids) - failed, "ids": [str(i) for i in ids]})
 
     # ------------------------------------------------------------ reads
     def request_rtts_ms(self, since: float) -> dict[str, float]:

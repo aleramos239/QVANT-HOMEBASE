@@ -450,6 +450,52 @@ def test_cancel_symbol_touches_only_this_accounts_working_orders_in_that_contrac
     assert [b["orderId"] for e, _, b in sent if e == "order/cancelorder"] == [2]
 
 
+# --- Kill all's cancel: Tradovate has no cancel-all call (order/cancelallorders = 404, 2026-10-19) ----
+def list_broker(listed, cancel=None):
+    base, sent = broker()
+
+    def answer(endpoint, query, body):
+        d = base(endpoint, query, body)                   # records every frame
+        if endpoint == "order/list":
+            return listed
+        if endpoint == "order/cancelorder" and cancel:
+            return cancel(json.loads(body)["orderId"])
+        return d
+    return answer, sent
+
+
+def test_cancel_all_lists_the_orders_and_cancels_each_working_one_of_this_account(tmp_path):
+    answer, sent = list_broker([working(1, CID[NQC]), working(2, CID[ESC], status="PendingNew"),
+                                working(3, CID[NQC], acct=OTHER), working(4, CID[NQC], status="Filled"),
+                                working(6, CID[NQC], status="Canceled")])
+    ad = mkadapter(tmp_path, answer)
+    ad._orders[7] = {"accountId": ME, "ordStatus": "Working"}        # pushed, not in the list yet
+    r = run(ad.cancel_all())
+    assert r.ok is True and r.raw == {"cancelled": 3, "ids": ["1", "2", "7"]}
+    assert not any(e == "order/cancelallorders" for e, _, _ in sent)
+    assert sorted(b["orderId"] for e, _, b in sent if e == "order/cancelorder") == [1, 2, 7]
+
+
+def test_cancel_all_reports_a_refused_cancel_but_not_one_already_gone(tmp_path):
+    answer, sent = list_broker(
+        [working(1, CID[NQC]), working(2, CID[NQC]), working(3, CID[NQC])],
+        cancel=lambda oid: {1: {}, 2: {"failureReason": "TooLate", "failureText": "Too late"},
+                            3: {"failureReason": "AnotherCommandPending",
+                                "failureText": "busy"}}[oid])
+    ad = mkadapter(tmp_path, answer)
+    r = run(ad.cancel_all())
+    assert r.ok is False and r.error == "3: busy" and r.raw["cancelled"] == 2
+
+
+def test_cancel_all_with_an_unreadable_list_still_cancels_the_known_orders(tmp_path):
+    answer, sent = list_broker(None)                      # order/list -> 404
+    ad = mkadapter(tmp_path, answer)
+    ad._orders[1] = working(1, CID[NQC])
+    r = run(ad.cancel_all())
+    assert r.ok is False and r.error.startswith("order list unreadable")
+    assert [b["orderId"] for e, _, b in sent if e == "order/cancelorder"] == [1]
+
+
 def test_reconnect_cancels_the_old_sockets_seed_before_anything_else(tmp_path, monkeypatch):
     class BrokenWS(SyncWS):
         async def user_sync(self):
