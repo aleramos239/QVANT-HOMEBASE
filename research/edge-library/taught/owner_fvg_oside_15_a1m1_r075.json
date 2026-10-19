@@ -1,0 +1,54 @@
+{
+ "name": "owner_fvg_oside_15_a1m1_r075",
+ "source": {
+  "title": "Owner's idea, 2026-10-19: most recent 15-min FVG on the side of the 09:30 open, stop 1 x ATR(14) of the 1-minute candles, 1:0.75",
+  "channel": "owner"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "fvg_oside",
+  "settings": {
+   "min_gap": 0.0,
+   "stop_atr": 0.0,
+   "atr1": 1.0
+  },
+  "words": "If we are above the 9:30 open level, we enter on the most recent 5 minute fvg, vice versa for shorts, use the middle candle extreme as the stop and 1:0.5."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.75,
+  "max_trades": 1
+ },
+ "taught": [
+  "[chat 2026-10-19] NQ, 15-minute bars",
+  "[chat 2026-10-19] above the 09:30 open: longs on the most recent FVG",
+  "[chat 2026-10-19] below the 09:30 open: shorts on the most recent FVG",
+  "[chat 2026-10-19] stop at the middle candle's extreme",
+  "[chat 2026-10-19] target 1:0.5",
+  "[chat 2026-10-19] owner: run the same rule at 1:1",
+  "[chat 2026-10-19] owner: try an ATR-based stop, 14-candle lookback",
+  "[chat 2026-10-19] owner: measure the ATR on the 1-minute, 1x and 2x ATR, each RR (this one: 1x, 1:0.75)"
+ ],
+ "not_run": [
+  "SIDE: price vs the 09:30 open is read on each 5-minute close, not tick by tick. Claude's pick.",
+  "THE ENTRY: not said; a limit at the gap's near edge, the usual FVG retest. A newer gap or a flip of the side moves the order. Claude's pick.",
+  "WINDOW: not said; entries 09:30-15:00, an unfilled order cancelled at 15:00, flat 15:58. Claude's pick.",
+  "TRADES A DAY: not said; one. Claude's pick.",
+  "GAP SIZE: any gap of one tick or more (no minimum).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only.",
+  "FIRST TRADE: all three gap candles start at or after 09:30, so on 15-minute bars the first possible entry is 10:15.",
+  "THE STOP: 1 x the mean true range of the 14 newest 1-minute candles at the gap's close, from the entry (no 0.25 tf-ATR floor; two ticks minimum)."
+ ],
+ "control": "random"
+}

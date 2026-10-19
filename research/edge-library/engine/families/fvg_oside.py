@@ -13,7 +13,9 @@ THE RULE (fixed here, before any run):
     One trade a day (max_tr 1); an unfilled order is cancelled at 15:00.
   * THE STOP: the middle candle's far end (bar 2's low up / high down), floored by the Template at 0.25 ATR and two ticks. A middle candle
     whose far end is not beyond the near edge gives no order. `stop_atr` k > 0 (the owner, 2026-10-19: "atr based stop 14 candle lookback")
-    puts the stop k x ATR14 of the tf (Wilder, the Template's own) from the near edge instead, ATR read at the gap's close. THE TARGET: the exit cell's tgt_r (the owner: 0.5). Flat 15:58 ET.
+    puts the stop k x ATR14 of the tf (Wilder, the Template's own) from the near edge instead, ATR read at the gap's close.
+    `atr1` k1 > 0 (the owner, 2026-10-19: "measure the atr on the 1 minute") is fvg_odir's: k1 x the mean true range of the 14 newest
+    1-minute bars from the near edge, without the 0.25 tf-ATR floor (fvg_odir._dist). THE TARGET: the exit cell's tgt_r (the owner: 0.5). Flat 15:58 ET.
 
 MY PICKS, NOT THE OWNER'S WORDS: side read on the tf close (not tick by tick); entry at the near edge; entries 09:30-15:00; one trade a day.
 
@@ -27,8 +29,8 @@ from .fvg_odir import LAST, OPEN, FvgOdir
 class FvgOside(FvgOdir):
     """fvg_oside (module docstring). State per day: last = {+1 / -1: (near edge, middle candle's far end)}, want = (side, px, struct) to rest
     now or None, placed = the `want` the working order was placed for."""
-    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "max_tr": 1, "stop_atr": 0.0}
-    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "stop_atr": ("float", 0.0, 5.0)}
+    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "max_tr": 1, "stop_atr": 0.0, "atr1": 0.0}
+    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "stop_atr": ("float", 0.0, 5.0), "atr1": ("float", 0.0, 20.0)}
 
     def fam_day(self, ctx):
         self.last, self.want, self.placed = {}, None, None
@@ -46,10 +48,13 @@ class FvgOside(FvgOdir):
             self.want = None
             return
         h1, l1, h3, l3 = self.H[-3], self.L[-3], self.H[-1], self.L[-1]
-        k = self.p["stop_atr"]
+        k, k1 = self.p["stop_atr"], self.p["atr1"]
+        a1 = self.atr1m() if k1 > 0 else None
         for sd, near, far, struct in ((1, l3, h1, self.L[-2]), (-1, h3, l1, self.H[-2])):
             if k > 0:
                 struct = near - sd * k * (self.atr or 0.0)    # no ATR yet = no order; the owner's ATR stop: k x Wilder ATR14 of the tf, from the near edge
+            if k1 > 0:
+                struct = near - sd * k1 * (a1 or 0.0)       # fvg_odir's atr1: k1 x ATR14 of the 1-minute bars, no tf-ATR floor (its _dist)
             if (near - far) * sd > 0 and abs(near - far) >= max(self.p["min_gap"] * self.atr, ctx.tick):
                 self.last[sd] = (near, struct) if (near - struct) * sd > 0 else None
         o = self.mo(OPEN)

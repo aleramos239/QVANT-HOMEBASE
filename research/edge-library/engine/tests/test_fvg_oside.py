@@ -86,3 +86,19 @@ def test_stop_atr_puts_the_stop_k_atr14_from_the_near_edge():
 def test_a_gap_whose_first_candle_is_before_0930_never_counts():
     g = [(15000.0, 15010.0, 15000.0, 15010.0, 40), (15010.0, 15012.0, 15006.0, 15011.0, 40)]     # bar 1 = 09:29: an up gap read at 09:32
     assert play(day(g + rest(200, 15011.0)))[0] == []
+
+
+def test_atr1_puts_the_stop_k_one_minute_atr14_from_the_near_edge_without_the_tf_floor():
+    class A1(FS.FvgOside):
+        seen: list = []
+
+        def _lim(self, ctx, side, px, **kw):
+            type(self).seen.append((px, kw.get("struct"), self.atr1m()))
+            return super()._lim(ctx, side, px, **kw)
+
+    st = A1({**BASE, "tf": "5", "atr1": 2.0})
+    st.ROLLS = frozenset()
+    g = rest(15, 15000.0) + [(15000.0, 15030.0, 15000.0, 15030.0, 40)] * 5 + rest(5, 15040.0) + rest(200, 15060.0)  # 5m gap 09:45-10:00
+    res = S.run_session(st, tape_of(day(g)), daily=list(DAILY), on_error="raise")
+    assert A1.seen and all(abs(px - s_ - 2.0 * a) < 1e-9 for px, s_, a in A1.seen)
+    assert all(abs(t["entry_price"] - t["sl"] - (A1.seen[0][0] - A1.seen[0][1])) < 1e-9 for t in res.trades)
