@@ -71,3 +71,15 @@ def test_registered_with_one_instance_and_the_owners_window():
     assert "fvg_odir" in blocks.WRAPPED and FO.ENTRY_WINDOWS["fvg_odir"] == (sec(10), sec(15) + 59)
     st = FO.FvgOdir(BASE)
     assert st.fam_sessions() == {"t": (sec(9, 30), sec(15, 58))} and st.fam_filter(["nyam", "mid", "pm"]) == ["t"]
+
+
+def test_pick_newest_moves_the_order_to_each_new_gap_on_the_side_until_one_fills():
+    g = UP_OPEN + rest(5, 15010.0) + up_gap(15010.0) + rest(3, 15021.0) + up_gap(15021.0) + rest(3, 15032.0)
+    log, gone, res = play(day(g), pick="newest")
+    assert log == [(sec(10, 8), "long", 15016.0, 15010.0, True), (sec(10, 14), "long", 15027.0, 15021.0, True)]
+    assert gone == [sec(10, 14), sec(15, 0)] and res.trades == []    # the older order is cancelled when the newer gap comes
+    assert play(day(g))[0] == log[:1]                                 # first (the default): the second gap is ignored
+    back = (15021.0, 15021.0, 15009.0, 15009.5, 40)                  # the first order fills (and stops out) ...
+    g2 = UP_OPEN + rest(5, 15010.0) + up_gap(15010.0) + rest(3, 15021.0) + [back] + rest(3, 15009.0) + up_gap(15009.0) + rest(3, 15020.0)
+    log, _, res = play(day(g2), pick="newest")
+    assert len(log) == 1 and len(res.trades) == 1                    # ... and the day is done: one trade a day

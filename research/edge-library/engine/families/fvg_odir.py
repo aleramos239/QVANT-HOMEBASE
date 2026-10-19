@@ -12,6 +12,8 @@ THE RULE (fixed here, before any run):
   * FIRST ONE IN THE DIRECTION. Only gaps whose bar 3 closes AFTER 10:00 and BEFORE 15:00 count (bar 1 and bar 2 may be older), and only
     the side of the direction (an up day ignores down gaps). The first such gap is the day's signal; every later gap is ignored, whether or
     not its order is placed or fills (max_tr 1: one trade a day).
+  * pick (the owner, 2026-10-19): first (default, the rule above) | newest = while no trade has filled today, every NEW gap on the side
+    cancels the resting order and takes its place (the most recent gap); the first fill ends the day (max_tr 1).
   * THE ORDER, `mode` (fvg's): touch = a LIMIT at the near edge (default), mid = a limit at the gap's middle, go = market at bar 3's close.
     A resting limit is cancelled at the first tf close at or after 15:00. The family runs with strict_limit (fvg's).
   * THE STOP (stop_mode struct): the MIDDLE candle's far end -- bar 2's LOW for an up gap, bar 2's HIGH for a down gap. The Template floors
@@ -40,8 +42,8 @@ MODES = ("touch", "mid", "go")
 class FvgOdir(Template):
     """fvg_odir (module docstring). State per day: dir = +1 / -1 / 0 (no trade) / None (not read yet), used = the day's signal is taken,
     gap = this close's signal (side, entry, structure level) or None."""
-    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "max_tr": 1}
-    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES)}
+    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "pick": "first", "max_tr": 1}
+    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES), "pick": ("choice", ("first", "newest"))}
     SCREEN_TFS = ("1", "5", "15", "30")
     SCREEN_RUN = {"strict_limit": True}
     ONE_INSTANCE_PASSES = NY                         # the session passes this ONE instance stands for (the taught lane reads it)
@@ -67,14 +69,19 @@ class FvgOdir(Template):
             if self.orders and ctx.flat:
                 self._cancel(ctx)                    # an unfilled order dies at 15:00
             return
-        if self.sid is None or not self.dir or self.used or now <= DIR_END or len(self.H) < 3:
+        if self.sid is None or not self.dir or now <= DIR_END or len(self.H) < 3:
             return
         self._sync(ctx)
+        newest = self.p["pick"] == "newest"
+        if self.used and not (newest and ctx.flat and self.n_ent == 0):
+            return
         h1, l1, h3, l3 = self.H[-3], self.L[-3], self.H[-1], self.L[-1]
         up = self.dir > 0
         near, far = (l3, h1) if up else (h3, l1)
         if (near - far) * self.dir <= 0 or abs(near - far) < max(self.p["min_gap"] * self.atr, ctx.tick):
             return
+        if newest and self.orders:
+            self._cancel(ctx)                        # the most recent gap takes over the resting order
         self.used = True
         px = {"touch": near, "mid": (near + far) / 2.0, "go": self.C[-1]}[self.p["mode"]]
         struct = self.L[-2] if up else self.H[-2]   # the middle candle's far end
