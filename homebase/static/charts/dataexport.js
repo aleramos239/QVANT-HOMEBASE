@@ -179,6 +179,14 @@ function refreshView(st) {
       ? `${n(k.filling)} still ${k.filling === 1 ? 'has gaps' : 'have gaps'} Tradovate has: click Refresh again.`
       : 'Every gap Tradovate still has is filled.');
     if (k.lost) text += ` ${n(k.lost)} keep${k.lost === 1 ? 's' : ''} holes Tradovate no longer has.`;
+    // Tradovate posts an hour's ticks ~45 min after it ends (tickarchive.HISTORY_COMMIT_MIN): a hole after that
+    // is not "filled" yet, so say when it can be (the owner, 2026-10-19: "when i click refresh it doesnt fill the gap")
+    const f = Date.parse(st.finished || '');
+    if (Number.isFinite(f)) {
+      const H = 3600e3, M = 60e3, posted = Math.floor((f - 45 * M) / H) * H;
+      const et = (ms) => new Date(ms).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: '2-digit' });
+      text += ` Gaps after ${et(posted)} ET fill from ${et(posted + H + 45 * M)}, when Tradovate posts that hour.`;
+    }
     return { text, busy: false, tone: '' };
   }
   if (c && c.sessions) {

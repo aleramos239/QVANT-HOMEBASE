@@ -91,3 +91,19 @@ def test_the_env_default_is_normalised_and_an_unknown_value_is_demo():
                              capture_output=True, text=True, check=True,
                              env={**os.environ, "HOMEBASE_CHARTS_MD": raw}).stdout.strip()
         assert out == want, raw
+
+
+def test_md_only_pins_the_login_and_shuts_the_second_socket(tmp_path, monkeypatch):
+    """HOMEBASE_CHARTS_MD_ONLY (the server, 2026-10-19): the file's md and md_other_roots are ignored,
+    and a switch to the other login is refused -- the live login's md is one connection at a time."""
+    path = tmp_path / "settings.json"
+    path.write_text('{"md": "live", "md_other_roots": ["YM", "GC", "SI"]}')
+    monkeypatch.setenv("HOMEBASE_CHARTS_MD_ONLY", "demo")
+    store = SettingsStore(path)
+    assert store.get() == {"md": "demo"}
+    assert store.other_roots() == []
+    with pytest.raises(ValueError):
+        store.set_md("live")
+    assert store.set_md("demo") == {"md": "demo"}
+    monkeypatch.delenv("HOMEBASE_CHARTS_MD_ONLY")
+    assert store.other_roots() == ["YM", "GC", "SI"]

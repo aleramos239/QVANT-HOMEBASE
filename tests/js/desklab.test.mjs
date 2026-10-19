@@ -228,7 +228,7 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
     // the research blocks (labResHtml): pieces built from escaped holes
     'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
     // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
-    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build)']);
+    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build, c.both)']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });
@@ -1233,7 +1233,8 @@ test('the 3:1 curve: build and unseen running totals on one day axis, each carry
   assert.deepEqual(c.days, ['2021-10-04', '2022-01-04', '2022-01-05', '2022-01-06']);
   assert.deepEqual(c.vals, [0, 100, 100, 150]);
   assert.deepEqual(c.build, [20, 20, 60, 60]);
+  assert.deepEqual(c.both, [20, 120, 160, 210]);
   assert.equal(c.total, 150);
-  assert.equal(c.notes[2], 'Unseen $100 · Build $60');
+  assert.equal(c.notes[2], 'Unseen $100 · Build $60 · Both $160');
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
 });

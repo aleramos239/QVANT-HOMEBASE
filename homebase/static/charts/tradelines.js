@@ -36,7 +36,7 @@ class Hook {
 
 /* Shaded price bands across the pane (TradingView's long/short look, the user 2026-10-18): green from an entry to its
    TP, red to its SL. set([{from, to, color}], tags, alpha) -- the order panel's preview uses one too, with tags: the
-   lines' labels drawn ON each line at the pane's right edge ([{price, text, color}]). */
+   lines' labels drawn ON each line at the pane's right edge ([{price, text, color, close}]; close: a × at its end). */
 class Zones {
   constructor() {
     this.list = []; this.tags = []; this.hits = []; this.alpha = 0.12;
@@ -75,12 +75,16 @@ class Zones {
       for (const t of this.tags) {
         const y = this.series.priceToCoordinate(t.price);
         if (y == null) continue;
-        const w = ctx.measureText(t.text).width + 12, x = mediaSize.width - w - 8;
-        this.hits.push({ key: t.key, x, w });
+        const xw = t.close ? 16 : 0, w = ctx.measureText(t.text).width + 12 + xw, x = mediaSize.width - w - 8;
+        this.hits.push({ key: t.key, x, w, xx: t.close ? x + w - xw : null });   // xx: where its × starts
         ctx.fillStyle = t.color;
         ctx.beginPath(); ctx.roundRect(x, y - 9, w, 18, 4); ctx.fill();
         ctx.fillStyle = '#fff';
         ctx.fillText(t.text, x + 6, y + 0.5);
+        if (t.close) {
+          ctx.globalAlpha = 0.5; ctx.fillRect(x + w - xw, y - 6, 1, 12); ctx.globalAlpha = 1;
+          ctx.fillText('\u00d7', x + w - xw + 4, y + 0.5);
+        }
       }
     });
   }

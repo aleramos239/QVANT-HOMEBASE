@@ -180,6 +180,10 @@ test('refreshView: with the report classes it says what a click can still fill, 
     'Done, charts reloaded. Every gap Tradovate still has is filled. 22 sessions keep holes Tradovate no longer has.');
   assert.equal(view({ whole: 170, filling: 1, lost: 0 }),
     'Done, charts reloaded. 1 session still has gaps Tradovate has: click Refresh again.');
+  // a click at 08:27 ET: Tradovate has posted up to 07:00, so the 07:00 hour's gaps fill from 08:45
+  assert.match(DE.refreshView({ status: 'done', steps: [], finished: '2026-10-19T12:27:43+00:00',
+    coverage: { sessions: 180, classes: { whole: 144, filling: 0, lost: 0 } } }).text,
+  / Gaps after 7:00\s?AM ET fill from 8:45\s?AM, when Tradovate posts that hour\.$/);
 });
 
 test('the Data tab offers exactly the six roots', () => {

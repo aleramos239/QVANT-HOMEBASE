@@ -1,7 +1,7 @@
 #!/bin/bash
 # Install Homebase as systemd services on a Linux server (run as root, on the server).
 # Idempotent: re-running updates and restarts. The Linux twin of deploy/install.sh.
-#   sudo ./deploy/linux/install.sh          desk + charts + Lab runner + the tick recorder's timer + the doorman
+#   sudo ./deploy/linux/install.sh          desk + charts (demo login only) + Lab runner + the doorman
 #                                           for HOMEBASE VPS (nginx-homebase-vps.conf)
 #   sudo ./deploy/linux/install.sh remove   stop and delete them
 # Not installed here (Mac / research only): the pipeline, the tester prune, the sleep blocker.
@@ -10,10 +10,11 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 USR="$(stat -c %U "$REPO")"
 UNITS=(homebase.service homebase-charts.service homebase-labrun.service homebase-ticks.service homebase-ticks.timer)
-STARTED=(homebase.service homebase-charts.service homebase-labrun.service homebase-ticks.timer)
+# not the tick recorder's timer: it pages on the live login, which kicks the Mac's charts off it (the Mac's job keeps the archive)
+STARTED=(homebase.service homebase-charts.service homebase-labrun.service)
 
 if [ "${1:-}" = "remove" ]; then
-  systemctl disable --now "${STARTED[@]}" 2>/dev/null || true
+  systemctl disable --now "${STARTED[@]}" homebase-ticks.timer 2>/dev/null || true
   for u in "${UNITS[@]}"; do rm -f "/etc/systemd/system/$u"; done
   systemctl daemon-reload
   echo "removed"
@@ -35,6 +36,7 @@ for u in "${UNITS[@]}"; do
   sed -e "s|__REPO__|$REPO|g" -e "s|__USER__|$USR|g" "$REPO/deploy/linux/$u" > "/etc/systemd/system/$u"
 done
 systemctl daemon-reload
+systemctl disable --now homebase-ticks.timer >/dev/null 2>&1 || true
 systemctl enable "${STARTED[@]}" >/dev/null 2>&1
 systemctl restart "${STARTED[@]}"
 sleep 2

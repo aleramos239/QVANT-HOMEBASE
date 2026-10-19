@@ -249,12 +249,12 @@
       var al = alignCurves(c, cb), money = function (v) { return (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-US"); };
       return {
         title: "Walk-forward 3:1 · build and unseen days, after costs",
-        label: "Unseen (dark) · Build (light)",
-        vals: al.a, build: al.b,
+        label: "Unseen (dark) · Build (light) · Both (dashed)",
+        vals: al.a, build: al.b, both: al.a.map(function (v, i) { return v + al.b[i]; }),   // every month, build and unseen together
         total: c.vals[c.vals.length - 1],
         ends: [monthOf(al.days[0]) || DASH, monthOf(al.days[al.days.length - 1]) || DASH],
         days: al.days,
-        notes: al.days.map(function (d, i) { return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]); }),
+        notes: al.days.map(function (d, i) { return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
         aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, by day",
       };
     }

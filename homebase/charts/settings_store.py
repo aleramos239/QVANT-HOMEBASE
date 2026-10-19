@@ -9,6 +9,11 @@ a partial file (an old version, a crash mid-write) never loses the others.
 HOMEBASE_CHARTS_MD (homebase.charts.MD_ENV) is the default `md` when the
 file has no choice yet -- so today's behaviour is unchanged until the user
 picks one in the Settings dialog, exactly like the brief asks.
+
+HOMEBASE_CHARTS_MD_ONLY pins the login on a machine that must never take the other one, whatever the
+file or the dialog say, and keeps the second socket (md_other_roots) shut. The server runs "demo"
+(2026-10-19): Tradovate gives the live login's market data to ONE connection at a time, and the server's
+charts and the Mac's kicked each other off every ~5 minutes, leaving holes in both.
 """
 from __future__ import annotations
 
@@ -20,6 +25,12 @@ from . import MD_ENV
 
 MD_CHOICES = ("live", "demo")
 CLOCK_CHOICES = ("12h", "24h")      # how every page prints a time of day; the first is the default
+
+
+def md_only() -> str | None:
+    """HOMEBASE_CHARTS_MD_ONLY: the one login this machine's charts may use, or None (any)."""
+    v = os.environ.get("HOMEBASE_CHARTS_MD_ONLY", "").strip().lower()
+    return v if v in MD_CHOICES else None
 
 
 class SettingsStore:
@@ -54,7 +65,7 @@ class SettingsStore:
         """{"md": "live"|"demo"} -- MD_ENV when the file has none yet or its
         value is not one of MD_CHOICES (a hand-edited or stale file)."""
         d = self._read()
-        md = d.get("md")
+        md = md_only() or d.get("md")
         if md not in MD_CHOICES:
             md = MD_ENV
         return {"md": md}
@@ -64,13 +75,15 @@ class SettingsStore:
         not name), e.g. ["YM", "GC", "SI"] when only the eval logins carry CBOT / COMEX. Read at
         start-up; [] (one socket for everything) unless the file holds a list of names."""
         v = self._read().get("md_other_roots")
-        if not isinstance(v, list):
+        if not isinstance(v, list) or md_only():
             return []
         return list(dict.fromkeys(x.upper() for x in v if isinstance(x, str) and x.strip()))
 
     def set_md(self, md: str) -> dict:
         if md not in MD_CHOICES:
             raise ValueError(f"md must be one of {MD_CHOICES}")
+        if md_only() not in (None, md):
+            raise ValueError(f"this machine's charts use the {md_only()} login only (HOMEBASE_CHARTS_MD_ONLY)")
         d = self._read()
         d["md"] = md
         self._write(d)

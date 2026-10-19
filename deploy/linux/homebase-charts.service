@@ -6,7 +6,10 @@ Wants=network-online.target
 [Service]
 User=__USER__
 WorkingDirectory=__REPO__
-Environment=HOMEBASE_CHARTS_MD=live
+# the demo login only: Tradovate serves the live login's market data to ONE connection at a time, and the
+# Mac's charts hold it (2026-10-19: both on live kicked each other off every ~5 min -- holes on both)
+Environment=HOMEBASE_CHARTS_MD=demo
+Environment=HOMEBASE_CHARTS_MD_ONLY=demo
 ExecStart=__REPO__/.venv/bin/python -m homebase.charts
 Restart=always
 RestartSec=10

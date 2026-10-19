@@ -674,14 +674,15 @@ function paintPreview(cell, c) {
     if (k.startsWith('armed:')) o.lineStyle = 0;   // a live order's breakeven: solid, whatever the preview's look
     if (line) line.applyOptions(o); else pre.lines[k] = series.createPriceLine(o);
   }
-  const tags = look.labels === 'line' ? Object.entries(want).map(([key, w]) => ({ key, price: w.price, text: w.title, color: w.color })) : [];
+  const tags = look.labels === 'line' ? Object.entries(want).map(([key, w]) => ({ key, price: w.price, text: w.title, color: w.color, close: key === 'entry' })) : [];
   pre.zones.set(c.entry == null ? [] : ['tp', 'sl'].filter((k) => want[k]).map((k) => ({ from: c.entry, to: want[k].price, color: want[k].color })),
     tags, look.shade / 100);
 }
 /* ---- dragging the preview's lines on the chart (the user, 2026-10-18): the TP, the SL, and a resting order's
    entry. The chart's press goes here first (app.js onPick). Dragging only rewrites the form -- in the exit's own unit
    (ticks stay ticks) -- and never sends anything; an exit stops one tick short of its entry's wrong side.
-   A click (no drag) on the ENTRY tag sends the order, as the panel's Send would. A Market's entry can't move: dragging
+   A click (no drag) on the ENTRY tag sends the order, as the panel's Send would; its × hides the preview, as the
+   panel's "Show on chart" switch does (the user, 2026-10-18). A Market's entry can't move: dragging
    it away places an exit instead ('new') -- toward profit the TP, the other way the SL -- switched on if it was off. ---- */
 const GRAB_PX = 6, CLICK_PX = 4;
 function paneXY(cell, e) {
@@ -692,7 +693,8 @@ function onEntryTag(cell, e) {
   const line = pre.lines.entry, hit = pre.zones && pre.zones.hits.find((h) => h.key === 'entry');
   if (pre.cell !== cell || !line || !hit || !cell.chart || cell.priceAtEvent(e) == null) return false;
   const { x, y } = paneXY(cell, e), ly = pre.series.priceToCoordinate(line.options().price);
-  return ly != null && Math.abs(y - ly) <= 9 && x >= hit.x && x <= hit.x + hit.w;
+  if (ly == null || Math.abs(y - ly) > 9 || x < hit.x || x > hit.x + hit.w) return false;
+  return hit.xx != null && x >= hit.xx ? 'x' : 'tag';
 }
 function grabAt(cell, e) {
   if (pre.cell !== cell || !cell.chart || cell.priceAtEvent(e) == null) return null;
@@ -707,6 +709,7 @@ function grabAt(cell, e) {
 }
 function startPreviewDrag(cell, e) {
   const tag = onEntryTag(cell, e);
+  if (tag === 'x') { setLook('on', false); return true; }
   let k = tag ? (st.type === 'Market' ? 'new' : 'entry') : grabAt(cell, e);
   if (!k) return false;
   const x0 = e.clientX, y0 = e.clientY;

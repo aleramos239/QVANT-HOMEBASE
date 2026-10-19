@@ -55,7 +55,7 @@ from .presets import MAX_PRESET_BYTES, PresetsStore
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
 from .session import ET, always_open, et_wall_s, session_date, session_range_ms, split_by_session
-from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore
+from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore, md_only
 from .store import ARCHIVE, TickStore, splice_tail
 from .studies import make
 from .tick import SideClassifier, from_row
@@ -1565,6 +1565,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             raise HTTPException(400, f"""a settings update is {{"md": {' or '.join(MD_CHOICES)}}}"""
                                 f""" or {{"clock": {' or '.join(CLOCK_CHOICES)}}}""")
         md = body["md"]
+        if md_only() not in (None, md):
+            raise HTTPException(409, f"this machine's charts use the {md_only()} login only")
         if not hasattr(feed, "switch_md"):
             raise HTTPException(503, "the market-data login can't be switched here (replay)")
         if getattr(feed, "switch_in_progress", False):

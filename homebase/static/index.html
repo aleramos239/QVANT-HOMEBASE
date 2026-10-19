@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=24"></script>
+<script src="/static/desklab.js?v=25"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -539,7 +539,7 @@
     .master{ flex-wrap:wrap; justify-content:flex-end; row-gap:8px; max-width:100%; }
   }
 </style>
-<link rel="stylesheet" href="/static/apple.css?v=11">
+<link rel="stylesheet" href="/static/apple.css?v=12">
 <link rel="stylesheet" href="/static/hb.css?v=7">
 <script src="/static/apple/web.js?v=2" data-tab="desk"></script>
 </head>
@@ -2211,9 +2211,11 @@ function loadEq(name) {
 /* A cumulative curve as the page draws it: `vals` = the running total a day, `label` the words on its left, `total` its last value. */
 /* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
    hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
-function eqPlot(vals, label, total, aria, ends, days, notes, second) {
-  // second: a quieter line on the same days (the 3:1's build months beside its unseen ones)
-  const both = Array.isArray(second) && second.length === vals.length ? vals.concat(second) : vals;
+function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {
+  // second: a quieter line on the same days (the 3:1's build months beside its unseen ones); third: a dashed one (the two together)
+  const ok = (s) => Array.isArray(s) && s.length === vals.length;
+  const both = vals.concat(ok(second) ? second : [], ok(third) ? third : []);
+  const path = (s) => s.map((v, i) => `${i ? (" H " + X(i).toFixed(1) + " V") : "M " + X(0).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
   const lo = Math.min(0, ...both), hi = Math.max(0, ...both), span = hi - lo || 1;
   const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
   let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
@@ -2257,7 +2259,7 @@ function eqPlot(vals, label, total, aria, ends, days, notes, second) {
     <div class="eq-plot"${attrs}><svg viewBox="0 0 1000 190" preserveAspectRatio="none" role="img" aria-label="${esc(aria)}">
       <defs><linearGradient id="hbEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".12"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
       ${grid}
-      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/>${both !== vals ? `<path class="eq-line2" d="${second.map((v, i) => `${i ? (" H " + X(i).toFixed(1) + " V") : "M " + X(0).toFixed(1)} ${Y(v).toFixed(1)}`).join("")}"/>` : ""}<path class="eq-line" d="${d}"/></svg>
+      <path class="eq-area" d="${d} L 1000 190 L 0 190 Z"/>${ok(second) ? `<path class="eq-line2" d="${path(second)}"/>` : ""}${ok(third) ? `<path class="eq-line3" d="${path(third)}"/>` : ""}<path class="eq-line" d="${d}"/></svg>
     ${ticks.map(v => `<span class="eq-y" style="top:${(Y(v) / 190 * 100).toFixed(1)}%">${axis(v)}</span>`).join("")}
     <i class="eq-dot" style="left:100%;top:${(Y(vals[vals.length - 1]) / 190 * 100).toFixed(1)}%"></i>${hover}</div>
     ${xt || (ends ? `<div class="eq-x"><span>${esc(ends[0])}</span><span>${esc(ends[1])}</span></div>` : "")}</div>`;
@@ -2338,7 +2340,7 @@ function labCurveHtml(lab) {
   let c;
   try { c = DeskLab.curve(DESKRES[lab]); } catch (_) { return ""; }
   if (!c) return "";
-  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build)}</div>`;
+  return `<div class="sec"><h2>${esc(c.title)}</h2>${eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build, c.both)}</div>`;
 }
 function todayLabRow(w) {
   const on = w.enabled === true, net = DeskLab.todayNet(w), nm = DeskLab.label(w);

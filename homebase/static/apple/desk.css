@@ -200,6 +200,7 @@ html.hb-apple .eq-grid { stroke: var(--a-sep); stroke-width: 1; vector-effect: n
 html.hb-apple .eq-zero { stroke: var(--a-label-3); stroke-width: 1; stroke-dasharray: 3 4; opacity: 1; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-line { fill: none; stroke: var(--a-accent-text); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-line2 { fill: none; stroke: var(--a-label-3); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+html.hb-apple .eq-line3 { fill: none; stroke: var(--a-label-2); stroke-width: 1.4; stroke-dasharray: 5 4; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 html.hb-apple .eq-area { fill: url(#hbEqFill); }
 html.hb-apple .eq-dot { position: absolute; width: 8px; height: 8px; border-radius: 50%; background: var(--a-accent-text); box-shadow: 0 0 0 3px var(--a-window); transform: translate(-50%, -50%); }
 html.hb-apple .eq-empty { margin: 20px 0 0; padding: 26px 14px; border: 0; border-radius: 12px; background: var(--a-group); font-size: 13px; line-height: 16px; color: var(--a-label-2); text-align: center; }
