@@ -10,7 +10,7 @@
     <string>homebase.server:app</string>
     <string>--app-dir</string><string>__REPO__</string>
     <string>--host</string><string>127.0.0.1</string>
-    <string>--port</string><string>8850</string>
+    <string>--port</string><string>__PORT__</string>
     <string>--log-level</string><string>warning</string>
     <string>--timeout-graceful-shutdown</string><string>5</string>
   </array>

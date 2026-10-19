@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-serversync</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/deploy/linux/sync.sh</string>
+    <string>__HOST__</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>StartInterval</key><integer>300</integer>
+  <key>RunAtLoad</key><true/>
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/serversync.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/serversync.log</string>
+</dict>
+</plist>
