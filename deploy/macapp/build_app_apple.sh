@@ -6,6 +6,9 @@
 #                                      bundle id (same Dock icon, same saved web settings). The classic viewer is first
 #                                      kept as "Homebase Classic.app" (its own bundle id). Quit Homebase first: the
 #                                      script refuses while it runs.
+#   build_app_apple.sh --vps [root@host]  "~/Applications/HOMEBASE VPS.app": the same viewer seeing the SERVER's Homebase
+#                                      through its own SSH SOCKS proxy (main_apple.swift, -D VPS; host default
+#                                      $HOMEBASE_SERVER, else root@144.202.51.163). Homebase.app is not touched.
 #   build_app_apple.sh <path.app>      a test build with its own bundle id, sharing nothing with an installed app
 #
 # The classic build (build_app.sh) also writes ~/Applications/Homebase.app: run it and the classic viewer is back.
@@ -16,7 +19,11 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 APPS="$HOME/Applications"
+VPS_HOST=""; SWIFT_FLAGS=(); MIN_OS=13.0; ICON=Homebase
 case "${1:-}" in
+  --vps)         MODE=vps; APP="${VPS_APP:-$APPS/HOMEBASE VPS.app}"; NAME="HOMEBASE VPS"; EXE="HomebaseVPS"
+                 BUNDLE_ID="com.ramosquant.homebase.viewer.vps"; SWIFT_FLAGS=(-D VPS -framework Network); MIN_OS=14.0; ICON=HomebaseVPS
+                 VPS_HOST="${2:-${HOMEBASE_SERVER:-root@144.202.51.163}}" ;;
   --as-homebase) MODE=homebase; APP="$APPS/Homebase.app"; NAME="Homebase"; EXE="Homebase"
                  BUNDLE_ID="com.ramosquant.homebase.viewer" ;;
   "")            MODE=next; APP="$APPS/Homebase Next.app"; NAME="Homebase Next"; EXE="HomebaseNext"
@@ -57,16 +64,17 @@ cat > "$BUILD/Contents/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>$EXE</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>2.0</string>
-  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSMinimumSystemVersion</key><string>$MIN_OS</string>
+  <key>HomebaseVPSHost</key><string>$VPS_HOST</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSAppTransportSecurity</key>
   <dict><key>NSAllowsLocalNetworking</key><true/></dict>
-  <key>CFBundleIconFile</key><string>Homebase</string>
+  <key>CFBundleIconFile</key><string>$ICON</string>
 </dict>
 </plist>
 PLIST
-cp "$HERE/Homebase.icns" "$BUILD/Contents/Resources/Homebase.icns"
-swiftc -O "$HERE/main_apple.swift" -o "$BUILD/Contents/MacOS/$EXE" -framework Cocoa -framework WebKit
+cp "$HERE/$ICON.icns" "$BUILD/Contents/Resources/$ICON.icns"     # HomebaseVPS.icns = the same, colours inverted
+swiftc -O ${SWIFT_FLAGS[@]+"${SWIFT_FLAGS[@]}"} "$HERE/main_apple.swift" -o "$BUILD/Contents/MacOS/$EXE" -framework Cocoa -framework WebKit
 codesign --force --sign - "$BUILD" 2>/dev/null || true
 
 mkdir -p "$(dirname "$APP")"

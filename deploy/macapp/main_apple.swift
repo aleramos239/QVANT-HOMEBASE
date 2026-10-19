@@ -26,8 +26,16 @@
 // HB_DEBUG_TABS (default "desk"), wait HB_DEBUG_WAIT seconds each, optionally run the JS in the file
 // HB_DEBUG_JS, write <dir>/<tab>.png (the web view's own snapshot) and <dir>/<tab>.json (diagnostics), then
 // quit. HB_DEBUG_OFFSCREEN=1 keeps the window off every display; HB_DEBUG_SIZE=WxH sets its size.
+//
+// HOMEBASE VPS (build_app_apple.sh --vps, compiled with -D VPS; the owner, 2026-10-18): the same viewer, seeing the
+// SERVER's Homebase. The pages build their links and API calls as <same host>:8850 / :8852, so a port tunnel cannot
+// do it: this app starts an SSH SOCKS proxy to the server (Info.plist HomebaseVPSHost) and sends every page and its own
+// fetches through it, so localhost:8850 / :8852 in this app are the server's. A red "VPS" badge marks every page.
 import Cocoa
 import WebKit
+#if VPS
+import Network
+#endif
 
 enum Tab: Int, CaseIterable {
     case desk = 0
@@ -38,7 +46,13 @@ enum Tab: Int, CaseIterable {
     var key: String { ["desk", "charts", "lab"][rawValue] }
     private var envVar: String { ["HOMEBASE_DESK_URL", "HOMEBASE_CHARTS_URL", "HOMEBASE_BACKTEST_URL"][rawValue] }
     private var defaultURLString: String {
+        #if VPS
+        // not localhost: WebKit never proxies loopback. Only the server resolves this name (its /etc/hosts, through the
+        // SOCKS proxy), so this app can never land on the Mac's own Desk; the server's nginx hands it on as 127.0.0.1.
+        ["http://homebase-vps:8850/", "http://homebase-vps:8852/", "http://homebase-vps:8852/backtest"][rawValue]
+        #else
         ["http://localhost:8850/", "http://localhost:8852/", "http://localhost:8852/backtest"][rawValue]
+        #endif
     }
     /// The tab's classic page. Overridable by environment so a test build points at dev servers.
     var baseURL: URL {
@@ -81,7 +95,11 @@ func fetch(_ url: URL, timeout: TimeInterval = 3) -> Data? {
     req.httpMethod = "GET"
     let sem = DispatchSemaphore(value: 0)
     var out: Data?
-    let task = URLSession(configuration: .ephemeral).dataTask(with: req) { data, resp, _ in
+    let conf = URLSessionConfiguration.ephemeral
+    #if VPS
+    conf.proxyConfigurations = [vpsProxy]
+    #endif
+    let task = URLSession(configuration: conf).dataTask(with: req) { data, resp, _ in
         if let http = resp as? HTTPURLResponse, http.statusCode == 200 { out = data }
         sem.signal()
     }
@@ -100,6 +118,42 @@ func origin(of url: URL) -> URL {
     c.scheme = url.scheme; c.host = url.host; c.port = url.port
     return c.url ?? url
 }
+
+#if VPS
+let vpsHost = (Bundle.main.object(forInfoDictionaryKey: "HomebaseVPSHost") as? String) ?? "root@144.202.51.163"
+let vpsPort: UInt16 = 1081            // not server-window.sh's 1080: this app owns its proxy
+let vpsProxy = ProxyConfiguration(socksv5Proxy: .hostPort(host: "127.0.0.1", port: NWEndpoint.Port(rawValue: vpsPort)!))
+var vpsTunnel: Process?
+let vpsBadgeJS = """
+(() => { if (document.getElementById('hb-vps-badge')) return; const b = document.createElement('div'); b.id = 'hb-vps-badge';
+b.textContent = 'VPS'; b.style.cssText = 'position:fixed;right:12px;bottom:10px;z-index:2147483647;pointer-events:none;' +
+'background:#d93025;color:#fff;font:600 11px/1 -apple-system,system-ui,sans-serif;letter-spacing:.06em;padding:4px 8px;border-radius:999px';
+document.documentElement.appendChild(b); })();
+"""
+
+func vpsProxyUp() -> Bool {
+    let fd = socket(AF_INET, SOCK_STREAM, 0)
+    guard fd >= 0 else { return false }
+    defer { close(fd) }
+    var a = sockaddr_in()
+    a.sin_family = sa_family_t(AF_INET); a.sin_port = vpsPort.bigEndian; a.sin_addr.s_addr = inet_addr("127.0.0.1")
+    return withUnsafePointer(to: &a) { $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+        connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) == 0 } }
+}
+
+/// The SSH SOCKS proxy to the server: started when it is not already up, and waited for (up to 10 s).
+func vpsEnsureTunnel() {
+    if vpsProxyUp() { return }
+    if let t = vpsTunnel, t.isRunning { t.terminate() }
+    let p = Process()
+    p.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+    p.arguments = ["-N", "-D", "127.0.0.1:\(vpsPort)", "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                   "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-o", "ConnectTimeout=8", vpsHost]
+    do { try p.run() } catch { return }
+    vpsTunnel = p
+    for _ in 0..<50 where !vpsProxyUp() { usleep(200_000) }
+}
+#endif
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
     var window: NSWindow!
@@ -123,6 +177,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
 
     // ---------------------------------------------------------------- launch
     func applicationDidFinishLaunching(_ n: Notification) {
+        #if VPS
+        vpsEnsureTunnel()
+        WKWebsiteDataStore.default().proxyConfigurations = [vpsProxy]     // before any web view exists
+        Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { _ in   // a dropped link comes back by itself
+            DispatchQueue.global().async { vpsEnsureTunnel() }
+        }
+        #endif
         skin = loadSkin()
         if skinned { chrome = measureChrome() }
         if env("HB_DEBUG_APPEARANCE") == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
@@ -136,7 +197,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         var style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
         if skinned { style.insert(.fullSizeContentView) }
         let win = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: style, backing: .buffered, defer: false)
-        win.title = "Homebase"
+        win.title = appName
         win.delegate = self
         win.minSize = NSSize(width: 980, height: 620)
         if skinned {
@@ -193,6 +254,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ s: NSApplication) -> Bool { true }
+
+    #if VPS
+    func applicationWillTerminate(_ n: Notification) { vpsTunnel?.terminate() }
+    #endif
 
     // ---------------------------------------------------------------- the skin
     /// All of the skin or none of it: a manifest naming every tab, and every file it lists loading.
@@ -352,6 +417,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, WKNavigati
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "hb")
         installScripts(config.userContentController, tab: tab)
+        #if VPS
+        config.userContentController.addUserScript(WKUserScript(source: vpsBadgeJS, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
+        #endif
         let wv = WKWebView(frame: window.contentView!.bounds, configuration: config)
         wv.autoresizingMask = [.width, .height]
         wv.navigationDelegate = self
