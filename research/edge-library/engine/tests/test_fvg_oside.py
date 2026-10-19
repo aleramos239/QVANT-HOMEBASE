@@ -66,3 +66,23 @@ def test_registered_with_one_instance_and_the_window_0930_1500():
     assert "fvg_oside" in blocks.WRAPPED and FS.ENTRY_WINDOWS["fvg_oside"] == (sec(9, 30), sec(15) + 59)
     st = FS.FvgOside(BASE)
     assert st.fam_sessions() == {"t": (sec(9, 30), sec(15, 58))} and st.fam_filter(["nyam", "mid", "pm"]) == ["t"]
+
+
+def test_stop_atr_puts_the_stop_k_atr14_from_the_near_edge():
+    class AtrSpy(FS.FvgOside):
+        seen: list = []
+
+        def _lim(self, ctx, side, px, **kw):
+            type(self).seen.append((px, kw.get("struct"), self.atr))
+            return super()._lim(ctx, side, px, **kw)
+
+    st = AtrSpy({**BASE, "stop_atr": 1.5})
+    st.ROLLS = frozenset()
+    S.run_session(st, tape_of(day(GAPS + rest(200, 15022.0))), daily=list(DAILY), on_error="raise")
+    assert [px for px, _, _ in AtrSpy.seen] == [15006.0, 15017.0]
+    assert all(a > 0 and abs(px - st_ - 1.5 * a) < 1e-9 for px, st_, a in AtrSpy.seen)
+
+
+def test_a_gap_whose_first_candle_is_before_0930_never_counts():
+    g = [(15000.0, 15010.0, 15000.0, 15010.0, 40), (15010.0, 15012.0, 15006.0, 15011.0, 40)]     # bar 1 = 09:29: an up gap read at 09:32
+    assert play(day(g + rest(200, 15011.0)))[0] == []
