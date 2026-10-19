@@ -167,6 +167,9 @@ class TradovateWS:
     async def position_list(self) -> list:
         return await self.request("position/list", "")
 
+    async def order_list(self) -> list:
+        return await self.request("order/list", "")
+
     async def cash_balance_list(self) -> list:
         return await self.request("cashBalance/list", "")
 
@@ -362,8 +365,6 @@ class TradovateWS:
             "admin": admin,
         })
 
-    async def cancel_all_orders(self, account_id: int) -> dict:
-        return await self.request("order/cancelallorders", {"accountId": account_id})
 
     async def close(self) -> None:
         if self._heartbeat_task:
