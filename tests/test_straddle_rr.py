@@ -96,14 +96,14 @@ def post(c, **body):
 
 def test_a_valid_change_sets_rr_and_the_target_saves_and_journals(client):          # noqa: F811
     r = post(client, strategy="nq930", rr=2)
-    assert r.status_code == 200 and r.json() == {"ok": True, "strategy": "nq930", "rr": 2.0, "tp_pts": 10.0}
+    assert r.status_code == 200 and r.json() == {"ok": True, "strategy": "nq930", "rr": 2.0, "tp_pts": 10.0, "sl_pts": 5.0}
     s = client.app.state.cfg.strategies["nq930"]
     assert (s.rr, s.tp_pts) == (2.0, 10.0)
     saved = json.loads(desk_config.config_path().read_text())["strategies"]["nq930"]
     assert (saved["rr"], saved["tp_pts"]) == (2.0, 10.0)
     ev = [json.loads(x) for x in (desk_config.config_path().parent / "journal.jsonl").read_text().splitlines()]
     ev, = [e for e in ev if e["event"] == "strategy_rr_changed"]
-    assert (ev["strategy"], ev["rr"], ev["tp_pts"], ev["previous"]) == ("nq930", 2.0, 10.0, {"rr": 0.0, "tp_pts": 15.0})
+    assert (ev["strategy"], ev["rr"], ev["tp_pts"], ev["previous"]) == ("nq930", 2.0, 10.0, {"rr": 0.0, "tp_pts": 15.0, "sl_pts": 5.0})
     assert client.get("/api/status").json()["strategies"]["nq930"]["cfg"]["rr"] == 2.0
 
 
@@ -114,6 +114,19 @@ def test_the_bounds_are_0_25_to_20(client):                                     
         assert post(client, strategy="nq930", rr=bad).status_code == 400, bad
     assert post(client, strategy="nq930").status_code == 400
     assert client.app.state.cfg.strategies["nq930"].rr == 20.0              # the last good one stands
+
+
+def test_the_stop_changes_alone_and_the_target_follows_the_rr(client):              # noqa: F811
+    assert post(client, strategy="nq930", rr=1.5).status_code == 200
+    r = post(client, strategy="nq930", sl_pts=10)
+    assert r.status_code == 200 and r.json() == {"ok": True, "strategy": "nq930", "rr": 1.5, "tp_pts": 15.0, "sl_pts": 10.0}
+    s = client.app.state.cfg.strategies["nq930"]
+    assert (s.sl_pts, s.rr, s.tp_pts) == (10.0, 1.5, 15.0)
+    assert json.loads(desk_config.config_path().read_text())["strategies"]["nq930"]["sl_pts"] == 10.0
+    assert post(client, strategy="nq930", rr=1, sl_pts=5).json()["tp_pts"] == 5.0          # both at once
+    for bad in (0, -5, 0.2, 201, "10", True, None):
+        assert post(client, strategy="nq930", sl_pts=bad).status_code == 400, bad
+    assert client.app.state.cfg.strategies["nq930"].sl_pts == 5.0                          # the last good one stands
 
 
 def test_an_unknown_strategy_is_404(client):                                        # noqa: F811

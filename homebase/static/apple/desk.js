@@ -8,7 +8,7 @@
        (readiness, notices, the footer links; a strategy's figures, links and actions), re-collected after each of
        the page's repaints;
      - adds a "Setup" card to the strategy inspector, written from the same cfg the page prints as one line; a straddle with
-     an RR (nq930) also gets a small RR field whose Set button calls the page's own setStratRr().
+     an RR (nq930) also gets a 5/10-point stop menu and a small RR field; both call the page's own setStratRr().
    It calls no endpoint itself, changes no handler and never stops an event. If anything here throws, the page is shown as
    the base page: the finally block always reveals it.                                                               */
 (function () {
@@ -137,7 +137,7 @@
         if (c.rule) rows.push(row('Rule', String(c.rule)));
       } else {
         rows.push(row('Entry offset', '±' + fmtN(c.offset_pts) + ' pts'));
-        rows.push(row('Stop', fmtN(c.sl_pts) + ' pts'));
+        if (!(c.rr > 0)) rows.push(row('Stop', fmtN(c.sl_pts) + ' pts'));      // with an RR the stop is the menu below
         rows.push(row('Target', c.rr > 0 ? '1:' + fmtN(c.rr) + ' · ' + fmtN(c.tp_pts) + ' pts' : fmtN(c.tp_pts) + ' pts'));
         if (c.self_fire && hm(c.fire_et)) rows.push(row('Fires', hm(c.fire_et) + ' ET'));
       }
@@ -148,11 +148,16 @@
       if (c.shadow) rows.push(row('Mode', 'Shadow (journal only)'));
       const edit = c.kind !== 'bars' && c.rr > 0;
       const sig = JSON.stringify([name, edit, rows.map((r) => r.textContent)]);
-      const had = (D.activeElement === rrCtl.input || D.activeElement === rrCtl.btn) ? D.activeElement : null;
-      if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows, ...(edit ? [rrCtl.row, rrCtl.err] : [])); }
+      const had = [rrCtl.input, rrCtl.btn, rrCtl.sl].includes(D.activeElement) ? D.activeElement : null;
+      if (setupBox._sig !== sig) { setupBox._sig = sig; setupBox.replaceChildren(...rows, ...(edit ? [rrCtl.slRow, rrCtl.row, rrCtl.err] : [])); }
       if (had && had.isConnected && D.activeElement !== had) had.focus();      // a rebuild must not take the field from the owner
       if (rrCtl.name !== name) { rrCtl.name = name; rrCtl.dirty = false; rrCtl.err.hidden = true; }
       if (edit && !rrCtl.dirty && D.activeElement !== rrCtl.input) rrCtl.input.value = String(+c.rr);
+      if (edit && !rrCtl.sl.disabled) {      // the Desk's stop, so a refused pick goes back to what it is
+        const cur = String(+c.sl_pts);      // a stop set elsewhere (not 5 or 10) still shows as it is
+        if (![...rrCtl.sl.options].some((o) => o.value === cur)) rrCtl.sl.append(el('option', { value: cur, text: cur + ' pts' }));
+        rrCtl.sl.value = cur;
+      }
     }
     // the RR field of a straddle with a target multiple: ONE node set for the whole page, so a repaint never wipes what is typed
     // (the rows' signature leaves it out). The write itself is the page's own setStratRr(), which says why a refusal came.
@@ -173,6 +178,20 @@
         if (!why) rrCtl.dirty = false;
       } finally { rrCtl.btn.disabled = false; }
     }
+    // the stop: 5 or 10 points (owner 2026-10-18); a pick saves at once, the RR stays, the target follows (sl x rr)
+    rrCtl.sl = el('select', { class: 'hb-field', 'aria-label': 'Stop (points)' },
+      el('option', { value: '5', text: '5 pts' }), el('option', { value: '10', text: '10 pts' }));
+    rrCtl.slRow = el('div', { class: 'hb-row' }, el('span', { class: 'hb-row-k', text: 'Stop' }), rrCtl.sl);
+    rrCtl.sl.addEventListener('change', async () => {
+      const name = rrCtl.name, v = parseFloat(rrCtl.sl.value);
+      if (!(v > 0) || typeof window.setStratRr !== 'function') return;
+      rrCtl.sl.disabled = true;
+      try {
+        const why = await window.setStratRr(name, null, v);
+        if (rrCtl.name !== name) return;
+        rrCtl.err.textContent = why || ''; rrCtl.err.hidden = !why;
+      } finally { rrCtl.sl.disabled = false; }
+    });
     rrCtl.input.addEventListener('input', () => { rrCtl.dirty = true; rrCtl.err.hidden = true; });
     rrCtl.input.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.repeat) setRr(); });
     rrCtl.btn.addEventListener('click', setRr);

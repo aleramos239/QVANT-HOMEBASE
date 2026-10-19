@@ -3808,14 +3808,17 @@ async function toggleStrat(name, enabled) {
 /* A straddle's target as 1:rr of its stop (nq930). The desk refuses 09:20-09:35 ET and while the strategy has
    orders or a position today. Returns "" when it landed, else the reason in words (the Desk skin shows it
    under the field). */
-async function setStratRr(name, rr) {
+async function setStratRr(name, rr, slPts) {      // rr null + slPts: change the stop only, the RR stays
   const N = stratLabel(name);
   let r, err = null;
-  try { r = await post("/api/strategy-rr", {strategy: name, rr}); } catch (e) { err = e || new Error("no answer"); }
+  const body = {strategy: name};
+  if (rr != null) body.rr = rr;
+  if (slPts != null) body.sl_pts = slPts;
+  try { r = await post("/api/strategy-rr", body); } catch (e) { err = e || new Error("no answer"); }
   refresh();
   if (DEMO) return "";
   if (err) return answerWhy(null, err);
-  if (r && r.ok === true) { toast(`${N} target set to 1:${r.rr} (${r.tp_pts} pts).`); return ""; }
+  if (r && r.ok === true) { toast(`${N}: stop ${r.sl_pts} pts, target 1:${r.rr} (${r.tp_pts} pts).`); return ""; }
   return killText(r && (r.detail || r.error)) || "the desk's answer was unreadable";
 }
 /* One adjustable setting of a Lab strategy (the Setup panel's controls, desklabset.js): "" when it was saved, else the sentence

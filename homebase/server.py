@@ -1557,9 +1557,9 @@ def create_app(cfg: config_mod.AppCfg | None = None,
 
     @app.post("/api/strategy-rr")
     async def strategy_rr(request: Request):
-        """Set a straddle's target as a multiple of its stop: tp_pts = round(sl_pts * rr, 4).
-        Refused while the strategy has working orders or an open
-        position today (the target is read when the legs go out and when they re-price)."""
+        """Set a straddle's target as a multiple of its stop: tp_pts = round(sl_pts * rr, 4). The body may also
+        carry sl_pts (the stop in points; rr then defaults to the current one). Refused while the strategy has
+        working orders or an open position today (stop and target are read when the legs go out and re-price)."""
         body = await request.json()
         name = str(body.get("strategy") or "")
         if name not in cfg.strategies:
@@ -1567,21 +1567,24 @@ def create_app(cfg: config_mod.AppCfg | None = None,
         s = cfg.strategies[name]
         if s.kind != "straddle" or not s.sl_pts > 0:
             raise HTTPException(400, f"{name} has no fixed stop to take a target from")
-        rr = body.get("rr")
+        rr = body.get("rr", s.rr if "sl_pts" in body else None)
         if isinstance(rr, bool) or not isinstance(rr, (int, float)) or not 0.25 <= rr <= 20:
             raise HTTPException(400, "rr must be a number from 0.25 to 20")
+        sl = body.get("sl_pts", s.sl_pts)
+        if isinstance(sl, bool) or not isinstance(sl, (int, float)) or not 0.25 <= sl <= 200:
+            raise HTTPException(400, "sl_pts must be a number from 0.25 to 200")
         busy = [st.account for st in engine.day_states(name)
                 if st.status in ("placing", "placed", "live", "error")]
         if busy:
             raise HTTPException(409, f"refused: {name} has orders or a position today "
                                 "— change the target once it is flat")
-        previous = {"rr": s.rr, "tp_pts": s.tp_pts}
-        s.rr = float(rr)
+        previous = {"rr": s.rr, "tp_pts": s.tp_pts, "sl_pts": s.sl_pts}
+        s.rr, s.sl_pts = float(rr), float(sl)
         s.tp_pts = round(s.sl_pts * s.rr, 4)
         config_mod.save(cfg)
-        engine.journal("strategy_rr_changed", strategy=name, rr=s.rr, tp_pts=s.tp_pts,
+        engine.journal("strategy_rr_changed", strategy=name, rr=s.rr, tp_pts=s.tp_pts, sl_pts=s.sl_pts,
                        previous=previous)
-        return {"ok": True, "strategy": name, "rr": s.rr, "tp_pts": s.tp_pts}
+        return {"ok": True, "strategy": name, "rr": s.rr, "tp_pts": s.tp_pts, "sl_pts": s.sl_pts}
 
     @app.post("/api/strategy-flatten")
     async def strategy_flatten(request: Request):
