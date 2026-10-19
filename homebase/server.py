@@ -217,7 +217,7 @@ def _timer_day(tst: dict | None, status: str, s, armed: bool) -> tuple[str, str]
 def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                       acct_status: dict, feed_status: dict | None = None,
                       timer_status: dict | None = None,
-                      power: dict | None = None) -> dict:
+                      power: dict | None = None, lab=None) -> dict:
     """Every check the desk needs before the open, across ALL strategies
     and ALL accounts. levels: ok | info | warn | bad; ready = no bad."""
     import datetime as dt
@@ -346,6 +346,14 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
     for name, s in enabled.items():
         status = engine.day_status(name)
         if getattr(s, "kind", "straddle") == "lab":
+            # the runner stopped its day (2026-10-19: no sandbox on the VPS, both strategies silent all day while the
+            # desk said ready): a problem is bad, the owner's own stop or kill only a warning
+            said = lab.runner_said(name) if lab is not None else None
+            if said and said.get("state") == "stopped":
+                why = said.get("why") or "no reason given"
+                checks.append({"level": "warn" if why in ("Stopped for today.", "Killed today.") else "bad",
+                               "label": shown(name), "detail": "stopped for the day — " + why})
+                continue
             if status != "idle":
                 checks.append({"level": "ok", "label": shown(name), "detail": status})
             continue                     # no trade by its last-entry time is a normal day for a Lab strategy
@@ -1020,7 +1028,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                 if should_fire_readiness(now, readiness_fired["date"]):
                     readiness_fired["date"] = now.date().isoformat()
                     r = compute_readiness(now, cfg, engine, acct_status,
-                                          feed_status(), timer.status(), power_status())
+                                          feed_status(), timer.status(), power_status(), lab=labdesk)
                     engine.journal(
                         "morning_readiness", ready=r["ready"],
                         problems=[c["label"] + ": " + c["detail"]
@@ -1151,7 +1159,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             "et_now": engine.now_et().isoformat(timespec="seconds"),
             "readiness": compute_readiness(engine.now_et(), cfg, engine,
                                            acct_status, feed_status(),
-                                           timer.status(), power_status()),
+                                           timer.status(), power_status(), lab=labdesk),
             "timer": timer.status(),
             "levels": level_timer.status(),
             "feed": feed_status(),

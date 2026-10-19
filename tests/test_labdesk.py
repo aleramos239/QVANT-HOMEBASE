@@ -1210,3 +1210,58 @@ def test_with_the_lab_side_off_nothing_of_the_intake_is_reachable(tmp_path):
         run(off.clear_block(LAB, "a1"))
     assert off.snapshot()["strategies"] == {} and off.publish_changed() is False
     assert run(asyncio.wait_for(off.run(), 1)) is None and placed(d) == []
+
+
+# ---------------------------------------------------------------- the runner's stopped day in the readiness
+class _Said:
+    """The LabDesk's runner_said() alone: what the runner's last beat said of each strategy."""
+    def __init__(self, info):
+        self.info = info
+
+    def runner_said(self, name):
+        return self.info.get(name)
+
+
+@pytest.mark.parametrize("why,level,ready", [("The sandbox is not working.", "bad", False),
+                                             ("Stopped for today.", "warn", True),
+                                             ("Killed today.", "warn", True)])
+def test_a_lab_strategy_the_runner_stopped_is_in_the_readiness(tmp_path, why, level, ready):
+    """2026-10-19: on the VPS both live Lab strategies were stopped for the day (no sandbox) while the desk said
+    ready. A runner's problem is bad; the owner's own stop or kill is a warning."""
+    from homebase.config import AccountCfg, AppCfg
+    clock = Clock()
+    clock.set_et(10, 0)
+    lab = StrategyCfg(symbol="MNQ", kind="lab", qty=1, offset_pts=1, sl_pts=1, tp_pts=1, enabled=True)
+    cfg = AppCfg(armed=True, accounts={"a1": AccountCfg(keyring_key="k", account_name="A1")},
+                 book={LAB: [{"account": "a1", "qty": 1}]}, strategies={LAB: lab})
+    eng = Engine(cfg, {"a1": FakeAdapter("a1")}, now_fn=clock, root=tmp_path)
+    now, acct = eng.now_et(), {"a1": {"connected": True}}
+    said = _Said({LAB: {"state": "stopped", "why": why, "mode": "desk"}})
+    r = compute_readiness(now, cfg, eng, acct, None, None, None, lab=said)
+    lines = [c for c in r["checks"] if c["detail"].startswith("stopped for the day")]
+    assert [(c["level"], c["detail"]) for c in lines] == [(level, "stopped for the day — " + why)]
+    assert r["ready"] is ready
+    running = compute_readiness(now, cfg, eng, acct, None, None, None, lab=_Said({LAB: {"state": "waiting", "why": None}}))
+    assert not [c for c in running["checks"] if c["detail"].startswith("stopped for the day")]
+    assert not [c for c in compute_readiness(now, cfg, eng, acct, None, None, None)["checks"]
+                if c["detail"].startswith("stopped for the day")]            # no Lab desk given: nothing new
+
+
+def test_a_stopped_day_the_runner_no_longer_hosts_is_read_from_its_day_file(tmp_path):
+    """After a runner restart a stopped day is not hosted, so no beat names it: the day file still says it."""
+    from homebase.config import AccountCfg, AppCfg
+    from homebase.labrun import store
+    clock = Clock()
+    clock.set_et(10, 0)
+    cfg = AppCfg(armed=True, accounts={"a1": AccountCfg(keyring_key="k", account_name="A1")}, book={}, strategies={})
+    eng = Engine(cfg, {"a1": FakeAdapter("a1")}, now_fn=clock, root=tmp_path)
+    at = tmp_path / "desklab"
+    ld = LabDesk(cfg, eng, eng.adapters, at=at)                              # on: the store bound at `at`
+    name = labdesk.labcfg.store_name(LAB)
+    assert ld.runner_said(LAB) is None                                       # no beat, no file: nothing
+    p = store.day_path(name, eng._today(), at)
+    p.parent.mkdir(parents=True)
+    p.write_text('{"state": "stopped", "why": "The sandbox is not working."}')
+    assert ld.runner_said(LAB) == {"state": "stopped", "why": "The sandbox is not working."}
+    ld._alive(LAB)["info"] = {"state": "waiting", "why": None, "mode": "desk"}
+    assert ld.runner_said(LAB)["state"] == "waiting"                         # a beat is newer than the file

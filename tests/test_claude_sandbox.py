@@ -28,7 +28,15 @@ HEAD = "from __future__ import annotations\nfrom homebase.strategies.base import
 CLASS = ('\n\nclass Probe(Strategy):\n    name = "probe"\n    root = "NQ"\n    session_independent = True\n'
          '    def times(self):\n        return ["09:30:00"]\n')
 
-pytestmark = pytest.mark.skipif(not sandbox.available(), reason="no working sandbox-exec on this machine")
+pytestmark = pytest.mark.skipif(not sandbox.available(), reason="no working sandbox (sandbox-exec / bwrap) here")
+
+
+def refused(err: str) -> bool:
+    """macOS refuses with PermissionError. Bubblewrap (Linux) refuses from inside: a hidden path is missing,
+    the root is read-only, its own empty network refuses -- any failure counts there, never ALLOWED."""
+    if sys.platform == "darwin":
+        return "probe:PermissionError" in err
+    return "probe:" in err and "probe:ALLOWED" not in err
 
 
 def client(tmp_path):
@@ -86,9 +94,12 @@ def test_a_draft_cannot_read_the_desk_key_or_the_desk_state(tmp_path):
         targets = [planted] + ([live_key] if live_key.exists() else [])
         for i, target in enumerate(targets):
             probe_draft(f"reads_key{i}", ATTEMPT + f"_attempt(lambda: open({str(target)!r}, 'rb').read())\n")
-            assert "probe:PermissionError" in run_probe(tmp_path, f"reads_key{i}"), target
-        probe_draft("lists_state", ATTEMPT + f"import os\n_attempt(lambda: os.listdir({str(state)!r}))\n")
-        assert "probe:PermissionError" in run_probe(tmp_path, "lists_state")
+            assert refused(run_probe(tmp_path, f"reads_key{i}")), target
+        # an EMPTY listing is a refusal too (bubblewrap shows .state as an empty tmpfs); the planted file must not show
+        probe_draft("lists_state", ATTEMPT + "import os\n"
+                    f"def _ls():\n    if not os.listdir({str(state)!r}):\n        raise FileNotFoundError('empty')\n"
+                    "_attempt(_ls)\n")
+        assert refused(run_probe(tmp_path, "lists_state"))
     finally:
         planted.unlink()
 
@@ -100,10 +111,10 @@ def test_a_draft_cannot_read_home_secrets(tmp_path, rel):
         pytest.skip(f"no ~/{rel} on this machine")
     if p.is_dir():
         probe_draft("reads_home", ATTEMPT + f"import os\n_attempt(lambda: os.listdir({str(p)!r}))\n")
-        assert "probe:PermissionError" in run_probe(tmp_path, "reads_home")
+        assert refused(run_probe(tmp_path, "reads_home"))
         return
     probe_draft("reads_home", ATTEMPT + f"_attempt(lambda: open({str(p)!r}, 'rb').read())\n")
-    assert "probe:PermissionError" in run_probe(tmp_path, "reads_home")
+    assert refused(run_probe(tmp_path, "reads_home"))
 
 
 def test_a_draft_cannot_open_a_socket_even_to_localhost(tmp_path):
@@ -115,12 +126,12 @@ def test_a_draft_cannot_open_a_socket_even_to_localhost(tmp_path):
     try:
         probe_draft("phones_home", ATTEMPT + "import socket\n"
                     f"_attempt(lambda: socket.create_connection(('127.0.0.1', {port}), timeout=2))\n")
-        assert "probe:PermissionError" in run_probe(tmp_path, "phones_home")
+        assert refused(run_probe(tmp_path, "phones_home"))
         with pytest.raises(socket.timeout):
             srv.accept()                      # nothing ever connected
         probe_draft("desk_port", ATTEMPT + "import socket\n"
                     "_attempt(lambda: socket.create_connection(('127.0.0.1', 8850), timeout=2))\n")
-        assert "probe:PermissionError" in run_probe(tmp_path, "desk_port")
+        assert refused(run_probe(tmp_path, "desk_port"))
     finally:
         srv.close()
 
@@ -131,7 +142,7 @@ def test_a_draft_cannot_write_into_the_venv_or_the_repo(tmp_path):
     existed = target.exists()
     probe_draft("plants_hook", ATTEMPT + f"_attempt(lambda: open({str(target)!r}, 'x').close())\n")
     try:
-        assert "probe:PermissionError" in run_probe(tmp_path, "plants_hook")
+        assert refused(run_probe(tmp_path, "plants_hook"))
     finally:
         if not existed and target.exists():      # never leave one behind, even when the test fails
             target.unlink()
@@ -139,14 +150,14 @@ def test_a_draft_cannot_write_into_the_venv_or_the_repo(tmp_path):
     marker = REPO / "homebase" / f"sandbox_probe_{uuid.uuid4().hex}.py"
     probe_draft("writes_repo", ATTEMPT + f"_attempt(lambda: open({str(marker)!r}, 'x').close())\n")
     try:
-        assert "probe:PermissionError" in run_probe(tmp_path, "writes_repo")
+        assert refused(run_probe(tmp_path, "writes_repo"))
     finally:
         assert not marker.exists()
 
 
 def test_a_draft_cannot_fork_or_exec(tmp_path):
     probe_draft("forks", ATTEMPT + "import subprocess\n_attempt(lambda: subprocess.run(['/bin/echo', 'hi']))\n")
-    assert "probe:PermissionError" in run_probe(tmp_path, "forks")
+    assert refused(run_probe(tmp_path, "forks"))
 
 
 def test_the_run_dir_is_writable_even_under_the_denied_state_dir():
@@ -160,7 +171,10 @@ def test_the_run_dir_is_writable_even_under_the_denied_state_dir():
     try:
         code = ("import os, sys\n"
                 "open(os.path.join(sys.argv[1], 'ok'), 'w').write('x')\n"
-                "try:\n    os.listdir(sys.argv[2])\n    print('LISTED')\nexcept PermissionError:\n    print('denied')\n")
+                "try:\n    names = os.listdir(sys.argv[2])\nexcept PermissionError:\n    names = []\n"
+                # bubblewrap mounts the run dir and the runs' lock file inside the hidden .state: those may show,
+                # nothing else may
+                "print('denied' if set(names) <= {os.path.basename(sys.argv[1]), '.lock'} else 'LISTED')\n")
         p = subprocess.run(sandbox.command([sys.executable, "-c", code, str(rd), str(state)],
                                            sandbox.params(run_dir=rd, archive=tmp, cache=tmp, tmp=tmp)),
                            env=sandbox.env(tmp), capture_output=True, text=True, timeout=60, cwd=tmp)

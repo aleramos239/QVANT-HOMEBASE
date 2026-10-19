@@ -298,8 +298,9 @@ def test_the_install_script_renders_loads_and_removes_the_runner_job():
     text = (REPO / "deploy" / "install.sh").read_text()
     labels = re.search(r"^LABELS=\(([^)]*)\)", text, re.M).group(1).split()
     assert "com.ramosquant.homebase-labrun" in labels                        # in LABELS: loaded, and removed
-    render = next(line for line in text.splitlines() if line.startswith("for l in com.ramosquant.homebase "))
-    assert "com.ramosquant.homebase-labrun" in render                        # rendered from its template
+    # rendered from its template: the render loop walks LABELS (2026-10-18, deploy/linux one-Desk mode drops the
+    # runner from LABELS only when homebase/.state/onedesk.on exists)
+    assert 'for l in "${LABELS[@]}"; do' in text and "deploy/$l.plist.template" in text
     assert (REPO / "deploy" / "com.ramosquant.homebase-labrun.plist.template").is_file()
 
 

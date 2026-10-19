@@ -867,6 +867,19 @@ class LabDesk:
                                     "refused": deque(maxlen=REFUSED_KEPT)}
         return d
 
+    def runner_said(self, name: str) -> dict | None:
+        """The runner's last word on a strategy's day ({"state", "why", ...}): its beat, else today's day file -- a
+        day the runner stopped is not hosted any more, so after a runner restart only the file still says it. None
+        when neither says anything. Never raises (readiness calls it)."""
+        info = (self._live.get(name) or {}).get("info")
+        if info:
+            return info
+        try:
+            sname = labcfg.store_name(name)
+            return store.get_day(sname, self.engine._today(), self._at) if sname else None
+        except Exception:  # noqa: BLE001 -- an unreadable day file adds no line
+            return None
+
     def _alive(self, name: str) -> dict:
         # fired: the open rounds (account, round, date) the heartbeat rule already cancelled the entries of
         return self._live.setdefault(name, {"beat": None, "info": None, "down": False, "fired": set()})

@@ -27,6 +27,8 @@ sudo -u "$USR" mkdir -p "$REPO/homebase/.state"
 
 # the doorman HOMEBASE VPS (the Mac app) comes in through: nginx on 127.0.0.2 only, the firewall untouched
 command -v nginx >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nginx >/dev/null
+# the Linux sandbox Lab strategies run in (homebase/backtest/sandbox.py): without it they are refused, fail closed
+command -v bwrap >/dev/null || DEBIAN_FRONTEND=noninteractive apt-get install -y -qq bubblewrap >/dev/null
 rm -f /etc/nginx/sites-enabled/default
 grep -q " homebase-vps$" /etc/hosts || echo "127.0.0.2 homebase-vps" >> /etc/hosts
 install -m 644 "$REPO/deploy/linux/nginx-homebase-vps.conf" /etc/nginx/conf.d/homebase-vps.conf
