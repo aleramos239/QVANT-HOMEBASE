@@ -83,3 +83,16 @@ def test_pick_newest_moves_the_order_to_each_new_gap_on_the_side_until_one_fills
     g2 = UP_OPEN + rest(5, 15010.0) + up_gap(15010.0) + rest(3, 15021.0) + [back] + rest(3, 15009.0) + up_gap(15009.0) + rest(3, 15020.0)
     log, _, res = play(day(g2), pick="newest")
     assert len(log) == 1 and len(res.trades) == 1                    # ... and the day is done: one trade a day
+
+
+def test_atr1_puts_the_stop_k_times_the_1_minute_atr14_from_the_entry():
+    back = (15021.0, 15021.0, 15009.0, 15009.5, 40)
+    g = UP_OPEN + rest(5, 15010.0) + up_gap(15010.0) + rest(3, 15021.0) + [back] + rest(60, 15009.0)
+    st = FO.FvgOdir({**BASE, "atr1": 2.0})
+    st.ROLLS = frozenset()
+    res = S.run_session(st, tape_of(day(g)), daily=list(DAILY), on_error="raise")
+    t = res.trades[0]
+    # the 14 minutes before 10:08: rest bars (range 2) + the gap's three: TRs 2 x 11, then 2, 10, 6 -> mean (22 + 18) / 14
+    a1 = (2.0 * 11 + 2.0 + 10.0 + 6.0) / 14.0
+    sl = round((15016.0 - 2.0 * a1) * 4) / 4
+    assert t["entry_price"] == 15016.0 and abs(t["sl"] - sl) <= 0.25, (t["sl"], sl)

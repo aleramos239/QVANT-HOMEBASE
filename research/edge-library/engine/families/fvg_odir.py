@@ -19,6 +19,8 @@ THE RULE (fixed here, before any run):
   * THE STOP (stop_mode struct): the MIDDLE candle's far end -- bar 2's LOW for an up gap, bar 2's HIGH for a down gap. The Template floors
     it at 0.25 ATR and two ticks, as for every family. A bar 2 whose far end is not beyond the entry (it can sit above an up gap's near
     edge) gives no stop: the signal is used and no order is placed.
+  * atr1 (the owner, 2026-10-19; default 0 = the middle-candle stop above): > 0 = the stop is atr1 x ATR14 of the 1-MINUTE bars (the mean
+    true range of the 14 newest completed minutes at bar 3's close) from the entry, with no 0.25 x tf-ATR floor (two ticks only).
   * THE TARGET is the exit cell's tgt_r (the owner: 1:1). Flat 15:58 ET.
   * WINDOW: ONE instance 09:30 -> 15:58 (vabreak.py's way), so the cap is a DAY cap and a gap may span 11:00 or 13:30.
 
@@ -42,8 +44,9 @@ MODES = ("touch", "mid", "go")
 class FvgOdir(Template):
     """fvg_odir (module docstring). State per day: dir = +1 / -1 / 0 (no trade) / None (not read yet), used = the day's signal is taken,
     gap = this close's signal (side, entry, structure level) or None."""
-    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "pick": "first", "max_tr": 1}
-    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES), "pick": ("choice", ("first", "newest"))}
+    DEFAULTS = {"min_gap": 0.0, "mode": "touch", "pick": "first", "atr1": 0.0, "max_tr": 1}
+    SCHEMA = {"min_gap": ("float", 0.0, 10.0), "mode": ("choice", MODES), "pick": ("choice", ("first", "newest")),
+              "atr1": ("float", 0.0, 20.0)}
     SCREEN_TFS = ("1", "5", "15", "30")
     SCREEN_RUN = {"strict_limit": True}
     ONE_INSTANCE_PASSES = NY                         # the session passes this ONE instance stands for (the taught lane reads it)
@@ -85,8 +88,25 @@ class FvgOdir(Template):
         self.used = True
         px = {"touch": near, "mid": (near + far) / 2.0, "go": self.C[-1]}[self.p["mode"]]
         struct = self.L[-2] if up else self.H[-2]   # the middle candle's far end
+        if self.p["atr1"] > 0:
+            a1 = self.atr1m()
+            struct = None if a1 is None else px - self.dir * self.p["atr1"] * a1
+        if struct is None:
+            return
         if (px - struct) * self.dir > 0:
             self.gap = ("long" if up else "short", px, struct)
+
+    def atr1m(self):
+        """The mean true range of the 14 newest completed 1-minute bars (15 needed), or None."""
+        m = self.M[-15:]
+        if len(m) < 15:
+            return None
+        return sum(max(b[2], a[4]) - min(b[3], a[4]) for a, b in zip(m, m[1:])) / 14.0
+
+    def _dist(self, ctx, ref, struct):
+        if self.p["atr1"] > 0 and struct is not None:
+            return max(abs(ref - struct), 2 * ctx.tick)          # the owner's ATR stop: no tf-ATR floor
+        return super()._dist(ctx, ref, struct)
 
     def fam_signal(self, ctx):
         if self.gap is None:
