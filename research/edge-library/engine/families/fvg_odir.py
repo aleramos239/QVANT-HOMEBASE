@@ -13,7 +13,8 @@ THE RULE (fixed here, before any run):
     the side of the direction (an up day ignores down gaps). The first such gap is the day's signal; every later gap is ignored, whether or
     not its order is placed or fills (max_tr 1: one trade a day).
   * pick (the owner, 2026-10-19): first (default, the rule above) | newest = while no trade has filled today, every NEW gap on the side
-    cancels the resting order and takes its place (the most recent gap); the first fill ends the day (max_tr 1).
+    cancels the resting order and takes its place (the most recent gap); the first fill ends the day (max_tr 1). With max_tr above 1
+    (1 .. 20) the next new gap on the side after a trade has closed is the next entry, until max_tr trades a day (newest only).
   * THE ORDER, `mode` (fvg's): touch = a LIMIT at the near edge (default), mid = a limit at the gap's middle, go = market at bar 3's close.
     A resting limit is cancelled at the first tf close at or after 15:00. The family runs with strict_limit (fvg's).
   * THE STOP (stop_mode struct): the MIDDLE candle's far end -- bar 2's LOW for an up gap, bar 2's HIGH for a down gap. The Template floors
@@ -76,7 +77,7 @@ class FvgOdir(Template):
             return
         self._sync(ctx)
         newest = self.p["pick"] == "newest"
-        if self.used and not (newest and ctx.flat and self.n_ent == 0):
+        if self.used and not (newest and ctx.flat and self.n_ent < self.p["max_tr"]):
             return
         h1, l1, h3, l3 = self.H[-3], self.L[-3], self.H[-1], self.L[-1]
         up = self.dir > 0

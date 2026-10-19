@@ -1,0 +1,52 @@
+{
+ "name": "owner_fvg_odir_15_nl_atr3",
+ "source": {
+  "title": "Owner's idea, 2026-10-19: first FVG with the 09:30-10:00 direction, middle-candle stop, 1:1",
+  "channel": "owner"
+ },
+ "market": "NQ",
+ "bars": [
+  "15"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "window": "10:00-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "fvg_odir",
+  "settings": {
+   "min_gap": 0.0,
+   "mode": "touch",
+   "pick": "newest",
+   "atr1": 3.0
+  },
+  "words": "NQ 15 minute time frame, trade from 10 am until 3 pm. Look at the direction of 9:30-10 am and take the first fvg in that direction, use the middle candle in the fvg as the stop and trade for a 1:1. 1 trade a day."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 1,
+  "max_trades": 20
+ },
+ "taught": [
+  "[chat 2026-10-19] NQ, 15-minute bars",
+  "[chat 2026-10-19] trade from 10:00 until 15:00 ET",
+  "[chat 2026-10-19] the direction of 09:30-10:00 sets the side",
+  "[chat 2026-10-19] target 1:1",
+  "[chat 2026-10-19] owner: ATR-based stop, 1-minute ATR with a 14-candle lookback, 3 x",
+  "[chat 2026-10-19] owner: no trade limit (the engine caps at 20 a day)"
+ ],
+ "not_run": [
+  "DIRECTION: read as the 10:00 price against the 09:30 open (1-minute bars); a day with no move does not trade. Claude's pick.",
+  "THE ENTRY: not said; a limit at the gap's near edge (bar 3's low on an up gap), the usual FVG retest. Claude's pick.",
+  "AN UNFILLED ORDER: cancelled at 15:00; the day's one signal is used even if it never fills. Claude's pick.",
+  "GAP SIZE: any gap of one tick or more (no minimum).",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only.",
+  "WHICH GAP: every new gap on the side (third candle closing after 10:00) replaces the waiting order until one fills. Claude's reading of \"the most recent fvg\".",
+  "THE STOP: 3 x the mean true range of the 14 newest completed 1-minute bars at the gap, from the entry (two ticks at least)."
+ ],
+ "control": "random"
+}

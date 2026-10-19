@@ -96,3 +96,10 @@ def test_atr1_puts_the_stop_k_times_the_1_minute_atr14_from_the_entry():
     a1 = (2.0 * 11 + 2.0 + 10.0 + 6.0) / 14.0
     sl = round((15016.0 - 2.0 * a1) * 4) / 4
     assert t["entry_price"] == 15016.0 and abs(t["sl"] - sl) <= 0.25, (t["sl"], sl)
+
+
+def test_newest_with_a_higher_cap_takes_the_next_gap_after_a_trade_closes():
+    back = (15021.0, 15021.0, 15009.0, 15009.5, 40)
+    g = UP_OPEN + rest(5, 15010.0) + up_gap(15010.0) + rest(3, 15021.0) + [back] + rest(3, 15009.0) + up_gap(15009.0) + rest(3, 15020.0)
+    log, _, res = play(day(g), pick="newest", max_tr=20)
+    assert [r[1:4] for r in log] == [("long", 15016.0, 15010.0), ("long", 15015.0, 15009.0)] and len(res.trades) == 1   # the 2nd never fills
