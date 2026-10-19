@@ -6,12 +6,10 @@ Wants=network-online.target
 [Service]
 User=__USER__
 WorkingDirectory=__REPO__
-# the demo login only: Tradovate serves the live login's market data to ONE connection at a time, and the
-# Mac's charts hold it (2026-10-19: both on live kicked each other off every ~5 min -- holes on both)
-Environment=HOMEBASE_CHARTS_MD=demo
-Environment=HOMEBASE_CHARTS_MD_ONLY=demo
-# the demo login has no Level 2: the book comes from the Mac's charts (deploy/linux/depthrelay.sh on the Mac)
-Environment=HOMEBASE_DEPTH_RELAY_IN=1
+# the live login (Level 2): Tradovate serves its market data to ONE connection at a time, and this always-on
+# server holds it (2026-10-19). The Mac's charts run demo-only and take this book through the relay
+# (homebase/charts/depthrelay.py). YM / GC / SI ride the demo login (.state/charts/settings.json md_other_roots).
+Environment=HOMEBASE_CHARTS_MD=live
 ExecStart=__REPO__/.venv/bin/python -m homebase.charts
 Restart=always
 RestartSec=10

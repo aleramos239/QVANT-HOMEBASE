@@ -4,7 +4,7 @@
 <dict>
   <key>Label</key><string>com.ramosquant.homebase-depthtunnel</string>
   <!-- the book relay's road (homebase/charts/depthrelay.py): this Mac's 127.0.0.1:18852 is the server's charts.
-       Mac -> server only: nothing on the Mac is reachable from the server. -->
+       The Mac opens it: nothing on the Mac is reachable from the server. -->
   <key>ProgramArguments</key>
   <array>
     <string>/usr/bin/ssh</string>

@@ -3,8 +3,8 @@
 <plist version="1.0">
 <dict>
   <key>Label</key><string>com.ramosquant.homebase-depthrelay</string>
-  <!-- the book relay (homebase/charts/depthrelay.py): this Mac's live Level 2 book (its charts' /ws/depth-out) to
-       the server's charts (/ws/depth-in, through homebase-depthtunnel), so the VPS DOM shows it. It only reads
+  <!-- the book relay (homebase/charts/depthrelay.py): the server's live Level 2 book (its charts' /ws, through
+       homebase-depthtunnel) into this Mac's charts (/ws/depth-in), so the Mac's DOM shows it. It only reads
        the book: no order path. With either end down it waits and reconnects by itself. -->
   <key>ProgramArguments</key>
   <array>

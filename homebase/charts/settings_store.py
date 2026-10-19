@@ -11,9 +11,10 @@ file has no choice yet -- so today's behaviour is unchanged until the user
 picks one in the Settings dialog, exactly like the brief asks.
 
 HOMEBASE_CHARTS_MD_ONLY pins the login on a machine that must never take the other one, whatever the
-file or the dialog say, and keeps the second socket (md_other_roots) shut. The server runs "demo"
-(2026-10-19): Tradovate gives the live login's market data to ONE connection at a time, and the server's
-charts and the Mac's kicked each other off every ~5 minutes, leaving holes in both.
+file or the dialog say, and keeps the second socket (md_other_roots) shut. Tradovate gives the live login's
+market data to ONE connection at a time (2026-10-19: the server's charts and the Mac's kicked each other off
+every ~5 minutes, leaving holes in both): the server holds it, the Mac runs "demo" and takes the server's
+Level 2 book through the relay (depthrelay.py).
 """
 from __future__ import annotations
 

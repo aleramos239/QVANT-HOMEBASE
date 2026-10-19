@@ -1,19 +1,20 @@
-"""The Mac's live Level 2 book on the server's charts (the owner, 2026-10-19: "build the relay so the Mac's live book
-also shows on the VPS DOM").
+"""The book relay: one machine's live Level 2 book on the other's charts (the owner, 2026-10-19: "build the relay so
+the Mac's live book also shows on the VPS DOM", then "can we switch that around": the server, always on, holds it).
 
-Level 2 comes only with the live login's market data, and Tradovate gives that to ONE connection at a time: the Mac's
-charts hold it (settings_store.md_only keeps the server on the demo login). So the server takes its book from the Mac:
+Level 2 comes only with the live login's market data, and Tradovate gives that to ONE connection at a time: the
+server's charts hold it; the Mac's run on the demo login (settings_store.md_only; its ticks are the same, real time)
+and take their book from the server:
 
-    Mac charts  /ws (a 1-minute chart of NQ and ES, like any page: its depth follows)
-      -> the pusher (python -m homebase.charts.depthrelay, on the Mac: launchd homebase-depthrelay)
-      -> ssh -L 127.0.0.1:18852 (launchd homebase-depthtunnel)
-      -> the server's charts  /ws/depth-in  ->  RelaySocket  ->  the server's own Depth
+    the server's charts  /ws (a 1-minute chart of NQ and ES, like any page: its depth follows)
+      <- ssh -L 127.0.0.1:18852 (launchd homebase-depthtunnel, opened by the Mac)
+      -> the relay (python -m homebase.charts.depthrelay, on the Mac: launchd homebase-depthrelay)
+      -> the Mac's charts  /ws/depth-in  ->  RelaySocket  ->  the Mac's own Depth
 
-The Mac's chart service needs nothing new (no restart). The Mac only sends: nothing on it is reachable from the
-server (its chart service can reach the armed Desk). On the
-server (HOMEBASE_DEPTH_RELAY_IN=1) RelaySocket stands in for the md socket Depth subscribes on: subscribeDOM always
-answers, each book the pusher sends becomes a DOM push, and while no pusher is attached the socket is "disconnected",
-so every page's book empties at once (the DOM says Book stale) rather than freezing on an old one.
+The Mac opens every connection: nothing on it is reachable from the server (its chart service can reach the armed
+Desk). The receiving side (HOMEBASE_DEPTH_RELAY_IN=1) has RelaySocket stand in for the md socket Depth subscribes on:
+subscribeDOM always answers, each book relayed becomes a DOM push, and while no relay is attached the socket is
+"disconnected", so every page's book empties at once (the DOM says Book stale) rather than freezing on an old one.
+Either direction works: the relay only joins a book source (--src) to a receiver (--dst).
 """
 from __future__ import annotations
 
@@ -77,8 +78,8 @@ class RelayFeed:
 # ---------------------------------------------------------------- the pusher (on the Mac)
 
 async def pump(src: str, dst: str, roots, connect=None, on_open=lambda: None) -> None:
-    """Forward every book of `roots` from `src` (this Mac's page socket /ws, as a 1-minute chart of each root: the
-    page's depth follows its chart) to `dst` (the server's /ws/depth-in), until either closes."""
+    """Forward every book of `roots` from `src` (a chart service's page socket /ws, as a 1-minute chart of each root:
+    a page's depth follows its chart) to `dst` (the other chart service's /ws/depth-in), until either closes."""
     if connect is None:
         import websockets
         connect = websockets.connect
@@ -96,17 +97,17 @@ def _log(m: str) -> None:
 
 
 def main(argv=None) -> int:
-    ap = argparse.ArgumentParser(description="Send this Mac's live Level 2 book to the server's charts")
+    ap = argparse.ArgumentParser(description="Bring the server's live Level 2 book to this Mac's charts")
     ap.add_argument("--roots", default="NQ,ES")
-    ap.add_argument("--src", default="ws://127.0.0.1:8852/ws", help="this Mac's charts")
-    ap.add_argument("--dst", default="ws://127.0.0.1:18852/ws/depth-in", help="the server's charts, through the ssh tunnel")
+    ap.add_argument("--src", default="ws://127.0.0.1:18852/ws", help="the book's charts: the server's, through the ssh tunnel")
+    ap.add_argument("--dst", default="ws://127.0.0.1:8852/ws/depth-in", help="the charts that take it: this Mac's")
     a = ap.parse_args(argv)
     roots = [r.strip().upper() for r in a.roots.split(",") if r.strip()]
     last = None
 
     def opened():
         nonlocal last
-        _log(f"forwarding {a.roots} to {a.dst}")
+        _log(f"forwarding {a.roots} from {a.src} to {a.dst}")
         last = None
     while True:
         try:

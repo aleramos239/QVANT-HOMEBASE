@@ -1,7 +1,7 @@
 #!/bin/bash
 # Install Homebase as systemd services on a Linux server (run as root, on the server).
 # Idempotent: re-running updates and restarts. The Linux twin of deploy/install.sh.
-#   sudo ./deploy/linux/install.sh          desk + charts (demo login only) + Lab runner + the doorman
+#   sudo ./deploy/linux/install.sh          desk + charts (the live login, Level 2) + Lab runner + the doorman
 #                                           for HOMEBASE VPS (nginx-homebase-vps.conf)
 #   sudo ./deploy/linux/install.sh remove   stop and delete them
 # Not installed here (Mac / research only): the pipeline, the tester prune, the sleep blocker.
@@ -10,7 +10,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 USR="$(stat -c %U "$REPO")"
 UNITS=(homebase.service homebase-charts.service homebase-labrun.service homebase-ticks.service homebase-ticks.timer)
-# not the tick recorder's timer: it pages on the live login, which kicks the Mac's charts off it (the Mac's job keeps the archive)
+# not the tick recorder's timer: the Mac's job keeps the archive (and each run on the live login bumps the charts' socket)
 STARTED=(homebase.service homebase-charts.service homebase-labrun.service)
 
 if [ "${1:-}" = "remove" ]; then

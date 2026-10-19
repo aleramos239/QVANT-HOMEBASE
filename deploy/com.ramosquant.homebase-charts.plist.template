@@ -12,9 +12,15 @@
   <key>WorkingDirectory</key><string>__REPO__</string>
   <!-- the chart half of the terminal: its OWN process so chart work can never
        delay an order or take the trading app down. Records live ticks. -->
-  <!-- market data from the live login (real-time CME quotes; Level 2 once bought) -->
+  <!-- market data from the demo login only (real time, the same ticks: checked 2026-10-19). Tradovate serves the live
+       login's market data to ONE connection, and the server's charts hold it; its Level 2 book comes here through
+       the relay (homebase/charts/depthrelay.py, deploy/linux/depthrelay.sh) into /ws/depth-in. -->
   <key>EnvironmentVariables</key>
-  <dict><key>HOMEBASE_CHARTS_MD</key><string>live</string></dict>
+  <dict>
+    <key>HOMEBASE_CHARTS_MD</key><string>demo</string>
+    <key>HOMEBASE_CHARTS_MD_ONLY</key><string>demo</string>
+    <key>HOMEBASE_DEPTH_RELAY_IN</key><string>1</string>
+  </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>10</integer>

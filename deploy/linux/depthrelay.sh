@@ -1,9 +1,9 @@
 #!/bin/bash
-# From the Mac: send this Mac's live Level 2 book to the server's charts, so the VPS DOM shows it, or stop.
-# (homebase/charts/depthrelay.py: Level 2 needs the live login, which Tradovate serves to one connection: the Mac's.)
-#   ./deploy/linux/depthrelay.sh on  [root@host]    the ssh tunnel + the pusher, as launchd jobs (kept alive)
+# From the Mac: bring the server's live Level 2 book to this Mac's charts (the Mac's DOM), or stop.
+# (homebase/charts/depthrelay.py: Level 2 needs the live login, which Tradovate serves to one connection: the server's.)
+#   ./deploy/linux/depthrelay.sh on  [root@host]    the ssh tunnel + the relay, as launchd jobs (kept alive)
 #   ./deploy/linux/depthrelay.sh off                both gone
-# The server's charts take the book only with HOMEBASE_DEPTH_RELAY_IN=1 (deploy/linux/homebase-charts.service).
+# The Mac's charts take the book only with HOMEBASE_DEPTH_RELAY_IN=1 (deploy/com.ramosquant.homebase-charts.plist.template).
 set -euo pipefail
 MODE="${1:?on or off}"
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"

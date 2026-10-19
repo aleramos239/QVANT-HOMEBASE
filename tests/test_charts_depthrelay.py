@@ -128,3 +128,15 @@ def test_the_server_gets_the_macs_book_from_its_page_socket(tmp_path):
             inn.send_json(msg)                           # and what it forwards
             wait_for(lambda: s.get("/api/status").json()["depth"]["NQ"]["levels"] == [20, 18])
         wait_for(lambda: s.get("/api/status").json()["depth"]["NQ"]["subscribed"] is False)   # pusher gone: no book
+
+
+def test_one_machine_holds_the_live_login_the_server():
+    """The owner, 2026-10-19 ("can we switch that around"): the always-on server's charts hold the live login (Level 2);
+    the Mac's run demo-only and take the server's book. Both on live kicked each other off every ~5 min."""
+    import plistlib
+    from pathlib import Path
+    deploy = Path(__file__).resolve().parent.parent / "deploy"
+    mac = plistlib.loads((deploy / "com.ramosquant.homebase-charts.plist.template").read_bytes())["EnvironmentVariables"]
+    assert mac == {"HOMEBASE_CHARTS_MD": "demo", "HOMEBASE_CHARTS_MD_ONLY": "demo", "HOMEBASE_DEPTH_RELAY_IN": "1"}
+    srv = [ln for ln in (deploy / "linux" / "homebase-charts.service").read_text().splitlines() if ln.startswith("Environment=")]
+    assert srv == ["Environment=HOMEBASE_CHARTS_MD=live"]
