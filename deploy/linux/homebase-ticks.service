@@ -1,0 +1,13 @@
+[Unit]
+Description=Homebase tick recorder (one pass)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=__USER__
+WorkingDirectory=__REPO__
+ExecStart=__REPO__/.venv/bin/python -m homebase.ticks
+Nice=10
+IOSchedulingClass=idle
+StandardOutput=append:__REPO__/homebase/.state/ticks.log
+StandardError=append:__REPO__/homebase/.state/ticks.log

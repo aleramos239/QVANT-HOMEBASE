@@ -1,0 +1,19 @@
+[Unit]
+Description=Homebase charts (:8852)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__REPO__
+Environment=HOMEBASE_CHARTS_MD=live
+ExecStart=__REPO__/.venv/bin/python -m homebase.charts
+Restart=always
+RestartSec=10
+Nice=5
+LimitNOFILE=4096
+StandardOutput=append:__REPO__/homebase/.state/charts.log
+StandardError=append:__REPO__/homebase/.state/charts.log
+
+[Install]
+WantedBy=multi-user.target

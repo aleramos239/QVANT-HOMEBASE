@@ -1,0 +1,16 @@
+[Unit]
+Description=Homebase desk (:8850)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=__USER__
+WorkingDirectory=__REPO__
+ExecStart=__REPO__/.venv/bin/python -m uvicorn homebase.server:app --app-dir __REPO__ --host 127.0.0.1 --port 8850 --log-level warning --timeout-graceful-shutdown 5
+Restart=always
+RestartSec=5
+StandardOutput=append:__REPO__/homebase/.state/service.log
+StandardError=append:__REPO__/homebase/.state/service.log
+
+[Install]
+WantedBy=multi-user.target

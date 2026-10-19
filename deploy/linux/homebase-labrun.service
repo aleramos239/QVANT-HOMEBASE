@@ -1,0 +1,16 @@
+[Unit]
+Description=Homebase Lab strategies runner
+After=homebase.service
+
+[Service]
+User=__USER__
+WorkingDirectory=__REPO__
+ExecStart=__REPO__/.venv/bin/python -m homebase.labrun --desk http://127.0.0.1:8850
+Restart=always
+RestartSec=30
+Nice=10
+StandardOutput=append:__REPO__/homebase/.state/labrun.log
+StandardError=append:__REPO__/homebase/.state/labrun.log
+
+[Install]
+WantedBy=multi-user.target
