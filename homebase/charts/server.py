@@ -38,6 +38,7 @@ from .booklive import BookLive
 from .bursts import REACTION_ROOTS, BurstBook, ReactionBook, configured_roots
 from .calendar import Calendar
 from .depth import DEPTH_ARCHIVE, Depth, DepthRecorder
+from .depthrelay import RelayFeed
 from .depthgrid import (MAX_COLS as DEPTH_MAX_COLS, MAX_SPAN_MS as DEPTH_MAX_SPAN_MS, Busy, HistoryPool, Paused,
                         paused_reason)
 from .desk import Fanout, Quotes, register as register_desk
@@ -642,7 +643,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                now_ms=None, state: Path | None = None, calendar_fetch=None,
                desk_factory=None, fake_desk_factory=None, news_fetch=None, depth_roots=None,
                depth_base: Path | None = None, paper_day: bool = False,
-               paper_backtest=None, depth_executor=None, md_connect=None, refresh_kw: dict | None = None) -> FastAPI:
+               paper_backtest=None, depth_executor=None, md_connect=None, refresh_kw: dict | None = None,
+               depth_relay_in: bool | None = None) -> FastAPI:
     if paper_day and not replay:
         raise ValueError("paper_day forces a REPLAYED date to be an event day: it needs replay")
     roots = app_roots = [r.upper() for r in roots]
@@ -1065,11 +1067,15 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             feed = feed_factory(roots, on_live, on_subscribed=_refill)
     # Level 2 rides the live feed's own md socket; replay builds none of it (no
     # subscriptions, no depth messages). Recorded: the depth roots this service charts.
-    depth = None
+    # HOMEBASE_DEPTH_RELAY_IN=1 (the server): the book comes from the Mac's charts, pushed to /ws/depth-in (depthrelay.py)
+    depth, relay = None, None
+    if depth_relay_in is None:
+        depth_relay_in = os.environ.get("HOMEBASE_DEPTH_RELAY_IN") == "1"
     if not replay:
         rec_roots = [r for r in (DEPTH_RECORD_ROOTS if depth_roots is None else depth_roots)
                      if r.upper() in roots]
-        depth = Depth(feed, rec_roots, log=log, wall_ms=lambda: int(clock()),    # the service's clock, like the tick hub
+        relay = RelayFeed() if depth_relay_in else None
+        depth = Depth(relay or feed, rec_roots, log=log, wall_ms=lambda: int(clock()),    # the service's clock, like the tick hub
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
     hub.log = log
@@ -1888,6 +1894,28 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         return Response(body, media_type="application/json")
+
+    @app.websocket("/ws/depth-in")
+    async def ws_depth_in(sock: WebSocket):
+        """The book relay (depthrelay.py): the Mac's books, into this service's Depth (HOMEBASE_DEPTH_RELAY_IN=1 only).
+        Only a local non-browser client (no Origin): the pusher on the Mac, through its ssh tunnel."""
+        if relay is None or sock.headers.get("origin") is not None:
+            await sock.close(code=1008)
+            return
+        await sock.accept()
+        relay.ws.pushers += 1
+        try:
+            while True:
+                try:
+                    relay.ws.push(json.loads(await sock.receive_text()))
+                except (WebSocketDisconnect, RuntimeError):
+                    raise
+                except Exception:  # noqa: BLE001 — a bad frame is skipped
+                    continue
+        except (WebSocketDisconnect, RuntimeError):
+            pass
+        finally:
+            relay.ws.pushers -= 1
 
     @app.websocket("/ws")
     async def ws_endpoint(sock: WebSocket):

@@ -10,6 +10,8 @@ WorkingDirectory=__REPO__
 # Mac's charts hold it (2026-10-19: both on live kicked each other off every ~5 min -- holes on both)
 Environment=HOMEBASE_CHARTS_MD=demo
 Environment=HOMEBASE_CHARTS_MD_ONLY=demo
+# the demo login has no Level 2: the book comes from the Mac's charts (deploy/linux/depthrelay.sh on the Mac)
+Environment=HOMEBASE_DEPTH_RELAY_IN=1
 ExecStart=__REPO__/.venv/bin/python -m homebase.charts
 Restart=always
 RestartSec=10

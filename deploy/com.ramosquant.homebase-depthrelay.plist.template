@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-depthrelay</string>
+  <!-- the book relay (homebase/charts/depthrelay.py): this Mac's live Level 2 book (its charts' /ws/depth-out) to
+       the server's charts (/ws/depth-in, through homebase-depthtunnel), so the VPS DOM shows it. It only reads
+       the book: no order path. With either end down it waits and reconnects by itself. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/.venv/bin/python</string>
+    <string>-m</string>
+    <string>homebase.charts.depthrelay</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__</string>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/depthrelay.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/depthrelay.log</string>
+</dict>
+</plist>
