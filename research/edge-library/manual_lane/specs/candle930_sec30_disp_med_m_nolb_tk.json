@@ -1,0 +1,35 @@
+{
+ "name": "candle930_sec30_disp_med_m_nolb_tk",
+ "reason": "Owner's manual test (2026-10-18): NQ 09:30 30-SECOND candle, NO lookback, followed at its close, stop at its other extreme; DISPLACEMENT filter med_m = body x the median body of the same 09:30 30-second candle on the 14 dates before ([1.5, 2.0, 3.0]); with and without the 08:30 -> 09:30 direction (pre_dir); own exits (struct 1.0 x 0.5R is the owner's cell); one trade a day, flat 15:58; build days only.",
+ "family": "candle930",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "med_m": [
+   1.5,
+   2.0,
+   3.0
+  ],
+  "pre_dir": [
+   "off",
+   "with"
+  ]
+ },
+ "fixed": {
+  "start": "09:30",
+  "sec": 30
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

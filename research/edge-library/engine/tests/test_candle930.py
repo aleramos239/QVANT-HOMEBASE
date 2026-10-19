@@ -74,11 +74,11 @@ def test_med_m_needs_ten_past_bodies(monkeypatch):
 
 def test_past_body_is_the_candle_of_that_date(monkeypatch):
     bars = rand_bars(960, 77, step=7.0)
-    monkeypatch.setattr(C9, "_BODY", {})
+    monkeypatch.setattr(C9, "_DAY", {})
     monkeypatch.setattr(S, "load_tape", lambda iso, root, **kw: minute_tape(bars, "00:00", d=D))
     a = S._sec("09:30")
-    assert C9.past_body("NQ", D.isoformat(), a, 1) == abs(bars[K][3] - bars[K][0])
-    assert C9.past_body("NQ", D.isoformat(), a, 5) == abs(bars[K + 4][3] - bars[K][0])
+    assert C9.past_body("NQ", D.isoformat(), a, 60) == abs(bars[K][3] - bars[K][0])
+    assert C9.past_body("NQ", D.isoformat(), a, 300) == abs(bars[K + 4][3] - bars[K][0])
 
 
 def test_own_exits_are_twenty_stops_times_six_targets():
@@ -143,8 +143,55 @@ def test_pre_n_counts_candles_of_the_candle_size():
     assert sides({"pre_n": 10}, day(edits={"09:24": (PX, PX + 8.0, PX - TICK, PX, 40)})) == []
 
 
+def test_sec_atr_b_med_m_vol_m_read_30_second_candles(monkeypatch):
+    # quiet minutes split into 30 s candles of true range 0.25 / 0.5 alternating: ATR of the 14 before 09:30 = 0.375; body 8 = 21.3 x
+    assert sides({**S30, "atr_b": 21.0}, day(DOWN30)) == ["long"]
+    assert sides({**S30, "atr_b": 21.5}, day(DOWN30)) == []
+    got = []
+    monkeypatch.setattr(C9, "past_body", lambda root, iso, a, secs: got.append(secs) or 4.0)
+    assert sides({**S30, "med_m": 2.0}, day(DOWN30)) == ["long"]      # 8 >= 2 x 4
+    assert sides({**S30, "med_m": 2.1}, day(DOWN30)) == []
+    assert set(got) == {30}                                           # the same 30 s candle of the dates before
+    seen = []
+    monkeypatch.setattr(C9, "past_candle", lambda root, iso, a, secs: seen.append(iso) or (1.0, 20.0 if iso == D.isoformat() else 10.0))
+    assert sides({**S30, "vol_m": 2.0}, day(DOWN30)) == ["long"]      # today 20 >= 2 x the median 10
+    assert sides({**S30, "vol_m": 2.1}, day(DOWN30)) == []
+    assert max(x for x in seen if x != D.isoformat()) < D.isoformat()
+
+
 @pytest.mark.parametrize("bad", [{"sec": 7}, {"sec": 30, "big_n": 3}, {"sec": 30, "k": 1.0}, {"sec": 30, "entry": "break"},
                                  {"sec": 20, "start": "09:30:10"}])
 def test_sec_refuses_what_it_cannot_read(bad):
     with pytest.raises(ValueError):
         C930({**P, **bad})
+
+
+def test_pre_dir_trades_only_with_the_0830_0930_move():
+    up = {"09:29": (PX, PX + TICK, PX - TICK, PX + 1.0, 40)}   # 08:30 opens at PX, the 09:29 bar closes PX + 1: the hour went up
+    dn = {"09:29": (PX, PX + TICK, PX - 1.0, PX - 1.0, 40)}
+    assert sides({"pre_dir": "with"}, day(GREEN, up)) == ["long"]
+    assert sides({"pre_dir": "with"}, day(GREEN, dn)) == []
+    assert sides({"pre_dir": "with"}, day(RED, dn)) == ["short"]
+    assert sides({"pre_dir": "with"}, day(RED, up)) == []
+    assert sides({"pre_dir": "with"}, day(GREEN)) == []        # a flat hour
+    assert sides({**S30, "pre_dir": "with"}, day(DOWN30, up)) == ["long"]
+    assert sides({**S30, "pre_dir": "with"}, day(DOWN30, dn)) == []
+
+
+def test_scan_end_takes_the_first_candle_of_the_window_that_passes():
+    # 09:30 and 09:31 flat (every print PX: dojis); the 09:32 minute is DOWN30-shaped: its 09:32:00-09:32:30 candle is green, body 8, low PX
+    flat = (PX, PX, PX, PX, 40)
+    b = day(flat, {"09:31": flat, "09:32": DOWN30})
+    assert sides(S30, b) == []                                         # the 09:30 candle alone: a doji, no trade
+    got = trades(go(C930, {**P, **S30, "scan_end": "10:00"}, b)[1])
+    assert len(got) == 1 and got[0][1] == "long" and S._sec("09:32:30") < got[0][0] < S._sec("09:33")
+    assert got[0][2] - got[0][3] == 8.0                                # stop at THAT candle's low
+    assert trades(go(C930, {**P, **S30, "scan_end": "09:32"}, b)[1]) == []        # the window ends before it
+    assert sides({**S30, "scan_end": "10:00", "body_pts": 9.0}, b) == []          # the gates read that candle
+    assert len(trades(go(C930, {**P, **S30, "scan_end": "10:00"}, day(DOWN30, {"09:32": DOWN30}))[1])) == 1   # one trade a session
+
+
+@pytest.mark.parametrize("bad", ["09:30", "09:45:10", "11:00"])
+def test_scan_end_refused(bad):
+    with pytest.raises(ValueError):
+        C930({**P, **S30, "scan_end": bad})

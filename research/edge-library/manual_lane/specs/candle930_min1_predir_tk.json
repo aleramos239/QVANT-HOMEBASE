@@ -1,0 +1,31 @@
+{
+ "name": "candle930_min1_predir_tk",
+ "reason": "Owner's manual test (2026-10-18): NQ 09:30 1-MINUTE candle followed at its close, only in the direction of 08:30 -> 09:30 ET (pre_dir with), when it closes above the highest high (green) / below the lowest low (red) of the pre_n 1-minute candles before it; stop at its other extreme; own exits (struct 1.0 x 0.5R is the owner's cell); pre_n 0 = no lookback, the control; one trade a day, flat 15:58; build days only.",
+ "family": "candle930",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "pre_n": [
+   0,
+   5,
+   10
+  ]
+ },
+ "fixed": {
+  "start": "09:30",
+  "pre_dir": "with"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}

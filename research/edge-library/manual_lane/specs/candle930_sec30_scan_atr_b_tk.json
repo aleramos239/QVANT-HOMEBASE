@@ -1,0 +1,36 @@
+{
+ "name": "candle930_sec30_scan_atr_b_tk",
+ "reason": "Owner's manual test (2026-10-18): NQ: the FIRST 30-second candle from 09:30 to 10:00 (scan_end) that passes the filter, NO lookback, followed at its close, stop at its other extreme; DISPLACEMENT filter atr_b = body x the mean true range of the 14 thirty-second candles before 09:30 ([2.0, 3.0, 5.0]); with and without the 08:30 -> 09:30 direction (pre_dir); own exits (struct 1.0 x 0.5R is the owner's cell); one trade a day, flat 15:58; build days only.",
+ "family": "candle930",
+ "markets": [
+  "NQ"
+ ],
+ "bar_sizes": [
+  "1"
+ ],
+ "sessions": [
+  "nyam"
+ ],
+ "params": {
+  "atr_b": [
+   2.0,
+   3.0,
+   5.0
+  ],
+  "pre_dir": [
+   "off",
+   "with"
+  ]
+ },
+ "fixed": {
+  "start": "09:30",
+  "sec": 30,
+  "scan_end": "10:00"
+ },
+ "filters": [],
+ "exits": "own",
+ "limits": {
+  "max_tr": 1,
+  "dir": "both"
+ }
+}
