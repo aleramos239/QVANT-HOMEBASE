@@ -67,3 +67,19 @@ def test_max_tr_above_one_takes_the_next_displacement_once_flat():
     g = DROP + [DISP] + rest(5, 14995.0) + [bar(14995.0, 15011.0)] + rest(3, 14990.0) + [bar(14990.0, 14985.0), bar(14985.0, 14995.0)]
     t = S.run_session(st, tape_of(day(g + rest(200, 14995.0))), daily=list(DAILY), on_error="raise").trades
     assert [x["side"] for x in t] == ["long", "long"]          # the first hits its 15-point target, the 09:44 displacement is the second
+
+
+def test_fair_1800_reads_the_side_against_the_evening_before_open():
+    import datetime as dt
+    import numpy as np
+
+    def run(eve_px):
+        tp = tape_of(day(DROP + [DISP] + rest(200, 14995.0)))
+        t18 = S.et_ns(tp.date - dt.timedelta(days=1), "18:00")
+        tp = S.Tape(tp.root, tp.date, tp.contract, np.r_[t18, tp.ts], np.r_[eve_px, tp.px], np.r_[10, tp.size])
+        st = DO.DispOside({**BASE, "fair": "1800"})
+        st.ROLLS = frozenset()
+        return S.run_session(st, tp, daily=list(DAILY), on_error="raise").trades
+
+    assert [t["side"] for t in run(15010.0)] == ["long"]          # 18:00 at 15010: the day trades below it, the up displacement is a long
+    assert [t["side"] for t in run(14980.0)] == ["short"]         # 18:00 at 14980: above it, the 09:30 down displacement is the short

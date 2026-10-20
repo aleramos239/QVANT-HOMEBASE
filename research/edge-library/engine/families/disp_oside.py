@@ -16,6 +16,9 @@ THE RULE (fixed here, before any run):
     stop_mode pts ignores it. stop_at candle (the owner, 2026-10-19: "use the displacement candle extreme as the stop") passes the
     displacement candle's low (long) / high (short) instead; the Template floors it at 0.25 ATR and two ticks.
 
+fair 1800 (the owner, 2026-10-19: "try 6pm as the fair value"): the side is read against the first print at or after 18:00 ET of the
+evening before the trade date (a Monday's is the Sunday's) instead of the 09:30 open; no print 18:00-19:00 = no trade that day.
+
 MY PICKS, NOT THE OWNER'S WORDS: side read on the displacement candle's close (not tick by tick); entry at that close (market); entries
 09:30-15:00; bar 1 may be the 09:25 bar.
 
@@ -23,17 +26,27 @@ NO LOOK-AHEAD: the side and both bars are read from closed bars; the order goes 
 Tests: engine/tests/test_disp_oside.py."""
 from __future__ import annotations
 
+import datetime as dt
+
+import numpy as np
+from l2sim import et_ns
+
 from .fvg_odir import LAST, OPEN, FvgOdir
 
 
 class DispOside(FvgOdir):
     """disp_oside (module docstring). State per day: want = the side to enter now, or None."""
-    DEFAULTS = {"stop_at": "atr", "max_tr": 1}
-    SCHEMA = {"stop_at": ("choice", ("atr", "candle"))}
+    DEFAULTS = {"stop_at": "atr", "fair": "0930", "max_tr": 1}
+    SCHEMA = {"stop_at": ("choice", ("atr", "candle")), "fair": ("choice", ("0930", "1800"))}
     SCREEN_RUN = {}
 
     def fam_day(self, ctx):
-        self.want = None
+        self.want, self.f18 = None, None
+        if self.p["fair"] == "1800":
+            t0 = et_ns(ctx.date - dt.timedelta(days=1), "18:00")
+            i = int(np.searchsorted(ctx._s.ts, t0, side="left"))
+            if i < len(ctx._s.ts) and ctx._s.ts[i] < t0 + 3600 * 10**9:
+                self.f18 = float(ctx._s.px[i])     # the evening before: known long before 09:30
 
     def fam_update(self, ctx):
         self.want = None
@@ -42,7 +55,7 @@ class DispOside(FvgOdir):
         self._sync(ctx)
         if self.sid is None or now <= OPEN or now >= LAST or len(self.C) < 2:
             return
-        o = self.mo(OPEN)
+        o = self.f18 if self.p["fair"] == "1800" else self.mo(OPEN)
         if o is None:
             return
         o1, h1, l1, c1 = self.O[-2], self.H[-2], self.L[-2], self.C[-2]

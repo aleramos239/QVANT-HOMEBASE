@@ -1,0 +1,50 @@
+{
+ "name": "owner_disp_oside_1_cdl_f18_r05",
+ "source": {
+  "title": "Owner's idea, 2026-10-19 (third): displacement against the side of the 18:00 open (fair value), stop at the displacement candle's extreme, 1:0.5",
+  "channel": "owner"
+ },
+ "market": "NQ",
+ "bars": [
+  "1"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "disp_oside",
+  "settings": {
+   "stop_at": "candle",
+   "fair": "1800"
+  },
+  "words": "Use 9:30: if we are above the 9:30 open level then short, below then long; enter when we get displacement, 1 trade a day, 30 point stop, try 1:0.5, 0.75, 1, 1.5. Displacement: the body of the candle must be larger than the body of the previous candle and close above the wick of the previous candle."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.5,
+  "max_trades": 1
+ },
+ "taught": [
+  "[chat 2026-10-19] the 09:30 open sets the side: above = shorts, below = longs",
+  "[chat 2026-10-19] displacement = body larger than the previous candle's body, close beyond the previous candle's wick",
+  "[chat 2026-10-19] one trade a day",
+  "[chat 2026-10-19] stop = the displacement candle's extreme (owner: use the displacement candle extreme as the stop)",
+  "[chat 2026-10-19] target 1:0.5 (of 1:0.5, 0.75, 1, 1.5)",
+  "[chat 2026-10-19] try 6pm as the fair value (the 18:00 open replaces the 09:30 open)"
+ ],
+ "not_run": [
+  "BARS: 1-minute. Claude's pick (1m and 5m both run).",
+  "FAIR VALUE: the first print at or after 18:00 ET of the evening before (a Monday's is the Sunday's).",
+  "THE STOP: the candle's low (long) / high (short), measured from its close; the engine floors it at 0.25 ATR and two ticks.",
+  "THE ENTRY: a market order at the displacement candle's close. Claude's pick.",
+  "WINDOW: not said; entries 09:30-15:00, flat 15:58. Claude's pick.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only.",
+  "SIDE: price vs the 18:00 open is read on the displacement candle's close. Claude's pick."
+ ],
+ "control": "random"
+}
