@@ -1,5 +1,13 @@
 # Homebase — rules for assistants working in this repo
 
+## The server follows main by itself (owner, 2026-10-20)
+
+The live Desk runs on the Chicago VPS. Every commit on this Mac's `main` reaches it by itself (`deploy/linux/vpssync.sh`, launchd
+every 2 minutes): committed main only, never the working tree; it must import; it ships only when every account is flat and not
+09:10-09:35 ET, and restarts only the services the change reaches. So: a change is on the server once it is COMMITTED to main --
+commit every new file with the files that import it, and never commit half of someone else's work. Do not hand-copy files to the
+server (push.sh, scp) unless the owner asks; check `./deploy/linux/vpssync.sh status` and `homebase/.state/vpssync.log`.
+
 ## One pipeline (2026-10-18)
 
 The strategy pipeline is ONE pipeline (`docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`): it judges a strategy at one
