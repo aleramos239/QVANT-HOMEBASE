@@ -1093,6 +1093,7 @@ class LabRig:
                     "live": live.get(name),
                     "day_status": engine.day_status(name),
                     "killed": engine.killed_today(name),
+                    "rotation": engine.rotation_view(name),
                     "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
                                  for st in engine.day_states(name)],
                     "lab": labdesk.status_view(name),
@@ -1324,6 +1325,15 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
             raise refused(e) from None
         engine.journal("strategy_toggled", strategy=name, enabled=on)
         return {"ok": True, "strategy": name, "enabled": on}
+
+    @app.post("/api/rotation")
+    async def strategy_rotation(request: Request):
+        """server.py `strategy_rotation`, line for line (take turns: one account a trade)."""
+        body = await request.json()
+        name = known(body)
+        if not isinstance(body.get("on"), bool):
+            raise HTTPException(400, "on must be true or false")
+        return {"ok": True, "strategy": name, **engine.set_rotation(name, body["on"])}
 
     @app.post("/api/strategy-flatten")
     async def strategy_flatten(request: Request):

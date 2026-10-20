@@ -2436,7 +2436,7 @@ function stratView(name) {
     <div class="sd-note">${esc(execTxt)}</div>
     ${eqChart(name)}${figs}${links}
     ${twin ? labCurveHtml(name) + labResHtml(name, name) : ""}
-    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${addForm}</div>
+    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div><div class="mcap acct-note">An account's balance and its green or red figure are the whole account: every strategy and every manual trade on it, not this strategy alone.</div>` : ""}${rotationHtml(name)}${addForm}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat('${name}')" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       ${twin ? `<button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)})" title="The Lab page, on this strategy's tester twin (it follows the Desk's setting)">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="openBuiltinInLab(${jsArg(name)}, true)"${hasRun ? "" : " disabled"} title="Its twin's run on the unseen days, on the chart, trade by trade">Show on chart</button>` : ""}
@@ -2515,7 +2515,7 @@ function labDeskView(name, s) {
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
-    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${addForm}</div>
+    <div class="sec"><h2>Accounts</h2>${rows ? `<div class="agroup">${rows}</div>` : ""}${ro ? "" : rotationHtml(name)}${addForm}</div>
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
@@ -2981,6 +2981,32 @@ async function setBook(strategy, assignments) {
   }
   if (!r.ok) toast("Book update failed — " + (r.detail || "unknown"), 5000);
   refresh();
+}
+/* Take turns (account rotation, the owner 2026-10-19): each trade goes to ONE booked account, the next in the list that
+   can take it. Off (the default) = every booked account takes every trade. Shown once two accounts are booked, or while on.
+   Turning it OFF with a live account booked asks first: the next trade then goes to every account. */
+function rotationHtml(name) {
+  const rot = (((ST.strategies || {})[name]) || {}).rotation || {}, n = ((ST.book && ST.book[name]) || []).length;
+  if (n < 2 && !rot.on) return "";
+  return `<div class="agroup feed static"><div class="feed-row"><span class="h">Take turns: one account a trade</span>
+    <button class="switch" role="switch" aria-label="Take turns" aria-checked="${!!rot.on}"
+      title="${rot.on ? "ON — each trade goes to the next account in the list" : "OFF — every trade goes to every account"}"
+      onclick="setRotation(${jsArg(name)}, ${!rot.on})"></button></div>
+    ${rot.on && rot.next ? `<div class="feed-row"><span class="h">Next account: ${esc(acctShort(rot.next))}</span></div>` : ""}</div>`;
+}
+async function setRotation(name, on) {
+  if (switchBounced("rotation:" + name)) return;
+  const book = (ST.book && ST.book[name]) || [], N = stratLabel(name);
+  if (!on && book.length > 1 && book.some(a => !isDemoAcct(a.account)) && !await confirmDlg(
+      `Stop taking turns on ${N}?`, `Its next trade goes to all ${book.length} booked accounts, LIVE ones included.`,
+      "Stop taking turns", false)) { refresh(); return; }
+  let r, err = null;
+  try { r = await post("/api/rotation", {strategy: name, on}); } catch (e) { err = e || new Error("no answer"); }
+  refresh();
+  if (DEMO) return;
+  const why = answerWhy(r, err);
+  if (why) toast(`${N}: take turns NOT changed — ${why}.`, 8000);
+  else toast(on ? `${N} takes turns: one account a trade.` : `${N}: every account takes every trade.`);
 }
 function removeAsg(strategy, account) {
   const cur = (ST.book[strategy] || []).filter(a => a.account !== account);

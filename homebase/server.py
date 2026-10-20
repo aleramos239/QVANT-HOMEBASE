@@ -1185,6 +1185,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                     "live": live.get(name),
                     "day_status": engine.day_status(name),
                     "killed": engine.killed_today(name),
+                    "rotation": engine.rotation_view(name),       # take turns: {on, next account}
                     "accounts": [{**vars(st), "check_it": engine.needs_check(st)}
                                  for st in engine.day_states(name)],
                     **({"lab": labdesk.status_view(name)} if labdesk.on else {}),   # None unless kind "lab"
@@ -1562,6 +1563,18 @@ def create_app(cfg: config_mod.AppCfg | None = None,
                        enabled=cfg.strategies[name].enabled)
         return {"ok": True, "strategy": name,
                 "enabled": cfg.strategies[name].enabled}
+
+    @app.post("/api/rotation")
+    async def strategy_rotation(request: Request):
+        """{strategy, on}: take turns -- each trade goes to ONE booked account, the next in book order that can take
+        it -- or (off, the default) every booked account, as always."""
+        body = await request.json()
+        name = str((body or {}).get("strategy") or "") if isinstance(body, dict) else ""
+        if name not in cfg.strategies:
+            raise HTTPException(404, f"unknown strategy {name!r}")
+        if not isinstance(body.get("on"), bool):
+            raise HTTPException(400, "on must be true or false")
+        return {"ok": True, "strategy": name, **engine.set_rotation(name, body["on"])}
 
     @app.post("/api/strategy-rr")
     async def strategy_rr(request: Request):
