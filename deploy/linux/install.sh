@@ -10,7 +10,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 USR="$(stat -c %U "$REPO")"
 UNITS=(homebase.service homebase-charts.service homebase-labrun.service homebase-ticks.service homebase-ticks.timer)
-# not the tick recorder's timer: the Mac's job keeps the archive (and each run on the live login bumps the charts' socket)
+# the tick recorder's timer runs HERE since 2026-10-20: this machine holds the live md login, and the Mac's job on that
+# login kicked this machine's chart feed off every hour. The Mac pulls the finished days (deploy/linux/tickpull.sh).
 STARTED=(homebase.service homebase-charts.service homebase-labrun.service)
 
 if [ "${1:-}" = "remove" ]; then
@@ -38,8 +39,8 @@ for u in "${UNITS[@]}"; do
   sed -e "s|__REPO__|$REPO|g" -e "s|__USER__|$USR|g" "$REPO/deploy/linux/$u" > "/etc/systemd/system/$u"
 done
 systemctl daemon-reload
-systemctl disable --now homebase-ticks.timer >/dev/null 2>&1 || true
 systemctl enable "${STARTED[@]}" >/dev/null 2>&1
+systemctl enable --now homebase-ticks.timer >/dev/null 2>&1
 systemctl restart "${STARTED[@]}"
 sleep 2
 systemctl --no-pager --lines=0 status "${STARTED[@]}" | grep -E "^●|Active:" || true

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.ramosquant.homebase-tickpull</string>
+  <!-- deploy/linux/tickpull.sh: the VPS's finished tick days -> ~/futures_ticks, hourly at :50 (the VPS
+       tick job runs at :30) and at load. Replaces the Mac's own hourly tick job (2026-10-20). -->
+  <key>ProgramArguments</key>
+  <array><string>__REPO__/deploy/linux/tickpull.sh</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>50</integer></dict>
+  <key>Nice</key><integer>10</integer>
+  <key>LowPriorityIO</key><true/>
+  <key>StandardOutPath</key><string>__REPO__/homebase/.state/tickpull.log</string>
+  <key>StandardErrorPath</key><string>__REPO__/homebase/.state/tickpull.log</string>
+</dict>
+</plist>
