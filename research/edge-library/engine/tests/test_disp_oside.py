@@ -83,3 +83,21 @@ def test_fair_1800_reads_the_side_against_the_evening_before_open():
 
     assert [t["side"] for t in run(15010.0)] == ["long"]          # 18:00 at 15010: the day trades below it, the up displacement is a long
     assert [t["side"] for t in run(14980.0)] == ["short"]         # 18:00 at 14980: above it, the 09:30 down displacement is the short
+
+
+def test_tp_fit_skips_a_long_whose_target_passes_the_fair_level():
+    def run(rr):
+        st = DO.DispOside({**BASE, "stop_mode": "struct", "stop_at": "candle", "tgt_r": rr, "tp_fit": "on"})
+        st.ROLLS = frozenset()
+        return S.run_session(st, tape_of(day(DROP + [DISP] + rest(200, 14995.0))), daily=list(DAILY), on_error="raise").trades
+
+    assert len(run(0.5)) == 1                 # stop 6 points: target 14998 <= the 09:30 open 15000
+    assert run(1.0) == []                     # target 15001 passes 15000: skipped
+
+
+def test_wait_skips_displacements_before_0930_plus_wait():
+    st = DO.DispOside({**BASE, "wait": 15})
+    st.ROLLS = frozenset()
+    g = DROP + [DISP] + rest(12, 14995.0) + [bar(14995.0, 14985.0), bar(14985.0, 14998.0)] + rest(200, 14998.0)
+    t = S.run_session(st, tape_of(day(g)), daily=list(DAILY), on_error="raise").trades
+    assert len(t) == 1 and abs(t[0]["entry_price"] - 14998.0) <= 1.5      # 09:32's displacement skipped, the 09:46 one (close 14998) taken

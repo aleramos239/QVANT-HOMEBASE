@@ -19,6 +19,13 @@ THE RULE (fixed here, before any run):
 fair 1800 (the owner, 2026-10-19: "try 6pm as the fair value"): the side is read against the first print at or after 18:00 ET of the
 evening before the trade date (a Monday's is the Sunday's) instead of the 09:30 open; no print 18:00-19:00 = no trade that day.
 
+tp_fit on (the owner, 2026-10-19: "the tp must fit below the fair value level, if it doesn't then skip"): the target, read at the
+signal close (close +/- tgt_r x the stop distance), must not pass the fair level (long: target <= fair, short: target >= fair); a signal
+whose target does not fit is skipped and the next displacement of the day may still trade.
+
+wait (the owner, 2026-10-19: "start trading 15 minutes after the fair value level, so first try 9:45"): the displacement candle must
+close at least `wait` minutes after 09:30 (wait 15 = from 09:45). Default 0.
+
 MY PICKS, NOT THE OWNER'S WORDS: side read on the displacement candle's close (not tick by tick); entry at that close (market); entries
 09:30-15:00; bar 1 may be the 09:25 bar.
 
@@ -36,8 +43,9 @@ from .fvg_odir import LAST, OPEN, FvgOdir
 
 class DispOside(FvgOdir):
     """disp_oside (module docstring). State per day: want = the side to enter now, or None."""
-    DEFAULTS = {"stop_at": "atr", "fair": "0930", "max_tr": 1}
-    SCHEMA = {"stop_at": ("choice", ("atr", "candle")), "fair": ("choice", ("0930", "1800"))}
+    DEFAULTS = {"stop_at": "atr", "fair": "0930", "tp_fit": "off", "wait": 0, "max_tr": 1}
+    SCHEMA = {"stop_at": ("choice", ("atr", "candle")), "fair": ("choice", ("0930", "1800")), "tp_fit": ("choice", ("off", "on")),
+              "wait": ("int", 0, 300)}
     SCREEN_RUN = {}
 
     def fam_day(self, ctx):
@@ -53,9 +61,9 @@ class DispOside(FvgOdir):
         step = self.tf * 60
         now = (self.M[-1][0] // step + 1) * step     # the clock close of this tf bar
         self._sync(ctx)
-        if self.sid is None or now <= OPEN or now >= LAST or len(self.C) < 2:
+        if self.sid is None or now <= OPEN or now < OPEN + 60 * self.p["wait"] or now >= LAST or len(self.C) < 2:
             return
-        o = self.f18 if self.p["fair"] == "1800" else self.mo(OPEN)
+        o = self.fair = self.f18 if self.p["fair"] == "1800" else self.mo(OPEN)
         if o is None:
             return
         o1, h1, l1, c1 = self.O[-2], self.H[-2], self.L[-2], self.C[-2]
@@ -74,6 +82,10 @@ class DispOside(FvgOdir):
                 struct = self.L[-1] if sd > 0 else self.H[-1]
             else:
                 struct = self.C[-1] - sd * self.atr
+            if self.p["tp_fit"] == "on":
+                tp = self.C[-1] + sd * self.p["tgt_r"] * self._dist(ctx, self.C[-1], struct)
+                if (tp - self.fair) * sd > 0:
+                    return                           # the target would pass the fair level: skip this one
             self._mkt(ctx, self.want, struct=struct)
 
 
