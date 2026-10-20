@@ -200,7 +200,7 @@ SPECS = [
            "group": {"type": "string", "description": "The group's name (1-40 characters). \"\" or left out: "
                                                       "in no group (the list shows it under Ungrouped)."}},
           ["strategy"]),
-] + BLUEPRINT_SPECS + PIPELINE_SPECS + DESK_SPECS
+] + BLUEPRINT_SPECS + DESK_SPECS     # PIPELINE_SPECS left out: the pipeline is off (the owner, 2026-10-20)
 
 
 # ---------------------------------------------------------------- formatting

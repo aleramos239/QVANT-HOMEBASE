@@ -291,8 +291,8 @@ test('the whole book card: every fact, every account (one whose rules are not co
 const LAB = rd('charts/lab.js');
 const PIPE = LAB.slice(LAB.indexOf('/* ---- the strategy pipeline in the sidebar ----'), LAB.indexOf('function paintEditor()'));
 
-test('the view switcher lists the four views: Strategies, Arsenal, then Queue, Book (the Payout page is retired, 2026-10-18)', () => {
-  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\['pq', 'Queue'\], \['pb', 'Book'\]\];/);
+test('the view switcher lists two views: Strategies, Arsenal (Queue and Book hidden: the pipeline is off, owner 2026-10-20)', () => {
+  assert.match(LAB, /const VIEWS = \[\['lib', 'Strategies'\], \['tk', 'Arsenal'\]\], PIPE_TABS = \[\];/);
   assert.doesNotMatch(LAB, /payMain|paySide|loadPayout|'pp'/, 'no Payout page');
   assert.doesNotMatch(LAB, /'Blueprint'|'Guide'|\/api\/tester\/blueprint/, 'the Blueprint and Guide views are gone, with what only they called');
   assert.match(LAB, /if \(VIEW_IDS\.includes\(v\)\) S\.view = v;/, 'a stored view that is no longer listed opens Strategies');

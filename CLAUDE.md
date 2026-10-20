@@ -8,18 +8,15 @@ every 2 minutes): committed main only, never the working tree; it must import; i
 commit every new file with the files that import it, and never commit half of someone else's work. Do not hand-copy files to the
 server (push.sh, scp) unless the owner asks; check `./deploy/linux/vpssync.sh status` and `homebase/.state/vpssync.log`.
 
-## One pipeline (2026-10-18)
+## The strategy pipeline is OFF (owner, 2026-10-20)
 
-The strategy pipeline is ONE pipeline (`docs/superpowers/specs/2026-10-18-one-pipeline-two-tags-design.md`): it judges a strategy at one
-contract after costs, with no prop simulator, and tags a pass Live or Live + Prop. The WR, PAYOUT and FUNDED pipelines and the group step
-are retired and their code is removed. Never bring the payout pipeline back or write its lock file (`payout_enabled`): only the owner can
-decide that.
+The pipeline, its Queue and its Book are switched off for now. Do not use it, start it, add to it or suggest it: no `pipeline_*` chat
+tools (removed from the connector), no `bp.py pipe ...` (it refuses while `~/.homebase/pipeline/DISABLED` exists), no Lab Queue/Book
+(hidden). Its launchd runner is parked in `~/Library/LaunchAgents/disabled/`, the nightly strategy-hunter task in
+`~/.claude/scheduled-tasks-disabled/`, the `pipeline` skill in `~/.claude/skills-disabled/`. Only the owner turns it back on.
+Never bring the payout pipeline back or write its lock file (`payout_enabled`).
 
 ## Strategy work follows the blueprint (house law, 2026-10-05)
-
-**To run an idea, use the pipeline first** (skill `pipeline`; chat tools `pipeline_add / pipeline_status / pipeline_control / pipeline_decide /
-pipeline_book`; Lab > Queue, Book, Guide). It runs the blueprint's phases by code, stops at the first fail, and keeps the book. The rest of
-this section is the by-hand route and the law the pipeline is built on.
 
 Any request to build, test, backtest, optimize or judge a strategy or a strategy idea follows
 `research/edge-library/BLUEPRINT.md`, section 2 (skill: `strategy-blueprint`). Read it before the first run.

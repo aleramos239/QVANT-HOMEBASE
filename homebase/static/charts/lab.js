@@ -22,7 +22,7 @@ const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, 
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
    'pq' (its Queue), 'pb' (its Book). A stored view that is no longer one of these opens Strategies. */
-const VIEWS = [['lib', 'Strategies'], ['tk', 'Arsenal']], PIPE_TABS = [['pq', 'Queue'], ['pb', 'Book']];
+const VIEWS = [['lib', 'Strategies'], ['tk', 'Arsenal']], PIPE_TABS = [];   // Queue + Book hidden: the pipeline is off (the owner, 2026-10-20); was [['pq', 'Queue'], ['pb', 'Book']]
 const PIPE_VIEWS = PIPE_TABS.map(([v]) => v), VIEW_IDS = [...VIEWS, ...PIPE_TABS].map(([v]) => v);
 const pipeOn = () => PIPE_VIEWS.includes(S.view);      // a pipeline view is open: the middle of the page is its own
 try { const v = localStorage.getItem('hb_lab_view'); if (VIEW_IDS.includes(v)) S.view = v; } catch (_) { /* private mode: strategies */ }
@@ -1198,11 +1198,11 @@ const ICON_CHEV = '<svg class="lb-chev" viewBox="0 0 24 24" fill="none" stroke="
    Six views used to sit in two rows of segmented buttons. Now the sidebar's head is ONE button that names the view
    on show; it opens a short menu in two groups -- the library of strategies, and the pipeline that tests ideas. */
 const VIEW_GROUPS = [['Library', VIEWS, { lib: 'Your saved scripts and the built-in ones', tk: 'Every block, chat tool, skill and script, read-only' }],
-  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage' }]];
+  ['Pipeline', PIPE_TABS, { pq: 'Ideas waiting, running and finished', pb: 'The strategies that passed every stage' }]].filter(([, v]) => v.length);
 const ICON_UPDOWN = '<svg class="lb-ud" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.2 5 2.2l3 3M2 8.8l3 3 3-3"/></svg>';
 function viewName(v) { const t = [...VIEWS, ...PIPE_TABS].find(([id]) => id === v); return t ? t[1] : 'Strategies'; }
 function viewSwitch() {
-  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies, Arsenal, Queue and Book"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
+  return `<button class="lb-view" data-act="viewmenu" data-fk="viewmenu" aria-haspopup="menu" aria-expanded="false" aria-label="${esc(viewName(S.view))}: choose what this list shows" title="Switch between Strategies and Arsenal"><b>${esc(viewName(S.view))}</b>${ICON_UPDOWN}</button>`;
 }
 function viewMenu(anchor) {
   const html = VIEW_GROUPS.map(([group, views, why]) => `<h6>${group}</h6>${views.map(([v, t]) =>

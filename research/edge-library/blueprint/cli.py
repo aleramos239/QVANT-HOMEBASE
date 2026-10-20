@@ -401,6 +401,9 @@ def _fills(a):
 def _pipe(a) -> dict:
     """`pipe <sub>`: the strategy pipeline's commands (pipe_runner.command). --root is the PIPELINE's folder here; `add` reads
     its card from --spec (- = stdin)."""
+    from . import pipe_store
+    if (pipe_store.root(a.root) / "DISABLED").exists():     # the owner turned the pipeline off (2026-10-20); delete the file to turn it back on
+        raise J.Refuse("the pipeline is OFF (the owner, 2026-10-20): do not use it. Strategy work goes by hand (strategy-blueprint).")
     from . import pipe_runner                       # loaded when a pipe command is read, never with this module
     card = None
     if a.sub == "add":

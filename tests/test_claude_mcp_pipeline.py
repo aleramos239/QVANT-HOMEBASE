@@ -28,6 +28,8 @@ from homebase import arsenal, ideastore, paths
 from homebase.claude_mcp import blueprint_tools, pipeline_tools, protocol, tools
 from homebase.claude_mcp.client import Client, ToolError
 
+pytestmark = pytest.mark.skip(reason="the pipeline_* chat tools are off (the owner, 2026-10-20); unskip when they come back")
+
 REPO = Path(__file__).resolve().parent.parent
 TOOLKIT = REPO / "research" / "edge-library"
 REAL_HOME = Path(pwd.getpwuid(os.getuid()).pw_dir)                      # the real one, whatever HOME says
