@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import fcntl
 from bisect import bisect_left
 import json
 import math
@@ -141,6 +142,19 @@ BOT_BUSY_STATUSES = ("placing", "placed", "live", "error")   # C3: trading.BOT_B
 MD_SWITCH_COOLDOWN_S = 600         # I3: at most one switch ATTEMPT every 10 min
 MD_SWITCH_BUDGET_HEADROOM = 120    # I3/N4: refuse a switch once the TARGET login is this close to 180/h
 MD_SWITCH_TIMEOUT_S = 600          # N3: the PUT never waits longer than this for the feed
+
+
+def tick_job_running() -> bool:
+    """True while the tick job (hourly, or a Refresh) holds its lock: homebase.ticks.archive_lock."""
+    try:
+        with open(state_dir() / "ticks.lock", "a") as f:
+            fcntl.flock(f, fcntl.LOCK_SH | fcntl.LOCK_NB)   # released at close; the job never waits for it
+    except BlockingIOError:
+        return True
+    except OSError:
+        pass
+    return False
+
 
 
 def log(msg: str) -> None:
@@ -819,6 +833,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         stamp = await asyncio.to_thread(store.archive_stamp, root, d)
         if stamp is None or stamp == repair_seen.get(root):
             return
+        if tick_job_running():
+            return      # it rewrites the file page by page: one reload when it is done, not one a page
         t0 = clock()
         sess = await asyncio.to_thread(store.load, root, d)
         if sess is None or hub.today_date.get(root) != d:

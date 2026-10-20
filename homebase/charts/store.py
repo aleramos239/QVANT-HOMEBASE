@@ -25,6 +25,7 @@ import re
 import threading
 import zlib
 from bisect import bisect_left
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from operator import itemgetter
 from dataclasses import dataclass, field, replace
@@ -59,23 +60,38 @@ class Session:
     gaps: list = field(default_factory=list)   # [[start_ms, end_ms], ...]
 
 
+def iter_table(path: Path) -> tuple[list[str], Iterator[list[str]]]:
+    """read_table, one record at a time: a whole ES day held as lists of strings is ~700 MB, which the 2 GB
+    server could not spare at each reload (OOM-killed 2026-10-20)."""
+    try:
+        fh = gzip.open(path, "rt", newline="")
+    except OSError:
+        return [], iter(())
+    try:
+        rd = csv.reader(fh)
+        header = next(rd, None) or []
+    except (EOFError, zlib.error, OSError):
+        fh.close()
+        return [], iter(())
+
+    def rows() -> Iterator[list[str]]:
+        n = len(header)
+        try:
+            with fh:
+                for rec in rd:
+                    if len(rec) == n and rec[0] != header[0]:
+                        yield rec
+        except (EOFError, zlib.error, OSError):
+            pass
+    return header, rows()
+
+
 def read_table(path: Path) -> tuple[list[str], list[list[str]]]:
     """(header, records) of a gzip CSV that may hold several gzip members
     (the live recorder appends one per flush) and may end in a member torn
     by a crash — the torn tail is dropped, never raised."""
-    header: list[str] = []
-    recs: list[list[str]] = []
-    try:
-        with gzip.open(path, "rt", newline="") as fh:
-            rd = csv.reader(fh)
-            header = next(rd, None) or []
-            n = len(header)
-            for rec in rd:
-                if len(rec) == n and rec[0] != header[0]:
-                    recs.append(rec)
-    except (EOFError, zlib.error, OSError):
-        pass
-    return header, recs
+    header, rows = iter_table(path)
+    return header, list(rows)
 
 
 def gaps_path(path: Path) -> Path:
@@ -85,7 +101,7 @@ def gaps_path(path: Path) -> Path:
     return path.with_name(stem + ".live.gaps")
 
 
-def ticks_from_table(header: list[str], recs: list[list[str]],
+def ticks_from_table(header: list[str], recs: Iterable[list[str]],
                      live: bool = False) -> tuple[list[Tick], bool]:
     """Classified ticks + whether the file carries quotes. A live file is
     deduped by id and re-sorted by (time, id) first: a gap refill appends
@@ -100,29 +116,39 @@ def ticks_from_table(header: list[str], recs: list[list[str]],
     ix = {k: i for i, k in enumerate(header)}
     it, ip, isz = ix["ts_ms"], ix["price"], ix["size"]
     ib, ia, iid = ix.get("bid"), ix.get("ask"), ix.get("id")
+
+    def parsed(r):      # (ts, id, price, size, bid, ask) as numbers: a third of the strings' memory
+        b = r[ib] if ib is not None else ""
+        a = r[ia] if ia is not None else ""
+        k = r[iid] if iid is not None else ""
+        return (int(r[it]), int(k) if k else 0, float(r[ip]), int(r[isz]),
+                float(b) if b else None, float(a) if a else None), k
+
+    rows: Iterable = (parsed(r)[0] for r in recs)
     if live and iid is not None:
-        seen: set[str] = set()
+        seen: set[int] = set()
         uniq = []
         for r in recs:
-            k = r[iid]
-            if k and k in seen:
-                continue
-            seen.add(k)
-            uniq.append(r)
-        recs = sorted(uniq, key=lambda r: (int(r[it]), int(r[iid] or 0)))
+            row, k = parsed(r)
+            if k:
+                if row[1] in seen:
+                    continue
+                seen.add(row[1])
+            uniq.append(row)
+        del seen
+        uniq.sort(key=_TS_ID)
+        rows = uniq
     clf = SideClassifier()
     out: list[Tick] = []
     quotes = False
-    for r in recs:
-        b = r[ib] if ib is not None else ""
-        a = r[ia] if ia is not None else ""
-        if b and a:
+    for ts, tid, p, size, b, a in rows:
+        if b is not None and a is not None:
             quotes = True
-        p = float(r[ip])
-        out.append(Tick(int(r[it]), p, int(r[isz]),
-                        clf.side(p, float(b) if b else None, float(a) if a else None),
-                        int(r[iid]) if iid is not None and r[iid] else 0))
+        out.append(Tick(ts, p, size, clf.side(p, b, a), tid))
     return out, quotes
+
+
+_TS_ID = itemgetter(0, 1)          # a parsed row's (ts_ms, id)
 
 
 _TIME_ID = itemgetter(0, 4)        # Tick's (ts_ms, id)
@@ -353,7 +379,7 @@ class TickStore:
             hit = self._archive_memo.get(key)
         if hit is not None:
             return hit
-        header, recs = read_table(arch)
+        header, recs = iter_table(arch)
         ticks, quotes = ticks_from_table(header, recs, live=True)
         side = (ticks, {t.id for t in ticks if t.id}, quotes)
         with self._merged_lock:
@@ -392,7 +418,7 @@ class TickStore:
         f = self.pick(root, d)
         if f is None:
             return None
-        header, recs = read_table(f.path)
+        header, recs = iter_table(f.path)
         ticks, quotes = ticks_from_table(header, recs, live=f.live)
         if f.live and f.merge_with is not None:
             ticks, quotes = self._with_archive(f, ticks, quotes)

@@ -2204,3 +2204,14 @@ def test_a_horizontal_line_can_carry_an_alert_and_nothing_else_can():
             check_drawings([{**HLINE, "alert": bad}])
     with pytest.raises(ValueError):
         check_drawings([{**TREND, "alert": {"dir": "up", "fired": False}}])
+
+
+def test_tick_job_running_reads_the_tick_jobs_lock(tmp_path, monkeypatch):
+    import fcntl
+    from homebase.charts import server as srv
+    monkeypatch.setattr(srv, "state_dir", lambda: tmp_path)
+    assert srv.tick_job_running() is False
+    with open(tmp_path / "ticks.lock", "a") as f:
+        fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)       # what homebase.ticks.archive_lock holds
+        assert srv.tick_job_running() is True
+    assert srv.tick_job_running() is False

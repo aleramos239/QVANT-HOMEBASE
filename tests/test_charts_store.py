@@ -188,8 +188,8 @@ def test_an_archive_update_is_picked_up_and_the_union_is_cached_until_then(tmp_p
     assert len(s1.ticks) == 3
     parsed = []
     import homebase.charts.store as mod
-    real = mod.read_table
-    mod.read_table = lambda p: parsed.append(p.name) or real(p)
+    real = mod.iter_table
+    mod.iter_table = lambda p: parsed.append(p.name) or real(p)
     try:
         st.load("NQ", D)
         assert parsed == [f"{D}_NQZ6.live.csv.gz"]              # unchanged archive: only the live side is read again
@@ -197,7 +197,7 @@ def test_an_archive_update_is_picked_up_and_the_union_is_cached_until_then(tmp_p
         parsed.clear()
         assert len(st.load("NQ", D).ticks) == 4 and parsed == [f"{D}_NQZ6.live.csv.gz"]
     finally:
-        mod.read_table = real
+        mod.iter_table = real
     # the hourly repair lands more ticks (an atomic replace, as tickarchive does)
     write_gz(arch, rows(session_ms(D, 1, 0), [100.0, 100.25, 100.5, 100.75], first_id=1))
     assert st.archive_stamp("NQ", D) != before
