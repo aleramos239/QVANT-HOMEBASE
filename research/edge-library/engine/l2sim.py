@@ -280,9 +280,8 @@ def _wf_check(d, level: str, root: str) -> None:
     if str(W) not in sys.path:
         sys.path.append(str(W))
     from blueprint import wfmonths as WM
-    bl = WM.blocks(root)
-    m = _date(d).isoformat()[:7]
-    if m not in ({x for b in bl for x in b["is"]} if level == ALLOW_WF_IS else {b["oos"] for b in bl}):
+    ins, oos = WM.month_sets(root)
+    if _date(d).isoformat()[:7] not in (ins if level == ALLOW_WF_IS else oos):
         raise HoldoutSealed(f"{d} is not in an {'in-sample' if level == ALLOW_WF_IS else 'out-of-sample'} month of the {root} 3:1 "
                             f"blocks: the {level} switch never opens it")
 
@@ -530,7 +529,7 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
     start, end = _date(start), _date(end)
     level = allow_level(allow_holdout, allow_exam, allow_check)
     check_holdout(end, level, root)
-    if isinstance(level, str) and level in (ALLOW_BT, *WF_SWITCHES):  # the TEST switch seals what lies BEFORE it: a range that starts in the build days raises
+    if isinstance(level, str) and level in (ALLOW_BT, *WF_SWITCHES):  # these switches seal the START too (TEST: the build days; 3:1: the other months)
         check_holdout(start, level, root)
     out = set()
     for y in range(start.year, end.year + 1):
