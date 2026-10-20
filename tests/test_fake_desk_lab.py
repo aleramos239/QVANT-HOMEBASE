@@ -873,7 +873,8 @@ def test_the_background_loops_work_the_prints_the_clock_and_the_settle_by_themse
 
 
 # ---------------------------------------------------------------- the copied route bodies follow the real server
-SERVER = (Path(fake_desk.__file__).resolve().parents[1] / "homebase" / "server.py").read_text(encoding="utf-8")
+_HB = Path(fake_desk.__file__).resolve().parents[1] / "homebase"
+SERVER = "\n".join(f.read_text(encoding="utf-8") for f in [_HB / "server.py", *sorted((_HB / "routes").glob("*.py"))])
 TOOL = Path(fake_desk.__file__).read_text(encoding="utf-8")
 CALL = __import__("re").compile(r"\b(labdesk|labdesk_mod|engine)\.([A-Za-z_]+)")
 

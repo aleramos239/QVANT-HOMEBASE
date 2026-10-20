@@ -226,10 +226,14 @@ def test_source_route_serves_builtins_and_draft_text_without_running_it(tmp_path
 
 # ---------------------------------------------------------------- the desk can never load one
 
-DESK_MODULES = ["homebase/server.py", "homebase/engine.py", "homebase/trading.py", "homebase/timer.py",
+DESK_MODULES = ["homebase/server.py", "homebase/engine.py", "homebase/engine_lab.py", "homebase/daystate.py",
+                "homebase/equity.py", "homebase/trading.py", "homebase/timer.py",
                 "homebase/config.py", "homebase/rules.py", "homebase/desk_api.py", "homebase/feed.py",
                 "homebase/gate.py", "homebase/risk.py", "homebase/review.py", "homebase/metrics.py",
-                "homebase/charts/desk.py", "homebase/charts/paper.py", "homebase/charts/paperbook.py"]
+                "homebase/charts/desk.py", "homebase/charts/paper.py", "homebase/charts/paperbook.py",
+                "homebase/routes/__init__.py", "homebase/routes/accounts.py", "homebase/routes/control.py",
+                "homebase/routes/lab.py", "homebase/routes/records.py", "homebase/routes/status.py",
+                "homebase/routes/strategies.py"]
 
 
 def test_no_desk_module_references_drafts():

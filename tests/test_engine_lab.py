@@ -11,6 +11,7 @@ import json
 import pytest
 
 from homebase import engine as engine_mod
+from homebase import engine_lab
 from homebase import labcfg
 from homebase.broker.base import FillEvent, OrderRequest, OrderResult
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
@@ -106,7 +107,7 @@ def events(tmp_path, name=None):
 
 
 # ------------------------------------------------------------------------------------------------ the hooks
-LAB_NAMES = [n for n in vars(Engine) if n.startswith(("_lab", "lab_"))]
+LAB_NAMES = [n for n in vars(engine_lab.LabMixin) if n.startswith(("_lab", "lab_"))]   # the Lab half, engine_lab.py
 
 
 def tripwire(eng) -> dict:
@@ -2418,6 +2419,7 @@ def test_s2_nothing_is_left_placing_when_the_round_cannot_be_built(tmp_path, mon
         raise TypeError("cannot build")
 
     monkeypatch.setattr(engine_mod, "asdict", broken)
+    monkeypatch.setattr(engine_lab, "asdict", broken)     # the Lab half reads its own module's asdict
     out = run(eng.lab_enter(LAB, [leg()], {"a1": 1}, max_rounds=3))["accounts"]["a1"]
     assert out["ok"] is False and ads["a1"].brackets == []
     assert not [s for s in eng.states.values() if s.status == "placing"]

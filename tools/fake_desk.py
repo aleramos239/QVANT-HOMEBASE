@@ -1037,7 +1037,7 @@ class LabRig:
                 "store": str(self.store)}
 
     async def status(self) -> dict:
-        """GET /api/status with the real route's keys (server.py `status`). The strategies block, the accounts
+        """GET /api/status with the real route's keys (routes/status.py `status`). The strategies block, the accounts
         block, the book and the journal tail are built as there, by the same calls. What is NOT the real thing:
         readiness holds only the Mode line and the two Lab lines (labdesk.readiness_line / orphan_line) -- the real
         compute_readiness lives in server.py; timer / levels / feed are empty (no timer, no feed here); no notices."""
@@ -1265,7 +1265,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/arm")
     async def arm(request: Request):
-        """server.py `arm`. Differs: the switch is kept in the engine folder's fake-desk.json, not in config.json."""
+        """routes/control.py `arm`. Differs: the switch is kept in the engine folder's fake-desk.json, not in
+        config.json."""
         body = await request.json()
         cfg.armed = bool(body.get("armed"))
         rig.save_state()
@@ -1283,8 +1284,9 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/kill")
     async def kill():
-        """server.py `kill`: disarm, then engine.flatten_today and each account's cancel_all / flatten_all under the
-        same locks. Differs: there is no chart trading to switch off, and the disarm goes to fake-desk.json."""
+        """routes/control.py `kill`: disarm, then engine.flatten_today and each account's cancel_all / flatten_all
+        under the same locks. Differs: there is no chart trading to switch off, and the disarm goes to
+        fake-desk.json."""
         cfg.armed = False
         rig.save_state()
         async with _kill_lock(), engine.all_kill_locks():
@@ -1310,7 +1312,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/strategy")
     async def strategy_toggle(request: Request):
-        """server.py `strategy_toggle`, the Lab branch, line for line."""
+        """routes/strategies.py `strategy_toggle`, the Lab branch, line for line."""
         body = await request.json()
         name = known(body)
         if not labdesk.is_lab(name):
@@ -1328,7 +1330,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/rotation")
     async def strategy_rotation(request: Request):
-        """server.py `strategy_rotation`, line for line (take turns: one account a trade)."""
+        """routes/strategies.py `strategy_rotation`, line for line (take turns: one account a trade)."""
         body = await request.json()
         name = known(body)
         if not isinstance(body.get("on"), bool):
@@ -1337,7 +1339,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/strategy-flatten")
     async def strategy_flatten(request: Request):
-        """server.py `strategy_flatten`, the Lab branch, line for line."""
+        """routes/strategies.py `strategy_flatten`, the Lab branch, line for line."""
         body = await request.json()
         name = known(body)
         if not labdesk.is_lab(name):
@@ -1356,8 +1358,8 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
 
     @app.post("/api/book")
     async def set_book(request: Request):
-        """server.py `set_book`: the same reading of the rows, then LabDesk.set_book (a Lab strategy is the only
-        kind here)."""
+        """routes/strategies.py `set_book`: the same reading of the rows, then LabDesk.set_book (a Lab strategy is the
+        only kind here)."""
         body = await request.json()
         name = known(body)
         rows = []
@@ -1379,7 +1381,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
         raise only_lab
 
     def lab_route(path: str, shape: str, call) -> None:
-        """server.py `lab_limits` / `lab_remove` / `lab_clear`: the body must be an object, LabDesk does the rest."""
+        """routes/lab.py `lab_limits` / `lab_remove` / `lab_clear`: the body must be an object, LabDesk does the rest."""
         async def handler(request: Request):
             body = await request.json()
             if not isinstance(body, dict):
@@ -1401,7 +1403,7 @@ def create_lab_desk(store, root, *, key: str, clock=None, ticks: str | None = No
     # ---- what else the page reads: the real function where there is one, else an empty answer of the real shape
     @app.get("/api/strategy-live")
     async def strategy_live(strategy: str):
-        """server.py `strategy_live`: metrics.strategy_live_detail on this Desk's own journal."""
+        """routes/records.py `strategy_live`: metrics.strategy_live_detail on this Desk's own journal."""
         from homebase.metrics import strategy_live_detail
         if strategy not in cfg.strategies:
             raise HTTPException(404, f"unknown strategy {strategy!r}")

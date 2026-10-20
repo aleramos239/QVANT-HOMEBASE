@@ -10,6 +10,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import homebase.config as config_mod
+from homebase import equity
 from homebase.config import AccountCfg, AppCfg, StrategyCfg
 from homebase.server import create_app
 from tests.test_engine import FakeAdapter
@@ -197,10 +198,9 @@ def test_journal_endpoint_reads_off_the_event_loop(client, tmp_path, monkeypatch
 
 
 def test_calendar_close_over_close(client, tmp_path):
-    from homebase import server as S
     for date, eq in [("2026-09-09", 50000.0), ("2026-09-10", 50250.0),
                      ("2026-09-11", 50100.0)]:
-        S.record_equity("ACC1", eq, date)
+        equity.record_equity(tmp_path / "equity.jsonl", "ACC1", eq, date)
     d = client.get("/api/calendar", params={"month": "2026-09",
                                             "account": "ACC1"}).json()
     assert d["days"]["2026-09-10"] == 250.0
@@ -938,7 +938,6 @@ def _write_equity(tmp_path, n, accounts):
 
 def test_calendar_answers_the_same_from_the_cached_file_and_reads_it_once(client, tmp_path, monkeypatch):
     from pathlib import Path
-    from homebase import server as S
     accounts = ["ACC1", "ACC2", "ACC3"]
     _write_equity(tmp_path, 3000, accounts)
     reads, orig = [], Path.read_text
@@ -967,7 +966,7 @@ def test_calendar_answers_the_same_from_the_cached_file_and_reads_it_once(client
         assert got.json() == w and list(got.json()["days"]) == list(w["days"])
     assert len(reads) == 1                         # eight calls, two reads each before: one parse
     assert want[("ACC1", "2026-09")]["days"] and want[("NOPE", "2026-09")]["history_since"] is None
-    S.record_equity("ACC1", 61000.0, "2026-09-30")                      # the file changed: read again, once
+    equity.record_equity(tmp_path / "equity.jsonl", "ACC1", 61000.0, "2026-09-30")   # the file changed: read again, once
     w = old_calendar("ACC1", "2026-09")
     assert client.get("/api/calendar", params={"month": "2026-09", "account": "ACC1"}).json() == w
     assert len(reads) == 2 and w["days"]["2026-09-30"] != want[("ACC1", "2026-09")]["days"].get("2026-09-30")
@@ -976,13 +975,12 @@ def test_calendar_answers_the_same_from_the_cached_file_and_reads_it_once(client
 def test_record_equity_writes_a_line_only_when_the_balance_or_the_day_changed(client, tmp_path):
     """The readers keep a day's LAST value, so what they answer is what a line per minute gave."""
     import json
-    from homebase import server as S
     samples = ([("ACC1", 50000.0, "2026-09-09")] * 3 + [("ACC2", 50000.0, "2026-09-09")] * 2
                + [("ACC1", 50000.0, "2026-09-10")] * 2          # a new day, the same balance: its 0.0 day
                + [("ACC1", 50010.0, "2026-09-10")] * 3 + [("ACC1", 50000.0, "2026-09-10")]
                + [("ACC2", 50000.0, "2026-09-10"), ("ACC1", 50000.0, "2026-09-11")])
     for account, eq, date in samples:
-        S.record_equity(account, eq, date)
+        equity.record_equity(tmp_path / "equity.jsonl", account, eq, date)
     lines = [json.loads(l) for l in (tmp_path / "equity.jsonl").read_text().splitlines()]
     assert [(r["account"], r["equity"], r["date"]) for r in lines] == [
         ("ACC1", 50000.0, "2026-09-09"), ("ACC2", 50000.0, "2026-09-09"), ("ACC1", 50000.0, "2026-09-10"),
@@ -991,7 +989,7 @@ def test_record_equity_writes_a_line_only_when_the_balance_or_the_day_changed(cl
     per_minute: dict = {}                                               # what a line for every sample gave
     for account, eq, date in samples:
         per_minute.setdefault(account, {})[date] = eq
-    assert {a: S.equity_by_day(a) for a in per_minute} == per_minute
+    assert {a: equity.equity_by_day(tmp_path / "equity.jsonl", a) for a in per_minute} == per_minute
     assert client.get("/api/calendar", params={"month": "2026-09", "account": "ACC1"}).json() == {
         "account": "ACC1", "month": "2026-09", "days": {"2026-09-10": 0.0, "2026-09-11": 0.0},
         "total": 0.0, "history_since": "2026-09-09"}
