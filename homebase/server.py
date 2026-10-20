@@ -876,7 +876,7 @@ def create_app(cfg: config_mod.AppCfg | None = None,
             return
         for row in rows:
             aid = str(row["id"])
-            if aid in cfg.accounts:
+            if aid in cfg.accounts or aid == "paper":   # the built-in PAPER is chart trading's own (owner, 2026-10-20)
                 continue
             label = str(row.get("label") or aid)
             cfg.accounts[aid] = config_mod.AccountCfg(paper=True, label=f"{label} (paper)", account_name=label)

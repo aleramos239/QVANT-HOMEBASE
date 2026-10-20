@@ -14,6 +14,8 @@ from .. import secrets_store
 from ..broker.base import AccountNotOnLogin, OrderRequest
 from ..marketdata import TradovateMD
 
+PAPER_ID = "paper"   # the Charts page's built-in paper account (charts/paperbook.PAPER_ID)
+
 
 def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed, _drop_account, _key_env, _listed,
                      _login_cooldown, _login_first_spent, _on_desk, acct_status, adapter_factory, adapters, budget, cfg,
@@ -249,8 +251,18 @@ def register(app, *, ADD_MANY_MAX, _add_lock, _connect_account, _connect_failed,
             except Exception:  # noqa: BLE001 — not asked, not removed
                 raise HTTPException(409, "can't reach the Charts page to check this paper "
                                     "account — try again in a moment") from None
-            if aid in listed:
-                raise HTTPException(409, "a paper account is managed on the Charts page — remove it there")
+            if aid in listed and aid != PAPER_ID:
+                # the owner (2026-10-20): x removes it everywhere -- the Charts page first (it refuses one that
+                # still holds a position or orders), then the pool below
+                try:
+                    r = await paper_http.post("/api/paper/accounts/remove", json={"account": aid})
+                    out = r.json()
+                except Exception:  # noqa: BLE001 — not removed there, so not here either
+                    raise HTTPException(409, "can't reach the Charts page to remove this paper "
+                                        "account — try again in a moment") from None
+                if not out.get("ok"):
+                    raise HTTPException(409, str(out.get("error") or out.get("detail") or "refused by the Charts page"))
+            # the built-in PAPER stays on the Charts page (chart trading's own); the pool no longer takes it back
         from_mcp = str(body.get("source") or "") == "mcp"
         ad = adapters.get(aid)
         readable = (ad is not None and ad.connected

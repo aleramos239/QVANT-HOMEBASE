@@ -143,6 +143,8 @@ def desk(tmp_path, monkeypatch):
     svc = Service(accounts=2)
 
     def listing(request):
+        if request.url.path == "/api/paper/accounts/remove":
+            return httpx.Response(200, json=svc.books.remove(json.loads(request.content)))
         assert request.url.path == "/api/paper/accounts"
         return httpx.Response(200, json={"accounts": svc.books.listing(), "broken": None})
 
@@ -166,27 +168,37 @@ def desk(tmp_path, monkeypatch):
 def test_the_pool_picks_up_every_chart_service_paper_account(desk):
     run(desk.app.state.sync_paper())
     assert {aid: (a.paper, a.label) for aid, a in desk.cfg.accounts.items() if a.paper} == {
-        "paper": (True, "PAPER (paper)"), "paper-2": (True, "t0 (paper)")}
+        "paper-2": (True, "t0 (paper)")}                              # never the built-in PAPER
     run(desk.app.state.sync_paper())                                  # idempotent
-    assert len(desk.cfg.accounts) == 3
+    assert len(desk.cfg.accounts) == 2
     saved = json.loads(config_mod.config_path().read_text())["accounts"]
     assert saved["paper-2"]["paper"] is True and saved["main"].get("paper") in (None, False)
 
 
 def test_a_paper_account_shows_as_paper_and_books_to_an_algo(desk):
     run(desk.app.state.sync_paper())
-    r = desk.post("/api/book", json={"strategy": "nq930", "assignments": [{"account": "paper", "qty": 3}]})
+    r = desk.post("/api/book", json={"strategy": "nq930", "assignments": [{"account": "paper-2", "qty": 3}]})
     assert r.status_code == 200, r.text
     st = desk.get("/api/status").json()
-    assert st["accounts"]["paper"]["env"] == "paper" and st["accounts"]["main"]["env"] == "demo"
-    assert st["book"]["nq930"] == [{"account": "paper", "qty": 3}]
+    assert st["accounts"]["paper-2"]["env"] == "paper" and st["accounts"]["main"]["env"] == "demo"
+    assert st["book"]["nq930"] == [{"account": "paper-2", "qty": 3}]
 
 
-def test_a_paper_account_cannot_be_removed_from_the_desk(desk):
+def test_x_removes_a_paper_account_on_the_charts_page_and_the_pool(desk):
     run(desk.app.state.sync_paper())
+    r = desk.post("/api/accounts/remove", json={"account": "paper-2"})
+    assert r.status_code == 200, r.text
+    assert "paper-2" not in desk.cfg.accounts and "paper-2" not in desk.svc.books.books
+    run(desk.app.state.sync_paper())                                  # and it does not come back
+    assert "paper-2" not in desk.cfg.accounts
+
+
+def test_the_built_in_paper_leaves_the_pool_and_stays_on_the_charts_page(desk):
+    desk.cfg.accounts["paper"] = AccountCfg(paper=True, label="PAPER (paper)")   # an older pool still has it
     r = desk.post("/api/accounts/remove", json={"account": "paper"})
-    assert r.status_code == 409 and "Charts page" in r.json()["detail"]
-    assert "paper" in desk.cfg.accounts
+    assert r.status_code == 200, r.text
+    run(desk.app.state.sync_paper())
+    assert "paper" not in desk.cfg.accounts and "paper" in desk.svc.books.books
 
 
 def test_a_paper_account_gone_from_the_charts_page_can_be_removed_from_the_desk(desk):
