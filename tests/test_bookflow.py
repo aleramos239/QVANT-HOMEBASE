@@ -101,9 +101,22 @@ def test_absorption_flag_when_volume_is_eaten_but_the_level_holds():
     assert eps(ev)[-1]["ab"] is None
     ev = tr.on_print(t + 4000, big_px, 60, SELL)                 # 0.6x shown, not yet 1x
     assert [e for e in eps(ev) if e["ab"]] == []
-    ev = tr.on_print(t + 4100, big_px, 60, SELL)                 # 120 traded >= 1 x 100 and >= 4 x median; still shows size
+    ev = tr.on_print(t + 4100, big_px, 60, SELL)                 # 120 traded >= 1 x 100 and >= 4 x median ...
+    assert [e for e in eps(ev) if e["ab"]] == []                 # ... but the print says nothing about what is left
+    ev = tr.on_book(t + 4200, *book(big={('b', 1): 70}))         # the book after it: still shows >= half
     flagged = [e for e in eps(ev) if e["ab"] is not None]
-    assert flagged and flagged[0]["ab"] == t + 4100 and flagged[0]["end"] == "open"
+    assert flagged and flagged[0]["ab"] == t + 4200 and flagged[0]["end"] == "open"
+
+def test_no_absorption_when_the_prints_ate_the_level():
+    tr = BookTracker(TICK)
+    warm(tr, 12)
+    t = 12_000
+    big_px = 100.0 - 1 * TICK
+    tr.on_book(t, *book(big={('b', 1): 100}))
+    tr.on_book(t + 3500, *book(big={('b', 1): 100}))
+    ev = tr.on_print(t + 4000, big_px, 120, SELL)
+    ev += tr.on_book(t + 4000, *book())                          # the same stamp: the wall is gone
+    assert [e for e in eps(ev) if e["ab"]] == [] and eps(ev)[-1]["end"] == "traded"
 
 def test_no_absorption_when_price_trades_through():
     tr = BookTracker(TICK)

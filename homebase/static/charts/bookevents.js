@@ -240,17 +240,17 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
         const sz = (inst) => Math.max(0.5, +inst.params.size || 1);        // the Marker size setting
         if (ab) {
           const k = sz(ab);
-          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+          const r = 7 * k, mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.textBaseline = 'middle'; ctx.lineWidth = 1.5 * k;
           for (const a of absorptions(eps, { multiple: ab.params.multiple, minSeconds: ab.params.minSeconds })) {
             if (!sideOk(ab.params.side, a.side)) continue;
             const x = X(a.t), y = series.priceToCoordinate(a.price);
             if (x == null || y == null || x < 0 || x > mediaSize.width) continue;
-            ctx.fillStyle = a.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
-            ctx.beginPath();
-            if (a.side === 'up') { ctx.moveTo(x, y - 7 * k); ctx.lineTo(x - 5 * k, y + 3 * k); ctx.lineTo(x + 5 * k, y + 3 * k); }
-            else { ctx.moveTo(x, y + 7 * k); ctx.lineTo(x - 5 * k, y - 3 * k); ctx.lineTo(x + 5 * k, y - 3 * k); }
-            ctx.closePath(); ctx.fill();
-            if (ab.params.labels && a.traded > 0) ctx.fillText(String(a.traded), x + 7 * k, y);   // contracts that traded into the level
+            ctx.strokeStyle = ctx.fillStyle = a.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
+            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();          // hollow ring, an A inside
+            ctx.font = `bold ${Math.round(9 * k)}px ${mono}`; ctx.textAlign = 'center'; ctx.fillText('A', x, y + 0.5);
+            ctx.font = `10px ${mono}`; ctx.textAlign = 'left';
+            if (ab.params.labels && a.traded > 0) ctx.fillText(String(a.traded), x + r + 3, y);   // contracts that traded into the level
           }
         }
         if (ice) {

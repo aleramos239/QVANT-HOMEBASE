@@ -41,8 +41,9 @@ TUNING = {
     "pull_ticks": 4,               # ... and the touch was within this many ticks of the level
     "traded_frac": 0.60,           # traded: prints at the level reached >= this fraction of the peak size
     "abs_mult": 1.0,               # absorbing: traded >= this x the size shown when it opened ...
-    "abs_median_mult": 4.0,        # ... and >= this x the median level size ...  (2.0 / 8.0 flagged 2-7 a day on NQ,
-                                   #   1.0 / 4.0 flags 20-65 a day: replayed 2026-10-07..09, see the vault note)
+    "abs_median_mult": 4.0,        # ... and >= this x the median level size ...  (judged on a book line, 1.0 / 4.0
+                                   #   flags 1-12 a day on NQ, replayed 2026-10-14..19; on a print it flagged 28-112,
+                                   #   nearly all walls eaten in one go)
     "abs_min_ratio": 4.0,          # ... and the level was at least this x the median to begin with ...
     "abs_hold_frac": 0.50,         # ... and the level still shows >= this fraction of that size ...
     "abs_through_ticks": 1,        # ... and price never printed beyond it by more than this many ticks
@@ -331,7 +332,7 @@ class BookTracker:
                     d = (touch - ep.px) / tick if ep.side == "b" else (ep.px - touch) / tick
                     ep.dist = max(0.0, round(d, 2))
                 self._trim(ep, ts)
-                out += self._after(ep, ts)
+                out += self._after(ep, ts, book=True)
             else:
                 ep.size = size
                 end = self._classify(ep, ts, size)
@@ -368,7 +369,9 @@ class BookTracker:
         return "faded"
 
     def _flag(self, ep: _Ep, ts: int) -> bool:
-        """True the first time the level qualifies as absorbing (and never again)."""
+        """True the first time the level qualifies as absorbing (and never again). Judged on a book line only: on a
+        print, ep.size is the size BEFORE that print, and a wall eaten in one go looked like it held (every flag on
+        NQ 2026-10-14..19 closed "traded" at the very same stamp)."""
         t = self.tune
         if ep.abs_t is not None or ep.beyond > t["abs_through_ticks"]:
             return False
@@ -378,9 +381,9 @@ class BookTracker:
             return True
         return False
 
-    def _after(self, ep: _Ep, ts: int) -> list:
+    def _after(self, ep: _Ep, ts: int, book: bool = False) -> list:
         """An open level changed: it is sent the first time it is old enough to show, and again when flagged."""
-        flagged = self._flag(ep, ts)
+        flagged = book and self._flag(ep, ts)
         if ts - ep.t0 >= self.tune["min_episode_ms"] and (not ep.sent or flagged):
             ep.sent = True
             return [ep.wire()]

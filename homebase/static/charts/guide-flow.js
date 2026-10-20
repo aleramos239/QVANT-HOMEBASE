@@ -178,8 +178,8 @@ G.add({
   absorb: {
     what: 'Marks a big resting order that took heavy trading and still held: it absorbed the flow.',
     see: [
-      'A filled triangle at the price and moment it was flagged.',
-      'Green pointing up: a bid (buyers waiting) absorbed sellers. Red pointing down: an offer absorbed buyers.',
+      'A hollow circle with an A inside, at the price and moment it was flagged.',
+      'Green: a bid (buyers waiting) absorbed sellers. Red: an offer absorbed buyers.',
     ],
     read: [
       'The level was big (at least 4 times the usual) and stood 5 seconds or more.',
@@ -188,11 +188,11 @@ G.add({
       'Someone big is on the other side and taking everything thrown at them.',
     ],
     use: [
-      'Green triangle at a low and price lifts away: buyers defended it. Red at a high then a drop: sellers did.',
+      'Green A at a low and price lifts away: buyers defended it. Red at a high then a drop: sellers did.',
       'If the level absorbs and then breaks anyway, the big player ran out. Do not stay with it.',
-      'Use it as a clue at a level you already watch. Do not trade a single triangle on its own.',
+      'Use it as a clue at a level you already watch. Do not trade a single A on its own.',
     ],
-    watch: 'A first-guess rule: dozens of marks a day can show on NQ. Needs the recorded Level 2 book (NQ, ES).',
+    watch: 'Rare: a few marks a day on NQ, and most walls still go within a minute. Needs the recorded Level 2 book (NQ, ES).',
   },
   pulled: {
     what: 'Marks a big resting order that was cancelled just as price came close to it.',
