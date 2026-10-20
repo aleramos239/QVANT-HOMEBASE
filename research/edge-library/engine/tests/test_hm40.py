@@ -49,8 +49,25 @@ def _dist(cls, mult):
 
 
 def test_own_stop_is_struct_distance_times_mult_floored():   # ref 100, struct 90, atr 8: 1.5 -> 15; 0.1 -> floor 2.0
-    for cls in (S.Template, blocks.WRAPPED["candle_sweep"]):
+    for cls in (S.Template, blocks.WRAPPED["candle_sweep"], blocks.WRAPPED["candle930"]):
         assert _dist(cls, 1.5) == 15.0 and _dist(cls, 0.1) == 2.0, cls
+    for v, want in ((0.5, 5.0), (2.0, 20.0)):                        # candle930: the multiplier, not its overnight-range rule
+        st = blocks.WRAPPED["candle930"]({"stop_mode": "own", "stop_val": v})
+        st.atr, st.onh, st.onl = 8.0, 130.0, 70.0
+        assert st._dist(SimpleNamespace(tick=0.25), 100.0, 90.0) == want
+
+
+def test_candle930_own_without_struct_is_counted():
+    import test_candle930 as T9
+
+    class NoLevel(T9.C930):
+        def _mkt(self, ctx, side, *a, **kw):
+            return super()._mkt(ctx, side, *a, **{**kw, "struct": None})
+
+    st, res = T9.go(NoLevel, {**T9.P, "stop_mode": "own", "stop_val": 1.0}, T9.day())
+    assert res.trades == [] and st.skipped_by_reason == {"own stop: no structure level": 1}
+    st, res = T9.go(T9.C930, {**T9.P, "stop_mode": "own", "stop_val": 1.0}, T9.day())
+    assert len(res.trades) == 1 and abs(res.trades[0]["entry_price"] - res.trades[0]["sl"]) == 7.0 and st.skipped_by_reason == {}
 
 
 class NoStruct(S.Template):
