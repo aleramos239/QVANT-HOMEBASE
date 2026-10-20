@@ -763,7 +763,7 @@ def test_a_stop_the_desk_said_of_another_promotion_does_not_keep_todays_from_bei
     k.rows("09:20:00", [21000.0] * 2)
     k.r.take(state({**snap(stopped="off"), "mark": ["x", "yesterday's promotion"]}))
     k.r.sync()
-    assert k.r.day("lab_x") is not None and k.r.day("lab_x").mode == "desk" and len(k.spawned) == 1
+    assert k.r.day("lab_x") is not None and k.r.day("lab_x").mode == "desk" and len(k.spawned) == 2   # (+ its shadow copy)
 
 
 # ================================================================ a resend is the first request, byte for byte

@@ -208,6 +208,32 @@ def test_remove_and_onoff(c, drafts_dir, make_run, tmp_path):
     assert c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}).json()["removed"] is False
 
 
+
+def test_delete_takes_the_history_too_but_only_once_it_is_off_the_desk_and_let_go(c, drafts_dir, make_run, tmp_path):
+    """The owner, 2026-10-20: "not only remove them, also delete them". Remove keeps the history; Delete removes the
+    strategy's folder (days, shadow copies, journal, matches) and an archived copy. Refused while the record or the
+    desk's sidecar is there, and while the runner still hosts it (it writes one last day file as it lets go)."""
+    at = tmp_path / "desklab"
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    store.put_day("nq_bars", {"date": "2026-09-25", "state": "done"}, at)
+    store.put_shadow_day("nq_bars", {"date": "2026-09-25", "state": "done"}, at)
+    delete = lambda: c.post("/api/tester/desklab/delete", json={"name": "nq_bars"})
+    on = delete()
+    assert on.status_code == 409 and on.json() == {"ok": False, "detail": "Remove it from the Desk first."}
+    assert c.post("/api/tester/desklab/remove", json={"name": "nq_bars"}).json()["removed"] is True
+    store.put_runner({"pid": 1, "seen_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "hosting": ["nq_bars"]}, at)
+    busy = delete()
+    assert busy.status_code == 409 and busy.json()["detail"] == "The runner is still letting it go. Try again in a few seconds."
+    assert (at / "nq_bars" / "days" / "2026-09-25.json").is_file()
+    store.put_runner({"pid": 1, "seen_utc": dt.datetime.now(dt.timezone.utc).isoformat(), "hosting": []}, at)
+    (at / ".archive").mkdir(exist_ok=True)
+    (at / ".archive" / "nq_bars.json").write_text("{}")
+    assert delete().json() == {"ok": True, "deleted": True, "name": "nq_bars"}
+    assert not (at / "nq_bars").exists() and not (at / ".archive" / "nq_bars.json").exists()
+    assert delete().json() == {"ok": True, "deleted": False, "name": "nq_bars"}         # nothing left: not an error
+    assert c.post("/api/tester/desklab/delete", json={"name": "../x"}).status_code == 400
+
 @pytest.mark.parametrize("what,body", [
     ("promote", {"name": "nq_bars"}), ("promote", {"name": "nq_bars", "run_id": "x", "z": 1}),
     ("promote", {"name": "Bad Name", "run_id": "x"}), ("promote", {"name": "nq_bars", "run_id": 5}),
@@ -841,3 +867,19 @@ def test_the_shadow_calendar_gives_every_day_of_this_promotion_oldest_first_with
     assert [d["date"] for d in days] == [(dt.date(2026, 9, 17) + dt.timedelta(days=i)).isoformat() for i in range(12)]
     assert days[-2]["trades"] == [t] and days[-1]["trades"] == [] and set(days[0]) == {"date", "state", "why", "net", "match", "trades"}
     assert c.get("/api/tester/desklab/shadow", params={"name": "../x"}).status_code == 404
+
+
+def test_the_shadow_calendar_shows_a_booked_days_shadow_copy_never_its_real_trades(c, drafts_dir, make_run, tmp_path):
+    """The owner, 2026-10-20: a day traded through an account still has its shadow trades (the runner's copy, in
+    <name>/shadow/). A booked day with no copy (from before) is left out: its trades are real, not would-be."""
+    at = tmp_path / "desklab"
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    real = {"side": "long", "qty": 1, "entry_t": "10:16:00", "entry_px": 1.0, "exit_t": "10:30:00", "exit_px": 2.0, "reason": "tp", "net": 18.0}
+    paper = {**real, "exit_px": 0.5, "reason": "sl", "net": -12.0}
+    store.put_day("nq_bars", {**a_day("2026-09-28", **mark(), trades=[real], net=18.0), "mode": "desk"}, at)
+    store.put_shadow_day("nq_bars", a_day("2026-09-28", **mark(), trades=[paper], net=-12.0), at)
+    store.put_day("nq_bars", {**a_day("2026-09-25", **mark(), trades=[real], net=18.0), "mode": "desk"}, at)   # no copy
+    store.put_shadow_day("nq_bars", a_day("2026-09-28", sha256="other", promoted_utc="old", trades=[real]), at / "elsewhere")
+    days = c.get("/api/tester/desklab/shadow", params={"name": "nq_bars"}, headers=DESK).json()["days"]
+    assert [(d["date"], d["trades"], d["net"]) for d in days] == [("2026-09-28", [paper], -12.0)]

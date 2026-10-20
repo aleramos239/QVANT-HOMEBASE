@@ -68,12 +68,40 @@ function load({ strategies = { nq930: nq930(), lab_nq_orb: deskStrat() }, book =
     `\nDESKLAB = { strategies: ${JSON.stringify(rows)}, runner: { alive: true } }; DESKLAB_OK = ${readOk};` +
     `\nVIEW = ${JSON.stringify(view)};` +
     '\nglobalThis.api = { renderSide, renderMain, labDeskView, stratView, stratState, stratDotCls, todayRow, specOf, setBook, pickAsg, liveBookingNote, toggleStrat,' +
-    ' flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
+    ' flattenStrat, dayHeadline, dayTimeline, journalShown, todayFoot, openLabLimits, closeLabLimits, saveLabLimits, removeLabStrat, clearLabBlock, labRowsHtml, calView, shadowData, deleteLabStrat, labOnDesk, todayLabRow, get LAB_LIM() { return LAB_LIM; }, get VIEW() { return VIEW; } };';
   vm.runInContext(code, ctx);
   return { ctx, api: ctx.api, els, el, posts, toasts, confirms, alerts, shown, hidden, refreshes,
     side: () => { ctx.api.renderSide(['nq930', 'lab_nq_orb'].filter((n) => ctx.ST.strategies[n]), 0, 0); return els.side.innerHTML; },
     view: (name = 'lab_nq_orb') => ctx.api.labDeskView(name, ctx.ST.strategies[name]) };
 }
+
+// ---- THE CALENDAR, OPEN ON THE PAGE (the owner, 2026-10-20) --------------------------------------------------------------
+test('the Lab page shows its calendar open: Shadow or Live, a month at a time, and a Delete beside Remove', () => {
+  const html = load().view();
+  assert.match(html, /<h2>Calendar<\/h2><div class="seg" role="group" aria-label="Which trades"><button class="sel" aria-pressed="true" onclick="scalMode\(true\)">Shadow<\/button><button class="" aria-pressed="false" onclick="scalMode\(false\)">Live<\/button><\/div>/);
+  assert.match(html, /onclick="scalStep\(-1\)" aria-label="Previous month"/);
+  assert.match(html, /onclick="scalStep\(1\)" aria-label="Next month"/);
+  assert.doesNotMatch(html, /Shadow calendar/);
+  assert.match(html, /onclick="deleteLabStrat\(&quot;lab_nq_orb&quot;, &quot;nq_orb&quot;\)"[^>]*>Delete<\/button>/);
+});
+
+test('a shadow month: each day its net, a picked day its trades, every word from the network escaped', () => {
+  const k = load();
+  const hostile = '<img src=x onerror=alert(1)>';
+  const data = k.api.shadowData([{ date: '2026-10-20', net: -928, trades: [
+    { side: hostile, qty: 2, entry_t: '09:45:00', entry_px: 29404.25, exit_t: '09:58:35', exit_px: 29604.75, reason: 'sl', net: -804 },
+    { side: 'long', qty: 1, entry_t: '10:00:00', entry_px: 29629.25, exit_t: '10:28:04', exit_px: 29864.25, reason: hostile, net: 469 }] },
+    { date: '2026-10-19', net: 0, trades: [] }]);
+  const v = k.api.calView({ d: new Date(2026, 9, 1), data, day: '2026-10-20', shadow: true }, 'scalDay');
+  assert.equal(v.month, 'October 2026');
+  assert.match(v.grid, /<div class="cal-cell down pick on" role="button"[^>]*onclick="scalDay\('2026-10-20'\)"[^>]*>20<span class="pnl">-\$335/);
+  assert.equal(v.total, 'Month -$335.00');                                   // -804 + 469
+  assert.match(v.trades, /TRADES · 2026-10-20 · would-be fills, nothing sent/);
+  assert.doesNotMatch(v.trades, /<img/);
+  assert.equal((v.trades.match(/class="rrow"/g) || []).length, 2);
+  const none = k.api.calView({ d: new Date(2026, 8, 1), data, day: '', shadow: true }, 'scalDay');
+  assert.equal(none.note, 'no trades this month');
+});
 
 // ---- ONE ROW, NEVER TWO ------------------------------------------------------------------------------------------------
 test('one row, never two: the chart service\'s row is skipped once the Desk knows lab_<name>', () => {

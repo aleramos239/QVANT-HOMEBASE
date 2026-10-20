@@ -2384,7 +2384,7 @@ function labView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.stateText(w, DESKLAB.runner))}</b>${rebuilt ? ` · ${esc(rebuilt)}` : ""}${net != null ? ` · today would be ${esc(usdS(net))}` : ""}</div>
     <div class="sd-note">${esc(DeskLab.NOTE)}</div>
-    <div class="sec"><h2>Today, in shadow</h2>${today}${shadowCalBtn(w.name, nm)}</div>
+    <div class="sec"><h2>Today, in shadow</h2>${today}</div>${stratCal("", w.name)}
     <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>
     ${labCurveHtml(w.name)}
@@ -2468,6 +2468,115 @@ function labShadowNet(name, s) {
   const row = labRowOf(s), net = row ? DeskLab.todayNet(row) : null;
   return net == null ? null : {net, title: DeskLab.netTitle(row)};
 }
+/* One month of a strategy's calendar (st: {d, data, day, shadow}): the pieces both the Live pop-up and the strategy page's
+   open calendar draw. pick: the function a shadow day's click calls. */
+function calView(st, pick) {
+  const out = {};
+  const d = st.data || {days: {}, trades: [], table: []};
+  const y = st.d.getFullYear(), m = st.d.getMonth();
+  const month = y + "-" + String(m + 1).padStart(2, "0");
+  out.month = st.d.toLocaleString("en-US", {month: "long", year: "numeric"});
+  out.since = !st.data ? "loading…" :
+    d.trades.length ? "since " + d.trades[0].date : st.shadow ? "no shadow trades yet" : "no live trades yet";
+  let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
+  const first = new Date(y, m, 1), n = new Date(y, m + 1, 0).getDate();
+  for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
+  let mnet = 0, mtr = 0;
+  for (let day = 1; day <= n; day++) {
+    const key = month + "-" + String(day).padStart(2, "0"), v = d.days[key];
+    if (v) { mnet += v.net; mtr += v.trades; }
+    const cls = (v ? (v.net > 0 ? " up" : v.net < 0 ? " down" : "") : "") + (st.shadow && v ? " pick" : "") + (st.day === key ? " on" : "");
+    const act = st.shadow && v ? ` role="button" tabindex="0" aria-pressed="${st.day === key}" aria-label="${key}: ${v.trades} trade${v.trades > 1 ? "s" : ""}, ${usd(v.net)}"` +
+      ` onclick="${pick}('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();${pick}('${key}')}"` : "";
+    html += `<div class="cal-cell${cls}"${act}>${day}` +
+      (v ? `<span class="pnl">${usd(v.net)}</span>` : "") + `</div>`;
+  }
+  out.grid = html;
+  out.total = mtr ? "Month " + usd(mnet) : "";
+  out.note = mtr ? `${mtr} trade${mtr > 1 ? "s" : ""} · ` + (st.shadow ? "would-be, after costs · pick a day for its trades" : "est. net after fees")
+    : (st.data ? "no trades this month" : "");
+
+  let last = "";
+  out.table = d.table.length
+    ? `<div class="rtable" style="margin-top:14px">` + d.table.map(([sec, k, v]) =>
+        (sec !== last ? ((last = sec), `<div class="slabel2">${sec.toUpperCase()}</div>`) : "") +
+        `<div class="rrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("") +
+      `</div><div class="mcap" style="margin-top:8px">${d.fee_note || ""}` +
+      (d.unknown_exits ? ` · ⚠ ${d.unknown_exits} trade(s) closed while disconnected — P&L not in these totals` : "") +
+      `</div>`
+    : "";
+
+  if (st.shadow) {
+    const list = d.trades.filter(t => st.day ? t.date === st.day : t.date.slice(0, 7) === month);
+    out.trades = list.length
+      ? `<div class="slabel2" style="margin-top:14px">${st.day ? "TRADES · " + esc(st.day) : "TRADES · THIS MONTH"} · would-be fills, nothing sent</div>` +
+        list.slice().reverse().map(t =>
+          `<div class="rrow"><span class="k">${esc(t.date)} ${esc(t.time ? hbClock(t.time.slice(0, 5)) : "")} · ${esc(t.side || "?")} ${esc(String(t.entry))} → ${esc(String(t.exit))} · ${esc(String(t.reason).toUpperCase())}</span>` +
+          `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}" style="white-space:nowrap">${usd(t.net)}</span></div>`).join("")
+      : "";
+    return out;
+  }
+  out.trades = d.trades.length
+    ? `<div class="slabel2" style="margin-top:14px">TRADES · slippage in ticks (entry / exit)</div>` +
+      d.trades.slice().reverse().map(t =>
+        `<div class="rrow"><span class="k">${t.date} · ${t.side || "?"} ${t.entry} → ${t.exit} · ${String(t.reason).toUpperCase()}</span>` +
+        `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}">${usd(t.net)}` +
+        ` <span style="color:var(--muted-foreground)">${fmtTicks(t.entry_slip_ticks)} / ${fmtTicks(t.exit_slip_ticks)}</span></span></div>`
+      ).join("")
+    : "";
+  return out;
+}
+/* The calendar of a Lab strategy page, always open (the owner, 2026-10-20): its SHADOW trades (the chart service's
+   GET /api/tester/desklab/shadow: would-be fills, a booked day's shadow copy included) or, on the Desk, its LIVE ones
+   (/api/strategy-live), a month at a time. Its state lives here, so a repaint keeps the month and the day picked. */
+let SCAL = {key: ""};
+function stratCal(deskId, lab) {
+  const key = deskId + "|" + lab;
+  if (SCAL.key !== key) SCAL = {key, deskId, lab, shadow: true, d: new Date(), day: "", data: null, at: 0, tok: 0};
+  if (!SCAL.loading && Date.now() - SCAL.at > 60000) loadScal();         // its trades, read again each minute
+  const v = calView(SCAL, "scalDay");
+  const seg = deskId ? `<div class="seg" role="group" aria-label="Which trades">` + [[true, "Shadow"], [false, "Live"]].map(([sh, word]) =>
+    `<button class="${SCAL.shadow === sh ? "sel" : ""}" aria-pressed="${SCAL.shadow === sh}" onclick="scalMode(${sh})">${word}</button>`).join("") + `</div>` : "";
+  return `<div class="sec"><h2>Calendar</h2>${seg}
+    <div class="cal-head"><button class="cal-nav" onclick="scalStep(-1)" aria-label="Previous month">&lsaquo;</button>
+      <span class="m" style="flex:1">${esc(v.month)}</span>
+      <button class="cal-nav" onclick="scalStep(1)" aria-label="Next month">&rsaquo;</button></div>
+    <div class="mcap" style="margin:0 0 8px">${esc(v.since)}</div>
+    <div class="cal-grid">${v.grid}</div>
+    <div class="cal-foot"><span>${esc(v.note)}</span><span class="tot">${esc(v.total)}</span></div>${v.table}${v.trades}</div>`;
+}
+async function loadScal() {
+  const s = SCAL, tok = ++s.tok, shadow = s.shadow;
+  s.loading = true;
+  let data = null;
+  try {
+    const r = await fetch(shadow ? CHART + "/api/tester/desklab/shadow?name=" + encodeURIComponent(s.lab)
+                                 : "/api/strategy-live?strategy=" + encodeURIComponent(s.deskId));
+    data = r.ok ? (shadow ? shadowData((await r.json()).days) : await r.json()) : null;
+  } catch (_) { data = null; }
+  if (SCAL !== s || s.tok !== tok) return;                             // another strategy, or the other switch, since
+  s.loading = false; s.at = Date.now();
+  s.data = data || {days: {}, trades: [], table: [], error: true};
+  try { render(); } catch (_) { /* no page to draw on */ }
+}
+function scalStep(n) { SCAL.d = new Date(SCAL.d.getFullYear(), SCAL.d.getMonth() + n, 1); SCAL.day = ""; render(); }
+function scalDay(key) { SCAL.day = SCAL.day === key ? "" : key; render(); }
+function scalMode(shadow) {
+  if (SCAL.shadow === shadow) return;
+  SCAL.shadow = shadow; SCAL.day = ""; SCAL.data = null;
+  loadScal();
+  render();
+}
+function shadowData(days) {
+  const out = {days: {}, trades: [], table: []};
+  for (const d of Array.isArray(days) ? days : []) {
+    const tr = Array.isArray(d.trades) ? d.trades : [];
+    if (!tr.length) continue;
+    out.days[d.date] = {net: tr.reduce((a, t) => a + (+t.net || 0), 0), trades: tr.length};
+    for (const t of tr) out.trades.push({date: d.date, time: t.entry_t || "", side: t.side, entry: t.entry_px, exit: t.exit_px, reason: t.reason || "", net: +t.net || 0});
+  }
+  return out;
+}
 function labDeskView(name, s) {
   const c = s.cfg, lab = s.lab || {}, on = c.enabled === true, p = todayPnl(s), nm = stratLabel(name), busy = DESKLAB_BUSY === name;
   const accts = ST.accounts || {}, book = (ST.book && ST.book[name]) || [], row = labRowOf(s);
@@ -2516,7 +2625,7 @@ function labDeskView(name, s) {
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
-    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${lab.name ? shadowCalBtn(lab.name, nm) : ""}</div>
+    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>${lab.name ? stratCal(name, lab.name) : ""}
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
@@ -2524,7 +2633,8 @@ function labDeskView(name, s) {
     <div class="sd-actions"><button class="btn btn-outline btn-sm" onclick="flattenStrat(${jsArg(name)})" title="Flattens its positions and switches it off">Flatten &amp; turn off</button>
       <button class="btn btn-outline btn-sm" onclick="openDeskLabInLab(${jsArg(lab.name || "")})" title="The Lab page, on this strategy's 3:1 out-of-sample">Open in the Lab</button>
       <button class="btn btn-outline btn-sm" onclick="archiveLabStrat(${jsArg(lab.name || "")}, ${jsArg(name)})"${busy || ro || !lab.name ? " disabled" : ""} title="Off the Desk, switched off, its accounts off, and kept. Restore it from Archive any time.">Archive</button>
-      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button></div>`;
+      <button class="btn btn-outline btn-sm" onclick="removeLabStrat(${jsArg(name)})"${busy || ro ? " disabled" : ""} title="Takes it off the Desk. Its history is kept.">Remove from Desk</button>
+      <button class="btn btn-outline btn-sm" onclick="deleteLabStrat(${jsArg(name)}, ${jsArg(lab.name || "")})"${busy || ro || !lab.name ? " disabled" : ""} title="Takes it off the Desk and deletes its shadow and day history for good. Its Lab draft stays.">Delete</button></div>`;
 }
 /* The Limits dialog: filled when it opens, never while it is open. Save posts exactly what the fields say, after the same checks the Desk makes. */
 let LAB_LIM = {name: "", tok: 0};       // the open dialog: whose, and which opening of it (a token per open)
@@ -2592,6 +2702,33 @@ async function removeLabStrat(name) {
     if (VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "today"};
     toast(`${stratLabel(name)} is off the Desk. Its history is kept; promote it again from the Lab any time.`);
   } else toast(DeskLab.refusalText(r, err), 7000);
+  await refresh();
+  loadDeskLab();
+}
+/* DELETE (the owner, 2026-10-20: "not only remove them, also delete them"): the Desk's own Remove (its "Flatten it first.",
+   its accounts coming off), then the chart service deletes its history -- shadow days, day records, its journal. The runner
+   needs a few seconds to let it go, so that step is tried again while it says so. Real trades stay in the account history;
+   the Lab draft stays in the Lab. */
+async function deleteLabStrat(name, lab) {
+  if (!name || !lab || DESKLAB_BUSY || DEMO) return;
+  const N = stratLabel(name);
+  if (!await confirmDlg(`Delete ${N}?`, "It comes off the Desk and its accounts come off. Its shadow calendar and day records are deleted for good. Real trades stay in the account history, and its Lab draft stays in the Lab.", "Delete", true)) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  let r, err = null, removed = false;
+  try { r = await post("/api/lab-remove", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
+  if (!err && r && r.ok === true) {
+    removed = true;
+    for (let i = 0; i < 10; i++) {
+      r = await chartPost("/api/tester/desklab/delete", {name: lab});
+      if (!(r && r.ok === false && /letting it go/.test(String(r.detail || "")))) break;
+      await new Promise(res => setTimeout(res, 2000));
+    }
+  }
+  DESKLAB_BUSY = "";
+  if (removed && VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "today"};
+  if (!err && r && r.ok === true) toast(`${N} is deleted.`);
+  else if (removed) toast(`${N} is off the Desk, but its history was not deleted: ${DeskLab.refusalText(r, err)}`, 8000);
+  else toast(`Could not delete ${N}: ${DeskLab.refusalText(r, err)}`, 7000);
   await refresh();
   loadDeskLab();
 }
@@ -4081,30 +4218,6 @@ async function openLive(name) {
   renderLive();
 }
 function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); LIVE.day = ""; renderLive(); }
-/* The SHADOW calendar of a Lab strategy (the owner, 2026-10-19): the Live calendar's pop-up, filled with what it wrote down in shadow
-   (the chart service's GET /api/tester/desklab/shadow: every day of this promotion, with its would-be trades). A day opens its trades. */
-const shadowCalBtn = (lab, title) => `<div class="qlinks"><button class="btn btn-quiet btn-sm" onclick="openShadow(${jsArg(lab)}, ${jsArg(title)})">Shadow calendar</button></div>`;
-async function openShadow(lab, title) {
-  LIVE.name = lab; LIVE.d = new Date(); LIVE.data = null; LIVE.shadow = true; LIVE.day = "";
-  $("#liveName").textContent = title + " · SHADOW";
-  showOverlay("liveOverlay");
-  renderLive();
-  try {
-    const r = await fetch(CHART + "/api/tester/desklab/shadow?name=" + encodeURIComponent(lab));
-    LIVE.data = r.ok ? shadowData((await r.json()).days) : {days: {}, trades: [], table: [], error: true};
-  } catch (_) { LIVE.data = {days: {}, trades: [], table: [], error: true}; }
-  if (LIVE.name === lab) renderLive();
-}
-function shadowData(days) {
-  const out = {days: {}, trades: [], table: []};
-  for (const d of Array.isArray(days) ? days : []) {
-    const tr = Array.isArray(d.trades) ? d.trades : [];
-    if (!tr.length) continue;
-    out.days[d.date] = {net: tr.reduce((a, t) => a + (+t.net || 0), 0), trades: tr.length};
-    for (const t of tr) out.trades.push({date: d.date, time: t.entry_t || "", side: t.side, entry: t.entry_px, exit: t.exit_px, reason: t.reason || "", net: +t.net || 0});
-  }
-  return out;
-}
 function liveDay(key) { LIVE.day = LIVE.day === key ? "" : key; renderLive(); }
 function closeLive() { hideOverlay("liveOverlay"); }
 $("#liveOverlay").addEventListener("click", (e) => {
@@ -4112,58 +4225,14 @@ $("#liveOverlay").addEventListener("click", (e) => {
 });
 function fmtTicks(x) { return x == null ? "—" : (x > 0 ? "+" : "") + Number(x).toFixed(1); }
 function renderLive() {
-  const d = LIVE.data || {days: {}, trades: [], table: []};
-  const y = LIVE.d.getFullYear(), m = LIVE.d.getMonth();
-  const month = y + "-" + String(m + 1).padStart(2, "0");
-  $("#liveMonth").textContent = LIVE.d.toLocaleString("en-US", {month: "long", year: "numeric"});
-  $("#liveSince").textContent = !LIVE.data ? "loading…" :
-    d.trades.length ? "since " + d.trades[0].date : LIVE.shadow ? "no shadow trades yet" : "no live trades yet";
-  let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
-  const first = new Date(y, m, 1), n = new Date(y, m + 1, 0).getDate();
-  for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
-  let mnet = 0, mtr = 0;
-  for (let day = 1; day <= n; day++) {
-    const key = month + "-" + String(day).padStart(2, "0"), v = d.days[key];
-    if (v) { mnet += v.net; mtr += v.trades; }
-    const cls = (v ? (v.net > 0 ? " up" : v.net < 0 ? " down" : "") : "") + (LIVE.shadow && v ? " pick" : "") + (LIVE.day === key ? " on" : "");
-    const act = LIVE.shadow && v ? ` role="button" tabindex="0" aria-pressed="${LIVE.day === key}" aria-label="${key}: ${v.trades} trade${v.trades > 1 ? "s" : ""}, ${usd(v.net)}"` +
-      ` onclick="liveDay('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();liveDay('${key}')}"` : "";
-    html += `<div class="cal-cell${cls}"${act}>${day}` +
-      (v ? `<span class="pnl">${usd(v.net)}</span>` : "") + `</div>`;
-  }
-  $("#liveGrid").innerHTML = html;
-  $("#liveTotal").textContent = mtr ? "Month " + usd(mnet) : "";
-  $("#liveNote").textContent = mtr ? `${mtr} trade${mtr > 1 ? "s" : ""} · ` + (LIVE.shadow ? "would-be, after costs · pick a day for its trades" : "est. net after fees")
-    : (LIVE.data ? "no trades this month" : "");
-
-  let last = "";
-  $("#liveTable").innerHTML = d.table.length
-    ? `<div class="rtable" style="margin-top:14px">` + d.table.map(([sec, k, v]) =>
-        (sec !== last ? ((last = sec), `<div class="slabel2">${sec.toUpperCase()}</div>`) : "") +
-        `<div class="rrow"><span class="k">${k}</span><span class="v">${v}</span></div>`).join("") +
-      `</div><div class="mcap" style="margin-top:8px">${d.fee_note || ""}` +
-      (d.unknown_exits ? ` · ⚠ ${d.unknown_exits} trade(s) closed while disconnected — P&L not in these totals` : "") +
-      `</div>`
-    : "";
-
-  if (LIVE.shadow) {
-    const list = d.trades.filter(t => LIVE.day ? t.date === LIVE.day : t.date.slice(0, 7) === month);
-    $("#liveTrades").innerHTML = list.length
-      ? `<div class="slabel2" style="margin-top:14px">${LIVE.day ? "TRADES · " + esc(LIVE.day) : "TRADES · THIS MONTH"} · would-be fills, nothing sent</div>` +
-        list.slice().reverse().map(t =>
-          `<div class="rrow"><span class="k">${esc(t.date)} ${esc(t.time ? hbClock(t.time.slice(0, 5)) : "")} · ${esc(t.side || "?")} ${esc(String(t.entry))} → ${esc(String(t.exit))} · ${esc(String(t.reason).toUpperCase())}</span>` +
-          `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}">${usd(t.net)}</span></div>`).join("")
-      : "";
-    return;
-  }
-  $("#liveTrades").innerHTML = d.trades.length
-    ? `<div class="slabel2" style="margin-top:14px">TRADES · slippage in ticks (entry / exit)</div>` +
-      d.trades.slice().reverse().map(t =>
-        `<div class="rrow"><span class="k">${t.date} · ${t.side || "?"} ${t.entry} → ${t.exit} · ${String(t.reason).toUpperCase()}</span>` +
-        `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}">${usd(t.net)}` +
-        ` <span style="color:var(--muted-foreground)">${fmtTicks(t.entry_slip_ticks)} / ${fmtTicks(t.exit_slip_ticks)}</span></span></div>`
-      ).join("")
-    : "";
+  const v = calView(LIVE, "liveDay");
+  $("#liveMonth").textContent = v.month;
+  $("#liveSince").textContent = v.since;
+  $("#liveGrid").innerHTML = v.grid;
+  $("#liveTotal").textContent = v.total;
+  $("#liveNote").textContent = v.note;
+  $("#liveTable").innerHTML = v.table;
+  $("#liveTrades").innerHTML = v.trades;
 }
 
 /* ---- P&L calendar ---- */

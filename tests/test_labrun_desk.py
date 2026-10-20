@@ -827,7 +827,8 @@ def test_every_account_taken_off_mid_day_ends_the_desk_day_done_and_no_shadow_da
     for _ in range(3):
         minute(k, "09:30:01")
         k.r.sync()
-    assert len(k.spawned) == 1 and k.r.hosting() == [] and k.stub.ops() == [["entry"], ["stop"]]
+    assert len(k.spawned) == 2 and k.r.hosting() == [] and k.stub.ops() == [["entry"], ["stop"]]   # (2: the desk day
+    # and its shadow copy, which runs the whole day; no third, plain shadow day is started)
     assert k.stub.bodies[1]["intents"] == [{"op": "stop", "why": "Stopped for today.", "flatten": False}]   # (R3: one
     # stop that keeps the position, once)
     assert k.today()["mode"] == "desk"
@@ -857,7 +858,7 @@ def test_the_book_is_read_again_and_only_decides_the_lead_account(kit):
     assert [t["net"] for t in day.trades()] == [10.0]
     store.put_desk("lab_x", sidecar(accounts=("a2", "a1")), k.at)
     k.r.sync()
-    assert k.r.day("lab_x") is day and [t["net"] for t in day.trades()] == [20.0] and len(k.spawned) == 1
+    assert k.r.day("lab_x") is day and [t["net"] for t in day.trades()] == [20.0] and len(k.spawned) == 2   # (+ its copy)
 
 
 # ---------------------------------------------------------------- the heartbeat

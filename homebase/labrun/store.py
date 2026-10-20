@@ -43,6 +43,7 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import threading
 import time
 from pathlib import Path
@@ -211,6 +212,22 @@ def remove(name: str, at=None) -> bool:
             return True
         except FileNotFoundError:
             return False
+
+
+def delete(name: str, at=None) -> bool | None:
+    """Delete (the owner, 2026-10-20: "not only remove them, also delete them"): a strategy that is OFF the Desk loses
+    its history too -- its folder (days, shadow copies, journal, matches) and an archived copy. None while its record or
+    the desk's sidecar is still there (Remove first); else True when anything was deleted, False when nothing was there.
+    Nothing outside this store is touched: the Lab draft stays, and real trades stay in the Desk's own journal."""
+    with write_lock(at):
+        if _file(name, at).exists() or _desk_file(name, at).exists():
+            return None
+        folder, copy = root(at) / _name(name), _arch_file(name, at)
+        found = folder.is_dir() or copy.is_file()
+        if folder.is_dir():
+            shutil.rmtree(folder)
+        copy.unlink(missing_ok=True)
+        return found
 
 
 ARCHIVE_DIR = ".archive"                 # a dot first: never a strategy's name (NAME_RE), never listed as one
@@ -455,6 +472,20 @@ def put_day(name: str, summary: dict, at=None) -> None:
 
 def get_day(name: str, date: str, at=None) -> dict | None:
     return _read(day_path(name, date, at))
+
+
+def shadow_day_path(name: str, date: str, at=None) -> Path:
+    """The shadow copy of a day hosted in desk mode (the owner, 2026-10-20: a booked strategy still runs in shadow):
+    <root>/<name>/shadow/<date>.json, beside days/, so nothing that reads days/ ever sees it."""
+    return day_path(name, date, at).parent.parent / "shadow" / f"{date}.json"
+
+
+def put_shadow_day(name: str, summary: dict, at=None) -> None:
+    _write(shadow_day_path(name, summary.get("date"), at), summary)
+
+
+def get_shadow_day(name: str, date: str, at=None) -> dict | None:
+    return _read(shadow_day_path(name, date, at))
 
 
 def days(name: str, n: int = 10, at=None) -> list:

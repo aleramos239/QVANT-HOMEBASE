@@ -181,3 +181,75 @@ def test_a_day_through_the_real_desk_the_child_sees_the_fills_the_engine_booked(
     assert ld.snapshot()["strategies"][lab]["stopped"] == "Stopped for today."
     assert k.file(NAME, d=DAY)["state"] == "stopped"
     assert not [p for p in k.spawned if p.poll() is None]
+
+
+def test_a_booked_day_keeps_a_shadow_copy_that_sends_nothing_and_is_never_named_to_the_desk(tmp_path):
+    """The owner, 2026-10-20: "even if an account is connected it still runs shadow". A day hosted in desk mode gets a
+    plain shadow day of the same strategy beside it: same prices and clock, its own would-be fills, written to
+    <name>/shadow/<date>.json. The Desk hears of one strategy and gets one request; the copy never reaches it."""
+    root = tmp_path / "desklab"
+    rec = {"name": NAME, "id": f"draft_{NAME}", "label": "PP", "root": "NQ", "source": SOURCE,
+           "sha256": hashlib.sha256(SOURCE.encode()).hexdigest(), "params": {}, "qty": 1, "run": {"id": "r1"}, "notes": [],
+           "promoted_utc": "2026-09-10T12:00:00+00:00", "enabled": True, "commission": 4.0, "slippage_ticks": 1.0,
+           "session_window": ["09:25", "15:55"], "bar_minutes": 1}
+    store.put(rec, root)
+    svc = Service()
+    (aid,) = [v["id"] for v in svc.books.views()]
+    clock = Clock()
+    clock.set_et(10, 0)
+    cfg = AppCfg(armed=True, accounts={aid: AccountCfg(paper=True, label=aid)}, book={}, strategies={})
+    labdesk.attach(cfg, root)
+    ad = adapter(svc, aid)
+    (tmp_path / "engine").mkdir()
+    eng = quick(Engine(cfg, {aid: ad}, now_fn=clock, root=tmp_path / "engine"))
+    run(ad.connect())
+    run(ad.observe_fills(eng.on_fill))
+    ad._task.cancel()
+    svc.feed([("09:59:59", 100.0)], aid=aid)
+    ld = LabDesk(cfg, eng, {aid: ad}, at=root)
+    lab = desk_id(NAME)
+    run(ld.refresh())
+    run(ld.set_limits(lab, LIMITS))
+    run(ld.set_book(lab, [{"account": aid, "qty": 1}]))
+    ld.start()
+    line = InProcess(ld)
+    k = Kit(tmp_path, desk=line)
+    k.r._nap = lambda s: None
+
+    def copy():
+        k.wall[0] += 1.5                                                     # past the second a save may wait
+        k.r.on_clock(k.last_clock)
+        return store.get_shadow_day(NAME, DAY.isoformat(), root)
+
+    try:
+        k.clock("09:00:00", d=DAY)
+        k.open(d=DAY, px=100.0)
+        k.rows("09:20:00", [100.0] * 2, d=DAY)
+        k.r.take(("desk", "state", json.loads(json.dumps(ld.snapshot()))))
+        k.r.sync()
+        assert k.r.day(NAME).mode == "desk" and k.r.hosting() == [NAME]
+        assert len(k.spawned) == 2                                           # the desk day's child and the copy's
+        assert copy()["state"] == "waiting" and "mode" not in copy()      # its window opens at 09:25, as the desk day's
+
+        k.rows("09:59:01", [100.0] * 60, d=DAY)
+        k.clock("10:00:00", d=DAY)
+        k.rows("10:00:01", [104.0] * 60, d=DAY)
+        k.clock("10:01:00", d=DAY)
+        k.rows("10:01:01", [110.5] * 60, d=DAY)                              # the copy's stop fills on the tape
+        k.clock("10:02:00", d=DAY)
+        k.rows("10:02:01", [125.0] * 60, d=DAY)                              # ... and its target
+        k.clock("10:03:00", d=DAY)
+        assert len(line.bodies) == 1 and [b["seq"] for b in line.bodies] == [2]      # the copy sent nothing
+        got = copy()
+        assert got["orders"] == [{"t": "10:00:00", "text": "Buy stop 110.00, stop 105.00, target 2 x the stop",
+                                  "refused": None}]
+        (trade,) = got["trades"]
+        assert (trade["side"], trade["reason"]) == ("long", "tp") and got["net"] == trade["net"] > 0
+        assert k.r.day(NAME).trades() == []                                 # the desk day: only the account's real trades
+        k.r.beat()
+        assert set(line.said[-1]["strategies"]) == {lab}                    # the Desk is told of one strategy
+        assert [x["kind"] for x in k.journal(NAME)].count("order") == 1     # the journal is the desk day's alone
+    finally:
+        k.r.close()
+        ld.close()
+    assert not [p for p in k.spawned if p.poll() is None]                   # the copy's child is gone too

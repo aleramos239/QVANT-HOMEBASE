@@ -1607,6 +1607,8 @@ class Runner:
         self._tapes: dict[str, tuple] = {}           # root -> that session's prints: (ts_ns, price, size) arrays
         self._late: dict[str, _Late] = {}
         self._days: dict[str, _Hosted] = {}
+        self._twins: dict[str, _Hosted] = {}         # name -> the shadow copy of its desk-mode day (_sync_twins)
+        self._twin_final: dict[str, tuple] = {}      # name -> (date, promotion) of a copy found final: not hosted again
         self._final: dict[str, tuple] = {}           # name -> (date, promotion) of a day file found final: never hosted again
         self._roots: list[str] = []                  # the markets the enabled strategies trade
         self._desk = desk                            # the line to the Desk, or None: shadow only
@@ -1666,6 +1668,8 @@ class Runner:
         for h in list(self._days.values()):
             h.day.on_clock(now_ms)
             self._note(h)
+        for c in list(self._twins.values()):
+            c.day.on_clock(now_ms)
         self._start_matches(now_ms)
 
     def on_rows(self, root: str, rows) -> None:
@@ -1681,6 +1685,9 @@ class Runner:
         for h in list(self._days.values()):
             if h.root == root:
                 self._feed(h)
+        for c in list(self._twins.values()):
+            if c.root == root:
+                self._feed(c, note=False)
 
     def idle(self) -> None:
         """No clock from the stream for SILENT_S of our own time: there are no prices, and every day says so."""
@@ -1692,7 +1699,7 @@ class Runner:
     def _quiet(self, silent: bool) -> None:
         if silent != self._silent:
             self._silent = silent
-            for h in self._days.values():
+            for h in [*self._days.values(), *self._twins.values()]:
                 h.day.no_prices(silent)
 
     def _roll(self, root: str, d: dt.date) -> str:
@@ -1710,6 +1717,14 @@ class Runner:
                     self._note(h)
                     h.day.kill()
                 del self._days[name]
+        for name, c in list(self._twins.items()):
+            if c.root == root:
+                if back:
+                    c.day.drop()
+                else:
+                    c.day.end()
+                    c.day.kill()
+                del self._twins[name]
         self._dates[root] = d
         old = _before(_before(d))                    # the matches that are over and more than two sessions old go
         for key, m in list(self._matches.items()):
@@ -1725,13 +1740,14 @@ class Runner:
                                      array("q", (size[i] for i in keep)))
         return root
 
-    def _feed(self, h: _Hosted) -> None:
+    def _feed(self, h: _Hosted, note: bool = True) -> None:
         ts, px, size = self._tapes[h.root]
         n = len(ts)
         if h.fed < n:
             h.day.on_ticks(zip(ts[h.fed:n], px[h.fed:n], size[h.fed:n]))
             h.fed = n
-        self._note(h)
+        if note:                                     # (a shadow copy writes its own file, never the journal)
+            self._note(h)
 
     def _note(self, h: _Hosted, quiet: bool = False) -> None:
         """One journal line per new order, stop and trade. quiet (catch-up): nothing is written, but a stop that was
@@ -1803,6 +1819,65 @@ class Runner:
         for name, rec in want.items():
             if name not in self._days and not self._is_final(rec):
                 self._host(rec)
+        self._sync_twins(want)
+
+    # ---- the shadow copy of a desk-mode day (the owner, 2026-10-20: "even if an account is connected it still runs shadow")
+    def _sync_twins(self, want: dict) -> None:
+        """Every day hosted in desk mode gets a plain shadow day of the same strategy beside it: the same prints and
+        clock, its own child, its own would-be fills, written to <name>/shadow/<date>.json (store.put_shadow_day) and
+        nowhere else -- no journal line, no daily match, never named to the Desk, never an order sent. It runs its whole
+        day even when the desk day ends early (unbooked, stopped by the Desk). It goes when the strategy is switched off
+        or removed (`off`), promoted again or turned back into a plain shadow day (`kill`; the plain day records it)."""
+        for name, c in list(self._twins.items()):
+            rec, h = want.get(name), self._days.get(name)
+            if rec is None:
+                c.day.off()
+            elif _key(rec) != c.key or (h is not None and h.day.mode != "desk"):
+                c.day.kill()
+            else:
+                continue
+            del self._twins[name]
+        for name, h in self._days.items():
+            if h.day.mode == "desk" and name not in self._twins and not self._twin_is_final(h):
+                self._host_twin(h)
+
+    def _twin_is_final(self, h: _Hosted) -> bool:
+        """A copy of this date and promotion that ended (`done` / `stopped`) is not hosted again, as _is_final."""
+        name, mark = h.rec["name"], (h.day.date, *_mark(h.rec))
+        if self._twin_final.get(name) == mark:
+            return True
+        try:
+            was = store.get_shadow_day(name, mark[0].isoformat(), self.at)
+        except (OSError, ValueError):
+            return False
+        if not store.same_promotion(was, h.rec) or was.get("state") not in ("done", "stopped"):
+            return False
+        self._twin_final[name] = mark
+        return True
+
+    def _host_twin(self, h: _Hosted) -> None:
+        rec, root, date = h.rec, h.root, h.day.date
+        name = rec["name"]
+        ts, px, size = self._tapes[root]
+        now, oldest = self._clock_ms * 1_000_000, ts[0]
+        try:
+            there = store.shadow_day_path(name, date.isoformat(), self.at).exists()
+        except (OSError, ValueError):
+            there = True
+
+        def save(summary: dict) -> None:
+            if summary["why"] == TOO_LATE and there:     # never over a copy that may be a finished one
+                return
+            self._write(store.put_shadow_day, name, summary)
+
+        day = StrategyDay(rec, date, spawn=self._spawn, daily=self._daily, deadline_s=self._deadline, save=save,
+                          wall=self._wall, late=lambda t0: now > t0 and oldest > t0, now_ns=now)
+        c = self._twins[name] = _Hosted(day, root, h.key, fed=len(ts), rec=rec)
+        if self._silent:
+            day.no_prices(True)
+        day.on_ticks(zip(ts, px, size))              # catch-up: the session so far
+        day.on_clock(self._clock_ms)
+        log(f"{name}: {date} shadow copy {day.state}, {c.fed} prints to catch up")
 
     def _day_file(self, rec: dict, date: dt.date) -> dict | None:
         """The date's day file, when it was written for this promotion (store.same_promotion)."""
@@ -1972,7 +2047,7 @@ class Runner:
     def close(self) -> None:
         if self._desk is not None:
             self._desk_leave()
-        for h in self._days.values():
+        for h in [*self._days.values(), *self._twins.values()]:
             h.day.kill()
 
     # ---- the Desk (Step B; every method below is reached only when the runner was given a line to it)

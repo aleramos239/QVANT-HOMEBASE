@@ -1199,6 +1199,24 @@ def test_the_status_block_shows_trades_refusals_and_what_the_runner_says(tmp_pat
     assert (v["state"], v["why"]) == ("stopped", "Too slow: no answer in 1 s.")
 
 
+def test_a_shadow_strategy_shows_the_day_the_runner_stopped_or_finished(tmp_path):
+    """The owner, 2026-10-20: three shadow days stopped at the open ("Yesterday's prices are not stored yet.") and the
+    Desk still said "Running in shadow". With no account booked, the runner's fresh word for the day is shown too."""
+    d = mkdesk(tmp_path, qty=0)                                                    # limits, no account: shadow
+    d.ld._mono = Mono()
+    assert d.ld.status_view(LAB)["state"] == "shadow"
+    beat(d, **{LAB: {"state": "running", "why": None, "mode": "shadow"}})
+    v = d.ld.status_view(LAB)
+    assert (v["state"], v["why"], v["mode_today"]) == ("shadow", None, "shadow")   # running in shadow: as before
+    beat(d, **{LAB: {"state": "stopped", "why": "Yesterday's prices are not stored yet.", "mode": "shadow"}})
+    v = d.ld.status_view(LAB)
+    assert (v["state"], v["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
+    beat(d, **{LAB: {"state": "not_today", "why": None, "mode": "shadow"}})
+    assert (d.ld.status_view(LAB)["state"], d.ld.status_view(LAB)["why"]) == ("done", None)
+    d.ld._mono.t += 21                                                             # its beat is old: what it said is too
+    assert d.ld.status_view(LAB)["state"] == "shadow"
+
+
 # ---------------------------------------------------------------- the Lab side off
 def test_with_the_lab_side_off_nothing_of_the_intake_is_reachable(tmp_path):
     d = mkdesk(tmp_path)

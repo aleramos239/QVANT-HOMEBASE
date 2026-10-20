@@ -228,7 +228,9 @@ test('every template hole in the Lab rows and page is escaped, a flag the page m
     // the research blocks (labResHtml): pieces built from escaped holes
     'head ? "f fh" : "f"', 'vals.map(cell).join("")', 'unseen', 'prop', 'labResHtml(w.name, w.name)', 'labCurveHtml(w.name)',
     // eqPlot escapes its label, aria text and end labels itself, and DeskLab.curve passes it numbers only
-    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build, c.both)']);
+    'eqPlot(c.vals, c.label, c.total, c.aria, c.ends, c.days, c.notes, c.build, c.both)',
+    // the open calendar (stratCal, 2026-10-20): its month, notes and shadow trades go through esc; the grid is dates and usd()
+    'stratCal("", w.name)']);
   const raw = holes.filter((h) => !/^(esc|jsArg)\(/.test(h) && !flags.has(h));
   assert.deepEqual(raw, [], 'a template hole that is not esc / jsArg / a known flag');
 });
@@ -250,7 +252,7 @@ test('a hostile name and sentence from the network cannot break out of the page'
     days: [day({ match: { ok: false, text: hostile } })], notes: [hostile] });
   const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [bad], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', DESKRES, shortDay: (s) => s,
     esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
-    usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
+    usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} }, stratCal: () => '' });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb");`, ctx);
   assert.doesNotMatch(ctx.html, /<img/);
   assert.match(ctx.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
@@ -289,7 +291,7 @@ test('the page: "Today, in shadow", the size in the net\'s tooltip, and "rebuilt
       { date: '2026-10-08', state: 'done', why: null, net: 80, match: { ok: true, text: 'Matched the backtest: 1 of 1 trade.' }, rebuilt: false }] });
   const ctx = vm.createContext({ DeskLab: D, DESKLAB: { strategies: [r], runner: ALIVE }, DESKLAB_OK: true, DESKLAB_BUSY: '', DESKRES, shortDay: (s) => s,
     esc: (v) => String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])),
-    usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} } });
+    usdS: D.usd, fmt: (v) => String(v), ST: { accounts: {} }, stratCal: () => '' });
   vm.runInContext(`const jsArg = (v) => esc(JSON.stringify(String(v == null ? "" : v)));\n${LABVIEW}\nglobalThis.html = labView("nq_orb"); globalThis.rowHtml = todayLabRow(DESKLAB.strategies[0]);`, ctx);
   assert.match(ctx.html, /<span class="t">10:10:00<\/span><span class="h">would sell at market, stop 22,014\.25, target 21,954\.25<\/span>/);
   assert.match(ctx.html, /<b>Running in shadow<\/b> · rebuilt from today&#39;s prices · today would be \+\$50/);

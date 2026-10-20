@@ -121,7 +121,7 @@ These ship in `config.py` defaults. All times are ET. Each trades at most once a
 
 | Part | Where | What it is |
 |---|---|---|
-| Desk server | `homebase/server.py`, `homebase/engine.py` | The trading app. FastAPI on port 8850. Dashboard at `/`. |
+| Desk server | `homebase/server.py` (wiring), `homebase/routes/` (its routes, one router per concern), `homebase/engine.py` (+ `engine_lab.py` the Lab half, `daystate.py`, `equity.py`) | The trading app. FastAPI on port 8850. Dashboard at `/`. |
 | Timers | `homebase/timer.py`, `homebase/leveltimer.py` | Fire the strategies on the desk's clock. |
 | Config | `homebase/config.py` | Strategy defaults, accounts, the book, the armed flag. |
 | Broker layer | `homebase/broker/` | Tradovate adapter (REST + websocket, demo or live) and the paper adapter. |

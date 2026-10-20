@@ -85,7 +85,8 @@
                                           {name[, run][, builtin]} hands it to the Lab page once (null when none, or one older
                                           than two minutes)
     GET  /api/tester/desklab/shadow?name= {name, days: [{date, state, why, net, match, trades}]}: the shadow calendar, every day
-                                          this promotion wrote (oldest first, at most DESKLAB_SHADOW_DAYS); 404 off the Desk
+                                          this promotion wrote (oldest first, at most DESKLAB_SHADOW_DAYS); a booked day
+                                          shows its shadow copy (store.get_shadow_day) or is left out; 404 off the Desk
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
                                           draft's text, its settings and that backtest's headline numbers. Refused (in
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
@@ -94,6 +95,8 @@
                                           not work. No draft runs here and no order goes anywhere; it does queue the copy's
                                           unseen-days backtest (once per code + settings, a tester run like the Lab's Run)
     POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
+    POST /api/tester/desklab/delete      {name} -> {ok, deleted, name}: once removed, its history goes too (409 while on the
+                                          Desk or while the runner still hosts it)
                                           (promote and remove answer 409 "Take its accounts off on the Desk first."
                                           while the desk's sidecar, <name>.desk.json, holds book rows)
     POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
@@ -225,7 +228,8 @@ def desk_strategy_ids() -> list[str]:
                   if isinstance(k, str) and isinstance(v, dict) and (v.get("cfg") or {}).get("kind") != "lab")
 
 
-DESKLAB_ACTIONS = ("promote", "remove", "onoff", "open", "archive", "filed", "restore", "archive_builtin", "restore_builtin")
+DESKLAB_ACTIONS = ("promote", "remove", "delete", "onoff", "open", "archive", "filed", "restore", "archive_builtin",
+                   "restore_builtin")
 ARCHIVE_GROUP = "Archive"     # the Lab group an archived strategy's draft is filed under (the owner, 2026-10-18)
 DESKGROUP_ACTIONS = ("create", "rename", "kind", "delete", "move")
 DESKLAB_ALIVE_S = 20     # the Lab-strategy runner is alive while its heartbeat is at most this old
@@ -819,8 +823,18 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         rec = store.get(name) if draftstore.NAME_RE.fullmatch(name or "") else None
         if rec is None:
             raise HTTPException(404, "not on the Desk")
-        days = [{k: d.get(k) for k in DESKLAB_DAY_KEYS + ("trades",)} for d in store.days(name, DESKLAB_SHADOW_DAYS)
-                if store.same_promotion(d, rec)]
+        days = []
+        for d in store.days(name, DESKLAB_SHADOW_DAYS):
+            if not store.same_promotion(d, rec):
+                continue
+            if d.get("mode") == "desk":      # a booked day: its shadow copy (the runner's, 2026-10-20), never its real trades
+                try:
+                    d = store.get_shadow_day(name, d.get("date"))
+                except ValueError:
+                    continue
+                if not store.same_promotion(d, rec):
+                    continue                 # booked before the copy existed: nothing would-be to show
+            days.append({k: d.get(k) for k in DESKLAB_DAY_KEYS + ("trades",)})
         return watch_answer(request, {"name": name, "days": days[::-1]})
 
     def runner_alive(seen) -> bool:
@@ -1031,6 +1045,18 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
+    def desklab_delete(name: str) -> dict:
+        """Remove's second step when the owner deletes (2026-10-20): the history goes too (store.delete). Refused while it
+        is still on the Desk, and while a live runner still hosts it -- letting a day go writes its last day file, which
+        would put the folder back."""
+        beat = store.get_runner() or {}
+        if runner_alive(beat.get("seen_utc")) and name in (beat.get("hosting") or []):
+            raise HTTPException(409, "The runner is still letting it go. Try again in a few seconds.")
+        done = store.delete(name)
+        if done is None:
+            raise HTTPException(409, "Remove it from the Desk first.")
+        return {"ok": True, "deleted": done, "name": name}
+
     # ---- Archive (the owner, 2026-10-18): off the Desk, kept, put back on with one click. The page runs it in three steps
     # ---- so the Desk's own Remove (with its "Flatten it first." and its accounts coming off) stays the one way off the Desk:
     # ---- archive = a copy is kept; the Desk removes it; filed = its Lab draft goes under the "Archive" group.
@@ -1145,7 +1171,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 body = await request.json()
             except ValueError:
                 raise HTTPException(400, "the body is JSON") from None
-            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "onoff": {"name", "on"}, "open": {"name"},
+            keys = {"promote": {"name", "run_id"}, "remove": {"name"}, "delete": {"name"}, "onoff": {"name", "on"},
+                    "open": {"name"},
                     "archive": {"name"}, "filed": {"name"}, "restore": {"name"},
                     "archive_builtin": {"name"}, "restore_builtin": {"name"}}[what]
             run = body.get("run") if what == "open" and isinstance(body, dict) else None
@@ -1177,6 +1204,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     done = await asyncio.to_thread(desklab_promote, name, body["run_id"])
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
+                elif what == "delete":
+                    done = await asyncio.to_thread(desklab_delete, name)
                 elif what == "open":
                     done = await asyncio.to_thread(desklab_open, name, run, builtin is True, wf)
                 elif what in ("archive", "filed", "restore", "archive_builtin", "restore_builtin"):

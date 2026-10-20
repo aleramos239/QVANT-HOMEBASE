@@ -1748,6 +1748,10 @@ class LabDesk:
                 told = {"running": "watching", "done": "done", "not_today": "done", "stopped": "stopped"}.get(info.get("state"))
                 if told is not None:
                     state, why = told, (info.get("why") if told == "stopped" else None)
+            elif state == "shadow" and fresh:        # no account: a day the runner stopped or finished says so (the owner,
+                told = {"done": "done", "not_today": "done", "stopped": "stopped"}.get(info.get("state"))   # 2026-10-20)
+                if told is not None:
+                    state, why = told, (info.get("why") if told == "stopped" else None)
         return {"state": state, "why": why, "trades_today": d["entries"],
                 "mode_today": info.get("mode") if fresh else None, "refused": list(d["refused"])}
 
