@@ -59,3 +59,11 @@ def test_stop_at_candle_is_the_displacement_candles_low():
     assert len(t) == 1 and t[0]["side"] == "long"
     d = t[0]["entry_price"] - t[0]["sl"]
     assert d == 14995.0 - 14989.0                   # close to DISP's low; the bracket keeps that distance from the fill
+
+
+def test_max_tr_above_one_takes_the_next_displacement_once_flat():
+    st = DO.DispOside({**BASE, "max_tr": 20})
+    st.ROLLS = frozenset()
+    g = DROP + [DISP] + rest(5, 14995.0) + [bar(14995.0, 15011.0)] + rest(3, 14990.0) + [bar(14990.0, 14985.0), bar(14985.0, 14995.0)]
+    t = S.run_session(st, tape_of(day(g + rest(200, 14995.0))), daily=list(DAILY), on_error="raise").trades
+    assert [x["side"] for x in t] == ["long", "long"]          # the first hits its 15-point target, the 09:44 displacement is the second

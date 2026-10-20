@@ -9,7 +9,8 @@ THE RULE (fixed here, before any run):
     above = shorts only, equal = nothing.
   * DISPLACEMENT, two tf bars, bar 1 the older: bar 2's body |close - open| larger than bar 1's body, and UP: bar 2 green and its close above
     bar 1's high; DOWN: bar 2 red and its close below bar 1's low. Read at bar 2's close, which must fall after 09:30 and before 15:00.
-  * ENTRY: the first displacement on the side -> a market order at its close. One trade a day (max_tr 1).
+  * ENTRY: a displacement on the side -> a market order at its close, when flat. max_tr trades a day (default 1 = the first one;
+    the owner, 2026-10-19: "remove the limit" = max_tr 20, the engine's top).
   * STOP and TARGET: the exit cell's (the owner: 30 points; 1:0.5, 0.75, 1, 1.5). Flat 15:58 ET. The structure level passed with the
     order is the close -/+ ATR(14) of the tf bars (the owner, 2026-10-19: "use atr 14 as the stop"): stop_mode struct = a 1-ATR stop,
     stop_mode pts ignores it. stop_at candle (the owner, 2026-10-19: "use the displacement candle extreme as the stop") passes the
@@ -39,7 +40,7 @@ class DispOside(FvgOdir):
         step = self.tf * 60
         now = (self.M[-1][0] // step + 1) * step     # the clock close of this tf bar
         self._sync(ctx)
-        if self.sid is None or now <= OPEN or now >= LAST or len(self.C) < 2 or self.n_ent:
+        if self.sid is None or now <= OPEN or now >= LAST or len(self.C) < 2:
             return
         o = self.mo(OPEN)
         if o is None:
