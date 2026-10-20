@@ -14,6 +14,9 @@ The pipeline, its Queue and its Book are switched off for now. Do not use it, st
 tools (removed from the connector), no `bp.py pipe ...` (it refuses while `~/.homebase/pipeline/DISABLED` exists), no Lab Queue/Book
 (hidden). Its launchd runner is parked in `~/Library/LaunchAgents/disabled/`, the nightly strategy-hunter task in
 `~/.claude/scheduled-tasks-disabled/`, the `pipeline` skill in `~/.claude/skills-disabled/`. Only the owner turns it back on.
+Agents still test strategies in Homebase, BY HAND: run each blueprint phase yourself with the `blueprint_*`, backtest, heatmap,
+walkforward, montecarlo and prop_eval tools, read every result yourself (trades, per-year numbers, the walk-forward, the chart), and
+report to the owner in plain words. Nothing is approved, booked or put on the Desk without the owner's word.
 Never bring the payout pipeline back or write its lock file (`payout_enabled`).
 
 ## Strategy work follows the blueprint (house law, 2026-10-05)
