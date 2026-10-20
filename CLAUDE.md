@@ -26,6 +26,10 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
   (2025-07-01 on, once, for a locked strategy) is RETIRED, and so is "tune only on the build days". In the pipeline each window takes
   the pipeline's own pick (the middle passing box, never the best); the Desk card's "Unseen days" is this record, and the Desk only
   says when this month's pick differs: the owner changes the setting, nothing switches by itself.
+- **Every route, no exceptions** (owner, 2026-10-19): the taught lane, by-hand engine runs and one-off checks too. "Check it OOS" /
+  "test it out-of-sample" ALWAYS means the 3:1 block walk-forward, never a single read of the months after the build days. If a route
+  has no walk-forward yet, say so and build it; never fall back to a single read. (2026-10-19 a single read was run on
+  `owner_fvg_odir_15_nl_new` by mistake: those months are no longer blind for that rule.)
 - Build days (2021-09-22 → 2025-06-30) stay the window for the idea card, the heat map, the proof and the lock.
 - Judge the average of all variants, never the best cell.
 - Use the connector's `blueprint_*` tools for every phase (blocks, card, build, code check, lock, test, sim, portfolio, eval card, status).
