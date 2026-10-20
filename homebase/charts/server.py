@@ -1302,7 +1302,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             tasks.append(asyncio.create_task(depth.run()))
         if paper.enabled:
             tasks.append(asyncio.create_task(paper_loop()))
-        if paper_backtest is not None:
+        # HOMEBASE_CHARTS_NO_BACKTEST=1 (the 2 GB VPS): no backtest work here -- the Mac does it (the owner, 2026-10-20)
+        no_backtest = os.environ.get("HOMEBASE_CHARTS_NO_BACKTEST") == "1"
+        if paper_backtest is not None and not no_backtest:
             job = BacktestJob(sd / "paper", paper_backtest, clock, log)
             paper_job.append(job)
 
@@ -1323,7 +1325,8 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 tester.warm()
                 time.sleep(WARM_EVERY_S)
 
-        threading.Thread(target=warm_desklab, name="desklab-warm", daemon=True).start()
+        if not no_backtest:     # off: the Desk's results cards compute on ask instead
+            threading.Thread(target=warm_desklab, name="desklab-warm", daemon=True).start()
         lagwatch.start(asyncio.get_running_loop(), log)     # a stall of the loop names its busy threads in the log
         try:
             yield

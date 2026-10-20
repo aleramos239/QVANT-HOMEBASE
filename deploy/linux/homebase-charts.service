@@ -10,6 +10,8 @@ WorkingDirectory=__REPO__
 # server holds it (2026-10-19). The Mac's charts run demo-only and take this book through the relay
 # (homebase/charts/depthrelay.py). YM / GC / SI ride the demo login (.state/charts/settings.json md_other_roots).
 Environment=HOMEBASE_CHARTS_MD=live
+# 2 GB box: no backtest work in the charts (the Desk results pre-warm, the paper comparison): the Mac does it
+Environment=HOMEBASE_CHARTS_NO_BACKTEST=1
 ExecStart=__REPO__/.venv/bin/python -m homebase.charts
 Restart=always
 RestartSec=10
