@@ -84,6 +84,8 @@
                                           built-in tester strategy (a Desk straddle's twin). GET /api/tester/lab-open ->
                                           {name[, run][, builtin]} hands it to the Lab page once (null when none, or one older
                                           than two minutes)
+    GET  /api/tester/desklab/shadow?name= {name, days: [{date, state, why, net, match, trades}]}: the shadow calendar, every day
+                                          this promotion wrote (oldest first, at most DESKLAB_SHADOW_DAYS); 404 off the Desk
     POST /api/tester/desklab/promote     {name, run_id} -> {ok, name, notes} | {ok: false, detail}: a frozen copy of the
                                           draft's text, its settings and that backtest's headline numbers. Refused (in
                                           words) for a draft not in the Lab, a run that is not a finished run of it, code
@@ -232,6 +234,7 @@ NOT_TRASHED = "It could not be moved to the trash."   # the move failed (an OSEr
 DESKLAB_TAKE_OFF = "Take its accounts off on the Desk first."   # Promote again / Remove while the desk has it booked
 DESKLAB_AUTO_UNSEEN = True   # a promoted strategy's unseen-days run starts by itself, once per code + settings (owner 2026-10-11)
 DESKLAB_PROP = "lucid-pro-50k-no-dll@2026-10-11"   # the account every Desk panel's prop sim is scored on (the pipeline's account; owner 2026-10-11)
+DESKLAB_SHADOW_DAYS = 800    # the shadow calendar: about three years of session days
 DESKLAB_DAYS = 10        # day summaries shown under each promoted strategy ...
 DESKLAB_DAY_KEYS = ("date", "state", "why", "net", "match")      # ... each cut to these and `rebuilt` (no order or trade rows)
 PIPE_KEYS = {"add": ("card", "inbox"), "start": (), "pause": (), "resume": (), "approve": ("name",), "refuse": ("name", "why")}
@@ -808,6 +811,17 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         archived += [{"name": k, "builtin": True, "archived_utc": v.get("archived_utc")} for k, v in store.archived_builtins().items()]
         return watch_answer(request, {"strategies": out, "archived": archived, "builtins": desk_strategy_ids(), "runner": {
             "alive": runner_alive(beat.get("seen_utc")), "seen_utc": beat.get("seen_utc"), "prices": beat.get("prices") or {}}})
+
+    @r.get("/desklab/shadow")
+    def desklab_shadow(request: Request, name: str = ""):
+        """The Desk's shadow calendar (the owner, 2026-10-19): every day THIS promotion wrote, oldest first, with its trades."""
+        watch_guard(request)
+        rec = store.get(name) if draftstore.NAME_RE.fullmatch(name or "") else None
+        if rec is None:
+            raise HTTPException(404, "not on the Desk")
+        days = [{k: d.get(k) for k in DESKLAB_DAY_KEYS + ("trades",)} for d in store.days(name, DESKLAB_SHADOW_DAYS)
+                if store.same_promotion(d, rec)]
+        return watch_answer(request, {"name": name, "days": days[::-1]})
 
     def runner_alive(seen) -> bool:
         try:

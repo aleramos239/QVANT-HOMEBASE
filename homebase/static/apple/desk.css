@@ -423,6 +423,9 @@ html.hb-apple .cal-grid { gap: 4px; }
 html.hb-apple .cal-grid .dow { padding: 2px 0 6px; font-size: 11px; line-height: 14px; font-weight: 400; letter-spacing: normal; color: var(--a-label-2); }
 html.hb-apple .cal-cell { min-height: 46px; padding: 4px 6px; border: 0; border-radius: 8px; background: var(--a-group); font-size: 11px; color: var(--a-label-2); }
 html.hb-apple .cal-cell.blank { background: transparent; }
+html.hb-apple .cal-cell.pick:hover { box-shadow: inset 0 0 0 1px var(--a-label-2); }
+html.hb-apple .cal-cell.pick:focus-visible { outline: 2px solid var(--a-accent); outline-offset: 1px; }
+html.hb-apple .cal-cell.on { box-shadow: inset 0 0 0 2px var(--a-accent); }
 html.hb-apple .cal-cell .pnl { margin-top: 5px; font-family: var(--a-font); font-size: 11px; font-weight: 590; font-variant-numeric: tabular-nums; }
 html.hb-apple .cal-cell.up { background: color-mix(in srgb, var(--a-green) 14%, transparent); border: 0; }
 html.hb-apple .cal-cell.up .pnl { color: var(--a-green); }

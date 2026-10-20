@@ -469,6 +469,11 @@
   .cal-cell{ border:1px solid var(--border); border-radius:var(--radius-sm);
     min-height:46px; padding:4px 5px; font-size:11px; color:var(--muted-foreground); }
   .cal-cell.blank{ border-color:transparent; }
+  .cal-cell.pick{ cursor:pointer; transition:box-shadow .15s cubic-bezier(.25,1,.5,1); }
+  .cal-cell.pick:hover{ box-shadow:inset 0 0 0 1px var(--foreground); }
+  .cal-cell.pick:focus-visible{ outline:2px solid var(--foreground); outline-offset:1px; }
+  .cal-cell.on{ box-shadow:inset 0 0 0 2px var(--foreground); }
+  @media (prefers-reduced-motion: reduce){ .cal-cell.pick{ transition:none; } }
   .cal-cell .pnl{ display:block; margin-top:4px; font-family:var(--font-mono);
     font-size:11px; font-weight:600; }
   .cal-cell.up{ background:color-mix(in oklch, var(--pos) 13%, transparent);
@@ -2379,7 +2384,7 @@ function labView(name) {
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(DeskLab.specLine(w))}</div></div>${sw}</div>
     <div class="sd-state"><b>${esc(DeskLab.stateText(w, DESKLAB.runner))}</b>${rebuilt ? ` · ${esc(rebuilt)}` : ""}${net != null ? ` · today would be ${esc(usdS(net))}` : ""}</div>
     <div class="sd-note">${esc(DeskLab.NOTE)}</div>
-    <div class="sec"><h2>Today, in shadow</h2>${today}</div>
+    <div class="sec"><h2>Today, in shadow</h2>${today}${shadowCalBtn(w.name, nm)}</div>
     <div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     <div class="figs">${DeskLab.figures(w).map(fig).join("")}</div>
     ${labCurveHtml(w.name)}
@@ -2511,7 +2516,7 @@ function labDeskView(name, s) {
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}
     ${lab.auto === true ? "" : `<div class="sec"><h2>Limits</h2><div class="agroup feed static">${limits}</div>${winNote ? `<div class="mcap warn">${esc(winNote)}</div>` : ""}
       <button class="btn btn-outline btn-sm" onclick="openLabLimits(${jsArg(name)})"${ro ? " disabled" : ""}>${esc(DeskLab.EDIT_LIMITS)}</button></div>`}
-    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}</div>
+    <div class="sec"><h2>${shadow ? "Today, in shadow" : "Today"}</h2>${today}${lab.name ? shadowCalBtn(lab.name, nm) : ""}</div>
     ${old.length ? `<div class="sec"><h2>${esc(DeskLab.OLD_TITLE)}</h2><div class="agroup feed static">${old.join("")}</div></div>` : ""}
     ${row ? `<div class="sec"><h2>Matched the backtest</h2>${days.length ? `<div class="agroup feed static">${days.join("")}</div>` : `<div class="eq-empty">${esc(DeskLab.NOT_CHECKED)}</div>`}</div>
     ${labCurveHtml(row.name)}${labResHtml(row.name, name)}` : ""}
@@ -4065,7 +4070,7 @@ $("#algoOverlay").addEventListener("click", (e) => {
 /* ---- strategy LIVE popup: calendar + metrics + trade log ---- */
 let LIVE = {name: "", d: new Date(), data: null};
 async function openLive(name) {
-  LIVE.name = name; LIVE.d = new Date(); LIVE.data = null;
+  LIVE.name = name; LIVE.d = new Date(); LIVE.data = null; LIVE.shadow = false; LIVE.day = "";
   $("#liveName").textContent = stratLabel(name) + " · LIVE";
   showOverlay("liveOverlay");
   renderLive();
@@ -4075,7 +4080,32 @@ async function openLive(name) {
   } catch (_) { LIVE.data = {days: {}, trades: [], table: [], error: true}; }
   renderLive();
 }
-function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); renderLive(); }
+function liveStep(n) { LIVE.d.setMonth(LIVE.d.getMonth() + n); LIVE.day = ""; renderLive(); }
+/* The SHADOW calendar of a Lab strategy (the owner, 2026-10-19): the Live calendar's pop-up, filled with what it wrote down in shadow
+   (the chart service's GET /api/tester/desklab/shadow: every day of this promotion, with its would-be trades). A day opens its trades. */
+const shadowCalBtn = (lab, title) => `<div class="qlinks"><button class="btn btn-quiet btn-sm" onclick="openShadow(${jsArg(lab)}, ${jsArg(title)})">Shadow calendar</button></div>`;
+async function openShadow(lab, title) {
+  LIVE.name = lab; LIVE.d = new Date(); LIVE.data = null; LIVE.shadow = true; LIVE.day = "";
+  $("#liveName").textContent = title + " · SHADOW";
+  showOverlay("liveOverlay");
+  renderLive();
+  try {
+    const r = await fetch(CHART + "/api/tester/desklab/shadow?name=" + encodeURIComponent(lab));
+    LIVE.data = r.ok ? shadowData((await r.json()).days) : {days: {}, trades: [], table: [], error: true};
+  } catch (_) { LIVE.data = {days: {}, trades: [], table: [], error: true}; }
+  if (LIVE.name === lab) renderLive();
+}
+function shadowData(days) {
+  const out = {days: {}, trades: [], table: []};
+  for (const d of Array.isArray(days) ? days : []) {
+    const tr = Array.isArray(d.trades) ? d.trades : [];
+    if (!tr.length) continue;
+    out.days[d.date] = {net: tr.reduce((a, t) => a + (+t.net || 0), 0), trades: tr.length};
+    for (const t of tr) out.trades.push({date: d.date, time: t.entry_t || "", side: t.side, entry: t.entry_px, exit: t.exit_px, reason: t.reason || "", net: +t.net || 0});
+  }
+  return out;
+}
+function liveDay(key) { LIVE.day = LIVE.day === key ? "" : key; renderLive(); }
 function closeLive() { hideOverlay("liveOverlay"); }
 $("#liveOverlay").addEventListener("click", (e) => {
   if (e.target === e.currentTarget) closeLive();
@@ -4087,21 +4117,23 @@ function renderLive() {
   const month = y + "-" + String(m + 1).padStart(2, "0");
   $("#liveMonth").textContent = LIVE.d.toLocaleString("en-US", {month: "long", year: "numeric"});
   $("#liveSince").textContent = !LIVE.data ? "loading…" :
-    d.trades.length ? "since " + d.trades[0].date : "no live trades yet";
+    d.trades.length ? "since " + d.trades[0].date : LIVE.shadow ? "no shadow trades yet" : "no live trades yet";
   let html = ["S", "M", "T", "W", "T", "F", "S"].map(x => `<div class="dow">${x}</div>`).join("");
   const first = new Date(y, m, 1), n = new Date(y, m + 1, 0).getDate();
   for (let i = 0; i < first.getDay(); i++) html += `<div class="cal-cell blank"></div>`;
   let mnet = 0, mtr = 0;
   for (let day = 1; day <= n; day++) {
-    const v = d.days[month + "-" + String(day).padStart(2, "0")];
+    const key = month + "-" + String(day).padStart(2, "0"), v = d.days[key];
     if (v) { mnet += v.net; mtr += v.trades; }
-    const cls = v ? (v.net > 0 ? " up" : v.net < 0 ? " down" : "") : "";
-    html += `<div class="cal-cell${cls}">${day}` +
+    const cls = (v ? (v.net > 0 ? " up" : v.net < 0 ? " down" : "") : "") + (LIVE.shadow && v ? " pick" : "") + (LIVE.day === key ? " on" : "");
+    const act = LIVE.shadow && v ? ` role="button" tabindex="0" aria-pressed="${LIVE.day === key}" aria-label="${key}: ${v.trades} trade${v.trades > 1 ? "s" : ""}, ${usd(v.net)}"` +
+      ` onclick="liveDay('${key}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();liveDay('${key}')}"` : "";
+    html += `<div class="cal-cell${cls}"${act}>${day}` +
       (v ? `<span class="pnl">${usd(v.net)}</span>` : "") + `</div>`;
   }
   $("#liveGrid").innerHTML = html;
   $("#liveTotal").textContent = mtr ? "Month " + usd(mnet) : "";
-  $("#liveNote").textContent = mtr ? `${mtr} trade${mtr > 1 ? "s" : ""} · est. net after fees`
+  $("#liveNote").textContent = mtr ? `${mtr} trade${mtr > 1 ? "s" : ""} · ` + (LIVE.shadow ? "would-be, after costs · pick a day for its trades" : "est. net after fees")
     : (LIVE.data ? "no trades this month" : "");
 
   let last = "";
@@ -4114,6 +4146,16 @@ function renderLive() {
       `</div>`
     : "";
 
+  if (LIVE.shadow) {
+    const list = d.trades.filter(t => LIVE.day ? t.date === LIVE.day : t.date.slice(0, 7) === month);
+    $("#liveTrades").innerHTML = list.length
+      ? `<div class="slabel2" style="margin-top:14px">${LIVE.day ? "TRADES · " + esc(LIVE.day) : "TRADES · THIS MONTH"} · would-be fills, nothing sent</div>` +
+        list.slice().reverse().map(t =>
+          `<div class="rrow"><span class="k">${esc(t.date)} ${esc(t.time ? hbClock(t.time.slice(0, 5)) : "")} · ${esc(t.side || "?")} ${esc(String(t.entry))} → ${esc(String(t.exit))} · ${esc(String(t.reason).toUpperCase())}</span>` +
+          `<span class="v ${t.net > 0 ? "pos" : t.net < 0 ? "neg" : ""}">${usd(t.net)}</span></div>`).join("")
+      : "";
+    return;
+  }
   $("#liveTrades").innerHTML = d.trades.length
     ? `<div class="slabel2" style="margin-top:14px">TRADES · slippage in ticks (entry / exit)</div>` +
       d.trades.slice().reverse().map(t =>

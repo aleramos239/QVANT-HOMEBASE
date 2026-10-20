@@ -824,3 +824,20 @@ def test_a_builtin_is_archived_and_restored(c, monkeypatch):
     assert c.get("/api/tester/desklab").json()["archived"] == []
     assert draftstore.read_groups()["members"]["gc_nfpcpi"] == "Ideas"
     assert post("restore_builtin", "gc_nfp").status_code == 404
+
+
+def test_the_shadow_calendar_gives_every_day_of_this_promotion_oldest_first_with_its_trades(c, drafts_dir, make_run, tmp_path):
+    at = tmp_path / "desklab"
+    assert c.get("/api/tester/desklab/shadow", params={"name": "nq_bars"}).status_code == 404
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    t = {"side": "long", "qty": 1, "entry_t": "10:16:00", "entry_px": 1.0, "exit_t": "10:30:00", "exit_px": 2.0, "reason": "tp", "net": 18.0}
+    for i in range(12):                                            # more than the list's 10: the calendar keeps them all
+        store.put_day("nq_bars", a_day((dt.date(2026, 9, 28) - dt.timedelta(days=i)).isoformat(), **mark(), trades=[t] * (i % 2), net=18.0 * (i % 2)), at)
+    store.put_day("nq_bars", a_day("2026-09-01", sha256="other", promoted_utc="old", trades=[t]), at)     # another promotion's day
+    got = c.get("/api/tester/desklab/shadow", params={"name": "nq_bars"}, headers=DESK)
+    assert got.status_code == 200 and got.headers.get("access-control-allow-origin") == DESK["origin"]
+    days = got.json()["days"]
+    assert [d["date"] for d in days] == [(dt.date(2026, 9, 17) + dt.timedelta(days=i)).isoformat() for i in range(12)]
+    assert days[-2]["trades"] == [t] and days[-1]["trades"] == [] and set(days[0]) == {"date", "state", "why", "net", "match", "trades"}
+    assert c.get("/api/tester/desklab/shadow", params={"name": "../x"}).status_code == 404
