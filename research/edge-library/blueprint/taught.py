@@ -55,7 +55,6 @@ pipe_gates / lines / pipe_prop for the lines); it edits none of the hashed engin
 """
 from __future__ import annotations
 
-import ast
 import contextlib
 import copy
 import datetime as dt
@@ -227,35 +226,8 @@ def _pass_words(s: str) -> str:
 # ================================================================ does a family pass a structure level?
 
 def passes_structure(family: str):
-    """True when the family's code hands the engine a STRUCTURE LEVEL with an order -- `_mkt(..., struct=x)`, `_lim(..., struct=x)` or a
-    leg (side, price, struct, target) of `_arm` -- read off its source (the family's class and its bases, up to the Template); False when
-    it never does (then stop_mode struct would silently become `stop_val` x ATR); None when the source cannot be read."""
-    cls = _blocks().BASES[family][0]
-    flagged = False
-    for k in cls.__mro__:
-        if k is object or k.__module__ == S.__name__:
-            continue
-        try:
-            tree = ast.parse(textwrap.dedent(inspect.getsource(k)))
-        except (OSError, TypeError, SyntaxError):
-            return None
-        none = lambda n: isinstance(n, ast.Constant) and n.value is None  # noqa: E731
-        for fn in ast.walk(tree):
-            arms = False
-            for n in ast.walk(fn) if isinstance(fn, ast.FunctionDef) else ():
-                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
-                    at = n.func.attr
-                    if at in ("_mkt", "_lim"):
-                        pos = 2 if at == "_mkt" else 3                       # (ctx, side[, px], struct)
-                        if any(kw.arg == "struct" and not none(kw.value) for kw in n.keywords) or (len(n.args) > pos and not none(n.args[pos])):
-                            flagged = True
-                    elif at == "_arm":
-                        arms = True
-            if arms:                                                         # legs (side, px, struct, tp_px): any such tuple of the function
-                for n in ast.walk(fn):
-                    if isinstance(n, ast.Tuple) and len(n.elts) == 4 and not none(n.elts[2]):
-                        flagged = True
-    return flagged
+    """engine families/blocks.has_structure (moved there 2026-10-20 for the hm40 table), on the registry with conti's families."""
+    return _blocks().has_structure(family)
 
 
 # ================================================================ the sheet -> the plan

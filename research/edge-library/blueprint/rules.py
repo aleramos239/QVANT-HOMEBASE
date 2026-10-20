@@ -115,13 +115,17 @@ EXIT_KINDS = ("standard", "open")                   # what a card's `exits` may 
 
 def exit_cells(kind: str, root: str) -> list:
     """The exit cells of a card's `exits` kind: 'standard' = exit_menu(root) (48 cells); 'open' = the session-anchored table
-    (exit_menu.json `open`: 60 cells, the same for every market), in the same order as engine families/blocks.menu_open(root)."""
+    (exit_menu.json `open`: 60 cells, the same for every market), in the same order as engine families/blocks.menu_open(root);
+    'hm40' = exit_menu.json `hm40` (40 cells, = blocks.menu_hm40(root, own=True))."""
     if kind == "standard":
         return exit_menu(root)
-    if kind != "open":
-        raise RuleError(f"exits {kind!r}: one of {', '.join(EXIT_KINDS)}")
+    if kind not in ("open", "hm40"):
+        raise RuleError(f"exits {kind!r}: one of {', '.join(EXIT_KINDS)}, hm40")
     m = template("exit_menu")
     if root not in m["stops"]["pts"]:
         raise RuleError(f"no exit table for market {root!r} (it has {', '.join(m['stops']['pts'])})")
+    if kind == "hm40":                              # all 40: a family with no structure level runs the 20 ATR cells (blocks.exits)
+        h = m["hm40"]
+        return [{"stop_mode": k, "stop_val": float(v), "tgt_r": float(r)} for k in ("atr", "own") for v in h["stops"][k] for r in h["targets_r"]]
     o = m["open"]
     return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for k in o["stop_order"] for v in o["stops"][k] for r in o["targets_r"]]

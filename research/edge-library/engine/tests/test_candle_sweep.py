@@ -248,6 +248,16 @@ def test_break_signals_equal_the_written_rule_on_random_days(tf, sess):
     assert n > 0
 
 
+def test_body_x_needs_this_body_at_least_x_times_the_previous_body():
+    brk = {"mode": "break"}
+    up = {**GREEN, "09:35": m(PX, 15014.0, 15003.0, 15013.0), "09:44": m(15013.0, 15014.0, 15012.5, 15013.0)}   # body 13 vs GREEN's 12
+    assert signals({**brk, "body_x": 1.0}, day(up)) == [(sec(9, 45), "long")]
+    assert signals({**brk, "body_x": 2.0}, day(up)) == []
+    assert CS.signal(100, 110, 99, 105, 105, 116, 104, 115, "body", mode="break", body_x=2.0) == 1     # 10 >= 2 x 5
+    assert CS.signal(100, 110, 99, 105, 105, 116, 104, 114, "body", mode="break", body_x=2.0) == 0     # 9 < 10
+    assert CS.signal(100, 110, 90, 95, 95, 96, 80, 85, "body", mode="break", body_x=2.0) == -1         # short: 10 >= 2 x 5
+
+
 # ---- (iv a) turn: the previous candle one colour, the sweeping candle the other -----------------------------------------------------
 
 def red_long(c):
@@ -437,6 +447,7 @@ def test_the_settings_and_their_limits():
     assert sc["back"] == ("choice", ("range", "body", "far")) and sc["max_tr"] == ("int", 1, 20) and sc["ema1h"] == ("int", 0, 500)
     assert sc["dir930"] == ("choice", ("off", "with")) and d["dir930"] == "off"
     assert sc["mode"] == ("choice", ("sweep", "break")) and d["mode"] == "sweep"
+    assert sc["body_x"] == ("float", 0.0, 10.0) and d["body_x"] == 0.0
     assert sc["candle"] == ("int", 0, 60) and sc["turn"] == ("choice", ("off", "on", "same")) and d["turn"] == "off"
     for bad in ({"back": "wick"}, {"back": 1}, {"max_tr": 0}, {"max_tr": 21}, {"dir": "up"}, {"ema1h": -1}, {"ema1h": 501}, {"ema1h": 1.5},
                 {"candle": -1}, {"candle": 61}, {"candle": 3}, {"candle": 3, "tf": "5"}):

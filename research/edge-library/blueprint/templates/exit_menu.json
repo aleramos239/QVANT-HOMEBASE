@@ -81,5 +81,30 @@
  },
  "hold": "day",
  "flat_et": "15:58",
- "flat_et_half_day": "13:13"
+ "flat_et_half_day": "13:13",
+ "hm40": {
+  "_about": "The hm40 exit table (the owner, 2026-10-20; spec docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md section 3): 4 ATR stops (x Wilder ATR14 of the idea's bar size) then 4 own stops (x the family's own structure distance, floored at 0.25 ATR) x 5 targets (x the stop) = 40 cells, stops outer and targets inner, the same for every market. A family that passes no structure level runs the 20 ATR cells only. Locked to the engine by engine/tests/test_hm40.py (blocks.menu_hm40 reads this section).",
+  "stops": {
+   "atr": [
+    0.5,
+    1,
+    1.5,
+    2
+   ],
+   "own": [
+    0.5,
+    1,
+    1.5,
+    2
+   ]
+  },
+  "targets_r": [
+   0.5,
+   0.75,
+   1,
+   1.5,
+   2
+  ],
+  "cells": 40
+ }
 }

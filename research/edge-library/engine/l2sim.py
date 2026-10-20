@@ -1732,6 +1732,8 @@ class Template(Strategy):
           as its own engine segment before the day window, so no trade spans midnight or the 17:00-18:00 break.
           Overnight range onh / onl: london 00:00-03:00, NY sessions 00:00-09:30, pre 00:00-08:25, eve / asia none.
       stop_mode = pct             stop distance = stop_val PERCENT of the entry reference price (0.10 = 0.10 %).
+      stop_mode = own             stop distance = stop_val x |ref - the family's structure level| (floor 0.25 ATR; hm40, the owner
+                                  2026-10-20). No structure level -> NO order, counted in result["skipped_by_reason"].
       f_book = on    (NQ, D2)     an entry is allowed only when the 5-minute mean imb10 does NOT oppose its side
                                   (long needs mean >= 0, short <= 0). No signal (NaN / book_ok False / stale) -> NO entry.
       f_thin = on    (NQ, D4)     an entry is allowed only when the break-side top-10 depth is thin: ask10_rel15
@@ -1766,7 +1768,7 @@ class Template(Strategy):
                 "f_book": "off", "x_book": "off", "f_thin": "off", "hold_to": "session"}
     SCHEMA = {"tf": ("choice", ("1", "5", "15", "30")),                    # the tester drafts' inputs (R/gen_drafts COMMON)
               "sess": ("choice", ("all", "asia", "london", "nyam", "mid", "pm", "eve", "pre", "globex")),
-              "dir": ("choice", ("both", "long", "short")), "stop_mode": ("choice", ("atr", "pts", "struct", "pct")),
+              "dir": ("choice", ("both", "long", "short")), "stop_mode": ("choice", ("atr", "pts", "struct", "pct", "own")),
               "stop_val": ("float", 0.1, 1000), "tgt_r": ("float", 0, 20), "trail_atr": ("float", 0, 10),
               "exit_bars": ("int", 0, 500), "max_tr": ("int", 1, 20),
               "f_trend": ("choice", ("off", "with", "against")), "f_vwap": ("choice", ("off", "with", "against")),
@@ -1784,6 +1786,7 @@ class Template(Strategy):
 
     def __init__(self, params: dict | None = None):
         super().__init__(params)
+        self.skipped_by_reason = {}                # reason -> signals that placed no order (run_many sums them)
         self.S = dict(SESS)                        # this instance's session table: SESS + the family's own windows
         self.S.update(self.fam_sessions())
         ids = self.sessions()
@@ -2160,6 +2163,10 @@ class Template(Strategy):
             d = self.p["stop_val"] / 100.0 * abs(ref)        # stop_val PERCENT of the entry reference price
         elif m == "struct" and struct is not None:
             d = max(abs(ref - struct), 0.25 * a)
+        elif m == "own":                                     # never silently an ATR stop: no level -> None, no order
+            if struct is None:
+                return None
+            d = max(abs(ref - struct) * self.p["stop_val"], 0.25 * a)
         else:
             d = self.p["stop_val"] * a
         return max(d, 2 * ctx.tick)
@@ -2170,6 +2177,10 @@ class Template(Strategy):
         r = self.p["tgt_r"]
         return ref + sd * r * d if r > 0 else None
 
+    def _no_level(self):
+        k = "own stop: no structure level"
+        self.skipped_by_reason[k] = self.skipped_by_reason.get(k, 0) + 1
+
     def _mkt(self, ctx, side, struct=None, tp_px=None, ref=None, tag=None):
         """Market entry at the signal close (or `ref`), brackets re-priced to the fill."""
         if not self.allowed(side):
@@ -2179,6 +2190,8 @@ class Template(Strategy):
         if tp_px is not None and (tp_px - ref) * sd < 2 * ctx.tick:
             return None                             # the target is already reached / behind us: no trade
         d = self._dist(ctx, ref, struct)
+        if d is None:
+            return self._no_level()
         ctx.move_brackets_to_fill = True
         o = ctx.market(side, sl=ref - sd * d, tp=self._tp(sd, ref, d, tp_px), ref=ref, **_tagkw(tag))
         self.orders.append([o, None, False])
@@ -2197,6 +2210,9 @@ class Template(Strategy):
             if not self.allowed(side) or (not imm and (px - lp) * sd <= 0):
                 continue
             d = self._dist(ctx, px, struct)
+            if d is None:
+                self._no_level()
+                continue
             ctx.move_brackets_to_fill = True
             os_.append(ctx.stop_entry(side, px, sl=px - sd * d, tp=self._tp(sd, px, d, tp_px), **_tagkw(tag)))
         if len(os_) == 2:
@@ -2217,6 +2233,8 @@ class Template(Strategy):
         if (lp - px) * sd <= 0:
             return None
         d = self._dist(ctx, px, struct)
+        if d is None:
+            return self._no_level()
         o = ctx.limit_entry(side, px, sl=px - sd * d, tp=self._tp(sd, px, d, tp_px), **_tagkw(tag))
         self.orders.append([o, self.nb + ttl if ttl else None, False])
         return o
@@ -2384,6 +2402,8 @@ def _run_days(job):
             trades += res.trades
             if res.skip:
                 no_trade.append({"date": iso, "reason": res.skip})
+    for st, o in zip(strats, out):
+        o["skipped_by_reason"] = dict(getattr(st, "skipped_by_reason", {}))
     return out
 
 
@@ -2441,7 +2461,8 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     """Run several (strategy class, params) specs in ONE pass over the tapes (a grid: each session's tape,
     bars and features are loaded once and shared by every cell). Returns one result dict per spec, in order:
     {"trades": [...R trades.json schema...], "skipped": [...], "no_trade": [...], "sessions": n, "used": n,
-    "skipped_by_error": n, "unrealistic_winners": n, "elapsed_s": s (the whole pass), "meta": {...}}; trades
+    "skipped_by_error": n, "unrealistic_winners": n, "skipped_by_reason": {reason: signals that placed no order},
+    "elapsed_s": s (the whole pass), "meta": {...}}; trades
     sorted by (exit, entry) like a tester bundle.
     `features`: optional picklable callable date -> Features | None (e.g. L2Features([...])).
     SENSITIVITY (defaults = the tester's validated law; any change is recorded in meta and meta["stress"]):
@@ -2553,9 +2574,11 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     elapsed = round(time.monotonic() - t_start, 2)
     results = []
     for k, (cls, _) in enumerate(specs):
-        trades, skipped, no_trade, n_sess, n_two, n_guard, eve_skipped = [], [], [], 0, 0, 0, []
+        trades, skipped, no_trade, n_sess, n_two, n_guard, eve_skipped, by_reason = [], [], [], 0, 0, 0, [], {}
         for part in parts:
             o = part[k]
+            for r, n in o.get("skipped_by_reason", {}).items():
+                by_reason[r] = by_reason.get(r, 0) + n
             trades += o["trades"]
             skipped += o["skipped"]
             no_trade += o["no_trade"]
@@ -2581,7 +2604,7 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
             "trades": trades, "skipped": skipped, "no_trade": no_trade, "sessions": n_sess,
             "used": n_sess - len(skipped), "skipped_by_error": len(errors), "both_sides_sessions": n_two,
             "unrealistic_winners": len(unrealistic_winners(trades, SPECS[root][1])), "elapsed_s": elapsed,
-            "eve_skipped": sorted(eve_skipped, key=lambda x: x["date"]),
+            "eve_skipped": sorted(eve_skipped, key=lambda x: x["date"]), "skipped_by_reason": by_reason,
             "meta": {"engine": ENGINE_VERSION,
                      "fill_law": "tick replay (ofb_tick tape)" if root == "NQ" else "tick replay (tester tape cache)",
                      "strategy": f"{cls.__module__}.{cls.__name__}", "inputs": probes[k].p, "root": root,
