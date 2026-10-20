@@ -18,6 +18,8 @@ THE RULE (fixed here, before any run):
     1-minute bars from the near edge, without the 0.25 tf-ATR floor (fvg_odir._dist). THE TARGET: the exit cell's tgt_r (the owner: 0.5). Flat 15:58 ET.
 
 MY PICKS, NOT THE OWNER'S WORDS: side read on the tf close (not tick by tick); entry at the near edge; entries 09:30-15:00; one trade a day.
+`max_tr` above 1 (the owner, 2026-10-19: "no trade limit"; 1 .. 20): after a trade has closed, the next NEW gap on the side is the next entry
+(a gap formed before or during the trade is used up), until max_tr trades a day -- fvg_odir's pick newest.
 
 NO LOOK-AHEAD: the side, the gap and bar 2 are read from closed bars; the order is placed or moved after that close.
 Tests: engine/tests/test_fvg_oside.py."""
@@ -33,7 +35,7 @@ class FvgOside(FvgOdir):
     SCHEMA = {"min_gap": ("float", 0.0, 10.0), "stop_atr": ("float", 0.0, 5.0), "atr1": ("float", 0.0, 20.0)}
 
     def fam_day(self, ctx):
-        self.last, self.want, self.placed = {}, None, None
+        self.last, self.want, self.placed, self.seen = {}, None, None, 0
 
     def fam_update(self, ctx):
         step = self.tf * 60
@@ -44,9 +46,13 @@ class FvgOside(FvgOdir):
                 self._cancel(ctx)                    # an unfilled order dies at 15:00
             self.want = None
             return
-        if self.sid is None or now < OPEN + 3 * step or len(self.H) < 3 or self.n_ent:     # all 3 gap candles from 09:30 on
-            self.want = None
+        if self.sid is None or now < OPEN + 3 * step or len(self.H) < 3 or self.n_ent >= self.p["max_tr"] or not ctx.flat:
+            self.want = None                         # all 3 gap candles from 09:30 on; nothing new while a trade is open
+            if not ctx.flat:
+                self.last = {}
             return
+        if self.n_ent != self.seen:                  # a trade has closed: only gaps formed after it count (fvg_odir's newest)
+            self.last, self.seen = {}, self.n_ent
         h1, l1, h3, l3 = self.H[-3], self.L[-3], self.H[-1], self.L[-1]
         k, k1 = self.p["stop_atr"], self.p["atr1"]
         a1 = self.atr1m() if k1 > 0 else None

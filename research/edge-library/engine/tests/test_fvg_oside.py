@@ -102,3 +102,11 @@ def test_atr1_puts_the_stop_k_one_minute_atr14_from_the_near_edge_without_the_tf
     res = S.run_session(st, tape_of(day(g)), daily=list(DAILY), on_error="raise")
     assert A1.seen and all(abs(px - s_ - 2.0 * a) < 1e-9 for px, s_, a in A1.seen)
     assert all(abs(t["entry_price"] - t["sl"] - (A1.seen[0][0] - A1.seen[0][1])) < 1e-9 for t in res.trades)
+
+
+def test_with_max_tr_above_1_the_next_new_gap_after_a_closed_trade_is_the_next_entry():
+    back = (15011.0, 15011.0, 15005.0, 15006.0, 40)                  # fills 15006, then 15012 > the 0.5R target 15009: closed
+    g = rest(5, 15000.0) + up_gap(15000.0) + rest(3, 15011.0) + [back] + rest(3, 15012.0) + up_gap(15012.0) + rest(200, 15023.0)
+    assert len(play(day(g))[0]) == 1                                 # max_tr 1: the day is over
+    log, _, res = play(day(g), max_tr=2)
+    assert [r[1:] for r in log] == [("long", 15006.0, 15000.0, True), ("long", 15018.0, 15012.0, True)] and len(res.trades) == 1
