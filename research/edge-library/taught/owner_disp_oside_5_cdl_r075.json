@@ -1,0 +1,47 @@
+{
+ "name": "owner_disp_oside_5_cdl_r075",
+ "source": {
+  "title": "Owner's idea, 2026-10-19 (third): displacement against the side of the 09:30 open, stop at the displacement candle's extreme, 1:0.75",
+  "channel": "owner"
+ },
+ "market": "NQ",
+ "bars": [
+  "5"
+ ],
+ "sessions": [
+  "nyam",
+  "mid",
+  "pm"
+ ],
+ "window": "09:30-15:00",
+ "dir": "both",
+ "entry": {
+  "family": "disp_oside",
+  "settings": {
+   "stop_at": "candle"
+  },
+  "words": "Use 9:30: if we are above the 9:30 open level then short, below then long; enter when we get displacement, 1 trade a day, 30 point stop, try 1:0.5, 0.75, 1, 1.5. Displacement: the body of the candle must be larger than the body of the previous candle and close above the wick of the previous candle."
+ },
+ "exits": {
+  "stop": "struct",
+  "target_r": 0.75,
+  "max_trades": 1
+ },
+ "taught": [
+  "[chat 2026-10-19] the 09:30 open sets the side: above = shorts, below = longs",
+  "[chat 2026-10-19] displacement = body larger than the previous candle's body, close beyond the previous candle's wick",
+  "[chat 2026-10-19] one trade a day",
+  "[chat 2026-10-19] stop = the displacement candle's extreme (owner: use the displacement candle extreme as the stop)",
+  "[chat 2026-10-19] target 1:0.75 (of 1:0.5, 0.75, 1, 1.5)"
+ ],
+ "not_run": [
+  "BARS: 5-minute. Claude's pick (1m and 5m both run).",
+  "THE STOP: the candle's low (long) / high (short), measured from its close; the engine floors it at 0.25 ATR and two ticks.",
+  "SIDE: price vs the 09:30 open is read on the displacement candle's close. Claude's pick.",
+  "THE ENTRY: a market order at the displacement candle's close. Claude's pick.",
+  "WINDOW: not said; entries 09:30-15:00, flat 15:58. Claude's pick.",
+  "COSTS AND FILLS: the engine's own (1 tick of slippage, $4 a round turn, tick replay).",
+  "THE TEST DAYS (2025-07-01 on) ARE NOT READ: this is build days only."
+ ],
+ "control": "random"
+}

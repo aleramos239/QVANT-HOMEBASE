@@ -10,7 +10,10 @@ THE RULE (fixed here, before any run):
   * DISPLACEMENT, two tf bars, bar 1 the older: bar 2's body |close - open| larger than bar 1's body, and UP: bar 2 green and its close above
     bar 1's high; DOWN: bar 2 red and its close below bar 1's low. Read at bar 2's close, which must fall after 09:30 and before 15:00.
   * ENTRY: the first displacement on the side -> a market order at its close. One trade a day (max_tr 1).
-  * STOP and TARGET: the exit cell's (the owner: 30 points; 1:0.5, 0.75, 1, 1.5). Flat 15:58 ET.
+  * STOP and TARGET: the exit cell's (the owner: 30 points; 1:0.5, 0.75, 1, 1.5). Flat 15:58 ET. The structure level passed with the
+    order is the close -/+ ATR(14) of the tf bars (the owner, 2026-10-19: "use atr 14 as the stop"): stop_mode struct = a 1-ATR stop,
+    stop_mode pts ignores it. stop_at candle (the owner, 2026-10-19: "use the displacement candle extreme as the stop") passes the
+    displacement candle's low (long) / high (short) instead; the Template floors it at 0.25 ATR and two ticks.
 
 MY PICKS, NOT THE OWNER'S WORDS: side read on the displacement candle's close (not tick by tick); entry at that close (market); entries
 09:30-15:00; bar 1 may be the 09:25 bar.
@@ -24,8 +27,8 @@ from .fvg_odir import LAST, OPEN, FvgOdir
 
 class DispOside(FvgOdir):
     """disp_oside (module docstring). State per day: want = the side to enter now, or None."""
-    DEFAULTS = {"max_tr": 1}
-    SCHEMA = {}
+    DEFAULTS = {"stop_at": "atr", "max_tr": 1}
+    SCHEMA = {"stop_at": ("choice", ("atr", "candle"))}
     SCREEN_RUN = {}
 
     def fam_day(self, ctx):
@@ -52,7 +55,12 @@ class DispOside(FvgOdir):
 
     def fam_signal(self, ctx):
         if self.want is not None:
-            self._mkt(ctx, self.want)
+            sd = 1 if self.want == "long" else -1
+            if self.p["stop_at"] == "candle":
+                struct = self.L[-1] if sd > 0 else self.H[-1]
+            else:
+                struct = self.C[-1] - sd * self.atr
+            self._mkt(ctx, self.want, struct=struct)
 
 
 ENTRY_WINDOWS = {"disp_oside": (OPEN, LAST + 59)}
