@@ -13,6 +13,14 @@ from homebase import config as desk_config
 from homebase.config import StrategyCfg
 from tests.levels_util import levels_cfg
 from tests.test_server import client  # noqa: F401  (the desk fixture)
+from tests.levels_util import _straddles
+
+
+@pytest.fixture(autouse=True)
+def _former_straddles_ship(monkeypatch):
+    """Nothing ships since 2026-10-20 (the Desk's straddles are Lab strategies now). config.load's rules are checked here on
+    the two straddles it shipped until then (tests/levels_util.py), as a stand-in shipped strategy."""
+    monkeypatch.setattr(desk_config, "_defaults", lambda: desk_config.AppCfg(strategies=_straddles()))
 
 ET = ZoneInfo("America/New_York")
 

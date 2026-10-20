@@ -162,57 +162,9 @@ def apply_rr(c: StrategyCfg) -> StrategyCfg:
 
 
 def _defaults() -> AppCfg:
-    return AppCfg(
-        strategies={
-            # NQ 9:30 straddle — the approved champion (spec 2026-09-09,
-            # OOS-passed 2026-09-10). The TREND gate runs in-app (self_fire).
-            # pine_file names a deleted file; the value stays so the tester's
-            # recorded desk_cfg is unchanged.
-            "nq930": StrategyCfg(
-                symbol="NQ", qty=3, offset_pts=5.0, sl_pts=5.0, tp_pts=15.0,
-                enabled=True, gated=True, self_fire=True, pine_file="nq930.pine", rr=3.0,
-                metrics={
-                    "source": "one-shot sealed-year OOS exam · 2025-07-08→2026-07-07 · TV 15s",
-                    "rows": {"trades": "167", "WR": "47.3%", "PF": "2.34",
-                             "t": "5.04", "avg/trade/mini": "$79.0",
-                             "maxDD/mini": "−$1,135", "green months": "10/10"},
-                    "caveat": "does not cover live fill quality — the edge is 2–4 ticks deep",
-                    "equity_file": "nq930_equity.json",
-                }),
-            # GC 08:30 NFP straddle (verified 2026-10-01, research/nfp-2026-10-02/verify): 4 gold
-            # contracts, OCO stops at anchor +/- 2.0, SL 5.0 (-$2,000 before slippage: the user's choice 2026-10-01, a stop-out ends the eval), TP 7.7
-            # (+$3,080 gross, +$3,061.60 after $2.30 a side), unfilled cancelled 08:45, flat 09:55.
-            # Fires 08:29:59 (the user's choice 2026-10-01): the stops rest at the exchange before the release;
-            # tested on 57 NFPs: 08:29:59 passes 22/38 + 13/19, one second later (08:30:00) 23/38 + 14/19.
-            # Trades ONLY the days in only_dates: the BLS NFP days (2026-10-02, 11-06, 12-04) and CPI days (10-14, 11-10, 12-10),
-            # 08:30 ET, checked on bls.gov 2026-10-08, one setup for both releases (owner 2026-10-08; extend by hand).
-            # The id stays gc_nfp (book, journal, history); the desk shows it as label GC_NFP/CPI.
-            # accept_until 08:31: a fire more than a minute late is refused, not re-anchored on a
-            # post-release price. Ships off and unbooked: the user books the evals and enables it.
-            "gc_nfp": StrategyCfg(
-                symbol="GC", qty=4, offset_pts=2.0, sl_pts=5.0, tp_pts=7.7,
-                cancel_et="08:45", flat_et="09:55",
-                accept_from_et="08:29", accept_until_et="08:31",
-                enabled=False, gated=False, self_fire=True,
-                fire_et="08:29:59", only_dates=["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04", "2026-12-10"],
-                label="GC_NFP/CPI",
-                metrics={
-                    "source": "GC 08:30 NFP + CPI straddle, one setup for both releases (2026-10-08)",
-                    "rows": {"entry": "OCO stops anchor +/-2.0",
-                             "SL": "5.0 pts, $500/ct, $2,000 at 4 ct (a stop-out ends the eval)",
-                             "TP": "7.7 pts, $770/ct, $3,080 at 4 ct",
-                             "2025-01..2026-09 tick replay, 4 ct": "NFP 19 trades 74% win +$32.1k eval pass 68% / "
-                                                                  "CPI 20 trades 60% win +$19.6k eval pass 48%",
-                             "events": "NFP and CPI days"},
-                    "rev": 3,
-                    "caveat": "19-20 trades per event; the 2025-26 days were already spent on this family; CPI is "
-                              "the weaker of the two and its win rate fell 64% -> 56% from 2025 to 2026; most "
-                              "winners last under 5 s (Lucid micro-scalp: over 50% of profit from trades held 5 s "
-                              "or less)",
-                    "equity_file": "gc_nfp_equity.json",
-                }),
-        },
-    )
+    # No built-in strategies: the NQ 9:30 and GC 08:30 NFP/CPI straddles left the Desk on 2026-10-20 (the owner) and are
+    # Lab strategies now (nq_930_straddle, gc_nfp_cpi_straddle).
+    return AppCfg()
 
 
 _said: set = set()      # (where, key) of the unknown keys a reader already named in the log

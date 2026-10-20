@@ -11,7 +11,7 @@ import json
 import pytest
 
 from homebase.broker.base import FillEvent
-from homebase.config import AccountCfg, AppCfg, _defaults
+from homebase.config import AccountCfg, AppCfg
 from tests.levels_util import strategy_cfg
 from homebase.engine import TAKE_GRACE_S, Engine
 from homebase.levels import Geometry
@@ -177,7 +177,7 @@ def test_disarmed_and_shadow_only_journal(tmp_path):
 
 def test_levels_refusals(tmp_path):
     eng, ads, clock = desk(tmp_path, {"lv_atr_take": strat(), "lv_orb": strat("lv_orb", enabled=False),
-                                      "nq930": dataclasses.replace(_defaults().strategies["nq930"], enabled=True)},
+                                      "nq930": strategy_cfg("nq930", enabled=True)},
                            {"a": paper()}, {"lv_atr_take": [("a", 4)], "nq930": [("a", 1)]})
     assert "unknown" in run(eng.handle_levels("nope", GEO))["reason"]
     assert "unknown" in run(eng.handle_levels("lv_orb", GEO))["reason"]               # disabled
@@ -277,7 +277,7 @@ def test_the_books_survive_a_restart(tmp_path):
 # --------------------------------------------------------------------------- an account stopped for the day
 def two_strategies(tmp_path, **levels_over):
     return desk(tmp_path, {"lv_atr_take": strat(**levels_over),
-                           "nq930": dataclasses.replace(_defaults().strategies["nq930"], enabled=True, gated=False)},
+                           "nq930": strategy_cfg("nq930", enabled=True, gated=False)},
                 {"a": paper()}, {"lv_atr_take": [("a", 4)], "nq930": [("a", 1)]})
 
 
@@ -440,7 +440,7 @@ def test_the_backstop_uses_the_lower_of_day_take_and_target_take(tmp_path):
 
 
 def test_accounts_without_rules_are_not_watched(tmp_path):
-    eng, ads, _ = desk(tmp_path, {"nq930": dataclasses.replace(_defaults().strategies["nq930"], enabled=True)},
+    eng, ads, _ = desk(tmp_path, {"nq930": strategy_cfg("nq930", enabled=True)},
                        {"a": paper()}, {"nq930": [("a", 3)]})
     run(eng.handle_alert({"strategy": "nq930", "upper": 24505.0, "lower": 24495.0}))
     st = eng._state("nq930", "a")

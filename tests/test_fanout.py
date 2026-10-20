@@ -41,7 +41,8 @@ def test_a_stop_is_the_only_op_the_runner_adds():
         assert not intents.well_formed_stop(bad)
 
 
-def test_the_two_modules_are_stdlib_only():
+def test_the_two_modules_are_stdlib_only(monkeypatch):
+    monkeypatch.delenv("PYTHONPATH", raising=False)          # no tests/child_site start-up hook in this bare child
     code = ("import sys; import homebase.labrun.intents, homebase.labrun.fanout\n"
             "bad = sorted(m for m in sys.modules if m.startswith('homebase.') and m not in "
             "('homebase.labrun', 'homebase.labrun.intents', 'homebase.labrun.fanout'))\n"

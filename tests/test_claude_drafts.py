@@ -67,7 +67,7 @@ def write_template(name="my_orb"):
 # ---------------------------------------------------------------- names
 
 @pytest.mark.parametrize("bad", ["", "a", "Nq930", "9lives", "has-dash", "has space", "../etc", "x" * 41,
-                                 "draft_x", "base", "straddle", "nq930", "gc_nfpcpi", "init", "a.b"])
+                                 "draft_x", "base", "straddle", "gc_nfpcpi", "init", "a.b"])
 def test_bad_names_are_refused(bad):
     with pytest.raises(ValueError):
         draftstore.validate_name(bad)
@@ -214,8 +214,8 @@ def test_a_draft_backtests_end_to_end_in_the_sandbox_and_runs_the_validated_snap
 def test_source_route_serves_builtins_and_draft_text_without_running_it(tmp_path, sentinel):
     write_template()
     with client(tmp_path) as c:
-        s = c.get("/api/tester/strategies/nq930/source").json()
-        assert [f["path"] for f in s["files"]] == ["homebase/strategies/nq930.py", "homebase/strategies/straddle.py",
+        s = c.get("/api/tester/strategies/gc_nfpcpi/source").json()
+        assert [f["path"] for f in s["files"]] == ["homebase/strategies/gc_nfpcpi.py", "homebase/strategies/straddle.py",
                                                    "homebase/strategies/base.py"]
         d = c.get("/api/tester/strategies/draft_my_orb/source").json()
         assert d["draft"] is True and "class MyDraft" in d["files"][0]["text"]

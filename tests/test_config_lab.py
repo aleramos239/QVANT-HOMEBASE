@@ -13,6 +13,19 @@ from homebase import config as desk_config
 from homebase import labcfg
 from homebase.config import AccountCfg, AppCfg, ChartTradingCfg
 from homebase.labrun import store
+from tests.levels_util import _straddles
+
+
+@pytest.fixture(autouse=True)
+def _former_straddles_ship(monkeypatch):
+    """Nothing ships since 2026-10-20 (the Desk's straddles are Lab strategies now). config.load's rules are checked here on
+    the two straddles it shipped until then (tests/levels_util.py), as a stand-in shipped strategy."""
+    def shipped():                                       # with the display-only records they carried (the golden file's)
+        s = _straddles()
+        for name, rec in json.loads(GOLDEN.read_text(encoding="utf-8"))["strategies"].items():
+            s[name].metrics = rec.get("metrics")
+        return desk_config.AppCfg(strategies=s)
+    monkeypatch.setattr(desk_config, "_defaults", shipped)
 
 GOLDEN = Path(__file__).parent / "fixtures" / "config_no_lab.golden.json"
 

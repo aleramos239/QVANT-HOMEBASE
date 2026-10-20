@@ -394,7 +394,7 @@ def test_a_name_already_taken_is_refused_unless_it_replaces(tmp_path):
         again = c.post(f"{FORM}/build", json={"answers": {**a, "side": "short"}, "replace": True}, headers=OK).json()
         assert again["ok"] is True and again["name"] == "form_taken" and again["code"] != first["code"]
         # a built-in's name stays taken, replace or not (saving it would be refused too)
-        for body in ({"answers": {**a, "name": "gc_nfp"}}, {"answers": {**a, "name": "gc_nfp"}, "replace": True}):
+        for body in ({"answers": {**a, "name": "gc_nfpcpi"}}, {"answers": {**a, "name": "gc_nfpcpi"}, "replace": True}):
             got = c.post(f"{FORM}/build", json=body, headers=OK).json()
             assert got["ok"] is False and list(got["errors"]) == ["name"] and "built-in" in got["errors"]["name"], got
         # other refusals still come first

@@ -16,6 +16,9 @@ kind ("research" -> "custom") and its label -- and no number.
 
 2026-10-11: the default prop rule set became lucid-flex-50k@2026-10-11 (the prop audit's corrected
 LucidFlex file). One word of the fixture changed with that -- run.prop_rules -- and no number.
+
+2026-10-20: the Desk's built-in nq930 was removed; the run's strategy is the tests' twin (tests/straddle_twin.py),
+which has no Desk config. One key left the fixture -- run.strategy_config.desk_cfg -- and no number.
 """
 from __future__ import annotations
 

@@ -56,12 +56,9 @@ It runs as launchd services on one Mac, from this folder
 
 ## Strategies
 
-These ship in `config.py` defaults. All times are ET. Each trades at most once a day.
-
-| Name | Market | Kind | What triggers it | Default |
-|---|---|---|---|---|
-| `nq930` | NQ | straddle | Every weekday at 09:30:00, if the daily TREND gate passes (ADX 14 on completed daily bars, read at 09:20). A chop day is skipped. Target = `rr` × stop (default 1:3, edited in the app). | on |
-| `gc_nfp` (shown as GC_NFP/CPI) | GC | straddle | 08:29:59, only on the dates listed in `only_dates` (NFP and CPI release days, added by hand). | off |
+No strategy ships in `config.py` defaults since 2026-10-20. Every strategy on the Desk is a Lab strategy. The old built-ins
+`nq930` (NQ 9:30 straddle) and `gc_nfp` (GC 08:29:59 NFP/CPI straddle) were rebuilt as the Lab strategies `nq_930_straddle` and
+`gc_nfp_cpi_straddle`, same rules and settings.
 
 - A **straddle** uses fixed distances from the config.
 - The **levels** kind (`levels.py`, `leveltimer.py`) is engine code only: no strategy ships on it since
@@ -282,7 +279,7 @@ The tester replays archived ticks through a strategy, one session at a time. Its
   recorded in `homebase/.state/tester/spends.jsonl`.
 - Draft strategies live in `~/.homebase/strategies/`. Listing or reading a draft never runs it. Its backtest runs
   inside the macOS sandbox (`homebase/backtest/draft.sb`). The desk never reads the drafts folder.
-- Script run: `.venv/bin/python -m homebase.backtest.runner run --strategy nq930 ...`
+- Script run: `.venv/bin/python -m homebase.backtest.runner run --strategy gc_nfpcpi ...`
 
 ## Research
 

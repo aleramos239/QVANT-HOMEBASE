@@ -127,7 +127,9 @@ def test_n_accounts_cost_one_login(client, world):
     assert all(client.app.state.adapters[n.lower()]._auth is world.shared[KEY] for n in EVALS[:4])
 
 
-def test_nothing_is_booked_or_assigned(client):
+def test_nothing_is_booked_or_assigned(client, monkeypatch):
+    from tests.levels_util import _straddles                     # nothing ships since 2026-10-20: the former straddles stand in
+    monkeypatch.setattr(config_mod, "_defaults", lambda: AppCfg(strategies=_straddles()))
     look_up(client)
     add(client, EVALS)
     cfg = client.app.state.cfg

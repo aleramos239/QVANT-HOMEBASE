@@ -1,6 +1,6 @@
 """Neutral "levels" configs for the engine / timer / geometry tests.
 
-No strategy ships on kind "levels" any more (2026-10-08: the desk ships nq930 and gc_nfp). The engine is
+No strategy ships on kind "levels" any more (and since 2026-10-20 the desk ships no strategy at all). The engine is
 still covered, on these four local configs; their numbers are the ones the four removed NQ algos had, so
 the geometry, take rules, size tiers and early-close skip keep the coverage they had:
 
@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import dataclasses
 
-from homebase.config import StrategyCfg, _defaults
+from homebase.config import StrategyCfg
 
 NAMES = ("lv_atr_take", "lv_atr_target", "lv_orb", "lv_atr_tiers")
 
@@ -44,7 +44,21 @@ def levels_cfg(name: str, **over) -> StrategyCfg:
     return dataclasses.replace(_levels()[name], **over)
 
 
+def _straddles() -> dict[str, StrategyCfg]:
+    """The two straddles the desk shipped until 2026-10-20 (now Lab strategies), kept here so the engine's generic
+    straddle paths (self_fire, fire_et, only_dates, rr, gating) stay covered."""
+    return {
+        "nq930": StrategyCfg(symbol="NQ", qty=3, offset_pts=5.0, sl_pts=5.0, tp_pts=15.0, enabled=True, gated=True,
+                             self_fire=True, pine_file="nq930.pine", rr=3.0),
+        "gc_nfp": StrategyCfg(symbol="GC", qty=4, offset_pts=2.0, sl_pts=5.0, tp_pts=7.7, cancel_et="08:45",
+                              flat_et="09:55", accept_from_et="08:29", accept_until_et="08:31", enabled=False,
+                              gated=False, self_fire=True, fire_et="08:29:59",
+                              only_dates=["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04",
+                                          "2026-12-10"], label="GC_NFP/CPI"),
+    }
+
+
 def strategy_cfg(name: str, **over) -> StrategyCfg:
-    """A levels config, or a shipped desk strategy (nq930, gc_nfp)."""
-    base = _levels().get(name) or _defaults().strategies[name]
+    """A levels config, or one of the two former desk straddles (nq930, gc_nfp)."""
+    base = _levels().get(name) or _straddles()[name]
     return dataclasses.replace(base, **over)

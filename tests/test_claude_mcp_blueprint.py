@@ -517,7 +517,7 @@ def test_the_wait_is_the_testers_own_default_and_cap(fake, ideas_root):
 
 def test_an_option_cannot_be_smuggled_in_through_a_name_an_id_or_a_reason(fake, ideas_root):
     b = box()
-    for bad in ("--stored", "-x", "nq930", "Bad Name", "", "../x"):
+    for bad in ("--stored", "-x", "gc_nfpcpi", "Bad Name", "", "../x"):
         for tool, more in (("blueprint_lock", {}), ("blueprint_build", {"reason": "r"}), ("blueprint_status", {}),
                            ("blueprint_test", {"confirm": True}), ("blueprint_test", {"confirm": True, "early_look": True}),
                            ("blueprint_heatmap", {}), ("blueprint_mc", {})):

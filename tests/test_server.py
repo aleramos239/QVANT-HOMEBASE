@@ -814,6 +814,8 @@ def test_the_webhook_and_its_secret_are_gone(client, tmp_path, monkeypatch, capl
     import logging
     p = tmp_path / "cfg.json"
     monkeypatch.setattr(config_mod, "config_path", lambda: p)
+    from tests.levels_util import _straddles                     # nothing ships since 2026-10-20: the former straddles stand in
+    monkeypatch.setattr(config_mod, "_defaults", lambda: config_mod.AppCfg(strategies=_straddles()))
     gone = ("webhook_secret", "hook_port", "public_hook_url")
     old = {"armed": True, "webhook_secret": "old-secret", "hook_port": 8851, "public_hook_url": "https://x",
            "accounts": {"a1": {"keyring_key": "k", "account_name": "ACC1", "live": True}},

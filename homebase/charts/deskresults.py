@@ -108,27 +108,13 @@ def build_run_id(runs: Path, rec: dict) -> str | None:
     return None
 
 
-# The Desk's own straddles are not Lab copies, but the tester holds an exact twin of each (it reads the Desk's config at call time):
-# Desk strategy id -> the tester strategy that mirrors it. gc_nfp is the NFP-and-CPI spec of 2026-10-08, so its twin is gc_nfpcpi.
-BUILTIN_TWINS = {"nq930": "nq930", "gc_nfp": "gc_nfpcpi"}
+# The Desk's own straddles (nq930, gc_nfp) left on 2026-10-20: they are Lab strategies now, so no Desk strategy has a twin.
+BUILTIN_TWINS: dict[str, str] = {}
 
 
 def builtin_rec(desk_id: str) -> dict | None:
-    """A built-in Desk straddle as a record the functions above can match runs against: its tester twin, the Desk's size, and
-    the settings the Desk runs now (so a run read before the Desk's setting changed stops matching, as a promoted copy's would).
-    None for a strategy with no twin."""
-    twin = BUILTIN_TWINS.get(desk_id)
-    if twin is None:
-        return None
-    from ..strategies.straddle import desk_cfg
-    c = desk_cfg(desk_id)
-    want = {"offset_pts": c.offset_pts, "sl_pts": c.sl_pts, "tp_pts": c.tp_pts}
-    if twin == "nq930":
-        want["adx_gate"] = bool(c.gated)
-    else:
-        want["events"] = "NFP+CPI"
-    return {"name": twin, "id": twin, "sha256": None, "qty": c.qty, "source": "",
-            "params": strategies.resolve_inputs(strategies.get(twin).inputs(), want)}
+    """A built-in Desk strategy's tester twin as a record. None: there are no built-ins any more."""
+    return None
 
 
 def unseen_run(runs: Path, rec: dict) -> dict | None:

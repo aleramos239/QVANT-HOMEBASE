@@ -97,7 +97,7 @@ def test_the_root_is_the_argument_then_the_environment_then_the_home_folder(idea
 
 
 @pytest.mark.parametrize("bad", ["", "a", "Nq_orb", "9lives", "has-dash", "../etc", "a/b", "x" * 41, "draft_x",
-                                 "nq930", "json", "homebase", None, 7])
+                                 "gc_nfpcpi", "json", "homebase", None, 7])
 def test_an_idea_is_named_like_its_draft(bad, ideas_root):
     for refused in (ideastore.create, ideastore.idea_dir, ideastore.status, ideastore.read_idea):
         with pytest.raises(ValueError):

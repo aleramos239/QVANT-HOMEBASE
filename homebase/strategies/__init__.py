@@ -2,11 +2,10 @@
 from __future__ import annotations
 
 from .base import Input, Strategy, resolve_inputs
-from .gc_nfp import GCNfp
 from .gc_nfpcpi import GCNfpCpi
-from .nq930 import NQ930
 
-REGISTRY: dict[str, type[Strategy]] = {c.id: c for c in (NQ930, GCNfpCpi, GCNfp)}
+# gc_nfpcpi stays for the chart service's paper forward test (charts/paper.py). The Desk's straddles are Lab strategies now.
+REGISTRY: dict[str, type[Strategy]] = {c.id: c for c in (GCNfpCpi,)}
 
 
 def get(strategy_id: str) -> type[Strategy]:

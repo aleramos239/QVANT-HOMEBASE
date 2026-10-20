@@ -9,21 +9,14 @@ position is flattened at flat_et.
 """
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
-from ..gate import THRESHOLD, trend_gate
-from .base import Input, Strategy
+from ..gate import trend_gate
+from .base import Strategy
 
 MIN_GATE_BARS = 110       # = homebase.timer.MIN_GATE_BARS (pinned by a test)
 GATE_BARS = 250           # = homebase.timer.GATE_BARS
 MINUS = "\u2212"          # U+2212 MINUS SIGN: "Short entry -2" reads as a level, not a hyphen
-
-
-def desk_cfg(name: str):
-    """The desk's StrategyCfg as the desk would load it (config.json over the
-    frozen defaults). Read at call time, so the tester follows the desk file."""
-    from ..config import load
-    return load().strategies[name]
 
 
 @dataclass(frozen=True)
@@ -120,38 +113,5 @@ class OpenStraddle(Strategy):
         self.geometry = ()
 
     def provenance(self) -> dict:
-        """Item 4: the times a run actually fired/cancelled/flattened at -- the
-        base class values for a research-only straddle (gc_nfpcpi); DeskStraddle
-        overrides with the desk's config.json-resolved times."""
+        """Item 4: the times a run actually fired/cancelled/flattened at."""
         return {"fire": self.fire, "cancel_et": self.cancel_et, "flat_et": self.flat_et}
-
-
-class DeskStraddle(OpenStraddle):
-    """A straddle the desk runs: defaults, cancel and flat come from its config."""
-    desk_key = ""
-    max_pts = 500.0
-
-    def __init__(self, params: dict | None = None):
-        cfg = desk_cfg(self.desk_key)
-        self.cancel_et, self.flat_et = cfg.cancel_et, cfg.flat_et
-        self.fire = cfg.fire_et
-        self._desk_cfg = cfg
-        super().__init__(params)
-
-    def provenance(self) -> dict:
-        """Item 4: OpenStraddle's fire/cancel/flat times, plus the full desk
-        config.json StrategyCfg this run resolved at call time -- everything
-        `desk_cfg` read that is not already in the run's own `inputs`."""
-        return {**super().provenance(), "desk_cfg": asdict(self._desk_cfg)}
-
-    @classmethod
-    def inputs(cls) -> list[Input]:
-        c = desk_cfg(cls.desk_key)
-        m = cls.max_pts
-        return [
-            Input("offset_pts", "Entry offset (pts)", "float", c.offset_pts, 0.0, m, 0.25),
-            Input("sl_pts", "Stop loss (pts)", "float", c.sl_pts, 0.25, m, 0.25),
-            Input("tp_pts", "Take profit (pts)", "float", c.tp_pts, 0.25, m, 0.25),
-            Input("adx_gate", "ADX(14) trend gate", "bool", bool(c.gated)),
-            Input("adx_min", "ADX threshold", "float", THRESHOLD, 0.0, 100.0, 0.5),
-        ]

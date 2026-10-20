@@ -118,9 +118,8 @@ def test_the_removed_strategies_are_gone_everywhere():
     from homebase import strategies
     gone = {"ym930", "nq10am", "nq_open_long", "nq_open_short"}
     assert not gone & set(_defaults().strategies) and not gone & set(strategies.REGISTRY)
-    assert set(_defaults().strategies) == {"nq930", "gc_nfp"}        # 2026-10-08: the desk ships these two only
-    assert "gc_nfp" not in _defaults().book
-    assert _defaults().strategies["gc_nfp"].enabled is False         # ships off and unbooked
+    assert _defaults().strategies == {} and _defaults().book == {}   # 2026-10-20: nq930 and gc_nfp are Lab strategies
+    assert "gc_nfp" not in strategies.REGISTRY
 
 
 # ---------------------------------------------------------------------------------------------- Friday

@@ -17,7 +17,7 @@ from homebase.engine import Engine
 from homebase.gate import trend_gate
 from homebase.strategies import REGISTRY, catalog, get
 from homebase.strategies.gc_nfpcpi import GCNfpCpi, calendar
-from homebase.strategies.nq930 import NQ930
+from tests.straddle_twin import NQ930
 from homebase.strategies.straddle import GATE_BARS, MIN_GATE_BARS
 
 GATE_FIX = json.loads((Path(__file__).parent / "fixture_gate_nq2024.json").read_text())
@@ -32,7 +32,7 @@ def desk_file(monkeypatch, tmp_path):
 
 
 def test_registry_has_the_v1_strategies_with_schemas():
-    assert set(REGISTRY) == {"nq930", "gc_nfpcpi", "gc_nfp"}
+    assert set(REGISTRY) == {"nq930", "gc_nfpcpi"}     # nq930: the tests' twin (conftest.py); the app ships gc_nfpcpi only
     cat = {c["id"]: c for c in catalog()}
     assert cat["nq930"]["root"] == "NQ" and cat["gc_nfpcpi"]["root"] == "GC"
     assert {i["key"] for i in cat["nq930"]["inputs"]} == {"offset_pts", "sl_pts", "tp_pts",
@@ -41,34 +41,10 @@ def test_registry_has_the_v1_strategies_with_schemas():
         get("nope")
 
 
-@pytest.mark.parametrize("cls", [NQ930])
-def test_straddle_defaults_equal_the_desk_geometry(cls):
-    cfg = desk_config.load().strategies[cls.desk_key]
-    s = cls()
-    assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"]) == (cfg.offset_pts, cfg.sl_pts, cfg.tp_pts)
-    assert s.p["adx_gate"] == cfg.gated and s.p["adx_min"] == 20.0
-    assert s.times() == ["09:30:00", cfg.cancel_et, cfg.flat_et] == ["09:30:00", "12:55", "15:55"]
-    assert cls.root == cfg.symbol and s.placement_ms == 85
-
-
-def test_defaults_follow_the_desk_config_file(desk_file):
-    desk_file.write_text(json.dumps({"strategies": {"nq930": {"offset_pts": 5.0, "gated": False,
-                                                              "flat_et": "15:50"}}}))
+def test_the_twin_has_the_old_shipped_geometry():
     s = NQ930()
-    assert s.p["offset_pts"] == 5.0 and s.p["adx_gate"] is False and s.flat_et == "15:50"
-
-
-# Item 4 (provenance): every strategy's runtime config -- as it actually resolved,
-# not just its `inputs` -- must be reproducible from what a run stores.
-
-@pytest.mark.parametrize("cls", [NQ930])
-def test_desk_straddle_provenance_carries_times_and_the_full_desk_cfg(cls, desk_file):
-    desk_file.write_text(json.dumps({"strategies": {cls.desk_key: {"flat_et": "15:50"}}}))
-    cfg = desk_config.load().strategies[cls.desk_key]
-    s = cls()
-    prov = s.provenance()
-    assert (prov["fire"], prov["cancel_et"], prov["flat_et"]) == ("09:30:00", cfg.cancel_et, "15:50")
-    assert prov["desk_cfg"] == asdict(cfg)
+    assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"], s.p["adx_gate"], s.p["adx_min"]) == (5.0, 5.0, 15.0, True, 20.0)
+    assert s.times() == ["09:30:00", "12:55", "15:55"] and s.placement_ms == 85
 
 
 def test_gc_provenance_carries_its_own_times_with_no_desk_cfg():
@@ -79,7 +55,7 @@ def test_gc_provenance_carries_its_own_times_with_no_desk_cfg():
 @pytest.mark.parametrize("cls", [NQ930])
 @pytest.mark.parametrize("anchor", [18250.0, 18250.25, 41000.0, 99.75])
 def test_legs_equal_the_desk_engine_legs(cls, anchor):
-    cfg = desk_config.load().strategies[cls.desk_key]
+    cfg = desk_config.StrategyCfg(symbol="NQ", qty=2, offset_pts=5.0, sl_pts=5.0, tp_pts=15.0)
     s = cls()
     desk = Engine._legs(cfg, anchor + cfg.offset_pts, anchor - cfg.offset_pts, 2)
     ours = s.legs(anchor)

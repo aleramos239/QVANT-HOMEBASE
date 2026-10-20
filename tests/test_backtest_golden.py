@@ -15,7 +15,7 @@ import pytest
 
 from homebase.backtest.engine import Costs, run_session
 from homebase.backtest.tape import TapeStore, missing_hours
-from homebase.strategies.nq930 import NQ930
+from tests.straddle_twin import NQ930
 
 ARCHIVE = Path.home() / "futures_ticks"
 FIX = json.loads((Path(__file__).parent / "fixtures" / "nq930_golden.json").read_text())

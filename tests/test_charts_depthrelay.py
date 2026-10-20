@@ -139,4 +139,4 @@ def test_one_machine_holds_the_live_login_the_server():
     mac = plistlib.loads((deploy / "com.ramosquant.homebase-charts.plist.template").read_bytes())["EnvironmentVariables"]
     assert mac == {"HOMEBASE_CHARTS_MD": "demo", "HOMEBASE_CHARTS_MD_ONLY": "demo", "HOMEBASE_DEPTH_RELAY_IN": "1"}
     srv = [ln for ln in (deploy / "linux" / "homebase-charts.service").read_text().splitlines() if ln.startswith("Environment=")]
-    assert srv == ["Environment=HOMEBASE_CHARTS_MD=live"]
+    assert srv == ["Environment=HOMEBASE_CHARTS_MD=live", "Environment=HOMEBASE_CHARTS_NO_BACKTEST=1"]   # (no backtest work on the 2 GB box)

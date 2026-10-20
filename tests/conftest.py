@@ -9,10 +9,16 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
+from pathlib import Path
 
 import pytest
 
+from homebase import strategies
 from homebase.backtest import slots
+from tests.straddle_twin import NQ930
+
+_REPO = Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +27,20 @@ def tester_shared(tmp_path_factory, monkeypatch):
     monkeypatch.setenv("HOMEBASE_TESTER_SHARED", str(d))
     monkeypatch.setenv("HOMEBASE_TESTER_SLOTS_FILE", str(d / "no_override.json"))   # never the real ~/.homebase file
     return d
+
+
+@pytest.fixture(autouse=True)
+def _nq930_twin(monkeypatch):
+    """The old built-in nq930, for the tester tests only (tests/straddle_twin.py)."""
+    monkeypatch.setitem(strategies.REGISTRY, "nq930", NQ930)
+
+
+@pytest.fixture(autouse=True)
+def twin_in_children(monkeypatch):
+    """A backtest a test runs in a child process sees the nq930 twin too (tests/child_site). A test that checks what a
+    bare child imports (test_fanout) takes PYTHONPATH off again."""
+    site = [str(_REPO / "tests" / "child_site"), str(_REPO)]
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join(site + [p for p in os.environ.get("PYTHONPATH", "").split(os.pathsep) if p]))
 
 
 @pytest.fixture(autouse=True)

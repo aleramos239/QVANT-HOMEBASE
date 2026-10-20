@@ -702,62 +702,20 @@ def test_the_desks_show_on_chart_carries_a_run_the_lab_page_takes_once_with_the_
     assert c.get("/api/tester/lab-open").json() == {"name": None}                        # a refusal asks nothing
 
 
-# ---- the Desk's own straddles (nq930, gc_nfp): their tester twin's saved runs, read by hand, shown under the Desk id ----
-BUILD = {"kind": "research", "start": "2021-09-22", "end": "2025-06-30", "label": "Build", "holdout": False}
+# ---- the Desk's own straddles were removed (the owner, 2026-10-20): no built-in twin is answered or opened ----
 
-
-def write_twin_run(tmp_path, rid, rec, rng=UNSEEN, inputs=None, qty=None, status="done", net=900.0):
-    d = tmp_path / "state" / "tester" / "runs" / rid
-    d.mkdir(parents=True)
-    inputs = rec["params"] if inputs is None else inputs
-    qty = rec["qty"] if qty is None else qty
-    (d / "request.json").write_text(json.dumps({"strategy": rec["id"], "id": rid, "inputs": inputs, "qty": qty, "range": rng}))
-    (d / "status.json").write_text(json.dumps({"id": rid, "status": status}))
-    (d / "trades.json").write_text("[]")
-    if status == "done":
-        (d / "run.json").write_text(json.dumps({"id": rid, "inputs": inputs, "qty": qty, "range": rng,
-                                                "report": {"summary": {"all": {**SUMMARY, "net_profit": net, "rr": 2.81, "rr_label": "1:2.81",
-                                                                                 "sharpe": 0.43}}}}))
-    return rid
-
-
-def test_the_desks_straddles_are_answered_from_their_twins_saved_runs_and_nothing_is_started(c, tmp_path, monkeypatch):
-    monkeypatch.setattr(tester_api, "_run_propsim",
-                        lambda trades, req: ({"rules": {"label": "LucidFlex 50K"}, "headline": HEAD, "breach": {}}, False))
-    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)        # even with the automatic read on, a built-in's is never started
+def test_no_builtin_is_answered_from_a_twin_and_nothing_is_started(c, monkeypatch):
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
     started = []
     monkeypatch.setattr(tester_api.RunManager, "submit", lambda self, req: started.append(req), raising=False)
-    assert deskresults.BUILTIN_TWINS == {"nq930": "nq930", "gc_nfp": "gc_nfpcpi"}
-    got = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]
-    for desk_id, twin in deskresults.BUILTIN_TWINS.items():
-        assert got[desk_id] == {"unseen": None, "unseen_state": "none", "manual": True, "twin": twin, "curve": None,
-                                "build": None, "prop": {"build": None, "unseen": None}}
-    assert started == []
-    # a saved run of the twin at the Desk's size and setting is its unseen result, and its build run feeds the prop sim's Build column
-    rec = deskresults.builtin_rec("nq930")
-    assert rec["id"] == "nq930" and rec["qty"] >= 1 and set(rec["params"]) >= {"offset_pts", "sl_pts", "tp_pts"}
-    unseen = write_twin_run(tmp_path, "20261011-190000-nq930-aa01", rec)
-    build = write_twin_run(tmp_path, "20261011-190001-nq930-aa02", rec, rng=BUILD)
-    write_twin_run(tmp_path, "20261011-190002-nq930-aa03", rec, qty=rec["qty"] + 1)          # another size: not the Desk's
-    write_twin_run(tmp_path, "20261011-190003-nq930-aa04", rec, inputs={**rec["params"], "sl_pts": rec["params"]["sl_pts"] + 1})
-    res = c.get("/api/tester/desklab/results", headers=DESK).json()["results"]["nq930"]
-    assert res["unseen"]["id"] == unseen and res["unseen"]["net"] == 900.0 and res["unseen_state"] == "done"
-    assert res["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
-    assert res["build"]["id"] == build and res["build"]["net"] == 900.0 and res["build"]["range"] == BUILD and res["build"]["rr"] == 2.81
-    assert deskresults.build_run_id(tmp_path / "state" / "tester" / "runs", rec) == build
+    assert deskresults.BUILTIN_TWINS == {} and deskresults.builtin_rec("nq930") is None
+    assert c.get("/api/tester/desklab/results", headers=DESK).json()["results"] == {}
     assert started == []
 
 
-def test_open_in_the_lab_takes_a_built_in_twin_by_its_flag_and_only_the_known_ones(c, drafts_dir):
-    ok = c.post("/api/tester/desklab/open", json={"name": "gc_nfpcpi", "builtin": True}, headers=DESK)
-    assert ok.status_code == 200 and ok.json() == {"ok": True, "name": "gc_nfpcpi"}
-    assert c.get("/api/tester/lab-open").json() == {"name": "gc_nfpcpi", "builtin": True}
-    assert c.get("/api/tester/lab-open").json() == {"name": None}                        # taken once
-    withrun = c.post("/api/tester/desklab/open", json={"name": "nq930", "builtin": True, "run": "20261011-nq930-1"}, headers=DESK)
-    assert withrun.status_code == 200
-    assert c.get("/api/tester/lab-open").json() == {"name": "nq930", "run": "20261011-nq930-1", "builtin": True}
-    # a built-in that is not a Desk straddle's twin, and a flag that is not true, ask nothing
-    assert c.post("/api/tester/desklab/open", json={"name": "gc_nfp", "builtin": True}, headers=DESK).status_code == 404
+def test_open_in_the_lab_refuses_every_built_in_now_none_is_a_twin(c, drafts_dir):
+    for name in ("gc_nfpcpi", "nq930", "gc_nfp"):
+        assert c.post("/api/tester/desklab/open", json={"name": name, "builtin": True}, headers=DESK).status_code == 404
     assert c.post("/api/tester/desklab/open", json={"name": "nq930", "builtin": False}, headers=DESK).status_code == 400
     assert c.get("/api/tester/lab-open").json() == {"name": None}
 
@@ -835,21 +793,19 @@ def test_restore_refused_while_a_namesake_is_on_the_desk(c, drafts_dir, make_run
 
 
 def test_a_builtin_is_archived_and_restored(c, monkeypatch):
-    """nq930 / gc_nfp stay in the Desk's config: Archive notes them (the page switched them off and hides them) and files the tester
-    twin under the Lab's "Archive" group; Restore takes the note off and the twin back to its group. Only the Desk's own ids."""
-    monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: ["gc_nfp", "nq930"])
-    draftstore.set_group("gc_nfpcpi", "Ideas")
+    """Archive notes one of the Desk's own ids (the page hides it); Restore takes the note off. No built-in has a Lab twin now
+    (2026-10-20), so no group is touched. Only the Desk's own ids."""
+    monkeypatch.setattr(tester_api, "desk_strategy_ids", lambda: ["desk_own"])
     post = lambda what, name: c.post(f"/api/tester/desklab/{what}", json={"name": name})
-    assert post("archive_builtin", "gc_nfp").json() == {"ok": True, "name": "gc_nfp"}
-    assert post("archive_builtin", "gc_nfp").json()["ok"] is True                # twice: the group it had is kept
+    assert post("archive_builtin", "desk_own").json() == {"ok": True, "name": "desk_own"}
+    assert post("archive_builtin", "desk_own").json()["ok"] is True
     (row,) = c.get("/api/tester/desklab").json()["archived"]
-    assert row["name"] == "gc_nfp" and row["builtin"] is True
-    assert draftstore.read_groups()["members"]["gc_nfpcpi"] == "Archive"
+    assert row["name"] == "desk_own" and row["builtin"] is True
+    assert draftstore.read_groups()["members"] == {}
     assert post("archive_builtin", "nq_bars").status_code == 404                # not one of the Desk's own
-    assert post("restore_builtin", "gc_nfp").json() == {"ok": True, "name": "gc_nfp"}
+    assert post("restore_builtin", "desk_own").json() == {"ok": True, "name": "desk_own"}
     assert c.get("/api/tester/desklab").json()["archived"] == []
-    assert draftstore.read_groups()["members"]["gc_nfpcpi"] == "Ideas"
-    assert post("restore_builtin", "gc_nfp").status_code == 404
+    assert post("restore_builtin", "desk_own").status_code == 404
 
 
 def test_the_shadow_calendar_gives_every_day_of_this_promotion_oldest_first_with_its_trades(c, drafts_dir, make_run, tmp_path):

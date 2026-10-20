@@ -1,5 +1,8 @@
 """gc_nfp: the GC 08:30 NFP straddle on the desk (verified 2026-10-01, research/nfp-2026-10-02).
 
+The built-in left the Desk on 2026-10-20 (a Lab strategy now): these tests keep its old config (GC_CFG) to pin the desk's
+08:29:59 fire, cancel, flat and renewal code, which any straddle config still uses.
+
 Pins the spec the user will put real Lucid evals on: it fires ONLY on its event day, at 08:30:00.000 ET,
 OCO stops at anchor +/- 2.0, SL 5.0 / TP 7.7 from the fill, unfilled cancelled 08:45, flat 09:55 --
 and that the 09:30 strategies' schedule did not move when the timer learned per-strategy fire times.
@@ -7,22 +10,17 @@ and that the 09:30 strategies' schedule did not move when the timer learned per-
 from __future__ import annotations
 
 import datetime as dt
-from array import array
 from dataclasses import replace
 
 import pytest
 
 from homebase import config as desk_config
-from homebase.backtest.engine import Costs, run_session
-from homebase.backtest.tape import Tape, et_ns
 from homebase.broker.base import FillEvent
 from homebase.broker.tradovate import renewal_due
 from homebase.config import AccountCfg, AppCfg
 from homebase.contracts import point_value
 from homebase.engine import Engine
 from homebase.server import compute_readiness
-from homebase.strategies import REGISTRY
-from homebase.strategies.gc_nfp import GCNfp
 from homebase.timer import (DONE_T, FIRE_T, GATE_T, STAGE_T, SelfTimer, fire_clock, fire_time,
                             schedule)
 from tests.test_engine import Clock, FakeAdapter, run
@@ -46,8 +44,14 @@ def desk_file(monkeypatch, tmp_path):
     return p
 
 
+GC_CFG = desk_config.StrategyCfg(            # the old shipped gc_nfp (removed from the defaults 2026-10-20)
+    symbol="GC", qty=4, offset_pts=2.0, sl_pts=5.0, tp_pts=7.7, cancel_et="08:45", flat_et="09:55",
+    accept_from_et="08:29", accept_until_et="08:31", enabled=False, gated=False, self_fire=True, fire_et="08:29:59",
+    only_dates=["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04", "2026-12-10"], label="GC_NFP/CPI")
+
+
 def gc_cfg(**over):
-    return replace(desk_config._defaults().strategies["gc_nfp"], enabled=True, **over)
+    return replace(GC_CFG, enabled=True, **over)
 
 
 def mk(tmp_path, *, armed=True, qty=4, date=NFP_DAY, cfg=None, accounts=("evalA", "evalB")):
@@ -70,19 +74,12 @@ def drive(timer, clock, date=NFP_DAY, through=(8, 30, 0)):
 
 
 # --------------------------------------------------------------------------- the spec, in the config
-def test_the_desk_config_is_the_verified_spec_and_ships_off_and_unbooked():
-    c = desk_config._defaults().strategies["gc_nfp"]
-    assert (c.symbol, c.qty, c.offset_pts, c.sl_pts, c.tp_pts) == ("GC", 4, 2.0, 5.0, 7.7)
-    assert (c.fire_et, c.cancel_et, c.flat_et) == ("08:29:59", "08:45", "09:55")   # rests before the release
-    assert c.only_dates == ["2026-10-02", "2026-10-14", "2026-11-06", "2026-11-10", "2026-12-04", "2026-12-10"]
-    assert c.kind == "straddle" and c.self_fire and not c.gated and not c.shadow
-    assert c.enabled is False                       # the user books the evals and switches it on
-    assert (c.accept_from_et, c.accept_until_et) == ("08:29", "08:31")   # a fire a minute late is refused
-    assert desk_config._defaults().book == {}
+def test_the_desk_ships_no_built_in_strategies():
+    assert desk_config._defaults().strategies == {} and desk_config._defaults().book == {}
 
 
 def test_the_stop_is_the_full_2000_dollar_limit_and_the_target_clears_3000_after_fees():
-    c = desk_config._defaults().strategies["gc_nfp"]
+    c = GC_CFG
     pv = point_value("GC")
     stop_loss = c.sl_pts * pv * c.qty               # $2,000 at 4 contracts, before slippage
     target = c.tp_pts * pv * c.qty                  # $3,080 gross
@@ -139,7 +136,7 @@ def test_it_does_nothing_on_any_other_day(tmp_path, day):
 
 
 def test_an_empty_only_dates_still_means_every_weekday():
-    c = desk_config._defaults().strategies["nq930"]
+    c = desk_config.StrategyCfg(symbol="NQ", qty=1, offset_pts=5.0, sl_pts=5.0, tp_pts=15.0)
     assert c.only_dates == [] and c.trades_on(dt.date(2026, 10, 1)) and c.trades_on("2026-10-02")
     assert gc_cfg().trades_on(dt.date(2026, 10, 2)) and not gc_cfg().trades_on(dt.date(2026, 10, 1))
 
@@ -229,40 +226,6 @@ def test_the_0930_strategy_is_not_touched_by_the_0830_clock(tmp_path):
         run(timer.tick())
         assert timer.status()["strategies"]["nq930"]["stage"] == "idle"
     assert md.subs == [] and events(tmp_path) == []
-
-
-# --------------------------------------------------------------------------- the tester twin
-def _tape(d, rows):
-    ts, px = array("q"), array("d")
-    for t, p in rows:
-        hms, _, ms = t.partition(".")
-        ts.append(et_ns(d, hms) + int(ms or 0) * 1_000_000)
-        px.append(p)
-    return Tape("GC", d, "X", ts, px, array("i", [1] * len(ts)), {})
-
-
-def test_the_twin_is_registered_and_reads_the_desk_config():
-    s = GCNfp()
-    assert REGISTRY["gc_nfp"] is GCNfp
-    assert (s.p["offset_pts"], s.p["sl_pts"], s.p["tp_pts"]) == (2.0, 5.0, 7.7)
-    assert s.times() == ["08:29:59", "08:45", "09:55"]
-    assert s.session_window == ("08:20", "09:56") and s.provenance()["fire"] == "08:29:59"
-
-
-def test_the_twin_trades_nfp_days_only_and_tomorrow():
-    s = GCNfp()
-    assert s.trades_on(dt.date(2026, 10, 2)) and s.trades_on(dt.date(2024, 12, 6))   # tomorrow; a past NFP
-    assert not s.trades_on(dt.date(2026, 10, 1))
-    assert not s.trades_on(dt.date(2024, 1, 11))                                     # CPI day
-
-
-def test_the_twin_trades_exactly_the_desk_geometry():
-    d = dt.date(2024, 12, 6)
-    tp = _tape(d, [("08:29:58", 2650.0), ("08:29:59.500", 2650.0), ("08:30:00.100", 2652.3), ("08:31", 2661.0)])
-    t, = run_session(GCNfp(), tp, Costs()).trades
-    assert t.side == "long" and t.entry_price == pytest.approx(2652.4)   # first print through 2652.0, +1 tick
-    assert t.sl == pytest.approx(2647.4) and t.tp == pytest.approx(2660.1)   # 5.0 / 7.7 from the FILL
-    assert t.exit_reason == "tp" and t.net == round(7.7 * 100 - 4.0, 2)
 
 
 # --------------------------------------------------------------------------- operations around the fire

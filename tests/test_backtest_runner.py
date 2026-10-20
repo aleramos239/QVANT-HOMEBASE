@@ -137,7 +137,7 @@ def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
     # Item 4: the resolved strategy config is snapshotted in BOTH request.json and
     # run.json, so a bundle is reproducible even after config.json later changes.
     req = read_json(d / "request.json")
-    assert req["strategy_config"]["fire"] == "09:30:00" and "desk_cfg" in req["strategy_config"]
+    assert req["strategy_config"]["fire"] == "09:30:00"
     assert meta["strategy_config"] == req["strategy_config"]
 
 
@@ -346,7 +346,7 @@ def test_every_strategy_declares_session_independence_explicitly():
     from homebase import strategies
     from homebase.strategies.base import Strategy
     assert Strategy.session_independent is False
-    assert set(strategies.REGISTRY) == {"nq930", "gc_nfpcpi", "gc_nfp"}
+    assert set(strategies.REGISTRY) == {"nq930", "gc_nfpcpi"}     # nq930: the tests' twin (conftest.py)
     for cls in strategies.REGISTRY.values():
         assert "session_independent" in vars(cls), cls.id
         assert cls.session_independent is True, cls.id
