@@ -166,3 +166,27 @@ def test_levels_takes_turns(tmp_path):
     out = run(eng.handle_levels("lv_atr_take", tl.GEO))
     assert out["ok"] and list(out["accounts"]) == ["a"] and placed(ads) == ["a"]
     assert list(tl.events(tmp_path, "levels_placed")[0]["accounts"]) == ["a"]
+
+
+# ------------------------------------------------------------------------------------------------ through the Lab door
+def test_lab_intake_sends_the_entry_to_one_account(tmp_path):
+    from tests import labdesk_util as lu
+    d = lu.mkdesk(tmp_path, accounts=("a1", "a2"))
+    d.eng.set_rotation(lu.LAB, True)
+    row = lu.send(d, [lu.entry()])["results"][0]
+    assert row["status"] == "working" and row["refused"] is None
+    assert [a for a, r in row["accounts"].items() if r["ok"]] == ["a1"] and "a2" not in row["accounts"]
+    assert len(d.ads["a1"].brackets) == 1 and d.ads["a2"].brackets == []
+    assert lu.journal(tmp_path, "lab_refused") == []         # the account that was not asked is not "refused"
+    assert d.eng.rotation_view(lu.LAB)["next"] == "a2"
+
+
+def test_lab_intake_skips_a_stopped_account(tmp_path):
+    from tests import labdesk_util as lu
+    d = lu.mkdesk(tmp_path, accounts=("a1", "a2"))
+    d.eng.set_rotation(lu.LAB, True)
+    d.eng.book("a1").locked = "day_lock"
+    row = lu.send(d, [lu.entry()])["results"][0]
+    assert row["status"] == "working"
+    assert row["accounts"]["a2"]["ok"] and not row["accounts"]["a1"]["ok"]
+    assert d.ads["a1"].brackets == [] and len(d.ads["a2"].brackets) == 1
