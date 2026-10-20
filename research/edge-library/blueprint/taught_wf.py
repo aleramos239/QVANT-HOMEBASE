@@ -23,6 +23,7 @@ import l2sim as S
 import library as LB
 
 from . import api
+from . import pipe_gates as G
 from . import pipe_rules as PR
 from . import pipe_wf as WF
 from . import runner as RUN
@@ -58,6 +59,65 @@ def _test_days(market: str, today: dt.date) -> list:
     rng = RUN.test_range(market)
     cal = [d.isoformat() for d in S.sessions(S._date(rng["start"]), S._date(rng["end"]), market, allow_holdout=S.ALLOW_BT)]
     return [d for d in cal if d[:7] < today.isoformat()[:7]]       # whole months only: the month under way is not a test month
+
+
+def _save_test(base, test: dict) -> None:
+    np.savez(base / "wf" / "test_cells.npz", **{f"{c}|{k}": v for c, x in test.items() for k, v in x.items()})
+
+
+def each(name: str, root=None, workers=None) -> dict:
+    """`bp.py taught wf-each <name>`: EVERY CELL ALONE on the walk-forward's own test months (the owner, 2026-10-19: "just run each variant
+    individually"): no pick between cells. Two reads a cell: `always` = the cell in every test month of the blocks; `own` = pipe_wf's walk with
+    that cell as the only box (a month whose pick months it fails stands aside). Needs the sheet's claimed read (wf/claim.json, same code); the
+    test-day trades are the read's own (wf/test_cells.npz), run again under that claim only when an older read did not keep them."""
+    base = TA.where(root) / str(name)
+    claim, res_f = base / "wf" / "claim.json", base / "wf" / "result.json"
+    if not (claim.exists() and res_f.exists()):
+        raise J.Refuse(f"{name}: no walk-forward on file: bp.py taught wf {name} first")
+    cl, wf = json.loads(claim.read_text()), json.loads(res_f.read_text())
+    plan = json.loads((base / "result.json").read_text())["plan"]
+    if cl["code"] != TA._code(plan["family"]):
+        raise J.Refuse(f"{name}: the code changed since the claimed read ({cl['utc']}): the cells cannot be read again as that read")
+    tf, market = plan["bars"][0], plan["market"]
+    ukey = TA._unit_key(name, market, tf)
+    st, _ = T._open(base / "runs", ukey)
+    u, ids = TA._unit_row(plan, tf), cl["cells"]
+    f = base / "wf" / "test_cells.npz"
+    if not f.exists():
+        umeta = json.loads((base / "runs" / ukey / "run.json").read_text())
+        ins = {c["id"]: c["inputs"] for c in umeta["cells"]}
+        days = [d for d in _test_days(market, dt.date.fromisoformat(cl["utc"][:10])) if cl["days"][0] <= d <= cl["days"][1]]
+        RUN.may_start()
+        n = max(1, min(int(workers or 6), S.MAX_WORKERS))
+        res = S.run_many([(TA._blocks().WRAPPED[umeta["family"]], ins[c]) for c in ids], S._date(days[0]), S._date(days[-1]), days=days, root=market, workers=n,
+                         allow_holdout=S.ALLOW_BT, **RUN._engine(RUN._kw(umeta["family"], umeta.get("filter"))))
+        if any(r["skipped_by_error"] for r in res):
+            raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error")
+        _save_test(base, {c: _arrays(r["trades"]) for c, r in zip(ids, res)})
+    z = np.load(f)
+    first, w = cl["days"][0][:7], PR.need("walkforward")
+    tested = [q["month"] for q in wf["months"]]
+    cal = sorted({*T.build_days(u, None), *[d for d in _test_days(market, dt.date.fromisoformat(cl["utc"][:10])) if cl["days"][0] <= d <= cl["days"][1]]})
+    rows, lines = [], [f"{name}: every cell alone on the {len(tested)} block test months ({tested[0]} .. {tested[-1]}); test days {cl['days'][0]} .. {cl['days'][1]}"]
+    for c in ids:
+        b = {k: np.asarray(v) for k, v in J.cellx(st, c, None, u).items() if k in WF.FIELDS}
+        x = {k: np.concatenate([b[k], z[f"{c}|{k}"]]) for k in WF.FIELDS}
+        x["month"] = WF._month(x["date"])
+        own = WF.walk({c: x}, J.table(st, {**u, "sess": "all"}), WF.months(cal), w["select_months"], w["window_trades"], cl["utc"][:10], w["step_months"])
+        row = {"cell": c}
+        for kind, ms in (("always", tested), ("own", [p["month"] for p in own["picks"] if p["cell"]])):
+            m = np.isin(x["month"], ms)
+            y = {k: x[k][m] for k in WF.FIELDS}
+            met = TA._metrics(y, LB._ordinals([d for d in cal if d[:7] in set(ms)]))
+            late = WF._month(y["date"]) >= first if len(y["date"]) else np.zeros(0, bool)
+            row[kind] = {**met, "months": len(ms), "unseen_net": float(y["net"][late].sum()), "unseen_trades": int(late.sum()), "p63": G.wr_rr(y["net"])["passed"]}
+            lines.append(f"  {c:16} {kind:6} {len(ms):2} months  {met['trades']:3} trades  net ${met['net']:,.0f}  avg ${met['avg_trade'] or 0:,.0f}  "
+                         f"win {100 * (met['win'] or 0):.1f} %  PF {met['pf'] or 0:.2f}  DD ${met['max_dd'] or 0:,.0f}  unseen ${row[kind]['unseen_net']:,.0f} "
+                         f"({row[kind]['unseen_trades']})")
+        rows.append(row)
+    doc = {"name": name, "cells": rows, "text": "\n".join(lines)}
+    TA._write(base / "wf" / "each.json", doc)
+    return api.result(WF_, name, status="done", result=doc, text=doc["text"], saved=[str(base / "wf" / "each.json")])
 
 
 def run(name: str, root=None, workers=None, who: str = "owner in chat") -> dict:
@@ -104,6 +164,7 @@ def run(name: str, root=None, workers=None, who: str = "owner in chat") -> dict:
     if any(r["skipped_by_error"] for r in res):
         raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error: nothing is judged (the claim stays on file)")
     test = {c: _arrays(r["trades"]) for c, r in zip(ids, res)}
+    _save_test(base, test)
     seeds = sorted({c["inputs"]["seed"] for c in cmeta["cells"]})
     rspecs = [(c["id"], {**c["inputs"], "sess": s}) for c in cmeta["cells"] for s in plan["sessions"]]     # one instance a pass, as the store's runs
     import l2ref

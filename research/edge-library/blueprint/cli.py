@@ -258,13 +258,14 @@ def _parser() -> _Parser:
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
-    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf}")
+    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf,wf-each}")
     taught = {name: ts.add_parser(name, allow_abbrev=False, help=text) for name, text in (
         ("check", "validate a rule sheet and print what will run beside what was taught (runs nothing)"),
         ("run", "run the sheet on the build days (--days = a smoke run on named days, never a verdict)"),
         ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"),
         ("lab", "the taught cell of a full run as a finished run of the tester page, to step through its trades (checked against the store)"),
-        ("wf", "the 3:1 walk-forward in blocks over all months, test days included (taught_wf.py; once a sheet: claimed before the read)"))}
+        ("wf", "the 3:1 walk-forward in blocks over all months, test days included (taught_wf.py; once a sheet: claimed before the read)"),
+        ("wf-each", "every cell of a walk-forward alone on its test months: always traded, and its own walk (taught_wf.each)"))}
     taught["check"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, or - for stdin")
     taught["run"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, - for stdin, or the name of a sheet on file")
     taught["show"].add_argument("name", help="the sheet's name")
@@ -272,6 +273,8 @@ def _parser() -> _Parser:
     taught["lab"].add_argument("--workers", type=int, help="worker processes for the run again (default 6)")
     taught["wf"].add_argument("name", help="the sheet's name")
     taught["wf"].add_argument("--workers", type=int, help="worker processes (default 6)")
+    taught["wf-each"].add_argument("name", help="the sheet's name")
+    taught["wf-each"].add_argument("--workers", type=int, help="worker processes (default 6)")
     taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
     taught["run"].add_argument("--days", help="a smoke run: named build days, d1,d2")
     for x in taught.values():
@@ -437,6 +440,9 @@ def _taught(a) -> dict:
     if a.sub == "wf":
         from . import taught_wf
         return taught_wf.run(a.name, a.root, workers=a.workers)
+    if a.sub == "wf-each":
+        from . import taught_wf
+        return taught_wf.each(a.name, a.root, workers=a.workers)
     arg = getattr(a, "sheet", None) or getattr(a, "name", None)
     if arg == "-":
         try:
