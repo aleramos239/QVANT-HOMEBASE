@@ -724,7 +724,8 @@ def test_the_status_has_the_real_routes_keys_three_accounts_and_the_lab_block(de
     assert all(v["connected"] is True and v["label"].startswith(("SIM", "FAKELIVE")) for v in s["accounts"].values())
     assert s["armed"] is True and s["et_now"].startswith("2026-09-14T10:00:00")
     one = s["strategies"][LAB]
-    assert set(one) == {"cfg", "research", "live", "day_status", "killed", "accounts", "lab"}
+    assert set(one) == {"cfg", "research", "live", "day_status", "killed", "rotation", "accounts", "lab"}
+    assert one["rotation"] == {"on": False, "next": None}           # take turns: off by default
     assert (one["cfg"]["kind"], one["cfg"]["symbol"], one["day_status"]) == ("lab", "NQ", "idle")
     assert one["lab"]["name"] == "pp" and one["lab"]["limits"] is None and one["lab"]["state"] == "shadow"
     assert s["readiness"]["checks"][-1]["label"] == "Mode" and s["journal"][0]["event"]

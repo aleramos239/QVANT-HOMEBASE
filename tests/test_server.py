@@ -1046,3 +1046,15 @@ def test_a_day_take_below_the_days_closed_pnl_locks_the_account_at_once(client):
     r = client.post("/api/account-day-lock", json={"account": "main", "day_lock": 300}).json()
     assert r["locked"] == "day_lock" and r["closed_net"] == 400.0
     assert eng.account_locked("main") == "day_lock"
+
+
+def test_rotation_switch_is_set_journaled_and_shown(client, tmp_path):
+    assert client.get("/api/status").json()["strategies"]["nq930"]["rotation"] == {"on": False, "next": None}
+    r = client.post("/api/rotation", json={"strategy": "nq930", "on": True}).json()
+    assert r == {"ok": True, "strategy": "nq930", "on": True, "next": "main"}
+    assert client.get("/api/status").json()["strategies"]["nq930"]["rotation"] == {"on": True, "next": "main"}
+    events = [json.loads(x) for x in (tmp_path / "journal.jsonl").read_text().splitlines()]
+    assert [e["on"] for e in events if e["event"] == "rotation_set"] == [True]
+    assert client.post("/api/rotation", json={"strategy": "nope", "on": True}).status_code == 404
+    for bad in ({"strategy": "nq930", "on": "yes"}, {"strategy": "nq930"}, [1]):
+        assert client.post("/api/rotation", json=bad).status_code in (400, 404), bad

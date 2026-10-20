@@ -64,6 +64,7 @@ SIBLING_RETRY_S = 2.0
 # cancel is sent again every SIBLING_FAST_S while the broker still reads it as working.
 SIBLING_FAST_S, SIBLING_WATCH_S = 0.5, 3.0
 TAKE_GRACE_S = 2.0      # a day_take touch the resting limit has not filled for this long is market-flattened
+ROTATION_NONE = "No booked account could take this trade."
 
 
 def _hhmm(s: str) -> dt.time:
@@ -156,7 +157,10 @@ class Engine:
         # account -> {date: closing balance}: the desk's daily balance record (server.equity_by_day);
         # target_take's largest day / day count come from it
         self.balance_history: Optional[Callable[[str], dict]] = None
+        # strategy -> {"on": take turns, "last": the account that took its last trade}; kept across days
+        self.rotation: dict[str, dict] = {}
         self._load_today()
+        self._load_rotation()
 
     # --- time & persistence -------------------------------------------------
     def now_et(self) -> dt.datetime:
@@ -263,6 +267,74 @@ class Engine:
     def _save_books(self) -> None:
         self._books_path().write_text(json.dumps({a: b.to_dict() for a, b in self.books.items()},
                                                  indent=2) + "\n")
+
+    # --- account rotation: one account a trade, taking turns (the owner, 2026-10-19; off by default) -------------
+    def _rotation_path(self):
+        return self._root / "rotation.json"           # not per day: the turn carries over to the next day
+
+    def _load_rotation(self) -> None:
+        p = self._rotation_path()
+        if not p.exists():
+            return
+        try:
+            data = json.loads(p.read_text())
+            self.rotation = {k: dict(v) for k, v in data.items() if isinstance(v, dict)}
+        except Exception as e:  # noqa: BLE001 -- the desk must still start
+            print(f"homebase engine: reading {p.name} failed: {e!r}", file=sys.stderr)
+
+    def _save_rotation(self) -> None:
+        p = self._rotation_path()
+        tmp = p.with_suffix(".tmp")                   # never half a file: a lost switch would trade every account
+        tmp.write_text(json.dumps(self.rotation, indent=2) + "\n")
+        tmp.replace(p)
+
+    def rotating(self, name: str) -> bool:
+        return bool(self.rotation.get(name, {}).get("on"))
+
+    def _turn_order(self, name: str) -> list[str]:
+        """The booked accounts in book order, starting after the one that took the last trade (wrapping); from the
+        first when that account is no longer booked."""
+        book = list(dict.fromkeys(a["account"] for a in assignments(self.cfg, name)))
+        last = self.rotation.get(name, {}).get("last")
+        i = book.index(last) + 1 if last in book else 0
+        return book[i:] + book[:i]
+
+    def rotation_view(self, name: str) -> dict:
+        on = self.rotating(name)
+        order = self._turn_order(name) if on else []
+        return {"on": on, "next": order[0] if order else None}
+
+    def set_rotation(self, name: str, on: bool) -> dict:
+        self.rotation.setdefault(name, {})["on"] = bool(on)
+        self._save_rotation()
+        self.journal("rotation_set", strategy=name, on=bool(on))
+        return self.rotation_view(name)
+
+    def _turn_taken(self, name: str, account: str) -> None:
+        self.rotation.setdefault(name, {})["last"] = account
+        self._save_rotation()
+
+    def _no_turn(self, name: str, skipped: dict) -> None:
+        self.journal("rotation_skipped", strategy=name, reason=ROTATION_NONE, accounts=skipped)
+
+    def _one_turn(self, name: str, cfg: StrategyCfg, accounts: list) -> Optional[str]:
+        """A built-in's trade with rotation on: of `accounts` (still in play), the first in turn that can take it now
+        -- _place / _place_one's own checks, without their side effects -- and the turn moves to it. None: none can
+        (journaled once)."""
+        skipped = {}
+        for a in self._turn_order(name):
+            if a not in accounts:
+                continue
+            ad = self.adapters.get(a)
+            why = (LAB_ACCOUNT_STOPPED if self.account_locked(a)
+                   else LAB_NOT_CONNECTED if ad is None or not ad.connected
+                   else LAB_SLOT_BUSY if self._slot_busy(name, cfg, a, lab_only=True) else None)
+            if why is None:
+                self._turn_taken(name, a)
+                return a
+            skipped[a] = why
+        self._no_turn(name, skipped)
+        return None
 
     def book(self, account: str) -> DayBook:
         today = self._today()
@@ -481,6 +553,11 @@ class Engine:
             return {"ok": True, "armed": False,
                     "note": ("shadow — journaled only" if ev == "shadow_signal"
                              else "disarmed — journaled only"), "accounts": len(asg)}
+        if self.rotating(name):                  # one account takes today's straddle: the one whose turn it is
+            turn = self._one_turn(name, cfg, [a["account"] for a in asg])
+            if turn is None:
+                return {"ok": False, "reason": ROTATION_NONE}
+            asg = [a for a in asg if a["account"] == turn]
 
         t0 = time.time()
         # every account at once — none waits behind another's round trip
@@ -545,6 +622,11 @@ class Engine:
             return {"ok": True, "armed": False,
                     "note": ("shadow — journaled only" if ev == "shadow_signal"
                              else "disarmed — journaled only"), "accounts": len(asg)}
+        if self.rotating(name):
+            turn = self._one_turn(name, cfg, [a["account"] for a in asg])
+            if turn is None:
+                return {"ok": False, "reason": ROTATION_NONE}
+            asg = [a for a in asg if a["account"] == turn]
         t0 = time.time()
         outs = await asyncio.gather(
             *(self._place_one(name, cfg, a["account"], int(a["qty"]), sig, source, t0)
@@ -625,8 +707,13 @@ class Engine:
             return {"ok": True, "armed": False, "accounts": len(legs), "sat_out": sat_out,
                     "note": ("shadow — journaled only" if ev == "shadow_signal"
                              else "disarmed — journaled only")}
-        t0 = time.time()
         order = list(legs)
+        if self.rotating(name):
+            turn = self._one_turn(name, cfg, order)
+            if turn is None:
+                return {"ok": False, "reason": ROTATION_NONE, "sat_out": sat_out}
+            order = [turn]
+        t0 = time.time()
         outs = await asyncio.gather(
             *(self._place(name, cfg, aid, legs[aid].qty, geo.upper, geo.lower, source, t0,
                           leg=legs[aid], sl_pts=geo.sl_pts, sl_sell_pts=geo.sl_sell_pts) for aid in order),
@@ -2996,6 +3083,22 @@ class Engine:
         self._lab_roll()
         t0 = time.time()
         order = list(sizes)
+        if self.rotating(name):
+            # one account takes it: the first in turn that opens a round (one that sits out, or whose position is
+            # not flat, passes the turn on). The door's refusals never got here: those accounts are not in `sizes`.
+            tried = {}
+            for a in (a for a in self._turn_order(name) if a in sizes):
+                try:
+                    tried[a] = await self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0)
+                    went = tried[a].get("round") is not None
+                except Exception:  # noqa: BLE001 -- answered as the gather below answers it; the outcome is unknown,
+                    tried[a], went = {"ok": False, "round": None, "reason": LAB_BAD_ORDER}, True  # so no other account
+                if went:
+                    self._turn_taken(name, a)
+                    break
+            else:
+                self._no_turn(name, {a: r.get("reason") for a, r in tried.items()})
+            return {"armed": bool(self.cfg.armed), "accounts": tried}
         outs = await asyncio.gather(*(self._lab_enter_one(name, a, sizes[a], legs, max_rounds, source, t0)
                                       for a in order), return_exceptions=True)
         return {"armed": bool(self.cfg.armed),
