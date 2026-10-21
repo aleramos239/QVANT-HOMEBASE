@@ -216,6 +216,11 @@ function stopInput(s) {
   const choices = HM40_AXES[0].values.filter((v) => (s && s.own_stop) || v.startsWith('atr:'));
   return { key: CTL_AXIS + 'stop', label: CTL_LABELS.stop, type: 'choice', choices, default: choices[0], ctl: true };
 }
+/* A stop axis with no own-stop rows because the strategy never declared own_stop (final review, 2026-10-21): said in one line,
+   so a strategy that passes its own sl is not cut to the ATR boxes in silence. */
+function ownStopNote(s, axes, n) {
+  return (axes || []).some((a) => a.key === HM40_AXES[0].key) && !(s && s.own_stop) ? `this strategy declares no stop of its own (own_stop): ${n} boxes` : '';
+}
 /* The Lab's heat map as it opens: the hm40 rows (Rows = Stop, Columns = Target). */
 function hm40Rows(s) {
   return [{ key: HM40_AXES[0].key, text: stopInput(s).choices.join(', ') }, { key: HM40_AXES[1].key, text: HM40_AXES[1].values.join(', ') },
@@ -1067,7 +1072,7 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_ROLL, WF_MODES, wfRatioText, signed, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
   wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, wfSchemeProblem, WF_COMPARE_TOO_SHORT, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
-  HM40_AXES, hm40Rows, LAB_RANGE, wfFixedBody, WF_FIXED_COLS, wfFixedTable, wfFixedSort, wfFixedOos, boxNo, wfFixedBlocks, heatSwitch,
+  HM40_AXES, hm40Rows, ownStopNote, LAB_RANGE, wfFixedBody, WF_FIXED_COLS, wfFixedTable, wfFixedSort, wfFixedOos, boxNo, wfFixedBlocks, heatSwitch,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body, CONTROLS, controlsClean, controlsFields, controlsError, setControl,

@@ -88,7 +88,7 @@ section 2, in that order. `blueprint_heatmap` and `blueprint_mc` are views of wh
 `blueprint_wf` (`bp.py wf run`: every hm40 box run fixed on the in-sample months of the 3:1 blocks, then the
 in-sample table) → `blueprint_wf_pick` (`bp.py wf pick`: the box the owner names, the lock, written once) →
 `blueprint_wf_oos` (`bp.py wf oos`: that box's test months, once). `blueprint_build`, `blueprint_test` and
-`blueprint_lock` stay for ideas locked before 2026-10-21 (`homebase/ideastore.py` `OLD_ROUTE_END`).
+`blueprint_lock` stay for ideas created before 2026-10-21; the test needs a lock dated before it (`homebase/ideastore.py` `OLD_ROUTE_END`).
 Each runs one command of the toolkit
 (`<python> bp.py <command> ... --root=<ideas folder> --json`) and returns its text and its pass/fail lines.
 

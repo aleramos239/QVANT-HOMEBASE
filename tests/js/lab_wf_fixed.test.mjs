@@ -161,3 +161,11 @@ test('the Lab heat map runs only on the 3:1 in-sample months; the old one-read w
   // the own-stop multiplier field only for a strategy with a stop of its own
   assert.match(LAB, /stopMode === 'own' && meta && meta\.own_stop \? num\('stop_own_mult'/);
 });
+
+test('a strategy with no own_stop says so in one line where its 20 boxes show (final review, 2026-10-21)', () => {
+  const atr = X.gridAxes(X.hm40Rows(STRAT), STRAT, 120).axes;
+  assert.equal(X.ownStopNote(STRAT, atr, 20), 'this strategy declares no stop of its own (own_stop): 20 boxes');
+  assert.equal(X.ownStopNote(OWN, X.HM40_AXES, 40), '');                                    // own_stop: the 40, nothing to say
+  assert.equal(X.ownStopNote(STRAT, [{ key: 'ctl.trail_pts', values: [0, 5] }], 2), '');    // no stop axis: not an hm40 table
+  assert.equal((LAB.match(/X\.ownStopNote\(/g) || []).length, 2);      // the heat map's run count and the in-sample table's header
+});

@@ -707,7 +707,7 @@ def validate_fixed(b: dict) -> dict:
         c["req"]["propsim"] = False
     g["walkforward"] = {"scheme": "fixed", "step_months": step, "rolling": step == 1, "root": cls.root,
                         "months": sorted({m for x in layout for m in x["is"]}), "blocks": layout, "n_blocks": len(layout),
-                        "stitch": stitch_rule(1, ROLL_SELECT, step)}
+                        "stitch": stitch_rule(1, ROLL_SELECT, step), "own_stop": bool(getattr(cls, "own_stop", False))}
     return g
 
 

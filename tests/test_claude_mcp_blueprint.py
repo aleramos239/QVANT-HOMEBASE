@@ -246,7 +246,7 @@ def tail(ideas_root) -> list[str]:
 # ---------------------------------------------------------------- the eleven tools
 
 REQUIRED = {"blueprint_blocks": [], "blueprint_card": ["name", "card", "settings"], "blueprint_code_check": ["name"],
-            "blueprint_build": ["name", "owner_said"], "blueprint_lock": ["name"], "blueprint_test": ["name", "confirm"],
+            "blueprint_build": ["name"], "blueprint_lock": ["name"], "blueprint_test": ["name", "confirm"],
             "blueprint_sim": ["name", "account", "attempts", "fee_budget"], "blueprint_portfolio": ["names", "account"],
             "blueprint_eval_card": ["name"],
             "blueprint_status": [], "blueprint_heatmap": ["name"], "blueprint_mc": ["name"],
@@ -417,6 +417,7 @@ def test_every_chat_is_told_to_use_them():
 def test_every_chat_is_told_their_order_and_that_the_lab_groups_fill_themselves():
     text = rpc(protocol.Server(box()), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
     assert ("Their order: blueprint_blocks (what an idea can be built from), blueprint_card, blueprint_code_check, "
+            "then, for an idea created before 2026-10-21 only (a newer one is refused: it takes the 3:1 walk-forward below), "
             "blueprint_build, blueprint_lock, blueprint_test (once, for ideas locked before 2026-10-21; an early look only "
             "for ideas created before it, on the owner's yes), blueprint_sim "
             "(one strategy; blueprint_portfolio reads several proven ones on one account), "
@@ -674,7 +675,11 @@ def test_blueprint_wf_needs_owner_said(fake):
 def test_blueprint_build_needs_owner_said(fake, ideas_root):
     b = box()
     spec = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_build")
-    assert "only when the owner says so" in spec["description"] and "owner_said" in spec["inputSchema"]["required"]
+    assert "only when the owner says so" in spec["description"] and spec["inputSchema"]["required"] == ["name"]      # a job_id poll runs nothing
+    lock = next(s for s in blueprint_tools.SPECS if s["name"] == "blueprint_lock")
+    for one in (spec, lock):                                                  # the old route: refused for a newer idea (bp.py says so)
+        assert "OLD ROUTE: only for an idea created before 2026-10-21" in one["description"], one["name"]
+    assert "not with job_id" in spec["inputSchema"]["properties"]["owner_said"]["description"]
     for said in ({}, {"owner_said": ""}, {"owner_said": "  "}, {"owner_said": 3}):
         with pytest.raises(ToolError, match="owner_said"):
             b.call("blueprint_build", {"name": NAME, "reason": "the plain idea", **said})

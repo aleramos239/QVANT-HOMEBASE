@@ -9,6 +9,7 @@ touched": what the idea is gets saved, with one hash over all of it, and from he
     SHOWN, never a pass line: the default variant's prop odds on the build days for the account of line 3.6 (propodds.look)
 
 REFUSED unless, for the idea on file:
+  * it was created before ideastore.OLD_ROUTE_END: a new idea takes the 3:1 walk-forward (bp.py wf; its pick is its lock)
   * its LATEST build round has every line 2.1-2.9 in its result and none failed (null = the line does not apply) -- a round
     that was started and has no result, a smoke run, a round whose card was changed afterwards: refused
   * a CODE CHECK is on file for the round's home store with every line that is read true: 1.1-1.5 TRUE (1.5 = the owner
@@ -200,6 +201,7 @@ def start(name, root=None, workers=None, out=None, ledger=None, days=None, cells
     and what the runner refuses before a pass (the no-start window, the ledger's cap, another run in the store folder)."""
     test = REC._test_run(root)
     IS, d = api.ideastore(), REC._carded(name, root)
+    REC._old_idea(name, d, root, "the lock (the freeze before the one read)")
     if (d / "lock.json").exists():
         if REC._json(d / "lock.json") is None:
             raise J.Refuse(f"{d / 'lock.json'} does not read as a lock: nothing is frozen over it")

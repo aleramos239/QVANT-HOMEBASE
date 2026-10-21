@@ -533,6 +533,14 @@ def _seeds(market: str, bar: str, out, exits: str = "standard") -> None:
                        f"{want} seeds): a build is not read against a thin control")
 
 
+def _old_idea(name, d, root, what):
+    """Build and lock are the old route: refused for an idea created on or after ideastore.OLD_ROUTE_END (the owner, 2026-10-20), like oos.start."""
+    IS, since = api.ideastore(), (_json(d / "idea.json") or {}).get("created")
+    if not IS.old_route(since, root):
+        from .oos import NEW_IDEAS                  # (oos imports this module)
+        raise J.Refuse(f"{NEW_IDEAS}. {name} was created {since or 'on no day on file'}: {what} is for ideas created before {IS.OLD_ROUTE_END}")
+
+
 def start(name, reason, root=None, workers=None, out=None, ledger=None, days=None, cells=None, block=None, tester=None) -> dict:
     """EVERYTHING OF A ROUND THAT NEEDS NO RUN -> the arguments of run() (JSON: a job keeps them). Refused here, at once and
     never as a job: no card · no reason · round 6 · a frozen idea · a card on file that is no longer whole · a rule with two
@@ -558,6 +566,7 @@ def start(name, reason, root=None, workers=None, out=None, ledger=None, days=Non
         raise J.Refuse(f"the card of {name} on file is no longer whole ({next(x['text'] for x in rows if x['passed'] is False)}): write it again (bp.py card)")
     if plan["exits"] == "hm40":
         raise J.Refuse(f"{name} has the hm40 table: it runs on the 3:1 walk-forward, not this build -- bp.py wf run {name} --owner-said=\"...\" (blueprint_wf)")
+    _old_idea(name, d, root, "a build on the build days")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers, tester = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers"), tester or test.get("tester")
     days = None if days is None else RUN.seal(days)

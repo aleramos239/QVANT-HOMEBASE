@@ -284,6 +284,8 @@ def test_every_chat_reads_the_blueprints_dates():
     assert "once and only for a locked strategy, never for a quick look or \"all data\"" in text     # old ideas' route
     assert "once and only for a locked strategy" not in desc                                           # retired for runs
     assert "3:1 in-sample months" in desc and "ONLY when the owner says so" in desc and "owner_said" in desc
+    assert ("walkforward (its old scheme \"pick\" only; a fixed one takes no range): the build days, 2021-09-22 -> 2025-06-30"
+            in desc)                                                     # true for both tools (final review, 2026-10-21)
     listed = {t["name"]: t for t in rpc(srv, "tools/list")["result"]["tools"]}
     for name in ("backtest", "walkforward"):            # walkforward: its old scheme ("pick") only
         assert listed[name]["inputSchema"]["properties"]["range"]["description"] == desc
@@ -572,6 +574,19 @@ def test_heatmap_tool_default_is_hm40(fixed):
     spec = {s["name"]: s for s in tools.SPECS}["heatmap"]
     assert "hm40" in spec["description"] and "ONLY when the owner says so" in spec["description"]
     assert "range" not in spec["inputSchema"]["properties"] and "owner_said" in spec["inputSchema"]["properties"]
+
+
+def test_fixed_text_says_when_the_strategy_declares_no_own_stop(fixed):
+    """20 boxes because the strategy never set own_stop: the result says so in one line (final review, 2026-10-21)."""
+    note = "this strategy declares no stop of its own (own_stop): 2 boxes"
+    st = ("GET", f"/api/tester/walkforward/{FWID}")
+    for own, says in ((False, True), (True, False), (None, False)):      # None: a job from before the flag was kept
+        fixed.routes[st] = {"id": FWID, "status": "done", "walkforward": {"scheme": "fixed", **({} if own is None else {"own_stop": own})}}
+        for tool in ("walkforward", "heatmap"):
+            text = box(fixed).call(tool, {"walkforward_id": FWID} if tool == "walkforward" else {"grid_id": FWID})
+            assert (note in text) is says, (own, tool)
+    spec = {s["name"]: s for s in tools.SPECS}["write_strategy"]
+    assert "set `own_stop = True` when the strategy passes its own sl (so the heat map gets the 4 own-stop rows)" in spec["description"]
 
 
 def test_heatmap_tool_needs_owner_said(fixed):

@@ -47,7 +47,7 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
   lane, by-hand engine runs and one-off checks too. If a route has no walk-forward yet, say so and build it; never fall back to a single
   read. (2026-10-19 a single read was run on `owner_fvg_odir_15_nl_new` by mistake: those months are no longer blind for that rule.)
 - Every month is in-sample OR out-of-sample, never both. The old split (tune on the build days 2021-09-22 → 2025-06-30, then the test
-  days read once) is retired: only ideas locked before 2026-10-21 keep it (`blueprint_build` / `lock` / `test`). The Desk card's
+  days read once) is retired: only ideas created before 2026-10-21 keep it (`blueprint_build` / `lock`; `test` needs a lock dated before it). The Desk card's
   "Unseen days" is the old per-window walk-forward record (old route); nothing on the Desk switches by itself.
 - Judge the average of all boxes, never the best one.
 - Use the connector's `blueprint_*` tools for every phase. They run `research/edge-library/bp.py` and save each idea in the app

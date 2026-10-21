@@ -2053,7 +2053,8 @@ function heatCheck(f, meta, h) {
   if (err) return { note: err, bad: true };
   const g = X.gridAxes(rows, m, f.max_cells);
   const n = X.gridCount(g.axes);
-  return { note: `${n} run${n === 1 ? '' : 's'}${n > X.DEFAULT_MAX_CELLS ? ' — a long wait' : ''}`, bad: false, n };
+  const own = X.ownStopNote(m, g.axes, n);
+  return { note: `${n} run${n === 1 ? '' : 's'}${n > X.DEFAULT_MAX_CELLS ? ' — a long wait' : ''}${own ? ` · ${own}` : ''}`, bad: false, n };
 }
 function heatPickHtml(f, meta, h) {
   const strat = meta.inputs || [];
@@ -2247,6 +2248,7 @@ function wfStepsHtml(r, axes) {
 function wfFixedHtml(w, job) {
   const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, w.said || ''), sk = w.sort && w.sort.key;
   const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
+  const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '';
   const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
     : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
@@ -2265,6 +2267,7 @@ function wfFixedHtml(w, job) {
       ${o.row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${t.head.slice(1).map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
         <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
   return `<div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+    ${own ? `<div class="heat-note">${esc(own)}</div>` : ''}
     <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
     <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
       ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>

@@ -1,6 +1,7 @@
 # Manual lane: the owner's by-hand tests, kept as toolkit pieces
 
-The owner and Claude test an idea by hand, **not through the queue, a card or the Lab** (build days only, 2021-09-22 .. 2025-06-30). Two
+The owner and Claude test an idea by hand, **not through the queue, a card or the Lab**: by default on the 3:1 in-sample months (`hm40`,
+`bp.py wf run`, below); the build days (2021-09-22 .. 2025-06-30) only for the old route and the 2026-10-10 tables. Two
 families of the 08:30 ET data release were built for it on 2026-10-10 and live in `engine/families/orb830.py`; this folder holds the
 settings files and the two report scripts, so the next test is "take it from the toolkit", not a new build.
 

@@ -236,7 +236,8 @@ SPECS = [
                                                         "and each entry and exit sits where the rule says (line 1.5). "
                                                         "Default false."}},
           ["name"]),
-    _spec("blueprint_build", "Blueprint phase 2, the build (2021-09-22 to 2025-06-30, where all tuning happens), only when "
+    _spec("blueprint_build", f"Blueprint phase 2, the build. OLD ROUTE: only for an idea created before {ideastore.OLD_ROUTE_END} "
+          "(a newer one is refused: it takes the 3:1 walk-forward, blueprint_wf). On the build days (2021-09-22 to 2025-06-30), only when "
           "the owner says so (it runs a heat map: quote his words in owner_said): runs "
           "the idea's table and its random-entry control when they are missing, then reads lines 2.1 to 2.9, each "
           "pass or fail with its number. All pass = a LEAD, approved for the out-of-sample test. Every call is one "
@@ -247,8 +248,10 @@ SPECS = [
           {"name": _NAME,
            "reason": {"type": "string", "description": "Why this round is run, in a sentence or two: it is saved "
                                                        "before the run. Needed to start a round; not with job_id."},
-           "owner_said": _SAID, "wait_s": _WAIT, "job_id": _JOB}, ["name", "owner_said"]),
-    _spec("blueprint_lock", "Blueprint phase 3, the freeze: saves the rule, the variant list, the default variant (the "
+           "owner_said": {**_SAID, "description": _SAID["description"] + " Needed to start a round; not with job_id."},
+           "wait_s": _WAIT, "job_id": _JOB}, ["name"]),
+    _spec("blueprint_lock", f"Blueprint phase 3, the freeze. OLD ROUTE: only for an idea created before {ideastore.OLD_ROUTE_END} "
+          "(a newer one is refused: its lock is the owner's pick, blueprint_wf_pick). The freeze saves the rule, the variant list, the default variant (the "
           "middle survivor, never the best), the random control and the costs, and returns the lock's hash, the "
           "default and the test range. BEFORE the freeze the default variant is read on its own on the build days "
           "(lines 3.3 to 3.7: profit factor 1.2, net / worst drawdown 3, Sharpe 1, its drawdown at 1 micro under "

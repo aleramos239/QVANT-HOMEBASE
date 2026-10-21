@@ -409,6 +409,24 @@ def test_blueprint_test_refuses_new_idea(wf, capsys, monkeypatch):
     assert rc == 2 and "owner" in r["error"]
 
 
+def test_build_and_lock_refuse_a_new_idea(wf):
+    """The old route (build on the build days -> lock -> the one read) is for ideas created before OLD_ROUTE_END: a new idea is refused
+    at the build and at the lock, with the owner's words or without (final review, 2026-10-21)."""
+    from blueprint import freeze as FRZ
+    from blueprint import records as REC
+    IS, NEW, root = api.ideastore(), "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)", wf["tmp"] / "ideas"
+    card = {"why": "a swept extreme that fails to hold reverses back into the range.", "loser": "late breakout buyers",
+            "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["NQ nyam 5"], "main_setting": "ema1h", "sides": "both",
+            "sides_why": "a sweep fails either way", "loses_when": "a trend day that never comes back"}
+    r = REC.card("hwt_old", {"name": "hwt_old", "card": card, "run": {"family": "candle_sweep", "params": {"ema1h": [0, 50, 100]}, "exits": "standard"}}, root)
+    assert r["ok"] and r["plan"]["exits"] == "standard", r["text"]          # an old-table card, made today
+    with pytest.raises(J.Refuse, match=re.escape(NEW) + ".*a build on the build days is for ideas created before 2026-10-21"):
+        REC.start("hwt_old", "the plain idea", root)
+    with pytest.raises(J.Refuse, match=re.escape(NEW) + ".*the lock .* is for ideas created before 2026-10-21"):
+        FRZ.start("hwt_old", root)
+    assert not IS.rounds("hwt_old", root) and not (IS.idea_dir("hwt_old", root) / "lock.json").exists()     # nothing written
+
+
 def test_a_card_may_say_hm40():
     from blueprint import rules as R
     assert "hm40" in R.EXIT_KINDS and len(R.exit_cells("hm40", "NQ")) == 40

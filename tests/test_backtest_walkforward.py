@@ -1135,6 +1135,7 @@ def test_hm40_axes_40_and_20(layout):
     assert "scheme" not in wf.validate_wf({"strategy": "nq930", "axes": AXES, "min_trades": 1})["walkforward"]   # an old body: pick
     assert wf.validate_wf({"strategy": "nq930", "axes": AXES})["walkforward"]["scheme"] == "fixed"           # a bare one: fixed
     assert len(wf.validate_wf({"strategy": "b5none"})["cells"]) == 20
+    assert w["walkforward"]["own_stop"] is True and wf.validate_wf({"strategy": "b5none"})["walkforward"]["own_stop"] is False   # the connector says why 20
 
 
 def test_fixed_scheme_runs_cells_on_is_only(tmp_path, layout, ranged, tester_shared):

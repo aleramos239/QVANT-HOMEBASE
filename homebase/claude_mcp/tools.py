@@ -54,8 +54,9 @@ def describe_target() -> str:
 _RANGE = {
     "type": "object",
     "description": "The dates to run on. Strategy work follows research/edge-library/BLUEPRINT.md section 2. Leave it "
-                   "out: the strategy market's 3:1 in-sample months (3 months in, the next 1 out, then the next block), "
-                   "no test month. Any range here reaches 3:1 test months, so it runs ONLY when the owner says so in "
+                   "out -- backtest: the strategy market's 3:1 in-sample months (3 months in, the next 1 out, then the next "
+                   "block), no test month; walkforward (its old scheme \"pick\" only; a fixed one takes no range): the "
+                   "build days, 2021-09-22 -> 2025-06-30. Any range here reaches 3:1 test months, so it runs ONLY when the owner says so in "
                    "chat: quote his words in owner_said. Presets: build = 2021-09-22 -> 2025-06-30; test = 2025-07-01 "
                    "-> today (ET); all = 2021 -> today (ET); custom needs start and end (YYYY-MM-DD). Old names, still "
                    "accepted: 2021-2024, 2022-2024, and 2025-2026 (2025-01-01 -> today).",
@@ -210,7 +211,8 @@ SPECS = [
           "runs). Its tester id is draft_<name>; backtest it like any strategy -- the backtest is the only place "
           "its code runs, inside a sandbox (no network, no files outside its run dir, 20 min max). Drafts never "
           "trade. Follow the template read_strategy returns: literal class attributes and a literal "
-          "`return [Input(...), ...]`.",
+          "`return [Input(...), ...]`. Its own stop: set `own_stop = True` when the strategy passes its own sl (so the heat map gets "
+          "the 4 own-stop rows); without it the hm40 heat map has the 20 ATR boxes only.",
           {"name": {"type": "string", "description": "a-z, 0-9, '_' (2-40 chars, starting with a letter); not a "
                                                      "built-in strategy's name."},
            "code": {"type": "string", "description": "The complete Python source."}}, ["name", "code"]),
@@ -446,9 +448,10 @@ def _rec_row(rec) -> list:
             _num(rec.get("sharpe")), _usd(rec.get("max_dd"))]
 
 
-def _fixed_text(wid: str, r: dict) -> str:
+def _fixed_text(wid: str, r: dict, own_stop=None) -> str:
     """A fixed 3:1 walk-forward: the in-sample table, one row a box numbered as the owner reads it (#1 = cell 0), the
-    pick, and the test months only once he said to run them (the server holds them back until then)."""
+    pick, and the test months only once he said to run them (the server holds them back until then). own_stop = the job's
+    (False: the strategy never declared it, so its stop axis has no own-stop rows -- said in one line)."""
     cells, lock, o = r.get("cells") or [], r.get("lock") or {}, r.get("oos") or {}
     picked = lock.get("cell")
     win = r.get("window") or {}
@@ -459,6 +462,9 @@ def _fixed_text(wid: str, r: dict) -> str:
     lines = [f"Walk-forward {wid} · 3:1 {'rolling' if r.get('rolling') else 'blocks'} · in-sample months only · "
              f"{win.get('start')} -> {win.get('end')} · {len(r.get('blocks') or [])} blocks · {r.get('looks')} looks", "",
              _table(FIXED_HEAD, rows), ""]
+    if own_stop is False and any("ctl.stop" in (c.get("params") or {}) for c in cells):
+        lines.append(f"Note: this strategy declares no stop of its own (own_stop): {len(cells)} boxes "
+                     "(a strategy that passes its own sl gets the 4 own-stop rows once its class sets own_stop = True).")
     if nets:
         lines.append(f"Average of all {len(cells)} boxes: net {_usd(sum(nets) / len(nets))}"
                      + (f", win rate {sum(wrs) / len(wrs):.1f}%" if wrs else "") + " -- the answer, not the best box.")
@@ -741,7 +747,7 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         q = "" if test_months is None else f"?test_months={test_months}"
         r = self.c.get(f"/api/tester/walkforward/{_q(wid)}/result{q}")
         if r.get("scheme") == "fixed":
-            return _fixed_text(wid, r)
+            return _fixed_text(wid, r, (st.get("walkforward") or {}).get("own_stop"))
         sch, so, si = r.get("scheme") or {}, r.get("stitched") or {}, r.get("stitched_is") or {}
         drop = r.get("drop") or {}
         pm_o, pm_i = so.get("per_month") or {}, si.get("per_month") or {}
