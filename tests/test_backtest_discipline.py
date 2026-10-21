@@ -144,6 +144,14 @@ def test_wf_is_range_excludes_oos_months(blocks):
     assert parse_range({"kind": "wf_is", "root": "NQ"}).holdout is False      # in-sample months, past 2025-07 or not
 
 
+def test_wf_ranges_skip_a_gappy_session(blocks):
+    blocks.setattr("homebase.backtest.wfmonths.skipped", lambda root, store=None: frozenset({dt.date(2022, 1, 12)}) if root == "NQ" else frozenset())
+    r = parse_range({"kind": "wf_oos", "root": "NQ", "month": "2022-01"})
+    assert r.includes(dt.date(2022, 1, 11)) and not r.includes(dt.date(2022, 1, 12))       # the month counts, its gappy day does not
+    assert not stored_range(r.to_dict()).includes(dt.date(2022, 1, 12))
+    assert parse_range({"kind": "custom", "start": "2022-01-01", "end": "2022-01-31"}).includes(dt.date(2022, 1, 12))   # only the 3:1 ranges skip
+
+
 def test_wf_oos_range_is_one_test_month_and_is_recorded(blocks, tmp_path):
     r = parse_range({"kind": "wf_oos", "root": "NQ", "month": "2022-01"})
     assert (r.start, r.end, r.holdout) == (dt.date(2022, 1, 1), dt.date(2022, 1, 31), True)

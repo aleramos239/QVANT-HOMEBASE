@@ -58,7 +58,7 @@ def _fake_run_many(calls):
 
 @pytest.fixture
 def wf(monkeypatch, tmp_path):
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01"))
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01", frozenset()))
     WM._sets.cache_clear()
     calls = []
     monkeypatch.setattr(S, "run_many", _fake_run_many(calls))
@@ -237,7 +237,7 @@ def test_oos_refused_by_the_runner_before_the_claim_is_not_used(wf, monkeypatch)
         H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
     assert not _log() and not _oos_calls(wf) and H.show("hwt_sweep")["oos"] is None
     monkeypatch.undo()                                                        # (the fixture's patches go too: set them again)
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01"))
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01", frozenset()))
     WM._sets.cache_clear()
     monkeypatch.setattr(S, "run_many", _fake_run_many(wf["calls"]))
     monkeypatch.setattr(H, "RUNS", wf["tmp"] / "runs_wf")
@@ -283,7 +283,7 @@ def test_oos_runs_once(wf):
 
 def test_oos_one_month_a_call(wf, monkeypatch):
     cal = ["2021-10-01", "2021-11-01", "2021-12-01", "2022-01-03", "2022-02-01", "2022-03-01", "2022-04-01", "2022-05-02"]
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(cal), "2022-06-01"))
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(cal), "2022-06-01", frozenset()))
     WM._sets.cache_clear()
     H.run_is(SPEC, workers=1, ledger=wf["ledger"])
     H.pick("hwt_sweep", BOX)
@@ -456,7 +456,7 @@ FIRST = "pick a box and run its test months first (blueprint_wf_pick, blueprint_
 @pytest.fixture
 def down(wf, monkeypatch):
     """The wf fixture with a whole test month (21 session days: enough for a portfolio's 20-day draws) and the Lab drafts in tmp."""
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(IS_DAYS + JAN), "2022-02-01"))
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(IS_DAYS + JAN), "2022-02-01", frozenset()))
     WM._sets.cache_clear()
     monkeypatch.setenv("HOMEBASE_DRAFTS_DIR", str(wf["tmp"] / "drafts"))
     return {**wf, "root": wf["tmp"] / "ideas"}

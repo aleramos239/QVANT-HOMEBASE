@@ -52,8 +52,10 @@ class Range:
     months: tuple = ()              # ... and the "YYYY-MM" months the range holds
 
     def includes(self, d: dt.date) -> bool:
-        return self.start <= d <= self.end and (self.kind != "is_months" or d.month in IS_MONTHS) \
-            and (self.kind not in WF_KINDS or d.isoformat()[:7] in self.months)
+        if self.kind in WF_KINDS:                   # the 3:1 months, less the gappy sessions the walk-forward skips
+            from . import wfmonths
+            return self.start <= d <= self.end and d.isoformat()[:7] in self.months and d not in wfmonths.skipped(self.root)
+        return self.start <= d <= self.end and (self.kind != "is_months" or d.month in IS_MONTHS)
 
     @property
     def holdout(self) -> bool:

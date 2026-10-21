@@ -1,6 +1,7 @@
 """The 3:1 block months (blueprint/wfmonths.py) and the engine's in-sample / out-of-sample switches (ALLOW_WF_IS / ALLOW_WF_OOS).
 Every calendar here is synthetic (weekdays): no tape is opened."""
 import datetime as dt
+import functools
 
 import pytest
 
@@ -25,8 +26,8 @@ def _fresh():
     WM._sets.cache_clear()
 
 
-def _cal(monkeypatch, cal, stops=None):
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(cal), stops))
+def _cal(monkeypatch, cal, last=None, skip=()):
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(cal), last, frozenset(skip)))
     WM._sets.cache_clear()
 
 
@@ -63,8 +64,8 @@ def test_blocks_start_at_first_whole_month_of_the_market(monkeypatch):
     assert WM.blocks("GC")[0]["is"][0] == "2024-01"
 
 
-def test_a_month_the_complete_sessions_do_not_run_past_is_in_no_block(monkeypatch):
-    _cal(monkeypatch, _weekdays("2021-09-22", "2026-09-22"), stops="2026-09-23")      # NQ today: Sep 2026 stops on the 22nd
+def test_a_month_the_sessions_do_not_run_past_is_in_no_block(monkeypatch):
+    _cal(monkeypatch, _weekdays("2021-09-22", "2026-09-22"), last="2026-09-23")       # the data's last session is in Sep 2026
     b = WM.blocks("NQ")
     assert len(b) == 14 and b[-1]["oos"] == "2026-05"             # Jun-Aug 2026: a trailing part-block, in no block
     assert not any(d[:7] == "2026-09" for d in WM.calendar("NQ") + WM.is_days("NQ"))
@@ -99,3 +100,50 @@ def test_wf_oos_switch_refuses_an_is_day(nq):
         S.period(S.ALLOW_WF_OOS)
     with pytest.raises(S.HoldoutSealed, match="ONE month"):        # ONE test month a call, never two
         S.run(l2ref.Donchian, {}, workers=1, days=["2022-01-05", "2022-05-04"], allow_holdout=S.ALLOW_WF_OOS)
+
+
+# ---- gappy days: a session with a hole is skipped, the month still counts (the owner, 2026-10-21: "Skip those days")
+def _market(tmp, monkeypatch, root, days, bad=(), parquet_to=None, lab_tape=()):
+    """A synthetic archive (manifests only) and, for NQ, empty tape files: names are all the calendar reads."""
+    for d in days:
+        p = tmp / "ticks" / root / d[:4] / f"{d}_X.json"
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text('{"ticks": 10, "complete": %s}' % ("false" if d in bad else "true"))
+        if parquet_to and d <= parquet_to:
+            q = tmp / "ofb" / root / d[:4] / d[5:7] / f"{d}.parquet"
+            q.parent.mkdir(parents=True, exist_ok=True)
+            q.touch()
+    for d in lab_tape:
+        (tmp / "hb" / root).mkdir(parents=True, exist_ok=True)
+        (tmp / "hb" / root / f"{d}.tape").touch()
+    for k, v in (("ARCHIVE", "ticks"), ("TAPE_DIR", "ofb"), ("HB_TAPE", "hb"), ("OWN_TAPE", "own")):
+        monkeypatch.setattr(S, k, tmp / v)
+    monkeypatch.setattr(WM, "_sessions", functools.lru_cache(maxsize=None)(WM._sessions.__wrapped__))   # its own memo: the real one never sees tmp
+    WM._sets.cache_clear()
+
+
+def test_a_month_with_a_gappy_session_counts_and_the_session_is_skipped(tmp_path, monkeypatch):
+    _market(tmp_path, monkeypatch, "XX", _weekdays("2025-05-01", "2025-10-01"), bad={"2025-08-12"})
+    assert [(b["is"], b["oos"]) for b in WM.blocks("XX")] == [(["2025-05", "2025-06", "2025-07"], "2025-08")]
+    assert "2025-08-12" not in WM.calendar("XX") and "2025-08-12" not in WM.oos_days("XX", "2025-08")
+    assert WM.oos_days("XX", "2025-08") == [d for d in _weekdays("2025-08-01", "2025-08-31") if d != "2025-08-12"]
+    assert WM.skipped("XX") == frozenset({"2025-08-12"})
+    S.check_holdout("2025-08-13", S.ALLOW_WF_OOS, "XX")
+    with pytest.raises(S.HoldoutSealed, match="skips it"):
+        S.check_holdout("2025-08-12", S.ALLOW_WF_OOS, "XX")      # inside a counted month, still refused
+    assert [d.isoformat() for d in S.sessions("2025-08-01", "2025-08-31", "XX", allow_holdout=S.ALLOW_WF_OOS)] == \
+        WM.oos_days("XX", "2025-08")                              # a month span under the switch lists it without its gappy day
+
+
+def test_a_month_the_data_does_not_run_past_is_out(tmp_path, monkeypatch):
+    _market(tmp_path, monkeypatch, "XX", _weekdays("2025-05-01", "2025-09-30"), bad={"2025-09-02"})
+    assert max(WM.calendar("XX")) == "2025-08-29"                 # no session after Sep 30: Sep is out (the hole does not decide it)
+    assert [b["oos"] for b in WM.blocks("XX")] == ["2025-08"] and WM.skipped("XX") == frozenset({"2025-09-02"})
+
+
+def test_nq_a_session_with_only_a_lab_tape_counts(tmp_path, monkeypatch):
+    days = _weekdays("2025-05-01", "2025-10-01")
+    _market(tmp_path, monkeypatch, "NQ", days, parquet_to="2025-07-31",
+            lab_tape=[d for d in days if d > "2025-07-31" and d != "2025-08-20"])
+    assert WM.oos_days("NQ", "2025-08") == [d for d in _weekdays("2025-08-01", "2025-08-31") if d != "2025-08-20"]
+    assert WM.skipped("NQ") == frozenset({"2025-08-20"})         # complete in the archive, but no tape the engine can replay

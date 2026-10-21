@@ -275,15 +275,23 @@ def _seal_end(allow_holdout) -> dt.date:
     return dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]
 
 
-def _wf_check(d, level: str, root: str) -> None:
-    """The 3:1 switches: d must lie in an in-sample month (ALLOW_WF_IS) / an out-of-sample month (ALLOW_WF_OOS) of root's blocks."""
+def _wfm():
     if str(W) not in sys.path:
         sys.path.append(str(W))
-    from blueprint import wfmonths as WM
+    from blueprint import wfmonths
+    return wfmonths
+
+
+def _wf_check(d, level: str, root: str) -> None:
+    """The 3:1 switches: d must lie in an in-sample month (ALLOW_WF_IS) / an out-of-sample month (ALLOW_WF_OOS) of root's blocks,
+    and not be a session the walk-forward skips (wfmonths.skipped: not complete)."""
+    WM = _wfm()
     ins, oos = WM.month_sets(root)
     if _date(d).isoformat()[:7] not in (ins if level == ALLOW_WF_IS else oos):
         raise HoldoutSealed(f"{d} is not in an {'in-sample' if level == ALLOW_WF_IS else 'out-of-sample'} month of the {root} 3:1 "
                             f"blocks: the {level} switch never opens it")
+    if _date(d).isoformat() in WM.skipped(root):
+        raise HoldoutSealed(f"{d}: the {root} session is not complete (a hole in its ticks, or no tape): the 3:1 walk-forward skips it")
 
 
 def check_holdout(d, allow_holdout: bool = False, root: str = "NQ") -> None:
@@ -543,6 +551,7 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
             if start <= d <= end and d.weekday() < 5:
                 out.add(d)
     if isinstance(level, str) and level in WF_SWITCHES:
+        out = {d for d in out if d.isoformat() not in _wfm().skipped(root)}     # a gappy day is no session of the 3:1 walk-forward
         _wf_days(out, level, root)
     return sorted(out)
 

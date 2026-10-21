@@ -66,7 +66,7 @@ def _fake_run_many(calls):
 
 @pytest.fixture
 def wf(monkeypatch, tmp_path):
-    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01"))
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01", frozenset()))
     WM._sets.cache_clear()
     calls = []
     monkeypatch.setattr(S, "run_many", _fake_run_many(calls))
