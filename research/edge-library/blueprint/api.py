@@ -204,7 +204,8 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     named, the one of the idea's check on file is read again -- so the owner's later `--looked` needs nothing repeated.
     Beyond the agreed keys: source, asked, look (the 10 trades), failed, not_applicable, passed. passed = lines 1.1-1.5
     all TRUE and 1.6 not failed (1.6 waits for a change to the code; a line that cannot be read is not a pass).
-    Refused: any day on or after 2025-07-01 (checks.seal, runner.guard); no source; a tester run id (not built yet)."""
+    Refused: any day on or after 2025-07-01 (checks.seal, runner.guard); no source; a tester run id (not built yet).
+    A 3:1 idea: no source = its in-sample store (runs_wf/<store>/is); a 3:1 store is read on its in-sample months only (checks.seal)."""
     given = {k: v for k, v in (("store", store), ("trades", trades), ("run_id", run_id)) if v is not None}
     if len(given) > 1:
         raise J.Refuse("give one of --store, --trades, --run-id")
@@ -215,6 +216,9 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     file = _idea_file(name, root, "check.json")
     if not given:
         before = (_json(file) or {}).get("asked") if file else None
+        if not before and wf_on_file(name):        # a 3:1 idea: its own in-sample store (the code check never reads a test month)
+            from . import hmwf as H
+            before = {"store": str(H.store(name) / H.IS)}
         if not before:
             raise J.Refuse(f"{name}: say what to check: --store=<store key> or --trades=<trades file> (no code check of this idea is on file to read again)")
         asked = {**before, **asked}

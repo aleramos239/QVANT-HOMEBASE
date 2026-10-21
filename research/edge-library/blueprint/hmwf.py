@@ -363,3 +363,52 @@ def show(name: str, store=None) -> dict:
     home = _home(name, store)
     rows = is_table(name, home)
     return {"is": rows, "lock": _lock(home), "oos": _oos(home, rows)}
+
+
+# ================================================================ downstream: the sim, the portfolio and the eval card (spec 4.7)
+
+FIRST = "pick a box and run its test months first (blueprint_wf_pick, blueprint_wf_oos)"
+
+
+def route(name: str, root=None) -> bool:
+    """Do the sim, the portfolio and the eval card of this idea read its 3:1 record? Not for the old route: an idea with the one read
+    of the test days on file (test.json), or one created before ideastore.OLD_ROUTE_END with no 3:1 store. No idea on file: no."""
+    IS = api.ideastore()
+    try:
+        d = IS.idea_dir(name, root)
+        created = IS.read_idea(name, root).get("created") if d.is_dir() else None
+    except (ValueError, FileNotFoundError):
+        return False
+    return d.is_dir() and not (d / "test.json").is_file() and (api.wf_on_file(name) or not IS.old_route(created, root))
+
+
+def record(name: str) -> dict:
+    """The pick and the test-month record on file, without the in-sample table (read only): {"store", "lock", "oos"}."""
+    home = store(name)
+    return {"store": str(home), "lock": _lock(home), "oos": _oos(home, [])}
+
+
+def handed(name: str) -> dict:
+    """WHAT THE SIM, THE PORTFOLIO AND THE EVAL CARD READ FOR A 3:1 IDEA, in propodds.handed's shape: the picked box's trades in its
+    test months (<store>/oos/, sealed by guard_wf), never the in-sample store, never another box. `same` = a lock-like {home, default,
+    spec} for the portfolio's line 5.6 (its sides are read on the in-sample store). Refused, in plain words: no table, no pick, the test
+    months not run, a read that stopped."""
+    try:
+        home = store(name)
+    except J.Refuse as e:
+        raise J.Refuse(f"{name}: {FIRST} -- {e}") from None
+    lock = _lock(home)
+    if lock is None:
+        raise J.Refuse(f"{name}: no box is picked: {FIRST}")
+    oos = _oos(home, [])
+    if oos is None:
+        raise J.Refuse(f"{name}: box {lock['box']} is picked, its test months are not run: {FIRST}")
+    if oos.get("state"):
+        raise J.Refuse(f"{name}: {_stopped(home, lock['box'])}: there is no test-month record to read")
+    st = J.store({"dir": home, "key": OOS})
+    m, box = st["meta"], lock["box"]
+    sess = m["sessions"][0] if len(m["sessions"]) == 1 else "all"
+    return {"wf": True, "market": m["root"], "session": sess, "bar": str(m["tf"]), "lock": f"{home.name} box {box}", "default": box, "store": st,
+            "where": f"{home.name}/{OOS}", "span": (m["days"][0], m["days"][-1]), "calendar": list(m["days"]),
+            "variants": [{"id": box, "test": oos["record"]["net"], "worse": None, "frozen": True}], "survivors": [box],
+            "same": {"home": {"market": m["root"], "folder": str(home), "key": IS, "session": sess}, "default": box, "spec": {"run": {"family": m["family"]}}}}

@@ -220,12 +220,13 @@ SPECS = [
           "home table: the others are neighbors), the evening session, and limits.trail_atr / limits.exit_bars (exits "
           "of their own): blueprint_blocks lists everything it refuses.",
           {"name": _NAME, "card": _CARD, "settings": _SETTINGS}, ["name", "card", "settings"]),
-    _spec("blueprint_code_check", "Blueprint phase 1, the code check (build days only): do the trades do what the card "
+    _spec("blueprint_code_check", "Blueprint phase 1, the code check (build days only; a 3:1 idea: its in-sample months only): do the trades do what the card "
           "says? It counts entries outside the session window, more than one position at a time or a trade not flat "
           "by 15:58 ET, a trade count the rule does not imply, winners and losers that do not pay about the target "
           "and the stop, and a trade list that no longer reproduces after a code change -- and names 10 trades to "
           "look at on the chart (the first 5 and 5 at random). Give at most one of store, trades_file, run_id. Call "
-          "it again with looked=true once those 10 were looked at. Refused for any day on or after 2025-07-01.",
+          "it again with looked=true once those 10 were looked at. Refused for any day on or after 2025-07-01. A 3:1 idea "
+          "(blueprint_wf): no store = its in-sample store; it never reads a test month.",
           {"name": _NAME,
            "store": {"type": "string", "description": "A store key of the research engine."},
            "trades_file": {"type": "string", "description": "The path of a trade list file."},
@@ -282,7 +283,8 @@ SPECS = [
           "-15%). One strategy's bar is line 5.5: 50% or more on each. The 60% within 10 days / 75% within 20 days "
           "bar (line 5.3) is the PORTFOLIO's (blueprint_portfolio); for one strategy it is said, not judged. Open "
           "losses count against the drawdown here, which the tester's own prop tile does not do. attempts and "
-          "fee_budget are the owner's numbers (line 5.4): ask him, never guess. Refused until the test is passed.",
+          "fee_budget are the owner's numbers (line 5.4): ask him, never guess. Refused until the test is passed. A 3:1 idea "
+          "reads the picked box's test months (refused until blueprint_wf_pick and blueprint_wf_oos are done).",
           {"name": _NAME,
            "account": {"type": "string", "description": "The account in question: a rule set id from list_prop_rules, "
                                                         "e.g. lucid-pro-50k@2026-09-27b."},
@@ -294,7 +296,8 @@ SPECS = [
           "days drawn together. Lines 5.2 (the \"live is worse\" row), 5.3 (eval pass within 10 trading days 60% or "
           "more; maximum payout within 20 trading days 75% or more), 5.6 (no two members are the same idea on the "
           "same market) and 5.7 (every member raises the portfolio's eval odds; one that lowers them stays out). "
-          "Open losses count. Refused when a member's out-of-sample test is not passed.",
+          "Open losses count. Refused when a member's out-of-sample test is not passed. A 3:1 idea takes part with the picked "
+          "box's test months (refused until blueprint_wf_pick and blueprint_wf_oos are done).",
           {"names": {"type": "array", "items": {"type": "string"}, "minItems": 2,
                      "description": "The ideas of the portfolio: two or more names, each proven on history."},
            "account": {"type": "string", "description": "The account in question: a rule set id from list_prop_rules, "
@@ -307,7 +310,7 @@ SPECS = [
           "exit_price, net and exit_reason; entry_slip_ticks (or trigger_price), replay, fixed and note are optional. "
           "AN ORDER THAT DID NOT TRADE where the test did is {\"status\": \"missed\" | \"rejected\"}, with "
           "entry_time, side and replay when they are known. A field that is not listed is refused. Refused until the "
-          "sim is done. AFTER A HARD ALARM (the drawdown at the 95th percentile: the strategy is switched off), "
+          "sim is done. A 3:1 idea's table is the picked box's test months. AFTER A HARD ALARM (the drawdown at the 95th percentile: the strategy is switched off), "
           "replay_since_stop = the tester's replay of the days since, and line 6.9 is read on it: the last 5 and 12 "
           "months above $0 and the last 3 months above the long-run pace.",
           {"name": _NAME,
@@ -328,7 +331,7 @@ SPECS = [
           ["name"]),
     _spec("blueprint_status", "Blueprint, any phase: where things stand -- every idea with its status (idea, lead, "
           "proven on history, proven live, shelved), phase, round and next step; or one idea (name); or one job "
-          "(job_id). Runs nothing.",
+          "(job_id). A 3:1 idea also shows its picked box and its test months (what the sim and the eval card read). Runs nothing.",
           {"name": _NAME, "job_id": {"type": "string", "description": "A job id a build or a test returned."}}),
     _spec("blueprint_heatmap", "Blueprint, a view of what is saved: the heat map of an idea's build -- one table of a "
           "build round as a grid: the table of its home, of a neighbor its card names, or of the place it should not "

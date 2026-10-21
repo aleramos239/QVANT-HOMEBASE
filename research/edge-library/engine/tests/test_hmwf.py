@@ -6,6 +6,7 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -425,3 +426,136 @@ def test_an_hm40_card_goes_to_the_walk_forward(wf):
         REC.start("hwt_card", "the plain idea", root)
     sp = api.wf_spec("hwt_card", root)
     assert (sp["markets"], sp["bar_sizes"], sp["sessions"]) == (["NQ"], ["15"], ["nyam"])      # its home table only
+
+
+# ================================================================ downstream: the code check, the sim, the portfolio, the eval card (Task 13)
+
+JAN = [x.isoformat() for x in (dt.date(2022, 1, 3) + dt.timedelta(k) for k in range(29)) if x.weekday() < 5]      # the test month, every weekday
+PRO = "lucid-pro-50k@2026-09-27b"
+FIRST = "pick a box and run its test months first (blueprint_wf_pick, blueprint_wf_oos)"
+
+
+@pytest.fixture
+def down(wf, monkeypatch):
+    """The wf fixture with a whole test month (21 session days: enough for a portfolio's 20-day draws) and the Lab drafts in tmp."""
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(IS_DAYS + JAN), "2022-02-01"))
+    WM._sets.cache_clear()
+    monkeypatch.setenv("HOMEBASE_DRAFTS_DIR", str(wf["tmp"] / "drafts"))
+    return {**wf, "root": wf["tmp"] / "ideas"}
+
+
+def _idea(name, root, created=None):
+    IS = api.ideastore()
+    IS.create(name, root)
+    if created:
+        f = IS.idea_dir(name, root) / "idea.json"
+        f.write_text(json.dumps({**json.loads(f.read_text()), "created": created}))
+
+
+def _ready(name, down, box=BOX):
+    _idea(name, down["root"])
+    H.run_is({**SPEC, "name": name}, workers=1, ledger=down["ledger"])
+    H.pick(name, box)
+    H.run_oos(name, box, "run it", workers=1, ledger=down["ledger"])
+
+
+def test_code_check_runs_on_is_days_for_a_wf_store(wf, monkeypatch):
+    from blueprint import checks as CH
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+
+    def sealed(*a, **kw):
+        raise AssertionError("the code check opened a tape day")
+    monkeypatch.setattr(S, "load_tape", sealed)
+    root = wf["tmp"] / "ideas"
+    for src in (str(H.RUNS / "hwt_sweep-NQ-tf15" / "is"), "hwt_sweep-NQ-tf15/is", None):      # a path, a key of runs_wf/, nothing: the idea's own
+        r = api.code_check("hwt_sweep", store=src, root=root)
+        assert r["ok"] and r["source"]["where"] == str(H.RUNS / "hwt_sweep-NQ-tf15" / "is") and r["source"]["trades"] > 0
+        assert [x["line"] for x in r["lines"]] == ["1.1", "1.2", "1.3", "1.4", "1.5", "1.6"]
+    t = CH.load(str(H.RUNS / "hwt_sweep-NQ-tf15" / "is"))
+    assert {dt.date.fromordinal(int(d)).isoformat()[:7] for d in t["date"]} <= {"2021-10", "2021-11", "2021-12"}
+    t["date"][0] = dt.date(2022, 1, 3).toordinal()                            # a trade in the test month: the whole table is refused
+    with pytest.raises(J.Refuse, match="in-sample months only"):
+        CH.seal(t)
+    H.pick("hwt_sweep", BOX)
+    H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    with pytest.raises(J.Refuse, match="in-sample"):                         # the test-month store is never a code check's
+        api.code_check("hwt_sweep", store=str(H.RUNS / "hwt_sweep-NQ-tf15" / "oos"), root=root)
+
+
+def test_sim_reads_the_picked_box_oos_record(down):
+    from blueprint import propodds as PO
+    from blueprint import records as REC
+    _ready("hwt_sweep", down)
+    h = PO.handed("hwt_sweep", down["root"])
+    assert (h["market"], h["session"], h["bar"], h["calendar"], h["survivors"]) == ("NQ", "nyam", "15", JAN, [BOX])
+    x = PO.cell(h, BOX)
+    u = LB.load_unit("oos", H.RUNS / "hwt_sweep-NQ-tf15")
+    assert len(x["net"]) == 21 and np.array_equal(np.sort(x["net"]), np.sort(u["net"]))      # the picked box's test-month trades, and nothing else
+    assert {dt.date.fromordinal(int(d)).isoformat()[:7] for d in x["date"]} == {"2022-01"}
+    r = PO.sim("hwt_sweep", PRO, 3, 345.0, down["root"], paths=200)
+    assert r["ok"] and r["chosen"]["variant"] == BOX and r["range"] == {"start": JAN[0], "end": JAN[-1]} and r["pool"]["days"] == 21
+    assert BOX in r["lock"] and "THE PICKED BOX" in r["text"] and (down["root"] / "hwt_sweep" / "sim" / f"{PRO}.json").is_file()
+    s = REC.status("hwt_sweep", down["root"])                                 # the status shows the pick and the test months
+    assert s["record"]["wf"]["lock"]["box"] == BOX and s["record"]["wf"]["oos"]["record"]["trades"] == 21 and f"PICKED box {BOX}" in s["text"]
+
+
+def test_eval_card_reads_the_picked_box_oos_record(down):
+    from blueprint import evalcard as EC
+    from blueprint import propodds as PO
+    _ready("hwt_sweep", down)
+    PO.sim("hwt_sweep", PRO, 3, 345.0, down["root"], paths=200)
+    r = EC.card("hwt_sweep", root=down["root"])
+    assert r["ok"] and r["variant"] == BOX and r["history"]["trades"] == 21 and r["history"]["days"] == 21
+    assert (down["root"] / "hwt_sweep" / "eval.json").is_file()
+
+
+def test_portfolio_takes_wf_ideas(down):
+    from blueprint import propodds as PO
+    _ready("hwt_sweep", down)
+    _ready("hwt_other", down)
+    r = PO.portfolio(["hwt_sweep", "hwt_other"], PRO, down["root"], paths=200)
+    assert r["ok"] and r["range"] == {"start": JAN[0], "end": JAN[-1]} and [m["variant"] for m in r["members"]] == [BOX, BOX]
+    assert all(m["trades"] == 21 for m in r["members"])
+    l56 = next(x for x in r["lines"] if x["line"] == "5.6")
+    assert l56["passed"] is False and "the same entry trigger on the same market (candle_sweep, NQ)" in l56["text"]
+
+
+def test_downstream_refuses_before_the_read(down, monkeypatch):
+    from blueprint import evalcard as EC
+    from blueprint import propodds as PO
+    root = down["root"]
+    _idea("hwt_sweep", root)
+    _ready("hwt_other", down)
+
+    def no(words):
+        for fn in (lambda: PO.sim("hwt_sweep", PRO, 3, 345.0, root, paths=200), lambda: EC.card("hwt_sweep", root=root),
+                   lambda: PO.portfolio(["hwt_sweep", "hwt_other"], PRO, root, paths=200)):
+            with pytest.raises(J.Refuse, match=words):
+                fn()
+        assert not (root / "hwt_sweep" / "sim").exists() and not (root / "_portfolios").exists()
+    no(re.escape(FIRST))                                                      # no 3:1 table at all
+    H.run_is(SPEC, workers=1, ledger=down["ledger"])
+    no(re.escape(FIRST))                                                      # no pick
+    H.pick("hwt_sweep", BOX)
+    no(re.escape(FIRST))                                                      # picked, test months not run
+
+    def boom(*a, **kw):
+        raise RuntimeError("engine down")
+    monkeypatch.setattr(S, "run_many", boom)
+    with pytest.raises(J.Refuse):
+        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=down["ledger"])
+    no("stopped and is not run again")                                        # a read that stopped: nothing to read, ever
+
+
+def test_old_idea_downstream_unchanged(down):
+    from blueprint import propodds as PO
+    root, IS = down["root"], api.ideastore()
+    _idea("hwt_old", root, created="2026-10-19T09:00:00+00:00")               # created before the cutoff, no 3:1 store: the old route
+    assert not H.route("hwt_old", root)
+    with pytest.raises(J.Refuse, match="out-of-sample test is not on file"):
+        PO.sim("hwt_old", PRO, 3, 345.0, root, paths=200)
+    _idea("hwt_new", root)
+    assert H.route("hwt_new", root)
+    (IS.idea_dir("hwt_new", root) / "test.json").write_text(json.dumps({"lines": []}))      # the one read of the test days on file: old
+    assert not H.route("hwt_new", root)
+    assert not H.route("nobody", root) and not H.route("Not A Name", root)

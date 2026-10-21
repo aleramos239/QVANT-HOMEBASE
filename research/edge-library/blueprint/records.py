@@ -798,6 +798,28 @@ def build(name, reason, root=None, **kw) -> dict:
 
 # ================================================================ the status
 
+def _wf(name: str):
+    """A 3:1 idea's pick and test-month record (hmwf.record), or None; what cannot be read is said, never raised."""
+    if not api.wf_on_file(name):
+        return None
+    from . import hmwf as H
+    try:
+        return H.record(name)
+    except J.Refuse as e:
+        return {"error": str(e)}
+
+
+def _wf_line(wf: dict) -> str:
+    lock, oos = wf.get("lock"), wf.get("oos")
+    if wf.get("error"):
+        return f"3:1 · {wf['error']}"
+    if lock is None:
+        return "3:1 · in-sample table on file · NOT PICKED: the owner picks a box"
+    said = ("not run" if oos is None else oos["state"] if oos.get("state") else
+            f"{oos['record']['trades']} trades, net {oos['record']['net']:,.0f}, {len(oos['blocks'])} months (the sim and the eval card read these)")
+    return f"3:1 · PICKED box {lock['box']} ({lock['at']}, {lock['who']}) · test months: {said}"
+
+
 def status(name=None, root=None) -> dict:
     """`bp.py status [<name>]`: where things stand. Runs nothing. Without a name: every idea on file, one line each (status,
     phase, round, next step; a build that is still running) -- `ideas`. With a name: the full record of that idea --
@@ -838,6 +860,7 @@ def status(name=None, root=None) -> dict:
     home = (lock or {}).get("home") or {}
     rng = ((lock or {}).get("test_range") or {}).get(home.get("market")) or {}
     early = _json(d / api.EARLY_LOOK / "test.json")     # an early look at the test days (oos.py): shown, and never part of the status
+    wf = _wf(name)
     text = [f"{name} · {head(i)}" + (f" · Lab group {i['group']}" if i["group"] else "")
             + (f" · {len(i['runs'])} tester run{'s' * (len(i['runs']) != 1)}" if i["runs"] else "") + (f" · job {job} is running" if job else ""),
             *(["CARD", *["  " + ln for ln in card_md.splitlines() if ln.strip()]] if card_md else ["NO CARD on file"]),
@@ -847,6 +870,7 @@ def status(name=None, root=None) -> dict:
             *([f"FROZEN · lock {lock.get('hash')} of {lock.get('locked_utc')} · round {lock.get('round')} · default variant {lock.get('default')} · test range "
                f"{home.get('market')} {rng.get('start')} .. {rng.get('end')}"] if lock else []),
             *([f"TEST DAYS READ · {read.get('state')} {read.get('utc') or ''}".rstrip() + (f" · {read['verdict']}" if read.get("verdict") else "")] if read else []),
+            *([_wf_line(wf)] if wf else []),
             *(["EARLY LOOK (no verdict of the law: the status does not read it)", *["  " + str(x.get("text")) for x in early.get("lines") or [] if isinstance(x, dict)]]
               if early else []),
             *(["LATEST VERDICT", *["  " + x["text"] for x in rows]] if rows else []),
@@ -855,6 +879,6 @@ def status(name=None, root=None) -> dict:
                       next=_step(name, i["status"], _last(name, root), root),
                       record={"idea": i, "card": card_md, "spec": _json(d / "spec.json"), "check": _json(d / "check.json"), "rounds": rounds, "job": job,
                               "lock": None if lock is None else {k: lock.get(k) for k in ("hash", "version", "round", "locked_utc", "default", "test_range")},
-                              "read": read,
+                              "read": read, "wf": wf,
                               "early_look": None if early is None else {k: early.get(k) for k in ("verdict", "label", "held", "failed", "lock", "range", "build_failed")},
                               "log": [json.loads(x) for x in (d / "log.jsonl").read_text(encoding="utf-8").splitlines() if x.strip()] if (d / "log.jsonl").is_file() else []})

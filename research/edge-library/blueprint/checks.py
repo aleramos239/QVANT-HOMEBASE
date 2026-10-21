@@ -33,6 +33,8 @@ THE TRADE TABLE (load): a dict of arrays, one row per trade --
   + lists [{id, max}], sessions, window, per_session, unit, root, pv, tick, name, kind, where, label.
 THE SEAL: a store whose range is not inside the build days is refused before a trade is loaded (runner.guard); any trade
 dated, entered or closed on or after 2025-07-01 is refused whatever the file says (seal).
+A 3:1 STORE (runs_wf/, spec 4.7) is checked on its own in-sample months: its seal is runner.guard_wf (written under the in-sample
+switch, every day an in-sample day: a test-month store is refused), and every trade must sit in an in-sample month (seal).
 """
 from __future__ import annotations
 
@@ -51,6 +53,7 @@ from . import W
 from . import lines as L
 from . import rules as R
 from . import runner as RUN
+from . import wfmonths as WM
 
 TP, SL, OTHER = (LB.REASONS.index(k) for k in ("tp", "sl", "other"))
 SHOWN = 20                                          # exceptions listed in a result (their count is always whole)
@@ -106,7 +109,8 @@ def from_store(d: Path, sessions=None, window=None, max_per_day=None) -> dict:
         meta = json.loads((d / "run.json").read_text())
     except (OSError, ValueError) as e:
         raise J.Refuse(f"store {label}: {e}") from None
-    RUN.guard(meta, label)
+    wf = meta.get("period") in S.WF_SWITCHES          # a 3:1 store: its in-sample months only
+    RUN.guard_wf(meta, label, S.ALLOW_WF_IS) if wf else RUN.guard(meta, label)
     u = LB.load_unit(d.name, d.parent)
     pv, tick = _contract(meta.get("root"))
     cells = meta["cells"]
@@ -127,7 +131,8 @@ def from_store(d: Path, sessions=None, window=None, max_per_day=None) -> dict:
         "net": u["net"].astype(np.float64), "side": u["side"].astype(np.int64), "qty": np.ones(len(cell)), "sess": u["sess"].astype(np.int64), "reason": reason,
         "stop_usd": risk * pv, "target_usd": np.where((r > 0) & ~own, r * risk * pv, np.nan), "slack_usd": (r + 1.0) / 2.0 * tick * pv, "own": own,
         "stop_pts": risk, "stated_stop": stated, "stated_off": pts & np.isfinite(risk) & (np.abs(risk - stated) > tick / 2.0),
-        "sessions": _sessions(stated_by), "window": window, "per_session": True, "unit": "a session and day"})
+        "sessions": _sessions(stated_by), "window": window, "per_session": True, "unit": "a session and day",
+        "is_months": WM.month_sets(str(meta["root"]))[0] if wf else None})
 
 
 def from_trades(rows, market, sessions=None, window=None, max_per_day=None, name: str = "trades", where: str = "") -> dict:
@@ -169,7 +174,13 @@ def from_trades(rows, market, sessions=None, window=None, max_per_day=None, name
 
 def seal(t: dict) -> dict:
     """THE SEAL: a table that holds a trade dated, entered or closed on or after the first test day is refused whole. The
-    code check reads build days only (BLUEPRINT.md phase 1: "never on the test period")."""
+    code check reads build days only (BLUEPRINT.md phase 1: "never on the test period"). A 3:1 store: every trade's date (its session
+    day: an evening entry belongs to the next day) lies in an in-sample month of its market's blocks."""
+    if t.get("is_months") is not None:
+        bad = next((d for d in (dt.date.fromordinal(int(o)).isoformat() for o in np.unique(t["date"])) if d[:7] not in t["is_months"]), None)
+        if bad:
+            raise J.Refuse(f"{t['label']} holds a trade on {bad}: the code check of a 3:1 store reads its in-sample months only, never a test month")
+        return t
     start = R.template("ranges")["test"]["start"]
     day = S._date(start)
     if len(t["date"]) and (int(t["date"].max()) >= day.toordinal() or int(max(t["entry"].max(), t["exit"].max())) >= S.et_ns(day, "00:00") // 1_000_000):
@@ -180,11 +191,12 @@ def seal(t: dict) -> dict:
 def find(source, out=None) -> Path:
     """Where a store or a trades file is: a path as it is given; else a store KEY in the store folder (`out`, runs_bp/
     unless told); else a path under the edge-library folder, as the library names a store (runs/orb-NQ-tf15)."""
+    from . import hmwf as H                         # (hmwf imports api, which imports this module)
     p = Path(str(source)).expanduser()
-    for c in ([p] if p.is_absolute() else [(RUN.RUNS if out is None else Path(out)) / p, W / p, Path.cwd() / p]):
+    for c in ([p] if p.is_absolute() else [(RUN.RUNS if out is None else Path(out)) / p, *([H.RUNS / p] if out is None else []), W / p, Path.cwd() / p]):
         if c.exists():
             return c
-    raise J.Refuse(f"no store and no trades file {source}" + ("" if p.is_absolute() else f" (looked in {RUN.RUNS.name if out is None else out}/ and under {W.name}/)"))
+    raise J.Refuse(f"no store and no trades file {source}" + ("" if p.is_absolute() else f" (looked in {RUN.RUNS.name + '/, ' + H.RUNS.name if out is None else out}/ and under {W.name}/)"))
 
 
 def load(store=None, trades=None, out=None, market=None, sessions=None, window=None, max_per_day=None) -> dict:

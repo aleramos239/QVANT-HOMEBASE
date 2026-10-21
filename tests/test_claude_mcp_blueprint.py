@@ -633,6 +633,9 @@ def test_blueprint_wf_tools_listed(fake, ideas_root):
     for old in ("blueprint_build", "blueprint_test"):                          # the old tools point new ideas at the walk-forward
         assert "new idea" in specs[old]["description"] and "blueprint_wf" in specs[old]["description"]
     assert "3:1 in-sample table" in specs["blueprint_heatmap"]["description"]
+    for n in ("blueprint_sim", "blueprint_portfolio", "blueprint_eval_card", "blueprint_status"):      # they read the picked box's test months
+        assert "3:1 idea" in specs[n]["description"] and "picked box" in specs[n]["description"], n
+    assert "3:1 idea" in specs["blueprint_code_check"]["description"] and "in-sample months only" in specs["blueprint_code_check"]["description"]
     b, end = box(), tail(ideas_root)
     b.call("blueprint_wf", {"name": NAME, "owner_said": "run the heat map"})
     assert fake.argv() == ["wf", "run", NAME, "--owner-said=run the heat map", "--wait=45", *end]

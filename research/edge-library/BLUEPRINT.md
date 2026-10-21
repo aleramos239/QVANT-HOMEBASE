@@ -56,8 +56,6 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 > the taught lane `bp.py taught wf | wf-show | wf-pick | wf-oos` (the sheet's own cells); the manual lane's default exits are hm40.
 > Connector `heatmap` / `walkforward` (fixed, pick, oos) and the Lab run the same law; connector `backtest` runs on its market's
 > 3:1 in-sample months unless the owner says to run a range (owner_said). Phase 0 is unchanged but for line 0.2 (exits: hm40).
-> Not wired to the 3:1 route yet: the code check (phase 1; it refuses any day on or after 2025-07-01) and phases 5-6 (they read the
-> old test record): say so to the owner, never work around it with new code.
 >
 > **The old route, kept for old results:** ideas locked before 2026-10-21 keep phases 2-4 below as written (the 48-cell table, the
 > build days 2021-09-22 → 2025-06-30, the test days read once: `blueprint_build` / `blueprint_lock` / `blueprint_test`). A new idea

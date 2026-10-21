@@ -56,6 +56,9 @@ Both stores pass the seal of the test days (runner.guard_test: the frozen range,
 Refused: an idea whose out-of-sample test is not on file or did not pass (the app's idea store reads that off the saved
 results), a test result or a lock that does not name those stores, a store that is not of this lock's read, no surviving
 variant.
+A 3:1 IDEA (hmwf.route: a new idea, or one with a 3:1 store and no old read) reads instead THE PICKED BOX'S TRADES IN ITS TEST
+MONTHS (hmwf.handed: runs_wf/<store>/oos/), never the in-sample store, never another box; refused until the owner picked the box
+and its test months were run (ready()).
 """
 from __future__ import annotations
 
@@ -432,12 +435,24 @@ def proven(name, root=None) -> Path:
     return d
 
 
+def ready(name, root=None) -> Path:
+    """The idea's folder, when phase 5 / 6 may read it: a 3:1 idea's picked box with its test months on file (hmwf.handed), else proven()."""
+    from . import hmwf as HW
+    if HW.route(name, root):
+        HW.handed(name)
+        return api.ideastore().idea_dir(name, root)
+    return proven(name, root)
+
+
 def handed(name, root=None) -> dict:
     """WHAT THE FREEZE AND THE ONE READ LEAVE for phase 5 (module docstring) -> {market, session, bar, lock (its hash),
     store (the locked variants on the test days, as the judge reads a store), where, span (start, end), calendar (the
     session days the read replayed), variants [{id, test, worse (its net on the test days, plain and with worse fills),
     frozen (a survivor of the lock: it makes money on build and on build with worse fills)}], survivors (the ids
-    profitable on all of them)}. Refused: module docstring."""
+    profitable on all of them)}. A 3:1 idea: hmwf.handed (the picked box on its test months). Refused: module docstring."""
+    from . import hmwf as HW
+    if HW.route(name, root):
+        return HW.handed(name)
     d = proven(name, root)
     lock, test = _json(d / "lock.json") or {}, _json(d / "test.json") or {}
     try:
@@ -543,6 +558,7 @@ def sim(name, account, attempts, fee_budget, root=None, paths=None, seed=None) -
     head = [f"SIM of {name} (phase 5) on {label} [{account}]: its test-period trades {h['span'][0]} .. {h['span'][1]} ({h['market']} {h['session']}, "
             f"{h['bar']}-minute bars; {at['days']} trading days, the sessions the read replayed), {n:,} runs of whole days drawn with replacement.",
             LABEL,
+            f"THE PICKED BOX: {ch['id']} (the owner's pick): its test months net {usd(h['variants'][0]['test'])} at 1 contract." if h.get("wf") else
             f"SURVIVING VARIANTS: {len(reads)} of the {len(h['variants'])} locked (profitable on build, on the test and with worse fills). Read for this account: "
             f"{ch['id']}, the one nearest the bar on its weaker phase" + (f"; the middle one ({mid['id']}) reads eval {_pc(mid['eval']['p'])} and payout "
             f"{_pc(mid['payout']['p'])}, and {met} of the {len(reads)} meet the bar -- the best of many is flattered" if len(reads) > 1 else "") + ".",
@@ -629,7 +645,7 @@ def portfolio(names, account, root=None, paths=None, seed=None) -> dict:
         raise J.Refuse(f"account {account!r}: the app's prop simulator has no such rule file (it has {', '.join(x['id'] for x in PS.list_rules())})") from None
     IS, need = api.ideastore(), R.need("5.3")
     H = {k: handed(k, root) for k in names}         # refused here when a member's test is not on file and passed
-    locks = {k: _json(IS.idea_dir(k, root) / "lock.json") for k in names}
+    locks = {k: H[k].get("same") or _json(IS.idea_dir(k, root) / "lock.json") for k in names}      # (a 3:1 idea: its pick, as a lock)
     cal = sorted(set.intersection(*[set(h["calendar"]) for h in H.values()]))
     if len(cal) < need["payout"]["days"]:
         raise J.Refuse(f"{' + '.join(names)}: their reads share {len(cal)} session days of the test period: too few to draw {need['payout']['days']}-day runs from "

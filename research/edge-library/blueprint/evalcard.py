@@ -303,7 +303,7 @@ def recovery(history: list, since: list) -> dict:
 def simmed(name, root=None, account=None) -> dict:
     """THE SIMULATOR'S RESULT THE CARD STANDS ON (sim/<account>.json of an idea whose test passed). account None = the
     account of the card on file, else the simulator result saved last. Refused: none on file (for that account)."""
-    d = PO.proven(name, root)
+    d = PO.ready(name, root)                        # (a 3:1 idea: its picked box's test months on file)
     account = account or ((PO._json(d / "eval.json") or {}).get("account") or {}).get("id")
     files = sorted((d / "sim").glob("*.json"), key=lambda p: p.stat().st_mtime_ns)
     f = next((p for p in files if p.stem == account), None) if account else files[-1] if files else None
