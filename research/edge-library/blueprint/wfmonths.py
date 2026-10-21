@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import datetime as dt
 import functools
+import os
 
 import l2sim as S
 
@@ -44,7 +45,11 @@ def _whole(first: str) -> bool:
     return sum(dt.date(d.year, d.month, k).weekday() < 5 for k in range(1, d.day + 1)) <= 2
 
 
+PIN_ENV = "HOMEBASE_WF_LAST"                       # a fixed last test month (YYYY-MM) for a hunt that must not grow mid-way (2026-10-21)
+
+
 def blocks(root: str, last: str | None = None) -> list:
+    last = last or os.environ.get(PIN_ENV) or None
     cal = calendar(root)
     ms = WF.months(cal)
     if ms and ms[0] == min(cal)[:7] and not _whole(min(cal)):    # months() keeps a month that starts on its 3rd..7th: not whole here
@@ -55,13 +60,13 @@ def blocks(root: str, last: str | None = None) -> list:
 
 
 @functools.lru_cache(maxsize=None)
-def _sets(root: str, today: str) -> tuple:
+def _sets(root: str, today: str, pin=None) -> tuple:
     bl = blocks(root)
     return frozenset(m for b in bl for m in b["is"]), frozenset(b["oos"] for b in bl)
 
 
 def month_sets(root: str) -> tuple:
-    return _sets(root, dt.date.today().isoformat())
+    return _sets(root, dt.date.today().isoformat(), os.environ.get(PIN_ENV) or None)
 
 
 def is_days(root: str) -> list:

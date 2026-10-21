@@ -355,16 +355,17 @@ def wf_run(spec, owner_said, workers=None, root=None, progress=None, worse: bool
     return {**r, "owner_said": said}
 
 
-def wf_pick(name: str, box) -> dict:
-    """`bp.py wf pick <name> <box>`: the owner's box (its row number or id) = the lock, written once."""
+def wf_pick(name: str, box, who: str = "owner") -> dict:
+    """`bp.py wf pick <name> <box>`: the owner's box (its row number or id) = the lock, written once. who = who picked (the owner, or
+    Claude under the owner's standing word: --who)."""
     from . import hmwf as H
-    H.pick(name, box, who="owner")
+    H.pick(name, box, who=who or "owner")
     return wf_show(name, "wf pick")
 
 
-def wf_oos(name: str, box, owner_said, workers=None, progress=None) -> dict:
+def wf_oos(name: str, box, owner_said, workers=None, progress=None, who: str = "owner") -> dict:
     """`bp.py wf oos <name> <box> --owner-said=...`: the test months of the picked box, once, on the owner's words (hmwf.run_oos)."""
     from . import hmwf as H
     said = _said(owner_said)
-    H.run_oos(name, box, said, workers, progress=progress)
+    H.run_oos(name, box, said, workers, progress=progress, who=who or "owner")
     return {**wf_show(name, "wf oos"), "owner_said": said}

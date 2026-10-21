@@ -80,6 +80,10 @@ def run_is(spec, workers=None, *, ledger=None, progress=None, block=None, worse:
     sp = _spec(spec)
     root, tf = sp["markets"][0], sp["bar_sizes"][0]
     days = WM.is_days(root)
+    u0 = RI.spec_units(sp)[0]
+    on = RUNS / f"{u0['key']}/{IS}" / "run.json"
+    if on.exists():                                 # the store's own months: the months may not grow under a store already run
+        days = list(json.loads(on.read_text()).get("days") or days)
     if not days:
         raise J.Refuse(f"{root}: no in-sample month of the 3:1 blocks yet")
     u = RI.spec_units(sp)[0]
@@ -202,7 +206,8 @@ def is_table(name: str, store=None) -> list:
     sess, seen, rows = [LB.SESS7.index(s) for s in m["sessions"]], _seen(m["idea"]), []
     for i, c in enumerate(m["cells"]):
         x = LB.unit_cell(u, i)
-        beats, vs = _beats(x, c, pool, sess, own)
+        own_sess = sorted({int(v) for v in np.unique(x["sess"])}) or sess      # a one-instance family trades past its listed pass
+        beats, vs = _beats(x, c, pool, own_sess, own)
         rows.append({"box": c["id"], "settings": {**c["variant"], **c["exit"]}, **numbers(x, days),
                      "worse_fills_net": round(worse[c["id"]], 2) if c["id"] in worse else None, "beats_random": beats, "random_vs": vs, "seen": seen})
     rows.sort(key=lambda r: (r["win_rate"] is None, -(r["win_rate"] or 0.0)))
