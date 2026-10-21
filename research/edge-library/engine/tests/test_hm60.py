@@ -80,3 +80,30 @@ def test_a_screening_pass_leaves_the_worse_fills_out_and_a_later_run_adds_only_t
     H.run_is({**SPEC, "exits": "hm60"}, workers=1, ledger=wf["ledger"])
     assert (home / "is-nyam-worse" / "cells.npz").exists() and len(wf["calls"]) > n
     assert all(r["worse_fills_net"] is not None for r in H.is_table("hwt_sweep"))
+
+
+def test_the_month_pin_holds_the_blocks(wf, monkeypatch):
+    from blueprint import wfmonths as WM
+    assert [b["oos"] for b in WM.blocks("NQ")] == ["2022-01"]
+    monkeypatch.setenv(WM.PIN_ENV, "2021-12")                                   # a pin before the first test month: no block
+    WM._sets.cache_clear()
+    assert WM.blocks("NQ") == [] and WM.is_days("NQ") == []
+    monkeypatch.delenv(WM.PIN_ENV)
+    WM._sets.cache_clear()
+    assert WM.is_days("NQ") == ["2021-10-01", "2021-11-01", "2021-12-01"]
+
+
+def test_a_store_on_disk_keeps_its_own_months(wf, monkeypatch):
+    from blueprint import wfmonths as WM
+    H.run_is({**SPEC, "exits": "hm60"}, workers=1, ledger=wf["ledger"], worse=False)
+    monkeypatch.setattr(WM, "is_days", lambda root: ["2021-10-01", "2021-11-01"])     # the months moved after the run
+    H.run_is({**SPEC, "exits": "hm60"}, workers=1, ledger=wf["ledger"])           # the worse-fills pass is not refused
+    assert (H.RUNS / "hwt_sweep-NQ-tf15" / "is-nyam-worse" / "cells.npz").exists()
+
+
+def test_who_picks_is_written_in_the_lock(wf):
+    from blueprint import api
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    api.wf_pick("hwt_sweep", 1, who="claude: owner's standing word")
+    lock = json.loads((H.RUNS / "hwt_sweep-NQ-tf15" / "lock.json").read_text())
+    assert lock["who"] == "claude: owner's standing word"

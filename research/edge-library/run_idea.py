@@ -67,7 +67,7 @@ import run_menus as RM  # noqa: E402
 SPECS = W / "ideas" / "specs"
 RUNS = LB.RUNS                                         # the library's BUILD stores: what judge.py reads
 LOG = W / "out" / "run_idea.log"
-CAPS = {"runs": 2000, "cells": 120000, "wfs": 40}      # the candidate cap of this stage (module docstring); 80,000 -> 120,000 on 2026-10-13 (owner), as library.CAPS
+CAPS = {"runs": 6000, "cells": 400000, "wfs": 40}      # the candidate cap of this stage (module docstring); 80,000 -> 120,000 on 2026-10-13 (owner) -> 400,000 on 2026-10-21 (owner: "i dont care how many tries it takes"), as library.CAPS
 PERIOD = RM.PERIOD
 KEYS = ("name", "reason", "family", "markets", "bar_sizes", "sessions", "params", "fixed", "filters", "exits", "filter_exits",
         "limits")

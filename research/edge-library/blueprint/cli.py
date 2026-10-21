@@ -310,6 +310,7 @@ def _parser() -> _Parser:
         wfs[name].add_argument("name", help="the idea's name (or its 3:1 store's)")
     for name in ("pick", "oos"):
         wfs[name].add_argument("box", help="the box: its row number in the in-sample table, or its id")
+        wfs[name].add_argument("--who", metavar="TEXT", help="who picks / reads (default: owner; Claude under the owner's standing word says so)")
     for name in ("run", "oos"):
         wfs[name].add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: nothing runs without them")
         wfs[name].add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
@@ -512,10 +513,10 @@ def _wf(a) -> dict:
     if a.sub == "show":
         return api.wf_show(a.name)
     if a.sub == "pick":
-        return api.wf_pick(a.name, a.box)
+        return api.wf_pick(a.name, a.box, getattr(a, "who", None) or "owner")
     api._said(a.owner_said)
     if a.sub == "oos":
-        kw, name = dict(name=a.name, box=a.box, owner_said=a.owner_said, workers=a.workers), a.name
+        kw, name = dict(name=a.name, box=a.box, owner_said=a.owner_said, workers=a.workers, who=getattr(a, "who", None) or "owner"), a.name
     else:
         spec = a.spec
         if spec == "-" or Path(spec).is_file():
