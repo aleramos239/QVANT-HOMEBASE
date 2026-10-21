@@ -804,12 +804,14 @@ function boxLabel(axes, params) {
   if (!axes || !axes.length) return 'As set';
   return axes.map((a) => `${a.label} ${axisLabels(a)[a.values.indexOf(params[a.key])] ?? valueLabel(params[a.key])}`).join(' · ');
 }
+/* A box as the owner reads it: 1-based (#1 ... #40, like research's is_table); the server's cell stays 0-based. */
+const boxNo = (i) => `#${i + 1}`;
 /* A header click: the same column flips the order, a new one starts high to low. */
 function wfFixedSort(cur, key) { return { key, dir: cur && cur.key === key ? -cur.dir : -1 }; }
 /* result.json (+ lock) -> {head, rows: [{i, label, cells}], picked}; rows in the server's order until sorted, a box with no
    number for the sorted column last. No test-month column: a read shows under the table, never in it. */
 function wfFixedTable(res, axes, sort) {
-  const rows = ((res && res.cells) || []).map((c) => ({ i: c.i, label: boxLabel(axes, c.params || {}), rec: c.is || {}, cells: fixedCells(c.is) }));
+  const rows = ((res && res.cells) || []).map((c) => ({ i: c.i, box: boxNo(c.i), label: boxLabel(axes, c.params || {}), rec: c.is || {}, cells: fixedCells(c.is) }));
   if (sort && WF_FIXED_COLS.some(([k]) => k === sort.key)) {
     const v = (r) => (Number.isFinite(r.rec[sort.key]) ? r.rec[sort.key] : null);
     rows.sort((a, b) => (v(a) == null) - (v(b) == null) || (v(a) == null ? 0 : (v(a) - v(b)) * sort.dir) || a.i - b.i);
@@ -817,6 +819,22 @@ function wfFixedTable(res, axes, sort) {
   return { head: [{ key: 'box', label: 'Box' }, ...WF_FIXED_COLS.map(([key, label]) => ({ key, label }))],
     rows, picked: res && res.lock ? res.lock.cell : null };
 }
+/* One box block by block (spec 4.2): its in-sample rows (cells[].blocks), and beside each the test month of the same block
+   once THIS box's read is done (oos.blocks) -- before that no test-month column exists. */
+function wfFixedBlocks(cell, oos) {
+  const read = oos && oos.state === 'done' && oos.cell === (cell && cell.i) ? new Map((oos.blocks || []).map((b) => [b.i, b])) : null;
+  const part = (b) => [{ text: int(b ? b.trades : null), tone: '' }, { text: rate(b ? b.win_rate : null), tone: '' },
+    { text: b ? signed(b.net) : '—', tone: b ? toneOf(b.net) : '' }];
+  return { head: ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net', ...(read ? ['Test month', 'Trades', 'Win rate', 'Net'] : [])],
+    rows: ((cell && cell.blocks) || []).map((b) => {
+      const ms = b.is || [], o = read ? read.get(b.i) : null;
+      return { i: b.i, cells: [{ text: String(b.i + 1), tone: '' }, { text: ms.length ? span(ms[0], ms[ms.length - 1]) : '—', tone: '' }, ...part(b),
+        ...(read ? [{ text: o ? o.oos : '—', tone: '' }, ...part(o)] : [])] };
+    }) };
+}
+/* The Lab's heat map runs only on the 3:1 in-sample months (2026-10-20): on any other Range it switches to the 3:1 blocks. */
+const HEAT_SAY = 'Heat maps run on the 3:1 in-sample months.';
+function heatSwitch(f) { return f && f.range && f.range.wf ? null : { range: { ...LAB_RANGE }, say: HEAT_SAY }; }
 /* The test months of the picked box: {canRun, body, text, final, row}. canRun only with a pick, typed words and no read yet;
    body carries the words exactly as typed (the server refuses blank ones and says why). */
 function wfFixedOos(res, said) {
@@ -1049,7 +1067,7 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_ROLL, WF_MODES, wfRatioText, signed, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
   wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, wfSchemeProblem, WF_COMPARE_TOO_SHORT, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
-  HM40_AXES, hm40Rows, LAB_RANGE, wfFixedBody, WF_FIXED_COLS, wfFixedTable, wfFixedSort, wfFixedOos,
+  HM40_AXES, hm40Rows, LAB_RANGE, wfFixedBody, WF_FIXED_COLS, wfFixedTable, wfFixedSort, wfFixedOos, boxNo, wfFixedBlocks, heatSwitch,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body, CONTROLS, controlsClean, controlsFields, controlsError, setControl,

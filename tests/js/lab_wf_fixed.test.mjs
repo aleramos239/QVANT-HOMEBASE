@@ -117,3 +117,47 @@ test('"Run test months" is shut until a box is picked and the owner has typed hi
   assert.match(LAB, /\/oos`, o\.body\)/);
   assert.match(LAB, /w\.say = r\.error/);
 });
+
+/* ---- fix round 1 (review of Task 10) ---- */
+const BLK = { i: 3, params: { 'ctl.stop': 'atr:1', 'ctl.target_rr': 2 }, is: IS(50, 500),
+  blocks: [{ i: 0, is: ['2021-10', '2021-11', '2021-12'], trades: 30, win_rate: 50, net: 400 },
+    { i: 1, is: ['2022-02', '2022-03', '2022-04'], trades: 25, win_rate: 40, net: -150 }] };
+
+test('the owner sees boxes 1-based (#1 ...); the server keeps its 0-based cell', () => {
+  assert.equal(X.boxNo(0), '#1');
+  const t = X.wfFixedTable(RES, AXES);
+  assert.equal(t.rows[0].box, '#1');
+  assert.equal(t.rows[0].i, 0);                                    // data-i and {cell} stay 0-based
+  for (const bad of ['#${row.i}', '#${t.picked}', 'Pick box #${i}', '#${esc(String(o.body.cell))}']) assert.ok(!LAB.includes(bad), bad);
+  assert.match(LAB, /X\.boxNo\(/);
+});
+
+test('block by block: a box\'s in-sample blocks, and the picked box\'s test month beside each once read', () => {
+  const b = X.wfFixedBlocks(BLK, null);
+  assert.deepEqual(b.head, ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net']);
+  assert.deepEqual(b.rows[0].cells.map((c) => c.text), ['1', '2021-10 → 2021-12', '30', '50.0%', '+$400']);
+  assert.equal(b.rows[1].cells[4].tone, 'down');
+  const notDone = { state: 'running', cell: 3 };
+  assert.equal(X.wfFixedBlocks(BLK, notDone).head.length, 5);       // nothing of a test month before the read is done
+  const other = { state: 'done', cell: 7, blocks: [{ i: 0, oos: '2022-01', trades: 9, win_rate: 60, net: 90 }] };
+  assert.equal(X.wfFixedBlocks(BLK, other).head.length, 5);         // another box's read is not this box's
+  const read = { state: 'done', cell: 3, blocks: [{ i: 0, oos: '2022-01', trades: 9, win_rate: 60, net: 90 },
+    { i: 1, oos: '2022-05', trades: 0, win_rate: null, net: 0 }] };
+  const r = X.wfFixedBlocks(BLK, read);
+  assert.deepEqual(r.head, ['Block', 'In-sample months', 'Trades', 'Win rate', 'Net', 'Test month', 'Trades', 'Win rate', 'Net']);
+  assert.deepEqual(r.rows[0].cells.slice(5).map((c) => c.text), ['2022-01', '9', '60.0%', '+$90']);
+  assert.deepEqual(r.rows[1].cells.slice(5).map((c) => c.text), ['2022-05', '0', '—', '$0']);
+  assert.match(LAB, /X\.wfFixedBlocks\(/);
+});
+
+test('the Lab heat map runs only on the 3:1 in-sample months; the old one-read warning is gone', () => {
+  assert.equal(X.heatSwitch({ range: { ...X.LAB_RANGE } }), null);
+  const s = X.heatSwitch({ range: { id: 'research', start: '', end: '', wf: null } });
+  assert.deepEqual(s.range, X.LAB_RANGE);
+  assert.equal(s.say, 'Heat maps run on the 3:1 in-sample months.');
+  assert.notStrictEqual(s.range, X.LAB_RANGE);                     // a copy: the form never shares the constant
+  assert.match(LAB, /X\.heatSwitch\(/);
+  assert.ok(!/one read, only for a locked strategy/.test(LAB));
+  // the own-stop multiplier field only for a strategy with a stop of its own
+  assert.match(LAB, /stopMode === 'own' && meta && meta\.own_stop \? num\('stop_own_mult'/);
+});

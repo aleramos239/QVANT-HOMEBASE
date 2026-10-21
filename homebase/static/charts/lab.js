@@ -1982,13 +1982,10 @@ function settingsHtml(b) {
     if (i.type === 'choice') return `<label>${esc(i.label)}</label><select data-in="${esc(i.key)}">${i.choices.map((c) => `<option${c === v ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`;
     return `<label title="${esc(i.label)}">${esc(i.label)}</label><input type="number" data-in="${esc(i.key)}" value="${esc(v)}" step="${i.step || 'any'}"${i.min != null ? ` min="${i.min}"` : ''}${i.max != null ? ` max="${i.max}"` : ''} class="${bad ? 'bad' : ''}">`;
   };
-  const { start, end } = X.rangeDates(f.range);
-  const spent = end && end >= X.rangeSpec('test').start;
   return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
       ${wfSel ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: the 3-month windows step a month. Every Heat map box runs as set; there are no unseen test months.' : 'Run tries every Heat map box on the in-sample months only: 3 months in, the next 1 out, then the next block. You pick one box; its test months run only when you say. Clear the Heat map to run the strategy as set.'}</div>` : ''}
       ${!wfSel && f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
-      ${spent && !wfSel ? '<div class="warn">This reaches July 2025 or later, the test days: one read, only for a locked strategy. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
       <label title="Dollars per contract, round trip">Fees ($ per contract)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
       <label>Slippage (ticks)</label><input type="number" data-f="slippage_ticks" value="${esc(f.slippage_ticks)}" min="0" step="1">
@@ -2123,7 +2120,12 @@ async function heatRun() {
   const b = buf();
   if (!b || (S.busy && S.active && S.active.key === b.key)) return;
   const f0 = b.kind !== 'pipe' && formOf(b);
-  if (f0 && f0.range.wf) return wfRun();        // under the 3:1 Range the heat map runs on the in-sample months only
+  if (f0) {                  // the Lab's heat map runs on the 3:1 in-sample months only, never a grid over test months
+    const sw = X.heatSwitch(f0);
+    if (!sw) return wfRun();
+    f0.range = sw.range; log(esc(sw.say)); paintRes(); paintHead();
+    return;
+  }
   if (b.kind !== 'builtin') {
     if (!b.code.trim()) return;
     const v = await validateNow(b);
@@ -2249,10 +2251,14 @@ function wfFixedHtml(w, job) {
     : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
   const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
     : `<button class="btn btn-sm btn-outline" data-act="wfpick" data-i="${row.i}"${w.busy ? ' disabled' : ''}>Pick</button>`}</td>
-    <th>#${row.i} ${esc(row.label)}</th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
-  const win = r.window || {};
+    <th><button class="wf-sort" data-act="wfblk" data-i="${row.i}" title="Show it block by block">${row.box} ${esc(row.label)}</button></th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
+  const win = r.window || {}, bi = w.blk != null ? w.blk : t.picked, bc = (r.cells || []).find((c) => c.i === bi);
+  const bt = bc && X.wfFixedBlocks(bc, r.oos), bRow = bc && t.rows.find((x) => x.i === bi);
+  const blocks = !bt ? '<div class="heat-note">Click a box to see it block by block.</div>'
+    : `<div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   const test = r.rolling ? '<div class="heat-note">Rolling has no unseen test months: each one is a later window\'s pick month.</div>'
-    : `${locked ? `<div class="rs-kv"><span>Picked</span><b>#${t.picked} ${esc(pickRow ? pickRow.label : '')}</b></div>` : ''}
+    : `${locked ? `<div class="rs-kv"><span>Picked</span><b>${X.boxNo(t.picked)} ${esc(pickRow ? pickRow.label : '')}</b></div>` : ''}
       ${locked && !r.oos ? `<input type="text" class="heat-vals" id="wfSaid" value="${esc(w.said || '')}" placeholder="Type your words to run them, e.g. run the test months" spellcheck="false" autocomplete="off">` : ''}
       ${r.oos ? '' : `<button class="btn btn-sm" id="wfOosBtn" data-act="wfoos"${o.canRun && !w.busy ? '' : ' disabled'}>Run test months</button>`}
       ${o.text ? `<div class="heat-note">${esc(o.text)}</div>` : ''}
@@ -2262,6 +2268,7 @@ function wfFixedHtml(w, job) {
     <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
     <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
       ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>
+    <div class="rs-gh">Block by block${bc ? ` · ${esc(X.boxNo(bi))} ${esc(bRow ? bRow.label : '')}` : ''}</div>${blocks}
     <div class="heat-foot">${esc(`${r.looks} looks counted`)} · Average of the whole table is the answer, not the best box.</div>`;
 }
 /* blocks and rolling are different runs: a result shows only under the Range choice it was run for */
@@ -2346,7 +2353,7 @@ async function wfRun() {
   const axes = search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [];      // none: one box, the strategy as set
   const bodyObj = f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5);
   const token = ++w.token;
-  w.err = ''; w.starting = true; w.job = null; w.result = null; w.sort = null; w.said = ''; w.say = ''; w.busy = false; S.wfStepsOpen = false;
+  w.err = ''; w.starting = true; w.job = null; w.result = null; w.sort = null; w.said = ''; w.say = ''; w.busy = false; w.blk = null; S.wfStepsOpen = false;
   wfPaint();
   const r = await send('POST', '/api/tester/walkforward', bodyObj);
   if (token !== w.token) return;
@@ -2384,7 +2391,7 @@ function wfPick(i) {
   const b = buf(), f = b && formOf(b), w = f && wfLabState(f);
   if (!w || !w.result || w.busy || !w.job) return;
   const row = X.wfFixedTable(w.result, w.job.axes || []).rows.find((x) => x.i === i);
-  const d = dialog(`<h2>Pick box #${i}?</h2><p>${esc(row ? row.label : '')}</p><p>The pick is locked: this walk-forward takes no other box.</p>
+  const d = dialog(`<h2>Pick box ${X.boxNo(i)}?</h2><p>${esc(row ? row.label : '')}</p><p>The pick is locked: this walk-forward takes no other box.</p>
     <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Pick it</button></div>`);
   d.addEventListener('click', async (e) => {
     const x = e.target.closest('[data-x]');
@@ -2414,7 +2421,7 @@ async function wfOos() {
   if (!r.ok) { w.say = r.error; wfPaint(); return; }
   w.result = { ...w.result, oos: r.json };
   wfPaint();
-  log(`Test months of box <b>#${esc(String(o.body.cell))}</b>: running, on your words.`);
+  log(`Test months of box <b>${esc(X.boxNo(o.body.cell))}</b>: running, on your words.`);
   wfOosPoll(w, token);
 }
 async function wfOosPoll(w, token) {
@@ -2481,7 +2488,7 @@ function rulesHtml(f, meta) {
       ${sel('stop_mode', 'Stop', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['candle', 'Signal candle'], ['none', 'No stop']], 'Replaces the strategy\'s stop, measured from the fill')}
       ${stopMode === 'fixed' ? num('stop_pts', 'Stop (points)', 'Distance from the fill', 0.25) : stopMode === 'atr' ? num('stop_atr', 'Stop (× ATR)', 'Multiple of the ATR at the entry', 0.1)
         : stopMode === 'candle' ? num('stop_candle_ticks', 'Past the candle (ticks)', 'The stop sits this many ticks past the last closed signal candle\'s high / low', 1).replace('placeholder="off"', 'placeholder="0"')
-        : stopMode === 'own' ? num('stop_own_mult', 'Own stop (×)', 'Times the strategy\'s own stop distance; 1 = as written', 0.05).replace('placeholder="off"', 'placeholder="1"') : ''}
+        : stopMode === 'own' && meta && meta.own_stop ? num('stop_own_mult', 'Own stop (×)', 'Times the strategy\'s own stop distance; 1 = as written', 0.05).replace('placeholder="off"', 'placeholder="1"') : ''}
       ${sel('target_mode', 'Target', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['rr', 'R multiple of the stop'], ['none', 'No target']], 'Replaces the strategy\'s target, measured from the fill')}
       ${tgtMode === 'fixed' ? num('target_pts', 'Target (points)', 'Distance from the fill', 0.25) : tgtMode === 'atr' ? num('target_atr', 'Target (× ATR)', 'Multiple of the ATR at the entry', 0.1) : tgtMode === 'rr' ? num('target_rr', 'Target (× stop)', 'Multiple of the stop distance', 0.25) : ''}
       <div class="sep"></div>
@@ -2676,6 +2683,7 @@ function act(name, el) {
   else if (name === 'hm40') hm40();
   else if (name === 'wfpick') wfPick(Number(el.dataset.i));
   else if (name === 'wfoos') wfOos();
+  else if (name === 'wfblk') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.blk = Number(el.dataset.i); wfPaint(); } }
   else if (name === 'wfsort') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.sort = X.wfFixedSort(w.sort, el.dataset.k); wfPaint(); } }
   else if (name === 'heatcancel') heatCancel();
   else if (name === 'wfrun') wfRun();
