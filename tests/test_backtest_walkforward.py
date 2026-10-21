@@ -1123,11 +1123,17 @@ def test_hm40_axes_40_and_20(layout):
     for bad in ("pts:5", "atr:0", "own:11", "atr:x", 1.5):
         with pytest.raises(ValueError, match="Stop"):
             grid.validate_grid({"strategy": "b5own", "axes": [{"key": "ctl.stop", "values": [bad]}, grid.HM40_AXES[1]]})
-    with pytest.raises(ValueError, match="no bar size"):                              # ATR of its own bar: it needs one
-        grid.validate_grid({"strategy": "nq930", "axes": grid.HM40_AXES})
+    # no bar size of its own (ruling 2026-10-20): the ATR of 5-minute bars, said so in the labels
+    ng = grid.validate_grid({"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": grid.hm40_axes(NQ930)})
+    nctl = [c["req"]["controls"] for c in ng["cells"]]
+    assert len(nctl) == 40 and all(c.get("atr_minutes", 5) == 5 for c in nctl) and nctl[20]["atr_minutes"] == 5
+    assert [c["stop_atr"] for c in nctl[:20]] == [x for x in (0.5, 1.0, 1.5, 2.0) for _ in range(5)]
+    assert ng["axes"][0]["value_labels"][0] == "ATR(5m) x0.5" and ng["axes"][0]["value_labels"][4] == "own x0.5"
     # the walk-forward's default: fixed, on the in-sample months, the hm40 cells when no axes are sent
     w = wf.validate_wf({"strategy": "b5own", "inputs": {"adx_gate": False}})
     assert w["walkforward"]["scheme"] == "fixed" and len(w["cells"]) == 40
+    assert "scheme" not in wf.validate_wf({"strategy": "nq930", "axes": AXES, "min_trades": 1})["walkforward"]   # an old body: pick
+    assert wf.validate_wf({"strategy": "nq930", "axes": AXES})["walkforward"]["scheme"] == "fixed"           # a bare one: fixed
     assert len(wf.validate_wf({"strategy": "b5none"})["cells"]) == 20
 
 
@@ -1204,18 +1210,18 @@ def test_pick_then_oos_once(tmp_path, layout, ranged, tester_shared):
         assert req["range"]["kind"] == "wf_oos" and req["range"]["months"] == [mo]
     claim = read_json(m.dir(wid) / "oos-claim.json")
     assert claim["owner_said"] == "run it" and claim["cell"] == 1
-    log = [json.loads(x) for x in (tmp_path / "wf-oos-reads.jsonl").read_text().splitlines()]
+    log = [json.loads(x) for x in (tester_shared / "wf-oos-reads.jsonl").read_text().splitlines()]
     assert len(log) == 1 and log[0]["owner_said"] == "run it" and log[0]["walkforward"] == wid
     with pytest.raises(ValueError, match="never run again"):
         m.oos(wid, 1, "run it again")
-    assert len((tmp_path / "wf-oos-reads.jsonl").read_text().splitlines()) == 1
+    assert len((tester_shared / "wf-oos-reads.jsonl").read_text().splitlines()) == 1
 
 
 def test_oos_refuses_without_pick(tmp_path, layout, ranged, tester_shared):
     m, wid, _ = fixed_done(tmp_path)
     with pytest.raises(ValueError, match="no cell is picked"):
         m.oos(wid, 0, "run it")
-    assert not (m.dir(wid) / "oos-claim.json").exists() and not (tmp_path / "wf-oos-reads.jsonl").exists()
+    assert not (m.dir(wid) / "oos-claim.json").exists() and not (tester_shared / "wf-oos-reads.jsonl").exists()
     old = m.submit(wbody(min_trades=1))                                              # the old pick scheme: no pick/oos
     wait_wf(m, old)
     for call in (lambda: m.pick(old, 0), lambda: m.oos(old, 0, "run it")):
@@ -1242,3 +1248,34 @@ def test_fixed_rolling_steps_a_month_and_has_no_unseen_test_months(tmp_path, lay
         m.oos(wid, 0, "run it")
     with pytest.raises(ValueError, match="step_months"):
         wf.validate_wf({"strategy": "nq930", "axes": AXES, "step_months": 2})
+
+
+def test_a_box_read_in_one_walkforward_is_never_read_again_in_another(tmp_path, layout, ranged, tester_shared):
+    m, a, _ = fixed_done(tmp_path)
+    m.pick(a, 1)
+    m.oos(a, 1, "run it")
+    t = time.monotonic() + 30
+    while m.oos_view(a)["state"] not in ("done", "stopped") and time.monotonic() < t:
+        time.sleep(0.02)
+    _, b, _ = fixed_done(tmp_path)                       # the same strategy, code, settings and months: the same box
+    m.pick(b, 1)
+    n_jobs = len(list((tmp_path / "walkforward-oos").iterdir()))
+    with pytest.raises(ValueError, match=f"read on .* in walk-forward {a}: shown there, never run again"):
+        m.oos(b, 1, "run it")
+    assert len(list((tmp_path / "walkforward-oos").iterdir())) == n_jobs and not (m.dir(b) / "oos-claim.json").exists()
+    assert len((tester_shared / "wf-oos-reads.jsonl").read_text().splitlines()) == 1
+    with pytest.raises(ValueError, match="the pick is locked"):
+        m.pick(b, 0)
+    _, c, _ = fixed_done(tmp_path, inputs={"adx_gate": False, "tp_pts": 20.0})    # other settings: another box, read once
+    m.pick(c, 1)
+    assert m.oos(c, 1, "run it")["state"] in ("queued", "running", "done")
+
+
+def test_a_stopped_read_says_so(tmp_path, layout, ranged, tester_shared, monkeypatch):
+    m, wid, _ = fixed_done(tmp_path)
+    m.pick(wid, 0)
+    monkeypatch.setattr(m.reads, "submit", lambda body: (_ for _ in ()).throw(OSError("disk")))
+    with pytest.raises(ValueError, match="the read is used"):
+        m.oos(wid, 0, "run it")
+    o = m.result(wid)["oos"]
+    assert o["state"] == "stopped" and o["say"] == "stopped: the read is used, no record"

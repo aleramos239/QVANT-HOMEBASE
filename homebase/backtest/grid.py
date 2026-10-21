@@ -87,12 +87,17 @@ def stop_value(v) -> str:
     return f"{mode}:{num:g}"
 
 
-def stop_controls(v: str) -> dict:
-    """The run settings of one `ctl.stop` value (the controller's ruling for hm40, 2026-10-20)."""
+def stop_controls(v: str, atr_minutes: int = 0) -> dict:
+    """The run settings of one `ctl.stop` value (the controller's rulings for hm40, 2026-10-20): the ATR of the strategy's
+    own bar (0), or of 5-minute bars for a strategy with no single bar size."""
     mode, _, x = stop_value(v).partition(":")
     if mode == "atr":
-        return {"stop_mode": "atr", "stop_atr": float(x), "atr_minutes": 0, "atr_period": 14}
-    return {"stop_mode": "own", "stop_own_mult": float(x), "own_floor": True, "atr_minutes": 0, "atr_period": 14}
+        return {"stop_mode": "atr", "stop_atr": float(x), "atr_minutes": atr_minutes, "atr_period": 14}
+    return {"stop_mode": "own", "stop_own_mult": float(x), "own_floor": True, "atr_minutes": atr_minutes, "atr_period": 14}
+
+
+def stop_atr_minutes(cls) -> int:
+    return 0 if getattr(cls, "bar_minutes", 0) else 5
 
 
 def _max_cells(v) -> int:
@@ -108,7 +113,7 @@ def expand(axes: list[dict]) -> list[dict]:
             for i, coords in enumerate(itertools.product(*ranges))]
 
 
-def _ctl_cells(base_ctl: dict, params: dict) -> dict:
+def _ctl_cells(base_ctl: dict, params: dict, atr_minutes: int = 0) -> dict:
     """One cell's run settings: the base, then the cell's own axis values. A number that only means something under
     one mode (stop points under "fixed") switches that mode on unless the base or another axis already picked
     one; a mode already set to something else is refused, in words."""
@@ -117,7 +122,7 @@ def _ctl_cells(base_ctl: dict, params: dict) -> dict:
     stop = chosen.pop(STOP, None)
     raw.update(chosen)
     if stop is not None:                        # the stop axis sets the whole stop, whatever the base said
-        raw.update(stop_controls(stop))
+        raw.update(stop_controls(stop, atr_minutes))
     for num, (mode, name) in ctlmod.IMPLIES.items():
         if num not in chosen or not chosen[num] or mode in chosen:
             continue
@@ -175,12 +180,13 @@ def validate_grid(body, min_axes: int = 2) -> dict:
             raise ValueError(f"{k}: a list of values")
         if k == CTL + STOP:
             resolved = [stop_value(v) for v in vals]
+            atr = "ATR" if stop_atr_minutes(cls) == 0 else f"ATR({stop_atr_minutes(cls)}m)"
             if len(set(resolved)) != len(resolved):
                 raise ValueError("Stop: a value twice")
             if not getattr(cls, "own_stop", False) and any(v.startswith("own:") for v in resolved):
                 raise ValueError(f"{cls.name or cls.id} sets no stop of its own: its heat map takes the ATR stops only (atr:<x>)")
             axes.append({"key": k, "label": "Stop", "type": "choice", "ctl": True, "values": resolved,
-                         "value_labels": [f"{'ATR' if v.startswith('atr') else 'own'} x{v.partition(':')[2]}" for v in resolved]})
+                         "value_labels": [f"{atr if v.startswith('atr') else 'own'} x{v.partition(':')[2]}" for v in resolved]})
             continue
         if k.startswith(CTL):
             f = k[len(CTL):]
@@ -210,7 +216,7 @@ def validate_grid(body, min_axes: int = 2) -> dict:
     for c in expand(axes):
         sreq = {"strategy": cls.id, "inputs": {**base, **{k: v for k, v in c["params"].items() if not k.startswith(CTL)}},
                 "range": body.get("range"), **common}
-        raw_ctl = _ctl_cells(base_ctl, c["params"])
+        raw_ctl = _ctl_cells(base_ctl, c["params"], stop_atr_minutes(cls))
         if raw_ctl:
             sreq["controls"] = raw_ctl
         try:
