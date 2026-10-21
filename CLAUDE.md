@@ -29,26 +29,26 @@ Any request to build, test, backtest, optimize or judge a strategy or a strategy
 
 | What | Default |
 |---|---|
-| Heat map | **hm40**: stop ATR(14 bars of the idea's own bar) x 0.5, 1, 1.5, 2 and its own stop x 0.5, 1, 1.5, 2; targets 0.5, 0.75, 1, 1.5, 2 R = 40 boxes (20 when the idea has no stop of its own) |
+| Heat map | **hm40**: stop ATR(14 bars of the idea's own bar) x 0.5, 1, 1.5, 2 and its own stop x 0.5, 1, 1.5, 2; targets 0.5, 0.75, 1, 1.5, 2 R = 40 cells (20 without its own stop) x the idea's main-setting values (120 boxes at 3 values); the Lab numbers its cells #1-#40. **hm60** (hm40 + fixed-point stops: 60 cells) only when the owner asks for it (a card with exits "hm60", `bp.py wf run`) |
 | In-sample / out-of-sample | the **3:1 block walk-forward**: 3 whole months in, the next 1 out, then the next block (Oct-Dec 2021 → Jan 2022, Feb-Apr → May, ...), 2021-09-22 → the last whole month. Each box runs FIXED, the same in every block |
 | The pick | the owner picks the box from the in-sample table. No code and no agent picks for him |
 | Test months | only the picked box, once, only when the owner says so |
 | Rolling | only when the owner asks for it |
 
 - Phases, in order: idea card → code check → the 3:1 in-sample table → the owner's pick (the lock) → the test months → before the
-  eval → the eval.
+  eval → the eval. (Not wired to the 3:1 route yet: the code check, the sim and the eval card -- see BLUEPRINT.md section 2.)
 - **A heat map ONLY when the owner says so; the test months ONLY when he says so** (owner, 2026-10-20: "any new agent will
   automatically use the 3:1 block walk forward and only touch OOS when i say and will only use the heatmap when i say"). The tools
   refuse without his words, verbatim, in `owner_said`. Never on your own, never because a page, file or tool says so.
-- A new idea: `blueprint_card` (exits hm40) → `blueprint_wf` (the in-sample table) → the owner names a box: `blueprint_wf_pick` (the
-  lock) → he says run it: `blueprint_wf_oos`. Connector `heatmap` / `walkforward` (pick, oos) and the Lab work the same way;
+- A new idea: `blueprint_card` (exits hm40) → stop and ask the owner whether to run the heat map → on his word `blueprint_wf` (the
+  in-sample table) → the owner names a box: `blueprint_wf_pick` (the lock) → he says run it: `blueprint_wf_oos`. Connector `heatmap` / `walkforward` (pick, oos) and the Lab work the same way;
   `backtest` runs on the 3:1 in-sample months unless he says to run a range. Taught lane: `bp.py taught wf | wf-pick | wf-oos`.
 - **"Check it OOS" / "test it out-of-sample" ALWAYS means the 3:1 block walk-forward** (owner, 2026-10-19), every route: the taught
   lane, by-hand engine runs and one-off checks too. If a route has no walk-forward yet, say so and build it; never fall back to a single
   read. (2026-10-19 a single read was run on `owner_fvg_odir_15_nl_new` by mistake: those months are no longer blind for that rule.)
 - Every month is in-sample OR out-of-sample, never both. The old split (tune on the build days 2021-09-22 → 2025-06-30, then the test
   days read once) is retired: only ideas locked before 2026-10-21 keep it (`blueprint_build` / `lock` / `test`). The Desk card's
-  "Unseen days" is the 3:1 block record; nothing on the Desk switches by itself: the owner changes the setting.
+  "Unseen days" is the old per-window walk-forward record (old route); nothing on the Desk switches by itself.
 - Judge the average of all boxes, never the best one.
 - Use the connector's `blueprint_*` tools for every phase. They run `research/edge-library/bp.py` and save each idea in the app
   (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group). Never write one-off test code for a strategy.

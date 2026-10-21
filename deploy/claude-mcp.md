@@ -60,7 +60,7 @@ claude mcp add --scope user \
 ## What the tools need from the running services
 
 All of the code below is in `main`. A tool only fails this way when a service is still running an older
-version: restart that service (never 09:20–09:35 ET on weekdays).
+version: restart that service.
 
 - **The desk** (`com.ramosquant.homebase`, :8850) serves `GET /api/journal` and a `cooldown_s` field on
   `/api/status`'s accounts, which `desk_journal` and `desk_status` depend on. A desk older than that
@@ -202,7 +202,7 @@ It takes over only a chart with NO accounts ticked and no algo, that is not repl
 chart (the order panel and DOM follow the selection, which it never moves). It never changes interval or scroll
 on a chart with accounts, and while any chart has accounts it loads the run into the Strategy Tester without
 switching the bottom panel away from Positions/Orders. No eligible chart: nothing moves and the status bar says
-why. Refused 09:20–09:35 ET on weekdays. A click in List of trades follows the same rule (the selected chart
+why. A click in List of trades follows the same rule (the selected chart
 allowed): a chart with accounts is never switched.
 
 ## Limits it inherits
@@ -210,18 +210,16 @@ allowed): a chart with accounts is never switched.
 - At most 2 backtests at once on this machine during desk hours (weekdays 08:00–16:15 ET) and 4 outside
   them (runs, heat-map cells and walk-forward cells together; `homebase/backtest/slots.py`). An override
   file, `~/.homebase/tester_slots.json`, can change the cap for a while and add no-start windows.
-- Nothing starts 09:20–09:35 ET on weekdays: a single backtest asked for then is refused and the tool
-  returns the refusal; a heat-map / walk-forward is accepted but its cells wait,
-  and the tool reports them `paused for the 9:30 window`.
+- The fixed 09:20–09:35 ET window is gone (the owner, 2026-10-16): nothing is paused at 9:30. Only a quiet
+  window of the override file pauses starts (`paused for a quiet window`).
 
 ## The desk-bridge tools
 
 - **Reads** — `desk_status`, `desk_journal`, `desk_readiness`, `data_coverage`, `services_health` — hit
   the desk's own `/api/status` / `/api/journal` (or read a local file for `data_coverage`) and are never
   refused; they format a compact summary, never a raw dump.
-- **Operations** — `account_reconnect`, `account_remove`, `export_start`, `export_status` — are each
-  refused 09:10–09:35 ET on weekdays, before any request goes out (`desk_tools.QUIET`; wider than the
-  tester tools' 09:20–09:35). The desk also refuses an MCP `account_remove` in that window itself. `account_reconnect` and
+- **Operations** — `account_reconnect`, `account_remove`, `export_start`, `export_status` — are not paused at
+  9:30 (the window was removed 2026-10-16). `account_reconnect` and
   `account_remove` send `source: "mcp"` on the desk's existing `/api/accounts/reconnect` and
   `/api/accounts/remove` routes, which journal an extra `mcp_action` event alongside the
   usual `manual_reconnect` / `account_removed` one — so the journal always shows whether a reconnect or a
