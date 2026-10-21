@@ -288,8 +288,20 @@ def _until(iso: str, sleep, idle_s: float) -> None:
         sleep(min(idle_s, left))
 
 
+OLD_SPLIT = ("the pipeline still runs on the old build-days split; move it to the 3:1 per-box walk-forward first "
+             "(docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md 4.6)")
+
+
+def _no_old_split(allow: bool) -> None:
+    """The pipeline's stages still judge on the old build-days split (owner 2026-10-20): no runner starts until they are moved.
+    `allow` is the tests' override (allow_old_split=True); no setting, file or variable turns it off."""
+    if not allow:
+        raise J.Refuse(OLD_SPLIT)
+
+
 def loop(ctx: dict, once: bool = False, sleep=time.sleep, idle_s: float = 60) -> int:
-    """THE RUNNER (module docstring) -> 0. `ctx` is handed to every stage; once=True never sleeps."""
+    """THE RUNNER (module docstring) -> 0. `ctx` is handed to every stage; once=True never sleeps. ctx["allow_old_split"] = tests only."""
+    _no_old_split(ctx.get("allow_old_split", False))
     root = PS.root(ctx.get("root"))
     with _lock(root, TRIES) as mine:
         if not mine:
@@ -319,8 +331,9 @@ def _python() -> str:
     return str(venv) if venv.exists() else sys.executable
 
 
-def start(root=None) -> dict:
+def start(root=None, allow_old_split: bool = False) -> dict:
     """The runner as a detached process (jobs.start's way) -> {"pid", "already"}; already = one is working, nothing started."""
+    _no_old_split(allow_old_split)
     r = PS.root(root)
     if _working(r):
         return {"pid": _pid(r), "already": True}
@@ -559,7 +572,8 @@ def pick(name, cell=None, why=None, root=None, clear: bool = False) -> dict:
                       next=f"bp.py pipe rerun {name} runs it again from stage 0 (a stopped idea only); a new idea takes it at its stage 1.")
 
 
-def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False) -> dict:
+def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, why=None, once: bool = False, cell=None, clear: bool = False,
+            allow_old_split: bool = False) -> dict:
     """`bp.py pipe <sub>` -> the command's ONE result object. `root` = the PIPELINE root (never the app's idea folder)."""
     cmd = f"pipe {sub}"
     if sub == "add":
@@ -579,7 +593,7 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
     if sub == "pick":
         return pick(name, cell, why, root, clear=clear)
     if sub == "start":
-        got = start(root)
+        got = start(root, allow_old_split)
         pid = f" (pid {got['pid']})" if got["pid"] else ""
         text = f"a runner is already working{pid}: nothing was started" if got["already"] else f"the runner is started{pid}: it works through the queue by itself"
         return api.result(cmd, **got, paused=PS.paused(root), text=text + (". The queue is PAUSED: bp.py pipe resume lets it work" if PS.paused(root) else ""),
@@ -598,5 +612,5 @@ def command(sub: str, name=None, root=None, *, card=None, inbox: bool = False, w
     if sub == "_loop":                              # the detached child of start(): no command of the pipeline's users
         with contextlib.suppress(OSError):          # every worker pool it spawns inherits this: the app and the chart
             os.nice(10)                             # service answer first when they compete for the cores (was nice 0)
-        return api.result(cmd, exit=loop({"root": root, "tiny": None}, once=once), text=f"the runner of {PS.root(root)} ended")
+        return api.result(cmd, exit=loop({"root": root, "tiny": None, "allow_old_split": allow_old_split}, once=once), text=f"the runner of {PS.root(root)} ended")
     raise J.Refuse(f"pipe {sub}: no command of the pipeline ({', '.join(SUBS)})")
