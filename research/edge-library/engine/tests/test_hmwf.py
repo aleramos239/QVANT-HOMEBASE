@@ -65,6 +65,7 @@ def wf(monkeypatch, tmp_path):
     monkeypatch.setattr(RUN, "RUNS", tmp_path / "runs_bp")
     monkeypatch.setattr(RUN, "clock", lambda: dt.datetime(2026, 10, 3, 11, 0, tzinfo=S.ET))     # a Saturday: no start window
     monkeypatch.setenv("HOMEBASE_IDEAS_ROOT", str(tmp_path / "ideas"))
+    monkeypatch.delenv("HOMEBASE_OLD_ROUTE_END", raising=False)              # the real cutoff (the old route's suite moves it)
     yield {"calls": calls, "ledger": tmp_path / "ledger.csv", "tmp": tmp_path}
     WM._sets.cache_clear()
 
@@ -373,14 +374,38 @@ def test_bp_wf_run_show_pick_oos(cli, capsys, wf):
     assert rc == 2 and len(_log()) == 1
 
 
-def test_blueprint_test_refuses_new_idea(wf, capsys):
-    IS = api.ideastore()
+def test_blueprint_test_refuses_new_idea(wf, capsys, monkeypatch):
+    IS, NEW = api.ideastore(), "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)"
+    assert IS.OLD_ROUTE_END == "2026-10-21" and IS.old_route("2026-10-20T23:59:59+00:00") and not IS.old_route("2026-10-21T00:00:00+00:00")
+    assert not IS.old_route(None) and not IS.old_route("")
     IS.create("hwt_new")
     IS.write_card("hwt_new", "# hwt_new -- idea card")
     IS.write_spec("hwt_new", {"name": "hwt_new", "version": 1, "card": {}, "run": {}})
-    rc, r = _bp(capsys, "test", "hwt_new", "--confirm")
-    assert rc == 2 and "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)" in r["error"]
+    d = IS.idea_dir("hwt_new")
+
+    def created(day):
+        j = json.loads((d / "idea.json").read_text())
+        (d / "idea.json").write_text(json.dumps({**j, "created": day}))
+
+    def no(*more):
+        rc, r = _bp(capsys, "test", "hwt_new", "--confirm", *more)
+        assert rc == 2 and NEW in r["error"], r["error"]
+        return r["error"]
+    no()                                                                      # no lock: a new idea
+    created("2026-10-21T08:00:00+00:00")
+    assert "created 2026-10-21" in no("--early-look")                        # an early look of an idea created on the cutoff day
+    (d / "lock.json").write_text(json.dumps({"locked_utc": "2026-10-21T09:00:00+00:00", "hash": "x"}))
+    assert "locked 2026-10-21" in no()                                       # card -> build -> lock today -> test: refused
+    (d / "lock.json").write_text(json.dumps({"locked_utc": "2026-10-19T09:00:00+00:00", "hash": "x"}))
+    rc, r = _bp(capsys, "test", "hwt_new", "--confirm")                       # an old lock passes the gate (and is refused further on)
+    assert rc == 2 and NEW not in r["error"]
+    monkeypatch.setattr(IS, "OLD_ROUTE_END", "2026-10-01")                    # the one constant moves every gate
+    assert "locked 2026-10-19" in no()
     assert not IS.reads()
+    with pytest.raises(J.Refuse, match="3:1 walk-forward"):                   # the runner holds the same gate (oos.start passes the lock day)
+        RUN.run_test("hwt_new", {"version": 1, "lock": "x"}, SPEC, "k", "nyam", [], "s", "2026-01-30", dry=True)
+    rc, r = _bp(capsys, "build", "hwt_new", "--reason=the plain idea")        # a build runs a heat map: only on the owner's words
+    assert rc == 2 and "owner" in r["error"]
 
 
 def test_a_card_may_say_hm40():

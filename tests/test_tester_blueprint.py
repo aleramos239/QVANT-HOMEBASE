@@ -80,10 +80,10 @@ def test_a_tool_runs_as_a_chat_runs_it_and_answers_in_its_own_words(c, ideas_roo
 
 def test_a_long_job_answers_with_its_id_after_twenty_seconds_at_most(c):
     for sent, want in ((None, 20), (3600, 20), (5, 5), (0, 0), (True, 20), ("soon", 20)):
-        args = {"name": "nq_orb_pre", "reason": "the plain idea", **({} if sent is None else {"wait_s": sent})}
+        args = {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", **({} if sent is None else {"wait_s": sent})}
         text = run(c, "blueprint_build", args).json()["text"]
         assert (f"--wait={want}" in text) or (want == 0 and "job j1 is still going" in text), (sent, text)
-    going = run(c, "blueprint_build", {"name": "nq_orb_pre", "reason": "the plain idea", "wait_s": 0}).json()["text"]
+    going = run(c, "blueprint_build", {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", "wait_s": 0}).json()["text"]
     assert "is still going" in going and "job_id='j1'" in going                  # the page's "Keep waiting" reads the id off this
 
 

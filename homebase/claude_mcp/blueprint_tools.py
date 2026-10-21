@@ -143,7 +143,7 @@ _CARD = {
     "additionalProperties": False}
 _SETTINGS = {
     "type": "object", "description": "How the research engine runs it (line 0.2: one entry trigger, at most 2 filters, "
-                                     "exits from the standard table only).",
+                                     "exits from hm40 (the default) or standard (old ideas)).",
     "properties": {
         "family": {"type": "string",
                    "description": "The entry trigger: one of the engine's bar-based families, e.g. orb."},
@@ -215,8 +215,8 @@ SPECS = [
     _spec("blueprint_card", "Blueprint phase 0, the idea card: write an idea down BEFORE any run -- why it should make "
           "money and who loses, its home, its neighbors and one place it should not work, its main setting with 3-4 "
           "values, both sides or one. Saves the card and the settings in the app, and a record draft in the Lab "
-          "(draft_<name>, filed under Ideas). Refused when a line of the card is missing, the exits are not the "
-          "standard table, or there are more than 2 filters. Version 1 also refuses a home of \"all\" (it judges ONE "
+          "(draft_<name>, filed under Ideas). Refused when a line of the card is missing, the exits are not "
+          "hm40 (the default) or standard (old ideas), or there are more than 2 filters. Version 1 also refuses a home of \"all\" (it judges ONE "
           "home table: the others are neighbors), the evening session, and limits.trail_atr / limits.exit_bars (exits "
           "of their own): blueprint_blocks lists everything it refuses.",
           {"name": _NAME, "card": _CARD, "settings": _SETTINGS}, ["name", "card", "settings"]),
@@ -234,16 +234,18 @@ SPECS = [
                                                         "and each entry and exit sits where the rule says (line 1.5). "
                                                         "Default false."}},
           ["name"]),
-    _spec("blueprint_build", "Blueprint phase 2, the build (2021-09-22 to 2025-06-30, where all tuning happens): runs "
+    _spec("blueprint_build", "Blueprint phase 2, the build (2021-09-22 to 2025-06-30, where all tuning happens), only when "
+          "the owner says so (it runs a heat map: quote his words in owner_said): runs "
           "the idea's table and its random-entry control when they are missing, then reads lines 2.1 to 2.9, each "
           "pass or fail with its number. All pass = a LEAD, approved for the out-of-sample test. Every call is one "
           "round: at most 5, each with its reason written before the run. Long: after wait_s it returns a job id -- "
           "call it again with that job_id to keep waiting. Refused without a card, without a reason, at round 6. "
-          "For ideas built before 2026-10-20: a new idea uses the 3:1 walk-forward (blueprint_wf).",
+          f"For old ideas: a new idea uses the 3:1 walk-forward (blueprint_wf), and its test is refused unless locked before "
+          f"{ideastore.OLD_ROUTE_END}.",
           {"name": _NAME,
            "reason": {"type": "string", "description": "Why this round is run, in a sentence or two: it is saved "
                                                        "before the run. Needed to start a round; not with job_id."},
-           "wait_s": _WAIT, "job_id": _JOB}, ["name"]),
+           "owner_said": _SAID, "wait_s": _WAIT, "job_id": _JOB}, ["name", "owner_said"]),
     _spec("blueprint_lock", "Blueprint phase 3, the freeze: saves the rule, the variant list, the default variant (the "
           "middle survivor, never the best), the random control and the costs, and returns the lock's hash, the "
           "default and the test range. BEFORE the freeze the default variant is read on its own on the build days "
@@ -259,17 +261,18 @@ SPECS = [
           "and only when the owner has said to: confirm must be true. Reads lines 4.1 to 4.9; all pass = PROVEN ON "
           "HISTORY, approved for a real eval. Long: after wait_s it returns a job id -- call it again with that "
           "job_id to keep waiting (nothing is read again). Refused when the idea is not locked, its lock no longer "
-          "matches, or a read is already on file. The one exception is AN EARLY LOOK (early_look: true): it reads "
-          "the test days for an idea that is NOT locked, uses them up for that idea, is labelled EARLY LOOK, can "
+          "matches, or a read is already on file. The one exception is AN EARLY LOOK (early_look: true), for an "
+          f"idea created before {ideastore.OLD_ROUTE_END} only: it reads the test days for an idea that is NOT locked, uses them up for that idea, is labelled EARLY LOOK, can "
           "never prove the idea, and needs the owner's clear yes in chat first -- warn him, then ask (confirm is "
-          "still required). For ideas locked before 2026-10-20 only: a new idea is refused here and uses the 3:1 "
+          "still required). "
+          f"Only for ideas locked before {ideastore.OLD_ROUTE_END}: a new idea is refused here and uses the 3:1 "
           "walk-forward (blueprint_wf, then blueprint_wf_oos).",
           {"name": _NAME,
            "confirm": {"type": "boolean", "description": "Must be true: the owner has said to run the one read. The "
                                                          "test days are read once for an idea, and a read cannot be "
                                                          "taken back."},
            "early_look": {"type": "boolean", "description": "true = an EARLY LOOK at the test days for an idea that "
-                                                            "is not locked: only after the owner, warned that it "
+                                                            f"is not locked (created before {ideastore.OLD_ROUTE_END}): only after the owner, warned that it "
                                                             "uses the test days up for this idea and can never "
                                                             "prove it, said a clear yes in chat. Default false."},
            "wait_s": _WAIT, "job_id": _JOB}, ["name", "confirm"]),
@@ -613,16 +616,16 @@ class BlueprintMixin:
 
     # ---- phase 2: the build
 
-    def t_blueprint_build(self, name: str, reason=None, wait_s=None, job_id=None) -> str:
+    def t_blueprint_build(self, name: str, reason=None, owner_said=None, wait_s=None, job_id=None) -> str:
         _name(name)
         wait = _wait_s(wait_s)
         if job_id is not None:
-            args = ["job", _job_id(job_id)]
+            args = ["job", _job_id(job_id)]                 # (keeps waiting: nothing new is run)
         elif not isinstance(reason, str) or not reason.strip():
             raise ToolError("reason: why this round is run, in a sentence or two -- it is written before the run "
                             "(line 2.9). To keep waiting on a build already started, pass its job_id.")
         else:
-            args = ["build", name, f"--reason={reason.strip()}"]
+            args = ["build", name, f"--reason={reason.strip()}", f"--owner-said={_said(owner_said)}"]
         r = self._bp([*args, f"--wait={wait}"], timeout=wait + self._bp_grace_s)
         return self._finish(r, f"Call blueprint_build(name={name!r}, job_id={{id}}) to keep waiting.")
 
@@ -706,6 +709,10 @@ class BlueprintMixin:
         said = _said(owner_said)
         if (card is None) == (name is None):
             raise ToolError("give card or name (one of them): an idea on file by its name, or the settings in run_idea's format")
+        if card is not None:
+            _name(_object(card, "card").get("name"))
+            if "variants" in card:
+                raise ToolError("card: no variants -- the boxes are the main setting's values x the hm40 cells")
         args = ["wf", "run", _name(name) if name is not None else "-", f"--owner-said={said}"]
         if workers is not None:
             if type(workers) is not int or not 1 <= workers <= 16:

@@ -15,7 +15,7 @@ import pytest
 sys.dont_write_bytecode = True
 L = Path(__file__).resolve().parent.parent          # the engine directory
 W = L.parent                                         # the edge-library root (library.py, run_menus.py)
-REPO = Path.home() / "ramos-quant-homebase"
+REPO = W.parent.parent                               # the checkout this suite is in (a worktree too): its own homebase/
 for p in (str(W), str(L), str(REPO)):
     if p not in sys.path:
         sys.path.insert(0, p)

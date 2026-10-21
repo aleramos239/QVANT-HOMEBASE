@@ -926,6 +926,10 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     own code), for the passes. A store that is on disk is never run again. A strategy error in a pass writes no store and
     ends the read: it stays on file."""
     sw = getattr(S, "ALLOW_BT", None)               # THE SWITCH OF THE TEST DAYS: named here and nowhere else in this project
+    from . import api                               # (api imports this module: looked up when the read is run)
+    if not api.ideastore().old_route(read.get("since"), ideas):      # the idea's lock day (an early look: its created day), oos.start
+        raise J.Refuse(f"{name}: new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf) -- this one read is for ideas locked before "
+                       f"{api.ideastore().OLD_ROUTE_END} ({read.get('since') or 'no lock day given'})")
     if sw is None:
         raise J.Refuse("the engine has no switch for the test days (engine/l2sim.py): the out-of-sample test cannot run on this checkout")
     sp = checked(spec)
@@ -999,7 +1003,6 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
                 pass
         return {"stores": [rows.get(p["key"]) or _row(p, out, skipped=False, ok=None, trades=None) for p in todo], "calendar": None, "trades": {}}
     # ---- THE CLAIM: nothing of the test days is opened unless the read is in the one-read log, claimed and not yet judged
-    from . import api                               # (api imports this module: looked up when the read is run)
     line = api.ideastore().read_on_file(name, root=ideas)
     if not (line and line.get("state") == "claimed" and (line.get("version"), line.get("lock")) == (read.get("version"), read.get("lock"))):
         raise J.Refuse(f"no claimed read of the test days is on file for {name} (lock {read.get('lock')}): the read is written to the log BEFORE the pass "

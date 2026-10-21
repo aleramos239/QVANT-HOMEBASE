@@ -595,7 +595,9 @@ def test_an_early_look_claims_the_read_first_and_freezes_what_is_there():
     # ---- THE CLAIM came first: when the pass started the read was in the one-read log, claimed for THIS lock and its range -- as a test's
     assert len(seen) == 1 and (s["line"]["state"], s["line"]["name"], s["line"]["version"], s["line"]["lock"], s["line"]["range"], s["line"]["verdict"]) == (
         "claimed", NAME, 1, lock["hash"], rng, None) and set(s["line"]) == {"utc", "name", "version", "lock", "range", "state", "verdict"}
-    assert s["early_lock"] == lock and s["early_test"] is False and s["read"] == {"version": 1, "lock": lock["hash"], "utc": s["line"]["utc"]}
+    assert s["early_lock"] == lock and s["early_test"] is False and s["read"] == {"version": 1, "lock": lock["hash"], "utc": s["line"]["utc"],
+                                                                                 "since": F.read(d / "idea.json")["created"]}      # the day the old route is held to: the idea's
+    assert IS.old_route(s["read"]["since"], root)                             # an OLD idea (this suite's route end: conftest._old_route)
     assert s["out"] == str(F.read_out("q_idea")) and OOS.EARLY_OUT == LB.W / "runs_bp_early" != RUN.TESTS      # its stores: never among those of THE one read
     log = reads(root)
     assert [(x["state"], x["lock"], x["range"]) for x in log] == [("claimed", lock["hash"], rng), ("judged", lock["hash"], rng)] and log[0] == s["line"]
@@ -645,7 +647,7 @@ def test_an_early_look_is_labelled_everywhere():
     # 4. what is saved: early_look/test.json -- early_look true, the label, every line -- and the read's verdict in the one-read log
     assert (saved["early_look"], saved["label"], saved["verdict"], saved["passed"], saved["status"]) == (True, EARLY, r["verdict"], False, "idea")
     assert saved["lines"] == json.loads(json.dumps(r["lines"])) and saved["next"] == r["next"] and saved["default"] == r["default"]
-    assert reads(root)[-1]["verdict"] == r["verdict"] and r["read"] == {**seen[0]["read"], "state": "judged", "verdict": r["verdict"]}
+    assert reads(root)[-1]["verdict"] == r["verdict"] and r["read"] == {**{k: v for k, v in seen[0]["read"].items() if k != "since"}, "state": "judged", "verdict": r["verdict"]}
     assert [x["verdict"] for x in events(d) if x["event"] == "tested"] == [r["verdict"]]
     assert sorted(Path(p).name for p in r["saved"]) == sorted([*RUN.test_keys(KEY, NAME, "NQ", "15", "nyam").values(), "test.json", "lock.json", "test_reads.jsonl"])
     assert str(d / "early_look/test.json") in r["saved"] and str(d / "early_look/lock.json") in r["saved"] and str(d / "test.json") not in r["saved"]

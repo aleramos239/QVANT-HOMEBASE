@@ -800,7 +800,7 @@ def test_the_runner_opens_nothing_without_a_claimed_read():
     """runner.run_test for an idea whose test days are UNSEEN (bpl_orb): every call here must stop before the engine."""
     root, lock = F.frozen(NAME, "runner")
     sp, out, end = RUN.checked(REC.engine(lock["spec"], lock["plan"], lock["store"])[0]), F.tmp() / "runs_test_runner", lock["test_range"]["NQ"]["end"]
-    rd, days, n = {"version": 1, "lock": lock["hash"]}, ["2025-08-20", "2026-03-18"], 0
+    rd, days, n = {"version": 1, "lock": lock["hash"], "since": lock["locked_utc"]}, ["2025-08-20", "2026-03-18"], 0
     rng = {"start": "2025-07-01", "end": end}
 
     def go(**kw):

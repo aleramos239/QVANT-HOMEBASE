@@ -123,12 +123,17 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
     IS, d = api.ideastore(), REC._carded(name, root)
     lock, early = REC._json(d / "lock.json"), bool(early_look)
     cmd = f"bp.py test {name} --confirm" + " --early-look" * early
+    since = (REC._json(d / "idea.json") or {}).get("created") if early else (lock or {}).get("locked_utc")      # the day the old route is held to
+    if early and not IS.old_route(since, root):
+        raise J.Refuse(f"{NEW_IDEAS}. {name} was created {since or 'on no day on file'}: an early look is for ideas created before {IS.OLD_ROUTE_END}")
     if early:
         lock = FRZ.early(name, root, test.get("out"), test.get("draws"))        # what is there, frozen as it is (in memory): refused for a frozen idea, or without a build
     elif lock is None:
         raise J.Refuse(f"{NEW_IDEAS}. {name} is not frozen (no lock.json): the freeze comes before the test, and nothing may change after it (bp.py lock {name}). The owner "
                        f"may ask for an EARLY LOOK instead ({cmd} --early-look): it reads the test days for the idea as it stands, uses them up for it, and "
                        "can never prove it")
+    elif not IS.old_route(since, root):
+        raise J.Refuse(f"{NEW_IDEAS}. {name} was locked {since or 'on no day on file'}: this one read is for ideas locked before {IS.OLD_ROUTE_END}")
     else:
         bad = FRZ.verify(lock, REC._json(d / "spec.json"))
         if bad:
@@ -166,7 +171,7 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
     ledger, workers, tester = ledger or test.get("ledger"), workers or test.get("workers"), tester or test.get("tester")
     sp = RUN.checked(REC.engine(lock["spec"], lock["plan"], lock["store"])[0])
     read = {"version": lock["version"], "lock": lock["hash"]}
-    pre = RUN.run_test(name, read, sp, h["key"], h["session"], lock["variants"], lock["store"], rng["end"], workers, out, ideas=root, ledger=ledger, days=days,
+    pre = RUN.run_test(name, {**read, "since": since}, sp, h["key"], h["session"], lock["variants"], lock["store"], rng["end"], workers, out, ideas=root, ledger=ledger, days=days,
                        block=block, dry=True)
     there = [s["key"] for s in pre["stores"] if s["skipped"]]
     if there:
@@ -228,7 +233,8 @@ def run(idea, read, rng, second_look=False, second_of=None, root=None, workers=N
     h = lock["home"]
     try:
         sp = RUN.checked(REC.engine(lock["spec"], lock["plan"], lock["store"])[0])
-        got = RUN.run_test(name, read, sp, h["key"], h["session"], lock["variants"], lock["store"], rng["end"], workers, out, ideas=root, ledger=ledger, days=days,
+        since = (REC._json(d / "idea.json") or {}).get("created") if early else lock.get("locked_utc")      # (start held it to the old route)
+        got = RUN.run_test(name, {**read, "since": since}, sp, h["key"], h["session"], lock["variants"], lock["store"], rng["end"], workers, out, ideas=root, ledger=ledger, days=days,
                            block=block, progress=progress, keep=[lock["default"]])
         t = T.tested(sp, lock, out)
         rows = [f(t) for f in LINES]

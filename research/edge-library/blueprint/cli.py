@@ -13,7 +13,7 @@ and --json out.
         [--window=HH:MM-HH:MM] [--max-per-day=N]                             or on a trades file; saved as the idea's check.json
                                                                              when the app has the idea; no source = the one of
                                                                              the check on file again (the owner's --looked)
-  bp.py build <name> --reason=TEXT [--wait=S]                             PHASE 2, ONE ROUND of the idea on file (records.py):
+  bp.py build <name> --reason=TEXT --owner-said=TEXT [--wait=S]         PHASE 2, ONE ROUND of the idea on file (records.py):
         [--tester=DIR]                                                       the reason is saved, what is missing is run on the
                                                                              build range (2021-09-22 .. 2025-06-30), lines
                                                                              2.1-2.9 are read at the round's bar and saved, the
@@ -191,6 +191,7 @@ def _parser() -> _Parser:
     b.add_argument("--stored", metavar="UNIT", help="DRY RUN on the old build days (2021-09-22 .. 2023-12-31) for a unit whose stores are on disk")
     b.add_argument("--spec-file", metavar="PATH", help="the one-table build of a spec in run_idea's format that has no record")
     b.add_argument("--reason", help="why this round is run, written before the run (line 2.9)")
+    b.add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: a build runs a heat map, only when he says so (not --stored)")
     b.add_argument("--home", metavar="ROOT-tfN-SESSION", help="--spec-file: the table that is judged (default: the spec's first market, bar size and session)")
     b.add_argument("--filter", metavar="BLOCK_SIDE", help="--spec-file: judge the table with this one filter of the spec on (line 2.7)")
     b.add_argument("--round", type=int, help="--spec-file: 1 .. 5, the bar of line 2.3 (default 1)")
@@ -383,12 +384,14 @@ def _build(a) -> dict:
         given = [f"--{k}" for k in ONE_TABLE if getattr(a, k) is not None]
         if given:
             raise J.Refuse(f"{', '.join(given)}: an option of the one-table build (--spec-file=PATH); an idea's record says its own home, filter and round")
+        api._said(a.owner_said)                     # a build runs a heat map: only on the owner's words (2026-10-20)
         kw = REC.start(a.name, a.reason, a.root, tester=a.tester, **run)      # every refusal that needs no run -- then the reason is on disk
         return REC.run(**kw) if a.wait is None else _job(kw, a)
     try:
         spec = json.loads(Path(a.spec_file).read_text())
     except (OSError, ValueError) as e:
         raise J.Refuse(f"spec file {a.spec_file}: {e}") from None
+    api._said(a.owner_said)
     kw = dict(spec=spec, name=a.name, reason=a.reason or "", home=a.home, filt=a.filter, round_=1 if a.round is None else a.round, **run)
     if a.wait is None:
         return api.build(**kw)                      # in the foreground
