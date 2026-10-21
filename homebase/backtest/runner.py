@@ -142,6 +142,8 @@ def validate(body, *, draft: tuple | None = None) -> dict:
         cls = strategies.get(sid)
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
     rng = discipline.parse_range(body.get("range"))
+    if rng.root and rng.root != cls.root:
+        raise ValueError(f"range.root: these are {rng.root} months, the strategy trades {cls.root}")
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
     prop_rules_data = propsim.load_rules(prop_rules_id)     # ValueError "prop_rules: one of ..." when unknown
     # Item 4 (provenance): the resolved runtime config -- cancel/flat times, the
@@ -159,6 +161,8 @@ def validate(body, *, draft: tuple | None = None) -> dict:
     rules = ctlmod.parse(body.get("controls"))      # run controls (controls.py): only when something is set, so a
     if rules:                                       # request without them is byte for byte what it always was
         req["controls"] = rules
+    if rules.get("atr_minutes") == 0 and not cls.bar_minutes:
+        raise ValueError("controls.atr_minutes: 0 = the strategy's own bar, and it has no bar size (pick 1, 5 or 15)")
     return drafthost.stamp(req, src) if src is not None else req
 
 
@@ -188,7 +192,7 @@ def _record(path: Path, req: dict, rid: str) -> None:
     child's log.txt) and the run carries on."""
     try:
         discipline.record(path, strategy=req["strategy"], inputs=req["inputs"],
-                          rng=discipline.parse_range(req["range"]), run_id=rid)
+                          rng=discipline.stored_range(req["range"]), run_id=rid)
     except OSError as e:
         print(f"tester: could not append to the spend log {path}: {e} (the run continues)",
               file=sys.stderr, flush=True)

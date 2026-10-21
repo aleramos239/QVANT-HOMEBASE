@@ -115,3 +115,57 @@ def test_a_spend_records_its_run_id_when_given(tmp_path):
     r = parse_range({"kind": "custom", "start": "2025-07-01", "end": "2025-12-31"})
     a = record(p, strategy="nq930", inputs={}, rng=r, run_id="RID1", ts="T1")
     assert a["run_id"] == "RID1" and spends(p)[0]["run_id"] == "RID1"
+
+
+# ---- the 3:1 block months (task 8): wf_is / wf_oos
+LAYOUT = [{"i": 0, "is": ["2021-10", "2021-11", "2021-12"], "oos": "2022-01"},
+          {"i": 1, "is": ["2022-02", "2022-03", "2022-04"], "oos": "2022-05"}]
+
+
+@pytest.fixture
+def blocks(monkeypatch):
+    from homebase.backtest import wfmonths
+    monkeypatch.setattr(wfmonths, "blocks", lambda root, store=None: LAYOUT if root == "NQ" else [])
+    return monkeypatch
+
+
+def test_wf_is_range_excludes_oos_months(blocks):
+    r = parse_range({"kind": "wf_is", "root": "NQ"})
+    assert (r.start, r.end, r.root, r.holdout) == (dt.date(2021, 10, 1), dt.date(2022, 4, 30), "NQ", False)
+    assert r.includes(dt.date(2021, 11, 10)) and r.includes(dt.date(2022, 3, 1))
+    for d in (dt.date(2022, 1, 10), dt.date(2022, 5, 2), dt.date(2021, 9, 23)):
+        assert not r.includes(d)
+    assert r.to_dict()["months"] == LAYOUT[0]["is"] + LAYOUT[1]["is"]
+    assert r.label == "3:1 in-sample months · NQ 2021-10 → 2022-04"
+    blocks.setattr("homebase.backtest.wfmonths.blocks", lambda root, store=None: LAYOUT[:1])
+    assert stored_range(r.to_dict()) == r                 # a stored request keeps the months it was made with
+    late = [{"i": 0, "is": ["2025-06", "2025-07", "2025-08"], "oos": "2025-09"}]
+    blocks.setattr("homebase.backtest.wfmonths.blocks", lambda root, store=None: late)
+    assert parse_range({"kind": "wf_is", "root": "NQ"}).holdout is False      # in-sample months, past 2025-07 or not
+
+
+def test_wf_oos_range_is_one_test_month_and_is_recorded(blocks, tmp_path):
+    r = parse_range({"kind": "wf_oos", "root": "NQ", "month": "2022-01"})
+    assert (r.start, r.end, r.holdout) == (dt.date(2022, 1, 1), dt.date(2022, 1, 31), True)
+    assert r.includes(dt.date(2022, 1, 10)) and not r.includes(dt.date(2021, 12, 30))
+    assert r.label == "3:1 test month · NQ 2022-01" and stored_range(r.to_dict()) == r
+    for bad in ({"kind": "wf_oos", "root": "NQ", "month": "2021-11"}, {"kind": "wf_oos", "root": "NQ"},
+                {"kind": "wf_is"}, {"kind": "wf_is", "root": "ES"}):
+        with pytest.raises(DisciplineError):
+            parse_range(bad)
+    p = tmp_path / "spends.jsonl"
+    assert record(p, strategy="nq930", inputs={}, rng=r, ts="T")["range"]["months"] == ["2022-01"]
+
+
+def test_prepare_records_a_wf_oos_run(blocks, tmp_path):
+    import json
+
+    from homebase.backtest.runner import prepare, validate
+    body = {"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "wf_oos", "root": "NQ", "month": "2022-05"}}
+    rid = prepare(body, tmp_path)
+    [spend] = [json.loads(x) for x in (tmp_path / "spends.jsonl").read_text().splitlines()]
+    assert spend["run_id"] == rid and spend["range"]["kind"] == "wf_oos" and spend["range"]["months"] == ["2022-05"]
+    assert prepare({**body, "range": {"kind": "wf_is", "root": "NQ"}}, tmp_path)       # in-sample: nothing recorded
+    assert len((tmp_path / "spends.jsonl").read_text().splitlines()) == 1
+    with pytest.raises(ValueError, match="root"):
+        validate({**body, "range": {"kind": "wf_is", "root": "GC"}})

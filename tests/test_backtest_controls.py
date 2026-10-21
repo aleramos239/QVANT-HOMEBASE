@@ -336,3 +336,70 @@ def test_ema_line_is_built_from_closed_bars_only():
     assert first == et_ns(D, "09:31:00") and lines[first] == (130.0, 130.0)     # seeded with the first close
     close, line = lines[et_ns(D, "09:32:00")]
     assert close == 131.0 and abs(line - (130.0 + 2 / 21 * 1.0)) < 1e-9
+
+
+# ---- the own stop x multiplier and the ATR of the strategy's own bar (task 8)
+def test_own_mult_scales_the_strategy_stop():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 101.0), ("15:00", 101.0)]
+    plan = {"09:30:00": long_at(sl=80.0, tp=130.0, ref=100.0)}                 # its own stop: 20 points
+    t, = go(rows, plan, {"stop_own_mult": 0.5}).trades
+    assert (t.sl, t.tp) == (90.0, 130.0)                                      # 10 points; its own target kept
+    assert go(rows, plan, {"stop_own_mult": 2}).trades[0].sl == 60.0
+    assert go(rows, {"09:30:00": long_at(ref=100.0)}, {"stop_own_mult": 0.5}).trades[0].sl is None   # no stop of its own
+    assert parse({"stop_own_mult": 1.0}) == {} and parse({"stop_own_mult": 0.5}) == {"stop_own_mult": 0.5}
+    assert parse({"stop_mode": "fixed", "stop_pts": 5, "stop_own_mult": 0.5}) == {"stop_mode": "fixed", "stop_pts": 5.0}
+    with pytest.raises(ValueError, match="stop_own_mult"):
+        parse({"stop_own_mult": 11})
+
+
+def test_old_request_unchanged():
+    """A request as the Lab sent it before task 8 validates to the same dict (= the same cache key)."""
+    import json
+
+    from homebase.backtest.runner import validate
+    old = {"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"},
+           "controls": {"entry_from": "", "direction": "both", "stop_mode": "atr", "stop_atr": 1.5, "target_mode": "rr",
+                        "target_rr": 2, "atr_minutes": 5, "atr_period": 14, "max_trades": 0}}
+    v = validate(old)
+    assert v["controls"] == {"stop_mode": "atr", "stop_atr": 1.5, "target_mode": "rr", "target_rr": 2.0}
+    assert v["range"] == {"kind": "research", "start": "2021-09-22", "end": "2025-06-30",
+                          "label": "Build · Sep 2021 – Jun 2025", "holdout": False}
+    new = validate({**old, "controls": {**old["controls"], "stop_own_mult": 1.0}})
+    assert json.dumps(new, sort_keys=True) == json.dumps(v, sort_keys=True)
+    assert "controls" not in validate({**old, "controls": {"stop_own_mult": 1.0, "atr_minutes": 5}})
+
+
+class BarScript(Script):
+    bar_minutes = 5
+
+
+def test_atr_minutes_zero_uses_bar_size():
+    rows, p = [], 100.0
+    for k in range(0, 40):                                    # 1-minute true range 4, 5-minute the same: ranges differ by size below
+        m = 9 * 60 + k
+        rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + (k % 5))]
+    plan = {"09:36:00": long_at()}
+    cfg = {"stop_mode": "atr", "stop_atr": 1, "atr_period": 3}
+
+    def sl(cls, minutes):
+        r = run_session(cls(plan), tape(rows), Costs(0.0, 0.0), qty=1, controls=Controls.from_dict({**cfg, "atr_minutes": minutes}))
+        return r.trades[0].entry_price - r.trades[0].sl if r.trades else r.blocked
+
+    assert sl(BarScript, 0) == sl(BarScript, 5) != sl(BarScript, 1)
+    assert sl(Script, 0) == {"atr: the strategy has no bar size": 1}
+    from homebase.backtest.controls import value_label
+    assert value_label("atr_minutes", 0) == "own"
+    from homebase.backtest.runner import validate
+    with pytest.raises(ValueError, match="no bar size"):
+        validate({"strategy": "nq930", "controls": {**cfg, "atr_minutes": 0}})
+
+
+def test_own_stop_flag():
+    """Only a strategy whose entries pass their own SL says so; a draft says it as a literal."""
+    from homebase.backtest import drafthost
+    from homebase.strategies.gc_nfpcpi import GCNfpCpi
+    from homebase.strategies.straddle import OpenStraddle
+    assert Strategy.own_stop is False and OpenStraddle.own_stop is True and GCNfpCpi.own_stop is True
+    head = "from homebase.strategies.base import Strategy\n\nclass X(Strategy):\n    name = 'x'\n    root = 'NQ'\n"
+    assert drafthost.stub_class("x", head + "    own_stop = True\n").own_stop is True
+    assert drafthost.stub_class("x", head).own_stop is False

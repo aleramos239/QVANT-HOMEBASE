@@ -366,7 +366,7 @@ def set_group(sid, group, base: Path | None = None) -> dict:
 
 _CLASS_ATTRS = {"name": str, "root": str, "session_window": (tuple, list), "bar_minutes": int,
                 "bar_window": (tuple, list, type(None)), "placement_ms": int, "session_independent": bool,
-                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "bar_sizes": (tuple, list),
+                "desk_settings": (tuple, list), "exec_root": str, "own_size": bool, "own_stop": bool, "bar_sizes": (tuple, list),
                 "max_trades_day": int}
 INPUT_FIELDS = ("key", "label", "type", "default", "min", "max", "step", "choices")
 

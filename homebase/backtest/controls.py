@@ -15,6 +15,8 @@ they are part of the request, so a run's bundle shows what was set.
   cooldown_min            minutes with no new entry after a losing trade.
   max_hold_min            a position older than this is closed at the next print (checked each minute).
   stop_mode               own (the strategy's) | fixed (stop_pts) | atr (stop_atr x ATR) | candle | none.
+                          own: stop_own_mult x the strategy's own stop distance (from the entry's reference, at least a
+                          tick); 1 = its own stop exactly.
                           candle: just past the last CLOSED signal candle's extreme at the entry (a long's below its low,
                           a short's above its high) by stop_candle_ticks; at least a tick past the fill.
   target_mode             own | fixed (target_pts) | atr (target_atr x ATR) | rr (target_rr x the stop distance) | none.
@@ -29,7 +31,8 @@ they are part of the request, so a run's bundle shows what was set.
   bar_minutes             signal bar size: 0 = the strategy's own, else 1 | 5 | 15. Only a strategy that lists the size in
                           its `bar_sizes` takes it (a candle-body rule cannot read other candles); for any other the
                           run says so in `blocked` and keeps the strategy's own bars.
-  atr_minutes / atr_period  the ATR: mean true range of the last `atr_period` CLOSED `atr_minutes` bars before the
+  atr_minutes / atr_period  the ATR: mean true range of the last `atr_period` CLOSED `atr_minutes` bars (0 = the
+                          strategy's own bar size; refused for a strategy without one) before the
                           entry (overnight included); fewer than that = the entry is refused ("atr warming up").
 
 A fixed or ATR bracket is measured from the FILL, like a broker bracket; it replaces the strategy's own level, for the
@@ -46,7 +49,7 @@ STOP_MODES = ("own", "fixed", "atr", "candle", "none")
 EXIT_LINES = ("", "vwap", "vwap_rth", "ema20", "ema50")
 LINE_MINUTES = (1, 5, 15)
 TARGET_MODES = ("own", "fixed", "atr", "rr", "none")
-ATR_MINUTES = (1, 5, 15)
+ATR_MINUTES = (0, 1, 5, 15)
 BAR_MINUTES = (0, 1, 5, 15)
 
 # key -> (kind, default, lo, hi): the one list the request validates against and a page can mirror.
@@ -64,6 +67,7 @@ SPEC: dict[str, tuple] = {
     "cooldown_min": ("int", 0, 0, 600),
     "max_hold_min": ("int", 0, 0, 1440),
     "stop_mode": ("choice", "own", STOP_MODES, None),
+    "stop_own_mult": ("float", 1.0, 0.0, 10.0),
     "stop_pts": ("float", 0.0, 0.0, 5000.0),
     "stop_atr": ("float", 0.0, 0.0, 50.0),
     "target_mode": ("choice", "own", TARGET_MODES, None),
@@ -120,7 +124,7 @@ LABELS = {
     "max_trades": "Trades a day", "stop_wins": "Stop after wins", "stop_losses": "Stop after losses",
     "max_consec_losses": "Losses in a row", "day_loss": "Daily loss ($)", "day_profit": "Daily profit ($)",
     "cooldown_min": "Cool off after a loss (min)", "max_hold_min": "Close after (min held)",
-    "stop_mode": "Stop type", "stop_pts": "Stop (points)", "stop_atr": "Stop (x ATR)",
+    "stop_mode": "Stop type", "stop_own_mult": "Own stop (x)", "stop_pts": "Stop (points)", "stop_atr": "Stop (x ATR)",
     "target_mode": "Target type", "target_pts": "Target (points)", "target_atr": "Target (x ATR)",
     "target_rr": "Target (x stop)", "stop_candle_ticks": "Candle stop buffer (ticks)", "be_after_pts": "Breakeven after (points)",
     "be_offset_ticks": "Breakeven + (ticks)", "trail_pts": "Trailing stop (points)", "trail_after_pts": "Trail after (points)",
@@ -128,7 +132,7 @@ LABELS = {
     "atr_period": "ATR length",
 }
 # a number that only means something under one mode: a heat-map axis on it switches that mode on (0 = leave it)
-IMPLIES = {"stop_pts": ("stop_mode", "fixed"), "stop_atr": ("stop_mode", "atr"),
+IMPLIES = {"stop_pts": ("stop_mode", "fixed"), "stop_own_mult": ("stop_mode", "own"), "stop_atr": ("stop_mode", "atr"),
            "target_pts": ("target_mode", "fixed"), "target_atr": ("target_mode", "atr"), "target_rr": ("target_mode", "rr"),
            "stop_candle_ticks": ("stop_mode", "candle")}
 
@@ -136,7 +140,7 @@ IMPLIES = {"stop_pts": ("stop_mode", "fixed"), "stop_atr": ("stop_mode", "atr"),
 def value_label(k: str, v) -> str:
     """A value the way a heat-map header reads it."""
     if v in ("", 0, 0.0):
-        return "own" if k == "bar_minutes" else "off"
+        return "own" if k in ("bar_minutes", "atr_minutes") else "off"
     return f"{v:g}" if isinstance(v, float) else str(v)
 
 
@@ -157,6 +161,8 @@ def parse(raw) -> dict:
             continue
         if val != SPEC[k][1]:
             out[k] = val
+    if out.get("stop_mode", "own") != "own":
+        out.pop("stop_own_mult", None)
     for (mode, name), num in NEEDS.items():
         if out.get(mode) == name:
             if not out.get(num):
@@ -193,6 +199,7 @@ class Controls:
     cooldown_min: int = 0
     max_hold_min: int = 0
     stop_mode: str = "own"
+    stop_own_mult: float = 1.0
     stop_pts: float = 0.0
     stop_atr: float = 0.0
     target_mode: str = "own"
