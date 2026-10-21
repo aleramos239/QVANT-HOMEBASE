@@ -90,6 +90,8 @@ TOO_MANY = "Too many orders at once."
 BAD_SETTINGS = "The strategy's settings cannot be read."
 NO_DAILY = "The daily bars could not be read."
 NO_YESTERDAY = "Yesterday's prices are not stored yet."
+WAIT_YESTERDAY = "Yesterday's prices are not stored yet: it checks again every minute."
+WAIT_RETRY_S = 60.0              # a day waiting for yesterday's prices asks again this often (its own wall clock)
 NO_HOURLY = "The earlier hours' prices could not be read."
 TOO_LATE = "Started too late to follow today."
 EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
@@ -123,6 +125,12 @@ class _Stop(Exception):
     def __init__(self, why: str, detail: str | None = None):
         super().__init__(why)
         self.detail = detail
+
+
+class _Wait(_Stop):
+    """Not yet: yesterday's prices are not stored, so the session event cannot run. The day waits and asks again every
+    WAIT_RETRY_S (the owner, 2026-10-20: a recorder that was late must not cost the whole day); still missing when its
+    session ends, it is stopped for today with the plain NO_YESTERDAY."""
 
 
 _TYPED = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*: ?")          # the child's event error: "<Type>: <message>"
@@ -564,6 +572,7 @@ class StrategyDay:
         self._saved_at = float("-inf")
         self._updated = _utc()
         self._evening = False                        # a window that opens the evening before the date (set by _start)
+        self._wait_until: float | None = None        # waiting for yesterday's prices: the wall time to ask again
         self._desk_init(desk, send, tell, resume, now_ns, flat_et)    # (desk mode's own fields; nothing read or sent)
         try:
             self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns,
@@ -686,7 +695,11 @@ class StrategyDay:
 
     def _finish(self) -> None:
         if self.state in ACTIVE:
+            if self._wait_until is not None:
+                self._wait_until = float("-inf")     # asked one last time
             self._run(self._t1 - 1)
+        if self.state in ACTIVE and self._wait_until is not None:
+            self._stopped(NO_YESTERDAY, self.detail)     # its session ended before yesterday's prices were stored
         if self.state in ACTIVE:
             self.fills.finish(self._t1)
             self.state = "done"
@@ -698,14 +711,25 @@ class StrategyDay:
         """Every event at or before `horizon` (and before the window's end), in order; then the prints held."""
         if self.state not in ACTIVE:
             return
+        if self._wait_until is not None and self._wall() < self._wait_until:
+            return                                   # waiting for yesterday's prices: not asked again yet
         try:
             self._find_bars(horizon)
             while True:
                 ev = min(self._events[0] if self._events else (horizon + 1,), self._bars[0] if self._bars else (horizon + 1,))
                 if ev[0] > horizon or ev[0] >= self._t1:
                     break
-                (self._bars if ev[1] == 1 else self._events).popleft()
-                self._event(*ev)
+                queue_ = self._bars if ev[1] == 1 else self._events
+                queue_.popleft()
+                try:
+                    self._event(*ev)
+                except _Wait as w:                   # raised before the event did anything: it goes back, first in line
+                    queue_.appendleft(ev)
+                    self._wait_until = self._wall() + WAIT_RETRY_S
+                    self.why, self.detail = WAIT_YESTERDAY, w.detail
+                    return
+                if self._wait_until is not None:     # yesterday's prices came: the day started late, from the prints held
+                    self._wait_until, self.why, self.detail, self.rebuilt = None, None, None, True
             self.fills.advance_all()
         except _Stop as e:
             self._stopped(str(e), e.detail)
@@ -739,7 +763,7 @@ class StrategyDay:
             raise _Stop(NO_DAILY, f"{type(e).__name__}: {e}") from None
         newest = bars[-1].get("date") if bars and isinstance(bars[-1], dict) else None
         if not isinstance(newest, str) or newest < _before(self.date).isoformat():
-            raise _Stop(NO_YESTERDAY, f"the newest daily bar is {newest if isinstance(newest, str) else 'none'}")
+            raise _Wait(NO_YESTERDAY, f"the newest daily bar is {newest if isinstance(newest, str) else 'none'}")
         return bars
 
     def _session_hourly(self) -> list | None:
@@ -754,7 +778,7 @@ class StrategyDay:
         except OSError as e:
             raise _Stop(NO_HOURLY, f"{type(e).__name__}: {e}") from None
         if hours and _session_of(hours[-1][0]) < _before(self.date):
-            raise _Stop(NO_YESTERDAY, f"the newest 1-hour close is of {_session_of(hours[-1][0]).isoformat()}")
+            raise _Wait(NO_YESTERDAY, f"the newest 1-hour close is of {_session_of(hours[-1][0]).isoformat()}")
         return hours
 
     def _event(self, t: int, _prio, _n, kind: str, arg) -> None:

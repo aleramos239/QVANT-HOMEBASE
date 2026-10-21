@@ -344,16 +344,41 @@ def bars(*dates):
     ([], "the newest daily bar is none"),
     ([{"h": 1.0}], "the newest daily bar is none"),
 ])
-def test_a_day_whose_yesterday_is_not_stored_yet_is_stopped_when_the_strategy_needs_daily_bars(days, held, detail):
-    """C2, fail closed: the newest daily bar is older than the session day before (D is a Tuesday)."""
-    day = days(DAILY, daily=lambda root, d: held)
-    assert day.state == "waiting"
+def test_a_day_whose_yesterday_is_not_stored_yet_waits_and_asks_again_every_minute(days, held, detail):
+    """C2, fail closed -- and since the owner's word of 2026-10-20, not for the whole day: the newest daily bar is older
+    than the session day before (D is a Tuesday), so the session event does not run. The day waits, asks again once a
+    minute (its own wall clock), and starts -- late, its session event at its own time, from the prices held -- once
+    yesterday is stored."""
+    wall, held_now, asked = [0.0], [held], []
+
+    def daily(root, d):
+        asked.append(wall[0])
+        return held_now[0]
+    day = days(DAILY, daily=daily, wall=lambda: wall[0])
     day.on_ticks(ticks("09:25:00", [21000.0] * 3))
     s = day.summary()
-    assert (s["state"], s["why"]) == ("stopped", "Yesterday's prices are not stored yet.") and day.detail == detail
-    assert s["orders"] == [] and s["trades"] == [] and day.child_alive() is False
-    assert s["match"] == {"ok": None, "text": "Not checked: it was stopped."}
+    assert (s["state"], s["why"]) == ("waiting", host.WAIT_YESTERDAY) and day.detail == detail
+    assert s["orders"] == [] and s["trades"] == [] and day.child_alive() is True
     assert day.fills.result.plots == {}                                      # the strategy never saw the old bars
+    wall[0] = 59.0
+    day.on_ticks(ticks("09:25:03", [21000.0]))
+    day.on_clock(ms_of("09:26:00"))
+    assert len(asked) == 1                                                   # not again within the minute
+    wall[0], held_now[0] = 60.5, bars("2024-03-01", "2024-03-04")
+    day.on_clock(ms_of("09:26:01"))
+    s = day.summary()
+    assert len(asked) == 2 and (s["state"], s["why"]) == ("running", None) and day.detail is None and s["rebuilt"] is True
+    assert day.fills.result.plots == {"days": [[ms_of("09:25"), 2.0]], "last close": [[ms_of("09:25"), 2.0]]}
+
+
+def test_a_day_still_without_yesterday_when_its_session_ends_is_stopped_and_says_why(days):
+    day = days(DAILY, daily=lambda root, d: bars("2024-03-01"), wall=lambda: 0.0)
+    day.on_ticks(ticks("09:25:00", [21000.0]))
+    assert (day.state, day.summary()["why"]) == ("waiting", host.WAIT_YESTERDAY)
+    day.end()                                                                # the session is over: asked one last time
+    s = day.summary()
+    assert (s["state"], s["why"]) == ("stopped", "Yesterday's prices are not stored yet.") and day.child_alive() is False
+    assert s["match"] == {"ok": None, "text": "Not checked: it was stopped."} and day.fills.result.plots == {}
 
 
 def test_yesterdays_bar_is_enough_and_a_monday_asks_for_fridays(days):
@@ -362,7 +387,7 @@ def test_yesterdays_bar_is_enough_and_a_monday_asks_for_fridays(days):
     assert ok.state == "running" and ok.summary()["why"] is None
     made = []
     try:
-        for held, state in ((bars("2024-03-01"), "running"), (bars("2024-02-29"), "stopped")):
+        for held, state in ((bars("2024-03-01"), "running"), (bars("2024-02-29"), "waiting")):
             made.append(StrategyDay(rec(DAILY), MON, spawn=plain, daily=held, deadline_s=0.3))
             made[-1].on_ticks([(at("09:25:00", d=MON), 21000.0, 1)])
             assert made[-1].state == state
@@ -411,13 +436,13 @@ def test_the_hours_reach_the_session_event_only_when_the_strategy_asks_and_are_r
     assert other.state == "running" and len(asked) == 1
 
 
-def test_a_roll_day_runs_with_no_hours_and_stale_or_unreadable_hours_stop_the_day(days):
+def test_a_roll_day_runs_with_no_hours_stale_hours_wait_and_unreadable_ones_stop_the_day(days):
     roll = days(HOURLY, hourly=lambda root, d, n: [])
     roll.on_ticks(ticks("09:25:00", [21000.0]))
     assert roll.state == "running" and roll.fills.result.plots == {"hours": [[ms_of("09:25"), 0.0]]}
     stale = days(HOURLY, hourly=lambda root, d, n: hours_of("2024-02-29", "2024-03-01"))     # Monday's not stored yet
     stale.on_ticks(ticks("09:25:00", [21000.0] * 3))
-    assert (stale.state, stale.summary()["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
+    assert (stale.state, stale.summary()["why"]) == ("waiting", host.WAIT_YESTERDAY)       # asked again each minute
     assert stale.detail == "the newest 1-hour close is of 2024-03-01" and stale.fills.result.plots == {}
 
     def broken(root, d, n):
@@ -1277,8 +1302,11 @@ def test_a_day_hosted_the_evening_before_reads_the_daily_bars_the_next_morning(d
     assert asked == [("NQ", D)] and k.today()["state"] == "running" and k.today()["why"] is None
 
 
-def test_a_day_hosted_the_evening_before_is_stopped_in_the_morning_when_yesterday_is_still_not_stored(desk):
-    k = desk(daily=lambda root, d: bars("2024-03-01"))
+def test_a_day_hosted_the_evening_before_waits_in_the_morning_for_yesterday_and_runs_once_it_is_stored(desk):
+    """The owner, 2026-10-20: three strategies lost a whole day because the recorder had not stored yesterday yet. Now the
+    day waits (no stop, no journal line), asks again every minute, and runs once yesterday is there."""
+    held = [bars("2024-03-01")]
+    k = desk(daily=lambda root, d: held[0])
     k.promote(DAILY)
     k.clock("18:00:10", MON)
     k.open()
@@ -1286,10 +1314,13 @@ def test_a_day_hosted_the_evening_before_is_stopped_in_the_morning_when_yesterda
     assert k.file()["state"] == "waiting"
     k.rows("09:24:58", [21000.0] * 3)
     s = k.today()
-    assert (s["state"], s["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
-    assert [(x["kind"], x["why"], x["detail"]) for x in k.journal()] == [
-        ("stop", "Yesterday's prices are not stored yet.", "the newest daily bar is 2024-03-01")]
-    assert not [p for p in k.spawned if p.poll() is None]
+    assert (s["state"], s["why"]) == ("waiting", host.WAIT_YESTERDAY) and k.journal() == []
+    held[0] = bars("2024-03-01", "2024-03-04")                              # the recorder caught up
+    k.wall[0] += host.WAIT_RETRY_S
+    k.rows("09:26:00", [21000.0])
+    k.clock("09:26:01")
+    s = k.today()
+    assert (s["state"], s["why"], s.get("rebuilt")) == ("running", None, True) and k.journal() == []
 
 
 # ---- M4 / M5 at the runner
