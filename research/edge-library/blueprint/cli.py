@@ -100,7 +100,7 @@ and --json out.
   bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
-  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
+  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` (and `mode live`) refuse on the old split; `start` = the runner, detached,
   bp.py pipe mode [off | live]                                               that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
@@ -258,7 +258,7 @@ def _parser() -> _Parser:
     ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,curve,executions,mode}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
-        ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
+        ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself; refused while the pipeline runs on the old split"),
         ("pause", "the runner stops after the stage in hand"), ("resume", "the runner carries on"), ("approve", "the owner's yes: the idea goes in the book"),
         ("refuse", "the owner's no, with his reason"), ("book", "one row a book card"),
         ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
@@ -267,7 +267,7 @@ def _parser() -> _Parser:
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("refine", "a near miss's next version: no --move lists what it missed and the moves; --move KIND=VALUE --why=TEXT files ONE child card (regime, indicator, days, window, sides)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
-        ("mode", "the switch: the pipeline works, or it does not; `mode off | live` chooses (live also starts the runner), no word shows"),
+        ("mode", "the switch: the pipeline works, or it does not; `mode off | live` chooses (live also starts the runner, refused on the old split), no word shows"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
@@ -461,6 +461,8 @@ def _pipe(a) -> dict:
     if a.sub == "mode":                             # the switch (pipe_switch): the pipeline works, or it does not
         from . import pipe_switch as SW
         if a.which:
+            if a.which in SW.PR.PROFILES:           # refuse BEFORE the switch is written: `mode off` stays allowed
+                pipe_runner._no_old_split(False)
             SW.choose(a.which, a.root)
             if a.which in SW.PR.PROFILES:           # on = working: the idea runner is started (it says `already` when one is)
                 pipe_runner.start(a.root)
