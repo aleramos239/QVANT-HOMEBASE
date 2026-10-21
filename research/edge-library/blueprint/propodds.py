@@ -661,7 +661,8 @@ def portfolio(names, account, root=None, paths=None, seed=None) -> dict:
         t = table(rest if len(rest) > 1 else rest[0], r, cal, paths, seed)
         w = read(k, t, "5.3")["eval"]["p"]
         members.append({"name": k, "market": H[k]["market"], "session": H[k]["session"], "bar": H[k]["bar"], "variant": locks[k]["default"],
-                        "survivor": locks[k]["default"] in H[k]["survivors"], "lock": H[k]["lock"], "trades": int(len(cells_[k]["net"])),
+                        "survivor": L._profitable(H[k]["variants"][0]["test"]) if H[k].get("wf") else locks[k]["default"] in H[k]["survivors"],
+                        "wf": bool(H[k].get("wf")), "lock": H[k]["lock"], "trades": int(len(cells_[k]["net"])),
                         "without": {"eval": w}, "helps": bool(ch["eval"]["p"] > w)})
     dbl = _doubles(locks)
     n, label = int(paths or PS.N_PATHS), r.get("name") if r.get("confirmed") is not False else f"{r.get('name')} · unconfirmed rules"
@@ -677,7 +678,10 @@ def portfolio(names, account, root=None, paths=None, seed=None) -> dict:
                f"portfolio of {len(names)} at {ch['eval']['size']} micros each (eval) and {ch['payout']['size']} micros each (funded): eval pass within "
                f"{need['eval']['days']} trading days {said['eval']}; maximum payout within {need['payout']['days']} trading days {said['payout']}"),
         L._row("5.6", not dbl, len(dbl), R.need("5.6")["doubles"],
-               f"every member passed its out-of-sample test on its own ({', '.join(names)}); " + ("no two are the same idea on the same market" if not dbl else
+               (f"every member passed its out-of-sample test on its own ({', '.join(names)}); " if not any(m["wf"] for m in members) else
+                "every member is on file on its own (" + "; ".join(f"{m['name']}: its picked box's test months are on file: net {usd(H[m['name']]['variants'][0]['test'])}"
+                                                                  if m["wf"] else f"{m['name']}: passed its out-of-sample test" for m in members) + "); ")
+               + ("no two are the same idea on the same market" if not dbl else
                "THE SAME IDEA ON THE SAME MARKET: " + "; ".join(f"{a} and {b} ({why})" for a, b, why in dbl))),
         L._row("5.7", not drag, len(drag), None,
                "every member raises the portfolio's eval odds: " + "; ".join(f"without {m['name']} {_pc(m['without']['eval'])}" for m in members)

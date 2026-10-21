@@ -225,8 +225,9 @@ SPECS = [
           "by 15:58 ET, a trade count the rule does not imply, winners and losers that do not pay about the target "
           "and the stop, and a trade list that no longer reproduces after a code change -- and names 10 trades to "
           "look at on the chart (the first 5 and 5 at random). Give at most one of store, trades_file, run_id. Call "
-          "it again with looked=true once those 10 were looked at. Refused for any day on or after 2025-07-01. A 3:1 idea "
-          "(blueprint_wf): no store = its in-sample store; it never reads a test month.",
+          "it again with looked=true once those 10 were looked at. An old idea: refused for any day on or after 2025-07-01. "
+          "A 3:1 idea (blueprint_wf): only its own 3:1 in-sample store (no store = that one); a test month, the old build "
+          "days and a trades file are refused.",
           {"name": _NAME,
            "store": {"type": "string", "description": "A store key of the research engine."},
            "trades_file": {"type": "string", "description": "The path of a trade list file."},

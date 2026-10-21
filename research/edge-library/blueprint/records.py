@@ -656,6 +656,25 @@ def _checked(name, root) -> bool:
     return (_json(api.ideastore().idea_dir(name, root) / "check.json") or {}).get("passed") is True
 
 
+def _wf_step(name: str, d, root) -> str:
+    """THE NEXT STEP of a 3:1 idea (hmwf), from what is on file: the in-sample table, the owner's pick, the test months, the sim."""
+    if any((d / "sim").glob("*.json")):
+        return api.ideastore().read_idea(name, root).get("next") or ""    # the later phases say their own
+    from . import hmwf as H
+    if not api.wf_on_file(name):
+        return f"The card is on file: the 3:1 in-sample table is next, only on the owner's word (bp.py wf run {name} --owner-said=\"his words\"; blueprint_wf)"
+    try:
+        w = H.record(name)
+    except J.Refuse as e:
+        return str(e)
+    box, oos = (w["lock"] or {}).get("box"), w["oos"]
+    return (f"The owner picks a box from the in-sample table: bp.py wf pick {name} <n> (blueprint_wf_pick)" if box is None else
+            f"Box {box} is picked: its test months run only on the owner's word (bp.py wf oos {name} {box} --owner-said=\"his words\"; blueprint_wf_oos)"
+            if oos is None else
+            f"The test months of box {box} are used (the read stopped): there is no record to read and it is not run again" if oos.get("state") else
+            f"The test months of box {box} are on file: the prop simulator is next (bp.py sim {name} --account=ID --attempts=N --fee-budget=USD; blueprint_sim)")
+
+
 def _step(name: str, status: str, last, root, checked=None) -> str:
     """THE NEXT STEP of an idea, in one sentence, from what is on file."""
     most, d = R.need("2.9"), api.ideastore().idea_dir(name, root)
@@ -677,6 +696,10 @@ def _step(name: str, status: str, last, root, checked=None) -> str:
                 f"bp.py status {name} shows a job that is still running" if read else
                 f"{name} is FROZEN: the out-of-sample test is next and it is ONE read of the test days, never repeated -- bp.py test {name} --confirm, "
                 "only when the owner has said to")
+    if status == "idea" and last is None:
+        from . import hmwf as H
+        if H.route(name, root):
+            return _wf_step(name, d, root)
     if last is None:
         return (f"The card is on file and the build is next: bp.py build {name} --reason=\"why round 1 is run\" (round 1 of at most {most}; with --days it is a "
                 "smoke run that gives the code check its store)")
@@ -798,15 +821,16 @@ def build(name, reason, root=None, **kw) -> dict:
 
 # ================================================================ the status
 
-def _wf(name: str):
-    """A 3:1 idea's pick and test-month record (hmwf.record), or None; what cannot be read is said, never raised."""
+def _wf(name: str, root=None):
+    """A 3:1 idea's pick and test-month record (hmwf.record), or None; what cannot be read is said, never raised. `read` = the sim and
+    the eval card read this record (hmwf.route)."""
     if not api.wf_on_file(name):
         return None
     from . import hmwf as H
     try:
-        return H.record(name)
+        return {**H.record(name), "read": H.route(name, root)}
     except J.Refuse as e:
-        return {"error": str(e)}
+        return {"error": str(e), "read": H.route(name, root)}
 
 
 def _wf_line(wf: dict) -> str:
@@ -816,7 +840,8 @@ def _wf_line(wf: dict) -> str:
     if lock is None:
         return "3:1 · in-sample table on file · NOT PICKED: the owner picks a box"
     said = ("not run" if oos is None else oos["state"] if oos.get("state") else
-            f"{oos['record']['trades']} trades, net {oos['record']['net']:,.0f}, {len(oos['blocks'])} months (the sim and the eval card read these)")
+            f"{oos['record']['trades']} trades, net {oos['record']['net']:,.0f}, {len(oos['blocks'])} months"
+            + (" (the sim and the eval card read these)" if wf.get("read") else " (the sim and the eval card read the old test record)"))
     return f"3:1 · PICKED box {lock['box']} ({lock['at']}, {lock['who']}) · test months: {said}"
 
 
@@ -860,7 +885,7 @@ def status(name=None, root=None) -> dict:
     home = (lock or {}).get("home") or {}
     rng = ((lock or {}).get("test_range") or {}).get(home.get("market")) or {}
     early = _json(d / api.EARLY_LOOK / "test.json")     # an early look at the test days (oos.py): shown, and never part of the status
-    wf = _wf(name)
+    wf = _wf(name, root)
     text = [f"{name} · {head(i)}" + (f" · Lab group {i['group']}" if i["group"] else "")
             + (f" · {len(i['runs'])} tester run{'s' * (len(i['runs']) != 1)}" if i["runs"] else "") + (f" · job {job} is running" if job else ""),
             *(["CARD", *["  " + ln for ln in card_md.splitlines() if ln.strip()]] if card_md else ["NO CARD on file"]),

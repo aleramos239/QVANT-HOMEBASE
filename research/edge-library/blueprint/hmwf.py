@@ -382,9 +382,26 @@ def route(name: str, root=None) -> bool:
     return d.is_dir() and not (d / "test.json").is_file() and (api.wf_on_file(name) or not IS.old_route(created, root))
 
 
+def picked(name: str) -> Path:
+    """The idea's 3:1 store that the sim, the portfolio and the eval card read: its only store -- or, when it has several, the one with
+    a pick (lock.json). Refused in words: no store, or several stores and not exactly one of them picked."""
+    try:
+        return store(name)
+    except J.Refuse as e:
+        hits = sorted(p.parent.parent for p in RUNS.glob(f"{name}-*-tf*/{IS}/run.json"))
+        locked = [h for h in hits if (h / LOCK).exists()]
+        if len(hits) < 2:
+            raise J.Refuse(f"{name}: {FIRST} -- {e}") from None
+        if len(locked) == 1:
+            return locked[0]
+        raise J.Refuse(f"{name}: {len(hits)} 3:1 stores ({', '.join(h.name for h in hits)}) and "
+                       + (f"no box is picked in any of them: {FIRST}" if not locked else
+                          f"{len(locked)} of them have a picked box ({', '.join(h.name for h in locked)}): one idea name reads one pick")) from None
+
+
 def record(name: str) -> dict:
     """The pick and the test-month record on file, without the in-sample table (read only): {"store", "lock", "oos"}."""
-    home = store(name)
+    home = picked(name)
     return {"store": str(home), "lock": _lock(home), "oos": _oos(home, [])}
 
 
@@ -393,10 +410,7 @@ def handed(name: str) -> dict:
     test months (<store>/oos/, sealed by guard_wf), never the in-sample store, never another box. `same` = a lock-like {home, default,
     spec} for the portfolio's line 5.6 (its sides are read on the in-sample store). Refused, in plain words: no table, no pick, the test
     months not run, a read that stopped."""
-    try:
-        home = store(name)
-    except J.Refuse as e:
-        raise J.Refuse(f"{name}: {FIRST} -- {e}") from None
+    home = picked(name)
     lock = _lock(home)
     if lock is None:
         raise J.Refuse(f"{name}: no box is picked: {FIRST}")

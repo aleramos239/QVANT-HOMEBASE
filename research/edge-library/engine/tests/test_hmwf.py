@@ -559,3 +559,82 @@ def test_old_idea_downstream_unchanged(down):
     (IS.idea_dir("hwt_new", root) / "test.json").write_text(json.dumps({"lines": []}))      # the one read of the test days on file: old
     assert not H.route("hwt_new", root)
     assert not H.route("nobody", root) and not H.route("Not A Name", root)
+
+
+# ---------------------------------------------------------------- Task 13, review round 1
+
+def _net(calls, net):
+    """The fake engine, with every trade of a test-month run paying `net` (a winning or a losing picked box, on purpose)."""
+    base = _fake_run_many(calls)
+
+    def run_many(specs, *a, **kw):
+        out = base(specs, *a, **kw)
+        if kw.get("allow_holdout") == S.ALLOW_WF_OOS:
+            for o in out:
+                for t in o["trades"]:
+                    t["net"] = net
+        return out
+    return run_many
+
+
+def test_portfolio_marks_a_losing_picked_box(down, monkeypatch):
+    from blueprint import propodds as PO
+    for name, net in (("hwt_win", 120.0), ("hwt_lose", -80.0)):
+        monkeypatch.setattr(S, "run_many", _net(down["calls"], net))
+        _ready(name, down)
+    r = PO.portfolio(["hwt_win", "hwt_lose"], PRO, down["root"], paths=200)
+    m = {x["name"]: x for x in r["members"]}
+    assert m["hwt_win"]["survivor"] is True and m["hwt_lose"]["survivor"] is False         # no gate: the losing box is read, and said
+    assert "hwt_lose" in r["text"] and "its default does NOT make money on the test and with worse fills" in r["text"]
+    l56 = next(x for x in r["lines"] if x["line"] == "5.6")["text"]
+    assert "passed its out-of-sample test" not in l56
+    assert "hwt_win: its picked box's test months are on file: net $2,520" in l56 and "hwt_lose: its picked box's test months are on file: net -$1,680" in l56
+
+
+def test_code_check_of_a_wf_idea_takes_wf_stores_only(down):
+    root = down["root"]
+    _idea("hwt_sweep", root)
+    H.run_is(SPEC, workers=1, ledger=down["ledger"])
+    old = RUN.RUNS / "hwt_sweep-NQ-tf15"
+    old.mkdir(parents=True)
+    (old / "run.json").write_text(json.dumps({"period": "bp_build", "root": "NQ"}))
+    trades = down["tmp"] / "trades.json"
+    trades.write_text("[]")
+    for kw in ({"store": "hwt_sweep-NQ-tf15"}, {"store": str(old)}, {"trades": str(trades)}, {"same_as": str(old)}):
+        with pytest.raises(J.Refuse, match="3:1 idea: its code check reads its own 3:1 in-sample store only"):
+            api.code_check("hwt_sweep", root=root, **kw)
+    r = api.code_check("hwt_sweep", root=root)                                # no source: its in-sample store
+    assert r["ok"] and r["source"]["where"] == str(H.RUNS / "hwt_sweep-NQ-tf15" / "is")
+
+
+def test_downstream_takes_the_picked_store(down):
+    from blueprint import propodds as PO
+    root = down["root"]
+    _idea("hwt_sweep", root)
+    H.run_is(SPEC, workers=1, ledger=down["ledger"])
+    H.run_is({**SPEC, "bar_sizes": ["5"]}, workers=1, ledger=down["ledger"])
+    with pytest.raises(J.Refuse, match="2 3:1 stores .* no box is picked in any of them"):
+        PO.handed("hwt_sweep", root)
+    H.pick("hwt_sweep", BOX, store=H.RUNS / "hwt_sweep-NQ-tf5")
+    H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=down["ledger"], store=H.RUNS / "hwt_sweep-NQ-tf5")
+    h = PO.handed("hwt_sweep", root)                                          # the store with the pick
+    assert h["bar"] == "5" and h["where"] == "hwt_sweep-NQ-tf5/oos"
+    H.pick("hwt_sweep", BOX, store=H.RUNS / "hwt_sweep-NQ-tf15")
+    with pytest.raises(J.Refuse, match="2 of them have a picked box"):
+        PO.handed("hwt_sweep", root)
+
+
+def test_status_next_step_and_wording_of_a_wf_idea(down):
+    from blueprint import records as REC
+    root, IS = down["root"], api.ideastore()
+    _idea("hwt_sweep", root)
+    assert "bp.py wf run hwt_sweep" in REC.status("hwt_sweep", root)["next"]
+    H.run_is(SPEC, workers=1, ledger=down["ledger"])
+    assert "bp.py wf pick hwt_sweep" in REC.status("hwt_sweep", root)["next"]
+    H.pick("hwt_sweep", BOX)
+    assert f"bp.py wf oos hwt_sweep {BOX}" in REC.status("hwt_sweep", root)["next"]
+    H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=down["ledger"])
+    s = REC.status("hwt_sweep", root)
+    assert "bp.py sim hwt_sweep" in s["next"] and "bp.py build" not in s["next"] and "(the sim and the eval card read these)" in s["text"]
+    (IS.idea_dir("hwt_sweep", root) / "test.json").write_text(json.dumps({"lines": []}))      # an old read on file: the old route reads that one
+    assert "(the sim and the eval card read the old test record)" in REC.status("hwt_sweep", root)["text"]

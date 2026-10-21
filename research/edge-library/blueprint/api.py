@@ -205,7 +205,8 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     Beyond the agreed keys: source, asked, look (the 10 trades), failed, not_applicable, passed. passed = lines 1.1-1.5
     all TRUE and 1.6 not failed (1.6 waits for a change to the code; a line that cannot be read is not a pass).
     Refused: any day on or after 2025-07-01 (checks.seal, runner.guard); no source; a tester run id (not built yet).
-    A 3:1 idea: no source = its in-sample store (runs_wf/<store>/is); a 3:1 store is read on its in-sample months only (checks.seal)."""
+    A 3:1 idea: no source = its in-sample store (runs_wf/<store>/is); a trades file or an old store is refused (_wf_sources); a 3:1 store
+    is read on its in-sample months only (checks.seal)."""
     given = {k: v for k, v in (("store", store), ("trades", trades), ("run_id", run_id)) if v is not None}
     if len(given) > 1:
         raise J.Refuse("give one of --store, --trades, --run-id")
@@ -225,6 +226,7 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
     if asked.get("max_per_day") is not None and int(asked["max_per_day"]) < 1:
         raise J.Refuse("--max-per-day: a whole number from 1")
     stated = {k: asked.get(k) for k in ("market", "sessions", "window", "max_per_day")}
+    _wf_sources(name, root, out, asked)
     t = CH.load(asked.get("store"), asked.get("trades"), out, **stated)
     e = None if asked.get("same_as") is None else CH.load(*((asked["same_as"], None) if _is_store(asked["same_as"], out) else (None, asked["same_as"])),
                                                          out, market=stated["market"] or t["root"])
@@ -253,6 +255,23 @@ def code_check(name: str, store=None, trades=None, run_id=None, same_as=None, lo
         r["saved"] = [str(file)]
         ideastore().write_check(name, r, root)
     return r
+
+
+def _wf_sources(name, root, out, asked) -> None:
+    """A 3:1 idea (hmwf.route) is code-checked on 3:1 stores only (spec 4.7: nothing on the old build days): a trades file or an old
+    store is refused before it is read; checks.load then seals the store to its in-sample months."""
+    from . import hmwf as H
+    if not H.route(name, root):
+        return
+    for k in ("store", "trades", "same_as"):
+        v = asked.get(k)
+        if v is None:
+            continue
+        d = CH.find(v, out)
+        meta = _json(d / "run.json") if k != "trades" and d.is_dir() else None
+        if (meta or {}).get("period") not in S.WF_SWITCHES:
+            raise J.Refuse(f"{name} is a 3:1 idea: its code check reads its own 3:1 in-sample store only, never the old build days or a trades file "
+                           f"({v}): give no source (its in-sample store) or --store=<its runs_wf store>/is")
 
 
 def _idea_file(name, root, rel: str):
