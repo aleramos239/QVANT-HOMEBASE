@@ -152,9 +152,9 @@ def _beats(x: dict, cell: dict, pool, sess, own: bool = False) -> tuple:
     """(the share of the pool's seeds -- the ATR cell of the box's multiplier and target, the box's sessions -- whose average trade is
     below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier. own = the pool is the
     box's own control (a taught sheet's: s<seed>_<box id>), held at the box's own cell."""
-    ex = {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}
     if pool is None or not len(x["net"]) or not own and cell["exit"]["stop_mode"] not in ("atr", "own"):
         return None, None
+    ex = None if own else {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}    # (a structure cell has no stop_val)
     same = (lambda c: c["id"].split("_", 1)[1] == cell["id"]) if own else (lambda c: c["exit"] == ex)
     mine, avg = float(np.mean(x["net"])), []
     for i, c in enumerate(pool["meta"]["cells"]):

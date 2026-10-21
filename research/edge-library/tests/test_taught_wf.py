@@ -190,3 +190,26 @@ def test_an_old_walk_forward_on_file_is_shown_never_run(wf):
     with pytest.raises(J.Refuse, match="already seen"):
         W.run(NAME, wf["root"], workers=1, owner_said="run it")
     assert not wf["calls"]
+
+
+def test_a_structure_stop_control_takes_its_stop_from_the_in_sample_trades_only(wf):
+    sheet = json.loads((HERE / "taught" / "casper_open_fvg_daytrade.json").read_text())
+    plan, bad = TA._plan(sheet)
+    assert plan and plan["struct"] and not bad, bad
+    name = plan["name"]
+    base = wf["root"] / name
+    base.mkdir()
+    (base / "result.json").write_text(json.dumps({"plan": plan, "utc": "2026-10-19T10:00:00+00:00"}))
+    # taught run's build-day store: in-sample trades with a 10-point stop, and test-month (Jan 2022) trades with a 500-point one
+    grid = TA._unit_part(plan, "5")["grid"]
+    days = IS_DAYS + ["2022-01-04", "2022-01-05", "2022-01-06", "2022-01-07", "2022-01-10"]
+    res = [{"trades": [{"date": d, "entry_ms": S.et_ns(dt.date.fromisoformat(d), "10:00") // 1_000_000, "exit_ms": 0, "net": 10.0,
+                        "mae_usd": 10.0, "side": "long", "exit_reason": "tp", "entry_price": 1000.0, "sl": 990.0 if d < "2022" else 500.0}
+                       for d in days], "meta": {"inputs": {}, "root": "NQ", "engine": "fake", "range": {"start": "2021-09-22", "end": "2025-06-30"}},
+            "sessions": len(days), "used": len(days), "skipped": [], "elapsed_s": 0.0} for _ in grid]
+    LB.write_unit(TA._unit_key(name, "NQ", "5"), {"idea": name, "period": RUN.PERIOD}, grid, res, base / "runs")
+    W.run(name, wf["root"], workers=1, owner_said="run it")
+    ctl = LB.load_unit("is-ctl", W.home(name, wf["root"]))["meta"]
+    assert ctl["period"] == S.ALLOW_WF_IS and ctl["days"] == IS_DAYS
+    assert {c["inputs"]["stop_mode"] for c in ctl["cells"]} == {"pts"}
+    assert {c["inputs"]["stop_val"] for c in ctl["cells"]} == {10.0}          # the fake engine's in-sample stop (100 - 90), never 500

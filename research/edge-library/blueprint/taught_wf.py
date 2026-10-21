@@ -178,11 +178,23 @@ def show(name: str, root=None, command: str = "taught wf-show") -> dict:
     return r
 
 
-def _parts(base: Path, plan: dict, h: Path, days: list) -> list:
-    """The in-sample stores: every cell of the sheet; the same cells with worse fills, one store a session; the sheet's own random
-    entries (its control: the same exit cells and passes; a structure stop takes the median stop size of the build-day store)."""
+def _ctl(plan: dict, h: Path, span: str, stop=None) -> dict:
+    """The sheet's own random entries on the in-sample months (its control: the same exit cells and passes)."""
+    c = TA._control_part(plan, plan["bars"][0], "both", stop)
+    return {**c, "key": f"{h.name}/{H.IS}-ctl", "stage": H.POOL, "meta": {**c["meta"], "root": plan["market"], "note": c["meta"]["note"] + f", on {span}"}}
+
+
+def _is_stop(h: Path, plan: dict):
+    """A structure stop's size for the control: the median stop of the taught trades of the IN-SAMPLE store (never a test month's)."""
+    st = LB.load_unit(H.IS, h)
+    st["_idx"] = {c["id"]: i for i, c in enumerate(st["meta"]["cells"])}
+    return TA._median_stop(st, plan)
+
+
+def _parts(plan: dict, h: Path, span: str) -> list:
+    """The in-sample stores: every cell of the sheet; the same cells with worse fills, one store a session; the control (here only for a
+    stop in points: a structure stop's control waits for the cells' own in-sample trades, run())."""
     name, market, tf = plan["name"], plan["market"], plan["bars"][0]
-    span = f"the 3:1 in-sample months ({days[0]} .. {days[-1]})"
     u = TA._unit_part(plan, tf)
     out = [{**u, "key": f"{h.name}/{H.IS}", "stage": H.STAGE, "meta": {**u["meta"], "root": market, "plan": plan, "wf": H.IS,
                                                                        "note": f"taught rule {name}: every cell of the sheet on {span}"}}]
@@ -192,13 +204,7 @@ def _parts(base: Path, plan: dict, h: Path, days: list) -> list:
                 "note": f"taught rule {name}: session {ss} with worse fills ({RUN.worse_words(RUN.worse_kw(two))}) on {span}"}
         out.append({**RUN._part(f"{h.name}/{H.IS}-{ss}-worse", "worse", market, tf, u["grid"], [ss], None, meta, plan["family"],
                                 {**RUN._kw(plan["family"]), **RUN.worse_kw(two)}), "stage": H.WORSE})
-    stop = None
-    if plan["struct"]:
-        stop = TA._median_stop(T._open(base / "runs", TA._unit_key(name, market, tf))[0], plan)     # a size, as the build's control took it
-    if stop or not plan["struct"]:
-        c = TA._control_part(plan, tf, "both", stop)
-        out.append({**c, "key": f"{h.name}/{H.IS}-ctl", "stage": H.POOL, "meta": {**c["meta"], "root": market, "note": c["meta"]["note"] + f", on {span}"}})
-    return out
+    return out if plan["struct"] else out + [_ctl(plan, h, span)]
 
 
 def run(name: str, root=None, workers=None, owner_said=None, *, progress=None) -> dict:
@@ -213,12 +219,18 @@ def run(name: str, root=None, workers=None, owner_said=None, *, progress=None) -
     if not days:
         raise J.Refuse(f"{plan['market']}: no in-sample month of the 3:1 blocks yet")
     h = home(name, root)
-    todo = _parts(base, plan, h, days)
+    span = f"the 3:1 in-sample months ({days[0]} .. {days[-1]})"
     h.mkdir(parents=True, exist_ok=True)            # (the runner's lock files sit beside each store)
-    rows = RUN._run(todo, workers, h.parent, base / "ledger.csv", days, None, progress, None, False, f"taught {name}, 3:1 in-sample", S.ALLOW_WF_IS)
-    bad = [r for r in rows if r.get("ok") is False]
-    if bad:
-        raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0].get('error')}): no store was written")
+
+    def go(todo):
+        rows = RUN._run(todo, workers, h.parent, base / "ledger.csv", days, None, progress, None, False, f"taught {name}, 3:1 in-sample", S.ALLOW_WF_IS)
+        bad = [r for r in rows if r.get("ok") is False]
+        if bad:
+            raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0].get('error')}): no store was written")
+    go(_parts(plan, h, span))
+    stop = _is_stop(h, plan) if plan["struct"] else None
+    if stop:                                        # no taught trade with a stop: no control (beats random stays empty)
+        go([_ctl(plan, h, span, stop)])
     return {**show(name, root, WF_), "owner_said": said}
 
 
