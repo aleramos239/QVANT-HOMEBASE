@@ -255,3 +255,20 @@ def test_old_tables_unchanged():
 - [ ] **Step 2: Full run** -- `cd research/edge-library && ../../.venv-research/bin/python -m pytest -q engine/tests tests` and `cd ../.. && .venv/bin/python -m pytest -q tests && node --test tests/js` → all PASS (the pre-existing failures, if any, listed before Task 1 and unchanged).
 - [ ] **Step 3: Grep check** -- `grep -rn "test days.*read once\|default range is the build days\|Build days stay the window" CLAUDE.md research/edge-library/BLUEPRINT.md homebase/claude_mcp ~/.claude/skills` → no hits outside "old route" notes.
 - [ ] **Step 4: Commit** `docs: hm40 + the fixed 3:1 block walk-forward are the house defaults (owner 2026-10-20)`.
+
+### Task 13: the code check, sim, portfolio and eval card read the 3:1 record (added during the build)
+
+Design 4.7: the code check runs on the in-sample months only; `blueprint_sim`, the eval card (and `blueprint_portfolio`) read the
+out-of-sample record of the locked (picked) box. Found missing at Task 12: the code check refuses any day on/after 2025-07-01 and
+sim / portfolio / eval card read the old test-days record, so a new idea cannot go past its pick + read.
+
+**Files:**
+- Modify: `research/edge-library/blueprint/checks.py` (the code check: for an hmwf / taught-wf store, check on its own `is_days` under `ALLOW_WF_IS`), the sim / portfolio / eval-card readers (`blueprint/evalcard.py`, `blueprint/pipe_prop.py` / `propodds.py` / `mc.py` callers, `api.py` sim / portfolio / eval_card entry points — find where they open the old test record), `homebase/claude_mcp/blueprint_tools.py` descriptions of `blueprint_code_check`, `blueprint_sim`, `blueprint_portfolio`, `blueprint_eval_card`, `blueprint_status`
+- Test: `research/edge-library/engine/tests/test_hmwf.py` (or a new `test_hmwf_downstream.py`), `tests/test_claude_mcp_blueprint.py`
+
+**Interfaces:**
+- Consumes: `hmwf.show(name, store=None)` → `{is_table, lock, oos}`; `oos` = the stitched OOS record + per-block rows of the ONE picked box, or `{"state": "read used, no record (it stopped)"}`, or None.
+- Produces: for a 3:1 idea, `bp.py sim|portfolio|eval-card <name>` read the picked box's trades in its OOS months (from `runs_wf/<store>/oos/`); refused in plain words before the read ("pick a box and run its test months first (blueprint_wf_pick, blueprint_wf_oos)") and after a stopped read; old ideas keep their old route unchanged.
+
+- [ ] **Step 1: Failing tests** -- `test_code_check_runs_on_is_days_for_a_wf_store` (no day ≥ an OOS month is opened); `test_sim_reads_the_picked_box_oos_record`; `test_eval_card_reads_the_picked_box_oos_record`; `test_portfolio_takes_wf_ideas`; `test_downstream_refuses_before_the_read`; `test_old_idea_downstream_unchanged`.
+- [ ] **Step 2–4.** **Step 5: Commit** `feat(blueprint): code check on the in-sample months; sim, portfolio and eval card read the picked box's test months`.
