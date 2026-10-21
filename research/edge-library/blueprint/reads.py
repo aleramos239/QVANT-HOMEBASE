@@ -7,6 +7,8 @@ were made before the blueprint into that log.
     seed(dry_run, root)   `bp.py seed-reads [--dry-run]`: one line a unit in the one-read log; a unit that has a line is left
                           alone, so a second run adds nothing
     used(name, lock)      for a frozen idea: the read on file for the idea itself, and the reads of its SAME-IDEA RELATIVES
+    claim_wf_oos(...)     THE 3:1 READ (entry kind `wf_oos`): the out-of-sample months of ONE picked box of a 3:1 store (blueprint/hmwf.py),
+                          logged before a day is opened, once per store and box; wf_oos_on_file(store, box) finds it
 
 THE OLD READ LOGS (read-only; a row is a store that was run, logged before its pass, or a store a verdict rests on):
     out/judge/year_reads.csv     every store a `judge.py year` verdict rests on: unit, period (pick | check | exam), verdict
@@ -258,3 +260,27 @@ def used(name: str, lock: dict, root=None, members_dir=None) -> dict:
     rel = [{"name": k, "kind": H[k].get("kind"), "why": w, "utc": H[k].get("utc"), "verdict": H[k].get("verdict"), "state": H[k].get("state"),
             "unit": H[k].get("unit"), "in_log": H[k].get("in_log")} for k, w in why.items()]
     return {"own": own, "relatives": rel}
+
+
+# ================================================================ the 3:1 read of a picked box (entry kind wf_oos)
+
+WF_OOS = "wf_oos"
+
+
+def wf_oos_on_file(store: str, box: str | None = None, root=None) -> list:
+    """The wf_oos lines of a 3:1 store (its folder name), of one box or of every box, oldest first."""
+    return [r for r in api.ideastore().reads(root) if r.get("kind") == WF_OOS and r.get("store") == store and box in (None, r.get("box"))]
+
+
+def claim_wf_oos(name: str, store: str, box: str, *, rng: dict, who: str, owner_said: str, code: dict, root=None) -> dict:
+    """Log THE 3:1 READ of a picked box (who, when, idea, box, code stamp, the owner's words), before any of its test months is opened.
+    Checked and written under the log's one lock: a second claim of the same store and box is refused (J.Refuse), even when the
+    first read died -- a read is never run twice. The line has `kind` wf_oos: it is not a read of the old test days."""
+    IS = api.ideastore()
+    rec = IS._read_line(name, None, f"{WF_OOS}:{store}:{box}", rng, "claimed", kind=WF_OOS, store=store, box=box, who=who,
+                        owner_said=owner_said, code=code)
+    with IS._reads_locked(root) as (f, text):
+        was = [r for r in IS._parse_reads(text) if r.get("kind") == WF_OOS and (r.get("store"), r.get("box")) == (store, box)]
+        if was:
+            raise J.Refuse(f"{store} box {box}: its out-of-sample read is on file ({was[-1].get('utc')}): it is shown, never run again")
+        return IS._append_read(f, text, rec)

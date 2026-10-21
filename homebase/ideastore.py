@@ -127,6 +127,20 @@ def _now() -> str:
     return dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
 
 
+# The owner, 2026-10-20: an idea created (an early look) or locked (a test) from this UTC day on takes the 3:1 walk-forward
+# (bp.py wf); build -> lock -> the one read of the test days is for the older ones. The toolkit and the connector both read it here.
+OLD_ROUTE_END = "2026-10-21"
+ENV_ROUTE_END = "HOMEBASE_OLD_ROUTE_END"            # TEST ONLY: another day, never for the app's own idea folder
+
+
+def old_route(utc, root=None) -> bool:
+    """Is a time (an idea's `created`, a lock's `locked_utc`) before OLD_ROUTE_END? No time = no."""
+    end = OLD_ROUTE_END
+    if os.environ.get(ENV_ROUTE_END) and ideas_root(root).resolve() != (Path.home() / ".homebase" / "ideas").resolve():
+        end = os.environ[ENV_ROUTE_END]
+    return isinstance(utc, str) and len(utc) >= 10 and utc[:10] < end
+
+
 def _plain(o):
     """The toolkit's numbers are numpy's: as plain JSON values. Anything else is refused."""
     if hasattr(o, "tolist"):

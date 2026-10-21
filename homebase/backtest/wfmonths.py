@@ -1,0 +1,60 @@
+"""The months of the 3:1 block walk-forward, from the tester's own data (the layout of research/edge-library/blueprint/wfmonths.py).
+
+Data: the market's archived sessions from its first WHOLE month (its first session on the month's 1st or 2nd weekday) to the
+last month its complete sessions run past (the month of the first session from 2025-07-01 on whose front-contract manifest is
+not `complete`, and the month under way, are out). Blocks: 3 in-sample months, then 1 out-of-sample month, the next block
+after it (Oct-Dec 2021 -> Jan 2022, Feb-Apr -> May, ...); a trailing part-block is in no block. File names and manifests
+only: no tape is opened. tests/test_wfmonths_parity.py checks it against the research module.
+
+  calendar(root, store=None) -> the session dates of the whole months
+  blocks(root, store=None)   -> [{"i", "is": [3 months], "oos": month}]
+"""
+from __future__ import annotations
+
+import datetime as dt
+import functools
+import json
+
+from .discipline import HOLDOUT_START, RESEARCH_START
+from .tape import TapeStore
+
+
+def _complete(store: TapeStore, root: str, d: dt.date) -> bool:
+    """The `complete` flag of the session's front contract (the manifest with the most ticks: TapeStore.pick's rule)."""
+    best = (-1, False)
+    for man in (store.archive / root / str(d.year)).glob(f"{d.isoformat()}_*.json"):
+        try:
+            m = json.loads(man.read_text())
+            n = int(m.get("ticks") or 0)
+        except (OSError, ValueError, TypeError, AttributeError):
+            continue
+        if n > best[0]:
+            best = (n, m.get("complete") is True)
+    return best[1]
+
+
+@functools.lru_cache(maxsize=None)
+def _calendar(root: str, archive: str, today: str) -> tuple:
+    store = TapeStore(archive=archive)
+    days = store.sessions(root, RESEARCH_START, dt.date.fromisoformat(today))
+    stops = next((d for d in days if d >= HOLDOUT_START and not _complete(store, root, d)), None)
+    cut = min(today[:7], stops.isoformat()[:7] if stops else today[:7])
+    return tuple(d for d in days if d.isoformat()[:7] < cut)
+
+
+def calendar(root: str, store: TapeStore | None = None) -> list:
+    return list(_calendar(root, str((store or TapeStore()).archive), dt.date.today().isoformat()))
+
+
+def _whole(first: dt.date) -> bool:
+    """A first session on the month's first or second weekday (one holiday, as Jan 1) = a whole month."""
+    return sum(dt.date(first.year, first.month, k).weekday() < 5 for k in range(1, first.day + 1)) <= 2
+
+
+def blocks(root: str, store: TapeStore | None = None) -> list:
+    from .walkforward import steps                  # the Lab's own 3:1 block layout (select 3, test 1, step 4)
+    cal = calendar(root, store)
+    ms = sorted({d.isoformat()[:7] for d in cal})
+    if ms and not _whole(cal[0]):
+        ms = ms[1:]
+    return [{"i": i, "is": s["select_ms"], "oos": s["test"][0]} for i, s in enumerate(steps(ms, 1, 3))]

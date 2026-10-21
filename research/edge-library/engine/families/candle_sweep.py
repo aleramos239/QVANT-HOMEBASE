@@ -37,6 +37,8 @@ THE RULE (fixed here, before any run):
     = with (off, the default): the open of the first 1-minute bar at or after 09:30 ET against the close of the last 1-minute bar
     before 10:00 sets the day's side -- up = longs only, down = shorts only, equal or no bar = no trade. It is known from the decision
     at or after 10:00 on, so an earlier decision (the 09:45 close) never trades with it; it never changes later in the day.
+  * BODY_X (the owner, 2026-10-20: "the candle body is 2x bigger than the previous candle's body"). `body_x` = x > 0 (0 = off, the
+    default: every run before it is unchanged): THIS bar's body |close - open| must be at least x times the PREVIOUS bar's body.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -124,7 +126,7 @@ def ema_last(closes, n: int):
     return e
 
 
-def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep"):
+def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep", body_x=0.0):
     """+1 long / -1 short / 0: THIS bar (o, h, l, c) against the PREVIOUS bar (po, ph, pl, pc) (module docstring, THE RULE, MODE, TURN)."""
     if mode == "break":                             # a close beyond the previous bar's wick: with it
         long, short = c > ph, c < pl
@@ -136,14 +138,16 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep"):
         long, short = long and pc < po and c > o, short and pc > po and c < o
     elif turn == "same":                            # both bars the trade's colour
         long, short = long and pc > po and c > o, short and pc < po and c < o
+    if body_x and abs(c - o) < body_x * abs(pc - po):   # this body at least body_x x the previous body
+        return 0
     return 0 if long == short else (1 if long else -1)
 
 
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "max_tr": 20}
-    SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")),
+    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "max_tr": 20}
+    SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")), "body_x": ("float", 0.0, 10.0),
               "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
@@ -166,7 +170,7 @@ class CandleSweep(Template):
         if self.nb < 2:
             return
         O, H, L, C = self.O, self.H, self.L, self.C
-        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"], self.p["mode"])
+        self.go = signal(O[-2], H[-2], L[-2], C[-2], O[-1], H[-1], L[-1], C[-1], self.p["back"], self.p["turn"], self.p["mode"], self.p["body_x"])
         self.sx = (L[-1], H[-1], C[-1])
 
     def _candles(self):
@@ -188,7 +192,7 @@ class CandleSweep(Template):
             self.done = j
             if j >= 2:
                 (_, po, ph, pl, pc), (_, o, h, l, c) = cd[j - 2], cd[j - 1]
-                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"], self.p["mode"])
+                self.go = signal(po, ph, pl, pc, o, h, l, c, self.p["back"], self.p["turn"], self.p["mode"], self.p["body_x"])
                 self.sx = (l, h, c)
 
     def ema1h(self, ctx):

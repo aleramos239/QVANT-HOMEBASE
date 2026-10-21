@@ -23,11 +23,13 @@ import contextlib
 import copy
 import datetime as dt
 import fcntl
+import functools
 import io
 import json
 import os
 import sys
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -88,7 +90,7 @@ def fakes(monkeypatch, plan: dict = None) -> list:
 
 
 def ctx(root) -> dict:
-    return {"root": root, "tiny": None}
+    return {"root": root, "tiny": None, "allow_old_split": True}
 
 
 def log(root) -> list:
@@ -109,8 +111,9 @@ def same(a: dict, b: dict) -> bool:
 
 
 def run(argv: list, stdin: str = "") -> tuple:
-    """The command line in this process, with --json -> (exit code, the one object)."""
-    rc, out = TI._run([*argv, "--json"], stdin)
+    """The command line in this process, with --json -> (exit code, the one object). The old-split refusal is overridden (tests only)."""
+    with mock.patch.object(PR, "command", functools.partial(PR.command, allow_old_split=True)):
+        rc, out = TI._run([*argv, "--json"], stdin)
     return rc, json.loads(out)
 
 
@@ -454,7 +457,7 @@ class Child:
 def test_start_is_a_detached_child_or_says_one_is_working(root, monkeypatch):
     monkeypatch.setattr(PR.subprocess, "Popen", Child)
     Child.made.clear()
-    assert PR.start(root) == {"pid": 4242, "already": False}
+    assert PR.start(root, allow_old_split=True) == {"pid": 4242, "already": False}
     (argv, kw), = Child.made
     assert argv == [PR._python(), str(W / "bp.py"), "pipe", "_loop", f"--root={root}"]
     venv = W.parent.parent / ".venv-research" / "bin" / "python"
@@ -464,11 +467,25 @@ def test_start_is_a_detached_child_or_says_one_is_working(root, monkeypatch):
     assert (root / PR.PID).read_text() == "4242"
     with open(root / PR.LOCK, "a") as fh:                                        # the child took the lock: it works
         fcntl.flock(fh, fcntl.LOCK_EX)
-        assert PR.start(root) == {"pid": 4242, "already": True} and len(Child.made) == 1
+        assert PR.start(root, allow_old_split=True) == {"pid": 4242, "already": True} and len(Child.made) == 1
         rc, r = run(["pipe", "start", f"--root={root}"])
         assert rc == 0 and (r["command"], r["already"], r["pid"]) == ("pipe start", True, 4242) and "already working (pid 4242)" in r["text"]
     rc, r = run(["pipe", "start", f"--root={root}"])
     assert rc == 0 and r["already"] is False and len(Child.made) == 2 and "the runner is started (pid 4242)" in r["text"]
+
+
+def test_pipe_start_and_the_loop_refuse_the_old_split(root, monkeypatch):
+    """Owner 2026-10-20: turning the pipeline back on must not bring the old build-days split back by accident."""
+    monkeypatch.setattr(PR.subprocess, "Popen", Child)
+    Child.made.clear()
+    for call in (lambda: PR.start(root), lambda: PR.loop({"root": root, "tiny": None}, once=True)):
+        with pytest.raises(J.Refuse) as e:
+            call()
+        assert str(e.value) == PR.OLD_SPLIT == ("the pipeline still runs on the old build-days split; move it to the 3:1 per-box walk-forward first "
+                                                "(docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md 4.6)")
+    rc, out = TI._run(["pipe", "start", f"--root={root}", "--json"])            # the command line says the same words, exit 1
+    assert rc != 0 and PR.OLD_SPLIT in json.loads(out)["text"]
+    assert Child.made == []                                                     # nothing was started
 
 
 # ================================================================ 7. the command line

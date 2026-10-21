@@ -161,16 +161,18 @@ class Candle930(FX.WinCandle):
     def _mkt(self, ctx, side, *a, **kw):
         if not self._strong(ctx):                   # win_candle calls _mkt once, at the candle's close
             return
+        own = self.p["stop_mode"] == "own"           # own: the Template's helpers drop AND count a missing level
         if self.p["entry"] == "break":              # the straddle: OCO stops one tick beyond the candle, each leg's stop past the other extreme
             h, l, t = self.H[-1], self.L[-1], ctx.tick
-            legs = [(sd, px, st, None) for sd, px, st in (("long", h + t, l), ("short", l - t, h)) if self._dist(ctx, px, st) is not None]
+            legs = [(sd, px, st, None) for sd, px, st in (("long", h + t, l), ("short", l - t, h))
+                    if own or self._dist(ctx, px, st) is not None]
             self._arm(ctx, legs)
-        elif self._dist(ctx, kw.get("ref") or self.C[-1], kw.get("struct")) is not None:
+        elif own or self._dist(ctx, kw.get("ref") or self.C[-1], kw.get("struct")) is not None:
             super()._mkt(ctx, side, *a, **kw)
 
     def _dist(self, ctx, ref, struct):
         m, v = self.p["stop_mode"], float(self.p["stop_val"])
-        if m in ("pts", "pct", "atr"):
+        if m in ("pts", "pct", "atr", "own"):              # own: the Template's (x the multiplier; no level -> None, counted)
             return super()._dist(ctx, ref, struct)
         if m == "struct":
             d = abs(ref - struct) * v

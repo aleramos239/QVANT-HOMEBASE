@@ -12,6 +12,7 @@ plain row, open losses counted) of --box at every size. Writes OUT_DIR/<name>_te
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import hashlib
 import json
 import sys
@@ -24,6 +25,7 @@ sys.path[:0] = [str(HERE.parent), str(HERE.parent / "engine")]
 
 import library as LB  # noqa: E402
 from blueprint import api  # noqa: E402
+from blueprint import oos as OOS  # noqa: E402
 from blueprint import pipe_rules as PR  # noqa: E402
 from blueprint import propodds as PO  # noqa: E402
 from blueprint import runner as RUN  # noqa: E402
@@ -85,7 +87,6 @@ def report(store: Path, cal: list, box: str, size: int, account: str, N: int) ->
         z = PO.sized(x, size)
         byq = {}
         for k, v in zip(d, np.asarray(z["net"], np.float64)):
-            import datetime as dt
             dd = dt.date.fromordinal(int(k))
             byq[f"{dd.year}-Q{(dd.month - 1) // 3 + 1}"] = byq.get(f"{dd.year}-Q{(dd.month - 1) // 3 + 1}", 0.0) + float(v)
         out["box_by_quarter"] = byq
@@ -104,6 +105,11 @@ def main(argv=None) -> int:
     ap.add_argument("--root", default="NQ")
     ap.add_argument("--report-only", action="store_true", help="re-read the stores of a read that is already judged (no days opened)")
     a = ap.parse_args(argv)
+    # the old route is for ideas before OLD_ROUTE_END: a manual spec has no lock day, so its file's day stands for it
+    since = dt.datetime.fromtimestamp(Path(a.spec).stat().st_mtime, dt.timezone.utc).isoformat(timespec="seconds")
+    if not a.report_only and not api.ideastore().old_route(since):      # refused BEFORE the claim: a refused read is not used up
+        print(f"REFUSED: {OOS.NEW_IDEAS}. {a.name}: the spec is of {since[:10]}; this one read is for ideas before {api.ideastore().OLD_ROUTE_END}")
+        return 2
     spec_json = json.loads(Path(a.spec).read_text())
     sp = RUN.checked(a.spec)
     u = next((x for x in RI.spec_units(sp) if x["root"] == a.root and not x["filter"]), None)
@@ -111,7 +117,7 @@ def main(argv=None) -> int:
     rng = RUN.test_range(a.root)
     variants = [c["id"] for c in u["grid"]]
     lock = hashlib.sha256(json.dumps(spec_json, sort_keys=True).encode()).hexdigest()[:16]
-    read = {"version": 1, "lock": lock}
+    read = {"version": 1, "lock": lock, "since": since}
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     ledger = out / "ledger.csv"

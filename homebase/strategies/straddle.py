@@ -28,6 +28,7 @@ class Leg:
 
 
 class OpenStraddle(Strategy):
+    own_stop = True           # every leg carries its SL (sl_pts)
     fire = "09:30:00"
     cancel_et = "12:55"
     flat_et = "15:55"

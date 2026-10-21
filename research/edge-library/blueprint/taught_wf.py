@@ -1,20 +1,27 @@
-"""taught_wf.py -- THE 3:1 WALK-FORWARD OF A TAUGHT SHEET (the owner, 2026-10-19: "the 3:1 block walk-forward is OOS on every route, taught
-lane and by-hand included"; CLAUDE.md). `bp.py taught wf <name>`.
+"""taught_wf.py -- THE 3:1 WALK-FORWARD OF A TAUGHT SHEET, IN BLOCKS, EVERY CELL FIXED (the owner, 2026-10-19: "the 3:1 block walk-forward is
+OOS on every route, taught lane and by-hand included"; 2026-10-20: every box fixed, the owner picks, the test months only on his word).
 
-The sheet's cells (the taught cell and its neighbours, as `taught run` stored them on the build days) are run once more on the test days
-(2025-07-01 .. the last WHOLE month of the market's complete sessions), with the sheet's own random entries (the same seeds, exits and passes).
-Build and test trades are joined per cell, and pipe_wf does the rest exactly as the pipeline's stage 6: blocks of 3 months pick, the next month
-trades the pick (the middle cell that holds: average trade above $0, 15+ trades, P3.15 -- never the best), the next block starts after it;
-the stitched test months are judged by P6.1-P6.4.
+    bp.py taught wf <name> --owner-said=TEXT        every cell of the sheet -- its OWN cells, as taught (the taught cell and its neighbours,
+                                                    not hm40) -- run fixed on the in-sample months of the 3:1 blocks (wfmonths.is_days,
+                                                    l2sim.ALLOW_WF_IS); then the in-sample table. No cell changes between blocks, no
+                                                    code picks. A heat-map-like run: only on the owner's words.
+    bp.py taught wf-show <name>                     the table, the pick, the test months if read (runs nothing)
+    bp.py taught wf-pick <name> <box>               the owner's cell (row number or id) = the lock, written once (hmwf.pick)
+    bp.py taught wf-oos <name> <box> --owner-said=TEXT   the picked cell on the test months of its blocks, once, on his words (hmwf.run_oos:
+                                                    claimed in the one-read log before a day is opened)
 
-THE ORDER: refusals first (no full result, a store written by other code -- the centre cell is run again on the build days and must give the
-same trades and net, as `taught lab` checks); then the CLAIM is written (wf/claim.json: who, when, the days, the cells, the code) BEFORE any
-test day is opened; a sheet whose walk-forward is on file is shown, never run again (those months are no longer blind for that rule).
-Nothing is tuned here: the cells and their settings are the sheet's own."""
+The store: <taught root>/<name>/wf_blocks/<name>__taught-<ROOT>-tf<tf>/{is, is-<session>-worse, is-ctl, lock.json, oos} (a folder name no
+hm40 idea has: the one-read log keys a read by it). Beside the cells, on the same in-sample days: the same cells with worse fills (one store a
+session) and the sheet's own random entries (is-ctl: each cell is held against s<seed>_<its id>). The lock, the read and the table are
+hmwf's own. The build days were read by `taught run` (every cell): the table says so (`seen`), its test months inside them are not blind.
+
+A sheet whose OLD walk-forward (2026-10-19, wf/: the middle cell re-picked per block on the test days) is on file is shown, never run
+again: its test months are already seen. `wf-each` reads that old walk-forward only."""
 from __future__ import annotations
 
 import datetime as dt
 import json
+from pathlib import Path
 
 import numpy as np
 
@@ -23,12 +30,15 @@ import l2sim as S
 import library as LB
 
 from . import api
+from . import hmwf as H
 from . import pipe_gates as G
 from . import pipe_rules as PR
 from . import pipe_wf as WF
+from . import rules as R
 from . import runner as RUN
 from . import tables as T
 from . import taught as TA
+from . import wfmonths as WM
 
 WF_ = "taught wf"
 
@@ -36,23 +46,6 @@ WF_ = "taught wf"
 def _arrays(trades: list) -> dict:
     x = LB.pack(trades)
     return {k: np.asarray(x[k]) for k in WF.FIELDS}
-
-
-def _pool(per_seed: dict):
-    """judge.pool_arrays' shape -- (date, net, slot code, cumulative net) -- from raw arrays per seed (the test days have no store)."""
-    D, N, C = [], [], []
-    for sd in sorted(per_seed):
-        x = per_seed[sd]
-        o = np.lexsort((x["entry_ms"], x["date"]))
-        d, n = x["date"][o].astype(np.int64), x["net"][o].astype(np.float64)
-        first = np.r_[True, d[1:] != d[:-1]] if len(d) else np.zeros(0, bool)
-        rank = np.arange(len(d)) - np.maximum.accumulate(np.where(first, np.arange(len(d)), 0)) if len(d) else np.zeros(0, np.int64)
-        D.append(d)
-        N.append(n)
-        C.append(d * 4096 + rank + (sd << 40))
-    d, n, c = (np.concatenate(v) if v else np.zeros(0) for v in (D, N, C))
-    o = np.argsort(d, kind="stable")
-    return d[o].astype(np.int64), n[o], c[o].astype(J.U64), np.r_[0.0, np.cumsum(n[o])]
 
 
 def _test_days(market: str, today: dt.date) -> list:
@@ -73,7 +66,7 @@ def each(name: str, root=None, workers=None) -> dict:
     base = TA.where(root) / str(name)
     claim, res_f = base / "wf" / "claim.json", base / "wf" / "result.json"
     if not (claim.exists() and res_f.exists()):
-        raise J.Refuse(f"{name}: no walk-forward on file: bp.py taught wf {name} first")
+        raise J.Refuse(f"{name}: no old walk-forward on file (wf-each reads the walk-forward of 2026-10-19 only; the 3:1 table is taught wf-show)")
     cl, wf = json.loads(claim.read_text()), json.loads(res_f.read_text())
     plan = json.loads((base / "result.json").read_text())["plan"]
     if cl["code"] != TA._code(plan["family"]):
@@ -120,94 +113,136 @@ def each(name: str, root=None, workers=None) -> dict:
     return api.result(WF_, name, status="done", result=doc, text=doc["text"], saved=[str(base / "wf" / "each.json")])
 
 
-def run(name: str, root=None, workers=None, who: str = "owner in chat") -> dict:
+def _sheet(name: str, root):
     base = TA.where(root) / str(name)
-    out = base / "wf" / "result.json"
-    if out.exists():
-        doc = json.loads(out.read_text())
-        return api.result(WF_, name, status="on file", result=doc, text=doc["text"])
     f = base / "result.json"
     if not f.exists():
         raise J.Refuse(f"{name}: no full result under {base.parent}: bp.py taught run <sheet> first")
     plan = json.loads(f.read_text())["plan"]
     if len(plan["bars"]) != 1:
         raise J.Refuse(f"{name}: {len(plan['bars'])} bar sizes; the walk-forward reads one (write a sheet per bar size)")
-    tf, market, blocks = plan["bars"][0], plan["market"], TA._blocks()
-    ukey, ckey = TA._unit_key(name, market, tf), TA._ctl_key(name, market, tf, "both")
-    st, _ = T._open(base / "runs", ukey)
-    umeta = json.loads((base / "runs" / ukey / "run.json").read_text())
-    cmeta = json.loads((base / "runs" / ckey / "run.json").read_text())
-    ids = [c["id"] for c in plan["cells"]]
-    centre = next(c["id"] for c in plan["cells"] if c.get("centre"))
-    u = TA._unit_row(plan, tf)
-    build = {c: {k: np.asarray(v) for k, v in J.cellx(st, c, None, u).items() if k in WF.FIELDS} for c in ids}
-    cls, ins = blocks.WRAPPED[umeta["family"]], {c["id"]: c["inputs"] for c in umeta["cells"]}
-    ueng = RUN._engine(RUN._kw(umeta["family"], umeta.get("filter")))
-    n = max(1, min(int(workers or 6), S.MAX_WORKERS))
-    RUN.may_start()
-    # ---- the code is the code of the store: the centre cell again on the build days (taught lab's check)
-    bdays = [d.isoformat() for d in S.sessions(*S.period(RUN.PERIOD), market, allow_holdout=RUN.PERIOD)]
-    again = S.run_many([(cls, ins[centre])], period=RUN.PERIOD, days=bdays, root=market, workers=n, **ueng)[0]
-    got, want = _arrays(again["trades"]), build[centre]
-    if again["skipped_by_error"] or len(got["net"]) != len(want["net"]) or abs(float(got["net"].sum() - want["net"].sum())) >= 0.01:
-        raise J.Refuse(f"{name} {centre}: run again on the build days it has {len(got['net']):,} trades and ${got['net'].sum():,.0f} where its store has "
-                       f"{len(want['net']):,} and ${want['net'].sum():,.0f}: the code changed since `taught run`; run the sheet again under a new name")
-    # ---- THE CLAIM, before any test day is opened
-    today = RUN.clock().date()
-    days = _test_days(market, today)
+    return base, plan
+
+
+OLD_SHOWN = "This is the old walk-forward: its test months are already seen. A new 3:1 run is a new sheet name."
+
+
+def home(name: str, root=None, have: bool = False) -> Path:
+    """The folder of the sheet's 3:1 stores (have: refused when an old walk-forward is on file, or the in-sample run is not)."""
+    base, plan = _sheet(name, root)
+    h = base / "wf_blocks" / f"{name}__taught-{plan['market']}-tf{plan['bars'][0]}"
+    if have and _old(base, name) is not None:
+        raise J.Refuse(f"{name}: {OLD_SHOWN} (bp.py taught wf-show {name} shows it)")
+    if have and not (h / H.IS / "run.json").exists():
+        raise J.Refuse(f"{name}: no 3:1 in-sample run on file: bp.py taught wf {name} --owner-said=... first (only on the owner's words)")
+    return h
+
+
+def _old(base: Path, name: str):
+    """The OLD walk-forward on file (its document), or None. A claim with no result = a read that stopped: its months are seen too."""
+    f = base / "wf" / "result.json"
+    if f.exists():
+        return json.loads(f.read_text())
+    if (base / "wf" / "claim.json").exists():
+        raise J.Refuse(f"{name}: an old walk-forward of this sheet was claimed and stopped: its test months are already seen; a new 3:1 run "
+                       "is a new sheet name")
+    return None
+
+
+def _built(base: Path):
+    """The day `taught run` read every cell on the build days (its full result), or None."""
+    doc = json.loads((base / "result.json").read_text())
+    return None if doc.get("smoke") else str(doc.get("utc") or "")[:10] or "on file"
+
+
+def show(name: str, root=None, command: str = "taught wf-show") -> dict:
+    """The in-sample table, the pick, the test months if read (hmwf.show on the sheet's store). Runs nothing. An old walk-forward on file
+    is shown as it is."""
+    base, _ = _sheet(name, root)
+    doc = _old(base, name)
+    if doc is not None:
+        return api.result(command, name, status="on file", result=doc, text=doc["text"] + "\n" + OLD_SHOWN)
+    s = H.show(name, store=home(name, root, have=True))
+    text, day = api._wf_text(name, s), _built(base)
+    if day:                                         # the build days were read, all cells, by taught run: their months are not blind
+        seen = f"build days read by taught run {day}"
+        for x in s["is"] + ([s["oos"]["record"]] if s["oos"] and s["oos"].get("record") else []):
+            x["seen"] = "; ".join(v for v in (x.get("seen"), seen) if v)
+        b = R.template("ranges")["build"]
+        text += (f"\nSEEN: taught run read every cell on the build days {b['start']} .. {b['end']} ({day}): the test months inside them "
+                 "are not blind.")
+    r = api.result(command, name, wf=s, text=text)
+    r["next"] = (f"The owner picks a cell by its number: bp.py taught wf-pick {name} <n>." if s["lock"] is None else
+                 f"The test months run only when the owner says so: bp.py taught wf-oos {name} {s['lock']['box']} --owner-said=\"...\"."
+                 if s["oos"] is None else "")
+    return r
+
+
+def _ctl(plan: dict, h: Path, span: str, stop=None) -> dict:
+    """The sheet's own random entries on the in-sample months (its control: the same exit cells and passes)."""
+    c = TA._control_part(plan, plan["bars"][0], "both", stop)
+    return {**c, "key": f"{h.name}/{H.IS}-ctl", "stage": H.POOL, "meta": {**c["meta"], "root": plan["market"], "note": c["meta"]["note"] + f", on {span}"}}
+
+
+def _is_stop(h: Path, plan: dict):
+    """A structure stop's size for the control: the median stop of the taught trades of the IN-SAMPLE store (never a test month's)."""
+    st = LB.load_unit(H.IS, h)
+    st["_idx"] = {c["id"]: i for i, c in enumerate(st["meta"]["cells"])}
+    return TA._median_stop(st, plan)
+
+
+def _parts(plan: dict, h: Path, span: str) -> list:
+    """The in-sample stores: every cell of the sheet; the same cells with worse fills, one store a session; the control (here only for a
+    stop in points: a structure stop's control waits for the cells' own in-sample trades, run())."""
+    name, market, tf = plan["name"], plan["market"], plan["bars"][0]
+    u = TA._unit_part(plan, tf)
+    out = [{**u, "key": f"{h.name}/{H.IS}", "stage": H.STAGE, "meta": {**u["meta"], "root": market, "plan": plan, "wf": H.IS,
+                                                                       "note": f"taught rule {name}: every cell of the sheet on {span}"}}]
+    two = bool(TA._blocks().BASES[plan["family"]][2])
+    for ss in plan["sessions"]:
+        meta = {**out[0]["meta"], "sessions": [ss], "sess_instance": ss, "worse": RUN.worse_kw(two),
+                "note": f"taught rule {name}: session {ss} with worse fills ({RUN.worse_words(RUN.worse_kw(two))}) on {span}"}
+        out.append({**RUN._part(f"{h.name}/{H.IS}-{ss}-worse", "worse", market, tf, u["grid"], [ss], None, meta, plan["family"],
+                                {**RUN._kw(plan["family"]), **RUN.worse_kw(two)}), "stage": H.WORSE})
+    return out if plan["struct"] else out + [_ctl(plan, h, span)]
+
+
+def run(name: str, root=None, workers=None, owner_said=None, *, progress=None) -> dict:
+    """`bp.py taught wf <name> --owner-said=...`: every cell of the sheet fixed on the 3:1 in-sample months (module docstring), with its
+    worse fills and its own random entries, then the table. A rerun does no work (the runner's fingerprint); an old walk-forward on file
+    is shown instead."""
+    base, plan = _sheet(name, root)
+    if _old(base, name) is not None:
+        return show(name, root, WF_)
+    said = api._said(owner_said)
+    days = WM.is_days(plan["market"])
     if not days:
-        raise J.Refuse(f"{market}: no whole test month on disk yet")
-    TA._write(base / "wf" / "claim.json", {"utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "who": who, "days": [days[0], days[-1]],
-                                           "cells": ids, "code": TA._code(plan["family"])})
-    a, b = S._date(days[0]), S._date(days[-1])
-    res = S.run_many([(cls, ins[c]) for c in ids], a, b, days=days, root=market, workers=n, allow_holdout=S.ALLOW_BT, **ueng)
-    if any(r["skipped_by_error"] for r in res):
-        raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error: nothing is judged (the claim stays on file)")
-    test = {c: _arrays(r["trades"]) for c, r in zip(ids, res)}
-    _save_test(base, test)
-    seeds = sorted({c["inputs"]["seed"] for c in cmeta["cells"]})
-    rspecs = [(c["id"], {**c["inputs"], "sess": s}) for c in cmeta["cells"] for s in plan["sessions"]]     # one instance a pass, as the store's runs
-    import l2ref
-    rres = S.run_many([(l2ref.Random, i) for _, i in rspecs], a, b, days=days, root=market, workers=n, allow_holdout=S.ALLOW_BT, **RUN._engine({}))
-    tpool: dict = {}
-    for (cid, i), r in zip(rspecs, rres):
-        tpool.setdefault(cid.split("_", 1)[1], {}).setdefault(i["seed"], []).extend(r["trades"])
-    tpool = {xid: {sd: _arrays(sorted(t, key=lambda q: q["entry_ms"])) for sd, t in by.items()} for xid, by in tpool.items()}
-    # ---- the walk-forward, pipe_wf's own
-    boxes = {c: {k: np.concatenate([build[c][k], test[c][k]]) for k in WF.FIELDS} for c in ids}
-    for x in boxes.values():
-        x["month"] = WF._month(x["date"])
-    cal = sorted({*T.build_days(u, None), *days})
-    w = PR.need("walkforward")
-    walk = WF.walk(boxes, J.table(st, {**u, "sess": "all"}), WF.months(cal), w["select_months"], w["window_trades"], today.isoformat(), w["step_months"])
-    x = WF.stitch(boxes, walk["picks"])
-    bpool = T.pool_seeds(base / "runs", ckey, ids, len(seeds))
-    first, cache = days[0][:7], {}
+        raise J.Refuse(f"{plan['market']}: no in-sample month of the 3:1 blocks yet")
+    h = home(name, root)
+    span = f"the 3:1 in-sample months ({days[0]} .. {days[-1]})"
+    h.mkdir(parents=True, exist_ok=True)            # (the runner's lock files sit beside each store)
 
-    def pool(xid, month):
-        side = "test" if month >= first else "build"
-        if (xid, side) not in cache:
-            cache[(xid, side)] = _pool(tpool[xid]) if side == "test" else J.pool_arrays(bpool, None, xid)
-        return cache[(xid, side)]
+    def go(todo):
+        rows = RUN._run(todo, workers, h.parent, base / "ledger.csv", days, None, progress, None, False, f"taught {name}, 3:1 in-sample", S.ALLOW_WF_IS)
+        bad = [r for r in rows if r.get("ok") is False]
+        if bad:
+            raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0].get('error')}): no store was written")
+    go(_parts(plan, h, span))
+    stop = _is_stop(h, plan) if plan["struct"] else None
+    if stop:                                        # no taught trade with a stop: no control (beats random stays empty)
+        go([_ctl(plan, h, span, stop)])
+    return {**show(name, root, WF_), "owner_said": said}
 
-    beat = WF.against_random(boxes, walk["picks"], pool, J.block_seeds(J.seed_of(f"taught|{name}", "wf")), J.RULE["draws"], float(np.sum(x["net"])),
-                             min(len(bpool), len(seeds)))
-    rows = WF.rows(x, beat, PR.need("variant", "region_trades"))
-    late = WF._month(x["date"]) >= first if len(x["date"]) else np.zeros(0, bool)
-    m = TA._metrics(x, LB._ordinals([d for d in cal if d[:7] in {p["month"] for p in walk["picks"]}]))
-    months = [{"month": p["month"], "cell": p["cell"], "trades": int((boxes[p["cell"]]["month"] == p["month"]).sum()) if p["cell"] else 0,
-               "net": float(boxes[p["cell"]]["net"][boxes[p["cell"]]["month"] == p["month"]].sum()) if p["cell"] else 0.0} for p in walk["picks"]]
-    split = {k: {"net": float(x["net"][s].sum()), "trades": int(s.sum())} for k, s in (("build_days", ~late), ("test_days", late))}
-    text = "\n".join([f"{name}: 3:1 walk-forward in blocks, {len(months)} test months ({months[0]['month']} .. {months[-1]['month']}), "
-                      f"{sum(1 for q in months if q['cell'] is None)} stood aside; test days read {days[0]} .. {days[-1]}",
-                      f"stitched: {m['trades']} trades, net ${m['net']:,.0f}, avg ${m['avg_trade'] or 0:,.0f}, win {100 * (m['win'] or 0):.1f} %, PF {m['pf'] or 0:.2f}, "
-                      f"worst DD ${m['max_dd'] or 0:,.0f}; build-day months ${split['build_days']['net']:,.0f} ({split['build_days']['trades']}), "
-                      f"test-day months ${split['test_days']['net']:,.0f} ({split['test_days']['trades']})"]
-                     + [f"  {r['text']}" for r in rows]
-                     + [f"  {q['month']}  {q['cell'] or 'stood aside':14} {q['trades']:3}  ${q['net']:,.0f}" for q in months]
-                     + [f"next month ({walk['next']['month']}): {walk['next']['cell'] or 'stand aside'}"])
-    doc = {"name": name, "days": [days[0], days[-1]], "months": months, "next": walk["next"], "metrics": m, "split": split, "random": {k: beat.get(k) for k in ("p_beat", "passed") if k in beat},
-           "rows": rows, "passed": all(r["passed"] is True for r in rows), "code": TA._code(plan["family"]), "text": text,
-           "utc": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")}
-    TA._write(out, doc)
-    return api.result(WF_, name, status="done", result=doc, text=text, saved=[str(out)])
+
+def pick(name: str, box, root=None, who: str = "owner") -> dict:
+    """`bp.py taught wf-pick <name> <box>`: the owner's cell = the lock, written once (hmwf.pick)."""
+    H.pick(name, box, who=who, store=home(name, root, have=True))
+    return show(name, root, "taught wf-pick")
+
+
+def oos(name: str, box, owner_said, root=None, workers=None, *, progress=None) -> dict:
+    """`bp.py taught wf-oos <name> <box> --owner-said=...`: the picked cell on its test months, once, on the owner's words (hmwf.run_oos)."""
+    said = api._said(owner_said)
+    base, _ = _sheet(name, root)
+    H.run_oos(name, box, said, workers, store=home(name, root, have=True), ledger=base / "ledger.csv", progress=progress)
+    return {**show(name, root, "taught wf-oos"), "owner_said": said}

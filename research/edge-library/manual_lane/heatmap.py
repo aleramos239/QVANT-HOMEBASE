@@ -2,8 +2,9 @@
 
     <venv-python> manual_lane/heatmap.py OUT.html STORE_DIR [STORE_DIR ...] [--title T] [--risk USD] [--root NQ]
 
-One card per variant of each store (the first store is usually the no-filter baseline, so every card is read against it). Rows are stops,
-columns are targets (a multiple of the stop; the last one is no target). A cell shows the metric you pick above the grid (Net $, Average trade $,
+The default store is an hm40 table run on the 3:1 in-sample months (`bp.py wf run`: runs_wf/<name>-<ROOT>-tf<tf>/is); an old store of the
+build days is drawn as before, with its old label. One card per variant of each store (the first store is usually the no-filter baseline, so every card is read against it). Rows are stops,
+columns are targets (a multiple of the stop; an old table's last one is no target). A cell shows the metric you pick above the grid (Net $, Average trade $,
 Win %); colour is the box's net profit on ONE scale for the whole page (--shade net, the default; --shade metric scales to the shown number); hover a cell for its trades, long / short split and exit mix. --risk USD sizes every
 trade to about that risk in micros (library.sized), otherwise one contract. A card's header says how many of its cells are profitable.
 """
@@ -20,6 +21,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent), str(HERE.parent / "engine")]
 
+import l2sim as S  # noqa: E402
 import library as LB  # noqa: E402
 
 REASON = {0: "stop", 1: "target", 2: "flat at end of day"}
@@ -30,12 +32,22 @@ METRICS = [("net", "Net $", lambda c: c["net"], lambda v: f"{v:,.0f}", 0.0),
 
 def stop_label(e) -> str:
     m, v = e["stop_mode"], e["stop_val"]
-    return {"atr": f"{v:g}x ATR", "pts": f"{v:g} pts", "pct": f"{v:g}%", "struct": "far side of the structure",
+    return {"atr": f"{v:g}x ATR", "own": f"{v:g}x own stop", "pts": f"{v:g} pts", "pct": f"{v:g}%", "struct": "far side of the structure",
             "rng": f"{v:g} x range"}.get(m, f"{m} {v:g}")
 
 
 def tgt_label(t) -> str:
     return "no target" if not t else f"{t:g}R"
+
+
+def days_label(m) -> str:
+    """The days a store holds, in words: its own 3:1 months, else the build days (an old store)."""
+    d = m.get("days") or []
+    if m.get("period") == S.ALLOW_WF_IS and d:
+        return f"the 3:1 in-sample months {d[0][:7]} .. {d[-1][:7]} &middot; test months not read"
+    if m.get("period") == S.ALLOW_WF_OOS and d:
+        return f"the 3:1 test months {d[0][:7]} .. {d[-1][:7]} of the picked box"
+    return "build days 2021-09-22 to 2025-06-30 &middot; test days not read"
 
 
 def read(path: Path, risk, root):
@@ -52,7 +64,7 @@ def read(path: Path, risk, root):
                  long=float(n[s > 0].sum()), short=float(n[s < 0].sum()), nl=int((s > 0).sum()), ns=int((s < 0).sum()),
                  mix={REASON.get(k, str(k)): int((q == k).sum()) for k in np.unique(q)} if len(n) else {})
         out.append(d)
-    return u["meta"].get("idea", path.name), out
+    return u["meta"].get("idea", path.name), out, days_label(u["meta"])
 
 
 def main(argv=None) -> int:
@@ -65,9 +77,10 @@ def main(argv=None) -> int:
     ap.add_argument("--shade", choices=("net", "metric"), default="net",
                     help="net = colour is the box's net profit on one scale for the whole page (default); metric = the shown number's own scale")
     a = ap.parse_args(argv)
-    groups = []                                                   # [(store idea, variant label, {(stop, tgt): cell})]
+    groups, spans = [], []                                        # [(store idea, variant label, {(stop, tgt): cell})], the stores' days
     for s in a.stores:
-        idea, cells = read(Path(s), a.risk, a.root)
+        idea, cells, span = read(Path(s), a.risk, a.root)
+        spans.append(span)
         for v in dict.fromkeys(c["variant"] for c in cells):
             cs = [c for c in cells if c["variant"] == v]
             groups.append((idea, cs[0]["vlabel"], {(c["stop"], c["tgt"]): c for c in cs}))
@@ -98,7 +111,7 @@ table{{border-collapse:separate;border-spacing:3px;width:100%;table-layout:fixed
 th.rl{{text-align:right;padding-right:6px;width:96px;white-space:nowrap}}td{{height:36px;border-radius:6px;text-align:center;font-variant-numeric:tabular-nums;font-size:12px}}
 .note{{color:var(--mute);font-size:13px;margin:14px 0 0}}
 </style></head><body><div class="wrap"><h1>{html.escape(a.title)}</h1>
-<p class="sub">{sizing} &middot; build days 2021-09-22 to 2025-06-30 &middot; costs as the engine books them &middot; test days not read</p>
+<p class="sub">{sizing} &middot; {" / ".join(dict.fromkeys(spans))} &middot; costs as the engine books them</p>
 {radios}<div class="bar">{labels}</div><div class="sets">{sets}</div>
 <p class="note">Rows are stops, columns are targets as a multiple of the stop. Colour is the box's net profit on one scale for the page (green makes money, red loses). Hover a cell for its full numbers.</p>
 </div></body></html>"""

@@ -1,5 +1,5 @@
 """Parameter heat-map grids: one strategy, 2 or 3 inputs with value lists, at most `max_cells`
-(the page's own Max cells box; 60 by default, 400 the hard ceiling),
+(the page's own Max cells box; 120 by default -- hm40 x 3 values -- 400 the hard ceiling),
 over whatever window the request names (the range picker's preset; the build days by default).
 
 Every cell is an ordinary tester run -- the request `runner.validate()` builds for a single run
@@ -42,12 +42,12 @@ from pathlib import Path
 
 from .. import draftstore, strategies
 from . import controls as ctlmod, drafthost, runner
-from .discipline import parse_range
+from .discipline import WF_OOS_ONLY, parse_range
 from .runner import RUN_ID, _now, read_json, write_json
 from .slots import QUIET_MSG, Slots, shared_dir
 from .tape import ARCHIVE, CACHE
 
-DEFAULT_MAX_CELLS = 60      # what the page's Max cells box starts at
+DEFAULT_MAX_CELLS = 120     # what a body without Max cells gets: the 40 hm40 exit cells x 3 values
 HARD_MAX_CELLS = 400        # ... and the most it, or any other client, may ask for
 WORKERS = 4                 # cell threads; each still needs a machine slot (slots.cap_at)
 FIELDS = {"strategy", "inputs", "axes", "range", "qty", "commission", "slippage_ticks", "capital",
@@ -57,6 +57,47 @@ SUMMARY_KEYS = ("net_profit", "sharpe", "trades", "win_rate", "profit_factor", "
                 "avg_trade")
 FINAL = {"done", "error", "cancelled"}
 INTERRUPTED = "interrupted (the chart service restarted)"
+
+# hm40 (the owner, 2026-10-20): 8 stops x 5 targets, ATR stops first, targets inner. ATR = 14 bars of the strategy's own
+# bar size; "own" = x the strategy's own stop distance, floored at 0.25 x that ATR, then 2 ticks.
+STOP = "stop"               # the virtual run setting behind the `ctl.stop` axis: "atr:<x>" or "own:<x>"
+HM40_AXES = [{"key": "ctl.stop", "values": ["atr:0.5", "atr:1", "atr:1.5", "atr:2", "own:0.5", "own:1", "own:1.5", "own:2"]},
+             {"key": "ctl.target_rr", "values": [0.5, 0.75, 1, 1.5, 2]}]
+
+
+def hm40_axes(cls) -> list[dict]:
+    """HM40_AXES for this strategy: its 20 ATR cells only when it sets no stop of its own (never own cells turned into ATR)."""
+    stops = HM40_AXES[0]["values"] if getattr(cls, "own_stop", False) else HM40_AXES[0]["values"][:4]
+    return [{"key": HM40_AXES[0]["key"], "values": list(stops)}, dict(HM40_AXES[1], values=list(HM40_AXES[1]["values"]))]
+
+
+def stop_value(v) -> str:
+    """A `ctl.stop` value, as "atr:<x>" (x the ATR) or "own:<x>" (x the strategy's own stop), x written short."""
+    mode, _, x = v.partition(":") if isinstance(v, str) else ("", "", "")
+    field = {"atr": "stop_atr", "own": "stop_own_mult"}.get(mode)
+    try:
+        num = float(x)
+    except ValueError:
+        num = None
+    if field is None or num is None or num != num:
+        raise ValueError(f"Stop: {v!r} is not atr:<x> or own:<x>")
+    lo, hi = max(ctlmod.SPEC[field][2], 1e-9), ctlmod.SPEC[field][3]
+    if not lo <= num <= hi:
+        raise ValueError(f"Stop: {v!r} must be within [{ctlmod.SPEC[field][2]:g}, {hi:g}]")
+    return f"{mode}:{num:g}"
+
+
+def stop_controls(v: str, atr_minutes: int = 0) -> dict:
+    """The run settings of one `ctl.stop` value (the controller's rulings for hm40, 2026-10-20): the ATR of the strategy's
+    own bar (0), or of 5-minute bars for a strategy with no single bar size."""
+    mode, _, x = stop_value(v).partition(":")
+    if mode == "atr":
+        return {"stop_mode": "atr", "stop_atr": float(x), "atr_minutes": atr_minutes, "atr_period": 14}
+    return {"stop_mode": "own", "stop_own_mult": float(x), "own_floor": True, "atr_minutes": atr_minutes, "atr_period": 14}
+
+
+def stop_atr_minutes(cls) -> int:
+    return 0 if getattr(cls, "bar_minutes", 0) else 5
 
 
 def _max_cells(v) -> int:
@@ -72,13 +113,16 @@ def expand(axes: list[dict]) -> list[dict]:
             for i, coords in enumerate(itertools.product(*ranges))]
 
 
-def _ctl_cells(base_ctl: dict, params: dict) -> dict:
+def _ctl_cells(base_ctl: dict, params: dict, atr_minutes: int = 0) -> dict:
     """One cell's run settings: the base, then the cell's own axis values. A number that only means something under
     one mode (stop points under "fixed") switches that mode on unless the base or another axis already picked
     one; a mode already set to something else is refused, in words."""
     raw = dict(base_ctl)
     chosen = {k[len(CTL):]: v for k, v in params.items() if k.startswith(CTL)}
+    stop = chosen.pop(STOP, None)
     raw.update(chosen)
+    if stop is not None:                        # the stop axis sets the whole stop, whatever the base said
+        raw.update(stop_controls(stop, atr_minutes))
     for num, (mode, name) in ctlmod.IMPLIES.items():
         if num not in chosen or not chosen[num] or mode in chosen:
             continue
@@ -113,7 +157,7 @@ def validate_grid(body, min_axes: int = 2) -> dict:
     keys = [a.get("key") if isinstance(a, dict) else None for a in axes_in]
     for k in keys:
         if isinstance(k, str) and k.startswith(CTL):
-            if k[len(CTL):] not in ctlmod.SPEC:
+            if k[len(CTL):] not in ctlmod.SPEC and k[len(CTL):] != STOP:
                 raise ValueError(f"unknown run setting {k[len(CTL):]!r}")
         elif k not in schema:
             raise ValueError(f"unknown input {k!r}")
@@ -134,6 +178,16 @@ def validate_grid(body, min_axes: int = 2) -> dict:
         k, vals = a["key"], a.get("values")
         if not isinstance(vals, list) or not vals:
             raise ValueError(f"{k}: a list of values")
+        if k == CTL + STOP:
+            resolved = [stop_value(v) for v in vals]
+            atr = "ATR" if stop_atr_minutes(cls) == 0 else f"ATR({stop_atr_minutes(cls)}m)"
+            if len(set(resolved)) != len(resolved):
+                raise ValueError("Stop: a value twice")
+            if not getattr(cls, "own_stop", False) and any(v.startswith("own:") for v in resolved):
+                raise ValueError(f"{cls.name or cls.id} sets no stop of its own: its heat map takes the ATR stops only (atr:<x>)")
+            axes.append({"key": k, "label": "Stop", "type": "choice", "ctl": True, "values": resolved,
+                         "value_labels": [f"{atr if v.startswith('atr') else 'own'} x{v.partition(':')[2]}" for v in resolved]})
+            continue
         if k.startswith(CTL):
             f = k[len(CTL):]
             resolved = [ctlmod.coerce(f, v) for v in vals]
@@ -156,11 +210,13 @@ def validate_grid(body, min_axes: int = 2) -> dict:
         raise ValueError(f"{n} cells: this grid is capped at {cap} (raise Max cells, up to {HARD_MAX_CELLS})")
     common = {k: body[k] for k in ("qty", "commission", "slippage_ticks", "capital", "prop_rules") if k in body}
     rng = parse_range(body.get("range"))         # DisciplineError on a malformed window; nothing else refuses
+    if rng.kind == "wf_oos":
+        raise ValueError(WF_OOS_ONLY)
     cells = []
     for c in expand(axes):
         sreq = {"strategy": cls.id, "inputs": {**base, **{k: v for k, v in c["params"].items() if not k.startswith(CTL)}},
                 "range": body.get("range"), **common}
-        raw_ctl = _ctl_cells(base_ctl, c["params"])
+        raw_ctl = _ctl_cells(base_ctl, c["params"], stop_atr_minutes(cls))
         if raw_ctl:
             sreq["controls"] = raw_ctl
         try:

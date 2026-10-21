@@ -55,6 +55,9 @@ archive's end and nothing before it: a build day raises under it whatever other 
 a named day outside the named range. It has no range by name (period("bp_test") raises: its end is the session a
 lock froze) and ONE caller, blueprint/runner.run_test, which uses it only for a read that is claimed in the app's
 one-read log. Everything above is untouched.
+3:1 BLOCK WALK-FORWARD (2026-10-20): allow_holdout=ALLOW_WF_IS with NAMED DATES opens only the in-sample months of
+blueprint/wfmonths.blocks(root); ALLOW_WF_OOS only the days of ONE out-of-sample month a call. Any other date raises, no
+range by name, never widened by another flag.
 
 COMPUTE WINDOWS: every worker checks the ET clock before each session-day and sleeps through the windows of
 compute_window_end: Fri 2026-10-02 08:15-08:50 ET, and -- unless OPEN_WINDOW is None, as it is since the owner's order of
@@ -128,6 +131,9 @@ ALLOW_BP = "bp_build"                                            # blueprint run
 BP_TEST_START = BP_BUILD[1] + dt.timedelta(days=1)               # BLUEPRINT.md phase 4: the out-of-sample TEST starts the day after the
 ALLOW_BT = "bp_test"                                             # build ends. The value allow_holdout carries on a blueprint TEST run:
 #                                                                  named dates only, never a build day, ONE caller (blueprint/runner.run_test)
+ALLOW_WF_IS = "wf_is"                                            # the 3:1 blocks' in-sample months (blueprint/wfmonths.blocks)
+ALLOW_WF_OOS = "wf_oos"                                          # ONE out-of-sample month of the blocks a call
+WF_SWITCHES = (ALLOW_WF_IS, ALLOW_WF_OOS)
 
 
 def period(name) -> tuple:
@@ -143,6 +149,8 @@ def period(name) -> tuple:
     if key == ALLOW_BT:                               # no range by name: a TEST run names its dates (the session its lock froze)
         raise HoldoutSealed("the blueprint TEST (2025-07-01 on) has no range by name: name its dates and pass allow_holdout=ALLOW_BT "
                             "(blueprint/runner.run_test only, for a read that is claimed in the one-read log)")
+    if key in WF_SWITCHES:
+        raise HoldoutSealed(f"{key} has no range by name: name its dates (blueprint/wfmonths.is_days / oos_days)")
     if key == "exam":
         raise HoldoutSealed("the EXAM period (>= 2025-01-01) is sealed: name its dates and pass allow_exam=True explicitly")
     if key not in PERIODS:
@@ -252,7 +260,7 @@ def allow_level(allow_holdout=False, allow_exam=False, allow_check=False):
     year 2025 and nothing later) | False. The one place the three keywords are folded into the value the guards read.
     ALLOW_BP (the blueprint BUILD, to 2025-06-30) passes through as itself and is never widened by another keyword.
     ALLOW_BT (the blueprint TEST, from 2025-07-01) passes through as itself too: no other keyword opens a build day under it."""
-    if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT):
+    if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT, *WF_SWITCHES):
         return allow_holdout
     if allow_holdout is True or allow_exam is True:
         return True
@@ -267,11 +275,25 @@ def _seal_end(allow_holdout) -> dt.date:
     return dt.date(2026, 12, 31) if allow_holdout else IN_SAMPLE[1]
 
 
-def check_holdout(d, allow_holdout: bool = False) -> None:
+def _wf_check(d, level: str, root: str) -> None:
+    """The 3:1 switches: d must lie in an in-sample month (ALLOW_WF_IS) / an out-of-sample month (ALLOW_WF_OOS) of root's blocks."""
+    if str(W) not in sys.path:
+        sys.path.append(str(W))
+    from blueprint import wfmonths as WM
+    ins, oos = WM.month_sets(root)
+    if _date(d).isoformat()[:7] not in (ins if level == ALLOW_WF_IS else oos):
+        raise HoldoutSealed(f"{d} is not in an {'in-sample' if level == ALLOW_WF_IS else 'out-of-sample'} month of the {root} 3:1 "
+                            f"blocks: the {level} switch never opens it")
+
+
+def check_holdout(d, allow_holdout: bool = False, root: str = "NQ") -> None:
     """The EXAM seal: a date >= 2025-01-01 raises unless allow_holdout (= allow_exam) is exactly True. The CHECK switch
     (allow_holdout == ALLOW_CHECK: what allow_check=True becomes) opens 2025-01-01..2025-12-31 ONLY -- 2026+ still raises.
     The blueprint BUILD switch (allow_holdout == ALLOW_BP) opens up to 2025-06-30 ONLY -- 2025-07-01 on still raises.
-    The blueprint TEST switch (allow_holdout == ALLOW_BT) opens 2025-07-01 on ONLY -- every day before it raises."""
+    The blueprint TEST switch (allow_holdout == ALLOW_BT) opens 2025-07-01 on ONLY -- every day before it raises.
+    The 3:1 switches (ALLOW_WF_IS / ALLOW_WF_OOS) open only the in-sample / out-of-sample months of root's blocks."""
+    if isinstance(allow_holdout, str) and allow_holdout in WF_SWITCHES:
+        return _wf_check(d, allow_holdout, root)
     if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:
         if _date(d) < BP_TEST_START:
             raise HoldoutSealed(f"{d} is before the blueprint TEST range (starts {BP_TEST_START}): the build days are never "
@@ -477,7 +499,7 @@ def load_tape(d, root: str = "NQ", allow_holdout: bool = False, allow_exam: bool
     tester's own tape cache (or this project's own build of a session the tester never cached: build_tapes).
     Raises HoldoutSealed for a 2025+ date unless allow_exam=True (= allow_holdout=True); allow_check=True opens 2025 only."""
     d = _date(d)
-    check_holdout(d, allow_level(allow_holdout, allow_exam, allow_check))
+    check_holdout(d, allow_level(allow_holdout, allow_exam, allow_check), root)
     p = tape_path(d, root) if root == "NQ" else None
     if p is None or not p.exists():                 # ES / GC always; NQ for a session with no parquet yet (2026-09-23 on): the tester's own tape
         p = hb_tape_path(d, root)
@@ -506,9 +528,9 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
     allow_check=True it may end no later than 2025-12-31."""
     start, end = _date(start), _date(end)
     level = allow_level(allow_holdout, allow_exam, allow_check)
-    check_holdout(end, level)
-    if isinstance(level, str) and level == ALLOW_BT:  # the TEST switch seals what lies BEFORE it: a range that starts in the build days raises
-        check_holdout(start, level)
+    check_holdout(end, level, root)
+    if isinstance(level, str) and level in (ALLOW_BT, *WF_SWITCHES):  # these switches seal the START too (TEST: the build days; 3:1: the other months)
+        check_holdout(start, level, root)
     out = set()
     for y in range(start.year, end.year + 1):
         files = (list((TAPE_DIR / root / str(y)).glob("*/*.parquet")) + list((HB_TAPE / root).glob(f"{y}-*.tape")) if root == "NQ"
@@ -520,7 +542,17 @@ def sessions(start, end, root: str = "NQ", allow_holdout: bool = False, allow_ex
                 continue
             if start <= d <= end and d.weekday() < 5:
                 out.add(d)
+    if isinstance(level, str) and level in WF_SWITCHES:
+        _wf_days(out, level, root)
     return sorted(out)
+
+
+def _wf_days(days, level: str, root: str) -> None:
+    """Every day under a 3:1 switch is checked; an out-of-sample call holds ONE month."""
+    for d in days:
+        check_holdout(d, level, root)
+    if level == ALLOW_WF_OOS and len({_date(d).isoformat()[:7] for d in days}) > 1:
+        raise HoldoutSealed("an out-of-sample call opens ONE month of the 3:1 blocks, never more")
 
 
 def _tapes_one(args) -> tuple:
@@ -615,6 +647,8 @@ def load_daily(root: str = "NQ", allow_holdout: bool = False, build: bool = True
     read per session, memoised per process) -- never a stale file while build_tapes is still adding sessions."""
     if isinstance(allow_holdout, str):               # a string is the CHECK switch, a blueprint switch or nothing
         allow_holdout = allow_level(allow_holdout)
+    if isinstance(allow_holdout, str) and allow_holdout in WF_SWITCHES:   # the 3:1 runs: every day's bar, as prior data only (the runner
+        allow_holdout = ALLOW_BT                                            # hands a day the bars BEFORE it); trades stay sealed by month
     if isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT:      # the blueprint TEST: the BUILD's bars (prior data, read under
         return load_daily(root, ALLOW_BP, build) + _daily_test(root, build)   # the build switch) + the test days' own
     if root != "NQ":
@@ -751,6 +785,8 @@ def load_eve_atr(root: str = "NQ", build: bool = True, workers: int = 1, allow_h
     cache/eve_atr30_<root>_check.json (the in-sample file never gets a 2025 row; nothing dated 2026+ is read).
     Blueprint BUILD (allow_holdout == ALLOW_BP): the same with 2025-01-01..2025-06-30 only, in cache/eve_atr30_<root>_bp.json.
     Blueprint TEST (allow_holdout == ALLOW_BT): the BUILD's dict + 2025-07-01 .. the archive's end, in cache/eve_atr30_<root>_bt.json."""
+    if isinstance(allow_holdout, str) and allow_holdout in WF_SWITCHES:   # the 3:1 runs: prior data of the whole history, as load_daily
+        allow_holdout = ALLOW_BT
     chk = isinstance(allow_holdout, str) and allow_holdout == ALLOW_CHECK
     if chk:
         return {**load_eve_atr(root, build, workers), **_eve_atr_file(root, build, workers, CHECK, True)}
@@ -1732,6 +1768,8 @@ class Template(Strategy):
           as its own engine segment before the day window, so no trade spans midnight or the 17:00-18:00 break.
           Overnight range onh / onl: london 00:00-03:00, NY sessions 00:00-09:30, pre 00:00-08:25, eve / asia none.
       stop_mode = pct             stop distance = stop_val PERCENT of the entry reference price (0.10 = 0.10 %).
+      stop_mode = own             stop distance = stop_val x |ref - the family's structure level| (floor 0.25 ATR; hm40, the owner
+                                  2026-10-20). No structure level -> NO order, counted in result["skipped_by_reason"].
       f_book = on    (NQ, D2)     an entry is allowed only when the 5-minute mean imb10 does NOT oppose its side
                                   (long needs mean >= 0, short <= 0). No signal (NaN / book_ok False / stale) -> NO entry.
       f_thin = on    (NQ, D4)     an entry is allowed only when the break-side top-10 depth is thin: ask10_rel15
@@ -1766,7 +1804,7 @@ class Template(Strategy):
                 "f_book": "off", "x_book": "off", "f_thin": "off", "hold_to": "session"}
     SCHEMA = {"tf": ("choice", ("1", "5", "15", "30")),                    # the tester drafts' inputs (R/gen_drafts COMMON)
               "sess": ("choice", ("all", "asia", "london", "nyam", "mid", "pm", "eve", "pre", "globex")),
-              "dir": ("choice", ("both", "long", "short")), "stop_mode": ("choice", ("atr", "pts", "struct", "pct")),
+              "dir": ("choice", ("both", "long", "short")), "stop_mode": ("choice", ("atr", "pts", "struct", "pct", "own")),
               "stop_val": ("float", 0.1, 1000), "tgt_r": ("float", 0, 20), "trail_atr": ("float", 0, 10),
               "exit_bars": ("int", 0, 500), "max_tr": ("int", 1, 20),
               "f_trend": ("choice", ("off", "with", "against")), "f_vwap": ("choice", ("off", "with", "against")),
@@ -1784,6 +1822,7 @@ class Template(Strategy):
 
     def __init__(self, params: dict | None = None):
         super().__init__(params)
+        self.skipped_by_reason = {}                # reason -> signals that placed no order (run_many sums them)
         self.S = dict(SESS)                        # this instance's session table: SESS + the family's own windows
         self.S.update(self.fam_sessions())
         ids = self.sessions()
@@ -2160,6 +2199,10 @@ class Template(Strategy):
             d = self.p["stop_val"] / 100.0 * abs(ref)        # stop_val PERCENT of the entry reference price
         elif m == "struct" and struct is not None:
             d = max(abs(ref - struct), 0.25 * a)
+        elif m == "own":                                     # never silently an ATR stop: no level -> None, no order
+            if struct is None:
+                return None
+            d = max(abs(ref - struct) * self.p["stop_val"], 0.25 * a)
         else:
             d = self.p["stop_val"] * a
         return max(d, 2 * ctx.tick)
@@ -2170,6 +2213,10 @@ class Template(Strategy):
         r = self.p["tgt_r"]
         return ref + sd * r * d if r > 0 else None
 
+    def _no_level(self):
+        k = "own stop: no structure level"
+        self.skipped_by_reason[k] = self.skipped_by_reason.get(k, 0) + 1
+
     def _mkt(self, ctx, side, struct=None, tp_px=None, ref=None, tag=None):
         """Market entry at the signal close (or `ref`), brackets re-priced to the fill."""
         if not self.allowed(side):
@@ -2179,6 +2226,8 @@ class Template(Strategy):
         if tp_px is not None and (tp_px - ref) * sd < 2 * ctx.tick:
             return None                             # the target is already reached / behind us: no trade
         d = self._dist(ctx, ref, struct)
+        if d is None:
+            return self._no_level()
         ctx.move_brackets_to_fill = True
         o = ctx.market(side, sl=ref - sd * d, tp=self._tp(sd, ref, d, tp_px), ref=ref, **_tagkw(tag))
         self.orders.append([o, None, False])
@@ -2197,6 +2246,9 @@ class Template(Strategy):
             if not self.allowed(side) or (not imm and (px - lp) * sd <= 0):
                 continue
             d = self._dist(ctx, px, struct)
+            if d is None:
+                self._no_level()
+                continue
             ctx.move_brackets_to_fill = True
             os_.append(ctx.stop_entry(side, px, sl=px - sd * d, tp=self._tp(sd, px, d, tp_px), **_tagkw(tag)))
         if len(os_) == 2:
@@ -2217,6 +2269,8 @@ class Template(Strategy):
         if (lp - px) * sd <= 0:
             return None
         d = self._dist(ctx, px, struct)
+        if d is None:
+            return self._no_level()
         o = ctx.limit_entry(side, px, sl=px - sd * d, tp=self._tp(sd, px, d, tp_px), **_tagkw(tag))
         self.orders.append([o, self.nb + ttl if ttl else None, False])
         return o
@@ -2314,7 +2368,7 @@ def _run_days(job):
     for iso in days:
         wait_compute_window()
         d = dt.date.fromisoformat(iso)
-        check_holdout(d, allow_holdout)
+        check_holdout(d, allow_holdout, root)
         active = [k for k, st in enumerate(strats) if st.trades_on(d)]
         if not active:
             continue
@@ -2384,6 +2438,8 @@ def _run_days(job):
             trades += res.trades
             if res.skip:
                 no_trade.append({"date": iso, "reason": res.skip})
+    for st, o in zip(strats, out):
+        o["skipped_by_reason"] = dict(getattr(st, "skipped_by_reason", {}))
     return out
 
 
@@ -2441,7 +2497,8 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     """Run several (strategy class, params) specs in ONE pass over the tapes (a grid: each session's tape,
     bars and features are loaded once and shared by every cell). Returns one result dict per spec, in order:
     {"trades": [...R trades.json schema...], "skipped": [...], "no_trade": [...], "sessions": n, "used": n,
-    "skipped_by_error": n, "unrealistic_winners": n, "elapsed_s": s (the whole pass), "meta": {...}}; trades
+    "skipped_by_error": n, "unrealistic_winners": n, "skipped_by_reason": {reason: signals that placed no order},
+    "elapsed_s": s (the whole pass), "meta": {...}}; trades
     sorted by (exit, entry) like a tester bundle.
     `features`: optional picklable callable date -> Features | None (e.g. L2Features([...])).
     SENSITIVITY (defaults = the tester's validated law; any change is recorded in meta and meta["stress"]):
@@ -2483,13 +2540,16 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
         start, end = _period_range(period)
         if str(period).lower() == ALLOW_BP:           # the blueprint BUILD: its own seal (to 2025-06-30), whatever flag came along
             allow_holdout = ALLOW_BP
-    test = isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT
+    wf = isinstance(allow_holdout, str) and allow_holdout in WF_SWITCHES
+    if wf and days and start is None and end is None:  # a 3:1 run names its days: they are its range
+        start, end = min(map(_date, days)), max(map(_date, days))
+    test = wf or (isinstance(allow_holdout, str) and allow_holdout == ALLOW_BT)
     if test and (start is None or end is None):       # the blueprint TEST has no range of its own: the dates its lock froze are named
-        raise HoldoutSealed("a blueprint TEST run names its dates: start and end (2025-07-01 .. the session its lock froze)")
+        raise HoldoutSealed("a blueprint TEST / 3:1 run names its dates: start and end, or days=")
     start, end = _date(IN_SAMPLE[0] if start is None else start), _date(IN_SAMPLE[1] if end is None else end)
-    check_holdout(end, allow_holdout)
+    check_holdout(end, allow_holdout, root)
     if test:
-        check_holdout(start, allow_holdout)           # ... and it never starts in the build days
+        check_holdout(start, allow_holdout, root)     # ... and it never starts in the build days
     if root not in SPECS:
         raise ValueError(f"root {root!r}: one of {sorted(SPECS)}")
     if on_error not in ("skip", "raise"):
@@ -2515,9 +2575,11 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
         raise ValueError(f"Level-2 features exist for {sorted(L2_ROOTS)} only (EDGE_SPEC user rule 4): root {root} runs without features")
     all_days = sessions(start, end, root, allow_holdout) if days is None else sorted(_date(d) for d in days)
     for d in all_days:
-        check_holdout(d, allow_holdout)
+        check_holdout(d, allow_holdout, root)
         if test and not start <= d <= end:            # the named range is the whole of a TEST run: a day outside it is not run
             raise HoldoutSealed(f"{d} is outside the named range {start} .. {end} of this blueprint TEST run")
+    if wf:
+        _wf_days([start, end], allow_holdout, root)   # an out-of-sample run: ONE month, start to end
     guard_months: frozenset = frozenset()
     if needs_exec_guard(features):
         pg = phase_guard()
@@ -2553,9 +2615,11 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
     elapsed = round(time.monotonic() - t_start, 2)
     results = []
     for k, (cls, _) in enumerate(specs):
-        trades, skipped, no_trade, n_sess, n_two, n_guard, eve_skipped = [], [], [], 0, 0, 0, []
+        trades, skipped, no_trade, n_sess, n_two, n_guard, eve_skipped, by_reason = [], [], [], 0, 0, 0, [], {}
         for part in parts:
             o = part[k]
+            for r, n in o.get("skipped_by_reason", {}).items():
+                by_reason[r] = by_reason.get(r, 0) + n
             trades += o["trades"]
             skipped += o["skipped"]
             no_trade += o["no_trade"]
@@ -2581,13 +2645,13 @@ def run_many(specs: list, start=None, end=None, *, root: str = "NQ", workers: in
             "trades": trades, "skipped": skipped, "no_trade": no_trade, "sessions": n_sess,
             "used": n_sess - len(skipped), "skipped_by_error": len(errors), "both_sides_sessions": n_two,
             "unrealistic_winners": len(unrealistic_winners(trades, SPECS[root][1])), "elapsed_s": elapsed,
-            "eve_skipped": sorted(eve_skipped, key=lambda x: x["date"]),
+            "eve_skipped": sorted(eve_skipped, key=lambda x: x["date"]), "skipped_by_reason": by_reason,
             "meta": {"engine": ENGINE_VERSION,
                      "fill_law": "tick replay (ofb_tick tape)" if root == "NQ" else "tick replay (tester tape cache)",
                      "strategy": f"{cls.__module__}.{cls.__name__}", "inputs": probes[k].p, "root": root,
                      "point_value": SPECS[root][0], "tick": SPECS[root][1],
                      "range": {"start": start.isoformat(), "end": end.isoformat(), "holdout": end >= HOLDOUT_START,
-                               "period": allow_holdout if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT)
+                               "period": allow_holdout if isinstance(allow_holdout, str) and allow_holdout in (ALLOW_BP, ALLOW_BT, *WF_SWITCHES)
                                else period_of(start, end)},
                      "segments": [x for x, w in (("eve", getattr(probes[k], "eve_window", None)),
                                                  ("day", probes[k].session_window)) if w],

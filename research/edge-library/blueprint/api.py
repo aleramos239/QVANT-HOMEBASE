@@ -16,12 +16,15 @@ steps 5 and 6): `bp.py card`, `bp.py build <name> --reason=...`, `bp.py status`.
 stored units, a smoke run on named days) never counts as a verdict: the idea store reads that field.
 The later phases are modules of their own: the freeze and the one read (plan step 8), propodds.py = `bp.py sim` (phase 5,
 step 9), evalcard.py = `bp.py eval-card` (phase 6, step 10); blocklist.py = `bp.py blocks`. quick.py = `bp.py heatmap` and
-`bp.py mc`, two read-only views of a built idea. An EARLY LOOK at the test days (`bp.py test <name> --confirm --early-look`:
+`bp.py mc`, two read-only views of a built idea. THE DEFAULT ROUTE OF A NEW IDEA since 2026-10-20 (hmwf.py, the owner): wf_run = every
+hm40 box on the 3:1 in-sample months (`bp.py wf run`, only on the owner's words), wf_show, wf_pick = the owner's box, wf_oos = its test
+months (`bp.py wf oos`, only on his words). An EARLY LOOK at the test days (`bp.py test <name> --confirm --early-look`:
 oos.py) is kept in the idea's folder EARLY_LOOK, beside its own files and never as one of them.
 """
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 import judge as J
 import l2sim as S
@@ -35,7 +38,8 @@ from . import tables as T
 
 DRY = "DRY RUN on the old build days"
 PHASE = {"card": 0, "code-check": 1, "build": 2, "pools": 2, "lock": 3, "test": 4, "sim": 5, "portfolio": 5, "eval-card": 6,      # plan section 4
-         "heatmap": 2, "mc": 2}                     # the two views read a build (mc --on=test: a test, and says phase 4)
+         "heatmap": 2, "mc": 2,                     # the two views read a build (mc --on=test: a test, and says phase 4)
+         "wf run": 2, "wf show": 2, "wf pick": 3, "wf oos": 4}      # the 3:1 walk-forward of every hm40 box (hmwf.py): the default since 2026-10-20
 EARLY_LOOK = "early_look"                           # <idea>/early_look/{lock.json, test.json}: an early look's files, and the field that marks them
 REFUSALS = (J.Refuse, R.RuleError, LB.CapExceeded, S.HoldoutSealed)       # what a command answers with `ok` false, exit 2
 
@@ -268,3 +272,99 @@ def _json(path):
 def _is_store(source, out) -> bool:
     d = CH.find(source, out)
     return (d / "run.json").exists() and (d / "cells.npz").exists()
+
+
+# ================================================================ the 3:1 walk-forward of every hm40 box (hmwf.py; the owner, 2026-10-20)
+
+def _said(owner_said) -> str:
+    """The owner's words, as he said them (nothing is trimmed): refused when there are none."""
+    if not isinstance(owner_said, str) or not owner_said.strip():
+        raise J.Refuse("this runs only when the owner says so: --owner-said=\"<his words, word for word>\"")
+    return owner_said
+
+
+def wf_spec(spec, root=None) -> dict:
+    """What `wf run` runs: a spec in run_idea's format (a dict) -- or the name of an idea on file: its card's home table (one market,
+    one bar size, its home session)."""
+    if isinstance(spec, dict):
+        return spec
+    from . import records as REC                    # (records imports this module)
+    name = spec
+    idea = REC._spec(name, REC._json(REC._carded(name, root) / "spec.json"))
+    rows, plan = REC.card_lines(idea)
+    if plan is None:
+        raise J.Refuse(f"the card of {name} on file is not whole ({next(x['text'] for x in rows if x['passed'] is False)}): write it again (bp.py card)")
+    return {**REC.engine(idea, plan, name)[0], "sessions": [plan["home"]["session"]]}
+
+
+def _pct(v) -> str:
+    return "  -  " if v is None else f"{100 * v:4.0f}%"
+
+
+def _usd(v) -> str:
+    return "-" if v is None else f"{v:,.0f}"
+
+
+def _wf_text(name: str, s: dict) -> str:
+    """The in-sample table (one row a box), the pick, the test months: short, for a person."""
+    rows, lock, oos = s["is"], s["lock"], s["oos"]
+    out = [f"3:1 IN-SAMPLE TABLE of {name}: {len(rows)} boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.",
+           "   n  box                          win    b/e  trades       net    pf  beats random"]
+    for r in rows:
+        pf = "-" if r["pf"] is None else f"{r['pf']:.2f}"
+        out.append(f"{r['n']:4d}  {r['box']:<27s} {_pct(r['win_rate'])} {_pct(r['breakeven'])} {r['trades']:7d} {_usd(r['net']):>9s} {pf:>5s}  {_pct(r['beats_random'])}")
+    out.append(f"PICKED: box {lock['box']} ({lock['at']}, {lock['who']}). It never changes." if lock else "NOT PICKED: the owner picks a box.")
+    if oos is None:
+        out.append("TEST MONTHS: not run.")
+    elif oos.get("state"):
+        out.append(f"TEST MONTHS: {oos['state']}.")
+    else:
+        x = oos["record"]
+        out.append(f"TEST MONTHS of box {x['box']}: {x['trades']} trades, win {_pct(x['win_rate'])}, net {_usd(x['net'])}, {len(oos['blocks'])} months")
+        out += [f"  {b['oos']}  {b['trades']:3d} trades  win {_pct(b['win_rate'])}  net {_usd(b['net'])}" for b in oos["blocks"]]
+    return "\n".join(out)
+
+
+def wf_show(name: str, command: str = "wf show") -> dict:
+    """`bp.py wf show <name>`: the in-sample table, the pick, the test-month record if it was read. Runs nothing."""
+    from . import hmwf as H                         # (hmwf imports this module)
+    s = H.show(name)
+    r = result(command, name, wf=s, text=_wf_text(name, s))
+    r["next"] = (f"The owner picks a box by its number: bp.py wf pick {name} <n> (blueprint_wf_pick)." if s["lock"] is None else
+                 f"The test months run only when the owner says so: bp.py wf oos {name} {s['lock']['box']} --owner-said=\"...\" (blueprint_wf_oos)."
+                 if s["oos"] is None else "")
+    return r
+
+
+def wf_on_file(name: str) -> bool:
+    """Has the idea a 3:1 in-sample table (hmwf)? (Then `bp.py heatmap <name>` shows it.)"""
+    from . import hmwf as H
+    return (H.RUNS / name / H.IS / "run.json").exists() or any(H.RUNS.glob(f"{name}-*-tf*/{H.IS}/run.json"))
+
+
+def wf_run(spec, owner_said, workers=None, root=None, progress=None) -> dict:
+    """`bp.py wf run <spec|name> --owner-said=...`: every hm40 box on the 3:1 in-sample months (hmwf.run_is: a rerun does no work, a
+    changed idea under the same name is refused), then the table. Only on the owner's words."""
+    from . import hmwf as H
+    said, sp = _said(owner_said), wf_spec(spec, root)
+    got = H.run_is(sp, workers, progress=progress)
+    try:
+        r = wf_show(sp["name"], "wf run")           # by the idea's name, as the chat tools name it
+    except J.Refuse:                                # (the idea has stores on more than one market or bar size: the store's own name)
+        r = wf_show(Path(got["store"]).parent.name, "wf run")
+    return {**r, "owner_said": said}
+
+
+def wf_pick(name: str, box) -> dict:
+    """`bp.py wf pick <name> <box>`: the owner's box (its row number or id) = the lock, written once."""
+    from . import hmwf as H
+    H.pick(name, box, who="owner")
+    return wf_show(name, "wf pick")
+
+
+def wf_oos(name: str, box, owner_said, workers=None, progress=None) -> dict:
+    """`bp.py wf oos <name> <box> --owner-said=...`: the test months of the picked box, once, on the owner's words (hmwf.run_oos)."""
+    from . import hmwf as H
+    said = _said(owner_said)
+    H.run_oos(name, box, said, workers, progress=progress)
+    return {**wf_show(name, "wf oos"), "owner_said": said}

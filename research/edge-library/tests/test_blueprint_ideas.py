@@ -648,7 +648,7 @@ def test_rounds_are_counted_the_bar_rises_and_round_six_is_refused():
     with tiny(), no_engine():
         word = refused(lambda: REC.build(name, "a sixth try", root=root), "round 6")
     assert "5" in word and IS.rounds(name, root) == [1, 2, 3, 4, 5] and not (root / name / "rounds" / "6").exists()
-    rc, txt = _run(["build", name, "--reason=a sixth try", f"--root={root}", "--json"])
+    rc, txt = _run(["build", name, "--owner-said=build it", "--reason=a sixth try", f"--root={root}", "--json"])
     d = json.loads(txt)
     assert rc == 2 and d["ok"] is False and "round 6" in d["error"] and (d["command"], d["name"], d["lines"]) == ("build", name, [])
     RESULTS["test_rounds_are_counted_the_bar_rises_and_round_six_is_refused"] = (5, 5, "rounds, then the sixth refused")
@@ -663,7 +663,7 @@ def test_a_run_on_named_days_is_a_smoke_run_and_saves_nothing():
     try:
         with no_engine():
             r = REC.build(name, "a look at the plumbing", root=root, days=DAYS, cells=CELLS, out=str(OUT), ledger=str(LEDGER))
-            rc, txt = _run(["build", name, "--reason=a look at the plumbing", "--days=" + ",".join(DAYS), "--cells=" + ",".join(CELLS), f"--out={OUT}",
+            rc, txt = _run(["build", name, "--owner-said=build it", "--reason=a look at the plumbing", "--days=" + ",".join(DAYS), "--cells=" + ",".join(CELLS), f"--out={OUT}",
                             f"--ledger={LEDGER}", f"--root={root}", "--json"])
     finally:
         RUN.clock = keep
@@ -677,7 +677,7 @@ def test_a_run_on_named_days_is_a_smoke_run_and_saves_nothing():
         refused(lambda: REC.build(name, "a look", root=root, days=DAYS, cells=CELLS), "named days")
     # the options of the one-table build belong to --spec-file: an idea's record says its own home, filter and round
     for opt in ("--home=NQ-tf15-mid", "--filter=momentum_with", "--round=2"):
-        rc, txt = _run(["build", name, "--reason=x", opt, f"--root={root}"])
+        rc, txt = _run(["build", name, "--owner-said=build it", "--reason=x", opt, f"--root={root}"])
         assert rc == 2 and "--spec-file" in txt, txt
 
 
@@ -787,7 +787,7 @@ def test_the_commands_in_this_process():
     for argv, stdin, word in ((["card", name, "--spec=-"], "", "stdin"), (["card", name, "--spec=-"], "{not json", "JSON"), (["card", name], "", "--spec"),
                               (["card", name, f"--spec={tmp() / 'no_card.json'}"], "", "no_card.json"), (["card", "--spec=-"], json.dumps(idea(name)), "name"),
                               (["card", "bpi_other", "--spec=-"], json.dumps(idea(name)), "bpi_other"), (["status", "bpi_nobody"], "", "no idea"),
-                              (["build", "bpi_nobody", "--reason=x"], "", "no card"), (["build", name], "", "--reason"), (["lock", name], "", "no build on file"),
+                              (["build", "bpi_nobody", "--owner-said=build it", "--reason=x"], "", "no card"), (["build", name, "--owner-said=build it"], "", "--reason"), (["lock", name], "", "no build on file"),
                               (["test", name, "--confirm"], "", "not frozen"), (["test", name], "", "not frozen")):
         rc, js = _run([*argv, *last], stdin)
         d = json.loads(js)
@@ -818,9 +818,9 @@ def test_the_command_lines_of_the_connector():
     assert rc == 0 and list(d)[:len(CONTRACT)] == list(CONTRACT) and (d["ok"], d["command"], d["status"], d["phase"]) == (True, "card", "idea", 0)
     rc, e = bp(["card", name, "--spec=-", *last], json.dumps(idea(name, run={"exits": "extended"})))
     assert rc == 2 and e["ok"] is False and "0.2" in e["error"]
-    rc, e = bp(["build", name, "--wait=0", *last], **env)                         # a refusal comes back at once, never as a job
+    rc, e = bp(["build", name, "--owner-said=build it", "--wait=0", *last], **env)                         # a refusal comes back at once, never as a job
     assert rc == 2 and e["job"] is None and "--reason" in e["error"] and not (root / "_jobs").exists()
-    rc, d = bp(["build", name, "--reason=the plain idea, as carded", "--wait=0", *last], **env)
+    rc, d = bp(["build", name, "--owner-said=build it", "--reason=the plain idea, as carded", "--wait=0", *last], **env)
     assert rc == 0 and (d["ok"], d["command"], d["name"], d["phase"], d["round"], d["lines"]) == (True, "build", name, 2, 1, []) and d["job"]["state"] in ("queued", "running")
     jid = d["job"]["id"]
     assert (root / name / "rounds/1/reason.txt").read_text() == "the plain idea, as carded\n"                # saved before the job started
@@ -838,7 +838,7 @@ def test_the_command_lines_of_the_connector():
     rc, s = bp(["status", name, *last])
     assert rc == 0 and s["status"] == d["status"] and s["round"] == 1 and [x["line"] for x in s["lines"]] == BUILD_LINES
     # a second round inside its wait: done at once (everything is stored), the bar of round 2
-    rc, d2 = bp(["build", name, "--reason=the same idea, read again", "--wait=300", *last], **env)
+    rc, d2 = bp(["build", name, "--owner-said=build it", "--reason=the same idea, read again", "--wait=300", *last], **env)
     assert rc == 0 and d2["job"]["state"] == "done" and d2["round"] == 2 and d2["bar"] == 0.975 and IS.rounds(name, root) == [1, 2]
     RESULTS["test_the_command_lines_of_the_connector"] = (2, 2, "rounds through the front door, one as a job")
 
@@ -871,8 +871,8 @@ def test_the_apps_connector_against_this_toolkit():
     life(1)
     root, name = tmp() / "ideas_app", NAME
     calls = [("blueprint_card", {"name": name, "card": CARD, "settings": SETTINGS}), ("blueprint_card", {"name": name, "card": {**CARD, "neighbors": []}, "settings": SETTINGS}),
-             ("blueprint_build", {"name": name, "reason": "the plain idea, as carded", "wait_s": 600}), ("blueprint_status", {}), ("blueprint_status", {"name": name}),
-             ("blueprint_build", {"name": "bpi_nobody", "reason": "x"})]
+             ("blueprint_build", {"name": name, "owner_said": "build it", "reason": "the plain idea, as carded", "wait_s": 600}), ("blueprint_status", {}), ("blueprint_status", {"name": name}),
+             ("blueprint_build", {"name": "bpi_nobody", "owner_said": "build it", "reason": "x"})]
     env = {**os.environ, "HOMEBASE_IDEAS_ROOT": str(root), "HOMEBASE_DRAFTS_DIR": str(tmp() / "drafts_app"), "HOMEBASE_BP": str(W / "bp.py"),
            "HOMEBASE_BP_PYTHON": sys.executable, REC.TEST_RUN: json.dumps({**TINY, "tester": str(tmp() / "tester_app")})}
     q = subprocess.run([str(APP_PYTHON), "-B", "-c", CONNECTOR, str(S.REPO), json.dumps(calls)], capture_output=True, text=True, timeout=900, cwd=str(tmp()), env=env)

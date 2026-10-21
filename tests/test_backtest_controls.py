@@ -336,3 +336,107 @@ def test_ema_line_is_built_from_closed_bars_only():
     assert first == et_ns(D, "09:31:00") and lines[first] == (130.0, 130.0)     # seeded with the first close
     close, line = lines[et_ns(D, "09:32:00")]
     assert close == 131.0 and abs(line - (130.0 + 2 / 21 * 1.0)) < 1e-9
+
+
+# ---- the own stop x multiplier and the ATR of the strategy's own bar (task 8)
+def test_own_mult_scales_the_strategy_stop():
+    rows = [("09:29:59", 100.0), ("09:30:05", 100.0), ("09:31", 101.0), ("15:00", 101.0)]
+    plan = {"09:30:00": long_at(sl=80.0, tp=130.0, ref=100.0)}                 # its own stop: 20 points
+    t, = go(rows, plan, {"stop_own_mult": 0.5}).trades
+    assert (t.sl, t.tp) == (90.0, 130.0)                                      # 10 points; its own target kept
+    assert go(rows, plan, {"stop_own_mult": 2}).trades[0].sl == 60.0
+    assert go(rows, {"09:30:00": long_at(ref=100.0)}, {"stop_own_mult": 0.5}).trades[0].sl is None   # no stop of its own
+    assert parse({"stop_own_mult": 1.0}) == {} and parse({"stop_own_mult": 0.5}) == {"stop_own_mult": 0.5}
+    assert parse({"stop_mode": "fixed", "stop_pts": 5, "stop_own_mult": 0.5}) == {"stop_mode": "fixed", "stop_pts": 5.0}
+    with pytest.raises(ValueError, match="stop_own_mult"):
+        parse({"stop_own_mult": 11})
+
+
+def test_old_request_unchanged():
+    """A request as the Lab sent it before task 8 validates to the same dict (= the same cache key)."""
+    import json
+
+    from homebase.backtest.runner import validate
+    old = {"strategy": "nq930", "inputs": {"adx_gate": False}, "range": {"kind": "research"},
+           "controls": {"entry_from": "", "direction": "both", "stop_mode": "atr", "stop_atr": 1.5, "target_mode": "rr",
+                        "target_rr": 2, "atr_minutes": 5, "atr_period": 14, "max_trades": 0}}
+    v = validate(old)
+    assert v["controls"] == {"stop_mode": "atr", "stop_atr": 1.5, "target_mode": "rr", "target_rr": 2.0}
+    assert v["range"] == {"kind": "research", "start": "2021-09-22", "end": "2025-06-30",
+                          "label": "Build · Sep 2021 – Jun 2025", "holdout": False}
+    new = validate({**old, "controls": {**old["controls"], "stop_own_mult": 1.0}})
+    assert json.dumps(new, sort_keys=True) == json.dumps(v, sort_keys=True)
+    assert "controls" not in validate({**old, "controls": {"stop_own_mult": 1.0, "atr_minutes": 5}})
+
+
+class BarScript(Script):
+    bar_minutes = 5
+
+
+def test_atr_minutes_zero_uses_bar_size():
+    rows, p = [], 100.0
+    for k in range(0, 40):                                    # 1-minute ranges vary 0..4, 5-minute ones are 4: the ATRs differ
+        m = 9 * 60 + k
+        rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + (k % 5))]
+    plan = {"09:36:00": long_at()}
+    cfg = {"stop_mode": "atr", "stop_atr": 1, "atr_period": 3}
+
+    def sl(cls, minutes):
+        r = run_session(cls(plan), tape(rows), Costs(0.0, 0.0), qty=1, controls=Controls.from_dict({**cfg, "atr_minutes": minutes}))
+        return r.trades[0].entry_price - r.trades[0].sl if r.trades else r.blocked
+
+    assert sl(BarScript, 0) == sl(BarScript, 5) != sl(BarScript, 1)
+    assert sl(Script, 0) == {"atr: the strategy has no bar size": 1}
+    from homebase.backtest.controls import value_label
+    assert value_label("atr_minutes", 0) == "own"
+    from homebase.backtest.runner import validate
+    with pytest.raises(ValueError, match="no bar size"):
+        validate({"strategy": "nq930", "controls": {**cfg, "atr_minutes": 0}})
+
+
+def test_own_stop_flag():
+    """Only a strategy whose entries pass their own SL says so; a draft says it as a literal."""
+    from homebase.backtest import drafthost
+    from homebase.strategies.gc_nfpcpi import GCNfpCpi
+    from homebase.strategies.straddle import OpenStraddle
+    assert Strategy.own_stop is False and OpenStraddle.own_stop is True and GCNfpCpi.own_stop is True
+    head = "from homebase.strategies.base import Strategy\n\nclass X(Strategy):\n    name = 'x'\n    root = 'NQ'\n"
+    assert drafthost.stub_class("x", head + "    own_stop = True\n").own_stop is True
+    assert drafthost.stub_class("x", head).own_stop is False
+
+
+# ---- the own-stop floor (task 8 fix round 1): max(own x mult, 0.25 x ATR), then at least 2 ticks
+def _atr_rows(width):
+    rows = []
+    for k in range(0, 40):                                    # every 5-minute bar spans `width`: ATR(5 min) = width
+        m = 9 * 60 + k
+        rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + width)]
+    return rows
+
+
+def _floor_sl(width, mult, own_sl=90.0, **kw):
+    ctl = Controls.from_dict({"own_floor": True, "stop_own_mult": mult, "atr_minutes": 0, "atr_period": 3, **kw})
+    r = run_session(BarScript({"09:36:00": long_at(sl=own_sl, ref=100.0)}), tape(_atr_rows(width)), Costs(0.0, 0.0),
+                    qty=1, controls=ctl)
+    return round(100.0 - r.trades[0].sl, 2) if r.trades else r.blocked
+
+
+def test_own_floor_is_a_quarter_atr_then_two_ticks():
+    assert _floor_sl(8.0, 0.1) == 2.0                         # own 10 x 0.1 = 1 < 0.25 x 8
+    assert _floor_sl(8.0, 1.5) == 15.0
+    assert _floor_sl(0.25, 0.5, own_sl=99.5) == 0.5           # 0.25 x 0.25 and 0.5 x 0.5 are under 2 ticks
+    assert _floor_sl(8.0, 0.1, atr_period=50) == {"atr warming up": 1}
+    t, = go(ROWS, {"09:30:00": long_at(sl=90.0, ref=100.0)}, {"stop_own_mult": 0.1}).trades
+    assert t.sl == 99.0                                       # without the floor: exactly as before
+
+
+def test_own_floor_keeps_its_keys_and_old_requests_stay_the_same():
+    assert parse({"own_floor": True}) == {"own_floor": True, "stop_own_mult": 1.0, "atr_minutes": 5, "atr_period": 14}
+    assert parse({"own_floor": True, "atr_minutes": 0}) == {"own_floor": True, "stop_own_mult": 1.0, "atr_minutes": 0,
+                                                            "atr_period": 14}
+    assert parse({"own_floor": False, "stop_own_mult": 1.0, "atr_minutes": 5}) == {}
+    assert parse({"own_floor": True, "stop_mode": "fixed", "stop_pts": 5}) == {"stop_mode": "fixed", "stop_pts": 5.0}
+    with pytest.raises(ValueError, match="own_floor"):
+        parse({"own_floor": 1})
+    with pytest.raises(ValueError, match="stop_own_mult"):
+        parse({"stop_own_mult": 0.01})

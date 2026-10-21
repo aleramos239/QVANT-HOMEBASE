@@ -278,8 +278,8 @@ def test_grid_requests_the_rules_refuse(tmp_path):
     with client(tmp_path) as c:
         for bad, word in (({**GRID, "range": {"kind": "custom", "start": "2025-03-01", "end": "2024-01-01"}}, "after"),
                           ({**GRID, "holdout": {"reason": "x"}}, "unknown field"),
-                          ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                             {"key": "sl_pts", "values": [5]}]}, "capped at 60"),
+                          ({**GRID, "axes": [{"key": "offset_pts", "values": list(range(121))},
+                                             {"key": "sl_pts", "values": [5]}]}, "capped at 120"),
                           ({**GRID, "axes": GRID["axes"][:1]}, "2 or 3")):
             r = c.post("/api/tester/grid", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
@@ -347,8 +347,8 @@ def test_walkforward_requests_the_rules_refuse(tmp_path):
         for bad, word in (({**WF, "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-03-31"}}, "too short"),
                           ({**WF, "holdout": {"reason": "x"}}, "unknown field"),
                           ({**WF, "metric": "win_rate"}, "metric"), ({**WF, "min_trades": 0}, "min_trades"),
-                          ({**WF, "axes": [{"key": "offset_pts", "values": list(range(61))},
-                                           {"key": "sl_pts", "values": [5]}]}, "capped at 60")):
+                          ({**WF, "axes": [{"key": "offset_pts", "values": list(range(121))},
+                                           {"key": "sl_pts", "values": [5]}]}, "capped at 120")):
             r = c.post("/api/tester/walkforward", json=bad)
             assert r.status_code == 400 and word in r.json()["detail"], r.json()
         assert c.post("/api/tester/walkforward", json=WF, headers=EVIL).status_code == 403
@@ -481,3 +481,39 @@ def test_a_compare_walkforward_serves_three_schemes_and_their_oos_side_by_side(t
         assert c.get(f"/api/tester/walkforward/{one}/compare").status_code == 409
         assert c.get(f"/api/tester/walkforward/{one}/result", params={"test_months": 1}).status_code == 200
         assert c.get(f"/api/tester/walkforward/{one}/result", params={"test_months": 2}).status_code == 409
+
+
+def test_a_fixed_walkforward_is_picked_then_its_test_months_run_once_on_the_owners_words(tmp_path, monkeypatch):
+    from homebase.backtest import wfmonths
+    layout = [{"i": 0, "is": ["2024-01", "2024-02", "2024-03"], "oos": "2024-04"}]
+    monkeypatch.setattr(wfmonths, "blocks", lambda root, store=None: layout if root == "NQ" else [])
+    body = {"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": WF["axes"]}      # no scheme: fixed, the default
+    with client(tmp_path) as c:
+        wid = c.post("/api/tester/walkforward", json=body).json()["id"]
+        st = poll_wf(c, wid)
+        assert st["status"] == "done", st.get("error")
+        assert st["walkforward"]["scheme"] == "fixed" and st["range"]["kind"] == "wf_is"
+        r = c.get(f"/api/tester/walkforward/{wid}/result").json()
+        assert r["scheme"] == "fixed" and r["cells"][0]["is"]["trades"] >= 1 and r["lock"] is None and "oos" not in r
+        assert c.post(f"/api/tester/walkforward/{wid}/oos", json={"cell": 0, "owner_said": "run it"}).status_code == 409
+        assert c.post(f"/api/tester/walkforward/{wid}/pick", json={"cell": 0}, headers=EVIL).status_code == 403
+        lock = c.post(f"/api/tester/walkforward/{wid}/pick", json={"cell": 0}).json()
+        assert lock["cell"] == 0
+        assert c.post(f"/api/tester/walkforward/{wid}/pick", json={"cell": 1}).status_code == 409
+        r = c.post(f"/api/tester/walkforward/{wid}/oos", json={"cell": 0})
+        assert r.status_code == 409 and "owner's word" in r.json()["detail"]
+        assert c.post(f"/api/tester/walkforward/{wid}/oos", json={"cell": 0, "owner_said": "run it"}, headers=EVIL).status_code == 403
+        assert c.post(f"/api/tester/walkforward/{wid}/oos", json={"cell": 0, "owner_said": "run it"}).status_code == 200
+        t = time.monotonic() + 60
+        while (c.get(f"/api/tester/walkforward/{wid}/result").json()["oos"]["state"] not in ("done", "stopped")
+               and time.monotonic() < t):
+            time.sleep(0.05)
+        o = c.get(f"/api/tester/walkforward/{wid}/result").json()["oos"]
+        assert o["state"] == "done" and o["months"] == ["2024-04"] and o["record"]["trades"] == 0
+        r = c.post(f"/api/tester/walkforward/{wid}/oos", json={"cell": 0, "owner_said": "again"})
+        assert r.status_code == 409 and "never run again" in r.json()["detail"]
+        # a public run or heat map never runs a test month
+        oos = {"kind": "wf_oos", "root": "NQ", "month": "2024-04"}
+        for path, b in (("/api/tester/run", {**RUN, "range": oos}), ("/api/tester/grid", {**GRID, "range": oos})):
+            r = c.post(path, json=b)
+            assert r.status_code == 400 and "only from its walk-forward" in r.json()["detail"], path

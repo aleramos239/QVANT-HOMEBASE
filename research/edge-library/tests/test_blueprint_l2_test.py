@@ -181,7 +181,7 @@ def test_run_test_hands_a_level_2_unit_the_test_tables_loader(monkeypatch, tmp_p
     monkeypatch.setattr(S, "sessions", lambda a, b, root, **k: [dt.date(2025, 7, 1), dt.date(2025, 7, 2)])
     out, led = tmp_path / "runs_test", tmp_path / "ledger.csv"
     with F.tiny():
-        res = RUN.run_test("bpl_l2run", {"version": 1, "lock": "ab" * 8}, sp, key, sess, cells, "bpl_l2run", end, 1, out, ideas=root, ledger=led, days=["2025-07-01", "2025-07-02"])
+        res = RUN.run_test("bpl_l2run", {"version": 1, "lock": "ab" * 8, "since": "2026-10-01T00:00:00+00:00"}, sp, key, sess, cells, "bpl_l2run", end, 1, out, ideas=root, ledger=led, days=["2025-07-01", "2025-07-02"])
     assert res["calendar"] == ["2025-07-01", "2025-07-02"] and len(res["stores"]) == 3
     K = RUN.test_keys(key, "bpl_l2run", "NQ", "15", sess)
     byk = {}
@@ -209,7 +209,7 @@ def test_run_test_refuses_a_level_2_unit_the_table_does_not_cover(monkeypatch, t
 
     def go(end, **kw):
         with F.tiny():
-            return RUN.run_test("bpl_l2run", {"version": 1, "lock": "ab" * 8}, sp, u["key"], "nyam", cells, "bpl_l2run", end, 1, tmp_path / "out", ideas=root,
+            return RUN.run_test("bpl_l2run", {"version": 1, "lock": "ab" * 8, "since": "2026-10-01T00:00:00+00:00"}, sp, u["key"], "nyam", cells, "bpl_l2run", end, 1, tmp_path / "out", ideas=root,
                                 ledger=tmp_path / "led.csv", days=["2025-07-01"], **kw)
 
     monkeypatch.setattr(btfeat, "cache_file", lambda: tmp_path / "not_built.parquet")

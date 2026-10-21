@@ -93,12 +93,24 @@ def test_pipe_list_carries_the_choice_and_the_choices(root):
 def test_pipe_mode_shows_and_chooses_and_starts_the_runner_for_live(root, monkeypatch):
     started = []
     monkeypatch.setattr(PRN, "start", lambda r=None: started.append(r) or {"pid": 1, "already": False})
+    monkeypatch.setattr(PRN, "_no_old_split", lambda allow=False: None)          # the old-split refusal is tested below
     rc, got = run(["pipe", "mode", f"--root={root}"])
     assert rc == 0 and got["mode"] == "live" and "LIVE PIPELINE is on" in got["text"] and started == []
     rc, got = run(["pipe", "mode", "off", f"--root={root}"])
     assert rc == 0 and got["mode"] == "off" and "No pipeline is on" in got["text"] and started == []
     rc, got = run(["pipe", "mode", "live", f"--root={root}"])
     assert rc == 0 and got["mode"] == "live" and len(started) == 1              # on = working: the runner is started (it says `already` when one is)
+
+
+def test_pipe_mode_live_refuses_on_the_old_split_and_saves_nothing(root):
+    """No patch: `mode live` must refuse BEFORE the switch is written, so the Lab never says LIVE PIPELINE is on with no runner."""
+    SW.choose("off", root)
+    paused, mode = PS.paused(root), SW.now(root)
+    rc, got = run(["pipe", "mode", "live", f"--root={root}"])
+    assert rc != 0 and PRN.OLD_SPLIT in got["text"]
+    assert SW.now(root) == mode == "off" and PS.paused(root) == paused               # nothing was saved
+    rc, got = run(["pipe", "mode", "off", f"--root={root}"])                         # off stays allowed
+    assert rc == 0 and got["mode"] == "off"
 
 
 @pytest.mark.parametrize("verb", ["payout", "profile", "settings", "mix", "portfolio"])

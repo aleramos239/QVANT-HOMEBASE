@@ -307,6 +307,7 @@ class _Sim:
         self._ids = 0
         self._ctx: Ctx | None = None   # set by run_session
         self.ctl = controls            # run controls (controls.Controls) or None: the engine's one old path
+        self.bar_min = 0               # run controls: the strategy's bar (minutes) an "own bar" ATR reads; 0 = none
         self.sig_min = 1               # run controls: the signal bar (minutes) a candle stop reads (run_session sets it)
         self.lines: dict = {}          # run controls: bar end ns -> (close, line) for exit_line (run_session fills it)
         self.st = {"entries": 0, "wins": 0, "losses": 0, "consec": 0, "pnl": 0.0, "last_loss": None}
@@ -435,7 +436,7 @@ class _Sim:
         """The stop / target the run controls ask for, as (ov, sl, tp, tp_rr, refusal). The planned levels are
         measured from the entry's own reference; `_fill` re-measures them from the fill."""
         c = self.ctl
-        if c.stop_mode == "own" and c.target_mode == "own":
+        if c.stop_mode == "own" and c.target_mode == "own" and (sl is None or (c.stop_own_mult == 1.0 and not c.own_floor)):
             return None, sl, tp, tp_rr, None
         r = ref if ref is not None else price
         if r is None:
@@ -443,8 +444,10 @@ class _Sim:
         if r is None:
             return None, sl, tp, tp_rr, "no price to size the bracket from"
         a = None
-        if c.stop_mode == "atr" or c.target_mode == "atr":
-            a = self.atr(c.atr_minutes, c.atr_period)
+        if c.stop_mode == "atr" or c.target_mode == "atr" or (c.own_floor and sl is not None):
+            if not (c.atr_minutes or self.bar_min):
+                return None, sl, tp, tp_rr, "atr: the strategy has no bar size"
+            a = self.atr(c.atr_minutes or self.bar_min, c.atr_period)
             if a is None:
                 return None, sl, tp, tp_rr, "atr warming up"
 
@@ -461,7 +464,12 @@ class _Sim:
             buf = c.stop_candle_ticks * self.tick
             sl = to_tick(ext[0] - buf if side > 0 else ext[1] + buf, self.tick)
             ov_sl = ("level", sl)
-        elif c.stop_mode != "own":
+        elif c.stop_mode == "own":
+            if sl is not None and c.own_floor:                  # scaled, at least 0.25 x ATR, then at least 2 ticks
+                sl = to_tick(r - side * max(abs(r - sl) * c.stop_own_mult, 0.25 * a, 2 * self.tick), self.tick)
+            elif sl is not None and c.stop_own_mult != 1.0:     # its own distance from the reference, scaled
+                sl = to_tick(r - side * max(abs(r - sl) * c.stop_own_mult, self.tick), self.tick)
+        else:
             d = dist(c.stop_mode, c.stop_pts, c.stop_atr)
             sl, ov_sl = to_tick(r - side * d, self.tick), ("dist", d)
         if c.target_mode != "own":
@@ -739,6 +747,7 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
             sim.refuse("signal bar size not offered by this strategy (its own bars used)")
     strategy.bar_min_eff = bm                       # what scan() / on_bar read when the bar size was swapped
     sim.sig_min = bm or 1                           # run controls: the candle a candle stop reads
+    sim.bar_min = bm                                # ... and the bar an "own bar" ATR reads
     if bm:
         b0, b1 = strategy.bar_window or strategy.session_window
         bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm)

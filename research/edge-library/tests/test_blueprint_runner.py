@@ -633,7 +633,8 @@ def test_build_prints_the_lines_on_the_new_range():
     # the command line as the connector writes it (--opt=value, the idea's name first): text, and ONE JSON object; refusals exit 2
     spec = tmp() / "spec.json"
     spec.write_text(json.dumps(SPEC))
-    argv = ["build", "bpt_orb", f"--spec-file={spec}", f"--reason={REASON}", f"--out={o}", f"--ledger={led}", "--days=" + ",".join(DAYS), "--cells=" + ",".join(CELLS)]
+    argv = ["build", "bpt_orb", f"--spec-file={spec}", f"--reason={REASON}", f"--out={o}", f"--ledger={led}", "--days=" + ",".join(DAYS), "--cells=" + ",".join(CELLS),
+            "--owner-said=build it"]
     with rule(draws=200), at(SAT), no_engine():
         rc, txt = _run(argv)
         rj, js = _run(argv + ["--home=NQ-tf15-mid", "--filter=momentum_with", "--round=2", f"--root={tmp() / 'ideas'}", "--json"])
@@ -648,9 +649,9 @@ def test_build_prints_the_lines_on_the_new_range():
             assert rc == 2 and list(d) == list(CONTRACT) and d["ok"] is False and word in d["error"] and (d["lines"], d["job"], d["command"]) == ([], None, "build"), d
             n += 1
         gone = [x for x in argv if not x.startswith("--reason")]
-        for argv2, word in ((gone, "--reason"), (["build", "bpt_orb", f"--reason={REASON}"], "--spec-file"), (["build"], "the idea's name"),
+        for argv2, word in ((gone, "--reason"), (["build", "bpt_orb", f"--reason={REASON}", "--owner-said=build it"], "--spec-file"), (["build"], "the idea's name"),
                             (["build", "bpt_orb", f"--spec-file={tmp() / 'none.json'}", f"--reason={REASON}"], "none.json"),
-                            (["build", "other_idea"] + argv[2:], "bpt_orb"), (argv[:4] + ["--days=" + ",".join(DAYS)], "named days"),
+                            (["build", "other_idea"] + argv[2:], "bpt_orb"), (argv[:4] + ["--owner-said=build it", "--days=" + ",".join(DAYS)], "named days"),
                             (argv + ["--days=2025-07-01"], "2025-06-30")):
             rc, txt = _run(argv2)
             assert rc == 2 and txt.startswith("REFUSED: ") and word in txt, (argv2, txt)
@@ -693,7 +694,7 @@ def test_the_job_flow():
         pytest.skip("no heavy run starts 09:18-09:36 ET on weekdays")
     root, o, led, spec = tmp() / "ideas_job", tmp() / "runs_job", tmp() / "ledger_job.csv", tmp() / "job_spec.json"
     spec.write_text(json.dumps(SPEC))
-    head = ["build", "bpt_orb", f"--spec-file={spec}", f"--reason={REASON}"]
+    head = ["build", "bpt_orb", f"--spec-file={spec}", f"--reason={REASON}", "--owner-said=build it"]
     more = [f"--out={o}", f"--ledger={led}", "--days=" + ",".join(DAYS), "--cells=" + ",".join(CELLS), "--workers=2"]
     last = [f"--root={root}", "--json"]                     # the connector's shape: --root and --json come last
     # a refusal comes back at once and never as a job

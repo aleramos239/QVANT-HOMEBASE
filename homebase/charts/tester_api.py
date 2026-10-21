@@ -138,7 +138,10 @@
     GET  /api/tester/grid/{id}/cell/{i}/bundle   a cell's full run bundle (the same shape as a run's)
     GET  /api/tester/grids               recent grids, newest first
     GET  /api/tester/looks               {strategy: heat-map cells ever run}
-    POST /api/tester/walkforward         the grid body + {metric?, min_trades?, test_months? | compare?} -> {id}:
+    POST /api/tester/walkforward         the grid body + {scheme?, step_months?} -> {id}: scheme "fixed" (the default)
+                                          = every cell as set (the hm40 cells when no axes) on the 3:1 in-sample months,
+                                          nothing picked by code; scheme "pick" (or a body with test_months / compare /
+                                          metric / min_trades) = the old one: + {metric?, min_trades?, test_months? | compare?}:
                                           1 month to select, the next N to test, stepping monthly, over the
                                           body's own range; `compare: true` = ONE job (one grid run) selected
                                           and stitched at 1:1, 1:2 and 1:3 (homebase.backtest.walkforward)
@@ -148,6 +151,9 @@
                                           without it is a 409)
     GET  /api/tester/walkforward/{id}/compare  a compare job's three stitched OOS results side by side
     POST /api/tester/walkforward/{id}/cancel
+    POST /api/tester/walkforward/{id}/pick   {cell} -> a fixed job's lock (the owner's pick, written once)
+    POST /api/tester/walkforward/{id}/oos    {cell, owner_said} -> the picked cell's test months, on the owner's words
+                                          (verbatim, non-empty), once; the result route then carries "oos"
     GET  /api/tester/walkforwards        recent walk-forwards, newest first
     GET  /api/tester/walkforward-scheme  ?test_months=1|2|3|compare&start=&end= — the step count for that
                                           ratio and window (compare: the three summed, and each), plus the
@@ -1496,6 +1502,24 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         write_ok(request)
         known_wf(wid)
         return wfs.cancel(wid)
+
+    @r.post("/walkforward/{wid}/pick")
+    def pick_walkforward(wid: str, request: Request, body: dict):
+        write_ok(request)
+        known_wf(wid)
+        try:
+            return wfs.pick(wid, body.get("cell"))
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
+
+    @r.post("/walkforward/{wid}/oos")
+    def oos_walkforward(wid: str, request: Request, body: dict):
+        write_ok(request)
+        known_wf(wid)
+        try:
+            return wfs.oos(wid, body.get("cell"), body.get("owner_said"))
+        except ValueError as e:
+            raise HTTPException(409, str(e)) from None
 
     @r.get("/walkforward-scheme")
     def walkforward_scheme(test_months: str | None = None, start: str | None = None, end: str | None = None,

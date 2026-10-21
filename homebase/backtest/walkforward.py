@@ -1,6 +1,26 @@
-"""Walk-forward, the user's scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
+"""Walk-forward. Two schemes: `fixed` (the DEFAULT since 2026-10-20) and `pick` (the old ones, below).
+
+FIXED (the owner, 2026-10-20; spec docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md 4.2-4.5).
+Every cell of the grid (the hm40 exit cells when the body sends no axes) runs ONCE, as set, on the in-sample months of the
+market's 3:1 blocks (range wf_is: 3 months in, the next 1 out, then the next block). No code picks a cell: result.json is
+{"scheme": "fixed", "blocks": [{i, is}], "cells": [{i, params, is: <the in-sample table's numbers>, blocks: [{i, is, trades,
+win_rate, net}]}]} -- the per-cell in-sample records ARE the product here, so the old rule below ("the full-window per-cell
+results are never served") does not apply to `fixed`. The test months are not run, not stored and not named in it.
+    pick(id, cell)             the owner's pick: lock.json, written once (another cell is refused)
+    oos(id, cell, owner_said)  only the picked cell, only on his words (verbatim, non-empty), once: the claim
+                               (oos-claim.json + a line in the machine-wide <shared>/wf-oos-reads.jsonl) is written BEFORE any
+                               test month runs; a box (strategy, code stamp, settings, market) read in ANY walk-forward is
+                               refused, never read twice;
+                               then the cell runs on each test month (range wf_oos, one month a run) as its own job under
+                               <base>/walkforward-oos/<job>/; oos_view() reads it back (oos.json once it is over).
+Rolling (step_months 1) stays an opt-in: the pick windows step a month, every cell still fixed; its cells run on every
+window's pick months (all but the last month), so a test month there is a later window's pick month: it has no unseen
+test months and oos() refuses it. Looks: the table counts each cell once.
+
+PICK -- the user's old scheme: 1 month to SELECT, the next N months to TEST, stepping monthly, over
 whatever window the request names (the range picker's preset; the build days, 2021-09-22 -> 2025-06-30,
-by default).
+by default). A body with no scheme that sends test_months / select_months / compare / metric / min_trades, or a range other
+than wf_is, is this one.
 
 Steps. Over the window's whole calendar months m_0..m_k, step k selects on m_k and tests on
 m_{k+1}..m_{k+N}. A step whose test window would run past the window's last month is dropped (no partial
@@ -72,18 +92,24 @@ session the run skipped dropped from that grid).
     <base>/walkforward/<id>/result.json       the steps, the stitched equity + stats (when done)
     <base>/walkforward/<id>/result-N.json     a compare job: scheme 1:N's result (the same shape)
     <base>/walkforward/<id>/compare.json      a compare job: the three stitched OOS side by side
+    <base>/walkforward/<id>/lock.json         a fixed job: the owner's pick
+    <base>/walkforward/<id>/oos-claim.json    a fixed job: the test-month read, claimed (his words, who, when, code)
+    <base>/walkforward/<id>/oos.json          a fixed job: the picked cell's test-month record, once the read is over
 """
 from __future__ import annotations
 
+import calendar
 import datetime as dt
+import json
 import math
+import os
 from collections import Counter
 from pathlib import Path
 
-from . import drafthost, report
-from .discipline import HOLDOUT_START, RESEARCH_END, RESEARCH_START
-from .grid import FINAL, GridManager, LooksCorrupt, add_look, validate_grid
-from .runner import read_json, report_holes, write_json
+from . import drafthost, report, wfmonths
+from .discipline import HOLDOUT_START, RESEARCH_END, RESEARCH_START, parse_range
+from .grid import FINAL, GridManager, LooksCorrupt, _looks_lock, add_look, hm40_axes, validate_grid
+from .runner import _now, read_json, report_holes, write_json
 
 SELECT_MONTHS = 1
 TEST_MONTHS = 3            # the default OOS side of the ratio (1:3); 1 and 2 are the other choices
@@ -100,6 +126,11 @@ HOLDOUT = HOLDOUT_START.strftime("%Y-%m")     # the first unseen month
 STAT_KEYS = ("net_profit", "trades", "win_rate", "profit_factor", "sharpe", "max_drawdown", "avg_trade", "t_stat",
              "rr", "rr_label", "skipped_by_error")
 TIE_BREAK = "best metric (equal to 6 decimals = a tie) → more trades that month → lowest cell index"
+SCHEMES = ("fixed", "pick")
+PICK_FIELDS = ("test_months", "select_months", "compare", "metric", "min_trades")   # the old scheme's own fields
+LOCK, CLAIM, OOS = "lock.json", "oos-claim.json", "oos.json"
+READS_LOG = "wf-oos-reads.jsonl"     # in the shared folder (slots.shared_dir), beside the looks counter
+STOPPED = "stopped: the read is used, no record"
 
 
 def ratio(v) -> int:
@@ -574,6 +605,14 @@ def validate_wf(body) -> dict:
     if not isinstance(body, dict):
         raise ValueError("the body is a JSON object")
     b = dict(body)
+    sch = b.pop("scheme", None)
+    if sch is None:     # fixed is the default; an old body (the pick's own fields, or a window of its own) keeps its scheme
+        own_window = isinstance(b.get("range"), dict) and b["range"].get("kind") != "wf_is"
+        sch = "pick" if own_window or any(k in b for k in PICK_FIELDS) else "fixed"
+    if sch not in SCHEMES:
+        raise ValueError("scheme: fixed (every cell as set; the owner picks one) or pick (the code picks a cell each window)")
+    if sch == "fixed":
+        return validate_fixed(b)
     compare = b.pop("compare", False)
     if type(compare) is not bool:
         raise ValueError("compare: true or false")
@@ -588,6 +627,9 @@ def validate_wf(body) -> dict:
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")
+    if isinstance(b.get("range"), dict) and b["range"].get("kind") in ("wf_is", "wf_oos"):
+        raise ValueError("this walk-forward picks its own months: the 3:1 block months (wf_is / wf_oos) are for "
+                         "single runs: pick a continuous window")
     metric = b.pop("metric", DEFAULT_METRIC)
     if not isinstance(metric, str) or metric not in METRICS:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")
@@ -624,6 +666,125 @@ def validate_wf(body) -> dict:
     return g
 
 
+def _month_end(m: str) -> str:
+    y, mo = map(int, m.split("-"))
+    return f"{m}-{calendar.monthrange(y, mo)[1]:02d}"
+
+
+def _next_month(m: str) -> str:
+    y, mo = map(int, m.split("-"))
+    return f"{y + mo // 12}-{mo % 12 + 1:02d}"
+
+
+def validate_fixed(b: dict) -> dict:
+    """The fixed scheme (module docstring): the grid on the 3:1 in-sample months, nothing to pick by code."""
+    bad = [k for k in PICK_FIELDS if k in b]
+    if bad:
+        raise ValueError(f"{', '.join(bad)}: the fixed walk-forward picks nothing (the owner picks a cell): send it without them")
+    step = b.pop("step_months", ROLL_STEP)
+    if type(step) is not int or step not in ROLL_STEPS:
+        raise ValueError("step_months: 4 (blocks) or 1 (rolling)")
+    rng = b.get("range")
+    if rng is not None and not (isinstance(rng, dict) and rng.get("kind") == "wf_is"):
+        raise ValueError("the fixed walk-forward runs on the 3:1 in-sample months: send it without a range")
+    cls = drafthost.resolve(b.get("strategy"))
+    bl = wfmonths.blocks(cls.root)
+    if not bl:
+        raise ValueError(f"{cls.root}: no whole 3:1 block of months on disk yet")
+    if step == ROLL_STEP:
+        layout = [{"i": x["i"], "is": list(x["is"])} for x in bl]
+        b["range"] = {"kind": "wf_is", "root": cls.root}
+    else:                                  # rolling: the same months, the pick windows step a month
+        ms = sorted({m for x in bl for m in (*x["is"], x["oos"])})
+        layout = [{"i": k, "is": st["select_ms"]} for k, st in enumerate(steps(ms, 1, ROLL_SELECT, 1))]
+        b["range"] = {"kind": "custom", "start": f"{ms[0]}-01", "end": _month_end(ms[-2])}
+    b.setdefault("axes", hm40_axes(cls))
+    g = validate_grid(b, min_axes=0)
+    if not getattr(cls, "session_independent", False):
+        raise ValueError(f"{g['strategy']}: not flagged session-independent, so a month cannot be sliced "
+                         "out of one run -- the walk-forward refuses it")
+    for c in g["cells"]:
+        c["req"]["propsim"] = False
+    g["walkforward"] = {"scheme": "fixed", "step_months": step, "rolling": step == 1, "root": cls.root,
+                        "months": sorted({m for x in layout for m in x["is"]}), "blocks": layout, "n_blocks": len(layout),
+                        "stitch": stitch_rule(1, ROLL_SELECT, step)}
+    return g
+
+
+def _pct(a, n):
+    return round(a / n * 100, 4) if n else None
+
+
+def is_numbers(trades_ms: list[dict], skipped: list[dict], capital: float, months: list[str]) -> dict:
+    """One record's numbers (spec 4.3) at 1 contract after costs, rates in %: report.column's own (net, PF, daily Sharpe,
+    max drawdown, win rate), and the rest from the same trades. Month win rates count months of 3 trades or more;
+    months_pos counts the months with trades (research hmwf's rule)."""
+    tr = sorted((to_ns(t) for t in trades_ms), key=lambda t: (t["exit_ns"], t["entry_ns"]))
+    col = report.column(tr, capital, skipped, months or None)
+    rr = col["rr"]
+    be = 100 / (1 + rr) if rr else None
+    by: dict[str, list[float]] = {}
+    for t in trades_ms:
+        by.setdefault(t["date"][:7], []).append(t["net"])
+    wr = [sum(x > 0 for x in v) / len(v) * 100 for v in by.values() if len(v) >= 3]
+    wdays = sum(1 for m in months for d in range(1, calendar.monthrange(*map(int, m.split("-")))[1] + 1)
+                if dt.date(*map(int, m.split("-")), d).weekday() < 5)
+    al = abs(col["avg_loss"]) if col["avg_loss"] else None
+    return {"win_rate": col["win_rate"], "breakeven": be,
+            "wr_minus_be": None if be is None or col["win_rate"] is None else col["win_rate"] - be,
+            "trades": col["trades"], "per_week": round(col["trades"] / (wdays / 5), 4) if wdays else None,
+            "avg_trade": col["avg_trade"], "avg_r": col["avg_trade"] / al if col["avg_trade"] is not None and al else None,
+            "net": col["net_profit"], "pf": col["profit_factor"], "sharpe": col["sharpe"], "max_dd": col["max_drawdown"],
+            "months_pos": _pct(sum(sum(v) > 0 for v in by.values()), len(by)),
+            "months_wr60": _pct(sum(w >= 60 for w in wr), len(wr)), "worst_month_wr": min(wr) if wr else None,
+            "long_net": round(sum(t["net"] for t in trades_ms if t["side"] == "long"), 2),
+            "short_net": round(sum(t["net"] for t in trades_ms if t["side"] == "short"), 2),
+            "skipped_by_error": sum(1 for x in skipped if x["reason"].startswith("strategy error"))}
+
+
+def _block_row(i, ms_key: str, ms: list[str], tr: list[dict]) -> dict:
+    t = _in(set(ms), tr)
+    return {"i": i, ms_key: ms if ms_key == "is" else ms[0], "trades": len(t),
+            "win_rate": _pct(sum(x["net"] > 0 for x in t), len(t)), "net": round(sum(x["net"] for x in t), 2)}
+
+
+def fixed_result(cells: list[dict], cfg: dict, *, trades_of, capital: float) -> dict:
+    """result.json of a fixed job: every cell's in-sample record and its block rows. No test month is in it."""
+    ms, out = cfg["months"], []
+    for c in cells:
+        tr, sk = trades_of(c["i"])
+        tr, sk = _in(set(ms), tr), _in(set(ms), sk)
+        out.append({"i": c["i"], "params": c["params"], "is": is_numbers(tr, sk, capital, ms),
+                    "blocks": [_block_row(b["i"], "is", b["is"], tr) for b in cfg["blocks"]]})
+    return {"scheme": "fixed", "step_months": cfg["step_months"], "rolling": cfg["rolling"], "stitch": cfg["stitch"],
+            "window": {"start": ms[0], "end": ms[-1]}, "months": ms, "blocks": cfg["blocks"],
+            "n_cells": len(cells), "looks": len(cells), "cells": out}
+
+
+def _write_once(path: Path, data: dict) -> dict | None:
+    """data written at `path` in one step, never over a file on file (two at once: one wins); None when it was there."""
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.{os.urandom(3).hex()}")
+    tmp.write_text(json.dumps(data, separators=(",", ":")))
+    try:
+        os.link(tmp, path)
+    except FileExistsError:
+        return None
+    finally:
+        tmp.unlink()
+    return data
+
+
+class _OosReads(GridManager):
+    """The test-month runs of a picked cell (one job a read, one wf_oos month a cell). Built and refused by
+    WalkForwardManager.oos, never by a body from outside."""
+
+    SUBDIR = "walkforward-oos"
+    COUNT_CELL_LOOKS = False
+
+    def _validate(self, body) -> dict:
+        return body
+
+
 # ---------------------------------------------------------------- the manager
 
 def _eta(st: dict, progress: float) -> float | None:
@@ -648,6 +809,12 @@ class WalkForwardManager(GridManager):
     def __init__(self, *a, **kw):
         self._claimed: set[str] = set()
         super().__init__(*a, **kw)
+        self.reads = _OosReads(self.base, archive=self.archive, cache=self.cache, python=self.python,
+                               workers=self.workers, slots=self.slots, shared=self.shared)
+
+    def shutdown(self) -> None:
+        super().shutdown()
+        self.reads.shutdown()
 
     def _validate(self, body) -> dict:
         return validate_wf(body)
@@ -704,7 +871,10 @@ class WalkForwardManager(GridManager):
                     cdir = d / "cells" / f"{i:02d}"
                     return read_json(cdir / "trades.json") or [], _run_skipped(read_json(cdir / "run.json"))
 
-                if cfg.get("compare"):
+                if cfg.get("scheme") == "fixed":
+                    per = None
+                    result = fixed_result(ins, cfg, trades_of=trades_of, capital=capital)
+                elif cfg.get("compare"):
                     per, result = compare_results(ins, cfg["months"], trades_of=trades_of, metric=cfg["metric"],
                                                   min_trades=cfg["min_trades"], capital=capital,
                                                   ratios=tuple(cfg.get("ratios") or RATIOS))
@@ -773,6 +943,14 @@ class WalkForwardManager(GridManager):
             if n not in (cfg.get("ratios") or RATIOS):
                 raise ValueError(f"walk-forward {gid} has no 1:{n} scheme")
             return read_json(d / f"result-{n}.json")
+        if cfg.get("scheme") == "fixed":
+            if test_months is not None:
+                raise ValueError(f"walk-forward {gid} is a fixed one: it has no 1:N scheme")
+            res = read_json(d / "result.json")
+            res["lock"] = read_json(d / LOCK)
+            if (d / CLAIM).exists():                # only once the owner said to run the test months
+                res["oos"] = self.oos_view(gid)
+            return res
         if test_months is not None and ratio(test_months) != cfg.get("test_months", TEST_MONTHS):
             raise ValueError(f"walk-forward {gid} is {ratio_label(cfg.get('test_months', TEST_MONTHS), cfg.get('select_months', SELECT_MONTHS))}, "
                              f"not 1:{test_months}")
@@ -788,6 +966,128 @@ class WalkForwardManager(GridManager):
     def cell_bundle(self, gid: str, i: int) -> dict:
         raise KeyError(f"{gid}/{i}: a walk-forward's full-window cells are never served")
 
+    # ---- a fixed job: the owner's pick, then the test months on his word
+
+    def _fixed(self, gid: str) -> tuple[Path, dict, dict]:
+        d, cfg = self._done(gid)
+        if cfg.get("scheme") != "fixed":
+            raise ValueError(f"walk-forward {gid} is not a fixed one: the code picked its cells, there is nothing to pick")
+        return d, cfg, read_json(d / "result.json")
+
+    @staticmethod
+    def _cell(res: dict, cell) -> dict:
+        hit = next((c for c in res["cells"] if c["i"] == cell), None) if type(cell) is int else None
+        if hit is None:
+            raise ValueError(f"cell: one of the table's cells, 0 to {len(res['cells']) - 1}")
+        return hit
+
+    def pick(self, gid: str, cell, who: str = "owner") -> dict:
+        """THE OWNER'S PICK: lock.json, written once. The same cell again: the lock on file; another: refused."""
+        d, cfg, res = self._fixed(gid)
+        c = self._cell(res, cell)
+        req = read_json(d / "cells" / f"{cell:02d}" / "request.json") or {}
+        lock = {"cell": cell, "params": c["params"], "code": req.get("draft_sha256") or req.get("strategy"),
+                "at": _now(), "who": who}
+        if _write_once(d / LOCK, lock) is None:
+            was = read_json(d / LOCK) or {}
+            if was.get("cell") != cell:
+                raise ValueError(f"cell {was.get('cell')} is picked already ({was.get('at')}, {was.get('who')}): "
+                                 "the pick is locked")
+            return was
+        return lock
+
+    def oos(self, gid: str, cell, owner_said, who: str = "owner") -> dict:
+        """THE TEST MONTHS of the picked cell, on the owner's words, once (module docstring). Every refusal comes first;
+        then the claim; only then a test month runs. -> oos_view()."""
+        d, cfg, res = self._fixed(gid)
+        lock = read_json(d / LOCK)
+        if lock is None:
+            raise ValueError(f"walk-forward {gid}: no cell is picked yet: the owner picks one first, then says to run it")
+        if not isinstance(owner_said, str) or not owner_said.strip():
+            raise ValueError("the test months run only on the owner's word (owner_said is empty)")
+        self._cell(res, cell)
+        if cell != lock["cell"]:
+            raise ValueError(f"cell {cell}: the picked cell is {lock['cell']}: only it runs")
+        if cfg.get("rolling"):
+            raise ValueError("a rolling walk-forward has no unseen test months (each one is a later window's pick month, "
+                             "already run): read the blocks instead")
+        if (d / CLAIM).exists():
+            raise ValueError(f"walk-forward {gid} cell {cell}: its test months are read already: shown, never run again")
+        req = read_json(d / "cells" / f"{cell:02d}" / "request.json") or {}
+        base = {k: v for k, v in req.items() if k not in ("id", "created")}
+        months = [_next_month(b["is"][-1]) for b in cfg["blocks"]]
+        runs = [{"i": j, "params": {"month": m}, "coords": [j],
+                 "req": {**base, "range": parse_range({"kind": "wf_oos", "root": cfg["root"], "month": m}).to_dict()}}
+                for j, m in enumerate(months)]
+        claim = {"walkforward": gid, "strategy": req.get("strategy"), "cell": cell, "params": lock["params"],
+                 "code": lock.get("code"), "root": cfg["root"], "owner_said": owner_said, "who": who, "at": _now(),
+                 "settings": {"inputs": req.get("inputs"), "controls": req.get("controls") or {}}}   # the whole box, not the axes
+        box = lambda x: (x.get("strategy"), x.get("code"), x.get("settings"), x.get("root"))   # noqa: E731 -- a box, not a job
+        log = self.shared / READS_LOG          # the machine-wide one-read log (every checkout), checked and added to at once
+        with _looks_lock(log):
+            try:
+                seen = [json.loads(x) for x in log.read_text().splitlines() if x.strip()]
+            except FileNotFoundError:
+                seen = []
+            was = next((x for x in seen if box(x) == box(claim)), None)
+            if was is not None:
+                raise ValueError(f"its test months were read on {str(was.get('at'))[:10]} in walk-forward {was.get('walkforward')}: "
+                                 "shown there, never run again")
+            if _write_once(d / CLAIM, claim) is None:
+                raise ValueError(f"walk-forward {gid} cell {cell}: its test months are read already: shown, never run again")
+            with open(log, "a", encoding="utf-8") as fh:     # written before any test month runs
+                fh.write(json.dumps(claim) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+        try:
+            oid = self.reads.submit({"strategy": req.get("strategy"), "walkforward": gid, "cell": cell, "cells": runs})
+        except Exception as e:  # noqa: BLE001 -- claimed: the read is used, and says why
+            write_json(d / OOS, {"state": "stopped", "say": STOPPED, "cell": cell, "error": f"{type(e).__name__}: {e}"})
+            raise ValueError(f"the test months of cell {cell} did not start ({e}): the read is used, never run again") from e
+        write_json(d / "oos-job.json", {"id": oid})
+        return self.oos_view(gid)
+
+    def oos_view(self, gid: str) -> dict:
+        """The read of a fixed job: {"state": "none"} before one; queued/running with progress; "done" with the record
+        (the in-sample table's columns) and one row a block; "stopped" when it did not finish (it is not run again)."""
+        d = self.dir(gid)
+        got = read_json(d / OOS)
+        if got is not None:
+            return got
+        claim = read_json(d / CLAIM)
+        if claim is None:
+            return {"state": "none"}
+        oid = (read_json(d / "oos-job.json") or {}).get("id")
+        if not oid:                             # claimed, its job never written: a restart between the two
+            age = (dt.datetime.now(dt.timezone.utc) - dt.datetime.fromisoformat(claim["at"])).total_seconds()
+            if age < 60:
+                return {"state": "queued", "cell": claim["cell"]}
+            out = {"state": "stopped", "say": STOPPED, "cell": claim["cell"], "error": "the read did not start"}
+            write_json(d / OOS, out)
+            return out
+        st = self.reads.status(oid)
+        if st.get("status") not in FINAL:
+            return {"state": st.get("status"), "cell": claim["cell"], "job": oid, "done": st.get("done"), "total": st.get("total")}
+        bad = [c for c in st["cells"] if c["status"] != "done"]
+        if st["status"] != "done" or bad:
+            out = {"state": "stopped", "say": STOPPED, "cell": claim["cell"], "job": oid,
+                   "error": (bad[0].get("error") if bad else None) or st.get("error") or st["status"]}
+        else:
+            cfg = (read_json(d / "grid.json") or {}).get("walkforward") or {}
+            tr, sk, months = [], [], []
+            for c in st["cells"]:
+                cdir = self.reads.cell_dir(oid, c["i"])
+                tr += read_json(cdir / "trades.json") or []
+                sk += _run_skipped(read_json(cdir / "run.json"))
+                months.append(c["params"]["month"])
+            capital = (read_json(d / "grid.json") or {}).get("capital", 50_000.0)
+            out = {"state": "done", "cell": claim["cell"], "job": oid, "params": claim["params"], "months": months,
+                   "record": is_numbers(tr, sk, capital, months),
+                   "blocks": [_block_row(b["i"], "oos", [m], tr) for b, m in zip(cfg["blocks"], months)],
+                   "owner_said": claim["owner_said"], "at": claim["at"]}
+        write_json(d / OOS, out)
+        return out
+
     def list(self, limit: int = 20) -> list[dict]:
         out = super().list(limit)
         for g in out:
@@ -796,4 +1096,5 @@ class WalkForwardManager(GridManager):
             g["compare"] = bool((j.get("walkforward") or {}).get("compare"))
             g["test_months"] = (j.get("walkforward") or {}).get("test_months")
             g["select_months"] = (j.get("walkforward") or {}).get("select_months", SELECT_MONTHS)
+            g["scheme"] = (j.get("walkforward") or {}).get("scheme", "pick")
         return out

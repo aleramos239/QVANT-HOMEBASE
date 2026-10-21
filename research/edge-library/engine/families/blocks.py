@@ -188,9 +188,14 @@ ib_n = port1.Ib with the range length as an input: ib_min 5 | 15 | 30 | 60 minut
 """
 from __future__ import annotations
 
+import ast
 import csv
+import inspect
+import json
 import os
+import textwrap
 from multiprocessing import get_context
+from pathlib import Path
 
 import numpy as np
 
@@ -464,10 +469,69 @@ def menu_blueprint(root: str) -> list:
     return S.menu(root) + [{**st, "tgt_r": r} for st in S.menu_stops(root) for r in BP_TGT_R]
 
 
+HM40_JSON = Path(__file__).resolve().parents[2] / "blueprint" / "templates" / "exit_menu.json"     # read as data: the engine imports no blueprint code
+
+
+def menu_hm40(root: str, own: bool) -> list:
+    """THE hm40 EXIT TABLE (the owner, 2026-10-20; exit_menu.json `hm40`): 4 ATR stops, then (own) 4 own stops = x the family's structure
+    distance, x 5 targets, stops outer and targets inner: 40 cells, or the 20 ATR cells for a family that passes no structure level."""
+    if root not in S.MENU_STOP_PTS:
+        raise KeyError(f"no menu for root {root!r}: {sorted(S.MENU_STOP_PTS)}")
+    h = json.loads(HM40_JSON.read_text(encoding="utf-8"))["hm40"]
+    return [{"stop_mode": k, "stop_val": float(v), "tgt_r": float(r)}
+            for k in ("atr", "own")[:2 if own else 1] for v in h["stops"][k] for r in h["targets_r"]]
+
+
+def has_structure(family: str):
+    """True when the family's code hands the engine a STRUCTURE LEVEL with an order -- `_mkt(..., struct=x)`, `_lim(..., struct=x)` or a
+    leg (side, price, struct, target) of `_arm` -- read off its source (the family's class and its bases, up to the Template); False when
+    it never does (then stop_mode struct would silently become `stop_val` x ATR); None when the source cannot be read."""
+    cls = BASES[family][0]
+    flagged = False
+    for k in cls.__mro__:
+        if k is object or k.__module__ == S.__name__:
+            continue
+        try:
+            tree = ast.parse(textwrap.dedent(inspect.getsource(k)))
+        except (OSError, TypeError, SyntaxError):
+            return None
+        none = lambda n: isinstance(n, ast.Constant) and n.value is None  # noqa: E731
+        for fn in ast.walk(tree):
+            arms = False
+            for n in ast.walk(fn) if isinstance(fn, ast.FunctionDef) else ():
+                if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute):
+                    at = n.func.attr
+                    if at in ("_mkt", "_lim"):
+                        pos = 2 if at == "_mkt" else 3                       # (ctx, side[, px], struct)
+                        if any(kw.arg == "struct" and not none(kw.value) for kw in n.keywords) or (len(n.args) > pos and not none(n.args[pos])):
+                            flagged = True
+                    elif at == "_arm":
+                        arms = True
+            if arms:                                                         # legs (side, px, struct, tp_px): any such tuple of the function
+                for n in ast.walk(fn):
+                    if isinstance(n, ast.Tuple) and len(n.elts) == 4 and not none(n.elts[2]):
+                        flagged = True
+    return flagged
+
+
+_STRUCT: dict = {}
+
+
+def __getattr__(name):
+    """STRUCT_FAMILIES: the families has_structure says True of, built on first use (again when families joined BASES since)."""
+    if name != "STRUCT_FAMILIES":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    if _STRUCT.get("n") != len(BASES):
+        _STRUCT.update(n=len(BASES), fams=frozenset(f for f in BASES if has_structure(f)))
+    return _STRUCT["fams"]
+
+
 def exits(kind: str, root: str, family: str) -> list:
     """The exit cells of an idea: 'standard' = l2sim.menu(root); 'extended' = menu_extended (range stops only when the
     family has a structure); 'blueprint' = menu_blueprint (what a blueprint build runs: blueprint/runner.py); 'open' = menu_open
-    (the session-anchored stops)."""
+    (the session-anchored stops); 'hm40' = menu_hm40 (own stops only for a family in STRUCT_FAMILIES)."""
+    if kind == "hm40":
+        return menu_hm40(root, own=family in __getattr__("STRUCT_FAMILIES"))
     if kind == "standard":
         return S.menu(root)
     if kind == "extended":
@@ -476,7 +540,7 @@ def exits(kind: str, root: str, family: str) -> list:
         return menu_blueprint(root)
     if kind == "open":
         return menu_open(root)
-    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint' or 'open'")
+    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint', 'open' or 'hm40'")
 
 
 COMBO, MAX_FILTERS = "+", 2                         # a unit may hold several filters at once: ("ote+pdz", "in+with"); at most 2 (BLUEPRINT.md 0.2)
@@ -790,7 +854,7 @@ class Blocks:
                 "f_bbw": "off", "f_atrp": "off", "f_er": "off", "f_macd": "off", "f_rsidiv": "off", "f_mfi": "off", "f_deltadiv": "off", "f_candle": "off", "f_tspeed": "off",
                 **{f"f_{b}": "off" for b in (*FLOW_SERIES, *FLOW_DIR, *BOOK_DIR)},
                 **{f"f_{b}": "off" for b in ("stoch", *TAPE_DIR, *BAND_BLOCKS, "vprof", "topen")}}
-    SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen")),
+    SCHEMA = {"stop_mode": ("choice", ("atr", "pts", "struct", "pct", "rng", "atropen", "rngopen", "own")),
               "f_dvol": ("choice", ("off", "hi", "lo")), "f_rsi": ("choice", ("off", "with", "against", "strong_with", "extreme_against")),
               "f_cvol": ("choice", ("off", "hi", "lo")), "f_news": ("choice", ("off", "yes", "no")),
               "f_bookopp": ("choice", ("off", "on")), "f_ahead": ("choice", ("off", "thin", "thick")),

@@ -13,7 +13,7 @@ and --json out.
         [--window=HH:MM-HH:MM] [--max-per-day=N]                             or on a trades file; saved as the idea's check.json
                                                                              when the app has the idea; no source = the one of
                                                                              the check on file again (the owner's --looked)
-  bp.py build <name> --reason=TEXT [--wait=S]                             PHASE 2, ONE ROUND of the idea on file (records.py):
+  bp.py build <name> --reason=TEXT --owner-said=TEXT [--wait=S]         PHASE 2, ONE ROUND of the idea on file (records.py):
         [--tester=DIR]                                                       the reason is saved, what is missing is run on the
                                                                              build range (2021-09-22 .. 2025-06-30), lines
                                                                              2.1-2.9 are read at the round's bar and saved, the
@@ -100,7 +100,7 @@ and --json out.
   bp.py pipe list | show <name> | book                                       ({"name", "why", "loser", "source", "market", "session",
   bp.py pipe start | pause | resume                                          "sides", "ways", "indicators"}) is checked (lines
   bp.py pipe approve <name> | refuse <name> --why=TEXT                       P0.1-P0.4) and queued -- a card with a line missing is
-  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` = the runner, detached,
+  bp.py pipe rerun <name> | pick <name> <cell> --why=TEXT | luck | near      refused with its rows; `start` (and `mode live`) refuse on the old split; `start` = the runner, detached,
   bp.py pipe mode [off | live]                                               that takes every queued idea through stages 0-7 by
                                                                              itself; `pause` stops it after the stage in hand;
                                                                              `list` = one row an idea, `show` = one idea's stage
@@ -128,6 +128,17 @@ and --json out.
                                                                              nothing; `run` is the build days only (--days = a smoke
                                                                              run, never a verdict). --root = the TAUGHT folder
                                                                              (HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)
+  bp.py taught wf <name> --owner-said=TEXT [--workers=N]                   the sheet's 3:1 walk-forward (taught_wf.py): every cell fixed on
+  bp.py taught wf-show <name> | wf-pick <name> <box>                         the in-sample months; the owner picks a cell; wf-oos runs its
+  bp.py taught wf-oos <name> <box> --owner-said=TEXT [--workers=N]           test months once, on his words
+  bp.py wf run <spec|-|name> --owner-said=TEXT [--workers=N] [--wait=S]  THE 3:1 WALK-FORWARD, the default of a NEW idea (hmwf.py, the owner
+  bp.py wf show <name>                                                       2026-10-20): `run` = every box of the hm40 heat map run fixed on the
+  bp.py wf pick <name> <box>                                                 in-sample months of the 3:1 blocks, then the in-sample table (a spec
+  bp.py wf oos <name> <box> --owner-said=TEXT [--workers=N] [--wait=S]       file, - for stdin, or an idea on file: its home); `show` = the table,
+                                                                             the pick, the test months if read (runs nothing); `pick` = the
+                                                                             owner's box (its row number or id), written once; `oos` = the test
+                                                                             months of the picked box, once. `run` and `oos` run ONLY on the
+                                                                             owner's words, quoted verbatim in --owner-said
   build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
@@ -143,6 +154,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -182,6 +194,7 @@ def _parser() -> _Parser:
     b.add_argument("--stored", metavar="UNIT", help="DRY RUN on the old build days (2021-09-22 .. 2023-12-31) for a unit whose stores are on disk")
     b.add_argument("--spec-file", metavar="PATH", help="the one-table build of a spec in run_idea's format that has no record")
     b.add_argument("--reason", help="why this round is run, written before the run (line 2.9)")
+    b.add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: a build runs a heat map, only when he says so (not --stored)")
     b.add_argument("--home", metavar="ROOT-tfN-SESSION", help="--spec-file: the table that is judged (default: the spec's first market, bar size and session)")
     b.add_argument("--filter", metavar="BLOCK_SIDE", help="--spec-file: judge the table with this one filter of the spec on (line 2.7)")
     b.add_argument("--round", type=int, help="--spec-file: 1 .. 5, the bar of line 2.3 (default 1)")
@@ -245,7 +258,7 @@ def _parser() -> _Parser:
     ps = pp.add_subparsers(dest="sub", required=True, metavar="{add,list,show,start,pause,resume,approve,refuse,book,rerun,pick,luck,near,refine,curve,executions,mode}")
     pipes = {name: ps.add_parser(name, allow_abbrev=False, **({"help": text} if text else {})) for name, text in (     # no help = not listed (_loop)
         ("add", "check a pipeline card (lines P0.1-P0.4) and put it in the queue"), ("list", "one row an idea: status, stage reached, tries, why it stopped"),
-        ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself"),
+        ("show", "one idea: its reason, its state, every stage card's first line"), ("start", "start the runner (detached); it works through the queue by itself; refused while the pipeline runs on the old split"),
         ("pause", "the runner stops after the stage in hand"), ("resume", "the runner carries on"), ("approve", "the owner's yes: the idea goes in the book"),
         ("refuse", "the owner's no, with his reason"), ("book", "one row a book card"),
         ("rerun", "an idea that stopped starts again from stage 0 (its stage cards are kept in stages_old)"),
@@ -254,29 +267,55 @@ def _parser() -> _Parser:
         ("near", "the near misses: the ideas that stopped closest to a line before the unseen days, the closest first"),
         ("refine", "a near miss's next version: no --move lists what it missed and the moves; --move KIND=VALUE --why=TEXT files ONE child card (regime, indicator, days, window, sides)"),
         ("curve", "an idea's picked box as a person looks at it: its equity curve by day and its numbers (reads the stored trades, runs nothing)"),
-        ("mode", "the switch: the pipeline works, or it does not; `mode off | live` chooses (live also starts the runner), no word shows"),
+        ("mode", "the switch: the pipeline works, or it does not; `mode off | live` chooses (live also starts the runner, refused on the old split), no word shows"),
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
-    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf,wf-each}")
+    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf,wf-show,wf-pick,wf-oos,wf-each}")
     taught = {name: ts.add_parser(name, allow_abbrev=False, help=text) for name, text in (
         ("check", "validate a rule sheet and print what will run beside what was taught (runs nothing)"),
         ("run", "run the sheet on the build days (--days = a smoke run on named days, never a verdict)"),
         ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"),
         ("lab", "the taught cell of a full run as a finished run of the tester page, to step through its trades (checked against the store)"),
-        ("wf", "the 3:1 walk-forward in blocks over all months, test days included (taught_wf.py; once a sheet: claimed before the read)"),
-        ("wf-each", "every cell of a walk-forward alone on its test months: always traded, and its own walk (taught_wf.each)"))}
+        ("wf", "every cell of the sheet fixed on the 3:1 in-sample months, then the table (only on the owner's words)"),
+        ("wf-show", "the sheet's 3:1 table, the pick, the test months if read (runs nothing)"),
+        ("wf-pick", "the owner's cell: written once, never changed"),
+        ("wf-oos", "the test months of the picked cell, once (only on the owner's words)"),
+        ("wf-each", "an OLD walk-forward's cells alone on its test months (taught_wf.each)"))}
     taught["check"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, or - for stdin")
     taught["run"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, - for stdin, or the name of a sheet on file")
     taught["show"].add_argument("name", help="the sheet's name")
     taught["lab"].add_argument("name", help="the sheet's name")
     taught["lab"].add_argument("--workers", type=int, help="worker processes for the run again (default 6)")
-    taught["wf"].add_argument("name", help="the sheet's name")
-    taught["wf"].add_argument("--workers", type=int, help="worker processes (default 6)")
+    for name in ("wf", "wf-show", "wf-pick", "wf-oos"):
+        taught[name].add_argument("name", help="the sheet's name")
+    for name in ("wf-pick", "wf-oos"):
+        taught[name].add_argument("box", help="the cell: its row number in the in-sample table, or its id")
+    for name in ("wf", "wf-oos"):
+        taught[name].add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: nothing runs without them")
+        taught[name].add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
     taught["wf-each"].add_argument("name", help="the sheet's name")
     taught["wf-each"].add_argument("--workers", type=int, help="worker processes (default 6)")
     taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
     taught["run"].add_argument("--days", help="a smoke run: named build days, d1,d2")
+    wp = add("wf", "the 3:1 walk-forward of every hm40 box (the default of a new idea): run | show | pick | oos")
+    ws = wp.add_subparsers(dest="sub", required=True, metavar="{run,show,pick,oos}")
+    wfs = {name: ws.add_parser(name, allow_abbrev=False, help=text) for name, text in (
+        ("run", "every hm40 box on the 3:1 in-sample months, then the table (only on the owner's words)"),
+        ("show", "the in-sample table, the pick, the test months if read (runs nothing)"),
+        ("pick", "the owner's box: written once, never changed"), ("oos", "the test months of the picked box, once (only on the owner's words)"))}
+    wfs["run"].add_argument("spec", metavar="SPEC", help="a spec file in run_idea's format, - for stdin, or the name of an idea on file")
+    for name in ("show", "pick", "oos"):
+        wfs[name].add_argument("name", help="the idea's name (or its 3:1 store's)")
+    for name in ("pick", "oos"):
+        wfs[name].add_argument("box", help="the box: its row number in the in-sample table, or its id")
+    for name in ("run", "oos"):
+        wfs[name].add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: nothing runs without them")
+        wfs[name].add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
+        wfs[name].add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
+    for x in wfs.values():
+        x.add_argument("--root", metavar="DIR", help="the app's idea folder (default HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas)")
+        x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in taught.values():
         x.add_argument("--root", metavar="DIR", help="the TAUGHT folder (default HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)")
         x.add_argument("--json", action="store_true", help="print the result as one JSON object")
@@ -356,12 +395,14 @@ def _build(a) -> dict:
         given = [f"--{k}" for k in ONE_TABLE if getattr(a, k) is not None]
         if given:
             raise J.Refuse(f"{', '.join(given)}: an option of the one-table build (--spec-file=PATH); an idea's record says its own home, filter and round")
+        api._said(a.owner_said)                     # a build runs a heat map: only on the owner's words (2026-10-20)
         kw = REC.start(a.name, a.reason, a.root, tester=a.tester, **run)      # every refusal that needs no run -- then the reason is on disk
         return REC.run(**kw) if a.wait is None else _job(kw, a)
     try:
         spec = json.loads(Path(a.spec_file).read_text())
     except (OSError, ValueError) as e:
         raise J.Refuse(f"spec file {a.spec_file}: {e}") from None
+    api._said(a.owner_said)
     kw = dict(spec=spec, name=a.name, reason=a.reason or "", home=a.home, filt=a.filter, round_=1 if a.round is None else a.round, **run)
     if a.wait is None:
         return api.build(**kw)                      # in the foreground
@@ -420,6 +461,8 @@ def _pipe(a) -> dict:
     if a.sub == "mode":                             # the switch (pipe_switch): the pipeline works, or it does not
         from . import pipe_switch as SW
         if a.which:
+            if a.which in SW.PR.PROFILES:           # refuse BEFORE the switch is written: `mode off` stays allowed
+                pipe_runner._no_old_split(False)
             SW.choose(a.which, a.root)
             if a.which in SW.PR.PROFILES:           # on = working: the idea runner is started (it says `already` when one is)
                 pipe_runner.start(a.root)
@@ -440,12 +483,17 @@ def _taught(a) -> dict:
     """`taught <sub>`: the taught lane (taught.command). --root here is the TAUGHT folder; a sheet is a file, `-` (stdin) or, for `run`, the
     name of a sheet on file."""
     from . import taught                            # loaded when a taught command is read, never with this module
-    if a.sub == "wf":
-        from . import taught_wf
-        return taught_wf.run(a.name, a.root, workers=a.workers)
-    if a.sub == "wf-each":
-        from . import taught_wf
-        return taught_wf.each(a.name, a.root, workers=a.workers)
+    if a.sub.startswith("wf"):
+        from . import taught_wf as TW
+        if a.sub == "wf":
+            return TW.run(a.name, a.root, workers=a.workers, owner_said=a.owner_said)
+        if a.sub == "wf-show":
+            return TW.show(a.name, a.root)
+        if a.sub == "wf-pick":
+            return TW.pick(a.name, a.box, a.root)
+        if a.sub == "wf-oos":
+            return TW.oos(a.name, a.box, a.owner_said, a.root, workers=a.workers)
+        return TW.each(a.name, a.root, workers=a.workers)
     arg = getattr(a, "sheet", None) or getattr(a, "name", None)
     if arg == "-":
         try:
@@ -455,10 +503,42 @@ def _taught(a) -> dict:
     return taught.command(a.sub, arg, a.root, days=_list(getattr(a, "days", None)), workers=getattr(a, "workers", None))
 
 
+def _wf(a) -> dict:
+    """`wf <sub>`: the 3:1 walk-forward of every hm40 box (api.wf_*). `run` and `oos` refuse without the owner's words before anything
+    starts; with --wait they go on as a job (`job <id>` picks the wait back up)."""
+    if a.root:
+        os.environ[JOBS.ENV] = str(a.root)          # hmwf keeps the one-read log in the ideas root (a job's child inherits it)
+    if a.sub == "show":
+        return api.wf_show(a.name)
+    if a.sub == "pick":
+        return api.wf_pick(a.name, a.box)
+    api._said(a.owner_said)
+    if a.sub == "oos":
+        kw, name = dict(name=a.name, box=a.box, owner_said=a.owner_said, workers=a.workers), a.name
+    else:
+        spec = a.spec
+        if spec == "-" or Path(spec).is_file():
+            where = "on stdin" if spec == "-" else spec
+            try:
+                spec = json.loads(sys.stdin.read() if spec == "-" else Path(spec).read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                raise J.Refuse(f"the spec {where} does not read as JSON: {e}") from None
+            if not isinstance(spec, dict):
+                raise J.Refuse(f"the spec {where}: a JSON object in run_idea's format")
+        kw = dict(spec=spec, owner_said=a.owner_said, workers=a.workers, root=a.root)
+        name = spec.get("name") if isinstance(spec, dict) else spec
+    fn = api.wf_oos if a.sub == "oos" else api.wf_run
+    if a.wait is None:
+        return fn(**kw)
+    d = JOBS.new(f"wf {a.sub}", name, kw, a.root, a.wait)
+    JOBS.start(d)
+    return JOBS.wait(d.name, a.root, a.wait)
+
+
 def _said(r: dict) -> str:
     """A result for a person: its text -- and the next step, for the commands of an idea's record and of the pipeline."""
     cmd = r.get("command")
-    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith("pipe ")
+    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith(("pipe ", "wf "))
                                                                     or str(cmd).startswith("taught ") or "idea" in r) else "")
 
 
@@ -504,13 +584,17 @@ def main(argv=None) -> int:
             r = _pipe(a)
         elif a.cmd == "taught":
             r = _taught(a)
+        elif a.cmd == "wf":
+            r = _wf(a)
+        elif a.cmd == "heatmap" and a.place is None and a.round is None and api.wf_on_file(a.name):
+            r = api.wf_show(a.name, "heatmap")      # a new idea's heat map: its 3:1 in-sample table (read-only)
         elif a.cmd in ("heatmap", "mc"):
             from . import quick                      # the two views: they read, and run nothing
             r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:
-        cmd = (f"{a.cmd} {a.sub}" if a.cmd in ("pipe", "taught") else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
+        cmd = (f"{a.cmd} {a.sub}" if a.cmd in ("pipe", "taught", "wf") else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
         why = f"{cmd} is not built yet: it is a later step of the toolkit plan ({e})" if a is None and cmd in NOT_BUILT else str(e)
         r = api.refused(cmd, why, getattr(a, "name", None) or getattr(a, "stored", None) if a else None)
     print(json.dumps(r) if "--json" in argv else _said(r))     # one object on one ASCII line: safe for any reader of stdout

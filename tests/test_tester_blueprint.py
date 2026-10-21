@@ -50,10 +50,13 @@ def run(c, tool, args=None, **kw):
 
 def test_the_lab_lists_the_tools_every_chat_has_and_the_ideas_on_file(c):
     r = c.get("/api/tester/blueprint").json()
-    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 12
+    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 15
     by = {t["name"]: t for t in r["tools"]}
     for s in blueprint_tools.SPECS:                 # the same definition, split into its phase and its words
         t = by[s["name"]]
+        if s["name"] == "blueprint_wf_oos":         # the owner's exact words (2026-10-20): no phase in front, shown whole
+            assert t["phase"] == t["description"] == s["description"] and t["inputs"] == s["inputSchema"]
+            continue
         assert t["inputs"] == s["inputSchema"] and s["description"] == f"{t['phase']}: {t['description']}" and t["phase"].startswith("Blueprint")
     assert by["blueprint_build"]["phase"].startswith("Blueprint phase 2, the build") and by["blueprint_portfolio"]["inputs"]["required"] == ["names", "account"]
     assert r["ideas"] == [] and r["wait_s"] == tester_api.LAB_WAIT_S == 20
@@ -77,10 +80,10 @@ def test_a_tool_runs_as_a_chat_runs_it_and_answers_in_its_own_words(c, ideas_roo
 
 def test_a_long_job_answers_with_its_id_after_twenty_seconds_at_most(c):
     for sent, want in ((None, 20), (3600, 20), (5, 5), (0, 0), (True, 20), ("soon", 20)):
-        args = {"name": "nq_orb_pre", "reason": "the plain idea", **({} if sent is None else {"wait_s": sent})}
+        args = {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", **({} if sent is None else {"wait_s": sent})}
         text = run(c, "blueprint_build", args).json()["text"]
         assert (f"--wait={want}" in text) or (want == 0 and "job j1 is still going" in text), (sent, text)
-    going = run(c, "blueprint_build", {"name": "nq_orb_pre", "reason": "the plain idea", "wait_s": 0}).json()["text"]
+    going = run(c, "blueprint_build", {"name": "nq_orb_pre", "owner_said": "build it", "reason": "the plain idea", "wait_s": 0}).json()["text"]
     assert "is still going" in going and "job_id='j1'" in going                  # the page's "Keep waiting" reads the id off this
 
 
