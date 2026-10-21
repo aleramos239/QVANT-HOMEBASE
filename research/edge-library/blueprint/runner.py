@@ -44,6 +44,7 @@ import csv
 import datetime as dt
 import fcntl
 import hashlib
+import itertools
 import json
 import os
 import shutil
@@ -135,14 +136,18 @@ def guard(meta: dict, where: str) -> dict:
     return meta
 
 
-def guard_wf(meta: dict, where: str) -> dict:
-    """THE SEAL on a store of the 3:1 in-sample months: written under the engine's in-sample switch, and every day it names lies in an
-    in-sample month of the market's blocks. A store that holds a day of a test month is refused: not skipped, not read."""
+def guard_wf(meta: dict, where: str, period: str = S.ALLOW_WF_IS) -> dict:
+    """THE SEAL on a store of the 3:1 months: written under the engine's switch `period` (in-sample, or the out-of-sample read of a
+    picked box), and every day it names lies in a month of that side of the market's blocks. Anything else is refused: not skipped,
+    not read."""
     from . import wfmonths as WM
-    days, ms = meta.get("days") or [], WM.month_sets(str(meta.get("root") or "NQ"))[0]
+    if not meta.get("root"):
+        raise J.Refuse(f"store {where}: no market in its run.json: a 3:1 store is not read without its market's months")
+    side = "in-sample" if period == S.ALLOW_WF_IS else "out-of-sample"
+    days, ms = meta.get("days") or [], WM.month_sets(str(meta["root"]))[period != S.ALLOW_WF_IS]
     bad = [d for d in days if str(d)[:7] not in ms]
-    if meta.get("period") != S.ALLOW_WF_IS or not days or bad:
-        raise J.Refuse(f"store {where} ({meta.get('period')!r}, {bad[0] if bad else 'no day'}): a 3:1 store holds in-sample days only")
+    if period not in S.WF_SWITCHES or meta.get("period") != period or not days or bad:
+        raise J.Refuse(f"store {where} ({meta.get('period')!r}, {bad[0] if bad else 'no day'}): a 3:1 {side} store holds {side} days only")
     return meta
 
 
@@ -472,7 +477,7 @@ def _stored(p: dict, out: Path, days=None, period: str = PERIOD) -> bool:
     f = out / p["key"] / "run.json"
     if not f.exists() or not (f.parent / "cells.npz").exists():
         return False
-    m = (guard if period == PERIOD else guard_wf)(json.loads(f.read_text()), _where(out, p["key"]))
+    m = guard(json.loads(f.read_text()), _where(out, p["key"])) if period == PERIOD else guard_wf(json.loads(f.read_text()), _where(out, p["key"]), period)
     if m.get("inputs_hash") != p["hash"] and _grown(p, m, days):
         return False                                # the table grew with the law: the store's cells stay, the missing ones are run (p["more"])
     if m.get("inputs_hash") != p["hash"]:
@@ -556,10 +561,11 @@ def _months(days) -> list:
 
 
 def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who, period: str = PERIOD) -> list:
-    """period = PERIOD (the build range) or S.ALLOW_WF_IS: the 3:1 in-sample days, named (blueprint/hmwf.py; guard_wf on its stores)."""
+    """period = PERIOD (the build range) or a 3:1 switch with its named days: S.ALLOW_WF_IS (the in-sample months) or S.ALLOW_WF_OOS (the
+    test months of a picked box, one month a call) (blueprint/hmwf.py; guard_wf on its stores)."""
     wf = period != PERIOD
-    if wf and (period != S.ALLOW_WF_IS or not days or cells is not None):
-        raise J.Refuse("a 3:1 run takes the engine's in-sample switch and its named days (wfmonths.is_days), every cell")
+    if wf and (period not in S.WF_SWITCHES or not days or cells is not None):
+        raise J.Refuse("a 3:1 run takes one of the engine's 3:1 switches and its named days (wfmonths.is_days / oos_days), every cell")
     if not wf and (days is not None or cells is not None) and (days is None or out_dir is None or ledger is None):
         raise J.Refuse("a run on named days (or on some exit cells only) is a smoke run: it takes named days, its own store folder and its own "
                        "ledger file, and never writes into runs_bp/ or ledger.csv")
@@ -577,7 +583,7 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who,
             miss = [d for d in days if S.hb_tape_path(d, root) is None] if wf else \
                 [d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD) if S.hb_tape_path(d, root) is None]
             if miss:
-                raise J.Refuse(f"{len(miss)} sessions of {root} {'in the 3:1 in-sample months' if wf else 'on the build range'} have no tape yet "
+                raise J.Refuse(f"{len(miss)} sessions of {root} {('in the 3:1 ' + ('in-sample' if period == S.ALLOW_WF_IS else 'test') + ' months') if wf else 'on the build range'} have no tape yet "
                                f"(first {miss[0]}): build them first (engine/l2sim.py build_tapes)")
         cand = sum(p["cells"] if p.get("more") is None else len(p["more"]) for p in pend if p["kind"] != "pool")
         try:
@@ -703,11 +709,14 @@ def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say, per
     step = max(1, int(block or R.template("compute")["block_days"])) if all(getattr(c, "session_independent", False) for c, _ in specs) else len(days)
     span = (S._date(days[0]).toordinal(), S._date(days[-1]).toordinal()) if wf else ()
     acc = [_Cell(*span) for _ in cut[1:]]
-    for k in range(0, len(days), step):
-        say(f"days {k + 1}-{min(k + step, len(days))} of {len(days)} ({len(specs)} instances)")
-        res = (S.run_many(specs, days=days[k:k + step], root=root, workers=workers, allow_holdout=period, **_engine(kw)) if wf else
-               S.run_many(specs, period=PERIOD, days=days[k:k + step], root=root, workers=workers, **_engine(kw)))
-        if wf and any(t["date"] not in named for named in [set(days[k:k + step])] for r in res for t in r["trades"]):
+    months = [list(g) for _, g in itertools.groupby(days, key=lambda d: d[:7])] if period == S.ALLOW_WF_OOS else [days]   # the test switch: ONE month a call
+    chunks, k = [m[i:i + step] for m in months for i in range(0, len(m), step)], 0
+    for chunk in chunks:
+        say(f"days {k + 1}-{k + len(chunk)} of {len(days)} ({len(specs)} instances)")
+        k += len(chunk)
+        res = (S.run_many(specs, days=chunk, root=root, workers=workers, allow_holdout=period, **_engine(kw)) if wf else
+               S.run_many(specs, period=PERIOD, days=chunk, root=root, workers=workers, **_engine(kw)))
+        if wf and any(t["date"] not in named for named in [set(chunk)] for r in res for t in r["trades"]):
             raise RuntimeError("the engine handed back a trade of a day that was not named: nothing is stored")
         for a, i, j in zip(acc, cut, cut[1:]):
             a.add(RM.merge(res[i:j]))

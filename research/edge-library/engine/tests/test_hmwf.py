@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -29,7 +30,7 @@ SPEC = {"name": "hwt_sweep", "reason": "a swept candle extreme that fails to hol
         "family": "candle_sweep", "markets": ["NQ"], "bar_sizes": ["15"], "sessions": ["nyam"], "params": {"ema1h": [0, 50, 100]},
         "exits": "standard"}
 COLUMNS = ["n", "box", "settings", "win_rate", "breakeven", "wr_minus_be", "trades", "per_week", "avg_trade", "avg_r", "net", "pf", "sharpe",
-           "max_dd", "months_pos", "months_wr60", "worst_month_wr", "long_net", "short_net", "worse_fills_net", "beats_random", "seen"]
+           "max_dd", "months_pos", "months_wr60", "worst_month_wr", "long_net", "short_net", "worse_fills_net", "beats_random", "random_vs", "seen"]
 
 
 def _fake_run_many(calls):
@@ -93,6 +94,8 @@ def test_guard_wf_refuses_a_store_with_a_test_month_day(wf):
         RUN.guard_wf({"period": S.ALLOW_WF_IS, "root": "NQ", "days": IS_DAYS + ["2022-01-03"]}, "x")
     with pytest.raises(J.Refuse, match="in-sample"):
         RUN.guard_wf({"period": "bp_build", "root": "NQ", "days": IS_DAYS}, "x")
+    with pytest.raises(J.Refuse, match="no market"):                         # never a fall back to NQ
+        RUN.guard_wf({"period": S.ALLOW_WF_IS, "days": IS_DAYS}, "x")
 
 
 def test_run_is_refuses_level_2(wf):
@@ -111,6 +114,7 @@ def test_is_table_columns_and_sort(wf):
     r = next(x for x in rows if x["box"] == "ema1h50_own1p5-r0p75")
     assert r["settings"] == {"ema1h": 50, "stop_mode": "own", "stop_val": 1.5, "tgt_r": 0.75} and r["trades"] == 3
     assert r["worse_fills_net"] is not None and isinstance(r["beats_random"], float) and 0 <= r["beats_random"] <= 1
+    assert r["random_vs"] == "atr1p5-r0p75"                                   # the control cell an own-stop box was compared with
     assert r["seen"] is None
     assert H.is_table("hwt_sweep-NQ-tf15") == rows                            # the store's name reads the same table
 
@@ -141,3 +145,113 @@ def test_seen_label(wf, monkeypatch):
     store.log_read("hwt_sweep", version=1, lock="abc", rng={"start": "2025-07-01", "end": "2025-09-30"}, state="judged")      # ... and read once
     rows = H.is_table("hwt_sweep")
     assert {r["seen"] for r in rows} == {"build days 2021-09..2025-06 tuned; test days read 2026-10-18"}
+
+
+# ================================================================ the owner's pick and the out-of-sample read (Task 4)
+
+BOX = "ema1h0_atr1-r1"
+
+
+def _oos_calls(wf):
+    return [c for c in wf["calls"] if c["allow_holdout"] == S.ALLOW_WF_OOS]
+
+
+def _log():
+    return [r for r in api.ideastore().reads() if r.get("kind") == "wf_oos"]
+
+
+def test_pick_writes_lock_once(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    rows = H.is_table("hwt_sweep")
+    with pytest.raises(J.Refuse, match="not a box"):
+        H.pick("hwt_sweep", 999)
+    assert H.show("hwt_sweep")["lock"] is None
+    lock = H.pick("hwt_sweep", 3)
+    assert set(lock) == {"box", "settings", "code", "at", "who"} and lock["who"] == "owner"
+    assert lock["box"] == rows[2]["box"] and lock["settings"] == rows[2]["settings"] and lock["code"] == RUN.code("candle_sweep")
+    assert json.loads((H.RUNS / "hwt_sweep-NQ-tf15" / "lock.json").read_text()) == lock
+    assert H.pick("hwt_sweep", rows[2]["box"]) == lock                        # the same box again: the lock on file
+    with pytest.raises(J.Refuse, match="new idea name"):
+        H.pick("hwt_sweep", rows[3]["box"])
+    s = H.show("hwt_sweep")
+    assert s["lock"] == lock and s["oos"] is None and s["is"] == rows
+    assert not _oos_calls(wf) and not _log()                                  # a pick runs nothing
+
+
+def test_oos_refuses_without_lock(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    with pytest.raises(J.Refuse, match="picked"):
+        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    assert not _oos_calls(wf) and not _log()
+
+
+def test_oos_refuses_another_box(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+    with pytest.raises(J.Refuse, match="picked box"):
+        H.run_oos("hwt_sweep", "ema1h50_atr1-r1", "run it", workers=1, ledger=wf["ledger"])
+    assert not _oos_calls(wf) and not _log()
+
+
+def test_oos_refuses_empty_owner_said(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+    for said in ("", "   ", None):
+        with pytest.raises(J.Refuse, match="owner's word"):
+            H.run_oos("hwt_sweep", BOX, said, workers=1, ledger=wf["ledger"])
+    assert not _oos_calls(wf) and not _log()
+
+
+def test_oos_claim_written_before_any_day(wf, monkeypatch):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+    seen = []
+
+    def boom(*a, **kw):
+        seen.append(len(_log()))
+        raise RuntimeError("engine down")
+    monkeypatch.setattr(S, "run_many", boom)
+    with pytest.raises(RuntimeError, match="engine down"):
+        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    assert seen == [1]                                                        # the claim was on file when the first day was opened
+    (line,) = _log()
+    assert line["box"] == BOX and line["state"] == "claimed" and line["owner_said"] == "run it"
+    with pytest.raises(J.Refuse, match="on file"):                            # a read that died is over: never run twice
+        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    assert not (H.RUNS / "hwt_sweep-NQ-tf15" / "oos").exists()
+
+
+def test_oos_runs_once(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+    n = len(wf["calls"])
+    r = H.run_oos("hwt_sweep", BOX, "run box 1", workers=1, ledger=wf["ledger"])
+    calls = wf["calls"][n:]
+    assert calls and all(c["allow_holdout"] == S.ALLOW_WF_OOS and c["days"] == ["2022-01-03"] for c in calls)
+    assert list(r["record"]) == COLUMNS and r["record"]["box"] == BOX and r["record"]["trades"] == 1
+    assert r["blocks"] == [{"i": 0, "oos": "2022-01", "trades": 1, "win_rate": r["record"]["win_rate"], "net": r["record"]["net"]}]
+    u = LB.load_unit("oos", H.RUNS / "hwt_sweep-NQ-tf15")                     # the one picked box, its test month only
+    assert [c["id"] for c in u["meta"]["cells"]] == [BOX] and u["meta"]["period"] == S.ALLOW_WF_OOS
+    assert {dt.date.fromordinal(int(d)).strftime("%Y-%m") for d in u["date"]} == {"2022-01"}
+    (line,) = _log()
+    assert line["name"] == "hwt_sweep" and line["box"] == BOX and line["who"] == "owner" and line["store"] == "hwt_sweep-NQ-tf15"
+    assert line["code"] == RUN.code("candle_sweep") and line["range"] == {"start": "2022-01-03", "end": "2022-01-03"}
+    with pytest.raises(J.Refuse, match="on file"):
+        H.run_oos("hwt_sweep", 1 + [x["box"] for x in H.is_table("hwt_sweep")].index(BOX), "again", workers=1, ledger=wf["ledger"])
+    assert len(wf["calls"]) == n + len(calls) and len(_log()) == 1
+    assert H.show("hwt_sweep")["oos"] == r
+    assert {x["seen"] for x in H.is_table("hwt_sweep")} == {None}             # the 3:1 read is not a read of the old test days
+
+
+def test_oos_one_month_a_call(wf, monkeypatch):
+    cal = ["2021-10-01", "2021-11-01", "2021-12-01", "2022-01-03", "2022-02-01", "2022-03-01", "2022-04-01", "2022-05-02"]
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(cal), "2022-06-01"))
+    WM._sets.cache_clear()
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+    n = len(wf["calls"])
+    r = H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    calls = wf["calls"][n:]
+    assert sorted(d for c in calls for d in c["days"]) == ["2022-01-03", "2022-05-02"]
+    assert all(len({d[:7] for d in c["days"]}) == 1 for c in calls)           # the engine's switch: one month a call
+    assert [b["oos"] for b in r["blocks"]] == ["2022-01", "2022-05"] and r["record"]["trades"] == 2

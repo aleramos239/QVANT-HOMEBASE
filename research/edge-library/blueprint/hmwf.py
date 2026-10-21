@@ -13,11 +13,21 @@ run, not stored and not shown here. The owner picks the box from the in-sample t
     is_table(name)           one row a box, sorted by win rate (the owner's pick list)
     block_rows(name, box)    one row a block: its 3 in-sample months
     numbers(x, days)         the numbers of one record (packed trades, the session days they were run on)
+
+THE OWNER'S PICK AND THE OUT-OF-SAMPLE READ (spec 4.4, 4.7; the owner: "run them when i say"). `box` = its row number n in the
+in-sample table, or its id; `store` = the folder of the 3:1 stores (default: the idea's, under runs_wf/).
+    pick(name, box, who)     THE LOCK: <store>/lock.json {box, settings, code, at, who}, written once; another box is refused (a new pick
+                             is a new idea name)
+    run_oos(name, box, owner_said)   only the picked box, only on the owner's words, once: the claim goes to the one-read log
+                             (reads.claim_wf_oos) BEFORE a day is opened; then the box runs on every test month of its blocks, one month
+                             a call (l2sim.ALLOW_WF_OOS), into <store>/oos/ (that box's test-month trades and nothing else)
+    show(name)               the in-sample table, the lock if any, the out-of-sample record if it was read
 """
 from __future__ import annotations
 
 import datetime as dt
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -28,12 +38,13 @@ import library as LB
 import run_idea as RI
 
 from . import api
+from . import reads as RD
 from . import rules as R
 from . import runner as RUN
 from . import wfmonths as WM
 
 RUNS = RUN.RUNS_WF
-IS = "is"
+IS, OOS, LOCK = "is", "oos", "lock.json"
 STAGE, WORSE, POOL = "wf_is", "wf_is_worse", "null_wf_is"      # the ledger stages (a pool's: not capped)
 
 
@@ -130,17 +141,18 @@ def _seen(name: str):
     b, out = R.template("ranges")["build"], []
     if any(RUN.RUNS.glob(f"{name}-*")) or any(RUN.RUNS.glob(f"{name}__*")):
         out.append(f"build days {b['start'][:7]}..{b['end'][:7]} tuned")
-    line = api.ideastore().read_on_file(name)
+    line = next((r for r in reversed(api.ideastore().reads()) if r.get("name") == name and r.get("kind") != RD.WF_OOS), None)   # (a 3:1 read is not one)
     if line:
         out.append(f"test days read {str(line.get('utc'))[:10]}")
     return "; ".join(out) or None
 
 
-def _beats(x: dict, cell: dict, pool, sess) -> float | None:
-    """The share of the pool's seeds (the ATR cell of the box's multiplier and target, the box's sessions) whose average trade is below the box's."""
-    if pool is None or not len(x["net"]):
-        return None
+def _beats(x: dict, cell: dict, pool, sess) -> tuple:
+    """(the share of the pool's seeds -- the ATR cell of the box's multiplier and target, the box's sessions -- whose average trade is
+    below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier."""
     ex = {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}
+    if pool is None or not len(x["net"]):
+        return None, None
     mine, avg = float(np.mean(x["net"])), []
     for i, c in enumerate(pool["meta"]["cells"]):
         if c["exit"] == ex:
@@ -148,19 +160,23 @@ def _beats(x: dict, cell: dict, pool, sess) -> float | None:
             t = y["net"][np.isin(y["sess"], sess)]
             if len(t):
                 avg.append(float(t.mean()))
-    return sum(a < mine for a in avg) / len(avg) if avg else None
+    return (sum(a < mine for a in avg) / len(avg), S.cell_id(ex)) if avg else (None, None)
 
 
-def _load(home: Path):
-    u = LB.load_unit(IS, home)
+def _load(home: Path, sub: str = IS, period: str = S.ALLOW_WF_IS):
+    u = LB.load_unit(sub, home)
     m = u["meta"]
-    RUN.guard_wf(m, f"{home.name}/{IS}")
+    RUN.guard_wf(m, f"{home.name}/{sub}", period)
     return u, m
 
 
-def is_table(name: str) -> list:
+def _home(name: str, at) -> Path:
+    return Path(at) if at is not None else store(name)
+
+
+def is_table(name: str, store=None) -> list:
     """THE IN-SAMPLE TABLE: one row a box (module docstring), sorted by win rate, best first (no win rate: last)."""
-    home = store(name)
+    home = _home(name, store)
     u, m = _load(home)
     days, root, tf = m["days"], m["root"], m["tf"]
     worse = {}
@@ -178,8 +194,9 @@ def is_table(name: str) -> list:
     sess, seen, rows = [LB.SESS7.index(s) for s in m["sessions"]], _seen(m["idea"]), []
     for i, c in enumerate(m["cells"]):
         x = LB.unit_cell(u, i)
+        beats, vs = _beats(x, c, pool, sess)
         rows.append({"box": c["id"], "settings": {**c["variant"], **c["exit"]}, **numbers(x, days),
-                     "worse_fills_net": round(worse[c["id"]], 2) if c["id"] in worse else None, "beats_random": _beats(x, c, pool, sess), "seen": seen})
+                     "worse_fills_net": round(worse[c["id"]], 2) if c["id"] in worse else None, "beats_random": beats, "random_vs": vs, "seen": seen})
     rows.sort(key=lambda r: (r["win_rate"] is None, -(r["win_rate"] or 0.0)))
     return [{"n": n, **r} for n, r in enumerate(rows, 1)]
 
@@ -199,3 +216,116 @@ def block_rows(name: str, box: str) -> list:
             out.append({"i": b["i"], "is": b["is"], "is_trades": len(t), "is_win_rate": float((t > 0).mean()) if len(t) else None,
                         "is_net": round(float(t.sum()), 2)})
     return out
+
+
+# ================================================================ the owner's pick (the lock) and the out-of-sample read
+
+def _row(name: str, home: Path, box) -> dict:
+    """The in-sample row of a box: by its row number n (an int, or digits) or by its id."""
+    rows = is_table(name, home)
+    by_n = isinstance(box, int) and not isinstance(box, bool) or isinstance(box, str) and box.isdigit()
+    hit = next((r for r in rows if (r["n"] == int(box) if by_n else r["box"] == box)), None)
+    if hit is None:
+        raise J.Refuse(f"{box!r}: not a box of {home.name} (a row number 1..{len(rows)} of its in-sample table, or a box id)")
+    return hit
+
+
+def _lock(home: Path):
+    f = home / LOCK
+    return json.loads(f.read_text()) if f.exists() else None
+
+
+def pick(name: str, box, who: str = "owner", store=None) -> dict:
+    """THE OWNER'S PICK = THE LOCK (module docstring): written once, before any test month is read. The same box again: the lock on file."""
+    home = _home(name, store)
+    r = _row(name, home, box)
+    lock = {"box": r["box"], "settings": r["settings"], "code": RUN.code(_load(home)[1]["family"]),
+            "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "who": who}
+    tmp = home / f"{LOCK}.{os.getpid()}.tmp"
+    tmp.write_text(json.dumps(lock, indent=1))
+    try:
+        os.link(tmp, home / LOCK)                   # one step, and never over a lock on file (two picks at once: one wins)
+    except FileExistsError:
+        was = _lock(home)
+        if was.get("box") != r["box"]:
+            raise J.Refuse(f"{home.name}: box {was.get('box')} is picked already ({was.get('at')}, {was.get('who')}): a new pick is a new idea name") from None
+        return was
+    finally:
+        tmp.unlink()
+    return lock
+
+
+def _grid(m: dict, home: Path) -> list:
+    """The in-sample store's grid, rebuilt from its run.json -- and proved the same by the store's own fingerprint."""
+    root, tf = m["root"], m["tf"]
+    sp = {"name": m["idea"], "family": m["family"], "markets": [root], "bar_sizes": [tf], "filters": [], "exits": m["exits"],
+          "filter_exits": m["exits"], "fixed": m["fixed"], "limits": m["limits"], "variants": m["variants"]}
+    grid = RI.spec_units(sp)[0]["grid"]
+    p = RUN._part(f"{home.name}/{IS}", "unit", root, tf, grid, m["sessions"], None, m, m["family"], RUN._kw(m["family"]))
+    if RUN.fingerprint(p, m["days"], S.ALLOW_WF_IS) != m.get("inputs_hash"):
+        raise J.Refuse(f"{home.name}: the idea's table is not the one its in-sample store was run from (the code or the settings changed): "
+                       "the box is not run on its test months")
+    return grid
+
+
+def _oos(home: Path, rows: list):
+    """The out-of-sample record on file -> {"store", "record" (the in-sample table's columns), "blocks"} | None."""
+    if not (home / OOS / "cells.npz").exists():
+        return None
+    u, m = _load(home, OOS, S.ALLOW_WF_OOS)
+    lock = _lock(home) or {}
+    if [c["id"] for c in m["cells"]] != [lock.get("box")]:
+        raise J.Refuse(f"{home.name}/{OOS} holds {[c['id'] for c in m['cells']]}, not the picked box {lock.get('box')}: it is not read")
+    c, x, days = m["cells"][0], LB.unit_cell(u, 0), m["days"]
+    n = next((r["n"] for r in rows if r["box"] == c["id"]), None)
+    rec = {"n": n, "box": c["id"], "settings": {**c["variant"], **c["exit"]}, **numbers(x, days), "worse_fills_net": None, "beats_random": None,
+           "random_vs": None, "seen": next((r["seen"] for r in rows if r["box"] == c["id"]), None)}
+    mo, net, have = _month(x), np.asarray(x["net"], np.float64), {d[:7] for d in days}
+    blocks = []
+    for b in WM.blocks(m["root"]):
+        if b["oos"] in have:
+            t = net[mo == b["oos"]]
+            blocks.append({"i": b["i"], "oos": b["oos"], "trades": len(t), "win_rate": float((t > 0).mean()) if len(t) else None,
+                           "net": round(float(t.sum()), 2)})
+    return {"store": str(home / OOS), "record": rec, "blocks": blocks}
+
+
+def run_oos(name: str, box, owner_said: str, workers=None, store=None, *, ledger=None, progress=None, block=None) -> dict:
+    """THE OUT-OF-SAMPLE READ of the picked box, on the owner's word, once (module docstring) -> what show() gives as "oos".
+    THE ORDER: every refusal first (a dry run of the runner included); then the claim in the one-read log; only then a test day."""
+    home = _home(name, store)
+    lock = _lock(home)
+    if lock is None:
+        raise J.Refuse(f"{home.name}: no box is picked: the owner picks one first (pick), then says to run it")
+    if not isinstance(owner_said, str) or not owner_said.strip():
+        raise J.Refuse(f"{home.name}: the test months run only on the owner's word (owner_said is empty)")
+    r = _row(name, home, box)
+    if r["box"] != lock["box"]:
+        raise J.Refuse(f"{r['box']}: the picked box of {home.name} is {lock['box']}: only the picked box is run")
+    if (home / OOS).exists() or RD.wf_oos_on_file(home.name, r["box"]):
+        raise J.Refuse(f"{home.name} box {r['box']}: its out-of-sample read is on file: it is shown (show), never run again")
+    _, m = _load(home)
+    have = {d[:7] for d in m["days"]}
+    bl = [b for b in WM.blocks(m["root"]) if set(b["is"]) <= have]      # the blocks the box was picked on
+    if not bl:
+        raise J.Refuse(f"{home.name}: no block of its in-sample months has a test month yet")
+    days = [d for b in bl for d in WM.oos_days(m["root"], b["oos"])]
+    cell = next(c for c in _grid(m, home) if c["id"] == r["box"])
+    note = f"idea {m['idea']}: the picked box {r['box']} on the 3:1 test months ({bl[0]['oos']} .. {bl[-1]['oos']}), on the owner's word"
+    todo = [{**RUN._part(f"{home.name}/{OOS}", "unit", m["root"], m["tf"], [cell], m["sessions"], None, {**m, "wf": OOS, "box": r["box"], "note": note},
+                         m["family"], RUN._kw(m["family"])), "stage": S.ALLOW_WF_OOS}]
+    who = f"idea {m['idea']}, 3:1 test months of box {r['box']}"
+    RUN._run(todo, workers, home.parent, ledger, days, None, progress, block, True, who, S.ALLOW_WF_OOS)     # the refusals, nothing run
+    RD.claim_wf_oos(m["idea"], home.name, r["box"], rng={"start": days[0], "end": days[-1]}, who=lock["who"], owner_said=owner_said.strip(),
+                    code=RUN.code(m["family"]))
+    rows = RUN._run(todo, workers, home.parent, ledger, days, None, progress, block, False, who, S.ALLOW_WF_OOS)
+    if rows[0].get("ok") is False:
+        raise J.Refuse(f"{home.name}/{OOS}: sessions were dropped by a strategy error ({rows[0].get('error')}): no store was written; the read is on file")
+    return _oos(home, is_table(name, home))
+
+
+def show(name: str, store=None) -> dict:
+    """The in-sample table, the lock if any, the out-of-sample record if it was read (never run here)."""
+    home = _home(name, store)
+    rows = is_table(name, home)
+    return {"is": rows, "lock": _lock(home), "oos": _oos(home, rows)}
