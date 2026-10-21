@@ -453,6 +453,84 @@ def test_a_roll_day_runs_with_no_hours_stale_hours_wait_and_unreadable_ones_stop
     assert bad.detail == "OSError: disk"
 
 
+MINVOL = HEAD + '''class Mv(Strategy):
+    id, name, root = "mv", "Mv", "NQ"
+
+    def needs_minute_volume(self):
+        return 2
+
+    def on_session(self, ctx):
+        mv = ctx.minute_volume
+        ctx.plot("dates", ctx.now_ns, float(len(mv)))
+        ctx.plot("first", ctx.now_ns, float(mv[-1]["vol"][0]) if mv and mv[-1]["vol"] else -1.0)
+'''
+
+
+def vols_of(*days_):
+    """[{date, vol}, ...]: each date given, 5 traded in its first minute (18:00 ET the evening before)."""
+    return [{"date": x, "vol": [5] + [0] * 1379} for x in days_]
+
+
+def test_the_minute_volume_reaches_the_session_event_only_when_the_strategy_asks_and_is_read_once(days):
+    asked = []
+
+    def minute_vol(root, d, n):
+        asked.append((root, d, n))
+        return vols_of("2024-03-01", "2024-03-04")
+
+    day = days(MINVOL, minute_vol=minute_vol)
+    day.on_ticks(ticks("09:24:58", [21000.0]))
+    assert asked == []                                                       # not before its session event ...
+    day.on_ticks(ticks("09:25:00", [21000.0]))
+    day.on_ticks(ticks("09:26:00", [21000.0]))
+    assert asked == [("NQ", D, 2)]                                           # ... once
+    assert day.fills.result.plots == {"dates": [[ms_of("09:25"), 2.0]], "first": [[ms_of("09:25"), 5.0]]}
+    other = days(MARKET_930, minute_vol=lambda root, d, n: asked.append("no"))   # it does not ask: never read
+    other.on_ticks(ticks("09:25:00", [21000.0]))
+    assert other.state == "running" and len(asked) == 1
+
+
+def test_stale_missing_or_unreadable_minute_volume_stops_the_day(days):
+    stale = days(MINVOL, minute_vol=lambda root, d, n: vols_of("2024-02-29", "2024-03-01"))   # Monday's not stored yet
+    stale.on_ticks(ticks("09:25:00", [21000.0] * 3))
+    assert (stale.state, stale.summary()["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
+    assert stale.detail == "the newest minute volume is of 2024-03-01" and stale.fills.result.plots == {}
+    empty = days(MINVOL, minute_vol=lambda root, d, n: [])
+    empty.on_ticks(ticks("09:25:00", [21000.0]))
+    assert (empty.state, empty.detail) == ("stopped", "the newest minute volume is of none")
+
+    def broken(root, d, n):
+        raise OSError("disk")
+    bad = days(MINVOL, minute_vol=broken)
+    bad.on_ticks(ticks("09:25:00", [21000.0]))
+    assert (bad.state, bad.summary()["why"]) == ("stopped", "The earlier days' volume could not be read.")
+    assert bad.detail == "OSError: disk"
+
+
+def test_desk_mode_writes_the_minute_volume_in_the_tell_log_and_a_restart_feeds_the_logs_own_again():
+    from tests.labrun_desk_util import desk_day, feed, plots
+    vols = vols_of("2024-03-01", "2024-03-04")
+    day, _, _, tells, _ = desk_day(MINVOL, minute_vol=lambda root, d, n: vols)
+    try:
+        feed(day, "09:25:00", [21000.0])
+        assert tells[1]["kind"] == "session" and tells[1]["minute_volume"] == vols
+        seen = plots(day)
+        assert seen == {"dates": [[ms_of("09:25"), 2.0]], "first": [[ms_of("09:25"), 5.0]]}
+    finally:
+        day.drop()
+
+    def unread(root, d, n):
+        raise AssertionError("a restart reads the log, not the archive")
+    again, _, _, _, _ = desk_day(MINVOL, up=False, resume=list(tells), tells=list(tells), now_ns=at("09:26:00"),
+                                 minute_vol=unread)
+    try:
+        again.on_ticks(ticks("09:25:00", [21000.0]))
+        again.on_clock(ms_of("09:26:00"))
+        assert again.state == "running" and plots(again) == seen             # the same answer: picked up
+    finally:
+        again.kill()
+
+
 def test_an_evening_close_belongs_to_the_next_sessions_date():
     assert host._session_of(et_ns(dt.date(2024, 3, 4), "19:00")) == dt.date(2024, 3, 5)
     assert host._session_of(et_ns(dt.date(2024, 3, 4), "17:00")) == dt.date(2024, 3, 4)

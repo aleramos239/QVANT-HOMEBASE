@@ -44,7 +44,7 @@ from pathlib import Path
 
 from .. import draftstore, strategies
 from ..contracts import commission_rt
-from . import drafthost, hourly, sandbox
+from . import drafthost, hourly, minvol, sandbox
 from ..paths import repo_root, state_dir
 from . import controls as ctlmod, discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
@@ -287,6 +287,10 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     if not 0 <= n_hourly <= hourly.MAX_SESSIONS:
         raise ValueError(f"needs_hourly: 0 .. {hourly.MAX_SESSIONS} sessions, not {n_hourly}")
     hour_cache: dict = {}
+    n_minvol = int(strat.needs_minute_volume() or 0)    # earlier trade dates' minute volume (ctx.minute_volume), read per day
+    if not 0 <= n_minvol <= minvol.MAX_SESSIONS:
+        raise ValueError(f"needs_minute_volume: 0 .. {minvol.MAX_SESSIONS} dates, not {n_minvol}")
+    mv_cache: dict = {}
     blocked: dict[str, int] = {}
     trades, skipped, no_trade, hlines, marks = [], [], [], [], []
     plots: dict[str, list] = {}
@@ -303,6 +307,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
             continue
         if n_hourly and d not in hour_cache:     # this session's hours, for the days after it (no second load)
             hour_cache[d] = (tape.contract, hourly.session_hours(tape))
+        if n_minvol and d not in mv_cache:       # this date's minute volume, for the days after it (no second load)
+            mv_cache[d] = minvol.minutes(tape)
         if strat.needs_daily():
             note_open930(d, tape)
         # Item 2: a CME half day shortens the session -- clamp the window BEFORE
@@ -317,7 +323,8 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         strat.session_window = window
         prior = dailies[:bisect_left(daily_dates, d.isoformat())]
         hours = hourly.prior(store, cls.root, d, n_hourly, hour_cache) if n_hourly else None
-        res = run_session(strat, tape, costs, qty=req["qty"], daily=prior, controls=rules, hourly=hours)
+        mv = minvol.prior(store, cls.root, d, n_minvol, mv_cache) if n_minvol else None
+        res = run_session(strat, tape, costs, qty=req["qty"], daily=prior, controls=rules, hourly=hours, minute_volume=mv)
         for why, n in res.blocked.items():
             blocked[why] = blocked.get(why, 0) + n
         trades += [t.to_dict() for t in res.trades]

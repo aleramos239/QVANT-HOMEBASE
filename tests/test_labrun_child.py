@@ -144,13 +144,16 @@ class Child:
         return self.send({"op": "init", "name": name, "source": source, "params": params or {}, "qty": qty,
                           "date": date})
 
-    def event(self, kind, arg=None, t_ns=T0, last_price=None, flat=True, updates=(), daily=None, hourly=None) -> dict:
+    def event(self, kind, arg=None, t_ns=T0, last_price=None, flat=True, updates=(), daily=None, hourly=None,
+              minute_volume=None) -> dict:
         ev = {"op": "event", "kind": kind, "t_ns": t_ns, "arg": arg, "last_price": last_price, "flat": flat,
               "updates": list(updates)}
         if daily is not None:
             ev["daily"] = daily
         if hourly is not None:
             ev["hourly"] = hourly
+        if minute_volume is not None:
+            ev["minute_volume"] = minute_volume
         return self.send(ev)
 
     def stop(self) -> int:
@@ -183,7 +186,8 @@ def test_init_replies_with_the_meta_block(child):
     r = child.init(STRADDLE)
     assert r == {"ok": True, "meta": {"root": "NQ", "session_window": ["09:25", "16:00"], "bar_minutes": 0,
                                       "bar_window": None, "placement_ms": 40, "times": ["09:30:00", "15:55:00"],
-                                      "needs_daily": False, "needs_hourly": 0, "trades_on": True}}
+                                      "needs_daily": False, "needs_hourly": 0, "needs_minute_volume": 0,
+                                      "trades_on": True}}
 
 
 def test_meta_of_a_bar_strategy(child):
@@ -369,5 +373,32 @@ def test_a_strategy_that_asks_for_hours_says_so_and_gets_them_at_the_session_eve
     r = child.event("session", t_ns=T0, hourly=[[1, 10.0], [2, 11.5]])
     assert r["intents"] == [{"op": "plot", "name": "hours", "t_ms": T0 // 1_000_000, "value": 2.0},
                             {"op": "plot", "name": "last", "t_ms": T0 // 1_000_000, "value": 11.5}]
+    r = child.event("session", t_ns=T0)                                      # none sent: an empty list, never the old ones
+    assert [i["value"] for i in r["intents"]] == [0.0, -1.0]
+
+
+MINVOL = """
+from homebase.strategies.base import Strategy
+
+
+class MinVol(Strategy):
+    id, name, root = "mv", "MinVol", "NQ"
+    session_window = ("09:00", "12:00")
+
+    def needs_minute_volume(self):
+        return 14
+
+    def on_session(self, ctx):
+        mv = ctx.minute_volume
+        ctx.plot("dates", ctx.now_ns, float(len(mv)))
+        ctx.plot("first", ctx.now_ns, float(mv[-1]["vol"][0]) if mv and mv[-1]["vol"] else -1.0)
+"""
+
+
+def test_a_strategy_that_asks_for_minute_volume_says_so_and_gets_it_at_the_session_event(child):
+    assert child.init(MINVOL)["meta"]["needs_minute_volume"] == 14
+    vols = [{"date": "2024-03-01", "vol": None}, {"date": "2024-03-04", "vol": [7] + [0] * 1379}]
+    r = child.event("session", t_ns=T0, minute_volume=vols)
+    assert [i["value"] for i in r["intents"]] == [2.0, 7.0]
     r = child.event("session", t_ns=T0)                                      # none sent: an empty list, never the old ones
     assert [i["value"] for i in r["intents"]] == [0.0, -1.0]

@@ -22,6 +22,7 @@ Orders (see homebase/backtest/engine.py for the fill law):
   ctx.cancel(order);  ctx.flatten();  ctx.move_brackets_to_fill = True;
   ctx.plot(name, t_ns, value);  ctx.skip(reason);
   ctx.daily (needs_daily) / ctx.hourly (needs_hourly): the bars of the sessions before today, read at the session start;
+  ctx.minute_volume (needs_minute_volume): the earlier trade dates' volume per ET minute, read at the session start;
   ctx.hline(name, price, role=...) -> the record -- the levels the strategy PLACED, drawn on the
     chart and never traded: role is one of anchor | entry | sl | tp | level (default "level"), so
     the page styles a level without parsing its name. A strategy may rename a record it kept a
@@ -154,6 +155,13 @@ class Strategy:
     def needs_hourly(self) -> int:
         """n > 0 = ctx.hourly must carry the 1-hour closes of the n complete sessions before today, today's contract only, oldest
         first, as [[end_ns, close], ...] (backtest/hourly.py; at most 30 sessions). 0 = none (ctx.hourly is [])."""
+        return 0
+
+    def needs_minute_volume(self) -> int:
+        """n > 0 = ctx.minute_volume must carry the volume per ET minute of the n trade dates before today (ctx.daily's dates,
+        any contract), oldest first, as [{"date": "YYYY-MM-DD", "vol": None or 1380 numbers}, ...]: vol[i] = the volume of the
+        minute that starts at 18:00 ET of the evening before that date + i minutes; None = no tape (backtest/minvol.py; at most
+        30 dates). 0 = none (ctx.minute_volume is [])."""
         return 0
 
     def provenance(self) -> dict:

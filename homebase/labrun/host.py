@@ -43,7 +43,7 @@ from collections import deque
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from ..backtest import hourly as hourlymod, sandbox, slots
+from ..backtest import hourly as hourlymod, minvol, sandbox, slots
 from ..backtest.engine import Costs, build_bars
 from ..backtest.runner import DAILY_LOOKBACK
 from ..backtest.tape import ARCHIVE, CACHE, ET, TapeStore, effective_session_window, et_ns
@@ -93,6 +93,7 @@ NO_YESTERDAY = "Yesterday's prices are not stored yet."
 WAIT_YESTERDAY = "Yesterday's prices are not stored yet: it checks again every minute."
 WAIT_RETRY_S = 60.0              # a day waiting for yesterday's prices asks again this often (its own wall clock)
 NO_HOURLY = "The earlier hours' prices could not be read."
+NO_MINVOL = "The earlier days' volume could not be read."
 TOO_LATE = "Started too late to follow today."
 EVENING_DESK = "It starts the evening before: the Desk does not trade that yet (shadow only)."
 NOT_CHECKED = "Not checked yet: the check failed."
@@ -212,7 +213,8 @@ def well_set(meta, root, exec_root: str = "") -> bool:
             and _int(bars) and 0 <= bars <= 1440 and _int(place) and 0 <= place <= 60_000
             and isinstance(times, list) and len(times) <= 500 and all(_at_eve(t, _HMS) for t in times)
             and isinstance(meta.get("needs_daily"), bool) and isinstance(meta.get("trades_on"), bool)
-            and _int(meta.get("needs_hourly", 0)) and 0 <= meta.get("needs_hourly", 0) <= hourlymod.MAX_SESSIONS)
+            and _int(meta.get("needs_hourly", 0)) and 0 <= meta.get("needs_hourly", 0) <= hourlymod.MAX_SESSIONS
+            and _int(meta.get("needs_minute_volume", 0)) and 0 <= meta.get("needs_minute_volume", 0) <= minvol.MAX_SESSIONS)
 
 
 def words(it: dict, tick: float) -> str:
@@ -265,6 +267,14 @@ _HOUR_CACHE: dict = {}          # (root) -> {date: (contract, hours)}: a session
 def hourly_closes(root: str, d: dt.date, n: int, tapes: TapeStore | None = None) -> list:
     """The 1-hour closes of the n complete sessions before d, read as the tester reads them (backtest/hourly.prior)."""
     return hourlymod.prior(tapes or TapeStore(), root, d, n, _HOUR_CACHE.setdefault(root, {}))
+
+
+_MV_CACHE: dict = {}            # (root) -> {date: minute volume}: a trade date's volume per minute, read once per process
+
+
+def minute_volume(root: str, d: dt.date, n: int, tapes: TapeStore | None = None) -> list:
+    """The volume per minute of the n trade dates before d, read as the tester reads them (backtest/minvol.prior)."""
+    return minvol.prior(tapes or TapeStore(), root, d, n, _MV_CACHE.setdefault(root, {}))
 
 
 def _session_of(end_ns: int) -> dt.date:
@@ -551,7 +561,8 @@ class StrategyDay:
     desk / send / tell / resume: DESK MODE (see that section below). With no `desk` none of it is reached: the day is
     hosted in shadow, as it always was."""
 
-    def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, hourly=None, deadline_s: float = DEADLINE_S,
+    def __init__(self, record: dict, date: dt.date, *, spawn=None, daily=None, hourly=None, minute_vol=None,
+                 deadline_s: float = DEADLINE_S,
                  start_s: float = START_S, save=None, wall=time.monotonic, late=None, now_ns: int | None = None,
                  desk: DeskSide | None = None, send=None, tell=None, resume=None, flat_et: str | None = None):
         self.name, self.date, self.sha256 = record.get("name"), date, record.get("sha256")
@@ -576,7 +587,8 @@ class StrategyDay:
         self._desk_init(desk, send, tell, resume, now_ns, flat_et)    # (desk mode's own fields; nothing read or sent)
         try:
             self._start(record, spawn or sandboxed, daily if daily is not None else daily_bars, start_s, late, now_ns,
-                        hourly if hourly is not None else hourly_closes)
+                        hourly if hourly is not None else hourly_closes,
+                        minute_vol if minute_vol is not None else minute_volume)
         except _Stop as e:
             self._stopped(str(e), e.detail)
         except Exception as e:  # noqa: BLE001 -- whatever broke, its child must not outlive the attempt
@@ -584,7 +596,7 @@ class StrategyDay:
         self._changed()
 
     # ---- the start
-    def _start(self, record: dict, spawn, daily, start_s: float, late, now_ns, hourly=None) -> None:
+    def _start(self, record: dict, spawn, daily, start_s: float, late, now_ns, hourly=None, minute_vol=None) -> None:
         run_dir = proc = None
         try:
             run_dir = Path(tempfile.mkdtemp(prefix="hb-labrun-"))
@@ -637,6 +649,8 @@ class StrategyDay:
         self._daily = daily if meta["needs_daily"] else None     # read when the session event fires (_session_daily)
         self._hourly_n = meta.get("needs_hourly", 0)
         self._hourly = hourly if self._hourly_n else None      # ... and so are the earlier sessions' 1-hour closes
+        self._mv_n = meta.get("needs_minute_volume", 0)
+        self._mv = minute_vol if self._mv_n else None          # ... and the earlier trade dates' minute volume
         self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"], ex)
         if self._desk is not None:
             self._desk_start()
@@ -781,11 +795,27 @@ class StrategyDay:
             raise _Wait(NO_YESTERDAY, f"the newest 1-hour close is of {_session_of(hours[-1][0]).isoformat()}")
         return hours
 
+    def _session_minvol(self) -> list | None:
+        """The earlier trade dates' volume per minute, for a strategy that asks (needs_minute_volume): read when its session
+        event fires. Fail closed: volume that cannot be read, or whose newest date is older than the session day before, stops
+        the day before the strategy sees anything. None (nothing is sent) for a strategy that does not ask."""
+        if self._mv is None:
+            return None
+        try:
+            got = self._mv(self._root, self.date, self._mv_n) if callable(self._mv) else list(self._mv)
+        except OSError as e:
+            raise _Stop(NO_MINVOL, f"{type(e).__name__}: {e}") from None
+        newest = got[-1].get("date") if got and isinstance(got[-1], dict) else None
+        if not isinstance(newest, str) or newest < _before(self.date).isoformat():
+            raise _Stop(NO_YESTERDAY, f"the newest minute volume is of {newest if isinstance(newest, str) else 'none'}")
+        return got
+
     def _event(self, t: int, _prio, _n, kind: str, arg) -> None:
         if self._desk is not None:                   # desk mode: the orders go to the Desk, nothing is filled here
             return self._desk_event(t, kind, arg)
         daily = self._session_daily() if kind == "session" else None     # (it may stop the day: before anything runs)
         hours = self._session_hourly() if kind == "session" else None
+        mv = self._session_minvol() if kind == "session" else None
         f = self.fills
         f.advance_to(t)
         f.now(t)
@@ -798,6 +828,8 @@ class StrategyDay:
             msg["daily"] = daily
             if hours is not None:
                 msg["hourly"] = hours
+            if mv is not None:
+                msg["minute_volume"] = mv
         seen = {"flat": f.flat, "working_entries": f.working_entries, "entries_today": self._entries,
                 "last_price": last, "now_hhmm": _since(self._t0, t) if self._evening else _hms(t)[:5],
                 "prices_late": self._late.late or self._silent}
@@ -1054,6 +1086,8 @@ class StrategyDay:
             msg["daily"] = line.get("daily")
             if "hourly" in line:
                 msg["hourly"] = line["hourly"]
+            if "minute_volume" in line:
+                msg["minute_volume"] = line["minute_volume"]
         intents = self._child.ask(msg, self._deadline).get("intents")
         if not isinstance(intents, list) or not all(well_formed(i) for i in intents):
             raise _Stop(GONE)
@@ -1067,6 +1101,7 @@ class StrategyDay:
         side, f = self._desk, self.fills
         daily = self._session_daily() if kind == "session" else None     # (it may stop the day: before anything runs)
         hours = self._session_hourly() if kind == "session" else None
+        mv = self._session_minvol() if kind == "session" else None
         f.advance_to(t)
         f.now(t)
         if kind == "session":
@@ -1079,6 +1114,8 @@ class StrategyDay:
             line["daily"] = daily
             if hours is not None:
                 line["hourly"] = hours
+            if mv is not None:
+                line["minute_volume"] = mv
         self._tell(line)                             # BEFORE the child is asked
         intents = self._ask(line)
         self._tell({"seq": seq, "intents": intents})
@@ -1498,11 +1535,12 @@ class StrategyDay:
         self._saved_key = None
         self._changed()
 
-def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, hourly=None, deadline_s: float = DEADLINE_S,
-            batch: int = BATCH) -> dict:
+def run_day(record: dict, rows, date: dt.date, *, spawn=None, daily=None, hourly=None, minute_vol=None,
+            deadline_s: float = DEADLINE_S, batch: int = BATCH) -> dict:
     """A whole list of prints (ts_ns, price, size) through one StrategyDay, `batch` at a time, the prints' own times
     as the clock. No network, no files. Returns {"summary": the day summary, "trades": the engine's trade dicts}."""
-    day = StrategyDay(record, date, spawn=spawn, daily=daily or [], hourly=hourly or [], deadline_s=deadline_s)
+    day = StrategyDay(record, date, spawn=spawn, daily=daily or [], hourly=hourly or [], minute_vol=minute_vol or [],
+                      deadline_s=deadline_s)
     try:
         for i in range(0, len(rows), batch):
             part = rows[i:i + batch]

@@ -199,6 +199,7 @@ class Ctx:
         self.qty = qty
         self.daily = daily
         self.hourly: list = []                  # [[end_ns, close], ...] of the earlier sessions (Strategy.needs_hourly)
+        self.minute_volume: list = []           # [{date, vol}, ...] of the earlier trade dates (Strategy.needs_minute_volume)
         self.move_brackets_to_fill = False
 
     @property
@@ -725,8 +726,9 @@ def split_flow(ts, px, size, lo: int, hi: int, bars: list[Bar]) -> None:
 
 
 def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None = None,
-                controls=None, hourly: list | None = None) -> SessionResult:
-    """Replay one session's tape through one strategy instance. hourly: ctx.hourly (the earlier sessions' 1-hour closes)."""
+                controls=None, hourly: list | None = None, minute_volume: list | None = None) -> SessionResult:
+    """Replay one session's tape through one strategy instance. hourly: ctx.hourly (the earlier sessions' 1-hour closes);
+    minute_volume: ctx.minute_volume (the earlier trade dates' volume per minute)."""
     d = tape.date
     w0, w1 = strategy.session_window
     t0, t1 = et_ns(d, w0), et_ns(d, w1)
@@ -738,6 +740,7 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     sim = _Sim(tape.root, d, ts, px, lo, hi, costs, strategy.placement_ms, ex, controls)
     ctx = sim._ctx = Ctx(sim, qty, daily or [])
     ctx.hourly = list(hourly or [])
+    ctx.minute_volume = list(minute_volume or [])
     events: list[tuple] = [(t0, 0, 0, "session", None)]
     bm = strategy.bar_minutes
     if bm and controls is not None and controls.bar_minutes:     # run control: the signal bar size

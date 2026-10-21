@@ -56,6 +56,7 @@ class LiveCtx:
         self.qty = qty
         self.daily = daily
         self.hourly: list = []                 # [[end_ns, close], ...] of the earlier sessions (Strategy.needs_hourly)
+        self.minute_volume: list = []          # [{date, vol}, ...] of the earlier trade dates (Strategy.needs_minute_volume)
         self.move_brackets_to_fill = False
         self._now = 0
         self._last: float | None = None
