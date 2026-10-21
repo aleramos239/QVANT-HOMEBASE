@@ -44,11 +44,11 @@ test('gridAxes / gridProblems: 2 or 3 distinct parameters, the cell cap, the bas
     'Pick a parameter for Rows and Columns');
   assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '5' }, { key: 'offset_pts', text: '6' }, { key: '', text: '' }]),
     'Entry offset (pts) is picked twice');
-  assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:7:1' }, { key: '', text: '' }]),
-    '70 cells: this grid is capped at 60 (raise Max cells, up to 400)');
+  assert.equal(X.gridProblems(f, STRAT, [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:13:1' }, { key: '', text: '' }]),
+    '130 cells: this grid is capped at 120 (raise Max cells, up to 400)');
   // ... and raising Max cells is exactly what lets it run
-  assert.equal(X.gridProblems({ ...f, max_cells: 100 }, STRAT,
-    [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:7:1' }, { key: '', text: '' }]), null);
+  assert.equal(X.gridProblems({ ...f, max_cells: 140 }, STRAT,
+    [{ key: 'offset_pts', text: '1:10:1' }, { key: 'sl_pts', text: '1:13:1' }, { key: '', text: '' }]), null);
   assert.equal(X.gridProblems({ ...f, max_cells: 401 }, STRAT, two), 'Max cells: a whole number 1 to 400');
   assert.equal(X.gridProblems({ ...f, max_cells: 0 }, STRAT, two), 'Max cells: a whole number 1 to 400');
   assert.equal(X.gridProblems({ ...f, max_cells: 12.5 }, STRAT, two), 'Max cells: a whole number 1 to 400');
@@ -82,12 +82,12 @@ test('an axis in from/to/steps mode: evenly spaced, rounded to the parameter\'s 
     { axes: [{ key: 'offset_pts', values: [5, 10, 15, 20] }, { key: 'sl_pts', values: [4, 6] }] });
 });
 
-test('the Max cells warning only speaks above 60, and uses a measured per-cell time when there is one', () => {
-  assert.equal(X.cellsWarning(60, 12), '');
-  assert.equal(X.cellsWarning(61, null),
-    '61 cells — above 60 a grid can run for hours; only 2 cells run at a time');
-  assert.equal(X.cellsWarning(120, 30), '120 cells ≈ 30m 0s at 30s a cell, 2 at a time');
-  assert.equal(X.cellsWarning(400, 0), '400 cells — above 60 a grid can run for hours; only 2 cells run at a time');
+test('the Max cells warning only speaks above 120 (hm40 x 3), and uses a measured per-cell time when there is one', () => {
+  assert.equal(X.cellsWarning(120, 12), '');
+  assert.equal(X.cellsWarning(121, null),
+    '121 cells — above 120 a grid can run for hours; only 2 cells run at a time');
+  assert.equal(X.cellsWarning(240, 30), '240 cells ≈ 1h 00m at 30s a cell, 2 at a time');
+  assert.equal(X.cellsWarning(400, 0), '400 cells — above 120 a grid can run for hours; only 2 cells run at a time');
 });
 
 test('gridBody: the range picker\'s window and the cell cap, varied inputs left to the axes', () => {
@@ -96,7 +96,7 @@ test('gridBody: the range picker\'s window and the cell cap, varied inputs left 
   assert.deepEqual(b, { strategy: 'nq930', inputs: { adx_gate: false, mode: 'a', n: 3 },
     axes: [{ key: 'offset_pts', values: [5, 10] }, { key: 'sl_pts', values: [4] }],
     range: { kind: 'custom', start: '2024-01-01', end: '2025-06-01' },
-    qty: 2, commission: 4, slippage_ticks: 1, max_cells: 60, prop_rules: 'lucid-flex-50k@2026-10-11' });
+    qty: 2, commission: 4, slippage_ticks: 1, max_cells: 120, prop_rules: 'lucid-flex-50k@2026-10-11' });
   assert.equal('holdout' in b, false);
   // the default preset still sends {kind:'research'} verbatim
   assert.deepEqual(X.gridBody(X.defaults(STRAT), [{ key: 'offset_pts', values: [5] }, { key: 'sl_pts', values: [4] }]).range,

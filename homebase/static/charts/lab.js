@@ -152,7 +152,7 @@ async function save(b) {
 function metaOf(b) {
   if (b.kind === 'builtin') return b.meta;
   const m = b.valid && b.valid.ok && b.valid.meta;
-  return m ? { id: b.id || `draft_${b.name}`, inputs: m.inputs || [], bar_minutes: m.bar_minutes || 0, bar_sizes: m.bar_sizes || [] } : null;
+  return m ? { id: b.id || `draft_${b.name}`, inputs: m.inputs || [], bar_minutes: m.bar_minutes || 0, bar_sizes: m.bar_sizes || [], own_stop: !!m.own_stop } : null;
 }
 function formOf(b) {
   const meta = metaOf(b);
@@ -160,7 +160,7 @@ function formOf(b) {
   const id = b.kind === 'builtin' ? b.id : `draft_${b.name}`;
   const fresh = !S.forms[id];
   const f = X.restore(S.forms[id] ? { ...S.forms[id], strategy: id } : null, { ...meta, id });
-  if (fresh) f.range = { id: 'all', start: '', end: '', wf: X.WF_ROLL, side: 'is' };   // the Lab's default: 3:1 in-sample (owner, 2026-10-18)
+  if (fresh) f.range = { ...X.LAB_RANGE };   // the Lab's default: the 3:1 blocks, every box fixed (owner, 2026-10-18 / 2026-10-20)
   f.strategy = id;
   S.forms[id] = f;
   return f;
@@ -1974,8 +1974,8 @@ function settingsHtml(b) {
   if (!f || !meta) return '';
   const ins = meta.inputs || [];
   const wfSel = wfRangeVal(f.range);
-  const rangeOpts = X.RANGES.map((r) => `<option value="${r.id}"${!wfSel && f.range.id === r.id ? ' selected' : ''}>${esc(r.label)}</option>`).join('')
-    + `<optgroup label="Walk-forward 3:1 blocks · all data">${WF_RANGE_OPTS.map(([v, l]) => `<option value="${v}"${wfSel === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`;
+  const rangeOpts = `<optgroup label="Walk-forward · all data">${WF_RANGE_OPTS.map(([v, l]) => `<option value="${v}"${wfSel === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</optgroup>`
+    + `<optgroup label="One run">${X.RANGES.map((r) => `<option value="${r.id}"${!wfSel && f.range.id === r.id ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</optgroup>`;
   const inputRow = (i) => {
     const v = f.inputs[i.key], bad = X.inputError(i, v);
     if (i.type === 'bool') return `<label>${esc(i.label)}</label><input type="checkbox" data-in="${esc(i.key)}"${v ? ' checked' : ''}>`;
@@ -1986,7 +1986,7 @@ function settingsHtml(b) {
   const spent = end && end >= X.rangeSpec('test').start;
   return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
     <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
-      ${wfSel ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: each month is traded on the best of the Heat map settings over the 3 months before it, then it steps a month.' : 'Run splits the data into blocks: 3 months in, the next 1 out, then the next block. Pick settings in Heat map below to let each block choose the best of them; for a search you can pick 3:1 rolling.'}</div>` : ''}
+      ${wfSel ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: the 3-month windows step a month. Every Heat map box runs as set; there are no unseen test months.' : 'Run tries every Heat map box on the in-sample months only: 3 months in, the next 1 out, then the next block. You pick one box; its test months run only when you say. Clear the Heat map to run the strategy as set.'}</div>` : ''}
       ${!wfSel && f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
       ${spent && !wfSel ? '<div class="warn">This reaches July 2025 or later, the test days: one read, only for a locked strategy. Each look is recorded.</div>' : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
@@ -2013,6 +2013,15 @@ const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 
 /* The Exit lab (the owner, 2026-10-18): the heat map set up to try exits on this strategy's own entries -- breakeven x a trailing
    stop, and its own stop vs the signal candle's. 0 / own = the strategy as it is. Run it on the build days. */
 const EXIT_LAB = [['ctl.be_after_pts', '0, 5, 10, 15, 20'], ['ctl.trail_pts', '0, 5, 10, 15, 20'], ['ctl.stop_mode', 'own, candle']];
+function hm40() {
+  const b = buf(), f = b && formOf(b);
+  if (!f) return;
+  const h = heatState(f);
+  if (heatBusy(h)) return;
+  h.rows = X.hm40Rows(metaOf(b) || {});
+  S.heatOpen = true;
+  paintRes();
+}
 function exitLab() {
   const b = buf(), f = b && formOf(b);
   if (!f) return;
@@ -2025,6 +2034,7 @@ function exitLab() {
 function heatSuggest(inp) {
   if (!inp) return '';
   if (HEAT_SUGGEST[inp.key]) return HEAT_SUGGEST[inp.key];
+  if (inp.key === 'ctl.stop') return inp.choices.join(', ');
   if (inp.key === 'ctl.bar_minutes') return inp.choices.join(', ');
   if (inp.type === 'bool') return 'on, off';
   if (inp.type === 'choice') return inp.choices.slice(0, 4).join(', ');
@@ -2034,7 +2044,7 @@ function heatSuggest(inp) {
   return [...new Set(base.map(round).filter((v) => v >= lo && v <= hi))].join(', ');
 }
 function heatState(f) {
-  return S.heat[f.strategy] || (S.heat[f.strategy] = { rows: [{ key: '', text: '' }, { key: '', text: '' }, { key: '', text: '' }], grid: null, id: '', token: 0, starting: false, err: '' });
+  return S.heat[f.strategy] || (S.heat[f.strategy] = { rows: X.hm40Rows(metaOf(buf()) || {}), grid: null, id: '', token: 0, starting: false, err: '' });   // hm40 (2026-10-20)
 }
 const heatBusy = (h) => h.starting || (h.grid && !X.gridProgress(h.grid).final);
 /* the current Rows / Columns / Panels as gridAxes wants them, and what it says about them */
@@ -2070,6 +2080,7 @@ function heatSettingsHtml(f, meta) {
     <div class="grid heat-grid">${heatPickHtml(f, meta, h)}
       <div class="sep"></div>
       <div class="heat-note${chk.bad ? ' bad' : ''}" id="heatNote">${esc(chk.note)}</div>
+      <button class="btn btn-sm btn-outline heat-exit" data-act="hm40"${busy ? ' disabled' : ''} title="The 40 exit boxes: 4 ATR stops (and 4 own-stop sizes when the strategy has its own stop) × 5 targets">hm40</button>
       <button class="btn btn-sm btn-outline heat-exit" data-act="exitlab"${busy ? ' disabled' : ''} title="Fill the heat map with exits to try on this strategy: breakeven × trailing stop × own vs candle stop">Exit lab</button>
       <button class="btn btn-sm heat-run" data-act="${busy ? 'heatcancel' : 'heatrun'}" id="heatBtn"${!busy && (chk.bad || !chk.n) ? ' disabled' : ''}>${busy ? 'Cancel' : 'Run heat map'}</button>
     </div>
@@ -2111,6 +2122,8 @@ function heatPaint() {
 async function heatRun() {
   const b = buf();
   if (!b || (S.busy && S.active && S.active.key === b.key)) return;
+  const f0 = b.kind !== 'pipe' && formOf(b);
+  if (f0 && f0.range.wf) return wfRun();        // under the 3:1 Range the heat map runs on the in-sample months only
   if (b.kind !== 'builtin') {
     if (!b.code.trim()) return;
     const v = await validateNow(b);
@@ -2173,18 +2186,17 @@ async function heatCell(i) {
    whole months and trades it the next 1, then the next block (never rolling); 1:N picks on 1 month and trades the next N. It runs over the
    Range's two 3:1 choices, over all the data (the owner's window). The words are tester.js (wfBody, wfTiles, wfStepRows, ...); the
    server is /api/tester/walkforward. */
-const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to split the data into blocks: 3 months in-sample, the next 1 out-of-sample, then the next block. To let each block pick the best setting, choose what to vary in Heat map below.</p></div>';
+const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to try every Heat map box on the in-sample months: 3 months in, the next 1 out, then the next block. You pick one box from the table; its test months run only when you say.</p></div>';
 /* The Range list's two 3:1 choices (the owner, 2026-10-18): one walk-forward over all the data, seen from either side --
    in-sample = the 3-month windows the picks were made on, out-of-sample = each next month, traded on that pick. */
-const WF_RANGE_OPTS = [['wf31_is', '3:1 in-sample'], ['wf31_oos', '3:1 out-of-sample'], ['wf31_both', '3:1 in + out-of-sample'],
-  ['wf31r_both', '3:1 rolling · in + out-of-sample']];
+const WF_RANGE_OPTS = [['wf31_is', '3:1 blocks'], ['wf31r_both', '3:1 rolling']];    // 2026-10-20: every box fixed; the old views open old results
 const WF_SIDE_TEXT = { is: 'in-sample', oos: 'out-of-sample', both: 'in + out-of-sample' };
 const wfSide = (f) => (WF_SIDE_TEXT[f.range.side] ? f.range.side : 'oos');
 const wfRolling = (r) => !!(r && r.wf === X.WF_ROLL && r.step === 1);
-const wfRangeVal = (r) => (r && r.wf === X.WF_ROLL ? (wfRolling(r) ? 'wf31r_both' : `wf31_${WF_SIDE_TEXT[r.side] ? r.side : 'oos'}`) : '');
+const wfRangeVal = (r) => (r && r.wf === X.WF_ROLL ? (wfRolling(r) ? 'wf31r_both' : 'wf31_is') : '');
 /* Blocks are ALWAYS the default (the owner, 2026-10-18); rolling is only ever picked by hand, here or by asking Claude. */
 function wfLabState(f) {
-  return S.wf[f.strategy] || (S.wf[f.strategy] = { job: null, result: null, id: '', token: 0, starting: false, err: '' });
+  return S.wf[f.strategy] || (S.wf[f.strategy] = { job: null, result: null, id: '', token: 0, starting: false, err: '', sort: null, said: '', say: '', busy: false });
 }
 const wfLabBusy = (w) => w.starting || (w.job && !X.wfProgress(w.job).final);
 /* The walk-forward's result, laid out like a run (the owner, 2026-10-18: "i liked how it was before"): the net, the curve, the
@@ -2227,6 +2239,31 @@ function wfStepsHtml(r, axes) {
     ${rows.map((row) => `<tr>${row.cells.map((c, i) => `<td class="${i === 3 ? row.isTone : i === 6 ? row.oosTone : ''}">${esc(c)}</td>`).join('')}</tr>`).join('')}
     </tbody></table></div></details>`;
 }
+/* The fixed walk-forward (2026-10-20): the in-sample table, win rate first, a header sorts it; a Pick per row (the pick is
+   locked); then "Run test months", open only after a pick and once the owner has typed his words, which go out as typed.
+   The words and numbers are tester.js (wfFixedTable, wfFixedOos); the server's refusals show as they come. */
+function wfFixedHtml(w, job) {
+  const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, w.said || ''), sk = w.sort && w.sort.key;
+  const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
+  const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
+    : `<th><button class="wf-sort${sk === h.key ? ' on' : ''}" data-act="wfsort" data-k="${esc(h.key)}" title="Sort by ${esc(h.label)}">${esc(h.label)}${sk === h.key ? (w.sort.dir < 0 ? ' ↓' : ' ↑') : ''}</button></th>`)).join('');
+  const tr = t.rows.map((row) => `<tr${row.i === t.picked ? ' class="sel"' : ''}><td>${locked ? (row.i === t.picked ? '<b>Picked</b>' : '')
+    : `<button class="btn btn-sm btn-outline" data-act="wfpick" data-i="${row.i}"${w.busy ? ' disabled' : ''}>Pick</button>`}</td>
+    <th>#${row.i} ${esc(row.label)}</th>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('');
+  const win = r.window || {};
+  const test = r.rolling ? '<div class="heat-note">Rolling has no unseen test months: each one is a later window\'s pick month.</div>'
+    : `${locked ? `<div class="rs-kv"><span>Picked</span><b>#${t.picked} ${esc(pickRow ? pickRow.label : '')}</b></div>` : ''}
+      ${locked && !r.oos ? `<input type="text" class="heat-vals" id="wfSaid" value="${esc(w.said || '')}" placeholder="Type your words to run them, e.g. run the test months" spellcheck="false" autocomplete="off">` : ''}
+      ${r.oos ? '' : `<button class="btn btn-sm" id="wfOosBtn" data-act="wfoos"${o.canRun && !w.busy ? '' : ' disabled'}>Run test months</button>`}
+      ${o.text ? `<div class="heat-note">${esc(o.text)}</div>` : ''}
+      ${o.row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${t.head.slice(1).map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
+        <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
+  return `<div class="rs-gh">In-sample table · ${t.rows.length} box${t.rows.length === 1 ? '' : 'es'}${win.start ? ` · ${esc(wfMon(win.start))} – ${esc(wfMon(win.end))}` : ''}</div>
+    <div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr><th></th>${th}</tr></thead><tbody>${tr}</tbody></table></div>
+    <div class="rs-gh">Test months</div><div class="rs-group wf-oos">${test}
+      ${w.say ? `<div class="heat-err">${esc(w.say)}</div>` : ''}</div>
+    <div class="heat-foot">${esc(`${r.looks} looks counted`)} · Average of the whole table is the answer, not the best box.</div>`;
+}
 /* blocks and rolling are different runs: a result shows only under the Range choice it was run for */
 const wfJobFits = (f, job) => !job || !job.walkforward || (job.walkforward.step_months === 1) === wfRolling(f.range);
 function wfResHtml(f) {
@@ -2241,6 +2278,7 @@ function wfResHtml(f) {
     return `<div class="rs-prog"><div class="t">${esc(pr.text)}</div>${pr.final ? '' : `<div class="rs-bar${pr.frac == null ? ' ind' : ''}"><i style="width:${pr.frac == null ? 38 : Math.round(pr.frac * 100)}%"></i></div>
       <button class="btn btn-outline btn-sm" data-act="wfcancel">Cancel</button>`}</div>`;
   }
+  if (r.scheme === 'fixed') return wfFixedHtml(w, job);
   const axes = job.axes || [], side = wfSide(f), so = r.stitched, si = r.stitched_is;
   const one = side === 'is' ? si : so, s = one.stats, pm = one.per_month || {};
   const span = (x) => (x.months && x.months.length ? ` (${wfMon(x.months[0])} – ${wfMon(x.months[x.months.length - 1])})` : '');
@@ -2305,15 +2343,16 @@ async function wfRun() {
   const h = heatState(f), w = wfLabState(f), search = h.rows.some((r) => r.key);
   const err = search ? X.gridProblems(f, meta, h.rows) : X.problems(f, meta);   // no heat-map settings: the strategy as set
   if (err) { log(`<span class="err">${esc(err)}</span>`); return; }
-  const bodyObj = X.wfBody(f, search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [], 'net_profit', 5);
+  const axes = search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [];      // none: one box, the strategy as set
+  const bodyObj = f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5);
   const token = ++w.token;
-  w.err = ''; w.starting = true; w.job = null; w.result = null; S.wfStepsOpen = false;
+  w.err = ''; w.starting = true; w.job = null; w.result = null; w.sort = null; w.said = ''; w.say = ''; w.busy = false; S.wfStepsOpen = false;
   wfPaint();
   const r = await send('POST', '/api/tester/walkforward', bodyObj);
   if (token !== w.token) return;
   if (!r.ok) { w.starting = false; w.err = r.error || 'request failed'; wfPaint(); return; }
   w.id = r.json.id;
-  log(`Walk-forward ${esc(X.wfRatioText(f.range.wf))} of <b>${esc(nb.kind === 'builtin' ? nb.id : nb.name)}</b> over ${esc(X.pillLabel(f.range))}: every cell runs once, then each month is picked…`);
+  log(`Walk-forward ${esc(X.wfRatioText(f.range.wf))} of <b>${esc(nb.kind === 'builtin' ? nb.id : nb.name)}</b>: every box runs once, on the in-sample months only…`);
   wfPoll(w, token);
 }
 async function wfPoll(w, token) {
@@ -2330,12 +2369,62 @@ async function wfPoll(w, token) {
           if (res.ok) w.result = res.json; else w.err = `could not load the walk-forward result: ${res.error || 'unknown'}`;
         }
         paintRes();          // the whole view: the net, the curve, the rows
-        log(`Walk-forward ${esc(r.json.status)}${w.result ? ` · out-of-sample <b>${esc(money0(w.result.stitched.stats.net_profit || 0))}</b>` : ''}`);
+        const fx = w.result && w.result.scheme === 'fixed';
+        log(`Walk-forward ${esc(r.json.status)}${!w.result ? '' : fx ? ` · <b>${esc(String(w.result.n_cells))} boxes</b> on the in-sample months: pick one` : ` · out-of-sample <b>${esc(money0(w.result.stitched.stats.net_profit || 0))}</b>`}`);
+        if (fx && w.result.oos && !X.wfFixedOos(w.result, '').final) wfOosPoll(w, token);     // a read still running: follow it
         return;
       }
       wfPaint();
     } else if (++lost > 8) { w.starting = false; w.err = `lost contact with the walk-forward: ${r.error || 'unknown'}`; wfPaint(); return; }
     await new Promise((res) => setTimeout(res, 1500));
+  }
+}
+/* The owner's pick: a box, locked for good once he says so here. */
+function wfPick(i) {
+  const b = buf(), f = b && formOf(b), w = f && wfLabState(f);
+  if (!w || !w.result || w.busy || !w.job) return;
+  const row = X.wfFixedTable(w.result, w.job.axes || []).rows.find((x) => x.i === i);
+  const d = dialog(`<h2>Pick box #${i}?</h2><p>${esc(row ? row.label : '')}</p><p>The pick is locked: this walk-forward takes no other box.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Pick it</button></div>`);
+  d.addEventListener('click', async (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x !== 'go') return;
+    const token = w.token;
+    w.busy = true; w.say = ''; wfPaint();
+    const r = await send('POST', `/api/tester/walkforward/${encodeURIComponent(w.id)}/pick`, { cell: i });
+    if (token !== w.token) return;
+    w.busy = false;
+    if (r.ok) w.result = { ...w.result, lock: r.json }; else w.say = r.error;
+    wfPaint();
+  });
+}
+/* The picked box's test months, on the owner's typed words (sent as typed): once, never run again. */
+async function wfOos() {
+  const b = buf(), f = b && formOf(b), w = f && wfLabState(f);
+  if (!w || !w.result || w.busy) return;
+  const o = X.wfFixedOos(w.result, w.said || '');
+  if (!o.canRun) return;
+  const token = w.token;
+  w.busy = true; w.say = ''; wfPaint();
+  const r = await send('POST', `/api/tester/walkforward/${encodeURIComponent(w.id)}/oos`, o.body);
+  if (token !== w.token) return;
+  w.busy = false;
+  if (!r.ok) { w.say = r.error; wfPaint(); return; }
+  w.result = { ...w.result, oos: r.json };
+  wfPaint();
+  log(`Test months of box <b>#${esc(String(o.body.cell))}</b>: running, on your words.`);
+  wfOosPoll(w, token);
+}
+async function wfOosPoll(w, token) {
+  let lost = 0;
+  while (token === w.token && !X.wfFixedOos(w.result, '').final) {
+    await new Promise((res) => setTimeout(res, 2000));
+    if (token !== w.token) return;
+    const r = await send('GET', `/api/tester/walkforward/${encodeURIComponent(w.id)}/result`);
+    if (token !== w.token) return;
+    if (r.ok) { lost = 0; w.result = r.json; wfPaint(); } else if (++lost > 8) { w.say = `lost contact with the test months: ${r.error || 'unknown'}`; wfPaint(); return; }
   }
 }
 /* The Desk's "Open in the Lab": its 3:1 walk-forward, already run -- the Range goes to "3:1 out-of-sample" and the result loads. */
@@ -2391,7 +2480,8 @@ function rulesHtml(f, meta) {
       <div class="sep"></div>
       ${sel('stop_mode', 'Stop', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['candle', 'Signal candle'], ['none', 'No stop']], 'Replaces the strategy\'s stop, measured from the fill')}
       ${stopMode === 'fixed' ? num('stop_pts', 'Stop (points)', 'Distance from the fill', 0.25) : stopMode === 'atr' ? num('stop_atr', 'Stop (× ATR)', 'Multiple of the ATR at the entry', 0.1)
-        : stopMode === 'candle' ? num('stop_candle_ticks', 'Past the candle (ticks)', 'The stop sits this many ticks past the last closed signal candle\'s high / low', 1).replace('placeholder="off"', 'placeholder="0"') : ''}
+        : stopMode === 'candle' ? num('stop_candle_ticks', 'Past the candle (ticks)', 'The stop sits this many ticks past the last closed signal candle\'s high / low', 1).replace('placeholder="off"', 'placeholder="0"')
+        : stopMode === 'own' ? num('stop_own_mult', 'Own stop (×)', 'Times the strategy\'s own stop distance; 1 = as written', 0.05).replace('placeholder="off"', 'placeholder="1"') : ''}
       ${sel('target_mode', 'Target', [['own', 'Strategy\'s own'], ['fixed', 'Fixed points'], ['atr', 'ATR multiple'], ['rr', 'R multiple of the stop'], ['none', 'No target']], 'Replaces the strategy\'s target, measured from the fill')}
       ${tgtMode === 'fixed' ? num('target_pts', 'Target (points)', 'Distance from the fill', 0.25) : tgtMode === 'atr' ? num('target_atr', 'Target (× ATR)', 'Multiple of the ATR at the entry', 0.1) : tgtMode === 'rr' ? num('target_rr', 'Target (× stop)', 'Multiple of the stop distance', 0.25) : ''}
       <div class="sep"></div>
@@ -2401,7 +2491,7 @@ function rulesHtml(f, meta) {
       ${num('trail_after_pts', 'Trail after (points)', 'Start trailing once the trade is this far in profit (empty: from the fill; used with Trailing stop)', 0.25).replace('placeholder="off"', 'placeholder="0"')}
       ${sel('exit_line', 'Exit on close through', [['', 'Off'], ['vwap', 'VWAP (from the Globex open)'], ['vwap_rth', 'VWAP (from 09:30)'], ['ema20', 'EMA 20'], ['ema50', 'EMA 50']], 'Close the trade when a bar closes back through this line: a long below it, a short above')}
       ${c.exit_line ? sel('exit_line_min', 'Exit line bars', [[1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar the close is read on') : ''}
-      ${usesAtr ? `${sel('atr_minutes', 'ATR bars', [[1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar size the ATR is read on')}${num('atr_period', 'ATR length', 'Bars averaged: the mean true range of the last N closed bars before the entry', 1).replace('placeholder="off"', 'placeholder="14"')}` : ''}
+      ${usesAtr ? `${sel('atr_minutes', 'ATR bars', [[0, `Strategy's bar${own}`], [1, '1 minute'], [5, '5 minutes'], [15, '15 minutes']], 'The bar size the ATR is read on')}${num('atr_period', 'ATR length', 'Bars averaged: the mean true range of the last N closed bars before the entry', 1).replace('placeholder="off"', 'placeholder="14"')}` : ''}
     </div></details>`;
 }
 /* "Oct 1 – Dec 13, 2024" / "2021 – 2024": a run's range the way a person writes it. */
@@ -2529,8 +2619,9 @@ function paintRes() {
   WFEQ = null; WFEQ2 = null;
   if (wfF && wfF.range.wf) {
     const wr = wfLabState(wfF).result, sd = wfSide(wfF);
-    if (wr && wfJobFits(wfF, wfLabState(wfF).job)) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
-    main = `<div class="rs-h"><b>Walk-forward ${esc(X.wfRatioText(wfF.range.wf))}${wfRolling(wfF.range) ? ' rolling' : ''} · ${WF_SIDE_TEXT[wfSide(wfF)]}</b><span>All data</span></div>
+    const fx = !!(wr && wr.scheme === 'fixed') || (!wr && wfF.range.wf === X.WF_ROLL);
+    if (wr && !fx && wfJobFits(wfF, wfLabState(wfF).job)) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
+    main = `<div class="rs-h"><b>Walk-forward ${esc(X.wfRatioText(wfF.range.wf))}${wfRolling(wfF.range) ? ' rolling' : ' blocks'} · ${fx ? 'every box' : WF_SIDE_TEXT[wfSide(wfF)]}</b><span>All data</span></div>
       <div class="wf-main" id="wfRes">${wfResHtml(wfF) || WF_EMPTY}</div>`;
   } else if (r && !r.bundle && !r.dead && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
@@ -2582,6 +2673,10 @@ function act(name, el) {
   else if (name === 'cancel') cancelRun();
   else if (name === 'heatrun') heatRun();
   else if (name === 'exitlab') exitLab();
+  else if (name === 'hm40') hm40();
+  else if (name === 'wfpick') wfPick(Number(el.dataset.i));
+  else if (name === 'wfoos') wfOos();
+  else if (name === 'wfsort') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.sort = X.wfFixedSort(w.sort, el.dataset.k); wfPaint(); } }
   else if (name === 'heatcancel') heatCancel();
   else if (name === 'wfrun') wfRun();
   else if (name === 'wfcancel') wfCancel();
@@ -2648,6 +2743,14 @@ root.addEventListener('input', (e) => {
   if (t.id === 'libQ') { S.libQ = t.value; paintLibList(); return; }
   if (t.id === 'libSort' || t.id === 'libShow' || t.id === 'libMkt') { setListView({ libSort: 'sort', libShow: 'show', libMkt: 'market' }[t.id], t.value); return; }
   if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
+  if (t.id === 'wfSaid') {           // the owner's words: only the button follows them, so the box keeps the focus
+    const f = b && formOf(b), w = f && wfLabState(f);
+    if (!w) return;
+    w.said = t.value;
+    const btn = $('#wfOosBtn');
+    if (btn) btn.disabled = !X.wfFixedOos(w.result, w.said).canRun || w.busy;
+    return;
+  }
   if (t.id === 'edTa' && b && b.kind !== 'builtin' && !locked(b)) {
     const wasEmpty = !b.code.trim();
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;

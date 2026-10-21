@@ -116,6 +116,8 @@ const CONTROLS = {
   max_trades: ['int', 0, 0, 50], stop_wins: ['int', 0, 0, 50], stop_losses: ['int', 0, 0, 50], max_consec_losses: ['int', 0, 0, 50],
   day_loss: ['float', 0, 0, 1e6], day_profit: ['float', 0, 0, 1e6], cooldown_min: ['int', 0, 0, 600], max_hold_min: ['int', 0, 0, 1440],
   stop_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'candle', 'none']], stop_pts: ['float', 0, 0, 5000], stop_atr: ['float', 0, 0, 50],
+  // the own stop x a multiplier; own_floor: at least 0.25 x the ATR, then 2 ticks (hm40, 2026-10-20)
+  stop_own_mult: ['float', 1, 0.05, 10], own_floor: ['bool', false],
   stop_candle_ticks: ['int', 0, 0, 200],
   target_mode: ['choice', 'own', ['own', 'fixed', 'atr', 'rr', 'none']], target_pts: ['float', 0, 0, 5000], target_atr: ['float', 0, 0, 50],
   target_rr: ['float', 0, 0, 50],
@@ -123,7 +125,7 @@ const CONTROLS = {
   be_after_pts: ['float', 0, 0, 5000], be_offset_ticks: ['int', 1, 0, 100], trail_pts: ['float', 0, 0, 5000], trail_after_pts: ['float', 0, 0, 5000],
   exit_line: ['choice', '', ['', 'vwap', 'vwap_rth', 'ema20', 'ema50']], exit_line_min: ['choice', 5, [1, 5, 15]],
   bar_minutes: ['choice', 0, [0, 1, 5, 15]],
-  atr_minutes: ['choice', 5, [1, 5, 15]], atr_period: ['int', 14, 2, 200],
+  atr_minutes: ['choice', 5, [0, 1, 5, 15]], atr_period: ['int', 14, 2, 200],     // atr_minutes 0 = the strategy's own bar
 };
 const CTL_NEEDS = [['stop_mode', 'fixed', 'stop_pts'], ['stop_mode', 'atr', 'stop_atr'], ['target_mode', 'fixed', 'target_pts'],
   ['target_mode', 'atr', 'target_atr'], ['target_mode', 'rr', 'target_rr']];
@@ -135,6 +137,7 @@ function controlsFields(raw) {
     const v = raw && raw[k];
     if (v === undefined || v === null || v === '' || v === def) continue;
     if (kind === 'time') { if (typeof v === 'string' && CTL_TIME.test(v)) o[k] = v; }
+    else if (kind === 'bool') { if (typeof v === 'boolean') o[k] = v; }
     else if (kind === 'choice') { if (a.includes(v)) o[k] = v; }
     else if (typeof v === 'number' && Number.isFinite(v) && v >= a && v <= b && (kind !== 'int' || Number.isInteger(v))) o[k] = v;
   }
@@ -144,7 +147,8 @@ function controlsFields(raw) {
 function controlsClean(raw) {
   const o = controlsFields(raw);
   for (const [m, name, num] of CTL_NEEDS) if (o[m] !== name) delete o[num];
-  if (o.stop_mode !== 'atr' && o.target_mode !== 'atr') { delete o.atr_minutes; delete o.atr_period; }
+  if (o.stop_mode && o.stop_mode !== 'own') { delete o.stop_own_mult; delete o.own_floor; }
+  if (o.stop_mode !== 'atr' && o.target_mode !== 'atr' && !o.own_floor) { delete o.atr_minutes; delete o.atr_period; }
   // a number another field switches on means nothing without it (controls.py parse: the same rules, the same request)
   if (o.stop_mode !== 'candle') delete o.stop_candle_ticks;
   if (!o.be_after_pts) delete o.be_offset_ticks;
@@ -160,7 +164,7 @@ function controlsError(raw) {
   if (c.flat_at && c.entry_from && c.flat_at <= c.entry_from) return 'Trade rules: flat time is before the entry window opens';
   for (const [k, [kind, , a, b]] of Object.entries(CONTROLS)) {
     const v = raw && raw[k];
-    if (v === undefined || v === null || v === '' || kind === 'time' || kind === 'choice') continue;
+    if (v === undefined || v === null || v === '' || kind === 'time' || kind === 'choice' || kind === 'bool') continue;
     if (typeof v !== 'number' || !Number.isFinite(v) || v < a || v > b || (kind === 'int' && !Number.isInteger(v))) return `Trade rules: ${k.replace(/_/g, ' ')} is ${kind === 'int' ? 'a whole number' : 'a number'} ${a} to ${b}`;
   }
   return '';
@@ -170,26 +174,26 @@ function setControl(raw, key, text) {
   const spec = CONTROLS[key], o = { ...(raw || {}) };
   if (!spec) return o;
   if (text === '' || text == null) { delete o[key]; return o; }
-  o[key] = spec[0] === 'time' ? String(text) : spec[0] === 'choice' ? (typeof spec[2][0] === 'number' ? Number(text) : text) : Number(text);
+  o[key] = spec[0] === 'time' ? String(text) : spec[0] === 'bool' ? (text === true || text === 'true' || text === 'on') : spec[0] === 'choice' ? (typeof spec[2][0] === 'number' ? Number(text) : text) : Number(text);
   return o;
 }
 
 /* ---- heat-map axes over the run settings (grid.py: an axis key `ctl.<field>`). The same words the Lab's Trade rules use. */
 const CTL_AXIS = 'ctl.';
 /* a number that only means something under one mode: an axis on it switches that mode on (0 = leave the mode alone) */
-const CTL_IMPLIES = { stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
+const CTL_IMPLIES = { stop_own_mult: ['stop_mode', 'own'], stop_pts: ['stop_mode', 'fixed'], stop_atr: ['stop_mode', 'atr'], target_pts: ['target_mode', 'fixed'],
   target_atr: ['target_mode', 'atr'], target_rr: ['target_mode', 'rr'], stop_candle_ticks: ['stop_mode', 'candle'] };
 const CTL_LABELS = {
   entry_from: 'Trade from (NY)', entry_to: 'Trade until (NY)', flat_at: 'Flat at (NY)', direction: 'Direction',
   max_trades: 'Trades a day', stop_wins: 'Stop after wins', stop_losses: 'Stop after losses', max_consec_losses: 'Losses in a row',
   day_loss: 'Daily loss ($)', day_profit: 'Daily profit ($)', cooldown_min: 'Cool off after a loss (min)', max_hold_min: 'Close after (min held)',
-  stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
+  stop: 'Stop', stop_own_mult: 'Own stop (x)', own_floor: 'Own stop floor (0.25 x ATR)', stop_mode: 'Stop type', stop_pts: 'Stop (points)', stop_atr: 'Stop (x ATR)', target_mode: 'Target type', target_pts: 'Target (points)',
   target_atr: 'Target (x ATR)', target_rr: 'Target (x stop)', bar_minutes: 'Signal bar (min)', atr_minutes: 'ATR bars (min)', atr_period: 'ATR length',
   stop_candle_ticks: 'Candle stop buffer (ticks)', be_after_pts: 'Breakeven after (points)', be_offset_ticks: 'Breakeven + (ticks)',
   trail_pts: 'Trailing stop (points)', trail_after_pts: 'Trail after (points)', exit_line: 'Exit on close through', exit_line_min: 'Exit line bars (min)',
 };
 /* The run settings a heat-map may vary, in the order a person thinks of them. Signal bar only when the strategy offers sizes. */
-const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'target_pts', 'target_atr', 'target_rr', 'be_after_pts', 'trail_pts', 'trail_after_pts',
+const CTL_AXIS_ORDER = ['stop_pts', 'stop_atr', 'stop_own_mult', 'target_pts', 'target_atr', 'target_rr', 'be_after_pts', 'trail_pts', 'trail_after_pts',
   'stop_candle_ticks', 'exit_line', 'be_offset_ticks', 'exit_line_min', 'stop_wins', 'stop_losses', 'max_trades',
   'max_consec_losses', 'entry_from', 'entry_to', 'flat_at', 'direction', 'bar_minutes', 'day_loss', 'day_profit', 'cooldown_min',
   'max_hold_min', 'stop_mode', 'target_mode', 'atr_minutes', 'atr_period'];
@@ -204,10 +208,23 @@ function ctlInput(field) {
   const step = /_pts$/.test(field) ? 0.25 : kind === 'int' ? 1 : 0.1;
   return { key, label, type: kind, min: a, max: b, step, default: def, ctl: true };
 }
+/* hm40 (the owner, 2026-10-20; grid.py HM40_AXES, the same list): 8 stops x 5 targets, ATR stops first, targets inner.
+   A strategy with no stop of its own gets the 4 ATR stops (20 cells). The `ctl.stop` axis sets the whole stop on the server. */
+const HM40_AXES = [{ key: 'ctl.stop', values: ['atr:0.5', 'atr:1', 'atr:1.5', 'atr:2', 'own:0.5', 'own:1', 'own:1.5', 'own:2'] },
+  { key: 'ctl.target_rr', values: [0.5, 0.75, 1, 1.5, 2] }];
+function stopInput(s) {
+  const choices = HM40_AXES[0].values.filter((v) => (s && s.own_stop) || v.startsWith('atr:'));
+  return { key: CTL_AXIS + 'stop', label: CTL_LABELS.stop, type: 'choice', choices, default: choices[0], ctl: true };
+}
+/* The Lab's heat map as it opens: the hm40 rows (Rows = Stop, Columns = Target). */
+function hm40Rows(s) {
+  return [{ key: HM40_AXES[0].key, text: stopInput(s).choices.join(', ') }, { key: HM40_AXES[1].key, text: HM40_AXES[1].values.join(', ') },
+    { key: '', text: '' }];
+}
 function ctlAxisInputs(s) {
   const sizes = Array.isArray(s && s.bar_sizes) ? s.bar_sizes : [];
-  return CTL_AXIS_ORDER.filter((f) => f !== 'bar_minutes' || sizes.length).map(ctlInput).filter(Boolean)
-    .map((i) => (i.key === CTL_AXIS + 'bar_minutes' ? { ...i, choices: [0, ...sizes] } : i));
+  return [stopInput(s)].concat(CTL_AXIS_ORDER.filter((f) => f !== 'bar_minutes' || sizes.length).map(ctlInput).filter(Boolean)
+    .map((i) => (i.key === CTL_AXIS + 'bar_minutes' ? { ...i, choices: [0, ...sizes] } : i)));
 }
 /* Everything a heat-map axis may be for strategy s: its own inputs, then the run settings. */
 function axisInput(s, key) {
@@ -559,7 +576,7 @@ function reachSpec(spec, ms, nowMs, cap = 200000) {
 }
 
 /* ---- the parameter heat-map (over the range picker's own window) ---- */
-const DEFAULT_MAX_CELLS = 60;      // the Max cells box's default; the viewer may raise it
+const DEFAULT_MAX_CELLS = 120;     // the Max cells box's default (grid.py's: hm40's 40 cells x 3 values); the viewer may raise it
 const HARD_MAX_CELLS = 400;        // ... but never past here, and the server refuses 401 too
 const GRID_WORKERS = 2;            // grid.py's pool: how many cells actually run at once
 const RANGE_MSG = 'a range is start:end:step with start ≤ end and step > 0';
@@ -763,6 +780,54 @@ function wfBody(f, axes, metric, minTrades) {
   if (f.range.wf === WF_COMPARE) return { ...gridBody(f, axes), metric, min_trades: minTrades, compare: true };
   if (f.range.wf === WF_ROLL) return { ...gridBody(f, axes), metric, min_trades: minTrades, select_months: 3, test_months: 1, step_months: f.range.step === 1 ? 1 : 4 };
   return { ...gridBody(f, axes), metric, min_trades: minTrades, test_months: f.range.wf || 3 };
+}
+/* ---- the FIXED 3:1 block walk-forward (the Lab's default since 2026-10-20; walkforward.py scheme "fixed"): every box of the
+   heat map runs once, as set, on the in-sample months only. The owner picks one box; its test months run only on his typed
+   words. Nothing here names a test month before that read. */
+const LAB_RANGE = { id: 'all', start: '', end: '', wf: WF_ROLL, side: 'is' };      // the Lab's Range as it opens: 3:1 blocks
+/* POST /api/tester/walkforward: the grid body with no window of its own (the server runs the 3:1 in-sample months) and
+   nothing for code to pick by. axes [] = one box, the strategy as set. */
+function wfFixedBody(f, axes) {
+  const g = gridBody(f, axes);
+  delete g.range;
+  return { ...g, scheme: 'fixed', step_months: f.range && f.range.step === 1 ? 1 : 4 };
+}
+const pts1 = (v) => (v == null || !Number.isFinite(v) ? '—' : (v > 0 ? '+' : v < 0 ? MINUS : '') + Math.abs(v).toFixed(1));
+/* the in-sample table's columns (walkforward.is_numbers, spec 4.3), win rate first: [key, label, format, toned] */
+const WF_FIXED_COLS = [['win_rate', 'Win rate', rate], ['breakeven', 'Break-even win rate', rate], ['wr_minus_be', 'Win rate − break-even', pts1],
+  ['trades', 'Trades', int], ['per_week', 'A week', (v) => num(v, 1)], ['avg_trade', 'Avg trade', signed, true], ['avg_r', 'Avg R', (v) => num(v, 2)],
+  ['net', 'Net', signed, true], ['pf', 'Profit factor', (v) => num(v, 2, true)], ['sharpe', 'Sharpe', (v) => num(v)],
+  ['max_dd', 'Max drawdown', (v) => Tr.money(v)], ['months_pos', 'Months up', rate], ['months_wr60', 'Months 60%+ win', rate],
+  ['worst_month_wr', 'Worst month win', rate], ['long_net', 'Long net', signed, true], ['short_net', 'Short net', signed, true]];
+const fixedCells = (rec) => WF_FIXED_COLS.map(([k, , fmt, toned]) => ({ text: fmt(rec ? rec[k] : null), tone: toned && rec ? toneOf(rec[k]) : '' }));
+function boxLabel(axes, params) {
+  if (!axes || !axes.length) return 'As set';
+  return axes.map((a) => `${a.label} ${axisLabels(a)[a.values.indexOf(params[a.key])] ?? valueLabel(params[a.key])}`).join(' · ');
+}
+/* A header click: the same column flips the order, a new one starts high to low. */
+function wfFixedSort(cur, key) { return { key, dir: cur && cur.key === key ? -cur.dir : -1 }; }
+/* result.json (+ lock) -> {head, rows: [{i, label, cells}], picked}; rows in the server's order until sorted, a box with no
+   number for the sorted column last. No test-month column: a read shows under the table, never in it. */
+function wfFixedTable(res, axes, sort) {
+  const rows = ((res && res.cells) || []).map((c) => ({ i: c.i, label: boxLabel(axes, c.params || {}), rec: c.is || {}, cells: fixedCells(c.is) }));
+  if (sort && WF_FIXED_COLS.some(([k]) => k === sort.key)) {
+    const v = (r) => (Number.isFinite(r.rec[sort.key]) ? r.rec[sort.key] : null);
+    rows.sort((a, b) => (v(a) == null) - (v(b) == null) || (v(a) == null ? 0 : (v(a) - v(b)) * sort.dir) || a.i - b.i);
+  }
+  return { head: [{ key: 'box', label: 'Box' }, ...WF_FIXED_COLS.map(([key, label]) => ({ key, label }))],
+    rows, picked: res && res.lock ? res.lock.cell : null };
+}
+/* The test months of the picked box: {canRun, body, text, final, row}. canRun only with a pick, typed words and no read yet;
+   body carries the words exactly as typed (the server refuses blank ones and says why). */
+function wfFixedOos(res, said) {
+  const lock = res && res.lock, o = res && res.oos;
+  const canRun = !!lock && !o && typeof said === 'string' && said.trim() !== '';
+  const body = lock ? { cell: lock.cell, owner_said: said } : null;
+  if (!o) return { canRun, body, text: lock ? '' : 'Pick a box first.', final: false, row: null };
+  if (o.state === 'done') return { canRun: false, body, text: `Test months: ${int((o.months || []).length)}`, final: true, row: { cells: fixedCells(o.record) } };
+  if (o.state === 'stopped') return { canRun: false, body, text: o.say || 'stopped: the read is used, no record', final: true, row: null };
+  const prog = o.total ? ` · ${int(o.done)} / ${int(o.total)}` : '';
+  return { canRun: false, body, text: `Test months ${o.state || 'queued'}${prog}`, final: false, row: null };
 }
 /* A job's mode as the pill spells it: its ratio N, or 'compare' -- what the pill must equal for its result to show. */
 function wfModeOf(cfg) {
@@ -984,6 +1049,7 @@ const api = { strategyLabel, DEFAULT_MAX_CELLS, HARD_MAX_CELLS, GRID_WORKERS, ma
   WF_METRICS, WF_RATIOS, WF_COMPARE, WF_ROLL, WF_MODES, wfRatioText, signed, isWfCompare, wfModeOf, wfModeLabel, WF_COMPARE_ROWS, wfCompareColors,
   wfCompareCell, wfCompareTable, wfCompareHead, wfComparePhaseLine, wfSharedCaption, wfCompareErrLine, wfSchemeProblem, WF_COMPARE_TOO_SHORT, WF_STEP_HEADERS, WF_STEP_GROUPS, WF_SIDE_LABELS, WF_NEEDS_GRID, wfBody, wfProblems, wfLooksText,
   etaText, wfProgress, wfTiles, wfDrop, wfUncovered, wfStepRows, wfStability, wfPhases, wfScheme,
+  HM40_AXES, hm40Rows, LAB_RANGE, wfFixedBody, WF_FIXED_COLS, wfFixedTable, wfFixedSort, wfFixedOos,
   heatLevel, cellView, gridProgress, RANGES, DEFAULT_RULES, defaults, restore, fromRun, rangeFromRun, isWalkforward,
   today, rangeSpec, rangeDates, rangeBody, parseDate, dateError, prettyDate, pillLabel, monthGrid, shiftMonth,
   problems, inputError, body, CONTROLS, controlsClean, controlsFields, controlsError, setControl,

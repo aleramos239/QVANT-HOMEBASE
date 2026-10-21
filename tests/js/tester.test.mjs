@@ -27,12 +27,12 @@ test('form defaults from the schema; restore keeps only valid values', () => {
   const f = X.defaults(STRAT);
   assert.deepEqual(f, { strategy: 'nq930', inputs: { offset_pts: 10, adx_gate: false, mode: 'a', n: 3 },
     range: { id: 'research', start: '', end: '', wf: null }, qty: 1, commission: 4, slippage_ticks: 1,
-    max_cells: 60, prop_rules: 'lucid-flex-50k@2026-10-11' });
+    max_cells: 120, prop_rules: 'lucid-flex-50k@2026-10-11' });
   const r = X.restore({ ...f, inputs: { offset_pts: 11, adx_gate: 'yes', ghost: 1, n: 2.5 }, qty: 3 }, STRAT);
   assert.deepEqual(r.inputs, { offset_pts: 11, adx_gate: false, mode: 'a', n: 3 });
   assert.equal(r.qty, 3);
   assert.equal(X.restore({ strategy: 'other' }, STRAT).strategy, 'nq930');
-  assert.equal(X.restore({ ...f, max_cells: 401 }, STRAT).max_cells, 60);      // out of range: the default
+  assert.equal(X.restore({ ...f, max_cells: 401 }, STRAT).max_cells, 120);      // out of range: the default
   assert.equal(X.restore({ ...f, max_cells: 240 }, STRAT).max_cells, 240);
 });
 

@@ -137,6 +137,7 @@ class Strategy:
                 **({"bar_sizes": list(cls.bar_sizes)} if cls.bar_sizes else {}),
                 **({"exec_root": cls.exec_root} if cls.exec_root else {}),
                 **({"own_size": True} if cls.own_size else {}),
+                **({"own_stop": True} if cls.own_stop else {}),      # hm40: the own-stop boxes (the Lab reads it)
                 "inputs": [i.to_dict() for i in cls.inputs()]}
 
     def times(self) -> list[str]:

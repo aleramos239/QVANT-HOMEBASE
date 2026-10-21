@@ -36,3 +36,4 @@ def test_a_strategy_resolves_its_params_and_describes_itself():
                  "inputs": [{"key": "n", "label": "N", "type": "int", "default": 3, "min": 1,
                              "max": 10, "step": 1, "choices": []}]}
     assert Demo.placement_ms == 85 and Demo().times() == [] and Demo().trades_on(None) is True
+    assert type("OwnStop", (Demo,), {"own_stop": True}).describe()["own_stop"] is True     # the Lab's hm40 own-stop boxes

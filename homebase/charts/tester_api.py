@@ -366,7 +366,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     def brief(meta: dict | None) -> dict | None:
         if meta is None:
             return None
-        keep = ("class", "name", "root", "session_window", "bar_minutes", "bar_sizes", "session_independent", "doc")
+        keep = ("class", "name", "root", "session_window", "bar_minutes", "bar_sizes", "own_stop", "session_independent", "doc")
         return {**{k: meta[k] for k in keep if k in meta}, "inputs": meta.get("inputs") or []}
 
     draft_rows: list[dict] = [{}]      # [{(file, mtime_ns, size): its row}] as of the last listing

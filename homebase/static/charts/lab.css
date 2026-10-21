@@ -650,6 +650,13 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 .wf-steps { table-layout: auto; min-width: 640px; }
 .wf-steps td { font-size: var(--hb-fs-sm); font-variant-numeric: tabular-nums; white-space: nowrap; padding: 2px 4px; }
 .wf-steps tr.wf-chain td { background: var(--hb-fill); }
+/* the fixed walk-forward's in-sample table (2026-10-20): a header sorts, a row is picked */
+.wf-fixed { min-width: 1100px; }
+.wf-fixed tbody th { width: auto; text-align: left; white-space: nowrap; padding: 2px 6px 2px 0; }
+.wf-fixed tr.sel td, .wf-fixed tr.sel th { background: var(--hb-fill); }
+.wf-sort { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap; }
+.wf-sort.on { color: var(--hb-fg); font-weight: 600; }
+.wf-oos .heat-vals { width: 100%; margin: 6px 0; }
 
 /* Pipeline picker, Passed filter, WR settings */
 .pl-filter { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 8px; }
