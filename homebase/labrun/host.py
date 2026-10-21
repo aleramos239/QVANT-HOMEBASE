@@ -269,7 +269,7 @@ def hourly_closes(root: str, d: dt.date, n: int, tapes: TapeStore | None = None)
     return hourlymod.prior(tapes or TapeStore(), root, d, n, _HOUR_CACHE.setdefault(root, {}))
 
 
-_MV_CACHE: dict = {}            # (root) -> {date: minute volume}: a trade date's volume per minute, read once per process
+_MV_CACHE: dict = {}            # (root) -> {date: (archive file stamp, minute volume)}: re-read when the file changes
 
 
 def minute_volume(root: str, d: dt.date, n: int, tapes: TapeStore | None = None) -> list:
@@ -651,6 +651,11 @@ class StrategyDay:
         self._hourly = hourly if self._hourly_n else None      # ... and so are the earlier sessions' 1-hour closes
         self._mv_n = meta.get("needs_minute_volume", 0)
         self._mv = minute_vol if self._mv_n else None          # ... and the earlier trade dates' minute volume
+        if callable(self._mv):
+            try:                                     # warm the cache now (hosting: 18:00 the evening before, or a restart while
+                self._mv(root, self.date, self._mv_n)    # flat), so the session event loads at most the newest file
+            except Exception:                        # noqa: BLE001 - the session event reads again and fails closed there
+                pass
         self.fills = ShadowFills(root, self.date, costs_of(record), meta["placement_ms"], ex)
         if self._desk is not None:
             self._desk_start()

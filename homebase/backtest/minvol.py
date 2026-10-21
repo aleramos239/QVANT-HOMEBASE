@@ -47,14 +47,26 @@ def prior(store, root: str, d: dt.date, n: int, cache: dict | None = None) -> li
     for x in reversed([s for s in store.sessions(root, d - LOOKBACK, d) if s < d]):
         if len(out) == n:
             break
-        if x not in cache:
-            if store.daily(root, x) is None:
-                continue                             # no daily bar: not a date of ctx.daily
-            tape = store.load(root, x)
-            v = minutes(tape) if tape is not None else None
-            if v is not None:
-                cache[x] = v                         # a date whose tape did not load is read again next time (not cached)
+        hit = cache.get(x)
+        if hit is None and store.daily(root, x) is None:
+            continue                                 # no daily bar: not a date of ctx.daily
+        stamp = _stamp(store, root, x)
+        if hit is not None and stamp is not None and hit[0] == stamp:
+            v = hit[1]
         else:
-            v = cache[x]
+            tape = store.load(root, x) if stamp is not None else None
+            v = minutes(tape) if tape is not None else None
+            if v is not None:                        # a date whose tape did not load is read again next time (not cached)
+                cache[x] = (stamp, v)
         out.append({"date": x.isoformat(), "vol": None if v is None else v.tolist()})
     return out[::-1]
+
+
+def _stamp(store, root: str, x: dt.date):
+    """The identity of date x's archive file (name, mtime, size: TapeStore._fresh's test), or None without one. A cached day
+    is used only while its file is unchanged: the tick job keeps merging a session's file for a day or two after its close."""
+    got = store.pick(root, x)
+    if got is None:
+        return None
+    st = got[0].stat()
+    return got[0].name, st.st_mtime_ns, st.st_size

@@ -308,7 +308,7 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
         if n_hourly and d not in hour_cache:     # this session's hours, for the days after it (no second load)
             hour_cache[d] = (tape.contract, hourly.session_hours(tape))
         if n_minvol and d not in mv_cache:       # this date's minute volume, for the days after it (no second load)
-            mv_cache[d] = minvol.minutes(tape)
+            mv_cache[d] = (minvol._stamp(store, cls.root, d), minvol.minutes(tape))     # minvol.prior's (file stamp, volume)
         if strat.needs_daily():
             note_open930(d, tape)
         # Item 2: a CME half day shortens the session -- clamp the window BEFORE

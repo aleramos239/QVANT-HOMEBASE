@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime as dt
 from array import array
+from types import SimpleNamespace
 
 import pytest
 
@@ -41,7 +42,13 @@ class Store:
     """A tape store of trade dates {date: (tape or None, has a daily bar)}; load counts its reads."""
 
     def __init__(self, days):
-        self.days, self.loads = days, []
+        self.days, self.loads, self.rev = days, [], {}
+
+    def pick(self, root, d):                                     # the archive file: its stamp changes when rev[d] does
+        if self.days[d][0] is None:
+            return None
+        st = SimpleNamespace(st_mtime_ns=self.rev.get(d, 0), st_size=1)
+        return SimpleNamespace(name=f"{d.isoformat()}_NQ.csv.gz", stat=lambda: st), "NQH4"
 
     def sessions(self, root, start, end):
         return sorted(d for d in self.days if start <= d <= end)
@@ -92,7 +99,16 @@ def test_a_date_whose_tape_did_not_load_is_read_again_next_time():
     store, cache = Store({a: day(a, 10), b: (None, True)}), {}
     assert [g["vol"] is None for g in minvol.prior(store, "NQ", D, 2, cache)] == [False, True]
     store.days[b] = day(b, 20)                                    # the archive caught up
-    assert minvol.prior(store, "NQ", D, 2, cache)[-1]["vol"][AT_10] == 20 and store.loads.count(b) == 2
+    assert minvol.prior(store, "NQ", D, 2, cache)[-1]["vol"][AT_10] == 20 and store.loads.count(b) == 1
+
+
+def test_a_cached_date_whose_archive_file_changed_is_read_again():
+    a, b = days_before(2)
+    store, cache = Store({a: day(a, 10), b: day(b, 20)}), {}
+    assert [g["vol"][AT_10] for g in minvol.prior(store, "NQ", D, 2, cache)] == [10, 20]
+    store.days[b], store.rev[b] = day(b, 25), 1                  # the tick job merged more prints into b's file
+    assert [g["vol"][AT_10] for g in minvol.prior(store, "NQ", D, 2, cache)] == [10, 25]
+    assert sorted(store.loads) == [a, b, b]                       # a unchanged: not read again
 
 
 class Reads(Strategy):
@@ -124,8 +140,11 @@ def test_a_lab_run_feeds_each_day_the_dates_before_it_from_their_own_tapes(tmp_p
     monkeypatch.setitem(strategies.REGISTRY, Reads.id, Reads)
     rid = prepare({"strategy": Reads.id, "range": {"kind": "custom", "start": "2024-03-04", "end": "2024-03-06"}},
                   tmp_path / "t")
+    loads, real = [], TapeStore.load
+    monkeypatch.setattr(TapeStore, "load", lambda self, root, d: loads.append(d) or real(self, root, d))
     execute(tmp_path / "t" / "runs" / rid, TapeStore(tmp_path / "ticks", tmp_path / "cache"))
     got = read_json(tmp_path / "t" / "runs" / rid / "plots.json")["plots"]
+    assert sorted(loads) == sorted(set(loads))                                    # each day's tape loaded once (the run's own)
     assert [p[1] for p in got["n"]] == [0.0, 1.0, 2.0]                           # 03-04 has no date before it here
     assert [p[1] for p in got["newest"]] == [0.0, 20240304.0, 20240305.0]         # yesterday, never today
     assert [p[1] for p in got["total"]] == [0.0, 1793.0, 1793.0]

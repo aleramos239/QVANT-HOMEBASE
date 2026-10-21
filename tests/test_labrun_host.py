@@ -471,7 +471,7 @@ def vols_of(*days_):
     return [{"date": x, "vol": [5] + [0] * 1379} for x in days_]
 
 
-def test_the_minute_volume_reaches_the_session_event_only_when_the_strategy_asks_and_is_read_once(days):
+def test_the_minute_volume_is_warmed_at_hosting_and_reaches_the_session_event_only_when_the_strategy_asks(days):
     asked = []
 
     def minute_vol(root, d, n):
@@ -480,14 +480,14 @@ def test_the_minute_volume_reaches_the_session_event_only_when_the_strategy_asks
 
     day = days(MINVOL, minute_vol=minute_vol)
     day.on_ticks(ticks("09:24:58", [21000.0]))
-    assert asked == []                                                       # not before its session event ...
+    assert asked == [("NQ", D, 2)]                                           # warmed when the day is hosted ...
     day.on_ticks(ticks("09:25:00", [21000.0]))
     day.on_ticks(ticks("09:26:00", [21000.0]))
-    assert asked == [("NQ", D, 2)]                                           # ... once
+    assert asked == [("NQ", D, 2)] * 2                                       # ... and read once at its session event
     assert day.fills.result.plots == {"dates": [[ms_of("09:25"), 2.0]], "first": [[ms_of("09:25"), 5.0]]}
     other = days(MARKET_930, minute_vol=lambda root, d, n: asked.append("no"))   # it does not ask: never read
     other.on_ticks(ticks("09:25:00", [21000.0]))
-    assert other.state == "running" and len(asked) == 1
+    assert other.state == "running" and len(asked) == 2
 
 
 def test_stale_or_missing_minute_volume_waits_and_unreadable_volume_stops_the_day(days):
