@@ -494,3 +494,15 @@ def test_real_build_days_hold_the_window_one_position_and_the_flat_time():
             last[t["date"]] = t["exit_ms"]
             total += 1
     assert total > 0
+
+
+def test_past_session_seal_by_its_own_date(monkeypatch):
+    """A past session's 1-hour closes open with the build switch up to 2025-06-30 and the test switch after (hunt 2026-10-20:
+    the 3:1 walk-forward's test days read the build days before them)."""
+    seen = []
+    monkeypatch.setattr(S, "load_tape", lambda iso, root, allow_holdout=False: seen.append((iso, allow_holdout)))
+    CS._CLOSES.clear()
+    CS.session_closes("NQ", "2025-06-30")
+    CS.session_closes("NQ", "2025-07-01")
+    assert seen == [("2025-06-30", S.ALLOW_BP), ("2025-07-01", S.ALLOW_BT)]
+    CS._CLOSES.clear()

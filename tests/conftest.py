@@ -18,6 +18,17 @@ from homebase import strategies
 from homebase.backtest import slots
 from tests.straddle_twin import NQ930
 
+# The whole run, not just each test: the stores that live under ~/.homebase point at a throwaway folder from the moment
+# the tests start. The fixtures below give every test its own folder on top; this catches what runs outside a test -- a
+# thread or a child still writing after its test ended, a module- or session-scoped fixture -- which used to land in the
+# REAL store (2026-10-20: a test strategy "PP" appeared on the owner's Desk).
+import tempfile as _tempfile                                                                  # noqa: E402
+_RUN = Path(_tempfile.mkdtemp(prefix="homebase-tests-"))
+for _key, _sub in (("HOMEBASE_DESKLAB_ROOT", "desklab"), ("HOMEBASE_DRAFTS_DIR", "drafts"), ("HOMEBASE_IDEAS_ROOT", "ideas"),
+                   ("HOMEBASE_TESTER_SHARED", "tester")):
+    os.environ[_key] = str(_RUN / _sub)
+os.environ["HOMEBASE_TESTER_SLOTS_FILE"] = str(_RUN / "tester" / "no_override.json")
+
 _REPO = Path(__file__).resolve().parents[1]
 
 

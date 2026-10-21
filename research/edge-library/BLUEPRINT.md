@@ -1,5 +1,8 @@
 # Strategy blueprint — from an idea to something worth running
 
+> **The strategy pipeline is OFF since 2026-10-20 (owner).** Everything below that says "the pipeline" describes switched-off code: never use
+> or suggest it. Run each phase by hand (`blueprint_*`, backtest, heatmap, walkforward, montecarlo, prop_eval) and review every result yourself.
+
 **HOUSE LAW since 2026-10-05 (owner: "lets lock this into the app … i want all strategies or strategy buildings to go off this").**
 Version 1.1 (2026-10-06: the owner's changes after the blueprint was held against the course line by line; section 11 lists
 them and what was built for them). Changed on 2026-10-07 with the strategy pipeline (owner): lines 3.7 and 4.7 ask 80 % of the
@@ -480,7 +483,7 @@ Only new unseen days or real fills on paper can change that.
 - The lines of version 1.1 were dry-run on the stored middle variant of 27 months, without worse fills. They removed nothing
   after the old lines, so nothing says they pick better. More lines mean fewer survivors, not better ones.
 
-## 13. The pipeline (2026-10-07)
+## 13. The pipeline (2026-10-07) -- OFF since 2026-10-20 (owner): do not use it
 
 The pipeline is one program that takes idea cards and runs each one through fixed stages (0 to 7) by itself. An idea stops at the
 first gate it fails, and the program writes why. The few that pass every stage wait for the owner's look, then go in the book.

@@ -305,6 +305,7 @@ def _parser() -> _Parser:
         ("show", "the in-sample table, the pick, the test months if read (runs nothing)"),
         ("pick", "the owner's box: written once, never changed"), ("oos", "the test months of the picked box, once (only on the owner's words)"))}
     wfs["run"].add_argument("spec", metavar="SPEC", help="a spec file in run_idea's format, - for stdin, or the name of an idea on file")
+    wfs["run"].add_argument("--no-worse", action="store_true", help="a screening pass: leave the worse-fills stores out (a later run adds only them)")
     for name in ("show", "pick", "oos"):
         wfs[name].add_argument("name", help="the idea's name (or its 3:1 store's)")
     for name in ("pick", "oos"):
@@ -525,7 +526,7 @@ def _wf(a) -> dict:
                 raise J.Refuse(f"the spec {where} does not read as JSON: {e}") from None
             if not isinstance(spec, dict):
                 raise J.Refuse(f"the spec {where}: a JSON object in run_idea's format")
-        kw = dict(spec=spec, owner_said=a.owner_said, workers=a.workers, root=a.root)
+        kw = dict(spec=spec, owner_said=a.owner_said, workers=a.workers, root=a.root, worse=not getattr(a, "no_worse", False))
         name = spec.get("name") if isinstance(spec, dict) else spec
     fn = api.wf_oos if a.sub == "oos" else api.wf_run
     if a.wait is None:

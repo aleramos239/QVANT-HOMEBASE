@@ -482,6 +482,16 @@ def menu_hm40(root: str, own: bool) -> list:
             for k in ("atr", "own")[:2 if own else 1] for v in h["stops"][k] for r in h["targets_r"]]
 
 
+def menu_hm60(root: str, own: bool) -> list:
+    """hm40 + FIXED-POINT stops (exit_menu.json `hm60`, the owner 2026-10-20): menu_hm40, then the market's 4 fixed stops (points) x hm40's 5
+    targets: 60 cells, or 40 for a family that passes no structure level."""
+    h = json.loads(HM40_JSON.read_text(encoding="utf-8"))
+    pts = h["hm60"]["pts"].get(root)
+    if pts is None:
+        raise KeyError(f"no fixed-point stops of hm60 for root {root!r}: {sorted(h['hm60']['pts'])}")
+    return menu_hm40(root, own) + [{"stop_mode": "pts", "stop_val": float(v), "tgt_r": float(r)} for v in pts for r in h["hm40"]["targets_r"]]
+
+
 def has_structure(family: str):
     """True when the family's code hands the engine a STRUCTURE LEVEL with an order -- `_mkt(..., struct=x)`, `_lim(..., struct=x)` or a
     leg (side, price, struct, target) of `_arm` -- read off its source (the family's class and its bases, up to the Template); False when
@@ -532,6 +542,8 @@ def exits(kind: str, root: str, family: str) -> list:
     (the session-anchored stops); 'hm40' = menu_hm40 (own stops only for a family in STRUCT_FAMILIES)."""
     if kind == "hm40":
         return menu_hm40(root, own=family in __getattr__("STRUCT_FAMILIES"))
+    if kind == "hm60":
+        return menu_hm60(root, own=family in __getattr__("STRUCT_FAMILIES"))
     if kind == "standard":
         return S.menu(root)
     if kind == "extended":
@@ -540,7 +552,7 @@ def exits(kind: str, root: str, family: str) -> list:
         return menu_blueprint(root)
     if kind == "open":
         return menu_open(root)
-    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint', 'open' or 'hm40'")
+    raise ValueError(f"exits {kind!r}: 'standard', 'extended', 'blueprint', 'open', 'hm40' or 'hm60'")
 
 
 COMBO, MAX_FILTERS = "+", 2                         # a unit may hold several filters at once: ("ote+pdz", "in+with"); at most 2 (BLUEPRINT.md 0.2)

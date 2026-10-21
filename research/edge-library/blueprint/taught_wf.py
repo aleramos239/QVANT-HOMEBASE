@@ -54,6 +54,18 @@ def _test_days(market: str, today: dt.date) -> list:
     return [d for d in cal if d[:7] < today.isoformat()[:7]]       # whole months only: the month under way is not a test month
 
 
+def _run_cells(cls, cells: list, sessions: list, *a, **kw) -> list:
+    """run_many of whole cells, one instance per session pass as `taught run` stored them (run_idea.cell_specs): one merged result a cell."""
+    import run_idea as RI
+    specs, cut = [], [0]
+    for inp in cells:
+        specs += RI.cell_specs({"spec": (cls, inp)}, sessions)
+        cut.append(len(specs))
+    res = S.run_many(specs, *a, **kw)
+    return [{"trades": [t for r in res[i:j] for t in r["trades"]], "skipped_by_error": sum(r["skipped_by_error"] for r in res[i:j])}
+            for i, j in zip(cut, cut[1:])]
+
+
 def _save_test(base, test: dict) -> None:
     np.savez(base / "wf" / "test_cells.npz", **{f"{c}|{k}": v for c, x in test.items() for k, v in x.items()})
 
@@ -82,7 +94,7 @@ def each(name: str, root=None, workers=None) -> dict:
         days = [d for d in _test_days(market, dt.date.fromisoformat(cl["utc"][:10])) if cl["days"][0] <= d <= cl["days"][1]]
         RUN.may_start()
         n = max(1, min(int(workers or 6), S.MAX_WORKERS))
-        res = S.run_many([(TA._blocks().WRAPPED[umeta["family"]], ins[c]) for c in ids], S._date(days[0]), S._date(days[-1]), days=days, root=market, workers=n,
+        res = _run_cells(TA._blocks().WRAPPED[umeta["family"]], [ins[c] for c in ids], plan["sessions"], S._date(days[0]), S._date(days[-1]), days=days, root=market, workers=n,
                          allow_holdout=S.ALLOW_BT, **RUN._engine(RUN._kw(umeta["family"], umeta.get("filter"))))
         if any(r["skipped_by_error"] for r in res):
             raise J.Refuse(f"{name}: sessions of the test days were dropped by a strategy error")

@@ -13,7 +13,7 @@ from homebase.labrun import door, host
 from homebase.labrun.deskclient import DeskClient
 from tests.labrun_desk_util import (ACCOUNT, D, DATE, DESK_ID, EVERY, ONE, REPLACE, StubDesk, at, desk_day, feed, filled,
                                     mark_of, ms_of, plots, rec, rnd, snap, ticks)
-from tests.test_labrun_host import MARKET_930, STOPS, plain, planted
+from tests.test_labrun_host import HEAD, MARKET_930, STOPS, plain, planted
 
 WORKING = {"status": "working"}
 CANCELLED = {"status": "cancelled"}
@@ -648,6 +648,34 @@ def test_a_carried_row_is_never_a_trade_and_never_makes_the_day_not_flat(days):
 
 
 # ================================================================ the runner: which days run in desk mode
+DAILY_ENTRY = HEAD + '''class De(Strategy):
+    id, name, root = "de", "De", "NQ"
+
+    def needs_daily(self):
+        return True
+
+    def times(self):
+        return ["09:25:30"]
+
+    def on_time(self, ctx, et_time):
+        ctx.market("long", sl=ctx.last_price - 10, ref=ctx.last_price)
+'''
+
+
+def test_a_desk_day_waiting_for_yesterday_sends_nothing_and_its_late_entry_is_not_sent_once_it_starts(days):
+    """The owner, 2026-10-20: a day waits for yesterday's prices instead of stopping. In desk mode nothing reaches the
+    Desk while it waits; when it starts late, the late-event rule still holds: an entry that is behind the clock is not sent."""
+    held = [[]]
+    day, stub, side, tells, wall = days(DAILY_ENTRY, daily=lambda root, d: held[0])
+    feed(day, "09:25:00", [21000.0] * 35)                                    # .. 09:25:34: past its 09:25:30 entry
+    assert (day.state, day.summary()["why"]) == ("waiting", host.WAIT_YESTERDAY) and stub.bodies == [] and [x for x in tells if "head" not in x] == []
+    held[0] = [{"date": "2024-03-04", "h": 1.0, "l": 1.0, "c": 1.0}]
+    wall.t += host.WAIT_RETRY_S
+    side.take(snap(DAILY_ENTRY))                                             # the Desk's stream, still talking
+    feed(day, "09:25:40", [21000.0])
+    assert day.state == "running" and day.summary()["why"] is None and stub.entries() == []      # 10 s late: not sent
+
+
 from homebase.labrun import store  # noqa: E402
 from tests.labrun_desk_util import LIMITS, sidecar, state  # noqa: E402
 from tests.test_labrun_host import Desk as Kit  # noqa: E402  (a Runner on a temp store, fed by hand)

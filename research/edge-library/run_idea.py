@@ -164,7 +164,7 @@ def check_spec(sp: dict, stem: str | None = None) -> dict:
     if bad:
         raise SpecError(f"limits {bad}: one of {LIMIT_KEYS}")
     for key in ("exits", "filter_exits"):
-        if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open", "own", "own_low", "hm40"):      # 'blueprint' / 'open' / 'hm40': set by blueprint/runner.py and hmwf.py only (its 48-cell table; the session-anchored 60-cell table); 'own' = the family's own unit_exits (orb_close: the stop at the other side of the range)
+        if sp.get(key, "standard") not in ("standard", "extended", "blueprint", "open", "own", "own_low", "hm40", "hm60"):      # 'blueprint' / 'open' / 'hm40': set by blueprint/runner.py and hmwf.py only (its 48-cell table; the session-anchored 60-cell table); 'own' = the family's own unit_exits (orb_close: the stop at the other side of the range)
             raise SpecError(f"{key} {sp.get(key)!r}: 'standard' or 'extended'")
     filters = []
 

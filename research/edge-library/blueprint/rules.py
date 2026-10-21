@@ -110,7 +110,7 @@ def exit_menu(root: str) -> list:
     return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for part in ("targets_r", "small_targets_r") for k, v in stops for r in m[part]]
 
 
-EXIT_KINDS = ("standard", "open", "hm40")           # what a card's `exits` may say: the standard table, the owner's session-anchored one, or hm40 (the 3:1 walk-forward's)
+EXIT_KINDS = ("standard", "open", "hm40", "hm60")           # what a card's `exits` may say: the standard table, the owner's session-anchored one, or hm40 (the 3:1 walk-forward's)
 
 
 def exit_cells(kind: str, root: str) -> list:
@@ -119,13 +119,16 @@ def exit_cells(kind: str, root: str) -> list:
     'hm40' = exit_menu.json `hm40` (40 cells, = blocks.menu_hm40(root, own=True))."""
     if kind == "standard":
         return exit_menu(root)
-    if kind not in ("open", "hm40"):
+    if kind not in ("open", "hm40", "hm60"):
         raise RuleError(f"exits {kind!r}: one of {', '.join(EXIT_KINDS)}")
     m = template("exit_menu")
     if root not in m["stops"]["pts"]:
         raise RuleError(f"no exit table for market {root!r} (it has {', '.join(m['stops']['pts'])})")
-    if kind == "hm40":                              # all 40: a family with no structure level runs the 20 ATR cells (blocks.exits)
+    if kind in ("hm40", "hm60"):                    # all 40: a family with no structure level runs the 20 ATR cells (blocks.exits)
         h = m["hm40"]
-        return [{"stop_mode": k, "stop_val": float(v), "tgt_r": float(r)} for k in ("atr", "own") for v in h["stops"][k] for r in h["targets_r"]]
+        cells = [{"stop_mode": k, "stop_val": float(v), "tgt_r": float(r)} for k in ("atr", "own") for v in h["stops"][k] for r in h["targets_r"]]
+        if kind == "hm60":                          # + the market's fixed-point stops x the same targets (exit_menu.json `hm60`)
+            cells += [{"stop_mode": "pts", "stop_val": float(v), "tgt_r": float(r)} for v in m["hm60"]["pts"][root] for r in h["targets_r"]]
+        return cells
     o = m["open"]
     return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for k in o["stop_order"] for v in o["stops"][k] for r in o["targets_r"]]

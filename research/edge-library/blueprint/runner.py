@@ -177,10 +177,10 @@ def checked(spec) -> dict:
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40)):
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40), (HM60, HM60)):
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table (BLUEPRINT.md line 0.2), the owner's session-anchored table "
                        f"(exits {OPEN!r}), the family's own table (exits {OWN!r}, manual lane) or the 40-cell table (exits {HM40!r}, the 3:1 walk-forward: hmwf), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
-    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
+    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40), (HM60, HM60)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
@@ -196,6 +196,7 @@ def checked(spec) -> dict:
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
 OWN_LOW = "own_low"                                 # the family's OWN stop x the small targets (orb830.LOW_TGT_R), manual lane, owner 2026-10-12
 OWN = "own"                                         # the family's OWN exit cells (its unit_exits; orb830.orb_close: the stop at the far side of the range x 6 targets): the manual lane's spec files
+HM60 = "hm60"                                       # hm40 + the fixed-point stops (families/blocks.menu_hm60; the owner 2026-10-20 23:45 ET)
 HM40 = "hm40"                                       # the 40-cell table of the 3:1 walk-forward (families/blocks.menu_hm40; blueprint/hmwf.py, the owner 2026-10-20)
 OPEN = "open"                                       # the owner's session-anchored table (families/blocks.menu_open: 60 cells; fvg_first_nq, 2026-10-06)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
@@ -275,7 +276,7 @@ def _part(key, kind, root, tf, grid, sessions, cells, meta, family=None, kw=None
 def pool_key(root: str, tf, exits: str = EXITS) -> str:
     """The store of a control pool: c1-NQ-tf5 for the standard table, c1o-NQ-tf5 for the session-anchored one, c1h-NQ-tf5 for the
     ATR cells of hm40 (the same random entries, the other exit cells)."""
-    return {OPEN: "c1o", HM40: "c1h"}.get(exits, "c1") + f"-{root}-tf{tf}"
+    return {OPEN: "c1o", HM40: "c1h", HM60: "c1f"}.get(exits, "c1") + f"-{root}-tf{tf}"
 
 
 def c1_grid(root: str, tf: str) -> list:
@@ -309,6 +310,16 @@ def c1_grid_hm40(root: str, tf: str) -> list:
             for sd in RM.NULL_SEEDS for k, x in enumerate(_blocks().menu_hm40(root, own=False))]
 
 
+def c1_grid_hm60(root: str, tf: str) -> list:
+    """The control pool of hm60: hm40's 20 ATR cells, then the 20 fixed-point cells (random entries take a fixed stop as it is), seeds as
+    c1_grid_open; ids s<seed>_<exit id>."""
+    import l2ref
+    menu = [x for x in _blocks().menu_hm60(root, own=False)]
+    return [{"id": f"s{sd}_{S.cell_id(x)}", "variant": {"seed": sd}, "exit": x, "vi": sd - 1, "xi": k,
+             "spec": (l2ref.Random, {"tf": str(tf), "sess": "all", "p_entry": RM.C1_P_ENTRY, "seed": sd, **x})}
+            for sd in RM.NULL_SEEDS for k, x in enumerate(menu)]
+
+
 def pool_part(root: str, tf, cells=None, exits: str = EXITS) -> dict:
     """THE CONTROL POOL of a market and bar size: l2ref.Random (p_entry 0.5) x the seeds of control.json x the 48 exit cells
     of the blueprint's table (c1_grid, seeded) -- or, for an idea on the session-anchored table, its 60 cells (c1_grid_open),
@@ -319,7 +330,7 @@ def pool_part(root: str, tf, cells=None, exits: str = EXITS) -> dict:
     seeds = list(range(1, R.template("control")["seeds"] + 1))
     meta = {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": list(RM.DAY_PASSES),
             "note": f"{len(seeds)}-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size"}
-    grid = _seeded({OPEN: c1_grid_open, HM40: c1_grid_hm40}.get(exits, c1_grid), seeds, root, str(tf))
+    grid = _seeded({OPEN: c1_grid_open, HM40: c1_grid_hm40, HM60: c1_grid_hm60}.get(exits, c1_grid), seeds, root, str(tf))
     return _part(pool_key(root, tf, exits), "pool", root, tf, grid, RM.DAY_PASSES, cells, meta)
 
 
