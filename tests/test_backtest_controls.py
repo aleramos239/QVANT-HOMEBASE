@@ -375,7 +375,7 @@ class BarScript(Script):
 
 def test_atr_minutes_zero_uses_bar_size():
     rows, p = [], 100.0
-    for k in range(0, 40):                                    # 1-minute true range 4, 5-minute the same: ranges differ by size below
+    for k in range(0, 40):                                    # 1-minute ranges vary 0..4, 5-minute ones are 4: the ATRs differ
         m = 9 * 60 + k
         rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + (k % 5))]
     plan = {"09:36:00": long_at()}
@@ -403,3 +403,40 @@ def test_own_stop_flag():
     head = "from homebase.strategies.base import Strategy\n\nclass X(Strategy):\n    name = 'x'\n    root = 'NQ'\n"
     assert drafthost.stub_class("x", head + "    own_stop = True\n").own_stop is True
     assert drafthost.stub_class("x", head).own_stop is False
+
+
+# ---- the own-stop floor (task 8 fix round 1): max(own x mult, 0.25 x ATR), then at least 2 ticks
+def _atr_rows(width):
+    rows = []
+    for k in range(0, 40):                                    # every 5-minute bar spans `width`: ATR(5 min) = width
+        m = 9 * 60 + k
+        rows += [(f"{m // 60:02d}:{m % 60:02d}:00", 100.0), (f"{m // 60:02d}:{m % 60:02d}:30", 100.0 + width)]
+    return rows
+
+
+def _floor_sl(width, mult, own_sl=90.0, **kw):
+    ctl = Controls.from_dict({"own_floor": True, "stop_own_mult": mult, "atr_minutes": 0, "atr_period": 3, **kw})
+    r = run_session(BarScript({"09:36:00": long_at(sl=own_sl, ref=100.0)}), tape(_atr_rows(width)), Costs(0.0, 0.0),
+                    qty=1, controls=ctl)
+    return round(100.0 - r.trades[0].sl, 2) if r.trades else r.blocked
+
+
+def test_own_floor_is_a_quarter_atr_then_two_ticks():
+    assert _floor_sl(8.0, 0.1) == 2.0                         # own 10 x 0.1 = 1 < 0.25 x 8
+    assert _floor_sl(8.0, 1.5) == 15.0
+    assert _floor_sl(0.25, 0.5, own_sl=99.5) == 0.5           # 0.25 x 0.25 and 0.5 x 0.5 are under 2 ticks
+    assert _floor_sl(8.0, 0.1, atr_period=50) == {"atr warming up": 1}
+    t, = go(ROWS, {"09:30:00": long_at(sl=90.0, ref=100.0)}, {"stop_own_mult": 0.1}).trades
+    assert t.sl == 99.0                                       # without the floor: exactly as before
+
+
+def test_own_floor_keeps_its_keys_and_old_requests_stay_the_same():
+    assert parse({"own_floor": True}) == {"own_floor": True, "stop_own_mult": 1.0, "atr_minutes": 5, "atr_period": 14}
+    assert parse({"own_floor": True, "atr_minutes": 0}) == {"own_floor": True, "stop_own_mult": 1.0, "atr_minutes": 0,
+                                                            "atr_period": 14}
+    assert parse({"own_floor": False, "stop_own_mult": 1.0, "atr_minutes": 5}) == {}
+    assert parse({"own_floor": True, "stop_mode": "fixed", "stop_pts": 5}) == {"stop_mode": "fixed", "stop_pts": 5.0}
+    with pytest.raises(ValueError, match="own_floor"):
+        parse({"own_floor": 1})
+    with pytest.raises(ValueError, match="stop_own_mult"):
+        parse({"stop_own_mult": 0.01})

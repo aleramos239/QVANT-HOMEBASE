@@ -588,6 +588,9 @@ def validate_wf(body) -> dict:
     if isinstance(b.get("range"), dict) and b["range"].get("kind") == "is_months":
         raise ValueError("a walk-forward steps whole calendar months, so it cannot run on IS months only "
                          "(Jan/Apr/Jul/Oct): pick a continuous window")
+    if isinstance(b.get("range"), dict) and b["range"].get("kind") in ("wf_is", "wf_oos"):
+        raise ValueError("this walk-forward picks its own months: the 3:1 block months (wf_is / wf_oos) are for "
+                         "single runs: pick a continuous window")
     metric = b.pop("metric", DEFAULT_METRIC)
     if not isinstance(metric, str) or metric not in METRICS:
         raise ValueError(f"metric: one of {', '.join(METRICS)}")

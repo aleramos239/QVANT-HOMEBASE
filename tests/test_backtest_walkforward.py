@@ -355,6 +355,9 @@ def test_is_months_is_refused_for_a_walkforward():
     months and score test legs over partly empty windows."""
     with pytest.raises(ValueError, match="calendar months"):
         wf.validate_wf(wbody(range={"kind": "is_months"}))
+    for rng in ({"kind": "wf_is", "root": "NQ"}, {"kind": "wf_oos", "root": "NQ", "month": "2022-01"}):
+        with pytest.raises(ValueError, match="3:1 block months"):
+            wf.validate_wf(wbody(range=rng))
 
 
 def test_the_scheme_route_reports_the_step_count_for_a_ratio_and_a_window():

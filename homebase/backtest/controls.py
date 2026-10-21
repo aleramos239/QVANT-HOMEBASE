@@ -16,7 +16,8 @@ they are part of the request, so a run's bundle shows what was set.
   max_hold_min            a position older than this is closed at the next print (checked each minute).
   stop_mode               own (the strategy's) | fixed (stop_pts) | atr (stop_atr x ATR) | candle | none.
                           own: stop_own_mult x the strategy's own stop distance (from the entry's reference, at least a
-                          tick); 1 = its own stop exactly.
+                          tick); 1 = its own stop exactly. own_floor: that distance is at least 0.25 x the ATR
+                          (atr_minutes / atr_period), then at least 2 ticks; the three numbers stay in the request.
                           candle: just past the last CLOSED signal candle's extreme at the entry (a long's below its low,
                           a short's above its high) by stop_candle_ticks; at least a tick past the fill.
   target_mode             own | fixed (target_pts) | atr (target_atr x ATR) | rr (target_rr x the stop distance) | none.
@@ -67,7 +68,8 @@ SPEC: dict[str, tuple] = {
     "cooldown_min": ("int", 0, 0, 600),
     "max_hold_min": ("int", 0, 0, 1440),
     "stop_mode": ("choice", "own", STOP_MODES, None),
-    "stop_own_mult": ("float", 1.0, 0.0, 10.0),
+    "stop_own_mult": ("float", 1.0, 0.05, 10.0),
+    "own_floor": ("bool", False, None, None),
     "stop_pts": ("float", 0.0, 0.0, 5000.0),
     "stop_atr": ("float", 0.0, 0.0, 50.0),
     "target_mode": ("choice", "own", TARGET_MODES, None),
@@ -102,6 +104,10 @@ def coerce(k: str, v):
         if not isinstance(v, str) or not TIME.match(v):
             raise ValueError(f"controls.{k}: a New York time as HH:MM")
         return v
+    if kind == "bool":
+        if not isinstance(v, bool):
+            raise ValueError(f"controls.{k}: true or false")
+        return v
     if kind == "choice":
         val = v
         if isinstance(val, str) and k in ("atr_minutes", "bar_minutes", "exit_line_min") and val.isdigit():
@@ -124,7 +130,7 @@ LABELS = {
     "max_trades": "Trades a day", "stop_wins": "Stop after wins", "stop_losses": "Stop after losses",
     "max_consec_losses": "Losses in a row", "day_loss": "Daily loss ($)", "day_profit": "Daily profit ($)",
     "cooldown_min": "Cool off after a loss (min)", "max_hold_min": "Close after (min held)",
-    "stop_mode": "Stop type", "stop_own_mult": "Own stop (x)", "stop_pts": "Stop (points)", "stop_atr": "Stop (x ATR)",
+    "stop_mode": "Stop type", "stop_own_mult": "Own stop (x)", "own_floor": "Own stop floor (0.25 x ATR)", "stop_pts": "Stop (points)", "stop_atr": "Stop (x ATR)",
     "target_mode": "Target type", "target_pts": "Target (points)", "target_atr": "Target (x ATR)",
     "target_rr": "Target (x stop)", "stop_candle_ticks": "Candle stop buffer (ticks)", "be_after_pts": "Breakeven after (points)",
     "be_offset_ticks": "Breakeven + (ticks)", "trail_pts": "Trailing stop (points)", "trail_after_pts": "Trail after (points)",
@@ -163,6 +169,10 @@ def parse(raw) -> dict:
             out[k] = val
     if out.get("stop_mode", "own") != "own":
         out.pop("stop_own_mult", None)
+        out.pop("own_floor", None)
+    if out.get("own_floor"):                        # the floor's numbers are part of its rule, even at their defaults
+        for k in ("stop_own_mult", "atr_minutes", "atr_period"):
+            out.setdefault(k, SPEC[k][1])
     for (mode, name), num in NEEDS.items():
         if out.get(mode) == name:
             if not out.get(num):
@@ -174,7 +184,7 @@ def parse(raw) -> dict:
                     ("trail_after_pts", bool(out.get("trail_pts"))), ("exit_line_min", bool(out.get("exit_line")))):
         if not on:
             out.pop(num, None)
-    if not any(out.get(m) == n for m, n in ATR_USERS):
+    if not out.get("own_floor") and not any(out.get(m) == n for m, n in ATR_USERS):
         out.pop("atr_minutes", None)
         out.pop("atr_period", None)
     if out.get("entry_from") and out.get("entry_to") and out["entry_from"] >= out["entry_to"]:
@@ -200,6 +210,7 @@ class Controls:
     max_hold_min: int = 0
     stop_mode: str = "own"
     stop_own_mult: float = 1.0
+    own_floor: bool = False
     stop_pts: float = 0.0
     stop_atr: float = 0.0
     target_mode: str = "own"

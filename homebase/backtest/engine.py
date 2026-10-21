@@ -436,7 +436,7 @@ class _Sim:
         """The stop / target the run controls ask for, as (ov, sl, tp, tp_rr, refusal). The planned levels are
         measured from the entry's own reference; `_fill` re-measures them from the fill."""
         c = self.ctl
-        if c.stop_mode == "own" and c.target_mode == "own" and (c.stop_own_mult == 1.0 or sl is None):
+        if c.stop_mode == "own" and c.target_mode == "own" and (sl is None or (c.stop_own_mult == 1.0 and not c.own_floor)):
             return None, sl, tp, tp_rr, None
         r = ref if ref is not None else price
         if r is None:
@@ -444,7 +444,7 @@ class _Sim:
         if r is None:
             return None, sl, tp, tp_rr, "no price to size the bracket from"
         a = None
-        if c.stop_mode == "atr" or c.target_mode == "atr":
+        if c.stop_mode == "atr" or c.target_mode == "atr" or (c.own_floor and sl is not None):
             if not (c.atr_minutes or self.bar_min):
                 return None, sl, tp, tp_rr, "atr: the strategy has no bar size"
             a = self.atr(c.atr_minutes or self.bar_min, c.atr_period)
@@ -465,7 +465,9 @@ class _Sim:
             sl = to_tick(ext[0] - buf if side > 0 else ext[1] + buf, self.tick)
             ov_sl = ("level", sl)
         elif c.stop_mode == "own":
-            if sl is not None and c.stop_own_mult != 1.0:       # its own distance from the reference, scaled
+            if sl is not None and c.own_floor:                  # scaled, at least 0.25 x ATR, then at least 2 ticks
+                sl = to_tick(r - side * max(abs(r - sl) * c.stop_own_mult, 0.25 * a, 2 * self.tick), self.tick)
+            elif sl is not None and c.stop_own_mult != 1.0:     # its own distance from the reference, scaled
                 sl = to_tick(r - side * max(abs(r - sl) * c.stop_own_mult, self.tick), self.tick)
         else:
             d = dist(c.stop_mode, c.stop_pts, c.stop_atr)
