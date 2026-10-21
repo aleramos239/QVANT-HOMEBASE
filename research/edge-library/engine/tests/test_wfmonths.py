@@ -147,3 +147,26 @@ def test_nq_a_session_with_only_a_lab_tape_counts(tmp_path, monkeypatch):
             lab_tape=[d for d in days if d > "2025-07-31" and d != "2025-08-20"])
     assert WM.oos_days("NQ", "2025-08") == [d for d in _weekdays("2025-08-01", "2025-08-31") if d != "2025-08-20"]
     assert WM.skipped("NQ") == frozenset({"2025-08-20"})         # complete in the archive, but no tape the engine can replay
+
+
+def test_a_gappy_day_at_a_range_end_does_not_refuse_the_month(tmp_path, monkeypatch):
+    """GC 2026-09-30: the month's last session is gappy; a range that starts or ends on a gappy day still opens the month."""
+    _market(tmp_path, monkeypatch, "NQ", _weekdays("2025-05-01", "2025-10-01"), bad={"2025-08-01", "2025-08-29"}, parquet_to="2025-10-01")
+    want = [d for d in _weekdays("2025-08-01", "2025-08-31") if d not in ("2025-08-01", "2025-08-29")]
+    assert WM.oos_days("NQ", "2025-08") == want
+    for a, b in (("2025-08-01", "2025-08-31"), ("2025-08-01", "2025-08-29"), ("2025-08-04", "2025-08-29")):
+        assert [d.isoformat() for d in S.sessions(a, b, "NQ", allow_holdout=S.ALLOW_WF_OOS)] == [d for d in want if a <= d <= b]
+    S._wf_days([dt.date(2025, 8, 1), dt.date(2025, 8, 29)], S.ALLOW_WF_OOS, "NQ", day=False)     # run()'s own check of its range ends
+    with pytest.raises(S.HoldoutSealed, match="skips it"):
+        S.check_holdout("2025-08-29", S.ALLOW_WF_OOS, "NQ")      # a NAMED gappy day is still refused
+
+
+def test_a_month_counts_only_when_a_complete_session_follows_it(tmp_path, monkeypatch):
+    _market(tmp_path, monkeypatch, "XX", _weekdays("2025-05-01", "2025-10-02"), bad={"2025-10-01", "2025-10-02"})
+    assert max(WM.calendar("XX")) == "2025-08-29"                 # Oct holds only gappy (still filling) days: Sep is not counted yet
+
+
+def test_a_run_whose_range_ends_on_gappy_days_runs_the_month_without_them(tmp_path, monkeypatch):
+    _market(tmp_path, monkeypatch, "ES", _weekdays("2025-05-01", "2025-10-01"), bad={"2025-08-01", "2025-08-29"})
+    r = S.run(l2ref.Donchian, {}, workers=1, root="ES", start="2025-08-01", end="2025-08-29", allow_holdout=S.ALLOW_WF_OOS)
+    assert r["sessions"] == len(WM.oos_days("ES", "2025-08")) == 19 and r["used"] == 0     # no tapes here: every day a no-tape skip

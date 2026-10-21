@@ -48,13 +48,16 @@ class Range:
     kind: str
     start: dt.date
     end: dt.date
-    root: str = ""                  # wf_is / wf_oos: the market whose blocks ...
+    root: str = ""                  # wf_is / wf_oos: the market whose blocks ... (custom: a 3:1 rolling range, whose gappy days are skipped)
     months: tuple = ()              # ... and the "YYYY-MM" months the range holds
 
     def includes(self, d: dt.date) -> bool:
         if self.kind in WF_KINDS:                   # the 3:1 months, less the gappy sessions the walk-forward skips
             from . import wfmonths
             return self.start <= d <= self.end and d.isoformat()[:7] in self.months and d not in wfmonths.skipped(self.root)
+        if self.kind == "custom" and self.root:     # the 3:1 rolling range: its months, less the gappy sessions
+            from . import wfmonths
+            return self.start <= d <= self.end and d not in wfmonths.skipped(self.root)
         return self.start <= d <= self.end and (self.kind != "is_months" or d.month in IS_MONTHS)
 
     @property
@@ -79,7 +82,9 @@ class Range:
     def to_dict(self) -> dict:
         out = {"kind": self.kind, "start": self.start.isoformat(), "end": self.end.isoformat(),
                "label": self.label, "holdout": self.holdout}
-        return {**out, "root": self.root, "months": list(self.months)} if self.kind in WF_KINDS else out
+        if self.kind in WF_KINDS:
+            return {**out, "root": self.root, "months": list(self.months)}
+        return {**out, "root": self.root} if self.root else out
 
 
 def _date(v, what: str) -> dt.date:
@@ -131,7 +136,10 @@ def parse_range(obj) -> Range:
     end = _date(obj["end"], "range.end") if obj.get("end") else RESEARCH_END
     if start > end:
         raise DisciplineError("range.start is after range.end")
-    return Range(kind, start, end)
+    root = (obj.get("root") or "") if kind == "custom" else ""     # a 3:1 rolling range names its market: its gappy days are skipped
+    if not isinstance(root, str):
+        raise DisciplineError("range.root: the market, as text")
+    return Range(kind, start, end, root)
 
 
 def stored_range(obj) -> Range:

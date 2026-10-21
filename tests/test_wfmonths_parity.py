@@ -41,13 +41,21 @@ def test_blocks_start_at_the_first_whole_month_and_skip_an_incomplete_session(tm
                                                  (["2022-08", "2022-09", "2022-10"], "2022-11")]   # Dec 2022 + Jul-Aug 2025: a part-block
 
 
+def test_a_month_counts_only_when_a_complete_session_follows_it(tmp_path):
+    arch = tmp_path / "ticks"
+    _manifests(arch, "XX", _weekdays(dt.date(2025, 7, 1), dt.date(2025, 9, 30)))
+    _manifests(arch, "XX", [dt.date(2025, 10, 1), dt.date(2025, 10, 2)], complete=False)       # Oct: still filling
+    assert max(wfmonths.calendar("XX", TapeStore(archive=arch, cache=tmp_path / "cache"))) == dt.date(2025, 8, 29)
+
+
 @pytest.mark.parametrize("root", ["NQ", "ES", "GC"])
 def test_wfmonths_parity(root):
     if not (PY.exists() and (ARCHIVE / root).exists()):
         pytest.skip("needs the research Python and the tick archive")
     code = ("import sys, json; sys.path[:0] = ['engine', '.']\n"
-            f"from blueprint import wfmonths as W\nprint(json.dumps(W.blocks({root!r})))")
-    research = json.loads(subprocess.run([str(PY), "-c", code], cwd=RESEARCH, capture_output=True, text=True, check=True).stdout)
+            f"from blueprint import wfmonths as W\nprint(json.dumps([W.blocks({root!r}), sorted(W.skipped({root!r}))]))")
+    research, skip = json.loads(subprocess.run([str(PY), "-c", code], cwd=RESEARCH, capture_output=True, text=True, check=True).stdout)
     mine = wfmonths.blocks(root)
     assert mine == research and len(mine) >= 15                   # the gappy Sep 2026 days are skipped, not a stop (2026-10-21)
+    assert sorted(d.isoformat() for d in wfmonths.skipped(root)) == skip
     assert (mine[0]["is"], mine[0]["oos"]) == (["2021-10", "2021-11", "2021-12"], "2022-01")

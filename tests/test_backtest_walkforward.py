@@ -1251,6 +1251,14 @@ def test_fixed_rolling_steps_a_month_and_has_no_unseen_test_months(tmp_path, lay
         wf.validate_wf({"strategy": "nq930", "axes": AXES, "step_months": 2})
 
 
+def test_rolling_skips_the_gappy_days(layout):
+    from homebase.backtest.discipline import stored_range
+    layout.setattr("homebase.backtest.wfmonths.skipped", lambda root, store=None: frozenset({dt.date(2022, 2, 15)}) if root == "NQ" else frozenset())
+    g = wf.validate_wf({"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": AXES, "step_months": 1})
+    rng = stored_range(g["cells"][0]["req"]["range"])
+    assert rng.kind == "custom" and rng.includes(dt.date(2022, 2, 14)) and not rng.includes(dt.date(2022, 2, 15))
+
+
 def test_a_box_read_in_one_walkforward_is_never_read_again_in_another(tmp_path, layout, ranged, tester_shared):
     m, a, _ = fixed_done(tmp_path)
     m.pick(a, 1)

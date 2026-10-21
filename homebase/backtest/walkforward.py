@@ -697,7 +697,7 @@ def validate_fixed(b: dict) -> dict:
     else:                                  # rolling: the same months, the pick windows step a month
         ms = sorted({m for x in bl for m in (*x["is"], x["oos"])})
         layout = [{"i": k, "is": st["select_ms"]} for k, st in enumerate(steps(ms, 1, ROLL_SELECT, 1))]
-        b["range"] = {"kind": "custom", "start": f"{ms[0]}-01", "end": _month_end(ms[-2])}
+        b["range"] = {"kind": "custom", "start": f"{ms[0]}-01", "end": _month_end(ms[-2]), "root": cls.root}    # root: skip its gappy days
     b.setdefault("axes", hm40_axes(cls))
     g = validate_grid(b, min_axes=0)
     if not getattr(cls, "session_independent", False):

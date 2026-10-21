@@ -1,7 +1,8 @@
 """wfmonths.py -- THE MONTHS OF THE 3:1 BLOCK WALK-FORWARD (docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md 4.1).
 
 Data: the market's sessions from its first WHOLE month to the last month its data runs past (a month counts when it is before
-today's month and the market has any session, complete or not, after its last day). A GAPPY DAY IS SKIPPED (the owner, 2026-10-21:
+today's month and the market has a used -- complete -- session after its last day: a fresh month's still-filling days never
+count it). A GAPPY DAY IS SKIPPED (the owner, 2026-10-21:
 "Skip those days"): from 2025-07-01 on, a session whose front-contract manifest is not `complete` (runner._front) -- or, NQ, that has
 no tape the engine can replay (its ofb_tick parquet or the Lab's .tape, load_tape's lookup) -- is in no in-sample and no out-of-sample
 day list and the switches refuse it; its month still counts. Blocks: 3 in-sample months, then
@@ -29,21 +30,21 @@ from . import pipe_wf as WF
 
 @functools.lru_cache(maxsize=None)
 def _sessions(root: str, today: str) -> tuple:
-    """(the sessions the walk-forward uses, the market's last session on disk complete or not, the skipped sessions)."""
+    """(the sessions the walk-forward uses, the last of them, the skipped sessions)."""
     from . import runner as RUN
     build = [d.isoformat() for d in S.sessions(*S.BP_BUILD, root, allow_holdout=S.ALLOW_BP)]
     end = dt.date.fromisoformat(today)
     done = RUN._front(root, S.BP_BUILD[1] + dt.timedelta(days=1))   # {date: complete} by the front contract's manifest, after the build days
     seen = sorted(d for d in done if d <= end)      # (every tape is built from an archive session: its manifest names it)
     use = [d for d in seen if done.get(d) and (root != "NQ" or S.tape_path(d, root).exists() or S.hb_tape_path(d, root) is not None)]
-    last = max([*build, *(d.isoformat() for d in seen)], default=None)
-    return tuple(build + [d.isoformat() for d in use]), last, frozenset(d.isoformat() for d in seen) - {d.isoformat() for d in use}
+    days = build + [d.isoformat() for d in use]
+    return tuple(days), max(days, default=None), frozenset(d.isoformat() for d in seen) - set(days)
 
 
 def calendar(root: str) -> list:
     today = dt.date.today().isoformat()
     days, last, _ = _sessions(root, today)
-    cut = min(today[:7], (last or today)[:7])       # a month counts only when the data runs past it
+    cut = min(today[:7], (last or today)[:7])       # a month counts only when a used session follows it
     return [d for d in days if d[:7] < cut]
 
 

@@ -1,8 +1,8 @@
 """The months of the 3:1 block walk-forward, from the tester's own data (the layout of research/edge-library/blueprint/wfmonths.py).
 
 Data: the market's archived sessions from its first WHOLE month (its first session on the month's 1st or 2nd weekday) to the
-last month the data runs past (a month counts when it is before today's month and the market has any session, complete or not,
-after its last day). A GAPPY DAY IS SKIPPED (the owner, 2026-10-21: "Skip those days"): a session from 2025-07-01 on whose
+last month the data runs past (a month counts when it is before today's month and the market has a complete session after its
+last day: a fresh month's still-filling days never count it). A GAPPY DAY IS SKIPPED (the owner, 2026-10-21: "Skip those days"): a session from 2025-07-01 on whose
 front-contract manifest is not `complete` is in no in-sample and no test day list (Range.includes refuses it); its month still
 counts. Blocks: 3 in-sample months, then 1 out-of-sample month, the next block
 after it (Oct-Dec 2021 -> Jan 2022, Feb-Apr -> May, ...); a trailing part-block is in no block. File names and manifests
@@ -42,8 +42,9 @@ def _calendar(root: str, archive: str, today: str) -> tuple:
     store = TapeStore(archive=archive)
     days = store.sessions(root, RESEARCH_START, dt.date.fromisoformat(today))
     bad = frozenset(d for d in days if d >= HOLDOUT_START and not _complete(store, root, d))
-    cut = min(today[:7], days[-1].isoformat()[:7] if days else today[:7])   # a month counts only when the data runs past it
-    return tuple(d for d in days if d.isoformat()[:7] < cut and d not in bad), bad
+    use = [d for d in days if d not in bad]
+    cut = min(today[:7], use[-1].isoformat()[:7] if use else today[:7])     # a month counts only when a complete session follows it
+    return tuple(d for d in use if d.isoformat()[:7] < cut), bad
 
 
 def _scan(root: str, store: TapeStore | None) -> tuple:
