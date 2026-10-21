@@ -283,8 +283,9 @@ def test_every_chat_reads_the_blueprints_dates():
         assert "test days" in t and "2025-07-01" in t
         assert "once and only for a locked strategy, never for a quick look or \"all data\"" in t
     listed = {t["name"]: t for t in rpc(srv, "tools/list")["result"]["tools"]}
-    for name in ("backtest", "heatmap", "walkforward"):
+    for name in ("backtest", "walkforward"):            # walkforward: its old scheme ("pick") only
         assert listed[name]["inputSchema"]["properties"]["range"]["description"] == desc
+    assert "range" not in listed["heatmap"]["inputSchema"]["properties"]   # a heat map runs on the 3:1 in-sample months only
 
 
 def test_a_run_that_read_the_test_days_says_so():
@@ -302,14 +303,16 @@ def test_a_long_run_returns_its_id_when_the_wait_runs_out(fake):
 def test_heatmap_walkforward_mc_prop_and_lists(fake):
     b = box(fake)
     axes = [{"key": "sl_pts", "values": [4, 5]}, {"key": "tp_pts", "values": [10]}]
-    text = b.call("heatmap", {"strategy": "nq930", "axes": axes, "max_cells": 10})
-    assert fake.last("POST")["path"] == "/api/tester/grid"
-    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "axes": axes, "range": {"kind": "research"},
-                                         "max_cells": 10}
+    b.call("heatmap", {"strategy": "nq930", "axes": axes, "max_cells": 10, "owner_said": "heat map it"})
+    assert fake.last("POST")["path"] == "/api/tester/walkforward"          # a new heat map: the fixed 3:1 in-sample table
+    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "axes": axes, "max_cells": 10,
+                                         "scheme": "fixed", "step_months": 4}
+    text = b.call("heatmap", {"grid_id": GID})                              # an old heat map still reads
     assert "Best net: cell 1" in text and "Looks this strategy: 40" in text
-    text = b.call("walkforward", {"strategy": "nq930", "axes": axes, "ratio": 2, "metric": "sharpe", "min_trades": 3})
+    text = b.call("walkforward", {"strategy": "nq930", "axes": axes, "scheme": "pick", "ratio": 2, "metric": "sharpe",
+                                  "min_trades": 3, "owner_said": "use the old 1:2 one"})
     assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "axes": axes, "range": {"kind": "research"},
-                                         "test_months": 2, "metric": "sharpe", "min_trades": 3}
+                                         "scheme": "pick", "test_months": 2, "metric": "sharpe", "min_trades": 3}
     assert "stitched OOS" in text and "Drop IS->OOS" in text
     text = b.call("montecarlo", {"run_id": RID, "paths": 500})
     assert fake.last("POST")["body"] == {"run_id": RID, "paths": 500} and "P(prop pass" in text
@@ -531,3 +534,105 @@ def test_walkforward_on_a_compare_job_returns_the_side_by_side_summary_or_one_sc
     # an ordinary job: no test_months -> /result, exactly as before
     b.call("walkforward", {"walkforward_id": WID})
     assert fake.last()["path"] == f"/api/tester/walkforward/{WID}/result"
+
+
+# ---------------------------------------------------------------- hm40 + the fixed 3:1 block walk-forward (2026-10-20)
+
+FWID = "20261020-120004-nq930-f1ed"
+_REC = {"win_rate": 55.0, "breakeven": 50.0, "wr_minus_be": 5.0, "trades": 100, "per_week": 2.5, "avg_trade": 10.0,
+        "avg_r": 0.1, "net": 1000.0, "pf": 1.2, "sharpe": 0.8, "max_dd": -500.0}
+FIXED = {"scheme": "fixed", "step_months": 4, "rolling": False, "stitch": "blocks", "window": {"start": "2021-10", "end": "2025-08"},
+         "blocks": [{"i": 0, "is": ["2021-10", "2021-11", "2021-12"]}], "n_cells": 2, "looks": 2, "lock": None,
+         "cells": [{"i": 0, "params": {"ctl.stop": "atr:0.5", "ctl.target_rr": 0.5}, "is": _REC, "blocks": []},
+                   {"i": 1, "params": {"ctl.stop": "atr:0.5", "ctl.target_rr": 1}, "is": {**_REC, "net": -200.0}, "blocks": []}]}
+
+
+@pytest.fixture
+def fixed(fake):
+    fake.routes.update({
+        ("POST", "/api/tester/walkforward"): {"id": FWID},
+        ("GET", f"/api/tester/walkforward/{FWID}"): {"id": FWID, "status": "done", "walkforward": {"scheme": "fixed"}},
+        ("GET", f"/api/tester/walkforward/{FWID}/result"): FIXED,
+        ("POST", f"/api/tester/walkforward/{FWID}/pick"): lambda body: {"cell": body["cell"]},
+        ("POST", f"/api/tester/walkforward/{FWID}/oos"): lambda body: {"state": "queued", "cell": body["cell"]},
+    })
+    return fake
+
+
+def test_heatmap_tool_default_is_hm40(fixed):
+    """A new heat map is the fixed 3:1 walk-forward's in-sample table: no axes = the server's hm40 boxes, no range."""
+    text = box(fixed).call("heatmap", {"strategy": "nq930", "owner_said": "run the heat map"})
+    req = fixed.last("POST")
+    assert req["path"] == "/api/tester/walkforward"
+    assert req["body"] == {"strategy": "nq930", "inputs": {}, "scheme": "fixed", "step_months": 4}
+    assert "| #1 |" in text and "| #2 |" in text and "| #0 " not in text          # boxes 1-based, as the owner says them
+    assert "Average of all 2 boxes" in text and "not the best box" in text
+    spec = {s["name"]: s for s in tools.SPECS}["heatmap"]
+    assert "hm40" in spec["description"] and "ONLY when the owner says so" in spec["description"]
+    assert "range" not in spec["inputSchema"]["properties"] and "owner_said" in spec["inputSchema"]["properties"]
+
+
+def test_heatmap_tool_needs_owner_said(fixed):
+    b = box(fixed)
+    for said in ({}, {"owner_said": ""}, {"owner_said": "   "}):
+        with pytest.raises(ToolError, match="owner_said"):
+            b.call("heatmap", {"strategy": "nq930", **said})
+    with pytest.raises(ToolError, match="3:1 in-sample months"):
+        b.call("heatmap", {"strategy": "nq930", "owner_said": "run it", "range": {"preset": "all"}})
+    assert not [r for r in fixed.requests if r["method"] == "POST"]
+    assert "Heat-map" in b.call("heatmap", {"grid_id": GID})                         # reading an old one needs none
+
+
+def test_walkforward_tool_default_fixed_blocks(fixed):
+    b = box(fixed)
+    with pytest.raises(ToolError, match="owner_said"):
+        b.call("walkforward", {"strategy": "nq930"})
+    text = b.call("walkforward", {"strategy": "nq930", "owner_said": "run the walk-forward"})
+    assert fixed.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "scheme": "fixed", "step_months": 4}
+    assert "| #1 |" in text and "pick=" in text
+    b.call("walkforward", {"strategy": "nq930", "owner_said": "use rolling", "rolling": True})
+    assert fixed.last("POST")["body"]["step_months"] == 1
+    n = len(fixed.requests)
+    for bad, says in (({"range": {"preset": "build"}}, "3:1 in-sample months"), ({"metric": "sharpe"}, 'scheme="pick"'),
+                      ({"ratio": 2}, 'scheme="pick"'), ({"scheme": "best"}, "scheme")):
+        with pytest.raises(ToolError, match=says):
+            b.call("walkforward", {"strategy": "nq930", "owner_said": "run it", **bad})
+    assert len(fixed.requests) == n
+    spec = {s["name"]: s for s in tools.SPECS}["walkforward"]
+    assert "ALWAYS the default" in spec["description"] and "ONLY when the owner says so" in spec["description"]
+    assert spec["inputSchema"]["properties"]["scheme"]["default"] == "fixed"
+    text = rpc(protocol.Server(b), "initialize", {"protocolVersion": "2025-06-18"})["result"]["instructions"]
+    assert "heatmap and walkforward tools follow the same law: both run the 3:1 block walk-forward by default" in text
+    assert "walkforward oos (the test months) ONLY when he says so (owner_said)" in text
+
+
+def test_walkforward_oos_needs_owner_said(fixed):
+    b = box(fixed)
+    b.call("walkforward", {"walkforward_id": FWID, "pick": 3})                     # box #3 as he says it = cell 2
+    assert fixed.last("POST")["path"] == f"/api/tester/walkforward/{FWID}/pick" and fixed.last("POST")["body"] == {"cell": 2}
+    for bad in (0, -1, True, "3"):
+        with pytest.raises(ToolError, match="pick"):
+            b.call("walkforward", {"walkforward_id": FWID, "pick": bad})
+    n = len(fixed.requests)
+    for said in ({}, {"owner_said": ""}):
+        with pytest.raises(ToolError, match="owner_said"):
+            b.call("walkforward", {"walkforward_id": FWID, "oos": True, **said})
+    assert len(fixed.requests) == n                                                 # refused before anything is asked
+    fixed.routes[("GET", f"/api/tester/walkforward/{FWID}/result")] = {**FIXED, "lock": {"cell": 1}}
+    text = b.call("walkforward", {"walkforward_id": FWID, "oos": True, "owner_said": " run the test months "})
+    assert fixed.last("POST")["path"] == f"/api/tester/walkforward/{FWID}/oos"
+    assert fixed.last("POST")["body"] == {"cell": 1, "owner_said": " run the test months "}   # his words, as said
+    assert "Picked: #2" in text
+    spec = {s["name"]: s for s in tools.SPECS}["walkforward"]["inputSchema"]["properties"]
+    assert "ONLY when the owner says so in chat" in spec["oos"]["description"]
+    assert "never on your own" in spec["oos"]["description"]
+
+
+def test_walkforward_shows_a_finished_test_month_read(fixed):
+    done = {"state": "done", "cell": 1, "record": {**_REC, "net": 321.0}, "owner_said": "run them",
+            "blocks": [{"i": 0, "oos": "2022-01", "trades": 4, "win_rate": 50.0, "net": 321.0}]}
+    fixed.routes[("GET", f"/api/tester/walkforward/{FWID}/result")] = {**FIXED, "lock": {"cell": 1, "params": {}}, "oos": done}
+    text = box(fixed).call("walkforward", {"walkforward_id": FWID})
+    assert "| #2 (picked) |" in text and "Test months of #2 (run once, on his words: 'run them')" in text
+    assert "| 1 | 2022-01 | 4 | 50.0 | $321 |" in text
+    assert not [r for r in fixed.requests if r["method"] == "POST"]               # reading it runs nothing
