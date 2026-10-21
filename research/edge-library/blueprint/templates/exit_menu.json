@@ -106,5 +106,29 @@
    2
   ],
   "cells": 40
+ },
+ "hm60": {
+  "_about": "hm40 + FIXED-POINT stops (the owner, 2026-10-20 23:45 ET: 'i reccomend adding a fixed point stop to the heatmap' -> 15 / 25 / 40 / 60 NQ points; ES and GC scaled as the old standard table, ES = NQ / 4, GC = NQ / 6): hm40's cells, then 4 fixed stops x the same 5 targets = 60 cells (40 for a family that passes no structure level). Locked by engine/tests/test_hm60.py.",
+  "pts": {
+   "NQ": [
+    15,
+    25,
+    40,
+    60
+   ],
+   "ES": [
+    4,
+    6,
+    10,
+    15
+   ],
+   "GC": [
+    2.5,
+    4,
+    6.5,
+    10
+   ]
+  },
+  "cells": 60
  }
 }

@@ -60,7 +60,8 @@ def _spec(spec) -> dict:
     if not isinstance(spec, dict):
         raise J.Refuse("a spec is a JSON object")
     spec = {k: v for k, v in spec.items() if k != "variants"}      # (checked again, on hm40)
-    sp = RUN.checked({**spec, "exits": RUN.HM40, "filter_exits": RUN.HM40})
+    ex = RUN.HM60 if spec.get("exits") == RUN.HM60 else RUN.HM40          # hm40 = the default; hm60 = hm40 + fixed-point stops, when the spec asks
+    sp = RUN.checked({**spec, "exits": ex, "filter_exits": ex})
     blocks = RUN._blocks()
     if any(blocks.reads(f, blocks.L2_BLOCKS) for f in sp["filters"]):
         raise J.Refuse(f"{sp['name']}: Level 2 is not open on the 3:1 months yet")
@@ -86,7 +87,7 @@ def run_is(spec, workers=None, *, ledger=None, progress=None, block=None) -> dic
                          sp["family"], RUN._kw(sp["family"])), "stage": STAGE}]
     todo += [{**RUN.worse_part(sp, u["key"], s), "key": f"{u['key']}/{IS}-{s}-worse", "stage": WORSE} for s in sp["sessions"]]
     if str(tf) in l2ref.Random.SCREEN_TFS and root in S.MENU_STOP_PTS:
-        p = RUN.pool_part(root, tf, None, RUN.HM40)
+        p = RUN.pool_part(root, tf, None, sp["exits"])
         p["meta"]["note"] = f"10-seed random-entry pool on hm40's ATR cells, the 3:1 in-sample months {days[0]} .. {days[-1]}, all sessions"
         todo.append({**p, "key": f"{p['key']}/{IS}-{days[-1][:7]}", "stage": POOL})      # a new pool when the months grow
     for p in todo:
@@ -152,9 +153,10 @@ def _beats(x: dict, cell: dict, pool, sess, own: bool = False) -> tuple:
     """(the share of the pool's seeds -- the ATR cell of the box's multiplier and target, the box's sessions -- whose average trade is
     below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier. own = the pool is the
     box's own control (a taught sheet's: s<seed>_<box id>), held at the box's own cell."""
-    if pool is None or not len(x["net"]) or not own and cell["exit"]["stop_mode"] not in ("atr", "own"):
+    if pool is None or not len(x["net"]) or not own and cell["exit"]["stop_mode"] not in ("atr", "own", "pts"):
         return None, None
-    ex = None if own else {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}    # (a structure cell has no stop_val)
+    mode = "pts" if cell["exit"]["stop_mode"] == "pts" else "atr"       # a fixed-point box (hm60) is held against the same fixed-point cell
+    ex = None if own else {"stop_mode": mode, "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}    # (a structure cell has no stop_val)
     same = (lambda c: c["id"].split("_", 1)[1] == cell["id"]) if own else (lambda c: c["exit"] == ex)
     mine, avg = float(np.mean(x["net"])), []
     for i, c in enumerate(pool["meta"]["cells"]):
@@ -191,7 +193,7 @@ def is_table(name: str, store=None) -> list:
             for i, c in enumerate(w["meta"]["cells"]):
                 worse[c["id"]] = worse.get(c["id"], 0.0) + float(LB.unit_cell(w, i)["net"].sum())
     own = bool(m.get("taught"))                     # a taught sheet: its own random entries beside it (blueprint/taught_wf.py)
-    pd = home / f"{IS}-ctl" if own else RUNS / RUN.pool_key(root, tf, RUN.HM40) / f"{IS}-{days[-1][:7]}"
+    pd = home / f"{IS}-ctl" if own else RUNS / RUN.pool_key(root, tf, m.get("exits") or RUN.HM40) / f"{IS}-{days[-1][:7]}"
     pool = LB.load_unit(pd.name, pd.parent) if (pd / "cells.npz").exists() else None
     if pool is not None:
         RUN.guard_wf(pool["meta"], f"{pd.parent.name}/{pd.name}")
