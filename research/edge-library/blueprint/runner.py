@@ -66,6 +66,7 @@ from . import rules as R
 
 PERIOD = S.ALLOW_BP                                 # 'bp_build': the range's name AND the engine's switch for it
 RUNS = W / "runs_bp"                                # the stores of the blueprint ranges (the old stores stay where they are)
+RUNS_WF = W / "runs_wf"                             # the stores of the 3:1 walk-forward months (blueprint/hmwf.py)
 STAGE = {"unit": "bp_build", "pool": "null_bp"}     # ledger stages: a unit's cells are candidate cells, a pool's are not
 WORSE = "bp_build_worse"                            # ... and so are the cells of a worse-fills table (the freeze runs it: run_worse)
 LOCK = "runner.lock"                                # held while a run writes to a store folder (beside its runner.log)
@@ -134,6 +135,17 @@ def guard(meta: dict, where: str) -> dict:
     return meta
 
 
+def guard_wf(meta: dict, where: str) -> dict:
+    """THE SEAL on a store of the 3:1 in-sample months: written under the engine's in-sample switch, and every day it names lies in an
+    in-sample month of the market's blocks. A store that holds a day of a test month is refused: not skipped, not read."""
+    from . import wfmonths as WM
+    days, ms = meta.get("days") or [], WM.month_sets(str(meta.get("root") or "NQ"))[0]
+    bad = [d for d in days if str(d)[:7] not in ms]
+    if meta.get("period") != S.ALLOW_WF_IS or not days or bad:
+        raise J.Refuse(f"store {where} ({meta.get('period')!r}, {bad[0] if bad else 'no day'}): a 3:1 store holds in-sample days only")
+    return meta
+
+
 # ================================================================ what an idea asks for
 
 def _blocks():
@@ -160,10 +172,10 @@ def checked(spec) -> dict:
     except (RI.SpecError, RM.RegistryBroken) as e:
         raise J.Refuse(str(e)) from None
     blocks = _blocks()
-    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW)):
+    if (sp["exits"], sp["filter_exits"]) not in (("standard", "standard"), (EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40)):
         raise J.Refuse(f"{sp['name']}: a build runs the standard exit table (BLUEPRINT.md line 0.2), the owner's session-anchored table "
-                       f"(exits {OPEN!r}) or the family's own table (exits {OWN!r}, manual lane), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
-    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
+                       f"(exits {OPEN!r}), the family's own table (exits {OWN!r}, manual lane) or the 40-cell table (exits {HM40!r}, the 3:1 walk-forward: hmwf), not exits {sp['exits']!r} / {sp['filter_exits']!r}")
+    if (sp["exits"], sp["filter_exits"]) not in ((EXITS, EXITS), (OPEN, OPEN), (OWN, OWN), (OWN_LOW, OWN_LOW), (HM40, HM40)):               # the blueprint's standard table (a copy: the caller's spec stays as it was)
         sp = {**sp, "exits": EXITS, "filter_exits": EXITS}
     l2 = [f"{b} {s}" for fl in sp["filters"] for b, s in blocks.parts(fl) if b in blocks.L2_BLOCKS]
     if l2 and any(m != "NQ" for m in sp["markets"]):
@@ -179,6 +191,7 @@ def checked(spec) -> dict:
 EXITS = "blueprint"                                 # the engine's name of the blueprint's exit table (families/blocks.menu_blueprint: 48 cells)
 OWN_LOW = "own_low"                                 # the family's OWN stop x the small targets (orb830.LOW_TGT_R), manual lane, owner 2026-10-12
 OWN = "own"                                         # the family's OWN exit cells (its unit_exits; orb830.orb_close: the stop at the far side of the range x 6 targets): the manual lane's spec files
+HM40 = "hm40"                                       # the 40-cell table of the 3:1 walk-forward (families/blocks.menu_hm40; blueprint/hmwf.py, the owner 2026-10-20)
 OPEN = "open"                                       # the owner's session-anchored table (families/blocks.menu_open: 60 cells; fvg_first_nq, 2026-10-06)
 L2 = "bp_l2"                                        # a store's run option `features`: the Level-2 table of the build range (bpfeat.BpL2Features)
 L2T = "bt_l2"                                       # ... and of the test days (btfeat.BtL2Features: run_test turns the marker into the loader)
@@ -255,9 +268,9 @@ def _part(key, kind, root, tf, grid, sessions, cells, meta, family=None, kw=None
 
 
 def pool_key(root: str, tf, exits: str = EXITS) -> str:
-    """The store of a control pool: c1-NQ-tf5 for the standard table, c1o-NQ-tf5 for the session-anchored one (the same random
-    entries, the other exit cells)."""
-    return f"c1o-{root}-tf{tf}" if exits == OPEN else f"c1-{root}-tf{tf}"
+    """The store of a control pool: c1-NQ-tf5 for the standard table, c1o-NQ-tf5 for the session-anchored one, c1h-NQ-tf5 for the
+    ATR cells of hm40 (the same random entries, the other exit cells)."""
+    return {OPEN: "c1o", HM40: "c1h"}.get(exits, "c1") + f"-{root}-tf{tf}"
 
 
 def c1_grid(root: str, tf: str) -> list:
@@ -282,6 +295,15 @@ def c1_grid_open(root: str, tf: str) -> list:
             for sd in RM.NULL_SEEDS for k, x in enumerate(blocks.menu_open(root))]
 
 
+def c1_grid_hm40(root: str, tf: str) -> list:
+    """The control pool on hm40's 20 ATR cells (random entries carry no structure level: an own cell is held against the ATR cell of
+    the same multiplier and target), seeds as c1_grid_open."""
+    import l2ref
+    return [{"id": f"s{sd}_{S.cell_id(x)}", "variant": {"seed": sd}, "exit": x, "vi": sd - 1, "xi": k,
+             "spec": (l2ref.Random, {"tf": str(tf), "sess": "all", "p_entry": RM.C1_P_ENTRY, "seed": sd, **x})}
+            for sd in RM.NULL_SEEDS for k, x in enumerate(_blocks().menu_hm40(root, own=False))]
+
+
 def pool_part(root: str, tf, cells=None, exits: str = EXITS) -> dict:
     """THE CONTROL POOL of a market and bar size: l2ref.Random (p_entry 0.5) x the seeds of control.json x the 48 exit cells
     of the blueprint's table (c1_grid, seeded) -- or, for an idea on the session-anchored table, its 60 cells (c1_grid_open),
@@ -292,7 +314,7 @@ def pool_part(root: str, tf, cells=None, exits: str = EXITS) -> dict:
     seeds = list(range(1, R.template("control")["seeds"] + 1))
     meta = {"family": "random", "tf": str(tf), "control": "c1", "p_entry": RM.C1_P_ENTRY, "seeds": seeds, "sessions": list(RM.DAY_PASSES),
             "note": f"{len(seeds)}-seed random-entry pool of the build range, all sessions: the control of every idea at this market and bar size"}
-    grid = _seeded(c1_grid_open if exits == OPEN else c1_grid, seeds, root, str(tf))
+    grid = _seeded({OPEN: c1_grid_open, HM40: c1_grid_hm40}.get(exits, c1_grid), seeds, root, str(tf))
     return _part(pool_key(root, tf, exits), "pool", root, tf, grid, RM.DAY_PASSES, cells, meta)
 
 
@@ -443,14 +465,14 @@ def _grown(p: dict, m: dict, days) -> bool:
     return True
 
 
-def _stored(p: dict, out: Path, days=None) -> bool:
+def _stored(p: dict, out: Path, days=None, period: str = PERIOD) -> bool:
     """Is this store on disk with the same inputs? A store of other inputs, or one that is not inside the build days, is
     refused: it is never skipped as if it were the one asked for, and never written over. (A store of the same inputs that
     holds only part of the cells asked for is not "on disk": _grown.)"""
     f = out / p["key"] / "run.json"
     if not f.exists() or not (f.parent / "cells.npz").exists():
         return False
-    m = guard(json.loads(f.read_text()), _where(out, p["key"]))
+    m = (guard if period == PERIOD else guard_wf)(json.loads(f.read_text()), _where(out, p["key"]))
     if m.get("inputs_hash") != p["hash"] and _grown(p, m, days):
         return False                                # the table grew with the law: the store's cells stay, the missing ones are run (p["more"])
     if m.get("inputs_hash") != p["hash"]:
@@ -525,24 +547,38 @@ def _row(p: dict, out: Path, **more) -> dict:
             "path": str(out / p["key"]), "inputs_hash": p["hash"], **more}
 
 
-def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who) -> list:
-    if (days is not None or cells is not None) and (days is None or out_dir is None or ledger is None):
+def _months(days) -> list:
+    """Named days -> (first, last) of each month they hold: a range under a 3:1 switch holds one month's days at a time."""
+    by: dict = {}
+    for d in days:
+        by.setdefault(d[:7], []).append(d)
+    return [(v[0], v[-1]) for v in by.values()]
+
+
+def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who, period: str = PERIOD) -> list:
+    """period = PERIOD (the build range) or S.ALLOW_WF_IS: the 3:1 in-sample days, named (blueprint/hmwf.py; guard_wf on its stores)."""
+    wf = period != PERIOD
+    if wf and (period != S.ALLOW_WF_IS or not days or cells is not None):
+        raise J.Refuse("a 3:1 run takes the engine's in-sample switch and its named days (wfmonths.is_days), every cell")
+    if not wf and (days is not None or cells is not None) and (days is None or out_dir is None or ledger is None):
         raise J.Refuse("a run on named days (or on some exit cells only) is a smoke run: it takes named days, its own store folder and its own "
                        "ledger file, and never writes into runs_bp/ or ledger.csv")
     if workers is not None and not 1 <= int(workers) <= S.MAX_WORKERS:
         raise J.Refuse(f"workers {workers}: 1 .. {S.MAX_WORKERS}")
-    days = None if days is None else seal(days)
+    days = None if days is None else sorted({S._date(d).isoformat() for d in days}) if wf else seal(days)      # (3:1: the engine's switch checks each day)
     out = RUNS if out_dir is None else Path(out_dir)
     for p in todo:
-        p["hash"] = fingerprint(p, days)
-        p["have"] = _stored(p, out, days)
+        p["hash"] = fingerprint(p, days, period)
+        p["have"] = _stored(p, out, days, period)
     pend = [p for p in todo if not p["have"]]
     if pend:
         may_start()
-        for root in dict.fromkeys(p["root"] for p in pend if p["root"] != "NQ" and days is None):
-            miss = [d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD) if S.hb_tape_path(d, root) is None]
+        for root in dict.fromkeys(p["root"] for p in pend if p["root"] != "NQ" and (days is None or wf)):
+            miss = [d for d in days if S.hb_tape_path(d, root) is None] if wf else \
+                [d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD) if S.hb_tape_path(d, root) is None]
             if miss:
-                raise J.Refuse(f"{len(miss)} sessions of {root} on the build range have no tape yet (first {miss[0]}): build them first (engine/l2sim.py build_tapes)")
+                raise J.Refuse(f"{len(miss)} sessions of {root} {'in the 3:1 in-sample months' if wf else 'on the build range'} have no tape yet "
+                               f"(first {miss[0]}): build them first (engine/l2sim.py build_tapes)")
         cand = sum(p["cells"] if p.get("more") is None else len(p["more"]) for p in pend if p["kind"] != "pool")
         try:
             if cand:
@@ -560,24 +596,27 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
     out.mkdir(parents=True, exist_ok=True)
     say = _talk(out, progress)
     with _stores(out, [p["key"] for p in pend + unbooked], wait={p["key"] for p in pend + unbooked if p["kind"] == "pool"}, say=say):
-        for p in [p for p in pend if _stored(p, out, days)]:            # a pool another run wrote while this one waited for it
+        for p in [p for p in pend if _stored(p, out, days, period)]:            # a pool another run wrote while this one waited for it
             p["have"] = True
             rows[p["key"]] = _row(p, out, skipped=True, ok=True, trades=_trades(p["stored"]), code_same=p["stored"].get("code") == code(p["family"]))
         pend = [p for p in pend if not p["have"]]
         for p in unbooked:                          # a store without its ledger row (a run that died between the two): booked, not run again
-            _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out)
+            _book(p, len(p["stored"]["cells"]), _trades(p["stored"]), p["stored"].get("elapsed_s"), ledger, out, period=period)
         if pend:
             n = RM.auto_workers(default_workers() if workers is None else int(workers))
+            spans = _months(days) if wf else [PERIOD]                   # the ranges the caches below are opened for
             with _prep(out):                                            # the caches below are shared files: one run builds them at a time
-                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol")) and days is None):
+                for root in dict.fromkeys(p["root"] for p in pend if p["filter"] and _blocks().reads(p["filter"], ("volume", "rvol")) and (days is None or wf)):
                     S.wait_compute_window()                                 # the volume block's minute-volume cache, opened for the build range
-                    say(f"volume block {root}: {_blocks().build_minvol(root, PERIOD, n, allow_holdout=PERIOD)}")
+                    for rg in spans:
+                        say(f"volume block {root}: {_blocks().build_minvol(root, rg, n, allow_holdout=period)}")
                 for fam, root in dict.fromkeys((p["family"], p["root"]) for p in pend if p["family"] and getattr(_blocks().WRAPPED.get(p["family"]), "prepare", None)):
-                    for lo, hi in ([(None, None)] if days is None else [(dt.date.fromisoformat(d) - dt.timedelta(days=7), d) for d in days]):     # named days: each and the week before
-                        say(f"{fam} cache {root}: {prepare_family(fam, root, PERIOD if lo is None else (lo, hi), n, PERIOD)}")
+                    for rg in (spans if wf or days is None else [(dt.date.fromisoformat(d) - dt.timedelta(days=7), d) for d in days]):     # named days: each and the week before
+                        say(f"{fam} cache {root}: {prepare_family(fam, root, rg, n, period)}")
                 for root in dict.fromkeys(x for p in pend for x in bar_roots(p["root"], p["family"], p["filter"])):
                     S.wait_compute_window()                                 # the swing level's 5-minute bars, opened for the build range
-                    say(f"swing bars {root}: {_levels().build_bars_cache(root, PERIOD, n, allow_holdout=PERIOD)}")
+                    for rg in spans:
+                        say(f"swing bars {root}: {_levels().build_bars_cache(root, rg, n, allow_holdout=period)}")
             groups: dict = {}
             for p in pend:
                 groups.setdefault((p["root"], p["tf"], json.dumps(p["kw"], sort_keys=True)), []).append(p)
@@ -585,9 +624,9 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who)
                 t0 = time.monotonic()
                 head = f"{who}: pass {i} of {len(groups)}, {root} {tf}-minute bars ({' + '.join(p['key'] for p in group)}; {n} workers)"
                 say(head)
-                res = _pass(group, root, days, n, group[0]["kw"], block, lambda msg, head=head: say(f"{head}: {msg}"))
+                res = _pass(group, root, days, n, group[0]["kw"], block, lambda msg, head=head: say(f"{head}: {msg}"), period)
                 for p, r in zip(group, res):
-                    rows[p["key"]] = _record(p, r, days, out, ledger, say, n, time.monotonic() - t0)
+                    rows[p["key"]] = _record(p, r, days, out, ledger, say, n, time.monotonic() - t0, period)
     return [rows[p["key"]] for p in todo]
 
 
@@ -649,7 +688,7 @@ class _Cell:
         return {**self.n, **self.rows, "elapsed_s": round(self.n["elapsed_s"], 2), "meta": self.meta, "trades": t}
 
 
-def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say) -> list:
+def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say, period: str = PERIOD) -> list:
     """ONE TAPE PASS for the stores of one market and bar size: every instance of every cell of every part, block of days
     after block of days (module docstring). -> per part, one merged result per cell (run_menus.merge) with its trades
     packed. Instances that carry state from day to day would not stand a cut: such a pass is one block."""
@@ -658,12 +697,18 @@ def _pass(parts_: list, root: str, days, workers: int, kw: dict, block, say) -> 
         for one in (p["runs"] if p.get("more") is None else [p["runs"][i] for i in p["more"]]):      # (a store that grew: its missing cells only)
             specs += one
             cut.append(len(specs))
-    days = seal([d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD)] if days is None else days)     # the law's range, again
+    wf = period != PERIOD
+    if not wf:
+        days = seal([d.isoformat() for d in S.sessions(*S.period(PERIOD), root, allow_holdout=PERIOD)] if days is None else days)     # the law's range, again
     step = max(1, int(block or R.template("compute")["block_days"])) if all(getattr(c, "session_independent", False) for c, _ in specs) else len(days)
-    acc = [_Cell() for _ in cut[1:]]
+    span = (S._date(days[0]).toordinal(), S._date(days[-1]).toordinal()) if wf else ()
+    acc = [_Cell(*span) for _ in cut[1:]]
     for k in range(0, len(days), step):
         say(f"days {k + 1}-{min(k + step, len(days))} of {len(days)} ({len(specs)} instances)")
-        res = S.run_many(specs, period=PERIOD, days=days[k:k + step], root=root, workers=workers, **_engine(kw))
+        res = (S.run_many(specs, days=days[k:k + step], root=root, workers=workers, allow_holdout=period, **_engine(kw)) if wf else
+               S.run_many(specs, period=PERIOD, days=days[k:k + step], root=root, workers=workers, **_engine(kw)))
+        if wf and any(t["date"] not in named for named in [set(days[k:k + step])] for r in res for t in r["trades"]):
+            raise RuntimeError("the engine handed back a trade of a day that was not named: nothing is stored")
         for a, i, j in zip(acc, cut, cut[1:]):
             a.add(RM.merge(res[i:j]))
     out, k = [], 0
@@ -696,14 +741,14 @@ def _book(p: dict, cells: int, trades: int, elapsed, ledger, out: Path, stage=No
                   note=note or f"{_where(out, p['key'])}: {m.get('note') or ''}"[:200], path=ledger, caps=RI.CAPS)
 
 
-def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall: float) -> dict:
+def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall: float, period: str = PERIOD) -> dict:
     """A part's results -> its store and its ledger row. A pass that dropped a session by a strategy error writes NO store:
     an error row (a unit's cells still count), and the key stays to be run once the family is fixed."""
     n = sum(len(r["trades"]) for r in res)
     if sum(r["skipped_by_error"] for r in res):
         why = next(x["reason"] for r in res for x in r["no_trade"] if x["reason"].startswith(S.ERROR_PREFIX))
         say(f"ERROR {p['key']}: sessions dropped by a strategy error ({why}); no store written")
-        _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, _stage(p) + "_error", why[:200])
+        _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, _stage(p) + "_error", why[:200], period=period)
         return _row(p, out, skipped=False, ok=False, trades=n, error=why)
     stage = _stage(p)
     if p.get("more") is not None:                   # the table grew with the law: the store keeps its cells and gets the new ones
@@ -712,9 +757,9 @@ def _record(p: dict, res: list, days, out: Path, ledger, say, workers: int, wall
               f"{_where(out, p['key'])}: + {len(p['more'])} cells of the grown exit table (BLUEPRINT.md version 1.1); it held {was}")
         say(f"{stage} {p['key']}: + {len(p['more'])} cells ({was} -> {p['cells']}), {n:,} trades more, {res[0]['elapsed_s']} s of tape (wall {wall:.0f} s, {workers} workers)")
         return _row(p, out, skipped=False, ok=True, trades=n, code_same=p["stored"].get("code") == code(p["family"]), grown=len(p["more"]))
-    _write(p["key"], {**p["meta"], "stage": stage, "period": PERIOD, "run_kw": p["kw"], "hold_to": RM.HOLD, "inputs_hash": p["hash"],
+    _write(p["key"], {**p["meta"], "stage": stage, "period": period, "run_kw": p["kw"], "hold_to": RM.HOLD, "inputs_hash": p["hash"],
                       "code": code(p["family"]), **({"days": days} if days else {})}, p["grid"], res, out)
-    _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out)
+    _book(p, p["cells"], n, res[0]["elapsed_s"], ledger, out, period=period)
     say(f"{stage} {p['key']}: {p['cells']} cells, {n:,} trades, {res[0]['elapsed_s']} s of tape (wall {wall:.0f} s, {workers} workers)")
     return _row(p, out, skipped=False, ok=True, trades=n, code_same=True)
 
