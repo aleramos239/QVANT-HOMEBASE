@@ -28,6 +28,7 @@ from __future__ import annotations
 import datetime as dt
 import json
 import os
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -238,11 +239,14 @@ def _lock(home: Path):
 def pick(name: str, box, who: str = "owner", store=None) -> dict:
     """THE OWNER'S PICK = THE LOCK (module docstring): written once, before any test month is read. The same box again: the lock on file."""
     home = _home(name, store)
-    r = _row(name, home, box)
-    lock = {"box": r["box"], "settings": r["settings"], "code": RUN.code(_load(home)[1]["family"]),
+    r, m = _row(name, home, box), _load(home)[1]
+    _grid(m, home)                                  # a changed idea is refused before a lock is written for good
+    lock = {"box": r["box"], "settings": r["settings"], "code": RUN.code(m["family"]),
             "at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "who": who}
-    tmp = home / f"{LOCK}.{os.getpid()}.tmp"
-    tmp.write_text(json.dumps(lock, indent=1))
+    fd, tmp = tempfile.mkstemp(dir=home, prefix=f".{LOCK}.")
+    tmp = Path(tmp)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(json.dumps(lock, indent=1))
     try:
         os.link(tmp, home / LOCK)                   # one step, and never over a lock on file (two picks at once: one wins)
     except FileExistsError:
@@ -268,10 +272,19 @@ def _grid(m: dict, home: Path) -> list:
     return grid
 
 
+USED = "read used, no record (it stopped)"
+
+
+def _stopped(home: Path, box: str) -> str:
+    return f"the test months of box {box} of {home.name} are used: this read stopped and is not run again"
+
+
 def _oos(home: Path, rows: list):
-    """The out-of-sample record on file -> {"store", "record" (the in-sample table's columns), "blocks"} | None."""
+    """The out-of-sample record on file -> {"store", "record" (the in-sample table's columns), "blocks"}; a read that was claimed and
+    stopped before its store was written -> {"state": USED, "claim": its line in the one-read log}; nothing read -> None."""
     if not (home / OOS / "cells.npz").exists():
-        return None
+        claim = RD.wf_oos_on_file(home.name, (_lock(home) or {}).get("box"))
+        return {"state": USED, "claim": claim[-1]} if claim else None
     u, m = _load(home, OOS, S.ALLOW_WF_OOS)
     lock = _lock(home) or {}
     if [c["id"] for c in m["cells"]] != [lock.get("box")]:
@@ -290,9 +303,10 @@ def _oos(home: Path, rows: list):
     return {"store": str(home / OOS), "record": rec, "blocks": blocks}
 
 
-def run_oos(name: str, box, owner_said: str, workers=None, store=None, *, ledger=None, progress=None, block=None) -> dict:
+def run_oos(name: str, box, owner_said: str, workers=None, store=None, *, who: str = "owner", ledger=None, progress=None, block=None) -> dict:
     """THE OUT-OF-SAMPLE READ of the picked box, on the owner's word, once (module docstring) -> what show() gives as "oos".
-    THE ORDER: every refusal first (a dry run of the runner included); then the claim in the one-read log; only then a test day."""
+    THE ORDER: every refusal first (the runner's own included); then, with the store locked, the claim in the one-read log; only then a
+    test day. Anything that stops the run after the claim is refused as a used read (its cause chained): it is not run again."""
     home = _home(name, store)
     lock = _lock(home)
     if lock is None:
@@ -302,8 +316,10 @@ def run_oos(name: str, box, owner_said: str, workers=None, store=None, *, ledger
     r = _row(name, home, box)
     if r["box"] != lock["box"]:
         raise J.Refuse(f"{r['box']}: the picked box of {home.name} is {lock['box']}: only the picked box is run")
-    if (home / OOS).exists() or RD.wf_oos_on_file(home.name, r["box"]):
+    if (home / OOS).exists():
         raise J.Refuse(f"{home.name} box {r['box']}: its out-of-sample read is on file: it is shown (show), never run again")
+    if RD.wf_oos_on_file(home.name, r["box"]):
+        raise J.Refuse(_stopped(home, r["box"]) + " (show says so)")
     _, m = _load(home)
     have = {d[:7] for d in m["days"]}
     bl = [b for b in WM.blocks(m["root"]) if set(b["is"]) <= have]      # the blocks the box was picked on
@@ -314,13 +330,20 @@ def run_oos(name: str, box, owner_said: str, workers=None, store=None, *, ledger
     note = f"idea {m['idea']}: the picked box {r['box']} on the 3:1 test months ({bl[0]['oos']} .. {bl[-1]['oos']}), on the owner's word"
     todo = [{**RUN._part(f"{home.name}/{OOS}", "unit", m["root"], m["tf"], [cell], m["sessions"], None, {**m, "wf": OOS, "box": r["box"], "note": note},
                          m["family"], RUN._kw(m["family"])), "stage": S.ALLOW_WF_OOS}]
-    who = f"idea {m['idea']}, 3:1 test months of box {r['box']}"
-    RUN._run(todo, workers, home.parent, ledger, days, None, progress, block, True, who, S.ALLOW_WF_OOS)     # the refusals, nothing run
-    RD.claim_wf_oos(m["idea"], home.name, r["box"], rng={"start": days[0], "end": days[-1]}, who=lock["who"], owner_said=owner_said.strip(),
-                    code=RUN.code(m["family"]))
-    rows = RUN._run(todo, workers, home.parent, ledger, days, None, progress, block, False, who, S.ALLOW_WF_OOS)
+    claimed = []
+
+    def claim():
+        claimed.append(RD.claim_wf_oos(m["idea"], home.name, r["box"], rng={"start": days[0], "end": days[-1]}, who=who, owner_said=owner_said,
+                                       code=RUN.code(m["family"])))
+    try:
+        rows = RUN._run(todo, workers, home.parent, ledger, days, None, progress, block, False, f"idea {m['idea']}, 3:1 test months of box {r['box']}",
+                        S.ALLOW_WF_OOS, before=claim)
+    except Exception as e:
+        if claimed:
+            raise J.Refuse(f"{_stopped(home, r['box'])} ({type(e).__name__}: {e})") from e
+        raise                                       # refused before the claim: the read is not used
     if rows[0].get("ok") is False:
-        raise J.Refuse(f"{home.name}/{OOS}: sessions were dropped by a strategy error ({rows[0].get('error')}): no store was written; the read is on file")
+        raise J.Refuse(f"{_stopped(home, r['box'])} (sessions were dropped by a strategy error: {rows[0].get('error')}; no store was written)")
     return _oos(home, is_table(name, home))
 
 

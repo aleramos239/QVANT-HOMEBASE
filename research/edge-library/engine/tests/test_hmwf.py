@@ -211,14 +211,48 @@ def test_oos_claim_written_before_any_day(wf, monkeypatch):
         seen.append(len(_log()))
         raise RuntimeError("engine down")
     monkeypatch.setattr(S, "run_many", boom)
-    with pytest.raises(RuntimeError, match="engine down"):
-        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    with pytest.raises(J.Refuse, match="box ema1h0_atr1-r1 of hwt_sweep-NQ-tf15 are used: this read stopped and is not run again") as e:
+        H.run_oos("hwt_sweep", BOX, "  run it ", workers=1, ledger=wf["ledger"], who="the owner, in chat")
+    assert isinstance(e.value.__cause__, RuntimeError)                        # the crash, chained
     assert seen == [1]                                                        # the claim was on file when the first day was opened
     (line,) = _log()
-    assert line["box"] == BOX and line["state"] == "claimed" and line["owner_said"] == "run it"
-    with pytest.raises(J.Refuse, match="on file"):                            # a read that died is over: never run twice
+    assert line["box"] == BOX and line["state"] == "claimed" and line["owner_said"] == "  run it " and line["who"] == "the owner, in chat"
+    with pytest.raises(J.Refuse, match="stopped and is not run again"):       # a read that died is over: never run twice
         H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
     assert not (H.RUNS / "hwt_sweep-NQ-tf15" / "oos").exists()
+    assert H.show("hwt_sweep")["oos"] == {"state": "read used, no record (it stopped)", "claim": line}
+
+
+def test_oos_refused_by_the_runner_before_the_claim_is_not_used(wf, monkeypatch):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    H.pick("hwt_sweep", BOX)
+
+    def shut():
+        raise J.Refuse("nothing heavy starts now")
+    monkeypatch.setattr(RUN, "may_start", shut)
+    with pytest.raises(J.Refuse, match="nothing heavy"):
+        H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])
+    assert not _log() and not _oos_calls(wf) and H.show("hwt_sweep")["oos"] is None
+    monkeypatch.undo()                                                        # (the fixture's patches go too: set them again)
+    monkeypatch.setattr(WM, "_sessions", lambda root, today: (tuple(CAL), "2022-02-01"))
+    WM._sets.cache_clear()
+    monkeypatch.setattr(S, "run_many", _fake_run_many(wf["calls"]))
+    monkeypatch.setattr(H, "RUNS", wf["tmp"] / "runs_wf")
+    monkeypatch.setattr(RUN, "RUNS", wf["tmp"] / "runs_bp")
+    monkeypatch.setattr(RUN, "clock", lambda: dt.datetime(2026, 10, 3, 11, 0, tzinfo=S.ET))
+    monkeypatch.setenv("HOMEBASE_IDEAS_ROOT", str(wf["tmp"] / "ideas"))
+    assert H.run_oos("hwt_sweep", BOX, "run it", workers=1, ledger=wf["ledger"])["record"]["trades"] == 1      # later, on his word: it runs
+
+
+def test_pick_refuses_a_changed_idea(wf):
+    H.run_is(SPEC, workers=1, ledger=wf["ledger"])
+    f = H.RUNS / "hwt_sweep-NQ-tf15" / "is" / "run.json"
+    m = json.loads(f.read_text())
+    f.write_text(json.dumps({**m, "variants": m["variants"][:2]}))          # the idea as rebuilt no longer matches the store's fingerprint
+    with pytest.raises(J.Refuse, match="not the one its in-sample store was run from"):
+        H.pick("hwt_sweep", BOX)
+    assert not (H.RUNS / "hwt_sweep-NQ-tf15" / "lock.json").exists()
+    assert not [p for p in (H.RUNS / "hwt_sweep-NQ-tf15").iterdir() if "lock.json" in p.name]      # no temp file left
 
 
 def test_oos_runs_once(wf):
@@ -235,6 +269,7 @@ def test_oos_runs_once(wf):
     assert {dt.date.fromordinal(int(d)).strftime("%Y-%m") for d in u["date"]} == {"2022-01"}
     (line,) = _log()
     assert line["name"] == "hwt_sweep" and line["box"] == BOX and line["who"] == "owner" and line["store"] == "hwt_sweep-NQ-tf15"
+    assert line["owner_said"] == "run box 1"
     assert line["code"] == RUN.code("candle_sweep") and line["range"] == {"start": "2022-01-03", "end": "2022-01-03"}
     with pytest.raises(J.Refuse, match="on file"):
         H.run_oos("hwt_sweep", 1 + [x["box"] for x in H.is_table("hwt_sweep")].index(BOX), "again", workers=1, ledger=wf["ledger"])
@@ -255,3 +290,37 @@ def test_oos_one_month_a_call(wf, monkeypatch):
     assert sorted(d for c in calls for d in c["days"]) == ["2022-01-03", "2022-05-02"]
     assert all(len({d[:7] for d in c["days"]}) == 1 for c in calls)           # the engine's switch: one month a call
     assert [b["oos"] for b in r["blocks"]] == ["2022-01", "2022-05"] and r["record"]["trades"] == 2
+
+
+def test_cache_builders_open_one_test_month(wf, monkeypatch, tmp_path):
+    """The runner's caches (a family's prepare, the minute volume, the 5-minute bars) are built per month span under ALLOW_WF_OOS: one
+    test month opens, an in-sample month or two months do not. Synthetic tapes (file names only) and a fake loader: no tape is read."""
+    import families.round1 as R1
+    for d in ("2021-12-01", "2022-01-03"):
+        f = tmp_path / "tape" / "NQ" / d[:4] / d[5:7] / f"{d}.parquet"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.touch()
+    monkeypatch.setattr(S, "TAPE_DIR", tmp_path / "tape")
+    monkeypatch.setattr(S, "HB_TAPE", tmp_path / "hb")
+    opened = []
+
+    def load(d, root="NQ", allow_holdout=False, **kw):
+        S.check_holdout(d, allow_holdout, root)
+        opened.append(str(d))
+        return None
+    monkeypatch.setattr(S, "load_tape", load)
+    blocks, levels = RUN._blocks(), RUN._levels()
+    monkeypatch.setattr(blocks, "_mv_path", lambda root: tmp_path / "cache" / f"minvol_{root}.npz")
+    monkeypatch.setattr(levels, "_fm_path", lambda root, tf=5: tmp_path / "cache" / f"bars{tf}m_{root}.npz")
+    monkeypatch.setattr(R1, "_va_path", lambda root: tmp_path / "cache" / f"va70_{root}.json")
+    fam = next(f for f, c in blocks.WRAPPED.items() if getattr(c, "prepare", None) and c.prepare.__func__.__module__ in ("families.round1", "families.vabreak"))
+    month = ("2022-01-03", "2022-01-03")
+    build = [lambda rg: RUN.prepare_family(fam, "NQ", rg, 1, S.ALLOW_WF_OOS), lambda rg: blocks.build_minvol("NQ", rg, 1, allow_holdout=S.ALLOW_WF_OOS),
+             lambda rg: levels.build_bars_cache("NQ", rg, 1, allow_holdout=S.ALLOW_WF_OOS)]
+    for fn in build:
+        opened.clear()
+        fn(month)
+        assert opened == ["2022-01-03"]
+        for rg in (("2021-12-01", "2021-12-01"), ("2021-12-01", "2022-01-03")):           # an in-sample month / more than the test month
+            with pytest.raises(S.HoldoutSealed):
+                fn(rg)

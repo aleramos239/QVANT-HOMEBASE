@@ -560,9 +560,11 @@ def _months(days) -> list:
     return [(v[0], v[-1]) for v in by.values()]
 
 
-def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who, period: str = PERIOD) -> list:
+def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who, period: str = PERIOD, before=None) -> list:
     """period = PERIOD (the build range) or a 3:1 switch with its named days: S.ALLOW_WF_IS (the in-sample months) or S.ALLOW_WF_OOS (the
-    test months of a picked box, one month a call) (blueprint/hmwf.py; guard_wf on its stores)."""
+    test months of a picked box, one month a call) (blueprint/hmwf.py; guard_wf on its stores).
+    before(): called once every refusal has passed and the stores are locked, before any day is opened (hmwf.run_oos claims its read
+    there, so no check of the run can refuse after the claim)."""
     wf = period != PERIOD
     if wf and (period not in S.WF_SWITCHES or not days or cells is not None):
         raise J.Refuse("a 3:1 run takes one of the engine's 3:1 switches and its named days (wfmonths.is_days / oos_days), every cell")
@@ -602,6 +604,8 @@ def _run(todo, workers, out_dir, ledger, days, cells, progress, block, dry, who,
     out.mkdir(parents=True, exist_ok=True)
     say = _talk(out, progress)
     with _stores(out, [p["key"] for p in pend + unbooked], wait={p["key"] for p in pend + unbooked if p["kind"] == "pool"}, say=say):
+        if before is not None:
+            before()
         for p in [p for p in pend if _stored(p, out, days, period)]:            # a pool another run wrote while this one waited for it
             p["have"] = True
             rows[p["key"]] = _row(p, out, skipped=True, ok=True, trades=_trades(p["stored"]), code_same=p["stored"].get("code") == code(p["family"]))
