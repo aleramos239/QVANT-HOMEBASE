@@ -10,9 +10,10 @@ OOS on every route, taught lane and by-hand included"; 2026-10-20: every box fix
     bp.py taught wf-oos <name> <box> --owner-said=TEXT   the picked cell on the test months of its blocks, once, on his words (hmwf.run_oos:
                                                     claimed in the one-read log before a day is opened)
 
-The store: <taught root>/<name>/wf_blocks/<name>__taught-<ROOT>-tf<tf>/{is, lock.json, oos} (a folder name no hm40 idea has: the one-read
-log keys a read by it). The lock, the read and the table are hmwf's own; the beats-random column is empty (hm40's random pool holds ATR
-stops, not the sheet's control).
+The store: <taught root>/<name>/wf_blocks/<name>__taught-<ROOT>-tf<tf>/{is, is-<session>-worse, is-ctl, lock.json, oos} (a folder name no
+hm40 idea has: the one-read log keys a read by it). Beside the cells, on the same in-sample days: the same cells with worse fills (one store a
+session) and the sheet's own random entries (is-ctl: each cell is held against s<seed>_<its id>). The lock, the read and the table are
+hmwf's own. The build days were read by `taught run` (every cell): the table says so (`seen`), its test months inside them are not blind.
 
 A sheet whose OLD walk-forward (2026-10-19, wf/: the middle cell re-picked per block on the test days) is on file is shown, never run
 again: its test months are already seen. `wf-each` reads that old walk-forward only."""
@@ -33,6 +34,7 @@ from . import hmwf as H
 from . import pipe_gates as G
 from . import pipe_rules as PR
 from . import pipe_wf as WF
+from . import rules as R
 from . import runner as RUN
 from . import tables as T
 from . import taught as TA
@@ -122,10 +124,15 @@ def _sheet(name: str, root):
     return base, plan
 
 
+OLD_SHOWN = "This is the old walk-forward: its test months are already seen. A new 3:1 run is a new sheet name."
+
+
 def home(name: str, root=None, have: bool = False) -> Path:
-    """The folder of the sheet's 3:1 stores (have: refused when its in-sample run is not on file)."""
+    """The folder of the sheet's 3:1 stores (have: refused when an old walk-forward is on file, or the in-sample run is not)."""
     base, plan = _sheet(name, root)
     h = base / "wf_blocks" / f"{name}__taught-{plan['market']}-tf{plan['bars'][0]}"
+    if have and _old(base, name) is not None:
+        raise J.Refuse(f"{name}: {OLD_SHOWN} (bp.py taught wf-show {name} shows it)")
     if have and not (h / H.IS / "run.json").exists():
         raise J.Refuse(f"{name}: no 3:1 in-sample run on file: bp.py taught wf {name} --owner-said=... first (only on the owner's words)")
     return h
@@ -142,37 +149,76 @@ def _old(base: Path, name: str):
     return None
 
 
+def _built(base: Path):
+    """The day `taught run` read every cell on the build days (its full result), or None."""
+    doc = json.loads((base / "result.json").read_text())
+    return None if doc.get("smoke") else str(doc.get("utc") or "")[:10] or "on file"
+
+
 def show(name: str, root=None, command: str = "taught wf-show") -> dict:
-    """The in-sample table, the pick, the test months if read (hmwf.show on the sheet's store). Runs nothing."""
+    """The in-sample table, the pick, the test months if read (hmwf.show on the sheet's store). Runs nothing. An old walk-forward on file
+    is shown as it is."""
+    base, _ = _sheet(name, root)
+    doc = _old(base, name)
+    if doc is not None:
+        return api.result(command, name, status="on file", result=doc, text=doc["text"] + "\n" + OLD_SHOWN)
     s = H.show(name, store=home(name, root, have=True))
-    r = api.result(command, name, wf=s, text=api._wf_text(name, s))
+    text, day = api._wf_text(name, s), _built(base)
+    if day:                                         # the build days were read, all cells, by taught run: their months are not blind
+        seen = f"build days read by taught run {day}"
+        for x in s["is"] + ([s["oos"]["record"]] if s["oos"] and s["oos"].get("record") else []):
+            x["seen"] = "; ".join(v for v in (x.get("seen"), seen) if v)
+        b = R.template("ranges")["build"]
+        text += (f"\nSEEN: taught run read every cell on the build days {b['start']} .. {b['end']} ({day}): the test months inside them "
+                 "are not blind.")
+    r = api.result(command, name, wf=s, text=text)
     r["next"] = (f"The owner picks a cell by its number: bp.py taught wf-pick {name} <n>." if s["lock"] is None else
                  f"The test months run only when the owner says so: bp.py taught wf-oos {name} {s['lock']['box']} --owner-said=\"...\"."
                  if s["oos"] is None else "")
     return r
 
 
+def _parts(base: Path, plan: dict, h: Path, days: list) -> list:
+    """The in-sample stores: every cell of the sheet; the same cells with worse fills, one store a session; the sheet's own random
+    entries (its control: the same exit cells and passes; a structure stop takes the median stop size of the build-day store)."""
+    name, market, tf = plan["name"], plan["market"], plan["bars"][0]
+    span = f"the 3:1 in-sample months ({days[0]} .. {days[-1]})"
+    u = TA._unit_part(plan, tf)
+    out = [{**u, "key": f"{h.name}/{H.IS}", "stage": H.STAGE, "meta": {**u["meta"], "root": market, "plan": plan, "wf": H.IS,
+                                                                       "note": f"taught rule {name}: every cell of the sheet on {span}"}}]
+    two = bool(TA._blocks().BASES[plan["family"]][2])
+    for ss in plan["sessions"]:
+        meta = {**out[0]["meta"], "sessions": [ss], "sess_instance": ss, "worse": RUN.worse_kw(two),
+                "note": f"taught rule {name}: session {ss} with worse fills ({RUN.worse_words(RUN.worse_kw(two))}) on {span}"}
+        out.append({**RUN._part(f"{h.name}/{H.IS}-{ss}-worse", "worse", market, tf, u["grid"], [ss], None, meta, plan["family"],
+                                {**RUN._kw(plan["family"]), **RUN.worse_kw(two)}), "stage": H.WORSE})
+    stop = None
+    if plan["struct"]:
+        stop = TA._median_stop(T._open(base / "runs", TA._unit_key(name, market, tf))[0], plan)     # a size, as the build's control took it
+    if stop or not plan["struct"]:
+        c = TA._control_part(plan, tf, "both", stop)
+        out.append({**c, "key": f"{h.name}/{H.IS}-ctl", "stage": H.POOL, "meta": {**c["meta"], "root": market, "note": c["meta"]["note"] + f", on {span}"}})
+    return out
+
+
 def run(name: str, root=None, workers=None, owner_said=None, *, progress=None) -> dict:
-    """`bp.py taught wf <name> --owner-said=...`: every cell of the sheet fixed on the 3:1 in-sample months (module docstring), then the
-    table. A rerun does no work (the runner's fingerprint); an old walk-forward on file is shown instead."""
+    """`bp.py taught wf <name> --owner-said=...`: every cell of the sheet fixed on the 3:1 in-sample months (module docstring), with its
+    worse fills and its own random entries, then the table. A rerun does no work (the runner's fingerprint); an old walk-forward on file
+    is shown instead."""
     base, plan = _sheet(name, root)
-    doc = _old(base, name)
-    if doc is not None:
-        return api.result(WF_, name, status="on file", result=doc,
-                          text=doc["text"] + "\nThis is the old walk-forward: its test months are already seen. A new 3:1 run is a new sheet name.")
+    if _old(base, name) is not None:
+        return show(name, root, WF_)
     said = api._said(owner_said)
-    market, tf = plan["market"], plan["bars"][0]
-    days = WM.is_days(market)
+    days = WM.is_days(plan["market"])
     if not days:
-        raise J.Refuse(f"{market}: no in-sample month of the 3:1 blocks yet")
+        raise J.Refuse(f"{plan['market']}: no in-sample month of the 3:1 blocks yet")
     h = home(name, root)
-    p = TA._unit_part(plan, tf)
-    note = f"taught rule {name}: every cell of the sheet on the 3:1 in-sample months ({days[0]} .. {days[-1]})"
-    p = {**p, "key": f"{h.name}/{H.IS}", "stage": H.STAGE, "meta": {**p["meta"], "root": market, "plan": plan, "wf": H.IS, "note": note}}
+    todo = _parts(base, plan, h, days)
     h.mkdir(parents=True, exist_ok=True)            # (the runner's lock files sit beside each store)
-    rows = RUN._run([p], workers, h.parent, base / "ledger.csv", days, None, progress, None, False, f"taught {name}, 3:1 in-sample", S.ALLOW_WF_IS)
-    if rows[0].get("ok") is False:
-        raise J.Refuse(f"{name}: sessions were dropped by a strategy error ({rows[0].get('error')}): no store was written")
+    rows = RUN._run(todo, workers, h.parent, base / "ledger.csv", days, None, progress, None, False, f"taught {name}, 3:1 in-sample", S.ALLOW_WF_IS)
+    bad = [r for r in rows if r.get("ok") is False]
+    if bad:
+        raise J.Refuse(f"{bad[0]['key']}: sessions were dropped by a strategy error ({bad[0].get('error')}): no store was written")
     return {**show(name, root, WF_), "owner_said": said}
 
 

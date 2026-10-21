@@ -308,7 +308,7 @@ def _usd(v) -> str:
 def _wf_text(name: str, s: dict) -> str:
     """The in-sample table (one row a box), the pick, the test months: short, for a person."""
     rows, lock, oos = s["is"], s["lock"], s["oos"]
-    out = [f"3:1 IN-SAMPLE TABLE of {name}: {len(rows)} boxes, run fixed on the in-sample months only (no test month is run). Best win rate first.",
+    out = [f"3:1 IN-SAMPLE TABLE of {name}: {len(rows)} boxes, run fixed on the in-sample months only (this run opened no test month). Best win rate first.",
            "   n  box                          win    b/e  trades       net    pf  beats random"]
     for r in rows:
         pf = "-" if r["pf"] is None else f"{r['pf']:.2f}"

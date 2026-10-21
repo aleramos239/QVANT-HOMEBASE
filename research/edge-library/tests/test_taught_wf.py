@@ -44,7 +44,8 @@ NAME, CENTRE = SHEET["name"], "pts80-r0p5"
 
 def _fake_run_many(calls):
     def run_many(specs, *a, days=None, root="NQ", allow_holdout=False, **kw):
-        calls.append({"days": list(days or []), "allow_holdout": allow_holdout, "inputs": [dict(p) for _, p in specs]})
+        calls.append({"days": list(days or []), "allow_holdout": allow_holdout, "inputs": [dict(p) for _, p in specs],
+                      "cls": {c.__name__ for c, _ in specs}, "worse": "slip_ticks" in kw})
         out = []
         for cls, p in specs:
             trades = []
@@ -79,7 +80,7 @@ def wf(monkeypatch, tmp_path):
     plan, bad = TA._plan(SHEET)
     assert plan and not bad, bad
     (root / NAME).mkdir(parents=True)
-    (root / NAME / "result.json").write_text(json.dumps({"plan": plan}))   # the sheet's build-day run on file (only its plan is read)
+    (root / NAME / "result.json").write_text(json.dumps({"plan": plan, "utc": "2026-10-19T10:00:00+00:00"}))   # the sheet's build-day run on file
     yield {"calls": calls, "root": root, "plan": plan}
     WM._sets.cache_clear()
 
@@ -115,8 +116,8 @@ def test_taught_wf_runs_each_cell_fixed(wf):
     # every engine call: the in-sample switch, in-sample days only; each cell keeps ONE set of inputs over every block
     assert wf["calls"] and all(c["allow_holdout"] == S.ALLOW_WF_IS and set(c["days"]) <= set(IS_DAYS) for c in wf["calls"])
     ran: dict = {}
-    for c in wf["calls"]:
-        for p in c["inputs"]:
+    for c in (c for c in wf["calls"] if not c["worse"]):
+        for p in (p for p in c["inputs"] if "p_entry" not in p):                # the cells themselves (not the random entries)
             ran.setdefault(json.dumps({k: v for k, v in p.items() if k != "sess"}, sort_keys=True), set()).update(c["days"])
     assert len(ran) == 9 and all(d == set(IS_DAYS) for d in ran.values())   # 9 input sets, each on every in-sample day
     for e in wf["plan"]["engine"]["5"]:                                      # ... each one the sheet's own cell
@@ -125,7 +126,16 @@ def test_taught_wf_runs_each_cell_fixed(wf):
     # the table the owner picks from: one row a cell, no pick, no test month
     assert r["command"] == "taught wf" and r["owner_said"] == "run the taught sheet on the blocks"
     assert sorted(x["box"] for x in r["wf"]["is"]) == sorted(ids) and r["wf"]["lock"] is None and r["wf"]["oos"] is None
-    assert all(x["beats_random"] is None for x in r["wf"]["is"])             # hm40's random pool is not the sheet's control
+    # its worse fills and its own random entries ran beside it, on the same in-sample days (design 4.7)
+    for sub in [f"is-{s}-worse" for s in SHEET["sessions"]] + ["is-ctl"]:
+        m = LB.load_unit(sub, home)["meta"]
+        assert m["period"] == S.ALLOW_WF_IS and m["days"] == IS_DAYS, sub
+    assert any(c["worse"] for c in wf["calls"]) and any("Random" in c["cls"] for c in wf["calls"])
+    for x in r["wf"]["is"]:
+        assert x["worse_fills_net"] is not None and x["beats_random"] is not None and x["random_vs"] == x["box"], x
+    # the build days were read by taught run: the months are said to be seen
+    assert all(x["seen"] == "build days read by taught run 2026-10-19" for x in r["wf"]["is"])
+    assert "SEEN: taught run read every cell on the build days 2021-09-22 .. 2025-06-30" in r["text"] and "opened no test month" in r["text"]
     assert "pick" in r["next"] and not _oos_calls(wf)
     n = len(wf["calls"])
     again = W.run(NAME, wf["root"], workers=1, owner_said="again")         # a rerun does no work
@@ -171,6 +181,10 @@ def test_an_old_walk_forward_on_file_is_shown_never_run(wf):
     r = W.run(NAME, wf["root"], workers=1)                                   # shown: no words needed, nothing runs
     assert r["status"] == "on file" and r["text"].startswith("the old walk-forward") and "already seen" in r["text"]
     assert not wf["calls"] and not W.home(NAME, wf["root"]).exists()
+    s = W.show(NAME, wf["root"])                                              # wf-show: the old result, not "run taught wf"
+    assert s["status"] == "on file" and W.OLD_SHOWN in s["text"] and "--owner-said" not in s["text"]
+    with pytest.raises(J.Refuse, match="old walk-forward"):
+        W.pick(NAME, CENTRE, wf["root"])
     (old / "result.json").unlink()
     (old / "claim.json").write_text(json.dumps({"utc": "2026-10-19T12:00:00+00:00"}))   # an old read that stopped: its months are seen too
     with pytest.raises(J.Refuse, match="already seen"):

@@ -21,6 +21,7 @@ import numpy as np
 HERE = Path(__file__).resolve().parent
 sys.path[:0] = [str(HERE.parent), str(HERE.parent / "engine")]
 
+import l2sim as S  # noqa: E402
 import library as LB  # noqa: E402
 
 REASON = {0: "stop", 1: "target", 2: "flat at end of day"}
@@ -42,9 +43,9 @@ def tgt_label(t) -> str:
 def days_label(m) -> str:
     """The days a store holds, in words: its own 3:1 months, else the build days (an old store)."""
     d = m.get("days") or []
-    if m.get("period") == "wf_is" and d:
+    if m.get("period") == S.ALLOW_WF_IS and d:
         return f"the 3:1 in-sample months {d[0][:7]} .. {d[-1][:7]} &middot; test months not read"
-    if m.get("period") == "wf_oos" and d:
+    if m.get("period") == S.ALLOW_WF_OOS and d:
         return f"the 3:1 test months {d[0][:7]} .. {d[-1][:7]} of the picked box"
     return "build days 2021-09-22 to 2025-06-30 &middot; test days not read"
 

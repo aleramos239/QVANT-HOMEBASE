@@ -148,20 +148,22 @@ def _seen(name: str):
     return "; ".join(out) or None
 
 
-def _beats(x: dict, cell: dict, pool, sess) -> tuple:
+def _beats(x: dict, cell: dict, pool, sess, own: bool = False) -> tuple:
     """(the share of the pool's seeds -- the ATR cell of the box's multiplier and target, the box's sessions -- whose average trade is
-    below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier."""
+    below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier. own = the pool is the
+    box's own control (a taught sheet's: s<seed>_<box id>), held at the box's own cell."""
     ex = {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}
-    if pool is None or not len(x["net"]) or cell["exit"]["stop_mode"] not in ("atr", "own"):     # (a taught sheet's points stop: not hm40's pool)
+    if pool is None or not len(x["net"]) or not own and cell["exit"]["stop_mode"] not in ("atr", "own"):
         return None, None
+    same = (lambda c: c["id"].split("_", 1)[1] == cell["id"]) if own else (lambda c: c["exit"] == ex)
     mine, avg = float(np.mean(x["net"])), []
     for i, c in enumerate(pool["meta"]["cells"]):
-        if c["exit"] == ex:
+        if same(c):
             y = LB.unit_cell(pool, i)
             t = y["net"][np.isin(y["sess"], sess)]
             if len(t):
                 avg.append(float(t.mean()))
-    return (sum(a < mine for a in avg) / len(avg), S.cell_id(ex)) if avg else (None, None)
+    return (sum(a < mine for a in avg) / len(avg), cell["id"] if own else S.cell_id(ex)) if avg else (None, None)
 
 
 def _load(home: Path, sub: str = IS, period: str = S.ALLOW_WF_IS):
@@ -188,14 +190,15 @@ def is_table(name: str, store=None) -> list:
             RUN.guard_wf(w["meta"], f"{home.name}/{d.name}")
             for i, c in enumerate(w["meta"]["cells"]):
                 worse[c["id"]] = worse.get(c["id"], 0.0) + float(LB.unit_cell(w, i)["net"].sum())
-    pd = RUNS / RUN.pool_key(root, tf, RUN.HM40) / f"{IS}-{days[-1][:7]}"
+    own = bool(m.get("taught"))                     # a taught sheet: its own random entries beside it (blueprint/taught_wf.py)
+    pd = home / f"{IS}-ctl" if own else RUNS / RUN.pool_key(root, tf, RUN.HM40) / f"{IS}-{days[-1][:7]}"
     pool = LB.load_unit(pd.name, pd.parent) if (pd / "cells.npz").exists() else None
     if pool is not None:
         RUN.guard_wf(pool["meta"], f"{pd.parent.name}/{pd.name}")
     sess, seen, rows = [LB.SESS7.index(s) for s in m["sessions"]], _seen(m["idea"]), []
     for i, c in enumerate(m["cells"]):
         x = LB.unit_cell(u, i)
-        beats, vs = _beats(x, c, pool, sess)
+        beats, vs = _beats(x, c, pool, sess, own)
         rows.append({"box": c["id"], "settings": {**c["variant"], **c["exit"]}, **numbers(x, days),
                      "worse_fills_net": round(worse[c["id"]], 2) if c["id"] in worse else None, "beats_random": beats, "random_vs": vs, "seen": seen})
     rows.sort(key=lambda r: (r["win_rate"] is None, -(r["win_rate"] or 0.0)))

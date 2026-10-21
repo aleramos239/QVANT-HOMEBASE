@@ -7,6 +7,8 @@ store of the build days keeps its old label. Hand-made stores in tmp_path, no ta
 from __future__ import annotations
 
 import datetime as dt
+import json
+import os
 import sys
 from pathlib import Path
 
@@ -18,6 +20,8 @@ import library as LB  # noqa: E402
 from blueprint import runner as RUN  # noqa: E402
 
 import heatmap as HM  # noqa: E402
+import test_read as TR  # noqa: E402
+from blueprint import api  # noqa: E402
 
 
 def _store(home: Path, period: str, days: list, exits: list) -> Path:
@@ -44,3 +48,18 @@ def test_manual_lane_default_exits_hm40(tmp_path):
     old = _store(tmp_path / "old-NQ-tf5", RUN.PERIOD, ["2022-03-15"], [{"stop_mode": "pts", "stop_val": 20.0, "tgt_r": 0.0}])
     assert HM.main([str(out), str(old)]) == 0
     assert "build days 2021-09-22 to 2025-06-30" in out.read_text()        # an old store keeps its old label
+
+
+def test_manual_test_read_refuses_a_new_spec_before_the_claim(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("HOMEBASE_IDEAS_ROOT", str(tmp_path / "ideas"))
+    monkeypatch.delenv("HOMEBASE_OLD_ROUTE_END", raising=False)
+    spec = HERE / "manual_lane" / "specs" / "orb830_range_stop.json"
+    f = tmp_path / "spec.json"
+    f.write_text(spec.read_text())
+    late = dt.datetime(2026, 10, 22, 12, tzinfo=dt.timezone.utc).timestamp()
+    os.utime(f, (late, late))                                               # a spec of 2026-10-22: the 3:1 route
+    calls = []
+    monkeypatch.setattr(RUN, "run_test", lambda *a, **k: calls.append(a))
+    rc = TR.main([str(f), str(tmp_path / "out"), "--name", "my_manual", "--confirm"])
+    assert rc == 2 and "new ideas use the 3:1 walk-forward" in capsys.readouterr().out
+    assert not calls and not api.ideastore().reads() and not (tmp_path / "out").exists()    # no claim, nothing opened
