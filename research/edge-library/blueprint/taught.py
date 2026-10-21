@@ -10,6 +10,9 @@ target, its own cap, and a small neighbourhood so that fragility shows. No heat 
     bp.py taught show <name> [--root=DIR]            the last result again
     bp.py taught list [--root=DIR]                   one row a sheet on file
     bp.py taught lab <name> [--root=DIR] [--workers=N]   the taught cell of the full run on the tester page (Show on chart)
+    bp.py taught wf <name> --owner-said=TEXT         OUT-OF-SAMPLE = the 3:1 walk-forward in blocks (taught_wf.py, the owner 2026-10-20):
+                                                     every cell above run FIXED on the in-sample months; the owner picks a cell
+                                                     (wf-pick); its test months run once, on his words (wf-oos)
     root = --root, else HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught.  <root>/<name>/{sheet.json, runs/, ledger.csv, runner.log,
     result.json}; a run on named days (--days) is a SMOKE RUN: <root>/<name>/smoke/ and never a verdict.
 
@@ -43,7 +46,7 @@ WHAT RUNS (every number is the sheet's own; the lane adds none)
              P4.2 -- each as the pipeline words it. Build days only (2021-09-22 .. 2025-06-30): the seal is the runner's.
 
 HONEST LIMITS (printed with every result): one video's rule; in-sample (the build days); the family's settings are the video's
-own and nothing was tuned; the neighbours are for fragility, never to pick from; the unseen days are not read (a person asks, once).
+own and nothing was tuned; the neighbours are for fragility, never to pick from here; the test months are read only by the 3:1 walk-forward, on the owner's word.
 
 THE PASS IS NOT THE DAY. The engine runs each session pass as its own instance (hold_to day: one session per instance). A cap
 (`max_trades`) and a family's own loss stop (vwap_trend_pull's max_loss) count inside ONE pass. With several passes in `sessions`
@@ -103,7 +106,7 @@ STEADY = ("P3.8", "P3.9", "P3.10")                  # the rows of how steadily t
 LIMITS = ("One video's rule, read on the build days (2021-09-22 .. 2025-06-30): in-sample.",
           "The family's settings and the exits are the video's own: nothing was tuned, searched or picked.",
           "The neighbours are shown to see how fragile the rule is; they are not alternatives to choose from.",
-          "The unseen days (2025-07-01 on) were not read: a person has to ask for that, and it is read once.",
+          "No test month was read: the out-of-sample check is the 3:1 walk-forward (bp.py taught wf), its test months only on the owner's word.",
           "The random entries are the pipeline's own (any bar of the session pass, matched by day and pass): they do not wait for the "
           "family's entry window.")
 
@@ -1041,7 +1044,7 @@ def run(sheet, root=None, workers=None, days=None, progress=None, draws=None) ->
     _write(base / "result.json", doc)
     lines = [{**r, "bar": tf} for tf, b in bars.items() for r in b["lines"]]
     return api.result(RUN_, name, status="smoke" if named else "done", lines=_clean(lines), text=text, saved=[str(base / "result.json")], result=doc, dry_run=bool(named),
-                      next="This is the rule as taught, in-sample. The unseen days are read once, and only when a person asks for it.")
+                      next="This is the rule as taught, in-sample. Out-of-sample = the 3:1 walk-forward: bp.py taught wf, only on the owner's words.")
 
 
 # ================================================================ show, list

@@ -152,7 +152,7 @@ def _beats(x: dict, cell: dict, pool, sess) -> tuple:
     """(the share of the pool's seeds -- the ATR cell of the box's multiplier and target, the box's sessions -- whose average trade is
     below the box's, the id of that ATR cell): an own-stop box is compared with the ATR cell of its own multiplier."""
     ex = {"stop_mode": "atr", "stop_val": cell["exit"]["stop_val"], "tgt_r": cell["exit"]["tgt_r"]}
-    if pool is None or not len(x["net"]):
+    if pool is None or not len(x["net"]) or cell["exit"]["stop_mode"] not in ("atr", "own"):     # (a taught sheet's points stop: not hm40's pool)
         return None, None
     mine, avg = float(np.mean(x["net"])), []
     for i, c in enumerate(pool["meta"]["cells"]):
@@ -262,9 +262,13 @@ def pick(name: str, box, who: str = "owner", store=None) -> dict:
 def _grid(m: dict, home: Path) -> list:
     """The in-sample store's grid, rebuilt from its run.json -- and proved the same by the store's own fingerprint."""
     root, tf = m["root"], m["tf"]
-    sp = {"name": m["idea"], "family": m["family"], "markets": [root], "bar_sizes": [tf], "filters": [], "exits": m["exits"],
-          "filter_exits": m["exits"], "fixed": m["fixed"], "limits": m["limits"], "variants": m["variants"]}
-    grid = RI.spec_units(sp)[0]["grid"]
+    if m.get("taught"):                             # a taught sheet's own cells (blueprint/taught_wf.py), from the plan in its store
+        from . import taught as TA
+        grid = TA._unit_part(m["plan"], tf)["grid"]
+    else:
+        sp = {"name": m["idea"], "family": m["family"], "markets": [root], "bar_sizes": [tf], "filters": [], "exits": m["exits"],
+              "filter_exits": m["exits"], "fixed": m["fixed"], "limits": m["limits"], "variants": m["variants"]}
+        grid = RI.spec_units(sp)[0]["grid"]
     p = RUN._part(f"{home.name}/{IS}", "unit", root, tf, grid, m["sessions"], None, m, m["family"], RUN._kw(m["family"]))
     if RUN.fingerprint(p, m["days"], S.ALLOW_WF_IS) != m.get("inputs_hash"):
         raise J.Refuse(f"{home.name}: the idea's table is not the one its in-sample store was run from (the code or the settings changed): "

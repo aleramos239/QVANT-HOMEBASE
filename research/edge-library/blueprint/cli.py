@@ -128,6 +128,9 @@ and --json out.
                                                                              nothing; `run` is the build days only (--days = a smoke
                                                                              run, never a verdict). --root = the TAUGHT folder
                                                                              (HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)
+  bp.py taught wf <name> --owner-said=TEXT [--workers=N]                   the sheet's 3:1 walk-forward (taught_wf.py): every cell fixed on
+  bp.py taught wf-show <name> | wf-pick <name> <box>                         the in-sample months; the owner picks a cell; wf-oos runs its
+  bp.py taught wf-oos <name> <box> --owner-said=TEXT [--workers=N]           test months once, on his words
   bp.py wf run <spec|-|name> --owner-said=TEXT [--workers=N] [--wait=S]  THE 3:1 WALK-FORWARD, the default of a NEW idea (hmwf.py, the owner
   bp.py wf show <name>                                                       2026-10-20): `run` = every box of the hm40 heat map run fixed on the
   bp.py wf pick <name> <box>                                                 in-sample months of the 3:1 blocks, then the in-sample table (a spec
@@ -268,21 +271,29 @@ def _parser() -> _Parser:
         ("executions", "an idea's picked box as a finished run of the tester page, so Show-on-chart opens every entry and exit (written once)"),
         ("_loop", None))}      # _loop: the detached child of `pipe start`, the runner itself
     tp = add("taught", "the taught lane: a video's rule run exactly as taught -- its own stop, target and cap, nine cells, the honest controls (--root here = the TAUGHT folder)")
-    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf,wf-each}")
+    ts = tp.add_subparsers(dest="sub", required=True, metavar="{check,run,show,list,lab,wf,wf-show,wf-pick,wf-oos,wf-each}")
     taught = {name: ts.add_parser(name, allow_abbrev=False, help=text) for name, text in (
         ("check", "validate a rule sheet and print what will run beside what was taught (runs nothing)"),
         ("run", "run the sheet on the build days (--days = a smoke run on named days, never a verdict)"),
         ("show", "the last result of a sheet again"), ("list", "one row a sheet on file"),
         ("lab", "the taught cell of a full run as a finished run of the tester page, to step through its trades (checked against the store)"),
-        ("wf", "the 3:1 walk-forward in blocks over all months, test days included (taught_wf.py; once a sheet: claimed before the read)"),
-        ("wf-each", "every cell of a walk-forward alone on its test months: always traded, and its own walk (taught_wf.each)"))}
+        ("wf", "every cell of the sheet fixed on the 3:1 in-sample months, then the table (only on the owner's words)"),
+        ("wf-show", "the sheet's 3:1 table, the pick, the test months if read (runs nothing)"),
+        ("wf-pick", "the owner's cell: written once, never changed"),
+        ("wf-oos", "the test months of the picked cell, once (only on the owner's words)"),
+        ("wf-each", "an OLD walk-forward's cells alone on its test months (taught_wf.each)"))}
     taught["check"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, or - for stdin")
     taught["run"].add_argument("sheet", metavar="SHEET", help="the rule sheet: a JSON file, - for stdin, or the name of a sheet on file")
     taught["show"].add_argument("name", help="the sheet's name")
     taught["lab"].add_argument("name", help="the sheet's name")
     taught["lab"].add_argument("--workers", type=int, help="worker processes for the run again (default 6)")
-    taught["wf"].add_argument("name", help="the sheet's name")
-    taught["wf"].add_argument("--workers", type=int, help="worker processes (default 6)")
+    for name in ("wf", "wf-show", "wf-pick", "wf-oos"):
+        taught[name].add_argument("name", help="the sheet's name")
+    for name in ("wf-pick", "wf-oos"):
+        taught[name].add_argument("box", help="the cell: its row number in the in-sample table, or its id")
+    for name in ("wf", "wf-oos"):
+        taught[name].add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: nothing runs without them")
+        taught[name].add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
     taught["wf-each"].add_argument("name", help="the sheet's name")
     taught["wf-each"].add_argument("--workers", type=int, help="worker processes (default 6)")
     taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
@@ -470,12 +481,17 @@ def _taught(a) -> dict:
     """`taught <sub>`: the taught lane (taught.command). --root here is the TAUGHT folder; a sheet is a file, `-` (stdin) or, for `run`, the
     name of a sheet on file."""
     from . import taught                            # loaded when a taught command is read, never with this module
-    if a.sub == "wf":
-        from . import taught_wf
-        return taught_wf.run(a.name, a.root, workers=a.workers)
-    if a.sub == "wf-each":
-        from . import taught_wf
-        return taught_wf.each(a.name, a.root, workers=a.workers)
+    if a.sub.startswith("wf"):
+        from . import taught_wf as TW
+        if a.sub == "wf":
+            return TW.run(a.name, a.root, workers=a.workers, owner_said=a.owner_said)
+        if a.sub == "wf-show":
+            return TW.show(a.name, a.root)
+        if a.sub == "wf-pick":
+            return TW.pick(a.name, a.box, a.root)
+        if a.sub == "wf-oos":
+            return TW.oos(a.name, a.box, a.owner_said, a.root, workers=a.workers)
+        return TW.each(a.name, a.root, workers=a.workers)
     arg = getattr(a, "sheet", None) or getattr(a, "name", None)
     if arg == "-":
         try:

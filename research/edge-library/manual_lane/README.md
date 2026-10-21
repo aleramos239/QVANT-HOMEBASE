@@ -12,7 +12,8 @@ settings files and the two report scripts, so the next test is "take it from the
 | family `open_candle` | the candle that opens at `start` (0830 default = sessions `["pre"]`; 0200 or 0300 ET = the London opens, sessions `["london"]`, window to 08:25), followed at its close, market, stop = its other extreme. Gates, all off at 0: `k` range >= k x ATR(14), `body_r` body >= r x range, `body_pts` body >= points, `vol_m` volume >= m x the median of the same bar over 14 dates |
 | exits `"own"` | the family's own table (`orb_close`): stop = the far side of the range, x the six standard targets (none, 0.5R, 0.75R, 1R, 2R, 3R) = 6 cells. Manual lane only (the card / pipeline take `standard`) |
 | `specs/*.json` | the eight settings files that produced the tables of 2026-10-10 (below); copy one, change the numbers |
-| `heatmap.py` | stop x target heat map for every variant of one or more stores, one colour scale, metric picker (Net $, Average trade $, Win %) |
+| exits `"hm40"` | **the default since 2026-10-20**: ATR and own stops x 0.5, 1, 1.5, 2; targets 0.5, 0.75, 1, 1.5, 2 R (40 cells; 20 for a family with no stop of its own), every box run FIXED on the 3:1 in-sample months (`bp.py wf run`); the owner picks a box, its test months run once on his words |
+| `heatmap.py` | stop x target heat map for every variant of one or more stores, one colour scale, metric picker (Net $, Average trade $, Win %); it names the store's own months (an hm40 store: the 3:1 in-sample months) |
 | `by_year.py` | the house metric set per year, then combined, for every cell of a store; `--risk 750` sizes every trade to about $750 of risk in micros |
 | `by_year.py --prop` | the same page plus each cell's prop sim (the pipeline's account and days, plain row, stress row); `--cells` keeps your order |
 | `sizing_sweep.py` | the prop sim of each cell at EVERY whole micro (1 .. the account's maximum): eval odds by day, bust, payout, stress; a grid by dollars of risk a trade |
@@ -23,6 +24,19 @@ Only `engine/families/orb830.py`, `run_idea.py` and `blueprint/runner.py` (the `
 so no earlier store or lock is marked "written by other code".
 
 ## Run one (from the toolkit checkout, with the research Python)
+
+The default (the owner, 2026-10-20): set `"exits": "hm40"` in the settings file and run the 3:1 walk-forward. It runs only on the owner's
+words, quoted verbatim:
+
+```
+PY=<repo>/.venv-research/bin/python; cd research/edge-library
+$PY bp.py wf run manual_lane/specs/my_idea.json --owner-said="<his words>"     # every box on the 3:1 in-sample months, then the table
+$PY manual_lane/heatmap.py heat.html runs_wf/my_idea-NQ-tf1/is --title "NQ 08:30 range"
+$PY bp.py wf pick my_idea <n>                                                  # the owner's box: once
+$PY bp.py wf oos my_idea <n> --owner-said="<his words>"                        # its test months: once
+```
+
+The old route below (`standard` / `own` on the build days) stays for the tables already on file:
 
 ```
 S=<a scratch folder>; PY=<repo>/.venv-research/bin/python; cd research/edge-library
@@ -36,7 +50,7 @@ $PY manual_lane/by_year.py $S/out/my_idea-NQ-tf1 $S/by_year.html --risk 750
 ```
 
 A settings file is `run_idea`'s format: `name`, `reason`, `family`, `markets`, `bar_sizes`, `sessions`, `params` (the settings that vary, each a list: the
-variants), `fixed`, `filters`, `exits` (`standard` or `own`), `limits`. 12 cells = 2 entries x 6 targets; 48 cells x 3 variants = 144.
+variants), `fixed`, `filters`, `exits` (`hm40`, the default; `standard` or `own` = the old tables), `limits`. 12 cells = 2 entries x 6 targets; 48 cells x 3 variants = 144.
 
 ## What was tested (build days; 1 contract; costs on) and where the tables are
 
