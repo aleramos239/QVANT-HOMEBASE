@@ -9,8 +9,8 @@ person or by an assistant in any chat — follows section 2. It replaces the adm
 `EDGE_SPEC.md` (see its "ADMISSION v3"). Changing a line here needs the owner's word.
 Built on 2026-10-06 (night): the toolkit `bp.py` runs every phase (`bp.py --help`; plan and decisions in
 `out/blueprint/toolkit_plan.md`), and the Homebase connector offers it to every chat as nine `blueprint_*` tools that save each
-idea in the app (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group per status). The tester's default dates are the build
-days. `judge.py` still scores the OLD rules (v2) for the old stores: a v2 verdict is not a blueprint verdict.
+idea in the app (`~/.homebase/ideas`, a Lab draft, a tester run, a Lab group per status). The tester's default dates were the build
+days until 2026-10-20; since then the default is the 3:1 in-sample months (the note at the top of section 2). `judge.py` still scores the OLD rules (v2) for the old stores: a v2 verdict is not a blueprint verdict.
 Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, `funnel.md`, `course_review.md`,
 `out/v2_summary.md`, `out/oos_summary.md`, `out/overfit8/OVERFIT_CHECK.md`. Dollars are 1 contract after costs.
 
@@ -29,6 +29,36 @@ Evidence: `out/blueprint/gate_backtest.md`, `protocol_gates.md`, `mc_gates.md`, 
 | 6. The eval | live | Do real fills and results match the test? | **PROVEN LIVE** |
 
 ## 2. Written requirements for each phase
+
+> **THE ROUTE OF EVERY NEW IDEA since 2026-10-20 (the owner): the hm40 heat map and the 3:1 block walk-forward, each box fixed.**
+> "any new agent will automatically use the 3:1 block walk forward and only touch OOS when i say and will only use the heatmap
+> when i say." Spec `docs/superpowers/specs/2026-10-20-heatmap-40-and-fixed-box-walkforward-design.md`. It replaces phases 2 to 4
+> below for every idea created from 2026-10-21 on; where a line below says otherwise, this note wins.
+>
+> | What | The rule |
+> |---|---|
+> | The table (hm40) | stops: ATR(14 bars of the idea's own bar size) x 0.5, 1, 1.5, 2, then its own stop x 0.5, 1, 1.5, 2; targets 0.5, 0.75, 1, 1.5, 2 R (inner). 40 cells x the 3 values of the main setting = 120 boxes. A family with no structure level of its own: the 20 ATR cells, 60 boxes (never turned into ATR cells silently). No "no target" cell, no point or percent stops |
+> | Own stop | max(\|entry reference − the family's structure level\| x the multiplier, 0.25 x ATR), then at least 2 ticks |
+> | The months | 2021-09-22 → the last whole month of the market's complete sessions. Blocks: 3 in-sample months, the next 1 out-of-sample, the next block starts after it (Oct-Dec 2021 → Jan 2022, Feb-Apr → May, Jun-Aug → Sep, ...). Sep 2021, the current month and a trailing part-block are in no block. Every month is in-sample OR out-of-sample, never both |
+> | In place of the build (2) | every box runs ONCE, FIXED (the same box in every block), on the in-sample months only, at 1 contract after costs, flat 15:58 ET. The in-sample table, one row a box, win rate first: win rate, breakeven of its realised reward:risk, the gap, trades, trades a week, average trade $ and R, net, profit factor, daily Sharpe, worst drawdown, % months positive, % months at 60 % win or more, worst month's win rate, long and short net; worse fills and beats-random (10 seeds, on the in-sample months) as labels; and each box block by block. No line passes or fails it |
+> | In place of the lock (3) | the OWNER picks a box from that table, by its number. No code and no agent picks for him. The pick is the lock: the box, its settings and the code stamp, written once, never changed (another box = a new idea name) |
+> | In place of the test (4) | the picked box's out-of-sample months, stitched, the same columns, plus block by block. Run ONCE, logged (who, when, box, code stamp, his words), never run again; a box with its test months on file is shown, not run |
+> | The owner's word | a heat map runs ONLY when the owner says so, and the test months ONLY when he says so: every tool that runs one takes his words, verbatim, in `owner_said` and refuses without them. Views of what is saved need none |
+> | Rolling | the windows step a month: only when the owner asks; per box, fixed too; it gives the in-sample table only (a rolling month is in-sample for a later window, so none is purely out-of-sample) |
+> | Months already seen | an idea tuned on the build days or read on the test days runs too; its table says "months already seen: <which>" |
+>
+> The tools: `blueprint_card` (exits `hm40`, the default) → `blueprint_wf` (owner_said) → `blueprint_wf_pick` (the box he names) →
+> `blueprint_wf_oos` (owner_said); `blueprint_heatmap` shows the table and runs nothing. By hand: `bp.py wf run | show | pick | oos`;
+> the taught lane `bp.py taught wf | wf-show | wf-pick | wf-oos` (the sheet's own cells); the manual lane's default exits are hm40.
+> Connector `heatmap` / `walkforward` (fixed, pick, oos) and the Lab run the same law; connector `backtest` runs on its market's
+> 3:1 in-sample months unless the owner says to run a range (owner_said). Phase 0 is unchanged but for line 0.2 (exits: hm40).
+> Not wired to the 3:1 route yet: the code check (phase 1; it refuses any day on or after 2025-07-01) and phases 5-6 (they read the
+> old test record): say so to the owner, never work around it with new code.
+>
+> **The old route, kept for old results:** ideas locked before 2026-10-21 keep phases 2-4 below as written (the 48-cell table, the
+> build days 2021-09-22 → 2025-06-30, the test days read once: `blueprint_build` / `blueprint_lock` / `blueprint_test`). A new idea
+> is refused there. `blueprint_build` runs a heat map, so it too needs `owner_said`. The old tables (standard 48, open 60, extended,
+> own) stay in the code so old results still read; none is a default. The pipeline is OFF and refuses to start on the old split.
 
 A phase is passed only when **every** line is true. Variants = the standard exit table (8 stops × 6 targets) × the 3-4 values of
 the idea's main setting. Random tables = the same exits, session and days with random entries: 4,000 draws from 10 seeds.

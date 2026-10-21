@@ -5,11 +5,11 @@ the Strategy Tester: list/read/write strategies, backtest, heat-map, walk-forwar
 re-scores, runs and trades, and **show on chart** (the open chart page loads the run and scrolls to it).
 It also gives Claude a read of the live desk (`desk_status`, `desk_journal`, `desk_readiness`,
 `data_coverage`, `services_health`) and two safe, non-trading operations (`account_reconnect`,
-`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the eleven
+`account_remove`), plus a charts-service data export (`export_start`, `export_status`), and the fifteen
 `blueprint_*` tools that run a strategy idea through the house blueprint: one per phase, the list of
-blocks before them, and three that only read what is saved (the status, the heat map, the Monte Carlo
-tables), and the five `pipeline_*` tools of the strategy pipeline (add an idea card, the runner, the queue, the
-owner's yes or no, the book). **It has no
+blocks before them, the 3:1 walk-forward of a new idea (its in-sample table, the owner's pick, the test
+months), and three that only read what is saved (the status, the heat map, the Monte Carlo tables). The
+`pipeline_*` tools of the strategy pipeline are left out while the pipeline is off (the owner, 2026-10-20). **It has no
 trading tool of any kind** — nothing here can place or cancel an order, flatten, kill, arm/disarm,
 book/unbook an account, or touch a strategy or chart-trading switch (`homebase/claude_mcp/desk_client.py`'s
 `ALLOWED_GET`/`ALLOWED_POST` is the whole allowlist; `tests/test_claude_mcp.py` pins it structurally).
@@ -28,7 +28,7 @@ claude mcp add --scope user \
   session (or run `/mcp` again).
 - `PYTHONPATH` makes `homebase` importable whatever directory Claude Code starts in. The server imports
   nothing outside the stdlib, so any `python3` (3.9+) works in place of the venv's.
-- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 42 tools.
+- Check it: `claude mcp list` should show `homebase ... ✓ Connected`. In a session, `/mcp` lists its 40 tools.
 - Leave `write_strategy` on "ask" (do not allowlist it): it writes Python that a backtest will run. The
   sandbox below contains that code, but the user should still see what Claude writes before it runs.
   `account_remove` is worth leaving on "ask" too, even though it is refused while an account holds a
@@ -83,6 +83,12 @@ version: restart that service (never 09:20–09:35 ET on weekdays).
 `blueprint_build` (2), `blueprint_lock` (3), `blueprint_test` (4, once), `blueprint_sim` (5),
 `blueprint_eval_card` (6) and `blueprint_status` (any time) follow `research/edge-library/BLUEPRINT.md`,
 section 2, in that order. `blueprint_heatmap` and `blueprint_mc` are views of what is saved, at any time.
+**A new idea (from 2026-10-21 on) takes the 3:1 walk-forward instead of build, lock and test** (the owner,
+2026-10-20; BLUEPRINT.md, the note at the top of section 2): `blueprint_card` (exits `hm40`, the default) →
+`blueprint_wf` (`bp.py wf run`: every hm40 box run fixed on the in-sample months of the 3:1 blocks, then the
+in-sample table) → `blueprint_wf_pick` (`bp.py wf pick`: the box the owner names, the lock, written once) →
+`blueprint_wf_oos` (`bp.py wf oos`: that box's test months, once). `blueprint_build`, `blueprint_test` and
+`blueprint_lock` stay for ideas locked before 2026-10-21 (`homebase/ideastore.py` `OLD_ROUTE_END`).
 Each runs one command of the toolkit
 (`<python> bp.py <command> ... --root=<ideas folder> --json`) and returns its text and its pass/fail lines.
 
@@ -102,9 +108,14 @@ Each runs one command of the toolkit
 - **A line that is neither passed nor failed** is counted as "not judged or does not apply": on an eval card
   it is not judged yet (6.4 before 10 trades at size), in a build it does not apply (2.7 without a filter).
   The line's own text says which.
-- **`blueprint_test` reads the test days ONCE.** It needs `confirm: true`; leave it on "ask".
+- **Only on the owner's words.** Every tool that runs a heat map (`blueprint_wf`, `blueprint_build`) or test
+  months (`blueprint_wf_oos`) needs `owner_said`: the owner's words in chat, verbatim, non-empty. It is refused
+  without them, before anything starts, and passed to the toolkit unchanged (`--owner-said`). The same holds
+  for the tester tools `heatmap`, `walkforward` (a run, `oos`) and `backtest` with a range. Leave them on "ask".
+  `blueprint_wf_pick` takes no words but is called only when the owner names the box.
+- **`blueprint_test` reads the test days ONCE** (old ideas only). It needs `confirm: true`; leave it on "ask".
 - **An early look** (`blueprint_test` with `early_look: true`; the owner's decision of 2026-10-06: "warn, then
-  run if I say yes") reads the test days for an idea that is not locked. It uses them up for that idea, is
+  run if I say yes") reads the test days for an idea that is not locked (only an idea created before 2026-10-21). It uses them up for that idea, is
   labelled EARLY LOOK and can never prove the idea. It needs the owner's clear yes in chat first, and
   `confirm: true` as any test does (`bp.py test <name> --confirm --early-look`). The toolkit keeps its result
   beside the idea's own files (`early_look/test.json`, which says `"early_look": true`), where the app reads no
@@ -117,7 +128,8 @@ Each runs one command of the toolkit
   `not_here`; `round`: left out = the latest round). The Monte Carlo tables are those of the build or of the
   test that is on file (`on`: `build` | `test`); `on: test` never reads the test days itself.
 - **Long commands** (`blueprint_build`, `blueprint_test`) return a job id after `wait_s` (default 120 s);
-  the same tool called with that `job_id` keeps waiting.
+  the same tool called with that `job_id` keeps waiting. `blueprint_wf` and `blueprint_wf_oos` return theirs
+  after 45 s: `blueprint_status(job_id)` keeps waiting.
 - **Everything is saved in the app.** After each command the idea's `idea.json`, the record block on top of
   its Lab draft (`draft_<name>`: the card and the latest verdict; the code below it is never touched) and its
   Lab group (Ideas, Leads, Proven on history, Proven live, Shelved) are brought up to date. The group moves
@@ -129,6 +141,8 @@ Each runs one command of the toolkit
 
 ## The pipeline tools
 
+**Off since 2026-10-20 (the owner): these tools are not listed** (`tools.py` leaves `PIPELINE_SPECS` out) and
+`bp.py pipe start` refuses. Kept as written for when the owner turns it back on.
 The strategy pipeline (`docs/superpowers/specs/2026-10-07-strategy-pipeline-design.md`) takes an idea card through
 eight fixed stages by itself and stops it at the first one it fails. Five tools, each one command of the toolkit
 (`<python> bp.py pipe <sub> ... --root=<pipeline folder> --json`), each answering with the toolkit's own text:
@@ -175,10 +189,12 @@ eight fixed stages by itself and stops it at the first one it fails. Five tools,
 before that code answers 404 / "not listed yet": restart `com.ramosquant.homebase-charts`. A chart page
 opened before the restart needs a reload to pick up the `tester_show` handler.
 
-The default range (`range: build`, the build days 2021-09-22 → 2025-06-30) is sent by name, and the chart
-service owns its dates (`homebase/backtest/discipline.py`). A chart service started before the blueprint's
-dates (connector 1.2.0) still runs 2021-01-01 → 2024-12-31 for it, and its result says "Research window
-2021–2024": restart it. `test`, `all` and `custom` carry their own dates and are right either way.
+The default range of `backtest` (no `range`) is the strategy market's 3:1 in-sample months (`wf_is`, the
+owner, 2026-10-20); the chart service owns their dates. Any other range (`build`, `test`, `all`, `custom`, the
+old names) reaches 3:1 test months, so it runs only with `owner_said`. The `build` preset (2021-09-22 → 2025-06-30) is sent by name, and the
+chart service owns its dates (`homebase/backtest/discipline.py`). A chart service started before the
+blueprint's dates (connector 1.2.0) still runs 2021-01-01 → 2024-12-31 for it, and its result says "Research
+window 2021–2024": restart it. `test`, `all` and `custom` carry their own dates and are right either way.
 
 ## show_on_chart, on the page
 
