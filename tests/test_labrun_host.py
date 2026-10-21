@@ -490,14 +490,19 @@ def test_the_minute_volume_reaches_the_session_event_only_when_the_strategy_asks
     assert other.state == "running" and len(asked) == 1
 
 
-def test_stale_missing_or_unreadable_minute_volume_stops_the_day(days):
+def test_stale_or_missing_minute_volume_waits_and_unreadable_volume_stops_the_day(days):
     stale = days(MINVOL, minute_vol=lambda root, d, n: vols_of("2024-02-29", "2024-03-01"))   # Monday's not stored yet
     stale.on_ticks(ticks("09:25:00", [21000.0] * 3))
-    assert (stale.state, stale.summary()["why"]) == ("stopped", "Yesterday's prices are not stored yet.")
+    assert (stale.state, stale.summary()["why"]) == ("waiting", host.WAIT_YESTERDAY)            # asked again each minute
     assert stale.detail == "the newest minute volume is of 2024-03-01" and stale.fills.result.plots == {}
     empty = days(MINVOL, minute_vol=lambda root, d, n: [])
     empty.on_ticks(ticks("09:25:00", [21000.0]))
-    assert (empty.state, empty.detail) == ("stopped", "the newest minute volume is of none")
+    assert (empty.state, empty.detail) == ("waiting", "the newest minute volume is of none")
+    unloaded = vols_of("2024-03-01", "2024-03-04")
+    unloaded[-1]["vol"] = None                                    # Monday is a date but its tape did not load: wait, not 13 dates
+    hole = days(MINVOL, minute_vol=lambda root, d, n: unloaded)
+    hole.on_ticks(ticks("09:25:00", [21000.0]))
+    assert (hole.state, hole.detail) == ("waiting", "the newest minute volume is of 2024-03-04 (its tape did not load)")
 
     def broken(root, d, n):
         raise OSError("disk")

@@ -806,8 +806,9 @@ class StrategyDay:
         except OSError as e:
             raise _Stop(NO_MINVOL, f"{type(e).__name__}: {e}") from None
         newest = got[-1].get("date") if got and isinstance(got[-1], dict) else None
-        if not isinstance(newest, str) or newest < _before(self.date).isoformat():
-            raise _Stop(NO_YESTERDAY, f"the newest minute volume is of {newest if isinstance(newest, str) else 'none'}")
+        if not isinstance(newest, str) or newest < _before(self.date).isoformat() or got[-1].get("vol") is None:
+            raise _Wait(NO_YESTERDAY, f"the newest minute volume is of {newest if isinstance(newest, str) else 'none'}"
+                                      f"{' (its tape did not load)' if isinstance(newest, str) and got[-1].get('vol') is None else ''}")
         return got
 
     def _event(self, t: int, _prio, _n, kind: str, arg) -> None:

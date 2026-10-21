@@ -51,7 +51,10 @@ def prior(store, root: str, d: dt.date, n: int, cache: dict | None = None) -> li
             if store.daily(root, x) is None:
                 continue                             # no daily bar: not a date of ctx.daily
             tape = store.load(root, x)
-            cache[x] = minutes(tape) if tape is not None else None
-        v = cache[x]
+            v = minutes(tape) if tape is not None else None
+            if v is not None:
+                cache[x] = v                         # a date whose tape did not load is read again next time (not cached)
+        else:
+            v = cache[x]
         out.append({"date": x.isoformat(), "vol": None if v is None else v.tolist()})
     return out[::-1]

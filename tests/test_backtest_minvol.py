@@ -87,6 +87,14 @@ def test_n_zero_reads_nothing_and_a_cache_reads_each_date_once():
     assert minvol.prior(store, "NQ", D, 3, cache) == first and sorted(store.loads) == [a, b, c]
 
 
+def test_a_date_whose_tape_did_not_load_is_read_again_next_time():
+    a, b = days_before(2)
+    store, cache = Store({a: day(a, 10), b: (None, True)}), {}
+    assert [g["vol"] is None for g in minvol.prior(store, "NQ", D, 2, cache)] == [False, True]
+    store.days[b] = day(b, 20)                                    # the archive caught up
+    assert minvol.prior(store, "NQ", D, 2, cache)[-1]["vol"][AT_10] == 20 and store.loads.count(b) == 2
+
+
 class Reads(Strategy):
     id, name, root = "mv_reads", "Reads", "NQ"
     session_window = ("09:30", "10:00")
