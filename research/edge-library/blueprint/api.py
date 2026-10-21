@@ -342,12 +342,12 @@ def wf_on_file(name: str) -> bool:
     return (H.RUNS / name / H.IS / "run.json").exists() or any(H.RUNS.glob(f"{name}-*-tf*/{H.IS}/run.json"))
 
 
-def wf_run(spec, owner_said, workers=None, root=None, progress=None) -> dict:
+def wf_run(spec, owner_said, workers=None, root=None, progress=None, worse: bool = True) -> dict:
     """`bp.py wf run <spec|name> --owner-said=...`: every hm40 box on the 3:1 in-sample months (hmwf.run_is: a rerun does no work, a
     changed idea under the same name is refused), then the table. Only on the owner's words."""
     from . import hmwf as H
     said, sp = _said(owner_said), wf_spec(spec, root)
-    got = H.run_is(sp, workers, progress=progress)
+    got = H.run_is(sp, workers, progress=progress, worse=worse)
     try:
         r = wf_show(sp["name"], "wf run")           # by the idea's name, as the chat tools name it
     except J.Refuse:                                # (the idea has stores on more than one market or bar size: the store's own name)

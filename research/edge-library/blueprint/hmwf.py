@@ -72,8 +72,10 @@ def _spec(spec) -> dict:
     return sp
 
 
-def run_is(spec, workers=None, *, ledger=None, progress=None, block=None) -> dict:
-    """Every box of the idea on the in-sample months (module docstring) -> {"store": its path, "boxes": n, "rows": the runner's rows}."""
+def run_is(spec, workers=None, *, ledger=None, progress=None, block=None, worse: bool = True) -> dict:
+    """Every box of the idea on the in-sample months (module docstring) -> {"store": its path, "boxes": n, "rows": the runner's rows}.
+    worse=False (a screening pass, `bp.py wf run --no-worse`): the worse-fills stores are left out (the table shows None for them); a later
+    run with them does only that work (every store is keyed and a rerun of a stored key does nothing)."""
     import l2ref
     sp = _spec(spec)
     root, tf = sp["markets"][0], sp["bar_sizes"][0]
@@ -85,7 +87,7 @@ def run_is(spec, workers=None, *, ledger=None, progress=None, block=None) -> dic
     note = f"idea {sp['name']}: every hm40 box on the 3:1 in-sample months ({days[0]} .. {days[-1]})"
     todo = [{**RUN._part(home, "unit", root, tf, u["grid"], sp["sessions"], None, {**RI.unit_meta(sp, u), "wf": IS, "note": note},
                          sp["family"], RUN._kw(sp["family"])), "stage": STAGE}]
-    todo += [{**RUN.worse_part(sp, u["key"], s), "key": f"{u['key']}/{IS}-{s}-worse", "stage": WORSE} for s in sp["sessions"]]
+    todo += [{**RUN.worse_part(sp, u["key"], s), "key": f"{u['key']}/{IS}-{s}-worse", "stage": WORSE} for s in sp["sessions"]] if worse else []
     if str(tf) in l2ref.Random.SCREEN_TFS and root in S.MENU_STOP_PTS:
         p = RUN.pool_part(root, tf, None, sp["exits"])
         p["meta"]["note"] = f"10-seed random-entry pool on hm40's ATR cells, the 3:1 in-sample months {days[0]} .. {days[-1]}, all sessions"

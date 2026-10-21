@@ -69,3 +69,14 @@ def test_run_is_on_hm60_runs_60_boxes_a_value_and_its_own_pool(wf):
     assert len(rows) == 180 and any(x["box"].endswith("pts25-r1") for x in rows)
     pt = next(x for x in rows if x["box"] == "ema1h50_pts25-r1")
     assert pt["random_vs"] == "pts25-r1"
+
+
+def test_a_screening_pass_leaves_the_worse_fills_out_and_a_later_run_adds_only_them(wf):
+    H.run_is({**SPEC, "exits": "hm60"}, workers=1, ledger=wf["ledger"], worse=False)
+    home = H.RUNS / "hwt_sweep-NQ-tf15"
+    assert (home / "is" / "cells.npz").exists() and not (home / "is-nyam-worse").exists()
+    assert all(r["worse_fills_net"] is None for r in H.is_table("hwt_sweep"))
+    n = len(wf["calls"])
+    H.run_is({**SPEC, "exits": "hm60"}, workers=1, ledger=wf["ledger"])
+    assert (home / "is-nyam-worse" / "cells.npz").exists() and len(wf["calls"]) > n
+    assert all(r["worse_fills_net"] is not None for r in H.is_table("hwt_sweep"))
