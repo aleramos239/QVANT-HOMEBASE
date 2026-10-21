@@ -34,6 +34,8 @@ RESEARCH_END = dt.date(2025, 6, 30)
 HOLDOUT_START = dt.date(2025, 7, 1)         # ... and the test days, from here to the latest data
 IS_MONTHS = (1, 4, 7, 10)
 WF_KINDS = ("wf_is", "wf_oos")
+WF_OOS_ONLY = ("a 3:1 test month (wf_oos) runs only from its walk-forward, after the owner's pick and on his word: "
+               "pick a cell there, then run its test months")
 KINDS = ("research", "is_months", "custom", *WF_KINDS)
 
 

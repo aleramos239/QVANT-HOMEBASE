@@ -106,17 +106,18 @@ def test_bad_run_setting_axes_are_refused(axes, ctl, msg):
         validate_grid(gbody(axes=axes, **({"controls": ctl} if ctl else {})))
 
 
-def test_the_cap_is_60_cells():
-    ok = validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(6))},
+def test_the_cap_is_120_cells():
+    """120 by default (2026-10-20): the 40 hm40 exit cells x 3 values of a setting."""
+    ok = validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(12))},
                                    {"key": "sl_pts", "values": list(range(1, 11))}]))
-    assert len(ok["cells"]) == 60
-    with pytest.raises(ValueError, match="61 cells.*60"):
-        validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(61))},
+    assert len(ok["cells"]) == 120
+    with pytest.raises(ValueError, match="121 cells.*120"):
+        validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(121))},
                                   {"key": "sl_pts", "values": [5]}]))
-    with pytest.raises(ValueError, match="64 cells.*60"):
-        validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(4))},
-                                  {"key": "sl_pts", "values": list(range(1, 5))},
-                                  {"key": "tp_pts", "values": list(range(1, 5))}]))
+    with pytest.raises(ValueError, match="125 cells.*120"):
+        validate_grid(gbody(axes=[{"key": "offset_pts", "values": list(range(5))},
+                                  {"key": "sl_pts", "values": list(range(1, 6))},
+                                  {"key": "tp_pts", "values": list(range(1, 6))}]))
 
 
 @pytest.mark.parametrize("axes,msg", [
@@ -170,14 +171,14 @@ def test_max_cells_is_the_cap_and_400_is_the_hard_ceiling():
     """The viewer chooses how many cells (the Max cells box); the server enforces the same
     number, and refuses anything above 400 whatever the body asks for."""
     from homebase.backtest.grid import DEFAULT_MAX_CELLS, HARD_MAX_CELLS
-    assert (DEFAULT_MAX_CELLS, HARD_MAX_CELLS) == (60, 400)
-    assert validate_grid(gbody())["max_cells"] == 60
-    big = gbody(axes=[{"key": "offset_pts", "values": list(range(10))},
-                      {"key": "sl_pts", "values": [1, 2, 3, 4, 5, 6, 7]}])          # 70 cells
-    with pytest.raises(ValueError, match="70 cells"):
+    assert (DEFAULT_MAX_CELLS, HARD_MAX_CELLS) == (120, 400)
+    assert validate_grid(gbody())["max_cells"] == 120
+    big = gbody(axes=[{"key": "offset_pts", "values": list(range(13))},
+                      {"key": "sl_pts", "values": list(range(1, 11))}])             # 130 cells
+    with pytest.raises(ValueError, match="130 cells"):
         validate_grid(big)
-    g = validate_grid({**big, "max_cells": 100})
-    assert len(g["cells"]) == 70 and g["max_cells"] == 100
+    g = validate_grid({**big, "max_cells": 200})
+    assert len(g["cells"]) == 130 and g["max_cells"] == 200
     huge = gbody(axes=[{"key": "offset_pts", "values": [x * 0.25 for x in range(1, 41)]},
                        {"key": "sl_pts", "values": [x * 0.25 for x in range(1, 11)]}])   # 400 cells
     assert len(validate_grid({**huge, "max_cells": 400})["cells"]) == 400

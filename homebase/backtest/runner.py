@@ -464,6 +464,8 @@ class RunManager:
         return self.runs / rid
 
     def submit(self, body) -> str:
+        if isinstance(body, dict) and isinstance(body.get("range"), dict) and body["range"].get("kind") == "wf_oos":
+            raise ValueError(discipline.WF_OOS_ONLY)
         if self.slots.quiet():
             raise ValueError(QUIET_REFUSAL)
         rid = prepare(body, self.base)

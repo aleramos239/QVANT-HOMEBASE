@@ -22,7 +22,8 @@ AXES = [{"key": "offset_pts", "values": [10, 12]}, {"key": "sl_pts", "values": [
 
 
 def wbody(**kw):
-    return {"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": AXES, **kw}
+    """The old schemes (the code picks a cell each window): named, since `fixed` is the default now (2026-10-20)."""
+    return {"scheme": "pick", "strategy": "nq930", "inputs": {"adx_gate": False}, "axes": AXES, **kw}
 
 
 def weekdays(month: str, n: int) -> list[str]:
@@ -344,7 +345,7 @@ def test_the_ratio_is_part_of_the_job():
         assert g["walkforward"]["test_months"] == n
         assert g["walkforward"]["n_steps"] == len(wf.steps(g["walkforward"]["months"], n))
         assert f"1:{n}" in g["walkforward"]["stitch"] or f"{n}-month" in g["walkforward"]["stitch"]
-    assert wf.validate_wf(wbody())["walkforward"]["test_months"] == 3        # 1:3 stays the default
+    assert wf.validate_wf(wbody())["walkforward"]["test_months"] == 3        # 1:3 stays the pick scheme's default
     for bad in (0, 4, 2.5, 2.0, True, "2", None):      # 2.0 is not a ratio either (review minor 3)
         with pytest.raises(ValueError, match="test_months"):
             wf.validate_wf(wbody(test_months=bad))
@@ -1012,3 +1013,232 @@ def test_the_3to1_step_is_blocks_by_default_or_rolling_on_request():
         with pytest.raises(ValueError, match="step_months"):
             wf.validate_wf(wbody(**bad))
     assert wf.scheme(test_months=1, select_months=3, step_months=1)["step_months"] == 1
+
+
+# ---------------------------------------------------------------- `fixed` (the default, 2026-10-20): every cell as set,
+# run once on the 3:1 in-sample months; the owner picks a cell; its test months run only on his word, once
+
+import json
+
+from homebase import strategies
+from homebase.backtest.discipline import stored_range
+from tests.straddle_twin import NQ930
+
+LAYOUT = [{"i": 0, "is": ["2022-01", "2022-02", "2022-03"], "oos": "2022-04"},
+          {"i": 1, "is": ["2022-05", "2022-06", "2022-07"], "oos": "2022-08"}]
+IS_MONTHS = LAYOUT[0]["is"] + LAYOUT[1]["is"]
+OOS_MONTHS = [b["oos"] for b in LAYOUT]
+FIXED_TRADES = {  # every month 2022-01 .. 2022-08 trades: a ranged fake child keeps only its range's months
+    0: [t for m in IS_MONTHS + OOS_MONTHS for t in trades(m, [100, -50])],
+    1: [t for m in IS_MONTHS + OOS_MONTHS for t in trades(m, [-20, -20, 30])]}
+
+
+class Bar5(NQ930):              # an own-stop strategy with a bar size (hm40's ATR is its own bar's)
+    id = "b5own"
+    bar_minutes = 5
+
+
+class Bar5NoOwn(Bar5):
+    id = "b5none"
+    own_stop = False
+
+
+@pytest.fixture
+def layout(monkeypatch):
+    from homebase.backtest import wfmonths
+    monkeypatch.setattr(wfmonths, "blocks", lambda root, store=None: LAYOUT if root == "NQ" else [])
+    monkeypatch.setitem(strategies.REGISTRY, Bar5.id, Bar5)
+    monkeypatch.setitem(strategies.REGISTRY, Bar5NoOwn.id, Bar5NoOwn)
+    return monkeypatch
+
+
+class RangedChild(FakeChild):
+    """A fake runner child that trades only inside its request's own range (as the real one does)."""
+
+    def _finish(self, ok: bool):
+        if self._done.is_set():
+            return
+        req = read_json(self.cdir / "request.json")
+        if ok:
+            rng = stored_range(req["range"])
+            src = FIXED_TRADES[int(req["inputs"]["offset_pts"] == 12.0)]
+            tr = [t for t in src if rng.includes(dt.date.fromisoformat(t["date"]))]
+            write_json(self.cdir / "trades.json", tr)
+            write_json(self.cdir / "run.json", {"id": req["id"], "range": req["range"], "capital": req["capital"],
+                                                "report": {"summary": {"all": {"trades": len(tr)}}, "skipped_by_error": 0},
+                                                "coverage": {"sessions": 9, "used": 9, "skipped": [], "no_trade": []}})
+            write_json(self.cdir / "status.json", {"id": req["id"], "status": "done"})
+        else:
+            write_json(self.cdir / "status.json", {"id": req["id"], "status": "error", "error": "boom"})
+        self._done.set()
+
+
+@pytest.fixture
+def ranged(monkeypatch):
+    release, spawned = threading.Event(), []
+
+    def popen(argv, **kw):
+        ch = RangedChild(argv, release, set())
+        spawned.append(ch)
+        return ch
+
+    monkeypatch.setattr(grid.subprocess, "Popen", popen)
+    release.set()
+    return spawned
+
+
+def keys(x) -> set:
+    if isinstance(x, dict):
+        return set(x) | {k for v in x.values() for k in keys(v)}
+    if isinstance(x, list):
+        return {k for v in x for k in keys(v)}
+    return set()
+
+
+def fixed_done(tmp_path, **kw):
+    m = WalkForwardManager(tmp_path)
+    wid = m.submit({"strategy": "nq930", "inputs": {"adx_gate": False}, "axes": AXES, **kw})
+    st = wait_wf(m, wid)
+    assert st["status"] == "done", st.get("error")
+    return m, wid, st
+
+
+def test_hm40_axes_40_and_20(layout):
+    assert grid.HM40_AXES == [{"key": "ctl.stop", "values": ["atr:0.5", "atr:1", "atr:1.5", "atr:2", "own:0.5", "own:1", "own:1.5", "own:2"]},
+                              {"key": "ctl.target_rr", "values": [0.5, 0.75, 1, 1.5, 2]}]
+    assert grid.hm40_axes(Bar5) == grid.HM40_AXES and grid.DEFAULT_MAX_CELLS == 120
+    assert grid.hm40_axes(Bar5NoOwn)[0]["values"] == ["atr:0.5", "atr:1", "atr:1.5", "atr:2"]
+    g = grid.validate_grid({"strategy": "b5own", "inputs": {"adx_gate": False}, "axes": grid.hm40_axes(Bar5)})
+    assert len(g["cells"]) == 40
+    ctl = [c["req"]["controls"] for c in g["cells"]]
+    assert ctl[0] == {"stop_mode": "atr", "stop_atr": 0.5, "atr_minutes": 0, "target_mode": "rr", "target_rr": 0.5}
+    assert ctl[4]["target_rr"] == 2.0 and ctl[5]["stop_atr"] == 1.0                  # targets inner
+    assert ctl[20] == {"stop_own_mult": 0.5, "own_floor": True, "atr_minutes": 0, "atr_period": 14,
+                       "target_mode": "rr", "target_rr": 0.5}                         # then the own stops
+    assert ctl[39]["stop_own_mult"] == 2.0 and ctl[39]["target_rr"] == 2.0
+    assert g["axes"][0]["value_labels"][:1] == ["ATR x0.5"] and g["axes"][0]["value_labels"][-1] == "own x2"
+    assert len(grid.validate_grid({"strategy": "b5none", "axes": grid.hm40_axes(Bar5NoOwn)})["cells"]) == 20
+    with pytest.raises(ValueError, match="no stop of its own"):
+        grid.validate_grid({"strategy": "b5none", "axes": grid.HM40_AXES})               # never own cells turned into ATR
+    for bad in ("pts:5", "atr:0", "own:11", "atr:x", 1.5):
+        with pytest.raises(ValueError, match="Stop"):
+            grid.validate_grid({"strategy": "b5own", "axes": [{"key": "ctl.stop", "values": [bad]}, grid.HM40_AXES[1]]})
+    with pytest.raises(ValueError, match="no bar size"):                              # ATR of its own bar: it needs one
+        grid.validate_grid({"strategy": "nq930", "axes": grid.HM40_AXES})
+    # the walk-forward's default: fixed, on the in-sample months, the hm40 cells when no axes are sent
+    w = wf.validate_wf({"strategy": "b5own", "inputs": {"adx_gate": False}})
+    assert w["walkforward"]["scheme"] == "fixed" and len(w["cells"]) == 40
+    assert len(wf.validate_wf({"strategy": "b5none"})["cells"]) == 20
+
+
+def test_fixed_scheme_runs_cells_on_is_only(tmp_path, layout, ranged, tester_shared):
+    m, wid, st = fixed_done(tmp_path)
+    cfg = st["walkforward"]
+    assert (cfg["scheme"], cfg["step_months"], cfg["months"]) == ("fixed", 4, IS_MONTHS)
+    assert st["looks_added"] == 2                                                   # a table of 2 cells, seen once
+    for i in (0, 1):
+        req = read_json(m.dir(wid) / "cells" / f"{i:02d}" / "request.json")
+        assert req["range"]["kind"] == "wf_is" and req["range"]["months"] == IS_MONTHS
+    r = m.result(wid)
+    assert r["scheme"] == "fixed" and [b["is"] for b in r["blocks"]] == [b["is"] for b in LAYOUT]
+    c0, c1 = r["cells"]
+    assert c0["params"] == {"offset_pts": 10.0, "sl_pts": 5.0} and c0["is"]["trades"] == 12
+    assert c0["is"]["net"] == 300.0 and c0["is"]["win_rate"] == 50.0 and c0["is"]["breakeven"] == pytest.approx(100 / 3)
+    assert c0["is"]["months_pos"] == 100.0 and c1["is"]["months_pos"] == 0.0 and c1["is"]["worst_month_wr"] == pytest.approx(100 / 3)
+    assert c0["is"]["long_net"] == 300.0 and c0["is"]["short_net"] == 0.0
+    assert set(c0["is"]) >= {"win_rate", "breakeven", "wr_minus_be", "trades", "per_week", "avg_trade", "avg_r", "net", "pf",
+                             "sharpe", "max_dd", "months_pos", "months_wr60", "worst_month_wr", "long_net", "short_net"}
+    assert c0["blocks"] == [{"i": 0, "is": LAYOUT[0]["is"], "trades": 6, "win_rate": 50.0, "net": 150.0},
+                            {"i": 1, "is": LAYOUT[1]["is"], "trades": 6, "win_rate": 50.0, "net": 150.0}]
+    assert m.list()[0]["scheme"] == "fixed"
+
+
+def test_fixed_result_has_no_oos_before_read(tmp_path, layout, ranged, tester_shared):
+    m, wid, st = fixed_done(tmp_path)
+    r = m.result(wid)
+    assert not {k for k in keys(r) if "oos" in k.lower()} and r.get("lock") is None
+    assert not {k for k in keys(st) if "oos" in k.lower()}
+    text = json.dumps(r) + json.dumps(st)
+    assert not any(mo in text for mo in OOS_MONTHS)                                  # no test month named, none run
+    for i in (0, 1):
+        tr = read_json(m.dir(wid) / "cells" / f"{i:02d}" / "trades.json")
+        assert {t["date"][:7] for t in tr} == set(IS_MONTHS)
+    assert not (m.dir(wid) / "oos.json").exists() and not list(tmp_path.glob("walkforward-oos/*"))
+    for bad in ({"metric": "sharpe"}, {"min_trades": 2}):                           # nothing is picked by code
+        with pytest.raises(ValueError, match="picks nothing"):
+            wf.validate_wf({"scheme": "fixed", "strategy": "nq930", "axes": AXES, **bad})
+    with pytest.raises(ValueError, match="in-sample months"):
+        wf.validate_wf({"scheme": "fixed", "strategy": "nq930", "axes": AXES,
+                        "range": {"kind": "custom", "start": "2022-01-01", "end": "2022-12-31"}})
+
+
+def test_pick_then_oos_once(tmp_path, layout, ranged, tester_shared):
+    m, wid, _ = fixed_done(tmp_path)
+    lock = m.pick(wid, 1)
+    assert lock["cell"] == 1 and lock["params"] == {"offset_pts": 12.0, "sl_pts": 5.0} and lock["who"] == "owner"
+    assert read_json(m.dir(wid) / "lock.json") == lock and m.pick(wid, 1) == lock    # the same pick: the lock on file
+    with pytest.raises(ValueError, match="picked already"):
+        m.pick(wid, 0)
+    with pytest.raises(ValueError, match="cell"):
+        m.pick(wid, 7)
+    with pytest.raises(ValueError, match="only it runs"):
+        m.oos(wid, 0, "run it")
+    for words in ("", "   ", None):
+        with pytest.raises(ValueError, match="owner's word"):
+            m.oos(wid, 1, words)
+    assert m.result(wid)["lock"] == lock and "oos" not in m.result(wid)
+    got = m.oos(wid, 1, "run it")
+    assert got["state"] in ("queued", "running", "done")
+    t = time.monotonic() + 30
+    while m.oos_view(wid)["state"] not in ("done", "stopped") and time.monotonic() < t:
+        time.sleep(0.02)
+    o = m.oos_view(wid)
+    assert o["state"] == "done", o
+    assert [b["oos"] for b in o["blocks"]] == OOS_MONTHS
+    assert o["blocks"][0] == {"i": 0, "oos": "2022-04", "trades": 3, "win_rate": pytest.approx(100 / 3, abs=1e-3), "net": -10.0}
+    assert o["record"]["trades"] == 6 and o["record"]["net"] == -20.0 and o["cell"] == 1
+    assert m.result(wid)["oos"] == o
+    oid = o["job"]
+    for j, mo in enumerate(OOS_MONTHS):                                              # one wf_oos month a run
+        req = read_json(tmp_path / "walkforward-oos" / oid / "cells" / f"{j:02d}" / "request.json")
+        assert req["range"]["kind"] == "wf_oos" and req["range"]["months"] == [mo]
+    claim = read_json(m.dir(wid) / "oos-claim.json")
+    assert claim["owner_said"] == "run it" and claim["cell"] == 1
+    log = [json.loads(x) for x in (tmp_path / "wf-oos-reads.jsonl").read_text().splitlines()]
+    assert len(log) == 1 and log[0]["owner_said"] == "run it" and log[0]["walkforward"] == wid
+    with pytest.raises(ValueError, match="never run again"):
+        m.oos(wid, 1, "run it again")
+    assert len((tmp_path / "wf-oos-reads.jsonl").read_text().splitlines()) == 1
+
+
+def test_oos_refuses_without_pick(tmp_path, layout, ranged, tester_shared):
+    m, wid, _ = fixed_done(tmp_path)
+    with pytest.raises(ValueError, match="no cell is picked"):
+        m.oos(wid, 0, "run it")
+    assert not (m.dir(wid) / "oos-claim.json").exists() and not (tmp_path / "wf-oos-reads.jsonl").exists()
+    old = m.submit(wbody(min_trades=1))                                              # the old pick scheme: no pick/oos
+    wait_wf(m, old)
+    for call in (lambda: m.pick(old, 0), lambda: m.oos(old, 0, "run it")):
+        with pytest.raises(ValueError, match="not a fixed"):
+            call()
+    # a public run or heat map never runs a test month
+    with pytest.raises(ValueError, match="only from its walk-forward"):
+        grid.validate_grid({"strategy": "nq930", "axes": AXES, "range": {"kind": "wf_oos", "root": "NQ", "month": "2022-04"}})
+    from homebase.backtest.runner import RunManager
+    with pytest.raises(ValueError, match="only from its walk-forward"):
+        RunManager(tmp_path / "rm").submit({"strategy": "nq930", "range": {"kind": "wf_oos", "root": "NQ", "month": "2022-04"}})
+
+
+def test_fixed_rolling_steps_a_month_and_has_no_unseen_test_months(tmp_path, layout, ranged, tester_shared):
+    m, wid, st = fixed_done(tmp_path, step_months=1)
+    cfg = st["walkforward"]
+    months = [f"2022-0{k}" for k in range(1, 9)]
+    assert cfg["rolling"] is True and cfg["months"] == months[:-1]                   # every rolling pick window's months
+    r = m.result(wid)
+    assert [b["is"] for b in r["blocks"]] == [months[k:k + 3] for k in range(5)]
+    assert r["cells"][0]["is"]["trades"] == 14
+    m.pick(wid, 0)
+    with pytest.raises(ValueError, match="rolling"):
+        m.oos(wid, 0, "run it")
+    with pytest.raises(ValueError, match="step_months"):
+        wf.validate_wf({"strategy": "nq930", "axes": AXES, "step_months": 2})
