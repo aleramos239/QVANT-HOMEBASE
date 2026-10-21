@@ -96,7 +96,10 @@ def session_closes(root: str, iso: str):
     """The 1-hour closes of one whole session (18:00 ET of its evening before to 17:00), from its tape; None = no tape."""
     key = (root, iso)
     if key not in _CLOSES:
-        t, d = S.load_tape(iso, root, allow_holdout=S.ALLOW_BP), S._date(iso)     # build days only (as orb830): a test-day read refuses
+        d = S._date(iso)
+        # a PAST session's seal by its own date: build switch up to 2025-06-30, test switch after (so a test-day run can read the
+        # build days before it; a build run never reaches a test date because prior_closes only reads days before today)
+        t = S.load_tape(iso, root, allow_holdout=S.ALLOW_BP if d <= S.BP_BUILD[1] else S.ALLOW_BT)
         _CLOSES[key] = None if t is None or not len(t.ts) else \
             hour_closes(t.ts, t.px, S.et_ns(d - dt.timedelta(days=1), "18:00"), S.et_ns(d, "17:00"))
     return _CLOSES[key]
@@ -107,6 +110,8 @@ def prior_closes(st, need: int):
     out, n = [], 0
     if st.day not in st.ROLLS:
         for r in reversed(st.dl[-LOOK:]):
+            if S._date(r["date"]) >= S._date(st.day):
+                raise S.LookAheadError(f"candle_sweep: prior session {r['date']} is not before {st.day}")
             got = session_closes(st._cx.root, r["date"])
             if got is not None:
                 out.append(got)
