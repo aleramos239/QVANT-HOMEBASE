@@ -61,7 +61,8 @@ def _test(**kw) -> dict:
     return oos.run(**kw)
 
 
-COMMANDS = {"build": _build, "lock": _lock, "test": _test}      # the commands that run as jobs (plan section 8: build, test; the freeze's one pass)
+COMMANDS = {"build": _build, "lock": _lock, "test": _test,     # the commands that run as jobs (plan section 8: build, test; the freeze's one pass)
+            "wf run": lambda **kw: api.wf_run(**kw), "wf oos": lambda **kw: api.wf_oos(**kw)}       # the 3:1 walk-forward (hmwf.py)
 
 
 def command(job_id, root_) -> str:

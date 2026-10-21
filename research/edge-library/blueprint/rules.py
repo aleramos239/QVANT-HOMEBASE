@@ -110,7 +110,7 @@ def exit_menu(root: str) -> list:
     return [{"stop_mode": k, "stop_val": v, "tgt_r": r} for part in ("targets_r", "small_targets_r") for k, v in stops for r in m[part]]
 
 
-EXIT_KINDS = ("standard", "open")                   # what a card's `exits` may say: the standard table, or the owner's session-anchored one
+EXIT_KINDS = ("standard", "open", "hm40")           # what a card's `exits` may say: the standard table, the owner's session-anchored one, or hm40 (the 3:1 walk-forward's)
 
 
 def exit_cells(kind: str, root: str) -> list:
@@ -120,7 +120,7 @@ def exit_cells(kind: str, root: str) -> list:
     if kind == "standard":
         return exit_menu(root)
     if kind not in ("open", "hm40"):
-        raise RuleError(f"exits {kind!r}: one of {', '.join(EXIT_KINDS)}, hm40")
+        raise RuleError(f"exits {kind!r}: one of {', '.join(EXIT_KINDS)}")
     m = template("exit_menu")
     if root not in m["stops"]["pts"]:
         raise RuleError(f"no exit table for market {root!r} (it has {', '.join(m['stops']['pts'])})")

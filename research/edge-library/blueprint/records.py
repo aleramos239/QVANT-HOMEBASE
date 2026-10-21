@@ -247,11 +247,12 @@ def card_lines(spec: dict) -> tuple:
     own = [k for k in OWN_EXITS if isinstance(limits, dict) and limits.get(k)]
     bad = (f"no entry trigger: settings.family names ONE of the engine's bar-based families ({', '.join(sorted(RUN._blocks().WRAPPED))})" if not known else bad or (
            "settings.fixed and settings.limits are objects {input: value}" if not (isinstance(limits, dict) and isinstance(run.get("fixed") or {}, dict)) else
-           f"exits {run.get('exits')!r}: the exits come from the standard table (or the session-anchored one, \"open\")" if (run.get("exits"), run.get("filter_exits", run.get("exits"))) != (kind, kind) else
+           f"exits {run.get('exits')!r}: the exits come from the hm40 table (\"hm40\"), the standard table or the session-anchored one (\"open\")" if (run.get("exits"), run.get("filter_exits", run.get("exits"))) != (kind, kind) else
            f"limits.{own[0]} is an exit of its own: the exits come from the standard table only (the random tables hold its cells and no other)" if own else ""))
     rows.append(L._row("0.2", not bad, len(F or []), need, bad or f"one entry trigger ({run['family']}), "
                        + ("no filter" if not F else f"{len(F)} filter{'s' * (len(F) > 1)}: {', '.join(' '.join(f) for f in F)}") + f" (at most {need['max_filters']}), "
-                       + ("exits from the standard table" if kind == "standard" else "exits from the owner's session-anchored table (10 stops x 6 targets)")))
+                       + ("exits from the standard table" if kind == "standard" else "exits from the hm40 table (8 stops x 5 targets: the 3:1 walk-forward's)"
+                          if kind == "hm40" else "exits from the owner's session-anchored table (10 stops x 6 targets)")))
     # 0.3 its home
     home, bad = _home(card, known)
     rows.append(L._row("0.3", not bad, None, R.rule("0.3").get("need"), bad or f"home: {home['market']}, {J.SESS_PLAIN[home['session']]}, {home['bar']}-minute bars"))
@@ -384,6 +385,7 @@ def _card_md(spec: dict, plan: dict) -> str:
         f"    Who is on the losing side: {_text(c['loser'])}",
         f"0.2 The rule: entry trigger {run['family']} ({_trigger(run['family'])}); "
         + ("no filter" if not F else "filters: " + "; ".join(f"{b} {s} ({blocks.PLAIN[(b, s)]})" for b, s in F)) + ("; exits from the standard table (8 stops x 6 targets)" if plan.get("exits", "standard") == "standard" else
+           "; exits from the hm40 table (ATR and own stops x 0.5, 1, 1.5, 2; targets 0.5, 0.75, 1, 1.5, 2 R)" if plan.get("exits") == "hm40" else
            "; exits from the owner's session-anchored table (5 stops of the mean true range since the session started and 5 of its range, x 6 targets)")
         + (f"; limits: {said(limits)}" if limits else ""),
         f"0.3 Home: {plan['home']['market']}, {J.SESS_PLAIN[plan['home']['session']]}, {plan['home']['bar']}-minute bars",
@@ -456,11 +458,14 @@ def card(name, spec, root=None) -> dict:
         saved += [str(draft)] * draft.is_file()
     except ValueError:
         pass                                        # no Lab for this idea folder: `said` has the note
-    n = len(IS.rounds(name, root))
+    n, wf = len(IS.rounds(name, root)), plan["exits"] == "hm40"          # an hm40 card runs on the 3:1 walk-forward, not the old build
+    runs = [f"WHAT RUNS: the 3:1 walk-forward -- every box ({len(plan['values'])} values x the hm40 cells) on the in-sample months of the blocks, "
+            "only when the owner says so"] if wf else _plan_text(name, plan)
     return api.result("card", name, status=idea["status"], lines=rows, saved=saved, plan=plan, lab=lab,
-                      text="\n".join([*head, *_plan_text(name, plan), f"The card and the settings are on file ({d})." + (f" {n} round{'s' * (n > 1)} on file: the next "
+                      text="\n".join([*head, *runs, f"The card and the settings are on file ({d})." + (f" {n} round{'s' * (n > 1)} on file: the next "
                                       "round runs the card as it now stands." if n else ""), *said]),
-                      next=_step(name, idea["status"], _last(name, root), root))
+                      next=f"When the owner says so: bp.py wf run {name} --owner-said=\"<his words>\" (blueprint_wf)." if wf else
+                      _step(name, idea["status"], _last(name, root), root))
 
 
 # ================================================================ phase 2: the build, round by round
@@ -551,6 +556,8 @@ def start(name, reason, root=None, workers=None, out=None, ledger=None, days=Non
     rows, plan = card_lines(spec)
     if plan is None:
         raise J.Refuse(f"the card of {name} on file is no longer whole ({next(x['text'] for x in rows if x['passed'] is False)}): write it again (bp.py card)")
+    if plan["exits"] == "hm40":
+        raise J.Refuse(f"{name} has the hm40 table: it runs on the 3:1 walk-forward, not this build -- bp.py wf run {name} --owner-said=\"...\" (blueprint_wf)")
     days, cells = (days or test.get("days")), (cells or test.get("cells"))
     out, ledger, workers, tester = out or test.get("out"), ledger or test.get("ledger"), workers or test.get("workers"), tester or test.get("tester")
     days = None if days is None else RUN.seal(days)

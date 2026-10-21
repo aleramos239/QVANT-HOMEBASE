@@ -87,6 +87,7 @@ from . import records as REC
 from . import runner as RUN
 from . import tables as T
 
+NEW_IDEAS = "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)"      # the owner, 2026-10-20: this one read is for ideas locked before
 LINES = L.TEST                                      # lines 4.1 .. 4.9, in the law's order (a test puts its own in)
 MARK = "SECOND LOOK"
 PROVEN, NOT_PROVEN = "PROVEN ON HISTORY", "NOT PROVEN"
@@ -125,7 +126,7 @@ def start(name, confirm=False, second_look=False, root=None, workers=None, out=N
     if early:
         lock = FRZ.early(name, root, test.get("out"), test.get("draws"))        # what is there, frozen as it is (in memory): refused for a frozen idea, or without a build
     elif lock is None:
-        raise J.Refuse(f"{name} is not frozen (no lock.json): the freeze comes before the test, and nothing may change after it (bp.py lock {name}). The owner "
+        raise J.Refuse(f"{NEW_IDEAS}. {name} is not frozen (no lock.json): the freeze comes before the test, and nothing may change after it (bp.py lock {name}). The owner "
                        f"may ask for an EARLY LOOK instead ({cmd} --early-look): it reads the test days for the idea as it stands, uses them up for it, and "
                        "can never prove it")
     else:

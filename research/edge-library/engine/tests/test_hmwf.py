@@ -20,6 +20,7 @@ W = Path(__file__).resolve().parents[2]
 if str(W) not in sys.path:
     sys.path.insert(0, str(W))
 from blueprint import api  # noqa: E402
+from blueprint import cli as CLI  # noqa: E402
 from blueprint import hmwf as H  # noqa: E402
 from blueprint import runner as RUN  # noqa: E402
 from blueprint import wfmonths as WM  # noqa: E402
@@ -324,3 +325,78 @@ def test_cache_builders_open_one_test_month(wf, monkeypatch, tmp_path):
         for rg in (("2021-12-01", "2021-12-01"), ("2021-12-01", "2022-01-03")):           # an in-sample month / more than the test month
             with pytest.raises(S.HoldoutSealed):
                 fn(rg)
+
+
+# ================================================================ bp.py wf: the blueprint's default route (Task 5)
+
+def _bp(capsys, *argv):
+    rc = CLI.main([*argv, "--json"])
+    return rc, json.loads(capsys.readouterr().out)
+
+
+@pytest.fixture
+def cli(wf, monkeypatch, tmp_path):
+    monkeypatch.setattr(LB, "LEDGER", wf["ledger"])                         # never the real ledger.csv
+    f = tmp_path / "spec.json"
+    f.write_text(json.dumps(SPEC))
+    return f
+
+
+def test_bp_wf_run_needs_owner_said(cli, capsys, wf):
+    for said in ([], ["--owner-said="], ["--owner-said=   "]):
+        rc, r = _bp(capsys, "wf", "run", str(cli), *said)
+        assert rc == 2 and r["ok"] is False and "owner" in r["error"]
+    assert not wf["calls"] and not (H.RUNS / "hwt_sweep-NQ-tf15").exists()
+
+
+def test_bp_wf_run_show_pick_oos(cli, capsys, wf):
+    rc, r = _bp(capsys, "wf", "run", str(cli), "--owner-said=run the heat map", "--workers=1")
+    assert rc == 0 and r["command"] == "wf run" and r["name"] == "hwt_sweep" and r["owner_said"] == "run the heat map"
+    assert len(r["wf"]["is"]) == 120 and r["wf"]["lock"] is None and r["wf"]["oos"] is None
+    assert not _oos_calls(wf) and "pick" in r["next"] and "120 boxes" in r["text"]
+    rc, again = _bp(capsys, "wf", "show", "hwt_sweep")
+    assert rc == 0 and again["wf"] == r["wf"]
+    rc, view = _bp(capsys, "heatmap", "hwt_sweep")                          # the read-only view: the 3:1 in-sample table
+    assert rc == 0 and view["wf"]["is"] == r["wf"]["is"]
+    rc, no = _bp(capsys, "wf", "oos", "hwt_sweep", BOX, "--owner-said=run it")
+    assert rc == 2 and "picked" in no["error"]                                # no pick yet
+    rc, r = _bp(capsys, "wf", "pick", "hwt_sweep", BOX)
+    assert rc == 0 and r["wf"]["lock"]["box"] == BOX and r["wf"]["oos"] is None and "owner says" in r["next"]
+    rc, no = _bp(capsys, "wf", "oos", "hwt_sweep", BOX, "--owner-said=  ")
+    assert rc == 2 and "owner" in no["error"]
+    assert not _oos_calls(wf) and not _log()                                  # a pick and a refusal run nothing
+    rc, r = _bp(capsys, "wf", "oos", "hwt_sweep", BOX, "--owner-said= run box 1", "--workers=1")
+    assert rc == 0 and r["wf"]["oos"]["record"]["box"] == BOX and r["owner_said"] == " run box 1"
+    (line,) = _log()
+    assert line["owner_said"] == " run box 1"                                 # his words, verbatim
+    rc, no = _bp(capsys, "wf", "oos", "hwt_sweep", BOX, "--owner-said=again")
+    assert rc == 2 and len(_log()) == 1
+
+
+def test_blueprint_test_refuses_new_idea(wf, capsys):
+    IS = api.ideastore()
+    IS.create("hwt_new")
+    IS.write_card("hwt_new", "# hwt_new -- idea card")
+    IS.write_spec("hwt_new", {"name": "hwt_new", "version": 1, "card": {}, "run": {}})
+    rc, r = _bp(capsys, "test", "hwt_new", "--confirm")
+    assert rc == 2 and "new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)" in r["error"]
+    assert not IS.reads()
+
+
+def test_a_card_may_say_hm40():
+    from blueprint import rules as R
+    assert "hm40" in R.EXIT_KINDS and len(R.exit_cells("hm40", "NQ")) == 40
+
+
+def test_an_hm40_card_goes_to_the_walk_forward(wf):
+    from blueprint import records as REC
+    card = {"why": "a swept extreme that fails to hold reverses back into the range.", "loser": "late breakout buyers",
+            "home": {"market": "NQ", "session": "nyam", "bar": "15"}, "neighbors": ["NQ nyam 5"], "main_setting": "ema1h", "sides": "both",
+            "sides_why": "a sweep fails either way", "loses_when": "a trend day that never comes back"}
+    root = wf["tmp"] / "ideas"
+    r = REC.card("hwt_card", {"name": "hwt_card", "card": card, "run": {"family": "candle_sweep", "params": {"ema1h": [0, 50, 100]}, "exits": "hm40"}}, root)
+    assert r["ok"] and r["plan"]["exits"] == "hm40" and "bp.py wf run hwt_card" in r["next"] and "WHAT A BUILD RUNS" not in r["text"]
+    with pytest.raises(J.Refuse, match="3:1 walk-forward"):
+        REC.start("hwt_card", "the plain idea", root)
+    sp = api.wf_spec("hwt_card", root)
+    assert (sp["markets"], sp["bar_sizes"], sp["sessions"]) == (["NQ"], ["15"], ["nyam"])      # its home table only

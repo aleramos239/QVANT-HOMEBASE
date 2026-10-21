@@ -128,6 +128,14 @@ and --json out.
                                                                              nothing; `run` is the build days only (--days = a smoke
                                                                              run, never a verdict). --root = the TAUGHT folder
                                                                              (HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)
+  bp.py wf run <spec|-|name> --owner-said=TEXT [--workers=N] [--wait=S]  THE 3:1 WALK-FORWARD, the default of a NEW idea (hmwf.py, the owner
+  bp.py wf show <name>                                                       2026-10-20): `run` = every box of the hm40 heat map run fixed on the
+  bp.py wf pick <name> <box>                                                 in-sample months of the 3:1 blocks, then the in-sample table (a spec
+  bp.py wf oos <name> <box> --owner-said=TEXT [--workers=N] [--wait=S]       file, - for stdin, or an idea on file: its home); `show` = the table,
+                                                                             the pick, the test months if read (runs nothing); `pick` = the
+                                                                             owner's box (its row number or id), written once; `oos` = the test
+                                                                             months of the picked box, once. `run` and `oos` run ONLY on the
+                                                                             owner's words, quoted verbatim in --owner-said
   build, pools, lock, test: [--workers=N] (default 8, or 4 while the desk trades)
 A SMOKE RUN (build, pools): --days=d1,d2 --cells=x,y --out=DIR --ledger=FILE = named build days and a few exit cells, into
 its own store folder and ledger; never a verdict (`dry_run` true), never saved as a round, never runs_bp/ or ledger.csv.
@@ -143,6 +151,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -277,6 +286,24 @@ def _parser() -> _Parser:
     taught["wf-each"].add_argument("--workers", type=int, help="worker processes (default 6)")
     taught["run"].add_argument("--workers", type=int, help="worker processes (default: 12, or 4 while the desk trades)")
     taught["run"].add_argument("--days", help="a smoke run: named build days, d1,d2")
+    wp = add("wf", "the 3:1 walk-forward of every hm40 box (the default of a new idea): run | show | pick | oos")
+    ws = wp.add_subparsers(dest="sub", required=True, metavar="{run,show,pick,oos}")
+    wfs = {name: ws.add_parser(name, allow_abbrev=False, help=text) for name, text in (
+        ("run", "every hm40 box on the 3:1 in-sample months, then the table (only on the owner's words)"),
+        ("show", "the in-sample table, the pick, the test months if read (runs nothing)"),
+        ("pick", "the owner's box: written once, never changed"), ("oos", "the test months of the picked box, once (only on the owner's words)"))}
+    wfs["run"].add_argument("spec", metavar="SPEC", help="a spec file in run_idea's format, - for stdin, or the name of an idea on file")
+    for name in ("show", "pick", "oos"):
+        wfs[name].add_argument("name", help="the idea's name (or its 3:1 store's)")
+    for name in ("pick", "oos"):
+        wfs[name].add_argument("box", help="the box: its row number in the in-sample table, or its id")
+    for name in ("run", "oos"):
+        wfs[name].add_argument("--owner-said", metavar="TEXT", help="the owner's words, verbatim: nothing runs without them")
+        wfs[name].add_argument("--workers", type=int, help="worker processes (default: 8, or 4 while the desk trades)")
+        wfs[name].add_argument("--wait", type=float, metavar="S", help="answer within S seconds; past them the work goes on as a job")
+    for x in wfs.values():
+        x.add_argument("--root", metavar="DIR", help="the app's idea folder (default HOMEBASE_IDEAS_ROOT, else ~/.homebase/ideas)")
+        x.add_argument("--json", action="store_true", help="print the result as one JSON object")
     for x in taught.values():
         x.add_argument("--root", metavar="DIR", help="the TAUGHT folder (default HOMEBASE_TAUGHT_ROOT, else ~/.homebase/taught)")
         x.add_argument("--json", action="store_true", help="print the result as one JSON object")
@@ -455,10 +482,42 @@ def _taught(a) -> dict:
     return taught.command(a.sub, arg, a.root, days=_list(getattr(a, "days", None)), workers=getattr(a, "workers", None))
 
 
+def _wf(a) -> dict:
+    """`wf <sub>`: the 3:1 walk-forward of every hm40 box (api.wf_*). `run` and `oos` refuse without the owner's words before anything
+    starts; with --wait they go on as a job (`job <id>` picks the wait back up)."""
+    if a.root:
+        os.environ[JOBS.ENV] = str(a.root)          # hmwf keeps the one-read log in the ideas root (a job's child inherits it)
+    if a.sub == "show":
+        return api.wf_show(a.name)
+    if a.sub == "pick":
+        return api.wf_pick(a.name, a.box)
+    api._said(a.owner_said)
+    if a.sub == "oos":
+        kw, name = dict(name=a.name, box=a.box, owner_said=a.owner_said, workers=a.workers), a.name
+    else:
+        spec = a.spec
+        if spec == "-" or Path(spec).is_file():
+            where = "on stdin" if spec == "-" else spec
+            try:
+                spec = json.loads(sys.stdin.read() if spec == "-" else Path(spec).read_text(encoding="utf-8"))
+            except (OSError, ValueError) as e:
+                raise J.Refuse(f"the spec {where} does not read as JSON: {e}") from None
+            if not isinstance(spec, dict):
+                raise J.Refuse(f"the spec {where}: a JSON object in run_idea's format")
+        kw = dict(spec=spec, owner_said=a.owner_said, workers=a.workers, root=a.root)
+        name = spec.get("name") if isinstance(spec, dict) else spec
+    fn = api.wf_oos if a.sub == "oos" else api.wf_run
+    if a.wait is None:
+        return fn(**kw)
+    d = JOBS.new(f"wf {a.sub}", name, kw, a.root, a.wait)
+    JOBS.start(d)
+    return JOBS.wait(d.name, a.root, a.wait)
+
+
 def _said(r: dict) -> str:
     """A result for a person: its text -- and the next step, for the commands of an idea's record and of the pipeline."""
     cmd = r.get("command")
-    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith("pipe ")
+    return r["text"] + (f"\nNEXT: {r['next']}" if r.get("next") and (cmd in ("card", "status", "lock", "test", "seed-reads", "heatmap", "mc") or str(cmd).startswith(("pipe ", "wf "))
                                                                     or str(cmd).startswith("taught ") or "idea" in r) else "")
 
 
@@ -504,13 +563,17 @@ def main(argv=None) -> int:
             r = _pipe(a)
         elif a.cmd == "taught":
             r = _taught(a)
+        elif a.cmd == "wf":
+            r = _wf(a)
+        elif a.cmd == "heatmap" and a.place is None and a.round is None and api.wf_on_file(a.name):
+            r = api.wf_show(a.name, "heatmap")      # a new idea's heat map: its 3:1 in-sample table (read-only)
         elif a.cmd in ("heatmap", "mc"):
             from . import quick                      # the two views: they read, and run nothing
             r = quick.heatmap(a.name, a.place, a.round, a.root) if a.cmd == "heatmap" else quick.mc(a.name, a.on, a.root)
         else:
             r = api.code_check(a.name, a.store, a.trades, a.run_id, a.same_as, a.looked, a.cell, a.market, _list(a.sessions), a.window, a.max_per_day, a.root, a.out)
     except api.REFUSALS as e:
-        cmd = (f"{a.cmd} {a.sub}" if a.cmd in ("pipe", "taught") else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
+        cmd = (f"{a.cmd} {a.sub}" if a.cmd in ("pipe", "taught", "wf") else a.cmd) if a else next((x for x in argv if not x.startswith("-")), None)
         why = f"{cmd} is not built yet: it is a later step of the toolkit plan ({e})" if a is None and cmd in NOT_BUILT else str(e)
         r = api.refused(cmd, why, getattr(a, "name", None) or getattr(a, "stored", None) if a else None)
     print(json.dumps(r) if "--json" in argv else _said(r))     # one object on one ASCII line: safe for any reader of stdout

@@ -1003,7 +1003,7 @@ def run_test(name: str, read: dict, spec, key: str, sess: str, variants: list, s
     line = api.ideastore().read_on_file(name, root=ideas)
     if not (line and line.get("state") == "claimed" and (line.get("version"), line.get("lock")) == (read.get("version"), read.get("lock"))):
         raise J.Refuse(f"no claimed read of the test days is on file for {name} (lock {read.get('lock')}): the read is written to the log BEFORE the pass "
-                       f"(bp.py test {name} --confirm), and a read that was judged is over")
+                       f"(bp.py test {name} --confirm), and a read that was judged is over; new ideas use the 3:1 walk-forward: bp.py wf (blueprint_wf)")
     kept: dict = {c: [] for c in keep}
     with _alone(out):
         say = _talk(out, progress)

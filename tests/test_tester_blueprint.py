@@ -50,10 +50,13 @@ def run(c, tool, args=None, **kw):
 
 def test_the_lab_lists_the_tools_every_chat_has_and_the_ideas_on_file(c):
     r = c.get("/api/tester/blueprint").json()
-    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 12
+    assert [t["name"] for t in r["tools"]] == [s["name"] for s in blueprint_tools.SPECS] and len(r["tools"]) == 15
     by = {t["name"]: t for t in r["tools"]}
     for s in blueprint_tools.SPECS:                 # the same definition, split into its phase and its words
         t = by[s["name"]]
+        if s["name"] == "blueprint_wf_oos":         # the owner's exact words (2026-10-20): no phase in front, shown whole
+            assert t["phase"] == t["description"] == s["description"] and t["inputs"] == s["inputSchema"]
+            continue
         assert t["inputs"] == s["inputSchema"] and s["description"] == f"{t['phase']}: {t['description']}" and t["phase"].startswith("Blueprint")
     assert by["blueprint_build"]["phase"].startswith("Blueprint phase 2, the build") and by["blueprint_portfolio"]["inputs"]["required"] == ["names", "account"]
     assert r["ideas"] == [] and r["wait_s"] == tester_api.LAB_WAIT_S == 20
