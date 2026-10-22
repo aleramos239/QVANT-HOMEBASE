@@ -257,7 +257,10 @@ PIPE_SHAPE = ("{action: add, card: {...}, inbox?: true | false} | {action: start
 class _Blueprint(pipeline_tools.PipelineMixin, blueprint_tools.BlueprintMixin):
     """The blueprint tools as the connector has them (one per phase, each a command of the research toolkit), and the
     pipeline's, for the Lab's own panels: the same code path, so the page and a chat can never disagree about a tool."""
-PROP_CACHE = 64          # prop-eval re-scores kept per service
+# prop-eval re-scores kept per service (~2 KB each). Must exceed the Desk warm-up's set (2 per promoted strategy + the
+# twins): at 64 with 35 promoted the LRU missed every time, so the 2-minute warm-up re-ran ~74 sims forever and pinned
+# a core, starving the loop that carries chart orders and fills (2026-10-22).
+PROP_CACHE = 512
 _HOST_RE = re.compile(r"^(127\.0\.0\.1|localhost)(:\d+)?$", re.IGNORECASE)
 
 
