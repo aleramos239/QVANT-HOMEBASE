@@ -1117,7 +1117,7 @@ test('results: a Desk straddle sends its build run too, so the block reads Build
   assert.equal(both.unseen.note, '');
   // no unseen run at this setting: the Build column stays, the Unseen one is dashes, and the note says why
   const only = D.results({ build: run(-5850), unseen: null, unseen_state: 'none', manual: true, prop: {} });
-  assert.deepEqual(only.unseen.rows.map((r) => r.v), Array(8).fill('—'));
+  assert.deepEqual(only.unseen.rows.map((r) => r.v), Array(9).fill('—'));
   assert.equal(only.unseen.note, "Not run on the unseen days at the Desk's setting. Run its tester twin from the Lab.");
   assert.equal(D.results({ unseen: null, prop: {} }).unseen.head, null, 'a Lab strategy keeps its one column');
 });
@@ -1128,7 +1128,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
   const full = D.results({ unseen, prop: { build: { ...head, eval_pass_p: 0.41 }, unseen: head } });
   assert.equal(full.unseen.title, 'Unseen days (OOS)');
   assert.deepEqual(full.unseen.rows.map((r) => [r.k, r.v]), [['Days', 'Jul 2025 – Oct 2026'], ['Net', '+$16,342'], ['Win rate', '66%'],
-    ['Realized RR', '1:2.81'], ['Trades', '305'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Sharpe', '0.43']]);
+    ['Realized RR', '1:2.81'], ['Trades', '305'], ['Trades / week', '4.6'], ['Profit factor', '1.18'], ['Deepest drawdown', '−$12,397'], ['Sharpe', '0.43']]);
   assert.equal(full.unseen.note, '');
   // an older saved run has no label: the ratio is written the same way; no figures at all -> dashes
   assert.deepEqual(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(3, 4).concat(D.results({ unseen: { range: {}, rr: 0.5 }, prop: {} }).unseen.rows.slice(-1)).map((r) => r.v), ['1:0.50', '—']);
@@ -1160,7 +1160,7 @@ test('results: the saved run on the unseen days and the prop sim of both runs, i
     const w = D.results(bad);
     assert.deepEqual([w.unseen.rows, w.unseen.note, w.prop.rows, w.prop.note], [[], 'Reading…', [], 'Reading…']);
   }
-  assert.deepEqual(D.results({ unseen: { range: {} }, prop: {} }).unseen.rows.map((r) => r.v), ['—', '—', '—', '—', '—', '—', '—', '—']);
+  assert.deepEqual(D.results({ unseen: { range: {} }, prop: {} }).unseen.rows.map((r) => r.v), Array(9).fill('—'));
 });
 
 test('curve: the unseen run\'s running total, or nothing', () => {
@@ -1253,4 +1253,12 @@ test('the 3:1 curve: build and unseen running totals on one day axis, each carry
   assert.equal(c.total, 150);
   assert.equal(c.notes[2], 'Unseen $100 · Build $60 · Both $160');
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
+});
+
+test('Trades / week: trades over the weeks of its months (3:1) or of its start..end days; dashes without either', () => {
+  const rows = (u) => D.results({ unseen: u, prop: {} }).unseen.rows;
+  const get = (u) => rows(u).find((r) => r.k === 'Trades / week').v;
+  assert.equal(get({ range: { start: '2025-07-01', end: '2025-07-28' }, trades: 28 }), '7.0', 'four weeks');
+  assert.equal(get({ range: {}, trades: 52, months: 12, walkforward: '3:1' }), '1.0', '12 months = 52 weeks');
+  assert.equal(get({ range: {}, trades: 10 }), '—');
 });

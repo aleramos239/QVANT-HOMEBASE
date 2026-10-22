@@ -624,7 +624,7 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     assert lab_results(c)["nq_bars"]["unseen_state"] == "none"
     gid = write_wf(tmp_path, rec, today, result=wf_result())
     r = lab_results(c)["nq_bars"]
-    assert r["unseen"] == {"id": gid, "range": {"start": "2022-04-01", "end": "2026-08-31"}, "walkforward": "3:1",
+    assert r["unseen"] == {"id": gid, "range": {"start": "2022-04-01", "end": "2026-08-31"}, "walkforward": "3:1", "months": 2,
                            "net": 1234.5, "trades": 41, "win_rate": 48.8, "profit_factor": 1.31, "max_drawdown": -2100.0,
                            "rr": 3.0, "rr_label": "1:3.00", "sharpe": 0.5}
     assert r["build"]["net"] == 4000.0 and r["build"]["range"] == {"start": "2022-01-01", "end": "2026-07-31"}

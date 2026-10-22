@@ -268,6 +268,16 @@
       aria: "Running net P&L after costs on the unseen days, by day",
     };
   }
+  // Trades a week on average: the run's trades over its weeks (the 3:1's months interleave: months x 52/12; else its start..end days / 7).
+  function perWeek(run) {
+    var n = num(run.trades), r = run.range || {}, m = num(run.months), weeks = null;
+    if (m !== null && m > 0) weeks = m * 52 / 12;
+    else {
+      var a = Date.parse(text(r.start)), b = Date.parse(text(r.end));
+      if (!isNaN(a) && !isNaN(b) && b >= a) weeks = ((b - a) / 86400000 + 1) / 7;
+    }
+    return n === null || !weeks ? DASH : (n / weeks).toFixed(1);
+  }
   // Realized reward:risk (average win over average loss) and the Sharpe of the unseen run; dashes when the run does not carry them.
   function unseenExtras(u) {
     var rr = num(u.rr), sh = num(u.sharpe);
@@ -292,6 +302,8 @@
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
       var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
       var rows = days.concat(figures({ run: run }), unseenExtras(run));
+      var tr = rows.findIndex(function (x) { return x.k === "Trades"; });      // right under Trades
+      if (tr >= 0) rows.splice(tr + 1, 0, { k: "Trades / week", v: perWeek(run) });
       var rr = rows.findIndex(function (x) { return x.k === "Realized RR"; });      // right under Win rate (owner 2026-10-18)
       var at = rows.findIndex(function (x) { return x.k === "Win rate"; });
       if (rr > at && at >= 0) rows.splice(at + 1, 0, rows.splice(rr, 1)[0]);

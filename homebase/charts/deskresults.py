@@ -214,6 +214,6 @@ def wf_summary(wid: str, result: dict, side: str = "stitched") -> dict:
     st, ms = so.get("stats") or {}, so.get("months") or []
     last = f"{ms[-1]}-{calendar.monthrange(*map(int, ms[-1].split('-')))[1]:02d}" if ms else None
     return {"id": wid, "range": {"start": f"{ms[0]}-01", "end": last} if ms else None,
-            "walkforward": (result.get("scheme") or {}).get("ratio"),
+            "walkforward": (result.get("scheme") or {}).get("ratio"), "months": len(ms),
             **{ours: st.get(theirs) for ours, theirs in HEADLINE},
             "rr": st.get("rr"), "rr_label": st.get("rr_label"), "sharpe": st.get("sharpe")}
