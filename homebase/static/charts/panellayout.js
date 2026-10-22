@@ -118,7 +118,6 @@ function pointInRect(px, py, rect) {
 /* ---- side-by-side docking (2026-09-27 panels-side plan): two docked panels can sit stacked (top/bottom,
    the original layout) or side by side (left/right) instead. Orientation is a per-dock flag, not per-panel --
    with only 2 panel ids it always describes the relationship between the pair. ---- */
-const ORIENTATIONS = ['stack', 'side'];
 function normalizeOrientation(o) { return o === 'side' ? 'side' : 'stack'; }
 
 /* Which drop zone a pointer at (px, py) is over, relative to the OTHER docked panel's rect: the outer
@@ -239,7 +238,7 @@ function parsePersisted(json, defaults) {
 }
 
 const api = {
-  IDS, DOCK_W_MIN, DOCK_W_MAX, DOCK_W_DEFAULT, FLOAT_W_MIN, FLOAT_H_MIN, DOCK_MIN_FRACTION, ORIENTATIONS,
+  IDS, DOCK_W_MIN, DOCK_W_MAX, DOCK_W_DEFAULT, FLOAT_W_MIN, FLOAT_H_MIN, DOCK_MIN_FRACTION,
   clamp, clampDockWidth, clampFloatRect, normalizeOrder, reorderList, dockHeights, applySplitterDrag,
   pixelsToFraction, dockSlots, pointInRect, defaultState, sanitizeState, parsePersisted,
   normalizeOrientation, dockDropZone, clampSideWidths, sideTotalWidth, applySideSplitDrag, applyGripDragSide,

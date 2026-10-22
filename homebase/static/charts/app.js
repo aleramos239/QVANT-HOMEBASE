@@ -1284,7 +1284,8 @@ function trapTab(e) {   // Tab stays inside the open dialog
 /* The starred indicators (per browser; a blocked store just means none): the dialog's Favorites group. */
 const IND_FAVS_KEY = 'hb_ind_favs';
 function loadIndFavs() {
-  try { return C.parseIdList(localStorage.getItem(IND_FAVS_KEY), C.CATALOG.map((d) => d.id), []); } catch (_) { return []; }
+  const ids = C.CATALOG.map((d) => d.id);   // nothing stored yet: the ones the saved layouts use (IND_FAV_DEFAULT)
+  try { return C.parseIdList(localStorage.getItem(IND_FAVS_KEY), ids, C.IND_FAV_DEFAULT); } catch (_) { return [...C.IND_FAV_DEFAULT]; }
 }
 let indFavs = loadIndFavs();
 function toggleIndFav(id) {
@@ -1308,7 +1309,9 @@ function indicatorsDialog() {
   const render = () => {
     const q = input.value.trim(), hits = C.filter(q, group, indFavs);
     const had = list.contains(document.activeElement) ? document.activeElement.dataset.id : null;   // keyboard focus
+    let section = null;      // the TradingView tab, no search: a heading above each section's rows (catalog TV_SECTIONS)
     list.replaceChildren(...hits.flatMap((d) => {
+      const head = group === 'TradingView' && !q && d.topic !== section ? (section = d.topic, [mk('div', 'dlg-sub', d.topic)]) : [];
       const row = mk('button', 'dlg-row has-desc');
       row.type = 'button';
       row.title = `Add ${d.name} — ${d.desc}`;
@@ -1346,7 +1349,7 @@ function indicatorsDialog() {
         render();
       };
       const g2 = helpOpen === d.id && window.HBGuide && window.HBGuide.get(d.id);
-      if (!g2) return [row];
+      if (!g2) return [...head, row];
       const box2 = mk('div', 'dlg-guide');
       box2.append(mk('p', 'guide-what', g2.what));
       for (const [key, title] of [['see', 'What you see'], ['read', 'How to read it'], ['use', 'How to use it']]) {
@@ -1356,7 +1359,7 @@ function indicatorsDialog() {
         box2.append(ul);
       }
       if (g2.watch) box2.append(mk('p', 'guide-watch', g2.watch));
-      return [row, box2];
+      return [...head, row, box2];
     }));
     if (!hits.length) {
       list.appendChild(mk('div', 'dlg-empty', group === C.FAV_GROUP && !q ? 'Star an indicator (the star on its row) and it is here.' : 'No indicators match'));
@@ -2581,7 +2584,8 @@ function clockMs() {
 /* The status bar's "Next USD: CPI m/m 08:30 (in 2h 14m)": the next event the selected chart shows. */
 function renderNextEvent() {
   const el = $('#sbEvent'), c = cur(), E = window.HBEvents;
-  const n = c ? E.nextText(E.shown(calendar, c.R), clockMs()) : null;
+  const ev = c ? C.eventsView(c.cfg.indicators) : null;   // the chart's Economic calendar indicator decides what shows (as the flags do); none: no next event
+  const n = ev ? E.nextText(E.shown(calendar, { ...c.R, ...ev }), clockMs()) : null;
   el.hidden = !n;
   if (n && el.textContent !== n.text) { el.textContent = n.text; el.title = n.text; }   // W1: text (and a re-fit) only on change
   if (n) { el.style.color = ''; el.style.setProperty('--ev', n.color); }

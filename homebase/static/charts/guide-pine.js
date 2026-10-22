@@ -13,7 +13,7 @@ G.add({
       'A note by the name says why it shows nothing: no script picked, a script that does not compile, or no Pine runtime.'],
     use: ['Pick a script, then change its inputs: the chart runs it again as you type.',
       'It needs a time chart (minutes, hours, days); a tick or range chart shows a note instead.',
-      'Max bars is how many of the newest bars it runs on; fewer bars run faster.'],
+      'Bars to run on is how many of the newest bars it runs on; fewer bars run faster.'],
     watch: 'Runs in your browser; a Pine function the runtime lacks shows as a note, not as a wrong line.',
   },
 });

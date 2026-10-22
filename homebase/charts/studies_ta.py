@@ -359,7 +359,6 @@ class SessionRange(_Study):
     def __init__(self, name: str = "london"):
         if name not in SESSIONS:
             raise ValueError(f"session {name!r} (have {', '.join(SESSIONS)})")
-        self.name = name
         self.a, self.b = SESSIONS[name]
         super().__init__()
 
@@ -706,7 +705,7 @@ class NoiseBand(_Study):
     def __init__(self, k: float = 0.3, anchor: str = "rth"):
         if anchor not in self.ANCHOR:
             raise ValueError(f"anchor {anchor!r} (have {', '.join(self.ANCHOR)})")
-        self.k, self.anchor, self.am = float(k), anchor, self.ANCHOR[anchor]
+        self.k, self.am = float(k), self.ANCHOR[anchor]
         super().__init__()
 
     def initial(self):

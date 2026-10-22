@@ -7,7 +7,8 @@ preview can never corrupt it. Values: float, dict, or None (warming up).
 Wire keys: "sma:50", "sma:50:hl2" (length + optional source, sma/ema only; default source is close), "ema:20",
 "vwma:15", "vwap", "vwap:rth", "vwap:week", "vwap:month", "vwap:t0200" (anchor eth/rth/week/month/tHHMM;
 "vwap" alone is "eth"), "adx:14", "cumdelta", "levels". ("profile" is not a Study — see Profile.) The technical
-studies (rsi, macd, bb, atr, stoch, supertrend, donchian, keltner, tema, mfi, er, orb, sess) are in studies_ta.py.
+studies (rsi, macd, bb, atr, stoch, supertrend, donchian, keltner, tema, mfi, er, orb, swing, equal, rmove, rswing, rvol, dhl,
+vaprev, fvg, wk, mo, topen, sess, noise) are in studies_ta.py, the order-flow ones (ddiv, tspeed, press, smt) in studies_flow.py.
 
 A key may end in "@<seconds>" (2026-10-11): the study is computed on bars of that longer timeframe -- "ema:20@3600" is
 the 20-period EMA of 1-hour bars -- and read on every chart bar (see HTF). Only the window / smoothing studies take it
@@ -18,10 +19,12 @@ house keys above never change.
 """
 from __future__ import annotations
 
+import datetime as dt
 import math
 import re
 
-from .session import anchor_period_start, is_rth, month_key, week_key
+from .bars import Bar
+from .session import ET, anchor_period_start, is_rth, month_key, week_key
 from .studies_flow import NAMES as FLOW_NAMES, make_flow
 from .studies_ta import NAMES as TA_NAMES, make_ta
 from .studies_tv import make_tv
@@ -271,15 +274,12 @@ class HTF(Study):
     def _key(self, bar):
         if self.sec >= 86400:
             return (bar.session, 0)
-        import datetime as dt
-        from .studies_ta import ET
         et = dt.datetime.fromtimestamp(bar.t / 1000, ET)
         since_open = (et.hour * 3600 + et.minute * 60 + et.second - 18 * 3600) % 86400      # seconds since the day opened (18:00 ET)
         return (bar.session, since_open // self.sec)
 
     @staticmethod
     def _merge(agg, bar):
-        from .bars import Bar
         if agg is None:
             return Bar(t=bar.t, session=bar.session, o=bar.o, h=bar.h, l=bar.l, c=bar.c, v=bar.v, buy=bar.buy, sell=bar.sell, n=bar.n)
         return Bar(t=agg.t, session=agg.session, o=agg.o, h=max(agg.h, bar.h), l=min(agg.l, bar.l), c=bar.c, v=agg.v + bar.v,
@@ -311,7 +311,7 @@ LENGTHS = range(1, 1001)        # the length a windowed study may be given
 
 def split_timeframe(key: str) -> tuple[str, int]:
     """("ema:20", 3600) from "ema:20@3600"; a key with no "@" is (key, 0). ValueError on a timeframe that is not one of
-    HTF_SECONDS or on a study that cannot take one."""
+    HTF_MAX_S or on a study that cannot take one."""
     base, at, tf = str(key).partition("@")
     if not at:
         return base, 0

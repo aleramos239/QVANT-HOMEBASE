@@ -60,7 +60,7 @@ test('book indicators: when older history was refused, the note names that, not 
   assert.match(a.text, /Older Level 2 is paused for the 9:30 window/);
   assert.doesNotMatch(a.text, /Lower/);
   assert.match(S.of(inst('absorb', { multiple: 4, minSeconds: 5 }), facts(bars, { book: paused, episodes: [] })).text, /paused for the 9:30 window/);
-  assert.match(S.of(inst('heatmap'), facts(bars, { book: paused })).text, /paused for the 9:30 window/);
+  assert.equal(S.of(inst('heatmap'), facts(bars, { book: paused })), null, 'the heatmap reads the depth history, not the book store');
   // the whole view is covered: the refusal (of some older chunk) changes nothing
   const full = { ...paused, full: true };
   assert.match(S.of(inst('bigorders', { multiple: 5, minSeconds: 5 }), facts(bars, { book: full, episodes: [] })).text, /None in view\. Lower "Multiple"/);
@@ -135,4 +135,63 @@ test('pine: an error is the note (first line, the whole text on hover); running 
   assert.equal(pine(undefined), null, 'no fact for this row: nothing to say');
   assert.equal(S.of(inst('pine', {}, { uid: 'p1' }), facts([bar(0)])), null, 'a page that gathers no Pine facts');
   assert.equal(S.of(inst('pine', {}, { uid: 'p1', visible: false }), facts([bar(0)], { pine: { p1: { error: 'x', notes: [] } } })), null, 'a hidden row stays quiet');
+});
+
+/* 2026-10-22 indicator cleanup (P3): the legend notes follow what the layers really draw. */
+const ep = (s, extra = {}) => ({ id: s + extra.t0, s, p: 100, t0: 0, t1: 20000, r: 6, pk: 50, tr: 40, ab: 12000, end: 'traded', ...extra });
+const live = { rows: 10, covered: true, live: true };
+
+test('bigorders without "Keep ended orders": no ended-order count and no book warning (only the live line draws)', () => {
+  const bars = [bar(0)];
+  assert.equal(S.of(inst('bigorders', { multiple: 5, minSeconds: 5, history: false }), facts(bars, { book: { rows: 0, covered: false, live: false }, episodes: [] })), null);
+  assert.match(S.of(inst('bigorders', { multiple: 5, minSeconds: 5, history: true }), facts(bars, { book: live, episodes: [] })).text, /None in view/);
+});
+
+test('absorb / pulled / iceberg counts respect the Side filter', () => {
+  const bars = [bar(0)];
+  const eps = [ep('b', { ab: 12000 }), ep('a', { t0: 1, ab: 12000 })];
+  const text = (id, side, extra = {}) => S.of(inst(id, { multiple: 4, minSeconds: 5, minTraded: 1, side, ...extra }), facts(bars, { book: live, episodes: eps })).text;
+  assert.equal(text('absorb', 'all'), '2 marks in view');
+  assert.equal(text('absorb', 'up'), '1 mark in view');
+  assert.match(text('absorb', 'down', { multiple: 100 }), /None in view/);
+  const pulls = [ep('b', { end: 'pulled', t1: 20000 }), ep('a', { t0: 1, end: 'pulled', t1: 20000 })];
+  const pt = (side) => S.of(inst('pulled', { multiple: 4, minSeconds: 5, side }), facts(bars, { book: live, episodes: pulls })).text;
+  assert.equal(pt('all'), '2 marks in view');
+  assert.equal(pt('down'), '1 mark in view');
+  const ice = [ep('b', { rl: 3, tr: 200 }), ep('a', { t0: 1, rl: 3, tr: 200 })];
+  const it = (side) => S.of(inst('iceberg', { multiple: 3, minTraded: 1, side }), facts(bars, { book: live, episodes: ice })).text;
+  assert.equal(it('all'), '2 marks in view');
+  assert.equal(it('up'), '1 mark in view');
+});
+
+test('heatmap: its own note (zoomed out past the depth limit), never the book-store warnings; bubbles-only says nothing', () => {
+  const day = 24 * 3600 * 1000, wide = [{ ...bar(0), ms: 0 }, { ...bar(1), ms: 4 * day }];
+  assert.equal(S.of(inst('heatmap'), facts(wide, { barMs: 3600000, book: { rows: 0, covered: false, live: false } })).text, 'Zoomed out too far: the heatmap shows up to 72 hours');
+  assert.equal(S.of(inst('heatmap', { map: false }), facts(wide, { barMs: 3600000 })), null);
+  assert.equal(S.of(inst('heatmap'), facts([bar(0), bar(1)], { barMs: 60000, book: { rows: 0, covered: false, live: false } })), null);
+});
+
+test('stoprun: bars without sweep data are said so, not reported as "none found"; exhaust is untouched', () => {
+  const old = [{ ...bar(0), sw: undefined }, { ...bar(1), sw: undefined }];
+  assert.equal(S.of(inst('stoprun', { length: 20, minSize: 50 }), facts(old)).text, 'No sweep detail for these bars');
+  assert.match(S.of(inst('stoprun', { length: 20, minSize: 50 }), facts([bar(0), bar(1)])).text, /None in view/);
+  assert.match(S.of(inst('exhaust', { length: 20, multiple: 2, wait: 3 }), facts(old)).text, /None in view/);
+});
+
+test('notes: headlines bolts outside the burst markets, the bar-length limit, cstat zoom, only the first instance draws', () => {
+  const h = inst('headlines', { show: 'bursts' });
+  assert.match(S.of(h, facts([bar(0)], { root: 'CL' })).text, /No bolts on this market/);
+  assert.equal(S.of(h, facts([bar(0)], { root: 'NQ' })), null);
+  assert.equal(S.of(inst('headlines', { show: 'all' }), facts([bar(0)], { root: 'CL' })), null, 'every headline still draws its dot');
+  const k = 'topen:570';
+  const hour = 3600000, withVal = [bar(0, { sv: { [k]: 100 } })];
+  assert.match(S.of(inst('topen', { time: '09:30' }), facts([bar(0)], { barMs: hour })).text, /5 minutes or less/);
+  assert.equal(S.of(inst('topen', { time: '09:30' }), facts(withVal, { barMs: hour })), null, 'a bar that carries the value: it works');
+  assert.equal(S.of(inst('topen', { time: '09:30' }), facts([bar(0)], { barMs: 60000 })), null);
+  assert.equal(S.of(inst('cstat'), facts([bar(0)], { spacing: 20 })).text, 'Zoom in to see the stats');
+  assert.equal(S.of(inst('cstat'), facts([bar(0)], { spacing: 40 })), null);
+  const a = { id: 'fvg', uid: 'a', params: { min: 0.25, length: 14 } }, b = { id: 'fvg', uid: 'b', params: { min: 0.25, length: 14 } };
+  assert.match(S.of(b, facts([bar(0)], { indicators: [a, b] })).text, /Only the first gap indicator/);
+  assert.equal(S.of(a, facts([bar(0)], { indicators: [a, b] })).text, 'No open gap in view');
+  assert.equal(S.of(b, facts([bar(0)], { indicators: [{ ...a, visible: false }, b] })).text, 'No open gap in view', 'a hidden first one does not count');
 });

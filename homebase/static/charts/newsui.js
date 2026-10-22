@@ -224,6 +224,7 @@ class Overlay {
 
   onBars() { this.render(); }
   onSettings() { this.render(); }   // a chart setting changed (cell.applySettings)
+  onIndicators() { this.render(); }   // the legend's eye: headline dots and bolts follow it at once
 
   /* The loaded-bar range this chart can actually place a marker in (tradelines.js's own convention for its
      bot/paper markers) -- not the visible viewport, but bounded well short of "every headline ever stored". */

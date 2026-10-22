@@ -246,7 +246,7 @@ def _whole(k: str) -> None:
 
 def tv_key(base: str) -> tuple[str, bool]:
     """("tv:" + base, True) when studies.make accepts the TradingView-match variant, else (base, False): the house key
-    stands in and the report says so (studies_tv.py may not exist yet). The key is a house key, so its arguments are
+    stands in and the report says so. The key is a house key, so its arguments are
     reordered for the tv: study where the two differ; ValueError for a fractional value in a whole-number parameter."""
     core, at, tf = base.partition("@")
     name, *args = core.split(":")

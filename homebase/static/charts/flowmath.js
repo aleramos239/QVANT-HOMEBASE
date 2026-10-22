@@ -484,7 +484,7 @@ function rowText(mode, row, o = {}) {
 }
 
 const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions, smtLines, fvgBoxes, valueArea,
-  IMB, imbalancesV2, valueAreaV2, nakedPocs, letterOf, tpo, ordersOf, agOf: ordersOf, clusterOrders, clusterStats, deltaTurnaround, deltaStrength, mwAbsorptions, rowText };
+  IMB, imbalancesV2, valueAreaV2, nakedPocs, letterOf, tpo, ordersOf, clusterOrders, clusterStats, deltaTurnaround, deltaStrength, mwAbsorptions, rowText };
 if (typeof window !== 'undefined') window.HBFlowMath = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

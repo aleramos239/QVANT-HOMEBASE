@@ -39,7 +39,7 @@ test('ddiv marks: a divergence at the swing, nothing otherwise', () => {
 test('smt: its key carries both lengths, marks follow the direction and sit `ago` bars back', () => {
   const d = D.ta.find((x) => x.id === 'smt');
   assert.equal(d.key({ window: 6, reference: 36 }), 'smt:6:36');
-  assert.equal(d.group, 'Structure');
+  assert.equal(d.group, 'Ranges & structure');
   assert.equal(d.marks(null, {}), null);
   assert.deepEqual(d.marks({ dir: -1, ago: 2, px: 12 }, {}), { position: 'aboveBar', color: '#F23645', shape: 'arrowDown', text: 'SMT', size: 1, ago: 2 });
   assert.equal(d.marks({ dir: 1, ago: 0, px: 4 }, { up: '#0a0' }).color, '#0a0');
@@ -62,4 +62,9 @@ test('only the tape speed histograms keep a colour of their own', () => {
   const t = D.ta.find((d) => d.id === 'tspeed');
   assert.deepEqual(t.lines.map((l) => [l.part, !!l.fixed]), [['rate', true], ['hot', true], ['burst', false]]);
   assert.ok(D.ta.filter((d) => d.id !== 'tspeed').every((d) => d.lines.every((l) => !l.fixed)));
+});
+
+test('bkdepth shows whole contracts (digits 0); no other flow indicator sets digits', () => {
+  assert.equal(D.ta.find((x) => x.id === 'bkdepth').digits, 0);
+  assert.deepEqual(D.ta.filter((x) => x.digits !== undefined).map((x) => x.id), ['bkdepth']);
 });

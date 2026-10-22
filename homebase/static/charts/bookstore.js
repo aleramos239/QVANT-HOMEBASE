@@ -3,7 +3,7 @@
    Three sources, one shape:
      - GET /api/book/history?root&from_ms&to_ms  -> {tick, step, t0, t1, samples: [row, ...], episodes: [ep, ...]}
      - the ws message {"type":"bookflow", root, reset?, samples, episodes} (the server's live tracker)
-   row = [t, bid10, ask10, imb1, imb5, imb10, micro, spread] (bookflow.py), ep = {id, s, p, t0, t1, pk, r, tr, end, ab, d0}.
+   row = [t, bid10, ask10, imb1, imb5, imb10, micro, spread, bid, ask] (bookflow.py; bid / ask = the best prices, COL 8 / 9), ep = {id, s, p, t0, t1, pk, r, tr, end, ab, d0}.
    Pure data (top half, Node-tested) + a small fetch scheduler (bottom, browser only). */
 (function () {
 'use strict';

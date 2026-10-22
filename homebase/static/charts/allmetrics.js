@@ -62,7 +62,6 @@ const sum = (a) => a.reduce((s, x) => s + x, 0);
 const mean = (a) => (a.length ? sum(a) / a.length : null);
 const sd = (a) => { if (a.length < 2) return null; const m = mean(a); return Math.sqrt(sum(a.map((x) => (x - m) ** 2)) / (a.length - 1)); };
 const median = (a) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), h = s.length >> 1; return s.length % 2 ? s[h] : (s[h - 1] + s[h]) / 2; };
-const ratio = (a, b) => (b ? a / b : null);
 
 function groupBy(trades, f) { const m = new Map(); for (const t of trades) { const k = f(t); (m.get(k) || m.set(k, []).get(k)).push(t); } return m; }
 

@@ -181,7 +181,9 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
     on() {
       const c = this.cell;
       if (this.dead || !c.chart || !c.bars || !c.bars.length) return false;
-      if (inst(c, 'bigorders') || inst(c, 'absorb') || inst(c, 'pulled') || inst(c, 'iceberg')) return true;
+      const big = inst(c, 'bigorders');
+      // bigorders with "Keep ended orders" off is only the live line (l2layer.js): nothing of ours to fetch or draw
+      if ((big && big.params.history !== false) || inst(c, 'absorb') || inst(c, 'pulled') || inst(c, 'iceberg')) return true;
       return (c.cfg.indicators || []).some((x) => x.visible !== false && String(window.HBCatalog.serverKey(x) || '').startsWith('bk:'));
     }
 

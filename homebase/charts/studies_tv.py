@@ -52,11 +52,7 @@ import math
 
 from .session import ET, always_open, month_key, week_key
 from .studies_ta import _Study, make_ta_num
-
-try:
-    from .studies_tv2 import PARAMS as PARAMS2, PRIME as PRIME2, WARM as WARM2
-except ImportError:                 # the long tail is not there yet
-    PARAMS2, PRIME2, WARM2 = {}, {}, {}
+from .studies_tv2 import PARAMS as PARAMS2, WARM as WARM2
 
 SOURCES = {"close": lambda b: b.c, "open": lambda b: b.o, "high": lambda b: b.h, "low": lambda b: b.l,
            "hl2": lambda b: (b.h + b.l) / 2, "hlc3": lambda b: (b.h + b.l + b.c) / 3,
@@ -689,6 +685,4 @@ def prime_tv(name: str, rest: list, root: str | None = None) -> int:
     if name == "vwap":
         week, month = (6, 30) if always_open(root) else (4, 22)
         return {"week": week, "month": month}.get(rest[0] if rest else "", 0)
-    if name in PRIME2:
-        return PRIME2[name](list(rest)) if callable(PRIME2[name]) else PRIME2[name]
     return 1 if name == "pivots" else 0

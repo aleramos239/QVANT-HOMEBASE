@@ -178,9 +178,6 @@ select, input[type="text"], input[type="number"], input[type="search"], input[ty
 .hb-lens > * { position: relative; z-index: 3; }
 :root { --hb-k1: .14; --hb-k2: .10; --hb-k3: .18; --hb-k4: .20; --hb-sheen: .8; }
 :root[data-theme="dark"] { --hb-k1: .5; --hb-k2: .4; --hb-k3: .5; --hb-k4: .6; --hb-sheen: .5; --hb-lens-body: .08; }
-/* a raised, solid thumb: the selected segment */
-.hb-thumb { background: #fff; color: #16171a; box-shadow: inset 0 .5px 0 #fff, 0 0 0 .5px rgb(0 0 0 / .05), 0 1px 1.5px rgb(0 0 0 / .14), 0 5px 12px -3px rgb(0 0 0 / .26); }
-:root[data-theme="dark"] .hb-thumb { background: #77777c; color: #fff; box-shadow: inset 0 .5px 0 rgb(255 255 255 / .3), 0 0 0 .5px rgb(0 0 0 / .4), 0 5px 12px -3px rgb(0 0 0 / .6); }
 /* the page switcher is glass on every page; its current page is the raised thumb */
 .pgsw.hb-lens { height: 36px; padding: 3px; background: rgb(255 255 255 / var(--hb-lens-body, .10)); }
 .pgsw.hb-lens a { height: 30px; padding: 0 15px; }

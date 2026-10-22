@@ -427,6 +427,7 @@ html.hb-apple .dlg-txt .dlg-name { line-height: 16px; }
 html.hb-apple .dlg-desc, html.hb-apple .dlg-grp { font-size: 11px; line-height: 14px; color: var(--a-label-2); }
 html.hb-apple .dlg-row .ic { width: 13px; height: 13px; stroke-width: 2.4; color: var(--a-accent-text); }
 html.hb-apple .dlg-empty { padding: 12px 10px; color: var(--a-label-2); }
+html.hb-apple .dlg-sub { padding: 10px 10px 3px; font-size: 11px; line-height: 14px; font-weight: 590; letter-spacing: normal; text-transform: none; color: var(--a-label-2); }
 html.hb-apple .dlg-msg { padding: 0 20px 14px; font-size: 13px; line-height: 16px; color: var(--a-label); }
 html.hb-apple .dlg-err { padding: 0 20px 6px; font-size: 11px; line-height: 14px; color: var(--a-red-text); }
 html.hb-apple .dlg-foot, html.hb-apple .set-foot { gap: 8px; padding: 14px 20px 20px; border-top: 1px solid var(--a-sep); }

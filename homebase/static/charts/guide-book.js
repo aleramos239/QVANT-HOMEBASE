@@ -8,7 +8,7 @@ G.add({
     what: 'Shows whether more size waits on the buy side or on the sell side of the book.',
     see: [
       'A histogram in its own pane: green bars above zero, red bars below.',
-      'Dashed lines at +0.3 and -0.3. The scale runs from -1 to +1.',
+      'Dashed lines at +0.3 and -0.3. The pane scales to the data, so its axis need not reach -1 or +1.',
       'One bar for each chart bar: the average over that bar.',
     ],
     read: [

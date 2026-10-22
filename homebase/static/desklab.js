@@ -455,7 +455,6 @@
    * service does not answer. The words are the design's table (section E), exactly. All of it returns plain TEXT.
    * ==================================================================================================================== */
   var PREFIX = "lab_";
-  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
   var STATE_WORDS = {
     off: "Off", shadow: "Running in shadow", waiting: "Waiting for the session", watching: "Watching", working: "Order working",

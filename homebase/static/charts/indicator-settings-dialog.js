@@ -34,6 +34,8 @@ function mk(tag, cls, text) {
 }
 function button(cls, text) { const b = mk('button', cls, text); b.type = 'button'; return b; }
 
+const NO_STYLE_TAB = new Set(['events', 'headlines']);
+
 function mount(box, host) {
   const { cell, uid } = host;
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
@@ -49,7 +51,8 @@ function mount(box, host) {
   const TABS = [];
   const guide = window.HBGuide && window.HBGuide.get(inst.id);
   if (d.params.length) TABS.push({ id: 'inputs', label: 'Inputs' });         // a style-only indicator (volume, cum delta) opens on Style
-  TABS.push({ id: 'style', label: 'Style' });
+  // events / headlines are client-side layers with no line, level or legend value: their Style tab would only hold a legend toggle that does nothing
+  if (!NO_STYLE_TAB.has(inst.id)) TABS.push({ id: 'style', label: 'Style' });
   if (guide) TABS.push({ id: 'guide', label: 'How to read' });
   const first = TABS.findIndex((t) => t.id === host.tab);                   // the legend's "?" opens on the guide
   let tab = first < 0 ? 0 : first, done = false, raf = 0;
@@ -578,6 +581,8 @@ function mount(box, host) {
     cb.onchange = () => { line.visible = cb.checked; preview(); };
     const own = C.TA_BY_ID[inst.id] && C.TA_BY_ID[inst.id].lines.find((l) => l.part === key);
     name.append(cb, mk('span', '', (LINE_LABEL[inst.id] || {})[key] || (own && own.label) || key));
+    // a histogram coloured by the sign of each bar (cell.js point()): colour, width, line style and axis tag change nothing, only the eye does
+    if (own && own.type === 'hist' && !own.fixed) { row.append(name); return [row]; }
     // one row a line: colour (its opacity is in the colour's popover), width, style, and a "more" for the rest
     const sw = button('swatch'), i = mk('i');
     i.style.background = C.lineColor(line);

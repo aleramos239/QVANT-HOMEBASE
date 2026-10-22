@@ -206,7 +206,7 @@ G.add({
   stoch: {
     what: 'Stochastic: where the close sits inside the last N bars high-to-low range, 0 to 100.',
     see: [
-      'Its own pane under the chart. K length 14, K smoothing 3, D smoothing 3 by default.',
+      'Its own pane under the chart. K length 14, K smoothing 3 (TradingView uses 1), D smoothing 3 by default.',
       '%K in blue is the main line. %D in orange is a slower average of %K.',
       'Dashed reference lines at 80 and 20.',
     ],
@@ -286,7 +286,7 @@ G.add({
     see: [
       'Three lines on the price pane. Length 20, range length 20, multiplier 1.5 by default.',
       'Violet upper and lower bands, solid. A grey dashed line between them is the EMA.',
-      'Band width is the average true range (the typical bar size, gaps counted) times the multiplier.',
+      'Band width is the simple average of the last range-length true ranges (gaps counted) times the multiplier.',
     ],
     read: [
       'Close above the upper band: a strong push up. Below the lower band: a strong push down.',

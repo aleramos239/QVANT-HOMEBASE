@@ -96,7 +96,7 @@ G.add({
     watch: 'The level itself means little: read the slope and compare with price. It resets to zero every session.',
   },
   bigprints: {
-    what: 'Marks single trades of 25 or more contracts: one order big enough to stand out.',
+    what: 'Marks single trades of at least your minimum size (25 contracts by default): big enough to stand out.',
     see: [
       'A circle on the candle with its contract count. Green below the candle is a buy; red above is a sell.',
       'A bigger circle is a bigger trade. Turn off "Marker size follows the print size" for equal circles.',
@@ -277,7 +277,7 @@ G.add({
     watch: 'It confirms 3 candles late, so part of the turn has already happened. About 4 a day on NQ 1m at defaults.',
   },
   bigtrades: {
-    what: 'Shows each single market order of 25 or more contracts as a bubble, sized by its contracts.',
+    what: 'Shows each market order of at least your minimum size (25 by default) as a bubble, sized by its contracts.',
     see: [
       'A circle at the order\'s time and average price. Green: a buyer paid the ask. Red: a seller hit the bid.',
       'A bigger circle is a bigger order. A circle large enough to read has its contract count inside.',
