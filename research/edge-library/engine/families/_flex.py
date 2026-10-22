@@ -13,6 +13,11 @@ family without them is trade for trade what it was (engine/tests/test_flex.py ho
   gate             off | an indicator of flexind.KINDS, read at the decision on the closed tf bars since the restart, with g_n (its main
                    period), g_m (the slow period: ema_x, macd), g_s (the macd signal), g_lvl (the line: flexind's table), g_side with | against.
                    No value yet (too few bars): both sides blocked, as the filter blocks do.
+                   onr_side (Amendment O, 2026-10-21): no indicator; the side the 09:30 open's third of the 01:00-09:30 ET range gives,
+                   families/onr.py read_bias word for word (ov_from 01:00): the open strictly above low + 2/3 of the range = long days,
+                   strictly below low + 1/3 = short days; the middle third, a boundary, a flat range or no 09:30 bar within 5 minutes =
+                   no entry either side; before the 09:30 bar has closed, no entry either side. Read from the instance's own closed
+                   1-minute bars (Template.M), once known fixed for the day. g_side with = as stated, against = the mirror.
   rel_dir          off | with | against (owner 2026-10-15). On the SECOND inflation release of a week (CPI after PPI or PPI after CPI,
                    flexind.first_release) only the side of the FIRST release's candle may trade: `with` = its direction, `against` = the
                    other. The candle is the price move from just before 08:30:00 to `rel_min` (1 | 5 | 15 | 30) minutes after, read from
@@ -30,6 +35,8 @@ import relcandle as RC
 from l2sim import NS, clock_sec
 
 KEYS = ("w_start", "w_end", "days", "gate", "g_n", "g_m", "g_s", "g_lvl", "g_side", "rel_dir", "rel_min")
+GATES_OWN = ("onr_side",)                            # gate kinds read from the Template's own bars, not a flexind indicator
+ONR_FROM_S, ONR_OPEN_S, ONR_TOL_S = 3600, 34200, 300  # families/onr.py OV_FROM_S["01:00"], OPEN_S, OPEN_TOL_S
 
 
 def window(txt: str, what: str):
@@ -43,11 +50,34 @@ def window(txt: str, what: str):
         raise ValueError(f"{what}: a clock time HH:MM on the Globex day (got {txt!r}): {e}") from None
 
 
+def onr_bias(fam):
+    """families/onr.py OnrOrb.read_bias with ov_from 01:00: +1 / -1 / 0 from the overnight range and the 09:30 open, or None while the
+    open is not known (the 09:30 minute bar has not closed)."""
+    o = fam.mo(ONR_OPEN_S)
+    first = next((m[0] for m in fam.M if m[0] >= ONR_OPEN_S), None)
+    if o is None or first is None:
+        return None
+    if first - ONR_OPEN_S > ONR_TOL_S:
+        return 0
+    r = fam.rng(ONR_FROM_S, ONR_OPEN_S)
+    if r is None:
+        return 0
+    hi, lo = r
+    if hi <= lo:
+        return 0
+    third = (hi - lo) / 3.0
+    if o > lo + 2.0 * third:
+        return 1
+    if o < lo + third:
+        return -1
+    return 0
+
+
 class FlexMods:
     """The settings of the open layer (module docstring), in front of a wrapped family class."""
     DEFAULTS = {"w_start": "", "w_end": "", "days": "all", "gate": "off", "g_n": 14, "g_m": 26, "g_s": 9, "g_lvl": 0.0, "g_side": "with",
                 "rel_dir": "off", "rel_min": 5}
-    SCHEMA = {"w_start": ("str",), "w_end": ("str",), "days": ("choice", FI.DAY_RULES), "gate": ("choice", ("off",) + FI.KINDS),
+    SCHEMA = {"w_start": ("str",), "w_end": ("str",), "days": ("choice", FI.DAY_RULES), "gate": ("choice", ("off",) + FI.KINDS + GATES_OWN),
               "g_n": ("int", 1, 500), "g_m": ("int", 1, 500), "g_s": ("int", 1, 500), "g_lvl": ("float", -1000.0, 1000.0),
               "g_side": ("choice", ("with", "against")), "rel_dir": ("choice", ("off", "with", "against")),
               "rel_min": ("choice", RC.MINUTES)}
@@ -60,7 +90,8 @@ class FlexMods:
             raise ValueError(f"w_end {p['w_end']!r} is not after w_start {p['w_start']!r}")
         self._fx_gi = None
         self._fx_rel = 0                                 # the first release's direction on a rel_dir day (on_session)
-        if p["gate"] != "off":
+        self._fx_onr = None                              # onr_side: +1 / -1 / 0 once the 09:30 open is known (on_session)
+        if p["gate"] != "off" and p["gate"] not in GATES_OWN:
             FI.make(p["gate"], p["g_n"], p["g_m"], p["g_s"])     # a bad period is refused at construction
 
     def trades_on(self, d) -> bool:
@@ -71,8 +102,9 @@ class FlexMods:
     def on_session(self, ctx):
         super().on_session(ctx)
         p = self.p
-        self._fx_gi = FI.make(p["gate"], p["g_n"], p["g_m"], p["g_s"]) if p["gate"] != "off" else None
+        self._fx_gi = FI.make(p["gate"], p["g_n"], p["g_m"], p["g_s"]) if p["gate"] != "off" and p["gate"] not in GATES_OWN else None
         self._fx_rel = 0
+        self._fx_onr = None
         if p["rel_dir"] != "off":
             first = FI.first_release(ctx.date.isoformat())
             self._fx_rel = (RC.direction(ctx.root, first, int(p["rel_min"])) or 0) if first is not None else 0
@@ -94,6 +126,11 @@ class FlexMods:
             r = self._fx_rel                             # 0 = the first candle did not move / has no tape: neither side
             if r == 0 or (side == "long") != ((r > 0) == (self.p["rel_dir"] == "with")):
                 return False
+        if self.p["gate"] == "onr_side":
+            if self._fx_onr is None:                     # not known yet: read again at the next decision
+                self._fx_onr = onr_bias(self)
+            b = self._fx_onr or 0                        # None / 0: neither side
+            return b != 0 and (side == "long") == ((b > 0) == (self.p["g_side"] == "with"))
         g = self._fx_gi
         return g is None or FI.gate_ok(g, side, self.p["g_side"], self.p["g_lvl"])
 

@@ -27,7 +27,7 @@ from families import _flex as FM
 from families import blocks as B
 from families import flex as FX
 from test_blocks import DAILY, TICK, days_of, minute_tape, ns, rand_bars, real_days
-from test_orb830 import BASE, FILL, HI, LO, PX, breaks_up, day, got, hold, run, sec
+from test_orb830 import B830, BASE, FILL, HI, LO, PX, breaks_dn, breaks_up, day, day830, dn, got, hold, run, sec, stay, up
 
 MS0 = ns("00:00") // 1_000_000
 ORB = B.WRAPPED["orb_close"]
@@ -344,6 +344,47 @@ def test_rewriting_every_bar_after_a_decision_changes_nothing_decided_up_to_it(c
         seen += bool(ta)
     if cls is not B.WRAPPED["open_candle"]:
         assert seen >= 1
+
+
+# ---- (ii b) the onr_side gate: the side of the 09:30 open's third of the 01:00-09:30 range (families/onr.py read_bias, Amendment O) ------------------
+ONR = {"gate": "onr_side"}
+TOP = {"02:00": dn(14900.0)}                                                             # the overnight low at 14900: the 15000 open is in the top third
+BOT = {"02:00": up(15100.0)}                                                             # the overnight high at 15100: the open is in the bottom third
+WANT_LONG = [(sec(9, 37, FILL), "long", HI + 4, LO, None)]
+
+
+def sides(st, params, bars):
+    return [x[1] for x in got(run(st, BASE, params, bars)[1])]
+
+
+def test_onr_side_allows_only_the_side_of_the_open_third_and_the_middle_third_blocks_both():
+    assert got(run(ORB, BASE, ONR, day({**breaks_up("09:36"), **TOP}))[1]) == WANT_LONG   # top third: a long
+    assert sides(ORB, ONR, day({**breaks_dn("09:36"), **TOP})) == []                       # top third: no short
+    assert sides(ORB, ONR, day({**breaks_dn("09:36"), **BOT})) == ["short"]               # bottom third: a short
+    assert sides(ORB, ONR, day({**breaks_up("09:36"), **BOT})) == []                       # bottom third: no long
+    assert sides(ORB, ONR, day(breaks_up("09:36"))) == []                                  # the quiet overnight: the open in the middle third
+    assert sides(ORB, ONR, day(breaks_dn("09:36"))) == []
+    assert sides(ORB, {**ONR, "g_side": "against"}, day(breaks_up("09:36"))) == []
+    assert sides(ORB, ONR, day({**breaks_up("09:36"), "00:30": dn(14900.0)})) == []        # a low before 01:00 is not in the range
+    assert sides(ORB, {**ONR, "g_side": "against"}, day({**breaks_up("09:36"), **TOP})) == []       # the mirror
+    assert sides(ORB, {**ONR, "g_side": "against"}, day({**breaks_dn("09:36"), **TOP})) == ["short"]
+    assert sides(ORB, {**ONR, "g_side": "against"}, day({**breaks_up("09:36"), **BOT})) == ["long"]
+
+
+def test_onr_side_reads_nothing_after_the_0930_bar_and_off_is_the_plain_family():
+    top = day({**breaks_up("09:36"), **TOP})
+    later = day({**breaks_up("09:36"), **TOP, **stay(16000.0, "09:40", "15:59")})          # the day's later range would put the open in the bottom third
+    for bars in (top, later):
+        st, res = run(ORB, BASE, ONR, bars)
+        assert got(res) == WANT_LONG and st._fx_onr == 1
+    assert got(run(ORB, BASE, {"gate": "off"}, top)[1]) == got(run(ORB, BASE, {}, top)[1]) == WANT_LONG
+    assert sides(ORB, {}, day({**breaks_dn("09:36"), **TOP})) == ["short"]                 # the gate off: the short the gate blocked trades
+
+
+def test_onr_side_blocks_every_decision_before_the_0930_bar_has_closed():
+    early = {**breaks_up("08:36"), **TOP}                                                  # an 08:30 session breaks at 08:36: the 09:30 open is not known yet
+    assert got(run(ORB, B830, {}, day830(early))[1]) != []                                   # gate off: it trades
+    assert got(run(ORB, B830, ONR, day830(early))[1]) == []                                  # gate onr_side: no entry either side
 
 
 # ---- (v) refusals ------------------------------------------------------------------------------------------------------------------------------------
