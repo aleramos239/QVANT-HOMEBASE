@@ -8,6 +8,7 @@ import datetime as dt
 import json
 import math
 import os
+import random
 import re
 from pathlib import Path
 
@@ -17,7 +18,7 @@ from homebase.charts.bars import Bar
 from homebase.charts.session import ET
 from homebase.charts.studies import make
 from homebase.paths import repo_root
-from tests.test_charts_studies_tv import ref_ema, ref_rma, ref_tr, walk
+from tests.test_charts_studies_tv import ref_ema, ref_rma, ref_tr, walk, weekdays
 from tools import tvparity as tp
 
 FAR = dt.datetime(2030, 1, 1, tzinfo=ET)        # a "now" with every session complete
@@ -32,10 +33,11 @@ def minutes(n, start=ms(2025, 10, 8, 18, 0)):
     return [start + i * 60_000 for i in range(n)]
 
 
-def text(times, extra=None, bom=False, fmt="s"):
-    """CSV text in TradingView's shape: time, open, high, low, close, Volume, then `extra` {title: [cells]}."""
+def text(times, extra=None, bom=False, fmt="s", volume=True):
+    """CSV text in TradingView's shape: time, open, high, low, close, Volume, then `extra` {title: [cells]}. volume=False
+    leaves the Volume column out, as a chart without the Volume indicator exports."""
     extra = extra or {}
-    head = ["time", "open", "high", "low", "close", "Volume", *extra]
+    head = ["time", "open", "high", "low", "close", *(["Volume"] if volume else []), *extra]
     rows = [",".join(head)]
     for i, t in enumerate(times):
         if fmt == "s":
@@ -46,8 +48,8 @@ def text(times, extra=None, bom=False, fmt="s"):
             cell = dt.datetime.fromtimestamp(t / 1000, dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         else:
             cell = dt.datetime.fromtimestamp(t / 1000, ET).isoformat()
-        rows.append(",".join([cell, str(100 + i), str(101 + i), str(99 + i), f"{100.5 + i}", str(10 * i + 1),
-                              *(extra[k][i] for k in extra)]))
+        rows.append(",".join([cell, str(100 + i), str(101 + i), str(99 + i), f"{100.5 + i}",
+                              *([str(10 * i + 1)] if volume else []), *(extra[k][i] for k in extra)]))
     return ("﻿" if bom else "") + "\n".join(rows) + "\n"
 
 
@@ -110,12 +112,12 @@ def test_rows_of_an_unfinished_session_are_dropped(tmp_path):
 
 
 def test_rows_without_a_bar_are_dropped_and_sorted(tmp_path):
-    ts = minutes(4)
+    ts = minutes(8)
     body = text(ts).splitlines()
     body[2] = body[2].replace(",102,", ",,", 1)                      # no high: no bar
     body[1], body[3] = body[3], body[1]                             # out of order
     x = load(tmp_path, "\n".join(body) + "\n")
-    assert x.t_ms == [ts[0], ts[2], ts[3]] and x.o == [100, 102, 103]
+    assert x.t_ms == [ts[0], *ts[2:]] and x.o == [100, *range(102, 108)]
 
 
 def test_probe_columns_and_group(tmp_path):
@@ -148,6 +150,8 @@ def test_verdicts():
     assert tp.verdict([1, 2, 3, 4], [1, 2, 9, 4], warm=1, restarts=(0, 2)) == "warm-up only"
     assert tp.verdict([1, 2, 3, 4], [1, 2, 9, 4], warm=1, restarts=(0,)) == "differs"
     assert tp.verdict([1, 2, 3], [1, 9, 3], skip={1}) == "identical"
+    assert tp.verdict([1, 2, 3], [1, 9, 3], cold={1}) == "warm-up only"      # a cold cell is forgiven, not skipped
+    assert tp.verdict([1, 2, 3], [1, 2, 9], cold={1}) == "differs"
     assert tp.verdict(None, [1]) == "no-tv"
     assert tp.verdict([], []) == "no-data"
     c = tp.compare([1.0, 2.0, 3.5, None], [1.0, 2.5, 3.0, 1.0], decimals=[1, 1, 1, 1])
@@ -295,7 +299,7 @@ def test_report_and_cli(tmp_path, monkeypatch, capsys):
     md = Path(capsys.readouterr().out.strip().splitlines()[-1])
     assert md.exists() and md.with_suffix(".json").exists() and md.parent == tmp_path / "tvp" / "reports"
     assert not list(inbox.iterdir())
-    moved = list((tmp_path / "tvp" / "exports").glob("*/P1_1m.csv"))
+    moved = list((tmp_path / "tvp" / "exports").glob("*/NQ_P1_1m.csv"))
     assert len(moved) == 1
     body = md.read_text()
     assert "| sma:2 |  | 1m | identical" in body and "| no-data |" in body and "100.5" not in body
@@ -337,7 +341,7 @@ def test_one_unreadable_csv_is_named_and_left_in_the_inbox_and_the_rest_are_chec
     assert md.exists() and "| sma:2 |  | 1m | identical" in md.read_text()
     assert sorted(p.name for p in inbox.iterdir()) == ["b_notes.csv", "c_midsession.csv"]      # still there, to fix and re-run
     assert "b_notes.csv skipped, left in" in out and "no 'time' column" in out and "c_midsession.csv skipped, left in" in out
-    assert len(list((tmp_path / "tvp" / "exports").glob("*/P1_1m.csv"))) == 1
+    assert len(list((tmp_path / "tvp" / "exports").glob("*/NQ_P1_1m.csv"))) == 1
 
 
 def test_a_run_where_no_csv_can_be_read_writes_no_report(tmp_path, monkeypatch):
@@ -413,6 +417,304 @@ def test_the_p1_pine_titles_are_house_keys_and_supertrend_plots_pines_own_sign()
         tp.tv_key(k)                               # and reaches its tv: study without a truncated argument
     p1 = (pine / "hb_parity_p1.pine").read_text()
     assert 'plot(stDir, "tv|supertrend:10:3|dir"' in p1 and "-stDir" not in p1       # tv:supertrend keeps Pine's sign
+
+
+# ------------------------------------------------------------------ review round 2: groups, volume, root, timeframe, cold sessions
+def test_a_layout_b_export_is_labelled_with_every_probe_id(tmp_path):
+    ids = {"tv|probe|P2": ["1"] * 3, "tv|probe|P3": ["1"] * 3, "tv|probe|P4": ["1"] * 3}
+    assert load(tmp_path, text(minutes(3), ids)).group == "P2+P3+P4"
+    assert load(tmp_path, text(minutes(3), {"tv|probe|P1": ["1"] * 3}), name="a.csv").group == "P1"
+
+
+@pytest.mark.parametrize("gap_s", [180, 1800, 7200, 14400, 604800])
+def test_an_unsupported_timeframe_is_refused_not_snapped(tmp_path, gap_s):
+    ts = [ms(2025, 10, 6, 18) + i * gap_s * 1000 for i in range(8)]       # 3m, 30m, 2h, 4h, 1W
+    with pytest.raises(ValueError, match="1m, 5m, 15m, 1h, 1D"):
+        load(tmp_path, text(ts))
+
+
+def test_a_3m_csv_is_named_and_left_in_the_inbox_and_the_rest_are_checked(tmp_path, monkeypatch, capsys):
+    inbox = _inbox(tmp_path, monkeypatch)
+    sma2 = [None] + [(100.5 + i - 1 + 100.5 + i) / 2 for i in range(1, 10)]
+    (inbox / "a_good.csv").write_text(text(minutes(10), {"tv|probe|P1": ["1"] * 10, "tv|sma:2|": cells(sma2)}))
+    (inbox / "b_three_minutes.csv").write_text(text([ms(2025, 10, 8, 18) + i * 180_000 for i in range(8)]))
+    assert tp.main(["run"]) == 0
+    out = capsys.readouterr().out
+    assert "b_three_minutes.csv skipped, left in" in out and "1m, 5m, 15m, 1h, 1D" in out
+    assert [p.name for p in inbox.iterdir()] == ["b_three_minutes.csv"]
+
+
+def test_a_chart_without_the_volume_indicator_takes_its_volume_from_the_tv_vol_probe(tmp_path):
+    ts = minutes(5)
+    x = load(tmp_path, text(ts, {"tv|vol|": [str(10 * i + 1) for i in range(5)]}, volume=False))
+    assert x.has_volume and x.v == [1.0, 11.0, 21.0, 31.0, 41.0]
+    assert tp.column(x, "tv|vol|") == x.v                      # still a column: the bar-field check compares it
+    y = load(tmp_path, text(ts, volume=False), name="n.csv")
+    assert not y.has_volume and y.v == [0.0] * 5
+    assert load(tmp_path, text(ts), name="w.csv").has_volume
+
+
+def test_with_no_volume_at_all_the_volume_probes_are_skipped_with_a_reason_not_reported_as_differs(tmp_path):
+    ts = minutes(60)
+    bars = tp.tv_bars(load(tmp_path, text(ts), name="full.csv"))           # the same bars WITH their volume: Homebase's
+    closes = [100.5 + i for i in range(60)]
+    sma2 = [None] + [(closes[i - 1] + closes[i]) / 2 for i in range(1, 60)]
+    vwap = [tp.field(v, "vwap") for v in tp.run("tv:vwap", bars)]
+    vwma = [tp.field(v, "") for v in tp.run("vwma:3", bars)]
+    x = load(tmp_path, text(ts, {"tv|probe|P2": ["1"] * 60, "tv|vwap|vwap": cells(vwap), "tv|vwma:3|": cells(vwma),
+                                 "tv|sma:2|": cells(sma2)}, volume=False), name="nov.csv")
+    assert not x.has_volume
+    meta, rows = tp.check_export(x, "NQ", hb=bars)
+    by = {(r["key"], r["field"]): r for r in rows}
+    assert meta["no_volume"] and meta["classes"] == {"same": 60, "extra": 0}      # not "volume 60"
+    for k in (("vwap", "vwap"), ("vwma:3", "")):
+        r = by[k]
+        assert r["note"].startswith("skipped") and "no volume" in r["note"], r
+        assert r["math"]["verdict"] == "no-tv" and r["math"]["n"] == 0
+        assert r["data"]["verdict"] == "identical"            # TradingView's column against Homebase's real volume stays valid
+    assert by[("sma:2", "")]["note"] == "" and by[("sma:2", "")]["math"]["verdict"] == "identical"
+    assert not any(r["field"] == "v" for r in rows)           # and no bar-volume row against a column that is not there
+
+
+def test_ohlcv_pass_without_volume_does_not_class_every_bar_volume():
+    ts = minutes(3)
+    tv = [bar(t, 10, 12, 9, 11, v=0) for t in ts]
+    hb = [bar(t, 10, 12, 9, 11, v=5) for t in ts]
+    assert tp.ohlcv_pass(tv, hb, 60)["classes"] == {"volume": 3, "extra": 0}
+    assert tp.ohlcv_pass(tv, hb, 60, volume=False)["classes"] == {"same": 3, "extra": 0}
+
+
+def test_the_p2_pine_plots_volume_so_a_layout_b_export_carries_it():
+    p2 = (Path(repo_root(), "tools", "pine") / "hb_parity_p2.pine").read_text()
+    assert 'plot(volume, "tv|vol|", display=D)' in p2
+
+
+def test_the_root_comes_from_the_file_name():
+    for name, root in (("CME_MINI_ES1!, 1_ab12.csv", "ES"), ("CME_MINI_NQ1!, 5_x.csv", "NQ"), ("COMEX_GC1!, 60_y.csv", "GC"),
+                       ("CME_MINI_MNQ1!, 1_z.csv", "NQ"), ("CME_MINI_NQ1!, 1_a (2).csv", "NQ"), ("export.csv", None)):
+        assert tp.file_root(name) == root, name
+
+
+class _Hist:
+    """A History stand-in: remembers the root of every session asked for and has no bars."""
+    store = None
+
+    def __init__(self):
+        self.roots = set()
+
+    def bars(self, root, spec, d):
+        self.roots.add(root)
+        return []
+
+
+def test_an_es_export_is_checked_against_es_and_filed_and_reported_under_its_root(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, monkeypatch)
+    sma2 = [None] + [(100.5 + i - 1 + 100.5 + i) / 2 for i in range(1, 10)]
+    body = text(minutes(10), {"tv|probe|P2": ["1"] * 10, "tv|sma:2|": cells(sma2)})
+    (inbox / "CME_MINI_NQ1!, 1_aa.csv").write_text(body)
+    (inbox / "CME_MINI_ES1!, 1_bb.csv").write_text(body)
+    h = _Hist()
+    md = tp.run_dir(inbox, history=h)
+    assert h.roots == {"NQ", "ES"}                             # each file asked its own market's bars
+    filed = sorted(p.name for p in (tmp_path / "tvp" / "exports").glob("*/*.csv"))
+    assert filed == ["ES_P2_1m.csv", "NQ_P2_1m.csv"]
+    report = md.read_text()
+    assert "## ES P2 1m" in report and "## NQ P2 1m" in report
+    assert "| ES_P2_1m.csv |" in report and "| NQ_P2_1m.csv |" in report         # the file column, last
+    # an explicit root wins over the name
+    for p in (tmp_path / "tvp" / "exports").glob("*/*.csv"):
+        p.rename(inbox / p.name)
+    h2 = _Hist()
+    tp.run_dir(inbox, "GC", history=h2)
+    assert h2.roots == {"GC"}
+
+
+def test_an_export_with_no_market_in_its_name_is_checked_as_nq_and_says_so(tmp_path, monkeypatch, capsys):
+    inbox = _inbox(tmp_path, monkeypatch)
+    body = text(minutes(10), {"tv|probe|P2": ["1"] * 10})
+    (inbox / "my_chart.csv").write_text(body)
+    (inbox / "CME_MINI_ES1!, 1_bb.csv").write_text(body)
+    tp.run_dir(inbox, history=_Hist())
+    out = capsys.readouterr().out
+    assert "my_chart.csv: no market in the file name" in out and "ES1!" not in out
+
+
+def test_a_probe_on_a_timeframe_below_the_chart_is_skipped_not_compared(tmp_path):
+    days = [ms(2025, 10, 5, 18) + i * 86_400_000 for i in range(25)]
+    x = load(tmp_path, text(days, {"tv|ema:20@3600|": ["100.0"] * 25, "tv|sma:50@86400|": ["100.0"] * 25,
+                                   "tv|sma:2|": ["100.0"] * 25}))
+    assert x.tf_s == 86400
+    by = {r["key"]: r for r in tp.check_export(x, "NQ", hb=[])[1]}
+    r = by["ema:20@3600"]
+    assert r["note"].startswith("skipped") and "below" in r["note"] and r["math"]["verdict"] == "no-tv" and r["math"]["n"] == 0
+    assert by["sma:50@86400"]["note"] == "" and by["sma:2"]["note"] == ""       # a day on a day chart, and plain keys, run
+    m = load(tmp_path, text(minutes(30), {"tv|sma:2@60|": ["100.0"] * 30}), name="m.csv")
+    assert tp.check_export(m, "NQ", hb=[])[1][0]["note"] == ""                  # the same length as the chart is not below it
+
+
+def test_studies_primed_from_earlier_sessions_read_warm_up_only_in_the_cold_sessions_not_differs(tmp_path):
+    dates = weekdays(24)
+    allb = walk(dates=dates, per=1000, seed=11)             # 18:00 -> 10:39 ET: reaches the 09:30 anchor of the noise band
+    for b in allb:
+        b.o, b.h, b.l, b.c = (round(x, 10) for x in (b.o, b.h, b.l, b.c))
+    last = {d.isoformat() for d in dates[16:]}              # TradingView's request.security("D") saw the 16 sessions before
+    idx = [i for i, b in enumerate(allb) if b.session in last]
+    exp = [allb[i] for i in idx]
+    cols = {"tv|probe|P2": [1.0] * len(exp)}
+    for key, flds in (("levels", ("pdh", "pdl", "pdc")), ("dhl:5", ("hi", "lo")), ("noise:0.3:rth", ("up", "dn"))):
+        vals = tp.run(key, allb)
+        for f in flds:
+            cols[f"tv|{key}|{f}"] = [tp.field(vals[i], f) for i in idx]
+    per = 1000
+
+    def check(cols):
+        x = load(tmp_path, walk_csv(exp, cols), name="cold.csv")
+        _, rows = tp.check_export(x, "NQ", hb=tp.tv_bars(x))
+        return {(r["key"], r["field"]): r for r in rows}
+
+    by = check(cols)
+    for k in [("levels", "pdh"), ("levels", "pdl"), ("levels", "pdc"), ("dhl:5", "hi"), ("dhl:5", "lo"),
+              ("noise:0.3:rth", "up"), ("noise:0.3:rth", "dn")]:
+        for side in ("math", "data"):
+            assert by[k][side]["verdict"] == "warm-up only", (k, side, by[k][side])
+    # a late difference is still a difference: the cold sessions are forgiven, not skipped
+    late = dict(cols)
+    late["tv|levels|pdh"] = [v + 1.0 if v is not None and 5 * per <= i < 6 * per else v for i, v in enumerate(cols["tv|levels|pdh"])]
+    late["tv|dhl:5|hi"] = [v + 1.0 if v is not None and i >= 7 * per else v for i, v in enumerate(cols["tv|dhl:5|hi"])]
+    by = check(late)
+    assert by[("levels", "pdh")]["math"]["verdict"] == "differs" and by[("dhl:5", "hi")]["data"]["verdict"] == "differs"
+    assert by[("levels", "pdl")]["math"]["verdict"] == "warm-up only"
+
+
+def test_a_running_sum_is_compared_from_its_first_bar_not_forgiven_as_warm_up(tmp_path):
+    exp = walk(dates=weekdays(4), per=300, seed=5)
+    for b in exp:
+        b.o, b.h, b.l, b.c = (round(x, 10) for x in (b.o, b.h, b.l, b.c))
+    vals = [tp.field(v, "") for v in tp.run("tv:obv", exp)]
+    assert tp.warm_bars("tv:obv") >= tp.CUMULATIVE_WARM                         # the hub's repair length, longer than this export
+
+    def check(col):
+        x = load(tmp_path, walk_csv(exp, {"tv|probe|P2": [1.0] * len(exp), "tv|tv:obv|": col}), name="obv.csv")
+        return next(r for r in tp.check_export(x, "NQ", hb=tp.tv_bars(x))[1] if r["key"] == "tv:obv")
+
+    assert check(vals)["math"]["verdict"] == "identical"
+    off = check([v + 5.0 if i == 700 and v is not None else v for i, v in enumerate(vals)])
+    assert off["math"]["verdict"] == "differs" and off["data"]["verdict"] == "differs"      # not "warm-up only"
+
+
+# ------------------------------------------------------------------ review round 3: seed fade, per-field cold, empty volume, bars file
+def long_15m(n, seed, per=64):
+    """n weekday sessions of 15-minute bars from 18:00 to 09:30 ET (the 09:30 bar is the noise band's anchor), NQ-sized."""
+    r, px, out = random.Random(seed), 20000.0, []
+    for d in weekdays(n):
+        t0 = int((dt.datetime(d.year, d.month, d.day, 18, 0, tzinfo=ET) - dt.timedelta(days=1)).timestamp() * 1000)
+        for i in range(per):
+            o = px
+            px += r.uniform(-12, 12.5)
+            h, l = max(o, px) + r.uniform(0, 6), min(o, px) - r.uniform(0, 6)
+            out.append(Bar(t=t0 + i * 900_000, session=d.isoformat(), o=round(o, 10), h=round(h, 10), l=round(l, 10),
+                           c=round(px, 10), v=r.randint(5, 80), closed=True, span=900_000))
+    return out
+
+
+def test_a_long_export_stays_warm_up_only_until_the_daily_atr_seed_has_faded_then_a_difference_is_one(tmp_path):
+    allb = long_15m(420, seed=2)                       # the noise band's last differing session is 164 here, past 140
+    sessions = sorted({b.session for b in allb})
+    idx = [i for i, b in enumerate(allb) if b.session in set(sessions[120:])]       # 300 sessions; TradingView saw 120 before
+    exp = [allb[i] for i in idx]
+    key = "noise:0.3:rth"
+    vals = tp.run(key, allb)
+    cols = {"tv|probe|P2": [1.0] * len(exp), **{f"tv|{key}|{f}": [tp.field(vals[i], f) for i in idx] for f in ("up", "dn")}}
+
+    def check(cols):
+        x = load(tmp_path, walk_csv(exp, cols), name="long.csv")
+        _, rows = tp.check_export(x, "NQ", hb=tp.tv_bars(x))
+        return {(r["key"], r["field"]): r for r in rows}
+
+    by = check(cols)
+    for f in ("up", "dn"):
+        for side in ("math", "data"):
+            assert by[(key, f)][side]["verdict"] == "warm-up only", (f, side, by[(key, f)][side])
+    late = {**cols, f"tv|{key}|up": [v + 1.0 if v is not None and i >= 260 * 64 else v for i, v in enumerate(cols[f"tv|{key}|up"])]}
+    assert check(late)[(key, "up")]["math"]["verdict"] == "differs"
+
+
+def test_the_levels_cold_allowance_is_for_the_prior_day_fields_not_the_overnight_ones(tmp_path):
+    assert [tp.cold_sessions("levels", f) for f in ("pdh", "pdl", "pdc", "onh", "onl", "rth_open")] == [2, 2, 2, 0, 0, 0]
+    exp = walk(dates=weekdays(4), per=300, seed=5)
+    for b in exp:
+        b.o, b.h, b.l, b.c = (round(x, 10) for x in (b.o, b.h, b.l, b.c))
+    vals = tp.run("levels", exp)
+    cols = {"tv|probe|P2": [1.0] * len(exp), **{f"tv|levels|{f}": [tp.field(v, f) for v in vals] for f in ("pdh", "onh")}}
+    cols["tv|levels|onh"] = [v + 1.0 if i < 50 else v for i, v in enumerate(cols["tv|levels|onh"])]     # wrong in session 0
+    cols["tv|levels|pdh"] = [1.0 if i < 50 else v for i, v in enumerate(cols["tv|levels|pdh"])]         # TradingView knew the prior day
+    x = load(tmp_path, walk_csv(exp, cols), name="lv.csv")
+    by = {(r["key"], r["field"]): r for r in tp.check_export(x, "NQ", hb=tp.tv_bars(x))[1]}
+    assert by[("levels", "onh")]["math"]["verdict"] == "differs"          # it reads the chart's own bars: no history to excuse it
+    assert by[("levels", "pdh")]["math"]["verdict"] == "warm-up only"
+
+
+def test_an_empty_or_all_zero_volume_column_is_no_volume_not_a_volume_of_zero(tmp_path):
+    for name, cell in (("e.csv", ""), ("z.csv", "0")):
+        x = load(tmp_path, text(minutes(5), {"tv|vol|": [cell] * 5}, volume=False), name=name)
+        assert not x.has_volume and x.v == [0.0] * 5, name
+
+
+def test_an_empty_or_all_zero_volume_column_leaves_no_bar_volume_row_to_differ(tmp_path):
+    ts = minutes(30)
+    hb = tp.tv_bars(load(tmp_path, text(ts)))                       # Homebase's side holds a real volume
+    for name, cell in (("e.csv", ""), ("z.csv", "0")):
+        x = load(tmp_path, text(ts, {"tv|probe|P2": ["1"] * 30, "tv|vol|": [cell] * 30}, volume=False), name=name)
+        meta, rows = tp.check_export(x, "NQ", hb=hb)
+        assert meta["no_volume"] and not [r for r in rows if r["key"] == "bar" and r["field"] == "v"], name
+    x = load(tmp_path, text(ts, {"tv|probe|P2": ["1"] * 30, "tv|vol|": [str(10 * i + 1) for i in range(30)]}, volume=False))
+    _, rows = tp.check_export(x, "NQ", hb=hb)                       # a real tv|vol| is still compared
+    assert next(r for r in rows if r["key"] == "bar" and r["field"] == "v")["data"]["verdict"] == "identical"
+
+
+def test_uses_volume_sees_nvi_and_pvi_which_a_constant_volume_leaves_flat(tmp_path):
+    bars = tp.tv_bars(load(tmp_path, text(minutes(30))))
+    for k in ("tv:nvi", "tv:pvi", "tv:obv", "tv:vwap", "vwma:3"):
+        assert tp.uses_volume(k, bars, 0.25), k
+    for k in ("sma:3", "atr:14", "tv:ema:3"):
+        assert not tp.uses_volume(k, bars, 0.25), k
+
+
+def test_a_filed_export_is_read_for_its_root_when_the_folder_is_run_again(tmp_path, monkeypatch):
+    for name, root in (("ES_P2_1m.csv", "ES"), ("NQ_P2+P3+P4_5m.csv", "NQ"), ("GC_P1_1D_2.csv", "GC"), ("6E_P1_15m.csv", "6E"),
+                       ("CME_1_1m.csv", None), ("ES_P2_2m.csv", None)):
+        assert tp.file_root(name) == root, name
+    inbox = _inbox(tmp_path, monkeypatch)
+    (inbox / "CME_MINI_ES1!, 1_bb.csv").write_text(text(minutes(10), {"tv|probe|P2": ["1"] * 10}))
+    tp.run_dir(inbox, history=_Hist())
+    for p in (tmp_path / "tvp" / "exports").glob("*/*.csv"):
+        p.rename(inbox / p.name)                                    # the filed name: ES_P2_1m.csv
+    h = _Hist()
+    tp.run_dir(inbox, history=h)
+    assert h.roots == {"ES"}
+
+
+class _OwnBars:
+    """A History stand-in whose Homebase bars are the given ones."""
+    store = None
+
+    def __init__(self, bars):
+        self.own = bars
+
+    def bars(self, root, spec, d):
+        return [b for b in self.own if b.session == d.isoformat()]
+
+
+def test_run_writes_homebase_bars_next_to_the_filed_export_for_parity_mjs(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, monkeypatch)
+    body = text(minutes(10), {"tv|probe|P1": ["1"] * 10})
+    (inbox / "a.csv").write_text(body)
+    own = tp.tv_bars(load(tmp_path, body, name="own.csv"))
+    tp.run_dir(inbox, history=_OwnBars(own))
+    p = next((tmp_path / "tvp" / "exports").glob("*/NQ_P1_1m.bars.json"))
+    got = json.loads(p.read_text())
+    assert [g["ms"] for g in got] == [b.t for b in own] and set(got[0]) == {"ms", "o", "h", "l", "c", "v"}
+    assert [(g["o"], g["c"], g["v"]) for g in got] == [(b.o, b.c, b.v) for b in own]
 
 
 # ------------------------------------------------------------------ the owner's exports (never in CI)

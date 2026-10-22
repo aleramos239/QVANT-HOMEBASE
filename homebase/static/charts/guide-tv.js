@@ -8,8 +8,8 @@ const tv = (name, what, see, read, use, note = '') => ({ what, see, read, use, w
 const MA_READ = ['Price above a rising line is an up trend; below a falling line, a down trend.', 'A flat line means no clear trend.'];
 const MA_USE = ['A short length hugs price; a long one is smooth and slow.', 'Two lengths crossing is a classic sign the trend is turning.'];
 const MA_TF = 'The Timeframe box in Settings lets it follow longer bars, such as 1h.';
-const ma = (name, what, n, extra = []) => tv(name, what,
-  [`One line on the price pane. Length ${n} by default; Source is the price it uses.`, ...extra, MA_TF], MA_READ, MA_USE);
+const ma = (name, what, n, extra = [], src = true) => tv(name, what,
+  [`One line on the price pane. Length ${n} by default; ${src ? 'Source is the price it uses' : 'it works on the close'}.`, ...extra, MA_TF], MA_READ, MA_USE);
 const OSC0 = 'Its own pane under the chart, with a dashed line at zero.';
 G.add({
   // ---- moving averages ----
@@ -18,18 +18,18 @@ G.add({
   tv_rma: ma('RMA', "Wilder's running average: each bar moves it 1/N of the gap. RSI and ATR smooth with it.", 7),
   tv_wma: ma('WMA', 'A weighted average: the newest value counts N times, the one before N-1, down to 1.', 9),
   tv_tema: ma('TEMA', 'Three EMAs combined (3 x EMA - 3 x EMA of EMA + EMA of that) so the line lags far less.', 9),
-  tv_hma: ma('Hull MA', 'Hull average: twice a half-length weighted average minus a full-length one, smoothed again.', 9),
-  tv_dema: ma('DEMA', 'Double EMA: twice the EMA minus the EMA of the EMA, which cancels most of the lag.', 9),
-  tv_smma: ma('Smoothed MA', 'Smoothed average: the first N bars averaged, then each bar moves it 1/N of the gap.', 7),
+  tv_hma: ma('Hull MA', 'Hull average: twice a half-length weighted average minus a full-length one, smoothed again.', 9, [], false),
+  tv_dema: ma('DEMA', 'Double EMA: twice the EMA minus the EMA of the EMA, which cancels most of the lag.', 9, [], false),
+  tv_smma: ma('Smoothed MA', 'Smoothed average: the first N bars averaged, then each bar moves it 1/N of the gap.', 7, [], false),
   tv_alma: ma('ALMA', 'A bell-shaped weighted average. Offset leans the bell to the newest bars; sigma sets its width.', 9,
-    ['Offset 0.85 leans it to the newest bars. Sigma 6 is how wide the bell is.']),
-  tv_lsma: ma('Least Squares MA', 'The end value of the straight line that best fits the last N closes (least squares).', 25),
+    ['Offset 0.85 leans it to the newest bars. Sigma 6 is how wide the bell is.'], false),
+  tv_lsma: ma('Least Squares MA', 'The end value of the straight line that best fits the last N closes (least squares).', 25, [], false),
   tv_mcginley: tv('McGinley Dynamic', 'An average that speeds up when price runs away from it and slows down when price hugs it.',
     ['One line on the price pane. Length 14 by default.', MA_TF],
     ['It sticks close to price in a trend and does not whip in chop.', 'Price above a rising line is an up trend; below a falling line, a down trend.'],
     ['Use it as a trailing guide: a close back through it is a warning.', 'It avoids many of the false crosses a plain average gives.']),
   tv_kama: ma('Kaufman Adaptive MA', 'Kaufman adaptive average: fast in a clean trend, slow in chop, set by an efficiency ratio.', 14,
-    ['Fast 2 and Slow 30 are the quickest and slowest it can go.']),
+    ['Fast 2 and Slow 30 are the quickest and slowest it can go.'], false),
   tv_median: tv('Median', 'The middle value of the last N bars of (high + low) / 2, so one spike cannot drag it.',
     ['One line on the price pane. Length 3 by default.', MA_TF],
     ['It follows the typical bar and ignores a single wild bar.', 'Price above a rising line is an up trend; below a falling line, a down trend.'],
@@ -45,10 +45,9 @@ G.add({
     ['The colour change is the flip: price closed through the line.', 'The line only moves with the trend, never against it.'],
     ['Use it as a trailing stop: stay with the trade while the colour holds.', 'A bigger factor flips less often but gives back more.']),
   tv_sar: tv('Parabolic SAR', 'Parabolic SAR: a stop that speeds toward price each bar and flips side when price touches it.',
-    ['A line on the price pane that follows below price in an uptrend and above it in a downtrend.', 'Start 0.02, Increment 0.02, Maximum 0.2 by default.'],
-    ['When the line jumps to the other side of price, the trend has flipped.', 'It speeds up the longer a trend runs.'],
-    ['Use it as a trailing stop that tightens with time.', 'Best in a clear trend; it flips again and again in chop.'],
-    'It is drawn as a joined line for now, not dots.'),
+    ['Dots on the price pane: below price in an uptrend and above it in a downtrend.', 'Start 0.02, Increment 0.02, Maximum 0.2 by default.'],
+    ['When the dots jump to the other side of price, the trend has flipped.', 'It speeds up the longer a trend runs.'],
+    ['Use it as a trailing stop that tightens with time.', 'Best in a clear trend; it flips again and again in chop.']),
   tv_chandelier: tv('Chandelier Exit', 'Stops hung a multiple of ATR below the highest close (long) or above the lowest close (short).',
     ['Two lines on the price pane: a green long stop under price and a red short stop over it.', 'ATR length 22 and Multiplier 3 by default.'],
     ['Only the side in force shows. The stop never loosens while the trend holds.', 'A close through the stop flips it to the other side.'],
@@ -57,8 +56,7 @@ G.add({
   tv_vstop: tv('Volatility Stop', 'A stop a multiple of ATR from the best close since the last flip. It never loosens until price crosses it.',
     ['Marks on the price pane: green under price in an uptrend, red over it in a downtrend.', 'ATR length 20 and Multiplier 2 by default.'],
     ['The side it sits on tells the trend. A switch of side is a flip.', 'It trails price and only ever tightens inside a trend.'],
-    ['Use it as a trailing stop: leave a trade when price closes through it.', 'Raise the multiplier to give price more room.'],
-    'Drawn as a joined line for now, not marks.'),
+    ['Use it as a trailing stop: leave a trade when price closes through it.', 'Raise the multiplier to give price more room.']),
   tv_chandekroll: tv('Chande Kroll Stop', 'Two stops: the highest high minus ATR (short) and the lowest low plus ATR (long), then extremes of those.',
     ['Two lines on the price pane: Stop long (blue) and Stop short (orange).', 'ATR length 10, Multiplier 1, Stop length 9 by default.'],
     ['Price above both lines is strong; below both is weak.', 'Price between them is a contested zone.'],
@@ -272,7 +270,7 @@ G.add({
 
   // ---- volume ----
   tv_vwap: tv('VWAP', 'The average price paid since the anchor, each bar weighted by its volume, with deviation bands.',
-    ['A thick line on the price pane, with Upper / Lower band 1 dashed. Bands 2 and 3 are off until you switch them on.', 'Anchor: Session, Week, Month, Quarter or Year.'],
+    ['A thick line on the price pane, with Upper / Lower band 1 dashed. Bands 2 and 3 are off until you switch them on.', 'Anchor: Session, Week, Month, Quarter or Year. Quarter and Year start at the first bar loaded.'],
     ['Price above the line: the average trade was cheaper than now. Below: dearer.', 'A band is a measure of stretch: price far out is stretched.'],
     ['Many traders treat it as fair price: favour buys above it, sells below.', 'Far from the line, price may drift back to it.'],
     'The Session anchor follows TradingView, not the Homebase 18:00 session.'),

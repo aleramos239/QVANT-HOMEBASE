@@ -4,6 +4,7 @@ random walk; PARAMS / WARM / PRIME have the shape studies_tv.make_tv expects; a 
 from __future__ import annotations
 
 import datetime as dt
+import json
 import math
 import random
 import re
@@ -183,9 +184,14 @@ def rows(**cols):
 
 
 # ---- the Pine formulas, one per study ----
+def hma_pine(c, n):
+    """TradingView's built-in Hull MA (pine-facade STD;Hull%1MA v28, Pine v6): ta.wma(2 ta.wma(src, length / 2) - ta.wma(src,
+    length), math.floor(math.sqrt(length))); length / 2 is cut to an int by ta.wma."""
+    return wma(sub(mul(wma(c, n // 2), 2.0), wma(c, n)), math.floor(math.sqrt(n)))
+
+
 def ref_hma(b):
-    c, n = C(b), 9
-    return wma(sub(mul(wma(c, n // 2), 2.0), wma(c, n)), round(math.sqrt(n)))
+    return hma_pine(C(b), 9)
 
 
 def ref_dema(b):
@@ -467,12 +473,13 @@ def ref_trix(b):
 
 
 def tsi(src, short, long):
+    """ta.tsi: the raw ratio in [-1, 1]; only the TSI indicator scales it by 100, SMI Ergodic plots it as it is."""
     pc = change(src)
-    return mul(div(ema(ema(pc, long), short), ema(ema(fmap(abs, pc), long), short)), 100.0)
+    return div(ema(ema(pc, long), short), ema(ema(fmap(abs, pc), long), short))
 
 
 def ref_tsi(b):
-    t = tsi(C(b), 13, 25)
+    t = mul(tsi(C(b), 13, 25), 100.0)
     return rows(tsi=t, signal=ema(t, 13))
 
 
@@ -820,13 +827,15 @@ def test_pine_edge_rules():
 
 def test_ichimoku_lines_each_read_their_own_length_even_above_the_span():
     """The window was capped at the span, so a conversion or base length above it never produced a value
-    (TradingView reads every line from its own length)."""
+    (TradingView reads every line from its own length). A line that is ready shows even while another is still warming:
+    conversion 20 / base 10 / span 30 draws the base from bar 9, not from bar 19 when the conversion fills."""
     bars = walk(400)
-    for conv, base, span, disp in ((30, 26, 20, 26), (9, 60, 20, 26), (9, 26, 52, 26)):
+    for conv, base, span, disp in ((30, 26, 20, 26), (9, 60, 20, 26), (9, 26, 52, 26), (20, 10, 30, 1), (20, 30, 10, 5)):
         def donchian(n):
             return avg(lowest(L(bars), n), highest(H(bars), n))
         c, b = donchian(conv), donchian(base)
-        want = rows(conv=c, base=b, a=shift(avg(c, b), disp - 1), b=shift(donchian(span), disp - 1))
+        cols = dict(conv=c, base=b, a=shift(avg(c, b), disp - 1), b=shift(donchian(span), disp - 1))
+        want = [None if all(v[i] is None for v in cols.values()) else {k: v[i] for k, v in cols.items()} for i in range(len(bars))]
         s = study("ichimoku", conv, base, span, disp)
         got = [s.push(x) for x in bars]
         bad = [i for i in range(len(bars)) if not same(got[i], want[i])]
@@ -849,3 +858,315 @@ def test_the_rsi_inside_stochrsi_and_connors_is_the_tv_rsi_study_even_on_a_flat_
     assert want[20] == 100.0 and want[39] == 100.0
     assert all(same(g, w) for g, w in zip(got, want)), [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if not same(g, w)][:3]
     assert run("connors", [mk(100.0) for _ in range(150)])[-1] == 100.0    # rsi(close, 3) is 100 on a flat start, not na
+
+
+# ---- review round 2: Hull MA, SMI scale, zero closes, Ichimoku warm-up, linear-time windows, a measured WARM table ----
+def test_hma_floors_the_square_root_like_tradingviews_built_in():
+    """round(sqrt(n)) and floor(sqrt(n)) differ whenever sqrt(n) ends in .5 or more: n = 15 (4 vs 3) and 21 (5 vs 4);
+    the default 9 (sqrt 3) cannot tell them apart."""
+    bars = walk(200)
+    for n in (15, 21):
+        s = study("hma", n)
+        got, want = [s.push(b) for b in bars], hma_pine(C(bars), n)
+        bad = [i for i in range(len(bars)) if not same(got[i], want[i])]
+        assert not bad and got[-1] is not None, (n, bad[:3])
+
+
+def test_smi_ergodic_is_the_raw_tsi_ratio_and_only_tsi_is_times_100():
+    bars = walk(300)
+    a, b, o = study("tsi", 20, 5, 5), study("smi", 20, 5, 5), study("smio", 20, 5, 5)
+    seen = 0
+    for x in bars:
+        t, m, d = a.push(x), b.push(x), o.push(x)
+        if m is None:
+            assert t is None and d is None
+            continue
+        seen += 1
+        assert abs(m["erg"]) <= 1.0 and math.isclose(t["tsi"], 100.0 * m["erg"], rel_tol=1e-12, abs_tol=1e-12)
+        assert (t["signal"] is None) == (m["sig"] is None) == (d is None)
+        if d is not None:
+            assert math.isclose(t["signal"], 100.0 * m["sig"], rel_tol=1e-12, abs_tol=1e-12) and math.isclose(d, m["erg"] - m["sig"])
+    assert seen > 250
+
+
+def test_mcginley_turns_a_zero_close_into_na_and_goes_on_from_the_ema_it_froze():
+    """mg + (c - mg) / (n (c / mg)^4) divided by zero at a close of 0: Pine's x / 0 is na, and hub.py pushes study values with
+    no try/except, so the crash left the bar-close handler. TradingView's script calls ta.ema only while mg[1] is na, so the
+    bar after a na takes that EMA up from where it froze (the seed, bar n - 1), not from a fresh start: PineTS 0.12.1 running
+    that source gives k close + (1 - k) seed there as well."""
+    bars = walk(60)
+    s = study("mcginley")
+    for b in bars[:30]:
+        s.push(b)
+    zero = mk(0.0, h=0.0, l=0.0, o=0.0, t=bars[30].t)
+    assert s.preview(zero) is None and s.push(zero) is None
+    assert [study("mcginley").push(mk(0.0)) for _ in range(3)] == [None] * 3
+    k, seed = 2 / 15, sum(C(bars[:14])) / 14
+    mg = seed + k * (bars[31].c - seed)
+    assert s.push(bars[31]) == pytest.approx(mg, rel=1e-12)
+    for b in bars[32:]:                                       # then the plain recursion again
+        mg = mg + (b.c - mg) / (14 * (b.c / mg) ** 4)
+        assert s.push(b) == pytest.approx(mg, rel=1e-12)
+
+
+@pytest.mark.parametrize("f", [0.3, 0.1, 0.01, 1e-5])
+def test_mcginley_survives_a_crash_in_the_price_and_never_writes_inf(f):
+    """(close / mg)^4 under 1 blows the step up (mg turns negative and grows): it overflows a float, or the line reaches inf, and
+    json.dumps writes Infinity, which the client cannot parse. Both are na, and the EMA goes on after them."""
+    bars = walk(200)
+    bars[60] = mk(bars[60].c * f, t=bars[60].t)
+    s = study("mcginley")
+    got = [s.push(b) for b in bars]                           # no raise is the claim
+    assert all(g is None or math.isfinite(g) for g in got)
+    json.dumps(got, allow_nan=False)
+    assert got[-1] is not None and abs(got[-1] - bars[-1].c) < 5          # back on the price once the EMA has seeded
+
+
+def test_mcginley_survives_a_close_whose_fourth_power_is_past_a_float():
+    bars = walk(80)
+    bars[40] = mk(1e80, t=bars[40].t)                         # (1e80 / 100) ** 4 is past 1.8e308: Python raises OverflowError
+    s = study("mcginley")
+    got = [s.push(b) for b in bars]
+    assert all(g is None or math.isfinite(g) for g in got) and got[-1] is not None
+
+
+@pytest.mark.parametrize("name", sorted(PARAMS))
+def test_a_zero_close_is_na_not_a_crash(name):
+    """x / 0 and log(0) are na in Pine and hub.py pushes study values with no try/except: one bad close (a zero tick, a bad feed)
+    must not raise. The bar after it has less (1) or more (100) volume than the zero bar (10): nvi and pvi look at that."""
+    for where in (0, 30):
+        for after in (1, 100):
+            bars = walk(80)
+            bars[where] = mk(0.0, h=0.0, l=0.0, o=0.0, v=10, t=bars[where].t)
+            nxt = bars[where + 1]
+            bars[where + 1] = mk(nxt.c, h=nxt.h, l=nxt.l, o=nxt.o, v=after, t=nxt.t)
+            s = study(name)
+            for b in bars[:where]:
+                s.push(b)
+            s.preview(bars[where])
+            for b in bars[where:]:
+                s.push(b)                                    # no raise is the claim
+
+
+def _bad_feeds():
+    """Feeds a broken tick source can produce: a run of zero bars, a dead feed, no volume, a close that falls to a fraction
+    of the price or jumps past a float."""
+    def with_bar(i, f, **kw):
+        bars = walk(120, 2)
+        b = bars[i]
+        bars[i] = mk(b.c * f, h=b.h * f, l=b.l * f, o=b.o * f, v=kw.get("v", b.v), t=b.t)
+        return bars
+    run = walk(120, 2)
+    for i in range(30, 70):
+        run[i] = mk(0.0, v=10, t=run[i].t)
+    yield "zero_run", run
+    yield "all_zero", [mk(0.0, v=10, t=i) for i in range(120)]
+    yield "no_volume", [mk(b.c, h=b.h, l=b.l, o=b.o, v=0, t=b.t) for b in walk(120, 2)]
+    for f in (0.3, 0.1, 0.01):
+        yield f"falls_to_{f}", with_bar(60, f)
+    yield "jumps_to_1e80", with_bar(60, 1e78)                  # (close / mg) ** 4 passes a float
+
+
+@pytest.mark.parametrize("name", sorted(PARAMS))
+def test_a_bad_feed_never_raises_and_never_writes_a_non_finite_number(name):
+    """hub.py pushes study values with no try/except and server.py writes them with json.dumps, which turns inf / nan into
+    Infinity / NaN, and the client's JSON.parse stops on those: a study gives a finite number or na for any bar it is fed."""
+    for label, bars in _bad_feeds():
+        s = study(name)
+        for b in bars:
+            s.preview(b)
+            json.dumps(s.push(b), allow_nan=False)
+
+
+def test_ichimoku_shows_a_ready_line_while_the_conversion_line_is_still_warming():
+    s = study("ichimoku", 20, 10, 30, 1)
+    got = [s.push(b) for b in walk(40)]
+    assert got[8] is None and got[9]["conv"] is None and got[9]["base"] is not None      # base is ready at bar 9, conv at bar 19
+    assert got[19]["conv"] is not None and got[29]["b"] is not None
+
+
+def test_alligator_shows_a_ready_line_while_the_longest_one_is_still_warming():
+    """Like Ichimoku: the lips line (30 bars) is the last to fill, and the jaw (5 bars, shown 3 later) was hidden until it did."""
+    bars = walk(80)
+    x, args = hl2(bars), (5, 8, 30, 3, 5, 3)
+    cols = dict(jaw=shift(rma(x, 5), 3), teeth=shift(rma(x, 8), 5), lips=shift(rma(x, 30), 3))
+    want = [None if all(v[i] is None for v in cols.values()) else {k: v[i] for k, v in cols.items()} for i in range(len(bars))]
+    s = study("alligator", *args)
+    got = [s.push(b) for b in bars]
+    assert [i for i in range(len(bars)) if not same(got[i], want[i])] == []
+    assert got[6] is None and got[7]["jaw"] is not None and got[7]["teeth"] is None and got[7]["lips"] is None
+    assert got[-1]["lips"] is not None
+
+
+def _ulcer_brute(c, m):
+    """The old O(n^2) per bar Ulcer Index, restated: every one of the m trailing windows rescanned for its highest close."""
+    out = []
+    for i in range(len(c)):
+        if i + 1 < 2 * m - 1:
+            out.append(None)
+            continue
+        w = c[i - 2 * m + 2:i + 1]
+        if any(max(w[j:j + m]) == 0 for j in range(m)):          # 0 / 0: na, and na in any term of the sma is na
+            out.append(None)
+            continue
+        dd = [(100.0 * (w[j + m - 1] - max(w[j:j + m])) / max(w[j:j + m])) ** 2 for j in range(m)]
+        out.append(math.sqrt(sum(dd) / len(dd)))
+    return out
+
+
+def _rci_brute(c, n):
+    """The old O(n^2) per bar Rank Correlation Index: the price rank of each close counted by scanning the window."""
+    out = []
+    for i in range(len(c)):
+        if i + 1 < n:
+            out.append(None)
+            continue
+        w = c[i - n + 1:i + 1]
+        d = sum(((n - j) - (1 + sum(1 for y in w if y > x))) ** 2 for j, x in enumerate(w))
+        out.append((1 - 6.0 * d / (n * (n * n - 1))) * 100.0)
+    return out
+
+
+def _ties(n=500, seed=5):
+    """Closes on a handful of price levels, so highs and ranks tie constantly."""
+    r = random.Random(seed)
+    return [mk(float(r.randint(1, 6))) for _ in range(n)]
+
+
+@pytest.mark.parametrize("n", [2, 5, 14, 60])
+def test_ulcer_equals_the_rescanning_definition(n):
+    for bars in (walk(400, 3), _ties()):
+        s = study("ulcer", n)
+        assert [s.push(b) for b in bars] == _ulcer_brute(C(bars), n)
+
+
+@pytest.mark.parametrize("n", [3, 14])
+def test_ulcer_is_na_while_a_window_is_all_zero_and_equals_the_definition_after_it(n):
+    """A window of n closes at 0 has a highest of 0: dd = 100 (c - 0) / 0 is na, and so is the sma of it (a run of n zero
+    closes, or a dead feed, raised ZeroDivisionError out of the bar-close handler)."""
+    bars = walk(150, 3)
+    lo, hi = 30, 30 + 2 * n                                   # the zero run, bars lo .. hi - 1, longer than a window
+    for i in range(lo, hi):
+        bars[i] = mk(0.0, t=bars[i].t)
+    s = study("ulcer", n)
+    got = [s.push(b) for b in bars]                           # no raise is the claim
+    dead = range(lo + n - 1, hi + n - 1)                      # some window of the 2 n - 1 closes sits wholly inside the run
+    assert [k for k, g in enumerate(got) if g is None and k >= 2 * n - 2] == list(dead)
+    want = _ulcer_brute(C(bars), n)
+    assert got == want
+    assert [study("ulcer", n).push(mk(0.0)) for _ in range(4 * n)][-1] is None
+
+
+class _Counted(float):
+    """A close that counts the comparisons made with it: a test can tell O(n) a bar from O(n^2) without a clock."""
+    seen = 0
+
+    def __lt__(self, other):
+        _Counted.seen += 1
+        return float.__lt__(self, other)
+
+    def __gt__(self, other):
+        _Counted.seen += 1
+        return float.__gt__(self, other)
+
+
+@pytest.mark.parametrize("name", ["ulcer", "rci"])
+def test_a_long_window_costs_far_fewer_than_n_squared_comparisons_a_bar(name):
+    """tv:ulcer:500 and tv:rci:500 took 1-3 ms a bar when each bar rescanned its window per close (n^2), 20-60 s over a long
+    history, and add_study runs on the event loop. Equal values (the tests above) cannot tell, and a clock is flaky: count."""
+    n, last = 200, 30
+    bars = [mk(_Counted(b.c), t=b.t) for b in walk(2 * n + last, 4)]
+    s = study(name, n)
+    for b in bars[:-last]:
+        s.push(b)
+    _Counted.seen = 0
+    for b in bars[-last:]:
+        s.push(b)
+    per_bar = _Counted.seen / last
+    assert 0 < per_bar < n * n / 4, per_bar                   # the scan did n^2 = 40000; sorted + bisect and two running maxima ~ 1e3
+
+
+@pytest.mark.parametrize("n", [2, 3, 10, 61])
+def test_rci_equals_the_scanning_definition(n):
+    for bars in (walk(400, 3), _ties()):
+        s = study("rci", n)
+        assert [s.push(b) for b in bars] == _rci_brute(C(bars), n)
+
+
+# ---- WARM is MEASURED: a study cold-started at a join against the same study run from the first bar ----
+def _leaves(v):
+    return {} if v is None else v if isinstance(v, dict) else {"": v}
+
+
+def dependence(name, args, bars, cut, tol=1e-3, horizon=None):
+    """Bars after a join that a study's value still depends on: run it from bar 0 and cold-started at `cut` (what a chart's own
+    study does at its first bar), and return the last bar after the cut (+ 1) where the cold run is missing a value the full
+    run has, or differs from it by more than `tol` x that line's own deviation. 1e-3 is where a 5 n EMA tail (e^-10) sits."""
+    s, c = study(name, *args), study(name, *args)
+    full = [s.push(b) for b in bars]
+    cold = [c.push(b) for b in bars[cut:cut + horizon if horizon else None]]
+    sd = {}
+    for k in {k for v in full for k in _leaves(v)}:
+        xs = [_leaves(v)[k] for v in full if _leaves(v).get(k) is not None]
+        m = sum(xs) / len(xs)
+        sd[k] = math.sqrt(sum((x - m) ** 2 for x in xs) / len(xs)) or 1.0
+    last = -1
+    for i, v in enumerate(cold):
+        f, g = _leaves(full[cut + i]), _leaves(v)
+        for k in f.keys() | g.keys():
+            a, b = f.get(k), g.get(k)
+            if (a is None) != (b is None) or (a is not None and abs(a - b) > tol * sd[k]):
+                last = i
+                break
+    return last + 1
+
+
+# every study with a finite memory, by arg sets (wire-key order) that put the LONGEST length where the table did not look
+MEASURED = {name: [()] for name in PARAMS}
+for _name in ("obv", "pvt", "adl", "nvi", "pvi"):
+    del MEASURED[_name]                      # a running sum remembers every bar: no finite WARM, see the next test
+MEASURED.update({
+    "bbtrend": [(), (100, 10, 2.0), (10, 100, 2.0)],
+    "ao": [(), (60, 5), (5, 60)],
+    "alligator": [(), (13, 60, 5, 8, 5, 3), (13, 8, 60, 8, 5, 3), (5, 8, 13, 3, 5, 40), (5, 8, 30, 3, 5, 3),
+                  (5, 5, 5, 100, 0, 0), (5, 5, 5, 0, 100, 0), (5, 5, 5, 0, 0, 100)],      # short lengths, one long offset each
+    "ppo": [(), (100, 26, 9), (12, 80, 9), (12, 26, 60), (100, 99, 3)],          # a difference of two EMAs is 6 n, the near-equal ones show it
+    "pvo": [(), (100, 26, 9), (12, 80, 9), (12, 26, 60), (69, 66, 3), (85, 84, 5)],
+    "uo": [(), (42, 7, 14), (7, 42, 28), (7, 14, 60)],
+    "rvgi": [(), (5,), (30,)],
+    "coppock": [(), (10, 40, 11), (10, 14, 50), (30, 14, 11)],
+    "kst": [(), (50, 15, 20, 30, 10, 10, 10, 15, 9), (10, 15, 60, 30, 10, 10, 10, 15, 9), (10, 15, 20, 30, 10, 10, 80, 15, 9),
+            (10, 15, 20, 30, 10, 10, 10, 15, 60)],
+    "chaikin": [(), (100, 10), (10, 3), (30, 31), (40, 41), (45, 44)],
+    "klinger": [(), (100, 55, 13), (34, 10, 13), (34, 55, 80), (56, 55, 3), (60, 59, 3)],
+})
+
+
+@pytest.mark.parametrize("name,args", [(n, a) for n, sets in sorted(MEASURED.items()) for a in sets], ids=lambda x: str(x).replace(" ", ""))
+def test_warm_covers_the_measured_dependence(name, args):
+    bars = walk(2400, 7)
+    want = dependence(name, args, bars, 800)
+    got = WARM[name]([str(a) for a in args])
+    assert got >= want, f"tv:{name}{args}: the repair covers {got} bars after a join but the value still depends on {want}"
+
+
+@pytest.mark.parametrize("n", [2, 3])
+def test_fractals_warm_covers_the_equal_bar_skip(n):
+    """On tick-quantised bars (equal highs and lows) a mark can hang on bars up to 2n + 4 back; a random walk never shows that."""
+    r, px, bars = random.Random(3), 100.0, []
+    for i in range(1500):
+        o = px
+        px = round((px + r.uniform(-1.5, 1.5)) * 4) / 4
+        bars.append(mk(px, h=max(o, px) + r.randint(0, 2) * 0.25, l=min(o, px) - r.randint(0, 2) * 0.25, o=o, t=i))
+    worst = max(dependence("fractals", (n,), bars, cut, horizon=40) for cut in range(100, 500))
+    assert 2 * n < worst <= WARM["fractals"]([str(n)]) == 2 * n + 4
+
+
+def test_a_running_sum_asks_for_all_the_history_the_hub_will_repair_and_netvol_for_one_bar():
+    """obv / pvt / adl / nvi / pvi add up across every bar, so no finite WARM is exact: they ask for the most the hub repairs
+    (HISTORY_MAX; it clamps anything bigger). netvol looks one bar back: its first bar after a join is -/+ volume, not 0."""
+    from homebase.charts.hub import HISTORY_MAX, warm_bars
+    for name in ("obv", "pvt", "adl", "nvi", "pvi"):
+        assert WARM[name]([]) == HISTORY_MAX == warm_bars(f"tv:{name}"), name
+    assert WARM["netvol"]([]) == 1 == warm_bars("tv:netvol")
+    assert warm_bars("tv:rvgi") == 15 and warm_bars("tv:fractals") == 8

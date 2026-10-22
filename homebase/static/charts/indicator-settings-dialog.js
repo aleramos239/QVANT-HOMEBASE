@@ -393,14 +393,15 @@ function mount(box, host) {
       for (const v of x.options) { const o = mk('option', '', String(v)); o.value = String(v); ctl.append(o); }
       ctl.value = String(cur());
       ctl.onchange = () => put(x.options.find((v) => String(v) === ctl.value));   // the option itself, a number stays a number
-    } else if (x.type === 'int' || x.type === 'float') {
+    } else if (x.type === 'int' || x.type === 'float' || x.type === 'price' || x.type === 'time') {   // price: a float; time: whole ms
+      const whole = x.type === 'int' || x.type === 'time';
       ctl = mk('input', 'set-num');
       ctl.type = 'number';
       if (x.minval != null) ctl.min = String(x.minval);
       if (x.maxval != null) ctl.max = String(x.maxval);
-      ctl.step = String(x.step || (x.type === 'int' ? 1 : 'any'));
+      ctl.step = String(x.step || (whole ? 1 : 'any'));
       ctl.value = String(cur());
-      ctl.oninput = () => { const n = Number(ctl.value); if (ctl.value !== '' && Number.isFinite(n)) put(x.type === 'int' ? Math.round(n) : n); };
+      ctl.oninput = () => { const n = Number(ctl.value); if (ctl.value !== '' && Number.isFinite(n)) put(whole ? Math.round(n) : n); };
     } else if (x.type === 'color') {
       ctl = mk('input');
       ctl.type = 'color';

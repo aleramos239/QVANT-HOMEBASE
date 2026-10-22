@@ -338,6 +338,26 @@ test('pine: two inputs with one title are two rows with their own keys; setting 
   assert.ok(!('inputs' in params()));
 });
 
+/* input.price is a float and input.time a whole number of ms: both are numbers to the script, never the text a text box gives. */
+const PRICE_TIME = { inputs: [
+  { id: 'in_0', varId: 'lvl', title: 'Level', type: 'price', defval: 100 },
+  { id: 'in_1', varId: 'when', title: 'When', type: 'time', defval: 1577944800000 }], title: 'PT', error: null, running: false };
+
+test('pine: a price input is a number box saved as a float, a time input one saved as whole ms; put back to the default each is dropped', () => {
+  const { box, params } = openPine({ script: 'a.pine' }, PRICE_TIME);
+  const lvl = inputOf(box, 'Level'), when = inputOf(box, 'When');
+  assert.deepEqual([lvl.type, lvl.step, lvl.value, when.type, when.step, when.value], ['number', 'any', '100', 'number', '1', '1577944800000']);
+  type(lvl, 105.25);
+  type(when, 1800000000000.4);
+  assert.deepEqual(params().inputs, { lvl: 105.25, when: 1800000000000 });
+  assert.deepEqual(Object.values(params().inputs).map((v) => typeof v), ['number', 'number']);
+  type(lvl, '');
+  assert.deepEqual(params().inputs, { lvl: 105.25, when: 1800000000000 }, 'an empty box is not a value');
+  type(lvl, 100);
+  type(when, 1577944800000);
+  assert.ok(!('inputs' in params()));
+});
+
 test('pine: an old save keyed by title keeps working; its value moves to the input\'s own key and the title key goes', () => {
   const { box, params } = openPine({ script: 'a.pine', inputs: { Length: 20, Mult: 2, Gone: 1 } });
   assert.equal(inputOf(box, 'Length').value, '20', 'read by title');

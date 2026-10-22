@@ -2,7 +2,8 @@
 studies.py / studies_ta.py keep the strategy engine's definitions and never change; these keep TradingView's, so a line
 here can be checked against TradingView's own export (tools/tvparity.py). Pure; the Study contract of studies.py
 (push / preview, immutable state, None = Pine's na). Every study reads only OHLCV, buy / sell and n, so each key may
-take a timeframe ("tv:ema:20@3600"). The long tail (hma, cci, obv, ...) is studies_tv2.py, merged into PARAMS here.
+take a timeframe ("tv:ema:20@3600"), except the two mark studies tv:pivothl and tv:fractals (split_timeframe refuses
+them). The long tail (hma, cci, obv, ...) is studies_tv2.py, merged into PARAMS here.
 
 Wire keys "tv:<name>[:args]"; a missing argument takes TradingView's default, a source is one of SOURCES:
   tv:sma:9:close         ta.sma                                                                     -> float
@@ -24,7 +25,7 @@ Wire keys "tv:<name>[:args]"; a missing argument takes TradingView's default, a 
   tv:supertrend:10:3     ta.supertrend(factor 3, atr 10), TV's sign: dir 1 = down (the line is the upper band), -1 = up;
                          it starts down, and a flip compares the close with THIS bar's band           -> {line, dir}
   tv:tema:9:close        3 (e1 - e2) + e3, each a ta.ema                                            -> float
-  tv:mfi:14              ta.mfi(hlc3) over the last n changes; no down flow = na                     -> float
+  tv:mfi:14              ta.mfi(hlc3) over the last n changes; no down flow = 100, 0/0 = na         -> float
   tv:vwap:session        ta.vwap(hlc3) since the anchor (session = the 18:00 ET session, week, month, quarter, year)
                          and its bands at 1, 2, 3 volume-weighted standard deviations of hlc3
                                                                                                     -> {vwap, u1, l1, u2, l2, u3, l3}
@@ -347,7 +348,8 @@ class MFI(_Study):
             return w, None
         up = sum(p1 * v1 for (p0, _), (p1, v1) in zip(w, w[1:]) if p1 > p0)
         dn = sum(p1 * v1 for (p0, _), (p1, v1) in zip(w, w[1:]) if p1 < p0)
-        return w, (None if dn == 0 else 100.0 - 100.0 / (1.0 + up / dn))
+        # Pine's 100 - 100 / (1 + up / dn) read as IEEE (x / 0 = inf -> 100, 0 / 0 = nan -> na); no TV export has settled it
+        return w, (None if dn == 0 and up == 0 else 100.0 if dn == 0 else 100.0 - 100.0 / (1.0 + up / dn))
 
 
 class VWAP(_Study):
@@ -658,7 +660,7 @@ def warm_tv(name: str, rest: list) -> int:
     if name in ("rma", "rsi", "atr", "supertrend"):
         return 10 * _num(name, rest, 0)
     if name == "macd":
-        return 5 * _num(name, rest, 1) + 5 * _num(name, rest, 2)
+        return 5 * max(_num(name, rest, 0), _num(name, rest, 1)) + 5 * _num(name, rest, 2)     # the longer of the two EMAs
     if name == "stoch":
         return _num(name, rest, 0) + _num(name, rest, 1) + _num(name, rest, 2)
     if name == "adx":
@@ -678,9 +680,12 @@ def warm_tv(name: str, rest: list) -> int:
 
 def prime_tv(name: str, rest: list) -> int:
     """Completed sessions BEFORE the loaded ones a tv study must be fed first (hub.prime_sessions): the relative volume's
-    and daily range's n sessions, the pivots' one."""
+    and daily range's n sessions, the pivots' one, and the most a week's (4) or a month's (22) VWAP can have behind the
+    first loaded session. A quarter's and a year's (64 / 259) are not primed: those count the sessions the chart loaded."""
     if name in ("rvol", "adr"):
         return _num(name, rest, 0) + 1
+    if name == "vwap":
+        return {"week": 4, "month": 22}.get(rest[0] if rest else "", 0)
     if name in PRIME2:
         return PRIME2[name](list(rest)) if callable(PRIME2[name]) else PRIME2[name]
     return 1 if name == "pivots" else 0

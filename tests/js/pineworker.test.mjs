@@ -65,6 +65,34 @@ test('a ta.rsi plot comes back for every bar and matches an independent RSI', { 
   assert.equal(r.strategy, null);
 });
 
+test('overlay is the runtime\'s own reading of the declaration (split over lines, in any argument order, strategy()); the title is read only from a quoted first argument', { skip }, async () => {
+  const run = async (decl) => {
+    const w = loadWorker(UMD);
+    w.post(init('//@version=6\n' + decl + '\nplot(close, "c")\n', bars(30)));
+    const r = await w.next();
+    assert.equal(r.type, 'result', decl + ' -> ' + r.message);
+    return r;
+  };
+  const cases = [
+    ['indicator("X", overlay=true)', true, 'X'],
+    ['indicator("X",\n  overlay=true)', true, 'X'],
+    ['indicator(overlay=true, title="X")', true, null],
+    ['T = "X"\nindicator(T, overlay=true)', true, null],
+    ['indicator(shorttitle="x", title="X", overlay=true)', true, null],
+    ['indicator("X", "x", true)', true, 'X'],
+    ['indicator("X")', false, 'X'],
+    ['indicator("X", overlay=false)', false, 'X'],
+    ['indicator("X") // overlay=true is for later', false, 'X'],
+    ['ov = false\nindicator("X", overlay=ov)', false, 'X'],   // the runtime hands back the name `ov`: not a true
+  ];
+  for (const [decl, overlay, title] of cases) {
+    const r = await run(decl);
+    assert.deepEqual([r.overlay, r.title], [overlay, title], decl);
+  }
+  const r = await run('strategy("S", margin_long=100,\n  overlay=true)');
+  assert.deepEqual([r.kind, r.overlay, r.title], ['strategy', true, 'S']);
+});
+
 test('an input override reaches the script', { skip }, async () => {
   const w = loadWorker(UMD);
   const b = bars(120);

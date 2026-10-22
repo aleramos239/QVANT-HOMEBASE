@@ -16,7 +16,8 @@
 
    2026-10-21 columns (orderflow.md §7.2): P/S bid · Sold · Bid · Price · Ask · Bought · P/S ask · Vol. Sold / Bought
    are the sells at the bid / buys at the ask per price since the Reset button (before any: the session); P/S is
-   HBDom.pullStack's net pull/stack per side since the same reset. Columns is a per-browser choice. */
+   HBDom.pullStack's net pull/stack per side since the same reset. Columns is a per-browser choice; until one is
+   made the ladder shows the columns that fit its width (HBDom.fitCols). */
 (() => {
 'use strict';
 const Dom = window.HBDom;
@@ -40,6 +41,7 @@ const volCache = { bars: null, len: -1, tick: null, start: -1, closed: null };
 const splitCache = { bars: null, len: -1, tick: null, start: -1, closed: null };
 const psState = new Map();                     // root -> {base, split0, session}: what the P/S and Sold/Bought columns count from
 const COLS_KEY = 'hb_dom_cols';
+let saved = false;                             // the column list is the user's own choice (else the default follows the width)
 let cols = loadCols();                         // the visible column ids (HBDom.COLS order)
 let dirty = false;
 
@@ -89,14 +91,27 @@ function reset() {
   dirty = true;
 }
 /* The column choice is per browser (localStorage, every access its own try/catch: a private window or cleared site
-   data just shows every column for this page). The grid template follows the visible columns. */
-function loadCols() { try { return Dom.parseCols(localStorage.getItem(COLS_KEY)); } catch (_) { return Dom.parseCols(null); } }
-function saveCols() { try { localStorage.setItem(COLS_KEY, JSON.stringify([...cols])); } catch (_) { /* stays for this page */ } }
+   data just shows the default for this page). The grid template follows the visible columns. */
+function loadCols() {
+  try { const raw = localStorage.getItem(COLS_KEY); saved = Array.isArray(JSON.parse(raw)); return Dom.parseCols(raw); } catch (_) { return Dom.parseCols(null); }
+}
+function saveCols() { saved = true; try { localStorage.setItem(COLS_KEY, JSON.stringify([...cols])); } catch (_) { /* stays for this page */ } }
 function applyCols() {
   const show = (c) => { for (const { id } of Dom.COLS) c[id].hidden = !cols.has(id); };
   show(ui.colEls);
   for (const e of rowEls.values()) show(e.c);
   ui.wrap.setAttribute('style', `--dom-grid: ${Dom.COLS.filter((c) => cols.has(c.id)).map((c) => (c.id === 'price' ? 'minmax(70px, 1fr)' : '1fr')).join(' ')}`);
+}
+/* Nothing chosen: show the columns that fit the ladder's width, again whenever the panel is resized. A hidden panel
+   measures 0 and keeps what it has. The observer fires on every frame of a drag, so a resize that leaves the same
+   columns touches nothing (applyCols rewrites every cell). */
+function fitDefault() {
+  const w = ui.wrap.clientWidth;
+  if (saved || !(w > 0)) return;
+  const next = Dom.fitCols(w);
+  if (next.size === cols.size && [...next].every((id) => cols.has(id))) return;
+  cols = next;
+  applyCols();
 }
 function colsMenu(btn) {
   page.toggleMenu(btn, () => {
@@ -146,6 +161,7 @@ function headButton(icon, text, title, onclick) {   // one class for every head 
 function build() {
   ui = {};
   ui.wrap = mkEl('div', 'dom-wrap');
+  if (window.ResizeObserver) new ResizeObserver(fitDefault).observe(ui.wrap);
 
   ui.head = mkEl('div', 'dom-head');
   ui.colsBtn = headButton('list', 'Columns', 'Which columns the ladder shows', () => colsMenu(ui.colsBtn));

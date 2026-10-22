@@ -93,11 +93,13 @@ class Footprint extends Layer {
   /* The vendor imbalance rule (HBFlowMath.imbalancesV2) when `ex` asks for one that is not today's, else null (draw keeps its own rule). */
   imb(rows, tick) {
     const ex = this.ex || {}, M = window.HBFlowMath;
-    const custom = (ex.imb && ex.imb !== 'homebase') || (ex.zero && ex.zero !== 'one') || (ex.edge && ex.edge !== 'one') || +ex.minvol > 0 || +ex.mindiff > 0;
-    // shortcut: a vendor rule brings its own ratio while the Imbalance ratio sits on its default 3 (typing a 3 by hand cannot be told apart); upgrade: store whether the user set it
+    // `one` is the dialog's default for zero / edge (cell.js always sends it), so it counts as unset: the rule's own skip stays
+    const zero = ex.zero && ex.zero !== 'one' ? ex.zero : null, edge = ex.edge && ex.edge !== 'one' ? ex.edge : null;
+    const custom = (ex.imb && ex.imb !== 'homebase') || zero || edge || +ex.minvol > 0 || +ex.mindiff > 0;
+    // shortcut: a vendor rule brings its own ratio / zero / edge while those sit on their defaults 3 / one / one (typing the default by hand cannot be told apart); upgrade: store whether the user set it
     const ratio = ex.imb && ex.imb !== 'homebase' && this.ratio === 3 ? null : this.ratio;
     return custom && M && M.imbalancesV2
-      ? M.imbalancesV2(rows, { tick, preset: ex.imb, ratio, zero: ex.zero || null, edge: ex.edge || null, minVolume: +ex.minvol || 0, minDiff: +ex.mindiff || 0, stack: ex.stack })
+      ? M.imbalancesV2(rows, { tick, preset: ex.imb, ratio, zero, edge, minVolume: +ex.minvol || 0, minDiff: +ex.mindiff || 0, stack: ex.stack })
       : null;
   }
   draw(target) {
@@ -198,17 +200,22 @@ class Profile extends Layer {
   constructor(P) { super(P); this.p = null; this.tick = 0.25; this.ex = {}; }
   z() { return 'bottom'; }
   set(p, tick, ex) { this.p = p; this.tick = tick; this.ex = ex || {}; this.redraw(); }
+  /* POC / VAH / VAL of one session `s` ({poc, vah, val, rows}) under `ex` ({va, method}): the value area at the chosen share (70 is the server's own)
+     is recomputed from the rows otherwise; `method` sierra / tv use that app's POC and value-area rules (HBFlowMath.valueAreaV2) -- homebase
+     (unset) keeps the rule above. -> {poc, vah, val}. */
+  static levels(s, ex, tick) {
+    const M = window.HBFlowMath;
+    const v2 = (ex.method === 'sierra' || ex.method === 'tv') && M && M.valueAreaV2 ? M.valueAreaV2(s.rows, ex.va || 70, ex.method, tick) : null;
+    const va = !v2 && ex.va && ex.va !== 70 && M && M.valueArea ? M.valueArea(s.rows, s.poc, ex.va) : null;
+    return { poc: v2 ? v2.poc : s.poc, vah: v2 ? v2.vah : va ? va.vah : s.vah, val: v2 ? v2.val : va ? va.val : s.val };
+  }
   draw(target) {
     const p = this.p; if (!p || !this.series || !p.rows || !p.rows.length) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       let maxV = 1; for (const r of p.rows) if (r[1] > maxV) maxV = r[1];
-      const ex0 = this.ex || {}, M = window.HBFlowMath;
+      const ex0 = this.ex || {};
       const W = mediaSize.width * Math.min(0.5, Math.max(0.05, (+ex0.width || 18) / 100)), rh = Math.max(1, this.rowH(p.poc, this.tick) - 0.5);
-      // the value area at the chosen share (70 is the server's own): recomputed from the rows otherwise; `method` sierra / tv use that app's
-      // POC and value-area rules (HBFlowMath.valueAreaV2) -- homebase (unset) keeps the rule above
-      const v2 = (ex0.method === 'sierra' || ex0.method === 'tv') && M && M.valueAreaV2 ? M.valueAreaV2(p.rows, ex0.va || 70, ex0.method, this.tick) : null;
-      const va = !v2 && ex0.va && ex0.va !== 70 && M && M.valueArea ? M.valueArea(p.rows, p.poc, ex0.va) : null;
-      const vah = v2 ? v2.vah : va ? va.vah : p.vah, val = v2 ? v2.val : va ? va.val : p.val, poc = v2 ? v2.poc : p.poc;
+      const { poc, vah, val } = Profile.levels(p, ex0, this.tick);
       const left = ex0.side === 'left';
       for (const [px, v] of p.rows) {
         const y = this.series.priceToCoordinate(px); if (y == null) continue;
@@ -217,13 +224,14 @@ class Profile extends Layer {
       }
       const q = p.prev, ex = this.ex || {};
       if (!q || !q.rows || !q.rows.length) return;
+      const pq = Profile.levels(q, ex, this.tick);        // the session before follows the same rule and share
       if (ex.prior) {                  // the prior session's ghost, left of the current profile
         let mq = 1; for (const r of q.rows) if (r[1] > mq) mq = r[1];
         const qh = Math.max(1, this.rowH(q.poc, this.tick) - 0.5);
         ctx.globalAlpha = 0.45;
         for (const [px, v] of q.rows) {
           const y = this.series.priceToCoordinate(px); if (y == null) continue;
-          ctx.fillStyle = px === q.poc ? this.P.poc : this.P.va;
+          ctx.fillStyle = px === pq.poc ? this.P.poc : this.P.va;
           const w = W * v / mq; ctx.fillRect(mediaSize.width - W - 6 - w, y - qh / 2, w, qh);
         }
         ctx.globalAlpha = 1;
@@ -231,8 +239,8 @@ class Profile extends Layer {
       if (ex.lines) {                  // VAH / VAL / POC of the session before, across the whole pane
         ctx.font = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
         ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 1;
-        for (const [px, name, color, dashed] of [[q.vah, 'pVAH', this.P.text2, false], [q.val, 'pVAL', this.P.text2, false],
-          [q.poc, 'pPOC', this.P.poc, !!ex.naked]]) {
+        for (const [px, name, color, dashed] of [[pq.vah, 'pVAH', this.P.text2, false], [pq.val, 'pVAL', this.P.text2, false],
+          [pq.poc, 'pPOC', this.P.poc, !!ex.naked]]) {
           const y = px == null ? null : this.series.priceToCoordinate(px); if (y == null) continue;
           ctx.strokeStyle = color; ctx.fillStyle = color;
           ctx.setLineDash(dashed ? [6, 4] : []);

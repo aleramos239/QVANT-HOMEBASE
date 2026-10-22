@@ -239,6 +239,7 @@ def test_a_bad_key_is_refused(key):
 def test_warm_bars_covers_each_studys_memory():
     assert warm_bars("rsi:14") == 140 and warm_bars("atr:20") == 200
     assert warm_bars("macd:12:26:9") == 5 * 26 + 5 * 9
+    assert warm_bars("macd:100:10:9") == 5 * 100 + 5 * 9      # fast > slow: the fast EMA is the longer memory
     assert warm_bars("bb:20:2") == 20 and warm_bars("donchian:50") == 50
     assert warm_bars("stoch:14:3:3") == 20 and warm_bars("mfi:14") == 15
     assert warm_bars("orb:15") == 0 and warm_bars("sess:london") == 0

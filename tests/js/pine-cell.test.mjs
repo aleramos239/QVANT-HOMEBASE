@@ -89,6 +89,16 @@ test('pineMarkers: shape, place, size and colour of a hit; a character is a size
   assert.deepEqual(pineMarkers(undefined, P), []);
 });
 
+test('pineMarkers over the cap keeps the newest by time, not the last the Worker listed (it lists plot by plot)', () => {
+  const hits = (shape, from) => Array.from({ length: 900 }, (_, i) => ({ time: from + i * 2, shape, location: 'AboveBar' }));
+  const shapes = [...hits('shape_triangle_up', 0), ...hits('shape_triangle_down', 1)];   // two series, interleaved in time
+  const first = (kept, shape) => Math.min(...kept.filter((m) => m.shape === shape).map((m) => m.ms));
+  const kept = pineMarkers(shapes, P);
+  assert.equal(kept.length, 1000);
+  assert.deepEqual([first(kept, 'arrowUp'), first(kept, 'arrowDown')], [800, 801], 'both series reach back to the same time');
+  assert.deepEqual([shapes[0].time, shapes[900].time], [0, 1], 'the state\'s own list is not reordered');
+});
+
 test('a Pine row starts its Worker with the chart\'s bars, the script text, the saved inputs and the market', async () => {
   reset();
   const c = cell([ind('a.pine', {}, { inputs: { Length: 9 }, maxbars: 5000 })], { bars: [bar(0), bar(1, { blank: 'closed' }), bar(2)] });
@@ -98,7 +108,7 @@ test('a Pine row starts its Worker with the chart\'s bars, the script text, the 
   assert.deepEqual(fetched, ['/api/pine/scripts/a.pine']);
   assert.equal(FakeWorker.all.length, 1);
   const w = FakeWorker.all[0];
-  assert.equal(w.url, '/static/charts/pineworker.js?v=2');
+  assert.equal(w.url, '/static/charts/pineworker.js?v=4');
   assert.equal(w.sent.length, 1);
   const m = w.sent[0];
   assert.deepEqual({ ...m, bars: undefined }, { type: 'init', source: SCRIPTS['a.pine'], inputs: { Length: 9 }, root: 'NQ', tf_s: 60, tick_size: 0.25, point_value: 20, bars: undefined, maxBars: 5000 });
@@ -146,6 +156,25 @@ test('later bars go to the Worker as they change; older history too; none before
   assert.deepEqual(w.sent.slice(1).map((m) => [m.type, m.bars.map((b) => b.ms)]), [['bars', [180000]]]);
 });
 
+test('older history before the Worker\'s run window changes nothing: the next live tick keeps the markers; a bar inside the window still counts', async () => {
+  reset();
+  const { c } = chartCell([ind('a.pine')]);
+  const st = await ready(c);
+  const w = FakeWorker.all[0];
+  c.pineForward([bar(0)]);
+  assert.equal(st.since, 0, 'no result yet: every bar counts');
+  const hit = (time) => ({ time, shape: 'shape_circle', location: 'AboveBar' });
+  w.say({ ...RESULT, firstMs: 60000, shapes: [hit(60000), hit(120000)] });   // the run window starts at bar 1
+  assert.equal(st.since, null);
+  c.pineForward([bar(0)]);   // scrolled back past it: the Worker takes no notice and answers nothing
+  assert.equal(st.since, null);
+  c.pineForward([bar(2)]);   // the live bar again
+  w.say({ ...RESULT, full: false, firstMs: 60000, plots: {}, shapes: [hit(120000)] });
+  assert.deepEqual(c.extMarkers['pine:p1'].map((m) => m.ms), [60000, 120000], 'the marker before the live bar stays');
+  c.pineForward([bar(1)]);
+  assert.equal(st.since, 60000, 'a bar inside the window');
+});
+
 test('a result becomes the plot values of each bar: the value, its colour when the script gave one, a gap for null or a missing bar', async () => {
   reset();
   const c = cell([ind('a.pine')]);
@@ -159,6 +188,8 @@ test('a result becomes the plot values of each bar: the value, its colour when t
   assert.deepEqual(c.point(l, bar(3, { blank: 'closed' })), { time: 1180 });
   assert.equal(st.running, false);
   assert.deepEqual(c.pineMeta('p1'), { inputs: RESULT.inputsMeta, title: 'A', error: null, running: false });
+  FakeWorker.all[0].say({ ...RESULT, title: null });
+  assert.equal(c.pineMeta('p1').title, 'a.pine', 'no title the Worker could read (a variable, a later argument): the script\'s file name');
 });
 
 function chartCell(indicators) {

@@ -19,19 +19,21 @@ import datetime as dt
 import json
 import math
 import os
+import re
 import shutil
 import statistics
 from bisect import bisect_right
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from homebase.charts import studies_tv
 from homebase.charts.bars import Bar, BarSpec
-from homebase.charts.hub import warm_bars
+from homebase.charts.hub import prime_sessions, warm_bars
 from homebase.charts.session import ET, session_date, session_range_ms
 from homebase.charts.studies import make, split_timeframe
-from homebase.contracts import tick_size
+from homebase.charts.studies_tv2 import CUMULATIVE_WARM
+from homebase.contracts import price_root, spec_for, tick_size
 from homebase.paths import repo_root
 from homebase.ticks import session_complete
 
@@ -58,8 +60,8 @@ def root() -> Path:
 @dataclass
 class TvExport:
     path: Path
-    tf_s: int               # bar length in seconds, the median spacing snapped to TFS
-    group: str              # the probe id column's name ("P1".."P4"), "" without one
+    tf_s: int               # bar length in seconds, the median spacing matched to TFS (ValueError for any other timeframe)
+    group: str              # the probe ids of the file ("P1", or "P2+P3+P4" on layout B), "" without one
     t_ms: list
     o: list
     h: list
@@ -67,6 +69,7 @@ class TvExport:
     c: list
     v: list
     cols: list              # [(title, values, decimals)] in file order, duplicate titles kept
+    has_volume: bool = True  # a Volume column or the P2 `tv|vol|` plot holds a volume; False: v is 0 on every bar
 
 
 def _time_ms(s: str) -> int:
@@ -112,8 +115,9 @@ def load_tv_csv(path, now: dt.datetime | None = None) -> TvExport:
         if name not in low:
             raise ValueError(f"{path.name}: no {name!r} column")
         idx[name] = low.index(name)
-    iv = low.index("volume") if "volume" in low else None
-    fixed = set(idx.values()) | {iv}
+    # the Volume indicator's column, else the P2 probe's `tv|vol|` plot (layout B has no Volume indicator)
+    iv = low.index("volume") if "volume" in low else low.index("tv|vol|") if "tv|vol|" in low else None
+    fixed = set(idx.values()) | ({iv} if iv is not None and low[iv] == "volume" else set())
     if now is None:
         now = dt.datetime.fromtimestamp(path.stat().st_mtime, ET)
     recs = []
@@ -133,18 +137,22 @@ def load_tv_csv(path, now: dt.datetime | None = None) -> TvExport:
     gaps = [(b - a) // 1000 for a, b in zip(t_ms, t_ms[1:]) if b > a]
     med = statistics.median(gaps)
     tf_s = min(TFS, key=lambda s: abs(s - med))
-    cols, group = [], ""
+    if abs(med - tf_s) > 0.1 * tf_s:
+        raise ValueError(f"{path.name}: bars {med:g} s apart are not a supported timeframe "
+                         f"({', '.join(TF_LABEL.values())}); export the chart on one of those")
+    cols, ids = [], []
     for j, title in enumerate(head):
         if j in fixed:
             continue
         parts = title.split("|")
         if len(parts) == 3 and parts[0] == "tv" and parts[1] == "probe":
-            group = parts[2]
+            if parts[2] not in ids:
+                ids.append(parts[2])
             continue
         cols.append((title, [_num(x[3][j]) for x in recs], [_decimals(x[3][j]) for x in recs]))
-    return TvExport(path, tf_s, group, t_ms,
+    return TvExport(path, tf_s, "+".join(ids), t_ms,
                     [x[1][0] for x in recs], [x[1][1] for x in recs], [x[1][2] for x in recs], [x[1][3] for x in recs],
-                    [x[2] or 0.0 for x in recs], cols)
+                    [x[2] or 0.0 for x in recs], cols, any(x[2] for x in recs))
 
 
 def column(x: TvExport, title: str):
@@ -266,12 +274,13 @@ def same(a, b, decimals: int = 0) -> bool:
     return abs(a - b) <= 0.5 * 10.0 ** -decimals + 1e-9 * abs(a)
 
 
-def compare(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=()) -> dict:
+def compare(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=(), cold=()) -> dict:
     """The verdict and its counts. `decimals` is per cell (a list) or one number; a difference inside `warm` bars after
-    any of `restarts` is warm-up; `skip` indices are not compared (tagged sessions, missing bars, open higher bars)."""
+    any of `restarts`, or at a `cold` index, is warm-up; `skip` indices are not compared (tagged sessions, missing bars,
+    open higher bars). `cold`: bars TradingView's study had history for that the export (and so Homebase) does not."""
     if tv is None:
         return {"verdict": "no-tv", "n": 0, "n_diff": 0, "first": None, "max_abs": 0.0}
-    warm_idx = {i for r in restarts for i in range(r, r + warm)}
+    warm_idx = {i for r in restarts for i in range(r, r + warm)} | set(cold)
     n = n_diff = late = 0
     first, mx = None, 0.0
     for i, (a, b) in enumerate(zip(tv, hb)):
@@ -291,8 +300,8 @@ def compare(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=()) -> dict:
     return {"verdict": verdict, "n": n, "n_diff": n_diff, "first": first, "max_abs": mx}
 
 
-def verdict(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=()) -> str:
-    return compare(tv, hb, decimals, warm, restarts, skip)["verdict"]
+def verdict(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=(), cold=()) -> str:
+    return compare(tv, hb, decimals, warm, restarts, skip, cold)["verdict"]
 
 
 # ------------------------------------------------------------------ the OHLCV pass
@@ -314,10 +323,11 @@ def _contract_hl(store, root: str, d: dt.date, contract: str):
     return max(t.price for t in ticks), min(t.price for t in ticks)
 
 
-def ohlcv_pass(tv: list, hb: list, tf_s: int, root: str = "NQ", store=None) -> dict:
+def ohlcv_pass(tv: list, hb: list, tf_s: int, root: str = "NQ", store=None, volume: bool = True) -> dict:
     """Each TradingView bar classed same | price | volume | boundary | missing (plus Homebase's extra bars), the sessions
     tagged holiday / roll / boundary, and whether the chart's SET or B-ADJ setting looks left on. The roll tag needs the
-    tick store (sessions holding more than one archived contract are read); None skips it."""
+    tick store (sessions holding more than one archived contract are read); None skips it. volume=False (the export
+    has no volume) leaves the volume out of the comparison."""
     hb_by_t = {b.t: b for b in hb}
     cls = []
     for b in tv:
@@ -326,7 +336,7 @@ def ohlcv_pass(tv: list, hb: list, tf_s: int, root: str = "NQ", store=None) -> d
             cls.append("missing")
         elif (b.o, b.h, b.l, b.c) != (m.o, m.h, m.l, m.c):
             cls.append("price")
-        elif b.v != m.v:
+        elif volume and b.v != m.v:
             cls.append("volume")
         else:
             cls.append("same")
@@ -377,6 +387,41 @@ def _et(ms: int) -> str:
     return dt.datetime.fromtimestamp(ms / 1000, ET).strftime("%Y-%m-%d %H:%M")
 
 
+def cold_sessions(key: str, fld: str = "") -> int:
+    """How many sessions at the start of an export the study is still cold in, though TradingView's probe is not: the
+    P2 probes of levels / dhl / noise read a daily series with request.security("D"), which holds history from before
+    the first exported bar, while Homebase has only the export's own bars. The cells in those sessions that differ read
+    'warm-up only' (a difference after them is still a difference). Not hub.prime_sessions: that is 0 for levels, and
+    it counts what the app feeds the chart, not what a probe on the daily series already knew."""
+    name = key.partition("@")[0].split(":")[0]
+    if name == "levels":
+        # the prior day, and the one before it when the export starts mid-session; onh / onl / rth_open read the chart
+        return 2 if fld in ("pdh", "pdl", "pdc") else 0
+    if name == "dhl":
+        return prime_sessions(key)  # the n sessions of the range, plus the one before
+    if name == "noise":
+        # a Wilder ATR(14): its seed fades by 13/14 a session, so 18 x 14 sessions leave 8e-9 of a daily range, under
+        # same()'s 1e-9-of-price tolerance (measured: the last session still off was 181 at five times NQ's range)
+        return 18 * 14
+    return 0
+
+
+def uses_volume(key: str, bars: list, tick: float) -> bool:
+    """True when the study's values change with the bars' volume (run on these bars with volume 0 and with a volume that
+    rises and falls, which also moves nvi / pvi: a constant volume leaves them flat); a study that cannot run on zero
+    volume counts as using it."""
+    def with_volume(vol):
+        out = []
+        for i, b in enumerate(bars):
+            p = (b.h + b.l + b.c) / 3.0
+            out.append(replace(b, v=vol(i), pv=p * vol(i), p2v=p * p * vol(i)))
+        return out
+    try:
+        return run(key, with_volume(lambda i: 0), tick) != run(key, with_volume(lambda i: 1 + i % 3), tick)
+    except Exception:
+        return True
+
+
 def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=None) -> tuple[dict, list]:
     """(meta, rows) of one export: the OHLCV pass, then the math and data check of every probe column. `hb` None reads
     Homebase's own bars; [] skips the data check."""
@@ -385,20 +430,21 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
         hb = hb_bars(x, root)
     tick = tick_size(root)
     tf = TF_LABEL.get(x.tf_s, str(x.tf_s))
-    meta = {"file": x.path.name, "group": x.group, "tf": tf, "bars": len(tv),
-            "sessions": len({b.session for b in tv}), "first": _et(tv[0].t), "last": _et(tv[-1].t)}
+    meta = {"file": x.path.name, "root": root, "group": x.group, "tf": tf, "bars": len(tv),
+            "sessions": len({b.session for b in tv}), "first": _et(tv[0].t), "last": _et(tv[-1].t),
+            "no_volume": not x.has_volume}
     rows = []
     hb_t = {b.t: b for b in hb}
     skip, restarts = set(), (0,)
     if hb:
-        o = ohlcv_pass(tv, hb, x.tf_s, root, store)
+        o = ohlcv_pass(tv, hb, x.tf_s, root, store, volume=x.has_volume)
         meta.update(classes=o["classes"], tags=o["tags"], flags=o["flags"])
         tagged = set().union(*o["tags"].values())
         skip = {i for i, b in enumerate(tv) if b.session in tagged or b.t not in hb_t}
         # the Homebase study still saw the skipped bars (a holiday's extra bar, a gap): its state is off until the warm-up
         restarts = (0,) + tuple(i for i in range(1, len(tv)) if i not in skip and i - 1 in skip)
         for title, attr in BAR_COLS.items():
-            col = column(x, title)
+            col = None if attr == "v" and not x.has_volume else column(x, title)   # an empty tv|vol| is no volume, not zeros
             if col is not None:
                 got = [float(getattr(hb_t[b.t], attr)) if b.t in hb_t else None for b in tv]
                 rows.append(_row("bar", attr, tf, None, compare(col, got, 0, 0, (0,), skip), "", tv))
@@ -407,6 +453,10 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
         by_t = dict(zip((b.t for b in hb), vals))
         return [by_t.get(b.t) for b in tv]
 
+    rank = {}
+    for b in tv:
+        rank.setdefault(b.session, len(rank))
+    needs_volume = {}
     for key, fld, vals, decs in probe_columns(x):
         try:
             _, sec = split_timeframe(key)
@@ -415,17 +465,34 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
         except ValueError as e:
             rows.append(_row(key, fld, tf, None, None, "", tv, note=f"bad key: {e}"))
             continue
+        if sec and sec < x.tf_s:
+            rows.append(_row(key, fld, tf, None, None, "", tv, note=f"skipped: @{sec} is below the chart's {tf} bars "
+                             "(TradingView reads the last lower-timeframe bar, Homebase has only the chart's bars)"))
+            continue
         warm = warm_bars(key)
+        if warm >= CUMULATIVE_WARM:      # a running sum never forgets its start: compare it from the first bar, a warm-up would hide every difference
+            warm = 0
         htf_skip = set(range(len(tv))) - htf_closes(tv, sec) if sec else set()
-        math_cmp = compare(vals, [field(v, fld) for v in run(kt, tv, tick)], decs, warm, (0,), htf_skip)
+        k = cold_sessions(key, fld)
+        cold = {i for i, b in enumerate(tv) if rank[b.session] < k}
+        note = ""
+        if not x.has_volume:
+            if kt not in needs_volume:
+                needs_volume[kt] = uses_volume(kt, tv, tick)
+            if needs_volume[kt]:
+                note = ("skipped: no volume in this export (put the Volume indicator on the chart, or re-export with "
+                        "the current P2 script, which plots tv|vol|); the data check below ran on Homebase's volume")
+        math_cmp = None if note else compare(vals, [field(v, fld) for v in run(kt, tv, tick)], decs, warm, (0,), htf_skip, cold)
         sign = HOUSE_SIGN.get((key.split(":")[0], fld), 1.0)
         house = compare(vals, [None if (f := field(v, fld)) is None else sign * f for v in run(key, tv, tick)], decs, warm,
-                        (0,), htf_skip) if has_tv else None
+                        (0,), htf_skip, cold) if has_tv and not note else None
         data_cmp = compare(vals, aligned([field(v, fld) for v in run(kt, hb, tick)]), decs, warm, restarts,
-                           skip | htf_skip) if hb else None
-        rows.append(_row(key, fld, tf, math_cmp, data_cmp, kt, tv, house=house))
+                           skip | htf_skip, cold) if hb else None
+        rows.append(_row(key, fld, tf, math_cmp, data_cmp, kt, tv, house=house, note=note))
     for name in NO_TV:
         rows.append(_row(name, "", tf, None, None, "", tv, note="no TradingView source"))
+    for r in rows:
+        r["file"] = x.path.name
     return meta, rows
 
 
@@ -453,8 +520,10 @@ def write_report(metas: list, rows: list, out_dir: Path, stamp: str | None = Non
     stamp = stamp or dt.datetime.now(ET).strftime("%Y%m%d-%H%M%S")
     lines = [f"# TradingView parity {stamp}", ""]
     for m in metas:
-        lines.append(f"## {m['group'] or m['file']} {m['tf']}: {m['bars']} bars, {m['sessions']} sessions, "
-                     f"{m['first']} to {m['last']} ET")
+        title = " ".join(filter(None, (m.get("root"), m["group"] or m["file"], m["tf"])))
+        lines.append(f"## {title}: {m['bars']} bars, {m['sessions']} sessions, {m['first']} to {m['last']} ET")
+        if m.get("no_volume"):
+            lines.append("- no volume in this export: the volume probes are skipped for the math and checked on Homebase's data only")
         if "classes" in m:
             cl = ", ".join(f"{k} {v}" for k, v in sorted(m["classes"].items()))
             tg = "; ".join(f"{k} {len(v)}: {' '.join(v[:6])}{' ...' if len(v) > 6 else ''}"
@@ -464,13 +533,13 @@ def write_report(metas: list, rows: list, out_dir: Path, stamp: str | None = Non
         else:
             lines.append("- data check: no Homebase bars")
         lines.append("")
-    lines += ["| study | field | tf | math | data | first diff (ET) | max abs | ran as | note |", "|---|---|---|---|---|---|---|---|---|"]
+    lines += ["| study | field | tf | math | data | first diff (ET) | max abs | ran as | note | file |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
         first = r["math"]["first"] or r["data"]["first"] or ""
         mx = max(r["math"]["max_abs"], r["data"]["max_abs"])
         house = f" (house: {_cell(r['house'])})" if r["house"] else ""
         lines.append(f"| {r['key']} | {r['field']} | {r['tf']} | {_cell(r['math'])}{house} | {_cell(r['data'])} | {first} | "
-                     f"{mx:.6g} | {r['tv_key']} | {r['note']} |")
+                     f"{mx:.6g} | {r['tv_key']} | {r['note']} | {r.get('file', '')} |")
     md, js = out_dir / f"{stamp}.md", out_dir / f"{stamp}.json"
     md.write_text("\n".join(lines) + "\n")
     js.write_text(json.dumps({"stamp": stamp, "files": metas, "rows": rows}, indent=1))
@@ -478,18 +547,38 @@ def write_report(metas: list, rows: list, out_dir: Path, stamp: str | None = Non
 
 
 # ------------------------------------------------------------------ CLI
-def run_dir(inbox: Path, root_sym: str = "NQ", history=None) -> Path:
-    """Every CSV in `inbox`: load, move to ROOT/exports/<date>/<group>_<tf>.csv, check, one report. Returns the
-    report's .md path. `history` None reads the tick archive when it holds the root, else the data check is skipped."""
+def file_root(name: str) -> str | None:
+    """The market an export is of, read from TradingView's file name ("CME_MINI_ES1!, 1_ab12.csv" -> ES, "MNQ1!" -> NQ)
+    or from the name run_dir files it under ("ES_P2_1m.csv" -> ES), or None when the name has neither."""
+    tfs = "|".join(TF_LABEL.values())
+    for rx in (rf"^([A-Z0-9]{{1,4}})_.+_(?:{tfs})(?:_\d+)?\.csv$", r"(?<![A-Z0-9])([A-Z0-9]{1,5}?)1!"):
+        m = re.search(rx, name)
+        if m and spec_for(r := price_root(m.group(1))).known:
+            return r
+    return None
+
+
+def run_dir(inbox: Path, root_sym: str | None = None, history=None) -> Path:
+    """Every CSV in `inbox`: load, move to ROOT/exports/<date>/<root>_<group>_<tf>.csv, check, one report. Returns the
+    report's .md path. The market of each file is `root_sym` when given, else read from its name, else NQ. `history` None
+    reads the tick archive for a root it holds, else that file's data check is skipped."""
     R = root()
     files = sorted(Path(inbox).glob("*.csv"))
     if not files:
         raise SystemExit(f"nothing to check in {inbox}")
-    if history is None:
-        from homebase.charts.history import History
-        from homebase.charts.store import TickStore
-        store = TickStore()
-        history = History(store) if store.sessions(root_sym) else None
+    store, archive = None, {}
+
+    def history_of(r):
+        nonlocal store
+        if history is not None:
+            return history
+        if r not in archive:
+            if store is None:
+                from homebase.charts.store import TickStore
+                store = TickStore()
+            from homebase.charts.history import History
+            archive[r] = History(store) if store.sessions(r) else None
+        return archive[r]
     out = R / "exports" / dt.datetime.now(ET).date().isoformat()
     out.mkdir(parents=True, exist_ok=True)
     metas, rows = [], []
@@ -499,7 +588,11 @@ def run_dir(inbox: Path, root_sym: str = "NQ", history=None) -> Path:
         except (ValueError, OSError, OverflowError) as e:
             print(f"{p.name} skipped, left in {inbox}: {e}")
             continue
-        stem = f"{x.group or p.stem}_{TF_LABEL.get(x.tf_s, x.tf_s)}"
+        r = root_sym or file_root(p.name)
+        if r is None:
+            r = "NQ"
+            print(f"{p.name}: no market in the file name, checked as NQ (name it like ES_P2_1m.csv, or pass the root)")
+        stem = f"{r}_{x.group or p.stem}_{TF_LABEL.get(x.tf_s, x.tf_s)}"
         dest = out / f"{stem}.csv"
         k = 1
         while dest.exists():
@@ -507,8 +600,12 @@ def run_dir(inbox: Path, root_sym: str = "NQ", history=None) -> Path:
             dest = out / f"{stem}_{k}.csv"
         shutil.move(str(p), dest)
         x.path = dest
-        hb = hb_bars(x, root_sym, history) if history is not None else []
-        meta, rs = check_export(x, root_sym, hb, history.store if history is not None else None)
+        h = history_of(r)
+        hb = hb_bars(x, r, h) if h is not None else []
+        if hb:      # Homebase's bars next to the filed export, for `parity.mjs <script> <filed csv> --bars homebase`
+            dest.with_suffix(".bars.json").write_text(json.dumps(
+                [{"ms": b.t, "o": b.o, "h": b.h, "l": b.l, "c": b.c, "v": b.v} for b in hb]))
+        meta, rs = check_export(x, r, hb, h.store if h is not None else None)
         metas.append(meta)
         rows.extend(rs)
         print(f"{dest.name}: {meta['bars']} bars, {len(rs)} rows")
@@ -523,7 +620,7 @@ def main(argv=None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run", help="check every CSV in the inbox (or dir) and write a report")
     r.add_argument("dir", nargs="?", help="folder of TradingView exports (default ROOT/inbox)")
-    r.add_argument("--root", default="NQ", help="the Homebase root the exports are of (default NQ)")
+    r.add_argument("--root", default=None, help="the Homebase root every export is of (default: read from each file's name, else NQ)")
     a = ap.parse_args(argv)
     print(run_dir(Path(a.dir) if a.dir else root() / "inbox", a.root))
     return 0

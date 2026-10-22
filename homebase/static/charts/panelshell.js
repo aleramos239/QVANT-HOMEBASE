@@ -579,7 +579,7 @@ function applyDockDrop(draggedId, otherId, zone, clientY) {
       setShownOrder(zone === 'top' ? [draggedId, otherId] : [otherId, draggedId]);
     }
   } else {
-    reorderShown(draggedId, dockDropIndex(clientY));
+    reorderShown(draggedId, dockDropIndex(clientY, draggedId));
   }
 }
 /* dockOrder lists EVERY panel -- a closed or floating one keeps its slot -- but a drop only knows the panels
@@ -691,7 +691,7 @@ function wireHeaderDrag(id, root, head) {
       if (otherId && zone) {
         animateDockFlip(id, () => { applyDockDrop(id, otherId, zone, projY); relayout(); }, vx, vy);
       } else {
-        const targetIndex = dockDropIndex(projY);
+        const targetIndex = dockDropIndex(projY, id);
         const cur = dockedOpenIds();
         if (cur.length > 1) { animateDockFlip(id, () => { reorderShown(id, targetIndex); relayout(); }, vx, vy); }
       }
@@ -710,9 +710,10 @@ function relayoutForDrag(id) {
   layoutDock();
   paintToolbar();
 }
-/* Which slot in the dock a drop at this Y lands in, among the OTHER currently docked+open panels. */
-function dockDropIndex(clientY) {
-  const ids = dockedOpenIds();
+/* Which slot in the dock a drop at this Y lands in, among the OTHER currently docked+open panels (`id` is the
+   dragged one: reorderShown splices into a list without it, and its own rect is no target). */
+function dockDropIndex(clientY, id) {
+  const ids = dockedOpenIds().filter((x) => x !== id);
   let idx = ids.length;
   for (let i = 0; i < ids.length; i++) {
     const e = els[ids[i]];

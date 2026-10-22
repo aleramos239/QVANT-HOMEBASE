@@ -159,7 +159,7 @@ test('imbalancesV2: the homebase preset is imbalances() row for row, gaps and ed
   for (let t = 0; t < 40; t++) {
     const fp = [];
     for (let k = 0; k < 12; k++) if (rnd(5)) fp.push([100 + k * T, rnd(4) ? rnd(30) : 0, rnd(4) ? rnd(30) : 0]);
-    for (const ratio of [1, 2.5, 3, 5]) {
+    for (const ratio of [0.5, 1, 2.5, 3, 5]) {          // below 1 a side may be flagged while smaller than the other: no minDiff, so no check
       const a = M.imbalances(fp, T, ratio), b = M.imbalancesV2(fp, { tick: T, ratio });
       assert.deepEqual(keys(b.buy), keys(a.buy));
       assert.deepEqual(keys(b.sell), keys(a.sell));
@@ -167,6 +167,9 @@ test('imbalancesV2: the homebase preset is imbalances() row for row, gaps and ed
     }
   }
   assert.equal(M.imbalancesV2([[100, 5, 5]], { tick: T, ratio: 0 }).rows.length, 0);   // ratio 0 = off
+  const low = [[100, 10, 6], [100.25, 4, 5]];                  // 5 bought against 10 sold below: flagged at ratio 0.5, as imbalances() does
+  assert.deepEqual(keys(M.imbalancesV2(low, { tick: T, ratio: 0.5 }).buy), [400, 401]);
+  assert.deepEqual(keys(M.imbalancesV2(low, { tick: T, ratio: 0.5, minDiff: 1 }).buy), [400], 'a minDiff still wants the side to lead');
 });
 
 test('imbalancesV2: ATAS 30 contracts at 350% means the other side must be GREATER than 105; homebase takes 105', () => {

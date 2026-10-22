@@ -124,7 +124,7 @@ function vwapLines(inst) {
 }
 /* ---- the TradingView studies (server: studies_tv.py + studies_tv2.py; wire key "tv:<name>:<args>", the args in this param order,
    TradingView's defaults and ranges). The lines, pane and colours follow the house entry closest to each one. What a plain line
-   cannot draw yet (dots, a cloud fill, a zigzag polyline, candles) is the closest line for now: the notes sit on those entries. ---- */
+   cannot draw yet (a cloud fill, a zigzag polyline, candles) is the closest line for now: the notes sit on those entries. ---- */
 const TV_I = (key, label, def, min = 1, max = 500) => ({ key, label, type: 'int', min, max, def });
 const TV_N = (key, label, def, min, max, step = 0.1) => ({ key, label, type: 'num', min, max, step, def });
 const TV_LEN = (def, min = 1, max = 500) => TV_I('length', 'Length', def, min, max);
@@ -524,8 +524,8 @@ const CATALOG = [
         ['trades', 'Prints: sells | buys'], ['dom', 'Dominant side %'], ['price', 'Price'], ['diag', 'Diagonal differences']] },
     { key: 'imb', label: 'Imbalance rule', type: 'choice', def: 'homebase',
       choices: [['homebase', 'Homebase'], ['atas', 'ATAS (ratio 1.5)'], ['exocharts', 'Exocharts (ratio 2.5)'], ['sierra', 'Sierra Chart (ratio 1)']] },
-    { key: 'zero', label: 'When the other side traded nothing', type: 'choice', def: 'one', choices: [['one', 'Compare with 1'], ['skip', 'No imbalance']] },
-    { key: 'edge', label: 'At the bar\'s top and bottom row', type: 'choice', def: 'one', choices: [['one', 'Compare with 1'], ['skip', 'No imbalance']] },
+    { key: 'zero', label: 'Other side traded nothing (a rule above sets it)', type: 'choice', def: 'one', choices: [['one', 'Compare with 1'], ['skip', 'No imbalance']] },
+    { key: 'edge', label: 'Bar\'s top and bottom row (a rule above sets it)', type: 'choice', def: 'one', choices: [['one', 'Compare with 1'], ['skip', 'No imbalance']] },
     { key: 'minvol', label: 'Skip a pair when both sides are under (contracts)', type: 'int', min: 0, max: 100000, def: 0 },
     { key: 'mindiff', label: 'Imbalance needs this many more contracts', type: 'int', min: 0, max: 100000, def: 0 }] },
   { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [
@@ -621,7 +621,7 @@ const CATALOG = [
 /* A study may be read on a longer timeframe (2026-10-11; server studies.HTF, wire key "ema:20@3600"): the window and
    smoothing ones take a Timeframe input, "Chart" (0) = the chart's own bars. */
 const HTF_IDS = ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema', 'fvg',
-  ...TV_DEFS.map((d) => d.id)];   // every tv: study reads only the bars (studies.HTF_OK holds "tv")
+  ...TV_DEFS.filter((d) => !d.marks).map((d) => d.id)];   // every tv: study reads only the bars (studies.HTF_OK holds "tv") -- but a mark study's `ago` counts chart bars (studies.HTF_NOT_TV)
 /* The timeframe is typed, any length from a second to a day: "15m", "1h", "90s", "4h", "1D" (a bare number is minutes). */
 function parseTf(text) {
   const m = /^\s*(\d+(?:\.\d+)?)\s*(s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?\s*$/i.exec(String(text == null ? '' : text));

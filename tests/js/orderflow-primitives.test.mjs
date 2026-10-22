@@ -170,6 +170,24 @@ test('footprint imb: a vendor rule changes the flagged rows; its stacked runs fo
   assert.equal(footprint({ imb: 'atas' }, 0).imb(three.fp, TICK).rows.length, 0);                // ratio off stays off
 });
 
+test('footprint imb: a vendor rule keeps its own zero / edge skips while the dialog leaves them on `one`; a chosen `skip` still counts', () => {
+  const rows = [[100, 0, 5], [100.25, 3, 9], [100.5, 2, 2]];     // an ask of 5 at the bottom edge, 9 against a 0 bid below, a top edge row
+  const flagged = (ex) => { const im = footprint(ex).imb(rows, TICK); return im && [[...im.buy].sort(), [...im.sell].sort()]; };
+  const dialog = { zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };    // what syncFootprint sends for controls nobody touched
+  for (const [imb, sells] of [['atas', []], ['exocharts', []], ['sierra', [401]]]) {      // sierra's ratio 1: the 3 bid beats the 2 ask above it, a real row
+    assert.deepEqual(flagged({ imb }), [[], sells], `${imb}: skips a zero opposite side and the edge rows`);
+    assert.deepEqual(flagged({ imb, ...dialog }), flagged({ imb }), `${imb}: the untouched dialog changes nothing`);
+  }
+  const bar = { c: 100, fp: rows };
+  assert.deepEqual(texts(drawFp({ imb: 'atas', ...dialog }, [bar])), texts(drawFp({ imb: 'atas' }, [bar])));
+  assert.ok(texts(drawFp({ imb: 'atas', ...dialog }, [bar])).every((t) => t[1] === 'TX'), 'nothing coloured on the chart');
+  assert.deepEqual(flagged({ imb: 'homebase', ...dialog }), null, 'homebase with the dialog defaults is today\'s rule: draw keeps its own code');
+  assert.deepEqual(flagged({ zero: 'skip' }), [[400], []], 'a chosen skip passes through under the homebase rule');
+  assert.deepEqual(flagged({ edge: 'skip', zero: 'skip', imb: 'homebase' }), [[], []]);
+  // shortcut: `one` is the catalog default, so a deliberate `one` under a vendor rule reads as unset (the rule's own skip wins)
+  assert.deepEqual(flagged({ imb: 'atas', zero: 'one' }), flagged({ imb: 'atas' }));
+});
+
 test('profile method: sierra / tv use that app\'s POC rule; homebase and unset keep the server\'s', () => {
   const p = new Profile(P);
   p.series = series; p.tick = 1;
@@ -187,4 +205,48 @@ test('profile method: sierra / tv use that app\'s POC rule; homebase and unset k
   assert.deepEqual(run({ method: 'homebase' }), run({}));
   assert.equal(pocY(run({ method: 'sierra' })), series.priceToCoordinate(101) - 1.75);          // nearest the middle of the profile
   assert.equal(pocY(run({ method: 'tv' })), series.priceToCoordinate(99) - 1.75);               // tv: the lowest of the tie
+});
+
+/* The prior session drawn under `ex` ({prior, lines, ...}): where its ghost POC row sits and where each pVAH / pVAL / pPOC label lands.
+   `prev` carries the server's own (homebase) levels. */
+function priorDraw(prev, ex) {
+  const p = new Profile(P);
+  p.series = series; p.tick = 1;
+  p.p = { ...prev, prev };
+  const { ctx, log } = recorder();
+  p.ex = { prior: true, lines: true, ...ex };
+  p.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+  let fill; const pocRects = [], labels = {};
+  for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillRect' && fill === 'POC') pocRects.push(l[2]); if (l[0] === 'fillText') labels[l[1]] = l[3]; }
+  return { ghost: pocRects[pocRects.length - 1], labels };          // the ghost is drawn after the current profile
+}
+const at = (v, px) => series.priceToCoordinate(px) - v;
+
+test('profile prior session: its POC ghost and pVAH / pVAL / pPOC follow the chosen method and share, like today\'s profile', () => {
+  const rows = [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]];
+  const run = (ex) => priorDraw({ poc: 99, vah: 102, val: 99, rows }, ex);    // the server's homebase levels
+  const server = run({});
+  assert.deepEqual(server.labels, { pVAH: at(2, 102), pVAL: at(2, 99), pPOC: at(2, 99) });
+  assert.equal(server.ghost, at(1.75, 99));
+  assert.deepEqual(run({ method: 'homebase', va: 70 }), server);
+  const sierra = run({ method: 'sierra' });                            // POC: the tie nearest the middle; the area takes both equal neighbours
+  assert.deepEqual(sierra.labels, { pVAH: at(2, 103), pVAL: at(2, 99), pPOC: at(2, 101) });
+  assert.equal(sierra.ghost, at(1.75, 101));
+  assert.equal(run({ method: 'tv' }).labels.pVAH, at(2, 101));         // tv stops before a row would pass the share
+  const wide = window.HBFlowMath.valueArea(rows, 99, 90);              // a chosen share re-walks the prior rows too
+  assert.notEqual(wide.vah, 102);
+  assert.equal(run({ va: 90 }).labels.pVAH, at(2, wide.vah));
+});
+
+test('profile prior session: the pVAL line follows the method and the share too, not only pVAH', () => {
+  const rows = [[99, 3], [100, 5], [101, 1], [102, 7], [103, 1], [104, 7], [105, 5]];
+  const prev = { poc: 102, vah: 105, val: 101, rows };              // the server's own levels: VAL 101, where sierra says 100, tv 102 and a 90 % area 99
+  assert.deepEqual(window.HBFlowMath.valueAreaV2(rows, 70, 'homebase', 1), { poc: 102, vah: 105, val: 101 });
+  const run = (ex) => priorDraw(prev, ex);
+  assert.equal(run({}).labels.pVAL, at(2, 101));
+  assert.equal(run({ method: 'sierra' }).labels.pVAL, at(2, 100));
+  assert.equal(run({ method: 'tv' }).labels.pVAL, at(2, 102));
+  const wide = window.HBFlowMath.valueArea(rows, 102, 90);
+  assert.equal(wide.val, 99);
+  assert.equal(run({ va: 90 }).labels.pVAL, at(2, wide.val));
 });

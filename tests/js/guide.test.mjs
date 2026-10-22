@@ -53,6 +53,14 @@ test('every TradingView study says it matches TradingView\'s built-in, and none 
   }
 });
 
+test('a TradingView entry only talks about a Source box and a drawing style its Settings and chart really have', () => {
+  for (const id of G.ids().filter((x) => x.startsWith('tv_'))) {
+    const e = G.get(id), d = C.def(id);
+    if (/\bSource\b/.test(e.see.join(' '))) assert.ok(d.params.some((q) => q.key === 'source'), `${id}: its help names a Source box it does not have`);
+    if (d.lines.some((l) => l.dots)) assert.doesNotMatch([...e.see, ...e.read, e.watch].join(' '), /joined line|\bthe line\b/, `${id}: drawn as dots, not a joined line`);
+  }
+});
+
 test('every order-flow app says which app\'s documented behaviour it follows; the footprint and profile name the rules they can switch to', () => {
   for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
     assert.match(G.get(id).watch || '', /^Follows [^.]*(ATAS|Exocharts|Sierra|MotiveWave|Bookmap)/, `${id}: watch names the app`);

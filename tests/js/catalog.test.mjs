@@ -1234,13 +1234,22 @@ test('tv studies: defaults sit inside their own ranges and choices', () => {
   }
 });
 
-test('tv studies: every one can run on a longer bar (@sec), and the Timeframe never enters the key', () => {
-  for (const id of TV_IDS) {
+test('tv studies: every one but the two mark studies can run on a longer bar (@sec), and the Timeframe never enters the key', () => {
+  for (const id of TV_IDS.filter((x) => !C.def(x).marks)) {
     assert.ok(C.HTF_IDS.includes(id), `${id} in HTF_IDS`);
     assert.ok(C.def(id).params.some((q) => q.key === 'tf'), `${id}: has a Timeframe param`);
     assert.equal(C.serverKey(C.instance(id, { tf: '3600' })), `${TV_KEYS[id.slice(3)]}@3600`, id);
     assert.equal(C.serverKey(C.instance(id, { tf: '0' })), TV_KEYS[id.slice(3)], id);
     assert.ok(!C.TA_BY_ID[id].key(C.clampParams(id, { tf: '3600' })).includes('3600'), `${id}: tf is no part of the key`);
+  }
+});
+
+test('tv studies: pivot high/low and fractals mark a bar `n` CHART bars back, so they take no Timeframe (the server refuses @ on them too)', () => {
+  assert.deepEqual(TV_IDS.filter((id) => C.def(id).marks), ['tv_pivothl', 'tv_fractals']);
+  for (const id of ['tv_pivothl', 'tv_fractals']) {
+    assert.ok(!C.HTF_IDS.includes(id), `${id} not in HTF_IDS`);
+    assert.ok(!C.def(id).params.some((q) => q.key === 'tf'), `${id}: no Timeframe param`);
+    assert.equal(C.serverKey(C.instance(id, { tf: '300' })), TV_KEYS[id.slice(3)], `${id}: a stray tf (a saved or hand-edited layout) falls back to chart bars`);
   }
 });
 
@@ -1372,4 +1381,13 @@ test('pine: a page-only entry (no server key); the script name and its inputs cl
   assert.equal(C.styleLineKeys('pine'), null, 'no Style-tab lines: the script colours its own plots');
   const old = { grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: [{ id: 'ema', uid: 'e1', visible: true, params: { length: 20 } }] }] };
   assert.deepEqual(C.migrateLayout(old).cells[0].indicators.map((x) => x.id), ['ema']);
+});
+
+test('footprint: the zero / edge selects say a rule above sets them, in a label short enough to leave the select its width', () => {
+  for (const key of ['zero', 'edge']) {
+    const q = C.def('footprint').params.find((x) => x.key === key);
+    assert.match(q.label, /\(a rule above sets it\)$/, key);
+    assert.ok(q.label.length <= 48, `${key}: a long label squeezes the select in the 520px dialog until "Compare with 1" is cut (${q.label.length})`);
+    assert.equal(q.def, 'one', `${key}: the default is untouched`);
+  }
 });

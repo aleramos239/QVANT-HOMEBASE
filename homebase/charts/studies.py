@@ -302,6 +302,7 @@ class HTF(Study):
 
 HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema", "fvg",
           "tv")       # every tv study reads only what HTF._merge carries
+HTF_NOT_TV = ("pivothl", "fractals")     # their marks sit `right` / `n` CHART bars back; on a longer bar HTF would repeat the value on all of them
 HTF_MAX_S = 86400       # any timeframe from a second to a day: the page's box takes "15m", "1h", "90s"
 REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
             "cumdelta": CumDelta, "levels": Levels}
@@ -314,9 +315,9 @@ def split_timeframe(key: str) -> tuple[str, int]:
     base, at, tf = str(key).partition("@")
     if not at:
         return base, 0
-    name = base.split(":")[0]
-    if name not in HTF_OK:
-        raise ValueError(f"bad study {key!r}: {name} has no timeframe option")
+    name, _, sub = base.partition(":")
+    if name not in HTF_OK or (name == "tv" and sub.split(":")[0] in HTF_NOT_TV):
+        raise ValueError(f"bad study {key!r}: {base} has no timeframe option")
     if not tf.isdecimal() or not 1 <= int(tf) <= HTF_MAX_S:
         raise ValueError(f"bad study {key!r}: the timeframe is 1 to {HTF_MAX_S} seconds")
     return base, int(tf)

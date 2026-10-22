@@ -269,10 +269,12 @@ def test_tema_and_mfi():
             continue
         up = sum(tp[j] * V[j] for j in range(i - 13, i + 1) if tp[j] > tp[j - 1])
         dn = sum(tp[j] * V[j] for j in range(i - 13, i + 1) if tp[j] < tp[j - 1])
-        mfi.append(None if dn == 0 else 100 - 100 / (1 + up / dn))
+        mfi.append(None if up == dn == 0 else 100.0 if dn == 0 else 100 - 100 / (1 + up / dn))
     same(run("tv:mfi:14", bars), mfi)
     rising = [bar(100 + i, 101 + i, i=i) for i in range(20)]
-    assert run("tv:mfi:5", rising)[-1] is None                          # no down flow: Pine divides into na
+    assert run("tv:mfi:5", rising)[-4:] == [100.0] * 4                  # no down flow: x / 0 is infinite, 100 - 100 / inf
+    assert run("tv:mfi:5", [bar(120 - i, 119 - i, i=i) for i in range(20)])[-1] == 0.0
+    assert run("tv:mfi:5", [bar(5, 5, i=i) for i in range(20)])[-1] is None    # no flow either way: 0 / 0 is na
 
 
 def test_vwap_of_hlc3_with_volume_weighted_bands_per_anchor():
@@ -471,6 +473,7 @@ def test_warm_bars_and_prime_sessions_cover_each_studys_memory():
     assert warm_bars("tv:ema:20") == 100 and warm_bars("tv:ema") == 45 and warm_bars("tv:sma:9:hl2") == 9
     assert warm_bars("tv:rma:7") == 70 and warm_bars("tv:wma:9") == 9 and warm_bars("tv:rsi:14") == 140
     assert warm_bars("tv:macd") == 5 * 26 + 5 * 9 and warm_bars("tv:macd:5:10:3") == 65
+    assert warm_bars("tv:macd:100:10:9") == 5 * 100 + 5 * 9 and warm_bars("tv:macd:60:5:3") == 315   # fast > slow: the fast EMA is the longer memory
     assert warm_bars("tv:stoch:14:1:3") == 18 and warm_bars("tv:adx:14:14") == 280 and warm_bars("tv:adx:7") == 210
     assert warm_bars("tv:atr:14") == 140 and warm_bars("tv:bb:20:2") == 20 and warm_bars("tv:donchian:50") == 50
     assert warm_bars("tv:keltner:20:2:10") == 200 and warm_bars("tv:supertrend:10:3") == 100
@@ -479,8 +482,35 @@ def test_warm_bars_and_prime_sessions_cover_each_studys_memory():
                                    "tv:pivots", "tv:twap")] == [0] * 9
     assert warm_bars("tv:ema:20@3600") == 6000
     assert [prime_sessions(k) for k in ("tv:rvol:14", "tv:rvol", "tv:rvol:5:regular", "tv:adr:14", "tv:adr:3", "tv:pivots",
-                                        "tv:pivots:dm", "tv:ema:20", "tv:vwap:week", "tv:cvd")] == [15, 15, 6, 15, 4, 1, 1, 0, 0, 0]
+                                        "tv:pivots:dm", "tv:ema:20", "tv:vwap:week", "tv:cvd")] == [15, 15, 6, 15, 4, 1, 1, 0, 4, 0]
     assert prime_sessions("tv:ema:20@3600") == 6                        # 100 hour bars = 4.3 trading days, plus one
+
+
+def test_a_timeframe_keeps_the_sessions_a_tv_study_reads():
+    for k in ("tv:rvol:14", "tv:rvol:5:regular", "tv:adr:14", "tv:adr:3", "tv:pivots:dm", "tv:vwap:month", "tv:vwap:week"):
+        for tf in (60, 900, 3600, 86400):
+            assert prime_sessions(f"{k}@{tf}") == prime_sessions(k), (k, tf)       # the inner study still needs its N sessions
+    assert prime_sessions("tv:ema:20@3600") == 6 and prime_sessions("tv:cvd@900") == 1      # a plain HTF study: only its own bars
+
+
+def test_the_vwap_anchors_declare_the_sessions_before_the_chart_they_reach_back_over():
+    """A period's earlier sessions are fed first (hub.prime_sessions): at most 4 before a week's open the chart shows from,
+    22 before a month's. A quarter and a year are not primed (64 / 259 sessions of footprint bars per stream): they count
+    the sessions the chart loaded."""
+    assert [prime_sessions(f"tv:vwap:{a}") for a in ("session", "week", "month", "quarter", "year")] == [0, 4, 22, 0, 0]
+    assert prime_sessions("tv:vwap") == 0 and prime_sessions("tv:vwap:nope") == 0
+    assert [warm_bars(f"tv:vwap:{a}") for a in ("session", "week", "month", "quarter", "year")] == [0] * 5
+
+
+def test_macd_is_exact_after_the_declared_warm_bars_whichever_average_is_longer():
+    bars = walk(per=500)                                                 # 8000 bars
+    for key in ("tv:macd:12:26:9", "tv:macd:100:10:9", "tv:macd:60:5:3"):
+        full, w = run(key, bars), warm_bars(key)
+        cold = run(key, bars[3000:])                                     # a scroll-back chunk's fresh start
+        for i in range(w, w + 100):
+            assert cold[i] is not None, (key, i)
+            for f in ("macd", "signal", "hist"):
+                assert cold[i][f] == pytest.approx(full[3000 + i][f], abs=1e-3), (key, i, f)
 
 
 def test_a_tv_study_takes_a_timeframe():

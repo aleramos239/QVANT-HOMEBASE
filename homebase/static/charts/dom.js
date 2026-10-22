@@ -359,8 +359,8 @@ function recentTraded(state, prints, opts = {}) {
 }
 
 /* The ladder's columns in order, and the saved choice of them: `raw` is the localStorage string (a JSON list of the
-   optional ids shown); anything else -- nothing saved, storage off, junk -- shows every column. The fixed three
-   (Bid, Price, Ask) are always shown. */
+   optional ids shown); anything else -- nothing saved, storage off, junk -- is every column (the ladder then
+   shows the ones that fit, fitCols). The fixed three (Bid, Price, Ask) are always shown. */
 const COLS = [
   { id: 'psb', label: 'P/S bid' }, { id: 'sold', label: 'Sold' }, { id: 'bid', label: 'Bid', fixed: true },
   { id: 'price', label: 'Price', fixed: true }, { id: 'ask', label: 'Ask', fixed: true }, { id: 'bought', label: 'Bought' },
@@ -371,11 +371,31 @@ function parseCols(raw) {
   try { const v = JSON.parse(raw); if (Array.isArray(v)) on = v; } catch (_) { /* junk: every column */ }
   return new Set(COLS.filter((c) => c.fixed || !on || on.includes(c.id)).map((c) => c.id));
 }
+/* The default -- nothing chosen -- for a ladder `width` px wide: the old four columns (Bid, Price, Ask, Vol) always,
+   then Sold / Bought, then the two P/S, each pair only while every track keeps COL_MIN_PX, so no value or header is
+   clipped. A 480px dock (the widest) holds every column; a width that is not a number is every column. */
+const PRICE_MIN_PX = 70;   // the price track's minimum (domui.js applyCols)
+const COL_MIN_PX = 52;     // the narrowest track that shows '-12.35K' and 'Bought' (measured, apple skin)
+/* The row's 10px + 10px side padding, plus 20px of room for a classic scrollbar on the rows. Measured in Chrome with
+   a real 11px and 15px scrollbar: 4 and 6 columns clip nothing; at 8 columns a signed net of 10K or more ('-12.35K',
+   '+12.35K') is 2-4px over with 4px of .dom-c padding a side, so charts.css keeps it at 2px. */
+const ROW_PAD_PX = 40;
+function fitCols(width) {
+  if (typeof width !== 'number' || Number.isNaN(width)) return new Set(COLS.map((c) => c.id));
+  let room = Math.floor((width - ROW_PAD_PX - PRICE_MIN_PX) / COL_MIN_PX) - 3;   // tracks left after Bid, Ask and Vol
+  const on = new Set(['vol']);
+  for (const pair of [['sold', 'bought'], ['psb', 'psa']]) {
+    if (room < 2) break;
+    for (const id of pair) on.add(id);
+    room -= 2;
+  }
+  return new Set(COLS.filter((c) => c.fixed || on.has(c.id)).map((c) => c.id));
+}
 
 const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice, withBar, sessionKey,
   sessionStart, toggleTab, pressed, isRecentreKey, chipTitle,
   BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, medianOf, fading, imbalance,
-  fpSplit, withBarSplit, salesSince, knownRange, pullStack, RECENT_TIMEOUT_MS, recentTraded, COLS, parseCols };
+  fpSplit, withBarSplit, salesSince, knownRange, pullStack, RECENT_TIMEOUT_MS, recentTraded, COLS, parseCols, fitCols };
 if (typeof window !== 'undefined') window.HBDom = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

@@ -449,3 +449,18 @@ test('COLS / parseCols: the column order, and the saved choice (fixed columns al
   assert.deepEqual([...Dom.parseCols('["vol"]')], ['bid', 'price', 'ask', 'vol']);
   assert.deepEqual([...Dom.parseCols('[]')], ['bid', 'price', 'ask']);
 });
+
+test('fitCols: the default follows the ladder width -- the old four columns, then Sold/Bought, then P/S; a wide dock keeps every column', () => {
+  const ids = (w) => [...Dom.fitCols(w)];
+  const old = ['bid', 'price', 'ask', 'vol'], withSales = ['sold', 'bid', 'price', 'ask', 'bought', 'vol'];
+  assert.deepEqual(ids(314), old);                                     // the 320px dock: the extra columns would clip to '1…'
+  assert.deepEqual(ids(100), old);                                     // never fewer than the old ladder
+  assert.deepEqual(ids(369), old);
+  assert.deepEqual(ids(370), withSales);
+  assert.deepEqual(ids(473), withSales);
+  assert.deepEqual(ids(474), Dom.COLS.map((c) => c.id));               // the widest dock (480px): every column, as before
+  assert.deepEqual(ids(2000), Dom.COLS.map((c) => c.id));
+  assert.deepEqual(ids(NaN), Dom.COLS.map((c) => c.id));               // width unknown: every column
+  assert.deepEqual(ids(undefined), Dom.COLS.map((c) => c.id));
+  for (const junk of [null, '', '400', [], {}]) assert.deepEqual(ids(junk), Dom.COLS.map((c) => c.id), `not a number: ${JSON.stringify(junk)}`);
+});

@@ -56,7 +56,7 @@ const SYM = { NQ: ['CME_MINI', 'E-mini Nasdaq-100'], ES: ['CME_MINI', 'E-mini S&
               GC: ['COMEX', 'Gold'], SI: ['COMEX', 'Silver'] };
 // The runtime's own marker test: a source it finds no //@version in is run as raw JavaScript, a marked one is Pine or an error.
 const MARKER = /^\s*\/\/\s*@version\s*=\s*(\d+)\s*$/im;
-const HEAD = /^\s*(indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?(["'])(.*?)\2([^\n]*)/m;
+const HEAD = /^\s*(indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?(["'])(.*?)\2/m;   // the title only; the runtime reads the rest of the declaration
 const ETDATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 const ETTIME = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
@@ -246,7 +246,7 @@ function rerun() {
   if (!MARKER.test(cfg.source)) throw new Error('Not a Pine script: it needs a //@version=5 or //@version=6 line');   // else PineTS would run it as JavaScript
   const ind = new Lib.Indicator(cfg.source, cfg.inputs);
   const h = HEAD.exec(cfg.source);
-  const meta = { kind: ind.getDeclarationType(), title: h ? h[3] : null, overlay: !!(h && /overlay\s*=\s*true/.test(h[4])),
+  const meta = { kind: ind.getDeclarationType(), title: h ? h[3] : null, overlay: ind.prop.overlay === true,   // === true: `overlay=ov` comes back as the name
                  inputsMeta: strip(ind.getInputsMeta()) };
   const pine = new Lib.PineTS(makeProvider(g, warnings), sym.tickerid, tfString(cfg.tf_s), store.length);
   pine.setMaxLoops(MAX_LOOPS);

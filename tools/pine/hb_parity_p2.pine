@@ -7,6 +7,7 @@ indicator("HB parity P2", overlay=true, precision=10, max_bars_back=5000)
 D = display.data_window
 TZ = "America/New_York"
 plot(1, "tv|probe|P2", display=D)
+plot(volume, "tv|vol|", display=D)          // the VWAP / rvol probes need the volume: layout B has no Volume indicator, and tvparity falls back on this column
 
 // --- the clock: the bar's START in ET minutes; the Homebase session (18:00 -> 17:00 ET, the chart's own CME day); the
 // session's date -- a bar from 18:00 on belongs to the next weekday -- and whether the bar is on that calendar day

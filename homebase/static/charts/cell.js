@@ -65,6 +65,13 @@ function mk(tag, cls, text) {
 }
 function val(text, color) { const s = mk('span', 'v', text); s.style.color = color; return s; }
 function kv(k, v, color) { const s = mk('span', 'kv'); s.append(mk('span', 'k', k), val(v, color)); return s; }
+/* A catalog line's style when its instance has none (a template, an old save): a line that starts off stays off, as defaultStyle().
+   The chart draws with it, and legendInst hands the same to the legend, so the two list the same lines. */
+const catalogSty = (ln) => ({ color: ln.color, width: ln.width, dash: ln.dash, visible: !ln.off });
+function legendInst(inst) {
+  const t = !inst.style && C.TA_BY_ID[inst.id];
+  return t && t.lines.some((ln) => ln.off) ? { ...inst, style: Object.fromEntries(t.lines.map((ln) => [ln.part, catalogSty(ln)])) } : inst;
+}
 function iconButton(name, title, act) {
   const b = mk('button', 'ib');
   b.type = 'button';
@@ -153,7 +160,7 @@ function tickLabel(t, type, fmt) {
 }
 
 /* ---- Pine (the 'pine' indicator: pineworker.js runs the script, the Cell methods below draw what it answers) ---- */
-const PINE_WORKER = '/static/charts/pineworker.js?v=2';   // bump with the worker: a browser keeps a Worker's script like any other
+const PINE_WORKER = '/static/charts/pineworker.js?v=4';   // bump with the worker: a browser keeps a Worker's script like any other
 const PINE_MARKS = 1000;   // plotshape / plotchar marks kept (the newest): a script with a hit on every bar would bury the chart
 const PINE_SHAPE = { triangle_up: 'arrowUp', arrow_up: 'arrowUp', label_up: 'arrowUp', triangle_down: 'arrowDown', arrow_down: 'arrowDown',
   label_down: 'arrowDown', square: 'square', diamond: 'square' };   // every other shape (circle, cross, flag ...) is a circle
@@ -202,7 +209,7 @@ const pineSig = (st) => JSON.stringify([st.overlay, pineKinds(st).map(({ color, 
    above or below the bar goes there; Top, Bottom and Absolute locations have no pane edge or price to sit on here, so they ride
    the bar (above, below, in it). A character is a marker of size 0 with the character as its text. */
 function pineMarkers(shapes, P) {
-  return (shapes || []).slice(-PINE_MARKS).map((s) => {
+  return (shapes || []).slice().sort((a, b) => a.time - b.time).slice(-PINE_MARKS).map((s) => {   // the worker lists them plot by plot: the newest by time, not by position
     const name = String(s.shape || '').replace(/^shape_/, ''), loc = String(s.location || '').toLowerCase(), isChar = name === 'char';
     const dflt = /up$/.test(name) ? P.up : /down$/.test(name) ? P.down : P.accent;
     const size = String(s.size || '').replace(/^size\./, '');
@@ -1093,7 +1100,7 @@ class Cell {
           const fmt = t.pane ? { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } } : {};
           let top = null;
           t.lines.forEach((ln, j) => {
-            const sty = st[ln.part] || { color: ln.color, width: ln.width, dash: ln.dash, visible: true };
+            const sty = st[ln.part] || catalogSty(ln);
             if (j === 0) this.colorOf[inst.uid] = sty.color;
             const tag = ln.tag !== false;   // its value on the price axis (a band or a histogram has none)
             const serie = ln.type === 'hist'
@@ -1337,7 +1344,7 @@ class Cell {
       const colors = { text: P.text, up: P.up, down: P.down, line: own || P.accent, vwap: own || P.vwap, cum: own || P.cum };
       // a plain-word reading ("Buyers pushing") is the answer itself, not a number: it shows even with "Indicator values" off
       const off = r.inst.opts && r.inst.opts.legend === false;
-      const vs = off ? [] : (r.inst.id === 'pine' ? this.pineValues(r.inst, b, dt) : C.legendValues(r.inst, b, colors, dt)).filter((x) => F.indValues || x.word);
+      const vs = off ? [] : (r.inst.id === 'pine' ? this.pineValues(r.inst, b, dt) : C.legendValues(legendInst(r.inst), b, colors, dt)).filter((x) => F.indValues || x.word);
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -1638,16 +1645,19 @@ class Cell {
   syncProfile() {
     if (!this.prof) return;
     const f = this.visible('profile')[0];
-    this.prof.set(f ? this.profile : null, this.tick, f ? { prior: f.params.prior, lines: f.params.lines, naked: this.priorNaked(),
-      va: f.params.va, width: f.params.width, side: f.params.side, method: f.params.method } : null);
+    const ex = f ? { prior: f.params.prior, lines: f.params.lines, va: f.params.va, width: f.params.width, side: f.params.side,
+      method: f.params.method } : null;
+    this.prof.set(f ? this.profile : null, this.tick, ex && { ...ex, naked: this.priorNaked(ex) });
   }
-  /* The prior session's POC has not been traded since this session began (its line is dashed until it is). */
-  priorNaked() {
+  /* The prior session's POC (the one drawn, by the chosen method and share) has not been traded since this session began
+     (its line is dashed until it is). */
+  priorNaked(ex) {
     const q = this.profile && this.profile.prev, bars = this.bars;
     if (!q || q.poc == null || !bars.length) return false;
+    const poc = Profile && Profile.levels ? Profile.levels(q, ex || {}, this.tick).poc : q.poc;
     const sess = bars[bars.length - 1].s;
     for (let i = bars.length - 1; i >= 0 && bars[i].s === sess; i--) {
-      if (!bars[i].blank && bars[i].l <= q.poc && bars[i].h >= q.poc) return false;
+      if (!bars[i].blank && bars[i].l <= poc && bars[i].h >= poc) return false;
     }
     return true;
   }
@@ -1789,7 +1799,7 @@ class Cell {
     if (st.since != null && st.since < from) from = st.since;
     st.shapes = full ? hits.slice() : st.shapes.filter((s) => s.time < from).concat(hits);
     st.since = null;
-    st.meta = meta; st.overlay = !!r.overlay; st.title = r.title; st.inputsMeta = r.inputsMeta || []; st.warnings = r.warnings || [];
+    st.meta = meta; st.overlay = !!r.overlay; st.title = r.title || st.script || null; st.inputsMeta = r.inputsMeta || []; st.warnings = r.warnings || [];
     if (r.firstMs != null) st.firstMs = r.firstMs;
     st.draw = { boxes: r.boxes || [], lines: r.lines || [], labels: r.labels || [], linefills: r.linefills || [], polylines: r.polylines || [], tables: r.tables || [] };
     st.drawn = Object.values(st.draw).some((l) => l.length);
@@ -1833,7 +1843,8 @@ class Cell {
       if (!st.w) continue;   // not started: its init carries these bars
       const bars = list.filter((b) => !b.blank).map((b) => pineBar(b, st.fp));
       if (!bars.length) continue;
-      for (const b of bars) if (st.since == null || b.ms < st.since) st.since = b.ms;
+      // bars before the run window change nothing (the Worker ignores them and answers nothing): they must not widen `since`
+      for (const b of bars) if ((st.firstMs == null || b.ms >= st.firstMs) && (st.since == null || b.ms < st.since)) st.since = b.ms;
       st.w.postMessage({ type: 'bars', bars });
     }
   }

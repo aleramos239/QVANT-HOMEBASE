@@ -898,7 +898,7 @@ def warm_ta(name: str, rest: list) -> int:
     if name == "rsi" or name == "atr":
         return 10 * num(0, 14)
     if name == "macd":
-        return 5 * num(1, 26) + 5 * num(2, 9)
+        return 5 * max(num(0, 12), num(1, 26)) + 5 * num(2, 9)     # the longer of the two EMAs
     if name == "bb" or name == "donchian":
         return num(0, 20)
     if name == "stoch":

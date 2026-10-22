@@ -10,7 +10,9 @@ newSess = timeframe.change("D")
 
 // --- one side of the pivots on y (the low side runs on -low), studies_ta._side_step: the swings no later bar went
 // beyond (newest last; each newer survivor sits below the older ones, so the newest drops first), their bar, and the
-// equal levels -- a swing within `tol` under the swing before it with nothing above that one in between
+// equal levels -- a swing within `tol` under the swing before it with nothing above that one in between.
+// A pivot is strict on BOTH sides, as Homebase's swing is (above the n bars before it and the n after): ta.pivothigh
+// alone lets an older equal value stand, so the n bars before are checked here (lh) and a left tie is no swing
 side(float y, int n, float tol) =>
     var swings = array.new<float>()
     var idx = array.new<int>()
@@ -24,7 +26,9 @@ side(float y, int n, float tol) =>
         array.pop(eqs)
     if not na(prev) and y > runmax
         runmax := y
-    c = ta.pivothigh(y, n, n)
+    c0 = ta.pivothigh(y, n, n)
+    lh = ta.highest(y[n + 1], n)                // the n bars before a pivot confirmed now
+    c = (not na(c0)) and c0 > lh ? c0 : na
     hn = ta.highest(y, n)                       // the n bars after a pivot confirmed now
     if not na(c)
         if not na(prev) and prev - c >= 0 and prev - c <= tol and runmax <= prev
@@ -112,7 +116,8 @@ plot(mvD, "tv|rmove:200|dir", display=D)
 // --- fvg:0.25:14 (FairValueGap): three bars of the session, bar 3's low above bar 1's high (up) or bar 3's high below
 // bar 1's low (down), at least 0.25 x ATR(14) and a tick; per side the newest gap not yet filled -- a later bar through
 // its far edge ends it (the bar that forms a gap is not a fill). Wilder ATR seeded with the mean of the first 14 true
-// ranges, the first needing a close before it (ta.tr(false) is na on bar 0, as in Homebase)
+// ranges, the first needing a close before it (ta.tr(false) is na on bar 0, as in Homebase). The gap is sized with the
+// ATR through the bar BEFORE the one that completes it (atr14[1]): FairValueGap.step tests the gap, then updates its ATR
 var float fvgUh = na                        // up gap: near edge (bar 3's low) / far edge (bar 1's high)
 var float fvgUl = na
 var float fvgDh = na                        // down gap: far edge (bar 1's low) / near edge (bar 3's high)
@@ -132,8 +137,8 @@ if not na(fvgDh) and high >= fvgDh
     fvgDl := na
 sessBars := sessBars + 1
 atr14 = ta.rma(ta.tr(false), 14)
-gapMin = math.max(0.25 * atr14, syminfo.mintick)
-if sessBars >= 3 and not na(atr14)
+gapMin = math.max(0.25 * atr14[1], syminfo.mintick)
+if sessBars >= 3 and not na(atr14[1])
     if low > high[2] and low - high[2] >= gapMin
         fvgUh := low
         fvgUl := high[2]

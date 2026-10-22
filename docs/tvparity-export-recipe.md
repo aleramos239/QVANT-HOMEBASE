@@ -7,8 +7,11 @@ The files stay on this Mac in `~/.homebase/tvparity/` and never go into the repo
 Then: `.venv/bin/python -m tools.tvparity run` reads `~/.homebase/tvparity/inbox/`, files each CSV under
 `exports/<date>/`, and writes `reports/<stamp>.md` with one verdict per indicator: identical, warm-up only, differs,
 no-tv (no TradingView source) or no-data (no Homebase bars for those days).
-A CSV that cannot be read (not an export, or fewer than two complete bars, say one saved mid-session) is named on screen
-and left in the inbox; the others are still checked and reported. The column title is a Homebase key; the harness runs it as
+A CSV that cannot be read (not an export, fewer than two complete bars, say one saved mid-session, or a chart timeframe the
+harness does not know: it reads only 1m, 5m, 15m, 1h and 1D, so a 3m or 4h export is refused by name, never snapped to the
+nearest one) is named on screen and left in the inbox; the others are still checked and reported.
+Each report table ends with a `file` column (the filed name), and each section is headed with the market, the group and the
+timeframe, so two exports of different markets never read as one. The column title is a Homebase key; the harness runs it as
 the `tv:` study with the arguments reordered where the two differ (Keltner), so keep the titles in the .pine files as they are.
 
 ## 3.0 Calibration export (once, about 5 minutes)
@@ -47,6 +50,9 @@ and the PineTS port agree with 100, but the `rs = up / down` listing in the Pine
 4. Repeat for `hb_parity_p2.pine` → **HB parity P2**, `hb_parity_p3.pine` → **HB parity P3**,
    `hb_parity_p4.pine` → **HB parity P4**.
    P4 uses `request.footprint`, which needs Premium (you have it). If it refuses to add, say so: P4 is then skipped.
+   Scripts saved before 2026-10-22: paste **P2** (it now plots the bar volume) and **P3** (the FVG gap floor now uses the ATR
+   through the bar before the gap, and a swing high or low now needs to be strictly beyond the n bars on both sides, as
+   Homebase has it) again over the saved ones and Save.
 
 ### The symbol and its settings (both layouts)
 
@@ -89,7 +95,10 @@ and the PineTS port agree with 100, but the `rs = up / down` listing in the Pine
 ### Layout "HB parity B"
 
 13. New layout, call it **HB parity B**. Same symbol and symbol settings as step 6.
-14. Add **HB parity P2**, **HB parity P3**, **HB parity P4** (Indicators → My scripts).
+14. Add **HB parity P2**, **HB parity P3**, **HB parity P4** (Indicators → My scripts). P2 plots the bar volume itself
+    (`tv|vol|`), so layout B needs no Volume indicator for the volume studies. An export that has neither a Volume column nor
+    that probe holding a volume still gets checked: the studies that use volume (vwap, vwma, rvol, ...) are skipped for the math check with a
+    visible "skipped: no volume" note and checked on Homebase's data only; the others run as usual.
 15. Add the built-ins **Cumulative Volume Delta** (anchor Session) and **Volume Delta** (defaults). These are reference
     only: TradingView defines delta from lower-timeframe bars, Homebase from each trade's side.
 16. Add your own Pine scripts you want checked against Homebase's Pine runtime, up to 20 indicators on this chart in
@@ -106,7 +115,9 @@ Do this at the weekend (Saturday, or Sunday before 18:00 ET) so no bar is still 
 3. Top right, the layout dropdown (the layout's name) → **Export chart data…**
 4. In the dialog: Chart = this chart; **Time format: UNIX timestamp**. Click **Export**.
 5. Save the file into `~/.homebase/tvparity/inbox/`. Keep the name TradingView gives it. The harness works out the
-   timeframe from the bar spacing and the group (P1 … P4) from the probe column, and renames the file itself.
+   timeframe from the bar spacing, the group from the probe columns (P1 on layout A, `P2+P3+P4` on layout B) and the market
+   from the symbol in the name (`CME_MINI_ES1!, 1_….csv` is ES, `MNQ1!` is NQ, a name it does not know is NQ), and renames
+   the file itself `<root>_<group>_<tf>.csv`. `run --root GC` forces one market for every file in the folder.
 6. Switch the timeframe to **5m** and repeat steps 2-5. Then **15m**, **1h**, **1D**.
 7. Open layout **HB parity B** and repeat steps 1-6.
 8. Tell Claude "the exports are in". Claude runs `.venv/bin/python -m tools.tvparity run` and reads
@@ -114,10 +125,29 @@ Do this at the weekend (Saturday, or Sunday before 18:00 ET) so no bar is still 
 
 Optional extras, same steps:
 - 1D with the SET button ON (to measure the settlement gap).
-- CME_MINI:ES1! 1m on layout B (the SMT partner market).
+- CME_MINI:ES1! 1m on layout B (the SMT partner market). It is checked against Homebase's ES bars, from the file name; if
+  the name carries no `ES1!` (renamed file), run that folder with `--root ES`. Needs ES ticks in the archive for the data
+  column, else that column reads no-data.
 - RTH session 1m / 5m, once Homebase has an RTH bar mode.
 
 Known differences the report sets apart (they are not bugs): a holiday session folded into the next day, the September
 2026 roll one session apart (TradingView NQ1! switched to NQZ6 on 09-15, Homebase on 09-14), a print landing on the other
 side of a bar boundary, settlement closes if SET was left on, roll-week volume (TradingView counts spread legs), days with
 Homebase data gaps, and the first bars of each study (seeding).
+
+Also set apart, by design:
+- Studies that TradingView primes from daily history before the first exported bar (the previous-day levels, the daily
+  high/low range and the noise band read `request.security("D")`): Homebase has only the export's own sessions, so the
+  first 2 sessions (the previous-day fields only: pdh, pdl, pdc; the overnight fields read the chart), the first sessions
+  of the range (dhl) and the first 252 sessions (noise: its ATR seed fades by 13/14 a session) read "warm-up only", and a
+  difference after them is still "differs".
+- A probe on a timeframe below the chart (`ema:20@3600` on the 1D chart): the row is skipped with a "below" note.
+  TradingView reads the last lower-timeframe bar, Homebase has no bars below the chart's.
+- `tools/pine/parity.mjs <script> <filed csv> --bars homebase` runs the script on Homebase's bars instead of TradingView's:
+  `tools.tvparity run` writes them next to each filed export (`<root>_<group>_<tf>.bars.json`) whenever it has Homebase bars
+  for it. `--bars homebase=PATH` takes any `[{ms,o,h,l,c,v}]` file.
+- A filed export put back in the inbox keeps its market: the harness reads `ES_P2_1m.csv` as ES.
+- The two Pine twins and Homebase now follow the same two rules, checked on made-up bars with the local Pine runtime
+  (`tests/test_tvparity_pine.py`): the fair-value gap floor is 0.25 x the ATR(14) through the bar before the gap, and a swing
+  needs the high (low) strictly beyond every one of the n bars on each side, so an equal value inside that window means no
+  swing. What TradingView does on an exact tie is not proven live; if a P3 export disagrees on tie bars, tell Claude.

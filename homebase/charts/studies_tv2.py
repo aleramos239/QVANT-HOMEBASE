@@ -11,6 +11,8 @@ ta.tr(true) is high - low on the first bar, ta.tr is na there.
 from __future__ import annotations
 
 import math
+from bisect import bisect_right
+from itertools import accumulate
 
 from .studies_ta import _Study
 
@@ -97,6 +99,11 @@ def _rsi(st, x, n):
 _RSI0 = (None, ((), None), ((), None))
 
 
+def _ln(x):
+    """math.log, na (None) for a value that is not above 0 as Pine's."""
+    return None if x is None or x <= 0 else math.log(x)
+
+
 def _hl2(bar):
     return (bar.h + bar.l) / 2.0
 
@@ -130,11 +137,13 @@ class _Closes(_Study):
 
 # ---- moving averages ----
 class HMA(_Closes):
-    """ta.hma(close, 9) = wma(2 wma(src, n/2) - wma(src, n), round(sqrt(n))); n/2 is Pine's integer division."""
+    """Hull MA(9) = wma(2 wma(src, n/2) - wma(src, n), floor(sqrt(n))); n/2 is Pine's integer division. The floor is what
+    TradingView's built-in Hull moving average source says: `ta.wma(2*ta.wma(src, length/2)-ta.wma(src, length),
+    math.floor(math.sqrt(length)))` (pine-facade STD;Hull%1MA v28): n = 15 smooths over 3 bars, n = 21 over 4 (round: 4, 5)."""
 
     def __init__(self, n: int = 9):
         super().__init__(n)
-        self.h, self.s = self.n // 2, round(math.sqrt(self.n))
+        self.h, self.s = self.n // 2, int(math.sqrt(self.n))
 
     def initial(self):
         return ((), ())   # closes, the inner series
@@ -199,7 +208,9 @@ class LSMA(_Closes):
 
 
 class McGinley(_Study):
-    """McGinley Dynamic(14): mg := na(mg[1]) ? ta.ema(close, n) : mg[1] + (close - mg[1]) / (n pow(close / mg[1], 4))."""
+    """McGinley Dynamic(14): mg := na(mg[1]) ? ta.ema(close, n) : mg[1] + (close - mg[1]) / (n pow(close / mg[1], 4)) (TradingView's
+    own source, pine-facade STD;McGinley%1Dynamic). Its ta.ema only runs while mg[1] is na, so after a na (x / 0, a zero close)
+    the EMA goes on from the state it froze in, bars ago, and the line walks back to the price: PineTS does the same."""
 
     def __init__(self, n: int = 14):
         self.n = int(n)
@@ -213,7 +224,12 @@ class McGinley(_Study):
         if mg is None:
             es, mg = _ma(es, bar.c, self.n, _k(self.n))
         else:
-            mg = mg + (bar.c - mg) / (self.n * (bar.c / mg) ** 4)
+            try:
+                mg = mg + (bar.c - mg) / (self.n * (bar.c / mg) ** 4)
+            except (ZeroDivisionError, OverflowError):   # a close or an mg of 0 (x / 0 is na in Pine), or a ratio** past a float
+                mg = None
+            if mg is not None and not math.isfinite(mg):
+                mg = None                                # an inf never reaches the wire (json.dumps writes Infinity)
         return (es, mg), mg
 
 
@@ -457,7 +473,7 @@ class Ichimoku(_Study):
         qa, ad = _delay(qa, a, self.d)
         qb, bd = _delay(qb, b, self.d)
         new = (hl, qa, qb)
-        if conv is None:
+        if conv is None and base is None and ad is None and bd is None:     # nothing to show yet
             return new, None
         return new, {"conv": conv, "base": base, "a": ad, "b": bd}
 
@@ -481,7 +497,7 @@ class Alligator(_Study):
             q, v = _delay(q, v, off)
             new.append((ms, q))
             out.append(v)
-        if out[2] is None:
+        if all(v is None for v in out):     # nothing to show yet: a line that is ready shows while the others still warm
             return tuple(new), None
         return tuple(new), {"jaw": out[0], "teeth": out[1], "lips": out[2]}
 
@@ -723,7 +739,7 @@ class TRIX(_Study):
         return (((), None), ((), None), ((), None), None)
 
     def step(self, st, bar):
-        s1, e1 = _ma(st[0], math.log(bar.c), self.n, _k(self.n))
+        s1, e1 = _ma(st[0], _ln(bar.c), self.n, _k(self.n))
         s2, e2 = _ma(st[1], e1, self.n, _k(self.n))
         s3, e3 = _ma(st[2], e2, self.n, _k(self.n))
         return (s1, s2, s3, e3), (None if e3 is None or st[3] is None else 10000.0 * (e3 - st[3]))
@@ -734,19 +750,19 @@ def _tsi0():
 
 
 def _tsi(st, x, short, long):
-    """One step of ta.tsi(src, short, long): 100 ema(ema(change, long), short) / ema(ema(|change|, long), short)."""
+    """One step of ta.tsi(src, short, long): ema(ema(change, long), short) / ema(ema(|change|, long), short), a ratio in
+    [-1, 1] (na when the denominator is 0). The TSI indicator plots 100 times it; SMI Ergodic plots it as it is."""
     px, a1, a2, b1, b2 = st
     d = None if px is None else x - px
     a1, u = _ma(a1, d, long, _k(long))
     a2, u = _ma(a2, u, short, _k(short))
     b1, v = _ma(b1, None if d is None else abs(d), long, _k(long))
     b2, v = _ma(b2, v, short, _k(short))
-    t = _div(u, v)
-    return (x, a1, a2, b1, b2), (None if t is None else 100.0 * t)
+    return (x, a1, a2, b1, b2), _div(u, v)
 
 
 class TSI(_Study):
-    """True Strength Index(25, 13, 13): ta.tsi(close, short, long) and its ema(signal)."""
+    """True Strength Index(25, 13, 13): 100 ta.tsi(close, short, long) and its ema(signal)."""
 
     def __init__(self, long: int = 25, short: int = 13, sig: int = 13):
         self.l, self.s, self.g = int(long), int(short), int(sig)
@@ -757,12 +773,13 @@ class TSI(_Study):
 
     def step(self, st, bar):
         ts, t = _tsi(st[0], bar.c, self.s, self.l)
+        t = None if t is None else 100.0 * t
         sg, g = _ma(st[1], t, self.g, _k(self.g))
         return (ts, sg), (None if t is None else {"tsi": t, "signal": g})
 
 
 class SMI(_Study):
-    """SMI Ergodic Indicator(20, 5, 5): erg = ta.tsi(close, short, long), sig = ema(erg, n_sig)."""
+    """SMI Ergodic Indicator(20, 5, 5): erg = ta.tsi(close, short, long) as it is (-1..1), sig = ema(erg, n_sig)."""
 
     def __init__(self, long: int = 20, short: int = 5, sig: int = 5):
         self.l, self.s, self.g = int(long), int(short), int(sig)
@@ -910,7 +927,8 @@ class Coppock(_Study):
         w = _push(w, bar.c, max(self.l, self.s) + 1)
         x = None
         if len(w) > max(self.l, self.s):
-            x = 100.0 * (w[-1] - w[-1 - self.l]) / w[-1 - self.l] + 100.0 * (w[-1] - w[-1 - self.s]) / w[-1 - self.s]
+            a, b = (_div(100.0 * (w[-1] - w[-1 - k]), w[-1 - k]) for k in (self.l, self.s))
+            x = None if a is None or b is None else a + b
         r = _push(r, x, self.n)
         return (w, r), (_wma(r) if _full(r, self.n) else None)
 
@@ -981,11 +999,18 @@ class Ulcer(_Closes):
         self.m = int(n)
 
     def value(self, w):
+        m = self.m
+        # every window w[i:i + m] holds the middle bar w[m - 1], so its highest is max(w[i..m - 1], w[m - 1..i + m - 1]):
+        # two running maxima instead of a rescan per window (O(n) a bar, not O(n^2); the values are the same)
+        left = list(accumulate(reversed(w[:m]), max))[::-1]
+        right = list(accumulate(w[m - 1:], max))
         dd = []
-        for i in range(self.m):
-            part = w[i:i + self.m]
-            hi = max(part)
-            dd.append((100.0 * (part[-1] - hi) / hi) ** 2)
+        for i in range(m):
+            hi = max(left[i], right[i])
+            d = _div(100.0 * (w[i + m - 1] - hi), hi)    # a run of zero closes: 0 / 0 is na, and so is the mean of it
+            if d is None:
+                return None
+            dd.append(d ** 2)
         return math.sqrt(_mean(dd))
 
 
@@ -1070,8 +1095,9 @@ class RCI(_Closes):
         super().__init__(n)
 
     def value(self, w):
-        n = len(w)
-        d = sum(((n - i) - (1 + sum(1 for y in w if y > x))) ** 2 for i, x in enumerate(w))
+        n, s = len(w), sorted(w)
+        # time rank n - i, price rank 1 + (closes above x) = n + 1 - bisect_right(s, x): one sort, not a scan per close
+        d = sum((bisect_right(s, x) - i - 1) ** 2 for i, x in enumerate(w))
         return (1 - 6.0 * d / (n * (n * n - 1))) * 100.0
 
 
@@ -1087,7 +1113,7 @@ class HV(_Study):
 
     def step(self, st, bar):
         pc, w = st
-        w = _push(w, None if pc is None else math.log(bar.c / pc), self.n)
+        w = _push(w, _ln(_div(bar.c, pc)), self.n)
         return (bar.c, w), (100.0 * _sd(w) * math.sqrt(365) if _full(w, self.n) else None)
 
 
@@ -1116,7 +1142,10 @@ class PVT(_Study):
         pc, s = st
         if pc is None:
             return (bar.c, s), None
-        s += (bar.c - pc) / pc * bar.v
+        g = _div(bar.c - pc, pc)
+        if g is None:   # close[1] is 0: Pine's x / 0 is na, this bar has no value and the sum goes on
+            return (bar.c, s), None
+        s += g * bar.v
         return (bar.c, s), s
 
 
@@ -1231,7 +1260,10 @@ class NVI(_Study):
     def step(self, st, bar):
         pc, pv, x = st
         if pv is not None and (bar.v < pv if self.DOWN else bar.v > pv):
-            x = x + (bar.c - pc) / pc * x
+            g = _div(bar.c - pc, pc)
+            if g is None:   # close[1] is 0: x / 0 is na, this bar has no value and the index goes on
+                return (bar.c, bar.v, x), None
+            x = x + g * x
         return (bar.c, bar.v, x), x
 
 
@@ -1431,14 +1463,24 @@ def _num(args, i, default):
 
 
 def _warm_of(spec):
-    """A study's memory in bars from its wire-key args: windows add up, an EMA of n counts 5 n, a Wilder average 10 n."""
+    """A study's memory in bars from its wire-key args: windows add up, an EMA of n counts 5 n, a Wilder average 10 n.
+    A difference of two EMAs (ppo, pvo, chaikin, klinger) counts 6 n of the longer: the line's own deviation is smaller
+    than either EMA's, and the cold EMA seeds at bar n - 1, so the same tail needs one more n to fall under 1e-3 of it."""
     def warm(args):
         return sum(m * _num(args, i, d) for i, m, d in spec)
     return warm
 
 
+# A running sum (obv, pvt, adl, nvi, pvi) remembers every bar since the first one it saw, so no finite warm repairs it. It asks
+# for as much as the hub will ever repair: hub.HISTORY_MAX (this module cannot import hub; a test pins them equal) and the hub
+# clamps anything bigger. Beyond that many bars after a join a step stays: the part of the page the repair does not reach keeps
+# its own baseline, and so does the live tail. An exact fix needs the client to rebase these keys (a new wire key from the hub).
+CUMULATIVE_WARM = 20_000
+
 # name -> fn(args: list[str]) -> bars after a join the value still depends on (hub.warm_bars through studies_tv.warm_tv);
-# (arg index, multiplier, default) terms, plus a constant where a length is fixed in the formula
+# (arg index, multiplier, default) terms, plus a constant where a length is fixed in the formula; a lambda where the LONGEST of
+# several lengths decides (they may come in any order). tests/test_charts_studies_tv2.py measures the table: a cold start against
+# a run from the first bar, to 1e-3 of the line's own deviation (where a 5 n EMA tail sits)
 WARM = {
     "hma": _warm_of(((0, 2, 9),)),
     "dema": _warm_of(((0, 10, 9),)),
@@ -1451,36 +1493,38 @@ WARM = {
     "stochrsi": _warm_of(((0, 10, 14), (1, 1, 14), (2, 1, 3), (3, 1, 3))),
     "bbpct": _warm_of(((0, 1, 20),)),
     "bbw": _warm_of(((0, 1, 20),)),
-    "bbtrend": _warm_of(((1, 1, 50),)),
+    "bbtrend": lambda args: max(_num(args, 0, 20), _num(args, 1, 50)),
     "sar": lambda args: 400,
     "chandelier": _warm_of(((0, 10, 22),)),
     "vstop": _warm_of(((0, 10, 20),)),
     "chandekroll": _warm_of(((0, 10, 10), (2, 1, 9))),
     "ichimoku": lambda args: max(_num(args, 0, 9), _num(args, 1, 26), _num(args, 2, 52)) + _num(args, 3, 26),
-    "alligator": _warm_of(((0, 10, 13), (3, 1, 8))),
-    "fractals": _warm_of(((0, 2, 2),)),
+    "alligator": lambda args: (10 * max(_num(args, 0, 13), _num(args, 1, 8), _num(args, 2, 5))
+                               + max(_num(args, 3, 8), _num(args, 4, 5), _num(args, 5, 3))),
+    "fractals": lambda args: 2 * _num(args, 0, 2) + 4,     # 2 n back, and up to 4 more through the equal-bar skip
     "cci": _warm_of(((0, 1, 20),)),
     "wpr": _warm_of(((0, 1, 14),)),
     "mom": _warm_of(((0, 1, 10),)),
     "roc": _warm_of(((0, 1, 9),)),
-    "ao": _warm_of(((1, 1, 34),)),
+    "ao": lambda args: max(_num(args, 0, 5), _num(args, 1, 34)),
     "bop": lambda args: 0,
     "bbp": _warm_of(((0, 5, 13),)),
     "cmo": _warm_of(((0, 1, 9),)),
     "connors": _warm_of(((0, 10, 3), (1, 10, 2), (2, 1, 100))),
     "fisher": _warm_of(((0, 10, 9),)),
-    "ppo": _warm_of(((1, 5, 26), (2, 5, 9))),
-    "pvo": _warm_of(((1, 5, 26), (2, 5, 9))),
+    "ppo": lambda args: 6 * max(_num(args, 0, 12), _num(args, 1, 26)) + 5 * _num(args, 2, 9),     # a difference of two EMAs: 6 n
+    "pvo": lambda args: 6 * max(_num(args, 0, 12), _num(args, 1, 26)) + 5 * _num(args, 2, 9),
     "trix": _warm_of(((0, 15, 18),)),
     "tsi": _warm_of(((0, 5, 25), (1, 5, 13), (2, 5, 13))),
     "smi": _warm_of(((0, 5, 20), (1, 5, 5), (2, 5, 5))),
     "smio": _warm_of(((0, 5, 20), (1, 5, 5), (2, 5, 5))),
     "smindex": _warm_of(((0, 1, 10), (1, 10, 3), (2, 5, 3))),
-    "uo": _warm_of(((2, 1, 28),)),
-    "rvgi": _warm_of(((0, 1, 10),)),
+    "uo": lambda args: max(_num(args, 0, 7), _num(args, 1, 14), _num(args, 2, 28)),
+    "rvgi": lambda args: _num(args, 0, 10) + 5,     # swma(4) of the ratio, the sum over n, swma(4) of that
     "rvi": _warm_of(((0, 1, 10), (1, 5, 14))),
-    "coppock": _warm_of(((0, 1, 10), (1, 1, 14))),
-    "kst": _warm_of(((3, 1, 30), (7, 1, 15), (8, 1, 9))),
+    "coppock": lambda args: max(_num(args, 1, 14), _num(args, 2, 11)) + _num(args, 0, 10),
+    "kst": lambda args: max(_num(args, i, r) + _num(args, i + 4, s) for i, (r, s) in enumerate(((10, 10), (15, 10), (20, 10), (30, 15))))
+                        + _num(args, 8, 9),
     "dpo": _warm_of(((0, 2, 21),)),
     "massindex": lambda args: 90 + _num(args, 0, 10),
     "ulcer": _warm_of(((0, 2, 14),)),
@@ -1490,17 +1534,17 @@ WARM = {
     "chop": _warm_of(((0, 1, 14),)),
     "rci": _warm_of(((0, 1, 10),)),
     "hv": _warm_of(((0, 1, 10),)),
-    "obv": lambda args: 0,
-    "pvt": lambda args: 0,
-    "adl": lambda args: 0,
+    "obv": lambda args: CUMULATIVE_WARM,
+    "pvt": lambda args: CUMULATIVE_WARM,
+    "adl": lambda args: CUMULATIVE_WARM,
     "cmf": _warm_of(((0, 1, 20),)),
-    "chaikin": _warm_of(((1, 5, 10),)),
-    "klinger": _warm_of(((1, 5, 55), (2, 5, 13))),
+    "chaikin": lambda args: 6 * max(_num(args, 0, 3), _num(args, 1, 10)),
+    "klinger": lambda args: 6 * max(_num(args, 0, 34), _num(args, 1, 55)) + 5 * _num(args, 2, 13),
     "efi": _warm_of(((0, 5, 13),)),
     "eom": _warm_of(((0, 1, 14),)),
-    "nvi": lambda args: 0,
-    "pvi": lambda args: 0,
-    "netvol": lambda args: 0,
+    "nvi": lambda args: CUMULATIVE_WARM,
+    "pvi": lambda args: CUMULATIVE_WARM,
+    "netvol": lambda args: 1,       # change(close) looks one bar back: the first bar after a join is -/+ volume, not 0
     "zigzag": lambda args: 400,
     "median": _warm_of(((0, 1, 3),)),
     "cog": _warm_of(((0, 1, 10),)),

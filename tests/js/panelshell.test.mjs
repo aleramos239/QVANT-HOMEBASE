@@ -291,3 +291,37 @@ test('a small drag inside the dock does not jump over a closed panel that sits f
   dragHeader(env, 'tape', { x: 1000, y: 410 }, { x: 1000, y: 450 });   // inside Tape's own panel: no zone, a plain reorder
   assert.deepEqual(dockedIds(env), ['order', 'tape']);
 });
+
+/* ---- the drop slot counts the OTHER docked panels only (review 2026-10-22): with two or more others there is no
+   zone to arrange against, so the Y-index path is the normal one, and it must not count the dragged panel. ---- */
+const THIRDS = { 'panel-order': { left: 900, top: 0, width: 300, height: 266 }, 'panel-dom': { left: 900, top: 266, width: 300, height: 266 },
+  'panel-tape': { left: 900, top: 532, width: 300, height: 268 } };
+
+test('three docked: dragging a panel down into a middle slot lands it there, not one slot too low', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  dragHeader(env, 'order', { x: 1000, y: 100 }, { x: 1000, y: 480 });   // lower half of DOM, above Tape's middle
+  assert.deepEqual(dockedIds(env), ['dom', 'order', 'tape']);
+});
+
+test('three docked: dragging a panel up still lands in the slot under the pointer', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  dragHeader(env, 'tape', { x: 1000, y: 600 }, { x: 1000, y: 100 });
+  assert.deepEqual(dockedIds(env), ['tape', 'order', 'dom']);
+});
+
+test('a floating panel dropped on a dock holding two others lands at the pointer, whatever its own floating rect says', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  shell.setDocked('order', false);                                       // Order floats; its dock slot is still first
+  place(env, { ...DOCK, 'panel-order': { left: 280, top: 0, width: 300, height: 480 },   // its (stale) floating rect: midpoint 240
+    'panel-dom': { left: 900, top: 0, width: 300, height: 400 }, 'panel-tape': { left: 900, top: 400, width: 300, height: 400 } });
+  dragHeader(env, 'order', { x: 300, y: 12 }, { x: 1000, y: 500 });     // lower half of DOM's slot ... above Tape's middle (600)
+  assert.deepEqual(dockedIds(env), ['dom', 'order', 'tape']);
+});

@@ -7,10 +7,13 @@
    The CSV: a header row with `time` (unix seconds, unix ms or ISO), open/high/low/close, `Volume` when the
    Volume indicator was on the chart, then one column per plot title. By default the bars are built from the
    CSV's own OHLCV, so a difference is the engine's, not the data's. `--bars homebase` runs the same script on
-   Homebase bars instead: a JSON file [{ms, o, h, l, c, v}] (ms = the bar's epoch start) written by the Python
-   harness, at PATH or <tv.csv minus .csv>.bars.json; a difference there is in the data.
+   Homebase bars instead: a JSON file [{ms, o, h, l, c, v}] (ms = the bar's epoch start), at PATH or
+   <tv.csv minus .csv>.bars.json, which `python -m tools.tvparity run` writes next to each filed export it has
+   Homebase bars for (ROOT/exports/<date>/); a difference there is in the data.
    Prints one line per plot column: bars compared, largest absolute error, the first bar that differs. Warm-up
-   bars and cells TradingView left empty are skipped. Exit 1 on a mismatch, 2 when the run itself failed.
+   bars and cells TradingView left empty are skipped. A CSV title the script has no plot of is only printed (an
+   export carries other indicators' columns). Exit 0 when every column compared agrees, 1 on a mismatch or a column
+   with no cell to compare, 2 when the run itself failed or no column at all was compared.
 
    The runtime stays outside the repo (AGPL): HOMEBASE_PINE_DIR or ~/.homebase/pine. loadWorker() is also what
    tests/js/pineworker.test.mjs drives the Worker with. */
@@ -72,7 +75,11 @@ function splitCsv(line) {
 
 function parseTime(s) {
   if (/^\d+(\.\d+)?$/.test(s)) { const n = +s; return n > 1e11 ? Math.round(n) : Math.round(n * 1000); }
-  const t = Date.parse(s);
+  // a time with no zone is UTC, as tools/tvparity._time_ms reads it (Date.parse would take the machine's zone)
+  const z = s.replace(/(\d:\d\d(?::\d\d(?:\.\d+)?)?)([+-]\d\d)$/, '$1$2:00');   // a bare +05 offset: Date.parse wants +05:00
+  const iso = /(Z|[+-]\d\d:?\d\d)$/i.test(z) || /^\d{4}-\d\d-\d\d$/.test(z);
+  const u = z.replace(/^(\d{4}-\d\d-\d\d)T/, '$1 ');
+  const t = Date.parse(iso ? z : /(UTC|GMT)$/i.test(u) ? u : u + ' UTC');
   return Number.isFinite(t) ? t : null;
 }
 
@@ -111,26 +118,33 @@ export function compare(expected, got, { tol = 1e-6, warmup = 0 } = {}) {
     const err = hb == null ? Infinity : Math.abs(hb - tv);
     n++;
     if (err > maxErr) maxErr = err;
-    if (err > tol && !first) first = { time, tv, hb };
+    if (!(err <= tol) && !first) first = { time, tv, hb };       // NaN never passes
   }
   return { n, maxErr, first, ok: !first };
 }
 
+const dec = (s) => /^(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i.test(s.trim()) ? Number(s) : NaN;   // Number() would also read 0x10 and Infinity
+
 function args(argv) {
   const a = { tol: 1e-6, warmup: 0, root: 'NQ', bars: null, pos: [] };
   for (let i = 0; i < argv.length; i++) {
-    const k = argv[i];
-    if (k === '--tol') a.tol = +argv[++i];
-    else if (k === '--warmup') a.warmup = +argv[++i];
-    else if (k === '--root') a.root = String(argv[++i]).toUpperCase();
-    else if (k === '--bars') a.bars = argv[++i];
-    else a.pos.push(k);
+    const eq = /^(--[a-z]+)=(.*)$/.exec(argv[i]);              // --flag=value reads like --flag value
+    const k = eq ? eq[1] : argv[i];
+    const value = () => { if (eq) return eq[2]; if (i + 1 >= argv.length) throw new Error(k + ' needs a value'); return argv[++i]; };
+    if (k === '--tol') a.tol = dec(value());
+    else if (k === '--warmup') a.warmup = dec(value());
+    else if (k === '--root') a.root = value().toUpperCase();
+    else if (k === '--bars') a.bars = value();
+    else a.pos.push(argv[i]);
   }
+  if (!(Number.isFinite(a.tol) && a.tol >= 0)) throw new Error('--tol must be a number, 0 or more');
+  if (!(Number.isInteger(a.warmup) && a.warmup >= 0)) throw new Error('--warmup must be a whole number, 0 or more');
   return a;
 }
 
 async function main() {
-  const a = args(process.argv.slice(2));
+  let a;
+  try { a = args(process.argv.slice(2)); } catch (e) { console.error(e.message); return 2; }
   if (a.pos.length !== 2) {
     console.error('usage: node tools/pine/parity.mjs <script.pine> <tv.csv> [--root NQ] [--tol 1e-6] [--warmup N] [--bars homebase[=PATH]]');
     return 2;
@@ -160,7 +174,7 @@ async function main() {
   if (r.type !== 'result') { console.error('run failed: ' + r.message); return 2; }
   for (const s of r.warnings) console.log('warning: ' + s);
   const byTitle = new Map(Object.keys(r.plots).map((t) => [t.toLowerCase(), t]));
-  let bad = false;
+  let bad = false, compared = 0;
   for (const title of tv.titles) {
     const hb = byTitle.get(title.toLowerCase());
     const name = title.padEnd(24);
@@ -169,9 +183,12 @@ async function main() {
     const got = new Map(r.plots[hb].map((p) => [p.time, p.value]));
     const c = compare(expected, got, a);
     const line = name + ' bars ' + String(c.n).padStart(6) + '  max abs err ' + c.maxErr.toExponential(2);
+    if (c.n === 0) { bad = true; console.log(name + ' NOTHING COMPARED (no non-empty TradingView cell lines up with a bar of the script)'); continue; }
+    compared++;
     if (c.ok) console.log(line + '  OK');
     else { bad = true; console.log(line + '  FIRST DIFF ' + new Date(c.first.time).toISOString() + ' tv=' + c.first.tv + ' hb=' + c.first.hb); }
   }
+  if (!compared) { console.error('NOTHING COMPARED: no plot column of the script has a TradingView column with cells to compare'); return 2; }
   return bad ? 1 : 0;
 }
 

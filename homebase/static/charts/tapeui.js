@@ -39,6 +39,7 @@ function selectedCell() { const C = window.HBCharts; return C ? C.cells[C.select
 /* ---- build (once) ---- */
 function buildRowEl() {
   const row = mkEl('div', 'tape-row');
+  row.setAttribute('role', 'listitem');   // ui.rows is a list: it owns list items
   const time = mkEl('span', 'tape-c tape-time');
   const price = mkEl('span', 'tape-c tape-price');
   const size = mkEl('span', 'tape-c tape-size');
@@ -57,7 +58,12 @@ function build() {
   for (const [m, label] of [['orders', 'Orders'], ['raw', 'Raw']]) {
     const b = mkEl('button', m === mode ? 'on' : '', label);
     b.type = 'button';
-    b.onclick = () => { mode = m; for (const k in ui.modeBtns) ui.modeBtns[k].classList.toggle('on', k === m); dirty = true; };
+    b.setAttribute('aria-pressed', String(m === mode));
+    b.onclick = () => {
+      mode = m;
+      for (const k in ui.modeBtns) { ui.modeBtns[k].classList.toggle('on', k === m); ui.modeBtns[k].setAttribute('aria-pressed', String(k === m)); }
+      dirty = true;
+    };
     ui.modeBtns[m] = b;
     ui.seg.appendChild(b);
   }

@@ -244,7 +244,7 @@ function imbalancesV2(fp, opts = {}) {
     const other = nb ? nb[col] : 0;
     if ((!nb && beyond ? o.edge : other === 0 ? o.zero : 'n') === 'skip') return false;
     if (own < minV && other < minV) return false;
-    if (own - other < minD) return false;
+    if (minD > 0 && own - other < minD) return false;      // unset must not drop an own < other pair: imbalances() flags it at a ratio below 1
     return o.cmp === '>' ? own > o.ratio * Math.max(other, 1) : own >= o.ratio * Math.max(other, 1);
   };
   const rows = [...fp].sort((a, b) => a[0] - b[0]).map(([price, bid, ask]) => {
