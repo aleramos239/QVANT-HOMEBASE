@@ -778,6 +778,25 @@ def test_archive_and_restore(c, drafts_dir, make_run, tmp_path):
     assert post("archive", "nq_none").status_code == 404
 
 
+def test_delete_from_the_archive_takes_the_lab_draft_too(c, drafts_dir, make_run, tmp_path):
+    """The Archive's Delete (the owner, 2026-10-22: "fully delete and remove them"): {name, draft: true} wipes the archived
+    copy and the history like Delete, and moves the Lab draft to the drafts' trash and off its Lab group."""
+    at = tmp_path / "desklab"
+    draft(drafts_dir)
+    promote(c, run_id=make_run())
+    store.put_day("nq_bars", {"date": "2026-09-25", "state": "done"}, at)
+    post = lambda what, **b: c.post(f"/api/tester/desklab/{what}", json={"name": "nq_bars", **b})
+    for what in ("archive", "remove", "filed"):
+        assert post(what).json()["ok"] is True
+    assert draftstore.read_groups()["members"]["draft_nq_bars"] == "Archive"
+    assert post("delete", draft=False).status_code == 400 and post("delete", draft=1).status_code == 400
+    assert post("delete", draft=True).json() == {"ok": True, "deleted": True, "name": "nq_bars"}
+    assert c.get("/api/tester/desklab").json()["archived"] == []
+    assert not (at / "nq_bars").exists() and not (at / ".archive" / "nq_bars.json").exists()
+    assert not (drafts_dir / "nq_bars.py").exists() and list((drafts_dir / draftstore.TRASH).glob("nq_bars.*.py"))
+    assert "draft_nq_bars" not in draftstore.read_groups()["members"]
+
+
 def test_restore_refused_while_a_namesake_is_on_the_desk(c, drafts_dir, make_run, tmp_path):
     draft(drafts_dir)
     rid = make_run()

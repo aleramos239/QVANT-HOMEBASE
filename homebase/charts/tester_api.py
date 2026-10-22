@@ -96,7 +96,8 @@
                                           unseen-days backtest (once per code + settings, a tester run like the Lab's Run)
     POST /api/tester/desklab/remove      {name} -> {ok, removed, name}: the record goes, its days and journal stay
     POST /api/tester/desklab/delete      {name} -> {ok, deleted, name}: once removed, its history goes too (409 while on the
-                                          Desk or while the runner still hosts it)
+                                          Desk or while the runner still hosts it); {name, draft: true} (the Archive's Delete) also
+                                          moves its Lab draft to the drafts' trash and off its Lab group
                                           (promote and remove answer 409 "Take its accounts off on the Desk first."
                                           while the desk's sidecar, <name>.desk.json, holds book rows)
     POST /api/tester/desklab/onoff       {name, on} -> {ok, name, enabled}; 404 for a name not on the Desk
@@ -1051,16 +1052,26 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 raise HTTPException(409, DESKLAB_TAKE_OFF)
             return {"ok": True, "removed": store.remove(name), "name": name}
 
-    def desklab_delete(name: str) -> dict:
+    def desklab_delete(name: str, draft: bool = False) -> dict:
         """Remove's second step when the owner deletes (2026-10-20): the history goes too (store.delete). Refused while it
         is still on the Desk, and while a live runner still hosts it -- letting a day go writes its last day file, which
-        would put the folder back."""
+        would put the folder back. draft (the Archive's Delete, 2026-10-22): the Lab draft goes as well, into the drafts'
+        trash, and off its Lab group."""
         beat = store.get_runner() or {}
         if runner_alive(beat.get("seen_utc")) and name in (beat.get("hosting") or []):
             raise HTTPException(409, "The runner is still letting it go. Try again in a few seconds.")
         done = store.delete(name)
         if done is None:
             raise HTTPException(409, "Remove it from the Desk first.")
+        if draft:
+            with store.write_lock():              # not while a Promote is putting it back on the Desk
+                if store.has_record_file(name):
+                    raise HTTPException(409, "Remove it from the Desk first.")
+                try:
+                    done = draftstore.delete(name) or done
+                    draftstore.set_group(draftstore.draft_id(name), None)
+                except (OSError, ValueError, draftstore.GroupsUnreadable):
+                    raise HTTPException(500, "Its history is deleted, but its Lab draft could not be moved to the trash.") from None
         return {"ok": True, "deleted": done, "name": name}
 
     # ---- Archive (the owner, 2026-10-18): off the Desk, kept, put back on with one click. The page runs it in three steps
@@ -1196,6 +1207,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 keys = keys | {"builtin"}
             if what == "open" and wf is not None:
                 keys = keys | {"wf"}
+            draft = body.get("draft") if what == "delete" and isinstance(body, dict) else None
+            if draft is not None and draft is not True:
+                raise HTTPException(400, "draft: true")
+            if draft is not None:
+                keys = keys | {"draft"}
             if not isinstance(body, dict) or set(body) != keys or not isinstance(body["name"], str) \
                     or not draftstore.NAME_RE.fullmatch(body["name"]):
                 raise HTTPException(400, "{" + ", ".join(sorted(keys)) + "}: a Lab strategy's name" + (
@@ -1211,7 +1227,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 elif what == "remove":
                     done = await asyncio.to_thread(desklab_remove, name)
                 elif what == "delete":
-                    done = await asyncio.to_thread(desklab_delete, name)
+                    done = await asyncio.to_thread(desklab_delete, name, draft is True)
                 elif what == "open":
                     done = await asyncio.to_thread(desklab_open, name, run, builtin is True, wf)
                 elif what in ("archive", "filed", "restore", "archive_builtin", "restore_builtin"):

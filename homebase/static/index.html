@@ -2705,6 +2705,17 @@ async function removeLabStrat(name) {
   await refresh();
   loadDeskLab();
 }
+/* The chart service's delete of an off-the-Desk strategy's history (draft: its Lab draft too). The runner needs a few seconds to let
+   a strategy go, so it is tried again while it says so. */
+async function deleteHistory(lab, draft) {
+  let r;
+  for (let i = 0; i < 10; i++) {
+    r = await chartPost("/api/tester/desklab/delete", draft ? {name: lab, draft: true} : {name: lab});
+    if (!(r && r.ok === false && /letting it go/.test(String(r.detail || "")))) break;
+    await new Promise(res => setTimeout(res, 2000));
+  }
+  return r;
+}
 /* DELETE (the owner, 2026-10-20: "not only remove them, also delete them"): the Desk's own Remove (its "Flatten it first.",
    its accounts coming off), then the chart service deletes its history -- shadow days, day records, its journal. The runner
    needs a few seconds to let it go, so that step is tried again while it says so. Real trades stay in the account history;
@@ -2718,11 +2729,7 @@ async function deleteLabStrat(name, lab) {
   try { r = await post("/api/lab-remove", {strategy: name}); } catch (e) { err = e || new Error("no answer"); }
   if (!err && r && r.ok === true) {
     removed = true;
-    for (let i = 0; i < 10; i++) {
-      r = await chartPost("/api/tester/desklab/delete", {name: lab});
-      if (!(r && r.ok === false && /letting it go/.test(String(r.detail || "")))) break;
-      await new Promise(res => setTimeout(res, 2000));
-    }
+    r = await deleteHistory(lab);
   }
   DESKLAB_BUSY = "";
   if (removed && VIEW.k === "strat" && VIEW.name === name) VIEW = {k: "today"};
@@ -2753,6 +2760,18 @@ async function archiveLabStrat(name, deskId) {
   } else toast(`Could not archive ${label}: ${DeskLab.refusalText(r, err)}`, 7000);
   if (deskId) await refresh();
   loadDeskLab();
+}
+/* DELETE from the Archive (the owner, 2026-10-22: "fully delete and remove them"): the archived copy, the strategy's history and its Lab
+   draft (the draft goes to the drafts' trash). Real trades stay in the account history. A built-in is the Desk's own: no Delete. */
+async function deleteArchived(name) {
+  if (DESKLAB_BUSY || DEMO) return;
+  const w = (DESKLAB.archived || []).find(x => x.name === name), label = w ? DeskLab.label(w) : name;
+  if (!await confirmDlg(`Delete ${label} for good?`, "It is wiped from the Archive and the Lab. Its shadow calendar and day records are deleted for good. Real trades stay in the account history.", "Delete", true)) return;
+  DESKLAB_BUSY = name; if (ST) render();
+  const r = await deleteHistory(name, true);
+  DESKLAB_BUSY = "";
+  toast(r && r.ok === true ? `${label} is deleted.` : `Could not delete ${label}: ${DeskLab.refusalText(r, null)}`, 7000);
+  await loadDeskLab();
 }
 async function restoreArchived(name) {
   if (DESKLAB_BUSY || DEMO) return;
@@ -2808,7 +2827,8 @@ function archiveView() {
     const f = DeskLab.figures(w), day = String(w.archived_utc || "").slice(0, 10), busy = DESKLAB_BUSY === w.name;
     return `<div class="feed-row"><span class="h"><b>${esc(DeskLab.label(w))}</b> · ${esc(w.root || "")}${day ? " · archived " + esc(shortDay(day)) : ""}<br>
       <small class="dim">${f.map(x => esc(x.k + " " + x.v)).join(" · ")}</small></span>
-      <button class="btn btn-outline btn-sm" onclick="restoreArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk, switched off, with no account">Restore</button></div>`;
+      <button class="btn btn-outline btn-sm" onclick="restoreArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Back on the Desk, switched off, with no account">Restore</button>
+      <button class="btn btn-outline btn-sm" onclick="deleteArchived(${jsArg(w.name)})"${busy || DESKLAB_BUSY ? " disabled" : ""} title="Deletes it for good: its history and its Lab draft">Delete</button></div>`;
   }).join("");
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">Archive</h1><div class="sp">Off the Desk and switched off. Restore puts one back, switched off, with no account.</div></div></div>
