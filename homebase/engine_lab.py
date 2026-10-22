@@ -93,7 +93,7 @@ class LabLeg:
     """One entry of a Lab strategy, as the engine places it. Duck-types rules.Signal for _place_one."""
     iid: int                            # the strategy's own order id
     side: str                           # "Buy" | "Sell"
-    entry: str                          # "Market" | "Stop"
+    entry: str                          # "Market" | "Stop" | "Limit"
     entry_price: Optional[float]
     sl_px: float
     tp_px: Optional[float]              # None = no target order
@@ -869,8 +869,8 @@ class LabMixin:
         return isinstance(v, (int, float)) and not isinstance(v, bool) and v == v and abs(v) != float("inf")
 
     def _lab_bad_legs(self, legs) -> Optional[str]:
-        """The sentence for a set of legs the engine will not place; None when it will. One entry, or one buy
-        stop and one sell stop; every entry with a stop on its losing side."""
+        """The sentence for a set of legs the engine will not place; None when it will. One entry (market, stop or
+        limit), or one buy stop and one sell stop; every entry with a stop on its losing side."""
         if not isinstance(legs, (list, tuple)) or not 1 <= len(legs) <= 2:
             return LAB_BAD_ORDER
         num = self._lab_num
@@ -878,9 +878,9 @@ class LabMixin:
             if not isinstance(g, LabLeg) or not isinstance(g.move, bool):
                 return LAB_BAD_ORDER
             if not isinstance(g.iid, int) or isinstance(g.iid, bool) or g.side not in ("Buy", "Sell") \
-                    or g.entry not in ("Market", "Stop"):
+                    or g.entry not in ("Market", "Stop", "Limit"):
                 return LAB_BAD_ORDER
-            if g.entry == "Stop" and not (num(g.entry_price) and g.entry_price > 0):
+            if g.entry in ("Stop", "Limit") and not (num(g.entry_price) and g.entry_price > 0):
                 return LAB_BAD_ORDER
             if g.entry == "Market" and g.entry_price is not None:
                 return LAB_BAD_ORDER

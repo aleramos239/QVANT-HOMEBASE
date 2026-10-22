@@ -302,6 +302,13 @@ def compute_readiness(now_et, cfg: config_mod.AppCfg, engine,
                 checks.append({"level": "warn" if why in ("Stopped for today.", "Killed today.") else "bad",
                                "label": shown(name), "detail": "stopped for the day — " + why})
                 continue
+            # booked after its session opened (2026-10-21: two accounts booked at 09:05 / 09:08 and nothing traded
+            # all day while the desk said ready): the runner keeps the day in shadow, the account starts tomorrow
+            if said and said.get("mode") == "shadow" and config_mod.assignments(cfg, name):
+                checks.append({"level": "warn", "label": shown(name),
+                               "detail": "booked after today's session opened — runs in shadow today, "
+                                         "trades on its account from the next session"})
+                continue
             if status != "idle":
                 checks.append({"level": "ok", "label": shown(name), "detail": status})
             continue                     # no trade by its last-entry time is a normal day for a Lab strategy

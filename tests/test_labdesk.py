@@ -145,6 +145,17 @@ def test_the_event_is_written_down_before_the_order_leaves_and_again_with_its_an
     assert done["results"][0]["accounts"]["a1"]["ok"] is True
 
 
+def test_a_limit_entry_goes_out_as_the_brokers_limit_and_never_through_its_own_stop(tmp_path):
+    """2026-10-21: the FVG rules enter on limits. A limit rests at its price with the same bracket as a stop entry;
+    one whose stop the last price is already through would fill at once and stop out: it is never sent."""
+    d = mkdesk(tmp_path)
+    out = send(d, entry(kind="limit", price=98.0, sl=95.0, tp=110.0), last=94.75)
+    assert refusal(out) == labdesk.PRICE_PAST and placed(d) == []
+    out = send(d, entry(2, kind="limit", price=98.0, sl=95.0, tp=110.0), seq=2)
+    assert out["results"][0]["status"] == "working" and refusal(out) is None
+    assert placed(d) == [("Buy", "Limit", 98.0, 95.0, 110.0, 1)]
+
+
 def test_a_linked_pair_is_one_round_with_two_legs_and_one_trade(tmp_path):
     d = mkdesk(tmp_path)
     out = send(d, pair())
@@ -341,7 +352,7 @@ def test_a_disarmed_desk_writes_the_entry_down_and_sends_nothing(tmp_path):
 def test_the_door_says_what_it_said_in_shadow(tmp_path):
     d = mkdesk(tmp_path)
     cases = [(entry(sl=None), door.NO_STOP), (entry(sl=115.0), door.WRONG_SIDE), (entry(own_qty=True), door.OWN_SIZE),
-             (entry(kind="limit", price=95.0, sl=90.0, tp=None), door.NO_LIMIT),
+             (entry(kind="limit", price=95.0, sl=96.0, tp=None), door.WRONG_SIDE),
              (entry(sl=90.0), "Stop too far: $400 at risk, limit $300.")]
     for n, (it, sentence) in enumerate(cases, 1):
         out = send(d, it, seq=n)

@@ -529,6 +529,22 @@ def test_readiness_an_enabled_lab_strategy_with_no_account_is_info_not_a_warning
     assert lab_checks(client) == [{"level": "info", "label": "PP ORB", "detail": "no account: runs in shadow"}]
 
 
+def test_readiness_a_strategy_booked_after_its_session_opened_warns_it_runs_in_shadow_today(client):
+    def checks():
+        r = compute_readiness(WED_10, client.cfg, client.engine, {}, {"connected": False, "watching": {}},
+                              {"strategies": {}}, None, lab=client.labdesk)
+        return [x for x in r["checks"] if x["label"] == "PP ORB"]
+    client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
+    set_limits(client)
+    book(client, [("eval1", 1)])
+    client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "shadow"}}})
+    assert checks() == [{"level": "warn", "label": "PP ORB",
+                         "detail": "booked after today's session opened — runs in shadow today, "
+                                   "trades on its account from the next session"}]
+    client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "desk"}}})
+    assert checks() == []
+
+
 def test_readiness_an_idle_lab_strategy_past_its_last_entry_is_not_a_missing_signal(client):
     client.post("/api/strategy", json={"strategy": LAB, "enabled": True})
     set_limits(client)

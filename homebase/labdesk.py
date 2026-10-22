@@ -1031,13 +1031,13 @@ class LabDesk:
     @staticmethod
     def _past(it: dict, last: float | None) -> bool:
         """Ruling Q6: a stop entry whose trigger is already at or through the fresh last price. And (review I4) a
-        market entry whose STOP the last price is already at or through: its bracket's stop would sit on the wrong
-        side of the fill, so it is never sent."""
+        market or limit entry whose STOP the last price is already at or through: its bracket's stop would sit on
+        the wrong side of the fill (a limit through its stop fills at once), so it is never sent."""
         if last is None:
             return False
         if it.get("kind") == "stop":
             return it["price"] - last <= 1e-9 if it["side"] == "long" else last - it["price"] <= 1e-9
-        if it.get("kind") == "market" and it.get("sl") is not None:
+        if it.get("kind") in ("market", "limit") and it.get("sl") is not None:
             return last - it["sl"] <= 1e-9 if it["side"] == "long" else it["sl"] - last <= 1e-9
         return False
 
@@ -1103,15 +1103,15 @@ class LabDesk:
         from . import engine as engine_mod   # (here: importing this module must load nothing of the tester)
         side = "Buy" if it["side"] == "long" else "Sell"
         sign = 1 if side == "Buy" else -1
-        stop = it["kind"] == "stop"
+        rests = it["kind"] in ("stop", "limit")      # a stop or a limit entry rests at the broker at its own price
         tp, rr, ref = it.get("tp"), it.get("tp_rr"), it.get("ref")
-        base = it["price"] if stop else (ref if ref is not None else last)
+        base = it["price"] if rests else (ref if ref is not None else last)
         if tp is None and rr is not None and base is not None:
             tp = base + sign * rr * abs(base - it["sl"])
             if tick:
                 tp = round(round(tp / tick) * tick, 6)
-        return engine_mod.LabLeg(iid=it["id"], side=side, entry="Stop" if stop else "Market",
-                                 entry_price=float(it["price"]) if stop else None, sl_px=float(it["sl"]),
+        return engine_mod.LabLeg(iid=it["id"], side=side, entry=it["kind"].capitalize() if rests else "Market",
+                                 entry_price=float(it["price"]) if rests else None, sl_px=float(it["sl"]),
                                  tp_px=None if tp is None else float(tp), tp_rr=None if rr is None else float(rr),
                                  ref_px=None if ref is None else float(ref), move=bool(it["move"]))
 

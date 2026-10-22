@@ -745,7 +745,7 @@ def test_the_summary_reads_in_plain_words(days):
         {"t": "09:40:00", "text": "Sell at market, stop 21,480.00", "refused": "One position at a time."},
         {"t": "09:40:00", "text": "Buy at market", "refused": "Every entry needs a stop held at the broker."},
         {"t": "09:40:00", "text": "Buy stop 21,405.00, stop 21,400.00", "refused": "Size is set on the Desk, per account."},
-        {"t": "09:50:00", "text": "Buy limit 21,395.00, stop 21,391.00", "refused": "Limit entries are not built yet."},
+        {"t": "09:50:00", "text": "Buy limit 21,395.00, stop 21,391.00", "refused": "One position at a time."},
         {"t": "09:50:00", "text": "Cancel", "refused": None},
         {"t": "15:55:00", "text": "Flatten (time)", "refused": None}]
     assert set(s) == {"date", "sha256", "promoted_utc", "state", "why", "orders", "trades", "net", "match", "updated_utc"}

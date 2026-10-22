@@ -503,6 +503,20 @@ test('deskState: one word for each state the server sends, from the design\'s ta
   assert.equal(at('disarmed'), 'Disarmed: written down only');
 });
 
+test('deskState: booked after its session opened, the day runs in shadow today and the card says so (2026-10-21)', () => {
+  const booked = [{ account: 'a1', qty: 1 }];
+  const SHADOW_TODAY = 'Shadow today: booked after the session opened. It trades on its account from the next session.';
+  assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'shadow' }), booked), SHADOW_TODAY);
+  assert.equal(D.deskState(deskStrat({ state: 'waiting', mode_today: 'shadow' }), booked), SHADOW_TODAY);
+  assert.equal(D.deskDot(deskStrat({ state: 'watching', mode_today: 'shadow' }), booked), 'shadow');
+  assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'desk' }), booked), 'Watching', 'through the Desk: the usual word');
+  assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'shadow' }), []), 'Watching', 'no account: nothing to say');
+  assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'shadow' })), 'Watching', 'no book given: the usual word');
+  assert.equal(D.deskState(deskStrat({ state: 'done', mode_today: 'shadow' }), booked), 'Done for today');
+  assert.equal(D.deskState(deskStrat({ state: 'stopped', why: 'off', mode_today: 'shadow' }), booked), 'Starts with the next session.');
+  assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'shadow', runner: { alive: false } }), booked), 'Runner is not running');
+});
+
 test('deskState: stopped. A real cause reads "Stopped: <why>"; ON and stopped for today by the switch reads "Starts with the next session."', () => {
   const at = (why, cfg = {}) => D.deskState(deskStrat({ state: 'stopped', why }, cfg));
   assert.equal(at('Could not pick up where it left off.'), 'Stopped: Could not pick up where it left off.');

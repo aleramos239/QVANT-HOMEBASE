@@ -74,8 +74,11 @@ def test_no_target_is_fine():
     assert ask(entry(tp=None)) is None
 
 
-def test_limit_entries_are_not_built():
-    assert ask(entry(kind="limit", price=100.5, sl=99.0)) == "Limit entries are not built yet."
+def test_a_limit_entry_is_judged_at_its_own_price():
+    assert ask(entry(kind="limit", price=100.5, sl=99.0)) is None
+    assert ask(entry(kind="limit", price=100.5, sl=101.0)) == "The stop must sit on the losing side of the entry."
+    assert ask(entry(kind="limit", side="short", price=100.5, sl=102.0, tp=99.0)) is None
+    assert ask(entry(kind="limit", price=100.5, sl=99.0), flat=False) == "One position at a time."
 
 
 @pytest.mark.parametrize("kw", [dict(flat=False), dict(working_entries=1)])
@@ -118,7 +121,7 @@ def test_prices_late():
 def test_the_first_failing_check_wins_in_this_order():
     bad = dict(flat=False, entries_today=5, now_hhmm="20:00", prices_late=True, max_risk_usd=1.0)
     e = entry(kind="limit", sl=None, own_qty=True)
-    assert ask(e, **bad) == "Limit entries are not built yet."
+    assert ask(e, **bad) == "Every entry needs a stop held at the broker."
     e["kind"] = "stop"
     assert ask(e, **bad) == "Every entry needs a stop held at the broker."
     e["sl"] = 105.0
@@ -275,7 +278,7 @@ CANNOT = "The Desk cannot check this order."
     (lambda a, b: b.update(side="long", price=102.0, sl=101.0, tp=104.0), [None, LONE, NOT_A_PAIR]),   # two buys
     (lambda a, b: b.update(qty=2), [None, LONE, NOT_A_PAIR]),                                          # sizes differ
     (lambda a, b: b.update(kind="market", price=None, ref=99.0), [None, LONE, NOT_A_PAIR]),            # a market leg
-    (lambda a, b: a.update(kind="limit"), ["Limit entries are not built yet.", None, NOT_A_PAIR]),     # a limit leg
+    (lambda a, b: a.update(kind="limit"), [None, LONE, NOT_A_PAIR]),                                   # a limit leg
 ])
 def test_an_oco_that_is_not_a_buy_stop_and_sell_stop_pair_is_refused(fix, want):
     a, b, o = straddle()
@@ -321,7 +324,7 @@ def test_no_stop_one_and_many():
     assert read_source(calls("ctx.market('long', sl=None)", "ctx.stop_entry('long', 5.0, sl=1.0)")) == \
         ["1 order can go out with no stop."]
     assert read_source(calls("ctx.market('long')", "ctx.stop_entry('short', 5.0)", "ctx.limit_entry('long', 4.0)")) == \
-        ["3 orders can go out with no stop.", "It uses limit entries: not built yet."]
+        ["3 orders can go out with no stop."]
 
 
 def test_a_conditional_stop_with_a_none_branch_counts():
@@ -336,8 +339,8 @@ def test_a_stop_given_by_position_counts_as_a_stop():
     assert read_source(calls("ctx.market('long', None, None)")) == ["1 order can go out with no stop."]
 
 
-def test_limit_entries():
-    assert read_source(calls("ctx.limit_entry('long', 4.0, sl=3.0)")) == ["It uses limit entries: not built yet."]
+def test_a_limit_entry_with_a_stop_gets_no_note():
+    assert read_source(calls("ctx.limit_entry('long', 4.0, sl=3.0)")) == []
 
 
 def test_own_size():
@@ -347,10 +350,9 @@ def test_own_size():
     assert read_source(calls("ctx.market('long', qty=None, sl=1.0)")) == []
 
 
-def test_all_three_notes_in_order():
+def test_both_notes_in_order():
     src = calls("ctx.limit_entry('long', 4.0, qty=2)")
-    assert read_source(src) == ["1 order can go out with no stop.", "It uses limit entries: not built yet.",
-                                "It sets its own size: size is set on the Desk."]
+    assert read_source(src) == ["1 order can go out with no stop.", "It sets its own size: size is set on the Desk."]
 
 
 def test_other_calls_are_ignored():

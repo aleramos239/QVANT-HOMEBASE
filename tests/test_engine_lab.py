@@ -290,7 +290,7 @@ def test_archived_is_false_at_the_plain_key_and_true_under_a_round_key(tmp_path)
 
 # ------------------------------------------------------------------------------------------------ driving a round
 def leg(iid=1, side="Buy", entry="Stop", px=100.0, sl=95.0, tp=110.0, rr=None, ref="px", move=False) -> LabLeg:
-    return LabLeg(iid=iid, side=side, entry=entry, entry_price=px if entry == "Stop" else None, sl_px=sl,
+    return LabLeg(iid=iid, side=side, entry=entry, entry_price=px if entry in ("Stop", "Limit") else None, sl_px=sl,
                   tp_px=tp, tp_rr=rr, ref_px=px if ref == "px" else ref, move=move)
 
 
@@ -409,9 +409,11 @@ def test_a_strategy_that_may_not_trade_is_refused_whole(tmp_path, how, reason):
     ([leg(side="Sell", sl=99.0, tp=90.0)], "The stop must sit on the losing side of the entry."),
     ([leg(tp=99.0)], "The Desk cannot check this order."),                       # a target behind the entry
     ([leg(tp=None, rr=2.0)], "The Desk cannot check this order."),               # an RR target with no first price
-    ([leg(entry="Limit")], "The Desk cannot check this order."),
+    ([leg(entry="StopLimit")], "The Desk cannot check this order."),
     ([leg(side="long")], "The Desk cannot check this order."),
     ([leg(entry="Stop", px=None)], "The Desk cannot check this order."),
+    ([leg(entry="Limit", px=None)], "The Desk cannot check this order."),
+    ([leg(entry="Limit", px=98.0, sl=99.0)], "The stop must sit on the losing side of the entry."),
     ([], "The Desk cannot check this order."),
     ([leg(1), leg(2), leg(3)], "The Desk cannot check this order."),
     ([leg(3, "Buy", px=110.0, sl=105.0, tp=120.0), leg(4, "Buy", px=111.0, sl=105.0, tp=120.0)],
@@ -471,6 +473,21 @@ def test_the_requests_a_single_entry_and_a_pair_send(tmp_path):
     st = rnd(eng, "a2")
     assert (st.status, st.upper_id, st.lower_id, st.upper_px, st.lower_px) == ("placed", "a2-101", "a2-102", 110.0, 90.0)
     assert rows(eng, account="a2")[0]["iid"] == {"Buy": 3, "Sell": 4}
+
+
+def test_a_limit_entry_rests_at_its_price_with_its_brackets(tmp_path):
+    """A limit entry (2026-10-21: the FVG rules enter on limits) goes out as the broker's Limit with the same
+    bracket as a stop entry, and its fill is graded like any other."""
+    eng, ads, _ = mk(tmp_path)
+    go(eng, leg(entry="Limit", px=98.0, sl=95.0, tp=110.0))
+    assert ads["a1"].brackets == [OrderRequest(symbol="NQ", side="Buy", qty=1, order_type="Limit", price=98.0,
+                                               stop_price=95.0, tp_price=110.0, text="homebase:entry")]
+    st = rnd(eng)
+    assert (st.status, st.upper_id, st.upper_px, st.sl_px, st.tp_px) == ("placed", "a1-101", 98.0, 95.0, 110.0)
+    fill_entry(eng, ads["a1"], st, 97.75)
+    assert (st.status, st.entry_fill) == ("live", 97.75)
+    fill_exit(eng, ads["a1"], st, 110.0, by="tp")
+    assert (st.status, st.exit_reason) == ("done", "tp")
 
 
 def test_a_trade_from_entry_to_target_books_its_price_and_pnl(tmp_path):

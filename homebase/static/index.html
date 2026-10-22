@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=25"></script>
+<script src="/static/desklab.js?v=26"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -2045,7 +2045,7 @@ function todayPnl(s) {
 }
 function stratState(name, s) {
   const c = s.cfg, st = s.day_status;
-  if (c.kind === "lab") return labSafe(() => DeskLab.deskState(s), "Check it");     // a promoted Lab strategy: the Desk's own words (lab.state / lab.why)
+  if (c.kind === "lab") return labSafe(() => DeskLab.deskState(s, (ST.book && ST.book[name]) || []), "Check it");     // a promoted Lab strategy: the Desk's own words (lab.state / lab.why)
   if (!c.enabled) return "Off";
   if (st === "live") return "In position";
   if (st === "placed" || st === "placing") return "Orders working";
@@ -2057,7 +2057,7 @@ function stratState(name, s) {
   if (now != null && now >= flat) return "Idle";
   return now != null && now < OPEN_MIN ? "Ready" : "Watching";
 }
-const stratDotCls = (s, state) => s.cfg.kind === "lab" ? labSafe(() => DeskLab.deskDot(s), "warn")
+const stratDotCls = (s, state, book) => s.cfg.kind === "lab" ? labSafe(() => DeskLab.deskDot(s, book), "warn")
   : !s.cfg.enabled ? "off" : s.cfg.shadow ? "shadow"
   : /Needs|Missed/.test(state) ? "warn" : (state === "In position" || state === "Orders working") ? "live" : "";
 
@@ -2160,7 +2160,7 @@ function renderSide(names, hiddenCount, issues) {
   for (const n of names) {
     const s = ST.strategies[n], state = stratState(n, s), sh = s.cfg.kind === "lab" ? labSafe(() => labShadowNet(n, s), null) : null, p = sh ? sh.net : todayPnl(s);
     rowOf[n] = `<button class="item one${sel("strat", n)}" onclick="setView('strat','${n}')" aria-current="${sel("strat", n) ? "page" : "false"}" title="${esc(state)}">
-      <i class="sd ${stratDotCls(s, state)}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
+      <i class="sd ${stratDotCls(s, state, (ST.book && ST.book[n]) || [])}"></i><span class="it"><b>${esc(stratLabel(n))}</b></span>
       <span class="ir mono${p == null || sh ? " dim" : ""}">${p == null ? "" : usdS(p)}</span></button>`;
   }
   const labIds = labSafe(() => DESKLAB.strategies.filter(w => !labOnDesk(w)).map(w => {
@@ -2619,7 +2619,7 @@ function labDeskView(name, s) {
         free.map(id => `<button class="mi2" role="menuitem" onclick="pickAsg(${jsArg(name)},${jsArg(id)},${+c.qty || 1})">${esc(accts[id].label || id)}</button>`).join("") + `</div></div>` : "";
   return `<button class="back" onclick="setView('today')">‹ Today</button>
     <div class="sd-top"><div><h1 class="sd-title">${esc(nm)}</h1><div class="sp mono">${esc(specOf(c, name))}</div></div>${sw}</div>
-    <div class="sd-state"><b>${esc(DeskLab.deskState(s))}</b>${sh ? ` · today would be ${esc(usdS(sh.net))}` : p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
+    <div class="sd-state"><b>${esc(DeskLab.deskState(s, book))}</b>${sh ? ` · today would be ${esc(usdS(sh.net))}` : p != null ? ` · today ${esc(usdS(p))}` : ""}</div>
     ${stateNote ? `<div class="sd-note">${esc(stateNote)}</div>` : ""}
     <div class="sd-note">${esc(DeskLab.deskNote(book.length > 0))}</div>
     ${ro ? `<div class="sd-note">${esc(DeskLab.OTHER_DESK)}</div>` : ""}

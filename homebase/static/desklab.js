@@ -463,6 +463,9 @@
     disarmed: "Disarmed: written down only",
   };
   var NEXT_SESSION = "Starts with the next session.";
+  // booked after today's session opened: the runner keeps the day in shadow (2026-10-21: two accounts booked at 09:05 /
+  // 09:08 and nothing traded all day while the card read "Watching")
+  var SHADOW_TODAY = "Shadow today: booked after the session opened. It trades on its account from the next session.";
   var STOPPED_TODAY = "Stopped for today.";            // the Desk's own sentence for a stop that has no other cause
   var QUIET_STOPS = ["", "off", STOPPED_TODAY];         // a stop that only means "not any more today": ON, it starts with the next session
   var OTHER_DESK = "Another copy of the Desk is using the Lab strategies.";
@@ -539,11 +542,18 @@
     return !!lab && !!s.cfg && s.cfg.enabled === true && isObj(lab.runner) && lab.runner.alive !== true &&
       (lab.state === "shadow" || lab.state === "waiting" || lab.state === "watching");
   }
-  // The one line of state, from lab.state / lab.why exactly as the server sends them.
-  function deskState(s) {
+  // A booked day the runner hosts in shadow (an account assigned after its session opened), while it runs or waits.
+  function shadowToday(s, book) {
+    var lab = blockOf(s);
+    return !!lab && lab.mode_today === "shadow" && Array.isArray(book) && book.length > 0 &&
+      (lab.state === "watching" || lab.state === "waiting");
+  }
+  // The one line of state, from lab.state / lab.why exactly as the server sends them; `book` is its rows of ST.book.
+  function deskState(s, book) {
     var lab = blockOf(s);
     if (!lab) return STATE_WORDS.check;
     if (runnerDead(s)) return RUNNER_DOWN;
+    if (shadowToday(s, book)) return SHADOW_TODAY;
     if (lab.state === "stopped") {
       if (startsNext(s)) return NEXT_SESSION;
       var why = text(lab.why).trim();
@@ -559,10 +569,11 @@
     return lab && (lab.state === "check" || lab.state === "runner_down") ? text(lab.why).trim() : "";
   }
   // The sidebar dot, in step with the words: off / shadow / live / warn, or "" for a plain ON.
-  function deskDot(s) {
+  function deskDot(s, book) {
     var lab = blockOf(s);
     if (!lab) return "warn";
     if (needsLook(s) || runnerDead(s)) return "warn";
+    if (shadowToday(s, book)) return "shadow";
     switch (lab.state) {
       case "off": return "off";
       case "shadow": return "shadow";

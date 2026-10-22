@@ -3,8 +3,8 @@
 check() judges one intent, check_event() the intents of one event, read_source() reads a draft's text (AST only,
 nothing runs) and returns notes for the owner. The sentences, in the order check() tries them:
 
-    Limit entries are not built yet. / Every entry needs a stop held at the broker. / The stop must sit on the losing
-    side of the entry. / Size is set on the Desk, per account. / One position at a time. / Daily limit reached (N trade[s]).
+    Every entry needs a stop held at the broker. / The stop must sit on the losing side of the entry. / Size is set on
+    the Desk, per account. / One position at a time. / Daily limit reached (N trade[s]).
     / Too late for a new trade today. / Stop too far: $X at risk, limit $Y. / Prices are late.
     Only a buy-stop and sell-stop pair can be linked. (an oco, in check_event)
     The Desk cannot check this order. (the state or the limits cannot be read: an entry fails closed, before any other)
@@ -24,7 +24,6 @@ import math
 
 NO_STOP = "Every entry needs a stop held at the broker."
 WRONG_SIDE = "The stop must sit on the losing side of the entry."
-NO_LIMIT = "Limit entries are not built yet."
 ONE_AT_A_TIME = "One position at a time."
 SLOT_BUSY = "Another strategy's trade on this account is open or not checked yet."   # a group shares an account one trade at a time
 OWN_SIZE = "Size is set on the Desk, per account."
@@ -97,8 +96,6 @@ _MISSING = object()
 
 
 def _check_entry(intent: dict, state: dict, limits: dict) -> str | None:
-    if intent.get("kind") == "limit":
-        return NO_LIMIT
     if intent.get("sl") is None:
         return NO_STOP
     px = _entry_price(intent, state)
@@ -214,7 +211,7 @@ def read_source(text: str) -> list[str]:
         tree = ast.parse(text)
     except (SyntaxError, ValueError, RecursionError, MemoryError) as e:
         return [f"The code does not read: {getattr(e, 'msg', None) or e}."]
-    no_stop = limit = own_size = 0
+    no_stop = own_size = 0
     for node in ast.walk(tree):
         if not (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
                 and node.func.attr in _ORDER_CALLS):
@@ -226,13 +223,10 @@ def read_source(text: str) -> list[str]:
         qty = _arg(node, "qty", qty_pos)
         if qty is not None and qty is not False and not _none_branch(qty):
             own_size += 1
-        limit += node.func.attr == "limit_entry"
     notes = []
     if no_stop:
         notes.append("1 order can go out with no stop." if no_stop == 1
                      else f"{no_stop} orders can go out with no stop.")
-    if limit:
-        notes.append("It uses limit entries: not built yet.")
     declared = any(isinstance(n, (ast.Assign, ast.AnnAssign)) and isinstance(n.value, ast.Constant)
                    and n.value.value is True
                    and any(isinstance(t, ast.Name) and t.id == "own_size"
