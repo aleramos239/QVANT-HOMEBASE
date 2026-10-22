@@ -1359,8 +1359,9 @@ test('pine: a page-only entry (no server key); the script name and its inputs cl
   assert.deepEqual(C.serverKeys([C.instance('ema', { length: 20 }), C.instance('pine', { script: 'a.pine' })]), ['ema:20']);
   assert.equal(C.label(C.instance('pine', { script: 'my ema.pine' })), 'Pine my ema.pine');
   assert.equal(C.label(C.instance('pine')), 'Pine script');
-  for (const bad of ['../secret.pine', 'a/b.pine', '', 5, null, 'x'.repeat(81)]) assert.equal(C.clampParams('pine', { script: bad }).script, '', String(bad));
-  assert.equal(C.clampParams('pine', { script: 'ok_1.v2-a.pine' }).script, 'ok_1.v2-a.pine');
+  // the server's NAME_RE (homebase/charts/pineapi.py; tests/test_charts_pineapi.py holds the same table): what it lists must survive here
+  for (const bad of ['../secret.pine', 'a/b.pine', '', 5, null, 'x', 'a.py', '.pine', 'a.pine\n', 'a\\b.pine', 'a$.pine', 'x'.repeat(251) + '.pine']) assert.equal(C.clampParams('pine', { script: bad }).script, '', String(bad));
+  for (const good of ['ok_1.v2-a.pine', 'my ema-2.pine', '\u00e9.pine', '\u6307\u6807.pine', 'x'.repeat(250) + '.pine']) assert.equal(C.clampParams('pine', { script: good }).script, good, good.slice(0, 20));
   assert.equal(C.clampParams('pine', { maxbars: 5 }).maxbars, 100);
   assert.equal(C.clampParams('pine', { maxbars: 999999 }).maxbars, 20000);
   assert.deepEqual(C.clampParams('pine', { inputs: { Length: 9, 'Use it': false, Kind: 'EMA', bad: null, worse: {}, nan: NaN, long: 'x'.repeat(201) } }).inputs,

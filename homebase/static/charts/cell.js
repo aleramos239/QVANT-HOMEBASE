@@ -153,7 +153,7 @@ function tickLabel(t, type, fmt) {
 }
 
 /* ---- Pine (the 'pine' indicator: pineworker.js runs the script, the Cell methods below draw what it answers) ---- */
-const PINE_WORKER = '/static/charts/pineworker.js?v=1';   // bump with the worker: a browser keeps a Worker's script like any other
+const PINE_WORKER = '/static/charts/pineworker.js?v=2';   // bump with the worker: a browser keeps a Worker's script like any other
 const PINE_MARKS = 1000;   // plotshape / plotchar marks kept (the newest): a script with a hit on every bar would bury the chart
 const PINE_SHAPE = { triangle_up: 'arrowUp', arrow_up: 'arrowUp', label_up: 'arrowUp', triangle_down: 'arrowDown', arrow_down: 'arrowDown',
   label_down: 'arrowDown', square: 'square', diamond: 'square' };   // every other shape (circle, cross, flag ...) is a circle

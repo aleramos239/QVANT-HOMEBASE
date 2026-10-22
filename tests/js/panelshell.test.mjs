@@ -233,3 +233,61 @@ test('the dock width grip drops its own release snap-back class on a fresh grab 
   grip.dispatchEvent(pointerEvent('pointerdown', 260, 100, { target: grip, t: 40 }));
   assert.ok(!dockEl.classList.contains('pdock-snap-w'), 'a fresh grab should drop the lingering snap-back class immediately, not carry it into the new drag');
 });
+
+/* ---- dock drops with THREE panels: dockOrder lists every panel (a closed or floating one keeps its slot), so a
+   drop that names only the panels showing must not drop the third from it (review 2026-10-22). ---- */
+function place(env, rects) {
+  for (const [id, r] of Object.entries(rects)) {
+    env.document.getElementById(id)._rect = { x: r.left, y: r.top, left: r.left, top: r.top, right: r.left + r.width,
+      bottom: r.top + r.height, width: r.width, height: r.height };
+  }
+}
+const dockedIds = (env) => env.document.getElementById('pdock').children.filter((c) => c.classList.contains('hbpanel')).map((c) => c.dataset.panel);
+/* A drag from `from` to `to` that ends at rest (the last two samples sit still), so the momentum projection adds nothing. */
+function dragHeader(env, id, from, to) {
+  const head = env.document.getElementById(`panel-${id}`).children[0];
+  head.dispatchEvent(pointerEvent('pointerdown', from.x, from.y, { target: head, t: 0 }));
+  head.dispatchEvent(pointerEvent('pointermove', to.x, to.y, { t: 16 }));
+  head.dispatchEvent(pointerEvent('pointermove', to.x, to.y, { t: 300 }));
+  head.dispatchEvent(pointerEvent('pointerup', to.x, to.y, { t: 316 }));
+}
+const DOCK = { pdock: { left: 900, top: 0, width: 300, height: 800 } };
+const TOP_HALF = { 'panel-order': { left: 900, top: 0, width: 300, height: 400 } };
+const BOTTOM_HALF = (id) => ({ [`panel-${id}`]: { left: 900, top: 400, width: 300, height: 400 } });
+
+test('a zone drop beside one docked panel keeps the closed Tape in the dock order: opening it shows it in the dock', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  shell.setOpen('order', true); shell.setOpen('dom', true);
+  place(env, { ...DOCK, ...TOP_HALF, ...BOTTOM_HALF('dom') });
+  dragHeader(env, 'dom', { x: 1000, y: 410 }, { x: 920, y: 200 });      // DOM's header onto Order's left band
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  shell.setOpen('tape', true);
+  assert.deepEqual(dockedIds(env), ['dom', 'order', 'tape']);
+});
+
+test('a floating panel dropped on the only docked one keeps the closed third panel too (float-drop path)', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  shell.setOpen('order', true); shell.setOpen('tape', true);
+  shell.setDocked('tape', false);                                        // Tape floats, DOM is closed
+  place(env, { ...DOCK, ...TOP_HALF });
+  dragHeader(env, 'tape', { x: 300, y: 300 }, { x: 1180, y: 200 });     // onto Order's right band
+  assert.deepEqual(dockedIds(env), ['order', 'tape']);
+  shell.setOpen('dom', true);
+  assert.deepEqual(dockedIds(env), ['order', 'tape', 'dom']);
+});
+
+test('a small drag inside the dock does not jump over a closed panel that sits first in the dock order', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  shell.setOpen('order', true); shell.setOpen('dom', true);
+  place(env, { ...DOCK, ...TOP_HALF, ...BOTTOM_HALF('dom') });
+  dragHeader(env, 'dom', { x: 1000, y: 410 }, { x: 920, y: 200 });      // dockOrder is now [dom, order, tape]
+  shell.setOpen('dom', false);                                           // DOM is closed but still first
+  shell.setOpen('tape', true);
+  place(env, { ...BOTTOM_HALF('tape') });
+  assert.deepEqual(dockedIds(env), ['order', 'tape']);
+  dragHeader(env, 'tape', { x: 1000, y: 410 }, { x: 1000, y: 450 });   // inside Tape's own panel: no zone, a plain reorder
+  assert.deepEqual(dockedIds(env), ['order', 'tape']);
+});

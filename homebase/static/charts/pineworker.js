@@ -3,8 +3,9 @@
    modules; the page talks to it with postMessage only. tools/pine/parity.mjs loads this same file in Node.
 
    IN  {type:'init', source, inputs?, root, tf_s, tick_size, point_value, bars, maxBars?}
-         source       the .pine text
-         inputs       {title: value} overrides for the script's input.* calls (optional)
+         source       the .pine text; it needs a //@version line, else an error (PineTS would run it as JavaScript)
+         inputs       {key: value} overrides for the script's input.* calls (optional); key = the input's variable name or id
+                      (inputsMeta varId / id), which tells apart two inputs of one title; an input's title also works (old saves)
          root         NQ|ES|RTY|YM|GC|SI -> syminfo CME_MINI:NQ1! ES1! RTY1!, CBOT_MINI:YM1!, COMEX:GC1! SI1!,
                       timezone America/Chicago, session 1700-1600; mintick / pointvalue from tick_size / point_value
          tf_s         the chart's bar length in seconds (time bars only)
@@ -39,6 +40,12 @@
 importScripts('/api/pine/runtime.js');
 
 const Lib = self.PineTSLib;
+/* Best effort, NOT the sandbox: a script that gets past the //@version check below (it cannot: see rerun) would run in this Worker
+   with the chart page's origin. The runtime is loaded and needs none of these (it fetches only in data providers this Worker
+   does not use), so they go. Dynamic import() cannot be blocked from here: the version check is the real fix. */
+for (const k of ['fetch', 'XMLHttpRequest', 'WebSocket', 'EventSource', 'importScripts', 'Worker', 'SharedWorker']) {
+  try { Object.defineProperty(self, k, { value: undefined, writable: false, configurable: false }); } catch (e) { /* shortcut: an engine that keeps it, the version check still holds */ }
+}
 const MAX_LOOPS = 200000;
 const POLL_MS = 1000;
 const DEFAULT_BARS = 5000, MAX_BARS = 20000;
@@ -47,6 +54,8 @@ const DAY = 86400000;
 const SYM = { NQ: ['CME_MINI', 'E-mini Nasdaq-100'], ES: ['CME_MINI', 'E-mini S&P 500'],
               RTY: ['CME_MINI', 'E-mini Russell 2000'], YM: ['CBOT_MINI', 'E-mini Dow'],
               GC: ['COMEX', 'Gold'], SI: ['COMEX', 'Silver'] };
+// The runtime's own marker test: a source it finds no //@version in is run as raw JavaScript, a marked one is Pine or an error.
+const MARKER = /^\s*\/\/\s*@version\s*=\s*(\d+)\s*$/im;
 const HEAD = /^\s*(indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?(["'])(.*?)\2([^\n]*)/m;
 const ETDATE = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
 const ETTIME = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -234,6 +243,7 @@ function rerun() {
   sinceMs = null;
   if (!store.length) throw new Error('no bars');
   const g = gen, warnings = new Set();
+  if (!MARKER.test(cfg.source)) throw new Error('Not a Pine script: it needs a //@version=5 or //@version=6 line');   // else PineTS would run it as JavaScript
   const ind = new Lib.Indicator(cfg.source, cfg.inputs);
   const h = HEAD.exec(cfg.source);
   const meta = { kind: ind.getDeclarationType(), title: h ? h[3] : null, overlay: !!(h && /overlay\s*=\s*true/.test(h[4])),

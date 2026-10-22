@@ -28,7 +28,7 @@ plot(stK, "tv|stoch:14:3:3|k", display=D)
 plot(ta.sma(stK, 3), "tv|stoch:14:3:3|d", display=D)
 [stLine, stDir] = ta.supertrend(3, 10)
 plot(stLine, "tv|supertrend:10:3|line", display=D)
-plot(-stDir, "tv|supertrend:10:3|dir", display=D)   // Pine: -1 means up; Homebase: +1 means up
+plot(stDir, "tv|supertrend:10:3|dir", display=D)    // Pine's sign, -1 up: what tv:supertrend returns (tvparity.py flips it for the house study)
 dcUp = ta.highest(high, 20)
 dcDn = ta.lowest(low, 20)
 plot(dcUp, "tv|donchian:20|up", display=D)
@@ -36,6 +36,7 @@ plot(dcDn, "tv|donchian:20|dn", display=D)
 plot((dcUp + dcDn) / 2, "tv|donchian:20|mid", display=D)
 kMid = ta.ema(close, 20)
 kW = 1.5 * ta.atr(20)                               // the built-in's "Average True Range" style: an RMA where Homebase takes an SMA
+// the title is the house key (n, band length, mult); tvparity.py runs it as tv:keltner:20:1.5:20
 plot(kMid, "tv|keltner:20:20:1.5|mid", display=D)
 plot(kMid + kW, "tv|keltner:20:20:1.5|up", display=D)
 plot(kMid - kW, "tv|keltner:20:20:1.5|dn", display=D)

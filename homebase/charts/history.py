@@ -35,11 +35,12 @@ M1 = BarSpec("time", 60)
 CACHE_VERSION = 2
 DAY_S = 86400          # a session fits inside one day: its bars of this size or longer are one bar
 COARSE_MIN = 900        # time bars this coarse (a whole number of minutes) are also kept per session on disk
-MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level, big print,
-                        # sweep and bubble it carries; ~250 B each in Python, so ~1 GB). A weight, not a count: a daily
-                        # or weekly chart keeps one bar a session, so its 1,300 sessions stay memoized (they never fitted
-                        # 256 entries: every 1D / 1W switch re-read a pickle per session, 1-2 s) -- but a daily bar holds
-                        # a whole day's footprint (~1,000 levels, ~0.5 MB), so bars alone are the wrong unit.
+MEMO_CELLS = 4_000_000  # what the memo may hold across sessions, in cells (a bar, plus each footprint level -- counted for
+                        # fp and again for fpn --, tape order, big print, sweep and bubble it carries; ~250 B each in Python
+                        # at most, so ~1 GB). A weight, not a count: a daily or weekly chart keeps one bar a session, so its
+                        # 1,300 sessions stay memoized (they never fitted 256 entries: every 1D / 1W switch re-read a
+                        # pickle per session, 1-2 s) -- but a daily bar holds a whole day's footprint (~1,000 levels, ~0.5
+                        # MB), so bars alone are the wrong unit.
 WATCH_DAYS = 35         # sessions this recent are watched for a fill landing in their files (the tick job merges
                         # live recordings 30 days back, ticks.LIVE_LOOKBACK_DAYS); older ones only change by hand
 
@@ -60,7 +61,7 @@ class History:
 
     @staticmethod
     def _cost(bars: list[Bar]) -> int:
-        return 1 + sum(1 + len(b.fp) + len(b.big) + len(b.sw) + len(b.bub) for b in bars)
+        return 1 + sum(1 + len(b.fp) + len(b.fpn or ()) + len(b.ag or ()) + len(b.big) + len(b.sw) + len(b.bub) for b in bars)
 
     def _from_ticks(self, root: str, spec: BarSpec, d: dt.date) -> list[Bar]:
         s = self.store.load(root, d)

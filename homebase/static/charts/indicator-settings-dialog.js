@@ -338,28 +338,44 @@ function mount(box, host) {
     return row;
   }
 
-  /* ---- Pine: the script's own inputs, one row each, from what its last run reported (the cell keeps the Worker). Stored by the
-     input's title, as the Worker reads them; a value put back to the script's own default is dropped. The block is drawn again
-     only when the inputs or the error change, so a number being typed keeps its focus while the script re-runs on each keystroke. ---- */
+  /* ---- Pine: the script's own inputs, one row each, from what its last run reported (the cell keeps the Worker). Stored under the
+     input's variable name, else its title when no other input shares it, else its id (in_N): the Worker reads all three, two inputs
+     can share a title, never a key, and a save does not move to another input when the script gains one. An old save keyed by title
+     moves to those keys when the block is drawn. A value put back to the script's own default is
+     dropped. The block is drawn again only when the inputs or the error change, so a number being typed keeps its focus while the
+     script re-runs on each keystroke. ---- */
+  function pineKeys(inputs) {   // input -> its key
+    const taken = new Set(), count = {};
+    for (const x of inputs) { taken.add(x.id); if (x.varId) taken.add(x.varId); const t = x.title || x.name; if (t) count[t] = (count[t] || 0) + 1; }
+    return new Map(inputs.map((x) => { const t = x.title || x.name; return [x, x.varId || (t && count[t] === 1 && !taken.has(t) ? t : x.id)]; }));
+  }
+  const pineHas = (o, k) => !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
+  function pineMigrate(inputs, keys) {   // each input takes the value its title held (two of one title each keep what both showed)
+    if (!vals.inputs || typeof vals.inputs !== 'object') return;
+    const used = new Set(keys.values()), titles = inputs.map((x) => [x, x.title || x.name]).filter(([, t]) => t && !used.has(t));
+    for (const [x, t] of titles) if (pineHas(vals.inputs, t) && !pineHas(vals.inputs, keys.get(x))) vals.inputs[keys.get(x)] = vals.inputs[t];
+    for (const [, t] of titles) delete vals.inputs[t];
+  }
   function pineInputs() {
     const wrap = mk('div', 'pine-inputs');
     let seen;
     const draw = () => {
-      const m = cell.pineMeta ? cell.pineMeta(uid) : null, sig = JSON.stringify(m ? [m.error, m.inputs.map((x) => [x.title, x.type])] : null);
+      const m = cell.pineMeta ? cell.pineMeta(uid) : null, keys = m ? pineKeys(m.inputs) : null, sig = JSON.stringify(m ? [m.error, m.inputs.map((x) => [keys.get(x), x.title, x.type])] : null);
       if (sig === seen) return;
       seen = sig;
       wrap.replaceChildren();
       if (!m) return;
+      pineMigrate(m.inputs, keys);
       if (m.error) { const err = mk('div', 'dlg-err', m.error); err.setAttribute('role', 'alert'); wrap.append(err); }
-      for (const x of m.inputs) if (x.title || x.name) wrap.append(pineInput(x));
+      for (const x of m.inputs) if (x.title || x.name) wrap.append(pineInput(x, keys.get(x)));
     };
     cell.onPineMeta = () => { if (!done && TABS[tab].id === 'inputs') draw(); };
     draw();
     return wrap;
   }
-  function pineInput(x) {
-    const key = x.title || x.name, row = mk('div', 'field'), id = `is-${uid}-pine-${x.id}`, lab = mk('label', '', key);
-    const cur = () => (vals.inputs && key in vals.inputs ? vals.inputs[key] : x.defval);
+  function pineInput(x, key) {
+    const label = x.title || x.name, row = mk('div', 'field'), id = `is-${uid}-pine-${x.id}`, lab = mk('label', '', label);
+    const cur = () => (pineHas(vals.inputs, key) ? vals.inputs[key] : x.defval);
     const put = (v) => {
       const o = vals.inputs && typeof vals.inputs === 'object' ? vals.inputs : (vals.inputs = {});
       if (v === x.defval) delete o[key]; else o[key] = v;
@@ -400,7 +416,7 @@ function mount(box, host) {
     }
     ctl.id = id;
     lab.htmlFor = id;
-    ctl.setAttribute('aria-label', key);
+    ctl.setAttribute('aria-label', label);
     row.append(lab, ctl);
     return row;
   }

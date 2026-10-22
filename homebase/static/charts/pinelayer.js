@@ -1,7 +1,8 @@
 /* Homebase Charts — HBPineLayer: what a Pine script draws besides its lines, one canvas primitive on the price pane
    (the pineworker.js result's boxes, lines, labels, linefills, polylines, tables, and the bgcolor() stripes).
      - boxes, lines, linefills and polylines: x is a bar_index (0 = the run's first bar, result.firstMs) or, with
-       xloc.bar_time, a time; both become the chart's logical index, so a future bar_index runs past the last bar;
+       xloc.bar_time, a time; both become the chart's logical index, so a future bar_index runs past the last bar
+       (bar_index counts the real bars the worker was sent: the chart's blank hole slots are stepped over);
        `extend` pushes a line or a box to the pane's edge;
      - labels: Pine's bubble styles (pointer or corner on the point), the shape styles and text only; yloc abovebar /
        belowbar sit on the bar's high / low;
@@ -86,10 +87,36 @@ function baseIndex(bars, firstMs, barMs) {
   return barMs > 0 ? -Math.round((bars[0].ms - firstMs) / barMs) : 0;
 }
 
-/* A Pine x as a chart logical index (bar i's centre = i): a bar_index counts from `f.base`, a bar_time sits between bars. */
+/* The chart slots of the real bars, or null when no slot is blank. The worker is sent the real bars only (cell.pineInit), so
+   its bar_index counts them and skips the blank slots of a lost / filling hole that the chart's bars keep.
+   shortcut: one O(n) pass per frame (fine to ~1e5 bars), cache it on the bars' revision if it ever shows in a profile. */
+function realSlots(bars) {
+  let real = null;
+  for (let i = 0; i < bars.length; i++) {
+    if (bars[i].blank) { if (!real) real = Array.from({ length: i }, (_, j) => j); }
+    else if (real) real.push(i);
+  }
+  return real && real.length ? real : null;
+}
+
+/* The k-th real bar's chart slot (a fraction rides on it): counted back before the first, stepped on past the last. */
+function slotOfReal(real, k) {
+  const m = real.length, i = Math.floor(k);
+  return (i < 0 ? real[0] + i : i >= m ? real[m - 1] + i - (m - 1) : real[i]) + (k - i);
+}
+
+/* Which real bar the last real bar at or before chart slot s is (before them all: counted back). */
+function realOrdinal(real, s) {
+  let a = 0, b = real.length;
+  while (a < b) { const m = (a + b) >> 1; if (real[m] <= s) a = m + 1; else b = m; }
+  return a > 0 ? a - 1 : s - real[0];
+}
+
+/* A Pine x as a chart logical index (bar i's centre = i): a bar_index counts from `f.base` (over the real bars when `f.real`
+   is set), a bar_time sits between bars. */
 function logicalOf(v, xloc, f) {
   if (!Number.isFinite(v)) return null;
-  if (xloc !== 'bt' && xloc !== 'bar_time') return f.base + v;
+  if (xloc !== 'bt' && xloc !== 'bar_time') return f.real ? slotOfReal(f.real, realOrdinal(f.real, f.base) + v) : f.base + v;
   const L = LQ.logicalAt(f.bars, v, f.barMs, f.end);      // logicalAt puts a bar's start at i - 0.5
   return L == null ? null : L + 0.5;
 }
@@ -195,7 +222,7 @@ function bgRuns(bars, i0, i1, colorOf, XI, half) {
   return runs;
 }
 
-const api = { MAX_OBJECTS, EDGE, parseColor, textPx, dashOf, newest, outside, baseIndex, logicalOf, extendSpan, lineSeg, fillQuad,
+const api = { MAX_OBJECTS, EDGE, parseColor, textPx, dashOf, newest, outside, baseIndex, realSlots, logicalOf, extendSpan, lineSeg, fillQuad,
   labelRect, placeText, tableLayout, bgRuns };
 
 /* ---------------------------------------------------------------- browser */
@@ -380,7 +407,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       const vr = ts.getVisibleLogicalRange();
       if (!vr) return null;
       const n = bars.length, barMs = this.host.barMs();
-      return { bars, barMs, end: bars[n - 1].ms + barMs, base: baseIndex(bars, this.firstMs, barMs),
+      return { bars, barMs, end: bars[n - 1].ms + barMs, base: baseIndex(bars, this.firstMs, barMs), real: realSlots(bars),
         i0: Math.max(0, Math.floor(vr.from) - 1), i1: Math.min(n - 1, Math.ceil(vr.to) + 1),
         XI: (i) => ts.logicalToCoordinate(i), Y: (p) => this.series.priceToCoordinate(p), spacing: this.spacing() };
     }

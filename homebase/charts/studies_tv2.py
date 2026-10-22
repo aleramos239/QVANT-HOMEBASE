@@ -77,7 +77,9 @@ def _tr(bar, pc):
 
 
 def _rsi(st, x, n):
-    """One step of ta.rsi: 100 - 100 / (1 + rma(up, n) / rma(down, n)); down = 0 -> 100, up = 0 -> 0, both 0 -> na."""
+    """One step of ta.rsi: 100 - 100 / (1 + rma(up, n) / rma(down, n)); down = 0 -> 100 (a flat series too: TradingView's RSI
+    script and PineTS agree, the `rs = up / down` listing in the Pine reference would say na -- open item in
+    docs/tvparity-export-recipe.md), up = 0 -> 0. Same rule as RSI in studies_tv.py."""
     px, su, sd = st
     d = None if px is None or x is None else x - px
     u, dn = (None, None) if d is None else (max(d, 0.0), max(-d, 0.0))
@@ -86,7 +88,7 @@ def _rsi(st, x, n):
     if ru is None or rd is None:
         v = None
     elif rd == 0:
-        v = None if ru == 0 else 100.0
+        v = 100.0
     else:
         v = 100.0 - 100.0 / (1.0 + ru / rd)
     return (x, su, sd), v
@@ -445,7 +447,7 @@ class Ichimoku(_Study):
 
     def step(self, st, bar):
         hl, qa, qb = st
-        hl = _push(hl, (bar.h, bar.l), self.s)
+        hl = _push(hl, (bar.h, bar.l), max(self.c, self.b, self.s))     # each line reads its own length, whichever is longest
 
         def don(n):
             w = hl[-n:]
@@ -1454,7 +1456,7 @@ WARM = {
     "chandelier": _warm_of(((0, 10, 22),)),
     "vstop": _warm_of(((0, 10, 20),)),
     "chandekroll": _warm_of(((0, 10, 10), (2, 1, 9))),
-    "ichimoku": _warm_of(((2, 1, 52), (3, 1, 26))),
+    "ichimoku": lambda args: max(_num(args, 0, 9), _num(args, 1, 26), _num(args, 2, 52)) + _num(args, 3, 26),
     "alligator": _warm_of(((0, 10, 13), (3, 1, 8))),
     "fractals": _warm_of(((0, 2, 2),)),
     "cci": _warm_of(((0, 1, 20),)),

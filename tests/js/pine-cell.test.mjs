@@ -98,7 +98,7 @@ test('a Pine row starts its Worker with the chart\'s bars, the script text, the 
   assert.deepEqual(fetched, ['/api/pine/scripts/a.pine']);
   assert.equal(FakeWorker.all.length, 1);
   const w = FakeWorker.all[0];
-  assert.equal(w.url, '/static/charts/pineworker.js?v=1');
+  assert.equal(w.url, '/static/charts/pineworker.js?v=2');
   assert.equal(w.sent.length, 1);
   const m = w.sent[0];
   assert.deepEqual({ ...m, bars: undefined }, { type: 'init', source: SCRIPTS['a.pine'], inputs: { Length: 9 }, root: 'NQ', tf_s: 60, tick_size: 0.25, point_value: 20, bars: undefined, maxBars: 5000 });

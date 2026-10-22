@@ -253,6 +253,25 @@ test('nakedPocs: a bar\'s POC stays naked until a later bar\'s range reaches it'
   assert.deepEqual(M.nakedPocs([{ h: 5, l: 1, fp: [[2, 3, 3], [4, 3, 3]] }]), [{ i: 0, price: 2, vol: 6 }]);   // tie -> the lowest
 });
 
+test('nakedPocs touched: a POC a later bar reached comes with that bar (hit), a naked one with hit null; the default list is unchanged', () => {
+  const bars = [
+    { h: 100.25, l: 100, fp: [[100, 5, 5], [100.25, 2, 2]] },        // POC 100, first reached by bar 2
+    { h: 102, l: 102, fp: [[102, 3, 3]] },                           // POC 102, never reached
+    { h: 100.5, l: 99.5, fp: [[100, 1, 1], [99.5, 6, 6]] },          // POC 99.5
+    { h: 101, l: 100.75, fp: [[100.75, 4, 4]] },
+    { blank: true },
+    { h: 100.5, l: 100.25 },
+  ];
+  assert.deepEqual(M.nakedPocs(bars, 0, 5, true), [
+    { i: 0, price: 100, vol: 10, hit: 2 }, { i: 1, price: 102, vol: 6, hit: null }, { i: 2, price: 99.5, vol: 12, hit: null }, { i: 3, price: 100.75, vol: 8, hit: null },
+  ]);
+  const naked = M.nakedPocs(bars, 0, 5, true).filter((r) => r.hit == null).map(({ i, price, vol }) => ({ i, price, vol }));
+  assert.deepEqual(naked, M.nakedPocs(bars));                                           // the old call still answers the untouched ones, same shape
+  // a blank slot (the last close as every price) is not a touch; the first real bar that reaches the price is
+  const gap = [{ h: 103, l: 101, fp: [[102, 3, 3]] }, { h: 102, l: 102, blank: 'closed' }, { h: 99, l: 98 }, { h: 102.5, l: 101.5 }, { h: 102, l: 101 }];
+  assert.deepEqual(M.nakedPocs(gap, 0, 0, true), [{ i: 0, price: 102, vol: 6, hit: 3 }]);
+});
+
 test('tpo: letters per 30 minutes, range vs traded rows, initial balance, single prints, POC and value area', () => {
   const t0 = 1700000000000, m = 60000;
   const bars = [
@@ -354,6 +373,21 @@ test('mwAbsorptions: an imbalance whose price a close then leaves by N ticks the
   const up = [{ c: 101, h: 102, l: 100, fp }, { c: 107, h: 107, l: 101 }];
   assert.deepEqual(M.mwAbsorptions(up, 0, 0, { tick: 1, ticks: 4, within: 1 }), [{ i: 0, j: 1, dir: 1, price: 102 }]);
   assert.deepEqual(M.mwAbsorptions(bars, 0, 0, {}), []);                                          // no tick
+});
+
+test('mwAbsorptions: a close exactly N ticks away counts on a 0.1 / 0.01 / 0.00005 tick too, not only on a binary one', () => {
+  const px = (k, tick) => +(k * tick).toFixed(6);                                                 // the wire's price: round(k * tick, 6)
+  for (const [tick, k0] of [[0.1, 20000], [0.01, 6000], [0.00005, 21000], [0.25, 20000]]) {      // GC, CL, 6E, ES
+    for (let k = k0; k < k0 + 400; k++) {
+      const P = (d) => px(k + d, tick), o = { tick, ticks: 4, within: 1 }, at = `tick ${tick} key ${k}`;
+      const buy = { c: P(0), h: P(0), l: P(-1), fp: [[P(-1), 1, 1], [P(0), 1, 12]] };            // a buy imbalance at P
+      assert.deepEqual(M.mwAbsorptions([buy, { c: P(-4), h: P(0), l: P(-4) }], 0, 0, o), [{ i: 0, j: 1, dir: -1, price: P(0) }], `buy, 4 ticks: ${at}`);
+      assert.deepEqual(M.mwAbsorptions([buy, { c: P(-3), h: P(0), l: P(-3) }], 0, 0, o), [], `buy, 3 ticks: ${at}`);
+      const sell = { c: P(0), h: P(1), l: P(0), fp: [[P(0), 1, 1], [P(1), 12, 1]] };             // a sell imbalance at P + 1 tick
+      assert.deepEqual(M.mwAbsorptions([sell, { c: P(5), h: P(5), l: P(0) }], 0, 0, o), [{ i: 0, j: 1, dir: 1, price: P(1) }], `sell, 4 ticks: ${at}`);
+      assert.deepEqual(M.mwAbsorptions([sell, { c: P(4), h: P(4), l: P(0) }], 0, 0, o), [], `sell, 3 ticks: ${at}`);
+    }
+  }
 });
 
 test('rowText: trades, dominant side %, price and the diagonal differences', () => {

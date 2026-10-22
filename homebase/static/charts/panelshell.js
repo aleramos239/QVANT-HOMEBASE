@@ -573,15 +573,22 @@ function applyDockDrop(draggedId, otherId, zone, clientY) {
   if (otherId && zone) {
     if (zone === 'left' || zone === 'right') {
       state.dockOrientation = 'side';
-      state.dockOrder = zone === 'left' ? [draggedId, otherId] : [otherId, draggedId];
+      setShownOrder(zone === 'left' ? [draggedId, otherId] : [otherId, draggedId]);
     } else {
       state.dockOrientation = 'stack';
-      state.dockOrder = zone === 'top' ? [draggedId, otherId] : [otherId, draggedId];
+      setShownOrder(zone === 'top' ? [draggedId, otherId] : [otherId, draggedId]);
     }
   } else {
-    const targetIndex = dockDropIndex(clientY);
-    state.dockOrder = L.reorderList(state.dockOrder, draggedId, targetIndex);
+    reorderShown(draggedId, dockDropIndex(clientY));
   }
+}
+/* dockOrder lists EVERY panel -- a closed or floating one keeps its slot -- but a drop only knows the panels
+   showing in the dock: they go first, in the order given, and the rest follow as they were (a bare 2-id order
+   dropped the third panel from the dock for good, until a reload). */
+function setShownOrder(shown) { state.dockOrder = L.normalizeOrder([...shown, ...state.dockOrder], L.IDS); }
+/* `visibleIndex` counts the panels showing in the dock, not the whole dockOrder. */
+function reorderShown(id, visibleIndex) {
+  setShownOrder(L.reorderList(dockedOpenIds().filter((x) => x !== id), id, visibleIndex));
 }
 
 /* ---- header drag: move a floating panel, drag a docked one out to float, drag a floating one onto the dock
@@ -686,7 +693,7 @@ function wireHeaderDrag(id, root, head) {
       } else {
         const targetIndex = dockDropIndex(projY);
         const cur = dockedOpenIds();
-        if (cur.length > 1) { animateDockFlip(id, () => { state.dockOrder = L.reorderList(state.dockOrder, id, targetIndex); relayout(); }, vx, vy); }
+        if (cur.length > 1) { animateDockFlip(id, () => { reorderShown(id, targetIndex); relayout(); }, vx, vy); }
       }
     }
     mode = null;

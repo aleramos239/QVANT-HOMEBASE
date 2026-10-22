@@ -725,9 +725,10 @@ function normalizeHHMM(text) {
   return hh >= 0 && hh <= 23 && mm >= 0 && mm <= 59 ? `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}` : null;
 }
 
-/* A Pine script's name (a file name the server lists) and its input overrides, by input title: a number, a switch or a
-   word each, at most 64 of them; anything else is dropped, and no override at all is no key. */
-const PINE_NAME = /^[\w. -]{1,80}$/;
+/* A Pine script's name (a file name the server lists) and its input overrides, by the input's variable name or id (an old save: by
+   title): a number, a switch or a word each, at most 64 of them; anything else is dropped, and no override at all is no key.
+   PINE_NAME is the server's NAME_RE (homebase/charts/pineapi.py: any letter or digit, then .pine, 255 characters at most): change both together. */
+const PINE_NAME = /^(?=.{1,255}$)[\p{L}\p{N}_ .-]+\.pine$/u;
 function clampPineInputs(v) {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
   const out = {};

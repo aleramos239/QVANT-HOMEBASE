@@ -129,7 +129,7 @@ def rsi(xs, n):
         if na(u, dn):
             out.append(None)
         elif dn == 0:
-            out.append(None if u == 0 else 100.0)
+            out.append(100.0)                       # the RSI script's `down == 0 ? 100`: a flat series too (as RSI in studies_tv)
         else:
             out.append(100 - 100 / (1 + u / dn))
     return out
@@ -807,7 +807,7 @@ def test_pine_edge_rules():
     assert run("wpr", flat)[-1] is None and run("cci", flat)[-1] is None
     assert run("eom", flat)[-1] is None                           # volume 0 -> na inside the SMA window
     assert run("cmf", flat)[-1] is None and run("adl", flat)[-1] == 0.0
-    assert run("stochrsi", flat)[-1] is None                      # rsi 0/0 is na, so its stoch is na
+    assert run("stochrsi", flat)[-1] is None                      # rsi is a flat 100, so its stoch is 0 / 0: na
     assert run("connors", flat + walk(150))[-1] is not None
     up = [mk(100.0 + i, h=100.5 + i, l=99.5 + i, o=100.0 + i, v=10) for i in range(30)]
     assert run("sar", up)[0] is None and run("sar", up)[1] is not None
@@ -816,3 +816,36 @@ def test_pine_edge_rules():
     assert run("fractals", up)[-1] is None
     peak = up[:10] + [mk(130.0, h=140.0, l=109.0, o=110.0)] + [mk(100.0 - i, h=100.5 - i, l=99.5 - i, o=100.0 - i) for i in range(10)]
     assert run("fractals", peak)[12] == {"up": 140.0}            # known 2 bars after the peak, the mark is its high
+
+
+def test_ichimoku_lines_each_read_their_own_length_even_above_the_span():
+    """The window was capped at the span, so a conversion or base length above it never produced a value
+    (TradingView reads every line from its own length)."""
+    bars = walk(400)
+    for conv, base, span, disp in ((30, 26, 20, 26), (9, 60, 20, 26), (9, 26, 52, 26)):
+        def donchian(n):
+            return avg(lowest(L(bars), n), highest(H(bars), n))
+        c, b = donchian(conv), donchian(base)
+        want = rows(conv=c, base=b, a=shift(avg(c, b), disp - 1), b=shift(donchian(span), disp - 1))
+        s = study("ichimoku", conv, base, span, disp)
+        got = [s.push(x) for x in bars]
+        bad = [i for i in range(len(bars)) if not same(got[i], want[i])]
+        assert not bad, ((conv, base, span), bad[:3], [(got[i], want[i]) for i in bad[:2]])
+        assert got[-1] is not None and got[-1]["base"] is not None and got[-1]["a"] is not None
+        assert WARM["ichimoku"]([str(conv), str(base), str(span), str(disp)]) == max(conv, base, span) + disp
+
+
+def test_the_rsi_inside_stochrsi_and_connors_is_the_tv_rsi_study_even_on_a_flat_start():
+    """tv:rsi said 100 on a flat series while the helper under stochrsi / connors said na: one rule now."""
+    from homebase.charts.studies import make
+    from homebase.charts.studies_tv2 import _RSI0, _rsi
+    flat, moving = [mk(100.0) for _ in range(40)], walk(120)
+    bars = flat + [mk(b.c, h=b.h, l=b.l, o=b.o, t=b.t) for b in moving]
+    tv, st, got = make("tv:rsi:14"), _RSI0, []
+    for b in bars:
+        st, v = _rsi(st, b.c, 14)
+        got.append(v)
+    want = [tv.push(b) for b in bars]
+    assert want[20] == 100.0 and want[39] == 100.0
+    assert all(same(g, w) for g, w in zip(got, want)), [(i, g, w) for i, (g, w) in enumerate(zip(got, want)) if not same(g, w)][:3]
+    assert run("connors", [mk(100.0) for _ in range(150)])[-1] == 100.0    # rsi(close, 3) is 100 on a flat start, not na

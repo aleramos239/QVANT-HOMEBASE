@@ -7,6 +7,9 @@ The files stay on this Mac in `~/.homebase/tvparity/` and never go into the repo
 Then: `.venv/bin/python -m tools.tvparity run` reads `~/.homebase/tvparity/inbox/`, files each CSV under
 `exports/<date>/`, and writes `reports/<stamp>.md` with one verdict per indicator: identical, warm-up only, differs,
 no-tv (no TradingView source) or no-data (no Homebase bars for those days).
+A CSV that cannot be read (not an export, or fewer than two complete bars, say one saved mid-session) is named on screen
+and left in the inbox; the others are still checked and reported. The column title is a Homebase key; the harness runs it as
+the `tv:` study with the arguments reordered where the two differ (Keltner), so keep the titles in the .pine files as they are.
 
 ## 3.0 Calibration export (once, about 5 minutes)
 
@@ -21,6 +24,18 @@ This settles how TradingView writes the file. Do it once, before the real export
 7. Put both files in `~/.homebase/tvparity/inbox/` and tell Claude "calibration exports are in". The harness reads
    either time format; the two files answer the open questions (seconds or milliseconds, the time zone, how `na` and
    duplicates are written, whether the developing bar is in the file).
+
+### 3.0b Flat-price RSI (open question, 2 minutes, once)
+
+On a series that has never moved, `ta.rsi` has up = down = 0. Homebase says 100 (`tv:rsi`, and the RSI inside `tv:stochrsi` and
+`tv:connors`, one rule since the 2026-10-22 review). What TradingView says is not proven: its own RSI script (`down == 0 ? 100`)
+and the PineTS port agree with 100, but the `rs = up / down` listing in the Pine reference would give na (0 / 0).
+
+1. Pine Editor → new indicator, paste `//@version=6` / `indicator("HB rsi flat")` / `plot(ta.rsi(1.0, 14))`, add it to any chart.
+2. Look at the first bars after the 14th: a flat line at 100 means Homebase is right. A gap (na) means the rule must flip to na.
+   Any other number: tell Claude the number.
+3. Tell Claude the answer. To flip it: `RSI.step` in `studies_tv.py` and `_rsi` in `studies_tv2.py` return None when both
+   averages are 0, and the flat assertions in `tests/test_charts_studies_tv.py` / `test_charts_studies_tv2.py` change with them.
 
 ## 3.1 One-time setup (about 20 minutes)
 

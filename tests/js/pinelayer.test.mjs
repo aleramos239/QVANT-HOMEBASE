@@ -427,3 +427,52 @@ test('the view is the culling window: a drawing wholly past the pane is skipped,
     assert.deepEqual(draw(1).of('moveTo').map((m) => m.a[0]), [850, -3950]);
   } finally { unload(); }
 });
+
+/* ------------------------------------------- blank slots: the worker counts real bars only, the chart's bars keep the holes */
+
+const HR = 3_600_000;
+/* 10 hourly slots, slots 3 and 4 blank (a lost hour pair): the worker's bar_index 0..7 are the real slots 0 1 2 5 6 7 8 9. */
+const holed = () => Array.from({ length: 10 }, (_, i) => ({ ms: T + i * HR, l: 100 + i, h: 110 + i, ...(i === 3 || i === 4 ? { blank: 'lost' } : {}) }));
+
+test('realSlots / logicalOf: bar_index counts the real bars, so it skips the blank slots; a chart with none is unchanged', () => {
+  const bars = holed(), real = P.realSlots(bars);
+  assert.deepEqual(real, [0, 1, 2, 5, 6, 7, 8, 9]);
+  assert.equal(P.realSlots(Array.from({ length: 5 }, (_, i) => ({ ms: T + i * HR }))), null);   // no blank slot: bar_index is the slot
+  assert.equal(P.realSlots([{ ms: T, blank: 'lost' }]), null);                                   // nothing real: nothing to count
+  const f = { bars, barMs: HR, end: T + 10 * HR, base: 0, real };
+  assert.equal(P.logicalOf(2, 'bi', f), 2);
+  assert.equal(P.logicalOf(3, 'bi', f), 5);                                      // the next real bar is past the hole
+  assert.equal(P.logicalOf(7, 'bi', f), 9);                                      // the last real bar
+  assert.equal(P.logicalOf(9, 'bi', f), 11);                                     // 2 bars on past the last, stepping slot by slot
+  assert.equal(P.logicalOf(-2, 'bi', f), -2);
+  near(P.logicalOf(T + 9 * HR, 'bt', f), P.logicalOf(7, 'bi', f));               // bar_time and bar_index land on the same bar
+  near(P.logicalOf(T + 5 * HR, 'bt', f), P.logicalOf(3, 'bi', f));
+  assert.equal(P.logicalOf(1, 'bi', { ...f, base: 2 }), 5);                      // a base before the hole counts across it
+  assert.equal(P.logicalOf(1, 'bi', { ...f, base: 6 }), 7);                      // a base after it does not
+  assert.equal(P.logicalOf(1, 'bi', { ...f, base: 3 }), 5);                      // a base in the hole is the real bar before it
+  assert.equal(P.logicalOf(1.5, 'bi', f), 1.5);
+  assert.equal(P.logicalOf(3.5, 'bi', f), 5.5);                                  // a fraction rides on the slot of its bar
+});
+
+test('the layer with blank slots: bar_index drawings land on the same bars as their bar_time twins, labels sit on the right bar, stripes on their slots', () => {
+  const { layer, draw, host } = rig();
+  try {
+    host.bars = holed(); host.barMs = () => HR;
+    const line = (x1, x2, xloc) => ({ x1, y1: 105, x2, y2: 105, xloc, extend: 'none', color: '#FF0000', width: 1 });
+    layer.update({ firstMs: T, full: true,
+      lines: [line(0, 7, 'bi'), line(T, T + 9 * HR, 'bt'), line(3, 8, 'bi')],
+      labels: [{ x: 5, y: 0, text: '', xloc: 'bi', yloc: 'ab', color: '#0000FF', style: 'style_circle', textcolor: '', size: 'normal' }],
+      polylines: [{ points: [{ index: 2, price: 100 }, { index: 3, price: 110 }], curved: false, closed: false, xloc: 'bi', line_color: '#00FF00', fill_color: '', line_width: 1 }],
+      plotsMeta: { bg: { style: 'background' } },
+      plots: { bg: [2, 5].map((i) => ({ time: T + i * HR, value: null, color: '#FF000033' })) } });
+    const c = draw(1);
+    assert.deepEqual(c.of('moveTo').map((m) => m.a[0]), [250, 50, 50, 550]);       // polyline from bi 2; bi 0 = bt T; bi 3 = slot 5
+    assert.deepEqual(c.of('lineTo').map((m) => m.a[0]), [550, 950, 950, 1050]);    // the polyline ends on slot 5; bi 7 = bt T+9h = slot 9; bi 8 = slot 10, one past the last bar
+    assert.equal(c.of('stroke').length, 4);
+    assert.deepEqual(c.of('arc')[0].a.slice(0, 2), [750, (200 - 117) * 4]);        // bar_index 5 = slot 7, high 117 (not slot 5's 115)
+    assert.deepEqual(draw(0).of('fillRect').map((o) => o.a), [[200, 0, 100, 800], [500, 0, 100, 800]]);   // the hole stays unpainted
+    layer.update({ firstMs: T + 5 * HR, full: true, lines: [line(0, 1, 'bi')] });  // bar_index 0 is a real bar past the hole
+    assert.deepEqual(draw(1).of('moveTo')[0].a, [550, 380]);
+    assert.deepEqual(draw(1).of('lineTo')[0].a, [650, 380]);
+  } finally { unload(); }
+});

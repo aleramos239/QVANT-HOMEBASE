@@ -26,6 +26,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from homebase.charts import studies_tv
 from homebase.charts.bars import Bar, BarSpec
 from homebase.charts.hub import warm_bars
 from homebase.charts.session import ET, session_date, session_range_ms
@@ -40,6 +41,7 @@ TF_LABEL = {60: "1m", 300: "5m", 900: "15m", 3600: "1h", 86400: "1D"}
 NA = frozenset(("", "nan", "na", "n/a", "null"))
 NO_TV = ("tspeed", "press", "vaprev")            # no TradingView source at all (big prints, sweeps, per-row data)
 BAR_COLS = {"tv|vol|": "v", "tv|fp|buy": "buy", "tv|fp|sell": "sell"}   # probe columns that are bar fields, not studies
+HOUSE_SIGN = {("supertrend", "dir"): -1.0}       # the probe holds Pine's sign (-1 up); the house study says +1 up
 VERDICTS = ("identical", "warm-up only", "differs", "no-tv", "no-data")
 
 
@@ -202,16 +204,45 @@ def run(key: str, bars: list, tick: float = 0.25) -> list:
 def field(v, name: str):
     """One number out of a study value: a dict's field, a plain value as is, None while warming up."""
     if isinstance(v, dict):
+        if name == "sd" and "sd" not in v and "u1" in v:          # tv:vwap has bands, no sd: the first band's width
+            v = {**v, "sd": None if v["u1"] is None else v["u1"] - v["vwap"]}
         v = v.get(name) if name else None
     if v is None:
         return None
     return float(v)
 
 
+def _tv_args(name: str, args: list) -> list:
+    """A house key's arguments in the tv: study's order. Only keltner differs: house n, true-range length, mult; tv n,
+    mult, band length."""
+    if name == "keltner":
+        n, m, mult, *rest = args + ["20", "20", "1.5"][len(args):]
+        return [n, mult, m, *rest]
+    return args
+
+
+def _whole(k: str) -> None:
+    """ValueError when a fractional value sits in an integer parameter of a tv: key (make_tv would truncate it)."""
+    name, *args = k.partition("@")[0].split(":")[1:]
+    spec = {**studies_tv.PARAMS, **studies_tv.PARAMS2}.get(name, (None, ()))[1]
+    for i, (a, p) in enumerate(zip(args, spec)):
+        if len(p) == 3 and isinstance(p[0], int):
+            try:
+                x = float(a)
+            except ValueError:
+                continue                                    # not a number: make() refuses it with its own words
+            if x % 1:
+                raise ValueError(f"{k}: parameter {i + 1} must be a whole number, got {a}")
+
+
 def tv_key(base: str) -> tuple[str, bool]:
     """("tv:" + base, True) when studies.make accepts the TradingView-match variant, else (base, False): the house key
-    stands in and the report says so (studies_tv.py may not exist yet)."""
-    k = "tv:" + base
+    stands in and the report says so (studies_tv.py may not exist yet). The key is a house key, so its arguments are
+    reordered for the tv: study where the two differ; ValueError for a fractional value in a whole-number parameter."""
+    core, at, tf = base.partition("@")
+    name, *args = core.split(":")
+    k = ":".join(["tv", name, *_tv_args(name, args)]) + at + tf
+    _whole(k)
     try:
         make(k)
         return k, True
@@ -364,7 +395,8 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
         meta.update(classes=o["classes"], tags=o["tags"], flags=o["flags"])
         tagged = set().union(*o["tags"].values())
         skip = {i for i, b in enumerate(tv) if b.session in tagged or b.t not in hb_t}
-        restarts = (0,) + tuple(i for i in range(1, len(tv)) if tv[i].t in hb_t and tv[i - 1].t not in hb_t)
+        # the Homebase study still saw the skipped bars (a holiday's extra bar, a gap): its state is off until the warm-up
+        restarts = (0,) + tuple(i for i in range(1, len(tv)) if i not in skip and i - 1 in skip)
         for title, attr in BAR_COLS.items():
             col = column(x, title)
             if col is not None:
@@ -379,14 +411,16 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
         try:
             _, sec = split_timeframe(key)
             make(key, tick)
+            kt, has_tv = tv_key(key)
         except ValueError as e:
             rows.append(_row(key, fld, tf, None, None, "", tv, note=f"bad key: {e}"))
             continue
-        kt, has_tv = tv_key(key)
         warm = warm_bars(key)
         htf_skip = set(range(len(tv))) - htf_closes(tv, sec) if sec else set()
         math_cmp = compare(vals, [field(v, fld) for v in run(kt, tv, tick)], decs, warm, (0,), htf_skip)
-        house = compare(vals, [field(v, fld) for v in run(key, tv, tick)], decs, warm, (0,), htf_skip) if has_tv else None
+        sign = HOUSE_SIGN.get((key.split(":")[0], fld), 1.0)
+        house = compare(vals, [None if (f := field(v, fld)) is None else sign * f for v in run(key, tv, tick)], decs, warm,
+                        (0,), htf_skip) if has_tv else None
         data_cmp = compare(vals, aligned([field(v, fld) for v in run(kt, hb, tick)]), decs, warm, restarts,
                            skip | htf_skip) if hb else None
         rows.append(_row(key, fld, tf, math_cmp, data_cmp, kt, tv, house=house))
@@ -460,7 +494,11 @@ def run_dir(inbox: Path, root_sym: str = "NQ", history=None) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     metas, rows = [], []
     for p in files:
-        x = load_tv_csv(p)
+        try:
+            x = load_tv_csv(p)
+        except (ValueError, OSError, OverflowError) as e:
+            print(f"{p.name} skipped, left in {inbox}: {e}")
+            continue
         stem = f"{x.group or p.stem}_{TF_LABEL.get(x.tf_s, x.tf_s)}"
         dest = out / f"{stem}.csv"
         k = 1
@@ -474,6 +512,8 @@ def run_dir(inbox: Path, root_sym: str = "NQ", history=None) -> Path:
         metas.append(meta)
         rows.extend(rs)
         print(f"{dest.name}: {meta['bars']} bars, {len(rs)} rows")
+    if not metas:
+        raise SystemExit(f"no CSV in {inbox} could be read")
     md, _ = write_report(metas, rows, R / "reports")
     return md
 

@@ -6,7 +6,9 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,7 @@ from homebase.charts.bars import Bar
 from homebase.charts.session import ET
 from homebase.charts.studies import make
 from homebase.paths import repo_root
+from tests.test_charts_studies_tv import ref_ema, ref_rma, ref_tr, walk
 from tools import tvparity as tp
 
 FAR = dt.datetime(2030, 1, 1, tzinfo=ET)        # a "now" with every session complete
@@ -154,6 +157,9 @@ def test_verdicts():
 def test_field():
     assert tp.field(None, "") is None and tp.field(2, "") == 2.0
     assert tp.field({"k": 3, "d": None}, "k") == 3.0 and tp.field({"k": 3}, "d") is None and tp.field({"k": 3}, "") is None
+    # tv:vwap has bands and no sd: the probe's sd is the first band's width; a house vwap's own sd is untouched
+    assert tp.field({"vwap": 10.0, "u1": 12.5}, "sd") == 2.5 and tp.field({"vwap": 10.0, "sd": 3.0}, "sd") == 3.0
+    assert tp.field({"vwap": 10.0, "u1": None}, "sd") is None
 
 
 def test_htf_closes_marks_the_bar_that_closes_the_higher_bar():
@@ -171,6 +177,24 @@ def test_tv_key_falls_back_to_the_house_key():
         assert (k, has) == ("tv:sma:2", True)
     except ValueError:
         assert (k, has) == ("sma:2", False)
+
+
+def test_tv_key_reorders_a_house_keltner_and_refuses_a_fractional_whole_number():
+    # house keltner is (n, true-range length, mult), tv:keltner is (n, mult, band length): the probe title is the house key
+    assert tp.tv_key("keltner:20:20:1.5") == ("tv:keltner:20:1.5:20", True)
+    assert tp.tv_key("keltner") == ("tv:keltner:20:1.5:20", True)            # the house defaults, not TradingView's
+    assert tp.tv_key("keltner:10:14:2") == ("tv:keltner:10:2:14", True)
+    assert tp.tv_key("sma:50@86400") == ("tv:sma:50@86400", True) and tp.tv_key("vwap:rth") == ("vwap:rth", False)
+    with pytest.raises(ValueError, match="whole number"):                     # a tv-order title: make_tv would truncate 1.5
+        tp.tv_key("keltner:20:1.5:20")
+    with pytest.raises(ValueError, match="whole number"):
+        tp.tv_key("sma:2.5")
+
+
+def test_a_tv_order_keltner_title_is_a_bad_key_row_not_a_silent_study(tmp_path):
+    x = load(tmp_path, text(minutes(30), {"tv|keltner:20:1.5:20|up": [""] * 30}))
+    row = next(r for r in tp.check_export(x, "NQ", hb=[])[1] if r["key"] == "keltner:20:1.5:20")
+    assert row["note"].startswith("bad key") and row["math"]["verdict"] == "no-tv" and row["tv_key"] == ""
 
 
 def test_root_refuses_the_repo(monkeypatch, tmp_path):
@@ -277,6 +301,118 @@ def test_report_and_cli(tmp_path, monkeypatch, capsys):
     assert "| sma:2 |  | 1m | identical" in body and "| no-data |" in body and "100.5" not in body
     with pytest.raises(SystemExit):
         tp.main(["run"])
+
+
+def test_the_first_bar_after_a_tagged_session_restarts_the_warm_up(tmp_path):
+    days = [ms(2025, 10, 6 + i, 18) for i in range(14)]
+    closes = [100.5 + i for i in range(14)]
+    sma5 = [None] * 4 + [sum(closes[i - 4:i + 1]) / 5 for i in range(4, 14)]
+    x = load(tmp_path, text(days, {"tv|sma:5|": cells(sma5)}))
+    hb = tp.tv_bars(x)
+    hb.insert(7, bar(days[6] + 12 * 3600_000, 100, 1000, 100, 1000))      # a holiday session TradingView folds into bar 6
+    meta, rows = tp.check_export(x, "NQ", hb=hb)
+    r = next(r for r in rows if r["key"] == "sma:5")
+    assert len(meta["tags"]["holiday"]) == 1 and r["math"]["verdict"] == "identical"
+    # the extra bar sits in the next four windows: warm-up after the tagged session, not four late differences
+    assert r["data"]["verdict"] == "warm-up only" and r["data"]["n_diff"] == 4
+
+
+def _inbox(tmp_path, monkeypatch):
+    monkeypatch.setenv(tp.ENV, str(tmp_path / "tvp"))
+    monkeypatch.setattr("homebase.charts.store.TickStore.sessions", lambda self, root: [])    # no archive: math only
+    inbox = tmp_path / "tvp" / "inbox"
+    inbox.mkdir(parents=True)
+    return inbox
+
+
+def test_one_unreadable_csv_is_named_and_left_in_the_inbox_and_the_rest_are_checked(tmp_path, monkeypatch, capsys):
+    inbox = _inbox(tmp_path, monkeypatch)
+    sma2 = [None] + [(100.5 + i - 1 + 100.5 + i) / 2 for i in range(1, 10)]
+    (inbox / "a_good.csv").write_text(text(minutes(10), {"tv|probe|P1": ["1"] * 10, "tv|sma:2|": cells(sma2)}))
+    (inbox / "b_notes.csv").write_text("Date,Value\n2025-10-08,1\n2025-10-09,2\n2025-10-10,3\n")
+    (inbox / "c_midsession.csv").write_text(text(minutes(1)))                # fewer than two bars
+    assert tp.main(["run"]) == 0
+    out = capsys.readouterr().out
+    md = Path(out.strip().splitlines()[-1])
+    assert md.exists() and "| sma:2 |  | 1m | identical" in md.read_text()
+    assert sorted(p.name for p in inbox.iterdir()) == ["b_notes.csv", "c_midsession.csv"]      # still there, to fix and re-run
+    assert "b_notes.csv skipped, left in" in out and "no 'time' column" in out and "c_midsession.csv skipped, left in" in out
+    assert len(list((tmp_path / "tvp" / "exports").glob("*/P1_1m.csv"))) == 1
+
+
+def test_a_run_where_no_csv_can_be_read_writes_no_report(tmp_path, monkeypatch):
+    inbox = _inbox(tmp_path, monkeypatch)
+    (inbox / "b_notes.csv").write_text("Date,Value\n1,1\n2,2\n3,3\n")
+    with pytest.raises(SystemExit):
+        tp.main(["run"])
+    assert (inbox / "b_notes.csv").exists() and not (tmp_path / "tvp" / "reports").exists()
+
+
+# ------------------------------------------------------------------ the P1 probes end to end
+def walk_csv(bars, extra):
+    """CSV text in TradingView's shape from Bars, plus `extra` {title: [values]}: ten decimals, None is na."""
+    rows = [",".join(["time", "open", "high", "low", "close", "Volume", *extra])]
+    for i, b in enumerate(bars):
+        rows.append(",".join([str(b.t // 1000), *(f"{x:.10f}" for x in (b.o, b.h, b.l, b.c)), str(b.v),
+                              *("" if extra[k][i] is None else f"{extra[k][i]:.10f}" for k in extra)]))
+    return "\n".join(rows) + "\n"
+
+
+def ref_vwap(bars, period):
+    """ta.vwap(hlc3) and its first band's width, restarting when `period(session date)` changes."""
+    out, acc = [], {}
+    for b in bars:
+        k = period(dt.date.fromisoformat(b.session))
+        pv, p2v, v = acc.get(k, (0.0, 0.0, 0))
+        p = (b.h + b.l + b.c) / 3
+        pv, p2v, v = pv + p * b.v, p2v + p * p * b.v, v + b.v
+        acc = {k: (pv, p2v, v)}
+        vw = pv / v
+        out.append((vw, math.sqrt(max(p2v / v - vw * vw, 0.0))))
+    return out
+
+
+def test_the_p1_keltner_supertrend_and_vwap_probes_pass_math_and_data_end_to_end(tmp_path):
+    bars = walk(per=60)
+    for b in bars:                                  # the file's ten decimals, so the reference sees the doubles the harness reads
+        b.o, b.h, b.l, b.c = (round(x, 10) for x in (b.o, b.h, b.l, b.c))
+    mid, band = ref_ema([b.c for b in bars], 20), ref_rma(ref_tr(bars, True), 20)       # Pine: ema +/- 1.5 x ta.atr(20)
+    line = [None if v is None else v["line"] for v in tp.run("tv:supertrend:10:3", bars)]
+    cols = {"tv|probe|P1": [1.0] * len(bars),
+            "tv|keltner:20:20:1.5|mid": mid,
+            "tv|keltner:20:20:1.5|up": [None if m is None or w is None else m + 1.5 * w for m, w in zip(mid, band)],
+            "tv|keltner:20:20:1.5|dn": [None if m is None or w is None else m - 1.5 * w for m, w in zip(mid, band)],
+            "tv|supertrend:10:3|line": line,
+            # Pine's sign: -1 while the line is the lower band under the close, 1 while it is the upper band over it
+            "tv|supertrend:10:3|dir": [None if ln is None else -1.0 if ln < b.c else 1.0 for ln, b in zip(line, bars)]}
+    for key, period in (("vwap", lambda d: d), ("vwap:week", lambda d: d.isocalendar()[:2])):
+        v = ref_vwap(bars, period)
+        cols[f"tv|{key}|vwap"] = [a for a, _ in v]
+        cols[f"tv|{key}|sd"] = [sd for _, sd in v]                         # P1 plots vwUp - vw
+    x = load(tmp_path, walk_csv(bars, cols))
+    meta, rows = tp.check_export(x, "NQ", hb=tp.tv_bars(x))
+    by = {(r["key"], r["field"]): r for r in rows}
+    assert len(by) >= 12 and meta["classes"] == {"same": len(bars), "extra": 0}
+    for k, r in by.items():
+        if k[0] in tp.NO_TV:
+            continue
+        assert r["math"]["verdict"] == "identical" and r["data"]["verdict"] == "identical", (k, r)
+        assert r["tv_key"].startswith("tv:") and r["math"]["n"] > 0, (k, r)
+    assert by[("keltner:20:20:1.5", "up")]["tv_key"] == "tv:keltner:20:1.5:20"
+    # the house study says +1 for up: with the sign flipped for it, its supertrend differs only while warming up
+    assert by[("supertrend:10:3", "dir")]["house"]["verdict"] in ("identical", "warm-up only")
+
+
+def test_the_p1_pine_titles_are_house_keys_and_supertrend_plots_pines_own_sign():
+    pine = Path(repo_root(), "tools", "pine")
+    keys = {m.group(1) for f in pine.glob("*.pine") for m in re.finditer(r'plot\([^\n]*"tv\|([^|"]+)\|', f.read_text())}
+    keys -= {"probe", "vol", "fp"}
+    assert "keltner:20:20:1.5" in keys
+    for k in keys:
+        make(k)                                    # a title is a house key, in the house order
+        tp.tv_key(k)                               # and reaches its tv: study without a truncated argument
+    p1 = (pine / "hb_parity_p1.pine").read_text()
+    assert 'plot(stDir, "tv|supertrend:10:3|dir"' in p1 and "-stDir" not in p1       # tv:supertrend keeps Pine's sign
 
 
 # ------------------------------------------------------------------ the owner's exports (never in CI)

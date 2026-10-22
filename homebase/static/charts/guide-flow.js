@@ -347,6 +347,7 @@ G.add({
       'Delta is buys minus sells. Delta % is that delta as a share of the candle\'s volume.',
       'Max and min delta: the highest and lowest the running delta reached inside the candle.',
       'Trades counts prints, not contracts. Seconds is how long the candle lasted.',
+      'On tick, volume and range charts Seconds runs to the next candle, and is blank across a session break.',
       'A candle that closed far from its max delta gave back part of its push.',
     ],
     use: [

@@ -295,17 +295,19 @@ function valueAreaV2(rows, pct, method = 'homebase', tick) {
 
 /* Naked POCs among bars[i0..i1] (Exocharts "naked POC", MotiveWave's naked POC): a bar's POC (its busiest 1-tick row, ties -> the lowest) that no
    LATER bar's range [low, high] has reached yet. Differs: "traded through" is read from the later bar's range, not its rows. Needs `fp`.
-   -> [{i, price, vol}]. */
-function nakedPocs(bars, i0 = 0, i1 = bars.length - 1) {
+   `touched` true: the POCs a later bar did reach come too, each with `hit` = that first bar's index (null while naked), so the line can be drawn up
+   to it. -> [{i, price, vol}] (touched: + hit). */
+function nakedPocs(bars, i0 = 0, i1 = bars.length - 1, touched = false) {
   const out = [];
   for (let i = Math.max(i0, 0); i <= Math.min(i1, bars.length - 1); i++) {
     const b = bars[i];
     if (!solid(b) || !Array.isArray(b.fp) || !b.fp.length) continue;
     let poc = b.fp[0], best = poc[1] + poc[2];
     for (const r of b.fp) { const v = r[1] + r[2]; if (v > best || (v === best && r[0] < poc[0])) { poc = r; best = v; } }
-    let hit = false;
-    for (let j = i + 1; j < bars.length && !hit; j++) hit = solid(bars[j]) && bars[j].l <= poc[0] && poc[0] <= bars[j].h;
-    if (!hit) out.push({ i, price: poc[0], vol: best });
+    let hit = null;
+    for (let j = i + 1; j < bars.length && hit == null; j++) if (solid(bars[j]) && bars[j].l <= poc[0] && poc[0] <= bars[j].h) hit = j;
+    if (hit != null && !touched) continue;
+    out.push(touched ? { i, price: poc[0], vol: best, hit } : { i, price: poc[0], vol: best });
   }
   return out;
 }
@@ -448,15 +450,16 @@ function mwAbsorptions(bars, i0, i1, o = {}) {
     if (!solid(b) || !Array.isArray(b.fp) || !b.fp.length) continue;
     const { rows } = imbalancesV2(b.fp, { stack: 0, ...o.imb, tick });
     const top = rows.filter((r) => r.buy).pop(), bot = rows.find((r) => r.sell);
+    // tick keys, not float prices: 2000.3 - 4 * 0.1 is 1999.8999999999999, so a close of 1999.9 (exactly 4 ticks) would miss
     for (let j = i; j <= Math.min(i + w, bars.length - 1); j++) {
       const x = bars[j];
       if (!solid(x)) continue;
-      if (top && x.c <= top.price - n * tick) { out.push({ i, j, dir: -1, price: top.price }); break; }
+      if (top && key(top.price, tick) - key(x.c, tick) >= n) { out.push({ i, j, dir: -1, price: top.price }); break; }
     }
     for (let j = i; j <= Math.min(i + w, bars.length - 1); j++) {
       const x = bars[j];
       if (!solid(x)) continue;
-      if (bot && x.c >= bot.price + n * tick) { out.push({ i, j, dir: 1, price: bot.price }); break; }
+      if (bot && key(x.c, tick) - key(bot.price, tick) >= n) { out.push({ i, j, dir: 1, price: bot.price }); break; }
     }
   }
   return out;

@@ -221,8 +221,8 @@ test('footprint: the new options are dropdowns and number boxes at today\'s valu
 const later = () => new Promise((r) => setTimeout(r, 0));
 const LIST = [{ name: 'a.pine', title: 'Alpha', kind: 'indicator', version: 5 }, { name: 'b.pine', title: null, kind: 'strategy', version: 5 }];
 const META = { inputs: [
-  { id: 'in_0', title: 'Length', type: 'int', defval: 14, minval: 1, maxval: 100, step: 2 },
-  { id: 'in_1', title: 'Mult', type: 'float', defval: 1.5 },
+  { id: 'in_0', varId: 'len', title: 'Length', type: 'int', defval: 14, minval: 1, maxval: 100, step: 2 },
+  { id: 'in_1', varId: 'mult', title: 'Mult', type: 'float', defval: 1.5 },
   { id: 'in_2', title: 'Flag', type: 'bool', defval: true },
   { id: 'in_3', title: 'Kind', type: 'string', defval: 'EMA', options: ['SMA', 'EMA'] },
   { id: 'in_4', title: 'Label', type: 'string', defval: 'x' },
@@ -280,12 +280,12 @@ test('pine: one row per input of the script, each as the kind of control its typ
   assert.deepEqual(inputOf(box, 'Step').children.map((o) => o.value), ['1', '2', '3']);
 });
 
-test('pine: a changed input is stored by its title and reaches the chart; put back to the script\'s own value it is dropped, and the last one takes the key with it', () => {
+test('pine: a changed input is stored by its variable name (its title when none shares it, else its id) and reaches the chart; put back to the script\'s own value it is dropped, and the last one takes the key with it', () => {
   const { box, params } = openPine();
   const len = inputOf(box, 'Length');
   len.value = '30';
   len.oninput();
-  assert.deepEqual(params().inputs, { Length: 30 });
+  assert.deepEqual(params().inputs, { len: 30 });
   const flag = inputOf(box, 'Flag');
   flag.checked = false;
   flag.onchange();
@@ -301,11 +301,11 @@ test('pine: a changed input is stored by its title and reaches the chart; put ba
   inputOf(box, 'Label').oninput();
   inputOf(box, 'Col').value = '#00ff00';
   inputOf(box, 'Col').oninput();
-  assert.deepEqual(params().inputs, { Length: 30, Flag: false, Kind: 'SMA', Step: 3, Mult: 2.25, Label: 'hello', Col: '#00ff00' }, 'a number option stays a number');
+  assert.deepEqual(params().inputs, { len: 30, Flag: false, Kind: 'SMA', Step: 3, mult: 2.25, Label: 'hello', Col: '#00ff00' }, 'a number option stays a number');
   len.value = '14'; len.oninput();
-  assert.ok(!('Length' in params().inputs));
+  assert.ok(!('len' in params().inputs));
   len.value = ''; len.oninput();
-  assert.ok(!('Length' in params().inputs), 'an empty box is not a value');
+  assert.ok(!('len' in params().inputs), 'an empty box is not a value');
   flag.checked = true; flag.onchange();
   kind.value = 'EMA'; kind.onchange();
   step.value = '2'; step.onchange();
@@ -314,6 +314,61 @@ test('pine: a changed input is stored by its title and reaches the chart; put ba
   assert.deepEqual(params().inputs, { Col: '#00ff00' }, 'everything put back is gone');
   inputOf(box, 'Col').value = '#F23645'; inputOf(box, 'Col').oninput();
   assert.deepEqual(Object.keys(params().inputs), ['Col'], 'a colour can only be picked, not put back: it stays');
+});
+
+/* Two inputs of one title (the same "Length" under two groups): two rows, two keys. */
+const TWIN = { inputs: [
+  { id: 'in_0', varId: 'a', title: 'Length', type: 'int', defval: 3, group: 'Fast' },
+  { id: 'in_1', varId: 'b', title: 'Length', type: 'int', defval: 10, group: 'Slow' }], title: 'T', error: null, running: false };
+const rowsOf = (box, label) => find(box, (n) => n._class === 'field').filter((f) => f.children[0] && f.children[0]._text === label).map((f) => f.children[1]);
+const type = (ctl, v) => { ctl.value = String(v); ctl.oninput(); };
+
+test('pine: two inputs with one title are two rows with their own keys; setting one leaves the other (and its default) alone', () => {
+  const { box, params } = openPine({ script: 'a.pine' }, TWIN);
+  const [fast, slow] = rowsOf(box, 'Length');
+  assert.deepEqual([fast.value, slow.value], ['3', '10']);
+  type(fast, 5);
+  assert.deepEqual(params().inputs, { a: 5 });
+  assert.equal(slow.value, '10', 'the other row still reads its own default');
+  type(slow, 20);
+  assert.deepEqual(params().inputs, { a: 5, b: 20 });
+  type(slow, 10);
+  assert.deepEqual(params().inputs, { a: 5 }, 'the second put back to its default takes only its own key');
+  type(fast, 3);
+  assert.ok(!('inputs' in params()));
+});
+
+test('pine: an old save keyed by title keeps working; its value moves to the input\'s own key and the title key goes', () => {
+  const { box, params } = openPine({ script: 'a.pine', inputs: { Length: 20, Mult: 2, Gone: 1 } });
+  assert.equal(inputOf(box, 'Length').value, '20', 'read by title');
+  assert.equal(inputOf(box, 'Mult').value, '2');
+  inputOf(box, 'Flag').checked = false;
+  inputOf(box, 'Flag').onchange();
+  assert.deepEqual(params().inputs, { len: 20, mult: 2, Gone: 1, Flag: false }, 'a title of no input of this script is left as it was');
+  type(inputOf(box, 'Length'), 14);
+  assert.ok(!('len' in params().inputs) && !('Length' in params().inputs), 'put back to the default: gone for good');
+  const twin = openPine({ script: 'a.pine', inputs: { Length: 7 } }, TWIN);
+  const [fast, slow] = rowsOf(twin.box, 'Length');
+  assert.deepEqual([fast.value, slow.value], ['7', '7'], 'both rows showed it before, both keep it');
+  type(fast, 5);
+  assert.deepEqual(twin.params().inputs, { a: 5, b: 7 });
+});
+
+test('pine: a save stays on its input when the script gains an input before it (no varId: the title is the key, not the position)', () => {
+  const { box, params, cell } = openPine({ script: 'a.pine' });
+  inputOf(box, 'Flag').checked = false;
+  inputOf(box, 'Flag').onchange();
+  assert.deepEqual(params().inputs, { Flag: false });
+  const grown = { ...META, inputs: [{ id: 'in_0', title: 'Fresh', type: 'bool', defval: true }, ...META.inputs.map((x) => ({ ...x, id: 'in_' + (+x.id.slice(3) + 1) }))] };
+  cell.meta = grown;
+  cell.onPineMeta('p');
+  assert.equal(inputOf(box, 'Flag').checked, false, 'still on Flag');
+  assert.equal(inputOf(box, 'Fresh').checked, true, 'the new first input reads its own default');
+  assert.deepEqual(params().inputs, { Flag: false });
+  const clash = { inputs: [{ id: 'in_0', title: 'in_1', type: 'int', defval: 1 }, { id: 'in_1', title: 'Other', type: 'int', defval: 2 }], title: 'C', error: null, running: false };
+  const o = openPine({ script: 'a.pine' }, clash);
+  type(inputOf(o.box, 'in_1'), 5);
+  assert.deepEqual(o.params().inputs, { in_0: 5 }, 'a title that is another input\'s id is not used as a key');
 });
 
 test('pine: the inputs block is drawn again when the script\'s inputs or error change, not on each run (a number being typed keeps its box)', () => {

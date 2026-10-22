@@ -279,19 +279,19 @@ class Overlay {
     });
   }
 
-  /* Naked POCs (Exocharts / MotiveWave): from each bar whose POC no later bar has traded back to, a dashed line to the right edge. The scan starts 500
-     bars left of the view so a line from before it still crosses it; the forming bar's own POC is the footprint's. */
+  /* Naked POCs (Exocharts / MotiveWave): from each bar's POC a dashed line to the first later bar that traded back to it, or to the right edge while none
+     has. The scan starts 500 bars left of the view so a line from before it still crosses it; the forming bar's own POC is the footprint's. */
   drawNaked(target) {
     if (!inst(this.cell, 'npoc')) return;
     const f = this.frame();
     if (!f) return;
-    const list = M.nakedPocs(f.bars, Math.max(0, f.i0 - 500), Math.min(f.i1, f.bars.length - 2));
+    const list = M.nakedPocs(f.bars, Math.max(0, f.i0 - 500), Math.min(f.i1, f.bars.length - 2), true);
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.strokeStyle = f.P.poc || '#f2a900'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
       for (const r of list) {
-        const x = f.XI(r.i), y = f.series.priceToCoordinate(r.price);
-        if (x == null || y == null || x > mediaSize.width) continue;
-        ctx.beginPath(); ctx.moveTo(Math.max(0, x), y); ctx.lineTo(mediaSize.width, y); ctx.stroke();
+        const x = f.XI(r.i), y = f.series.priceToCoordinate(r.price), x1 = r.hit == null ? mediaSize.width : f.XI(r.hit);
+        if (x == null || y == null || x1 == null || x > mediaSize.width || x1 < 0) continue;
+        ctx.beginPath(); ctx.moveTo(Math.max(0, x), y); ctx.lineTo(Math.min(mediaSize.width, x1), y); ctx.stroke();
       }
       ctx.setLineDash([]);
     });
@@ -371,7 +371,10 @@ class Overlay {
       for (let i = f.i0; i <= f.i1; i++) {
         const b = f.bars[i], x = f.XI(i);
         if (b.blank || x == null || x - sp / 2 < LW || x > mediaSize.width) continue;
-        const c = M.clusterStats(b, i + 1 < f.bars.length ? f.bars[i + 1].ms : barMs ? b.ms + barMs : null);
+        // A time bar lasts at most its length (the next stored bar can be a quiet stretch, the 17:00 hour or a weekend away). A tick / volume / range
+        // bar runs to the next bar's start, blank across a session break. shortcut: that includes a quiet gap inside a session, exact once a bar carries its end.
+        const nx = f.bars[i + 1];
+        const c = M.clusterStats(b, barMs ? Math.min(nx ? nx.ms : Infinity, b.ms + barMs) : nx && nx.s === b.s ? nx.ms : null);
         const cells = [[num(c.delta), c.delta > 0 ? f.P.up : c.delta < 0 ? f.P.down : null], [num(c.volume)], [num(c.trades)],
           [c.deltaPct == null ? '' : `${(100 * c.deltaPct).toFixed(1)}%`, c.deltaPct > 0 ? f.P.up : c.deltaPct < 0 ? f.P.down : null],
           [num(c.maxDelta), f.P.up], [num(c.minDelta), f.P.down], [c.duration == null ? '' : String(+(c.duration / 1000).toFixed(1))]];

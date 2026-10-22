@@ -70,17 +70,19 @@ test('flow layer: big trades keep to the size window and side, and cluster insid
   r.o.destroy();
 });
 
-test('flow layer: a naked POC is a dashed line from its bar to the right edge, until a later bar trades through it', () => {
+test('flow layer: a POC line runs from its bar to the bar that trades back to it, or to the right edge while none has', () => {
   const bars = [100, 102, 104, 106, 108].map((p, i) => bar(i, { l: p, h: p + 1, fp: [[p, 3, 3], [p + 1, 1, 1]] }));
   bars.push(bar(5, { l: 100, h: 110, fp: [[100, 5, 5]] }), bar(6, { l: 112, h: 113, fp: [[112, 2, 2]] }), bar(7, { l: 114, h: 115, fp: [[114, 2, 2]] }));
   const r = rig([], bars);
   r.cell.cfg.indicators.push(r.ind('npoc'));
   r.o.onIndicators();
   const log = r.draw(r.o.npoc);
-  const m = log.filter((c) => c[0] === 'moveTo');
-  assert.deepEqual(m.map((c) => c[2]), [yOf(100), yOf(112)]);      // bar 5 (the 100 again) and bar 6; the forming bar's own POC is the footprint's
-  assert.deepEqual(m.map((c) => c[1]), [500, 600]);
-  assert.ok(log.filter((c) => c[0] === 'lineTo').every((c) => c[1] === 2000));
+  const m = log.filter((c) => c[0] === 'moveTo'), to = log.filter((c) => c[0] === 'lineTo');
+  // bars 0-4: their POC (100 .. 108) is inside bar 5's range, so each line ends at bar 5 (x 500); bar 5's own 100 and bar 6's 112 are still naked: to the edge.
+  // The forming bar 7's own POC is the footprint's.
+  assert.deepEqual(m.map((c) => c[2]), [100, 102, 104, 106, 108, 100, 112].map(yOf));
+  assert.deepEqual(m.map((c) => c[1]), [0, 100, 200, 300, 400, 500, 600]);
+  assert.deepEqual(to.map((c) => c[1]), [500, 500, 500, 500, 500, 2000, 2000]);
   r.cell.cfg.indicators[0].visible = false;
   r.o.onIndicators();
   assert.equal(r.o.npoc, null);
@@ -137,6 +139,31 @@ test('flow layer: the statistics strip writes seven figures a bar, and goes away
   narrow.o.onIndicators();
   assert.equal(narrow.draw(narrow.o.stat).length, 0);
   narrow.o.destroy();
+});
+
+test('flow layer: Seconds on a time chart is the candle\'s own length, never the gap to the next stored bar', () => {
+  const HOUR = 3_600_000, WEEKEND = 176_460_000;                      // a quiet stretch, then Fri 16:59 -> Sun 18:00
+  const ms = [0, BAR, 2 * BAR, 3 * BAR + HOUR, 4 * BAR + HOUR + WEEKEND, 5 * BAR + HOUR + WEEKEND];
+  const bars = ms.map((t, i) => bar(i, { ms: T0 + t, d: 10, v: 100, n: 40, dmax: 50, dmin: -5 }));
+  const r = rig([], bars);
+  r.cell.cfg.indicators.push(r.ind('cstat'));
+  r.o.onIndicators();
+  const t = texts(r.draw(r.o.stat));
+  r.o.destroy();
+  assert.equal(t.length, 7 + 7 * 4);                                  // bars 0, 1 sit under the label column
+  assert.deepEqual([13, 20, 27, 34].map((k) => t[k]), ['900', '900', '900', '900']);   // the quiet stretch, the weekend, a normal next bar, the forming last bar
+});
+
+test('flow layer: Seconds on a tick / volume / range chart runs to the next bar\'s start, and stays blank across a session break', () => {
+  const at = [[0, 'a'], [1000, 'a'], [20_000, 'a'], [27_000, 'a'], [90_000_000, 'b'], [90_004_000, 'b']];
+  const bars = at.map(([t, s], i) => bar(i, { ms: T0 + t, s, d: 10, v: 100, n: 40, dmax: 50, dmin: -5 }));
+  const r = rig([], bars);
+  r.cell.isTime = () => false; r.cell.barMs = () => 0;
+  r.cell.cfg.indicators.push(r.ind('cstat'));
+  r.o.onIndicators();
+  const t = texts(r.draw(r.o.stat));
+  r.o.destroy();
+  assert.deepEqual([13, 20, 27, 34].map((k) => t[k]), ['7', '', '4', '']);   // bar 2 -> 3 in one session; 3 -> 4 over a session break; 4 -> 5; the forming last bar
 });
 
 test('flow layer: delta turnaround and strength arrows and an absorption line, each only while its indicator is on', () => {

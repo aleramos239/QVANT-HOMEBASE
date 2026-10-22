@@ -7,7 +7,7 @@
 
     GET /api/pine/runtime.js        the runtime file, only when its sha256 is the pinned build (404 otherwise)
     GET /api/pine/scripts           [{name, version, kind, title}] read from each script's header
-    GET /api/pine/scripts/{name}    the script's text; a name outside the folder is 404
+    GET /api/pine/scripts/{name}    the script's text; a name outside the folder, or a file with no //@version line, is 404
 
 The server computes nothing for Pine: the Worker (static/charts/pineworker.js) runs the script in the page.
 routes() is registered by server.py."""
@@ -26,8 +26,11 @@ from .tester_api import host_ok
 ENV = "HOMEBASE_PINE_DIR"
 RUNTIME_VERSION = "0.12.1"
 RUNTIME_SHA256 = "45e7a7ed89a5796db4b8cb1e215e74bb1d30d7614d514818dccc752396dd2b37"
-NAME_RE = re.compile(r"^[\w .-]+\.pine$")
-_VERSION_RE = re.compile(r"^\s*//@version\s*=\s*(\d+)", re.M)
+# catalog.js PINE_NAME mirrors this rule (same 255-character cap): change both together. The lookahead also refuses a trailing newline.
+NAME_RE = re.compile(r"^(?=.{1,255}\Z)[\w .-]+\.pine$")
+# The runtime's own marker test (PineTS): a source it finds no //@version in is run as raw JavaScript, so such a file is never
+# listed or served. Same pattern as the runtime's; re.A so a non-ASCII digit does not count.
+_VERSION_RE = re.compile(r"^\s*//\s*@version\s*=\s*(\d+)\s*$", re.M | re.I | re.A)
 _HEAD_RE = re.compile(r"^\s*(indicator|strategy|study)\s*\(\s*(?:title\s*=\s*)?([\"'])(.*?)\2", re.M)
 
 
@@ -53,15 +56,23 @@ def script_meta(name: str, text: str) -> dict:
             "kind": "indicator" if kind == "study" else kind, "title": h.group(3) if h else None}
 
 
+def read_script(p: Path) -> str:
+    return p.read_text(encoding="utf-8-sig", errors="replace")   # a BOM is not part of the script: the runtime's tokenizer refuses it
+
+
 def list_scripts() -> list[dict]:
     d = scripts_dir()
     out = []
     for p in sorted(d.glob("*.pine")) if d.is_dir() else []:
-        if NAME_RE.match(p.name) and p.is_file():
-            try:
-                out.append(script_meta(p.name, p.read_text(encoding="utf-8", errors="replace")))
-            except OSError:
-                continue
+        q = script_path(p.name)   # the GET's own check: a link out of the folder is neither listed nor read
+        if q is None:
+            continue
+        try:
+            meta = script_meta(p.name, read_script(q))
+        except OSError:
+            continue
+        if meta["version"] is not None:
+            out.append(meta)
     return out
 
 
@@ -70,7 +81,10 @@ def script_path(name: str) -> Path | None:
     if not NAME_RE.match(name):
         return None
     d = scripts_dir().resolve()
-    p = (d / name).resolve()
+    try:
+        p = (d / name).resolve()
+    except (OSError, RuntimeError):   # a symlink loop (RuntimeError before Python 3.13)
+        return None
     if p.parent != d or not p.is_file():
         return None
     return p
@@ -99,6 +113,9 @@ def routes() -> APIRouter:
         p = script_path(name)
         if p is None:
             raise HTTPException(404, "no such script")
-        return PlainTextResponse(p.read_text(encoding="utf-8", errors="replace"))
+        text = read_script(p)
+        if script_meta(name, text)["version"] is None:
+            raise HTTPException(404, "not a Pine script: it has no //@version=5 or //@version=6 line")
+        return PlainTextResponse(text)
 
     return r
