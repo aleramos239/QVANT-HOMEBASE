@@ -313,3 +313,13 @@ def test_make_bounds_lengths_and_rejects_extra_parameters():
         with pytest.raises(ValueError):
             make(bad)
     assert make("sma:1").n == 1 and make("ema:1000").n == 1000 and make("adx").n == 14
+
+
+def test_a_marker_study_takes_no_timeframe():
+    """tv:pivothl / tv:fractals draw a mark `right` / `n` CHART bars back from the bar that proves a pivot; on a longer bar HTF repeats the
+    value on every chart bar of the developing bar, so the marks stacked in the wrong place. The other tv studies still take '@'."""
+    for bad in ("tv:pivothl:3:3@300", "tv:fractals:2@300", "tv:pivothl@300"):
+        with pytest.raises(ValueError, match="no timeframe"):
+            make(bad)
+    assert make("tv:pivothl:3:3") and make("tv:fractals:2")
+    assert make("tv:sma:9:close@300") and make("tv:rsi:14:close@3600")

@@ -95,3 +95,16 @@ def test_a_torn_file_reads_back_as_empty_never_crashes(tmp_path):
     assert store.list("drawing:trend") == {}
     store.put("drawing:trend", "A", {"width": 1})   # writes clean over the torn file
     assert json.loads(p.read_text()) == {"drawing:trend": {"A": {"width": 1}}}
+
+
+def test_defaults_gathers_one_familys_default_presets(tmp_path):
+    store = PresetsStore(tmp_path / "presets.json")
+    store.put("indicator:rsi", DEFAULT_NAME, {"params": {"length": 9}})
+    store.put("indicator:rsi", "Fast", {"params": {"length": 5}})
+    store.put("indicator:ema", "Slow", {"params": {"length": 200}})
+    store.put("drawing:trend", DEFAULT_NAME, {"width": 4})
+    assert store.defaults("indicator") == {"rsi": {"params": {"length": 9}}}
+    assert store.defaults("drawing") == {"trend": {"width": 4}}
+    assert PresetsStore(tmp_path / "none.json").defaults("indicator") == {}
+    with pytest.raises(ValueError):
+        store.defaults("sticker")

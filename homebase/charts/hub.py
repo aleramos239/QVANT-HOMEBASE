@@ -33,10 +33,11 @@ from types import SimpleNamespace
 from ..contracts import point_value, tick_size
 from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
-from .session import session_date
+from .session import always_open, session_date
 from .studies import Profile, make
 from .studies_flow import NAMES as FLOW_NAMES, SMT_PARTNER, warm_flow
 from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
+from .studies_tv import prime_tv, warm_tv
 from .tick import BUY, SideClassifier, Tick, from_row
 
 HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
@@ -64,13 +65,17 @@ def sessions_back(spec: BarSpec) -> int:
 def warm_bars(key: str) -> int:
     """How many bars after a join a study's value still depends on the bars before it: a window's length, or
     long enough for an EMA's (5n) / a Wilder ADX's (10n) memory to fade below e^-10. 0: the study restarts on
-    its own anchor (VWAP, cumulative delta, levels). Reads only the length token (index 1): an sma/ema key may
-    carry a third `:source` token, which never changes the window length."""
+    its own anchor (session VWAP, per-session cumulative delta, levels), so a join leaves nothing to repair. A
+    running sum that never restarts (tv obv / pvt / adl / nvi / pvi) is NOT 0: no finite number makes it exact, it
+    declares what it wants repaired and older() clamps the span at HISTORY_MAX. Reads only the length token
+    (index 1): an sma/ema key may carry a third `:source` token, which never changes the window length."""
     base, _, tf = str(key).partition("@")
     if tf.isdecimal():       # on a longer timeframe: the same count of ITS bars, each up to tf/60 one-minute chart bars
         return min(HISTORY_MAX, warm_bars(base) * max(1, int(tf) // 60))
     name, *rest = base.split(":")
     n = int(rest[0]) if rest and rest[0].isdecimal() else 0
+    if name == "tv" and rest:
+        return warm_tv(rest[0], rest[1:])
     if name in TA_NAMES:
         return warm_ta(name, rest)
     if name in FLOW_NAMES:
@@ -78,12 +83,18 @@ def warm_bars(key: str) -> int:
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 
-def prime_sessions(key: str) -> int:
-    """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars)."""
+def prime_sessions(key: str, root: str | None = None) -> int:
+    """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars). `root`: a
+    24/7 root's weeks and months hold more sessions than a classic root's (tv:vwap, wk, mo): those ask for more."""
     base, _, tf = str(key).partition("@")
-    if tf.isdecimal():       # the sessions its higher bars need to settle (a trading day is ~23 h), at most 60
-        return min(60, 1 + -(-warm_bars(base) * int(tf) // 82800))
+    if tf.isdecimal():       # the sessions its higher bars need to settle (a trading day is ~23 h), at most 60; and the
+        # sessions the inner study reads itself (tv adr / rvol), which the higher bars do not shorten
+        return max(min(60, 1 + -(-warm_bars(base) * int(tf) // 82800)), prime_sessions(base, root))
     name, *rest = base.split(":")
+    if name == "tv" and rest:
+        return prime_tv(rest[0], rest[1:], root)
+    if name in ("wk", "mo") and always_open(root):    # the finished week (7) / month (31) + the 6 / 30 sessions of this one
+        return 13 if name == "wk" else 61             # before the chart (prime_ta's 11 / 45: 5 + 4 + 2, 23 + 22)
     return prime_ta(name, rest) if name in TA_NAMES else 0
 
 
@@ -139,7 +150,7 @@ class Stream:
         st = make(key, self.tick_size)
         if hasattr(st, "peer"):
             st.peer = self.peer
-        if prime_sessions(key):
+        if prime_sessions(key, self.root):
             for b in self.prime:      # earlier sessions: the study's memory, not part of this chart
                 st.push(b)
         self.studies[key] = st
@@ -361,25 +372,30 @@ class Hub:
 
     def ensure_prime(self, s: "Stream", keys) -> None:
         """Worker thread: a study added to a stream that already exists may read more sessions than were primed."""
-        if any(k not in s.studies and prime_sessions(k) > s.prime_n for k in keys):
+        if any(k not in s.studies and prime_sessions(k, s.root) > s.prime_n for k in keys):
             self._prime(s, s.root, s.spec, self.today_date.get(s.root) or session_date(self.now_ms(), s.root), keys)
 
     def _prime(self, s: "Stream", root: str, spec: BarSpec, today, keys) -> None:
         """Worker thread: load the sessions before the stream's first bar that the studies in `keys` read
         (prime_sessions) -- only those not already there. Bounded by BUILD_BUDGET_S like a subscribe; a session
         left out just leaves that study's first values empty."""
-        need = max((prime_sessions(k) for k in keys if k not in s.studies), default=0)
+        need = max((prime_sessions(k, root) for k in keys if k not in s.studies), default=0)
         if need <= s.prime_n:
             return
         first = s.sessions[0]["date"] if s.sessions else today.isoformat()
-        older = [d for d in self.store.sessions(root) if d.isoformat() < str(first)][-need:]
+        s.prime = self._prior(root, spec, [d for d in self.store.sessions(root) if d.isoformat() < str(first)], need)
+        s.prime_n = need
+
+    def _prior(self, root: str, spec: BarSpec, dates: list, need: int) -> list[Bar]:
+        """Worker thread: the bars of the last `need` of `dates` (ascending), oldest first, never memoized. Bounded by
+        BUILD_BUDGET_S of its own; a cutoff drops the oldest sessions."""
         got, t0 = [], time.monotonic()
         with self.store.listing():
-            for d in reversed(older):                # newest first, so a budget cutoff drops the oldest
+            for d in reversed(dates[-need:]):        # newest first, so a budget cutoff drops the oldest
                 got[:0] = self.history.bars(root, spec, d, memo=False)
                 if time.monotonic() - t0 > BUILD_BUDGET_S:
                     break
-        s.prime, s.prime_n = got, need
+        return got
 
     def _minutes(self, root: str, tape: list, ts: float) -> tuple[int, list[Bar]] | None:
         """Worker thread: (ticks covered, today's 1-minute bars over them, the last one a copy of the
@@ -476,10 +492,15 @@ class Hub:
         of building sessions that are not already cached -- past it, this stops and answers with the chunk
         so far (done can still be False: the page just asks again for the rest, instead of this call
         blocking the connection on a cold chunk). Built as a history message's bars are, but never
-        memoized. Its studies run over it from a fresh start, as a history message's do, then on across the
-        join through the page's first bars for as long as a study remembers what came before ("repair": the
-        page overwrites those values). done: nothing older is left. Never today's session. fp / big: as
-        the chart's history message (Stream.payload)."""
+        memoized. Its studies run over it from a fresh start, as a history message's do -- a study that reads
+        prior sessions (prime_sessions) is first fed the ones before the chunk, and the older bars of a session
+        the chunk cuts; a study that restarts on its own anchor (warm_bars 0) only the latter, so a session of
+        more than HISTORY_MAX bars stays anchored at its open (one more pass over bars this call has read
+        anyway) -- then on across the join through the page's first bars for as long as a study remembers
+        what came before ("repair": the page overwrites those values). The prior-session read and the repair
+        read each have a BUILD_BUDGET_S of their own (one session at least), so a cold call can take about three.
+        done: nothing older is left. Never today's session. fp / big: as the chart's history message
+        (Stream.payload)."""
         root, spec = s.root, s.spec
         keys = list(s.studies)
         today = self.today_date.get(root) or session_date(self.now_ms(), root)
@@ -490,6 +511,7 @@ class Hub:
         infos: list[dict] = []
         taken, trimmed, i = 0, False, len(back)
         used: list[dt.date] = []        # the sessions the chunk and `ahead` come from: the partner's bars for smt
+        head: list[Bar] = []            # the older bars of a session the chunk cuts: still the studies' memory
         t0 = time.monotonic()
         with self.store.listing():       # one directory read per year folder, not three per session
             while i > 0 and taken < sessions_back(spec) and len(chunk) < HISTORY_MAX:
@@ -501,7 +523,7 @@ class Hub:
                     continue
                 room = HISTORY_MAX - len(chunk)
                 if len(bs) > room:
-                    bs, trimmed = bs[-room:], True
+                    head, bs, trimmed = bs[:-room], bs[-room:], True
                 chunk[:0] = bs
                 used.append(back[i])
                 infos.insert(0, self.history.info(root, back[i]))
@@ -513,8 +535,9 @@ class Hub:
             mid = chunk[-1].session == cut.isoformat()
             rest = [b for b in self.history.bars(root, spec, cut, memo=False) if b.t >= before_ms] if mid else []
             span = min(max(len(rest), max((warm_bars(k) for k in keys), default=0)), HISTORY_MAX)
+            t1 = time.monotonic()        # a study that never forgets asks for HISTORY_MAX bars: bounded like the chunk
             for d in (x for x in dates if x >= cut):
-                if len(ahead) >= span:
+                if len(ahead) >= span or (ahead and time.monotonic() - t1 > BUILD_BUDGET_S):
                     break
                 used.append(d)
                 ahead.extend(b for b in self.history.bars(root, spec, d, memo=False) if b.t >= before_ms)
@@ -524,11 +547,18 @@ class Hub:
             pview = SimpleNamespace(bars=[b for d in sorted(set(used))
                                           for b in self.history.bars(SMT_PARTNER[root], spec, d, memo=False)],
                                     builder=None)
+        need = max((prime_sessions(k, root) for k in keys), default=0)
+        pre = (self._prior(root, spec, [d for d in dates if d < min(used)], need) if chunk and need else []) + head
         studies, repair = {}, {}
         for k in keys:
             st = make(k, s.tick_size)
             if hasattr(st, "peer"):
                 st.peer = pview
+            # the study's memory, as in add_study; a study that restarts on its own anchor (warm_bars 0: session VWAP,
+            # cumulative delta, TWAP) needs only the older bars of a session the chunk cuts: they hold its anchor
+            # (a finite-window study starts fresh: the `ahead` repair covers its join)
+            for b in pre if prime_sessions(k, root) else (head if not warm_bars(k) else ()):
+                st.push(b)
             studies[k] = [st.push(b) for b in chunk]
             repair[k] = [st.push(b) for b in ahead]
         return {"bars": [b.wire(s.tick_size, fp, big, flow) for b in chunk], "studies": studies, "repair": repair,

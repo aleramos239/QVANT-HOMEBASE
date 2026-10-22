@@ -43,12 +43,13 @@ function levelMap(levels, tick) {
 function buildRows(book, tick, centerIdx, opts = {}) {
   const levels = opts.levels > 0 ? opts.levels : LEVELS;
   const volume = opts.volume || null;
+  const ps = opts.ps || null, sales = opts.sales || null;   // 2026-10-21 columns: rows without them stay as they were
   const bids = levelMap(book && book.bids, tick), offers = levelMap(book && book.offers, tick);
   const bestBidIdx = book && Array.isArray(book.bids) && book.bids.length ? tickIndex(book.bids[0][0], tick) : null;
   const bestAskIdx = book && Array.isArray(book.offers) && book.offers.length ? tickIndex(book.offers[0][0], tick) : null;
   const rows = [];
   for (let idx = centerIdx + levels; idx >= centerIdx - levels; idx--) {
-    rows.push({
+    const row = {
       idx,
       price: priceOf(idx, tick),
       bid: bids.has(idx) ? bids.get(idx) : null,
@@ -56,7 +57,10 @@ function buildRows(book, tick, centerIdx, opts = {}) {
       vol: volume ? (volume.has(idx) ? volume.get(idx) : null) : null,
       bestBid: bestBidIdx != null && idx === bestBidIdx,
       bestAsk: bestAskIdx != null && idx === bestAskIdx,
-    });
+    };
+    if (ps) { const p = ps.get(idx); row.psBid = p && p.bid != null ? p.bid : null; row.psAsk = p && p.ask != null ? p.ask : null; }
+    if (sales) { const s = sales.get(idx); row.sold = s ? s[0] : null; row.bought = s ? s[1] : null; }
+    rows.push(row);
   }
   return rows;
 }
@@ -238,9 +242,160 @@ function imbalance(book, n = 10) {
   return { bid, ask, pct, side: pct > 0 ? 'bid' : pct < 0 ? 'ask' : null };
 }
 
+/* ---- 2026-10-21 DOM columns (orderflow.md §7.2): sales at price and net pull/stack since a reset, and Sierra's
+   Recent Bid/Ask. Same discipline as bigLevels: every input explicit, the state threaded through the function's own
+   last return, nothing read off a clock or a module store. ---- */
+
+/* The footprint per tick index split by side, [sellAtBid, buyAtAsk], over bars[from..to) -- the same walk as
+   volumeAtPrice (left as it is: the Vol column keeps its sum), null when no bar in the range carries a footprint. */
+function addFpSplit(m, bar, tick) {
+  for (const row of bar.fp) {
+    if (!Array.isArray(row) || row.length < 3) continue;
+    const idx = tickIndex(row[0], tick);
+    if (idx == null) continue;
+    const e = m.get(idx) || [0, 0];
+    m.set(idx, [e[0] + (Number.isFinite(row[1]) ? row[1] : 0), e[1] + (Number.isFinite(row[2]) ? row[2] : 0)]);
+  }
+}
+function fpSplit(bars, tick, from = 0, to = Array.isArray(bars) ? bars.length : 0) {
+  if (!Array.isArray(bars) || !bars.length) return null;
+  let seen = false;
+  const m = new Map();
+  for (let i = Math.max(0, from); i < Math.min(to, bars.length); i++) {
+    const b = bars[i];
+    if (!b || !Array.isArray(b.fp)) continue;
+    seen = true;
+    addFpSplit(m, b, tick);
+  }
+  return seen ? m : null;
+}
+function withBarSplit(map, bar, tick) {
+  if (!bar || !Array.isArray(bar.fp)) return map;
+  const m = new Map(map || []);
+  addFpSplit(m, bar, tick);
+  return m;
+}
+/* Sold / Bought per price since a reset: the session split now minus the copy taken at the reset (`split0`, null
+   before any reset: the whole session; a price with no copy started at 0). null until the split exists at all. */
+function salesSince(split, split0) {
+  if (!split) return null;
+  const out = new Map();
+  for (const [idx, e] of split) { const z = (split0 && split0.get(idx)) || [0, 0]; out.set(idx, [e[0] - z[0], e[1] - z[1]]); }
+  return out;
+}
+
+/* What the book knows per side: no bid rests above the best bid, and a price between the best and the deepest
+   shown bid that is missing is empty -- so every row from the deepest shown bid up is known (a size, or 0); below it
+   the wire's depth ends and nothing is known. Asks mirror. {bidFrom, askTo}: the deepest shown level's tick index
+   each side, null when that side is empty. */
+function knownRange(book, tick) {
+  const edge = (rows, pick) => { let e = null; for (const idx of levelMap(rows, tick).keys()) if (e == null || pick(idx, e)) e = idx; return e; };
+  return { bidFrom: edge(book && book.bids, (a, b) => a < b), askTo: edge(book && book.offers, (a, b) => a > b) };
+}
+
+/* One side of pullStack. `levels` Map(idx -> size), `old` the side's last base, rows from..to are where new rows
+   start, `known(idx)` says whether the row is inside the side's known range, `best`/`prevBest` its best level now and
+   at the last call, `traded(idx)` what has traded into the side at idx so far. {next: the side's new base, rows:
+   Map(idx -> net change)}. */
+function psSide(levels, old, from, to, known, best, prevBest, traded) {
+  const next = new Map(), rows = new Map();
+  const seed = (idx) => ({ r: levels.get(idx) || 0, f: traded(idx) });
+  for (const [idx, e] of old) if (known(idx)) next.set(idx, e);   // a row leaving the known range is dropped, never read as pulled
+  if (from != null && to != null) for (let idx = from; idx <= to; idx++) if (!next.has(idx)) next.set(idx, seed(idx));
+  if (best != null && best !== prevBest) next.set(best, seed(best));   // Sierra: the best level starts over when the best price moves
+  for (const [idx, e] of next) rows.set(idx, (levels.get(idx) || 0) - e.r + traded(idx) - e.f);
+  return { next, rows };
+}
+
+/* Net pull/stack per side since a reset (Sierra's Pulling/Stacking with "Add Trade Volume"): for a row k,
+   R(k, now) - R(k, t0) + F(k, t0 -> now), R the size resting on that side and F what traded into it (sells at the
+   bid, buys at the ask, from `split`: fpSplit's Map, or null for no footprint), so a level eaten by trades is not
+   read as pulled: 50 -> 40 then 5 traded there = -5. Plus = stacked, minus = pulled. t0 is the reset (`base` null) or
+   the first call k was inside the known range; new rows start between the two deepest shown levels, a row stays
+   tracked until it leaves the known range (knownRange), and the best level starts over at 0 when the best price
+   moves. `base` is this function's own last return. {rows: Map(idx -> {bid, ask}, null for a side that is unknown
+   there -- never 0), base}. */
+function pullStack(base, book, split, tick) {
+  const bids = levelMap(book && book.bids, tick), offers = levelMap(book && book.offers, tick);
+  const { bidFrom, askTo } = knownRange(book, tick);
+  const bestBid = bids.size ? Math.max(...bids.keys()) : null, bestAsk = offers.size ? Math.min(...offers.keys()) : null;
+  const prev = base && typeof base === 'object' ? base : {};
+  const traded = (i) => (idx) => { const e = split && split.get(idx); return e && Number.isFinite(e[i]) ? e[i] : 0; };
+  const b = psSide(bids, prev.bid || new Map(), bidFrom, askTo != null ? askTo : bestBid, (idx) => bidFrom != null && idx >= bidFrom,
+    bestBid, prev.bestBid, traded(0));
+  const a = psSide(offers, prev.ask || new Map(), bidFrom != null ? bidFrom : bestAsk, askTo, (idx) => askTo != null && idx <= askTo,
+    bestAsk, prev.bestAsk, traded(1));
+  const rows = new Map();
+  for (const [idx, v] of b.rows) rows.set(idx, { bid: v, ask: null });
+  for (const [idx, v] of a.rows) { const r = rows.get(idx); if (r) r.ask = v; else rows.set(idx, { bid: null, ask: v }); }
+  return { rows, base: { bid: b.next, ask: a.next, bestBid, bestAsk } };
+}
+
+/* Sierra's Recent Bid/Ask Volume: per price, the volume that traded at the bid (sells) or at the ask (buys) while
+   the market kept trading there. Trading elsewhere and coming back starts the count over -- unless it is back
+   within opts.timeoutMs (default RECENT_TIMEOUT_MS) of the last trade there, then the count goes on: 2 at 1000, 3 at
+   999, back at 1000 within 2500 ms with 1 -> 3; back after 2500 ms -> 1. `prints` are tape rows [ts_ms, price, size,
+   side] in time order, side > 0 a buy at the ask, else a sell at the bid (tick.py's BUY/SELL); opts.tick keys rows
+   by tick index like the ladder (the price itself without it). `state` is this function's own last return, null to
+   start: {bid: Map(idx -> {v, ts}), ask: Map(idx -> {v, ts}), lastBid, lastAsk}. */
+const RECENT_TIMEOUT_MS = 2500;
+function recentTraded(state, prints, opts = {}) {
+  const timeout = opts.timeoutMs >= 0 ? opts.timeoutMs : RECENT_TIMEOUT_MS;
+  const keyOf = (price) => (opts.tick > 0 ? tickIndex(price, opts.tick) : (Number.isFinite(price) ? price : null));
+  const prev = state && typeof state === 'object' ? state : {};
+  const next = { bid: new Map(prev.bid || []), ask: new Map(prev.ask || []),
+    lastBid: prev.lastBid != null ? prev.lastBid : null, lastAsk: prev.lastAsk != null ? prev.lastAsk : null };
+  for (const p of Array.isArray(prints) ? prints : []) {
+    if (!Array.isArray(p) || !Number.isFinite(p[0]) || !Number.isFinite(p[2])) continue;
+    const idx = keyOf(p[1]);
+    if (idx == null) continue;
+    const side = p[3] > 0 ? 'ask' : 'bid', last = side === 'ask' ? 'lastAsk' : 'lastBid';
+    const e = next[side].get(idx);
+    const goesOn = !!e && (next[last] === idx || p[0] - e.ts <= timeout);
+    next[side].set(idx, { v: (goesOn ? e.v : 0) + p[2], ts: p[0] });
+    next[last] = idx;
+  }
+  return next;
+}
+
+/* The ladder's columns in order, and the saved choice of them: `raw` is the localStorage string (a JSON list of the
+   optional ids shown); anything else -- nothing saved, storage off, junk -- is every column (the ladder then
+   shows the ones that fit, fitCols). The fixed three (Bid, Price, Ask) are always shown. */
+const COLS = [
+  { id: 'psb', label: 'P/S bid' }, { id: 'sold', label: 'Sold' }, { id: 'bid', label: 'Bid', fixed: true },
+  { id: 'price', label: 'Price', fixed: true }, { id: 'ask', label: 'Ask', fixed: true }, { id: 'bought', label: 'Bought' },
+  { id: 'psa', label: 'P/S ask' }, { id: 'vol', label: 'Vol' },
+];
+function parseCols(raw) {
+  let on = null;
+  try { const v = JSON.parse(raw); if (Array.isArray(v)) on = v; } catch (_) { /* junk: every column */ }
+  return new Set(COLS.filter((c) => c.fixed || !on || on.includes(c.id)).map((c) => c.id));
+}
+/* The default -- nothing chosen -- for a ladder `width` px wide: the old four columns (Bid, Price, Ask, Vol) always,
+   then Sold / Bought, then the two P/S, each pair only while every track keeps COL_MIN_PX, so no value or header is
+   clipped. A 480px dock (the widest) holds every column; a width that is not a number is every column. */
+const PRICE_MIN_PX = 70;   // the price track's minimum (domui.js applyCols)
+const COL_MIN_PX = 52;     // the narrowest track that shows '-12.35K' and 'Bought' (measured, apple skin)
+/* The row's 10px + 10px side padding, plus 20px of room for a classic scrollbar on the rows. Measured in Chrome with
+   a real 11px and 15px scrollbar: 4 and 6 columns clip nothing; at 8 columns a signed net of 10K or more ('-12.35K',
+   '+12.35K') is 2-4px over with 4px of .dom-c padding a side, so charts.css keeps it at 2px. */
+const ROW_PAD_PX = 40;
+function fitCols(width) {
+  if (typeof width !== 'number' || Number.isNaN(width)) return new Set(COLS.map((c) => c.id));
+  let room = Math.floor((width - ROW_PAD_PX - PRICE_MIN_PX) / COL_MIN_PX) - 3;   // tracks left after Bid, Ask and Vol
+  const on = new Set(['vol']);
+  for (const pair of [['sold', 'bought'], ['psb', 'psa']]) {
+    if (room < 2) break;
+    for (const id of pair) on.add(id);
+    room -= 2;
+  }
+  return new Set(COLS.filter((c) => c.fixed || on.has(c.id)).map((c) => c.id));
+}
+
 const api = { LEVELS, tickIndex, priceOf, buildRows, nextCenter, centerOn, volumeAtPrice, withBar, sessionKey,
   sessionStart, toggleTab, pressed, isRecentreKey, chipTitle,
-  BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, medianOf, fading, imbalance };
+  BIG_WINDOW_MS, BIG_FADE_MS, BIG_CAP, BIG_MULTIPLE, bigLevels, medianOf, fading, imbalance,
+  fpSplit, withBarSplit, salesSince, knownRange, pullStack, RECENT_TIMEOUT_MS, recentTraded, COLS, parseCols, fitCols };
 if (typeof window !== 'undefined') window.HBDom = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

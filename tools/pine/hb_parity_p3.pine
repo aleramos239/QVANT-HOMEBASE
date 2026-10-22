@@ -1,0 +1,151 @@
+//@version=6
+// HB parity P3 -- structure: our own Pine twin of Homebase's swing, equal, range and fair-value-gap studies
+// (homebase/charts/studies_ta.py) read on TradingView's own bars. Column name = tv|<homebase key>|<field>;
+// tools/tvparity.py reads the export. Homebase feeds its structure studies three prior sessions first: the first
+// hundreds of bars of an export are warm-up.
+indicator("HB parity P3", overlay=true, precision=10, max_bars_back=5000)
+D = display.data_window
+plot(1, "tv|probe|P3", display=D)
+newSess = timeframe.change("D")
+
+// --- one side of the pivots on y (the low side runs on -low), studies_ta._side_step: the swings no later bar went
+// beyond (newest last; each newer survivor sits below the older ones, so the newest drops first), their bar, and the
+// equal levels -- a swing within `tol` under the swing before it with nothing above that one in between.
+// A pivot is strict on BOTH sides, as Homebase's swing is (above the n bars before it and the n after): ta.pivothigh
+// alone lets an older equal value stand, so the n bars before are checked here (lh) and a left tie is no swing
+side(float y, int n, float tol) =>
+    var swings = array.new<float>()
+    var idx = array.new<int>()
+    var eqs = array.new<float>()
+    var float prev = na
+    var float runmax = na
+    while array.size(swings) > 0 and y > array.last(swings)
+        array.pop(swings)
+        array.pop(idx)
+    while array.size(eqs) > 0 and y > array.last(eqs)
+        array.pop(eqs)
+    if not na(prev) and y > runmax
+        runmax := y
+    c0 = ta.pivothigh(y, n, n)
+    lh = ta.highest(y[n + 1], n)                // the n bars before a pivot confirmed now
+    c = (not na(c0)) and c0 > lh ? c0 : na
+    hn = ta.highest(y, n)                       // the n bars after a pivot confirmed now
+    if not na(c)
+        if not na(prev) and prev - c >= 0 and prev - c <= tol and runmax <= prev
+            array.push(eqs, prev)
+        array.push(swings, c)
+        array.push(idx, bar_index - n)
+        prev := c
+        runmax := hn
+    ns = array.size(swings)
+    [ns > 0 ? array.last(swings) : na, ns > 0 ? array.last(idx) : na, array.size(eqs) > 0 ? array.last(eqs) : na]
+
+// swing:50 and equal:50:10 (the swings do not depend on the tolerance)
+[swH, swHi, eqH] = side(high, 50, 10)
+[swLn, swLi, eqLn] = side(-low, 50, 10)
+swL = -swLn
+eqL = -eqLn
+plot(swH, "tv|swing:50|hi", display=D)
+plot(swL, "tv|swing:50|lo", display=D)
+plot(eqH, "tv|equal:50:10|hi", display=D)
+plot(eqL, "tv|equal:50:10|lo", display=D)
+
+// --- a dealing range (studies_ta._range_value): hi, lo, mid and the 62 % .. 79 % retracement of a leg pointing d (+1 up)
+rangeOf(float lo, float hi, int d) =>
+    r = hi - lo
+    ok = r > 0
+    o1 = d == 1 ? hi - 0.62 * r : lo + 0.62 * r
+    o2 = d == 1 ? hi - 0.79 * r : lo + 0.79 * r
+    [ok ? hi : na, ok ? lo : na, ok ? (hi + lo) / 2 : na, ok ? o1 : na, ok ? o2 : na, ok ? d : na]
+
+// rswing:50 (RangeSwing): the latest untouched swing high to the latest untouched swing low; up when the low came first
+both = not na(swH) and not na(swL)
+[rsH, rsL, rsM, rs1, rs2, rsD] = rangeOf(both ? swL : na, both ? swH : na, swLi < swHi ? 1 : -1)
+plot(rsH, "tv|rswing:50|hi", display=D)
+plot(rsL, "tv|rswing:50|lo", display=D)
+plot(rsM, "tv|rswing:50|mid", display=D)
+plot(rs1, "tv|rswing:50|ote1", display=D)
+plot(rs2, "tv|rswing:50|ote2", display=D)
+plot(rsD, "tv|rswing:50|dir", display=D)
+
+// rmove:200 (RangeMove): a zigzag of 200 points; the range runs from the last turning point to the extreme since
+var bool mvStarted = false
+var int mvMode = 0
+var float mvHi = na
+var float mvLo = na
+var float mvPv = 0.0
+var float mvEx = 0.0
+thr = 200.0
+if not mvStarted
+    mvStarted := true
+    mvHi := high
+    mvLo := low
+else if mvMode == 0
+    mvHi := math.max(mvHi, high)
+    mvLo := math.min(mvLo, low)
+    if high - mvLo >= thr
+        mvMode := 1
+        mvPv := mvLo
+        mvEx := high
+    else if mvHi - low >= thr
+        mvMode := -1
+        mvPv := mvHi
+        mvEx := low
+else if mvMode == 1
+    if high > mvEx
+        mvEx := high
+    else if mvEx - low >= thr
+        mvMode := -1
+        mvPv := mvEx
+        mvEx := low
+else
+    if low < mvEx
+        mvEx := low
+    else if high - mvEx >= thr
+        mvMode := 1
+        mvPv := mvEx
+        mvEx := high
+[mvH, mvL, mvM, mv1, mv2, mvD] = rangeOf(mvMode == 0 ? na : math.min(mvPv, mvEx), mvMode == 0 ? na : math.max(mvPv, mvEx), mvMode)
+plot(mvH, "tv|rmove:200|hi", display=D)
+plot(mvL, "tv|rmove:200|lo", display=D)
+plot(mvM, "tv|rmove:200|mid", display=D)
+plot(mv1, "tv|rmove:200|ote1", display=D)
+plot(mv2, "tv|rmove:200|ote2", display=D)
+plot(mvD, "tv|rmove:200|dir", display=D)
+
+// --- fvg:0.25:14 (FairValueGap): three bars of the session, bar 3's low above bar 1's high (up) or bar 3's high below
+// bar 1's low (down), at least 0.25 x ATR(14) and a tick; per side the newest gap not yet filled -- a later bar through
+// its far edge ends it (the bar that forms a gap is not a fill). Wilder ATR seeded with the mean of the first 14 true
+// ranges, the first needing a close before it (ta.tr(false) is na on bar 0, as in Homebase). The gap is sized with the
+// ATR through the bar BEFORE the one that completes it (atr14[1]): FairValueGap.step tests the gap, then updates its ATR
+var float fvgUh = na                        // up gap: near edge (bar 3's low) / far edge (bar 1's high)
+var float fvgUl = na
+var float fvgDh = na                        // down gap: far edge (bar 1's low) / near edge (bar 3's high)
+var float fvgDl = na
+var int sessBars = 0
+if newSess
+    sessBars := 0
+    fvgUh := na
+    fvgUl := na
+    fvgDh := na
+    fvgDl := na
+if not na(fvgUl) and low <= fvgUl
+    fvgUh := na
+    fvgUl := na
+if not na(fvgDh) and high >= fvgDh
+    fvgDh := na
+    fvgDl := na
+sessBars := sessBars + 1
+atr14 = ta.rma(ta.tr(false), 14)
+gapMin = math.max(0.25 * atr14[1], syminfo.mintick)
+if sessBars >= 3 and not na(atr14[1])
+    if low > high[2] and low - high[2] >= gapMin
+        fvgUh := low
+        fvgUl := high[2]
+    else if high < low[2] and low[2] - high >= gapMin
+        fvgDh := low[2]
+        fvgDl := high
+plot(fvgUh, "tv|fvg:0.25:14|uh", display=D)
+plot(fvgUl, "tv|fvg:0.25:14|ul", display=D)
+plot(fvgDh, "tv|fvg:0.25:14|dh", display=D)
+plot(fvgDl, "tv|fvg:0.25:14|dl", display=D)

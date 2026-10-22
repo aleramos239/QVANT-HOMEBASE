@@ -118,3 +118,175 @@ test('zoomed out (the footprint is not readable) the extras are not drawn either
   f.draw({ useMediaCoordinateSpace: () => { drew = true; } });
   assert.equal(drew, false);
 });
+
+/* ---- wave 2: what a row shows (`text`), the vendor imbalance rules (`imb`), the profile's value-area `method` ---- */
+
+const series12 = { priceToCoordinate: (px) => 1000 - px * 48 };       // a tick is 12 px: readable at rows: 1
+function drawFp(ex, bars, ratio = 3) {
+  const f = new Footprint(P);
+  f.series = series12; f.tick = TICK; f.ratio = ratio; f.ex = { rows: 1, ...ex }; f.on = true; f.bars = bars;
+  f.chart = { timeScale: () => ({ logicalToCoordinate: (i) => i * 100 + 50, getVisibleLogicalRange: () => ({ from: 0, to: bars.length - 1 }) }) };
+  const { ctx, log } = recorder();
+  f.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+  return log;
+}
+// every drawn text with the fill it was drawn in
+const texts = (log) => { let fill; const out = []; for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillText') out.push([l[1], fill]); } return out; };
+const ROWS = [[100, 2, 3], [100.25, 0, 6]];
+const BAR = { c: 100, fp: ROWS, fpn: [[100, 1, 2], [100.25, 0, 4]] };
+
+test('footprint text: unset is today\'s `numbers` mode; bidask / volume are its both / total; text wins over numbers', () => {
+  const base = drawFp({}, [BAR]);
+  assert.deepEqual(texts(base), [['2', 'TX'], ['3', 'UP'], ['0', 'TX'], ['6', 'UP']]);
+  assert.deepEqual(drawFp({ text: 'bidask' }, [BAR]), base);
+  assert.deepEqual(drawFp({ imb: 'homebase', zero: 'one', edge: 'one', minvol: 0, mindiff: 0 }, [BAR]), base);
+  assert.deepEqual(drawFp({ text: 'volume' }, [BAR]), drawFp({ numbers: 'total' }, [BAR]));
+  assert.deepEqual(drawFp({ text: 'delta', numbers: 'total' }, [BAR]), drawFp({ numbers: 'delta' }, [BAR]));
+});
+
+test('footprint text: trades, dominant side %, price, diagonal differences', () => {
+  assert.deepEqual(texts(drawFp({ text: 'trades' }, [BAR])).map((t) => t[0]), ['1', '2', '0', '4']);
+  assert.deepEqual(texts(drawFp({ text: 'trades' }, [{ c: 100, fp: ROWS }])), []);               // no fpn on the bar: no data, nothing drawn
+  assert.deepEqual(texts(drawFp({ text: 'dom' }, [BAR])), [['+60', 'UP'], ['+100', 'UP']]);
+  assert.deepEqual(texts(drawFp({ text: 'price' }, [BAR])).map((t) => t[0]), ['100.00', '100.25']);
+  // left = Ask(P+1) - Bid(P), right = Ask(P) - Bid(P-1); 0 where that neighbour row does not exist
+  assert.deepEqual(texts(drawFp({ text: 'diag' }, [BAR])).map((t) => t[0]), ['4', '0', '0', '4']);
+});
+
+test('footprint imb: a vendor rule changes the flagged rows; its stacked runs follow it', () => {
+  const atas = texts(drawFp({ imb: 'atas' }, [BAR], 3.5));
+  assert.deepEqual(atas, [['2', 'TX'], ['3', 'TX'], ['0', 'TX'], ['6', 'TX']]);                  // 6 is not GREATER than 3.5 x 2, and 100 has no row below
+  assert.deepEqual(texts(drawFp({ imb: 'atas' }, [BAR]))[3], ['6', 'UP']);                        // ratio left on its default 3: ATAS brings its own 1.5, and 6 > 1.5 x 2
+  const three = { c: 100, fp: [[100, 1, 3], [100.25, 1, 3], [100.5, 1, 3]] };                   // asks exactly 3x the bid below
+  const stack = (ex, ratio) => { const { ctx, log } = recorder(); footprint(ex, ratio).extras(ctx, three, 200, 40, 10); return log.filter((l) => l[0] === 'moveTo').length; };
+  assert.equal(stack({ stack: 3 }), 1);
+  assert.equal(stack({ stack: 3, imb: 'atas' }, 3.5), 0);
+  assert.equal(stack({ stack: 2, imb: 'atas' }), 1);                                              // default ratio: ATAS's 1.5 flags a 3x ask (two rows, the bottom edge is skipped)
+  assert.equal(stack({ stack: 3, imb: 'atas', ratio: 2 }, 3.5), 0);                              // ratio is the footprint's own, not ex.ratio
+  const four = [...three.fp, [100.75, 1, 3]];                                                    // sierra skips the bottom row (nothing below it): 3 left in a row
+  assert.equal(footprint({ stack: 3, imb: 'sierra' }, 2).imb(four, TICK).runs.length, 1);
+  assert.equal(footprint({ stack: 3, imb: 'sierra' }, 2).imb(three.fp, TICK).runs.length, 0);
+  assert.equal(footprint({}).imb(three.fp, TICK), null);                                         // today's rule: draw keeps its own code
+  assert.equal(footprint({ imb: 'atas' }, 0).imb(three.fp, TICK).rows.length, 0);                // ratio off stays off
+});
+
+test('footprint imb: a vendor rule keeps its own zero / edge skips while the dialog leaves them on `one`; a chosen `skip` still counts', () => {
+  const rows = [[100, 0, 5], [100.25, 3, 9], [100.5, 2, 2]];     // an ask of 5 at the bottom edge, 9 against a 0 bid below, a top edge row
+  const flagged = (ex) => { const im = footprint(ex).imb(rows, TICK); return im && [[...im.buy].sort(), [...im.sell].sort()]; };
+  const dialog = { zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };    // what syncFootprint sends for controls nobody touched
+  for (const [imb, sells] of [['atas', []], ['exocharts', []], ['sierra', [401]]]) {      // sierra's ratio 1: the 3 bid beats the 2 ask above it, a real row
+    assert.deepEqual(flagged({ imb }), [[], sells], `${imb}: skips a zero opposite side and the edge rows`);
+    assert.deepEqual(flagged({ imb, ...dialog }), flagged({ imb }), `${imb}: the untouched dialog changes nothing`);
+  }
+  const bar = { c: 100, fp: rows };
+  assert.deepEqual(texts(drawFp({ imb: 'atas', ...dialog }, [bar])), texts(drawFp({ imb: 'atas' }, [bar])));
+  assert.ok(texts(drawFp({ imb: 'atas', ...dialog }, [bar])).every((t) => t[1] === 'TX'), 'nothing coloured on the chart');
+  assert.deepEqual(flagged({ imb: 'homebase', ...dialog }), null, 'homebase with the dialog defaults is today\'s rule: draw keeps its own code');
+  assert.deepEqual(flagged({ zero: 'skip' }), [[400], []], 'a chosen skip passes through under the homebase rule');
+  assert.deepEqual(flagged({ edge: 'skip', zero: 'skip', imb: 'homebase' }), [[], []]);
+  // shortcut: `one` is the catalog default, so a deliberate `one` under a vendor rule reads as unset (the rule's own skip wins)
+  assert.deepEqual(flagged({ imb: 'atas', zero: 'one' }), flagged({ imb: 'atas' }));
+});
+
+test('profile method: sierra / tv use that app\'s POC rule; homebase and unset keep the server\'s', () => {
+  const p = new Profile(P);
+  p.series = series; p.tick = 1;
+  p.p = { poc: 99, vah: 101, val: 99, rows: [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]] };
+  const run = (ex) => {
+    const { ctx, log } = recorder();
+    p.ex = ex;
+    p.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+    let fill; const out = [];
+    for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillRect') out.push([fill, l[2]]); }
+    return out;
+  };
+  const pocY = (r) => r.find((x) => x[0] === 'POC')[1];
+  assert.equal(pocY(run({})), series.priceToCoordinate(99) - 1.75);
+  assert.deepEqual(run({ method: 'homebase' }), run({}));
+  assert.equal(pocY(run({ method: 'sierra' })), series.priceToCoordinate(101) - 1.75);          // nearest the middle of the profile
+  assert.equal(pocY(run({ method: 'tv' })), series.priceToCoordinate(99) - 1.75);               // tv: the lowest of the tie
+});
+
+/* The prior session drawn under `ex` ({prior, lines, ...}): where its ghost POC row sits and where each pVAH / pVAL / pPOC label lands.
+   `prev` carries the server's own (homebase) levels. */
+function priorDraw(prev, ex) {
+  const p = new Profile(P);
+  p.series = series; p.tick = 1;
+  p.p = { ...prev, prev };
+  const { ctx, log } = recorder();
+  Object.defineProperty(ctx, 'textAlign', { set: (v) => { log.push(['set textAlign', v]); }, get: () => undefined });
+  p.ex = { prior: true, lines: true, ...ex };
+  p.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+  let fill, align; const pocRects = [], labels = {}, labelX = {}, labelAlign = {};
+  for (const l of log) {
+    if (l[0] === 'set fillStyle') fill = l[1];
+    if (l[0] === 'set textAlign') align = l[1];
+    if (l[0] === 'fillRect' && fill === 'POC') pocRects.push(l);
+    if (l[0] === 'fillText') { labels[l[1]] = l[3]; labelX[l[1]] = l[2]; labelAlign[l[1]] = align; }
+  }
+  const ghost = pocRects[pocRects.length - 1];                      // the ghost is drawn after the current profile
+  return { ghost: ghost[2], ghostX: ghost[1], labels, labelX, labelAlign };
+}
+const at = (v, px) => series.priceToCoordinate(px) - v;
+
+test('profile prior session: its POC ghost and pVAH / pVAL / pPOC follow the chosen method and share, like today\'s profile', () => {
+  const rows = [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]];
+  const run = (ex) => priorDraw({ poc: 99, vah: 102, val: 99, rows }, ex);    // the server's homebase levels
+  const server = run({});
+  assert.deepEqual(server.labels, { pVAH: at(2, 102), pVAL: at(2, 99), pPOC: at(2, 99) });
+  assert.equal(server.ghost, at(1.75, 99));
+  assert.deepEqual(run({ method: 'homebase', va: 70 }), server);
+  const sierra = run({ method: 'sierra' });                            // POC: the tie nearest the middle; the area takes both equal neighbours
+  assert.deepEqual(sierra.labels, { pVAH: at(2, 103), pVAL: at(2, 99), pPOC: at(2, 101) });
+  assert.equal(sierra.ghost, at(1.75, 101));
+  assert.equal(run({ method: 'tv' }).labels.pVAH, at(2, 101));         // tv stops before a row would pass the share
+  const wide = window.HBFlowMath.valueAreaV2(rows, 90, 'homebase', 1);   // a chosen share re-walks the prior rows too, one row at a time like the server
+  assert.notEqual(wide.vah, 102);
+  assert.equal(run({ va: 90 }).labels.pVAH, at(2, wide.vah));
+});
+
+test('profile prior session: the pVAL line follows the method and the share too, not only pVAH', () => {
+  const rows = [[99, 3], [100, 5], [101, 1], [102, 7], [103, 1], [104, 7], [105, 5]];
+  const prev = { poc: 102, vah: 105, val: 101, rows };              // the server's own levels: VAL 101, where sierra says 100, tv 102 and a 90 % area 99
+  assert.deepEqual(window.HBFlowMath.valueAreaV2(rows, 70, 'homebase', 1), { poc: 102, vah: 105, val: 101 });
+  const run = (ex) => priorDraw(prev, ex);
+  assert.equal(run({}).labels.pVAL, at(2, 101));
+  assert.equal(run({ method: 'sierra' }).labels.pVAL, at(2, 100));
+  assert.equal(run({ method: 'tv' }).labels.pVAL, at(2, 102));
+  const wide = window.HBFlowMath.valueAreaV2(rows, 90, 'homebase', 1);
+  assert.equal(wide.val, 99);
+  assert.equal(run({ va: 90 }).labels.pVAL, at(2, wide.val));
+});
+
+test('profile value area: under the homebase rule a larger share never narrows the area (one row at a time, like the server\'s 70)', () => {
+  const M = window.HBFlowMath, rows = [[100, 5], [101, 7], [102, 2], [103, 7]];
+  const srv = { poc: 101, ...M.valueAreaV2(rows, 70, 'homebase', 1), rows };
+  assert.deepEqual([srv.val, srv.vah], [100, 103]);
+  assert.deepEqual(Profile.levels(srv, { va: 70, method: 'homebase' }, 1), { poc: 101, vah: 103, val: 100 });
+  assert.deepEqual(Profile.levels(srv, { va: 71, method: 'homebase' }, 1), { poc: 101, vah: 103, val: 100 }, '71 % is not narrower than 70 %');
+  assert.deepEqual(Profile.levels(srv, { va: 75 }, 1), { poc: 101, vah: 103, val: 100 }, 'method unset = homebase');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let n = 0; n < 300; n++) {                                     // random profiles: every share is the server's rule, so the areas nest
+    const rs = Array.from({ length: 3 + Math.floor(rnd() * 12) }, (_, i) => [100 + i, 1 + Math.floor(rnd() * 20)]);
+    const s = { ...M.valueAreaV2(rs, 70, 'homebase', 1), rows: rs };
+    let prev = Profile.levels(s, { va: 70 }, 1);
+    for (const va of [71, 75, 80, 85, 90, 95]) {
+      const cur = Profile.levels(s, { va, method: 'homebase' }, 1), want = M.valueAreaV2(rs, va, 'homebase', 1);
+      assert.deepEqual(cur, want);
+      assert.ok(cur.val <= prev.val && cur.vah >= prev.vah, `profile ${n}: ${va} % narrower than the share before`);
+      prev = cur;
+    }
+  }
+});
+
+test('profile prior session: side = left puts the ghost and the pVAH / pVAL / pPOC labels beside the left-edge profile, not the right', () => {
+  const rows = [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]], prev = { poc: 99, vah: 102, val: 99, rows };
+  const right = priorDraw(prev, {}), left = priorDraw(prev, { side: 'left' });
+  assert.deepEqual([right.ghostX, right.labelX.pVAH, right.labelAlign.pVAH], [1000 - 180 - 6 - 180, 6, 'left'], 'right side: today\'s places');
+  assert.deepEqual(priorDraw(prev, { side: 'right' }), right);
+  assert.equal(left.ghostX, 180 + 6, 'the ghost starts just past the profile (W = 18 % of 1000) and grows to the right');
+  assert.deepEqual(left.labelX, { pVAH: 1000 - 6, pVAL: 1000 - 6, pPOC: 1000 - 6 }, 'the mirror of the right side: at the far edge, not on the ghost that fills 186..366');
+  assert.deepEqual(left.labelAlign, { pVAH: 'right', pVAL: 'right', pPOC: 'right' }, 'right-aligned, so the words end 6 px from the edge');
+  assert.deepEqual([left.ghost, left.labels], [right.ghost, right.labels], 'only x moves');
+});

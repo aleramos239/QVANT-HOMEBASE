@@ -10,7 +10,7 @@ import pytest
 import homebase.charts.hub as hub_mod
 from homebase.charts.bars import Bar, BarBuilder, BarSpec, build
 from homebase.charts.history import History
-from homebase.charts.hub import Hub, Stream, sessions_back, warm_bars
+from homebase.charts.hub import Hub, Stream, prime_sessions, sessions_back, warm_bars
 from homebase.charts.store import TickStore
 from homebase.charts.studies import make
 from homebase.charts.tick import SideClassifier, from_row
@@ -36,8 +36,8 @@ def ticks_of(rs):
     return [from_row(r, clf) for r in rs]
 
 
-def open_stream(hub, spec=M1, keys=("vwap", "cumdelta"), sub=("conn", "c1")):
-    s = hub.attach(hub.prepare("NQ", spec, list(keys)))
+def open_stream(hub, spec=M1, keys=("vwap", "cumdelta"), sub=("conn", "c1"), root="NQ"):
+    s = hub.attach(hub.prepare(root, spec, list(keys)))
     hub.subscribe(s, sub)
     return s
 
@@ -312,14 +312,23 @@ def test_the_history_message_carries_the_point_value(tmp_path):
 
 
 # ---- deep history: scroll-back chunks (spec §5) ----
-def deep(tmp_path, n=8):
-    """A hub over n completed weekday sessions before D (3 one-minute bars each, 09:30-09:32; session k
+def day_rows(d, k, per, mixed):
+    """Session k's trades on day d: `per` one-minute bars from 09:30 (3 trades each), around 100 + k; `mixed`: buys and
+    sells of different sizes on a longer price cycle, so the cumulative delta and the volume-weighted studies have
+    something to say at every bar (and no bar is flat: tv:cvd reads the bar before only on a flat one)."""
+    m = 3 * per if mixed else 0
+    prices = [100 + k + 0.25 * (i * 5 % 7 if mixed else i % 4) for i in range(3 * per)]
+    return rows(session_ms(d, 9, 30), prices, step_ms=20_000, first_id=1000 * (k + 1),
+                sides=[1 if i % 3 else -1 for i in range(m)] or None, size=[1 + i % 3 for i in range(m)] or 1)
+
+
+def deep(tmp_path, n=8, per=3, mixed=False):
+    """A hub over n completed weekday sessions before D (`per` one-minute bars each from 09:30; session k
     trades around 100 + k) with D's first minutes as today's tape."""
     base = tmp_path / "ticks"
     days = weekdays_before(D, n)
     for k, d in enumerate(days):
-        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100 + k + 0.25 * (i % 4) for i in range(9)],
-                                                  step_ms=20_000, first_id=1000 * (k + 1)))
+        write_archive(base, "NQ", d, "NQZ6", day_rows(d, k, per, mixed))
     hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(D, 9, 31))
     hub.start_today("NQ", D, ticks_of(rows(session_ms(D, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
                                            first_id=90_000)))
@@ -373,6 +382,19 @@ def test_older_respects_history_max_and_repairs_a_session_it_cuts(tmp_path, monk
     assert b["repair"]["vwap"] == want[2:3]
 
 
+def test_a_study_that_never_forgets_can_ask_for_any_warm_and_the_hub_clamps_it(tmp_path, monkeypatch):
+    """obv / pvt / adl add up across sessions: no finite warm repairs them, so a study may declare a huge one. The hub
+    repairs at most HISTORY_MAX bars after the join, clamps a timeframe key's warm there, and primes at most 60 sessions."""
+    monkeypatch.setattr(hub_mod, "warm_tv", lambda name, rest: 10 ** 9)
+    assert warm_bars("tv:obv@3600") == hub_mod.HISTORY_MAX and prime_sessions("tv:obv@3600") == 60
+    assert prime_sessions("tv:obv") == 0
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("tv:obv",))
+    assert len(hub.older(s, s.bars[0].t)["repair"]["tv:obv"]) == 15            # all the completed bars the page holds
+    monkeypatch.setattr(hub_mod, "HISTORY_MAX", 4)
+    assert len(hub.older(s, s.bars[0].t)["repair"]["tv:obv"]) == 4
+
+
 def test_older_studies_run_on_across_the_join(tmp_path):
     """The chunk's values are a fresh run over it; `repair` continues that run through the chart's first bars
     for as long as a study remembers (ema:3 -> 15 bars; the longest wins): together, a full reload of the
@@ -386,6 +408,76 @@ def test_older_studies_run_on_across_the_join(tmp_path):
         want = [st.push(b) for b in every]
         assert ans["studies"][key] == want[:9], key
         assert ans["repair"][key] == want[9:24], key
+
+
+def test_older_primes_the_studies_that_read_many_days(tmp_path):
+    """A scroll-back chunk is what a reload of the longer range shows: a study that reads prior sessions (the daily
+    range, the relative volume, the pivots' prior session, the day high / low) is fed the sessions before the chunk,
+    as add_study feeds the first load, instead of starting cold at the chunk's first bar."""
+    hub, days = deep(tmp_path, n=12)
+    keys = ("tv:adr:2", "tv:rvol:2", "tv:pivots", "dhl:2", "ema:3")
+    s = open_stream(hub, keys=keys)
+    ans = hub.older(s, s.bars[0].t)
+    every = [b for d in days for b in hub.history.bars("NQ", M1, d)]       # all 12 completed sessions, oldest first
+    first = 3 * days.index(dt.date.fromisoformat(ans["sessions"][0]["date"]))
+    assert first > 0 and len(ans["bars"]) == 15                             # two sessions are still behind the chunk
+    for key in keys[:-1]:
+        st = make(key)
+        want = [st.push(b) for b in every]
+        assert ans["studies"][key] == want[first:first + 15], key
+        assert ans["repair"][key] == want[first + 15:first + 15 + len(ans["repair"][key])], key
+    assert ans["studies"]["tv:adr:2"][0] is not None and ans["studies"]["tv:pivots"][0] is not None
+    st = make("ema:3")                                                      # one that reads only the chart's bars is not primed
+    assert ans["studies"]["ema:3"] == [st.push(b) for b in every[first:first + 15]]
+
+
+def test_older_feeds_a_cut_sessions_older_bars_to_the_studies_that_read_prior_sessions(tmp_path, monkeypatch):
+    """HISTORY_MAX cuts the chunk's oldest session to its newest bars: the bars it dropped come before the chunk's first
+    one, so a study with a memory of days (a month's VWAP restarts at the month's first session) is fed them too."""
+    hub, days = deep(tmp_path, n=40)
+    keys = ("tv:vwap:month", "tv:vwap:week", "tv:adr:2")
+    s = open_stream(hub, keys=keys)
+    monkeypatch.setattr(hub_mod, "HISTORY_MAX", 4)
+    ans = hub.older(s, s.bars[0].t)                 # all of days[-6] and the newest bar of days[-7]
+    assert [b["s"] for b in ans["bars"]] == [days[-7].isoformat()] + [days[-6].isoformat()] * 3 and ans["done"] is False
+    every = [b for d in days for b in hub.history.bars("NQ", M1, d)]
+    first = 3 * (len(days) - 7) + 2                 # two bars of days[-7] are behind the chunk
+    for key in keys:
+        st = make(key)
+        want = [st.push(b) for b in every]
+        assert ans["studies"][key] == want[first:first + 4], key
+
+
+def walk_back(hub, s, page_from=0):
+    """The chart scroll-back leaves: the stream's bars from `page_from` on, then every older chunk in front of them (the
+    page's prepend), each repair over the page's first bars. -> (the bars' start times, {study key: its values})."""
+    ms, vals = [b.t for b in s.bars[page_from:]], {k: list(v[page_from:]) for k, v in s.values.items()}
+    while True:
+        ans = hub.older(s, ms[0])
+        if not ans["bars"]:
+            return ms, vals
+        for k, v in vals.items():
+            v[:len(ans["repair"][k])] = ans["repair"][k]
+            v[:0] = ans["studies"][k]
+        ms[:0] = [b["ms"] for b in ans["bars"]]
+
+
+@pytest.mark.parametrize("root", ["NQ", "BTC"])     # a classic root / a 24/7 one (a session every calendar day)
+@pytest.mark.parametrize("page_from", [0, -3])      # the page opens at a session's first bar / three bars before the last
+@pytest.mark.parametrize("key", ["vwap", "cumdelta", "tv:vwap", "tv:cvd", "tv:twap"])
+def test_scroll_back_through_a_session_longer_than_two_chunks_keeps_a_session_study_anchored_at_its_open(
+        tmp_path, monkeypatch, key, page_from, root):
+    """A session over 2 x HISTORY_MAX bars is cut in every request, so the bars before the chunk's first (VWAP, cumulative
+    delta and TWAP restart only at the session's open) are fed to the study too: the page scroll-back builds, repairs
+    applied in order, equals one run over the whole history."""
+    hub, days = (deep(tmp_path, n=7, per=10, mixed=True) if root == "NQ"
+                 else deep_24_7(tmp_path, dt.date(2026, 10, 14), 7, per=10, mixed=True))
+    s = open_stream(hub, keys=(key,), root=root)
+    monkeypatch.setattr(hub_mod, "HISTORY_MAX", 3)
+    ms, vals = walk_back(hub, s, page_from)
+    every = [b for d in days for b in hub.history.bars(root, M1, d)]
+    st = make(key)
+    assert ms == [b.t for b in every] and vals[key] == [st.push(b) for b in every]
 
 
 def test_older_tick_bars_come_one_session_at_a_time(tmp_path):
@@ -458,6 +550,37 @@ def test_older_also_bounds_the_time_it_spends_on_a_cold_chunk(tmp_path, monkeypa
     elapsed = time.monotonic() - t0
     assert elapsed < 2.0
     assert ans["bars"] != [] or ans["done"] is True   # never silently nothing without a reason
+
+
+def test_older_bounds_the_time_it_spends_repairing_for_a_study_that_never_forgets(tmp_path, monkeypatch):
+    """obv / pvt / adl declare a huge warm: the repair would re-read every session after the join, one by one, each request.
+    It stops at BUILD_BUDGET_S like the chunk does (the session the chunk ends inside is always whole), the rest keeps
+    the page's own values."""
+    hub, days = deep(tmp_path, n=300)
+    s = open_stream(hub, spec=BarSpec("time", 86400), keys=("tv:obv",))      # the newest 250 sessions
+    monkeypatch.setattr(hub_mod, "warm_tv", lambda name, rest: 10 ** 9)
+    real_bars = History.bars
+
+    def slow_bars(self, root, spec, d, memo=True):
+        time.sleep(0.01)
+        return real_bars(self, root, spec, d, memo=memo)
+
+    monkeypatch.setattr(History, "bars", slow_bars)
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.05)
+    t0 = time.monotonic()
+    ans = hub.older(s, s.bars[0].t)
+    assert time.monotonic() - t0 < 1.0              # NOT 250 * 0.01s = 2.5s on top of the chunk
+    assert 0 < len(ans["repair"]["tv:obv"]) < 250 and ans["bars"] != []
+
+
+def test_older_always_repairs_the_rest_of_the_session_the_chunk_ends_inside_even_with_no_time_left(tmp_path, monkeypatch):
+    """The repair budget only cuts the sessions AFTER the cut one: the cut session's remaining bars are always read
+    (VWAP and cumulative delta restart only at a session's open, so a half-repaired session is wrong all day)."""
+    hub, days = deep(tmp_path, n=8)
+    s = open_stream(hub, keys=("vwap", "tv:obv"))
+    monkeypatch.setattr(hub_mod, "BUILD_BUDGET_S", 0.0)         # every later check says the time is up
+    ans = hub.older(s, s.bars[1].t)                             # mid-session: bar 0 of that session is the chunk's end
+    assert [len(ans["repair"][k]) for k in ("vwap", "tv:obv")] == [2, 2]
 
 
 # ---- Fix round 2: a budget cutoff must never leave a HOLE -- it must drop the OLDEST end, not the newest ----
@@ -679,7 +802,7 @@ def test_a_reseed_and_the_roll_drop_the_kept_minutes(tmp_path):
 
 # ---- the footprint and the big prints ride in a history / scroll-back message only when the chart asks ----
 def lean(bars):
-    return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+    return [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big")} for b in bars]
 
 
 def test_a_history_without_footprint_and_big_prints_is_the_same_message_minus_those_two(tmp_path):
@@ -827,6 +950,108 @@ def test_ensure_prime_reaches_back_further_for_a_study_added_later(tmp_path):
     assert s.values["dhl:5"][0] is not None
     hub.ensure_prime(s, ["ema:3"])                                # nothing new to read: nothing reloaded
     assert s.prime_n == 6
+
+
+def test_a_timeframe_keeps_a_session_primed_study_primed(tmp_path):
+    """tv:adr / tv:rvol read N prior sessions; with an @tf suffix (the dialog's Timeframe) they still do."""
+    for k in ("tv:adr:14", "tv:rvol:14", "tv:rvol:5:regular", "tv:pivots", "dhl:5"):
+        assert prime_sessions(k + "@3600") >= prime_sessions(k), k
+    assert prime_sessions("tv:adr:14@3600") == 15 and prime_sessions("tv:ema:20@3600") == 6
+    hub, days = deep(tmp_path)
+    s = open_stream(hub, keys=("tv:adr:2@3600", "tv:adr:2"))
+    assert s.prime_n == 3 and s.values["tv:adr:2@3600"][0] is not None
+    assert s.values["tv:adr:2@3600"] == s.values["tv:adr:2"]
+
+
+def test_a_month_vwap_starts_at_the_months_first_session_not_the_first_loaded_bar(tmp_path):
+    hub, days = deep(tmp_path, n=40)                                 # Sep 1 - 23 is before the 5 loaded sessions
+    s = open_stream(hub, keys=("tv:vwap:month", "tv:vwap:week", "tv:vwap"))
+    assert s.bars[0].session == days[-5].isoformat() and days[-5].month == 9 and days[-5].day > 14
+    done = [b for d in days for b in hub.history.bars("NQ", M1, d)]
+    tail = s.bars[15:]                                               # today's closed bars: the loaded ones are 15
+    for key in ("tv:vwap:month", "tv:vwap:week", "tv:vwap"):
+        st = make(key)
+        want = [st.push(b) for b in done + tail]
+        assert s.values[key] == want[len(done) - 15:], key
+
+
+def test_a_week_vwap_on_a_tick_chart_starts_at_the_weeks_first_session(tmp_path):
+    """A tick chart loads one session behind today (Wed 09-23): Monday and Tuesday of the same week are before the chart."""
+    hub, days = deep(tmp_path, n=40)
+    spec = BarSpec("tick", 5)
+    s = open_stream(hub, spec=spec, keys=("tv:vwap:week",))
+    loaded = len(hub.history.bars("NQ", spec, days[-1]))
+    assert s.bars[0].session == days[-1].isoformat() == "2026-09-23" and len(s.prime) > 0
+    done = [b for d in days for b in hub.history.bars("NQ", spec, d)]
+    st = make("tv:vwap:week")
+    want = [st.push(b) for b in done + s.bars[loaded:]]
+    assert s.values["tv:vwap:week"] == want[len(done) - loaded:]
+
+
+def deep_24_7(tmp_path, today, n, per=3, mixed=False):
+    """deep() for a 24/7 root: a hub over the n calendar days before `today`, each a BTC session of `per` one-minute bars
+    (a classic root has none on a weekend), with today's first minutes as the tape."""
+    base = tmp_path / "ticks"
+    days = [today - dt.timedelta(days=n - k) for k in range(n)]
+    for k, d in enumerate(days):
+        write_archive(base, "BTC", d, "BTCZ6", day_rows(d, k, per, mixed))
+    hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(today, 9, 31))
+    hub.start_today("BTC", today, ticks_of(rows(session_ms(today, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
+                                                first_id=90_000)))
+    return hub, days
+
+
+@pytest.mark.parametrize("today, key, behind, n", [
+    (dt.date(2026, 10, 9), "tv:vwap:week", 6, 40),      # loads Sun 10-04 .. Thu 10-08: Mon .. Sat of its ISO week are before it
+    (dt.date(2026, 11, 5), "tv:vwap:month", 30, 40),    # loads Oct 31 .. Nov 4: the 30 sessions of October before it
+    (dt.date(2026, 10, 9), "wk", 13, 40),               # the same Sunday: its six, and the seven of the week before (the levels)
+    (dt.date(2026, 9, 5), "mo", 61, 75),                # loads Aug 31 .. Sep 4: the 30 sessions of August, the 31 of July
+])
+def test_a_24_7_charts_week_and_month_studies_start_at_the_periods_first_session(tmp_path, today, key, behind, n):
+    """A 24/7 root has a session every calendar day, so the period behind the chart's left edge holds more sessions than a
+    classic root's 4 / 22 (hub.prime_sessions takes the root): the value at the left edge equals a full-history run."""
+    hub, days = deep_24_7(tmp_path, today, n)
+    s = open_stream(hub, keys=(key,), root="BTC")
+    assert s.bars[0].session == days[-5].isoformat() and s.prime_n >= behind
+    assert len(s.prime) == 3 * s.prime_n                              # every session it asked for was there
+    done = [b for d in days for b in hub.history.bars("BTC", M1, d)]
+    tail = s.bars[15:]                                                # today's closed bars: the loaded ones are 15
+    st = make(key)
+    want = [st.push(b) for b in done + tail]
+    assert s.values[key] == want[len(done) - 15:]
+
+
+def test_a_24_7_scroll_back_chunk_starts_a_week_vwap_at_the_weeks_first_session(tmp_path):
+    """older() feeds a chunk the sessions before it: a chunk that opens on a Sunday needs the six before it."""
+    hub, days = deep_24_7(tmp_path, dt.date(2026, 10, 14), 40)
+    s = open_stream(hub, keys=("tv:vwap:week",), root="BTC")
+    ans = hub.older(s, s.bars[0].t)
+    first = dt.date.fromisoformat(ans["sessions"][0]["date"])
+    assert first.weekday() == 6 and len(ans["bars"]) == 15            # Sun 10-04 .. Thu 10-08
+    done = [b for d in days if d <= first + dt.timedelta(days=4) for b in hub.history.bars("BTC", M1, d)]
+    st = make("tv:vwap:week")
+    want = [st.push(b) for b in done]
+    assert ans["studies"]["tv:vwap:week"] == want[-15:]
+
+
+@pytest.mark.parametrize("today, first_key, key, behind", [
+    (dt.date(2026, 10, 9), "tv:rvol:3", "tv:vwap:week", 6),     # primed 4 for the rvol, the week VWAP needs 6
+    (dt.date(2026, 11, 5), "tv:adr:25", "tv:vwap:month", 30),   # primed 26 for the adr, the month VWAP needs 30
+])
+def test_a_24_7_stream_gets_reprimed_when_a_week_or_month_vwap_is_added_later(tmp_path, today, first_key, key, behind):
+    """ensure_prime asks for the stream's own root: a 24/7 chart that primed fewer sessions than 6 / 30 for another study
+    still goes back for the rest, and the added VWAP's left edge equals a full-history run."""
+    hub, days = deep_24_7(tmp_path, today, 40)
+    s = open_stream(hub, keys=(first_key,), root="BTC")
+    assert s.prime_n < behind
+    hub.ensure_prime(s, [key])
+    assert s.prime_n >= behind
+    s.add_study(key)
+    st = make(key)
+    want = [st.push(b) for d in days for b in hub.history.bars("BTC", M1, d)]
+    n = len(want)
+    want += [st.push(b) for b in s.bars[15:]]
+    assert s.values[key] == want[n - 15:]
 
 
 def _flow_wire(m):

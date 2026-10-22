@@ -5,6 +5,8 @@ import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const C = require('../../homebase/static/charts/catalog.js');
 const strip = (list) => list.map(({ id, params, visible }) => ({ id, params, visible }));
+// the footprint options added 2026-10-21: each default is the behaviour the chart had before them
+const FP_NEW = { text: '', imb: 'homebase', zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };
 
 const VWAP_DEFAULT_PARAMS = { anchor: 'eth', customTime: '02:00',
   band1On: false, band1Mult: 1, band2On: false, band2Mult: 2, band3On: false, band3Mult: 3 };
@@ -14,7 +16,7 @@ test('a new chart gets volume, VWAP (ETH), session levels and a 3x footprint', (
     { id: 'volume', params: {}, visible: true },
     { id: 'vwap', params: VWAP_DEFAULT_PARAMS, visible: true },
     { id: 'levels', params: {}, visible: true },
-    { id: 'footprint', params: { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true }, visible: true }]);
+    { id: 'footprint', params: { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW }, visible: true }]);
 });
 
 test('every instance gets its own short uid', () => {
@@ -62,9 +64,9 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('ema', { length: 20, source: 'bogus' }), { length: 20, source: 'close' });
   assert.deepEqual(C.clampParams('sma', { length: 20, source: 'ohlc4' }), { length: 20, source: 'ohlc4' });
   assert.deepEqual(C.clampParams('vwma', { length: 9 }), { length: 9 });   // no Source param for VWMA
-  assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
-  assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
-  assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+  assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
+  assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
+  assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1, scale: true, sweeps: false, side: 'all', labels: true });
   assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true, width: '2' });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true, width: '2' });
@@ -73,7 +75,7 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('heatmap', { bubbleMax: -5, bubbleSide: 'sideways' }).bubbleMax, 0);
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sideways' }).bubbleSide, 'all');
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sell', bubbleMax: 40 }).bubbleSide, 'sell');
-  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false, va: 70, width: 18, side: 'right' });
+  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase' });
   assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
   assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
@@ -108,8 +110,8 @@ test('a Build-1 chart (st form) migrates field by field', () => {
     { id: 'delta', params: {}, visible: true },
     { id: 'cumdelta', params: {}, visible: true },
     { id: 'adx', params: { length: 14 }, visible: true },
-    { id: 'footprint', params: { imbalance: 4, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true }, visible: true },
-    { id: 'profile', params: { prior: true, lines: false, va: 70, width: 18, side: 'right' }, visible: true },
+    { id: 'footprint', params: { imbalance: 4, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW }, visible: true },
+    { id: 'profile', params: { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase' }, visible: true },
     { id: 'bigprints', params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true }, visible: true }]);
 });
 
@@ -399,13 +401,13 @@ test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; cryp
 
 test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma', 'tema']);
-  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'ddiv']);
-  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigorders', 'imbalance', 'heatmap',
+  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'dturn', 'dstr', 'ddiv', 'tv_cvd', 'tv_vdelta']);
+  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs', 'bigorders', 'imbalance', 'heatmap',
     'absorb', 'pulled', 'iceberg', 'stoprun', 'exhaust', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote', 'tspeed', 'pressure', 'ddiv']);
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
-  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow']);
+  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow', 'TradingView', 'TradingView / Pine']);
 });
 
 test('a saved spec is normalised on migration (a Build-1 tick:0750 is tick:750)', () => {
@@ -1088,9 +1090,9 @@ test('buy / sell pressure: the four part lines start hidden on a new chart, the 
 });
 
 test('adjustable settings: new options default to what the chart did before, and clamp', () => {
-  assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right' });
+  assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right', method: 'homebase' });
   assert.deepEqual(C.clampParams('footprint', { rows: '3', numbers: 'zzz' }),
-    { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true });
+    { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.equal(C.clampParams('heatmap', { contrast: 'strong', palette: 'ice' }).palette, 'ice');
   assert.equal(C.clampParams('heatmap', { contrast: 'x' }).contrast, 'normal');
   assert.equal(C.clampParams('bigprints', { side: 'sell', labels: false }).side, 'sell');
@@ -1180,4 +1182,223 @@ test('the legend names the folders the calendar shows', () => {
   assert.equal(C.label(C.instance('events', { high: false, medium: false })), 'Calendar none');
   assert.equal(C.label(C.instance('headlines', { show: 'all' })), 'News all');
   assert.deepEqual(C.serverKeys([C.instance('events'), C.instance('headlines')]), []);   // nothing is asked of the server
+});
+
+/* ---- the TradingView studies (tv_*): one entry per `tv:` study of the server, same key, same defaults ---- */
+const TV_KEYS = {
+  sma: 'tv:sma:9:close', ema: 'tv:ema:9:close', rma: 'tv:rma:7:close', wma: 'tv:wma:9:close', tema: 'tv:tema:9:close', hma: 'tv:hma:9',
+  dema: 'tv:dema:9', smma: 'tv:smma:7', alma: 'tv:alma:9:0.85:6', lsma: 'tv:lsma:25', mcginley: 'tv:mcginley:14', kama: 'tv:kama:10:2:30',
+  median: 'tv:median:3', envelope: 'tv:envelope:20:10', supertrend: 'tv:supertrend:10:3', sar: 'tv:sar:0.02:0.02:0.2',
+  chandelier: 'tv:chandelier:22:3', vstop: 'tv:vstop:20:2', chandekroll: 'tv:chandekroll:10:1:9', ichimoku: 'tv:ichimoku:9:26:52:26',
+  alligator: 'tv:alligator:13:8:5:8:5:3', adx: 'tv:adx:14:14', aroon: 'tv:aroon:14', aroonosc: 'tv:aroonosc:14', vortex: 'tv:vortex:14',
+  chop: 'tv:chop:14', dpo: 'tv:dpo:21', massindex: 'tv:massindex:10', corr: 'tv:corr:14', rsi: 'tv:rsi:14:close',
+  macd: 'tv:macd:12:26:9:close', stoch: 'tv:stoch:14:1:3', stochrsi: 'tv:stochrsi:14:14:3:3', mfi: 'tv:mfi:14', cci: 'tv:cci:20',
+  wpr: 'tv:wpr:14', mom: 'tv:mom:10', roc: 'tv:roc:9', ao: 'tv:ao:5:34', bop: 'tv:bop', bbp: 'tv:bbp:13', cmo: 'tv:cmo:9',
+  connors: 'tv:connors:3:2:100', fisher: 'tv:fisher:9', ppo: 'tv:ppo:12:26:9', pvo: 'tv:pvo:12:26:9', trix: 'tv:trix:18',
+  tsi: 'tv:tsi:25:13:13', smi: 'tv:smi:20:5:5', smio: 'tv:smio:20:5:5', smindex: 'tv:smindex:10:3:3', uo: 'tv:uo:7:14:28',
+  rvgi: 'tv:rvgi:10', rvi: 'tv:rvi:10:14', coppock: 'tv:coppock:10:14:11', kst: 'tv:kst:10:15:20:30:10:10:10:15:9', rci: 'tv:rci:10',
+  atr: 'tv:atr:14', bb: 'tv:bb:20:2:close', bbpct: 'tv:bbpct:20:2', bbw: 'tv:bbw:20:2', bbtrend: 'tv:bbtrend:20:50:2',
+  keltner: 'tv:keltner:20:2:10:atr', donchian: 'tv:donchian:20', ulcer: 'tv:ulcer:14', hv: 'tv:hv:10', linreg: 'tv:linreg:100:2',
+  cog: 'tv:cog:10', vwap: 'tv:vwap:session', twap: 'tv:twap:ohlc4', cvd: 'tv:cvd', vdelta: 'tv:vdelta', updown: 'tv:updown',
+  rvol: 'tv:rvol:14:cumulative', adr: 'tv:adr:14', obv: 'tv:obv', pvt: 'tv:pvt', adl: 'tv:adl', cmf: 'tv:cmf:20',
+  chaikin: 'tv:chaikin:3:10', klinger: 'tv:klinger:34:55:13', efi: 'tv:efi:13', eom: 'tv:eom:14:10000', nvi: 'tv:nvi', pvi: 'tv:pvi',
+  netvol: 'tv:netvol', pivots: 'tv:pivots:traditional', pivothl: 'tv:pivothl:10:10', fractals: 'tv:fractals:2', zigzag: 'tv:zigzag:5:10' };
+const TV_IDS = Object.keys(TV_KEYS).map((n) => `tv_${n}`);
+
+test('tv studies: 90 entries, own group, ids never collide with a house indicator', () => {
+  assert.equal(TV_IDS.length, 90);
+  const tv = C.CATALOG.filter((d) => d.id.startsWith('tv_'));
+  assert.deepEqual(tv.map((d) => d.id).sort(), [...TV_IDS].sort());
+  assert.ok(tv.every((d) => d.group === 'TradingView' && d.name.endsWith(' (TV)')));
+  assert.equal(new Set(C.CATALOG.map((d) => d.id)).size, C.CATALOG.length, 'no id twice');
+  assert.deepEqual(C.CATALOG.filter((d) => d.group === 'TradingView').map((d) => d.id).sort(), [...TV_IDS].sort());
+});
+
+test('tv studies: key(defaults) is the documented wire key, and a new instance asks the server for it', () => {
+  for (const [n, key] of Object.entries(TV_KEYS)) {
+    const id = `tv_${n}`;
+    assert.equal(C.TA_BY_ID[id].key(C.clampParams(id, {})), key, id);
+    assert.equal(C.serverKey(C.instance(id)), key, `${id}: serverKey`);
+  }
+});
+
+test('tv studies: defaults sit inside their own ranges and choices', () => {
+  for (const id of TV_IDS) {
+    for (const q of C.def(id).params.filter((x) => x.key !== 'tf')) {
+      if (q.type === 'int' || q.type === 'num') {
+        assert.ok(q.def >= q.min && q.def <= q.max, `${id}.${q.key}: ${q.def} in ${q.min}..${q.max}`);
+        if (q.type === 'int') assert.ok(Number.isInteger(q.def) && Number.isInteger(q.min) && Number.isInteger(q.max), `${id}.${q.key}: whole numbers`);
+      } else if (q.type === 'choice') assert.ok(q.choices.some(([v]) => v === q.def), `${id}.${q.key}: default is a choice`);
+      else if (q.type !== 'source') assert.fail(`${id}.${q.key}: unexpected param type ${q.type}`);
+    }
+  }
+});
+
+test('tv studies: every one but the two mark studies can run on a longer bar (@sec), and the Timeframe never enters the key', () => {
+  for (const id of TV_IDS.filter((x) => !C.def(x).marks)) {
+    assert.ok(C.HTF_IDS.includes(id), `${id} in HTF_IDS`);
+    assert.ok(C.def(id).params.some((q) => q.key === 'tf'), `${id}: has a Timeframe param`);
+    assert.equal(C.serverKey(C.instance(id, { tf: '3600' })), `${TV_KEYS[id.slice(3)]}@3600`, id);
+    assert.equal(C.serverKey(C.instance(id, { tf: '0' })), TV_KEYS[id.slice(3)], id);
+    assert.ok(!C.TA_BY_ID[id].key(C.clampParams(id, { tf: '3600' })).includes('3600'), `${id}: tf is no part of the key`);
+  }
+});
+
+test('tv studies: pivot high/low and fractals mark a bar `n` CHART bars back, so they take no Timeframe (the server refuses @ on them too)', () => {
+  assert.deepEqual(TV_IDS.filter((id) => C.def(id).marks), ['tv_pivothl', 'tv_fractals']);
+  for (const id of ['tv_pivothl', 'tv_fractals']) {
+    assert.ok(!C.HTF_IDS.includes(id), `${id} not in HTF_IDS`);
+    assert.ok(!C.def(id).params.some((q) => q.key === 'tf'), `${id}: no Timeframe param`);
+    assert.equal(C.serverKey(C.instance(id, { tf: '300' })), TV_KEYS[id.slice(3)], `${id}: a stray tf (a saved or hand-edited layout) falls back to chart bars`);
+  }
+});
+
+test('tv studies: a changed setting changes the key, in the order the server reads it', () => {
+  assert.equal(C.serverKey(C.instance('tv_sma', { length: 20, source: 'hl2' })), 'tv:sma:20:hl2');
+  assert.equal(C.serverKey(C.instance('tv_macd', { fast: 8, slow: 21, signal: 5, source: 'close' })), 'tv:macd:8:21:5:close');
+  assert.equal(C.serverKey(C.instance('tv_keltner', { bands: 'range' })), 'tv:keltner:20:2:10:range');
+  assert.equal(C.serverKey(C.instance('tv_pivots', { kind: 'camarilla' })), 'tv:pivots:camarilla');
+  assert.equal(C.serverKey(C.instance('tv_vwap', { anchor: 'week' })), 'tv:vwap:week');
+  assert.equal(C.serverKey(C.instance('tv_rvol', { length: 20, mode: 'regular' })), 'tv:rvol:20:regular');
+  assert.equal(C.serverKey(C.instance('tv_sar', { start: 0.01, step: 0.03, max: 0.25 })), 'tv:sar:0.01:0.03:0.25');
+  assert.equal(C.serverKey(C.instance('tv_alma', { offset: 0.5, sigma: 3 })), 'tv:alma:9:0.5:3');
+  assert.equal(C.serverKey(C.instance('tv_sma', { length: 99999 })), 'tv:sma:1000:close');                  // clamped to the server's range
+  assert.equal(C.serverKey(C.instance('tv_pivots', { kind: 'nope' })), 'tv:pivots:traditional');           // an unknown word falls back
+  assert.equal(C.serverKey(C.instance('tv_fractals', { n: 1 })), 'tv:fractals:2');
+});
+
+test('tv studies: house indicators keep their keys (law 1: nothing already on a saved chart changes)', () => {
+  const was = { rsi: 'rsi:14', ema: 'ema:20', bb: 'bb:20:2', macd: 'macd:12:26:9', supertrend: 'supertrend:10:3', vwap: 'vwap', sma: 'sma:50',
+    atr: 'atr:14', stoch: 'stoch:14:3:3', mfi: 'mfi:14', adx: 'adx:14', keltner: 'keltner:20:20:1.5', donchian: 'donchian:20', tema: 'tema:20', er: 'er:14' };
+  for (const [id, key] of Object.entries(was)) assert.equal(C.serverKey(C.instance(id)), key, id);
+  assert.equal(C.serverKey(C.instance('ema', { length: 9, source: 'hl2' })), 'ema:9:hl2');
+  assert.equal(C.serverKey(C.instance('rsi', { tf: '3600' })), 'rsi:14@3600');
+  // the tv study and the house one of the same name can sit on one chart: two keys, no clash
+  assert.deepEqual(C.serverKeys([C.instance('rsi'), C.instance('tv_rsi')]), ['rsi:14', 'tv:rsi:14:close']);
+});
+
+test('tv studies: Supertrend uses TradingView\'s sign (dir -1 is the up trend); Chandelier and Vol Stop the natural one', () => {
+  const val = (id, part, v) => C.lineValue(C.def(id).lines.find((l) => l.part === part), v);
+  assert.equal(val('tv_supertrend', 'up', { line: 100, dir: -1 }), 100);
+  assert.equal(val('tv_supertrend', 'dn', { line: 100, dir: -1 }), null);
+  assert.equal(val('tv_supertrend', 'dn', { line: 110, dir: 1 }), 110);
+  assert.equal(val('tv_supertrend', 'up', { line: 110, dir: 1 }), null);
+  assert.equal(val('tv_chandelier', 'long', { long: 95, short: 105, dir: 1 }), 95);
+  assert.equal(val('tv_chandelier', 'short', { long: 95, short: 105, dir: 1 }), null);
+  assert.equal(val('tv_chandelier', 'short', { long: 95, short: 105, dir: -1 }), 105);
+  assert.equal(val('tv_vstop', 'up', { stop: 98, dir: 1 }), 98);
+  assert.equal(val('tv_vstop', 'dn', { stop: 98, dir: 1 }), null);
+  assert.equal(val('tv_vstop', 'dn', { stop: 102, dir: -1 }), 102);
+  assert.equal(val('tv_vstop', 'up', null), null);
+  assert.equal(val('tv_macd', 'macd', { macd: 1.5, signal: null, hist: null }), 1.5);
+});
+
+test('tv studies: fractals and pivot high/low mark the bar `n` back from the one that proves them', () => {
+  const P = { up: '#0f0', down: '#f00' };
+  const f = C.def('tv_fractals'), p = C.def('tv_pivothl');
+  assert.deepEqual(f.lines, []);
+  assert.deepEqual(f.marks({ up: 101.5 }, P, { n: 3 }), { position: 'aboveBar', color: '#f00', shape: 'arrowDown', text: '', size: 1, ago: 3 });
+  assert.deepEqual(f.marks({ dn: 99.5 }, P, { n: 2 }), { position: 'belowBar', color: '#0f0', shape: 'arrowUp', text: '', size: 1, ago: 2 });
+  assert.deepEqual(f.marks({ up: 101, dn: 99 }, P, { n: 2 }).map((m) => [m.position, m.shape, m.ago]), [['aboveBar', 'arrowDown', 2], ['belowBar', 'arrowUp', 2]],
+    'both on one bar: a mark each, top first');
+  assert.equal(f.marks({}, P, { n: 2 }), null);
+  assert.equal(f.marks(null, P, { n: 2 }), null);
+  assert.equal(p.marks({ hi: 120 }, P, { left: 8, right: 6 }).ago, 6);
+  assert.equal(p.marks({ lo: 80 }, P, { left: 8, right: 6 }).position, 'belowBar');
+  assert.equal(p.marks({ hi: null, lo: null }, P, { left: 8, right: 6 }), null);
+});
+
+test('tv studies: SMI Ergodic sends a raw ratio (about 0.04), so its legend reads 4 decimals; every other study keeps 2', () => {
+  assert.deepEqual(C.CATALOG.filter((d) => d.digits !== undefined).map((d) => [d.id, d.digits]), [['tv_smi', 4], ['tv_smio', 4]]);
+  const text = (id, wire) => C.legendValues(C.instance(id), { sv: { [C.serverKey(C.instance(id))]: wire } }, {}, 0.25).map((x) => x.text);
+  assert.deepEqual(text('tv_smio', 0.0432), ['0.0432']);
+  assert.deepEqual(text('tv_smio', -0.004), ['-0.0040']);
+  assert.deepEqual(text('tv_smi', { erg: 0.0432, sig: 0.0411 }), ['0.0432', '0.0411']);
+  assert.deepEqual(text('tv_smi', { erg: 0.17, sig: null }), ['0.1700', '—']);
+  assert.deepEqual(text('tv_rsi', 71.234), ['71.23']);
+  assert.deepEqual(text('tv_bbw', 3.9228), ['3.92']);
+});
+
+test('tv studies: the line parts are the ones the server sends (so the legend reads a number, not nothing)', () => {
+  const PARTS = { sma: ['main'], macd: ['macd', 'signal', 'hist'], adx: ['adx', 'pdi', 'mdi'], donchian: ['up', 'dn', 'mid'], cvd: ['c'],
+    updown: ['up', 'down', 'delta'], vwap: ['vwap', 'u1', 'l1', 'u2', 'l2', 'u3', 'l3'], zigzag: ['px'], ichimoku: ['conv', 'base', 'a', 'b'] };
+  for (const [n, parts] of Object.entries(PARTS)) assert.deepEqual(C.def(`tv_${n}`).lines.map((l) => l.part).sort(), [...parts].sort(), `tv_${n}`);
+  assert.deepEqual(C.def('tv_vwap').lines.filter((l) => l.off).map((l) => l.part), ['u2', 'l2', 'u3', 'l3'], 'only the outer VWAP bands start hidden');
+  assert.deepEqual(C.def('tv_updown').lines.filter((l) => l.off).map((l) => l.part), ['delta']);
+});
+
+/* 2026-10-21 order-flow apps (B2's layers): the entries, their defaults, and old saved charts. */
+test('order-flow apps: each page-only entry has the params its layer reads, with the defaults the layer assumes', () => {
+  const defs = (id) => C.clampParams(id, {});
+  assert.deepEqual(defs('bigtrades'), { min: 25, max: 0, side: 'all', cluster: 'none', thr: 100 });
+  assert.deepEqual(defs('tpo'), { period: 30, rows: 1, mode: 'range', style: 'letters', ib: 2, va: 70, method: 'sierra' });
+  assert.deepEqual(defs('dturn'), { fix: false });
+  assert.deepEqual(defs('dstr'), { min: 80, max: 100 });
+  assert.deepEqual(defs('mwabs'), { ticks: 4, within: 3, imb: 'homebase' });
+  for (const id of ['npoc', 'cstat']) assert.deepEqual(defs(id), {});
+  for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
+    const d = C.def(id);
+    assert.equal(d.group, 'Order flow');
+    assert.ok(!d.pane && !C.TA_BY_ID[id], `${id}: drawn by the flow layer, no series`);
+    assert.equal(C.serverKeys([C.instance(id)]).length, 0, `${id}: no study key on the wire`);
+  }
+  assert.equal(C.label(C.instance('bigtrades', { min: 50 })), 'Big trades ≥50');
+});
+
+test('order-flow apps: new params clamp (a wrong choice falls back, a number stays in range)', () => {
+  assert.equal(C.clampParams('bigtrades', { cluster: 'zzz' }).cluster, 'none');
+  assert.equal(C.clampParams('bigtrades', { cluster: 'priceside', side: 'buy', min: 0 }).cluster, 'priceside');
+  assert.equal(C.clampParams('bigtrades', { min: 0 }).min, 1);
+  assert.equal(C.clampParams('tpo', { mode: 'traded', method: 'nope' }).method, 'sierra');
+  assert.equal(C.clampParams('footprint', { text: 'trades', imb: 'sierra', zero: 'skip', edge: 'skip', minvol: 5, mindiff: 2 }).text, 'trades');
+  assert.equal(C.clampParams('footprint', { imb: 'zzz', zero: 'zzz', minvol: -3 }).imb, 'homebase');
+  assert.equal(C.clampParams('footprint', { minvol: -3 }).minvol, 0);
+  assert.equal(C.clampParams('profile', { method: 'tv' }).method, 'tv');
+  assert.equal(C.clampParams('profile', { method: 'zzz' }).method, 'homebase');
+});
+
+test('an old saved layout loads unchanged: its footprint and profile keep every value, the new options come in at today\'s behaviour', () => {
+  const old = { grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: [
+    { id: 'footprint', uid: 'f1', visible: true, params: { imbalance: 4, stack: 2, unfinished: false, deltaNum: true, rows: '2', numbers: 'delta', vbars: false, poc: true } },
+    { id: 'profile', uid: 'p1', visible: true, params: { prior: false, lines: true, va: 80, width: 20, side: 'left' } },
+    { id: 'bigprints', uid: 'b1', visible: true, params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true } }] }] };
+  const got = C.migrateLayout(old).cells[0].indicators.map(({ id, params }) => [id, params]);
+  assert.deepEqual(got[0], ['footprint', { imbalance: 4, stack: 2, unfinished: false, deltaNum: true, rows: '2', numbers: 'delta', vbars: false, poc: true, ...FP_NEW }]);
+  assert.deepEqual(got[1], ['profile', { prior: false, lines: true, va: 80, width: 20, side: 'left', method: 'homebase' }]);
+  assert.deepEqual(got[2], ['bigprints', { min: 30, scale: true, sweeps: false, side: 'all', labels: true }]);
+  // a second pass changes nothing, and the new options carry no wire key of their own
+  const again = C.migrateLayout({ grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: C.migrateLayout(old).cells[0].indicators }] }).cells[0].indicators;
+  assert.deepEqual(again.map(({ id, params }) => [id, params]), got);
+  assert.deepEqual(C.serverKeys(again), C.serverKeys(old.cells[0].indicators.map((x) => C.instance(x.id, x.params))));
+});
+
+test('pine: a page-only entry (no server key); the script name and its inputs clamp; old layouts do not gain a pine key', () => {
+  assert.equal(C.def('pine').group, 'TradingView / Pine');
+  assert.deepEqual(C.instance('pine').params, { script: '', maxbars: 5000 }, 'no script, no inputs key');
+  assert.equal(C.serverKey(C.instance('pine', { script: 'a.pine' })), null);
+  assert.deepEqual(C.serverKeys([C.instance('ema', { length: 20 }), C.instance('pine', { script: 'a.pine' })]), ['ema:20']);
+  assert.equal(C.label(C.instance('pine', { script: 'my ema.pine' })), 'Pine my ema.pine');
+  assert.equal(C.label(C.instance('pine')), 'Pine script');
+  // the server's NAME_RE (homebase/charts/pineapi.py; tests/test_charts_pineapi.py holds the same table): what it lists must survive here
+  for (const bad of ['../secret.pine', 'a/b.pine', '', 5, null, 'x', 'a.py', '.pine', 'a.pine\n', 'a\\b.pine', 'a$.pine', 'x'.repeat(251) + '.pine']) assert.equal(C.clampParams('pine', { script: bad }).script, '', String(bad));
+  for (const good of ['ok_1.v2-a.pine', 'my ema-2.pine', '\u00e9.pine', '\u6307\u6807.pine', 'x'.repeat(250) + '.pine']) assert.equal(C.clampParams('pine', { script: good }).script, good, good.slice(0, 20));
+  assert.equal(C.clampParams('pine', { maxbars: 5 }).maxbars, 100);
+  assert.equal(C.clampParams('pine', { maxbars: 999999 }).maxbars, 20000);
+  assert.deepEqual(C.clampParams('pine', { inputs: { Length: 9, 'Use it': false, Kind: 'EMA', bad: null, worse: {}, nan: NaN, long: 'x'.repeat(201) } }).inputs,
+    { Length: 9, 'Use it': false, Kind: 'EMA' });
+  for (const none of [undefined, null, 'x', [1, 2], {}, { a: null }]) assert.ok(!('inputs' in C.clampParams('pine', { inputs: none })), JSON.stringify(none));
+  assert.equal(Object.keys(C.clampParams('pine', { inputs: Object.fromEntries(Array.from({ length: 100 }, (_, i) => [`k${i}`, i])) }).inputs).length, 64);
+  assert.deepEqual(C.legendValues(C.instance('pine'), { sv: {} }, {}, 2), [], 'the cell draws a pine row\'s values itself');
+  assert.equal(C.styleLineKeys('pine'), null, 'no Style-tab lines: the script colours its own plots');
+  const old = { grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: [{ id: 'ema', uid: 'e1', visible: true, params: { length: 20 } }] }] };
+  assert.deepEqual(C.migrateLayout(old).cells[0].indicators.map((x) => x.id), ['ema']);
+});
+
+test('footprint: the zero / edge selects say a rule above sets them, in a label short enough to leave the select its width', () => {
+  for (const key of ['zero', 'edge']) {
+    const q = C.def('footprint').params.find((x) => x.key === key);
+    assert.match(q.label, /\(a rule above sets it\)$/, key);
+    assert.ok(q.label.length <= 48, `${key}: a long label squeezes the select in the 520px dialog until "Compare with 1" is cut (${q.label.length})`);
+    assert.equal(q.def, 'one', `${key}: the default is untouched`);
+  }
 });

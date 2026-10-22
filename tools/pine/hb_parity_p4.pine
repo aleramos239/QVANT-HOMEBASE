@@ -1,0 +1,81 @@
+//@version=6
+// HB parity P4 -- order flow from TradingView's own footprint (request.footprint, Premium, since January 2026): the bar's
+// buy / sell volume and delta, its POC and value-area rows at one tick per row and 70 %, a session cumulative delta, and
+// a Pine twin of Homebase's delta divergence (homebase/charts/studies_flow.py). Column name = tv|<homebase key>|<field>;
+// tools/tvparity.py reads tv|fp|buy and tv|fp|sell into its bars. tspeed, press and vaprev have no TradingView source.
+indicator("HB parity P4", overlay=false, precision=10)
+D = display.data_window
+plot(1, "tv|probe|P4", display=D)
+
+footprint fp = request.footprint(1, 70)
+float fpBuy = na
+float fpSell = na
+float fpDelta = na
+float pocDn = na
+float pocUp = na
+float vahUp = na
+float valDn = na
+if not na(fp)
+    fpBuy := fp.buy_volume()
+    fpSell := fp.sell_volume()
+    fpDelta := fp.delta()
+    volume_row poc = fp.poc()
+    volume_row vah = fp.vah()
+    volume_row val = fp.val()
+    if not na(poc)
+        pocDn := poc.down_price()
+        pocUp := poc.up_price()
+    if not na(vah)
+        vahUp := vah.up_price()
+    if not na(val)
+        valDn := val.down_price()
+plot(fpBuy, "tv|fp|buy", display=D)
+plot(fpSell, "tv|fp|sell", display=D)
+plot(fpDelta, "tv|fp|delta", display=D)
+plot(pocDn, "tv|fp|poc_dn", display=D)       // a one-tick row: which edge is Homebase's traded price is settled by the export
+plot(pocUp, "tv|fp|poc_up", display=D)
+plot(vahUp, "tv|fp|vah", display=D)
+plot(valDn, "tv|fp|val", display=D)
+
+// cumdelta (studies.CumDelta): the session's running buy - sell, reset at the 18:00 ET open
+var float cd = 0.0
+if timeframe.change("D")
+    cd := 0.0
+cd := cd + nz(fpDelta)
+plot(cd, "tv|cumdelta|", display=D)
+
+// ddiv:5 (studies_flow.DeltaDiv): a swing high (5 bars each side, inside the session) above the previous one on a
+// lower cumulative delta -> -1, a swing low below the previous one on a higher delta -> +1; known 5 bars later
+var int sessBars = 0
+var float phPx = na
+var float phCd = na
+var float plPx = na
+var float plCd = na
+if timeframe.change("D")
+    sessBars := 0
+    phPx := na
+    phCd := na
+    plPx := na
+    plCd := na
+sessBars := sessBars + 1
+sh = ta.pivothigh(high, 5, 5)
+sl = ta.pivotlow(low, 5, 5)
+cdAt = cd[5]
+int ddDir = na
+float ddPx = na
+if sessBars >= 11
+    if not na(sh)
+        if not na(phPx) and sh > phPx and cdAt < phCd
+            ddDir := -1
+            ddPx := sh
+        phPx := sh
+        phCd := cdAt
+    if not na(sl)
+        if not na(plPx) and sl < plPx and cdAt > plCd
+            ddDir := 1
+            ddPx := sl
+        plPx := sl
+        plCd := cdAt
+plot(ddDir, "tv|ddiv:5|dir", display=D)
+plot(ddPx, "tv|ddiv:5|px", display=D)
+plot(na(ddDir) ? na : 5, "tv|ddiv:5|ago", display=D)

@@ -16,6 +16,7 @@ globalThis.HBLayers = {};
 globalThis.LightweightCharts = new Proxy({ LineStyle: { Solid: 0, Dotted: 1, Dashed: 2 }, LineType: { Simple: 0, WithSteps: 1, Curved: 2 } },
   { get: (t, k) => (k in t ? t[k] : String(k)) });
 require('../../homebase/static/charts/catalog.js');
+require('../../homebase/static/charts/settings.js');
 require('../../homebase/static/charts/cell.js');
 const { Cell } = globalThis.HBCell;
 
@@ -83,4 +84,34 @@ test('a VWAP\'s bands are drawn around every line that has bands on, each in its
   const bands = c.lines.filter((l) => l.part != null);
   assert.deepEqual(bands.map((l) => [l.src, l.part, l.s.opts.color]),
     [['vwap', 1, '#aaaaaa'], ['vwap', -1, '#aaaaaa'], ['vwap:rth', 1, '#112233'], ['vwap:rth', -1, '#112233']]);   // week has bands off
+});
+
+test('an instance with no style (a template, an old save) starts its off-by-default lines hidden, as its Style tab shows them; a line switched on there is drawn', () => {
+  const { c } = chartCell([{ uid: 'tv', id: 'tv_vwap', params: {}, visible: true }, { uid: 'ud', id: 'tv_updown', params: {}, visible: true }]);
+  c.buildSeries();
+  const seen = (uid) => Object.fromEntries(c.lines.filter((l) => l.uid === uid).map((l) => [l.part, l.s.opts.visible]));
+  assert.deepEqual(seen('tv'), { vwap: true, u1: true, l1: true, u2: false, l2: false, u3: false, l3: false });
+  assert.deepEqual(seen('ud'), { up: true, down: true, delta: false });
+  const style = globalThis.HBCatalog.defaultStyle('tv_vwap', []);
+  style.u2.visible = true;
+  const on = chartCell([{ uid: 'tv', id: 'tv_vwap', params: {}, visible: true, style }]);
+  on.c.buildSeries();
+  assert.deepEqual(on.c.lines.filter((l) => l.part === 'u2' || l.part === 'l2').map((l) => [l.part, l.s.opts.visible]), [['u2', true], ['l2', false]]);
+});
+
+test('the legend lists the lines the chart draws: no value for an off-by-default line of an instance with no style, one for a line switched on', () => {
+  globalThis.document = { createElement: () => ({ style: {}, append() {} }) };
+  const bar = { o: 1, h: 2, l: 0.5, c: 1.5, v: 1, d: 0 };
+  const listed = (inst) => {
+    const shown = [];
+    const c = Object.assign(Object.create(Cell.prototype), { bars: [bar], P: { text: '#000', up: '#0f0', down: '#f00', accent: '#08f' }, R: { ohlc: true, indValues: true, precision: 2 },
+      tick: 0.25, colorOf: {}, lg: { ohlc: { replaceChildren() {} } }, rows: [{ inst, vals: { replaceChildren: (...x) => shown.push(...x) } }] });
+    c.legend(null);
+    return shown.length;
+  };
+  assert.equal(listed({ uid: 'tv', id: 'tv_vwap', params: {}, visible: true }), 3, 'vwap, upper 1, lower 1');
+  assert.equal(listed({ uid: 'ud', id: 'tv_updown', params: {}, visible: true }), 2, 'up and down, not delta');
+  const style = globalThis.HBCatalog.defaultStyle('tv_vwap', []);
+  style.u2.visible = true;
+  assert.equal(listed({ uid: 'tv', id: 'tv_vwap', params: {}, visible: true, style }), 4, 'the styled instance: its own style rules, band 2 upper switched on');
 });

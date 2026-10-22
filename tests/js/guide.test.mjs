@@ -43,3 +43,63 @@ test('every entry says something of its own (no two share a what-line)', () => {
   const seen = new Set();
   for (const id of G.ids()) { const w = G.get(id).what; assert.ok(!seen.has(w), `${id}: its own words`); seen.add(w); }
 });
+
+test('every TradingView study says it matches TradingView\'s built-in, and none is a copy of a house entry', () => {
+  const tv = G.ids().filter((id) => id.startsWith('tv_'));
+  assert.equal(tv.length, 90);
+  for (const id of tv) {
+    assert.match(G.get(id).watch || '', /^Matches TradingView's built-in [^.]+\./, `${id}: watch names the TradingView built-in`);
+    assert.equal(C.def(id).group, 'TradingView', `${id}: lives in the TradingView group`);
+  }
+});
+
+test('a TradingView entry only talks about a Source box and a drawing style its Settings and chart really have', () => {
+  for (const id of G.ids().filter((x) => x.startsWith('tv_'))) {
+    const e = G.get(id), d = C.def(id);
+    if (/\bSource\b/.test(e.see.join(' '))) assert.ok(d.params.some((q) => q.key === 'source'), `${id}: its help names a Source box it does not have`);
+    if (d.lines.some((l) => l.dots)) assert.doesNotMatch([...e.see, ...e.read, e.watch].join(' '), /joined line|\bthe line\b/, `${id}: drawn as dots, not a joined line`);
+  }
+});
+
+test('every order-flow app says which app\'s documented behaviour it follows; the footprint and profile name the rules they can switch to', () => {
+  for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
+    assert.match(G.get(id).watch || '', /^Follows [^.]*(ATAS|Exocharts|Sierra|MotiveWave|Bookmap)/, `${id}: watch names the app`);
+  }
+  assert.match(G.get('footprint').use.join(' '), /ATAS, Exocharts or Sierra/);
+  assert.match(G.get('profile').use.join(' '), /Sierra Chart or TradingView/);
+});
+
+test('a TradingView entry promises only the dashed reference lines its catalog entry draws (its refs)', () => {
+  const NUM = '-?\\d+(?:\\.\\d+)?', re = new RegExp(`dashed lines? at (zero|${NUM}(?: and ${NUM})?)`);
+  let seen = 0;
+  for (const id of G.ids().filter((x) => x.startsWith('tv_'))) {
+    const e = G.get(id), m = re.exec([e.what, ...e.see, ...e.read, ...e.use, e.watch || ''].join(' '));
+    if (!m) continue;
+    seen++;
+    const want = m[1] === 'zero' ? [0] : m[1].split(' and ').map(Number);
+    assert.deepEqual(want.filter((x) => !(C.refsOf(id) || []).includes(x)), [], `${id}: its help says "${m[0]}" but the chart draws ${JSON.stringify(C.refsOf(id))}`);
+  }
+  assert.ok(seen > 20, `the check found ${seen} entries that name a reference line: has the wording changed?`);
+  assert.doesNotMatch(G.get('tv_rvgi').see.join(' '), /dashed/);
+  assert.doesNotMatch(G.get('tv_cog').see.join(' '), /dashed/);
+  assert.match(G.get('tv_bbtrend').see.join(' '), /dashed line at zero/, 'BBTrend draws its zero line');
+});
+
+test('a TradingView entry that says "Length N by default" says the length its catalog entry starts with', () => {
+  for (const id of G.ids().filter((x) => x.startsWith('tv_'))) {
+    const m = /\bLength (\d+) by default/.exec(G.get(id).see.join(' ')), q = C.def(id).params.find((x) => x.key === 'length');
+    if (m && q) assert.equal(q.def, +m[1], `${id}: help says Length ${m[1]}, Settings start at ${q.def}`);
+  }
+  assert.equal(C.def('tv_kama').params[0].def, 10, "TradingView's KAMA starts at ER length 10");
+});
+
+test('Pivot HL and Fractals: the help says a bar that is both draws both arrows, as the chart does', () => {
+  for (const id of ['tv_pivothl', 'tv_fractals']) {
+    assert.match(G.get(id).watch, /\bboth arrows\b/, id);
+    assert.doesNotMatch(G.get(id).watch, /One mark per bar|shows the (high|top)/, id);
+  }
+});
+
+test('Bollinger Bandwidth: the help says the width is a percent of the middle line, as TradingView plots it', () => {
+  assert.match(G.get('tv_bbw').what, /\bpercent\b/);
+});

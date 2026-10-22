@@ -1,5 +1,6 @@
 /* Homebase Charts — guide text for the order-flow indicators (footprint, profile, delta, big prints, the Level 2 book
-   ones, stop runs, exhaustion). Plain words; see guide.js for the entry shape. Every colour and number here is what
+   ones, stop runs, exhaustion, and the 2026-10-21 apps: big trades, naked POCs, TPO, cluster statistics, delta
+   turnaround / strength, absorption). Plain words; see guide.js for the entry shape. Every colour and number here is what
    the code draws: footprint / profile in primitives.js, big orders + gauge in l2layer.js, book marks in
    bookevents.js, stop runs + exhaustion + sweeps + bubbles in flowlayer.js / flowmath.js, rules in bookflow.py. */
 (function () {
@@ -27,7 +28,7 @@ G.add({
       'Green lines stacked near a low can mean buyers took control. Red lines near a high, sellers.',
       'Compare the delta under the candle with its colour. A green candle with red delta looks weak.',
       'Use it on the few candles at a level you care about, not to scan the whole chart.',
-      'Settings: group ticks into taller rows, show buys minus sells or the total, hide the bars or the box.',
+      'Settings: taller rows; other row numbers (prints, dominant %, price); the ATAS, Exocharts or Sierra imbalance rule.',
     ],
     watch: 'Drawn only when you zoom in until candles are wide and price rows are tall. Zoomed out you see plain candles.',
   },
@@ -37,7 +38,7 @@ G.add({
       'Horizontal bars grow from the right edge. A longer bar means more contracts traded at that price.',
       'One orange row is the POC (point of control): the single price with the most volume.',
       'Darker blue rows are the value area: the prices holding 70% of the volume. Lighter blue is outside.',
-      'Left of it, a faint ghost of the prior session. Optional lines mark its VAH, VAL and POC.',
+      'Beside it, a faint ghost of the prior session. Optional lines mark its VAH, VAL and POC.',
       'The session restarts at 6 pm New York time, so the profile starts fresh each evening.',
     ],
     read: [
@@ -52,6 +53,7 @@ G.add({
       'Price holding above the value area shows buyers in control. Holding below it, sellers.',
       'Price that falls back into the value area from outside can drift across to the other side.',
       'Thin zones outside the area are where a move can run quickly if price gets there.',
+      'Settings: the POC and value area can follow Sierra Chart or TradingView\'s rules instead of Homebase\'s.',
     ],
     watch: 'It shows where volume was, not who won. A tall bar could be mostly buyers or mostly sellers.',
   },
@@ -273,6 +275,139 @@ G.add({
       'It is best at a level you already watch. Alone it is a weak clue.',
     ],
     watch: 'It confirms 3 candles late, so part of the turn has already happened. About 4 a day on NQ 1m at defaults.',
+  },
+  bigtrades: {
+    what: 'Shows each single market order of 25 or more contracts as a bubble, sized by its contracts.',
+    see: [
+      'A circle at the order\'s time and average price. Green: a buyer paid the ask. Red: a seller hit the bid.',
+      'A bigger circle is a bigger order. A circle large enough to read has its contract count inside.',
+      'With "Group orders" on, nearby orders merge into one circle sized by the group.',
+    ],
+    read: [
+      'One order is a run of same-side prints inside one millisecond, added up. It can walk several prices.',
+      'By volume, the remainder carries on (Bookmap dots): a circle each time the running total reaches the group size.',
+      'By volume, the whole sum (Bookmap bars): the circle holds the full total, not only whole multiples.',
+      'Until the price changes, or until the price or side changes: orders at one price merge into one circle.',
+    ],
+    use: [
+      'Big circles at a swing low or high show who pushed price there. Check that price then stalls.',
+      'Raise the minimum when the chart is crowded. Set a maximum to look only at mid-size orders.',
+      'Pick one side to follow only the buyers or only the sellers.',
+    ],
+    watch: 'Follows the big-trade dots of ATAS, MotiveWave and Bookmap. Orders under 10 contracts are never kept; a candle keeps its 60 largest.',
+  },
+  npoc: {
+    what: 'Draws a dashed line from each candle\'s busiest price until a later candle trades back to it.',
+    see: [
+      'A dashed orange line from a candle\'s most traded price, running right to the edge of the chart.',
+      'A line ends when a later candle\'s range reaches that price.',
+      'The candle still forming is left to the footprint\'s own box.',
+    ],
+    read: [
+      'The most traded price of a candle is its point of control (POC). Left alone, it is called naked.',
+      'Traders treat an untouched POC as unfinished business that price may come back to.',
+      'A line that ran a long way untouched is a price the market has ignored so far.',
+    ],
+    use: [
+      'Watch for price returning to a naked line. A reaction there is what you look for.',
+      'Lines stacked close together mark a zone that is more likely to matter than a single line.',
+      'Turn the footprint on at that candle to see what traded at that price.',
+    ],
+    watch: 'Follows the naked POC of Exocharts and MotiveWave. "Touched" is read from a later candle\'s high and low, not from its rows.',
+  },
+  tpo: {
+    what: 'Shows this session as time-price letters: one letter per time slice at each price it visited.',
+    see: [
+      'Letters (A, B, C...) in rows by price, docked at the right edge. Only the newest session is drawn.',
+      'A row grows to the right with each slice that visited it. "Blocks" draws boxes instead of letters.',
+      'The value area is tinted and the busiest row (POC) is boxed. A price hit by one slice only has the orange colour.',
+      'Dashed lines mark the top and bottom of the initial balance, the first two slices.',
+    ],
+    read: [
+      'A row with many letters is a price the market accepted over time. One letter is a single print: price left fast.',
+      'The value area holds the chosen share of all the letters (70% by default).',
+      'The initial balance is the range of the first slices: a first read of the day\'s size.',
+      'A letter marks every price in its slice\'s range (Sierra), or only the prices that traded in it (MotiveWave).',
+    ],
+    use: [
+      'A day that stays inside its initial balance is a balance day. A break out of it can start a trend.',
+      'Single prints at the edge of the profile are fast moves that price may come back to test.',
+      'Compare its value area with the volume profile\'s: both should centre on much the same prices.',
+    ],
+    watch: 'Follows the TPO of Sierra Chart and MotiveWave. No RTH / ETH split, no open or close marks. "Only prices that traded" needs the footprint.',
+  },
+  cstat: {
+    what: 'Prints a column of order-flow numbers under each candle: delta, volume, trades, seconds and more.',
+    see: [
+      'A strip at the bottom of the chart: one column per candle, a label for each row on the left.',
+      'Rows: Delta, Volume, Trades, Delta %, Max delta, Min delta, Seconds. Green and red show the sign of a delta.',
+      'It hides itself when the candles are too narrow for the numbers. Zoom in to bring it back.',
+    ],
+    read: [
+      'Delta is buys minus sells. Delta % is that delta as a share of the candle\'s volume.',
+      'Max and min delta: the highest and lowest the running delta reached inside the candle.',
+      'Trades counts prints, not contracts. Seconds is how long the candle lasted.',
+      'On tick, volume and range charts Seconds runs to the next candle, and is blank across a session break.',
+      'A candle that closed far from its max delta gave back part of its push.',
+    ],
+    use: [
+      'A big delta % with little price movement is effort without result.',
+      'Compare the max delta with the final delta to see if the buying faded before the close.',
+      'Large volume in few seconds means a fast candle.',
+    ],
+    watch: 'Follows the ATAS Cluster Statistic and Bookmap footprint statistics. A candle stored before the delta range was kept shows a blank.',
+  },
+  dturn: {
+    what: 'Marks a candle whose delta turned against the two candles before it.',
+    see: [
+      'A filled arrow under a candle (pointing up) or over it (pointing down).',
+      'Up: two red candles, then a green one with positive delta and a low at or under the candle before.',
+      'Down: two green candles, then a red one with negative delta that reaches back to the candle before.',
+    ],
+    read: [
+      'The last candle\'s delta disagrees with the two before it: the push may be changing sides.',
+      'The ATAS page words the down test with the earlier candle\'s low, probably a slip. The setting uses its high.',
+    ],
+    use: [
+      'Use it at a level you already watch, as a hint and never as a signal alone.',
+      'A turn on a candle that also shows big trades or an absorption is stronger evidence.',
+    ],
+    watch: 'Follows ATAS Delta Turnaround as its page words it. The delta of a candle in progress can still change it.',
+  },
+  dstr: {
+    what: 'Marks candles that closed with their delta near the best it reached: a one-sided candle.',
+    see: [
+      'A hollow arrow past the candle\'s low (delta positive) or past its high (delta negative).',
+      'It sits further out than the Delta turnaround arrows, so both can show on one candle.',
+    ],
+    read: [
+      'The best delta is the highest the running delta reached in the candle (the lowest if the candle ended negative).',
+      'The closing delta must be between "From" and "Up to" percent of that best. 80 to 100 is a candle closing near its best.',
+      'Lower "From" for more candles. Raise it to keep only the cleanest.',
+    ],
+    use: [
+      'A strong candle that breaks a level is a move with order flow behind it.',
+      'A strong candle with little price movement can mean the other side absorbed it.',
+    ],
+    watch: 'Follows ATAS Delta Strength. It needs the delta high and low, which candles stored before the update do not have.',
+  },
+  mwabs: {
+    what: 'Marks an imbalance that price then walked away from, with a line back to where it formed.',
+    see: [
+      'A line from the imbalance price on a candle to the candle that confirmed it, with a dot at the end.',
+      'Red: buyers\' imbalance, price then closed lower. Green: sellers\' imbalance, price then closed higher.',
+      'One mark per candle and side.',
+    ],
+    read: [
+      'A buy imbalance at the top that price then closes under by "Price leaves it by" ticks: the buyers did not hold it.',
+      'It is checked on that candle and the next few ("Within"). The mirror holds for sellers.',
+      'The imbalance comes from the rule you pick: Homebase, ATAS, Exocharts or Sierra Chart.',
+    ],
+    use: [
+      'Treat the line\'s price as a level to watch if price comes back.',
+      'Raise the ticks for fewer, stronger marks.',
+    ],
+    watch: 'Follows the absorption idea of the MotiveWave Volume Imprint. The "Within" wait is ours: the page gives none.',
   },
 });
 })();

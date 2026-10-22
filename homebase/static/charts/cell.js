@@ -65,6 +65,13 @@ function mk(tag, cls, text) {
 }
 function val(text, color) { const s = mk('span', 'v', text); s.style.color = color; return s; }
 function kv(k, v, color) { const s = mk('span', 'kv'); s.append(mk('span', 'k', k), val(v, color)); return s; }
+/* A catalog line's style when its instance has none (a template, an old save): a line that starts off stays off, as defaultStyle().
+   The chart draws with it, and legendInst hands the same to the legend, so the two list the same lines. */
+const catalogSty = (ln) => ({ color: ln.color, width: ln.width, dash: ln.dash, visible: !ln.off });
+function legendInst(inst) {
+  const t = !inst.style && C.TA_BY_ID[inst.id];
+  return t && t.lines.some((ln) => ln.off) ? { ...inst, style: Object.fromEntries(t.lines.map((ln) => [ln.part, catalogSty(ln)])) } : inst;
+}
 function iconButton(name, title, act) {
   const b = mk('button', 'ib');
   b.type = 'button';
@@ -152,6 +159,68 @@ function tickLabel(t, type, fmt) {
   return S.clockText(d.toISOString().slice(11, type === 4 ? 19 : 16), fmt);
 }
 
+/* ---- Pine (the 'pine' indicator: pineworker.js runs the script, the Cell methods below draw what it answers) ---- */
+const PINE_WORKER = '/static/charts/pineworker.js?v=4';   // bump with the worker: a browser keeps a Worker's script like any other
+const PINE_MARKS = 1000;   // plotshape / plotchar marks kept (the newest): a script with a hit on every bar would bury the chart
+const PINE_SHAPE = { triangle_up: 'arrowUp', arrow_up: 'arrowUp', label_up: 'arrowUp', triangle_down: 'arrowDown', arrow_down: 'arrowDown',
+  label_down: 'arrowDown', square: 'square', diamond: 'square' };   // every other shape (circle, cross, flag ...) is a circle
+const PINE_SIZE = { tiny: 0.5, small: 0.75, normal: 1, large: 1.5, huge: 2 };
+
+/* A Pine colour ('#RRGGBB', '#RRGGBBAA', rgb(), rgba()) as [r, g, b, a], or null when it is not one. */
+function pineRgba(c) {
+  const s = String(c == null ? '' : c).trim();
+  let m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(s);
+  if (m) {
+    const h = m[1].length < 6 ? m[1].replace(/./g, '$&$&') : m[1];
+    return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).concat(h.length === 8 ? parseInt(h.slice(6), 16) / 255 : 1);
+  }
+  m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(s);
+  return m ? [+m[1], +m[2], +m[3], m[4] == null ? 1 : +m[4]] : null;
+}
+/* ... as a CSS colour Lightweight Charts reads (it does not take 8-digit hex); `a` replaces the alpha; dflt when it is none. */
+function pineCss(c, dflt, a) {
+  const v = pineRgba(c);
+  return v ? `rgba(${v[0]},${v[1]},${v[2]},${+(a == null ? v[3] : a).toFixed(3)})` : dflt;
+}
+
+/* How a plot (its plotsMeta) is drawn as a series: null for a bgcolor stripe or a barcolor (the layer / nothing, not a series),
+   else {kind: 'line' | 'hist' | 'area' | 'dots', step, dashed}. */
+function pinePlotKind(meta) {
+  const s = (meta && meta.style) || '';
+  if (s === 'background' || s === 'barcolor') return null;
+  if (s === 'style_histogram' || s === 'style_columns') return { kind: 'hist' };
+  if (s === 'style_area' || s === 'style_areabr') return { kind: 'area' };
+  if (s === 'style_circles' || s === 'style_cross') return { kind: 'dots' };
+  return { kind: 'line', step: /stepline/.test(s), dashed: s === 'hline' };
+}
+/* The plots of a Pine instance that draw as series, in script order; and what decides whether the chart's series still fit
+   them (colours are left out: a script that colours its last bar differently must not rebuild the chart on every tick). */
+function pineKinds(st) {
+  const out = [];
+  for (const title in st.meta) {
+    const k = pinePlotKind(st.meta[title]);
+    if (k) out.push({ title, ...k, color: st.meta[title].color, width: st.meta[title].linewidth || 1 });
+  }
+  return out;
+}
+const pineSig = (st) => JSON.stringify([st.overlay, pineKinds(st).map(({ color, ...k }) => k)]);
+
+/* plotshape / plotchar / plotarrow hits (the worker's `shapes`) as the series-markers records setExtraMarkers takes. A shape
+   above or below the bar goes there; Top, Bottom and Absolute locations have no pane edge or price to sit on here, so they ride
+   the bar (above, below, in it). A character is a marker of size 0 with the character as its text. */
+function pineMarkers(shapes, P) {
+  return (shapes || []).slice().sort((a, b) => a.time - b.time).slice(-PINE_MARKS).map((s) => {   // the worker lists them plot by plot: the newest by time, not by position
+    const name = String(s.shape || '').replace(/^shape_/, ''), loc = String(s.location || '').toLowerCase(), isChar = name === 'char';
+    const dflt = /up$/.test(name) ? P.up : /down$/.test(name) ? P.down : P.accent;
+    const size = String(s.size || '').replace(/^size\./, '');
+    return { ms: s.time, position: /^(abovebar|top)$/.test(loc) ? 'aboveBar' : /^(belowbar|bottom)$/.test(loc) ? 'belowBar' : 'inBar',
+      shape: PINE_SHAPE[name] || 'circle', color: pineCss(s.color, dflt), text: isChar ? String(s.char || s.text || '') : String(s.text || ''),
+      size: isChar ? 0 : (PINE_SIZE[size] || 1) };
+  });
+}
+/* A bar as the worker takes it (pineworker.js `init` / `bars`); fp only when the script reads request.footprint. */
+const pineBar = (b, fp) => (fp && b.fp ? { ms: b.ms, s: b.s, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v, fp: b.fp } : { ms: b.ms, s: b.s, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v });
+
 class Cell {
   constructor(slot, cfg, host) {
     this.el = slot; this.cfg = cfg; this.host = host; this.id = host.id;
@@ -187,6 +256,9 @@ class Cell {
     this.today = []; this.todayKey = '[]';   // the session under way's thin hours, from the status message (setToday)
     this.has = { fp: false, big: false, flow: false };   // what the bars on screen carry beyond OHLCV: need() as their history was asked
     this.wantFp = false;   // the Level 2 ladder reads this chart's footprint (needFootprint)
+    this.pine = new Map(); // Pine instances: uid -> {w: the Worker, data, shapes ...} -- outside the chart, which is rebuilt often (pineSync)
+    this.pineFresh = false;   // the bars were replaced (a history, a window): every Pine script starts over on them
+    this.onPineMeta = null;   // the settings dialog's hook: a Pine script's inputs or error changed (uid)
     slot.className = 'panel';
     this.folded = false;   // the legend's collapse chevron: app.js syncs this to the persisted preference
                             // right after construction (it needs this cell's grid index, unknown in here)
@@ -521,6 +593,7 @@ class Cell {
       if (r) this.chart.timeScale().setVisibleLogicalRange({ from: r.from + k, to: r.to + k });
       if (this.hover != null) this.hover += k;
       this.drawMarkers(); this.drawGaps(); this.syncFootprint(); this.syncEth();
+      this.pineForward(merged.slice(0, added));   // the scripts re-run with the older bars in front
       this.syncRefLines();   // an older session on the chart: the previous close may be on it now
       this.lg.badge.hidden = !this.sessions.some((s) => s.approx);
       this.legend(this.hover);
@@ -580,6 +653,7 @@ class Cell {
     this.bars = []; this.realT = new Map();
     m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; });
     for (const b of this.slotted(m.bars)) this.append(b);
+    this.pineReplaced();
     this.build(null);
     this.message('Showing the days around ' + new Date(w.before).toISOString().slice(0, 10) + ' — not live. Pick the interval again for the latest bars.');
     this.host.onLoaded(this);
@@ -625,10 +699,14 @@ class Cell {
   need() {
     const on = (id) => this.cfg.indicators.some((x) => x.id === id);
     const opt = (id, key) => this.cfg.indicators.some((x) => x.id === id && x.params && x.params[key]);
+    const opt2 = (id, key, val) => this.cfg.indicators.some((x) => x.id === id && x.params && x.params[key] === val);
     // flow: the sweeps and trade bubbles (the bar's `sw` / `bub`), a good part of the message: only while an option wants them
     // (Stop runs read the sweeps; Exhaustion reads only OHLC and delta, which every bar carries)
-    return { fp: this.wantFp || on('footprint'), big: on('bigprints'),
-      flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') || on('stoprun') };
+    // the order-flow apps (2026-10-21): bigtrades reads the orders (`ag`, flow); npoc, mwabs and a traded-mode TPO read the footprint rows
+    // a Pine script that reads request.footprint (known once its text has been fetched: pineRun)
+    const pineFp = !!this.pine && this.cfg.indicators.some((x) => x.id === 'pine' && this.pine.get(x.uid) && this.pine.get(x.uid).fp);
+    return { fp: this.wantFp || on('footprint') || on('npoc') || on('mwabs') || opt2('tpo', 'mode', 'traded') || pineFp, big: on('bigprints'),
+      flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') || on('stoprun') || on('bigtrades') };
   }
 
   /* The Level 2 ladder shows this chart (domui.js calls this at every paint): its Vol column sums the bars'
@@ -710,6 +788,7 @@ class Cell {
     this.bars = []; this.realT = new Map();
     m.bars.forEach((b, i) => { b.sv = {}; for (const k in m.studies) b.sv[k] = m.studies[k][i]; });
     for (const b of this.slotted(m.bars)) this.append(b);
+    this.pineReplaced();
     this.build(view);
     // partial: the server's BUILD_BUDGET_S cut the initial load short (a cold, deep chart). It already
     // dropped the OLDEST sessions, never the newest, so what's on screen is right -- but there may be far
@@ -770,6 +849,7 @@ class Cell {
     if (sel) { this.dc.sel = sel; this.dc.refresh(); }
     requestAnimationFrame(() => this.placeGear());
     this.ov = this.host.overlays ? this.host.overlays(this) : [];
+    this.pineSync();
   }
 
   restyle() { if (this.chart) this.build(this.viewNow()); }
@@ -988,6 +1068,28 @@ class Cell {
           });
           break;
         }
+        case 'pine': {   // a Pine script's own plots, once its first result is in: the price pane when the script says overlay, else a pane of its own
+          const st = this.pine && this.pine.get(inst.uid);
+          if (!st) break;
+          st.sig = pineSig(st);   // what this chart has built: a later result with another set of plots rebuilds it (pineResult)
+          const kinds = pineKinds(st), where = !kinds.length || st.overlay ? 0 : ++pane;
+          if (where) this.paneUid.push(inst.uid);
+          const fmt = where ? { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } } : {};
+          kinds.forEach((k, j) => {
+            const color = pineCss(k.color, P.accent), src = 'pine:' + k.title;
+            if (k.kind === 'hist') add(inst, src, null, LW.HistogramSeries, { ...fmt, color, lastValueVisible: false }, where);
+            else if (k.kind === 'area') {
+              add(inst, src, null, LW.AreaSeries, { ...fmt, lineColor: color, lineWidth: k.width, topColor: pineCss(color, color, 0.3),
+                bottomColor: pineCss(color, color, 0), lastValueVisible: true, crosshairMarkerVisible: false }, where);
+            } else {
+              line(inst, src, null, color, k.width, where, { ...fmt, ...(k.kind === 'dots' ? { lineVisible: false, pointMarkersVisible: true } : {}),
+                ...(k.step ? { lineType: LW.LineType.WithSteps } : {}), ...(k.dashed ? { lineStyle: LW.LineStyle.Dashed } : {}) });
+            }
+            Object.assign(this.lines[this.lines.length - 1], { pine: { st, title: k.title }, color });
+            if (j === 0) this.colorOf[inst.uid] = color;
+          });
+          break;
+        }
         default: {
           const t = C.TA_BY_ID[inst.id];
           if (!t) break;   // levels, footprint, profile, big prints: price lines, layers and markers
@@ -995,10 +1097,11 @@ class Cell {
           // when it can move, the price pane when it cannot
           const { where, scale } = t.pane ? spot(inst) : { where: 0, scale: {} };
           const st = inst.style || {}, own = where > 0;
-          const fmt = t.pane ? { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } } : {};
+          const dg = t.digits || 2;   // decimals of the axis and the value tags: 2, or what the entry asks for (SMI Ergodic: 4)
+          const fmt = t.pane ? { priceFormat: { type: 'price', precision: dg, minMove: Number((10 ** -dg).toFixed(dg)) } } : {};
           let top = null;
           t.lines.forEach((ln, j) => {
-            const sty = st[ln.part] || { color: ln.color, width: ln.width, dash: ln.dash, visible: true };
+            const sty = st[ln.part] || catalogSty(ln);
             if (j === 0) this.colorOf[inst.uid] = sty.color;
             const tag = ln.tag !== false;   // its value on the price axis (a band or a histogram has none)
             const serie = ln.type === 'hist'
@@ -1006,7 +1109,7 @@ class Cell {
                 ...scale, visible: sty.visible !== false }, where)
               : line(inst, k, ln.part, C.lineColor(sty), sty.width, where,
                 { ...fmt, lastValueVisible: tag, ...tagOpt(sty), ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
-                  ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}), ...shapeOpt(sty) });
+                  ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}), ...(ln.dots ? { lineVisible: false, pointMarkersVisible: true } : {}), ...shapeOpt(sty) });
             this.lines[this.lines.length - 1].gen = ln;
             if (!top) top = serie;
           });
@@ -1082,6 +1185,7 @@ class Cell {
         refused: Bk.refusal ? Bk.refusal(root) : null };    // why older history is missing (a paused window, busy)
       if (this.cfg.indicators.some((x) => ['bigorders', 'absorb', 'pulled', 'iceberg'].includes(x.id))) f.episodes = Bk.episodes(root, t0, t1);
     }
+    if (this.pine && this.pine.size) f.pine = this.pineFacts();
     return f;
   }
 
@@ -1102,7 +1206,7 @@ class Cell {
       r.note.className = 'lg-note' + (s ? ` ${s.tone}` + (s.act ? ' act' : '') : '');
       r.note.textContent = s ? s.text : '';
       if (s && s.act) r.note.dataset.act = s.act; else delete r.note.dataset.act;
-      r.note.title = s ? (s.act === 'zoom' ? 'Click to zoom in' : s.text) : '';
+      r.note.title = s ? (s.title || (s.act === 'zoom' ? 'Click to zoom in' : s.text)) : '';
     }
   }
 
@@ -1143,6 +1247,7 @@ class Cell {
     this.host.changed();
     for (const l of this.lines) if (l.uid === uid) l.s.applyOptions({ visible: on && l.own !== false });
     this.drawLevels(); this.drawMarkers(); this.syncFootprint(); this.syncProfile();
+    if (this.pine && this.pine.get(uid)) this.pineDraw(this.pine.get(uid));   // its marks and drawings follow the eye too
     // the overlay layers (flow bubbles, Level 2 lines, the book's events, the heatmap) read the eye themselves but
     // repainted only on a new bar or a pan: an eye click left them as they were
     for (const o of this.ov) { if (o && o.onIndicators) { try { o.onIndicators(); } catch (e) { console.error(e); } } }
@@ -1240,7 +1345,7 @@ class Cell {
       const colors = { text: P.text, up: P.up, down: P.down, line: own || P.accent, vwap: own || P.vwap, cum: own || P.cum };
       // a plain-word reading ("Buyers pushing") is the answer itself, not a number: it shows even with "Indicator values" off
       const off = r.inst.opts && r.inst.opts.legend === false;
-      const vs = off ? [] : C.legendValues(r.inst, b, colors, dt).filter((x) => F.indValues || x.word);
+      const vs = off ? [] : (r.inst.id === 'pine' ? this.pineValues(r.inst, b, dt) : C.legendValues(legendInst(r.inst), b, colors, dt)).filter((x) => F.indValues || x.word);
       r.vals.replaceChildren(...vs.map((x) => val(x.text, x.color)));
     }
   }
@@ -1264,6 +1369,7 @@ class Cell {
       if (this.alt) this.alt.update(this.altPoint(b));
       for (const l of this.lines) l.s.update(this.point(l, b));
     }
+    this.pineForward(touched);
     if (touched.length && !this.replay && this.dc && this.dc.checkAlerts) this.dc.checkAlerts();
     if (m.profile !== undefined) { this.profile = m.profile; this.syncProfile(); }
     // a big print, or a value for a study drawn as markers (ddiv: the server puts it on the confirming bar), moves the markers
@@ -1359,6 +1465,10 @@ class Cell {
   point(l, b) {
     const P = this.P, time = b.tt;
     if (b.blank) return { time };
+    if (l.pine) {   // a Pine plot: the worker's value for this bar (its own colour when the script gave one)
+      const p = l.pine.st.data.get(l.pine.title), v = p && p.get(b.ms);
+      return !v || v.value == null ? { time } : v.color ? { time, value: v.value, color: v.color } : { time, value: v.value };
+    }
     if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
     if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
     if (typeof l.src === 'string' && l.src.startsWith('bk:')) this.bookSv(l.src, b);   // the book's own series: into b.sv
@@ -1465,12 +1575,13 @@ class Cell {
       if (!t || !t.marks || inst.visible === false) continue;
       const k = C.serverKey(inst);
       for (let i = 0; i < this.bars.length; i++) {
-        const v = this.bars[i].sv && this.bars[i].sv[k], m = v ? t.marks(v, this.P, inst.params) : null;
-        if (!m) continue;
-        let j = i, left = m.ago || 0;
-        while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back
-        if (left > 0) continue;       // the swing is left of the first loaded bar: no marker (never one on bar 0)
-        if (!this.bars[j].blank) out.push({ time: this.bars[j].tt, position: m.position, color: m.color, shape: m.shape, text: m.text, size: m.size });
+        const v = this.bars[i].sv && this.bars[i].sv[k];
+        for (const m of [].concat((v && t.marks(v, this.P, inst.params)) || [])) {   // one mark, or a top and a bottom on one bar
+          let j = i, left = m.ago || 0;
+          while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back
+          if (left > 0) continue;       // the swing is left of the first loaded bar: no marker (never one on bar 0)
+          if (!this.bars[j].blank) out.push({ time: this.bars[j].tt, position: m.position, color: m.color, shape: m.shape, text: m.text, size: m.size });
+        }
       }
     }
     return out;
@@ -1528,24 +1639,243 @@ class Cell {
     const f = this.visible('footprint')[0];
     this.fp.set(this.bars, !!f, f ? f.params.imbalance : 0, this.tick,
       f ? { stack: f.params.stack, unfinished: f.params.unfinished, deltaNum: f.params.deltaNum, rows: f.params.rows,
-        numbers: f.params.numbers, vbars: f.params.vbars, poc: f.params.poc } : null);
+        numbers: f.params.numbers, vbars: f.params.vbars, poc: f.params.poc, text: f.params.text || undefined, imb: f.params.imb,
+        zero: f.params.zero, edge: f.params.edge, minvol: f.params.minvol, mindiff: f.params.mindiff } : null);
   }
 
   syncProfile() {
     if (!this.prof) return;
     const f = this.visible('profile')[0];
-    this.prof.set(f ? this.profile : null, this.tick, f ? { prior: f.params.prior, lines: f.params.lines, naked: this.priorNaked(),
-      va: f.params.va, width: f.params.width, side: f.params.side } : null);
+    const ex = f ? { prior: f.params.prior, lines: f.params.lines, va: f.params.va, width: f.params.width, side: f.params.side,
+      method: f.params.method } : null;
+    this.prof.set(f ? this.profile : null, this.tick, ex && { ...ex, naked: this.priorNaked(ex) });
   }
-  /* The prior session's POC has not been traded since this session began (its line is dashed until it is). */
-  priorNaked() {
+  /* The prior session's POC (the one drawn, by the chosen method and share) has not been traded since this session began
+     (its line is dashed until it is). */
+  priorNaked(ex) {
     const q = this.profile && this.profile.prev, bars = this.bars;
     if (!q || q.poc == null || !bars.length) return false;
+    const poc = Profile && Profile.levels ? Profile.levels(q, ex || {}, this.tick).poc : q.poc;
     const sess = bars[bars.length - 1].s;
     for (let i = bars.length - 1; i >= 0 && bars[i].s === sess; i--) {
-      if (!bars[i].blank && bars[i].l <= q.poc && bars[i].h >= q.poc) return false;
+      if (!bars[i].blank && bars[i].l <= poc && bars[i].h >= poc) return false;
     }
     return true;
+  }
+
+  /* ---- Pine ------------------------------------------------------------------------------------------------------
+     A 'pine' indicator runs its script in a Worker (pineworker.js) on this chart's bars. The Worker lives in this.pine
+     (uid -> state), not with the chart: the chart is rebuilt on every history and every settings change, and a rebuild must
+     not restart a script. build() ends with pineSync(), which starts, restarts (another script, inputs, symbol, bars) or stops
+     the Workers to match cfg.indicators. A result is merged into the state (st.data by bar ms, st.shapes) and drawn from it:
+     point() for the series, pineDraw() for the marks and the drawings layer, pineValues() for the legend. A Worker error, a
+     missing runtime or a script that does not compile stops at st.error: it shows in the legend note and never reaches the chart. */
+  pineSync() {
+    if (!this.pine) this.pine = new Map();
+    const fresh = this.pineFresh, live = new Set();
+    this.pineFresh = false;
+    for (const inst of this.cfg.indicators) {
+      if (inst.id !== 'pine') continue;
+      live.add(inst.uid);
+      let st = this.pine.get(inst.uid);
+      if (!st) {
+        st = { uid: inst.uid, w: null, ask: 0, key: '', script: null, fp: false, running: false, error: null, since: null, sig: null, layer: null,
+          market: this.pineMarket() };
+        this.pineClear(st);
+        this.pine.set(inst.uid, st);
+      }
+      st.layer = null;   // the chart is new: so is the layer on it (the drawings come back from st.draw)
+      if (window.HBPineLayer && this.candles) { st.layer = new window.HBPineLayer.PineLayer(this.P, this); this.candles.attachPrimitive(st.layer); }
+      this.pineRun(st, inst, fresh);
+      this.pineDraw(st);
+    }
+    for (const [uid, st] of [...this.pine]) {
+      if (live.has(uid)) continue;
+      if (st.w) st.w.terminate();
+      this.pine.delete(uid);
+      this.setExtraMarkers('pine:' + uid, []);
+    }
+  }
+
+  /* The bars on screen were replaced (a history, a window): every script starts over on them, and one that answered for another
+     market or interval drops that answer now, so the new chart never shows the old market's lines for a moment. */
+  pineReplaced() {
+    this.pineFresh = true;
+    if (!this.pine) return;
+    const market = this.pineMarket();
+    for (const st of this.pine.values()) {
+      if (st.market !== market) Object.assign(st, { market, data: new Map(), shapes: [], draw: {}, drawn: false, since: null });
+    }
+  }
+
+  pineMarket() { return `${(this.shown || this.cfg).root}|${this.spec()}`; }
+
+  /* What a script has answered so far, forgotten (a new script, no script, a chart it cannot run on). */
+  pineClear(st) {
+    Object.assign(st, { data: new Map(), shapes: [], meta: {}, overlay: false, inputsMeta: [], warnings: [], draw: {}, drawn: false, title: null,
+      firstMs: null, fp: false, since: null });
+  }
+  pineStop(st) {
+    if (st.w) st.w.terminate();
+    st.w = null; st.ask++; st.running = false; st.key = '';
+    this.pineClear(st);
+  }
+
+  /* Start the script of `inst`, or start it over when its settings or the bars changed; nothing when it already runs that. */
+  pineRun(st, inst, fresh) {
+    const p = inst.params || {}, root = (this.shown || this.cfg).root;
+    if (st.script !== p.script) { this.pineStop(st); st.script = p.script; st.error = null; this.pineChanged(st); }   // the dialog drops the old inputs
+    if (!p.script) return;
+    if (!this.isTime()) { this.pineStop(st); st.error = 'Pine needs a time chart'; return; }
+    if (!this.bars.length) return;   // its history is on the way: build() comes again with it
+    const key = JSON.stringify([p.script, p.inputs || null, p.maxbars, root, this.spec(), this.tick, this.pv]);
+    if (key === st.key && !fresh && !(st.error && !st.w)) return;
+    st.key = key; st.error = null; st.running = true;
+    this.refreshStatus();
+    const ask = ++st.ask, live = () => st.ask === ask && this.pine && this.pine.get(st.uid) === st;
+    window.fetch(`/api/pine/scripts/${encodeURIComponent(p.script)}`)
+      .then((r) => (r.ok ? r.text() : Promise.reject(new Error(`Pine script "${p.script}" was not found`))))
+      .then((src) => {
+        if (!live()) return;
+        st.fp = /request\.footprint/.test(src);
+        if (st.fp && !this.has.fp) { this.subscribe(true); return; }   // its history comes again with the footprint, and starts this over
+        this.pineInit(st, p, src);
+      })
+      .catch((e) => { if (live()) this.pineFail(st, e); });
+  }
+
+  pineInit(st, p, src) {
+    if (!st.w) {
+      if (!window.Worker) throw new Error('This browser cannot run Pine scripts');
+      const w = st.w = new window.Worker(PINE_WORKER);
+      w.onmessage = (e) => { try { this.pineMsg(st, w, e.data || {}); } catch (err) { console.error(err); } };
+      // a Worker whose script did not load (the runtime is not installed on the server) fires this, not a message
+      w.onerror = (e) => {
+        if (e && e.preventDefault) e.preventDefault();
+        if (st.w !== w) return;
+        w.terminate(); st.w = null; st.key = '';
+        this.pineFail(st, new Error('The Pine runtime is not available on this server'));
+      };
+    }
+    const bars = this.bars.filter((b) => !b.blank).slice(-(p.maxbars || 5000)).map((b) => pineBar(b, st.fp));
+    st.since = null;
+    st.w.postMessage({ type: 'init', source: src, inputs: p.inputs || {}, root: (this.shown || this.cfg).root, tf_s: this.barMs() / 1000,
+      tick_size: this.tick, point_value: this.pv || 1, bars, maxBars: p.maxbars });
+  }
+
+  pineFail(st, e) {
+    st.running = false;
+    st.error = String((e && e.message) || e || 'Pine failed').slice(0, 300);
+    this.pineChanged(st);
+  }
+  pineChanged(st) {
+    this.refreshStatus();
+    if (this.onPineMeta) { try { this.onPineMeta(st.uid); } catch (e) { console.error(e); } }
+  }
+
+  pineMsg(st, w, m) {
+    if (st.w !== w || !this.pine || this.pine.get(st.uid) !== st) return;   // a Worker that was replaced or removed
+    if (m.type === 'error') this.pineFail(st, new Error(m.message));
+    else if (m.type === 'result') this.pineResult(st, m);
+  }
+
+  /* A worker result into the state, then onto the chart. full: a whole run; else only the points from the first changed bar
+     on, merged by bar time (the shapes: from the earliest of the changed plot points, the bars forwarded since the last result
+     and the new hits, so a hit that went away on the developing bar goes away here too). */
+  pineResult(st, r) {
+    const full = r.full !== false, meta = r.plotsMeta || {};
+    let from = Infinity;
+    if (full) st.data = new Map();
+    for (const title in r.plots || {}) {
+      const m = st.data.get(title) || new Map(), bg = meta[title] && meta[title].style === 'background';
+      st.data.set(title, m);
+      for (const p of r.plots[title]) {
+        if (p.time < from) from = p.time;
+        if (p.value == null && !(bg && p.color)) m.delete(p.time);
+        else m.set(p.time, { value: p.value, color: pineCss(p.color) });
+      }
+    }
+    const hits = r.shapes || [];
+    for (const s of hits) if (s.time < from) from = s.time;
+    if (st.since != null && st.since < from) from = st.since;
+    st.shapes = full ? hits.slice() : st.shapes.filter((s) => s.time < from).concat(hits);
+    st.since = null;
+    st.meta = meta; st.overlay = !!r.overlay; st.title = r.title || st.script || null; st.inputsMeta = r.inputsMeta || []; st.warnings = r.warnings || [];
+    if (r.firstMs != null) st.firstMs = r.firstMs;
+    st.draw = { boxes: r.boxes || [], lines: r.lines || [], labels: r.labels || [], linefills: r.linefills || [], polylines: r.polylines || [], tables: r.tables || [] };
+    st.drawn = Object.values(st.draw).some((l) => l.length);
+    st.running = false; st.error = null;
+    if (this.chart) {
+      if (pineSig(st) !== st.sig) this.restyle();   // the plots are not the ones the chart has built: it builds them (and draws the rest) afresh
+      else {
+        const last = this.bars[this.bars.length - 1];
+        for (const l of this.lines) {
+          if (!l.pine || l.pine.st !== st) continue;
+          if (!full && last && from >= last.ms) l.s.update(this.point(l, last));   // only the developing bar moved
+          else l.s.setData(this.bars.map((b) => this.point(l, b)));
+        }
+        this.pineDraw(st);
+        this.legend(this.hover);
+      }
+    }
+    this.pineChanged(st);
+  }
+
+  /* The marks and the drawings of a Pine instance, as its eye says (a hidden one draws neither). */
+  pineDraw(st) {
+    if (!this.P) return;
+    const inst = this.cfg.indicators.find((x) => x.uid === st.uid), on = !!inst && inst.visible !== false;
+    this.setExtraMarkers('pine:' + st.uid, on ? pineMarkers(st.shapes, this.P) : []);
+    if (!st.layer) return;
+    const bg = {}, bgMeta = {};
+    for (const [title, m] of st.data) {
+      if (!on || !st.meta[title] || st.meta[title].style !== 'background') continue;
+      bgMeta[title] = st.meta[title];
+      bg[title] = [...m].map(([time, v]) => ({ time, color: v.color }));
+    }
+    // the layer merges a partial result's stripes itself; fed the whole state each time it never has to
+    st.layer.update({ full: true, firstMs: st.firstMs, plotsMeta: bgMeta, plots: bg, ...(on ? st.draw : {}) });
+  }
+
+  /* New or changed bars to every running script (the live bar, a closed one, older history). */
+  pineForward(list) {
+    if (!this.pine || !this.pine.size || !list.length) return;
+    for (const st of this.pine.values()) {
+      if (!st.w) continue;   // not started: its init carries these bars
+      const bars = list.filter((b) => !b.blank).map((b) => pineBar(b, st.fp));
+      if (!bars.length) continue;
+      // bars before the run window change nothing (the Worker ignores them and answers nothing): they must not widen `since`
+      for (const b of bars) if ((st.firstMs == null || b.ms >= st.firstMs) && (st.since == null || b.ms < st.since)) st.since = b.ms;
+      st.w.postMessage({ type: 'bars', bars });
+    }
+  }
+
+  /* The legend values of a Pine row: each plot's value on bar b, in the colour that bar's point has. */
+  pineValues(inst, b, dt) {
+    const out = [];
+    for (const l of this.lines) {
+      if (!l.pine || l.uid !== inst.uid) continue;
+      const p = l.pine.st.data.get(l.pine.title), v = p && p.get(b.ms);
+      out.push({ text: C.fmtPrice(v ? v.value : null, dt), color: (v && v.color) || l.color });
+    }
+    return out;
+  }
+
+  /* What HBStatus.of reads for the Pine rows. */
+  pineFacts() {
+    const out = {};
+    for (const [uid, st] of this.pine) {
+      const notes = [...st.warnings];
+      if (st.drawn && !window.HBPineLayer) notes.push('This page cannot draw a script\'s boxes, lines, labels or tables');
+      out[uid] = { error: st.error, notes, running: st.running };
+    }
+    return out;
+  }
+
+  /* The settings dialog's view of a script: its inputs (the script's own, from its last run), its title and why it failed. */
+  pineMeta(uid) {
+    const st = this.pine && this.pine.get(uid);
+    return st ? { inputs: st.inputsMeta, title: st.title, error: st.error, running: st.running } : null;
   }
 
   destroy() {
@@ -1557,9 +1887,10 @@ class Cell {
     if (this.winReq) this.winReq.resolve(false);
     // ... nor may a whenLoaded() (a jump() awaiting this cell's load) wait on a cell that will never load.
     const w = this.loadWaiters; this.loadWaiters = []; w.forEach((f) => f(false));
+    if (this.pine) { for (const st of this.pine.values()) if (st.w) st.w.terminate(); this.pine.clear(); }   // a Worker outlives its page's chart
     this.teardown();
   }
 }
 
-window.HBCell = { Cell, palette, FONT, badgeEl, holesOf, withBlanks, bandsOf, MIN_GAP_S };
+window.HBCell = { Cell, palette, FONT, badgeEl, holesOf, withBlanks, bandsOf, MIN_GAP_S, pineCss, pinePlotKind, pineMarkers };
 })();

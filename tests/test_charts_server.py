@@ -1497,6 +1497,18 @@ def test_presets_roundtrip(tmp_path):
         assert client.delete("/api/presets/drawing:trend/gone").status_code == 200   # deleting nothing is fine
 
 
+def test_preset_defaults_come_in_one_request(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.get("/api/preset-defaults/indicator").json() == {}
+        assert client.put("/api/presets/indicator:rsi/__default__", json={"params": {"length": 9}}).status_code == 200
+        assert client.put("/api/presets/indicator:rsi/Fast", json={"params": {"length": 5}}).status_code == 200
+        assert client.put("/api/presets/indicator:ema/Slow", json={"params": {"length": 200}}).status_code == 200   # no default saved: left out
+        assert client.put("/api/presets/drawing:trend/__default__", json={"width": 4}).status_code == 200
+        assert client.get("/api/preset-defaults/indicator").json() == {"rsi": {"params": {"length": 9}}}
+        assert client.get("/api/preset-defaults/drawing").json() == {"trend": {"width": 4}}
+        assert client.get("/api/preset-defaults/sticker").status_code == 400
+
+
 def test_presets_refuse_a_bad_kind(tmp_path):
     with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         for kind in ("sticker:trend", "drawing:Trend", "drawing"):
@@ -1640,10 +1652,10 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
         return [b for b in m["bars"] if b["s"] != D.isoformat()]
 
     def lean(bars):
-        return [{k: v for k, v in b.items() if k not in ("fp", "big", "sw", "bub")} for b in bars]
+        return [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big", "sw", "bub", "ag")} for b in bars]
 
     def no_flow(bars):
-        return [{k: v for k, v in b.items() if k not in ("sw", "bub")} for b in bars]
+        return [{k: v for k, v in b.items() if k not in ("sw", "bub", "ag")} for b in bars]
 
     with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
@@ -1656,11 +1668,11 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
 
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False})
         bare = next_of(ws, "history")
-        assert all("fp" not in b and "big" not in b and "sw" in b and "bub" in b for b in bare["bars"])   # flow said nothing: kept
-        assert past(bare) == [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in past(full)]
+        assert all("fp" not in b and "fpn" not in b and "big" not in b and "sw" in b and "bub" in b for b in bare["bars"])   # flow said nothing: kept
+        assert past(bare) == [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big")} for b in past(full)]
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False, "flow": False})
         bare = next_of(ws, "history")
-        assert all(not ({"fp", "big", "sw", "bub"} & set(b)) for b in bare["bars"])
+        assert all(not ({"fp", "fpn", "big", "sw", "bub", "ag"} & set(b)) for b in bare["bars"])
         assert past(bare) == lean(past(full))
         ws.send_json({"op": "older", "id": "c1", "before": bare["bars"][0]["ms"], "fp": False, "big": False, "flow": False})
         bare_older = next_of(ws, "older")

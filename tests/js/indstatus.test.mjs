@@ -84,3 +84,55 @@ test('fvg: counts the boxes in view', () => {
   for (const i of [2, 3]) bars[i].sv = { [K]: { uh: 102, ul: 100, dh: null, dl: null } };
   assert.equal(S.of(inst('fvg', { min: 0.25, length: 14 }), facts(bars)).text, '1 gap in view');
 });
+
+/* 2026-10-21 order-flow apps: a bar loaded before the wire carried their field says so; big trades count like big prints. */
+test('order-flow apps: no bar in view carries the field they read -> a plain warning; one bar that does -> nothing to say', () => {
+  const old = [bar(0), bar(1)];
+  assert.equal(S.of(inst('bigtrades', { min: 25 }), facts(old)).text, 'No order detail for these bars');
+  assert.equal(S.of(inst('npoc'), facts(old)).text, 'No trade detail for these bars');
+  assert.equal(S.of(inst('mwabs'), facts(old)).text, 'No trade detail for these bars');
+  assert.equal(S.of(inst('dstr'), facts(old)).text, 'No delta highs and lows for these bars');
+  assert.equal(S.of(inst('npoc'), facts([bar(0), bar(1, { fp: [] })])), null, 'an empty footprint array is a bar that carries it');
+  assert.equal(S.of(inst('dstr'), facts([bar(0, { dmax: 0, dmin: 0 })])), null);
+  assert.equal(S.of(inst('bigtrades', {}, { visible: false }), facts(old)), null);
+  assert.equal(S.of(inst('cstat'), facts(old)), null, 'its strip shows blanks for what a bar lacks');
+});
+
+test('big trades: counts the bubbles in view the way the layer draws them; none says which setting to lower', () => {
+  const ag = (size, side, t = 1) => [T(t), 100, 100, 100, size, side, 1];
+  const T = (t) => 1_790_000_000_000 + t;
+  const bars = [bar(0, { ag: [ag(30, 1), ag(10, -1, 2)] }), bar(1, { ag: [ag(60, -1, 3)] })];
+  assert.deepEqual(S.of(inst('bigtrades', { min: 25, max: 0, side: 'all', cluster: 'none', thr: 100 }), facts(bars)), { text: '2 marks in view', tone: 'info' });
+  assert.equal(S.of(inst('bigtrades', { min: 25, max: 50, side: 'all', cluster: 'none', thr: 100 }), facts(bars)).text, '1 mark in view', 'max drops the 60');
+  assert.equal(S.of(inst('bigtrades', { min: 5, max: 0, side: 'sell', cluster: 'none', thr: 100 }), facts(bars)).text, '2 marks in view', 'sellers only');
+  assert.equal(S.of(inst('bigtrades', { min: 5, max: 0, side: 'all', cluster: 'none', thr: 100 }), facts(bars)).text, '3 marks in view');
+  assert.equal(S.of(inst('bigtrades', { min: 5, max: 0, side: 'all', cluster: 'price', thr: 100 }), facts(bars)).text, '2 marks in view', 'same price in a bar: one bubble a bar');
+  const none = S.of(inst('bigtrades', { min: 500, max: 0, side: 'all', cluster: 'none', thr: 100 }), facts(bars));
+  assert.equal(none.tone, 'warn');
+  assert.match(none.text, /None in view\. Lower "Minimum size" \(now 500\)/);
+});
+
+test('footprint: the prints-per-row text needs bars that carry the print counts', () => {
+  const rows = [[100, 1, 2]];
+  assert.equal(S.of(inst('footprint', { text: 'trades' }), facts([bar(0, { fp: rows })])).text, 'No print counts for these bars');
+  assert.equal(S.of(inst('footprint', { text: 'trades' }), facts([bar(0, { fp: rows, fpn: [[100, 1, 1]] })])), null);
+  assert.equal(S.of(inst('footprint', { text: '' }), facts([bar(0, { fp: rows })])), null);
+});
+
+test('pine: an error is the note (first line, the whole text on hover); running says so; warnings are counted; a clean script says nothing', () => {
+  const pine = (state) => S.of(inst('pine', {}, { uid: 'p1' }), facts([bar(0)], { pine: { p1: state } }));
+  assert.deepEqual(pine({ error: 'Syntax error at line 3\nunexpected token', notes: [], running: false }),
+    { text: 'Syntax error at line 3', tone: 'warn', title: 'Syntax error at line 3\nunexpected token' });
+  const long = pine({ error: 'x'.repeat(200), notes: [] });
+  assert.equal(long.text.length, 70);
+  assert.match(long.text, /…$/);
+  assert.equal(long.title.length, 200);
+  assert.deepEqual(pine({ error: 'Pine needs a time chart', notes: [], running: true }), { text: 'Pine needs a time chart', tone: 'warn', title: 'Pine needs a time chart' }, 'an error beats running');
+  assert.deepEqual(pine({ error: null, notes: [], running: true }), { text: 'Running…', tone: 'info' });
+  assert.deepEqual(pine({ error: null, notes: ['ta.foo is not supported'], running: false }), { text: 'ta.foo is not supported', tone: 'warn', title: 'ta.foo is not supported' });
+  assert.deepEqual(pine({ error: null, notes: ['a', 'b', 'c'], running: false }), { text: 'a (+2 more)', tone: 'warn', title: 'a\nb\nc' });
+  assert.equal(pine({ error: null, notes: [], running: false }), null);
+  assert.equal(pine(undefined), null, 'no fact for this row: nothing to say');
+  assert.equal(S.of(inst('pine', {}, { uid: 'p1' }), facts([bar(0)])), null, 'a page that gathers no Pine facts');
+  assert.equal(S.of(inst('pine', {}, { uid: 'p1', visible: false }), facts([bar(0)], { pine: { p1: { error: 'x', notes: [] } } })), null, 'a hidden row stays quiet');
+});

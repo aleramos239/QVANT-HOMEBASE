@@ -12,6 +12,9 @@ studies (rsi, macd, bb, atr, stoch, supertrend, donchian, keltner, tema, mfi, er
 A key may end in "@<seconds>" (2026-10-11): the study is computed on bars of that longer timeframe -- "ema:20@3600" is
 the 20-period EMA of 1-hour bars -- and read on every chart bar (see HTF). Only the window / smoothing studies take it
 (HTF_OK); an anchored one (vwap, levels, orb, sess ...) has no meaning on another timeframe.
+
+"tv:<name>[:args]" (2026-10-21) is TradingView's own definition of a built-in, in Pine's math (studies_tv.py); the
+house keys above never change.
 """
 from __future__ import annotations
 
@@ -21,6 +24,7 @@ import re
 from .session import anchor_period_start, is_rth, month_key, week_key
 from .studies_flow import NAMES as FLOW_NAMES, make_flow
 from .studies_ta import NAMES as TA_NAMES, make_ta
+from .studies_tv import make_tv
 
 SOURCES = ("close", "open", "high", "low", "hl2", "hlc3", "ohlc4")
 
@@ -296,7 +300,9 @@ class HTF(Study):
         return (inner_state, k, agg, last), value
 
 
-HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema", "fvg")
+HTF_OK = ("sma", "ema", "vwma", "adx", "rsi", "macd", "stoch", "mfi", "er", "atr", "bb", "keltner", "donchian", "supertrend", "tema", "fvg",
+          "tv")       # every tv study reads only what HTF._merge carries
+HTF_NOT_TV = ("pivothl", "fractals")     # their marks sit `right` / `n` CHART bars back; on a longer bar HTF would repeat the value on all of them
 HTF_MAX_S = 86400       # any timeframe from a second to a day: the page's box takes "15m", "1h", "90s"
 REGISTRY = {"sma": SMA, "ema": EMA, "vwma": VWMA, "vwap": VWAP, "adx": ADX,
             "cumdelta": CumDelta, "levels": Levels}
@@ -309,9 +315,9 @@ def split_timeframe(key: str) -> tuple[str, int]:
     base, at, tf = str(key).partition("@")
     if not at:
         return base, 0
-    name = base.split(":")[0]
-    if name not in HTF_OK:
-        raise ValueError(f"bad study {key!r}: {name} has no timeframe option")
+    name, _, sub = base.partition(":")
+    if name not in HTF_OK or (name == "tv" and sub.split(":")[0] in HTF_NOT_TV):
+        raise ValueError(f"bad study {key!r}: {base} has no timeframe option")
     if not tf.isdecimal() or not 1 <= int(tf) <= HTF_MAX_S:
         raise ValueError(f"bad study {key!r}: the timeframe is 1 to {HTF_MAX_S} seconds")
     return base, int(tf)
@@ -324,13 +330,15 @@ def make(key: str, tick_size: float = 0.25) -> Study:
     if sec:
         return HTF(make(base, tick_size), sec)
     name, *args = str(key).split(":")
+    if name == "tv":
+        return make_tv(key, tick_size)
     if name in TA_NAMES:
         return make_ta(name, args, tick_size)
     if name in FLOW_NAMES:
         return make_flow(name, args)
     cls = REGISTRY.get(name)
     if cls is None:
-        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES, *FLOW_NAMES]))}, profile)")
+        raise ValueError(f"unknown study {key!r} (have {', '.join(sorted([*REGISTRY, *TA_NAMES, *FLOW_NAMES]))}, profile, tv:<name>)")
     if cls in (SMA, EMA):
         if len(args) > 2 or (args and not (args[0].isdecimal() and int(args[0]) in LENGTHS)):
             raise ValueError(f"bad study {key!r}: {name} takes a length and optional source "

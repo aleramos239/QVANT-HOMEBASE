@@ -13,6 +13,7 @@ a backtest see exactly the bars the live chart saw.
 from __future__ import annotations
 
 import datetime as dt
+from bisect import insort
 from dataclasses import dataclass, field
 
 from .session import et_wall_s, session_date, session_range_ms
@@ -24,6 +25,8 @@ SWEEP_TICKS = 2     # a burst of same-side prints inside one millisecond that sp
 BUB_MIN = 3         # trade bubbles: contracts printed in one second at one price on one side, at least this many
 BUB_CAP = 60        # ... and at most this many per bar (the largest)
 SW_CAP = 60         # sweeps kept per bar: the largest (a 1D bar of an NQ day would otherwise carry ~11,000)
+AG_MIN = 10         # tape orders (a run of same-side prints inside one millisecond: one aggressor) of >= this many contracts are kept
+AG_CAP = 60         # ... at most this many per bar (the largest)
 
 
 @dataclass(frozen=True)
@@ -63,6 +66,18 @@ def _cap_sweeps(rows: list) -> list:
     return sorted(rows, key=lambda r: (r[0], r[1], r[2], r[4]))
 
 
+def _cap_ag(rows: list) -> list:
+    """The AG_CAP largest tape orders ([ts_ms, vwap, price_lo, price_hi, size, side, n_prints]) in time order, the whole
+    row breaking a tie, so the same prints always keep the same rows however the bar was assembled. A new list."""
+    if len(rows) > AG_CAP:
+        rows = sorted(rows, key=lambda r: (-r[4], r))[:AG_CAP]
+    return sorted(rows)
+
+
+def _ag_row(g: list, tick_size: float) -> list:
+    return [g[0], round(g[6] / g[4], 6), round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1], g[5]]
+
+
 @dataclass
 class Bar:
     t: int                  # start, epoch ms (time: bucket start; others: first trade)
@@ -90,10 +105,17 @@ class Bar:
     ords_b: int = -1            # aggressive BUY orders: runs of buy prints inside one millisecond (-1: not counted)
     ords_s: int = -1            # aggressive SELL orders likewise. A bar cached before the counts existed unpickles with -1
                             # (the class default), and a resampled bar that took any such minute keeps -1
+    ag: list | None = None      # tape orders of >= AG_MIN: [ts_ms, vwap, price_lo, price_hi, size, side, n_prints], at most AG_CAP
+    fpn: dict | None = None     # price in ticks -> [sell prints, buy prints]
+    dmax: int | None = None     # the running delta's high and low inside the bar (from 0 at the open)
+    dmin: int | None = None
+    dhi: int | None = None      # the running delta when the bar last traded at its high / its low
+    dlo: int | None = None      # these six are None on a bar cached before they existed, and on a resample that took one
 
     @classmethod
     def open_at(cls, t: int, session: str, price: float) -> "Bar":
-        return cls(t=t, session=session, o=price, h=price, l=price, c=price, ords_b=0, ords_s=0)
+        return cls(t=t, session=session, o=price, h=price, l=price, c=price, ords_b=0, ords_s=0,
+                   ag=[], fpn={}, dmax=0, dmin=0, dhi=0, dlo=0)
 
     @property
     def delta(self) -> int:
@@ -120,6 +142,21 @@ class Bar:
         else:
             self.sell += q
             cell[0] += q
+        if self.fpn is not None:
+            pc = self.fpn.get(k)
+            if pc is None:
+                pc = self.fpn[k] = [0, 0]
+            pc[1 if tk.side > 0 else 0] += 1
+        if self.dmax is not None:
+            d = self.buy - self.sell
+            if d > self.dmax:
+                self.dmax = d
+            if d < self.dmin:
+                self.dmin = d
+            if p >= self.h:
+                self.dhi = d
+            if p <= self.l:
+                self.dlo = d
         if q >= BIG_MIN:
             self.big.append([tk.ts_ms, p, q, tk.side])
         if tk.ts_ms > self.te:
@@ -140,9 +177,10 @@ class Bar:
             g[3] = max(g[3], k)
             g[4] += q
             g[5] += 1
+            g[6] += p * q
         else:
             self._flush_group(tick_size)
-            self._g = [tk.ts_ms, tk.side, k, k, q, 1]
+            self._g = [tk.ts_ms, tk.side, k, k, q, 1, p * q]
             if self.ords_b >= 0:                    # a new run of one side inside one millisecond: one aggressor order
                 if tk.side > 0:
                     self.ords_b += 1
@@ -154,6 +192,11 @@ class Bar:
         if g is not None and g[5] >= 2 and g[3] - g[2] >= SWEEP_TICKS:
             row = [g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]]
             self.sw = _cap_sweeps(self.sw + [row]) if len(self.sw) >= SW_CAP else self.sw + [row]
+        if g is not None and g[4] >= AG_MIN and self.ag is not None:
+            if len(self.ag) >= AG_CAP:
+                self.ag = _cap_ag(self.ag + [_ag_row(g, tick_size)])
+            else:
+                insort(self.ag, _ag_row(g, tick_size))     # kept in _cap_ag's order: a sealed bar reads like a resampled one
 
     def seal(self, tick_size: float) -> None:
         """The bar is closed: finish the sweep group and fold the developing bubbles into the capped list."""
@@ -177,18 +220,33 @@ class Bar:
                    {k: list(c) for k, c in self.fp.items()},
                    [list(x) for x in self.big], self.closed, self.te, self.span,
                    [list(x) for x in self.sw], [list(x) for x in self.bub], dict(self._bd),
-                   list(self._g) if self._g else None, self._bs, ords_b=self.ords_b, ords_s=self.ords_s)
+                   list(self._g) if self._g else None, self._bs, ords_b=self.ords_b, ords_s=self.ords_s,
+                   ag=None if self.ag is None else [list(x) for x in self.ag],
+                   fpn=None if self.fpn is None else {k: list(c) for k, c in self.fpn.items()},
+                   dmax=self.dmax, dmin=self.dmin, dhi=self.dhi, dlo=self.dlo)
 
     def finish_merge(self) -> None:
-        """Cap and order the sweeps and bubbles after merge(..., cap=False) calls. The cap keeps the top rows of a total
-        order, so capping once at the end keeps exactly the rows capping after every merge did."""
+        """Cap and order the sweeps, bubbles and tape orders after merge(..., cap=False) calls. The cap keeps the top
+        rows of a total order, so capping once at the end keeps exactly the rows capping after every merge did."""
         self.sw = _cap_sweeps(self.sw)
         self.bub = _cap_bubbles(self.bub)
+        if self.ag is not None:
+            self.ag = _cap_ag(self.ag)
 
     def merge(self, other: "Bar", cap: bool = True) -> None:
-        """Absorb the NEXT bar in time (resampling). cap=False leaves the sweeps and bubbles uncapped and unsorted:
-        the caller merges a whole run and then calls finish_merge() once (a 1D bar merges ~1,400 one-minute bars, and
-        sorting both lists at every step was most of a session's resample time)."""
+        """Absorb the NEXT bar in time (resampling). cap=False leaves the sweeps, bubbles and tape orders uncapped and
+        unsorted: the caller merges a whole run and then calls finish_merge() once (a 1D bar merges ~1,400 one-minute
+        bars, and sorting both lists at every step was most of a session's resample time)."""
+        if self.dmax is None or other.dmax is None:
+            self.dmax = self.dmin = self.dhi = self.dlo = None
+        else:
+            d0 = self.delta                         # other's running delta starts where this bar's ends
+            self.dmax = max(self.dmax, d0 + other.dmax)
+            self.dmin = min(self.dmin, d0 + other.dmin)
+            if other.h >= self.h:
+                self.dhi = d0 + other.dhi
+            if other.l <= self.l:
+                self.dlo = d0 + other.dlo
         self.h = max(self.h, other.h)
         self.l = min(self.l, other.l)
         self.c = other.c
@@ -215,6 +273,19 @@ class Bar:
             self.ords_s += other.ords_s
         else:
             self.ords_b = self.ords_s = -1
+        if self.ag is None or other.ag is None:
+            self.ag = None
+        elif cap:
+            self.ag = _cap_ag([list(x) for x in self.ag] + [list(x) for x in other.ag])
+        else:
+            self.ag.extend(list(x) for x in other.ag)
+        if self.fpn is None or other.fpn is None:
+            self.fpn = None
+        else:
+            for k, (s, b) in other.fpn.items():
+                pc = self.fpn.setdefault(k, [0, 0])
+                pc[0] += s
+                pc[1] += b
         for bk, q in other._bd.items():
             self._bd[bk] = self._bd.get(bk, 0) + q
         self._bs = max(self._bs, other._bs)
@@ -223,10 +294,14 @@ class Bar:
     def wire(self, tick_size: float, fp: bool = True, big: bool = True, flow: bool = True) -> dict:
         """JSON for the page: t = ET wall-clock seconds (the axis shows ET),
         ms = the real start in epoch ms. fp / big / flow False: without the footprint / the big prints / the
-        sweeps and trade bubbles (a chart that draws none of them does not ask for them)."""
+        sweeps, trade bubbles and tape orders (a chart that draws none of them does not ask for them). The tape
+        orders (ag, with the run still forming), the print counts (fpn) and the running-delta numbers are left out
+        of a bar that has none (cached before they existed)."""
         d = {"t": et_wall_s(self.t), "ms": self.t, "s": self.session,
              "o": self.o, "h": self.h, "l": self.l, "c": self.c,
              "v": self.v, "d": self.delta, "n": self.n}
+        if self.dmax is not None:
+            d.update(dmax=self.dmax, dmin=self.dmin, dhi=self.dhi, dlo=self.dlo)
         if big:
             d["big"] = self.big
         if flow:
@@ -234,8 +309,12 @@ class Bar:
             d["sw"] = _cap_sweeps(self.sw + ([[g[0], round(g[2] * tick_size, 6), round(g[3] * tick_size, 6), g[4], g[1]]]
                                              if g and g[5] >= 2 and g[3] - g[2] >= SWEEP_TICKS else []))
             d["bub"] = self._bubbles(tick_size) if self._bd else self.bub
+            if self.ag is not None:
+                d["ag"] = _cap_ag(self.ag + ([_ag_row(g, tick_size)] if g and g[4] >= AG_MIN else []))
         if fp:
             d["fp"] = [[round(k * tick_size, 6), s, b] for k, (s, b) in sorted(self.fp.items())]
+            if self.fpn is not None:
+                d["fpn"] = [[round(k * tick_size, 6), s, b] for k, (s, b) in sorted(self.fpn.items())]
         return d
 
 

@@ -18,7 +18,7 @@ function bare(over = {}) {
   const c = { sent, id: 'c1', chart: {}, bars: [{ ms: 9e12 }], inflight: [], has: { fp: false, big: false, flow: false }, windowAt: null, winReq: null,
     back: new globalThis.HBScrollBack.ScrollBack(), sessions: [], keys: new Set(), host: { send: (m) => { sent.push(m); return true; }, onLoaded() {} },
     slotted: (b) => b, append(b) { this.bars.push(b); }, build() { this.built = (this.built || 0) + 1; }, message(t) { this.msg = t; },
-    showWindow: P.showWindow, onWindow: P.onWindow, onOlder: P.onOlder, onUpdate: P.onUpdate, ...over };
+    showWindow: P.showWindow, onWindow: P.onWindow, pineReplaced: P.pineReplaced, onOlder: P.onOlder, onUpdate: P.onUpdate, ...over };
   return c;
 }
 const ans = (before, over = {}) => ({ type: 'older', id: 'c1', before, bars: [{ ms: 100 }, { ms: 200 }], studies: { sma: [1, 2] }, sessions: [{ date: '2023-03-03' }], done: false, ...over });

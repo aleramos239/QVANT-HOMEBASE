@@ -1,13 +1,16 @@
 /* Homebase Charts — HBStatus: why an indicator shows nothing (or how much it shows), in a few plain words, for the
    legend. The pure half (of) is Node-tested; the page gathers the facts (cell.js statusFacts) and draws the note.
-     of(inst, facts) -> null (nothing to say) | { text, tone: 'info' | 'warn', act?: 'zoom' }
+     of(inst, facts) -> null (nothing to say) | { text, tone: 'info' | 'warn', act?: 'zoom', title? (the long form, for the hover) }
    facts: { bars, i0, i1 (the bars in view), readable (the footprint's numbers fit), book: { rows, covered, live },
-            episodes (the book's order episodes in view), M (HBFlowMath), E (HBBookEvents' pure half) }. */
+            episodes (the book's order episodes in view), M (HBFlowMath), E (HBBookEvents' pure half),
+            pine: { [uid]: { error, notes: [the script's warnings], running } } }. */
 (function () {
 'use strict';
 const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
 
 const BOOK_IDS = new Set(['bigorders', 'absorb', 'pulled', 'iceberg', 'heatmap', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote']);
+// the order-flow apps (2026-10-21) read a field that only bars loaded since then carry: [the field, what it holds in plain words]
+const FIELD = { bigtrades: ['ag', 'order detail'], npoc: ['fp', 'trade detail'], mwabs: ['fp', 'trade detail'], dstr: ['dmax', 'delta highs and lows'] };
 const noun = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const info = (text) => ({ text, tone: 'info' });
 const warn = (text, act) => (act ? { text, tone: 'warn', act } : { text, tone: 'warn' });
@@ -22,9 +25,13 @@ function of(inst, f) {
   if (!inst || !f || !f.bars || !f.bars.length) return null;
   const id = inst.id, p = inst.params || {};
   if (inst.visible === false) return null;
+  if (id === 'pine') return pineNote(f.pine && f.pine[inst.uid]);
+  const miss = FIELD[id];
+  if (miss && !visible(f).some((b) => b[miss[0]] != null)) return warn(`No ${miss[1]} for these bars`);
   if (id === 'footprint') {
     if (!f.readable) return warn('Too small to read: zoom in', 'zoom');
-    return visible(f).some((b) => b.fp && b.fp.length) ? null : warn('No trade detail for these bars');
+    if (!visible(f).some((b) => b.fp && b.fp.length)) return warn('No trade detail for these bars');
+    return p.text === 'trades' && !visible(f).some((b) => b.fpn != null) ? warn('No print counts for these bars') : null;
   }
   if (BOOK_IDS.has(id) || id === 'imbalance') {
     const bk = f.book || {};
@@ -44,6 +51,13 @@ function of(inst, f) {
   if (id === 'bigprints') {
     let n = 0;
     for (const b of visible(f)) for (const r of b.big || []) if (r[2] >= p.min) n++;
+    return countNote(n, `Lower "Minimum size" (now ${p.min})`);
+  }
+  if (id === 'bigtrades' && f.M) {
+    let n = 0;
+    for (const b of visible(f)) {
+      for (const c of f.M.clusterOrders(f.M.ordersOf(b, 0, 0, p.side || 'all'), p.cluster || 'none', +p.thr || 100)) if (c.size >= p.min && (!p.max || c.size <= p.max)) n++;
+    }
     return countNote(n, `Lower "Minimum size" (now ${p.min})`);
   }
   if (id === 'fvg' && f.M && f.M.fvgBoxes) {
@@ -66,6 +80,17 @@ function of(inst, f) {
     return countNote(n, id === 'stoprun' ? 'Lower "Burst at least"' : 'Lower "Delta at least"');
   }
   return null;
+}
+
+/* A Pine script: why it did not run (the first line in the legend, all of it on hover), its warnings, or that it is running. */
+function pineNote(s) {
+  if (!s) return null;
+  const short = (t) => { const one = String(t).split('\n')[0]; return one.length > 70 ? `${one.slice(0, 69)}…` : one; };
+  if (s.error) return { text: short(s.error), tone: 'warn', title: String(s.error) };
+  if (s.running) return info('Running…');
+  const n = s.notes || [];
+  if (!n.length) return null;
+  return { text: n.length === 1 ? short(n[0]) : `${short(n[0])} (+${n.length - 1} more)`, tone: 'warn', title: n.join('\n') };
 }
 
 function countNote(n, hint, gap) {

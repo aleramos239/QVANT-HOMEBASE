@@ -300,3 +300,16 @@ def test_a_listing_scope_reads_each_year_folder_once_and_nothing_outside_it_is_k
     finally:
         store_mod.os.scandir = real
     assert folder.exists()
+
+
+def test_the_memo_weight_counts_the_footprint_second_level_and_the_tape_orders():
+    """fpn (a second per-level dict) and ag (up to 60 tape orders) are memory too: leaving them out let the memo
+    hold ~27% more real bytes than MEMO_CELLS says on footprint-heavy charts."""
+    from homebase.charts.bars import Bar
+    old = Bar(t=0, session="RTH", o=1, h=1, l=1, c=1)              # a bar cached before fpn / ag existed: both None
+    assert History._cost([old]) == 2
+    b = Bar.open_at(0, "RTH", 100.0)
+    b.fp = {400: [1, 2], 401: [3, 4]}
+    b.fpn = {400: [1, 1], 401: [2, 2]}
+    b.ag = [[0, 100.0, 100.0, 100.0, 30, 1, 3]]
+    assert History._cost([b]) == 1 + 1 + 2 + 2 + 1
