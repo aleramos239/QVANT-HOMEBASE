@@ -45,6 +45,14 @@ def run(params, bars=None, daily=DAILY, tape=None):
     return [((t["entry_ms"] - MS0) // 60000, t["side"]) for t in sorted(res.trades, key=lambda t: t["entry_ms"])]
 
 
+def test_the_wrapped_class_the_hunt_runs_trades_like_the_bare_family():
+    for mv in (40.0, -40.0, 5.0):
+        st = B.WRAPPED["day_move"]({**BASE})
+        st.ROLLS = frozenset()
+        res = S.run_session(st, minute_tape(day(mv), "00:00"), daily=list(DAILY), on_error="raise")
+        assert [((t["entry_ms"] - MS0) // 60000, t["side"]) for t in sorted(res.trades, key=lambda t: t["entry_ms"])] == run({}, day(mv))
+
+
 def test_a_move_of_k_times_the_20_day_range_at_15_00_goes_with_it_at_the_next_bar():
     assert run({}, day(40.0)) == [(sec(15) // 60, "long")]            # +40 >= 0.25 x 100: long, filled in the 15:00 minute
     assert run({}, day(-40.0)) == [(sec(15) // 60, "short")]
