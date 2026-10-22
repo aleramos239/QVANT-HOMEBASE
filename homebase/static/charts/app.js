@@ -1591,10 +1591,12 @@ async function loadDrawStyleDefaults() {
    see settingsDialog's own guard. */
 const indicatorDefaults = new Map();
 async function loadIndicatorDefaults() {
-  const ids = C.CATALOG.filter((d) => d.params.length || C.styleLineKeys(d.id)).map((d) => d.id);
-  for (const id of ids) {
-    const all = await window.HBPresets.client(`indicator:${id}`).list();
-    if (all && window.HBPresets.DEFAULT_NAME in all) indicatorDefaults.set(id, C.sanitizePreset(id, all[window.HBPresets.DEFAULT_NAME]));
+  // one request for every saved default (the catalog passed 150 entries: a request each was a burst at page load)
+  let all = null;
+  try { const r = await fetch('/api/preset-defaults/indicator'); all = r.ok ? await r.json() : null; } catch (_) { /* no defaults: the catalog's own */ }
+  if (!all || typeof all !== 'object') return;
+  for (const d of C.CATALOG) {
+    if (all[d.id] && (d.params.length || C.styleLineKeys(d.id))) indicatorDefaults.set(d.id, C.sanitizePreset(d.id, all[d.id]));
   }
 }
 /* A dialog-scoped menu host built around the page's own openMenu/closeMenu/placeMenu, the same

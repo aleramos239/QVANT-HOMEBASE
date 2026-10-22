@@ -235,6 +235,33 @@ function mount(box, host) {
       };
     } else if (p.type === 'boxes') {
       return boxesEditor(p);
+    } else if (p.type === 'pineinputs') {
+      return pineInputs();
+    } else if (p.type === 'pinescript') {
+      // the server's script list, read when the dialog opens; the stored name stays in the list even if its file went away
+      ctl = mk('select', 'set-select ch-select');
+      ctl.id = id;
+      lab.htmlFor = id;
+      ctl.setAttribute('aria-label', p.label);
+      const err = mk('div', 'dlg-err');
+      err.hidden = true;
+      err.setAttribute('role', 'alert');
+      const fill = (list) => {
+        const rows = [['', 'Choose a script']].concat(list.map((x) => [x.name, x.title ? `${x.name} - ${x.title}` : x.name]));
+        if (vals[p.key] && !list.some((x) => x.name === vals[p.key])) rows.push([vals[p.key], vals[p.key]]);
+        ctl.replaceChildren(...rows.map(([v, text]) => { const o = mk('option', '', text); o.value = v; return o; }));
+        ctl.value = vals[p.key] || '';
+      };
+      const fail = (text) => { if (done) return; err.textContent = text; err.hidden = false; };
+      fill([]);
+      if (window.fetch) {
+        window.fetch('/api/pine/scripts').then((r) => (r.ok ? r.json() : Promise.reject(new Error('list'))))
+          .then((list) => { if (done) return; fill(Array.isArray(list) ? list : []); if (!list || !list.length) fail('No Pine scripts on the server yet'); })
+          .catch(() => fail('Could not load the script list'));
+      }
+      ctl.onchange = () => { vals[p.key] = ctl.value; delete vals.inputs; preview(); };   // the old script's inputs mean nothing to the new one
+      row.append(lab, ctl, err);
+      return row;
     } else if (p.type === 'tf') {
       // the timeframe is typed: "15m", "1h", "90s", "4h", "1D" (a bare number is minutes); blank = the chart's own bars
       ctl = mk('input', 'sw-hex');
@@ -307,6 +334,73 @@ function mount(box, host) {
     }
     ctl.id = id;
     lab.htmlFor = id;
+    row.append(lab, ctl);
+    return row;
+  }
+
+  /* ---- Pine: the script's own inputs, one row each, from what its last run reported (the cell keeps the Worker). Stored by the
+     input's title, as the Worker reads them; a value put back to the script's own default is dropped. The block is drawn again
+     only when the inputs or the error change, so a number being typed keeps its focus while the script re-runs on each keystroke. ---- */
+  function pineInputs() {
+    const wrap = mk('div', 'pine-inputs');
+    let seen;
+    const draw = () => {
+      const m = cell.pineMeta ? cell.pineMeta(uid) : null, sig = JSON.stringify(m ? [m.error, m.inputs.map((x) => [x.title, x.type])] : null);
+      if (sig === seen) return;
+      seen = sig;
+      wrap.replaceChildren();
+      if (!m) return;
+      if (m.error) { const err = mk('div', 'dlg-err', m.error); err.setAttribute('role', 'alert'); wrap.append(err); }
+      for (const x of m.inputs) if (x.title || x.name) wrap.append(pineInput(x));
+    };
+    cell.onPineMeta = () => { if (!done && TABS[tab].id === 'inputs') draw(); };
+    draw();
+    return wrap;
+  }
+  function pineInput(x) {
+    const key = x.title || x.name, row = mk('div', 'field'), id = `is-${uid}-pine-${x.id}`, lab = mk('label', '', key);
+    const cur = () => (vals.inputs && key in vals.inputs ? vals.inputs[key] : x.defval);
+    const put = (v) => {
+      const o = vals.inputs && typeof vals.inputs === 'object' ? vals.inputs : (vals.inputs = {});
+      if (v === x.defval) delete o[key]; else o[key] = v;
+      if (!Object.keys(o).length) delete vals.inputs;
+      preview();
+    };
+    let ctl;
+    if (x.type === 'bool') {
+      ctl = mk('input');
+      ctl.type = 'checkbox';
+      ctl.checked = !!cur();
+      ctl.onchange = () => put(ctl.checked);
+    } else if (Array.isArray(x.options) && x.options.length) {
+      ctl = mk('select', 'set-select ch-select');
+      for (const v of x.options) { const o = mk('option', '', String(v)); o.value = String(v); ctl.append(o); }
+      ctl.value = String(cur());
+      ctl.onchange = () => put(x.options.find((v) => String(v) === ctl.value));   // the option itself, a number stays a number
+    } else if (x.type === 'int' || x.type === 'float') {
+      ctl = mk('input', 'set-num');
+      ctl.type = 'number';
+      if (x.minval != null) ctl.min = String(x.minval);
+      if (x.maxval != null) ctl.max = String(x.maxval);
+      ctl.step = String(x.step || (x.type === 'int' ? 1 : 'any'));
+      ctl.value = String(cur());
+      ctl.oninput = () => { const n = Number(ctl.value); if (ctl.value !== '' && Number.isFinite(n)) put(x.type === 'int' ? Math.round(n) : n); };
+    } else if (x.type === 'color') {
+      ctl = mk('input');
+      ctl.type = 'color';
+      ctl.value = /^#[0-9a-f]{6}/i.test(String(cur())) ? String(cur()).slice(0, 7) : '#2962ff';
+      ctl.oninput = () => put(ctl.value);
+    } else {   // string, timeframe: typed as the script expects it
+      ctl = mk('input', 'sw-hex');
+      ctl.type = 'text';
+      ctl.maxLength = 200;
+      ctl.spellcheck = false;
+      ctl.value = String(cur() == null ? '' : cur());
+      ctl.oninput = () => put(ctl.value);
+    }
+    ctl.id = id;
+    lab.htmlFor = id;
+    ctl.setAttribute('aria-label', key);
     row.append(lab, ctl);
     return row;
   }
@@ -598,6 +692,7 @@ function mount(box, host) {
     if (f && f !== ok && pane.contains(f) && f.blur) f.blur();      // a timeframe or time still being typed is taken first
     flush();
     done = true;
+    cell.onPineMeta = null;
     const patch = current();
     cell.update({ indicators: cell.cfg.indicators.map((x) => (x.uid === uid ? patch : x)) });
     host.commit(JSON.stringify(patch.params) !== JSON.stringify(atOpen.params) || JSON.stringify(style) !== JSON.stringify(atOpen.style)
@@ -613,6 +708,7 @@ function mount(box, host) {
       if (done) return;
       done = true;
       flush();
+      cell.onPineMeta = null;
       const now = cell.cfg.indicators.some((x) => x.uid === uid);
       if (!now) return;   // removed meanwhile (e.g. the legend's × while the dialog was open)
       const patch = { ...inst, params: atOpen.params };

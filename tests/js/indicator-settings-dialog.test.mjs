@@ -198,3 +198,152 @@ test('the first line colour recolours it and its three bands', () => {
   assert.ok(want);
   for (const k of ['main', 'band1', 'band2', 'band3']) assert.equal(st[k].color, want);
 });
+
+/* 2026-10-21: the footprint's new options reuse the dropdown and number rows; the row text's first choice is the empty one ("as before"). */
+test('footprint: the new options are dropdowns and number boxes at today\'s values, and a pick reaches the chart', () => {
+  const inst = C.instance('footprint');
+  const cell = makeCell(inst);
+  const box = new FakeEl('div');
+  HBIndicatorSettings.mount(box, makeHost(cell, inst.uid).host);
+  const sel = (label) => find(pane(box), (n) => n.tagName === 'select' && n.attrs['aria-label'] === label)[0];
+  const text = sel('What each row shows (overrides the numbers above)'), imb = sel('Imbalance rule');
+  assert.equal(text.value, '', 'the empty choice is selected: the Numbers setting still decides');
+  assert.deepEqual(imb.children.map((o) => o.value), ['homebase', 'atas', 'exocharts', 'sierra']);
+  assert.equal(imb.value, 'homebase');
+  text.value = 'trades'; text.onchange();
+  imb.value = 'atas'; imb.onchange();
+  assert.deepEqual([cell.cfg.indicators[0].params.text, cell.cfg.indicators[0].params.imb], ['trades', 'atas']);
+  const nums = find(pane(box), (n) => n.tagName === 'input' && n.type === 'number').length;
+  assert.ok(nums >= 3, 'the ratio, the stack and the two new minimums are number boxes');
+});
+
+/* ---- Pine: the script picker and the script's own inputs ---- */
+const later = () => new Promise((r) => setTimeout(r, 0));
+const LIST = [{ name: 'a.pine', title: 'Alpha', kind: 'indicator', version: 5 }, { name: 'b.pine', title: null, kind: 'strategy', version: 5 }];
+const META = { inputs: [
+  { id: 'in_0', title: 'Length', type: 'int', defval: 14, minval: 1, maxval: 100, step: 2 },
+  { id: 'in_1', title: 'Mult', type: 'float', defval: 1.5 },
+  { id: 'in_2', title: 'Flag', type: 'bool', defval: true },
+  { id: 'in_3', title: 'Kind', type: 'string', defval: 'EMA', options: ['SMA', 'EMA'] },
+  { id: 'in_4', title: 'Label', type: 'string', defval: 'x' },
+  { id: 'in_5', title: 'Col', type: 'color', defval: '#F23645FF' },
+  { id: 'in_6', title: 'Step', type: 'int', defval: 2, options: [1, 2, 3] }], title: 'A', error: null, running: false };
+function openPine(params = { script: 'a.pine' }, meta = META) {
+  const inst = C.instance('pine', params);
+  const cell = makeCell(inst);
+  cell.meta = meta;
+  cell.pineMeta = () => cell.meta;
+  const box = new FakeEl('div');
+  const { host, commits } = makeHost(cell, inst.uid);
+  const ctl = HBIndicatorSettings.mount(box, host);
+  return { box, cell, inst, ctl, commits, params: () => cell.cfg.indicators[0].params };
+}
+const fieldOf = (box, label) => find(box, (n) => n._class === 'field').find((f) => f.children[0] && f.children[0]._text === label);
+const inputOf = (box, label) => fieldOf(box, label).children[1];
+
+test('pine: the Script row lists the server\'s scripts (name and title) and keeps a saved name whose file is gone; a pick reaches the chart', async () => {
+  global.window.fetch = async () => ({ ok: true, json: async () => LIST });
+  const { box, params } = openPine({ script: 'gone.pine', inputs: { Length: 20 } });
+  await later();
+  const sel = inputOf(box, 'Script');
+  assert.deepEqual(sel.children.map((o) => [o.value, o._text]), [['', 'Choose a script'], ['a.pine', 'a.pine - Alpha'], ['b.pine', 'b.pine'], ['gone.pine', 'gone.pine']]);
+  assert.equal(sel.value, 'gone.pine');
+  sel.value = 'a.pine';
+  sel.onchange();
+  assert.equal(params().script, 'a.pine');
+  assert.ok(!('inputs' in params()), 'the old script\'s inputs mean nothing to the new one');
+});
+
+test('pine: a list that cannot load, or is empty, is said in plain words', async () => {
+  global.window.fetch = async () => ({ ok: false });
+  let o = openPine({});
+  await later();
+  assert.equal(find(o.box, (n) => n._class === 'dlg-err').some((e) => e._text === 'Could not load the script list' && e.hidden === false), true);
+  global.window.fetch = async () => ({ ok: true, json: async () => [] });
+  o = openPine({});
+  await later();
+  assert.equal(find(o.box, (n) => n._class === 'dlg-err').some((e) => /No Pine scripts/.test(e._text)), true);
+  global.window.fetch = undefined;
+  assert.doesNotThrow(() => openPine({}));
+});
+
+test('pine: one row per input of the script, each as the kind of control its type needs', async () => {
+  global.window.fetch = async () => ({ ok: true, json: async () => LIST });
+  const { box } = openPine();
+  const len = inputOf(box, 'Length'), mult = inputOf(box, 'Mult'), flag = inputOf(box, 'Flag'), kind = inputOf(box, 'Kind');
+  assert.deepEqual([len.type, len.min, len.max, len.step, len.value], ['number', '1', '100', '2', '14']);
+  assert.deepEqual([mult.type, mult.step, mult.value], ['number', 'any', '1.5']);
+  assert.deepEqual([flag.type, flag.checked], ['checkbox', true]);
+  assert.deepEqual([kind.tagName, kind.children.map((o) => o.value), kind.value], ['select', ['SMA', 'EMA'], 'EMA']);
+  assert.equal(inputOf(box, 'Label').type, 'text');
+  assert.deepEqual([inputOf(box, 'Col').type, inputOf(box, 'Col').value], ['color', '#F23645']);
+  assert.deepEqual(inputOf(box, 'Step').children.map((o) => o.value), ['1', '2', '3']);
+});
+
+test('pine: a changed input is stored by its title and reaches the chart; put back to the script\'s own value it is dropped, and the last one takes the key with it', () => {
+  const { box, params } = openPine();
+  const len = inputOf(box, 'Length');
+  len.value = '30';
+  len.oninput();
+  assert.deepEqual(params().inputs, { Length: 30 });
+  const flag = inputOf(box, 'Flag');
+  flag.checked = false;
+  flag.onchange();
+  const kind = inputOf(box, 'Kind');
+  kind.value = 'SMA';
+  kind.onchange();
+  const step = inputOf(box, 'Step');
+  step.value = '3';
+  step.onchange();
+  inputOf(box, 'Mult').value = '2.25';
+  inputOf(box, 'Mult').oninput();
+  inputOf(box, 'Label').value = 'hello';
+  inputOf(box, 'Label').oninput();
+  inputOf(box, 'Col').value = '#00ff00';
+  inputOf(box, 'Col').oninput();
+  assert.deepEqual(params().inputs, { Length: 30, Flag: false, Kind: 'SMA', Step: 3, Mult: 2.25, Label: 'hello', Col: '#00ff00' }, 'a number option stays a number');
+  len.value = '14'; len.oninput();
+  assert.ok(!('Length' in params().inputs));
+  len.value = ''; len.oninput();
+  assert.ok(!('Length' in params().inputs), 'an empty box is not a value');
+  flag.checked = true; flag.onchange();
+  kind.value = 'EMA'; kind.onchange();
+  step.value = '2'; step.onchange();
+  inputOf(box, 'Mult').value = '1.5'; inputOf(box, 'Mult').oninput();
+  inputOf(box, 'Label').value = 'x'; inputOf(box, 'Label').oninput();
+  assert.deepEqual(params().inputs, { Col: '#00ff00' }, 'everything put back is gone');
+  inputOf(box, 'Col').value = '#F23645'; inputOf(box, 'Col').oninput();
+  assert.deepEqual(Object.keys(params().inputs), ['Col'], 'a colour can only be picked, not put back: it stays');
+});
+
+test('pine: the inputs block is drawn again when the script\'s inputs or error change, not on each run (a number being typed keeps its box)', () => {
+  const o = openPine();
+  const first = find(o.box, (n) => n._class === 'pine-inputs')[0].children.slice();
+  assert.equal(first.length, 7);
+  o.cell.onPineMeta('p');
+  assert.deepEqual(find(o.box, (n) => n._class === 'pine-inputs')[0].children, first, 'same inputs: the same rows');
+  o.cell.meta = { ...META, error: 'line 3: oops' };
+  o.cell.onPineMeta('p');
+  const wrap = find(o.box, (n) => n._class === 'pine-inputs')[0];
+  assert.equal(wrap.children[0]._text, 'line 3: oops');
+  assert.equal(wrap.children[0].attrs.role, 'alert');
+  o.cell.meta = { inputs: [{ id: 'in_0', title: 'Only', type: 'int', defval: 1 }], title: 'B', error: null, running: false };
+  o.cell.onPineMeta('p');
+  assert.deepEqual(wrap.children.map((r) => r.children[0]._text), ['Only']);
+  o.cell.meta = null;
+  o.cell.onPineMeta('p');
+  assert.deepEqual(wrap.children, []);
+});
+
+test('pine: Cancel and OK let go of the cell\'s hook; a cell with no Pine support (no pineMeta) opens an empty block', () => {
+  const a = openPine();
+  assert.equal(typeof a.cell.onPineMeta, 'function');
+  a.ctl.revert();
+  assert.equal(a.cell.onPineMeta, null);
+  const inst = C.instance('pine', { script: 'a.pine' });
+  const cell = makeCell(inst);
+  const box = new FakeEl('div');
+  const { host } = makeHost(cell, inst.uid);
+  HBIndicatorSettings.mount(box, host);
+  assert.deepEqual(find(box, (n) => n._class === 'pine-inputs')[0].children, []);
+});

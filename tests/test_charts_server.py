@@ -1497,6 +1497,18 @@ def test_presets_roundtrip(tmp_path):
         assert client.delete("/api/presets/drawing:trend/gone").status_code == 200   # deleting nothing is fine
 
 
+def test_preset_defaults_come_in_one_request(tmp_path):
+    with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
+        assert client.get("/api/preset-defaults/indicator").json() == {}
+        assert client.put("/api/presets/indicator:rsi/__default__", json={"params": {"length": 9}}).status_code == 200
+        assert client.put("/api/presets/indicator:rsi/Fast", json={"params": {"length": 5}}).status_code == 200
+        assert client.put("/api/presets/indicator:ema/Slow", json={"params": {"length": 200}}).status_code == 200   # no default saved: left out
+        assert client.put("/api/presets/drawing:trend/__default__", json={"width": 4}).status_code == 200
+        assert client.get("/api/preset-defaults/indicator").json() == {"rsi": {"params": {"length": 9}}}
+        assert client.get("/api/preset-defaults/drawing").json() == {"trend": {"width": 4}}
+        assert client.get("/api/preset-defaults/sticker").status_code == 400
+
+
 def test_presets_refuse_a_bad_kind(tmp_path):
     with TestClient(replay_app(tmp_path), base_url="http://127.0.0.1:8852") as client:
         for kind in ("sticker:trend", "drawing:Trend", "drawing"):

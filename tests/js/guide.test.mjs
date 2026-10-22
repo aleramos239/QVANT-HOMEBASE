@@ -43,3 +43,20 @@ test('every entry says something of its own (no two share a what-line)', () => {
   const seen = new Set();
   for (const id of G.ids()) { const w = G.get(id).what; assert.ok(!seen.has(w), `${id}: its own words`); seen.add(w); }
 });
+
+test('every TradingView study says it matches TradingView\'s built-in, and none is a copy of a house entry', () => {
+  const tv = G.ids().filter((id) => id.startsWith('tv_'));
+  assert.equal(tv.length, 90);
+  for (const id of tv) {
+    assert.match(G.get(id).watch || '', /^Matches TradingView's built-in [^.]+\./, `${id}: watch names the TradingView built-in`);
+    assert.equal(C.def(id).group, 'TradingView', `${id}: lives in the TradingView group`);
+  }
+});
+
+test('every order-flow app says which app\'s documented behaviour it follows; the footprint and profile name the rules they can switch to', () => {
+  for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
+    assert.match(G.get(id).watch || '', /^Follows [^.]*(ATAS|Exocharts|Sierra|MotiveWave|Bookmap)/, `${id}: watch names the app`);
+  }
+  assert.match(G.get('footprint').use.join(' '), /ATAS, Exocharts or Sierra/);
+  assert.match(G.get('profile').use.join(' '), /Sierra Chart or TradingView/);
+});

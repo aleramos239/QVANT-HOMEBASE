@@ -70,6 +70,18 @@ class PresetsStore:
         v = self._read_all().get(kind)
         return v if isinstance(v, dict) else {}
 
+    def defaults(self, family: str) -> dict:
+        """{tool: payload} of every saved "__default__" preset of one family ("drawing" or "indicator"):
+        one read where the page used to ask once per tool. ValueError on another family."""
+        if family not in ("drawing", "indicator"):
+            raise ValueError('family: "drawing" or "indicator"')
+        out = {}
+        for kind, bucket in self._read_all().items():
+            head, _, tool = kind.partition(":")
+            if head == family and isinstance(bucket, dict) and isinstance(bucket.get(DEFAULT_NAME), dict):
+                out[tool] = bucket[DEFAULT_NAME]
+        return out
+
     def put(self, kind: str, name: str, payload: dict) -> None:
         kind, name = check_kind(kind), check_preset_name(name)
         if not isinstance(payload, dict):

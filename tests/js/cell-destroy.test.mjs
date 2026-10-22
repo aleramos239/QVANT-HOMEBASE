@@ -32,3 +32,13 @@ test('destroy() still resolves a pending reach() false', () => {
   Cell.prototype.destroy.call(c);
   assert.equal(got, false);
 });
+
+test('destroy() terminates every Pine Worker and forgets its state; a cell with no Pine field still destroys', () => {
+  const c = bare(), stopped = [];
+  c.pine = new Map([['a', { w: { terminate: () => stopped.push('a') } }], ['b', { w: null }], ['c', { w: { terminate: () => stopped.push('c') } }]]);
+  Cell.prototype.destroy.call(c);
+  assert.deepEqual(stopped, ['a', 'c']);
+  assert.equal(c.pine.size, 0);
+  assert.equal(c.tornDown, true);
+  assert.doesNotThrow(() => Cell.prototype.destroy.call(bare()));
+});

@@ -4,6 +4,7 @@
 (function () {
 'use strict';
 const key = (px) => +(+px).toFixed(6);
+const TEXT = { bidask: 'both', volume: 'total' };   // the footprint's `text` names for the `numbers` modes it always had
 
 class Layer {
   constructor(P) { this.P = P; this._views = [{ zOrder: () => this.z(), renderer: () => ({ draw: (t) => this.draw(t) }) }]; }
@@ -29,7 +30,9 @@ class Layer {
    tick below; sells at P vs buys one tick above) at `ratio`:1. Drawn only
    when zoomed in far enough to read. `ex` (2026-10-11): {stack, unfinished, deltaNum} -- a bracket beside runs of
    `stack` or more stacked imbalances, a triangle where an auction at the bar's high / low did not finish, and
-   the bar's delta under it (HBFlowMath holds the rules). */
+   the bar's delta under it (HBFlowMath holds the rules). `ex` (2026-10-21) also: {text: bidask | delta | volume | trades | dom | price |
+   diag (what a row shows; unset = `numbers`, as before), imb: homebase | atas | exocharts | sierra with zero / edge / minvol / mindiff
+   overriding it (unset = the rule above)}. */
 class Footprint extends Layer {
   constructor(P) {
     super(P);
@@ -87,6 +90,16 @@ class Footprint extends Layer {
     }
     return [...m.values()].sort((x, y) => x[0] - y[0]);
   }
+  /* The vendor imbalance rule (HBFlowMath.imbalancesV2) when `ex` asks for one that is not today's, else null (draw keeps its own rule). */
+  imb(rows, tick) {
+    const ex = this.ex || {}, M = window.HBFlowMath;
+    const custom = (ex.imb && ex.imb !== 'homebase') || (ex.zero && ex.zero !== 'one') || (ex.edge && ex.edge !== 'one') || +ex.minvol > 0 || +ex.mindiff > 0;
+    // shortcut: a vendor rule brings its own ratio while the Imbalance ratio sits on its default 3 (typing a 3 by hand cannot be told apart); upgrade: store whether the user set it
+    const ratio = ex.imb && ex.imb !== 'homebase' && this.ratio === 3 ? null : this.ratio;
+    return custom && M && M.imbalancesV2
+      ? M.imbalancesV2(rows, { tick, preset: ex.imb, ratio, zero: ex.zero || null, edge: ex.edge || null, minVolume: +ex.minvol || 0, minDiff: +ex.mindiff || 0, stack: ex.stack })
+      : null;
+  }
   draw(target) {
     if (!this.readable()) return;
     const ts = this.chart.timeScale(), r = ts.getVisibleLogicalRange(); if (!r) return;
@@ -94,7 +107,8 @@ class Footprint extends Layer {
     if (i1 < i0) return;   // visible range holds no bars (panned past either end)
     const w = this.spacing() * 0.86, P = this.P, ex = this.ex || {};
     const nTicks = this.rowTicks(), tick = this.tick * nTicks;          // one drawn row = `tick` of price
-    const mode = ex.numbers || 'both', showBars = ex.vbars !== false, showPoc = ex.poc !== false;
+    const mode = TEXT[ex.text] || ex.text || ex.numbers || 'both', showBars = ex.vbars !== false, showPoc = ex.poc !== false;
+    const M = window.HBFlowMath, dec = (String(this.tick).split('.')[1] || '').length;
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       const rh = this.rowH(this.bars[i1].c, tick);
       ctx.font = `${Math.max(8, Math.min(11, rh - 2))}px ui-monospace, SFMono-Regular, Menlo, monospace`;
@@ -103,7 +117,8 @@ class Footprint extends Layer {
         const b = this.bars[i]; if (!b || !b.fp || !b.fp.length) continue;
         const x = ts.logicalToCoordinate(i); if (x == null) continue;
         const rows = Footprint.group(b.fp, this.tick, nTicks);
-        const at = new Map(rows.map((row) => [key(row[0]), row]));
+        const at = new Map(rows.map((row) => [key(row[0]), row])), im = this.imb(rows, tick);
+        const tr = mode === 'trades' && b.fpn ? new Map(Footprint.group(b.fpn, this.tick, nTicks).map((row) => [key(row[0]), row])) : null;
         let maxV = 1, poc = rows[0];
         for (const row of rows) { const v = row[1] + row[2]; if (v > maxV) maxV = v; if (v > poc[1] + poc[2]) poc = row; }
         for (const [px, sv, bv] of rows) {
@@ -111,8 +126,8 @@ class Footprint extends Layer {
           const y = this.series.priceToCoordinate(px + (nTicks - 1) * this.tick / 2); if (y == null) continue;
           if (showBars) { ctx.fillStyle = P.fpBg; ctx.fillRect(x - w / 2, y - rh / 2, w * (sv + bv) / maxV, rh - 1); }
           const below = at.get(key(px - tick)), above = at.get(key(px + tick));
-          const buyImb = this.ratio > 0 && bv > 0 && bv >= this.ratio * Math.max(below ? below[1] : 0, 1);
-          const sellImb = this.ratio > 0 && sv > 0 && sv >= this.ratio * Math.max(above ? above[2] : 0, 1);
+          const buyImb = im ? im.buy.has(Math.round(px / tick)) : this.ratio > 0 && bv > 0 && bv >= this.ratio * Math.max(below ? below[1] : 0, 1);
+          const sellImb = im ? im.sell.has(Math.round(px / tick)) : this.ratio > 0 && sv > 0 && sv >= this.ratio * Math.max(above ? above[2] : 0, 1);
           if (mode === 'both') {
             ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(String(sv), x - 3, y);
             ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(String(bv), x + 3, y);
@@ -122,23 +137,31 @@ class Footprint extends Layer {
             ctx.fillText(d > 0 ? `+${d}` : String(d), x, y);
           } else if (mode === 'total') {
             ctx.textAlign = 'center'; ctx.fillStyle = buyImb ? P.up : sellImb ? P.down : P.fpText; ctx.fillText(String(sv + bv), x, y);
+          } else if (M && (mode === 'trades' || mode === 'dom' || mode === 'price' || mode === 'diag')) {
+            const t = M.rowText(mode, [px, sv, bv], { below, above, dec, trades: tr && tr.get(key(px)) });
+            if (t.c != null) {
+              ctx.textAlign = 'center'; ctx.fillStyle = mode === 'dom' ? (bv >= sv ? P.up : P.down) : P.fpText; ctx.fillText(t.c, x, y);
+            } else if (t.l != null) {
+              ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(t.l, x - 3, y);
+              ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(t.r, x + 3, y);
+            }
           } else if (buyImb || sellImb) {             // no numbers: a thin edge where one side dominates
             ctx.fillStyle = buyImb ? P.up : P.down;
             ctx.fillRect(buyImb ? x + w / 2 - 3 : x - w / 2, y - rh / 2, 3, rh - 1);
           }
           if (showPoc && px === poc[0]) { ctx.strokeStyle = P.poc; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
         }
-        this.extras(ctx, b, x, w, rh, rows, tick);
+        this.extras(ctx, b, x, w, rh, rows, tick, im);
       }
     });
   }
   /* One bar's extras (see the class comment). Nothing here when an option is off or HBFlowMath did not load. */
-  extras(ctx, b, x, w, rh, rows = b.fp, tick = this.tick) {
+  extras(ctx, b, x, w, rh, rows = b.fp, tick = this.tick, im = this.imb(rows, tick)) {
     const M = window.HBFlowMath, ex = this.ex, P = this.P, s = this.series;
     if (!M || !ex || !b.fp.length) return;
     if (ex.stack > 0 && this.ratio > 0) {
       ctx.lineWidth = 2;
-      for (const r of M.stackedRuns(rows, tick, this.ratio, ex.stack)) {
+      for (const r of im ? im.runs : M.stackedRuns(rows, tick, this.ratio, ex.stack)) {
         const y0 = s.priceToCoordinate(r.to), y1 = s.priceToCoordinate(r.from);
         if (y0 == null || y1 == null) continue;
         const xx = r.side === 'buy' ? x + w / 2 + 3 : x - w / 2 - 3;     // buyers on the ask (right), sellers on the bid (left)
@@ -181,13 +204,15 @@ class Profile extends Layer {
       let maxV = 1; for (const r of p.rows) if (r[1] > maxV) maxV = r[1];
       const ex0 = this.ex || {}, M = window.HBFlowMath;
       const W = mediaSize.width * Math.min(0.5, Math.max(0.05, (+ex0.width || 18) / 100)), rh = Math.max(1, this.rowH(p.poc, this.tick) - 0.5);
-      // the value area at the chosen share (70 is the server's own): recomputed from the rows otherwise
-      const va = ex0.va && ex0.va !== 70 && M && M.valueArea ? M.valueArea(p.rows, p.poc, ex0.va) : null;
-      const vah = va ? va.vah : p.vah, val = va ? va.val : p.val;
+      // the value area at the chosen share (70 is the server's own): recomputed from the rows otherwise; `method` sierra / tv use that app's
+      // POC and value-area rules (HBFlowMath.valueAreaV2) -- homebase (unset) keeps the rule above
+      const v2 = (ex0.method === 'sierra' || ex0.method === 'tv') && M && M.valueAreaV2 ? M.valueAreaV2(p.rows, ex0.va || 70, ex0.method, this.tick) : null;
+      const va = !v2 && ex0.va && ex0.va !== 70 && M && M.valueArea ? M.valueArea(p.rows, p.poc, ex0.va) : null;
+      const vah = v2 ? v2.vah : va ? va.vah : p.vah, val = v2 ? v2.val : va ? va.val : p.val, poc = v2 ? v2.poc : p.poc;
       const left = ex0.side === 'left';
       for (const [px, v] of p.rows) {
         const y = this.series.priceToCoordinate(px); if (y == null) continue;
-        ctx.fillStyle = px === p.poc ? this.P.poc : (px >= val && px <= vah ? this.P.vaIn : this.P.va);
+        ctx.fillStyle = px === poc ? this.P.poc : (px >= val && px <= vah ? this.P.vaIn : this.P.va);
         const w = W * v / maxV; ctx.fillRect(left ? 0 : mediaSize.width - w, y - rh / 2, w, rh);
       }
       const q = p.prev, ex = this.ex || {};

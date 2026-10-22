@@ -118,3 +118,73 @@ test('zoomed out (the footprint is not readable) the extras are not drawn either
   f.draw({ useMediaCoordinateSpace: () => { drew = true; } });
   assert.equal(drew, false);
 });
+
+/* ---- wave 2: what a row shows (`text`), the vendor imbalance rules (`imb`), the profile's value-area `method` ---- */
+
+const series12 = { priceToCoordinate: (px) => 1000 - px * 48 };       // a tick is 12 px: readable at rows: 1
+function drawFp(ex, bars, ratio = 3) {
+  const f = new Footprint(P);
+  f.series = series12; f.tick = TICK; f.ratio = ratio; f.ex = { rows: 1, ...ex }; f.on = true; f.bars = bars;
+  f.chart = { timeScale: () => ({ logicalToCoordinate: (i) => i * 100 + 50, getVisibleLogicalRange: () => ({ from: 0, to: bars.length - 1 }) }) };
+  const { ctx, log } = recorder();
+  f.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+  return log;
+}
+// every drawn text with the fill it was drawn in
+const texts = (log) => { let fill; const out = []; for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillText') out.push([l[1], fill]); } return out; };
+const ROWS = [[100, 2, 3], [100.25, 0, 6]];
+const BAR = { c: 100, fp: ROWS, fpn: [[100, 1, 2], [100.25, 0, 4]] };
+
+test('footprint text: unset is today\'s `numbers` mode; bidask / volume are its both / total; text wins over numbers', () => {
+  const base = drawFp({}, [BAR]);
+  assert.deepEqual(texts(base), [['2', 'TX'], ['3', 'UP'], ['0', 'TX'], ['6', 'UP']]);
+  assert.deepEqual(drawFp({ text: 'bidask' }, [BAR]), base);
+  assert.deepEqual(drawFp({ imb: 'homebase', zero: 'one', edge: 'one', minvol: 0, mindiff: 0 }, [BAR]), base);
+  assert.deepEqual(drawFp({ text: 'volume' }, [BAR]), drawFp({ numbers: 'total' }, [BAR]));
+  assert.deepEqual(drawFp({ text: 'delta', numbers: 'total' }, [BAR]), drawFp({ numbers: 'delta' }, [BAR]));
+});
+
+test('footprint text: trades, dominant side %, price, diagonal differences', () => {
+  assert.deepEqual(texts(drawFp({ text: 'trades' }, [BAR])).map((t) => t[0]), ['1', '2', '0', '4']);
+  assert.deepEqual(texts(drawFp({ text: 'trades' }, [{ c: 100, fp: ROWS }])), []);               // no fpn on the bar: no data, nothing drawn
+  assert.deepEqual(texts(drawFp({ text: 'dom' }, [BAR])), [['+60', 'UP'], ['+100', 'UP']]);
+  assert.deepEqual(texts(drawFp({ text: 'price' }, [BAR])).map((t) => t[0]), ['100.00', '100.25']);
+  // left = Ask(P+1) - Bid(P), right = Ask(P) - Bid(P-1); 0 where that neighbour row does not exist
+  assert.deepEqual(texts(drawFp({ text: 'diag' }, [BAR])).map((t) => t[0]), ['4', '0', '0', '4']);
+});
+
+test('footprint imb: a vendor rule changes the flagged rows; its stacked runs follow it', () => {
+  const atas = texts(drawFp({ imb: 'atas' }, [BAR], 3.5));
+  assert.deepEqual(atas, [['2', 'TX'], ['3', 'TX'], ['0', 'TX'], ['6', 'TX']]);                  // 6 is not GREATER than 3.5 x 2, and 100 has no row below
+  assert.deepEqual(texts(drawFp({ imb: 'atas' }, [BAR]))[3], ['6', 'UP']);                        // ratio left on its default 3: ATAS brings its own 1.5, and 6 > 1.5 x 2
+  const three = { c: 100, fp: [[100, 1, 3], [100.25, 1, 3], [100.5, 1, 3]] };                   // asks exactly 3x the bid below
+  const stack = (ex, ratio) => { const { ctx, log } = recorder(); footprint(ex, ratio).extras(ctx, three, 200, 40, 10); return log.filter((l) => l[0] === 'moveTo').length; };
+  assert.equal(stack({ stack: 3 }), 1);
+  assert.equal(stack({ stack: 3, imb: 'atas' }, 3.5), 0);
+  assert.equal(stack({ stack: 2, imb: 'atas' }), 1);                                              // default ratio: ATAS's 1.5 flags a 3x ask (two rows, the bottom edge is skipped)
+  assert.equal(stack({ stack: 3, imb: 'atas', ratio: 2 }, 3.5), 0);                              // ratio is the footprint's own, not ex.ratio
+  const four = [...three.fp, [100.75, 1, 3]];                                                    // sierra skips the bottom row (nothing below it): 3 left in a row
+  assert.equal(footprint({ stack: 3, imb: 'sierra' }, 2).imb(four, TICK).runs.length, 1);
+  assert.equal(footprint({ stack: 3, imb: 'sierra' }, 2).imb(three.fp, TICK).runs.length, 0);
+  assert.equal(footprint({}).imb(three.fp, TICK), null);                                         // today's rule: draw keeps its own code
+  assert.equal(footprint({ imb: 'atas' }, 0).imb(three.fp, TICK).rows.length, 0);                // ratio off stays off
+});
+
+test('profile method: sierra / tv use that app\'s POC rule; homebase and unset keep the server\'s', () => {
+  const p = new Profile(P);
+  p.series = series; p.tick = 1;
+  p.p = { poc: 99, vah: 101, val: 99, rows: [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]] };
+  const run = (ex) => {
+    const { ctx, log } = recorder();
+    p.ex = ex;
+    p.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
+    let fill; const out = [];
+    for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillRect') out.push([fill, l[2]]); }
+    return out;
+  };
+  const pocY = (r) => r.find((x) => x[0] === 'POC')[1];
+  assert.equal(pocY(run({})), series.priceToCoordinate(99) - 1.75);
+  assert.deepEqual(run({ method: 'homebase' }), run({}));
+  assert.equal(pocY(run({ method: 'sierra' })), series.priceToCoordinate(101) - 1.75);          // nearest the middle of the profile
+  assert.equal(pocY(run({ method: 'tv' })), series.priceToCoordinate(99) - 1.75);               // tv: the lowest of the tie
+});

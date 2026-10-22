@@ -2,6 +2,7 @@
 leave the folder refused, and the runtime file served only when it is the pinned build."""
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
 import os
 
@@ -10,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from homebase.charts import pineapi as P
+from homebase.charts.server import create_app
+from tests.charts_util import D, rows, session_ms, write_archive
 
 RSI = '//@version=6\nindicator("RSI twin", overlay=false)\nplot(ta.rsi(close, 14))\n'
 STRAT = "//@version=5\nstrategy(title='Sniper', overlay=true)\nplot(close)\n"
@@ -98,3 +101,21 @@ def test_routes_refuse_a_foreign_host(tmp_path, monkeypatch):
 @pytest.mark.skipif(not P.runtime_path().is_file(), reason="the Pine runtime is not installed on this machine")
 def test_the_installed_runtime_is_the_pinned_build():
     assert hashlib.sha256(P.runtime_path().read_bytes()).hexdigest() == P.RUNTIME_SHA256
+
+
+def test_the_chart_app_serves_the_pine_routes(tmp_path, monkeypatch):
+    """create_app registers pineapi.routes(): the script list and text reach the page through the real app."""
+    monkeypatch.setenv(P.ENV, str(tmp_path / "pine"))
+    (tmp_path / "pine" / "scripts").mkdir(parents=True)
+    (tmp_path / "pine" / "scripts" / "rsi.pine").write_text(RSI)
+    body = b"var PineTS = {};"
+    monkeypatch.setattr(P, "RUNTIME_SHA256", hashlib.sha256(body).hexdigest())
+    P.runtime_path().parent.mkdir(parents=True)
+    P.runtime_path().write_bytes(body)
+    base = tmp_path / "ticks"
+    write_archive(base, "NQ", D, "NQZ6", rows(session_ms(D, 9, 29), [200.0 + 0.25 * (i % 4) for i in range(60)]))
+    app = create_app(roots=["NQ"], base=base, replay=D, speed=1, start_et=dt.time(9, 30), state=tmp_path / "state")
+    with TestClient(app, base_url="http://127.0.0.1:8852") as c:
+        assert c.get("/api/pine/scripts").json() == [{"name": "rsi.pine", "version": 6, "kind": "indicator", "title": "RSI twin"}]
+        assert c.get("/api/pine/scripts/rsi.pine").text == RSI
+        assert c.get("/api/pine/runtime.js").content == body

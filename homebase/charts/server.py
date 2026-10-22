@@ -53,6 +53,7 @@ from .news import News
 from .paper import ROOT as PAPER_ROOT, STRATEGY_ID as PAPER_ID, BacktestJob, PaperRunner, describe as paper_describe
 from .paperbook import DESK_ORIGINS, PaperBooks, _cors, desk_origin_refusal, is_paper_id, register as register_paperbook
 from .exitrunner import ExitRunner, register as register_exitrunner
+from .pineapi import routes as pine_routes
 from .presets import MAX_PRESET_BYTES, PresetsStore
 from .recorder import REFILL_MAX_PAGES, LiveRecorder, refill
 from .replay import ReplayFeed
@@ -1510,6 +1511,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
         "md_ready": lambda: bool(T.accounts_by_env()["live"]),     # the live login's md token: the fill pages on no other
         "on_finish": after_refresh, **(refresh_kw or {})})
     app.include_router(refresh_rt)
+    app.include_router(pine_routes())      # the Pine runtime and the owner's scripts (~/.homebase/pine)
 
     @app.get("/api/settings")
     async def get_settings(request: Request, response: Response):
@@ -1786,6 +1788,13 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
     # 2026-09-27 draw-tools plan: a generic named-preset store, by "kind" ("drawing:<tool>" today,
     # "indicator:<tool>" once the indicator dialog reuses it). Same write guard, same atomic write,
     # same body-size cap and JSON-object-only rule as templates above.
+    @app.get("/api/preset-defaults/{family}")
+    async def get_preset_defaults(family: str):
+        try:
+            return presets_store.defaults(family)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     @app.get("/api/presets/{kind}")
     async def get_presets(kind: str):
         try:
