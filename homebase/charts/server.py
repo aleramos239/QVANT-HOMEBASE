@@ -60,6 +60,7 @@ from .session import ET, always_open, et_wall_s, session_date, session_range_ms,
 from .settings_store import CLOCK_CHOICES, MD_CHOICES, SettingsStore, md_only
 from .store import ARCHIVE, TickStore, splice_tail
 from .studies import make
+from .tapelive import TapeLive
 from .tick import SideClassifier, from_row
 from .tester_api import tester_router
 from .tickfeed import MD_ENVS, SwitchInProgress, TickFeed, session_contract
@@ -1095,6 +1096,9 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                       recorder=DepthRecorder(depth_base or DEPTH_ARCHIVE) if rec_roots else None)
     hub = Hub(history, clock)
     hub.log = log
+    # Time & Sales (tapelive.py): the hub's own today list to the pages that opened the panel ({"op": "tape"}), read
+    # by the pump after hub.drain(); nothing on the tick path
+    tapelive = TapeLive(lambda r: hub.today.get(r), lambda r: hub.today_date.get(r))
     # the book indicators' live side (booklive.py): the same book lines the recorder writes and the hub's classified
     # prints, through one BookTracker per root; live service only (a replay has no book)
     booklive = BookLive(log=log)
@@ -1208,6 +1212,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 hub.on_clock(clock() - CLOSE_GRACE_MS)
                 for (conn, cid), msg in hub.drain():
                     conn.send({**msg, "id": cid})
+                tapelive.flush()                # the tape rows the bars above were built from
                 for m in quotes.drain():
                     fan(m)
                 desk_fan.flush()                # only a page that had no room: a desk event goes out as it arrives
@@ -2009,6 +2014,14 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
                 if op == "replay_stop":
                     replays.stop(conn, cid)
                     continue
+                if op == "tape":
+                    # the Time & Sales panel follows one root per page; null or an uncharted root closes it
+                    root = str(msg.get("root") or "").upper()
+                    if root in roots:
+                        tapelive.view((conn, "tape"), root, conn.send, room)
+                    else:
+                        tapelive.unview((conn, "tape"))
+                    continue
                 if op != "sub":
                     continue
                 try:
@@ -2083,6 +2096,7 @@ def create_app(*, roots=DEFAULT_ROOTS, base: Path = ARCHIVE, replay: dt.date | N
             if depth is not None:
                 depth.drop_conn(conn)
                 booklive.drop_conn(conn)
+            tapelive.drop_conn(conn)
             hub.drop_conn(conn)
             replays.drop_conn(conn)
             conn.task.cancel()

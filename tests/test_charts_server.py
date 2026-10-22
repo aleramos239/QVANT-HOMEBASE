@@ -1640,10 +1640,10 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
         return [b for b in m["bars"] if b["s"] != D.isoformat()]
 
     def lean(bars):
-        return [{k: v for k, v in b.items() if k not in ("fp", "big", "sw", "bub")} for b in bars]
+        return [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big", "sw", "bub", "ag")} for b in bars]
 
     def no_flow(bars):
-        return [{k: v for k, v in b.items() if k not in ("sw", "bub")} for b in bars]
+        return [{k: v for k, v in b.items() if k not in ("sw", "bub", "ag")} for b in bars]
 
     with TestClient(app, base_url="http://127.0.0.1:8852") as client, client.websocket_connect("/ws", headers={"host": "localhost:8852"}) as ws:
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60"})
@@ -1656,11 +1656,11 @@ def test_footprint_and_big_prints_come_only_when_the_chart_asks_for_them(tmp_pat
 
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False})
         bare = next_of(ws, "history")
-        assert all("fp" not in b and "big" not in b and "sw" in b and "bub" in b for b in bare["bars"])   # flow said nothing: kept
-        assert past(bare) == [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in past(full)]
+        assert all("fp" not in b and "fpn" not in b and "big" not in b and "sw" in b and "bub" in b for b in bare["bars"])   # flow said nothing: kept
+        assert past(bare) == [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big")} for b in past(full)]
         ws.send_json({"op": "sub", "id": "c1", "root": "NQ", "spec": "time:60", "fp": False, "big": False, "flow": False})
         bare = next_of(ws, "history")
-        assert all(not ({"fp", "big", "sw", "bub"} & set(b)) for b in bare["bars"])
+        assert all(not ({"fp", "fpn", "big", "sw", "bub", "ag"} & set(b)) for b in bare["bars"])
         assert past(bare) == lean(past(full))
         ws.send_json({"op": "older", "id": "c1", "before": bare["bars"][0]["ms"], "fp": False, "big": False, "flow": False})
         bare_older = next_of(ws, "older")

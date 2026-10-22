@@ -1,0 +1,200 @@
+//@version=6
+// HB parity P2 -- sessions and levels: our own Pine twin of each Homebase definition (homebase/charts/studies.py,
+// studies_ta.py) read on TradingView's own bars. A match proves TradingView's session, holiday and roll model, not a
+// TradingView indicator. Column name = tv|<homebase key>|<field>; tools/tvparity.py reads the export. VWAPs use hlc3 x
+// volume where Homebase reads every trade. Symbol settings: ETH, settlement-as-close OFF, back-adjust OFF.
+indicator("HB parity P2", overlay=true, precision=10, max_bars_back=5000)
+D = display.data_window
+TZ = "America/New_York"
+plot(1, "tv|probe|P2", display=D)
+
+// --- the clock: the bar's START in ET minutes; the Homebase session (18:00 -> 17:00 ET, the chart's own CME day); the
+// session's date -- a bar from 18:00 on belongs to the next weekday -- and whether the bar is on that calendar day
+tod = hour(time, TZ) * 60 + minute(time, TZ)
+newSess = timeframe.change("D")
+etDay = year(time, TZ) * 10000 + month(time, TZ) * 100 + dayofmonth(time, TZ)
+sessT = tod >= 1080 ? time + (dayofweek(time, TZ) == dayofweek.friday ? 3 : 1) * 86400000 : time
+sessDay = year(sessT, TZ) * 10000 + month(sessT, TZ) * 100 + dayofmonth(sessT, TZ)
+ownDay = etDay == sessDay
+inRth = tod >= 570 and tod < 1080               // from 09:30 ET to the 17:00 close: studies.is_rth
+
+// --- vwap (studies.VWAP): sum(price x size) / sum(size) and the population sd since the anchor; reset decided from
+// the bar's start; `on` false before the rth anchor (None in Homebase)
+vwapOf(bool reset, bool on) =>
+    var float pv = 0.0
+    var float p2v = 0.0
+    var float vv = 0.0
+    if reset
+        pv := 0.0
+        p2v := 0.0
+        vv := 0.0
+    if on
+        pv := pv + hlc3 * volume
+        p2v := p2v + hlc3 * hlc3 * volume
+        vv := vv + volume
+    float v = on and vv > 0 ? pv / vv : na
+    float sd = na(v) ? na : math.sqrt(math.max(p2v / vv - v * v, 0.0))
+    [v, sd]
+
+[vwE, sdE] = vwapOf(newSess, true)
+[vwR, sdR] = vwapOf(inRth and not inRth[1], inRth)
+[vwW, sdW] = vwapOf(timeframe.change("W"), true)
+[vwM, sdM] = vwapOf(timeframe.change("M"), true)
+// t0200: a reset at 02:00 ET decided from the bar's start; a Saturday or Sunday 02:00 never traded, so the Sunday open
+// keeps Friday's period (session.anchor_period_start)
+back = tod >= 120 ? tod - 120 : tod + 1320
+anchorT = time - back * 60000
+anchorT := dayofweek(anchorT, TZ) == dayofweek.saturday ? anchorT - 86400000 : dayofweek(anchorT, TZ) == dayofweek.sunday ? anchorT - 2 * 86400000 : anchorT
+anchorKey = year(anchorT, TZ) * 10000 + month(anchorT, TZ) * 100 + dayofmonth(anchorT, TZ)
+[vwT, sdT] = vwapOf(anchorKey != anchorKey[1], true)
+plot(vwE, "tv|vwap|vwap", display=D)
+plot(sdE, "tv|vwap|sd", display=D)
+plot(vwR, "tv|vwap:rth|vwap", display=D)
+plot(sdR, "tv|vwap:rth|sd", display=D)
+plot(vwW, "tv|vwap:week|vwap", display=D)
+plot(sdW, "tv|vwap:week|sd", display=D)
+plot(vwM, "tv|vwap:month|vwap", display=D)
+plot(sdM, "tv|vwap:month|sd", display=D)
+plot(vwT, "tv|vwap:t0200|vwap", display=D)
+plot(sdT, "tv|vwap:t0200|sd", display=D)
+
+// --- levels (studies.Levels): the prior session's high / low / last trade (SET off: the daily close is the last trade),
+// the overnight high / low of the bars before 09:30, the open of the first bar from 09:30
+[pdh, pdl, pdc] = request.security(syminfo.tickerid, "D", [high[1], low[1], close[1]], lookahead = barmerge.lookahead_on)
+var float onh = na
+var float onl = na
+var float rthOpen = na
+if newSess
+    onh := na
+    onl := na
+    rthOpen := na
+if inRth
+    if na(rthOpen)
+        rthOpen := open
+else
+    onh := na(onh) ? high : math.max(onh, high)
+    onl := na(onl) ? low : math.min(onl, low)
+plot(pdh, "tv|levels|pdh", display=D)
+plot(pdl, "tv|levels|pdl", display=D)
+plot(pdc, "tv|levels|pdc", display=D)
+plot(onh, "tv|levels|onh", display=D)
+plot(onl, "tv|levels|onl", display=D)
+plot(rthOpen, "tv|levels|rth_open", display=D)
+
+// --- orb:15 (studies_ta.OpeningRange): bars STARTING in [09:30, 09:45) ET; grows, then held to the session's end
+var float orbH = na
+var float orbL = na
+if newSess
+    orbH := na
+    orbL := na
+if tod >= 570 and tod < 585
+    orbH := na(orbH) ? high : math.max(orbH, high)
+    orbL := na(orbL) ? low : math.min(orbL, low)
+plot(orbH, "tv|orb:15|hi", display=D)
+plot(orbL, "tv|orb:15|lo", display=D)
+plot((orbH + orbL) / 2, "tv|orb:15|mid", display=D)
+
+// --- sess:<name> (studies_ta.SessionRange): one window's high / low since it began on the ET CALENDAR day, held to
+// midnight; asia 00:00-03:00, london 03:00-08:25, pre 08:25-09:30, nyam 09:30-11:00
+sessWin(int a, int b) =>
+    var float hi = na
+    var float lo = na
+    if etDay != etDay[1]
+        hi := na
+        lo := na
+    if tod >= a and tod < b
+        hi := na(hi) ? high : math.max(hi, high)
+        lo := na(lo) ? low : math.min(lo, low)
+    [hi, lo]
+
+[asH, asL] = sessWin(0, 180)
+[lnH, lnL] = sessWin(180, 505)
+[prH, prL] = sessWin(505, 570)
+[nyH, nyL] = sessWin(570, 660)
+plot(asH, "tv|sess:asia|hi", display=D)
+plot(asL, "tv|sess:asia|lo", display=D)
+plot(lnH, "tv|sess:london|hi", display=D)
+plot(lnL, "tv|sess:london|lo", display=D)
+plot(prH, "tv|sess:pre|hi", display=D)
+plot(prL, "tv|sess:pre|lo", display=D)
+plot(nyH, "tv|sess:nyam|hi", display=D)
+plot(nyL, "tv|sess:nyam|lo", display=D)
+
+// --- topen:0 (studies_ta.TimeOpen): the open of the first bar starting at 00:00 ET or up to 5 minutes after it, on the
+// session's own day, held to the session's end; none when no bar starts that close
+var float tOpen = na
+if newSess
+    tOpen := na
+if na(tOpen) and ownDay and tod <= 5
+    tOpen := open
+plot(tOpen, "tv|topen:0|", display=D)
+
+// --- wk / mo (studies_ta.PeriodLevels): the PRIOR period's high / low / close and this period's open; none until a
+// period has finished
+period(bool change) =>
+    var float o = na
+    var float h = na
+    var float l = na
+    var float c = na
+    var float ph = na
+    var float pl = na
+    var float pc = na
+    if change or na(o)
+        if not na(o)
+            ph := h
+            pl := l
+            pc := c
+        o := open
+        h := high
+        l := low
+    else
+        h := math.max(h, high)
+        l := math.min(l, low)
+    c := close
+    [ph, pl, pc, na(ph) ? na : o]
+
+[wkH, wkL, wkC, wkO] = period(timeframe.change("W"))
+[moH, moL, moC, moO] = period(timeframe.change("M"))
+plot(wkH, "tv|wk|hi", display=D)
+plot(wkL, "tv|wk|lo", display=D)
+plot(wkC, "tv|wk|close", display=D)
+plot(wkO, "tv|wk|open", display=D)
+plot(moH, "tv|mo|hi", display=D)
+plot(moL, "tv|mo|lo", display=D)
+plot(moC, "tv|mo|close", display=D)
+plot(moO, "tv|mo|open", display=D)
+
+// --- dhl:5 (studies_ta.DayHL): the highest high / lowest low of the last 5 COMPLETED sessions
+[dh5, dl5] = request.security(syminfo.tickerid, "D", [ta.highest(high, 5)[1], ta.lowest(low, 5)[1]], lookahead = barmerge.lookahead_on)
+plot(dh5, "tv|dhl:5|hi", display=D)
+plot(dl5, "tv|dhl:5|lo", display=D)
+
+// --- noise:0.3:rth (studies_ta.NoiseBand): the 09:30 open (first bar from 09:30, at most 5 minutes late) +/- 0.3 x the
+// daily ATR(14) of the sessions before today -- Wilder, seeded with the mean of the first 14 true ranges, the first
+// true range needing a close before it (ta.tr(false) is na on the first daily bar, as in Homebase)
+dAtr = request.security(syminfo.tickerid, "D", ta.rma(ta.tr(false), 14)[1], lookahead = barmerge.lookahead_on)
+var float nRef = na
+if newSess
+    nRef := na
+if na(nRef) and ownDay and tod >= 570 and tod <= 575
+    nRef := open
+plot(nRef + 0.3 * dAtr, "tv|noise:0.3:rth|up", display=D)
+plot(nRef - 0.3 * dAtr, "tv|noise:0.3:rth|dn", display=D)
+
+// --- rvol:14:10 (studies_ta.RelVolume): the bar's volume over the median volume of the same ET clock minute on the 14
+// bars before it at that minute; none with fewer than 10 of them
+type Clock                                  // a map cannot hold an array directly
+    array<float> vols
+var volByClock = map.new<int, Clock>()
+if not map.contains(volByClock, tod)
+    map.put(volByClock, tod, Clock.new(array.new<float>()))
+clockVols = map.get(volByClock, tod).vols
+float rv = na
+if array.size(clockVols) >= 10
+    med = array.median(clockVols)
+    rv := med > 0 ? volume / med : na
+if barstate.isconfirmed
+    array.push(clockVols, volume)
+    if array.size(clockVols) > 14
+        array.shift(clockVols)
+plot(rv, "tv|rvol:14:10|", display=D)

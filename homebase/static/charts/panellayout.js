@@ -6,7 +6,7 @@
 (function () {
 'use strict';
 
-const IDS = ['order', 'dom'];
+const IDS = ['order', 'dom', 'tape'];
 const DOCK_W_MIN = 260, DOCK_W_MAX = 480, DOCK_W_DEFAULT = 320;
 const FLOAT_W_MIN = 260, FLOAT_H_MIN = 220;
 const DOCK_MIN_FRACTION = 0.15;   // a docked panel never collapses under 15% of the stack's height
@@ -193,6 +193,7 @@ function defaultState() {
     panels: {
       order: { open: false, docked: true, x: 96, y: 96, w: 320, h: 480 },
       dom: { open: false, docked: true, x: 440, y: 96, w: 320, h: 480 },
+      tape: { open: false, docked: true, x: 784, y: 96, w: 320, h: 480 },
     },
   };
 }

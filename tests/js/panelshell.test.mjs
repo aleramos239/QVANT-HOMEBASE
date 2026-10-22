@@ -92,7 +92,7 @@ function makeEnv() {
   const registry = {};
   const mkRoot = (id) => { const e = new El('div', registry); e.id = id; e._isRoot = true; return e; };
   mkRoot('pdock'); mkRoot('floatLayer');
-  const tbOrder = mkRoot('tbOrder'), tbDom = mkRoot('tbDom');
+  const tbOrder = mkRoot('tbOrder'), tbDom = mkRoot('tbDom'), tbTape = mkRoot('tbTape');
   const document_ = {
     getElementById: (id) => registry[id] || null,
     createElement: (t) => new El(t, registry),
@@ -123,7 +123,7 @@ function makeEnv() {
   window_.HBSpring.Spring.prototype.stop = function (...args) { stopSpies.push(this); return realStop.apply(this, args); };
   vm.runInContext(SHELL_SRC, ctx);
   window_.HBPanelShell.mount({}, {});
-  return { window: window_, document: document_, tbOrder, tbDom, stopSpies };
+  return { window: window_, document: document_, tbOrder, tbDom, tbTape, stopSpies };
 }
 
 function findByClass(root, cls) {
@@ -145,11 +145,28 @@ function dragFloatingHeader(env, id, dx, dy) {
   head.dispatchEvent(pointerEvent('pointerup', start.x + dx, start.y + dy, { t: 32 }));
 }
 
-test('sanity: mount() builds both panels\' chrome and wires the toolbar toggles', () => {
+test('sanity: mount() builds every panel\'s chrome and wires the toolbar toggles', () => {
   const env = makeEnv();
   assert.ok(env.document.getElementById('panel-order'));
   assert.ok(env.document.getElementById('panel-dom'));
+  assert.ok(env.document.getElementById('panel-tape'));
   assert.equal(typeof env.tbOrder.onclick, 'function');
+  assert.equal(typeof env.tbDom.onclick, 'function');
+  assert.equal(typeof env.tbTape.onclick, 'function');
+  env.tbTape.onclick();
+  assert.equal(env.window.HBPanelShell.isOpen('tape'), true);
+  assert.equal(env.tbTape.getAttribute('aria-pressed'), 'true');
+});
+
+test('three docked panels stack: side-by-side is only ever a pair', () => {
+  const env = makeEnv();
+  const { HBPanelShell: shell } = env.window;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);   // docked by default
+  const dockEl = env.document.getElementById('pdock');
+  assert.equal(dockEl.hidden, false);
+  assert.ok(!dockEl.classList.contains('side'));
+  assert.deepEqual(dockEl.children.filter((c) => c.classList.contains('hbpanel')).map((c) => c.dataset.panel), ['order', 'dom', 'tape']);
+  assert.equal(dockEl.children.filter((c) => c.classList.contains('pdock-split')).length, 2);
 });
 
 test('onWindowResize: stops a floating panel\'s in-flight settle spring before writing the corrected rect', () => {

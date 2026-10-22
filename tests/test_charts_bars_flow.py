@@ -195,3 +195,123 @@ def test_the_prior_session_profile_is_built_once_per_session_not_once_per_update
     assert p.value(live) == v and len(calls) == 3
     p.push(live)                                                           # it closes: the same prior, still cached
     assert p.value()["prev"]["poc"] == 101.0 and len(calls) == 4
+
+
+# ---- tape orders (ag), print counts (fpn) and the running-delta numbers (dmax / dmin / dhi / dlo), 2026-10-21
+
+def test_a_tape_order_is_one_run_of_same_side_prints_in_one_millisecond_at_its_average_price():
+    from homebase.charts.bars import AG_CAP, AG_MIN
+    ticks = [T(0, 100.0, 4), T(0, 100.25, 3), T(0, 100.5, 5),          # one buy of 12 over three levels
+             T(5, 100.0, 10, SELL),                                      # one print of 10: an order too
+             T(7, 100.0, 4, SELL), T(7, 100.25, 5, SELL),                # 9: below AG_MIN
+             T(9, 100.0, 6), T(9, 100.0, 6)]                             # the run still forming at the end
+    closed, cur = build(ticks, M1, TS)
+    big = [BASE, round(1203.25 / 12, 6), 100.0, 100.5, 12, BUY, 3]
+    ten = [BASE + 5, 100.0, 100.0, 100.0, 10, SELL, 1]
+    assert cur.ag == [big, ten]
+    assert cur.wire(TS)["ag"] == [big, ten, [BASE + 9, 100.0, 100.0, 100.0, 12, BUY, 2]]
+    assert "ag" not in cur.wire(TS, flow=False)
+    closed, _ = build(ticks + [T(61_000, 100.0)], M1, TS)
+    assert closed[0].ag == [big, ten, [BASE + 9, 100.0, 100.0, 100.0, 12, BUY, 2]]
+    many = [T(i * 2, 100.0 + (i % 9) * TS, AG_MIN + i % 5, BUY if i % 2 else SELL) for i in range(200)]
+    bar, _ = build(many + [T(61_000, 100.0)], M1, TS)
+    assert len(bar[0].ag) == AG_CAP and sum(1 for r in bar[0].ag if r[4] == AG_MIN + 4) == 40    # the largest stay
+    assert min(r[4] for r in bar[0].ag) == AG_MIN + 3
+    assert bar[0].ag == sorted(bar[0].ag)                                              # in time order
+
+
+def test_fpn_counts_the_prints_at_each_price_by_side():
+    ticks = [T(0, 100.0, 5, SELL), T(1, 100.0, 1, SELL), T(2, 100.0, 7), T(3, 100.25, 2), T(4, 100.25, 2)]
+    _, cur = build(ticks, M1, TS)
+    assert cur.fpn == {400: [2, 1], 401: [0, 2]}
+    w = cur.wire(TS)
+    assert w["fpn"] == [[100.0, 2, 1], [100.25, 0, 2]] and w["fp"] == [[100.0, 6, 7], [100.25, 0, 4]]
+    assert "fpn" not in cur.wire(TS, fp=False)
+
+
+def test_the_running_delta_numbers_follow_the_definition():
+    ticks = [T(0, 100.0, 3), T(1, 99.75, 5, SELL), T(2, 100.5, 4), T(3, 100.5, 1, SELL), T(4, 100.0, 2, SELL)]
+    _, cur = build(ticks, M1, TS)                    # delta: 3, -2, 2, 1, -1
+    assert (cur.dmax, cur.dmin, cur.dhi, cur.dlo) == (3, -2, 1, -2)
+    w = cur.wire(TS)
+    assert (w["dmax"], w["dmin"], w["dhi"], w["dlo"]) == (3, -2, 1, -2)
+    _, cur = build([T(0, 100.0, 2, SELL), T(1, 100.0, 1, SELL)], M1, TS)
+    assert (cur.dmax, cur.dmin, cur.dhi, cur.dlo) == (0, -3, -3, -3)     # the open counts as delta 0
+
+
+def test_resampled_tape_orders_counts_and_delta_numbers_equal_the_direct_build():
+    rng = random.Random(5)
+    ticks, t = [], 0
+    for _ in range(12000):
+        t += rng.choice([0, 0, 0, 1, 3, 40, 300, 900])
+        ticks.append(T(t, 100.0 + rng.randint(0, 12) * TS, rng.choice([1, 2, 3, 5, 8, 12, 30]), rng.choice([BUY, SELL])))
+    ticks.append(Tick(ticks[-1].ts_ms + 120_001, 100.0, 1, BUY))
+    m1, _ = build(ticks, M1, TS)
+    for size in (300, 900):
+        direct, _ = build(ticks, BarSpec.parse(f"time:{size}"), TS)
+        via = resample(m1, BarSpec.parse(f"time:{size}"))
+        n = min(len(direct), len(via)) - 1
+        assert n >= 1
+        for a, b in zip(direct[:n], via[:n]):
+            assert a.ag == b.ag and a.fpn == b.fpn and len(a.ag) > 0
+            assert (a.dmax, a.dmin, a.dhi, a.dlo) == (b.dmax, b.dmin, b.dhi, b.dlo)
+            assert a.wire(TS) == b.wire(TS)
+    one = m1[0].copy()
+    for m in m1[1:5]:
+        one.merge(m)                                 # cap=True at every step keeps the same rows as capping once
+    five = m1[0].copy()
+    for m in m1[1:5]:
+        five.merge(m, cap=False)
+    five.finish_merge()
+    assert one.ag == five.ag and one.fpn == five.fpn and (one.dmax, one.dmin, one.dhi, one.dlo) == (five.dmax, five.dmin, five.dhi, five.dlo)
+
+
+def test_a_bar_from_before_the_tape_fields_loads_with_none_and_a_resample_that_takes_it_has_none():
+    import pickle
+    from homebase.charts.bars import Bar
+    closed, _ = build([T(0, 100.0, 12), T(1, 100.25, 3, SELL), T(60_000, 100.0, 2), T(120_000, 100.0, 1)], M1, TS)
+    state = dict(closed[0].__dict__)
+    for k in ("ag", "fpn", "dmax", "dmin", "dhi", "dlo"):
+        del state[k]
+    old = Bar.__new__(Bar)
+    old.__dict__.update(state)
+    again = pickle.loads(pickle.dumps(old))
+    assert (again.ag, again.fpn, again.dmax, again.dmin, again.dhi, again.dlo) == (None,) * 6
+    w = again.wire(TS)
+    assert not {"ag", "fpn", "dmax", "dmin", "dhi", "dlo"} & set(w) and w["sw"] == closed[0].wire(TS)["sw"]
+    again.add(T(2, 100.0, 15), TS)                   # an old bar keeps developing without them
+    assert again.ag is None and again.fpn is None and again.dmax is None
+    three = resample([again, closed[1]], BarSpec.parse("time:180"))
+    assert len(three) == 1 and (three[0].ag, three[0].fpn, three[0].dmax, three[0].dlo) == (None,) * 4
+    assert three[0].n == again.n + closed[1].n and three[0].ords_b == again.ords_b + closed[1].ords_b
+    c = again.copy()
+    assert (c.ag, c.fpn, c.dhi) == (None, None, None)
+
+
+# What the OLD bars.py (main ab61bbb0, before ag / fpn / the delta numbers) made of this fixture: every field and wire
+# key that existed then, hashed. The new fields must never move any of them (the engine mirrors these definitions).
+_OLD_KEYS = ("t", "ms", "s", "o", "h", "l", "c", "v", "d", "n", "big", "sw", "bub", "fp")
+_OLD_SHA = "6c3a0483bbb01c96bc80b2563fc8546dadc4e3dcd8c5f4b2d0fca5897a616459"
+
+
+def test_the_fields_and_wire_keys_from_before_are_byte_for_byte_what_they_were():
+    import hashlib
+    import json
+    rng = random.Random(21)
+    ticks, t = [], 0
+    for _ in range(9000):
+        t += rng.choice([0, 0, 0, 1, 2, 30, 250, 700])
+        ticks.append(Tick(BASE + t, 100.0 + rng.randint(0, 15) * TS, rng.choice([1, 1, 2, 3, 5, 8, 12, 25]), rng.choice([BUY, SELL])))
+    ticks.append(Tick(BASE + t + 600_000, 100.0, 1, BUY))
+    out = []
+    for key in ("time:60", "tick:50", "volume:300", "range:4"):
+        closed, cur = build(ticks, BarSpec.parse(key), TS)
+        bars = closed + ([cur] if cur else [])
+        if key == "time:60":
+            bars += resample(closed, BarSpec.parse("time:300"))
+        for b in bars:
+            w = b.wire(TS)
+            out.append([[w[k] for k in _OLD_KEYS], b.sw, b.bub, b.big, b.ords_b, b.ords_s, sorted(b.fp.items()),
+                        b.v, b.buy, b.sell, b.n, b.pv, b.p2v, b.te, b.span, b.closed])
+    assert len(out) == 5613
+    assert hashlib.sha256(json.dumps(out, separators=(",", ":")).encode()).hexdigest() == _OLD_SHA

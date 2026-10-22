@@ -10,6 +10,7 @@
   } catch (_) { document.documentElement.setAttribute('data-theme', 'light'); }
 </script>
 <link rel="stylesheet" href="/static/charts/charts.css?v=53">
+<link rel="stylesheet" href="/static/charts/tape.css?v=1">
 <link rel="stylesheet" href="/static/charts/apple-charts.css?v=8">
 <link rel="stylesheet" href="/static/charts/guide.css?v=5">
 <link rel="stylesheet" href="/static/hb.css?v=7">
@@ -40,6 +41,7 @@
   <span class="tb-spacer"></span>
   <button class="tb-btn" id="tbOrder" type="button" title="Order panel" aria-pressed="false" aria-controls="panel-order"><span class="icw" data-icon="panelRight"></span><span class="tb-label">Order</span></button>
   <button class="tb-btn" id="tbDom" type="button" title="DOM (Level 2 ladder)" aria-pressed="false" aria-controls="panel-dom"><span class="icw" data-icon="listOrdered"></span><span class="tb-label">DOM</span></button>
+  <button class="tb-btn" id="tbTape" type="button" title="Tape (Time &amp; Sales)" aria-pressed="false" aria-controls="panel-tape"><span class="icw" data-icon="list"></span><span class="tb-label">Tape</span></button>
 </header>
 <div class="main">
   <nav class="rail" id="rail" aria-label="Drawing tools">
@@ -128,6 +130,8 @@
 <script src="/static/charts/paperclient.js?v=34"></script>
 <script src="/static/charts/dom.js?v=33"></script>
 <script src="/static/charts/domui.js?v=33"></script>
+<script src="/static/charts/tape.js?v=1"></script>
+<script src="/static/charts/tapeui.js?v=1"></script>
 <script src="/static/charts/panel.js?v=33"></script>
 <script src="/static/charts/tradeui.js?v=35"></script>
 <script src="/static/charts/tradelines.js?v=40"></script>

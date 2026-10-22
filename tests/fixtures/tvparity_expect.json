@@ -1,0 +1,19 @@
+{
+  "_": "tests/test_tvparity.py real-data test: the math verdict each tv: study must reach against the P1 probe columns (category names only, never a TradingView value)",
+  "sma:50": {"math": "identical"},
+  "ema:20": {"math": "identical"},
+  "vwma:20": {"math": "identical"},
+  "tema:20": {"math": "identical"},
+  "rsi:14": {"math": "identical"},
+  "macd:12:26:9": {"math": "identical"},
+  "bb:20:2": {"math": "identical"},
+  "atr:14": {"math": "identical"},
+  "stoch:14:3:3": {"math": "identical"},
+  "supertrend:10:3": {"math": "identical"},
+  "donchian:20": {"math": "identical"},
+  "keltner:20:20:1.5": {"math": "identical"},
+  "mfi:14": {"math": "identical"},
+  "adx:14": {"math": "identical"},
+  "vwap": {"math": "identical"},
+  "er:14": {"math": "identical"}
+}

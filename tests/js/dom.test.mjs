@@ -308,3 +308,144 @@ test('chipTitle: the line label and the account(s) it belongs to', () => {
   assert.equal(Dom.chipTitle('BUY LMT 1', [{ who: '…047' }, { who: '…045' }]), 'BUY LMT 1 · …047, …045');
   assert.equal(Dom.chipTitle('SL 1', []), 'SL 1');
 });
+
+/* ---- 2026-10-21 DOM columns: sales at price, net pull/stack, Sierra's Recent Bid/Ask, the column choice ---- */
+
+test('fpSplit / withBarSplit: sell-at-bid and buy-at-ask kept apart per price; the memo is never mutated', () => {
+  const bars = [{ fp: [[100, 1, 1]] }, { fp: [[100, 2, 0]] }, { fp: [[100, 0, 5], [100.25, 1, 0]] }, { o: 1 }];
+  const closed = Dom.fpSplit(bars, TICK, 0, 2);
+  assert.deepEqual(closed.get(Dom.tickIndex(100, TICK)), [3, 1]);
+  const all = Dom.withBarSplit(closed, bars[2], TICK);
+  assert.deepEqual(all.get(Dom.tickIndex(100, TICK)), [3, 6]);
+  assert.deepEqual(all.get(Dom.tickIndex(100.25, TICK)), [1, 0]);
+  assert.deepEqual(closed.get(Dom.tickIndex(100, TICK)), [3, 1]);
+  assert.equal(Dom.fpSplit([{ o: 1 }], TICK), null);            // no footprint anywhere: blank, not empty
+  assert.equal(Dom.withBarSplit(null, { o: 1 }, TICK), null);
+  assert.equal(Dom.fpSplit([{ fp: [[100, 1, 1], ['x', 1, 1], [100.25, 2]] }], TICK).size, 1);   // malformed rows dropped
+});
+
+test('salesSince: the split now minus the copy at the reset; a price with no copy started at 0', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const split0 = new Map([[i(100), [3, 1]]]);
+  const split = new Map([[i(100), [5, 1]], [i(100.25), [0, 2]]]);
+  assert.deepEqual([...Dom.salesSince(split, split0)], [[i(100), [2, 0]], [i(100.25), [0, 2]]]);
+  assert.deepEqual([...Dom.salesSince(split, null)], [...split]);   // no reset yet: the whole session
+  assert.equal(Dom.salesSince(null, split0), null);
+});
+
+test('knownRange: the deepest shown level each side, null for an empty side', () => {
+  const book = { bids: [[100, 5], [99.75, 3], [99.25, 1]], offers: [[100.25, 4], [100.75, 2]] };
+  assert.deepEqual(Dom.knownRange(book, TICK), { bidFrom: Dom.tickIndex(99.25, TICK), askTo: Dom.tickIndex(100.75, TICK) });
+  assert.deepEqual(Dom.knownRange({ bids: [], offers: [[100.25, 4]] }, TICK), { bidFrom: null, askTo: Dom.tickIndex(100.25, TICK) });
+  assert.deepEqual(Dom.knownRange(null, TICK), { bidFrom: null, askTo: null });
+});
+
+test('pullStack (Sierra): the bid at 100 goes 50 -> 40 (-10), then 5 trade there (+5): -5', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const offers = [[100.25, 10]];
+  let r = Dom.pullStack(null, { bids: [[100, 50]], offers }, null, TICK);
+  assert.equal(r.rows.get(i(100)).bid, 0);                      // the first call is the base: nothing has changed yet
+  r = Dom.pullStack(r.base, { bids: [[100, 40]], offers }, null, TICK);
+  assert.equal(r.rows.get(i(100)).bid, -10);
+  r = Dom.pullStack(r.base, { bids: [[100, 40]], offers }, new Map([[i(100), [5, 0]]]), TICK);
+  assert.equal(r.rows.get(i(100)).bid, -5);
+  assert.equal(r.rows.get(i(100.25)).ask, 0);                   // the ask side has its own column
+  assert.equal(r.rows.get(i(100.25)).bid, 0);                   // above the best bid: a known 0, not unknown
+});
+
+test('pullStack: a buy at the ask counts for the ask side only; a sell at the bid for the bid side only', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const book = { bids: [[100, 10]], offers: [[100.25, 10]] };
+  let r = Dom.pullStack(null, book, null, TICK);
+  r = Dom.pullStack(r.base, { bids: [[100, 10]], offers: [[100.25, 7]] }, new Map([[i(100.25), [0, 3]], [i(100), [2, 0]]]), TICK);
+  assert.equal(r.rows.get(i(100.25)).ask, 0);                   // 3 lifted, 3 less resting: nothing pulled
+  assert.equal(r.rows.get(i(100)).bid, 2);                      // 2 hit the bid yet 10 still rest: 2 stacked back
+});
+
+test('pullStack: unknown rows are absent (never 0); a row below the deepest shown bid is unknown', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const r = Dom.pullStack(null, { bids: [[100, 5], [99.5, 2]], offers: [[100.25, 4]] }, null, TICK);
+  assert.equal(r.rows.has(i(99.25)), false);                    // below the deepest shown bid: not tracked at all
+  assert.equal(r.rows.get(i(99.75)).bid, 0);                    // a gap between the best and the deepest bid: known empty
+  assert.equal(r.rows.get(i(99.75)).ask, 0);                    // no ask can rest below the best ask: a known 0
+  assert.equal(r.rows.has(i(101)), false);                      // above the deepest shown ask: nothing tracked yet
+  assert.deepEqual(Dom.pullStack(null, null, null, TICK).rows.size, 0);
+});
+
+test('pullStack: a level filled into a gap is stacked; one that leaves the known range is dropped and starts over when back', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const offers = [[100.25, 4]];
+  let r = Dom.pullStack(null, { bids: [[100, 5], [99.5, 2]], offers }, null, TICK);
+  r = Dom.pullStack(r.base, { bids: [[100, 5], [99.75, 5], [99.5, 2]], offers }, null, TICK);
+  assert.equal(r.rows.get(i(99.75)).bid, 5);                    // +5 into the gap
+  r = Dom.pullStack(r.base, { bids: [[100, 5], [99.75, 5]], offers }, null, TICK);   // 99.5 fell off the wire's depth
+  assert.equal(r.rows.get(i(99.5)).bid, null);                  // dropped, not read as -2 pulled (the ask side still knows it: 0)
+  r = Dom.pullStack(r.base, { bids: [[100, 5], [99.75, 5], [99.5, 9]], offers }, null, TICK);
+  assert.equal(r.rows.get(i(99.5)).bid, 0);                     // back in range: a fresh base, not +7
+  assert.equal(r.rows.get(i(99.75)).bid, 5);                    // the others keep counting
+});
+
+test('pullStack: the best level starts over at 0 when the best price moves; the old best keeps its history', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  let r = Dom.pullStack(null, { bids: [[100, 5], [99.75, 3]], offers: [[100.25, 4]] }, null, TICK);
+  r = Dom.pullStack(r.base, { bids: [[100, 2], [99.75, 3]], offers: [[100.25, 4]] }, null, TICK);
+  assert.equal(r.rows.get(i(100)).bid, -3);
+  r = Dom.pullStack(r.base, { bids: [[99.75, 9]], offers: [[100, 1], [100.25, 4]] }, null, TICK);   // the bid at 100 is gone
+  assert.equal(r.rows.get(i(100)).bid, -5);                     // the old best: all 5 pulled
+  assert.equal(r.rows.get(i(99.75)).bid, 0);                    // the new best: starts over (was +6)
+  assert.equal(r.rows.get(i(100)).ask, 0);                      // the new best ask: fresh
+  assert.equal(r.rows.get(i(100.25)).ask, 0);
+});
+
+test('recentTraded (Sierra): back at the price within the timeout keeps counting (3); after it, starts over (1)', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const prints = [[0, 1000, 2, -1], [100, 999, 3, -1]];
+  let s = Dom.recentTraded(null, prints, { tick: TICK });
+  assert.equal(s.bid.get(i(1000)).v, 2);
+  assert.equal(s.bid.get(i(999)).v, 3);
+  assert.equal(Dom.recentTraded(s, [[2000, 1000, 1, -1]], { tick: TICK }).bid.get(i(1000)).v, 3);   // within 2500 ms
+  assert.equal(Dom.recentTraded(s, [[2600, 1000, 1, -1]], { tick: TICK }).bid.get(i(1000)).v, 1);   // after 2500 ms
+  assert.equal(Dom.recentTraded(s, [[9000, 1000, 1, -1]], { tick: TICK, timeoutMs: 10000 }).bid.get(i(1000)).v, 3);
+  assert.equal(s.bid.get(i(1000)).v, 2);                        // the last state is never mutated
+});
+
+test('recentTraded: staying at one price keeps counting however slow; sides are separate; junk prints are skipped', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  let s = Dom.recentTraded(null, [[0, 1000, 2, -1], [9000, 1000, 1, -1]], { tick: TICK });
+  assert.equal(s.bid.get(i(1000)).v, 3);                        // the market never traded elsewhere
+  s = Dom.recentTraded(s, [[9100, 1000.25, 4, 1], [9200, 1000.25, 1, 1], ['x'], null, [9300, NaN, 1, 1]], { tick: TICK });
+  assert.equal(s.ask.get(i(1000.25)).v, 5);
+  assert.equal(s.bid.has(i(1000.25)), false);
+  assert.equal(s.lastAsk, i(1000.25));
+  assert.equal(s.lastBid, i(1000));
+  assert.equal(Dom.recentTraded(null, [[0, 1000, 2, -1]]).bid.get(1000).v, 2);   // no tick: keyed by the price itself
+});
+
+test('buildRows: no opts -- the rows are exactly what they were (no new fields)', () => {
+  const book = { bids: [[30900, 5]], offers: [[30900.25, 4]] };
+  const rows = Dom.buildRows(book, TICK, Dom.tickIndex(30900, TICK), { levels: 1 });
+  assert.deepEqual(rows, [
+    { idx: 123601, price: 30900.25, bid: null, ask: 4, vol: null, bestBid: false, bestAsk: true },
+    { idx: 123600, price: 30900, bid: 5, ask: null, vol: null, bestBid: true, bestAsk: false },
+    { idx: 123599, price: 30899.75, bid: null, ask: null, vol: null, bestBid: false, bestAsk: false },
+  ]);
+});
+
+test('buildRows: ps and sales fill psBid/psAsk/sold/bought, null where the row is unknown', () => {
+  const i = (p) => Dom.tickIndex(p, TICK);
+  const ps = new Map([[i(30900), { bid: -5, ask: null }], [i(30900.25), { bid: 0, ask: 2 }]]);
+  const sales = new Map([[i(30900), [7, 1]]]);
+  const rows = Dom.buildRows(null, TICK, i(30900), { levels: 1, ps, sales });
+  const at = (p) => rows.find((r) => r.price === p);
+  assert.deepEqual([at(30900).psBid, at(30900).psAsk, at(30900).sold, at(30900).bought], [-5, null, 7, 1]);
+  assert.deepEqual([at(30900.25).psBid, at(30900.25).psAsk, at(30900.25).sold], [0, 2, null]);
+  assert.deepEqual([at(30899.75).psBid, at(30899.75).psAsk, at(30899.75).sold, at(30899.75).bought], [null, null, null, null]);
+});
+
+test('COLS / parseCols: the column order, and the saved choice (fixed columns always on, junk = every column)', () => {
+  assert.deepEqual(Dom.COLS.map((c) => c.label), ['P/S bid', 'Sold', 'Bid', 'Price', 'Ask', 'Bought', 'P/S ask', 'Vol']);
+  assert.deepEqual([...Dom.parseCols(null)], Dom.COLS.map((c) => c.id));
+  assert.deepEqual([...Dom.parseCols('{')], Dom.COLS.map((c) => c.id));
+  assert.deepEqual([...Dom.parseCols('["vol"]')], ['bid', 'price', 'ask', 'vol']);
+  assert.deepEqual([...Dom.parseCols('[]')], ['bid', 'price', 'ask']);
+});

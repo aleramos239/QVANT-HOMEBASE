@@ -125,11 +125,11 @@ def test_wire_is_et_wall_clock_with_priced_footprint():
 def test_wire_leaves_out_the_footprint_and_the_big_prints_only_when_asked_to():
     closed, _ = build([T(M, 100.0, 12, SELL), T(M + 1, 100.25, 3)], BarSpec("tick", 2), TS)
     full = closed[0].wire(TS)
-    assert list(full)[-4:] == ["big", "sw", "bub", "fp"] and full["big"] == [[M, 100.0, 12, SELL]]
-    assert closed[0].wire(TS, fp=False, big=False, flow=False) == {k: v for k, v in full.items() if k not in ("fp", "big", "sw", "bub")}
-    assert closed[0].wire(TS, fp=False) == {k: v for k, v in full.items() if k != "fp"}
+    assert list(full)[-6:] == ["big", "sw", "bub", "ag", "fp", "fpn"] and full["big"] == [[M, 100.0, 12, SELL]]
+    assert closed[0].wire(TS, fp=False, big=False, flow=False) == {k: v for k, v in full.items() if k not in ("fp", "fpn", "big", "sw", "bub", "ag")}
+    assert closed[0].wire(TS, fp=False) == {k: v for k, v in full.items() if k not in ("fp", "fpn")}
     assert closed[0].wire(TS, big=False) == {k: v for k, v in full.items() if k != "big"}
-    assert closed[0].wire(TS, flow=False) == {k: v for k, v in full.items() if k not in ("sw", "bub")}
+    assert closed[0].wire(TS, flow=False) == {k: v for k, v in full.items() if k not in ("sw", "bub", "ag")}
 
 
 def test_resample_caps_sweeps_and_bubbles_once_with_the_same_rows_as_capping_every_merge():

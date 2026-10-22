@@ -1,0 +1,21 @@
+/* ---- the Tape panel: Time & Sales (2026-10-21 tape plan; tapeui.js). Read-only: no row is a button.
+   Same bones as the DOM ladder (.dom-* in charts.css): a head, a column header, fixed-height rows. */
+.tape-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.tape-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+.tape-head .seg button { height: 24px; padding: 0 10px; font-size: 12px; font-weight: 600; }
+.tape-spacer { flex: 1; }
+.tape-head .op-in.tape-min { width: 64px; height: 26px; padding: 0 6px; font-size: 12px; }
+.tape-head .op-sel.tape-side { width: auto; height: 26px; padding: 0 24px 0 8px; font-size: 12px; }
+.tape-cols, .tape-row { display: grid; grid-template-columns: minmax(84px, 1.3fr) minmax(70px, 1fr) 1fr .8fr .6fr; align-items: center; }
+.tape-wrap.raw .tape-cols, .tape-wrap.raw .tape-row { grid-template-columns: minmax(84px, 1.3fr) minmax(70px, 1fr) 1fr; }
+.tape-wrap.raw .tape-n, .tape-wrap.raw .tape-lv { display: none; }
+.tape-cols { flex: none; padding: 4px 10px; color: var(--text-2); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; border-bottom: 1px solid var(--border); }
+.tape-c { text-align: right; padding: 0 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tape-time { text-align: left; color: var(--text-2); }
+.tape-rows { flex: 1; min-height: 0; overflow: hidden; font-variant-numeric: tabular-nums; }
+.tape-row { height: 18px; padding: 0 10px; font-size: 12px; }   /* ROW_H in tapeui.js */
+.tape-row.buy .tape-price, .tape-row.buy .tape-size { color: var(--up); }
+.tape-row.sell .tape-price, .tape-row.sell .tape-size { color: var(--down); }
+.tape-row .tape-size { font-weight: 600; }
+.tape-n, .tape-lv { color: var(--text-2); }
+.tape-idle { flex: 1; display: grid; place-items: center; padding: 24px; color: var(--text-2); font-size: 13px; text-align: center; }

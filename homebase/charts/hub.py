@@ -37,6 +37,7 @@ from .session import session_date
 from .studies import Profile, make
 from .studies_flow import NAMES as FLOW_NAMES, SMT_PARTNER, warm_flow
 from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
+from .studies_tv import prime_tv, warm_tv
 from .tick import BUY, SideClassifier, Tick, from_row
 
 HISTORY_MAX = 20_000    # a history message carries at most this many bars: the most recent
@@ -71,6 +72,8 @@ def warm_bars(key: str) -> int:
         return min(HISTORY_MAX, warm_bars(base) * max(1, int(tf) // 60))
     name, *rest = base.split(":")
     n = int(rest[0]) if rest and rest[0].isdecimal() else 0
+    if name == "tv" and rest:
+        return warm_tv(rest[0], rest[1:])
     if name in TA_NAMES:
         return warm_ta(name, rest)
     if name in FLOW_NAMES:
@@ -84,6 +87,8 @@ def prime_sessions(key: str) -> int:
     if tf.isdecimal():       # the sessions its higher bars need to settle (a trading day is ~23 h), at most 60
         return min(60, 1 + -(-warm_bars(base) * int(tf) // 82800))
     name, *rest = base.split(":")
+    if name == "tv" and rest:
+        return prime_tv(rest[0], rest[1:])
     return prime_ta(name, rest) if name in TA_NAMES else 0
 
 

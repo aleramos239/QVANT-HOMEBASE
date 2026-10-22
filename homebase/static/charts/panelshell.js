@@ -16,7 +16,8 @@
 const L = window.HBPanelLayout;
 const M = window.HBSpring;     // the feel pass (2026-09-28): momentum projection, rubber-band, the settle spring
 const KEY = 'hb_charts_panels';
-const TITLES = { order: 'Order', dom: 'DOM' };
+const TITLES = { order: 'Order', dom: 'DOM', tape: 'Tape' };
+const TB_IDS = { order: 'tbOrder', dom: 'tbDom', tape: 'tbTape' };   // each panel's toolbar toggle (charts.html)
 const DRAG_OUT_PX = 24;     // a docked header must clear the dock by this much before it starts floating
 const GRID_MIN_W = 240;     // the chart grid never gets crushed under this, however wide a side-by-side dock asks to be
 
@@ -301,7 +302,7 @@ function detachClosed() {
 }
 function paintToolbar() {
   for (const id of L.IDS) {
-    const btn = document.getElementById(id === 'order' ? 'tbOrder' : 'tbDom');
+    const btn = document.getElementById(TB_IDS[id]);
     if (!btn) continue;
     const on = state.panels[id].open;
     btn.setAttribute('aria-pressed', String(on));
@@ -815,9 +816,10 @@ function mount(pg, defsIn) {
   for (const id of L.IDS) ensureBuilt(id);
   relayout();
   window.addEventListener('resize', onWindowResize);
-  const tbOrder = document.getElementById('tbOrder'), tbDom = document.getElementById('tbDom');
-  if (tbOrder) tbOrder.onclick = () => toggle('order');
-  if (tbDom) tbDom.onclick = () => toggle('dom');
+  for (const id of L.IDS) {
+    const btn = document.getElementById(TB_IDS[id]);
+    if (btn) btn.onclick = () => toggle(id);
+  }
 }
 
 window.HBPanelShell = { mount, toggle, setOpen, setDocked, isOpen: (id) => state.panels[id].open };

@@ -679,7 +679,7 @@ def test_a_reseed_and_the_roll_drop_the_kept_minutes(tmp_path):
 
 # ---- the footprint and the big prints ride in a history / scroll-back message only when the chart asks ----
 def lean(bars):
-    return [{k: v for k, v in b.items() if k not in ("fp", "big")} for b in bars]
+    return [{k: v for k, v in b.items() if k not in ("fp", "fpn", "big")} for b in bars]
 
 
 def test_a_history_without_footprint_and_big_prints_is_the_same_message_minus_those_two(tmp_path):

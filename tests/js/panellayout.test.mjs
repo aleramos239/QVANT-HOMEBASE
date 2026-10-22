@@ -120,7 +120,7 @@ test('sanitizeState degrades field-by-field instead of discarding the whole blob
 
 test('sanitizeState drops an unknown persisted panel id and never throws on garbage', () => {
   const d = L.defaultState();
-  assert.deepEqual(Object.keys(L.sanitizeState({ panels: { ghost: { open: true } } }, d).panels), ['order', 'dom']);
+  assert.deepEqual(Object.keys(L.sanitizeState({ panels: { ghost: { open: true } } }, d).panels), ['order', 'dom', 'tape']);
   assert.deepEqual(L.sanitizeState(null, d), d);
   assert.deepEqual(L.sanitizeState('garbage', d), d);
   assert.deepEqual(L.sanitizeState(42, d), d);
@@ -140,9 +140,11 @@ test('parsePersisted never throws on invalid JSON and falls back to sanitized de
   assert.equal(out.dockWidth, 400);
 });
 
-test('defaultState shape has both known panels, closed, docked', () => {
+test('defaultState shape has every known panel, closed, docked', () => {
   const d = L.defaultState();
-  assert.deepEqual(Object.keys(d.panels).sort(), ['dom', 'order']);
+  assert.deepEqual(Object.keys(d.panels).sort(), ['dom', 'order', 'tape']);
+  assert.deepEqual(L.IDS, ['order', 'dom', 'tape']);
+  assert.deepEqual(L.normalizeOrder(['dom', 'order'], L.IDS), ['dom', 'order', 'tape']);   // a layout saved before the tape panel
   for (const id of L.IDS) {
     assert.equal(d.panels[id].open, false);
     assert.equal(d.panels[id].docked, true);
@@ -263,7 +265,7 @@ test('parsePersisted with no stored dockOrientation (old saved state) falls back
   const d = L.defaultState();
   const out = L.parsePersisted(JSON.stringify({ dockWidth: 340, dockOrder: ['dom', 'order'] }), d);
   assert.equal(out.dockOrientation, 'stack');
-  assert.deepEqual(out.dockOrder, ['dom', 'order']);
+  assert.deepEqual(out.dockOrder, ['dom', 'order', 'tape']);   // the saved pair keeps its order; the newer panel is appended
 });
 
 test('clampSideWidths: an uneven split lands exactly on the budget without dipping under the floor', () => {

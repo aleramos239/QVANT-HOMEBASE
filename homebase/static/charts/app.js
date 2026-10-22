@@ -2689,6 +2689,7 @@ function connect() {
     wsOpenedOnce = true;
     window.HBReplayUI?.onReconnect(cells);   // a fresh connection carries no replay sessions from the old one
     for (const c of cells) { c.clearInflight(); c.subscribe(true); }
+    window.HBTapeUI?.onOpen();   // asks for its root again: the new socket streams nothing until told
   };
   ws.onmessage = (e) => {
     let m;
@@ -2700,6 +2701,7 @@ function connect() {
     if (m.type === 'paperbook') { window.HBPaperClient?.onBook(m); window.HBDeskClient?.bookChanged(); return; }   // the PAPER account
     if (m.type === 'depth') { window.HBDomUI?.onDepth(m); window.HBL2Layer?.onDepth(m); window.HBLiquidity?.onDepth(m); return; }
     if (m.type === 'bookflow') { window.HBBookStore?.applyLive(m); return; }   // the book's seconds + order levels (booklive.py)
+    if (m.type === 'tape') { window.HBTapeUI?.onMessage(m); return; }   // the prints the Tape panel asked for (tapelive.py)
     if (m.type === 'news' || m.type === 'burst' || m.type === 'burst_update') { window.HBNewsUI?.onMessage(m); return; }
     if (m.type === 'tester_show') { window.HBTesterUI?.show(m); return; }   // Claude's "show on chart" (POST /api/tester/show)
     const c = cells.find((x) => x.id === m.id);
@@ -2715,7 +2717,7 @@ function connect() {
   ws.onclose = () => {
     showStatus({ connected: false, error: 'chart service unreachable — retrying' });
     // the books went with the socket: the ladder says "Book stale", the lines go, the heatmap leaves a gap
-    window.HBDomUI?.onDisconnect(); window.HBL2Layer?.onDisconnect(); window.HBLiquidity?.onDisconnect();
+    window.HBDomUI?.onDisconnect(); window.HBL2Layer?.onDisconnect(); window.HBLiquidity?.onDisconnect(); window.HBTapeUI?.onDisconnect();
     setTimeout(connect, 2000);
   };
 }
@@ -2849,6 +2851,7 @@ async function init() {
     openMenu, closeMenu, placeMenu, toggleMenu, menuItem, sbNote, clockMs, chartSettings, events: () => calendar,
     deskUrl: () => `${location.protocol}//${location.hostname}:8850/`,
     overlays: [],
+    send(msg) { if (!ws || ws.readyState !== 1) return false; ws.send(JSON.stringify(msg)); return true; },   // page-level ops (the tape panel); the cells send through hostFor
     // a chart's trade config changed (HBTradeUI.setCellTrade): an account-list change is a layout change (Unsaved);
     // the switch alone is not saved as "on" anywhere a load could bring back (loadedTrade)
     tradeChanged(cell, accountsChanged) { if (accountsChanged) markDirty(); else saveLast(); },
@@ -2875,10 +2878,12 @@ async function init() {
   // the chrome (open/close, dock/float, drag, resize, persistence); it hands each module a plain container to
   // fill ONCE (mount) and a setVisible callback -- neither module ever touches the page's layout itself.
   if (window.HBOrderPanel && window.HBDomUI && window.HBPanelShell) {
-    window.HBPanelShell.mount(page, {
+    const defs = {
       order: { mount: (container) => window.HBOrderPanel.mount(page, container), setVisible: (v) => window.HBOrderPanel.setVisible(v) },
       dom: { mount: (container) => window.HBDomUI.mount(container, page), setVisible: (v) => window.HBDomUI.setVisible(v) },
-    });
+    };
+    if (window.HBTapeUI) defs.tape = { mount: (container) => window.HBTapeUI.mount(container, page), setVisible: (v) => window.HBTapeUI.setVisible(v) };   // 2026-10-21: Time & Sales
+    window.HBPanelShell.mount(page, defs);
   }
   if (window.HBReplayUI) window.HBReplayUI.mount(page);
   buildGrid();   // after the mounts: page.overlays must be filled before any cell's build() reads host.overlays()
