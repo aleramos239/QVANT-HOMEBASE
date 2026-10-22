@@ -143,6 +143,12 @@ class ShadowFills:
     def working_entries(self) -> int:
         return sum(1 for o in self._sim.orders if o.role == "entry")
 
+    @property
+    def settled(self) -> bool:
+        """Flat, and every order the strategy placed has ended and the strategy was told so: nothing is open on paper
+        and its child believes nothing that is not true (a day may change over to the Desk from here)."""
+        return self.flat and not self._told
+
     # ---- the strategy's side
     def apply(self, intents) -> None:
         s, ctx = self._sim, self._ctx

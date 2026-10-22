@@ -539,8 +539,8 @@ def test_readiness_a_strategy_booked_after_its_session_opened_warns_it_runs_in_s
     book(client, [("eval1", 1)])
     client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "shadow"}}})
     assert checks() == [{"level": "warn", "label": "PP ORB",
-                         "detail": "booked after today's session opened — runs in shadow today, "
-                                   "trades on its account from the next session"}]
+                         "detail": "booked after today's session opened — starts sending orders as soon as "
+                                   "it has no open trade or order"}]
     client.labdesk.heartbeat({"pid": 7, "strategies": {LAB: {"state": "running", "why": None, "mode": "desk"}}})
     assert checks() == []
 

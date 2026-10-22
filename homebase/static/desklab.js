@@ -463,9 +463,9 @@
     disarmed: "Disarmed: written down only",
   };
   var NEXT_SESSION = "Starts with the next session.";
-  // booked after today's session opened: the runner keeps the day in shadow (2026-10-21: two accounts booked at 09:05 /
-  // 09:08 and nothing traded all day while the card read "Watching")
-  var SHADOW_TODAY = "Shadow today: booked after the session opened. It trades on its account from the next session.";
+  // booked after today's session opened: the runner changes the day over once the strategy has no open trade or order
+  // (2026-10-21: two accounts booked at 09:05 / 09:08 and nothing traded all day while the card read "Watching")
+  var SHADOW_TODAY = "Booked after the session opened. It starts sending orders as soon as it has no open trade or order.";
   var STOPPED_TODAY = "Stopped for today.";            // the Desk's own sentence for a stop that has no other cause
   var QUIET_STOPS = ["", "off", STOPPED_TODAY];         // a stop that only means "not any more today": ON, it starts with the next session
   var OTHER_DESK = "Another copy of the Desk is using the Lab strategies.";
@@ -479,7 +479,7 @@
   var OLD_TITLE = "From an earlier day";
   var CLEAR = "Clear";
   var CLEARED = "Cleared.";
-  var BOOKED_NEXT = "Booked. It starts with the next session.";
+  var BOOKED_NEXT = "Booked. It starts as soon as it has no open trade or order.";
   var BOOKED_JOINS = "Booked. It joins at the next trade.";
   var LIVE_NOTE = "It will trade real money on its next order. Every entry carries a stop held at the broker.";
   // The Lab's journal lines the Activity page does NOT show: write-ahead bookkeeping of an order request (two lines per request).
@@ -542,7 +542,8 @@
     return !!lab && !!s.cfg && s.cfg.enabled === true && isObj(lab.runner) && lab.runner.alive !== true &&
       (lab.state === "shadow" || lab.state === "waiting" || lab.state === "watching");
   }
-  // A booked day the runner hosts in shadow (an account assigned after its session opened), while it runs or waits.
+  // A booked day the runner still hosts in shadow (an account assigned after its session opened, a trade or order open
+  // on paper), while it runs or waits.
   function shadowToday(s, book) {
     var lab = blockOf(s);
     return !!lab && lab.mode_today === "shadow" && Array.isArray(book) && book.length > 0 &&
@@ -761,7 +762,8 @@
     if (s && startsNext(s)) return switchOnNext(n);
     return Array.isArray(book) && book.length > 0 ? switchOnAccounts(n) : switchOnShadow(n);
   }
-  // An account added while today's day runs in shadow: "Booked. It starts with the next session." (ruling, Q3)
+  // An account added while today's day runs in shadow: it starts as soon as the strategy has no open trade or order (the
+  // owner, 2026-10-21; was: with the next session, ruling Q3)
   function bookedNext(s, before, after) {
     var lab = blockOf(s);
     return !!lab && lab.mode_today === "shadow" && !!s.cfg && s.cfg.enabled === true &&

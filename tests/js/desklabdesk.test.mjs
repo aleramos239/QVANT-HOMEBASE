@@ -399,10 +399,10 @@ test('the book: a refusal of a Lab strategy is shown as the Desk\'s sentence, wi
   assert.deepEqual(other.toasts, ['Book update failed — unknown account']);
 });
 
-test('the book: an account added while the day runs in shadow says "Booked. It starts with the next session."', async () => {
+test('the book: an account added while the day runs in shadow says "Booked. It starts as soon as it has no open trade or order."', async () => {
   const t = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'shadow', state: 'shadow' }) } });
   await t.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
-  assert.deepEqual(t.toasts, ['Booked. It starts with the next session.']);
+  assert.deepEqual(t.toasts, ['Booked. It starts as soon as it has no open trade or order.']);
   const desk = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'desk' }) } });      // final wave: a day through the Desk
   await desk.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }]);
   assert.deepEqual(desk.toasts, ['Booked. It joins at the next trade.']);
@@ -603,7 +603,7 @@ test('the skin\'s Setup card for a Lab strategy on the Desk reads the same helpe
 });
 
 test('asset versions: desklab.js and the skin\'s manifest are bumped', () => {
-  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=26"><\/script>/);
+  assert.match(HTML, /<script src="\/static\/desklab\.js\?v=27"><\/script>/);
   assert.match(HTML, /<script src="\/static\/desklabset\.js\?v=2"><\/script>/);
   assert.doesNotMatch(HTML, /desklab\.js\?v=(?:[1-9]|1[012])\b/);
   const manifest = JSON.parse(readFileSync(new URL('../../homebase/static/apple/manifest.json', import.meta.url), 'utf8'));
@@ -1030,7 +1030,7 @@ test('final wave B6: an account added while the day trades through the Desk says
   assert.deepEqual(t.toasts, ['Booked. It joins at the next trade.']);
   const s = load({ strategies: { lab_nq_orb: deskStrat({ mode_today: 'shadow' }) }, book: BOOKED0 });
   await s.api.setBook('lab_nq_orb', [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }]);
-  assert.deepEqual(s.toasts, ['Booked. It starts with the next session.']);
+  assert.deepEqual(s.toasts, ['Booked. It starts as soon as it has no open trade or order.']);
 });
 
 test('final wave B6: the flatten alert believes the Desk\'s `check` list, also when every step reads plain', async () => {

@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=2">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=26"></script>
+<script src="/static/desklab.js?v=27"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -3114,7 +3114,7 @@ function acctRow(id, extra) {
 async function setBook(strategy, assignments) {
   const lab = ((ST.strategies || {})[strategy] || {cfg: {}}).cfg.kind === "lab", before = lab ? ((ST.book && ST.book[strategy]) || []) : [];
   const r = await post("/api/book", {strategy, assignments});
-  if (lab) {      // a promoted Lab strategy: the Desk's own sentence, no prefix; an account added mid-session starts next session
+  if (lab) {      // a promoted Lab strategy: the Desk's own sentence, no prefix; an account added mid-session starts once it has no open trade
     if (!r.ok) toast(DeskLab.refusalText(r), 5000);
     else if (DeskLab.bookedNext(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_NEXT, 5000);
     else if (DeskLab.bookedJoins(ST.strategies[strategy], before, assignments)) toast(DeskLab.BOOKED_JOINS, 5000);

@@ -505,7 +505,7 @@ test('deskState: one word for each state the server sends, from the design\'s ta
 
 test('deskState: booked after its session opened, the day runs in shadow today and the card says so (2026-10-21)', () => {
   const booked = [{ account: 'a1', qty: 1 }];
-  const SHADOW_TODAY = 'Shadow today: booked after the session opened. It trades on its account from the next session.';
+  const SHADOW_TODAY = 'Booked after the session opened. It starts sending orders as soon as it has no open trade or order.';
   assert.equal(D.deskState(deskStrat({ state: 'watching', mode_today: 'shadow' }), booked), SHADOW_TODAY);
   assert.equal(D.deskState(deskStrat({ state: 'waiting', mode_today: 'shadow' }), booked), SHADOW_TODAY);
   assert.equal(D.deskDot(deskStrat({ state: 'watching', mode_today: 'shadow' }), booked), 'shadow');
@@ -748,7 +748,7 @@ test('the switch and flatten sentences, exactly', () => {
   assert.equal(D.switchOnNext('NQ ORB'), 'NQ ORB is ON. It starts with the next session.');
   assert.equal(D.switchOff('NQ ORB'), 'NQ ORB is OFF. Unfilled orders are cancelled. An open position keeps its stop and is closed at the flat time. It trades again from the next session.');
   assert.deepEqual({ ...D.flattenAsk('NQ ORB') }, { title: 'Flatten NQ ORB?', body: 'Cancels its orders, closes its own position on every account, and switches it OFF. It trades again from the next session.', action: 'Flatten & turn off' });
-  assert.equal(D.BOOKED_NEXT, 'Booked. It starts with the next session.');
+  assert.equal(D.BOOKED_NEXT, 'Booked. It starts as soon as it has no open trade or order.');
   assert.equal(D.LIVE_NOTE, 'It will trade real money on its next order. Every entry carries a stop held at the broker.');
   assert.equal(D.CLEARED, 'Cleared.');
 });
@@ -869,7 +869,7 @@ test('the activity lines of the Lab\'s journal events, in simple words', () => {
   assert.deepEqual(A.lab_removed({}, 'NQ ORB', ''), ['NQ ORB taken off the Desk']);
 });
 
-test('bookedNext: an account added while the day runs in shadow starts with the next session', () => {
+test('bookedNext: an account added while the day runs in shadow starts as soon as it has no open trade or order', () => {
   const one = [{ account: 'a1', qty: 1 }], two = [{ account: 'a1', qty: 1 }, { account: 'a2', qty: 1 }];
   assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), [], one), true);
   assert.equal(D.bookedNext(deskStrat({ mode_today: 'shadow' }), one, two), true);
@@ -1084,7 +1084,7 @@ test('final wave B6: an account added while the day trades through the Desk join
   assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), one, two), true);
   assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), two, one), false, 'taking one off');
   assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }), one, one), false, 'a size change');
-  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'shadow' }), one, two), false, 'a shadow day: it starts with the next session');
+  assert.equal(D.bookedJoins(deskStrat({ mode_today: 'shadow' }), one, two), false, 'a shadow day: it starts once it has no open trade or order');
   assert.equal(D.bookedJoins(deskStrat({ mode_today: null }), [], one), false, 'the session has not begun');
   assert.equal(D.bookedJoins(deskStrat({ mode_today: 'desk' }, { enabled: false }), one, two), false);
   assert.equal(D.bookedJoins(null, one, two), false);

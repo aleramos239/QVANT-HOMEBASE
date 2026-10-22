@@ -112,6 +112,7 @@ NO_RESUME = "Could not pick up where it left off."
 STOPPED_TODAY = "Stopped for today."
 KILLED = "Killed today."
 NO_FILLS = "Not checked: a trade's fills are not known."     # the daily match of a desk day (a round with no price)
+PART_DAY = "Not checked: the account was booked after the session opened."    # a desk day that began mid-session
 OTHER_DAY = "The Desk is on another day."    # a day's `why` while the Desk's stream says a date that is not the day's:
                                              # nothing at all is sent for it (the Desk applies an exit whatever its date)
 
@@ -569,6 +570,7 @@ class StrategyDay:
         self.promoted = record.get("promoted_utc")
         self.state, self.why, self.detail = "waiting", None, None
         self.rebuilt = False                         # made by catch-up (the summary says so)
+        self.partial = False                         # a desk day that began mid-session (go_desk): its trades are not the day's
         self.match: dict | None = None               # the daily match's verdict, once the runner has it
         self.fills: ShadowFills | None = None
         self.orders: list[dict] = []                 # the summary's rows, as they happened
@@ -970,7 +972,9 @@ class StrategyDay:
     #     it. (`stopped` after the runner's OWN stop is that stop's echo: the stop keeps being asked until answered.)
     #   * while the Desk's stream says a date that is not the day's, NOTHING is sent for the day -- no entry, no exit,
     #     no stop: the Desk applies an exit whatever date its event carries ("The Desk is on another day.").
-    #   * a day that ran in shadow is never turned into a desk day: a tell-log with no event is nothing to pick up.
+    #   * a tell-log with no event is nothing to pick up. A day that ran in shadow turns into a desk day only through
+    #     go_desk (an account booked after the window opened, the day settled): from there on it is a desk day whose
+    #     earlier part was never sent, and a runner that starts again cannot pick it up (its log starts at the flip).
     #   * at the strategy's own window end ONE flatten "eod" is sent (the tester's law) for a day that sent an entry --
     #     or at the Desk's flat time when that comes first (the day ends there: `flat_et`).
     #
@@ -1029,14 +1033,34 @@ class StrategyDay:
     def start_ns(self) -> int:
         return self._t0
 
-    def _desk_start(self) -> None:
+    def go_desk(self, *, desk: DeskSide, send, tell, resume=None, flat_et: str | None = None) -> None:
+        """A shadow day whose account was booked after its window opened carries on in desk mode from here (the owner,
+        2026-10-21: "an account booked after the session opens starts trading the same day"). The runner asks only
+        for a SETTLED day (ShadowFills.settled): flat on paper, nothing working, its child told of every ending. So
+        what the child asks next goes to the Desk, and nothing it did before is ever sent. The paper day so far stays
+        in the shadow copy (Runner._sync_twins); this day's rows start empty and its match is not made (`partial`).
+        shortcut: the events before the booking are not in the tell-log, so a runner that starts again later the same
+        day cannot pick this day up: it stops, and the Desk keeps any position on its stop. Upgrade: log the events."""
+        self._desk_init(desk, send, tell, resume, self._now_ref(), flat_et)
+        self.partial, self.orders = True, []
+        self._desk_start(late=True)
+        if self._desk is not None and self._flat_et is not None:
+            self._t1 = min(self._t1, et_ns(self.date, self._flat_et))
+        self._resave()                               # (the day file says desk now, whatever the rows' count was)
+
+    @property
+    def settled(self) -> bool:
+        """A shadow day, running or waiting, with nothing open on paper that go_desk would have to carry over."""
+        return self._desk is None and self.state in ACTIVE and self.fills is not None and self.fills.settled
+
+    def _desk_start(self, late: bool = False) -> None:
         """The mode, decided once (design D2): desk mode only for a day made before its window began, or picked up
         from its own tell-log -- one that holds an event: the head line alone is written as soon as a desk day is
         made, and says nothing of a day that then ran in shadow. A day made later with nothing to pick up is shadow
-        today: the account starts with the next session."""
+        until it is settled and the runner changes it over (go_desk: `late`)."""
         side = self._desk
         if not self._logged:                         # no log, or one with no event: nothing to pick up. A day that
-            if self.rebuilt:                         # has already begun is never turned into a desk day
+            if self.rebuilt and not late:            # has already begun is never turned into a desk day by its start
                 self._desk = None
                 return
             if self._log is None:
@@ -1522,7 +1546,7 @@ class StrategyDay:
     def _desk_summary(self, why) -> dict:
         """What a desk day's summary adds: its mode, the Desk's silence while it lasts, and how many of the lead
         account's trades have no price (the daily match cannot compare those)."""
-        out: dict = {"mode": "desk"}
+        out: dict = {"mode": "desk", **({"partial": True} if self.partial else {})}
         if why is None and self._desk_why() is not None:
             out["why"] = self._desk_why()
         n = self._desk.unpriced()
@@ -2034,6 +2058,10 @@ class Runner:
                 except (KeyError, TypeError, ValueError):
                     continue
                 if was.get("mode") == "desk":        # a desk day: its trades are real, at the Desk's size
+                    if was.get("partial"):
+                        self._write(store.put_day, rec["name"], {**was, "match": {"ok": None, "text": PART_DAY},
+                                                                 "updated_utc": _utc()})
+                        continue
                     if was.get("unpriced"):
                         self._write(store.put_day, rec["name"], {**was, "match": {"ok": None, "text": NO_FILLS},
                                                                  "updated_utc": _utc()})
@@ -2244,8 +2272,9 @@ class Runner:
           desk day, accounts still booked        its book is kept up to date (it only decides the lead account)
           desk day, every account taken off      begun: it ends `done` and no shadow day is started for the date;
                                                  not begun: a fresh day, in shadow
-          shadow day, an account was assigned    before its window began: a fresh day, in desk mode; after: it stays
-                                                 shadow today (the heartbeat says so)"""
+          shadow day, an account was assigned    before its window began: a fresh day, in desk mode; after: it carries on
+                                                 in desk mode from the moment it is settled -- flat on paper, nothing
+                                                 working (_late_book; the owner, 2026-10-21)"""
         day, accounts = h.day, self._book(rec)
         if day.mode == "desk":
             if accounts:
@@ -2260,7 +2289,23 @@ class Runner:
         if accounts and day.state == "waiting" and self._clock_ms * 1_000_000 <= day.start_ns:
             day.kill()
             return True
+        if accounts and day.settled and self._clock_ms * 1_000_000 > day.start_ns:
+            self._late_book(h, rec)
         return False
+
+    def _late_book(self, h: _Hosted, rec: dict) -> None:
+        """An account was booked after the window opened and the shadow day is settled: the same day carries on in
+        desk mode (StrategyDay.go_desk). Not when the Desk already ended its day (killed there, stopped for today), and
+        not for a date that began in desk mode before (its tell-log holds an event: that is _desk_day's, not a flip)."""
+        day = h.day
+        if self._desk_word(rec, day.date) is not None:
+            return
+        plan = self._desk_day(rec, day.date)
+        if not plan or plan.pop("begun"):
+            return
+        day.go_desk(**plan)
+        h.orders = h.trades = 0                      # (the desk day's rows start empty: the paper day is the twin's)
+        log(f"{day.name}: {day.date} booked after its window opened: carries on in desk mode")
 
     def _on_desk(self, kind: str, event=None, data=None) -> None:
         """What the Desk's reader and the heartbeat's timer put on the queue (DeskClient)."""
@@ -2441,6 +2486,9 @@ class Runner:
         """A desk day's match compares the lead account's REAL trades, as they stand when the match starts, with the
         tester run at that account's size. False: a trade has no price -- answered here, the tester is not asked."""
         m.trades = m.day.trades()
+        if m.day.partial:                            # it began mid-session: the tester's whole day is not its day
+            self._results.put((m, {"ok": None, "text": PART_DAY}))
+            return False
         if m.day.desk.unpriced():
             self._results.put((m, {"ok": None, "text": NO_FILLS}))
             return False

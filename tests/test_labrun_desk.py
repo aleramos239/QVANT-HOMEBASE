@@ -799,7 +799,9 @@ def test_a_sidecar_that_cannot_be_read_is_no_book(kit):
     assert day.mode == "shadow"
 
 
-def test_a_day_made_after_its_window_began_is_shadow_today_and_the_heartbeat_says_so(kit):
+def test_a_day_made_after_its_window_began_stays_shadow_while_an_order_is_working_then_carries_on_as_a_desk_day(kit):
+    """The owner, 2026-10-21: an account booked after the session opened starts trading the same day. The paper order
+    that is working (and the child's belief in it) is never carried over: the day changes over once it is settled."""
     k = kit()
     k.clock("09:00:00")
     k.open()
@@ -809,13 +811,24 @@ def test_a_day_made_after_its_window_began_is_shadow_today_and_the_heartbeat_say
     booked(k)                                                                # booked at 09:30:05: the window began 09:25
     k.r.sync()
     day = k.r.day("lab_x")
-    assert day.mode == "shadow" and day.rebuilt is True and day.fills.working_entries == 1
+    assert day.mode == "shadow" and day.rebuilt is True and day.fills.working_entries == 1 and not day.settled
     assert k.stub.bodies == [] and not store.tell_path("lab_x", DATE, k.at).exists()
     k.r.beat()
     assert k.stub.said[-1]["strategies"] == {DESK_ID: {"state": "running", "why": None, "mode": "shadow"}}
     for _ in range(3):
         k.r.sync()
-    assert k.r.day("lab_x") is day and len(k.spawned) == 1                   # it stays: the next session starts it
+    assert k.r.day("lab_x") is day and day.mode == "shadow" and len(k.spawned) == 1      # (its stop order is working)
+    minute(k, "09:30:06", n=265)                                             # 09:33:00 cancels it; .. 09:34:30
+    assert day.settled
+    k.r.sync()
+    assert k.r.day("lab_x") is day and day.mode == "desk" and day.partial is True and k.stub.bodies == []
+    s = k.today()
+    assert s["mode"] == "desk" and s["partial"] is True and s["orders"] == [] and s["trades"] == []
+    assert store.tells("lab_x", DATE, k.at)[0] == {"head": 1, "strategy": DESK_ID, "mark": mark_of(ONE), "date": DATE}
+    k.r.beat()
+    assert k.stub.said[-1]["strategies"][DESK_ID]["mode"] == "desk"
+    assert len(k.spawned) == 2                                               # (the paper day goes on in its shadow copy)
+    assert store.get_shadow_day("lab_x", DATE, k.at)["state"] == "running"
 
 
 def test_an_account_assigned_before_the_window_begins_starts_the_day_again_in_desk_mode(kit):
@@ -831,17 +844,100 @@ def test_an_account_assigned_before_the_window_begins_starts_the_day_again_in_de
     assert k.stub.ops() == [["entry"]]
 
 
-def test_an_account_assigned_after_the_window_began_changes_nothing_today(kit):
+def test_an_account_assigned_after_the_window_began_starts_trading_the_same_day(kit):
     k = kit()
     k.promote(ONE)
     first = before_the_window(k)
     minute(k, "09:24:02")                                                    # 09:25:01: the window has begun
     store.put_desk("lab_x", sidecar(), k.at)
     k.r.sync()
-    minute(k, "09:29:01")
-    assert k.r.day("lab_x") is first and first.mode == "shadow" and len(k.spawned) == 1 and k.stub.bodies == []
+    assert k.r.day("lab_x") is first and first.mode == "desk" and first.partial is True and first.state == "running"
+    assert k.stub.bodies == [] and first.child_alive()                       # (the same child: nothing is run again)
+    minute(k, "09:29:01")                                                    # .. 09:30:00: its entry goes to the Desk
+    assert k.stub.ops() == [["entry"]] and first.fills.working_entries == 0
+    s = k.today()
+    assert s["mode"] == "desk" and s["partial"] is True and s["state"] == "running"
+    assert [o["text"] for o in s["orders"]] == ["Buy stop 21,005.00, stop 20,995.00, target 2 x the stop"]
     k.r.beat()
-    assert k.stub.said[-1]["strategies"][DESK_ID]["mode"] == "shadow"
+    assert k.stub.said[-1]["strategies"][DESK_ID]["mode"] == "desk"
+
+
+def test_a_shadow_day_in_a_trade_is_changed_over_only_once_it_is_flat(kit):
+    k = kit()
+    k.promote(ONE)
+    day = before_the_window(k)
+    minute(k, "09:29:50", n=11)                                              # .. 09:30:00: the buy stop is placed
+    minute(k, "09:30:01", px=21006.0, n=60)                                  # it fills; the paper trade is open
+    store.put_desk("lab_x", sidecar(), k.at)
+    k.r.sync()
+    assert day.mode == "shadow" and not day.fills.flat and not day.settled and k.stub.bodies == []
+    minute(k, "09:31:01", px=21030.0, n=60)                                  # the target (21,028.75) is hit: flat
+    assert day.settled
+    k.r.sync()
+    assert day.mode == "desk" and day.partial is True and day.trades() == [] and k.stub.bodies == []
+
+
+def test_a_settled_shadow_day_is_not_changed_over_when_the_desk_has_stopped_the_strategy(kit):
+    k = kit()
+    k.promote(ONE)
+    day = before_the_window(k)
+    k.r.take(state(snap(stopped="off")))
+    minute(k, "09:24:02")
+    store.put_desk("lab_x", sidecar(), k.at)
+    k.r.sync()
+    assert day.mode == "shadow" and day.settled
+    minute(k, "09:29:01")
+    assert day.mode == "shadow" and k.stub.bodies == []
+
+
+def test_a_runner_that_starts_again_after_a_same_day_start_stops_the_day_and_keeps_the_position(kit):
+    """shortcut (go_desk): the events before the booking are not in the tell-log, so the new runner cannot replay the
+    day to where it was. It must not guess: the day stops with the position kept (a stop that does not flatten)."""
+    k = kit()
+    k.promote(ONE)
+    before_the_window(k)
+    minute(k, "09:24:02")
+    store.put_desk("lab_x", sidecar(), k.at)
+    k.r.sync()
+    minute(k, "09:29:01")
+    minute(k, "09:30:01")                                                    # the entry went; bars after it are logged
+    assert k.stub.ops() == [["entry"]]
+    again = kit(live=False)
+    again.r.sync()
+    again.r.take(("connect",))
+    again.open()
+    again.rows("09:20:00", [21000.0] * 2)
+    again.rows("09:24:02", [21000.0] * 60)
+    again.rows("09:29:01", [21000.0] * 60)
+    again.rows("09:30:01", [21000.0] * 60)
+    again.r.take(("live",))
+    again.r.take(state(snap(orders={1: WORKING}, answered=[1, 2, 3])))
+    again.clock("09:31:00")
+    again.r.sync()
+    again.clock("09:31:05")
+    s = again.today()
+    assert s["state"] == "stopped" and s["why"] == host.NO_RESUME
+    assert again.stub.bodies and all(b["intents"][0].get("flatten") is not True for b in again.stub.bodies
+                                     if b["intents"] and b["intents"][0]["op"] == "stop")
+
+
+def test_a_day_that_began_mid_session_is_not_matched_against_the_whole_day_backtest(kit):
+    k = kit()
+    k.promote(ONE)
+    day = before_the_window(k)
+    minute(k, "09:24:02")
+    store.put_desk("lab_x", sidecar(), k.at)
+    k.r.sync()
+    minute(k, "09:29:01")
+    k.r.take(("desk", "strategy", snap(orders={1: filled()}, answered=[1], rounds=[rnd()])))
+    k.rows("15:59:58", [21030.0] * 2)
+    k.clock("16:00:03")
+    assert day.state == "done" and day.partial is True
+    k.clock("17:35:00")
+    k.settle()
+    k.r.idle()
+    assert k.matcher.calls == []
+    assert k.file()["match"] == {"ok": None, "text": host.PART_DAY} and k.file()["partial"] is True
 
 
 def test_every_account_taken_off_mid_day_ends_the_desk_day_done_and_no_shadow_day_takes_its_place(kit):
