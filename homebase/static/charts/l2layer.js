@@ -68,6 +68,15 @@ function hexToRgba(hex, alpha) {
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${Math.max(0, Math.min(1, alpha))})`;
 }
 
+/* A line colour at fade fraction f: '#RRGGBB' (the theme's own) or the Style tab's 'rgba(r,g,b,a)' (its opacity kept). */
+function withOpacity(color, f) {
+  const m = /^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/.exec(color);
+  return m ? `rgba(${m[1]},${m[2]},${m[3]},${Math.max(0, Math.min(1, f * m[4]))})` : hexToRgba(color, f);
+}
+/* One setting: the number if it is one, else the default (an instance in memory may lack a key or hold junk). */
+function num(v, def) { return v != null && v !== '' && Number.isFinite(+v) ? +v : def; }
+const sc = (inst, key, fallback) => (Cat && Cat.styleColor ? Cat.styleColor(inst, key, fallback) : fallback);
+
 function findIndicator(cell, id) {
   return (cell.cfg.indicators || []).find((x) => x.id === id && x.visible !== false) || null;
 }
@@ -105,8 +114,9 @@ class Overlay {
   /* ---- big-order lines ---- */
   paintBigLines(cell, book) {
     const inst = findIndicator(cell, 'bigorders');
-    if (!inst || !book) { this.clearLines(); this.lines = { bids: [], offers: [] }; return; }
+    if (!inst || !book || inst.params.liveLines === false) { this.clearLines(); this.lines = { bids: [], offers: [] }; return; }
     const result = Dom.bigLevels(book, null, { multiple: inst.params.multiple, now: bookNow(this.root, book),
+      fadeMs: num(inst.params.fade, 5) * 1000, cap: num(inst.params.maxLines, 8),
       prev: this.lines, tick: cell.tick, median: medianFor(this.root, book) });
     this.lines = { bids: result.bids, offers: result.offers };
     this.syncLines(cell);
@@ -115,23 +125,26 @@ class Overlay {
   syncLines(cell) {
     if (!cell.candles) return;
     const P = cell.P || {};
+    const inst = findIndicator(cell, 'bigorders'), p = (inst && inst.params) || {};
+    const minSize = num(p.minSize, 0), width = num(p.liveWidth, 1), labels = p.labels !== false;
+    const dash = [0, 1, 2].includes(+p.liveDash) ? +p.liveDash : 0;
     const wanted = new Map();
     for (const side of ['bids', 'offers']) {
-      const color = side === 'bids' ? (P.accent || '#2962FF') : (P.down || '#F23645');
-      for (const line of this.lines[side]) wanted.set(`${side}:${line.idx}`, { ...line, color });   // tick index (review 7)
+      const color = sc(inst, side === 'bids' ? 'bid' : 'ask', side === 'bids' ? (P.accent || '#2962FF') : (P.down || '#F23645'));
+      for (const line of this.lines[side]) if (!(minSize > 0) || line.size >= minSize) wanted.set(`${side}:${line.idx}`, { ...line, color });   // tick index (review 7)
     }
     for (const [key, pl] of [...this.priceLines]) {
       if (!wanted.has(key)) { cell.candles.removePriceLine(pl); this.priceLines.delete(key); }
     }
     for (const [key, w] of wanted) {
-      const title = `${Cat.fmtCompact(w.size)} @ ${Cat.fmtPrice(w.price, cell.tick)}`;
-      const color = hexToRgba(w.color, Math.max(0.15, w.opacity));
+      const title = labels ? `${Cat.fmtCompact(w.size)} @ ${Cat.fmtPrice(w.price, cell.tick)}` : '';
+      const color = withOpacity(w.color, Math.max(0.15, w.opacity));
       let pl = this.priceLines.get(key);
       if (!pl) {
-        pl = cell.candles.createPriceLine({ price: w.price, color, lineWidth: 1, lineStyle: 0, axisLabelVisible: true, title });
+        pl = cell.candles.createPriceLine({ price: w.price, color, lineWidth: width, lineStyle: dash, axisLabelVisible: labels, title });
         this.priceLines.set(key, pl);
       } else {
-        pl.applyOptions({ price: w.price, color, title });
+        pl.applyOptions({ price: w.price, color, title, lineWidth: width, lineStyle: dash, axisLabelVisible: labels });
       }
     }
   }
@@ -148,12 +161,18 @@ class Overlay {
     const row = inst && cell.rows ? cell.rows.find((r) => r.inst.uid === inst.uid) : null;
     if (!inst || !book || !row) { this.removeBadge(); return; }
     this.ensureBadge(row);
-    const im = Dom.imbalance(book);
+    const p = inst.params, lv = +p.levels, im = Dom.imbalance(book, [1, 5, 10].includes(lv) ? lv : 10);
     const pct = Math.round(im.pct);
     this.badge.pct.textContent = `${pct > 0 ? '+' : ''}${pct}%`;
     this.badge.pct.className = 'l2-imb-pct' + (im.side ? ` ${im.side}` : '');
     this.badge.bar.className = 'l2-imb-bar' + (im.side ? ` ${im.side}` : '');
     this.badge.bar.style.width = `${Math.min(100, Math.abs(pct))}%`;
+    // Style tab: an inline colour beats the css class; '' (no style) leaves the class's theme colour
+    const col = sc(inst, im.side === 'bid' ? 'bid' : 'ask', '');
+    this.badge.bar.style.background = im.side ? col : '';
+    this.badge.pct.style.color = im.side ? col : '';
+    this.badge.bar.parentNode.style.display = p.bar === false ? 'none' : '';
+    this.badge.pct.style.display = p.number === false ? 'none' : '';
   }
 
   ensureBadge(row) {

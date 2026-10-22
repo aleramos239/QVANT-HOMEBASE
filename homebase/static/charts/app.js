@@ -2585,7 +2585,8 @@ function clockMs() {
 function renderNextEvent() {
   const el = $('#sbEvent'), c = cur(), E = window.HBEvents;
   const ev = c ? C.eventsView(c.cfg.indicators) : null;   // the chart's Economic calendar indicator decides what shows (as the flags do); none: no next event
-  const n = ev ? E.nextText(E.shown(calendar, { ...c.R, ...ev }), clockMs()) : null;
+  const inst = ev ? c.cfg.indicators.find((i) => i.id === 'events' && i.visible !== false) : null;
+  const n = ev ? E.nextText(E.shown(calendar, { ...c.R, ...ev }), clockMs(), E.look(inst, C.styleColor).colors) : null;
   el.hidden = !n;
   if (n && el.textContent !== n.text) { el.textContent = n.text; el.title = n.text; }   // W1: text (and a re-fit) only on change
   if (n) { el.style.color = ''; el.style.setProperty('--ev', n.color); }

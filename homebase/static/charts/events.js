@@ -16,27 +16,40 @@ function shown(events, s) {
   return (events || []).filter((e) => on[e.impact] && cc.has(String(e.country).toUpperCase()));
 }
 
-/* The flags along the time axis, left to right: [{x, t_ms, events, color, line}]. Events at one time share a
-   flag, and a flag closer than FLAG px to the previous one joins it (zoomed out). color: the highest impact's;
-   line: a High or Medium event is in it (drawn in color). xOf(t_ms) -> px | null (null: no place on this chart); off-pane flags go. */
-function layout(events, xOf, width) {
-  const pts = [];
+/* What the Economic calendar indicator's Style / Inputs tabs change (flowdefs.js settings), read off its instance `inst`:
+   {colors: COLORS-shaped, size (flag px), lineLow, showFlags, outline (or undefined: the theme's)}. No instance, no
+   style or junk values give today's look. `sc` is catalog.js styleColor. */
+function look(inst, sc) {
+  const p = (inst && inst.params) || {}, c = (k, d) => (sc ? sc(inst, k, d) : d);
+  const hol = c('holiday', COLORS.Holiday);
+  return { colors: { High: c('high', COLORS.High), Medium: c('medium', COLORS.Medium), Low: c('low', COLORS.Low), Holiday: hol, 'Non-Economic': hol },
+    size: typeof p.flagSize === 'number' && p.flagSize > 0 ? p.flagSize : FLAG, lineLow: p.lineLow === true, showFlags: p.showFlags !== false,
+    outline: c('outline', undefined) };
+}
+
+/* The flags along the time axis, left to right: [{x, t_ms, events, color, line, size}]. Events at one time share a
+   flag, and a flag closer than its size (FLAG px) to the previous one joins it (zoomed out). color: the highest impact's;
+   line: a High or Medium event is in it (drawn in color; Low too with look.lineLow). xOf(t_ms) -> px | null (null: no place on this chart); off-pane flags go.
+   `lk` (look()) is optional: without it every colour and size is today's. */
+function layout(events, xOf, width, lk) {
+  const pts = [], size = (lk && lk.size) || FLAG, colors = (lk && lk.colors) || COLORS;
   for (const e of events) {
     const x = xOf(e.t_ms);
-    if (x == null || x < -FLAG / 2 || x > width + FLAG / 2) continue;
+    if (x == null || x < -size / 2 || x > width + size / 2) continue;
     pts.push({ x, e });
   }
   pts.sort((a, b) => a.x - b.x || a.e.t_ms - b.e.t_ms);
   const out = [];
   for (const { x, e } of pts) {
     const g = out[out.length - 1];
-    if (g && (e.t_ms === g.t_ms || x - g.x < FLAG)) g.events.push(e);
+    if (g && (e.t_ms === g.t_ms || x - g.x < size)) g.events.push(e);
     else out.push({ x, t_ms: e.t_ms, events: [e] });
   }
   for (const g of out) {
     const top = g.events.reduce((a, b) => ((RANK[b.impact] || 0) > (RANK[a.impact] || 0) ? b : a));
-    g.color = COLORS[top.impact] || COLORS.Holiday;
-    g.line = g.events.some((e) => e.impact === 'High' || e.impact === 'Medium');   // red and orange folders: a line, in the flag's colour
+    g.color = colors[top.impact] || colors.Holiday;
+    g.line = g.events.some((e) => e.impact === 'High' || e.impact === 'Medium' || (lk && lk.lineLow && e.impact === 'Low'));
+    if (lk) { g.size = size; if (!lk.showFlags) g.hidden = true; }   // flagAt skips a hidden flag: no tooltip on a flag nobody sees   // red and orange folders: a line, in the flag's colour
   }
   return out;
 }
@@ -61,7 +74,7 @@ function visibleSlice(events, from, to) {
 
 /* The flag under a pane point (the flags' centres sit at y): within FLAG / 2 + 2 px. */
 function flagAt(flags, pt, y) {
-  for (const g of flags) if (Math.hypot(pt.x - g.x, pt.y - y) <= FLAG / 2 + 2) return g;
+  for (const g of flags) if (!g.hidden && Math.hypot(pt.x - g.x, pt.y - y) <= (g.size || FLAG) / 2 + 2) return g;
   return null;
 }
 
@@ -86,15 +99,15 @@ function fmtIn(ms) {
 
 /* The status bar: the next event among `events` (a chart's shown ones), "Next USD: CPI m/m 08:30 (in 2h 14m)"
    in ET, with its impact's colour; null when none is left within 7 days (the feed holds this week only). */
-function nextText(events, nowMs) {
+function nextText(events, nowMs, colors = COLORS) {
   const next = (events || []).filter((e) => e.t_ms > nowMs && e.t_ms - nowMs <= 7 * 86400000)
     .sort((a, b) => a.t_ms - b.t_ms || (RANK[b.impact] || 0) - (RANK[a.impact] || 0))[0];
   if (!next) return null;
   return { text: `Next ${next.country}: ${next.title} ${hhmm(next.t_ms, 'exchange')} (in ${fmtIn(next.t_ms - nowMs)})`,
-    color: COLORS[next.impact] || COLORS.Holiday };
+    color: colors[next.impact] || colors.Holiday };
 }
 
-const api = { COLORS, FLAG, shown, layout, visibleSlice, flagAt, tipLine, tipLines, fmtIn, nextText };
+const api = { COLORS, FLAG, look, shown, layout, visibleSlice, flagAt, tipLine, tipLines, fmtIn, nextText };
 if (typeof window !== 'undefined') window.HBEvents = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

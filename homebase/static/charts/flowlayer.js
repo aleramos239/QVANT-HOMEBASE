@@ -28,7 +28,7 @@ const inst = (cell, id) => (cell.cfg.indicators || []).find((x) => x.id === id &
 
 class BubbleLayer extends window.HBLayers.Layer {
   constructor(P, ov) { super(P); this.ov = ov; }
-  z() { return 'bottom'; }
+  z() { const h = inst(this.ov.cell, 'heatmap'); return h && h.params && h.params.bubbleFront === true ? 'top' : 'bottom'; }   // read on every paint
   draw(target) { this.ov.drawBubbles(target); }
 }
 class SweepLayer extends window.HBLayers.Layer {
@@ -52,10 +52,10 @@ class RunLayer extends window.HBLayers.Layer {
 /* The order-flow apps' layers: (P, ov) like the four above, but made by Overlay.sync() only while one of their indicators is on. */
 const layerOf = (z, draw) => class extends window.HBLayers.Layer {
   constructor(P, ov) { super(P); this.ov = ov; }
-  z() { return z; }
+  z() { return typeof z === 'function' ? z(this.ov) : z; }
   draw(target) { this.ov[draw](target); }
 };
-const OrderLayer = layerOf('bottom', 'drawOrders');     // "bigtrades"
+const OrderLayer = layerOf((ov) => { const g = inst(ov.cell, 'bigtrades'); return g && g.params && g.params.front === true ? 'top' : 'bottom'; }, 'drawOrders');   // "bigtrades"
 const NakedLayer = layerOf('bottom', 'drawNaked');      // "npoc"
 const TpoLayer = layerOf('bottom', 'drawTpo');          // "tpo"
 const StatLayer = layerOf('bottom', 'drawStats');       // "cstat"
@@ -64,6 +64,13 @@ const LAZY = { ord: [['bigtrades'], OrderLayer], npoc: [['npoc'], NakedLayer], t
   stat: [['cstat'], StatLayer], mark: [['dturn', 'dstr', 'mwabs'], MarkLayer] };
 
 const FONT = '11px -apple-system, BlinkMacSystemFont, sans-serif', SMALL = '10px -apple-system, BlinkMacSystemFont, sans-serif';
+const font = (px) => `${px}px -apple-system, BlinkMacSystemFont, sans-serif`;      // font(11) === FONT, font(10) === SMALL
+/* Settings (Inputs / Style tabs, flowdefs.js `settings`): each reader gives the setting, or today's hard-coded value when it is missing or junk. */
+const pn = (v, d) => (v != null && v !== '' && Number.isFinite(+v) ? +v : d);
+const pb = (v, d) => (typeof v === 'boolean' ? v : d);
+const pc = (v, list, d) => (list.includes(v) ? v : d);
+const sc = (i, key, fb) => (window.HBCatalog && window.HBCatalog.styleColor ? window.HBCatalog.styleColor(i, key, fb) : fb);   // the Style tab's colour, else `fb`
+const dashOf = (v, dashed, def) => { const m = pc(v, ['solid', 'dashed', 'dotted'], def); return m === 'solid' ? [] : m === 'dotted' ? [1, 2] : dashed; };
 const tri = (ctx, x, y, dir, k = 1) => {            // dir 1: points up, -1: points down; y = the tip; k = marker size
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 5 * k, y + 9 * k * dir); ctx.lineTo(x + 5 * k, y + 9 * k * dir); ctx.closePath();
 };
@@ -123,17 +130,23 @@ class Overlay {
     if (!h || !h.params.bubbles) return;
     const f = this.frame();
     if (!f) return;
-    const min = h.params.bubbleMin, max = +h.params.bubbleMax || 0, side = h.params.bubbleSide || 'all';
-    const hi = max > min ? max : Math.max(min * 20, 200);      // a ceiling is the size of the biggest circle
+    const q = h.params, min = q.bubbleMin, max = +q.bubbleMax || 0, side = q.bubbleSide || 'all', full = pn(q.bubbleFullSize, 0);
+    const hi = max > min ? max : full > 0 ? full : Math.max(min * 20, 200);      // a ceiling is the size of the biggest circle
+    const rMin = pn(q.bubbleRadiusMin, 3), rMax = Math.max(rMin, pn(q.bubbleRadiusMax, 14)), lw = pn(q.bubbleLineWidth, 1), labels = pb(q.bubbleLabels, false);
+    const fillB = sc(h, 'buyFill', 'rgba(8,153,129,.45)'), fillS = sc(h, 'sellFill', 'rgba(242,54,69,.45)');
+    const lineB = sc(h, 'buyOutline', '#089981'), lineS = sc(h, 'sellOutline', '#F23645');
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      if (labels) { ctx.font = SMALL; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; }
       for (let i = f.i0; i <= f.i1; i++) {
         for (const b of M.bubblesOf(f.bars[i], min, max, side)) {
           const x = f.X(b.t), y = f.series.priceToCoordinate(b.price);
           if (x == null || y == null || x < -20 || x > mediaSize.width + 20) continue;
-          ctx.fillStyle = b.side > 0 ? 'rgba(8,153,129,.45)' : 'rgba(242,54,69,.45)';
-          ctx.strokeStyle = b.side > 0 ? '#089981' : '#F23645';
-          ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(x, y, M.bubbleRadius(b.size, min, hi), 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+          const r = M.bubbleRadius(b.size, min, hi, rMin, rMax);
+          ctx.fillStyle = b.side > 0 ? fillB : fillS;
+          ctx.strokeStyle = b.side > 0 ? lineB : lineS;
+          ctx.lineWidth = lw;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); if (lw > 0) ctx.stroke();
+          if (labels && r >= 7) { ctx.fillStyle = f.P.text || ctx.strokeStyle; ctx.fillText(String(Math.round(b.size)), x, y); }
         }
       }
     });
@@ -144,20 +157,24 @@ class Overlay {
     if (!bp || !bp.params.sweeps) return;
     const f = this.frame();
     if (!f) return;
-    const min = bp.params.min;
+    const q = bp.params, sm = pn(q.sweepMin, 0), min = sm > 0 ? sm : q.min;      // 0 = the same as Minimum size
+    const k = pn(q.sweepArrow, 1), dash = pc(q.sweepDash, ['solid', 'dashed', 'dotted'], 'solid');
+    const buy = sc(bp, 'buy', f.P.up || '#089981'), sell = sc(bp, 'sell', f.P.down || '#F23645');
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.lineWidth = 2;
+      ctx.lineWidth = pn(q.sweepWidth, 2);
+      if (dash !== 'solid') ctx.setLineDash(dashOf(dash, [4, 3], 'solid'));
       for (let i = f.i0; i <= f.i1; i++) {
         for (const s of M.sweepsOf(f.bars[i], min)) {
           const x = f.X(s.t), y0 = f.series.priceToCoordinate(s.from), y1 = f.series.priceToCoordinate(s.to);
           if (x == null || y0 == null || y1 == null || x < -10 || x > mediaSize.width + 10) continue;
-          const col = s.side > 0 ? (f.P.up || '#089981') : (f.P.down || '#F23645');
+          const col = s.side > 0 ? buy : sell;
           ctx.strokeStyle = col; ctx.fillStyle = col;
           ctx.beginPath(); ctx.moveTo(x, y0); ctx.lineTo(x, y1); ctx.stroke();
-          const tip = s.side > 0 ? Math.min(y0, y1) : Math.max(y0, y1), d = s.side > 0 ? 6 : -6;   // buyers lift: up
-          ctx.beginPath(); ctx.moveTo(x, tip - d); ctx.lineTo(x - 4, tip); ctx.lineTo(x + 4, tip); ctx.closePath(); ctx.fill();
+          const tip = s.side > 0 ? Math.min(y0, y1) : Math.max(y0, y1), d = s.side > 0 ? 6 * k : -6 * k;   // buyers lift: up
+          ctx.beginPath(); ctx.moveTo(x, tip - d); ctx.lineTo(x - 4 * k, tip); ctx.lineTo(x + 4 * k, tip); ctx.closePath(); ctx.fill();
         }
       }
+      if (dash !== 'solid') ctx.setLineDash([]);
     });
   }
 
@@ -173,17 +190,21 @@ class Overlay {
     const op = Number.isFinite(+g.params.opacity) ? Math.max(0, Math.min(100, +g.params.opacity)) : 15;
     const wx = f.XI(Math.max(f.i0, 1)) - f.XI(Math.max(f.i0, 1) - 1), half = (Number.isFinite(wx) && wx > 0 ? wx : 8) / 2;
     const A = window.HBDrawings.withAlpha;
+    const border = pb(g.params.border, true), bw = pn(g.params.borderWidth, 1), extend = pb(g.params.extend, false);
+    let last = f.bars.length - 1;
+    while (last > 0 && f.bars[last].blank) last--;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       for (const b of M.fvgBoxes(f.bars, key, f.i1 + 1)) {
         if (b.to < f.i0 - 1) continue;
         const xa = f.XI(b.from), xb = f.XI(b.to), ya = f.series.priceToCoordinate(b.top), yb = f.series.priceToCoordinate(b.bottom);
         if (xa == null || xb == null || ya == null || yb == null) continue;
-        const x0 = xa - half, x1 = xb + half;
+        const x0 = xa - half, x1 = extend && b.to === last ? Math.max(xb + half, mediaSize.width) : xb + half;   // a gap still open on the newest bar runs on to the right edge
         if (x1 < 0 || x0 > mediaSize.width) continue;
         const col = b.side > 0 ? (f.P.up || '#089981') : (f.P.down || '#F23645');
         const y = Math.min(ya, yb), h = Math.max(1, Math.abs(yb - ya));
         if (op > 0) { ctx.fillStyle = A(col, op / 100); ctx.fillRect(x0, y, x1 - x0, h); }
-        ctx.strokeStyle = A(col, Math.min(1, op / 100 + 0.35)); ctx.lineWidth = 1;
+        if (!border) continue;
+        ctx.strokeStyle = A(col, Math.min(1, op / 100 + 0.35)); ctx.lineWidth = bw;
         ctx.strokeRect(x0 + 0.5, y + 0.5, Math.max(0, x1 - x0 - 1), Math.max(0, h - 1));
       }
     });
@@ -199,38 +220,48 @@ class Overlay {
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       ctx.font = FONT;
       ctx.textBaseline = 'middle';
+      let fpx = 11;       // the font size now set; each block below sets its own (its Label font setting)
+      const useFont = (n) => { if (n !== fpx) { ctx.font = font(n); fpx = n; } };
       if (sr) {
-        const k = Math.max(0.5, +sr.params.size || 1), only = sr.params.side;
-        for (const r of M.stopRuns(f.bars, f.i0, f.i1, sr.params.length, sr.params.minSize)) {
+        const q = sr.params, k = Math.max(0.5, +q.size || 1), only = q.side, lw = pn(q.lineWidth, 1), dash = dashOf(q.dash, [3, 3], 'dashed');
+        const line = pb(q.levelLine, true), show = pc(q.show, ['all', 'held', 'trap'], 'all'), cross = pb(q.trapMark, true), gap = pn(q.arrowGap, 4);
+        const cu = sc(sr, 'up', up), cd = sc(sr, 'down', down);
+        useFont(pn(q.fontSize, 11));
+        for (const r of M.stopRuns(f.bars, f.i0, f.i1, q.length, q.minSize, pn(q.sweepMin, 1))) {
           if ((only === 'up' && r.side <= 0) || (only === 'down' && r.side > 0)) continue;
+          if ((show === 'held' && !r.held) || (show === 'trap' && r.held)) continue;
           const x1 = f.XI(r.i), x0 = f.XI(r.from), y = f.series.priceToCoordinate(r.level);
           if (x1 == null || y == null || x1 < -20 || x1 > mediaSize.width + 20) continue;
-          const col = r.side > 0 ? up : down;
-          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1;
-          ctx.setLineDash([3, 3]);
-          ctx.beginPath(); ctx.moveTo(Math.max(-20, x0 ?? x1), y); ctx.lineTo(x1, y); ctx.stroke();
+          const col = r.side > 0 ? cu : cd;
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = lw;
+          ctx.setLineDash(dash);
+          if (line) { ctx.beginPath(); ctx.moveTo(Math.max(-20, x0 ?? x1), y); ctx.lineTo(x1, y); ctx.stroke(); }
           ctx.setLineDash([]);
+          if (lw !== 1) ctx.lineWidth = 1;      // the width is the level line's: a hollow arrow keeps its thin outline
           // the arrow sits just past the level, on the side the run went, pointing that way; hollow = pushed back (a trap)
-          const tipY = y - 4 * r.side;
+          const tipY = y - gap * r.side;
           tri(ctx, x1, tipY, r.side, k);
           if (r.held) ctx.fill(); else ctx.stroke();
           ctx.fillStyle = col;
-          if (sr.params.labels !== false) ctx.fillText(`${r.size}${r.held ? '' : ' ✕'}`, x1 + 8, tipY - r.side * 8);
+          if (q.labels !== false) ctx.fillText(`${r.size}${r.held || !cross ? '' : ' ✕'}`, x1 + 8, tipY - r.side * 8);
         }
       }
       if (sm) {
         // SMT: the chart's own two peaks joined (the reference's extreme to the window's); `lead` says who took it
         const me = String(this.cell.cfg.root || '').toUpperCase(), other = me === 'NQ' ? 'ES' : me === 'ES' ? 'NQ' : '';
         const key = `smt:${sm.params.window}:${sm.params.reference}`;
+        const lw = pn(sm.params.lineWidth, 1.5), line = pb(sm.params.showLine, true), dotR = pn(sm.params.dotRadius, 2.5);
+        const cu = sc(sm, 'up', up), cd = sc(sm, 'down', down);
+        useFont(pn(sm.params.fontSize, 11));
         for (const r of M.smtLines(f.bars, f.i0, f.i1, key)) {
           const x0 = f.XI(r.from), x1 = f.XI(r.to), y0 = f.series.priceToCoordinate(r.y0), y1 = f.series.priceToCoordinate(r.y1);
           if (x0 == null || x1 == null || y0 == null || y1 == null || x1 < -20 || x0 > mediaSize.width + 20) continue;
-          const col = r.dir < 0 ? down : up;
-          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 1.5;
+          const col = r.dir < 0 ? cd : cu;
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = lw;
           ctx.setLineDash(r.live ? [2, 3] : [5, 3]);       // dotted while the bar is still forming
-          ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke();
+          if (line) { ctx.beginPath(); ctx.moveTo(x0, y0); ctx.lineTo(x1, y1); ctx.stroke(); }
           ctx.setLineDash([]);
-          for (const [x, y] of [[x0, y0], [x1, y1]]) { ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill(); }
+          if (dotR > 0) for (const [x, y] of [[x0, y0], [x1, y1]]) { ctx.beginPath(); ctx.arc(x, y, dotR, 0, Math.PI * 2); ctx.fill(); }
           if (sm.params.labels !== false && other) {
             const took = r.lead > 0 ? me : other, failed = r.lead > 0 ? other : me;
             ctx.fillText(`${took} ${r.dir < 0 ? 'high' : 'low'} · ${failed} did not`, x1 + 8, y1 + (r.dir < 0 ? -12 : 12));
@@ -238,18 +269,19 @@ class Overlay {
         }
       }
       if (ex) {
-        const k = Math.max(0.5, +ex.params.size || 1), only = ex.params.side;
-        for (const r of M.exhaustions(f.bars, f.i0, f.i1, ex.params.length, ex.params.multiple, ex.params.wait)) {
+        const q = ex.params, k = Math.max(0.5, +q.size || 1), only = q.side, cw = pn(q.capWidth, 2), ch = pn(q.capHalf, 6), arrow = pb(q.arrow, true);
+        const cu = sc(ex, 'up', up), cd = sc(ex, 'down', down);
+        useFont(pn(q.fontSize, 11));
+        for (const r of M.exhaustions(f.bars, f.i0, f.i1, q.length, q.multiple, q.wait, pn(q.giveback, 50))) {
           if ((only === 'up' && r.dir >= 0) || (only === 'down' && r.dir < 0)) continue;   // 'up' = price turned down (buying spent)
           const xa = f.XI(r.at), xi = f.XI(r.i), y = f.series.priceToCoordinate(r.level);
           if (xi == null || y == null || xi < -20 || xi > mediaSize.width + 20) continue;
-          const col = r.dir < 0 ? down : up;               // buyers spent: price turned down (red)
-          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 2;
-          ctx.beginPath(); ctx.moveTo((xa ?? xi) - 6, y); ctx.lineTo(xi + 6, y); ctx.stroke();   // the cap: the extreme that stopped
+          const col = r.dir < 0 ? cd : cu;                 // buyers spent: price turned down (red)
+          ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = cw;
+          ctx.beginPath(); ctx.moveTo((xa ?? xi) - ch, y); ctx.lineTo(xi + ch, y); ctx.stroke();   // the cap: the extreme that stopped
           const dir = r.dir, tipY = y + (dir < 0 ? -2 : 2);   // the arrow points the way price went, at the cap
-          tri(ctx, xi, tipY, dir, k);
-          ctx.fill();
-          if (ex.params.labels !== false) ctx.fillText('Ex', xi + 8, y + (dir < 0 ? -14 : 14));
+          if (arrow) { tri(ctx, xi, tipY, dir, k); ctx.fill(); }
+          if (q.labels !== false) ctx.fillText('Ex', xi + 8, y + (dir < 0 ? -14 : 14));
         }
       }
     });
@@ -262,18 +294,22 @@ class Overlay {
     if (!g) return;
     const f = this.frame();
     if (!f) return;
-    const p = g.params, min = Math.max(1, p.min == null ? 25 : +p.min), max = +p.max || 0, hi = max > min ? max : Math.max(min * 20, 200);
+    const p = g.params, min = Math.max(1, p.min == null ? 25 : +p.min), max = +p.max || 0, full = pn(p.fullSize, 0);
+    const hi = max > min ? max : full > 0 ? full : Math.max(min * 20, 200);
+    const rMin = pn(p.radiusMin, 3), rMax = Math.max(rMin, pn(p.radiusMax, 14)), lw = pn(p.lineWidth, 1), labels = pb(p.labels, true), labelR = pn(p.labelMinR, 7);
+    const fillB = sc(g, 'buyFill', 'rgba(8,153,129,.45)'), fillS = sc(g, 'sellFill', 'rgba(242,54,69,.45)');
+    const lineB = sc(g, 'buyOutline', f.P.up || '#089981'), lineS = sc(g, 'sellOutline', f.P.down || '#F23645');
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.font = SMALL; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = font(pn(p.fontSize, 10)); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (let i = f.i0; i <= f.i1; i++) {
         for (const c of M.clusterOrders(M.ordersOf(f.bars[i], 0, 0, p.side || 'all'), p.cluster || 'none', +p.thr || 100)) {
           if (c.size < min || (max > 0 && c.size > max)) continue;
           const x = f.X(c.t), y = f.series.priceToCoordinate(c.price);
           if (x == null || y == null || x < -20 || x > mediaSize.width + 20) continue;
-          const r = M.bubbleRadius(c.size, min, hi), col = c.side > 0 ? f.P.up || '#089981' : f.P.down || '#F23645';
-          ctx.fillStyle = c.side > 0 ? 'rgba(8,153,129,.45)' : 'rgba(242,54,69,.45)'; ctx.strokeStyle = col; ctx.lineWidth = 1;
-          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-          if (r >= 7) { ctx.fillStyle = f.P.text || col; ctx.fillText(String(Math.round(c.size)), x, y); }
+          const r = M.bubbleRadius(c.size, min, hi, rMin, rMax), col = c.side > 0 ? lineB : lineS;
+          ctx.fillStyle = c.side > 0 ? fillB : fillS; ctx.strokeStyle = col; ctx.lineWidth = lw;
+          ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill(); if (lw > 0) ctx.stroke();
+          if (labels && r >= labelR) { ctx.fillStyle = f.P.text || col; ctx.fillText(String(Math.round(c.size)), x, y); }
         }
       }
     });
@@ -282,12 +318,14 @@ class Overlay {
   /* Naked POCs (Exocharts / MotiveWave): from each bar's POC a dashed line to the first later bar that traded back to it, or to the right edge while none
      has. The scan starts 500 bars left of the view so a line from before it still crosses it; the forming bar's own POC is the footprint's. */
   drawNaked(target) {
-    if (!inst(this.cell, 'npoc')) return;
+    const np = inst(this.cell, 'npoc');
+    if (!np) return;
     const f = this.frame();
     if (!f) return;
-    const list = M.nakedPocs(f.bars, Math.max(0, f.i0 - 500), Math.min(f.i1, f.bars.length - 2), true);
+    const q = np.params, back = pn(q.lookback, 500);
+    const list = M.nakedPocs(f.bars, Math.max(0, f.i0 - back), Math.min(f.i1, f.bars.length - 2), !pb(q.nakedOnly, false));   // nakedOnly: the lines that stopped at a later bar are not drawn
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      ctx.strokeStyle = f.P.poc || '#f2a900'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = sc(np, 'line', f.P.poc || '#f2a900'); ctx.lineWidth = pn(q.width, 1); ctx.setLineDash(dashOf(q.dash, [4, 3], 'dashed'));
       for (const r of list) {
         const x = f.XI(r.i), y = f.series.priceToCoordinate(r.price), x1 = r.hit == null ? mediaSize.width : f.XI(r.hit);
         if (x == null || y == null || x1 == null || x > mediaSize.width || x1 < 0) continue;
@@ -306,6 +344,9 @@ class Overlay {
     const f = this.frame();
     if (!f) return;
     const p = t.params, bars = f.bars, tick = this.cell.tick || 0.25;
+    const fs = pn(p.fontSize, 10), blocksA = pn(p.blocksOpacity, 45) / 100, showPoc = pb(p.showPoc, true), showVa = pb(p.showVa, true), marks = pb(p.markSingles, true);
+    const vaC = sc(t, 'va', f.P.vaIn || 'rgba(120,140,200,.15)'), singleC = sc(t, 'single', f.P.poc || '#f2a900');
+    const pocC = sc(t, 'poc', f.P.poc || '#f2a900'), ibC = sc(t, 'ib', f.P.text2 || f.P.text || '#9aa4b2');
     let e = bars.length - 1;
     while (e >= 0 && bars[e].blank) e--;
     if (e < 0) return;
@@ -327,22 +368,22 @@ class Overlay {
     const rh = Math.abs(a - b), maxN = Math.max(...prof.rows.map((r) => r.n));
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
       const W = mediaSize.width, cw = Math.min(9, W * 0.45 / maxN), x0 = W - 6 - maxN * cw, letters = p.style !== 'blocks' && rh >= 8 && cw >= 6;
-      ctx.font = SMALL; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = font(fs); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       for (const r of prof.rows) {
         const yc = y(r.price);
         if (yc == null) continue;
-        if (r.price >= prof.val && r.price <= prof.vah) { ctx.fillStyle = f.P.vaIn || 'rgba(120,140,200,.15)'; ctx.fillRect(x0 - 3, yc - rh / 2, W - x0 + 3, rh); }
-        const ink = r.n === 1 ? f.P.poc || '#f2a900' : f.P.text || '#9aa4b2';
-        ctx.fillStyle = letters ? ink : window.HBDrawings.withAlpha(ink, 0.45);    // blocks are a wash, not a wall: the candles stay readable
+        if (showVa && r.price >= prof.val && r.price <= prof.vah) { ctx.fillStyle = vaC; ctx.fillRect(x0 - 3, yc - rh / 2, W - x0 + 3, rh); }
+        const ink = r.n === 1 && marks ? singleC : f.P.text || '#9aa4b2';
+        ctx.fillStyle = letters ? ink : window.HBDrawings.withAlpha(ink, blocksA);    // blocks are a wash, not a wall: the candles stay readable
         r.per.forEach((per, j) => {
           if (letters) ctx.fillText(M.letterOf(per), x0 + j * cw + cw / 2, yc);
           else ctx.fillRect(x0 + j * cw, yc - rh / 2, cw - 1, Math.max(1, rh - 1));
         });
-        if (r.price === prof.poc) { ctx.strokeStyle = f.P.poc || '#f2a900'; ctx.lineWidth = 1; ctx.strokeRect(x0 - 1, yc - rh / 2, r.n * cw + 2, Math.max(1, rh - 1)); }
+        if (showPoc && r.price === prof.poc) { ctx.strokeStyle = pocC; ctx.lineWidth = 1; ctx.strokeRect(x0 - 1, yc - rh / 2, r.n * cw + 2, Math.max(1, rh - 1)); }
       }
       if (prof.ib) {
         const hi = y(prof.ib.hi), lo = y(prof.ib.lo);
-        ctx.strokeStyle = f.P.text2 || f.P.text || '#9aa4b2'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = ibC; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
         for (const yy of [hi == null ? null : hi - rh / 2, lo == null ? null : lo + rh / 2]) {
           if (yy != null) { ctx.beginPath(); ctx.moveTo(x0 - 3, yy); ctx.lineTo(W, yy); ctx.stroke(); }
         }
@@ -354,19 +395,23 @@ class Overlay {
   /* Cluster statistics (ATAS Cluster Statistic, Bookmap footprint stats): a strip at the bottom of the pane, under the candles, one column per bar
      (delta, volume, trades, delta %, the highest and lowest running delta, seconds); hidden while the bars are too narrow to read. */
   drawStats(target) {
-    if (!inst(this.cell, 'cstat')) return;
+    const cs = inst(this.cell, 'cstat');
+    if (!cs) return;
     const f = this.frame();
     if (!f) return;
-    const sp = f.XI(1) - f.XI(0), barMs = this.cell.isTime() ? this.cell.barMs() : 0;
-    if (!(sp >= 34)) return;
-    const LAB = ['Delta', 'Volume', 'Trades', 'Delta %', 'Max delta', 'Min delta', 'Seconds'], RH = 12, LW = 58;
-    const num = (v) => (v == null ? '' : Math.abs(v) >= 1e4 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)));
+    const p = cs.params, sp = f.XI(1) - f.XI(0), barMs = this.cell.isTime() ? this.cell.barMs() : 0;
+    if (!(sp >= pn(p.minBarPx, 34))) return;      // indstatus.js reads the same setting for its "zoom in" hint
+    const LAB = ['Delta', 'Volume', 'Trades', 'Delta %', 'Max delta', 'Min delta', 'Seconds'], RH = pn(p.rowH, 12), LW = pn(p.labelW, 58);
+    const rows = LAB.map((_, k) => k).filter((k) => pb(p[['showDelta', 'showVolume', 'showTrades', 'showDeltaPct', 'showMaxDelta', 'showMinDelta', 'showSeconds'][k]], true));
+    if (!rows.length) return;
+    const kFrom = pn(p.kFrom, 1e4), dec = pn(p.pctDecimals, 1), cp = sc(cs, 'pos', f.P.up), cn = sc(cs, 'neg', f.P.down);
+    const num = (v) => (v == null ? '' : Math.abs(v) >= kFrom ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v)));
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const top = mediaSize.height - RH * LAB.length - 4;
-      ctx.fillStyle = window.HBDrawings.withAlpha(f.P.bg || '#131722', 0.8); ctx.fillRect(0, top, mediaSize.width, RH * LAB.length + 4);
-      ctx.font = SMALL; ctx.textBaseline = 'middle';
+      const top = pc(p.place, ['bottom', 'top'], 'bottom') === 'top' ? 0 : mediaSize.height - RH * rows.length - 4;
+      ctx.fillStyle = window.HBDrawings.withAlpha(f.P.bg || '#131722', 0.8); ctx.fillRect(0, top, mediaSize.width, RH * rows.length + 4);
+      ctx.font = font(pn(p.fontSize, 10)); ctx.textBaseline = 'middle';
       ctx.textAlign = 'left'; ctx.fillStyle = f.P.text2 || f.P.text || '#9aa4b2';
-      LAB.forEach((l, k) => ctx.fillText(l, 4, top + 2 + RH * (k + 0.5)));
+      rows.forEach((k, j) => ctx.fillText(LAB[k], 4, top + 2 + RH * (j + 0.5)));
       ctx.textAlign = 'center';
       for (let i = f.i0; i <= f.i1; i++) {
         const b = f.bars[i], x = f.XI(i);
@@ -375,10 +420,10 @@ class Overlay {
         // bar runs to the next bar's start, blank across a session break. shortcut: that includes a quiet gap inside a session, exact once a bar carries its end.
         const nx = f.bars[i + 1];
         const c = M.clusterStats(b, barMs ? Math.min(nx ? nx.ms : Infinity, b.ms + barMs) : nx && nx.s === b.s ? nx.ms : null);
-        const cells = [[num(c.delta), c.delta > 0 ? f.P.up : c.delta < 0 ? f.P.down : null], [num(c.volume)], [num(c.trades)],
-          [c.deltaPct == null ? '' : `${(100 * c.deltaPct).toFixed(1)}%`, c.deltaPct > 0 ? f.P.up : c.deltaPct < 0 ? f.P.down : null],
-          [num(c.maxDelta), f.P.up], [num(c.minDelta), f.P.down], [c.duration == null ? '' : String(+(c.duration / 1000).toFixed(1))]];
-        cells.forEach(([txt, col], k) => { ctx.fillStyle = col || f.P.text || '#9aa4b2'; ctx.fillText(txt, x, top + 2 + RH * (k + 0.5)); });
+        const cells = [[num(c.delta), c.delta > 0 ? cp : c.delta < 0 ? cn : null], [num(c.volume)], [num(c.trades)],
+          [c.deltaPct == null ? '' : `${(100 * c.deltaPct).toFixed(dec)}%`, c.deltaPct > 0 ? cp : c.deltaPct < 0 ? cn : null],
+          [num(c.maxDelta), cp], [num(c.minDelta), cn], [c.duration == null ? '' : String(+(c.duration / 1000).toFixed(1))]];
+        rows.forEach((k, j) => { const [txt, col] = cells[k]; ctx.fillStyle = col || f.P.text || '#9aa4b2'; ctx.fillText(txt, x, top + 2 + RH * (j + 0.5)); });
       }
     });
   }
@@ -392,24 +437,36 @@ class Overlay {
     const f = this.frame();
     if (!f) return;
     const up = f.P.up || '#089981', down = f.P.down || '#F23645';
+    // an arrow mark's own settings (colours, size, distance from the bar, fill, outline width); `d` = today's gap and fill for that mark
+    const look = (i, d) => ({ up: sc(i, 'up', up), down: sc(i, 'down', down), k: Math.max(0.5, +i.params.size || 1), gap: pn(i.params.gap, d.gap),
+      filled: pb(i.params.filled, d.filled), lw: pn(i.params.lineWidth, 1.5) });
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const arrow = (r, lift, filled) => {
+      const arrow = (r, o) => {
         const x = f.XI(r.i), y = f.series.priceToCoordinate(r.dir > 0 ? f.bars[r.i].l : f.bars[r.i].h);
         if (x == null || y == null || x < -20 || x > mediaSize.width + 20) return;
-        ctx.strokeStyle = ctx.fillStyle = r.dir > 0 ? up : down; ctx.lineWidth = 1.5;
-        tri(ctx, x, y + (3 + lift) * r.dir, r.dir);
-        if (filled) ctx.fill(); else ctx.stroke();
+        ctx.strokeStyle = ctx.fillStyle = r.dir > 0 ? o.up : o.down; ctx.lineWidth = o.lw;
+        tri(ctx, x, y + o.gap * r.dir, r.dir, o.k);
+        if (o.filled) ctx.fill(); else ctx.stroke();
       };
-      if (dt) for (const r of M.deltaTurnaround(f.bars, f.i0, f.i1, { fix: !!dt.params.fix })) arrow(r, 0, true);
-      if (ds) for (const r of M.deltaStrength(f.bars, f.i0, f.i1, { min: ds.params.min, max: ds.params.max })) arrow(r, 14, false);
+      if (dt) { const o = look(dt, { gap: 3, filled: true }); for (const r of M.deltaTurnaround(f.bars, f.i0, f.i1, { fix: !!dt.params.fix, run: dt.params.run })) arrow(r, o); }
+      if (ds) { const o = look(ds, { gap: 17, filled: false }); for (const r of M.deltaStrength(f.bars, f.i0, f.i1, { min: ds.params.min, max: ds.params.max })) arrow(r, o); }
       if (ma) {
-        const p = ma.params;
-        for (const r of M.mwAbsorptions(f.bars, f.i0, f.i1, { tick: this.cell.tick || 0.25, ticks: p.ticks, within: p.within, imb: p.imb ? { preset: p.imb } : undefined })) {
+        const p = ma.params, lw = pn(p.lineWidth, 1.5), tail = pn(p.tail, 6), dot = pb(p.dot, true), dotR = pn(p.dotR, 3), dash = dashOf(p.dash, [4, 3], 'solid');
+        const cu = sc(ma, 'up', up), cd = sc(ma, 'down', down);
+        const imb = { ...(p.imb ? { preset: p.imb } : {}) };      // the settings left at "the rule's own" stay out, so the preset decides
+        if (pn(p.ratio, 0) > 0) imb.ratio = +p.ratio;
+        if (p.zero === 'skip') imb.zero = 'skip';
+        if (p.edge === 'skip') imb.edge = 'skip';
+        if (pn(p.minvol, 0) > 0) imb.minVolume = +p.minvol;
+        if (pn(p.mindiff, 0) > 0) imb.minDiff = +p.mindiff;
+        for (const r of M.mwAbsorptions(f.bars, f.i0, f.i1, { tick: this.cell.tick || 0.25, ticks: p.ticks, within: p.within, imb: Object.keys(imb).length ? imb : undefined })) {
           const xa = f.XI(r.i), xb = f.XI(r.j), y = f.series.priceToCoordinate(r.price);
           if (xa == null || xb == null || y == null || xb < -20 || xa > mediaSize.width + 20) continue;
-          ctx.strokeStyle = ctx.fillStyle = r.dir < 0 ? down : up; ctx.lineWidth = 1.5;
-          ctx.beginPath(); ctx.moveTo(xa - 6, y); ctx.lineTo(xb, y); ctx.stroke();
-          ctx.beginPath(); ctx.arc(xb, y, 3, 0, Math.PI * 2); ctx.fill();
+          ctx.strokeStyle = ctx.fillStyle = r.dir < 0 ? cd : cu; ctx.lineWidth = lw;
+          if (dash.length) ctx.setLineDash(dash);
+          ctx.beginPath(); ctx.moveTo(xa - tail, y); ctx.lineTo(xb, y); ctx.stroke();
+          if (dash.length) ctx.setLineDash([]);
+          if (dot) { ctx.beginPath(); ctx.arc(xb, y, dotR, 0, Math.PI * 2); ctx.fill(); }
         }
       }
     });

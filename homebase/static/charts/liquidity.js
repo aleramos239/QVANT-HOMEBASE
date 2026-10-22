@@ -124,9 +124,9 @@ function liveGrid(buf, from, to, dt, tick) {
 
 /* The column width for a view of spanMs over widthPx (about PX_PER_COL px a column, a power-of-two number of
    seconds so zooming reuses chunks), and the history chunk it is asked in; null past MAX_VIEW_MS. */
-function level(spanMs, widthPx) {
+function level(spanMs, widthPx, pxPerCol = PX_PER_COL) {
   if (!(spanMs > 0) || spanMs > MAX_VIEW_MS) return null;
-  const want = spanMs / Math.max(1, (widthPx || 0) / PX_PER_COL);
+  const want = spanMs / Math.max(1, (widthPx || 0) / (pxPerCol > 0 ? pxPerCol : PX_PER_COL));
   const k = Math.max(0, Math.min(MAX_LEVEL, Math.ceil(Math.log2(want / BIN_MS) - 1e-9)));
   const dt = BIN_MS * 2 ** k;
   return { dt, chunk: dt * CHUNK_COLS };
@@ -287,6 +287,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       this.onRange = () => { clearTimeout(this.deb); this.deb = setTimeout(() => this.ask(), DEBOUNCE_MS); };
       if (cell.chart) cell.chart.timeScale().subscribeVisibleLogicalRangeChange(this.onRange);
       this.wasOn = false;
+      this.setKey = JSON.stringify(this.settings());
       this.timer = setInterval(() => this.tick(), PAINT_MS);
       overlays.add(this);
       this.ask();
@@ -297,10 +298,20 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       if (this.dead) return;
       const on = this.on();
       if (on !== this.wasOn) { this.wasOn = on; if (on) this.ask(); this.dirty = true; }
+      // a map setting changed in the dialog: repaint, and a new column width asks the history at its new level
+      const key = JSON.stringify(this.settings());
+      if (key !== this.setKey) { this.setKey = key; this.dirty = true; if (on) this.ask(); }
       if (this.dirty) { this.dirty = false; this.redraw(); }
     }
 
     on() { return !this.dead && !!this.cell.chart && findOn(this.cell) && this.cell.bars && this.cell.bars.length > 0; }
+
+    /* The map's own number settings (Inputs tab), junk or a missing key = the old fixed value. */
+    settings() {
+      const h = (this.cell.cfg.indicators || []).find((x) => x.id === 'heatmap' && x.visible !== false);
+      const p = (h && h.params) || {}, n = (v, d) => (v != null && v !== '' && Number.isFinite(+v) ? +v : d);
+      return { opacity: n(p.opacity, 100), fullAt: n(p.fullAt, 0), cutoff: n(p.cutoff, 0), px: n(p.columnPx, PX_PER_COL) };
+    }
 
     /* The heatmap indicator's settings: how hard the colour ramps (contrast) and which colours (palette). */
     look() {
@@ -313,7 +324,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
         const st = parseStops(stops);
         this.palettes[name] = Array.from({ length: BUCKETS }, (_, b) => ramp((b + 1) / BUCKETS, st));
       }
-      return { fills: this.palettes[name], gamma: p.contrast === 'soft' ? 1.8 : p.contrast === 'strong' ? 0.55 : 1 };
+      return { fills: this.palettes[name], gamma: p.contrast === 'soft' ? 1.8 : p.contrast === 'strong' ? 0.55 : 1, ...this.settings() };
     }
     redraw() { if (!this.dead) this.layer.redraw(); }
 
@@ -331,7 +342,7 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       let end = barMs ? lastMs + barMs : (replay ? lastMs : Math.max(lastMs, (buf && buf.latest()) || lastMs));
       if (replay) end = Math.min(end, cursor == null ? lastMs : cursor);
       const from = timeAt(bars, vr.from, barMs, end), to = Math.min(timeAt(bars, vr.to, barMs, end), end);
-      const lv = level(to - from, ts.width());
+      const lv = level(to - from, ts.width(), this.settings().px);
       if (!lv || !(to > from)) return null;
       const oldest = buf && buf.length ? buf.oldest() : null;
       const cut = oldest == null ? Infinity : Math.floor(oldest / lv.dt) * lv.dt;
@@ -403,18 +414,22 @@ if (typeof window !== 'undefined' && window.HBLayers) {
       target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
         const pTop = series.coordinateToPrice(0), pBot = series.coordinateToPrice(mediaSize.height);
         if (pTop == null || pBot == null) return;
-        const max = windowMax(cells, v.from, v.to, pBot, pTop);
-        if (!max) return;
+        const wmax = windowMax(cells, v.from, v.to, pBot, pTop);
+        if (!wmax) return;
         const rows = Array.from({ length: BUCKETS }, () => []);
         const look = this.look();
+        const max = look.fullAt > 0 ? look.fullAt : wmax, cut = look.cutoff / 100;
         for (const c of cells) {
           const x0 = X(c.t0), x1 = X(c.t1), y = series.priceToCoordinate(c.price);
           if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
-          const b = Math.min(BUCKETS - 1, Math.floor(Math.pow(intensity(c.size, max), look.gamma) * BUCKETS));
+          const it = intensity(c.size, max);
+          if (cut > 0 && it < cut) continue;
+          const b = Math.min(BUCKETS - 1, Math.floor(Math.pow(it, look.gamma) * BUCKETS));
           rows[b].push(x0, y, x1);
         }
         const y0 = series.priceToCoordinate(cells[0].price), y1 = series.priceToCoordinate(cells[0].price + tick);
         const h = Math.max(1, y0 == null || y1 == null ? 1 : Math.abs(y0 - y1));
+        if (look.opacity < 100) ctx.globalAlpha = Math.max(0, look.opacity) / 100;
         for (let b = 0; b < BUCKETS; b++) {
           const r = rows[b];
           if (!r.length) continue;

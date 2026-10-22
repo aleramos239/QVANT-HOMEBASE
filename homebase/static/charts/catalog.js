@@ -54,7 +54,7 @@ const BAND = (n, def) => [
 /* The order-flow indicators' definitions (flowdefs.js, loaded before this file on the chart page): the book and
    tick studies of 2026-10-11. Absent (a page that does not load it), none of them exist there. */
 const FLOW = (typeof window !== 'undefined' && window.HBFlowDefs)
-  || (typeof require === 'function' ? require('./flowdefs.js') : { ta: [], catalog: [] });
+  || (typeof require === 'function' ? require('./flowdefs.js') : { ta: [], catalog: [], settings: {} });
 const TA_UP = '#089981', TA_DOWN = '#F23645', TA_BLUE = '#2962FF', TA_ORANGE = '#FF6D00', TA_VIOLET = '#7E57C2', TA_GREY = '#787B86';
 const TA_LEN = (def, min = 2, max = 500) => ({ key: 'length', label: 'Length', type: 'int', min, max, def });
 const TA_LINE = (part, label, color, width = 1, dash = 'solid', extra = {}) => ({ part, label, color, width, dash, ...extra });
@@ -644,6 +644,17 @@ for (const id of HTF_IDS) {
 }
 const tfSec = (p) => { const n = p && /^\d+$/.test(String(p.tf)) ? Number(p.tf) : 0; return n >= 1 && n <= 86400 ? n : 0; };
 const BY_ID = Object.fromEntries(CATALOG.map((d) => [d.id, d]));
+/* Canvas-drawn and book indicators' colour rows and extra inputs (flowdefs.js `settings`, 2026-10-22): `colors` become
+   the Style tab's rows, `params` are appended to the Inputs tab. Every one is client-only -- none of them reaches a wire
+   key (a `ta` entry builds its key from named params; a `catalog` entry has none) -- and each default equals the value
+   the renderer used before, so an untouched indicator draws exactly as it did. */
+const OV_COLORS = {};
+for (const [id, s] of Object.entries(FLOW.settings || {})) {
+  const d = BY_ID[id];
+  if (!d) continue;
+  if (s.params) d.params.push(...s.params.filter((q) => !d.params.some((x) => x.key === q.key)));   // an input the entry already has stays as it is
+  if (s.colors) OV_COLORS[id] = s.colors;
+}
 const FAVOURITES = [['1m', 'time:60'], ['5m', 'time:300'], ['15m', 'time:900'], ['1h', 'time:3600'], ['4h', 'time:14400'], ['D', 'time:86400']];
 /* The starred intervals (the toolbar row), from their stored JSON: valid specs only, each once, in the
    interval menu's order (a custom one after the listed ones, in the order starred); junk/none -> the defaults.
@@ -799,9 +810,22 @@ const STYLE_LINES = { vwap: ['main', 'band1', 'band2', 'band3'], ema: ['main'], 
    Style tab shows a colour and an opacity for them, no width or dash (a style row's controls: see styleControls). */
 const COLOR_ONLY = new Set(['volume', 'delta']);
 function styleControls(id) { return COLOR_ONLY.has(id) ? 'color' : 'line'; }
+/* The colour-only rows of a canvas-drawn indicator (OV_COLORS above): {key, label, color, alpha} each. */
+function colorDefs(id) { return OV_COLORS[id] || []; }
+function isColorKey(id, key) { return colorDefs(id).some((c) => c.key === key); }
 function styleLineKeys(id) { if (id === 'sess') return null;   // its boxes carry their own colours
   const t = TA_BY_ID[id];
-  return STYLE_LINES[id] || (t && t.lines.length ? t.lines.map((l) => l.part) : null); }   // a study drawn as markers only has no line style
+  const lines = STYLE_LINES[id] || (t && t.lines.length ? t.lines.map((l) => l.part) : null);   // a study drawn as markers only has no line style
+  const colors = colorDefs(id).map((c) => c.key);
+  return colors.length ? [...(lines || []), ...colors] : lines; }
+/* An instance's colour for `key` (its Style tab) with its opacity, else `fallback` (the colour the renderer always
+   used): an instance saved before the Style tab existed has no `style` and so draws as it did. */
+function styleColor(inst, key, fallback) {
+  const st = inst && inst.style && inst.style[key];
+  return st && typeof st.color === 'string' ? lineColor(st) : fallback;
+}
+/* Whether the legend row can show values for `id` (legendValues has a case or a study line for it). */
+function hasLegend(id) { return !!TA_BY_ID[id] || ['ema', 'sma', 'vwma', 'vwap', 'adx', 'cumdelta', 'sess'].includes(id); }
 
 const VWAP_DEFAULT = '#9C27B0';   // cell.js palette().vwap -- today's single-VWAP purple, kept as the first colour
 const UP_DEFAULT = '#089981', DOWN_DEFAULT = '#F23645';   // palette().up/.down -- theme-independent
@@ -826,6 +850,15 @@ function lineStyle(color, width, dash, alpha) { return alpha == null ? { color, 
 function defaultStyle(id, siblings) {
   const keys = styleLineKeys(id);
   if (!keys) return null;
+  const cols = colorDefs(id);
+  if (cols.length) {   // the colour rows come after any plotted lines, each at the colour and opacity the renderer always used
+    const out = TA_BY_ID[id] || STYLE_LINES[id] ? lineDefaults(id, siblings) : {};
+    for (const c of cols) out[c.key] = lineStyle(c.color, 1, 'solid', c.alpha != null && c.alpha < 100 ? c.alpha : undefined);
+    return out;
+  }
+  return lineDefaults(id, siblings);
+}
+function lineDefaults(id, siblings) {
   const color = cycleColor(id, siblings);
   switch (id) {
     case 'volume': case 'delta': return { up: lineStyle(UP_DEFAULT, 1, 'solid', 50), down: lineStyle(DOWN_DEFAULT, 1, 'solid', 50) };
@@ -1171,15 +1204,15 @@ function legendValues(inst, bar, colors, tick) {
     default: {
       const t = TA_BY_ID[inst.id];
       if (!t) return [];
-      const nd = fix(t.digits ?? 2);   // a study that sends a small ratio (SMI Ergodic) says how many decimals it needs
+      const nd = fix(inst.params && inst.params.digits != null ? +inst.params.digits : (t.digits ?? 2));   // a study that sends a small ratio (SMI Ergodic) says how many decimals it needs
       // one value per line that is shown (a hidden line adds nothing), in that line's own colour
       const st = inst.style || {}, out = t.lines.filter((ln) => !(st[ln.part] && st[ln.part].visible === false))
         .map((ln) => ({ text: nd(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
       // lines that take turns (Supertrend's up / down side) show only the one in force
       const live = out.filter((x) => !x.pick || x.on);
       const shown = (live.length ? live : out.slice(0, 1)).map(({ text, color }) => ({ text, color }));
-      const say = t.words ? t.words(lineValue(t.lines[0], v)) : '';   // a word in front: who is winning, etc.
-      if (say) { const x = lineValue(t.lines[0], v); shown.unshift({ text: say, word: true, color: x >= 10 ? colors.up : x <= -10 ? colors.down : colors.text }); }
+      const say = t.words ? t.words(lineValue(t.lines[0], v), inst.params) : '';   // a word in front: who is winning, etc.
+      if (say) { const x = lineValue(t.lines[0], v); shown.unshift({ text: say, word: true, color: x >= ((inst.params && inst.params.lean) || 10) ? colors.up : x <= -((inst.params && inst.params.lean) || 10) ? colors.down : colors.text }); }
       return shown;
     }
   }
@@ -1438,7 +1471,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   defaults, seedNews, eventsView, newsMode, serverKey, serverKeys, migrate, migrateLayout, TA_BY_ID, lineValue, sessBoxes, vwapLines, VWAP_MORE_MAX, VWAP_ANCHORS, SESS_BOX_COLORS, SESS_BOX_MAX, SESS_BOX_DEFAULTS, GRID_DIMS, cleanSizes, dragTrack, barIndexAtMs, label, legendValues, decimals, fmtPrice, fmtCompact,
   fmtSigned, change, parseSpec, specLabel, longLabel, toSpec, parseInterval, matchSymbols, rootName, rootBadge, filter,
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
-  styleLineKeys, styleControls, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
+  styleLineKeys, styleControls, colorDefs, isColorKey, styleColor, hasLegend, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
   SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
   FAV_GROUP, BEST_GROUP, BEST, TOOL_GROUPS, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;

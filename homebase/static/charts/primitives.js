@@ -5,6 +5,9 @@
 'use strict';
 const key = (px) => +(+px).toFixed(6);
 const TEXT = { bidask: 'both', volume: 'total' };   // the footprint's `text` names for the `numbers` modes it always had
+// a number setting (Inputs tab) or its default when it is missing / not a number: the default is today's hard-coded value
+const nz = (v, d) => (typeof v === 'number' && Number.isFinite(v) ? v : d);
+const SANS = '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
 
 class Layer {
   constructor(P) { this.P = P; this._views = [{ zOrder: () => this.z(), renderer: () => ({ draw: (t) => this.draw(t) }) }]; }
@@ -49,15 +52,16 @@ class Footprint extends Layer {
     if (!last || !this.series) return 1;
     const one = this.rowH(last.c, this.tick);
     if (!(one > 0)) return 1;
-    for (const n of [1, 2, 4, 8, 16, 32, 64]) if (one * n >= 11) return n;
+    const aim = nz(this.ex && this.ex.autoRowPx, 11);
+    for (const n of [1, 2, 4, 8, 16, 32, 64]) if (one * n >= aim) return n;
     return 64;
   }
   readable() {
     if (!this.on || !this.chart || !this.series || !this.bars.length) return false;
     const last = this.bars[this.bars.length - 1];
-    if (this.spacing() < 56) return false;
+    if (this.spacing() < nz(this.ex && this.ex.minBarPx, 56)) return false;
     const auto = !this.ex || !this.ex.rows || this.ex.rows === 'auto';
-    return auto || this.rowH(last.c, this.tick * this.rowTicks()) >= 9;
+    return auto || this.rowH(last.c, this.tick * this.rowTicks()) >= nz(this.ex && this.ex.minRowPx, 9);
   }
   /* Cancel any pending flip and drop the callback: a torn-down primitive must
      never dispatch into whatever it used to be attached to. */
@@ -107,13 +111,16 @@ class Footprint extends Layer {
     const ts = this.chart.timeScale(), r = ts.getVisibleLogicalRange(); if (!r) return;
     const i0 = Math.max(0, Math.floor(r.from)), i1 = Math.min(this.bars.length - 1, Math.ceil(r.to));
     if (i1 < i0) return;   // visible range holds no bars (panned past either end)
-    const w = this.spacing() * 0.86, P = this.P, ex = this.ex || {};
+    const P = this.P, ex = this.ex || {}, w = this.spacing() * (nz(ex.barFill, 86) / 100);   // 86 / 100 === 0.86
+    const col = ex.colors || {}, up = col.buy || P.up, down = col.sell || P.down, dPos = col.deltaPos || P.up, dNeg = col.deltaNeg || P.down, pocC = col.poc || P.poc;
+    const edgeW = nz(ex.edgeWidth, 3), pocW = nz(ex.pocWidth, 1);
     const nTicks = this.rowTicks(), tick = this.tick * nTicks;          // one drawn row = `tick` of price
     const mode = TEXT[ex.text] || ex.text || ex.numbers || 'both', showBars = ex.vbars !== false, showPoc = ex.poc !== false;
     const M = window.HBFlowMath, dec = (String(this.tick).split('.')[1] || '').length;
     target.useMediaCoordinateSpace(({ context: ctx }) => {
       const rh = this.rowH(this.bars[i1].c, tick);
-      ctx.font = `${Math.max(8, Math.min(11, rh - 2))}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+      const fMax = nz(ex.fontMax, 11);
+      ctx.font = `${Math.max(Math.min(nz(ex.fontMin, 8), fMax), Math.min(fMax, rh - 2))}px ${ex.fontFamily === 'sans' ? SANS : 'ui-monospace, SFMono-Regular, Menlo, monospace'}`;
       ctx.textBaseline = 'middle';
       for (let i = i0; i <= i1; i++) {
         const b = this.bars[i]; if (!b || !b.fp || !b.fp.length) continue;
@@ -131,27 +138,27 @@ class Footprint extends Layer {
           const buyImb = im ? im.buy.has(Math.round(px / tick)) : this.ratio > 0 && bv > 0 && bv >= this.ratio * Math.max(below ? below[1] : 0, 1);
           const sellImb = im ? im.sell.has(Math.round(px / tick)) : this.ratio > 0 && sv > 0 && sv >= this.ratio * Math.max(above ? above[2] : 0, 1);
           if (mode === 'both') {
-            ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(String(sv), x - 3, y);
-            ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(String(bv), x + 3, y);
+            ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? down : P.fpText; ctx.fillText(String(sv), x - 3, y);
+            ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? up : P.fpText; ctx.fillText(String(bv), x + 3, y);
           } else if (mode === 'delta') {
             const d = bv - sv;
-            ctx.textAlign = 'center'; ctx.fillStyle = d > 0 ? P.up : d < 0 ? P.down : P.fpText;
+            ctx.textAlign = 'center'; ctx.fillStyle = d > 0 ? dPos : d < 0 ? dNeg : P.fpText;
             ctx.fillText(d > 0 ? `+${d}` : String(d), x, y);
           } else if (mode === 'total') {
-            ctx.textAlign = 'center'; ctx.fillStyle = buyImb ? P.up : sellImb ? P.down : P.fpText; ctx.fillText(String(sv + bv), x, y);
+            ctx.textAlign = 'center'; ctx.fillStyle = buyImb ? up : sellImb ? down : P.fpText; ctx.fillText(String(sv + bv), x, y);
           } else if (M && (mode === 'trades' || mode === 'dom' || mode === 'price' || mode === 'diag')) {
             const t = M.rowText(mode, [px, sv, bv], { below, above, dec, trades: tr && tr.get(key(px)) });
             if (t.c != null) {
-              ctx.textAlign = 'center'; ctx.fillStyle = mode === 'dom' ? (bv >= sv ? P.up : P.down) : P.fpText; ctx.fillText(t.c, x, y);
+              ctx.textAlign = 'center'; ctx.fillStyle = mode === 'dom' ? (bv >= sv ? dPos : dNeg) : P.fpText; ctx.fillText(t.c, x, y);
             } else if (t.l != null) {
-              ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? P.down : P.fpText; ctx.fillText(t.l, x - 3, y);
-              ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? P.up : P.fpText; ctx.fillText(t.r, x + 3, y);
+              ctx.textAlign = 'right'; ctx.fillStyle = sellImb ? down : P.fpText; ctx.fillText(t.l, x - 3, y);
+              ctx.textAlign = 'left'; ctx.fillStyle = buyImb ? up : P.fpText; ctx.fillText(t.r, x + 3, y);
             }
           } else if (buyImb || sellImb) {             // no numbers: a thin edge where one side dominates
-            ctx.fillStyle = buyImb ? P.up : P.down;
-            ctx.fillRect(buyImb ? x + w / 2 - 3 : x - w / 2, y - rh / 2, 3, rh - 1);
+            ctx.fillStyle = buyImb ? up : down;
+            ctx.fillRect(buyImb ? x + w / 2 - edgeW : x - w / 2, y - rh / 2, edgeW, rh - 1);
           }
-          if (showPoc && px === poc[0]) { ctx.strokeStyle = P.poc; ctx.lineWidth = 1; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
+          if (showPoc && px === poc[0]) { ctx.strokeStyle = pocC; ctx.lineWidth = pocW; ctx.strokeRect(x - w / 2, y - rh / 2, w, rh - 1); }
         }
         this.extras(ctx, b, x, w, rh, rows, tick, im);
       }
@@ -161,13 +168,14 @@ class Footprint extends Layer {
   extras(ctx, b, x, w, rh, rows = b.fp, tick = this.tick, im = this.imb(rows, tick)) {
     const M = window.HBFlowMath, ex = this.ex, P = this.P, s = this.series;
     if (!M || !ex || !b.fp.length) return;
+    const col = ex.colors || {};
     if (ex.stack > 0 && this.ratio > 0) {
-      ctx.lineWidth = 2;
+      ctx.lineWidth = nz(ex.stackWidth, 2);
       for (const r of im ? im.runs : M.stackedRuns(rows, tick, this.ratio, ex.stack)) {
         const y0 = s.priceToCoordinate(r.to), y1 = s.priceToCoordinate(r.from);
         if (y0 == null || y1 == null) continue;
         const xx = r.side === 'buy' ? x + w / 2 + 3 : x - w / 2 - 3;     // buyers on the ask (right), sellers on the bid (left)
-        ctx.strokeStyle = r.side === 'buy' ? P.up : P.down;
+        ctx.strokeStyle = r.side === 'buy' ? (col.buy || P.up) : (col.sell || P.down);
         ctx.beginPath(); ctx.moveTo(xx, y0 - rh / 2); ctx.lineTo(xx, y1 + rh / 2); ctx.stroke();
       }
     }
@@ -187,7 +195,7 @@ class Footprint extends Layer {
       const y = s.priceToCoordinate(u.lo);
       if (y == null) return;
       ctx.textAlign = 'center';
-      ctx.fillStyle = b.d >= 0 ? P.up : P.down;
+      ctx.fillStyle = b.d >= 0 ? (col.deltaPos || P.up) : (col.deltaNeg || P.down);
       ctx.fillText(window.HBCatalog.fmtSigned(b.d), x, y + rh / 2 + (ex.unfinished && u.low ? 16 : 9));
     }
   }
@@ -216,10 +224,11 @@ class Profile extends Layer {
       const ex0 = this.ex || {};
       const W = mediaSize.width * Math.min(0.5, Math.max(0.05, (+ex0.width || 18) / 100)), rh = Math.max(1, this.rowH(p.poc, this.tick) - 0.5);
       const { poc, vah, val } = Profile.levels(p, ex0, this.tick);
-      const left = ex0.side === 'left';
+      const left = ex0.side === 'left', col = ex0.colors || {}, hiPoc = ex0.highlightPoc !== false;   // Style / Inputs tab (flowdefs.js settings)
+      const cPoc = col.poc || this.P.poc, cVa = col.va || this.P.vaIn, cBody = col.body || this.P.va;
       for (const [px, v] of p.rows) {
         const y = this.series.priceToCoordinate(px); if (y == null) continue;
-        ctx.fillStyle = px === poc ? this.P.poc : (px >= val && px <= vah ? this.P.vaIn : this.P.va);
+        ctx.fillStyle = hiPoc && px === poc ? cPoc : (px >= val && px <= vah ? cVa : cBody);
         const w = W * v / maxV; ctx.fillRect(left ? 0 : mediaSize.width - w, y - rh / 2, w, rh);
       }
       const q = p.prev, ex = this.ex || {};
@@ -228,25 +237,25 @@ class Profile extends Layer {
       if (ex.prior) {                  // the prior session's ghost, next to the current profile on its pane side
         let mq = 1; for (const r of q.rows) if (r[1] > mq) mq = r[1];
         const qh = Math.max(1, this.rowH(q.poc, this.tick) - 0.5);
-        ctx.globalAlpha = 0.45;
+        ctx.globalAlpha = nz(ex.ghostOpacity, 45) / 100;   // 45 / 100 === 0.45
         for (const [px, v] of q.rows) {
           const y = this.series.priceToCoordinate(px); if (y == null) continue;
-          ctx.fillStyle = px === pq.poc ? this.P.poc : this.P.va;
+          ctx.fillStyle = hiPoc && px === pq.poc ? cPoc : (col.ghost || this.P.va);
           const w = W * v / mq; ctx.fillRect(left ? W + 6 : mediaSize.width - W - 6 - w, y - qh / 2, w, qh);
         }
         ctx.globalAlpha = 1;
       }
       if (ex.lines) {                  // VAH / VAL / POC of the session before, across the whole pane
-        ctx.font = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
-        ctx.textAlign = left ? 'right' : 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 1;   // side left: the words at the far edge, away from the profile and its ghost
-        for (const [px, name, color, dashed] of [[pq.vah, 'pVAH', this.P.text2, false], [pq.val, 'pVAL', this.P.text2, false],
-          [pq.poc, 'pPOC', this.P.poc, !!ex.naked]]) {
+        ctx.font = `${nz(ex.fontSize, 10)}px ${SANS}`;
+        ctx.textAlign = left ? 'right' : 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = nz(ex.lineWidth, 1);   // side left: the words at the far edge, away from the profile and its ghost
+        for (const [px, name, color, dashed] of [[pq.vah, 'pVAH', col.priorVaLines || this.P.text2, false], [pq.val, 'pVAL', col.priorVaLines || this.P.text2, false],
+          [pq.poc, 'pPOC', col.priorPoc || this.P.poc, !!ex.naked]]) {
           const y = px == null ? null : this.series.priceToCoordinate(px); if (y == null) continue;
           ctx.strokeStyle = color; ctx.fillStyle = color;
           ctx.setLineDash(dashed ? [6, 4] : []);
           ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(mediaSize.width, Math.round(y) + 0.5); ctx.stroke();
           ctx.setLineDash([]);
-          ctx.fillText(name, left ? mediaSize.width - 6 : 6, y - 2);
+          if (ex.labels !== false) ctx.fillText(name, left ? mediaSize.width - 6 : 6, y - 2);
         }
       }
     });
@@ -409,10 +418,13 @@ class EventFlags extends Layer {
     const r = this.chart ? this.read() : null;
     this.lines = !!(r && r.lines);
     this.lineStyle = (r && r.lineStyle) || 'dotted'; this.lineWidth = (r && r.lineWidth) || 1;
+    // the Economic calendar indicator's instance (r.inst, cell.js eventsNow): its Style colours and Inputs size / low lines / flags on-off
+    const C = window.HBCatalog, lk = r && r.inst ? window.HBEvents.look(r.inst, C && C.styleColor) : null;
+    this.look = lk;
     // binary-search down to the visible time range first (events.js: visibleSlice) -- a chart never runs
     // xOf() over every stored calendar event, only the handful actually near what is on screen
     const events = r ? window.HBEvents.visibleSlice(r.events, r.from, r.to) : [];
-    this.flags = r ? window.HBEvents.layout(events, r.xOf, this.chart.timeScale().width()) : [];
+    this.flags = r ? window.HBEvents.layout(events, r.xOf, this.chart.timeScale().width(), lk) : [];
   }
   drawLines(target) {
     if (!this.lines || !this.flags.some((g) => g.line)) return;
@@ -430,12 +442,13 @@ class EventFlags extends Layer {
     });
   }
   drawFlags(target) {
-    if (!this.flags.length) return;
+    const lk = this.look;
+    if (!this.flags.length || (lk && !lk.showFlags)) return;
     target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
-      const r = window.HBEvents.FLAG / 2;
+      const r = (lk ? lk.size : window.HBEvents.FLAG) / 2;
       this.flagY = mediaSize.height - r - 3;
       ctx.lineWidth = 1;
-      ctx.strokeStyle = this.P.bg;
+      ctx.strokeStyle = (lk && lk.outline) || this.P.bg;
       for (const g of this.flags) {
         ctx.beginPath(); ctx.arc(g.x, this.flagY, r, 0, Math.PI * 2);
         ctx.fillStyle = g.color; ctx.fill(); ctx.stroke();

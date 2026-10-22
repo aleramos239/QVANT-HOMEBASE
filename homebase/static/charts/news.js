@@ -148,26 +148,42 @@ const TRUMP_COLOR = '#7E57C2';     // --paper: distinct from every trade/bot mar
 const NEWS_COLOR = '#787B86';      // --text-2: a quiet grey tick, not a trade signal
 const BREAKING_COLOR = '#F7A600';  // --warn: the "just landed" 3 s flash
 
+/* What the News headlines indicator's Style / Inputs tabs change (flowdefs.js settings), read off its instance `inst`:
+   colours (undefined = the constants above), dot / bolt sizes, bolt text, Trump colouring, flash, dot cap. No instance, no
+   style or junk values give today's look. `sc` is catalog.js styleColor. */
+function look(inst, sc) {
+  const p = (inst && inst.params) || {}, c = (k) => (sc ? sc(inst, k, undefined) : undefined);
+  const num = (v, d, lo) => (typeof v === 'number' && Number.isFinite(v) && v >= lo ? v : d);
+  return { colors: { headline: c('headline'), trump: c('trump'), breaking: c('breaking'), up: c('burstUp'), down: c('burstDown') },
+    size: num(p.dotSize, 0.35, 0.05), boltSize: num(p.boltSize, 0.6, 0.05), boltText: p.boltText !== false,
+    trumpHighlight: p.trumpHighlight !== false, flash: p.flash !== false, cap: Math.floor(num(p.maxDots, MARKERS_CAP, 1)) };
+}
+
 /* Headline ticks within [fromMs, toMs), most recent `cap` kept (a chart with months of loaded bars must not
-   try to draw hundreds of ticks it can't legibly show). `nowMs` decides which are still "breaking". */
-function headlineMarkers(items, { fromMs, toMs, cap = MARKERS_CAP, nowMs = Date.now(), flashMs = FLASH_MS } = {}) {
+   try to draw hundreds of ticks it can't legibly show). `nowMs` decides which are still "breaking". `lk` (look()) is optional:
+   without it everything is today's. */
+function headlineMarkers(items, { lk, fromMs, toMs, cap = lk ? lk.cap : MARKERS_CAP, nowMs = Date.now(), flashMs = FLASH_MS } = {}) {
+  const c = (lk && lk.colors) || {};
   const inRange = (items || []).filter((it) => it.t_ms >= fromMs && it.t_ms < toMs);
   inRange.sort((a, b) => b.t_ms - a.t_ms);
   return inRange.slice(0, cap).map((it) => ({
     id: `news:${it.id}`, ms: it.t_ms, position: 'aboveBar', shape: 'circle',
-    size: 0.35, color: isBreaking(it, nowMs, flashMs) ? BREAKING_COLOR : isTrump(it) ? TRUMP_COLOR : NEWS_COLOR,
+    size: lk ? lk.size : 0.35,
+    color: (!lk || lk.flash) && isBreaking(it, nowMs, flashMs) ? c.breaking || BREAKING_COLOR
+      : (!lk || lk.trumpHighlight) && isTrump(it) ? c.trump || TRUMP_COLOR : c.headline || NEWS_COLOR,
     text: '', tip: headlineTip(it),
   }));
 }
 
 /* A burst chart shows only bursts of ITS root, in range. Bursts are rare (a 120 s refractory per root), so no
    aggressive cap is needed -- `cap` is only a defensive ceiling. */
-function burstMarkers(bursts, { root, fromMs, toMs, cap = BURSTS_CAP, upColor = '#089981', downColor = '#F23645' } = {}, items) {
+function burstMarkers(bursts, { root, fromMs, toMs, cap = BURSTS_CAP, upColor = '#089981', downColor = '#F23645', lk } = {}, items) {
+  if (lk) { upColor = lk.colors.up || upColor; downColor = lk.colors.down || downColor; }
   const inRange = (bursts || []).filter((b) => b.root === root && b.t_ms >= fromMs && b.t_ms < toMs);
   inRange.sort((a, b) => b.t_ms - a.t_ms);
   return inRange.slice(0, cap).map((b) => ({
     id: `burst:${burstKey(b)}`, ms: b.t_ms, position: b.dir === 'up' ? 'belowBar' : 'aboveBar',
-    shape: 'circle', size: 0.6, color: b.dir === 'up' ? upColor : downColor, text: '⚡',
+    shape: 'circle', size: lk ? lk.boltSize : 0.6, color: b.dir === 'up' ? upColor : downColor, text: lk && !lk.boltText ? '' : '⚡',
     tip: burstTip(b, items),
   }));
 }
@@ -188,7 +204,7 @@ const api = {
   sourceLabel, isTrump, etTime,
   mergeItems, matchesFilter, filterItems, availableSources, availableTags, isBreaking,
   burstKey, mergeBursts, nearNews, burstsNear, burstLinkedNews, burstTip, headlineTip,
-  headlineMarkers, burstMarkers,
+  headlineMarkers, burstMarkers, look,
 };
 if (typeof window !== 'undefined') window.HBNews = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
