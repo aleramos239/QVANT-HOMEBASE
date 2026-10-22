@@ -27,7 +27,7 @@ from families import _flex as FM
 from families import blocks as B
 from families import flex as FX
 from test_blocks import DAILY, TICK, days_of, minute_tape, ns, rand_bars, real_days
-from test_orb830 import BASE, FILL, HI, LO, PX, breaks_dn, breaks_up, day, dn, got, hold, run, sec, stay, up
+from test_orb830 import B830, BASE, FILL, HI, LO, PX, breaks_dn, breaks_up, day, day830, dn, got, hold, run, sec, stay, up
 
 MS0 = ns("00:00") // 1_000_000
 ORB = B.WRAPPED["orb_close"]
@@ -379,6 +379,12 @@ def test_onr_side_reads_nothing_after_the_0930_bar_and_off_is_the_plain_family()
         assert got(res) == WANT_LONG and st._fx_onr == 1
     assert got(run(ORB, BASE, {"gate": "off"}, top)[1]) == got(run(ORB, BASE, {}, top)[1]) == WANT_LONG
     assert sides(ORB, {}, day({**breaks_dn("09:36"), **TOP})) == ["short"]                 # the gate off: the short the gate blocked trades
+
+
+def test_onr_side_blocks_every_decision_before_the_0930_bar_has_closed():
+    early = {**breaks_up("08:36"), **TOP}                                                  # an 08:30 session breaks at 08:36: the 09:30 open is not known yet
+    assert got(run(ORB, B830, {}, day830(early))[1]) != []                                   # gate off: it trades
+    assert got(run(ORB, B830, ONR, day830(early))[1]) == []                                  # gate onr_side: no entry either side
 
 
 # ---- (v) refusals ------------------------------------------------------------------------------------------------------------------------------------
