@@ -792,6 +792,11 @@ class Controller {
     this.box.addEventListener('pointermove', this.on.hover);
     this.box.addEventListener('pointerleave', this.on.leave);
     this.box.addEventListener('dblclick', this.on.dbl, true);
+    this.on.zone = (e) => this.onZone(e); this.on.zoneDown = (e) => this.onZone(e, true); this.on.zoneUp = (e) => this.onZone(e);
+    this.box.addEventListener('pointermove', this.on.zone);
+    this.box.addEventListener('pointerdown', this.on.zoneDown, true);
+    this.box.addEventListener('pointerleave', this.on.zoneOff = () => this.setZone(null));
+    window.addEventListener('pointerup', this.on.zoneUp);
     window.addEventListener('pointermove', this.on.move, true);
     window.addEventListener('pointerup', this.on.up, true);
     window.addEventListener('pointercancel', this.on.lost, true);
@@ -807,6 +812,11 @@ class Controller {
     this.box.removeEventListener('pointermove', this.on.hover);
     this.box.removeEventListener('pointerleave', this.on.leave);
     this.box.removeEventListener('dblclick', this.on.dbl, true);
+    this.box.removeEventListener('pointermove', this.on.zone);
+    this.box.removeEventListener('pointerdown', this.on.zoneDown, true);
+    this.box.removeEventListener('pointerleave', this.on.zoneOff);
+    window.removeEventListener('pointerup', this.on.zoneUp);
+    delete this.cell.el.dataset.zone;
     window.removeEventListener('pointermove', this.on.move, true);
     window.removeEventListener('pointerup', this.on.up, true);
     window.removeEventListener('pointercancel', this.on.lost, true);
@@ -853,6 +863,16 @@ class Controller {
     let p = roundToTick(raw, c.tick);
     if (e) p = snapPrice(this.barAt(t), pt.y, p, magnetMode(this.host.magnet(), e.metaKey), (q) => c.candles.priceToCoordinate(q));
     return { t, p, L };
+  }
+
+  /* TradingView's mouse: a crosshair over the plot, the resize arrows over the axes, a closed hand while the chart is dragged.
+     `data-zone` on the panel (charts.css); a held button keeps the zone it started in (an axis drag stays an axis drag). */
+  setZone(z) { if (z) this.cell.el.dataset.zone = z; else delete this.cell.el.dataset.zone; }
+  onZone(e, down = false) {
+    if (!this.cell.chart || !this.cell.chart.panes().length) return;
+    if (e.type === 'pointermove' && e.buttons) return;
+    const z = zoneAt(this.local(e), this.paneW(), this.paneH());
+    this.setZone(z === 'pane' && down && !this.owned && this.host.tool() === 'cursor' ? 'pan' : z);
   }
 
   setCursor(kind) {
@@ -1192,7 +1212,7 @@ class Controller {
     const near = hit || items.find((d) => isPos(d) && Pos().near(d, pt, geo, 28));
     this.setHover(near ? near.id : null);
     if (this.place || this.host.tool() !== 'cursor') return;
-    this.setCursor(hit ? 'move' : null);
+    this.setCursor(hit ? 'pointer' : null);
   }
 
   setHover(id) {
@@ -1202,7 +1222,13 @@ class Controller {
   }
 }
 
-const api = { barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
+/* Which part of the chart a pane point is over: the plot, the price axis (right of it), the time axis (below it), or neither. */
+function zoneAt(pt, w, h) {
+  if (pt.x < 0 || pt.y < 0) return null;
+  return pt.x < w && pt.y < h ? 'pane' : pt.x >= w ? 'price' : 'time';
+}
+
+const api = { zoneAt, barIndexAt, placeMarkers, logicalOf, xOfLogical, timeToX, snapTime, roundToTick, distToSegment, handlePoints, hitTest,
   setPoint, shiftTime, moveDrawing, samePoints, fillOf, fmtDuration, measureLabel, lineStats, fibRows, withAlpha, timeTag, newId, MAGNET_PX, MAGNET_OFF, parseMagnet,
   magnetMode, snapPrice, toolLabelsShown, toolLabelParts, Store, Primitive, Controller, HANDLE_TOL, LINE_TOL };
 if (typeof window !== 'undefined') window.HBDrawings = api;

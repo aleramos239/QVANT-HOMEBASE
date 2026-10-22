@@ -858,3 +858,11 @@ test('fillOf: a box fills with its own colour at the theme\'s soft opacity unles
   assert.equal(D.fillOf({}, 'red', P), P.accentSoft, 'not a plain hex: the theme blue');
   assert.equal(D.fillOf({}, '#2962FF', { accentSoft: 'rgba(41,98,255,.10)' }), 'rgba(41,98,255,0.1)');
 });
+
+test('zoneAt: plot, price axis (right), time axis (below), nowhere (negative) -- the zone the mouse cursor follows', () => {
+  assert.equal(D.zoneAt({ x: 10, y: 10 }, 500, 300), 'pane');
+  assert.equal(D.zoneAt({ x: 500, y: 10 }, 500, 300), 'price');
+  assert.equal(D.zoneAt({ x: 10, y: 300 }, 500, 300), 'time');
+  assert.equal(D.zoneAt({ x: 520, y: 320 }, 500, 300), 'price', 'the corner counts as the price axis');
+  assert.equal(D.zoneAt({ x: -1, y: 10 }, 500, 300), null);
+});
