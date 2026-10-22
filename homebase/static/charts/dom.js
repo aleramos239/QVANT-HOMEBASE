@@ -175,7 +175,7 @@ function pooledSizes(history, now, windowMs) {
    `size` freezes at that moment too (a fading line shows the size that earned it the line, not whatever the
    book prints while it decays). A line whose fade has run its full course (age >= fadeMs, never requalified in
    between) is dropped for good. Capped to BIG_CAP, live (opacity 1) lines ahead of fading ones, largest first. */
-function bigSide(rows, prevSide, threshold, now, fadeMs, tick) {
+function bigSide(rows, prevSide, threshold, now, fadeMs, tick, cap = BIG_CAP) {
   const keyOf = (price) => (tick > 0 ? tickIndex(price, tick) : price);   // review 7: the ladder's own key
   const qualifying = new Map();
   for (const r of Array.isArray(rows) ? rows : []) {
@@ -199,7 +199,7 @@ function bigSide(rows, prevSide, threshold, now, fadeMs, tick) {
       opacity: live ? 1 : Math.max(0, 1 - age / fadeMs) });
   }
   out.sort((a, b) => b.opacity - a.opacity || b.size - a.size);
-  return out.slice(0, BIG_CAP);
+  return out.slice(0, cap);
 }
 
 /* The median displayed size over `history` within [now - windowMs, now] -- the caller computes it once per
@@ -214,19 +214,21 @@ function fading(result) {
    (recent books for the same root; order doesn't matter, this function windows it itself). opts: multiple
    (default BIG_MULTIPLE), now (ms; defaults to book.ts), windowMs (default BIG_WINDOW_MS), fadeMs (default
    BIG_FADE_MS), prev (this function's own last return -- {bids, offers} -- omit on the first call for a root),
-   tick (key levels by tick index, as the ladder does), median (precomputed: `history` is then not pooled).
+   tick (key levels by tick index, as the ladder does), median (precomputed: `history` is then not pooled),
+   cap (most lines per side, default BIG_CAP).
    No book, or a history too thin to have a median at all, both mean nothing qualifies. */
 function bigLevels(book, history, opts = {}) {
   const multiple = opts.multiple > 0 ? opts.multiple : BIG_MULTIPLE;
   const windowMs = opts.windowMs > 0 ? opts.windowMs : BIG_WINDOW_MS;
   const fadeMs = opts.fadeMs > 0 ? opts.fadeMs : BIG_FADE_MS;
+  const cap = opts.cap >= 1 ? Math.floor(opts.cap) : BIG_CAP;
   const now = Number.isFinite(opts.now) ? opts.now : (book && Number.isFinite(book.ts) ? book.ts : 0);
   const prev = opts.prev && typeof opts.prev === 'object' ? opts.prev : {};
   const med = Number.isFinite(opts.median) && opts.median >= 0 ? opts.median : medianOf(history, now, windowMs);
   const threshold = med > 0 ? med * multiple : Infinity;   // no usable median: nothing can qualify
   return {
-    bids: bigSide(book && book.bids, prev.bids, threshold, now, fadeMs, opts.tick),
-    offers: bigSide(book && book.offers, prev.offers, threshold, now, fadeMs, opts.tick),
+    bids: bigSide(book && book.bids, prev.bids, threshold, now, fadeMs, opts.tick, cap),
+    offers: bigSide(book && book.offers, prev.offers, threshold, now, fadeMs, opts.tick, cap),
     median: med,
   };
 }

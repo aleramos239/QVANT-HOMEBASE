@@ -34,8 +34,6 @@ function mk(tag, cls, text) {
 }
 function button(cls, text) { const b = mk('button', cls, text); b.type = 'button'; return b; }
 
-const NO_STYLE_TAB = new Set(['events', 'headlines']);
-
 function mount(box, host) {
   const { cell, uid } = host;
   const inst = cell.cfg.indicators.find((x) => x.uid === uid), d = inst && C.def(inst.id);
@@ -48,11 +46,13 @@ function mount(box, host) {
   const lineKeys = C.styleLineKeys(inst.id);
   let style = inst.style ? JSON.parse(JSON.stringify(inst.style))
     : lineKeys ? C.defaultStyle(inst.id, cell.cfg.indicators.filter((x) => x.uid !== uid)) : null;
+  // a style saved before a colour row was added to this indicator lacks that key: it takes the default colour
+  if (style && lineKeys) { const fresh = C.defaultStyle(inst.id, []); for (const k of lineKeys) if (!style[k]) style[k] = fresh[k]; }
   const TABS = [];
   const guide = window.HBGuide && window.HBGuide.get(inst.id);
   if (d.params.length) TABS.push({ id: 'inputs', label: 'Inputs' });         // a style-only indicator (volume, cum delta) opens on Style
-  // events / headlines are client-side layers with no line, level or legend value: their Style tab would only hold a legend toggle that does nothing
-  if (!NO_STYLE_TAB.has(inst.id)) TABS.push({ id: 'style', label: 'Style' });
+  // a Style tab only when there is something to style: lines or colours, reference levels, or legend values (the order-flow overlays have none of the last)
+  if (lineKeys || refDefs || C.hasLegend(inst.id)) TABS.push({ id: 'style', label: 'Style' });
   if (guide) TABS.push({ id: 'guide', label: 'How to read' });
   const first = TABS.findIndex((t) => t.id === host.tab);                   // the legend's "?" opens on the guide
   let tab = first < 0 ? 0 : first, done = false, raf = 0;
@@ -506,7 +506,7 @@ function mount(box, host) {
     const rows = [];
     if (lineKeys) for (const k of lineKeys) rows.push(...styleRow(k));
     if (refDefs) rows.push(mk('div', 'set-cap', 'LEVELS'), ...refRows());
-    rows.push(mk('div', 'set-cap', 'LEGEND'), legendRow());
+    if (C.hasLegend(inst.id)) rows.push(mk('div', 'set-cap', 'LEGEND'), legendRow());   // the order-flow overlays have no legend values: the box would do nothing
     return rows;
   }
   function setOpt(key, v) {
@@ -574,13 +574,15 @@ function mount(box, host) {
   }
   function styleRow(key) {
     const line = style[key], row = mk('div', 'set-row'), name = mk('label', 'set-name'), ctl = mk('div', 'set-ctl');
-    const colorOnly = C.styleControls(inst.id) === 'color';        // volume / delta: a colour (and its opacity), no width or dash
+    const colorOnly = C.styleControls(inst.id) === 'color' || C.isColorKey(inst.id, key);   // volume / delta and an overlay's colours: a colour (and its opacity), no width or dash
     const cb = mk('input');
     cb.type = 'checkbox';
     cb.checked = line.visible !== false;
     cb.onchange = () => { line.visible = cb.checked; preview(); };
     const own = C.TA_BY_ID[inst.id] && C.TA_BY_ID[inst.id].lines.find((l) => l.part === key);
-    name.append(cb, mk('span', '', (LINE_LABEL[inst.id] || {})[key] || (own && own.label) || key));
+    const cdef = C.colorDefs(inst.id).find((c) => c.key === key);
+    if (!C.isColorKey(inst.id, key)) name.append(cb);   // an overlay's colour has no eye: it is one colour, always drawn
+    name.append(mk('span', '', (LINE_LABEL[inst.id] || {})[key] || (cdef && cdef.label) || (own && own.label) || key));
     // a histogram coloured by the sign of each bar (cell.js point()): colour, width, line style and axis tag change nothing, only the eye does
     if (own && own.type === 'hist' && !own.fixed) { row.append(name); return [row]; }
     // one row a line: colour (its opacity is in the colour's popover), width, style, and a "more" for the rest

@@ -14,6 +14,7 @@
 'use strict';
 const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
 const Store = need('HBBookStore', './bookstore.js');
+const Cat = need('HBCatalog', './catalog.js');
 
 const PAINT_MS = 250;
 const ASK_MAX_MS = 48 * 3600 * 1000;   // the oldest history one ask walks back from the span's end, counted in OPEN market time
@@ -23,10 +24,10 @@ const ASK_EVERY = 8;        // paint ticks between two asks of the store (2 s): 
 
 /* Episodes -> the segments to draw. now: the right edge for a level still standing. An episode's `r` is its
    PEAK ratio against the trailing median, so `multiple` filters the same way the live gauge's threshold does. */
-function segments(eps, { multiple = 5, minSeconds = 5, now = Infinity } = {}) {
+function segments(eps, { multiple = 5, minSeconds = 5, now = Infinity, minSize = 0 } = {}) {
   const out = [];
   for (const e of eps || []) {
-    if (!e || !(e.r >= multiple)) continue;
+    if (!e || !(e.r >= multiple) || (minSize > 0 && !(e.pk >= minSize))) continue;
     const t1 = e.t1 == null ? now : e.t1;
     if (!(t1 - e.t0 >= minSeconds * 1000)) continue;
     out.push({ id: e.id, side: e.s, price: e.p, t0: e.t0, t1, open: e.t1 == null, size: e.pk, end: e.end, traded: e.tr });
@@ -36,20 +37,21 @@ function segments(eps, { multiple = 5, minSeconds = 5, now = Infinity } = {}) {
 
 /* Absorption flags: [{id, t, price, side}] where side = 'up' (a bid absorbed sellers) or 'down' (an offer absorbed
    buyers). minSeconds: the level had stood at least this long when it was flagged. */
-function absorptions(eps, { multiple = 4, minSeconds = 5 } = {}) {
+function absorptions(eps, { multiple = 4, minSeconds = 5, minTraded = 0 } = {}) {
   const out = [];
   for (const e of eps || []) {
-    if (!e || e.ab == null || !(e.r >= multiple) || !(e.ab - e.t0 >= minSeconds * 1000)) continue;
+    if (!e || e.ab == null || !(e.r >= multiple) || !(e.ab - e.t0 >= minSeconds * 1000) || (minTraded > 0 && !(e.tr >= minTraded))) continue;
     out.push({ id: e.id, t: e.ab, price: e.p, side: e.s === 'b' ? 'up' : 'down', traded: e.tr });
   }
   return out;
 }
 
 /* Pulled liquidity: [{id, t, price, side}] at the moment the order was withdrawn. side 'b' / 'a' = which side's. */
-function pulls(eps, { multiple = 5, minSeconds = 5 } = {}) {
+function pulls(eps, { multiple = 5, minSeconds = 5, minSize = 0 } = {}) {
   const out = [];
   for (const e of eps || []) {
-    if (!e || e.end !== 'pulled' || e.t1 == null || !(e.r >= multiple) || !(e.t1 - e.t0 >= minSeconds * 1000)) continue;
+    if (!e || e.end !== 'pulled' || e.t1 == null || !(e.r >= multiple) || !(e.t1 - e.t0 >= minSeconds * 1000)
+        || (minSize > 0 && !(e.pk >= minSize))) continue;
     out.push({ id: e.id, t: e.t1, price: e.p, side: e.s, size: e.pk });
   }
   return out;
@@ -66,10 +68,10 @@ function sideOk(want, side) {
 /* Icebergs: [{id, t0, t1, price, side, traded, shown, times, open}]. The server marks one with `rl`; `pk` is the biggest
    size the level showed and `tr` what traded there, so tr / pk is how many times the shown size went through. side
    'up' = a bid (support), 'down' = an offer. t1 null while it stands. */
-function icebergs(eps, { multiple = 3, minTraded = 30 } = {}) {
+function icebergs(eps, { multiple = 3, minTraded = 30, reloads = 0 } = {}) {
   const out = [];
   for (const e of eps || []) {
-    if (!e || e.rl == null || !(e.pk > 0) || !(e.tr >= minTraded) || !(e.tr / e.pk >= multiple)) continue;
+    if (!e || e.rl == null || (reloads > 2 && !(e.rl >= reloads)) || !(e.pk > 0) || !(e.tr >= minTraded) || !(e.tr / e.pk >= multiple)) continue;
     out.push({ id: e.id, t0: e.t0, t1: e.t1, price: e.p, side: e.s === 'b' ? 'up' : 'down', traded: e.tr, shown: e.pk,
       times: Math.floor(e.tr / e.pk), open: e.t1 == null });
   }
@@ -126,6 +128,11 @@ function askSpan(from, to, limit) {
   const end = Math.min(to, limit), start = Math.max(from, openStart(end, ASK_MAX_MS));
   return end > start ? [start, end] : null;
 }
+
+/* One setting: the number if it is one, else the default (an instance in memory may lack a key or hold junk). */
+const num = (v, def) => (v != null && v !== '' && Number.isFinite(+v) ? +v : def);
+/* The Style tab's colour for `key`, else the colour the renderer always used. */
+const sc = (inst, key, fallback) => (Cat && Cat.styleColor ? Cat.styleColor(inst, key, fallback) : fallback);
 
 const api = { PAINT_MS, ASK_MAX_MS, segments, absorptions, pulls, icebergs, sideOk, clipAt, askSpan, marketOpen, openStart };
 
@@ -226,15 +233,17 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
       const big = inst(cell, 'bigorders'), ab = inst(cell, 'absorb'), pu = inst(cell, 'pulled'), ice = inst(cell, 'iceberg');
       target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
         if (big && big.params.history !== false) {
-          const segs = segments(eps, { multiple: big.params.multiple, minSeconds: big.params.minSeconds, now });
+          const segs = segments(eps, { multiple: big.params.multiple, minSeconds: big.params.minSeconds, now, minSize: num(big.params.minSize, 0) });
+          const endedA = num(big.params.endedOpacity, 60) / 100, caps = big.params.caps !== false;
           for (const s of segs) {
             if (s.open && !replay) continue;      // standing: the live line (l2layer). A replay has no live book.
             const x0 = X(s.t0), x1 = X(s.t1), y = series.priceToCoordinate(s.price);
             if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
-            const col = s.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645');
-            ctx.strokeStyle = col; ctx.globalAlpha = s.open ? 0.9 : 0.6; ctx.lineWidth = +big.params.width || 2;
+            const col = sc(big, s.side === 'b' ? 'bid' : 'ask', s.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645'));
+            ctx.strokeStyle = col; ctx.globalAlpha = s.open ? 0.9 : endedA; ctx.lineWidth = +big.params.width || 2;
             ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(x1, y); ctx.stroke();
             ctx.globalAlpha = 1;
+            if (!caps) continue;
             if (!s.open && s.end === 'traded') { ctx.fillStyle = col; ctx.fillRect(x1 - 2.5, y - 2.5, 5, 5); }
             else if (!s.open && s.end === 'pulled') { ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(x1, y, 3.5, 0, Math.PI * 2); ctx.stroke(); }
           }
@@ -242,29 +251,29 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
         const sz = (inst) => Math.max(0.5, +inst.params.size || 1);        // the Marker size setting
         if (ab) {
           const k = sz(ab);
-          const r = 7 * k, mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
+          const r = 7 * k, lab = num(ab.params.labelSize, 10), mono = 'ui-monospace, SFMono-Regular, Menlo, monospace';
           ctx.textBaseline = 'middle'; ctx.lineWidth = 1.5 * k;
-          for (const a of absorptions(eps, { multiple: ab.params.multiple, minSeconds: ab.params.minSeconds })) {
+          for (const a of absorptions(eps, { multiple: ab.params.multiple, minSeconds: ab.params.minSeconds, minTraded: num(ab.params.minTraded, 0) })) {
             if (!sideOk(ab.params.side, a.side)) continue;
             const x = X(a.t), y = series.priceToCoordinate(a.price);
             if (x == null || y == null || x < 0 || x > mediaSize.width) continue;
-            ctx.strokeStyle = ctx.fillStyle = a.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
+            ctx.strokeStyle = ctx.fillStyle = sc(ab, a.side, a.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645'));
             ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();          // hollow ring, an A inside
             ctx.font = `bold ${Math.round(9 * k)}px ${mono}`; ctx.textAlign = 'center'; ctx.fillText('A', x, y + 0.5);
-            ctx.font = `10px ${mono}`; ctx.textAlign = 'left';
+            ctx.font = `${lab}px ${mono}`; ctx.textAlign = 'left';
             if (ab.params.labels && a.traded > 0) ctx.fillText(String(a.traded), x + r + 3, y);   // contracts that traded into the level
           }
         }
         if (ice) {
-          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.font = `${num(ice.params.labelSize, 10)}px ui-monospace, SFMono-Regular, Menlo, monospace`;
           ctx.textBaseline = 'bottom';
-          const k = sz(ice);
-          for (const q of icebergs(eps, { multiple: ice.params.multiple, minTraded: ice.params.minTraded })) {
+          const k = sz(ice), lw = num(ice.params.width, 3), endedI = num(ice.params.endedOpacity, 70) / 100;
+          for (const q of icebergs(eps, { multiple: ice.params.multiple, minTraded: ice.params.minTraded, reloads: num(ice.params.reloads, 2) })) {
             if (!sideOk(ice.params.side, q.side)) continue;
             const x0 = X(q.t0), x1 = X(q.t1 == null ? now : q.t1), y = series.priceToCoordinate(q.price);
             if (x0 == null || x1 == null || y == null || x1 < 0 || x0 > mediaSize.width) continue;
-            const col = q.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645');
-            ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = 3 * k; ctx.globalAlpha = q.open ? 1 : 0.7;
+            const col = sc(ice, q.side, q.side === 'up' ? (P.up || '#089981') : (P.down || '#F23645'));
+            ctx.strokeStyle = col; ctx.fillStyle = col; ctx.lineWidth = lw * k; ctx.globalAlpha = q.open ? 1 : endedI;
             ctx.beginPath(); ctx.moveTo(x0, y); ctx.lineTo(Math.max(x1, x0 + 6), y); ctx.stroke();
             ctx.globalAlpha = 1;
             ctx.beginPath(); ctx.moveTo(x0 - 4 * k, y); ctx.lineTo(x0, y - 4 * k); ctx.lineTo(x0 + 4 * k, y); ctx.lineTo(x0, y + 4 * k); ctx.closePath(); ctx.fill();
@@ -275,12 +284,12 @@ if (typeof window !== 'undefined' && window.HBLayers && window.HBLiquidity && St
         if (pu) {
           const k = sz(pu);
           ctx.lineWidth = 1.5 * k;
-          ctx.font = '10px ui-monospace, SFMono-Regular, Menlo, monospace'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-          for (const p of pulls(eps, { multiple: pu.params.multiple, minSeconds: pu.params.minSeconds })) {
+          ctx.font = `${num(pu.params.labelSize, 10)}px ui-monospace, SFMono-Regular, Menlo, monospace`; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+          for (const p of pulls(eps, { multiple: pu.params.multiple, minSeconds: pu.params.minSeconds, minSize: num(pu.params.minSize, 0) })) {
             if (!sideOk(pu.params.side, p.side)) continue;
             const x = X(p.t), y = series.priceToCoordinate(p.price);
             if (x == null || y == null || x < 0 || x > mediaSize.width) continue;
-            ctx.strokeStyle = ctx.fillStyle = p.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645');
+            ctx.strokeStyle = ctx.fillStyle = sc(pu, p.side === 'b' ? 'bid' : 'ask', p.side === 'b' ? (P.accent || '#2962FF') : (P.down || '#F23645'));
             ctx.beginPath(); ctx.moveTo(x - 4 * k, y - 4 * k); ctx.lineTo(x + 4 * k, y + 4 * k);
             ctx.moveTo(x + 4 * k, y - 4 * k); ctx.lineTo(x - 4 * k, y + 4 * k); ctx.stroke();
             if (pu.params.labels && p.size > 0) ctx.fillText(String(Math.round(p.size)), x + 7 * k, y);   // the size that was pulled

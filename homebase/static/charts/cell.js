@@ -36,6 +36,25 @@ const MIN_GAP_S = 5;        // a recording gap shorter than this is not marked: 
 const BLANKS_MAX = 20000;   // empty slots one chart adds for its known holes, at most (a 5 s chart of a day-long hole: 16,560)
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const clone = (x) => JSON.parse(JSON.stringify(x));
+/* An indicator setting read defensively: an instance in memory may lack a key or hold junk (the dialog always clamps). */
+const num = (v, d, lo = -Infinity, hi = Infinity) => (v != null && v !== '' && Number.isFinite(+v) && +v >= lo && +v <= hi ? +v : d);
+const oneOf = (v, ok, d) => (ok.includes(v) ? v : d);
+/* Pressure's colour breakpoints: the instance's lean / push (the line's own `bands` are the defaults). */
+const pressureBands = (inst, bands) => { const lean = num(inst.params.lean, bands[0], 1, 99); return [lean, Math.max(num(inst.params.push, bands[1], 2, 100), lean)]; };
+/* What a default-branch line carries beyond its catalog definition, from the instance's inputs and Style colours (point() reads
+   it): Pressure's bar colours and breakpoints, Book imbalance's two bar colours, Tape speed's burst multiple. */
+function lineTone(inst, ln) {
+  const col = (key) => C.styleColor(inst, key, undefined);
+  if (inst.id === 'pressure' && ln.bands && !ln.fixed) {
+    return { bands: pressureBands(inst, ln.bands), tone: { even: col('even'), leanUp: col('leanUp'), leanDown: col('leanDown'), pushUp: col('pushUp'), pushDown: col('pushDown') } };
+  }
+  if (inst.id === 'bkimb' && ln.type === 'hist' && !ln.fixed) return { cols: { up: col('up'), down: col('down') } };
+  if (inst.id === 'tspeed') return { burstMult: num(inst.params.burstMult, 3, 1.5, 10) };
+  return {};
+}
+/* The marker studies whose arrows take their colour (down arrow, up arrow Style keys) and size from the instance (studyMarks). */
+const MARK_SETTINGS = { ddiv: ['bear', 'bull'], smt: ['down', 'up'] };
+const dashOf = (v) => ({ solid: LW.LineStyle.Solid, dashed: LW.LineStyle.Dashed, dotted: LW.LineStyle.Dotted }[v]);
 
 /* The chart canvas colours: charts.css's tokens for the current theme. */
 function palette() {
@@ -403,6 +422,9 @@ class Cell {
     return this.fpHide ? { ...o, upColor: S.CLEAR, downColor: S.CLEAR, borderVisible: false } : o;
   }
 
+  /* The footprint's "Hide the candle bodies while the numbers show" input (on unless the instance says false). */
+  fpHides() { const f = this.visible('footprint')[0]; return !f || f.params.hideCandles !== false; }
+
   /* The watermark line: "NQ, 1m" in the settings' colour. */
   wmLine() {
     const s = this.shown || this.cfg;
@@ -525,7 +547,7 @@ class Cell {
     const ahead = vr && time && this.barMs() > 0 ? Math.max(0, Math.ceil(vr.to) + 1 - (n - 1)) * this.barMs() : 0;
     const to = vr ? (this.bars[Math.min(n - 1, Math.ceil(vr.to) + 1)] || this.bars[n - 1]).ms + ahead : last;
     return { events: window.HBEvents.shown(this.host.events(), { ...this.R, ...ev }), xOf, lines: ev.evLines, lineStyle: ev.evLineStyle,
-      lineWidth: ev.evLineWidth, from, to };
+      lineWidth: ev.evLineWidth, from, to, inst: this.cfg.indicators.find((i) => i.id === 'events' && i.visible !== false) };
   }
 
   redrawEvents() { if (this.evl) this.evl.redraw(); }
@@ -898,7 +920,7 @@ class Cell {
     const fp = this.fp;   // pin the instance this callback belongs to
     fp.onReadableChange = (on) => {   // fired async from Footprint.updateAllViews(), after layout
       if (this.fp !== fp || !this.chart) return;
-      this.fpHide = on;
+      this.fpHide = on && this.fpHides();
       this.candles.applyOptions(this.candleOpts());
       if (this.R.prevClose) this.resetCandles();   // per-bar colours ride in the data
     };
@@ -991,8 +1013,9 @@ class Cell {
           const { where } = spot(inst);
           const s = add(inst, '__vol', null, LW.HistogramSeries, { priceFormat: { type: 'volume' },
             ...(where === 0 ? { priceScaleId: 'vol', lastValueVisible: false } : { lastValueVisible: true }) }, where);
-          this.lines[this.lines.length - 1].cols = sideColors(inst);
-          pin(s, where, VOL_TOP);
+          Object.assign(this.lines[this.lines.length - 1], { cols: sideColors(inst), byCandle: inst.params.colorBy === 'candle' });
+          // the bars' share of the pane: 20 % (VOL_TOP 0.8) unless the instance says another
+          pin(s, where, inst.params.heightPct == null ? VOL_TOP : 1 - num(inst.params.heightPct, 20, 5, 60) / 100);
           break;
         }
         case 'vwap': {
@@ -1060,9 +1083,12 @@ class Cell {
           const t = C.TA_BY_ID.sess;
           C.sessBoxes(inst).forEach((b, j) => {
             if (j === 0) this.colorOf[inst.uid] = b.color;
+            const sp = inst.params;
             for (const ln of t.lines) {
-              line(inst, b.key, ln.part, b.color, 1, 0, { lastValueVisible: false, lineStyle: dash(ln.part === 'lo' ? 'dashed' : 'solid'),
-                lineType: LW.LineType.WithSteps });
+              const lo = ln.part === 'lo';
+              line(inst, b.key, ln.part, b.color, Math.round(num(sp.lineWidth, 1, 1, 4)), 0, { lastValueVisible: false,
+                lineStyle: dash(oneOf(lo ? sp.loDash : sp.hiDash, ['solid', 'dashed', 'dotted'], lo ? 'dashed' : 'solid')),
+                lineType: LW.LineType.WithSteps, ...((lo ? sp.showLow : sp.showHigh) === false ? { visible: false } : {}) });
               this.lines[this.lines.length - 1].gen = ln;
             }
           });
@@ -1097,7 +1123,7 @@ class Cell {
           // when it can move, the price pane when it cannot
           const { where, scale } = t.pane ? spot(inst) : { where: 0, scale: {} };
           const st = inst.style || {}, own = where > 0;
-          const dg = t.digits ?? 2;   // decimals of the axis and the value tags: 2, or what the entry asks for (SMI Ergodic: 4)
+          const dg = Math.round(num(inst.params.digits, t.digits ?? 2, 0, 8));   // decimals of the axis and the value tags: the instance's input, else what the entry asks for (SMI Ergodic: 4), else 2
           const fmt = t.pane ? { priceFormat: { type: 'price', precision: dg, minMove: Number((10 ** -dg).toFixed(dg)) } } : {};
           let top = null;
           t.lines.forEach((ln, j) => {
@@ -1110,13 +1136,15 @@ class Cell {
               : line(inst, k, ln.part, C.lineColor(sty), sty.width, where,
                 { ...fmt, lastValueVisible: tag, ...tagOpt(sty), ...scale, lineStyle: dash(sty.dash), visible: sty.visible !== false,
                   ...(ln.step ? { lineType: LW.LineType.WithSteps } : {}), ...(ln.dots ? { lineVisible: false, pointMarkersVisible: true } : {}), ...shapeOpt(sty) });
-            this.lines[this.lines.length - 1].gen = ln;
+            Object.assign(this.lines[this.lines.length - 1], { gen: ln }, lineTone(inst, ln));
             if (!top) top = serie;
           });
           if (own && t.refs) {
             // the reference levels (RSI 70/30 ...): each value editable or hidden, one colour (the instance's opts)
             const o = inst.opts || {}, rc = o.refColor || P.text2 || '#787B86';
-            t.refs.forEach((r0, i) => {
+            const [lean, push] = inst.id === 'pressure' ? pressureBands(inst, t.lines[0].bands) : [];
+            const refs = inst.id === 'pressure' ? [push, lean, -lean, -push] : t.refs;   // Pressure's levels sit at its lean / push
+            refs.forEach((r0, i) => {
               const r = o.refs && o.refs[i] !== undefined ? o.refs[i] : r0;
               if (r === null) return;
               top.createPriceLine({ price: r, color: rc, lineWidth: 1, lineStyle: LW.LineStyle.Dashed, axisLabelVisible: false, title: '' });
@@ -1213,12 +1241,12 @@ class Cell {
     }
   }
 
-  /* Zoom so the footprint's numbers fit: the newest bars, about 62 px each (it reads from 56 px a bar). */
+  /* Zoom so the footprint's numbers fit: the newest bars, about 62 px each (it reads from 56 px a bar; the footprint's input moves both). */
   zoomToRead() {
     const n = this.bars.length;
     if (!this.chart || !n) return;
     const ts = this.chart.timeScale();
-    const slots = Math.max(4, Math.floor((ts.width() || this.box.clientWidth || 600) / 62));   // bar slots across the plot, the two margin ones included
+    const slots = Math.max(4, Math.floor((ts.width() || this.box.clientWidth || 600) / (num((this.visible('footprint')[0] || { params: {} }).params.minBarPx, 56, 30, 200) + 6)));   // bar slots across the plot, the two margin ones included
     ts.setVisibleLogicalRange({ from: n - 1 - (slots - 2), to: n + 1 });
   }
 
@@ -1473,20 +1501,25 @@ class Cell {
       const p = l.pine.st.data.get(l.pine.title), v = p && p.get(b.ms);
       return !v || v.value == null ? { time } : v.color ? { time, value: v.value, color: v.color } : { time, value: v.value };
     }
-    if (l.src === '__vol') return { time, value: b.v, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
+    if (l.src === '__vol') return { time, value: b.v, color: (l.byCandle ? b.c >= b.o : b.d >= 0) ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
     if (l.src === '__delta') return { time, value: b.d, color: b.d >= 0 ? (l.cols ? l.cols.up : P.upA) : (l.cols ? l.cols.down : P.downA) };
     if (typeof l.src === 'string' && l.src.startsWith('bk:')) this.bookSv(l.src, b);   // the book's own series: into b.sv
-    const v = b.sv ? b.sv[l.src] : null;
+    let v = b.sv ? b.sv[l.src] : null;
     if (v == null) return { time };
+    if (l.burstMult && l.burstMult !== 3 && v.burst != null) {   // Tape speed: the wire's burst is 3 x the median (linear), so another multiple is derived here
+      const burst = v.burst * l.burstMult / 3;
+      v = { ...v, burst, hot: v.rate >= burst ? v.rate : null };
+    }
     if (l.gen) {   // a technical indicator: its definition says which number this line plots
       const x = C.lineValue(l.gen, v);
       if (x == null) return { time };
       if (l.gen.type !== 'hist') return { time, value: x };
       if (l.gen.bands && !l.gen.fixed) {   // even = grey, a lean = pale, a clear push = solid (flowdefs.js `bands`)
-        const m = Math.abs(x);
-        return { time, value: x, color: m < l.gen.bands[0] ? 'rgba(120,123,134,.45)' : m < l.gen.bands[1] ? (x >= 0 ? P.upA : P.downA) : (x >= 0 ? P.up : P.down) };
+        const m = Math.abs(x), bd = l.bands || l.gen.bands, tn = l.tone || {};
+        return { time, value: x, color: m < bd[0] ? (tn.even || 'rgba(120,123,134,.45)') : m < bd[1] ? (x >= 0 ? (tn.leanUp || P.upA) : (tn.leanDown || P.downA))
+          : (x >= 0 ? (tn.pushUp || P.up) : (tn.pushDown || P.down)) };
       }
-      return l.gen.fixed ? { time, value: x } : { time, value: x, color: x >= 0 ? P.upA : P.downA };
+      return l.gen.fixed ? { time, value: x } : { time, value: x, color: x >= 0 ? (l.cols && l.cols.up || P.upA) : (l.cols && l.cols.down || P.downA) };
     }
     if (typeof v === 'number') return { time, value: v };
     if (l.src.startsWith('vwap')) {
@@ -1546,12 +1579,15 @@ class Cell {
     if (mins.length) {
       const min = Math.min(...mins), scale = prints.some((x) => x.params.scale) && window.HBFlowMath;
       const pick = prints.find((x) => x.params.min === min) || prints[0], only = pick.params.side;   // buy / sell / all
-      const text = pick.params.labels !== false;
+      const text = pick.params.labels !== false, pp = pick.params;
+      const shape = oneOf(pp.shape, ['circle', 'square', 'arrowUp', 'arrowDown'], 'circle');
+      const cBuy = C.styleColor(pick, 'buy', P.up), cSell = C.styleColor(pick, 'sell', P.down);
+      const sizing = { markerMin: pp.markerMin, markerMax: pp.markerMax, fullAt: pp.fullAt };   // flowmath's markerSize: undefined = its own
       for (const b of this.bars) {
         for (const [, , size, side] of (b.big || [])) {
           if (size < min || (only === 'buy' && side <= 0) || (only === 'sell' && side > 0)) continue;
           big.push({ time: b.tt, position: side > 0 ? 'belowBar' : 'aboveBar',
-            color: side > 0 ? P.up : P.down, shape: 'circle', size: scale ? scale.markerSize(size, min, true) : 0.6, text: text ? String(size) : '' });
+            color: side > 0 ? cBuy : cSell, shape, size: scale ? scale.markerSize(size, min, true, sizing) : num(pp.markerMin, 0.6, 0.5, 3), text: text ? String(size) : '' });
         }
       }
     }
@@ -1580,7 +1616,13 @@ class Cell {
       const k = C.serverKey(inst);
       for (let i = 0; i < this.bars.length; i++) {
         const v = this.bars[i].sv && this.bars[i].sv[k];
-        for (const m of [].concat((v && t.marks(v, this.P, inst.params)) || [])) {   // one mark, or a top and a bottom on one bar
+        for (let m of [].concat((v && t.marks(v, this.P, inst.params)) || [])) {   // one mark, or a top and a bottom on one bar
+          const mk = MARK_SETTINGS[inst.id];
+          if (mk) {
+            if (inst.params.side === 'up' && m.shape !== 'arrowUp' || inst.params.side === 'down' && m.shape !== 'arrowDown') continue;   // Delta divergence: one side only
+            m = { ...m, color: C.styleColor(inst, mk[m.shape === 'arrowDown' ? 0 : 1], m.color), size: num(inst.params.size, m.size, 0.5, 3) };
+            if (inst.id === 'ddiv' && inst.params.labels === false) m.text = '';
+          }
           let j = i, left = m.ago || 0;
           while (left > 0 && j > 0) { j--; if (!this.bars[j].blank) left--; }   // the swing bar: `ago` real bars back
           if (left > 0) continue;       // the swing is left of the first loaded bar: no marker (never one on bar 0)
@@ -1593,14 +1635,21 @@ class Cell {
 
   drawLevels() {
     if (!this.candles) return;
-    const last = this.bars[this.bars.length - 1];
-    const lv = this.visible('levels').length && last && last.sv ? last.sv.levels : null;
+    const last = this.bars[this.bars.length - 1], inst = this.visible('levels')[0], p = inst ? inst.params : {};
+    const lv = inst && last && last.sv ? last.sv.levels : null;
     for (const [k, title] of LEVELS) {
-      const px = lv ? lv[k] : null, cur = this.levelLines[k];
+      const sk = k === 'rth_open' ? 'open' : k, show = p['show' + sk[0].toUpperCase() + sk.slice(1)] !== false, labels = p.labels !== false;
+      const px = lv && show ? lv[k] : null, cur = this.levelLines[k];
       if (px == null) { if (cur) { this.candles.removePriceLine(cur); delete this.levelLines[k]; } continue; }
-      if (cur) { if (cur.options().price !== px) cur.applyOptions({ price: px }); continue; }
-      this.levelLines[k] = this.candles.createPriceLine({ price: px, color: this.P.level, lineWidth: 1,
-        lineStyle: LW.LineStyle.Dashed, axisLabelVisible: true, title });
+      const want = { color: C.styleColor(inst, sk, this.P.level), lineWidth: Math.round(num(p.width, 1, 1, 4)),
+        lineStyle: dashOf(oneOf(p.dash, ['solid', 'dotted', 'dashed'], 'dashed')), axisLabelVisible: labels, title: labels ? title : '' };
+      if (cur) {
+        const o = cur.options();
+        if (Object.keys(want).some((x) => o[x] !== want[x])) cur.applyOptions({ ...want, price: px });
+        else if (o.price !== px) cur.applyOptions({ price: px });
+        continue;
+      }
+      this.levelLines[k] = this.candles.createPriceLine({ price: px, ...want });
     }
   }
 
@@ -1640,18 +1689,23 @@ class Cell {
 
   syncFootprint() {
     if (!this.fp) return;
-    const f = this.visible('footprint')[0];
+    const f = this.visible('footprint')[0], col = (i, key) => C.styleColor(i, key, undefined);   // undefined: the primitive's own palette colour
     this.fp.set(this.bars, !!f, f ? f.params.imbalance : 0, this.tick,
       f ? { stack: f.params.stack, unfinished: f.params.unfinished, deltaNum: f.params.deltaNum, rows: f.params.rows,
         numbers: f.params.numbers, vbars: f.params.vbars, poc: f.params.poc, text: f.params.text || undefined, imb: f.params.imb,
-        zero: f.params.zero, edge: f.params.edge, minvol: f.params.minvol, mindiff: f.params.mindiff } : null);
+        zero: f.params.zero, edge: f.params.edge, minvol: f.params.minvol, mindiff: f.params.mindiff,
+        fontMax: f.params.fontMax, fontMin: f.params.fontMin, barFill: f.params.barFill, minBarPx: f.params.minBarPx, minRowPx: f.params.minRowPx,
+        autoRowPx: f.params.autoRowPx, pocWidth: f.params.pocWidth, stackWidth: f.params.stackWidth, edgeWidth: f.params.edgeWidth,
+        fontFamily: f.params.fontFamily,
+        colors: { buy: col(f, 'buy'), sell: col(f, 'sell'), deltaPos: col(f, 'deltaPos'), deltaNeg: col(f, 'deltaNeg'), poc: col(f, 'poc') } } : null);
   }
 
   syncProfile() {
     if (!this.prof) return;
     const f = this.visible('profile')[0];
     const ex = f ? { prior: f.params.prior, lines: f.params.lines, va: f.params.va, width: f.params.width, side: f.params.side,
-      method: f.params.method } : null;
+      method: f.params.method, ghostOpacity: f.params.ghostOpacity, lineWidth: f.params.lineWidth, labels: f.params.labels, fontSize: f.params.fontSize,
+      highlightPoc: f.params.highlightPoc, colors: Object.fromEntries(['body', 'va', 'poc', 'ghost', 'priorVaLines', 'priorPoc'].map((k) => [k, C.styleColor(f, k, undefined)])) } : null;
     this.prof.set(f ? this.profile : null, this.tick, ex && { ...ex, naked: this.priorNaked(ex) });
   }
   /* The prior session's POC (the one drawn, by the chosen method and share) has not been traded since this session began

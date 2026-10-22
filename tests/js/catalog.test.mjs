@@ -6,16 +6,39 @@ const require = createRequire(import.meta.url);
 const C = require('../../homebase/static/charts/catalog.js');
 const strip = (list) => list.map(({ id, params, visible }) => ({ id, params, visible }));
 // the footprint options added 2026-10-21: each default is the behaviour the chart had before them
-const FP_NEW = { text: '', imb: 'homebase', zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };
+const FP_OLD_NEW = { text: '', imb: 'homebase', zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };
+// the per-indicator settings added 2026-10-22 (flowdefs.js `settings`): purely additive, every default is what the renderer drew before
+const FP_SET = { fontMax: 11, fontMin: 8, barFill: 86, minBarPx: 56, minRowPx: 9, autoRowPx: 11, pocWidth: 1, stackWidth: 2, edgeWidth: 3, hideCandles: true, fontFamily: 'mono' };
+const FP_NEW = { ...FP_OLD_NEW, ...FP_SET };
+const VOLUME_SET = { heightPct: 20, colorBy: 'delta' };
+const LEVELS_SET = { showPdh: true, showPdl: true, showPdc: true, showOnh: true, showOnl: true, showOpen: true, labels: true, width: 1, dash: 'dashed' };
+const LEVELS_KEYS = ['pdh', 'pdl', 'pdc', 'onh', 'onl', 'open'];
+const PROFILE_SET = { ghostOpacity: 45, lineWidth: 1, labels: true, fontSize: 10, highlightPoc: true };
+const BIGPRINTS_SET = { shape: 'circle', markerMin: 0.6, markerMax: 2.2, fullAt: 8, sweepMin: 0, sweepWidth: 2, sweepArrow: 1, sweepDash: 'solid' };
+const BIGORDERS_SET = { endedOpacity: 60, caps: true, liveLines: true, liveWidth: 1, liveDash: '0', labels: true, fade: 5, maxLines: 8, minSize: 0 };
+const STOPRUN_SET = { lineWidth: 1, dash: 'dashed', levelLine: true, show: 'all', trapMark: true, fontSize: 11, arrowGap: 4, sweepMin: 1 };
+const PRESSURE_SET = { lean: 10, push: 25, digits: 2 };
+const EVENTS_SET = { flagSize: 10, lineLow: false, showFlags: true };
+const HEATMAP_SET = { bubbleRadiusMin: 3, bubbleRadiusMax: 14, bubbleFullSize: 0, bubbleLineWidth: 1, bubbleLabels: false, bubbleFront: false, opacity: 100, fullAt: 0, cutoff: 0, columnPx: 2 };
+const PULLED_SET = { minSize: 0, labelSize: 10 }, ABSORB_SET = { minTraded: 0, labelSize: 10 };
+const EXHAUST_SET = { capWidth: 2, capHalf: 6, arrow: true, fontSize: 11, giveback: 50 };
+const HEADLINES_SET = { dotSize: 0.35, boltSize: 0.6, boltText: true, trumpHighlight: true, flash: true, maxDots: 300 };
+const TPO_SET = { blocksOpacity: 45, fontSize: 10, showPoc: true, showVa: true, markSingles: true };
+const DTURN_SET = { size: '1', filled: true, gap: 3, lineWidth: 1.5, run: 2 };
+const DSTR_SET = { size: '1', filled: false, gap: 17, lineWidth: 1.5 };
+const MWABS_SET = { lineWidth: 1.5, tail: 6, dot: true, dotR: 3, dash: 'solid', ratio: 0, zero: 'one', edge: 'one', minvol: 0, mindiff: 0 };
+const NPOC_SET = { nakedOnly: false, lookback: 500, width: 1, dash: 'dashed' };
+const CSTAT_SET = { showDelta: true, showVolume: true, showTrades: true, showDeltaPct: true, showMaxDelta: true, showMinDelta: true, showSeconds: true, rowH: 12, labelW: 58, minBarPx: 34, fontSize: 10, pctDecimals: 1, kFrom: 10000, place: 'bottom' };
+const BIGTRADES_SET = { radiusMin: 3, radiusMax: 14, fullSize: 0, lineWidth: 1, labels: true, labelMinR: 7, fontSize: 10, front: false };
 
 const VWAP_DEFAULT_PARAMS = { anchor: 'eth', customTime: '02:00',
   band1On: false, band1Mult: 1, band2On: false, band2Mult: 2, band3On: false, band3Mult: 3 };
 
 test('a new chart gets volume, VWAP (ETH), session levels and a 3x footprint', () => {
   assert.deepEqual(strip(C.defaults()), [
-    { id: 'volume', params: {}, visible: true },
+    { id: 'volume', params: VOLUME_SET, visible: true },
     { id: 'vwap', params: VWAP_DEFAULT_PARAMS, visible: true },
-    { id: 'levels', params: {}, visible: true },
+    { id: 'levels', params: LEVELS_SET, visible: true },
     { id: 'footprint', params: { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW }, visible: true }]);
 });
 
@@ -67,17 +90,17 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
-  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 10, scale: true, sweeps: false, side: 'all', labels: true });
-  assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true, width: '2' });
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true, width: '2' });
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false, width: '2' });
-  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 3, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
+  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 10, scale: true, sweeps: false, side: 'all', labels: true, ...BIGPRINTS_SET });
+  assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true, width: '2', ...BIGORDERS_SET });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true, width: '2', ...BIGORDERS_SET });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false, width: '2', ...BIGORDERS_SET });
+  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 3, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire', ...HEATMAP_SET });
   assert.deepEqual(C.clampParams('heatmap', { bubbleMax: -5, bubbleSide: 'sideways' }).bubbleMax, 0);
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sideways' }).bubbleSide, 'all');
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sell', bubbleMax: 40 }).bubbleSide, 'sell');
-  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase' });
-  assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), {});
-  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
+  assert.deepEqual(C.clampParams('profile', {}), { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase', ...PROFILE_SET });
+  assert.deepEqual(C.clampParams('imbalance', { junk: 1 }), { levels: '10', bar: true, number: true });   // unknown keys dropped, 2026-10-22 inputs at today's drawing
+  assert.deepEqual(C.clampParams('heatmap', { junk: 1 }), { map: true, bubbles: false, bubbleMin: 10, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire', ...HEATMAP_SET });
   assert.deepEqual(C.clampParams('vwap', { anchor: 'xyz', customTime: 'nope' }), VWAP_DEFAULT_PARAMS);
   assert.deepEqual(C.clampParams('vwap', { anchor: 'rth', junk: 1 }), { ...VWAP_DEFAULT_PARAMS, anchor: 'rth' });
   // "9:30" is loose keyboard entry, not an error: it normalises to "09:30" like the other shorthands do
@@ -90,7 +113,7 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('vwap', { anchor: 'week', band1On: true, band1Mult: 1.5 }),
     { ...VWAP_DEFAULT_PARAMS, anchor: 'week', band1On: true, band1Mult: 1.5 });
   assert.deepEqual(C.clampParams('vwap', { band1Mult: 99 }), { ...VWAP_DEFAULT_PARAMS, band1Mult: 10 });   // clamped to max
-  assert.deepEqual(C.clampParams('volume', { any: 1 }), {});
+  assert.deepEqual(C.clampParams('volume', { any: 1 }), VOLUME_SET);   // unknown keys dropped
 });
 
 test('a Build-1 chart (st form) migrates field by field', () => {
@@ -105,14 +128,14 @@ test('a Build-1 chart (st form) migrates field by field', () => {
     { id: 'ema', params: { length: 21, source: 'close' }, visible: true },
     { id: 'sma', params: { length: 50, source: 'close' }, visible: true },
     { id: 'vwma', params: { length: 20 }, visible: true },
-    { id: 'levels', params: {}, visible: true },
-    { id: 'volume', params: {}, visible: true },
+    { id: 'levels', params: LEVELS_SET, visible: true },
+    { id: 'volume', params: VOLUME_SET, visible: true },
     { id: 'delta', params: {}, visible: true },
     { id: 'cumdelta', params: {}, visible: true },
     { id: 'adx', params: { length: 14 }, visible: true },
     { id: 'footprint', params: { imbalance: 4, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW }, visible: true },
-    { id: 'profile', params: { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase' }, visible: true },
-    { id: 'bigprints', params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true }, visible: true }]);
+    { id: 'profile', params: { prior: true, lines: false, va: 70, width: 18, side: 'right', method: 'homebase', ...PROFILE_SET }, visible: true },
+    { id: 'bigprints', params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true, ...BIGPRINTS_SET }, visible: true }]);
 });
 
 test('an empty Build-1 st means the Build-1 defaults', () => {
@@ -230,9 +253,13 @@ test('styleLineKeys: a Style tab per plotted line for the drawn indicators, none
   assert.deepEqual(C.styleLineKeys('cumdelta'), ['main']);
   assert.deepEqual(C.styleLineKeys('volume'), ['up', 'down']);       // 2026-10-11: the up and the down bar colour
   assert.deepEqual(C.styleLineKeys('delta'), ['up', 'down']);
+  // canvas-drawn ones plot no line: their Style tab (2026-10-22) is only the colour rows flowdefs.js `settings` declares, else none
   for (const id of ['levels', 'footprint', 'profile', 'bigprints', 'bigorders', 'imbalance', 'heatmap']) {
-    assert.equal(C.styleLineKeys(id), null, id);
+    const cols = C.colorDefs(id).map((c) => c.key);
+    assert.deepEqual(C.styleLineKeys(id), cols.length ? cols : null, id);
   }
+  assert.deepEqual(C.styleLineKeys('footprint'), ['buy', 'sell', 'deltaPos', 'deltaNeg', 'poc']);
+  assert.deepEqual(C.styleLineKeys('bigprints'), ['buy', 'sell']);
   assert.equal(C.styleLineKeys('nope'), null);
 });
 
@@ -290,7 +317,8 @@ test('sanitizePreset: a loaded preset payload runs through clampParams/clampStyl
   // missing/non-object payload, or a payload for an indicator with no Style tab: never throws
   assert.deepEqual(C.sanitizePreset('ema', {}), { params: { length: 20, source: 'close' }, style: C.defaultStyle('ema', []) });
   assert.deepEqual(C.sanitizePreset('ema', null), { params: { length: 20, source: 'close' }, style: C.defaultStyle('ema', []) });
-  assert.deepEqual(C.sanitizePreset('levels', { params: { junk: 1 }, style: { main: {} } }), { params: {}, style: null });
+  // levels has no plotted line, so a stray `main` never survives; with no colour rows declared there is no Style tab at all
+  assert.deepEqual(C.sanitizePreset('levels', { params: { junk: 1 }, style: { main: {} } }), { params: LEVELS_SET, style: C.colorDefs('levels').length ? C.defaultStyle('levels', []) : null });
 
   // an indicator with a Style tab but no saved style at all -- fresh defaultStyle, not null
   assert.deepEqual(C.sanitizePreset('ema', { params: {} }).style, C.defaultStyle('ema', []));
@@ -908,11 +936,11 @@ test('order-flow settings that did nothing below the server floor start at it; o
   const min = (id, key) => C.CATALOG.find((d) => d.id === id).params.find((p) => p.key === key).min;
   assert.equal(min('bigorders', 'minSeconds'), 3);               // an ended level is only shown once it stood 3 s
   assert.equal(min('pulled', 'multiple'), 3);                    // a level only opens at 3x the median
-  assert.deepEqual(C.clampParams('bigorders', { multiple: 5, minSeconds: 1, history: true }), { multiple: 5, minSeconds: 3, history: true, width: '2' });
+  assert.deepEqual(C.clampParams('bigorders', { multiple: 5, minSeconds: 1, history: true }), { multiple: 5, minSeconds: 3, history: true, width: '2', ...BIGORDERS_SET });
   assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).multiple, 3);
   assert.equal(C.clampParams('pulled', { multiple: 2, minSeconds: 2 }).minSeconds, 3);
-  assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5, side: 'all', labels: false, size: '1' });     // defaults untouched
-  assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5, side: 'all', labels: false, size: '1' });
+  assert.deepEqual(C.clampParams('pulled', {}), { multiple: 5, minSeconds: 5, side: 'all', labels: false, size: '1', ...PULLED_SET });     // defaults untouched
+  assert.deepEqual(C.clampParams('absorb', {}), { multiple: 4, minSeconds: 5, side: 'all', labels: false, size: '1', ...ABSORB_SET });
 });
 
 test('starred indicators: Favorites is a group of whatever is starred, not a catalog group', () => {
@@ -1065,19 +1093,19 @@ test('heatmap: "Show the heatmap" is on by default and an older saved heatmap ke
 });
 
 test('stop runs, exhaustion and best bid / ask: defaults, clamps and the book keys', () => {
-  assert.deepEqual(C.clampParams('stoprun', {}), { length: 50, minSize: 100, side: 'all', labels: true, size: '1' });
-  assert.deepEqual(C.clampParams('stoprun', { length: 1, minSize: 0 }), { length: 3, minSize: 1, side: 'all', labels: true, size: '1' });
-  assert.deepEqual(C.clampParams('exhaust', {}), { length: 20, multiple: 4, wait: 3, side: 'all', labels: true, size: '1' });
-  assert.deepEqual(C.clampParams('exhaust', { multiple: 0.1, wait: 99, length: 999 }), { length: 200, multiple: 1.5, wait: 10, side: 'all', labels: true, size: '1' });
+  assert.deepEqual(C.clampParams('stoprun', {}), { length: 50, minSize: 100, side: 'all', labels: true, size: '1', ...STOPRUN_SET });
+  assert.deepEqual(C.clampParams('stoprun', { length: 1, minSize: 0 }), { length: 3, minSize: 1, side: 'all', labels: true, size: '1', ...STOPRUN_SET });
+  assert.deepEqual(C.clampParams('exhaust', {}), { length: 20, multiple: 4, wait: 3, side: 'all', labels: true, size: '1', ...EXHAUST_SET });
+  assert.deepEqual(C.clampParams('exhaust', { multiple: 0.1, wait: 99, length: 999 }), { length: 200, multiple: 1.5, wait: 10, side: 'all', labels: true, size: '1', ...EXHAUST_SET });
   const q = C.instance('bkquote');
   assert.equal(C.serverKey(q), 'bk:quote');
   assert.deepEqual(C.serverKeys([q]), []);                          // computed in the page: never asked of the server
 });
 
 test('buy / sell pressure: server key from its length, clamps, lines the legend reads', () => {
-  assert.deepEqual(C.clampParams('pressure', {}), { length: 5 });
-  assert.deepEqual(C.clampParams('pressure', { length: 0 }), { length: 1 });
-  assert.deepEqual(C.clampParams('pressure', { length: 999 }), { length: 50 });
+  assert.deepEqual(C.clampParams('pressure', {}), { length: 5, ...PRESSURE_SET });
+  assert.deepEqual(C.clampParams('pressure', { length: 0 }), { length: 1, ...PRESSURE_SET });
+  assert.deepEqual(C.clampParams('pressure', { length: 999 }), { length: 50, ...PRESSURE_SET });
   const p = C.instance('pressure', { length: 12 });
   assert.equal(C.serverKey(p), 'press:12');
   assert.deepEqual(C.serverKeys([p]), ['press:12']);                 // a server study: asked of the service
@@ -1091,7 +1119,7 @@ test('buy / sell pressure: the four part lines start hidden on a new chart, the 
 });
 
 test('adjustable settings: new options default to what the chart did before, and clamp', () => {
-  assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right', method: 'homebase' });
+  assert.deepEqual(C.clampParams('profile', { va: 5, width: 99, side: 'x' }), { prior: true, lines: false, va: 50, width: 45, side: 'right', method: 'homebase', ...PROFILE_SET });
   assert.deepEqual(C.clampParams('footprint', { rows: '3', numbers: 'zzz' }),
     { imbalance: 3, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.equal(C.clampParams('heatmap', { contrast: 'strong', palette: 'ice' }).palette, 'ice');
@@ -1134,15 +1162,15 @@ test('the legend shows one value per VWAP line, each in its line colour', () => 
 test('a chart saved before the news indicators gets them once, from the settings it had', () => {
   const out = C.seedNews([C.instance('volume')], { evHigh: true, evMedium: false, evLow: true, evLineStyle: 'dashed', evLineWidth: 2, newsOnChart: 'all' });
   assert.deepEqual(out.map((x) => x.id), ['volume', 'events', 'headlines']);
-  assert.deepEqual(out[1].params, { high: true, medium: false, low: true, holiday: false, lines: true, lineStyle: 'dashed', lineWidth: '2' });
+  assert.deepEqual(out[1].params, { high: true, medium: false, low: true, holiday: false, lines: true, lineStyle: 'dashed', lineWidth: '2', ...EVENTS_SET });
   assert.equal(out[1].visible, true);
-  assert.deepEqual(out[2].params, { show: 'all' });
+  assert.deepEqual(out[2].params, { show: 'all', ...HEADLINES_SET });
 });
 
 test('no overrides = the app defaults: red and orange folders, dotted lines, big moves with news', () => {
   const [, ev, hl] = C.seedNews([C.instance('volume')], undefined);
-  assert.deepEqual(ev.params, { high: true, medium: true, low: false, holiday: false, lines: true, lineStyle: 'dotted', lineWidth: '1' });
-  assert.deepEqual(hl.params, { show: 'bursts' });
+  assert.deepEqual(ev.params, { high: true, medium: true, low: false, holiday: false, lines: true, lineStyle: 'dotted', lineWidth: '1', ...EVENTS_SET });
+  assert.deepEqual(hl.params, { show: 'bursts', ...HEADLINES_SET });
 });
 
 test('a chart that had the news switched off keeps it off: the indicator is there, hidden', () => {
@@ -1331,12 +1359,13 @@ test('tv studies: the line parts are the ones the server sends (so the legend re
 /* 2026-10-21 order-flow apps (B2's layers): the entries, their defaults, and old saved charts. */
 test('order-flow apps: each page-only entry has the params its layer reads, with the defaults the layer assumes', () => {
   const defs = (id) => C.clampParams(id, {});
-  assert.deepEqual(defs('bigtrades'), { min: 25, max: 0, side: 'all', cluster: 'none', thr: 100 });
-  assert.deepEqual(defs('tpo'), { period: 30, rows: 1, mode: 'range', style: 'letters', ib: 2, va: 70, method: 'sierra' });
-  assert.deepEqual(defs('dturn'), { fix: false });
-  assert.deepEqual(defs('dstr'), { min: 80, max: 100 });
-  assert.deepEqual(defs('mwabs'), { ticks: 4, within: 3, imb: 'homebase' });
-  for (const id of ['npoc', 'cstat']) assert.deepEqual(defs(id), {});
+  assert.deepEqual(defs('bigtrades'), { min: 25, max: 0, side: 'all', cluster: 'none', thr: 100, ...BIGTRADES_SET });
+  assert.deepEqual(defs('tpo'), { period: 30, rows: 1, mode: 'range', style: 'letters', ib: 2, va: 70, method: 'sierra', ...TPO_SET });
+  assert.deepEqual(defs('dturn'), { fix: false, ...DTURN_SET });
+  assert.deepEqual(defs('dstr'), { min: 80, max: 100, ...DSTR_SET });
+  assert.deepEqual(defs('mwabs'), { ticks: 4, within: 3, imb: 'homebase', ...MWABS_SET });
+  assert.deepEqual(defs('npoc'), NPOC_SET);
+  assert.deepEqual(defs('cstat'), CSTAT_SET);
   for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
     const d = C.def(id);
     assert.equal(d.group, id === 'npoc' || id === 'tpo' ? 'Volume & profile' : 'Order flow');
@@ -1365,8 +1394,8 @@ test('an old saved layout loads unchanged: its footprint and profile keep every 
     { id: 'bigprints', uid: 'b1', visible: true, params: { min: 30, scale: true, sweeps: false, side: 'all', labels: true } }] }] };
   const got = C.migrateLayout(old).cells[0].indicators.map(({ id, params }) => [id, params]);
   assert.deepEqual(got[0], ['footprint', { imbalance: 4, stack: 2, unfinished: false, deltaNum: true, rows: '2', numbers: 'delta', vbars: false, poc: true, ...FP_NEW }]);
-  assert.deepEqual(got[1], ['profile', { prior: false, lines: true, va: 80, width: 20, side: 'left', method: 'homebase' }]);
-  assert.deepEqual(got[2], ['bigprints', { min: 30, scale: true, sweeps: false, side: 'all', labels: true }]);
+  assert.deepEqual(got[1], ['profile', { prior: false, lines: true, va: 80, width: 20, side: 'left', method: 'homebase', ...PROFILE_SET }]);
+  assert.deepEqual(got[2], ['bigprints', { min: 30, scale: true, sweeps: false, side: 'all', labels: true, ...BIGPRINTS_SET }]);
   // a second pass changes nothing, and the new options carry no wire key of their own
   const again = C.migrateLayout({ grid: 1, cells: [{ root: 'NQ', spec: 'time:60', indicators: C.migrateLayout(old).cells[0].indicators }] }).cells[0].indicators;
   assert.deepEqual(again.map(({ id, params }) => [id, params]), got);

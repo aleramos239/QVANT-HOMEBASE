@@ -44,7 +44,10 @@ function of(inst, f) {
   }
   if (id === 'heatmap') return heatmapNote(p, f);
   if (id === 'headlines') return p.show !== 'all' && f.root && !BOLT_ROOTS.includes(f.root) ? warn(`No bolts on this market: they exist for ${BOLT_ROOTS.join(', ')}`) : null;
-  if (id === 'cstat') return f.spacing > 0 && f.spacing < 34 ? warn('Zoom in to see the stats') : null;   // flowlayer.js drawStats hides under 34 px a bar
+  if (id === 'cstat') {      // flowlayer.js drawStats hides under the same minBarPx (34) px a bar
+    const min = p.minBarPx == null || !Number.isFinite(+p.minBarPx) ? 34 : +p.minBarPx;
+    return f.spacing > 0 && f.spacing < min ? warn('Zoom in to see the stats') : null;
+  }
   if (['orb', 'noise', 'topen'].includes(id) && f.barMs > FIVE_MIN) {
     const key = need('HBCatalog', './catalog.js').serverKey(inst);
     if (!visible(f).some((b) => b.sv && b.sv[key] != null)) return warn('Needs bars of 5 minutes or less (a bar must start within 5 minutes of the time)');

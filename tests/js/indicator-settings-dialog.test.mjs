@@ -622,8 +622,14 @@ test('a sign-coloured histogram line shows only its eye: no colour, width, style
   assert.ok(others.length >= 2);
 });
 
-test('events and headlines have no Style tab (only a legend toggle that does nothing); a normal indicator keeps it', () => {
-  assert.deepEqual(tabsOf(openStyle('events')), ['Inputs']);   // the dialog hides a lone tab
-  assert.deepEqual(tabsOf(openStyle('headlines')), ['Inputs']);
+test('an overlay with colour rows has a Style tab of colours only: no eye, width or dash, and no legend box that does nothing', () => {
+  for (const id of ['events', 'headlines', 'bigtrades', 'footprint']) {
+    const box = openStyle(id);
+    assert.ok(tabsOf(box).includes('Style'), id);
+    const rows = find(box, (n) => n._class === 'set-row');
+    assert.ok(rows.length >= 2, id);
+    assert.equal(find(box, (n) => n.tagName === 'select').length, 0, `${id}: colour and opacity only`);
+    assert.equal(find(box, (n) => n.type === 'checkbox').length, 0, `${id}: no eye, no legend box`);
+  }
   assert.ok(tabsOf(openStyle('rsi')).includes('Style'));
 });

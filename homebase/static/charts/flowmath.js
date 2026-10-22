@@ -58,11 +58,15 @@ function bubbleRadius(size, min, max, rMin = 3, rMax = 14) {
 }
 
 /* A series marker's `size` (Lightweight Charts: 0.5 .. 3) for a print of `size` contracts when the chart scales big
-   prints by size: 0.6 at `min`, 2.2 at 8 x `min` and beyond. Off (scale false): 0.6, as always. */
-function markerSize(size, min, scale) {
-  if (!scale || !(size > 0) || !(min > 0)) return 0.6;
-  const t = Math.min(1, Math.max(0, Math.log2(size / min) / 3));
-  return Math.round((0.6 + 1.6 * t) * 100) / 100;
+   prints by size: 0.6 at `min`, 2.2 at 8 x `min` and beyond. Off (scale false): 0.6, as always.
+   `o` (optional, the Big prints instance's params): {markerMin 0.6, markerMax 2.2, fullAt 8 (the multiple of `min` that gets the biggest marker)}; a
+   missing or junk key is the default, and the defaults give exactly the numbers above. */
+const fin = (v, d) => (v != null && v !== '' && Number.isFinite(+v) ? +v : d);
+function markerSize(size, min, scale, o) {
+  const a = fin(o && o.markerMin, 0.6), b = Math.max(a, fin(o && o.markerMax, 2.2)), at = Math.max(2, fin(o && o.fullAt, 8));
+  if (!scale || !(size > 0) || !(min > 0)) return a;
+  const t = Math.min(1, Math.max(0, Math.log2(size / min) / Math.log2(at)));
+  return Math.round((a === 0.6 && b === 2.2 ? 0.6 + 1.6 * t : a + (b - a) * t) * 100) / 100;   // the default keeps its own sum: 2.2 - 0.6 is not 1.6 in floating point
 }
 
 /* Trade bubbles of one bar for the heatmap: rows [sec, price, size, side] with min <= size (<= max when max > 0) and,
@@ -96,11 +100,11 @@ const backSolid = (bars, i, n) => { let j = i; for (let k = 0; j > 0 && k < n;) 
 /* Stop runs among bars[i0..i1]: bar i trades through the highest high (or lowest low) of the `len` bars before it
    (blank slots are no bars) while sweeps (one aggressor walking several prices) that reach beyond that level add
    up to `min` contracts or more -- the burst that takes the stops resting there. Needs the bars' `sw` (the
-   chart's flow data); a bar without it is never a run. [{i, from, side: 1 (up) | -1 (down), level, size,
+   chart's flow data); a bar without it is never a run. `sweepMin` (default 1): the smallest sweep that counts. [{i, from, side: 1 (up) | -1 (down), level, size,
    held}]: `from` the swing's bar, `held` = the bar closed beyond the level (false: it was pushed straight back,
    a trap). */
-function stopRuns(bars, i0, i1, len, min) {
-  const n = Math.max(2, Math.floor(len) || 20), out = [];
+function stopRuns(bars, i0, i1, len, min, sweepMin = 1) {
+  const n = Math.max(2, Math.floor(len) || 20), sm = fin(sweepMin, 1), out = [];
   for (let i = Math.max(i0, 1); i <= Math.min(i1, bars.length - 1); i++) {
     const b = bars[i];
     if (!solid(b) || !Array.isArray(b.sw) || !b.sw.length) continue;
@@ -113,7 +117,7 @@ function stopRuns(bars, i0, i1, len, min) {
     }
     if (hiAt < 0) continue;
     let up = 0, down = 0;
-    for (const w of sweepsOf(b, 1)) {
+    for (const w of sweepsOf(b, sm)) {
       const top = Math.max(w.from, w.to), bottom = Math.min(w.from, w.to);
       if (w.side > 0 && top > hi) up += w.size;
       if (w.side < 0 && bottom < lo) down += w.size;
@@ -170,10 +174,10 @@ function smtLines(bars, i0, i1, key, span = 60) {
 /* Exhaustion among bars[i0..i1]: bar `at` pushes to a new extreme of the `len` bars before it on a delta of `mult`
    x their average |delta| or more, the next `wait` bars make no new extreme, and the last of them closes back past
    the push bar's midpoint -- the aggression went nowhere and was given back. Only confirmed ones (all `wait` bars
-   are in). Blank slots are no bars: stepped over, never counted. [{i: the confirming bar, at: the push bar,
+   are in); `giveback` (percent of the push bar's range, default 50 = its midpoint) is how far back the last bar must close. Blank slots are no bars: stepped over, never counted. [{i: the confirming bar, at: the push bar,
    dir: -1 (buyers spent: price turns down) | 1, level: the extreme, delta}]. */
-function exhaustions(bars, i0, i1, len, mult, wait) {
-  const n = Math.max(2, Math.floor(len) || 20), w = Math.max(1, Math.floor(wait) || 3), out = [];
+function exhaustions(bars, i0, i1, len, mult, wait, giveback = 50) {
+  const n = Math.max(2, Math.floor(len) || 20), w = Math.max(1, Math.floor(wait) || 3), gb = fin(giveback, 50), out = [];
   for (let at = Math.max(backSolid(bars, Math.max(i0, 1), w), 1); at <= Math.min(i1, bars.length - 1); at++) {   // from the push whose confirming bar can be i0
     const b = bars[at];
     if (!solid(b) || !Number.isFinite(b.d) || b.d === 0) continue;
@@ -186,7 +190,7 @@ function exhaustions(bars, i0, i1, len, mult, wait) {
       sum += Math.abs(x.d); k++;
     }
     if (k < Math.min(n, 5) || !(sum > 0) || Math.abs(b.d) < mult * (sum / k)) continue;
-    const mid = (b.h + b.l) / 2, up = b.d > 0;
+    const up = b.d > 0, mid = gb === 50 ? (b.h + b.l) / 2 : up ? b.h - gb / 100 * (b.h - b.l) : b.l + gb / 100 * (b.h - b.l);
     if (up ? !(b.h >= hi) : !(b.l <= lo)) continue;
     let j = at, got = 0, ok = true;                      // j ends on the w-th solid bar after the push
     while (ok && got < w && j < bars.length - 1) {
@@ -415,14 +419,21 @@ function clusterStats(bar, nextMs) {
 
 /* Delta Turnaround among bars[i0..i1] (ATAS, as its page words it): UP = two bearish bars, then a bullish bar with delta > 0 and a low at or below the
    bar before's low; DOWN = two bullish bars, then a bearish bar with delta < 0 and a high at or above the bar before's LOW (as written, likely a slip
-   for its high); o.fix uses that bar's high. -> [{i, dir: 1 | -1, price (the bar's low for up, high for down), delta}]. */
+   for its high); o.fix uses that bar's high; o.run (1-5, default 2) is how many bars of the other colour come before. -> [{i, dir: 1 | -1, price (the bar's low for up, high for down), delta}]. */
 function deltaTurnaround(bars, i0, i1, o = {}) {
-  const out = [];
-  for (let i = Math.max(i0, 2); i <= Math.min(i1, bars.length - 1); i++) {
-    const a = bars[i - 2], p = bars[i - 1], b = bars[i];
-    if (!solid(a) || !solid(p) || !solid(b) || !Number.isFinite(b.d)) continue;
-    if (a.c < a.o && p.c < p.o && b.c > b.o && b.d > 0 && b.l <= p.l) out.push({ i, dir: 1, price: b.l, delta: b.d });
-    else if (a.c > a.o && p.c > p.o && b.c < b.o && b.d < 0 && b.h >= (o.fix ? p.h : p.l)) out.push({ i, dir: -1, price: b.h, delta: b.d });
+  const out = [], run = Math.min(5, Math.max(1, Math.floor(o.run) || 2));
+  for (let i = Math.max(i0, run); i <= Math.min(i1, bars.length - 1); i++) {
+    const p = bars[i - 1], b = bars[i];
+    if (!solid(b) || !Number.isFinite(b.d)) continue;
+    let dn = true, up = true;                                   // every one of the `run` bars before is bearish (dn) / bullish (up), and a real bar
+    for (let k = 1; k <= run; k++) {
+      const x = bars[i - k];
+      if (!solid(x)) { dn = up = false; break; }
+      if (!(x.c < x.o)) dn = false;
+      if (!(x.c > x.o)) up = false;
+    }
+    if (dn && b.c > b.o && b.d > 0 && b.l <= p.l) out.push({ i, dir: 1, price: b.l, delta: b.d });
+    else if (up && b.c < b.o && b.d < 0 && b.h >= (o.fix ? p.h : p.l)) out.push({ i, dir: -1, price: b.h, delta: b.d });
   }
   return out;
 }

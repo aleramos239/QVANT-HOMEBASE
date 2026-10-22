@@ -246,12 +246,14 @@ class Overlay {
     }
     const filtered = N.filterItems(store.items, store.filter);
     const show = N.chartNews(window.HBCatalog.newsMode(this.cell.cfg.indicators), store.bursts, store.items);   // the chart's News headlines indicator
-    const hlist = show.headlines ? N.headlineMarkers(filtered, { fromMs: r.fromMs, toMs: r.toMs, nowMs: Date.now() }) : [];
+    const C = window.HBCatalog, inst = (this.cell.cfg.indicators || []).find((i) => i.id === 'headlines' && i.visible !== false);
+    const lk = inst ? N.look(inst, C.styleColor) : undefined;   // its Style colours and Inputs sizes / flash / dot cap
+    const hlist = show.headlines ? N.headlineMarkers(filtered, { fromMs: r.fromMs, toMs: r.toMs, nowMs: Date.now(), lk }) : [];
     const root = (this.cell.shown || this.cell.cfg).root;
-    const blist = N.burstMarkers(show.bursts, { root, fromMs: r.fromMs, toMs: r.toMs }, store.items);
-    const hSig = JSON.stringify(hlist.map((m) => [m.id, m.color]));
+    const blist = N.burstMarkers(show.bursts, { root, fromMs: r.fromMs, toMs: r.toMs, lk }, store.items);
+    const hSig = JSON.stringify(hlist.map((m) => [m.id, m.color, m.size]));
     if (hSig !== this.newsSig) { this.newsSig = hSig; this.cell.setExtraMarkers('news', hlist.map(({ tip, ...m }) => m)); }
-    const bSig = JSON.stringify(blist.map((m) => [m.id, m.color]));
+    const bSig = JSON.stringify(blist.map((m) => [m.id, m.color, m.size, m.text]));
     if (bSig !== this.burstSig) { this.burstSig = bSig; this.cell.setExtraMarkers('bursts', blist.map(({ tip, ...m }) => m)); }
     this.tips = [...hlist, ...blist].map((m) => ({ ms: m.ms, position: m.position, tip: m.tip }));
   }
