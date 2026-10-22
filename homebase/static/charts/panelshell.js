@@ -599,11 +599,11 @@ function reorderShown(id, visibleIndex) {
    release point fell a little short, and the panel's landing motion is a spring, not a snap. ---- */
 function wireHeaderDrag(id, root, head) {
   let dragging = false, mode = null;   // mode: null (still docked) | 'float-move' | 'convert'
-  let startX = 0, startY = 0, startRect = null, vtrack = null;
+  let startX = 0, startY = 0, lastX = 0, lastY = 0, startRect = null, vtrack = null;   // last: the latest pointer sample
   head.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button')) return;   // the toggle / close buttons own their own click
     dragging = true;
-    startX = e.clientX; startY = e.clientY;
+    startX = lastX = e.clientX; startY = lastY = e.clientY;
     // Interruptible: a header grabbed while its own release animation is still playing picks up from
     // there -- the LIVE on-screen value, not the (possibly stale) target -- instead of a brick-wall stop.
     stopFlipAnim(id);
@@ -622,6 +622,7 @@ function wireHeaderDrag(id, root, head) {
     if (!dragging) return;
     if (!e.buttons) { end(e); return; }   // the button was released without a pointerup/cancel reaching us
     M.pushSample(vtrack, e.clientX, e.clientY, e.timeStamp);
+    lastX = e.clientX; lastY = e.clientY;
     const dx = e.clientX - startX, dy = e.clientY - startY;
     if (mode === null) {   // still docked: has it cleared the dock far enough to start floating?
       const { otherId, zone } = resolveDropZone(id, e.clientX, e.clientY);
@@ -663,11 +664,15 @@ function wireHeaderDrag(id, root, head) {
     window.removeEventListener('blur', end);
     dockEl.classList.remove('drop-target');
     clearDropZone();
-    const { vx, vy } = M.velocityOf(vtrack);
+    // A window blur has no pointer (clientX/Y undefined -> NaN, which the clamp turned into the 0,0 corner):
+    // end where the last sample was and carry no momentum.
+    const hasPtr = Number.isFinite(e.clientX) && Number.isFinite(e.clientY);
+    const relX = hasPtr ? e.clientX : lastX, relY = hasPtr ? e.clientY : lastY;
+    const { vx, vy } = hasPtr ? M.velocityOf(vtrack) : { vx: 0, vy: 0 };
     // Momentum projection (apple-design skill, "animate to where the gesture is going"): the DOCK/FLOAT
     // decision -- and, when floating, the resting spot -- is judged at the projected landing point, not the
     // raw release point, so a fast flick toward the dock lands in it even released a little short.
-    const projX = e.clientX + M.project(vx), projY = e.clientY + M.project(vy);
+    const projX = relX + M.project(vx), projY = relY + M.project(vy);
     const { otherId, zone } = resolveDropZone(id, projX, projY);
     const inDock = zone || L.pointInRect(projX, projY, dockZoneRect());
     if (mode && !state.panels[id].docked && inDock) {
@@ -689,9 +694,9 @@ function wireHeaderDrag(id, root, head) {
       // a plain press-release inside the dock, no float conversion: a zone against the other docked panel
       // switches stack<->side and/or reorders; otherwise treat it as a plain reorder gesture, so a small drag
       // up/down still reshuffles the stack without needing to leave it first (left/right when the panels sit
-      // side by side). A click never rearranges the dock, nor does a blur (no pointer: NaN): the momentum
+      // side by side). A click never rearranges the dock (nor a blur before the pointer moved): the momentum
       // projection above would carry even a 3px twitch onto another panel's band or past its middle.
-      const moved = Math.hypot(e.clientX - startX, e.clientY - startY) >= CLICK_PX;
+      const moved = Math.hypot(relX - startX, relY - startY) >= CLICK_PX;
       if (moved && otherId && zone) {
         animateDockFlip(id, () => { applyDockDrop(id, otherId, zone, projY); relayout(); }, vx, vy);
       } else if (moved) {

@@ -111,6 +111,39 @@ test('exhaustions: sellers spent at a new low turn price up; a modest delta is n
   assert.equal(M.exhaustions(mild, 0, mild.length - 1, 10, 3, 3).length, 0);
 });
 
+const slot = (c) => ({ o: c, h: c, l: c, c, v: 0, d: 0, n: 0, sv: {}, blank: 'lost' });   // a blank slot as withBlanks builds it: the last close as every price, no delta
+const hole = (c, n) => Array.from({ length: n }, () => slot(c));
+const gap = (bars, after, n) => [...bars.slice(0, after + 1), ...hole(bars[after].c, n), ...bars.slice(after + 1)];   // n blank slots after bars[after]
+
+test('stopRuns: a hole is no bars -- not the carried close as the swing, not part of the lookback window', () => {
+  const swing = Array.from({ length: 5 }, () => bar(120, 80, 100));
+  const run = bar(105, 100, 104, { sw: [[1, 101, 105, 60, 1]] });
+  assert.deepEqual(M.stopRuns([...swing, ...hole(100, 25), run], 0, 30, 20, 50), []);       // the 120 high is 5 bars back; 100 never traded
+  const quiet = Array.from({ length: 10 }, (_, k) => bar(101 + (k === 4 ? 1 : 0), 99, 100));   // swing high 102 at bar 4
+  const sweep = bar(103, 100, 102.5, { sw: [[1, 101.75, 102.75, 30, 1]] });
+  const flat = M.stopRuns([...quiet, sweep], 0, 10, 10, 25);
+  assert.deepEqual(flat, [{ i: 10, from: 4, side: 1, level: 102, size: 30, held: true }]);
+  assert.deepEqual(M.stopRuns([...gap(quiet, 6, 5), sweep], 0, 15, 10, 25), [{ ...flat[0], i: 15 }]);   // 10 bars before it, 5 slots of hole or not
+});
+
+test('exhaustions: a hole is no bars -- not in the average delta, not one of the bars that must confirm', () => {
+  const calm = Array.from({ length: 10 }, (_, k) => bar(100, 99, 99.5, { d: k % 2 ? 20 : -20 }));
+  const after = [bar(102.75, 101, 102), bar(102.5, 100.5, 101), bar(102, 99.5, 100.5)];
+  const ask = (bars) => M.exhaustions(bars, 0, bars.length - 1, 20, 3, 3);
+  assert.equal(ask([...calm, bar(103, 100, 102.5, { d: 40 }), ...after]).length, 0);        // 40 is 2x the average of 20: no push
+  assert.equal(ask([...calm, ...hole(99.5, 10), bar(103, 100, 102.5, { d: 40 }), ...after]).length, 0);   // ten empty slots do not halve the average
+  assert.equal(ask([...calm, ...hole(99.5, 10), bar(103, 100, 102.5, { d: 70 }), ...after]).length, 1);
+  const push = bar(103, 100, 102.5, { d: 200 });                                           // midpoint 101.5
+  assert.equal(ask([...calm, push, bar(102.75, 101, 101), ...hole(101, 2)]).length, 0);     // one bar after it, two empty slots: not confirmed
+  const bars = [...calm, push, after[0], ...hole(102, 2), after[1], after[2]];
+  assert.deepEqual(ask(bars), [{ i: 15, at: 10, dir: -1, level: 103, delta: 200 }]);          // confirmed on the third real bar, past the hole
+  assert.equal(M.exhaustions(bars, 15, 15, 20, 3, 3).length, 1);                             // a view that starts on it still sees it
+  assert.equal(M.exhaustions(bars, 16, 20, 20, 3, 3).length, 0);
+  assert.equal(M.exhaustions(bars, 0, 14, 20, 3, 3).length, 0);                              // a view that ends before the confirming bar does not
+  const mixed = [...Array.from({ length: 10 }, (_, k) => bar(100, 99, 99.5, { d: k % 2 ? 100 : -100 })), ...calm];   // the 20 bars before the push: 60 on average
+  assert.equal(ask([...mixed, ...hole(99.5, 10), bar(103, 100, 102.5, { d: 70 }), ...after]).length, 0);   // not the 10 slots of hole + 10 calm bars (20)
+});
+
 test('valueArea: from the busiest price outward until the share of volume is covered', () => {
   const rows = [[100, 5], [101, 10], [102, 30], [103, 20], [104, 15], [105, 5]];     // 85 in all
   assert.deepEqual(M.valueArea(rows, 102, 70), { vah: 104, val: 102 });              // the two rows above (35) beat the two below (15): 30 + 20 + 15 = 65 >= 59.5

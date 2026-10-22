@@ -100,8 +100,8 @@ function makeEnv() {
     getElementById: (id) => registry[id] || null,
     createElement: (t) => new El(t, registry),
   };
-  let rafId = 0;
-  const stopSpies = [];
+  let rafId = 0, stored = null;
+  const stopSpies = [], timers = [];
   const window_ = {
     innerWidth: 1200, innerHeight: 800,
     HBIcons: new Proxy({}, { get: () => '' }),   // icon(name) just needs window.HBIcons[name] to not throw
@@ -112,10 +112,10 @@ function makeEnv() {
   };
   const ctx = vm.createContext({
     window: window_, document: document_, console,
-    localStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} },
+    localStorage: { getItem: () => null, setItem: (_, v) => { stored = v; }, removeItem: () => {} },
     requestAnimationFrame: () => (++rafId), cancelAnimationFrame: () => {},
     performance: { now: () => Date.now() },
-    setTimeout: () => 0, clearTimeout: () => {},
+    setTimeout: (fn) => { timers.push(fn); return 0; }, clearTimeout: () => {},   // queued, never run unless a test calls savedPanels()
   });
   vm.runInContext(SPRING_SRC, ctx);
   vm.runInContext(LAYOUT_SRC, ctx);
@@ -126,7 +126,9 @@ function makeEnv() {
   window_.HBSpring.Spring.prototype.stop = function (...args) { stopSpies.push(this); return realStop.apply(this, args); };
   vm.runInContext(SHELL_SRC, ctx);
   window_.HBPanelShell.mount({}, {});
-  return { window: window_, document: document_, tbOrder, tbDom, tbTape, stopSpies };
+  // the panels' saved rects as the debounced save() would have written them to localStorage
+  const savedPanels = () => { timers.splice(0).forEach((fn) => fn()); return JSON.parse(stored).panels; };
+  return { window: window_, document: document_, tbOrder, tbDom, tbTape, stopSpies, savedPanels };
 }
 
 function findByClass(root, cls) {
@@ -506,4 +508,65 @@ test('a neighbour still springing into place is a drop target where it is drawn,
   dragHeader(env, 'order', { x: 1000, y: 12 }, { x: 1010, y: 12 });
   assert.ok(!env.document.getElementById('pdock').classList.contains('side'), 'a drag onto the panel drawn under the pointer stacks the pair');
   assert.deepEqual(dockedIds(env), ['order', 'dom']);
+});
+
+/* A window blur mid-drag carries no pointer (review 2026-10-22, round 4): the drag ends where the last pointer sample
+   was, with no momentum, and the saved rect is a real one. It used to be NaN, which the clamp turned into 0,0: the
+   panel sprang to the top-left corner and stayed there after a reload. */
+const finiteRect = (r) => ['x', 'y', 'w', 'h'].every((k) => Number.isFinite(r[k]));
+const livePos = (root) => ({ x: parseFloat(root.style.left), y: parseFloat(root.style.top) });
+
+test('a window blur while moving a floating panel leaves it where the pointer was (not at 0,0) and saves a finite rect', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  shell.setOpen('order', true); shell.setDocked('order', false);
+  const root = env.document.getElementById('panel-order');
+  const head = root.children[0];
+  head.dispatchEvent(pointerEvent('pointerdown', 300, 300, { target: head, t: 0 }));
+  head.dispatchEvent(pointerEvent('pointermove', 420, 400, { t: 16 }));   // 7500px/s: a real release would project it to the far corner
+  const at = livePos(root);
+  assert.ok(at.x > 0 && at.y > 0, 'setup: the panel is off the corner mid-drag');
+  env.window._fire('blur');
+  assert.deepEqual(livePos(root), at);
+  const saved = env.savedPanels().order;
+  assert.ok(finiteRect(saved), 'the saved rect is finite');
+  assert.deepEqual({ x: saved.x, y: saved.y }, at);
+  assert.equal(saved.docked, false);
+});
+
+test('a window blur while dragging a docked panel out to float leaves it floating where the pointer was, with a finite saved rect', () => {
+  const env = makeEnv();
+  env.window.HBPanelShell.setOpen('order', true);
+  place(env, { ...DOCK, ...TOP_HALF });
+  const root = env.document.getElementById('panel-order');
+  const head = root.children[0];
+  head.dispatchEvent(pointerEvent('pointerdown', 1000, 12, { target: head, t: 0 }));
+  head.dispatchEvent(pointerEvent('pointermove', 400, 200, { t: 16 }));    // well clear of the dock: it converts to floating, grabbed at (20,12)
+  assert.deepEqual(dockedIds(env), []);
+  assert.deepEqual(livePos(root), { x: 380, y: 188 });
+  env.window._fire('blur');
+  assert.deepEqual(livePos(root), { x: 380, y: 188 });
+  const saved = env.savedPanels().order;
+  assert.ok(finiteRect(saved), 'the saved rect is finite');
+  assert.deepEqual({ x: saved.x, y: saved.y, docked: saved.docked }, { x: 380, y: 188, docked: false });
+});
+
+test('a window blur after a real drag inside the dock ends it where the pointer was (stack by Y, side by side by X)', () => {
+  const env = makeEnv();
+  for (const id of ['order', 'dom', 'tape']) env.window.HBPanelShell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  const tape = env.document.getElementById('panel-tape').children[0];
+  tape.dispatchEvent(pointerEvent('pointerdown', 1000, 540, { target: tape, t: 0 }));
+  tape.dispatchEvent(pointerEvent('pointermove', 1000, 100, { t: 16 }));
+  env.window._fire('blur');
+  assert.deepEqual(dockedIds(env), ['tape', 'order', 'dom']);
+  const side = makeEnv();
+  sideDock(side);
+  const order = side.document.getElementById('panel-order').children[0];
+  order.dispatchEvent(pointerEvent('pointerdown', 1000, 12, { target: order, t: 0 }));
+  order.dispatchEvent(pointerEvent('pointermove', 590, 12, { t: 16 }));    // just short of floating, left of DOM's middle
+  side.window._fire('blur');
+  assert.deepEqual(dockedIds(side), ['order', 'dom']);
+  assert.ok(side.document.getElementById('pdock').classList.contains('side'), 'still side by side');
+  assert.ok(Object.values(side.savedPanels()).every(finiteRect), 'every saved rect is finite');
 });

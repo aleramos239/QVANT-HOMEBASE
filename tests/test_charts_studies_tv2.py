@@ -14,7 +14,7 @@ import pytest
 from homebase.charts.bars import Bar
 from homebase.charts.session import ET
 from homebase.charts.studies_ta import _Study
-from homebase.charts.studies_tv2 import PARAMS, PRIME, WARM
+from homebase.charts.studies_tv2 import CUMULATIVE_WARM, PARAMS, PRIME, WARM
 
 
 def ms(y, mo, d, h, mi) -> int:
@@ -1139,6 +1139,8 @@ MEASURED.update({
             (10, 15, 20, 30, 10, 10, 10, 15, 60)],
     "chaikin": [(), (100, 10), (10, 3), (30, 31), (40, 41), (45, 44)],
     "klinger": [(), (100, 55, 13), (34, 10, 13), (34, 55, 80), (56, 55, 3), (60, 59, 3)],
+    "kama": [(), (10, 4, 30), (10, 6, 30), (10, 10, 30), (10, 10, 10), (10, 2, 60)],     # alpha floors at (2 / (slow + 1))^2: a fast near slow fades slowest
+    "zigzag": [(), (1.0, 500)],                                                           # a pivot waits depth / 2 bars each side
 })
 
 
@@ -1160,6 +1162,46 @@ def test_fractals_warm_covers_the_equal_bar_skip(n):
         bars.append(mk(px, h=max(o, px) + r.randint(0, 2) * 0.25, l=min(o, px) - r.randint(0, 2) * 0.25, o=o, t=i))
     worst = max(dependence("fractals", (n,), bars, cut, horizon=40) for cut in range(100, 500))
     assert 2 * n < worst <= WARM["fractals"]([str(n)]) == 2 * n + 4
+
+
+def _goes_nowhere(n, seed, rho):
+    """Closes round a level: i.i.d. noise (rho 0, a chop) or a mean-reverting wobble (rho .9, a quiet range). Nothing trends, so
+    KAMA's efficiency ratio sits near 1 / n and its alpha near the floor, and the line's own deviation is small."""
+    r, x, out = random.Random(seed), 0.0, []
+    for i in range(n):
+        x = rho * x + r.uniform(-1, 1) * (1 - rho)
+        out.append(mk(100.0 + x, t=i))
+    return out
+
+
+@pytest.mark.parametrize("rho", [0.0, 0.9], ids=["chop", "quiet"])
+@pytest.mark.parametrize("args", [(), (10, 4, 30), (10, 6, 30), (10, 10, 30), (10, 10, 10), (10, 2, 60), (20, 2, 30)], ids=lambda a: str(a).replace(" ", ""))
+def test_kama_warm_covers_a_market_that_goes_nowhere(args, rho):
+    bars = _goes_nowhere(4000, 5, rho)
+    want = max(dependence("kama", args, bars, cut) for cut in (800, 1000, 1200))
+    got = WARM["kama"]([str(a) for a in args])
+    assert got >= want, f"tv:kama{args}: the repair covers {got} bars after a join but the value still depends on {want}"
+
+
+def _slow_walk(n, seed, px=10000.0, step=18.0):
+    """Small steps (0.18 % a bar) against a large price: a 5 % leg takes thousands of bars."""
+    r, out = random.Random(seed), []
+    for i in range(n):
+        o = px
+        px += r.uniform(-step, step)
+        out.append(mk(px, h=max(o, px) + r.uniform(0, step / 2), l=min(o, px) - r.uniform(0, step / 2), o=o, t=i))
+    return out
+
+
+def test_zigzag_warm_covers_a_leg_of_the_default_deviation_and_grows_with_it():
+    """The last pivot a cold start reaches is the full run's only once a leg flips in both: at 5 % that is far more than the
+    400 bars of a 1 % leg. Measured on NQ / ES / GC 5-minute bars the worst of 500 cold starts took 9.4k / 11.4k / 14.9k bars."""
+    bars = _slow_walk(6000, 2)
+    worst = max(dependence("zigzag", (5.0, 10), bars, cut) for cut in range(800, 2000, 150))
+    assert 400 < worst < 5000 and WARM["zigzag"](["5"]) >= worst
+    w = WARM["zigzag"]
+    assert w(["1"]) < w(["2"]) < w(["5"]) == w([]) < CUMULATIVE_WARM      # bounded memory: tvparity compares it after a warm-up, a running sum from bar 1
+    assert w(["0.5"]) == w(["1"]) and w(["8"]) == w(["100"]) == CUMULATIVE_WARM and w(["1", "500"]) > w(["1"])
 
 
 def test_a_running_sum_asks_for_all_the_history_the_hub_will_repair_and_netvol_for_one_bar():
@@ -1187,4 +1229,6 @@ def test_kama_defaults_to_tradingviews_er_length_10_in_every_copy():
     from homebase.charts.studies_tv2 import KAMA
     assert [d for d, _, _ in PARAMS["kama"][1]] == [10, 2, 30]
     assert KAMA().n == studies.make("tv:kama").n == 10
-    assert WARM["kama"]([]) == 10 + 5 * 30 and WARM["kama"](["20"]) == 20 + 5 * 30
+    w = WARM["kama"]
+    assert w([]) > 10 + 5 * 30 and w(["20"]) > w([]) and w(["10", "2", "60"]) > w([])         # a longer er window or slow EMA: longer memory
+    assert w([]) < w(["10", "4"]) < w(["10", "6"]) < w(["10", "10"])   # a fast near slow: alpha near its floor

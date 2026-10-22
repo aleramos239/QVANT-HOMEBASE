@@ -88,23 +88,26 @@ function sweepsOf(bar, min) {
   return out;
 }
 
-const real = (b) => !!b && Number.isFinite(b.h) && Number.isFinite(b.l);   // a blank slot (a closed hour) has no prices
+const real = (b) => !!b && Number.isFinite(b.h) && Number.isFinite(b.l);   // has finite prices (a blank slot has them too: see solid)
 const solid = (b) => real(b) && !b.blank;   // blank slots carry the last close as every price: they never traded, so they cover nothing
+/* The slot `n` solid bars before bars[i] (0 when there are fewer): a lookback of n bars steps over the blank slots in it. */
+const backSolid = (bars, i, n) => { let j = i; for (let k = 0; j > 0 && k < n;) if (solid(bars[--j])) k++; return j; };
 
 /* Stop runs among bars[i0..i1]: bar i trades through the highest high (or lowest low) of the `len` bars before it
-   while sweeps (one aggressor walking several prices) that reach beyond that level add up to `min` contracts or
-   more -- the burst that takes the stops resting there. Needs the bars' `sw` (the chart's flow data); a bar
-   without it is never a run. [{i, from, side: 1 (up) | -1 (down), level, size, held}]: `from` the swing's bar,
-   `held` = the bar closed beyond the level (false: it was pushed straight back, a trap). */
+   (blank slots are no bars) while sweeps (one aggressor walking several prices) that reach beyond that level add
+   up to `min` contracts or more -- the burst that takes the stops resting there. Needs the bars' `sw` (the
+   chart's flow data); a bar without it is never a run. [{i, from, side: 1 (up) | -1 (down), level, size,
+   held}]: `from` the swing's bar, `held` = the bar closed beyond the level (false: it was pushed straight back,
+   a trap). */
 function stopRuns(bars, i0, i1, len, min) {
   const n = Math.max(2, Math.floor(len) || 20), out = [];
   for (let i = Math.max(i0, 1); i <= Math.min(i1, bars.length - 1); i++) {
     const b = bars[i];
-    if (!real(b) || !Array.isArray(b.sw) || !b.sw.length) continue;
+    if (!solid(b) || !Array.isArray(b.sw) || !b.sw.length) continue;
     let hi = -Infinity, lo = Infinity, hiAt = -1, loAt = -1;
-    for (let j = Math.max(0, i - n); j < i; j++) {
+    for (let j = backSolid(bars, i, n); j < i; j++) {
       const x = bars[j];
-      if (!real(x)) continue;
+      if (!solid(x)) continue;
       if (x.h > hi) { hi = x.h; hiAt = j; }
       if (x.l < lo) { lo = x.l; loAt = j; }
     }
@@ -167,17 +170,17 @@ function smtLines(bars, i0, i1, key, span = 60) {
 /* Exhaustion among bars[i0..i1]: bar `at` pushes to a new extreme of the `len` bars before it on a delta of `mult`
    x their average |delta| or more, the next `wait` bars make no new extreme, and the last of them closes back past
    the push bar's midpoint -- the aggression went nowhere and was given back. Only confirmed ones (all `wait` bars
-   are in). [{i: the confirming bar, at: the push bar, dir: -1 (buyers spent: price turns down) | 1, level: the
-   extreme, delta}]. */
+   are in). Blank slots are no bars: stepped over, never counted. [{i: the confirming bar, at: the push bar,
+   dir: -1 (buyers spent: price turns down) | 1, level: the extreme, delta}]. */
 function exhaustions(bars, i0, i1, len, mult, wait) {
   const n = Math.max(2, Math.floor(len) || 20), w = Math.max(1, Math.floor(wait) || 3), out = [];
-  for (let at = Math.max(i0 - w, 1); at <= Math.min(i1 - w, bars.length - 1 - w); at++) {
+  for (let at = Math.max(backSolid(bars, Math.max(i0, 1), w), 1); at <= Math.min(i1, bars.length - 1); at++) {   // from the push whose confirming bar can be i0
     const b = bars[at];
-    if (!real(b) || !Number.isFinite(b.d) || b.d === 0) continue;
+    if (!solid(b) || !Number.isFinite(b.d) || b.d === 0) continue;
     let hi = -Infinity, lo = Infinity, sum = 0, k = 0;
-    for (let j = Math.max(0, at - n); j < at; j++) {
+    for (let j = backSolid(bars, at, n); j < at; j++) {
       const x = bars[j];
-      if (!real(x) || !Number.isFinite(x.d)) continue;
+      if (!solid(x) || !Number.isFinite(x.d)) continue;
       if (x.h > hi) hi = x.h;
       if (x.l < lo) lo = x.l;
       sum += Math.abs(x.d); k++;
@@ -185,13 +188,14 @@ function exhaustions(bars, i0, i1, len, mult, wait) {
     if (k < Math.min(n, 5) || !(sum > 0) || Math.abs(b.d) < mult * (sum / k)) continue;
     const mid = (b.h + b.l) / 2, up = b.d > 0;
     if (up ? !(b.h >= hi) : !(b.l <= lo)) continue;
-    let ok = true;
-    for (let j = at + 1; j <= at + w && ok; j++) {
-      const x = bars[j];
-      if (!real(x) || (up ? x.h > b.h : x.l < b.l)) ok = false;
+    let j = at, got = 0, ok = true;                      // j ends on the w-th solid bar after the push
+    while (ok && got < w && j < bars.length - 1) {
+      const x = bars[++j];
+      if (!solid(x)) continue;
+      got++;
+      if (up ? x.h > b.h : x.l < b.l) ok = false;
     }
-    const last = bars[at + w];
-    if (ok && (up ? last.c < mid : last.c > mid)) out.push({ i: at + w, at, dir: up ? -1 : 1, level: up ? b.h : b.l, delta: b.d });
+    if (ok && got === w && j <= i1 && (up ? bars[j].c < mid : bars[j].c > mid)) out.push({ i: j, at, dir: up ? -1 : 1, level: up ? b.h : b.l, delta: b.d });
   }
   return out;
 }

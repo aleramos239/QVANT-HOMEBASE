@@ -494,7 +494,9 @@ class Hub:
         blocking the connection on a cold chunk). Built as a history message's bars are, but never
         memoized. Its studies run over it from a fresh start, as a history message's do -- a study that reads
         prior sessions (prime_sessions) is first fed the ones before the chunk, and the older bars of a session
-        the chunk cuts -- then on across the join through the page's first bars for as long as a study remembers
+        the chunk cuts; a study that restarts on its own anchor (warm_bars 0) only the latter, so a session of
+        more than HISTORY_MAX bars stays anchored at its open (one more pass over bars this call has read
+        anyway) -- then on across the join through the page's first bars for as long as a study remembers
         what came before ("repair": the page overwrites those values). The prior-session read and the repair
         read each have a BUILD_BUDGET_S of their own (one session at least), so a cold call can take about three.
         done: nothing older is left. Never today's session. fp / big: as the chart's history message
@@ -552,9 +554,11 @@ class Hub:
             st = make(k, s.tick_size)
             if hasattr(st, "peer"):
                 st.peer = pview
-            if prime_sessions(k, root):
-                for b in pre:                        # the sessions before the chunk: the study's memory, as in add_study
-                    st.push(b)
+            # the study's memory, as in add_study; a study that restarts on its own anchor (warm_bars 0: session VWAP,
+            # cumulative delta, TWAP) needs only the older bars of a session the chunk cuts: they hold its anchor
+            # (a finite-window study starts fresh: the `ahead` repair covers its join)
+            for b in pre if prime_sessions(k, root) else (head if not warm_bars(k) else ()):
+                st.push(b)
             studies[k] = [st.push(b) for b in chunk]
             repair[k] = [st.push(b) for b in ahead]
         return {"bars": [b.wire(s.tick_size, fp, big, flow) for b in chunk], "studies": studies, "repair": repair,

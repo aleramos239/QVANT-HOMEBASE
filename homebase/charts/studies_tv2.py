@@ -1477,10 +1477,32 @@ def _warm_of(spec):
 # its own baseline, and so does the live tail. An exact fix needs the client to rebase these keys (a new wire key from the hub).
 CUMULATIVE_WARM = 20_000
 
+
+def _kama_warm(args):
+    """alpha = (er (fast - slow) + slow)^2 runs from the slow floor (2 / (slow + 1))^2 where nothing trends, and a cold seed's gap
+    falls by (1 - alpha) a bar. In pure noise er is 1 / n: 12 / alpha(1 / n) bars bring the gap under 1e-3 of a line that barely
+    moves (measured on i.i.d. noise, a quiet range, a random walk and NQ / ES / GC 5-minute bars: at most 0.9 of it was needed)."""
+    n, fast, slow = (max(1, _num(args, i, d)) for i, d in enumerate((10, 2, 30)))
+    return min(CUMULATIVE_WARM, n + math.ceil(12 / ((_k(fast) - _k(slow)) / n + _k(slow)) ** 2))
+
+
+def _zigzag_warm(args):
+    """The last pivot a cold start reaches is the full run's only once a leg flips in both, and a leg of dev % takes about
+    dev^1.5 x 1700 bars (measured on NQ / ES / GC 5-minute bars: the worst of 500 cold starts took at most 0.9 of it; a faster bar
+    takes more, the hub clamps at HISTORY_MAX), or depth x 5 where the pivot window is wide. Under CUMULATIVE_WARM at the default
+    5 %: a bounded memory, which tvparity forgives as warm-up (a running sum it compares from the first bar)."""
+    try:
+        dev = float(args[0])
+    except (IndexError, ValueError, TypeError):
+        dev = 5.0
+    return math.ceil(min(CUMULATIVE_WARM, max(5 * _num(args, 1, 10), 1700 * min(100.0, max(1.0, dev)) ** 1.5)))
+
+
 # name -> fn(args: list[str]) -> bars after a join the value still depends on (hub.warm_bars through studies_tv.warm_tv);
 # (arg index, multiplier, default) terms, plus a constant where a length is fixed in the formula; a lambda where the LONGEST of
-# several lengths decides (they may come in any order). tests/test_charts_studies_tv2.py measures the table: a cold start against
-# a run from the first bar, to 1e-3 of the line's own deviation (where a 5 n EMA tail sits)
+# several lengths decides (they may come in any order); a function of its own where the memory is no sum of lengths (kama, zigzag).
+# tests/test_charts_studies_tv2.py measures the table: a cold start against a run from the first bar, to 1e-3 of the line's own
+# deviation (where a 5 n EMA tail sits)
 WARM = {
     "hma": _warm_of(((0, 2, 9),)),
     "dema": _warm_of(((0, 10, 9),)),
@@ -1488,7 +1510,7 @@ WARM = {
     "alma": _warm_of(((0, 1, 9),)),
     "lsma": _warm_of(((0, 1, 25),)),
     "mcginley": _warm_of(((0, 10, 14),)),
-    "kama": _warm_of(((0, 1, 10), (2, 5, 30))),
+    "kama": _kama_warm,
     "envelope": _warm_of(((0, 1, 20),)),
     "stochrsi": _warm_of(((0, 10, 14), (1, 1, 14), (2, 1, 3), (3, 1, 3))),
     "bbpct": _warm_of(((0, 1, 20),)),
@@ -1545,7 +1567,7 @@ WARM = {
     "nvi": lambda args: CUMULATIVE_WARM,
     "pvi": lambda args: CUMULATIVE_WARM,
     "netvol": lambda args: 1,       # change(close) looks one bar back: the first bar after a join is -/+ volume, not 0
-    "zigzag": lambda args: 400,
+    "zigzag": _zigzag_warm,
     "median": _warm_of(((0, 1, 3),)),
     "cog": _warm_of(((0, 1, 10),)),
     "corr": _warm_of(((0, 1, 14),)),

@@ -312,14 +312,23 @@ def test_the_history_message_carries_the_point_value(tmp_path):
 
 
 # ---- deep history: scroll-back chunks (spec §5) ----
-def deep(tmp_path, n=8):
-    """A hub over n completed weekday sessions before D (3 one-minute bars each, 09:30-09:32; session k
+def day_rows(d, k, per, mixed):
+    """Session k's trades on day d: `per` one-minute bars from 09:30 (3 trades each), around 100 + k; `mixed`: buys and
+    sells of different sizes on a longer price cycle, so the cumulative delta and the volume-weighted studies have
+    something to say at every bar (and no bar is flat: tv:cvd reads the bar before only on a flat one)."""
+    m = 3 * per if mixed else 0
+    prices = [100 + k + 0.25 * (i * 5 % 7 if mixed else i % 4) for i in range(3 * per)]
+    return rows(session_ms(d, 9, 30), prices, step_ms=20_000, first_id=1000 * (k + 1),
+                sides=[1 if i % 3 else -1 for i in range(m)] or None, size=[1 + i % 3 for i in range(m)] or 1)
+
+
+def deep(tmp_path, n=8, per=3, mixed=False):
+    """A hub over n completed weekday sessions before D (`per` one-minute bars each from 09:30; session k
     trades around 100 + k) with D's first minutes as today's tape."""
     base = tmp_path / "ticks"
     days = weekdays_before(D, n)
     for k, d in enumerate(days):
-        write_archive(base, "NQ", d, "NQZ6", rows(session_ms(d, 9, 30), [100 + k + 0.25 * (i % 4) for i in range(9)],
-                                                  step_ms=20_000, first_id=1000 * (k + 1)))
+        write_archive(base, "NQ", d, "NQZ6", day_rows(d, k, per, mixed))
     hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(D, 9, 31))
     hub.start_today("NQ", D, ticks_of(rows(session_ms(D, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
                                            first_id=90_000)))
@@ -437,6 +446,38 @@ def test_older_feeds_a_cut_sessions_older_bars_to_the_studies_that_read_prior_se
         st = make(key)
         want = [st.push(b) for b in every]
         assert ans["studies"][key] == want[first:first + 4], key
+
+
+def walk_back(hub, s, page_from=0):
+    """The chart scroll-back leaves: the stream's bars from `page_from` on, then every older chunk in front of them (the
+    page's prepend), each repair over the page's first bars. -> (the bars' start times, {study key: its values})."""
+    ms, vals = [b.t for b in s.bars[page_from:]], {k: list(v[page_from:]) for k, v in s.values.items()}
+    while True:
+        ans = hub.older(s, ms[0])
+        if not ans["bars"]:
+            return ms, vals
+        for k, v in vals.items():
+            v[:len(ans["repair"][k])] = ans["repair"][k]
+            v[:0] = ans["studies"][k]
+        ms[:0] = [b["ms"] for b in ans["bars"]]
+
+
+@pytest.mark.parametrize("root", ["NQ", "BTC"])     # a classic root / a 24/7 one (a session every calendar day)
+@pytest.mark.parametrize("page_from", [0, -3])      # the page opens at a session's first bar / three bars before the last
+@pytest.mark.parametrize("key", ["vwap", "cumdelta", "tv:vwap", "tv:cvd", "tv:twap"])
+def test_scroll_back_through_a_session_longer_than_two_chunks_keeps_a_session_study_anchored_at_its_open(
+        tmp_path, monkeypatch, key, page_from, root):
+    """A session over 2 x HISTORY_MAX bars is cut in every request, so the bars before the chunk's first (VWAP, cumulative
+    delta and TWAP restart only at the session's open) are fed to the study too: the page scroll-back builds, repairs
+    applied in order, equals one run over the whole history."""
+    hub, days = (deep(tmp_path, n=7, per=10, mixed=True) if root == "NQ"
+                 else deep_24_7(tmp_path, dt.date(2026, 10, 14), 7, per=10, mixed=True))
+    s = open_stream(hub, keys=(key,), root=root)
+    monkeypatch.setattr(hub_mod, "HISTORY_MAX", 3)
+    ms, vals = walk_back(hub, s, page_from)
+    every = [b for d in days for b in hub.history.bars(root, M1, d)]
+    st = make(key)
+    assert ms == [b.t for b in every] and vals[key] == [st.push(b) for b in every]
 
 
 def test_older_tick_bars_come_one_session_at_a_time(tmp_path):
@@ -947,14 +988,13 @@ def test_a_week_vwap_on_a_tick_chart_starts_at_the_weeks_first_session(tmp_path)
     assert s.values["tv:vwap:week"] == want[len(done) - loaded:]
 
 
-def deep_24_7(tmp_path, today, n):
-    """deep() for a 24/7 root: a hub over the n calendar days before `today`, each a BTC session of 3 one-minute bars
+def deep_24_7(tmp_path, today, n, per=3, mixed=False):
+    """deep() for a 24/7 root: a hub over the n calendar days before `today`, each a BTC session of `per` one-minute bars
     (a classic root has none on a weekend), with today's first minutes as the tape."""
     base = tmp_path / "ticks"
     days = [today - dt.timedelta(days=n - k) for k in range(n)]
     for k, d in enumerate(days):
-        write_archive(base, "BTC", d, "BTCZ6", rows(session_ms(d, 9, 30), [100 + k + 0.25 * (i % 4) for i in range(9)],
-                                                    step_ms=20_000, first_id=1000 * (k + 1)))
+        write_archive(base, "BTC", d, "BTCZ6", day_rows(d, k, per, mixed))
     hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(today, 9, 31))
     hub.start_today("BTC", today, ticks_of(rows(session_ms(today, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
                                                 first_id=90_000)))
