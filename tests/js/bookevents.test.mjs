@@ -310,3 +310,19 @@ test('flow layer: a stop run and an exhaustion are drawn only while their indica
 });
 
 test.after(() => { delete globalThis.window; });
+
+test('overlay: bigorders without "Keep ended orders" is only the live line: no book history is fetched, nothing drawn', () => {
+  const made = [];
+  const mk = (indicators) => { const r = rig({ indicators }); const o = r.M.overlay(r.cell); made.push(o); return { r, o }; };
+  try {
+    const off = mk([{ id: 'bigorders', visible: true, params: { multiple: 5, minSeconds: 5, history: false } }]);
+    assert.equal(off.o.on(), false);
+    off.o.onBars();
+    assert.deepEqual(off.r.calls.ensure, []);
+    // history on (and the other marker indicators) still ask for the span
+    const on = mk([{ id: 'bigorders', visible: true, params: { multiple: 5, minSeconds: 5, history: true } }]);
+    assert.equal(on.o.on(), true);
+    assert.equal(on.r.calls.ensure.length, 1);
+    assert.equal(mk([{ id: 'bigorders', visible: true, params: { history: false } }, { id: 'absorb', visible: true, params: {} }]).o.on(), true);
+  } finally { for (const o of made) o.destroy(); }
+});

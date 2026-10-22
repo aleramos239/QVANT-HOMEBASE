@@ -393,8 +393,8 @@ class HighLow extends Layer {
 }
 
 /* The economic calendar: a 10 px flag per event time at the bottom of the price pane (ForexFactory's folder
-   colours) and, for High and Medium events, a 1 px dotted line in the event's colour through the pane. read() -> {events,
-   xOf, lines} | null is asked before every render (the bars and settings live in the cell); `flags` and
+   colours) and, for High and Medium events, a line in the event's colour through the pane (lineStyle / lineWidth params, dotted 1 px by default). read() -> {events,
+   xOf, lines, lineStyle, lineWidth} | null is asked before every render (the bars and settings live in the cell); `flags` and
    `flagY` stay for the page's hover test. Layout and colours: HBEvents. */
 class EventFlags extends Layer {
   constructor(P, read) {

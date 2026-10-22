@@ -319,6 +319,8 @@ body.split-dragging.row * { cursor: row-resize !important; }
 .dlg-txt .dlg-name { line-height: 20px; }
 .dlg-desc { color: var(--text-2); font-size: 12px; line-height: 16px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dlg-grp { color: var(--text-2); font-size: 12px; }
+/* a section heading in the TradingView tab of the indicators dialog (catalog TV_SECTIONS) */
+.dlg-sub { padding: 12px 20px 4px; color: var(--text-2); font-size: 12px; letter-spacing: .04em; text-transform: uppercase; }
 .dlg-row .ic { width: 16px; height: 16px; color: var(--accent); }
 /* the star on an indicator row: faint until it is starred (gold), so what can be starred is visible without a hover */
 .dlg-star { flex: none; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--text-2); opacity: .45; cursor: pointer; }

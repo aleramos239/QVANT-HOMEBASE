@@ -35,7 +35,7 @@ function classicOpen(weekday, minutes) {
 function marketOpen(root, weekday, minutes) {
   return ALWAYS_OPEN.has(root) || classicOpen(weekday, minutes);
 }
-const GROUPS = ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow', 'TradingView', 'TradingView / Pine'];
+const GROUPS = ['All', 'VWAP & levels', 'Order flow', 'Book (L2)', 'Volume & profile', 'Calendar & news', 'Ranges & structure', 'Classic TA', 'TradingView'];
 const LENGTH = (def) => ({ key: 'length', label: 'Length', type: 'int', min: 1, max: 1000, def });
 // SMA/EMA (studies.py SOURCES): "sma:50"/"ema:20" keep meaning close -- the source param defaults to it.
 const SOURCES = [['close', 'Close'], ['open', 'Open'], ['high', 'High'], ['low', 'Low'],
@@ -160,7 +160,7 @@ const TV_DEFS = [
   tvDef('tema', 'TEMA', 'Triple exponential moving average: follows price with little lag', [TV_LEN(9, 1, 1000), TV_SRC], TV_ONE('TEMA', TA_ORANGE)),
   tvDef('hma', 'Hull MA', 'Hull moving average: a weighted average built to be smooth and quick', [TV_LEN(9, 2)], TV_ONE('HMA')),
   tvDef('dema', 'DEMA', 'Double exponential moving average: twice the EMA minus the EMA of the EMA', [TV_LEN(9)], TV_ONE('DEMA')),
-  tvDef('smma', 'Smoothed MA', 'Smoothed moving average: Wilder smoothing of the close', [TV_LEN(7)], TV_ONE('SMMA')),
+  tvDef('smma', 'Smoothed MA', 'Smoothed moving average: Wilder smoothing of the close, same as RMA', [TV_LEN(7)], TV_ONE('SMMA')),
   tvDef('alma', 'ALMA', 'Arnaud Legoux moving average: a bell-shaped weighting you can lean to the newest bars',
     [TV_LEN(9), TV_N('offset', 'Offset', 0.85, 0, 1, 0.05), TV_N('sigma', 'Sigma', 6, 0.1, 100, 0.5)], TV_ONE('ALMA')),
   tvDef('lsma', 'Least Squares MA', 'The value of the straight line fitted through the last N closes', [TV_LEN(25, 2)], TV_ONE('LSMA'), { short: 'LSMA' }),
@@ -212,8 +212,8 @@ const TV_DEFS = [
     [TV_LEN(21)], TV_ONE('DPO'), { pane: 'own', refs: [0] }),
   tvDef('massindex', 'Mass Index', 'Sums how wide the bar range is versus its own average, to spot a reversal bulge',
     [TV_LEN(10)], TV_ONE('Mass Index'), { pane: 'own', refs: [27, 26.5], short: 'Mass Index' }),
-  tvDef('corr', 'Trend Strength Index', 'How straight price runs with time over N bars: 1 up, -1 down, 0 none',
-    [TV_LEN(14, 2)], TV_ONE('TSI', TA_BLUE), { pane: 'own', refs: [0], short: 'Trend Strength' }),
+  tvDef('corr', 'Correlation', 'How straight price runs with time over N bars: 1 up, -1 down, 0 none',
+    [TV_LEN(14, 2)], TV_ONE('TSI', TA_BLUE), { pane: 'own', refs: [0], short: 'Correlation' }),
   // ---- momentum ----
   tvDef('rsi', 'RSI', 'Relative strength: how strongly the last N values moved up versus down, 0 to 100',
     [TV_LEN(14, 1, 1000), TV_SRC], TV_ONE('RSI', TA_VIOLET), { pane: 'own', refs: [70, 30] }),
@@ -253,20 +253,20 @@ const TV_DEFS = [
   tvDef('pvo', 'Volume Oscillator', 'The gap between a fast and a slow EMA of volume in percent, with signal and histogram',
     [TV_I('fast', 'Fast length', 12), TV_I('slow', 'Slow length', 26), TV_I('signal', 'Signal length', 9)],
     [TV_HIST('hist', 'Histogram'), TA_LINE('pvo', 'PVO', TA_BLUE), TA_LINE('signal', 'Signal', TA_ORANGE)], { pane: 'own', short: 'PVO' }),
-  tvDef('trix', 'TRIX', 'The 1-bar percent change of a triple-smoothed EMA of the close',
+  tvDef('trix', 'TRIX', 'The 1-bar change of a triple-smoothed EMA of the close, in basis points',
     [TV_LEN(18)], TV_ONE('TRIX', TA_DOWN), { pane: 'own', refs: [0] }),
   tvDef('tsi', 'True Strength Index', 'Double-smoothed momentum over double-smoothed absolute momentum, with a signal',
     [TV_I('long', 'Long length', 25), TV_I('short', 'Short length', 13), TV_I('signal', 'Signal length', 13)],
     TV_SIG(['tsi', 'TSI'], ['signal', 'Signal']), { pane: 'own', refs: [0] }),
   tvDef('smi', 'SMI Ergodic Indicator', 'The True Strength Index and its signal line',
     [TV_I('long', 'Long length', 20), TV_I('short', 'Short length', 5), TV_I('signal', 'Signal length', 5)],
-    TV_SIG(['erg', 'SMI'], ['sig', 'Signal']), { pane: 'own', refs: [0], digits: 4 }),
+    TV_SIG(['erg', 'SMI'], ['sig', 'Signal']), { pane: 'own', refs: [0], digits: 4, short: 'SMI Ergodic' }),
   tvDef('smio', 'SMI Ergodic Oscillator', 'The SMI Ergodic Indicator minus its signal line, as bars',
     [TV_I('long', 'Long length', 20), TV_I('short', 'Short length', 5), TV_I('signal', 'Signal length', 5)],
     [TV_HIST('main', 'SMI Osc')], { pane: 'own', digits: 4 }),
   tvDef('smindex', 'Stochastic Momentum Index', 'Where the close sits versus the middle of the N-bar range, double smoothed',
     [TV_I('k', '%K length', 10), TV_I('d', '%D length', 3), TV_I('ema', 'EMA length', 3)],
-    TV_SIG(['smi', 'SMI'], ['ema', 'SMI-based EMA']), { pane: 'own', refs: [40, -40], short: 'SMI' }),
+    TV_SIG(['smi', 'SMI'], ['ema', 'SMI-based EMA']), { pane: 'own', refs: [40, -40], short: 'SMI Index' }),
   tvDef('uo', 'Ultimate Oscillator', 'Buying pressure over true range, blended across three time frames',
     [TV_I('fast', 'Fast length', 7), TV_I('mid', 'Middle length', 14), TV_I('slow', 'Slow length', 28)], TV_ONE('UO', TA_DOWN), { pane: 'own' }),
   tvDef('rvgi', 'Relative Vigor Index', 'How far bars close from their open versus their range, with a signal line',
@@ -294,7 +294,7 @@ const TV_DEFS = [
     [TV_LEN(20, 2), TV_DEV()], TV_ONE('BBW', TA_BLUE), { pane: 'own' }),
   tvDef('bbtrend', 'BBTrend', 'How far short and long Bollinger bands drift apart: trend with its strength',
     [TV_I('short', 'Short length', 20, 2), TV_I('long', 'Long length', 50, 2), TV_DEV()], [TV_HIST('main', 'BBTrend')], { pane: 'own', refs: [0] }),
-  tvDef('keltner', 'Keltner Channels', 'An EMA with bands set by the average true range (or true range, or bar range)',
+  tvDef('keltner', 'Keltner (EMA + ATR)', 'An EMA with bands set by the average true range (or true range, or bar range)',
     [TV_LEN(20, 1, 1000), TV_N('mult', 'Multiplier', 2, 0.001, 50, 0.5), TV_I('atr', 'ATR length', 10, 1, 1000),
       { key: 'bands', label: 'Bands style', type: 'choice', def: 'atr', choices: [['atr', 'Average true range'], ['tr', 'True range'], ['range', 'High minus low']] }],
     [TA_LINE('up', 'Upper', TA_VIOLET, 1, 'solid', { tag: false }), TA_LINE('mid', 'Basis', TA_GREY, 1, 'dashed', { tag: false }),
@@ -319,10 +319,10 @@ const TV_DEFS = [
       TA_LINE('l3', 'Lower band 3', TA_BLUE, 1, 'dashed', { tag: false, off: true })]),
   tvDef('twap', 'TWAP', 'Time-weighted average price since the session open: every bar counts the same',
     [{ ...TV_SRC, def: 'ohlc4' }], TV_ONE('TWAP', TA_VIOLET)),
-  tvDef('cvd', 'Cumulative Volume Delta', 'The running total of buy volume minus sell volume since the session open',
+  tvDef('cvd', 'Cumulative Volume Delta', 'Running total of volume delta since the session open, estimated from candle colour',
     [], [TA_LINE('c', 'CVD', TA_BLUE, 2, 'solid', { tag: false })], { pane: 'own', short: 'CVD' }),   // the server sends candles (o h l c); the close line for now
-  tvDef('vdelta', 'Volume Delta', 'Buy volume minus sell volume in each bar, as bars', [], [TV_HIST('c', 'Delta')], { pane: 'own' }),
-  tvDef('updown', 'Up/Down Volume', 'Volume traded on upticks above zero, on downticks below zero',
+  tvDef('vdelta', 'Volume Delta', 'Volume delta of each bar as bars, estimated from candle colour (up candle = buying)', [], [TV_HIST('c', 'Delta')], { pane: 'own' }),
+  tvDef('updown', 'Up/Down Volume', 'Volume split by candle direction: up candles above zero, down candles below',
     [], [TV_HIST('up', 'Up volume', { fixed: true }), TA_LINE('down', 'Down volume', TA_DOWN, 1, 'solid', { type: 'hist', tag: false, fixed: true }),
       TA_LINE('delta', 'Delta', TA_ORANGE, 1, 'solid', { tag: false, off: true })], { pane: 'own', short: 'Up/Down Vol' }),
   tvDef('rvol', 'Relative Volume at Time', 'Bar volume against the same time of day on earlier days; 2 is a spike',
@@ -364,116 +364,116 @@ const TV_DEFS = [
     [TA_LINE('px', 'Last pivot', TA_ORANGE, 2, 'solid', TA_LVL)]),   // a polyline joining the pivots is a layer cell.js does not have yet: their steps for now
 ];
 const TA_DEFS = [
-  { id: 'rsi', group: 'Momentum', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
+  { id: 'rsi', group: 'Classic TA', name: 'RSI', pane: 'own', params: [TA_LEN(14)], key: (p) => `rsi:${p.length}`,
     label: (p) => `RSI ${p.length}`, desc: 'Relative strength: how strongly the last N bars closed up versus down, 0 to 100',
     lines: [TA_LINE('main', 'RSI', TA_VIOLET)], refs: [70, 30] },
-  { id: 'macd', group: 'Momentum', name: 'MACD', pane: 'own', key: (p) => `macd:${p.fast}:${p.slow}:${p.signal}`,
+  { id: 'macd', group: 'Classic TA', name: 'MACD', pane: 'own', key: (p) => `macd:${p.fast}:${p.slow}:${p.signal}`,
     params: [{ ...TA_LEN(12), key: 'fast', label: 'Fast length' }, { ...TA_LEN(26), key: 'slow', label: 'Slow length' },
       { ...TA_LEN(9, 1), key: 'signal', label: 'Signal length' }],
     label: (p) => `MACD ${p.fast} ${p.slow} ${p.signal}`, desc: 'Fast minus slow EMA, its signal line and the histogram between them',
     lines: [TA_LINE('hist', 'Histogram', TA_UP, 1, 'solid', { type: 'hist', tag: false }), TA_LINE('macd', 'MACD', TA_BLUE),
       TA_LINE('signal', 'Signal', TA_ORANGE)] },
-  { id: 'stoch', group: 'Momentum', name: 'Stochastic', pane: 'own', key: (p) => `stoch:${p.length}:${p.smooth}:${p.d}`,
+  { id: 'stoch', group: 'Classic TA', name: 'Stochastic', pane: 'own', key: (p) => `stoch:${p.length}:${p.smooth}:${p.d}`,
     params: [{ ...TA_LEN(14), label: 'K length' }, { ...TA_LEN(3, 1, 100), key: 'smooth', label: 'K smoothing' },
       { ...TA_LEN(3, 1, 100), key: 'd', label: 'D smoothing' }],
     label: (p) => `Stoch ${p.length} ${p.smooth} ${p.d}`, desc: 'Where the close sits inside the last N bars range, 0 to 100, with its signal line',
     lines: [TA_LINE('k', '%K', TA_BLUE), TA_LINE('d', '%D', TA_ORANGE)], refs: [80, 20] },
-  { id: 'mfi', group: 'Momentum', name: 'Money flow index', pane: 'own', params: [TA_LEN(14)], key: (p) => `mfi:${p.length}`,
+  { id: 'mfi', group: 'Classic TA', name: 'Money flow index', pane: 'own', params: [TA_LEN(14)], key: (p) => `mfi:${p.length}`,
     label: (p) => `MFI ${p.length}`, desc: 'Volume-weighted RSI: buying versus selling pressure over the last N bars, 0 to 100',
     lines: [TA_LINE('main', 'MFI', TA_VIOLET)], refs: [80, 20] },
-  { id: 'er', group: 'Trend', name: 'Efficiency ratio', pane: 'own', params: [TA_LEN(14)], key: (p) => `er:${p.length}`,
+  { id: 'er', group: 'Classic TA', name: 'Efficiency ratio', pane: 'own', params: [TA_LEN(14)], key: (p) => `er:${p.length}`,
     label: (p) => `ER ${p.length}`, desc: 'Net move over the path travelled in N bars: 1 is a straight line, near 0 is chop',
     lines: [TA_LINE('main', 'ER', TA_BLUE)], refs: [0.5, 0.25] },
-  { id: 'atr', group: 'Volatility', name: 'ATR', pane: 'own', params: [TA_LEN(14, 1)], key: (p) => `atr:${p.length}`,
+  { id: 'atr', group: 'Classic TA', name: 'ATR', pane: 'own', params: [TA_LEN(14, 1)], key: (p) => `atr:${p.length}`,
     label: (p) => `ATR ${p.length}`, desc: 'Average true range: the typical bar size over the last N bars, in points',
     lines: [TA_LINE('main', 'ATR', TA_DOWN)] },
-  { id: 'bb', group: 'Volatility', name: 'Bollinger bands', key: (p) => `bb:${p.length}:${p.mult}`,
-    params: [TA_LEN(20), { key: 'mult', label: 'Deviations', type: 'num', min: 0.5, max: 6, step: 0.5, def: 2 }],
+  { id: 'bb', group: 'Classic TA', name: 'Bollinger bands', key: (p) => `bb:${p.length}:${p.mult}`,
+    params: [TA_LEN(20), { key: 'mult', label: 'Deviations', type: 'num', min: 0.1, max: 6, step: 0.5, def: 2 }],
     label: (p) => `BB ${p.length} ${p.mult}`, desc: 'The N-bar average of closes with bands this many standard deviations either side',
     lines: [TA_LINE('up', 'Upper', TA_BLUE, 1, 'solid', { tag: false }), TA_LINE('mid', 'Basis', TA_ORANGE, 1, 'dashed', { tag: false }),
       TA_LINE('dn', 'Lower', TA_BLUE, 1, 'solid', { tag: false })] },
-  { id: 'keltner', group: 'Volatility', name: 'Keltner channel', key: (p) => `keltner:${p.length}:${p.atr}:${p.mult}`,
+  { id: 'keltner', group: 'Classic TA', name: 'Keltner channel', key: (p) => `keltner:${p.length}:${p.atr}:${p.mult}`,
     params: [TA_LEN(20), { ...TA_LEN(20, 1), key: 'atr', label: 'Range length' },
-      { key: 'mult', label: 'Multiplier', type: 'num', min: 0.5, max: 10, step: 0.5, def: 1.5 }],
-    label: (p) => `KC ${p.length} ${p.atr} ${p.mult}`, desc: 'An EMA with bands set by the average true range, the squeeze strategy channel',
+      { key: 'mult', label: 'Multiplier', type: 'num', min: 0.1, max: 10, step: 0.5, def: 1.5 }],
+    label: (p) => `KC ${p.length} ${p.atr} ${p.mult}`, desc: 'An EMA with bands set by the SMA of the true range, the squeeze strategy channel',
     lines: [TA_LINE('up', 'Upper', TA_VIOLET, 1, 'solid', { tag: false }), TA_LINE('mid', 'Basis', TA_GREY, 1, 'dashed', { tag: false }),
       TA_LINE('dn', 'Lower', TA_VIOLET, 1, 'solid', { tag: false })] },
-  { id: 'donchian', group: 'Volatility', name: 'Donchian channel', params: [TA_LEN(20)], key: (p) => `donchian:${p.length}`,
+  { id: 'donchian', group: 'Classic TA', name: 'Donchian channel', params: [TA_LEN(20, 2, 1000)], key: (p) => `donchian:${p.length}`,
     label: (p) => `Donchian ${p.length}`, desc: 'Highest high and lowest low of the last N bars, with the middle between them',
     lines: [TA_LINE('up', 'Upper', TA_BLUE, 1, 'solid', { tag: false }), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', { tag: false }),
       TA_LINE('dn', 'Lower', TA_BLUE, 1, 'solid', { tag: false })] },
-  { id: 'supertrend', group: 'Trend', name: 'Supertrend', key: (p) => `supertrend:${p.length}:${p.mult}`,
+  { id: 'supertrend', group: 'Classic TA', name: 'Supertrend', key: (p) => `supertrend:${p.length}:${p.mult}`,
     params: [TA_LEN(10, 1, 200), { key: 'mult', label: 'Multiplier', type: 'num', min: 0.5, max: 10, step: 0.5, def: 3 }],
     label: (p) => `Supertrend ${p.length} ${p.mult}`, desc: 'A trailing ATR line under price in an uptrend and over it in a downtrend',
     lines: [TA_LINE('up', 'Uptrend', TA_UP, 2, 'solid', { read: (v) => (v.dir === 1 ? v.line : null) }),
       TA_LINE('dn', 'Downtrend', TA_DOWN, 2, 'solid', { read: (v) => (v.dir === -1 ? v.line : null) })] },
-  { id: 'tema', group: 'Moving averages', name: 'TEMA', params: [TA_LEN(20)], key: (p) => `tema:${p.length}`,
+  { id: 'tema', group: 'Classic TA', name: 'TEMA', params: [TA_LEN(20)], key: (p) => `tema:${p.length}`,
     label: (p) => `TEMA ${p.length}`, desc: 'Triple exponential moving average: follows price closely with little lag',
     lines: [TA_LINE('main', 'TEMA', TA_ORANGE)] },
-  { id: 'orb', group: 'Ranges', name: 'Opening range / open candle', key: (p) => (p.start === '09:30' ? `orb:${p.minutes}` : `orb:${p.minutes}:${hhmmMin(p.start)}`),
+  { id: 'orb', group: 'Ranges & structure', name: 'Opening range / open candle', key: (p) => (p.start === '09:30' ? `orb:${p.minutes}` : `orb:${p.minutes}:${hhmmMin(p.start)}`),
     params: [{ key: 'minutes', label: 'Minutes', type: 'int', min: 1, max: 240, def: 15 },
       { key: 'start', label: 'Start (ET)', type: 'time', def: '09:30' }],
     label: (p) => (p.start === '09:30' ? `Opening range ${p.minutes}m` : `Candle ${p.start} ${p.minutes}m`),
     desc: 'High, low and middle of the first N minutes from a start time, all day',
     lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('mid', 'Middle', TA_GREY, 1, 'dashed', TA_LVL),
       TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
-  { id: 'sess', group: 'Ranges', name: 'Session range', key: (p) => { const b = (p.boxes || []).find((x) => x.on !== false); return b ? sessKey(b) : null; },
+  { id: 'sess', group: 'Ranges & structure', name: 'Session range', key: (p) => { const b = (p.boxes || []).find((x) => x.on !== false); return b ? sessKey(b) : null; },
     params: [{ key: 'boxes', label: 'Boxes', type: 'boxes', def: SESS_BOX_DEFAULTS }],
     label: (p) => { const on = (p.boxes || []).filter((b) => b.on !== false); return on.length ? on.map((b) => b.name || `${b.from}-${b.to}`).join(' · ') : 'Session range'; },
     desc: 'High and low of each time window you type (ET), as many as you like, each on or off',
-    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_DOWN, 1, 'solid', TA_LVL)] },
+    lines: [TA_LINE('hi', 'High', TA_UP, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_DOWN, 1, 'dashed', TA_LVL)] },
   // ---- structure: the same definitions the strategy blocks read (engine/levels.py, ranges.py, zones.py) ----
-  { id: 'swing', group: 'Structure', name: 'Swing high / low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
+  { id: 'swing', group: 'Ranges & structure', name: 'Swing high / low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
     key: (p) => `swing:${p.length}`, label: (p) => `Swings ${p.length}`,
     desc: 'Latest swing high and low not yet traded beyond: a bar above or below N each side',
     lines: [TA_LINE('hi', 'Swing high', TA_DOWN, 1, 'dashed', TA_LVL), TA_LINE('lo', 'Swing low', TA_UP, 1, 'dashed', TA_LVL)] },
-  { id: 'equal', group: 'Structure', name: 'Equal highs / lows', key: (p) => `equal:${p.length}:${p.tol}`,
+  { id: 'equal', group: 'Ranges & structure', name: 'Equal highs / lows', key: (p) => `equal:${p.length}:${p.tol}`,
     params: [{ ...TA_LEN(50), label: 'Bars each side' }, { key: 'tol', label: 'Tolerance (points)', type: 'num', min: 0.25, max: 1000, step: 0.25, def: 10 }],
     label: (p) => `Equal H/L ${p.length} ${p.tol}`,
     desc: 'Two swings at nearly one price, not traded beyond since: resting liquidity',
     lines: [TA_LINE('hi', 'Equal highs', TA_DOWN, 1, 'dotted', TA_LVL), TA_LINE('lo', 'Equal lows', TA_UP, 1, 'dotted', TA_LVL)] },
-  { id: 'rmove', group: 'Structure', name: 'Range of the current move', key: (p) => `rmove:${p.points}`,
+  { id: 'rmove', group: 'Ranges & structure', name: 'Range of the current move', key: (p) => `rmove:${p.points}`,
     params: [{ key: 'points', label: 'Reversal (points)', type: 'num', min: 1, max: 5000, step: 1, def: 200 }],
     label: (p) => `Move range ${p.points}`,
     desc: 'Last turning point to the extreme since, with its middle and 62-79% band',
     lines: TA_RANGE },
-  { id: 'rswing', group: 'Structure', name: 'Range between the last swing high and low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
+  { id: 'rswing', group: 'Ranges & structure', name: 'Range between the last swing high and low', params: [{ ...TA_LEN(50), label: 'Bars each side' }],
     key: (p) => `rswing:${p.length}`, label: (p) => `Swing range ${p.length}`,
     desc: 'Latest untouched swing high to swing low, with its middle and 62-79% band',
     lines: TA_RANGE },
-  { id: 'fvg', group: 'Structure', name: 'Fair value gaps', key: (p) => `fvg:${p.min}:${p.length}`,
+  { id: 'fvg', group: 'Ranges & structure', name: 'Fair value gaps', key: (p) => `fvg:${p.min}:${p.length}`,
     params: [{ key: 'min', label: 'Smallest gap (x ATR)', type: 'num', min: 0, max: 10, step: 0.05, def: 0.25 },
       { ...TA_LEN(14, 1, 200), label: 'ATR length' },
       { key: 'opacity', label: 'Box fill (%)', type: 'int', min: 0, max: 100, def: 15 }],
     label: (p) => `FVG ${p.min}`,
     desc: 'Boxes for the newest unfilled gap each side in the session: bar 3 clear of bar 1',
     lines: [] },   // drawn as boxes by the flow overlay (flowlayer.js) from the study's uh / ul / dh / dl on each bar
-  { id: 'wk', group: 'Levels', name: 'Prior week high / low / close + week open', params: [], key: () => 'wk', label: () => 'Week levels',
+  { id: 'wk', group: 'VWAP & levels', name: 'Prior week high / low / close + week open', params: [], key: () => 'wk', label: () => 'Week levels',
     desc: "Last week's high, low and close, and this week's open",
     lines: [TA_LINE('hi', 'Prior week high', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Prior week low', TA_UP, 1, 'solid', TA_LVL),
       TA_LINE('close', 'Prior week close', TA_GREY, 1, 'dashed', TA_LVL), TA_LINE('open', 'Week open', TA_ORANGE, 1, 'dotted', TA_LVL)] },
-  { id: 'mo', group: 'Levels', name: 'Prior month high / low / close + month open', params: [], key: () => 'mo', label: () => 'Month levels',
+  { id: 'mo', group: 'VWAP & levels', name: 'Prior month high / low / close + month open', params: [], key: () => 'mo', label: () => 'Month levels',
     desc: "Last month's high, low and close, and this month's open",
     lines: [TA_LINE('hi', 'Prior month high', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Prior month low', TA_UP, 1, 'solid', TA_LVL),
       TA_LINE('close', 'Prior month close', TA_GREY, 1, 'dashed', TA_LVL), TA_LINE('open', 'Month open', TA_ORANGE, 1, 'dotted', TA_LVL)] },
-  { id: 'topen', group: 'Levels', name: 'Open at a time', key: (p) => `topen:${hhmmMin(p.time)}`,
+  { id: 'topen', group: 'VWAP & levels', name: 'Open at a time', key: (p) => `topen:${hhmmMin(p.time)}`,
     params: [{ key: 'time', label: 'Time (ET)', type: 'time', def: '00:00' }],
     label: (p) => `Open ${p.time}`, desc: 'The price at one time of the ET day, held to the session end',
     lines: [TA_LINE('main', 'Open', TA_ORANGE, 1, 'dashed', TA_LVL)] },
-  { id: 'vaprev', group: 'Levels', name: 'Prior value area', params: [], key: () => 'vaprev', label: () => 'Prior VA',
-    desc: 'Yesterday 09:30-16:00 value area (70% of volume) and its point of control',
+  { id: 'vaprev', group: 'Volume & profile', name: 'Prior value area', params: [], key: () => 'vaprev', label: () => 'Prior VA',
+    desc: 'Prior session 09:30-16:00 value area (70% of volume) and its point of control',
     lines: [TA_LINE('vah', 'VAH', TA_BLUE, 1, 'solid', TA_LVL), TA_LINE('poc', 'POC', TA_ORANGE, 1, 'solid', TA_LVL),
       TA_LINE('val', 'VAL', TA_BLUE, 1, 'solid', TA_LVL)] },
-  { id: 'dhl', group: 'Levels', name: 'Prior days high / low', params: [{ key: 'days', label: 'Days', type: 'int', min: 1, max: 60, def: 5 }],
+  { id: 'dhl', group: 'VWAP & levels', name: 'Prior days high / low', params: [{ key: 'days', label: 'Days', type: 'int', min: 1, max: 60, def: 5 }],
     key: (p) => `dhl:${p.days}`, label: (p) => `${p.days}-day H/L`,
     desc: 'Highest high and lowest low of the last N completed sessions, a liquidity level',
     lines: [TA_LINE('hi', 'High', TA_DOWN, 1, 'solid', TA_LVL), TA_LINE('lo', 'Low', TA_UP, 1, 'solid', TA_LVL)] },
-  { id: 'noise', group: 'Ranges', name: 'Noise band', key: (p) => `noise:${p.k}:${p.anchor}`,
+  { id: 'noise', group: 'Ranges & structure', name: 'Noise band', key: (p) => `noise:${p.k}:${p.anchor}`,
     params: [{ key: 'k', label: 'Multiplier', type: 'num', min: 0.05, max: 3, step: 0.05, def: 0.3 },
       { key: 'anchor', label: 'Anchor', type: 'choice', def: 'rth', choices: [['rth', 'RTH open 09:30'], ['globex', 'Globex open 01:00']] }],
-    label: (p) => `Noise band ${p.k}`, desc: 'The open plus or minus k times the daily ATR: moves beyond it are not noise',
+    label: (p) => `Noise band ${p.k} ${p.anchor}`, desc: 'The open plus or minus k times the daily ATR: moves beyond it are not noise',
     lines: [TA_LINE('up', 'Upper', TA_UP, 1, 'solid', TA_LVL), TA_LINE('dn', 'Lower', TA_DOWN, 1, 'solid', TA_LVL)] },
-  { id: 'rvol', group: 'Volume', name: 'Relative volume', pane: 'own', key: (p) => `rvol:${p.days}:${p.need}`,
+  { id: 'rvol', group: 'Volume & profile', name: 'Relative volume', pane: 'own', key: (p) => `rvol:${p.days}:${p.need}`,
     params: [{ key: 'days', label: 'Days compared', type: 'int', min: 3, max: 60, def: 14 },
       { key: 'need', label: 'Fewest days needed', type: 'int', min: 1, max: 60, def: 10 }],
     label: (p) => `RVOL ${p.days}`, desc: 'Bar volume over the median of the same time of day on earlier days; 2 is a spike',
@@ -491,21 +491,21 @@ function lineValue(ln, v) {
 
 /* W5 (2026-09-28): `desc` is the one plain line the Indicators dialog shows under each name (TradingView-style). */
 const CATALOG = [
-  { id: 'volume', group: 'Volume', name: 'Volume', params: [], pane: 'main',
+  { id: 'volume', group: 'Volume & profile', name: 'Volume', params: [], pane: 'main',
     desc: 'Contracts traded per bar; green when buyers outweighed sellers, else red' },
-  { id: 'vwap', group: 'VWAP', name: 'VWAP', desc: 'Average price since its anchor; several lines, each its own anchor and colour', params: [
+  { id: 'vwap', group: 'VWAP & levels', name: 'VWAP', desc: 'Average price since its anchor; several lines, each its own anchor and colour', params: [
     { key: 'anchor', label: 'Anchor', type: 'choice',
       choices: [['eth', 'Session'], ['rth', 'RTH'], ['custom', 'Custom time'], ['week', 'Week'], ['month', 'Month']], def: 'eth' },
     { key: 'customTime', label: 'Time (ET)', type: 'time', def: '02:00' },
     { key: 'more', label: 'More lines', type: 'vwaplines', def: [] },
     ...BAND(1, 1), ...BAND(2, 2), ...BAND(3, 3)] },
-  { id: 'ema', group: 'Moving averages', name: 'EMA', params: [LENGTH(20), SOURCE],
+  { id: 'ema', group: 'Classic TA', name: 'EMA', params: [LENGTH(20), SOURCE],
     desc: 'Exponential moving average of the last N bars; recent bars count more' },
-  { id: 'sma', group: 'Moving averages', name: 'SMA', params: [LENGTH(50), SOURCE], desc: 'Simple moving average: the plain average of the last N bars' },
-  { id: 'vwma', group: 'Moving averages', name: 'VWMA', params: [LENGTH(20)], desc: 'Moving average of the last N bars, each bar weighted by its volume' },
-  { id: 'adx', group: 'Trend', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own',
+  { id: 'sma', group: 'Classic TA', name: 'SMA', params: [LENGTH(50), SOURCE], desc: 'Simple moving average: the plain average of the last N bars' },
+  { id: 'vwma', group: 'Classic TA', name: 'VWMA', params: [LENGTH(20)], desc: 'Moving average of the last N bars, each bar weighted by its volume' },
+  { id: 'adx', group: 'Classic TA', name: 'ADX / DMI', params: [LENGTH(14)], pane: 'own',
     desc: 'Trend strength (ADX) with the +DI / −DI direction lines, in a pane of its own' },
-  { id: 'levels', group: 'Levels', name: 'Session levels', params: [],
+  { id: 'levels', group: 'VWAP & levels', name: 'Session levels', params: [],
     desc: 'Prior session high / low / close, overnight high / low and RTH open, as lines' },
   { id: 'footprint', group: 'Order flow', name: 'Footprint', desc: 'Sells at bid and buys at ask per price in each bar, shown when zoomed in', params: [
     { key: 'imbalance', label: 'Imbalance ratio (a rule below brings its own while this stays 3)', type: 'num', min: 0, max: 20, step: 0.5, def: 3 },
@@ -528,7 +528,7 @@ const CATALOG = [
     { key: 'edge', label: 'Bar\'s top and bottom row (a rule above sets it)', type: 'choice', def: 'one', choices: [['one', 'Compare with 1'], ['skip', 'No imbalance']] },
     { key: 'minvol', label: 'Skip a pair when both sides are under (contracts)', type: 'int', min: 0, max: 100000, def: 0 },
     { key: 'mindiff', label: 'Imbalance needs this many more contracts', type: 'int', min: 0, max: 100000, def: 0 }] },
-  { id: 'profile', group: 'Order flow', name: 'Volume profile', params: [
+  { id: 'profile', group: 'Volume & profile', name: 'Volume profile', params: [
     { key: 'prior', label: 'Show the prior session', type: 'bool', def: true },
     { key: 'lines', label: 'Prior VAH / VAL / POC lines', type: 'bool', def: false },
     { key: 'va', label: 'Value area covers (% of the volume)', type: 'int', min: 50, max: 95, def: 70 },
@@ -541,7 +541,7 @@ const CATALOG = [
   { id: 'cumdelta', group: 'Order flow', name: 'Cumulative delta', params: [], pane: 'own',
     desc: "Running total of each bar's buy-minus-sell volume, reset every session" },
   { id: 'bigprints', group: 'Order flow', name: 'Big prints', desc: 'Single N+ contract trades: green = buyers lifted the offer, red = sellers hit the bid', params: [
-    { key: 'min', label: 'Minimum size', type: 'int', min: 1, max: 100000, def: 25 },
+    { key: 'min', label: 'Minimum size', type: 'int', min: 10, max: 100000, def: 25 },   // min 10: bars.py keeps no print under BIG_MIN
     { key: 'scale', label: 'Marker size follows the print size', type: 'bool', def: true },
     { key: 'sweeps', label: 'Mark sweeps (one order walking several prices)', type: 'bool', def: false },
     { key: 'side', label: 'Show prints of', type: 'choice', def: 'all',
@@ -549,16 +549,16 @@ const CATALOG = [
     { key: 'labels', label: 'Write the size next to each marker', type: 'bool', def: true }] },
   { id: 'bigtrades', group: 'Order flow', name: 'Big trades', label: (p) => `Big trades ≥${p.min}`,
     desc: 'Whole aggressor orders as bubbles by size; optionally grouped into one', params: [
-    { key: 'min', label: 'Minimum size (contracts)', type: 'int', min: 1, max: 100000, def: 25 },
+    { key: 'min', label: 'Minimum size (contracts)', type: 'int', min: 10, max: 100000, def: 25 },   // min 10: bars.py AG_MIN
     { key: 'max', label: 'Maximum size (0 = no limit)', type: 'int', min: 0, max: 100000, def: 0 },
     { key: 'side', label: 'Show orders of', type: 'choice', def: 'all', choices: [['all', 'Both'], ['buy', 'Buyers'], ['sell', 'Sellers']] },
     { key: 'cluster', label: 'Group orders', type: 'choice', def: 'none',
       choices: [['none', 'No'], ['volume', 'By volume, the remainder carries on'], ['overshoot', 'By volume, the whole sum'], ['price', 'Until the price changes'],
         ['priceside', 'Until the price or the side changes']] },
     { key: 'thr', label: 'Group size (contracts)', type: 'int', min: 1, max: 100000, def: 100 }] },
-  { id: 'npoc', group: 'Order flow', name: 'Naked POCs', params: [],
+  { id: 'npoc', group: 'Volume & profile', name: 'Naked POCs', params: [],
     desc: 'A dashed line from each bar\'s busiest price that no later bar has traded back to' },
-  { id: 'tpo', group: 'Order flow', name: 'TPO profile', desc: 'This session as time-price letters at the right edge, with its value area', params: [
+  { id: 'tpo', group: 'Volume & profile', name: 'TPO profile', desc: 'This session as time-price letters at the right edge, with its value area', params: [
     { key: 'period', label: 'Minutes in a letter', type: 'int', min: 1, max: 240, def: 30 },
     { key: 'rows', label: 'Ticks in each row', type: 'int', min: 1, max: 100, def: 1 },
     { key: 'mode', label: 'A letter marks', type: 'choice', def: 'range',
@@ -575,21 +575,21 @@ const CATALOG = [
   { id: 'dstr', group: 'Order flow', name: 'Delta strength', desc: 'Arrows on bars that closed near their own best delta', params: [
     { key: 'min', label: 'From (% of the best delta)', type: 'int', min: 1, max: 100, def: 80 },
     { key: 'max', label: 'Up to (% of the best delta)', type: 'int', min: 1, max: 100, def: 100 }] },
-  { id: 'mwabs', group: 'Order flow', name: 'Absorption (imbalance)', desc: 'An imbalance that price then walked away from, a line to the bar that showed it', params: [
+  { id: 'mwabs', group: 'Order flow', name: 'Absorption (tape)', desc: 'An imbalance that price then walked away from, a line to the bar that showed it', params: [
     { key: 'ticks', label: 'Price leaves it by (ticks)', type: 'int', min: 1, max: 200, def: 4 },
     { key: 'within', label: 'Within (bars after)', type: 'int', min: 0, max: 50, def: 3 },
     { key: 'imb', label: 'Imbalance rule', type: 'choice', def: 'homebase',
       choices: [['homebase', 'Homebase'], ['atas', 'ATAS'], ['exocharts', 'Exocharts'], ['sierra', 'Sierra Chart']] }] },
-  { id: 'bigorders', group: 'Order flow', name: 'Big orders', desc: 'Resting book orders N× the median size or more, as lines; ended ones stay', params: [
+  { id: 'bigorders', group: 'Book (L2)', name: 'Big orders', desc: 'Resting book orders N× the median size or more, as lines; ended ones stay', params: [
     { key: 'multiple', label: 'Multiple', type: 'num', min: 1, max: 50, step: 0.5, def: 5 },
     { key: 'minSeconds', label: 'Ended ones that stood at least (seconds)', type: 'int', min: 3, max: 600, def: 5 },   // bookflow.py shows none younger than 3 s
     { key: 'history', label: 'Keep ended orders on the chart', type: 'bool', def: true },
     { key: 'width', label: 'Line thickness', type: 'choice', def: '2', choices: [['1', 'Thin'], ['2', 'Normal'], ['4', 'Thick']] }] },
-  { id: 'imbalance', group: 'Order flow', name: 'Imbalance', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
-  { id: 'heatmap', group: 'Order flow', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
+  { id: 'imbalance', group: 'Book (L2)', name: 'Book imbalance (live)', params: [], desc: 'Bid vs ask size resting in the top 10 book levels, as a gauge in the legend' },
+  { id: 'heatmap', group: 'Book (L2)', name: 'Liquidity heatmap', desc: 'Resting book size at each price over time, behind the candles; optional trade bubbles', params: [
     { key: 'map', label: 'Show the heatmap', type: 'bool', def: true },
     { key: 'bubbles', label: 'Trade bubbles', type: 'bool', def: false },
-    { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 1, max: 10000, def: 10 },
+    { key: 'bubbleMin', label: 'Bubble from (contracts in one second)', type: 'int', min: 3, max: 10000, def: 10 },
     { key: 'bubbleMax', label: 'Bubble up to (contracts, 0 = no limit)', type: 'int', min: 0, max: 100000, def: 0 },
     { key: 'bubbleSide', label: 'Bubbles of', type: 'choice', def: 'all', choices: [['all', 'Buyers and sellers'], ['buy', 'Buyers only (lifted the offer)'], ['sell', 'Sellers only (hit the bid)']] },
     { key: 'contrast', label: 'Contrast (strong shows smaller orders too)', type: 'choice', def: 'normal',
@@ -608,9 +608,9 @@ const CATALOG = [
     { key: 'show', label: 'Show', type: 'choice', def: 'bursts',
       choices: [['bursts', 'Big moves that had news'], ['all', 'Every headline and every big move']] }] },
   /* A Pine script run in the page (cell.js, pineworker.js): no server key. `script` is a name from /api/pine/scripts and
-     `inputs` the script's own inputs by title (only the ones changed from the script's defaults), so a saved layout with
+     `inputs` the script's own inputs by variable name or id (only the ones changed from the script's defaults), so a saved layout with
      neither is a pine row that draws nothing. */
-  { id: 'pine', group: 'TradingView / Pine', name: 'Pine script', desc: 'Runs a Pine script from your script list on this chart\'s bars', params: [
+  { id: 'pine', group: 'TradingView', name: 'Pine script', desc: 'Runs a Pine script from your script list on this chart\'s bars', params: [
     { key: 'script', label: 'Script', type: 'pinescript', def: '' },
     { key: 'inputs', label: 'Script inputs', type: 'pineinputs' },
     { key: 'maxbars', label: 'Bars to run on', type: 'int', min: 100, max: 20000, step: 100, def: 5000 }],
@@ -771,6 +771,7 @@ function clampParams(id, params) {
       out[p.key] = Math.min(p.max, Math.max(p.min, n));
     }
   }
+  if (id === 'rvol' && out.need > out.days) out.need = out.days;    // the server wants "need" within "days" (catalog only: a saved key is never rejected)
   return out;
 }
 
@@ -1157,8 +1158,11 @@ function legendValues(inst, bar, colors, tick) {
     case 'ema': case 'sma': case 'vwma': return [{ text: fmtPrice(v, tick), color: colors.line }];
     case 'vwap': return [{ text: fmtPrice(v ? v.vwap : null, tick), color: colors.vwap },
       ...vwapLines(inst).map((l) => { const lv = bar && bar.sv ? bar.sv[l.key] : null; return { text: fmtPrice(lv ? lv.vwap : null, tick), color: l.color }; })];
-    case 'adx': return [{ text: n2(v && v.adx), color: colors.text }, { text: n2(v && v.pdi), color: colors.up },
-      { text: n2(v && v.mdi), color: colors.down }];
+    case 'adx': {    // each line in the colour the user gave it (Style tab), else the theme's
+      const sc = (part, dflt) => (inst.style && inst.style[part] && inst.style[part].color) || dflt;
+      return [{ text: n2(v && v.adx), color: sc('adx', colors.text) }, { text: n2(v && v.pdi), color: sc('pdi', colors.up) },
+        { text: n2(v && v.mdi), color: sc('mdi', colors.down) }];
+    }
     case 'cumdelta': return [{ text: fmtSigned(v), color: colors.cum }];
     case 'sess': {      // each box on: its high and low in its colour
       return sessBoxes(inst).flatMap((b) => { const bv = bar && bar.sv ? bar.sv[b.key] : null;
@@ -1167,8 +1171,8 @@ function legendValues(inst, bar, colors, tick) {
     default: {
       const t = TA_BY_ID[inst.id];
       if (!t) return [];
-      const nd = fix(t.digits || 2);   // a study that sends a small ratio (SMI Ergodic) says how many decimals it needs
-      // one value per drawn line, in that line's own colour; the histogram and a hidden line add nothing
+      const nd = fix(t.digits ?? 2);   // a study that sends a small ratio (SMI Ergodic) says how many decimals it needs
+      // one value per line that is shown (a hidden line adds nothing), in that line's own colour
       const st = inst.style || {}, out = t.lines.filter((ln) => !(st[ln.part] && st[ln.part].visible === false))
         .map((ln) => ({ text: nd(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
       // lines that take turns (Supertrend's up / down side) show only the one in force
@@ -1364,13 +1368,42 @@ const BEST = [
 ];
 const BEST_NOTE = new Map(BEST);
 
-/* `favs`: the starred indicator ids, for the Favorites group (which is no catalog group: it is whatever is starred). */
+/* The TradingView tab's sections (2026-10-22): which one holds each tv_ twin (and the Pine runner, first). Only a heading in the
+   dialog: ids, groups and wire keys are untouched. The counts match the section comments of TV_DEFS. */
+const TV_SECTIONS = ['Pine scripts', 'Moving averages', 'Trend & stops', 'Momentum', 'Volatility & bands', 'Volume', 'Levels & marks'];
+const TV_TOPICS = {
+  pine: 0,
+  ...Object.fromEntries([
+    'sma ema rma wma tema hma dema smma alma lsma mcginley kama median envelope',
+    'supertrend sar chandelier vstop chandekroll ichimoku alligator adx aroon aroonosc vortex chop dpo massindex corr',
+    'rsi macd stoch stochrsi mfi cci wpr mom roc ao bop bbp cmo connors fisher ppo pvo trix tsi smi smio smindex uo rvgi rvi coppock kst rci',
+    'atr bb bbpct bbw bbtrend keltner donchian ulcer hv linreg cog',
+    'vwap twap cvd vdelta updown rvol adr obv pvt adl cmf chaikin klinger efi eom nvi pvi netvol',
+    'pivots pivothl fractals zigzag',
+  ].flatMap((names, i) => names.split(' ').map((n) => [`tv_${n}`, i + 1]))),
+};
+for (const d of CATALOG) if (d.id in TV_TOPICS) d.topic = TV_SECTIONS[TV_TOPICS[d.id]];
+
+/* `favs`: the starred indicator ids, for the Favorites group (which is no catalog group: it is whatever is starred).
+   A query ranks (2026-10-22): the exact id or name first, then a name / id hit, then a group-word hit, then a hit only in the
+   one-line description; inside a rank the house studies come before the tv_ twins, then catalog order. Every word must match.
+   No query: catalog order (the TradingView tab by section). */
 function filter(query, group = 'All', favs = []) {
-  const q = String(query || '').trim().toLowerCase();
-  const hits = CATALOG.filter((d) => (group === 'All' || (group === FAV_GROUP ? favs.includes(d.id)
-    : group === BEST_GROUP ? BEST_NOTE.has(d.id) : d.group === group))
-    && (!q || d.name.toLowerCase().includes(q) || d.group.toLowerCase().includes(q) || d.id.includes(q)));
-  return group === BEST_GROUP ? hits.sort((a, b) => BEST.findIndex(([i]) => i === a.id) - BEST.findIndex(([i]) => i === b.id)) : hits;
+  const q = String(query || '').trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
+  const rows = CATALOG.filter((d) => group === 'All' || (group === FAV_GROUP ? favs.includes(d.id)
+    : group === BEST_GROUP ? BEST_NOTE.has(d.id) : d.group === group));
+  const rank = (d) => {
+    const name = d.name.toLowerCase(), has = (t) => words.every((w) => t.includes(w));
+    if (d.id === q || name === q) return 0;
+    if (has(`${name} ${d.id}`)) return 1;
+    if (has(`${name} ${d.id} ${d.group.toLowerCase()}`)) return 2;
+    const head = `${name} ${d.id} ${d.group.toLowerCase()}`, dw = String(d.desc || '').toLowerCase().split(/[^a-z0-9]+/);
+    return words.every((w) => head.includes(w) || dw.some((x) => x.startsWith(w))) ? 3 : -1;     // the description: from a word's start, so "er" is not every "order"
+  };
+  const by = (key) => rows.map((d, i) => [d, i, key(d)]).filter((x) => x[2] != null).sort((a, b) => a[2] - b[2] || a[1] - b[1]).map((x) => x[0]);
+  if (group === BEST_GROUP) return by((d) => (!q || rank(d) >= 0 ? BEST.findIndex(([i]) => i === d.id) : null));
+  if (!q) return group === 'TradingView' ? by((d) => TV_SECTIONS.indexOf(d.topic)) : rows;
+  return by((d) => { const r = rank(d); return r < 0 ? null : r * 2 + (d.id.startsWith('tv_') ? 1 : 0); });
 }
 
 /* ---- starred indicators and drawing tools (2026-10-11) ----
@@ -1383,6 +1416,8 @@ const TOOL_GROUPS = [
   ['Fib and positions', ['fib', 'long', 'short', 'measure']],
   ['Notes and marks', ['note', 'avwap', 'alert']],
 ];
+/* The indicators the saved layouts actually use, most first (2026-10-22): the Favorites group before the user stars anything. */
+const IND_FAV_DEFAULT = ['vwap', 'volume', 'levels', 'footprint', 'events', 'headlines', 'bigorders', 'bigprints', 'profile', 'delta'];
 const TOOL_FAV_DEFAULT = ['trend', 'hline', 'rect', 'fib', 'long', 'short'];
 /* A stored JSON list of ids: only ids `valid` knows, each once; junk or nothing stored -> `fallback`. A stored empty list is kept
    (the user unstarred everything). */
@@ -1405,7 +1440,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, styleControls, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
   SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
-  FAV_GROUP, BEST_GROUP, BEST, TOOL_GROUPS, TOOL_FAV_DEFAULT, parseIdList, toggleId, toolGroupOf };
+  FAV_GROUP, BEST_GROUP, BEST, TOOL_GROUPS, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

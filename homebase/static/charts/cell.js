@@ -1097,7 +1097,7 @@ class Cell {
           // when it can move, the price pane when it cannot
           const { where, scale } = t.pane ? spot(inst) : { where: 0, scale: {} };
           const st = inst.style || {}, own = where > 0;
-          const dg = t.digits || 2;   // decimals of the axis and the value tags: 2, or what the entry asks for (SMI Ergodic: 4)
+          const dg = t.digits ?? 2;   // decimals of the axis and the value tags: 2, or what the entry asks for (SMI Ergodic: 4)
           const fmt = t.pane ? { priceFormat: { type: 'price', precision: dg, minMove: Number((10 ** -dg).toFixed(dg)) } } : {};
           let top = null;
           t.lines.forEach((ln, j) => {
@@ -1175,7 +1175,10 @@ class Cell {
     const n = this.bars.length, ts = this.chart.timeScale(), vr = ts.getVisibleLogicalRange();
     const i0 = vr ? Math.max(0, Math.floor(vr.from)) : 0, i1 = vr ? Math.min(n - 1, Math.ceil(vr.to)) : n - 1;
     const f = { bars: this.bars, i0, i1, readable: !this.fp || this.fp.readable(), M: window.HBFlowMath, E: window.HBBookEvents,
-      root: String((this.shown || this.cfg).root || '').toUpperCase(), time: this.isTime() };
+      root: String((this.shown || this.cfg).root || '').toUpperCase(), time: this.isTime(), indicators: this.cfg.indicators,
+      barMs: this.isTime() ? this.barMs() : 0 };
+    const x0 = ts.logicalToCoordinate(0), x1 = ts.logicalToCoordinate(1);
+    if (x0 != null && x1 != null) f.spacing = x1 - x0;   // px a bar (flowlayer.js drawStats hides its strip under 34)
     const Bk = window.HBBookStore, first = this.bars[i0], last = this.bars[i1];
     if (Bk && first && last) {
       const t0 = first.ms, t1 = last.ms + (this.isTime() ? this.barMs() : 0) + 1, root = this.cfg.root, cov = Bk.covered(root);
@@ -1251,6 +1254,7 @@ class Cell {
     // the overlay layers (flow bubbles, Level 2 lines, the book's events, the heatmap) read the eye themselves but
     // repainted only on a new bar or a pan: an eye click left them as they were
     for (const o of this.ov) { if (o && o.onIndicators) { try { o.onIndicators(); } catch (e) { console.error(e); } } }
+    this.redrawEvents();   // the calendar flags read the events indicator's eye too
     this.legendRows();
     this.legend(this.hover);
   }

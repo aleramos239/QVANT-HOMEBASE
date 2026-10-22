@@ -14,7 +14,6 @@
 'use strict';
 const need = (name, file) => (typeof window !== 'undefined' && window[name]) || (typeof require === 'function' ? require(file) : null);
 const Cat = need('HBCatalog', './catalog.js');
-const Pos = need('HBPosition', './position.js');
 // 2026-09-28 three-tabs plan: the genuinely pure half of this file -- prefs parsing, bracket math,
 // money formatting, order-type inference and its menu text (2026-09-29: moved inferType/menuText
 // here too, see tradepure.js's own doc) -- lives in tradepure.js so pages with no trading module
@@ -26,7 +25,6 @@ const { PREFS_KEY, parsePrefs, prefsText, bracket, roundTick, money, usd, inferT
 const BOT_NAMES = { nq930: '9:30 bot' };
 const ET = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-const int = (v, lo, hi, dflt) => { const n = Math.round(Number(v)); return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt; };
 const accountsOf = (state) => (state && state.accounts) || [];
 
 /* A list of account ids: strings of 1-64 characters, de-duplicated, at most 20 (a fresh array). */

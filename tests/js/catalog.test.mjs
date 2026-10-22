@@ -67,11 +67,11 @@ test('params are clamped to their range and type', () => {
   assert.deepEqual(C.clampParams('footprint', { imbalance: 2.5 }), { imbalance: 2.5, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.deepEqual(C.clampParams('footprint', { imbalance: -1 }), { imbalance: 0, stack: 3, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
   assert.deepEqual(C.clampParams('footprint', { stack: 99, unfinished: 'x' }), { imbalance: 3, stack: 20, unfinished: true, deltaNum: true, rows: 'auto', numbers: 'both', vbars: true, poc: true, ...FP_NEW });
-  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 1, scale: true, sweeps: false, side: 'all', labels: true });
+  assert.deepEqual(C.clampParams('bigprints', { min: 0 }), { min: 10, scale: true, sweeps: false, side: 'all', labels: true });
   assert.deepEqual(C.clampParams('bigorders', {}), { multiple: 5, minSeconds: 5, history: true, width: '2' });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 0 }), { multiple: 1, minSeconds: 5, history: true, width: '2' });
   assert.deepEqual(C.clampParams('bigorders', { multiple: 999, minSeconds: 0, history: false }), { multiple: 50, minSeconds: 3, history: false, width: '2' });
-  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 1, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
+  assert.deepEqual(C.clampParams('heatmap', { bubbles: true, bubbleMin: 0 }), { map: true, bubbles: true, bubbleMin: 3, bubbleMax: 0, bubbleSide: 'all', contrast: 'normal', palette: 'fire' });
   assert.deepEqual(C.clampParams('heatmap', { bubbleMax: -5, bubbleSide: 'sideways' }).bubbleMax, 0);
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sideways' }).bubbleSide, 'all');
   assert.equal(C.clampParams('heatmap', { bubbleSide: 'sell', bubbleMax: 40 }).bubbleSide, 'sell');
@@ -181,7 +181,7 @@ test('legend labels', () => {
   assert.equal(C.label(C.instance('footprint', { imbalance: 0 })), 'Footprint');
   assert.equal(C.label(C.instance('bigprints')), 'Big prints ≥25');
   assert.equal(C.label(C.instance('bigorders')), 'Big orders 5×');
-  assert.equal(C.label(C.instance('imbalance')), 'Imbalance');
+  assert.equal(C.label(C.instance('imbalance')), 'Book imbalance (live)');
   assert.equal(C.label(C.instance('heatmap')), 'Liquidity heatmap');
   assert.equal(C.label(C.instance('cumdelta')), 'Cumulative delta');
   assert.equal(C.label(C.instance('levels')), 'Session levels');
@@ -400,14 +400,15 @@ test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; cryp
 });
 
 test('dialog filtering by name and group', () => {
-  assert.deepEqual(C.filter('', 'Moving averages').map((d) => d.id), ['ema', 'sma', 'vwma', 'tema']);
-  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'dturn', 'dstr', 'ddiv', 'tv_cvd', 'tv_vdelta']);
-  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['footprint', 'profile', 'delta', 'cumdelta', 'bigprints', 'bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs', 'bigorders', 'imbalance', 'heatmap',
-    'absorb', 'pulled', 'iceberg', 'stoprun', 'exhaust', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote', 'tspeed', 'pressure', 'ddiv']);
-  assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Order flow']]);
+  assert.deepEqual(C.filter('', 'Classic TA').map((d) => d.id), ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema']);
+  // the id and name hits first (house before tv_), then the group word, then a hit only in the one-line description (cstat)
+  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'dturn', 'dstr', 'ddiv', 'tv_cvd', 'tv_vdelta', 'cstat']);
+  assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['bigorders', 'footprint', 'delta', 'cumdelta', 'bigprints', 'bigtrades', 'cstat', 'dturn', 'dstr', 'mwabs', 'stoprun', 'exhaust', 'tspeed', 'pressure', 'ddiv',
+    'pulled', 'iceberg']);
+  assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Book (L2)']]);
   assert.deepEqual(C.filter('zzz'), []);
   assert.equal(C.filter('').length, C.CATALOG.length);
-  assert.deepEqual(C.GROUPS, ['All', 'VWAP', 'Moving averages', 'Trend', 'Momentum', 'Volatility', 'Structure', 'Ranges', 'Levels', 'Volume', 'Order flow', 'TradingView', 'TradingView / Pine']);
+  assert.deepEqual(C.GROUPS, ['All', 'VWAP & levels', 'Order flow', 'Book (L2)', 'Volume & profile', 'Calendar & news', 'Ranges & structure', 'Classic TA', 'TradingView']);
 });
 
 test('a saved spec is normalised on migration (a Build-1 tick:0750 is tick:750)', () => {
@@ -1211,7 +1212,7 @@ test('tv studies: 90 entries, own group, ids never collide with a house indicato
   assert.deepEqual(tv.map((d) => d.id).sort(), [...TV_IDS].sort());
   assert.ok(tv.every((d) => d.group === 'TradingView' && d.name.endsWith(' (TV)')));
   assert.equal(new Set(C.CATALOG.map((d) => d.id)).size, C.CATALOG.length, 'no id twice');
-  assert.deepEqual(C.CATALOG.filter((d) => d.group === 'TradingView').map((d) => d.id).sort(), [...TV_IDS].sort());
+  assert.deepEqual(C.CATALOG.filter((d) => d.group === 'TradingView').map((d) => d.id).sort(), [...TV_IDS, 'pine'].sort(), 'the 90 twins and the Pine runner');
 });
 
 test('tv studies: key(defaults) is the documented wire key, and a new instance asks the server for it', () => {
@@ -1309,7 +1310,7 @@ test('tv studies: fractals and pivot high/low mark the bar `n` back from the one
 });
 
 test('tv studies: SMI Ergodic sends a raw ratio (about 0.04), so its legend reads 4 decimals; every other study keeps 2', () => {
-  assert.deepEqual(C.CATALOG.filter((d) => d.digits !== undefined).map((d) => [d.id, d.digits]), [['tv_smi', 4], ['tv_smio', 4]]);
+  assert.deepEqual(C.CATALOG.filter((d) => d.digits !== undefined).map((d) => [d.id, d.digits]), [['bkdepth', 0], ['tv_smi', 4], ['tv_smio', 4]]);
   const text = (id, wire) => C.legendValues(C.instance(id), { sv: { [C.serverKey(C.instance(id))]: wire } }, {}, 0.25).map((x) => x.text);
   assert.deepEqual(text('tv_smio', 0.0432), ['0.0432']);
   assert.deepEqual(text('tv_smio', -0.004), ['-0.0040']);
@@ -1338,7 +1339,7 @@ test('order-flow apps: each page-only entry has the params its layer reads, with
   for (const id of ['npoc', 'cstat']) assert.deepEqual(defs(id), {});
   for (const id of ['bigtrades', 'npoc', 'tpo', 'cstat', 'dturn', 'dstr', 'mwabs']) {
     const d = C.def(id);
-    assert.equal(d.group, 'Order flow');
+    assert.equal(d.group, id === 'npoc' || id === 'tpo' ? 'Volume & profile' : 'Order flow');
     assert.ok(!d.pane && !C.TA_BY_ID[id], `${id}: drawn by the flow layer, no series`);
     assert.equal(C.serverKeys([C.instance(id)]).length, 0, `${id}: no study key on the wire`);
   }
@@ -1348,7 +1349,7 @@ test('order-flow apps: each page-only entry has the params its layer reads, with
 test('order-flow apps: new params clamp (a wrong choice falls back, a number stays in range)', () => {
   assert.equal(C.clampParams('bigtrades', { cluster: 'zzz' }).cluster, 'none');
   assert.equal(C.clampParams('bigtrades', { cluster: 'priceside', side: 'buy', min: 0 }).cluster, 'priceside');
-  assert.equal(C.clampParams('bigtrades', { min: 0 }).min, 1);
+  assert.equal(C.clampParams('bigtrades', { min: 0 }).min, 10);
   assert.equal(C.clampParams('tpo', { mode: 'traded', method: 'nope' }).method, 'sierra');
   assert.equal(C.clampParams('footprint', { text: 'trades', imb: 'sierra', zero: 'skip', edge: 'skip', minvol: 5, mindiff: 2 }).text, 'trades');
   assert.equal(C.clampParams('footprint', { imb: 'zzz', zero: 'zzz', minvol: -3 }).imb, 'homebase');
@@ -1373,7 +1374,7 @@ test('an old saved layout loads unchanged: its footprint and profile keep every 
 });
 
 test('pine: a page-only entry (no server key); the script name and its inputs clamp; old layouts do not gain a pine key', () => {
-  assert.equal(C.def('pine').group, 'TradingView / Pine');
+  assert.equal(C.def('pine').group, 'TradingView');
   assert.deepEqual(C.instance('pine').params, { script: '', maxbars: 5000 }, 'no script, no inputs key');
   assert.equal(C.serverKey(C.instance('pine', { script: 'a.pine' })), null);
   assert.deepEqual(C.serverKeys([C.instance('ema', { length: 20 }), C.instance('pine', { script: 'a.pine' })]), ['ema:20']);
@@ -1401,4 +1402,85 @@ test('footprint: the zero / edge selects say a rule above sets them, in a label 
     assert.ok(q.label.length <= 48, `${key}: a long label squeezes the select in the 520px dialog until "Compare with 1" is cut (${q.label.length})`);
     assert.equal(q.def, 'one', `${key}: the default is untouched`);
   }
+});
+
+/* 2026-10-22 picker cleanup: tabs, ranking, favourites seed, TradingView sections, catalog clamps and labels. */
+test('picker: every id is in exactly one tab of GROUPS, and the tabs keep the sizes the layout was designed with', () => {
+  const sizes = {};
+  for (const d of C.CATALOG) { assert.ok(C.GROUPS.includes(d.group) && d.group !== 'All', `${d.id}: ${d.group}`); sizes[d.group] = (sizes[d.group] || 0) + 1; }
+  assert.deepEqual(sizes, { 'VWAP & levels': 6, 'Order flow': 14, 'Book (L2)': 10, 'Volume & profile': 6, 'Calendar & news': 2, 'Ranges & structure': 9, 'Classic TA': 15, TradingView: 91 });
+  assert.equal(C.CATALOG.length, 153, 'no indicator removed');
+  assert.deepEqual(C.filter('', 'Calendar & news').map((d) => d.id), ['events', 'headlines']);
+});
+
+test('picker search: the exact id or name first, house before tv_, then a word of the description; every word must match', () => {
+  const ids = (q) => C.filter(q).map((d) => d.id);
+  assert.equal(ids('orb')[0], 'orb', 'not Absorption (its id contains "orb")');
+  assert.equal(ids('er')[0], 'er', 'not EMA (its group used to match)');
+  assert.equal(ids('mo')[0], 'mo');
+  assert.deepEqual(ids('tv_bb').slice(0, 2), ['tv_bb', 'tv_bbp'], 'not tv_bbp first');
+  assert.equal(ids('RSI')[0], 'rsi');
+  assert.equal(ids('RSI')[1], 'tv_rsi');
+  assert.equal(ids('vwap')[0], 'vwap');
+  assert.deepEqual(ids('trailing'), ['supertrend', 'tv_supertrend'], 'found by the description');
+  assert.ok(ids('squeeze').includes('keltner'));
+  assert.ok(ids('book').includes('bkquote') && ids('l2').includes('bkimb'), 'the tab names find their rows');
+  assert.deepEqual(ids('big prints').slice(0, 1), ['bigprints']);
+  assert.deepEqual(ids('prints big').slice(0, 1), ['bigprints'], 'word order does not matter');
+  assert.deepEqual(ids('delta zzz'), [], 'every word must match');
+  assert.deepEqual(C.filter('vwap', C.BEST_GROUP).map((d) => d.id), ['vwap']);
+  assert.ok(ids('delta').indexOf('cstat') > ids('delta').indexOf('tv_vdelta'), 'a description-only hit is last');
+});
+
+test('picker favourites: the seed is what the saved layouts use, every id exists, and a stored list (even empty) beats it', () => {
+  assert.deepEqual(C.IND_FAV_DEFAULT, ['vwap', 'volume', 'levels', 'footprint', 'events', 'headlines', 'bigorders', 'bigprints', 'profile', 'delta']);
+  const all = C.CATALOG.map((d) => d.id);
+  assert.ok(C.IND_FAV_DEFAULT.every((id) => all.includes(id)));
+  assert.deepEqual(C.parseIdList(null, all, C.IND_FAV_DEFAULT), C.IND_FAV_DEFAULT, 'nothing stored: the seed');
+  assert.deepEqual(C.parseIdList('[]', all, C.IND_FAV_DEFAULT), [], 'unstarred everything: kept');
+  assert.deepEqual(C.parseIdList('["rsi","nope"]', all, C.IND_FAV_DEFAULT), ['rsi']);
+});
+
+test('picker TradingView tab: every twin and the Pine runner sit in one section, listed section by section', () => {
+  const tab = C.filter('', 'TradingView');
+  assert.equal(tab.length, 91);
+  assert.ok(tab.every((d) => C.TV_SECTIONS.includes(d.topic)), 'every row has a section');
+  assert.deepEqual(C.TV_SECTIONS.map((s) => tab.filter((d) => d.topic === s).length), [1, 14, 15, 28, 11, 18, 4]);
+  assert.equal(tab[0].id, 'pine', 'the Pine runner first');
+  const seq = tab.map((d) => C.TV_SECTIONS.indexOf(d.topic));
+  assert.deepEqual(seq, [...seq].sort((a, b) => a - b), 'each heading appears once');
+  assert.equal(C.def('tv_adx').topic, 'Trend & stops');
+  assert.equal(C.def('tv_stoch').topic, 'Momentum');
+  assert.equal(C.def('ema').topic, undefined, 'house studies have no section');
+});
+
+test('picker catalog fixes: server clamps, labels, descriptions', () => {
+  assert.equal(C.clampParams('bigprints', { min: 3 }).min, 10);
+  assert.equal(C.clampParams('bigtrades', { min: 3 }).min, 10);
+  assert.equal(C.clampParams('heatmap', { bubbleMin: 1 }).bubbleMin, 3);
+  assert.equal(C.clampParams('bb', { mult: 0.1 }).mult, 0.1);
+  assert.equal(C.clampParams('keltner', { mult: 0.1 }).mult, 0.1);
+  assert.equal(C.clampParams('donchian', { length: 900 }).length, 900);
+  assert.deepEqual(C.clampParams('rvol', { days: 5, need: 30 }), { days: 5, need: 5 }, 'need never above days');
+  assert.deepEqual(C.clampParams('rvol', {}), { days: 14, need: 10 });
+  assert.equal(C.def('sess').lines.find((l) => l.part === 'lo').dash, 'dashed');
+  assert.equal(C.def('mwabs').name, 'Absorption (tape)');
+  assert.equal(C.def('tv_corr').name, 'Correlation (TV)');
+  assert.match(C.def('tv_vdelta').desc, /candle colour/);
+  assert.match(C.def('tv_cvd').desc, /candle colour/);
+  assert.match(C.def('tv_updown').desc, /candle direction/);
+  assert.match(C.def('keltner').desc, /SMA of the true range/);
+  assert.match(C.def('vaprev').desc, /^Prior session/);
+  assert.match(C.def('tv_smma').desc, /same as RMA/);
+  assert.match(C.def('tv_trix').desc, /basis points/);
+  assert.match(C.label(C.instance('noise', { anchor: 'globex' })), /globex/);
+  assert.notEqual(C.def('tv_smi').label(C.def('tv_smi').params.reduce((o, q) => ({ ...o, [q.key]: q.def }), {})).split(' ').slice(0, 3).join(' '),
+    C.def('tv_smindex').label(C.def('tv_smindex').params.reduce((o, q) => ({ ...o, [q.key]: q.def }), {})).split(' ').slice(0, 3).join(' '));
+});
+
+test('adx legend values follow the colours the user gave the lines', () => {
+  const colors = { text: '#0F0F0F', up: '#089981', down: '#F23645' };
+  const bar = { sv: { 'adx:14': { adx: 25, pdi: 30, mdi: 10 } } };
+  const inst = { ...C.instance('adx'), style: { adx: { color: '#111111' }, pdi: { color: '#222222' } } };
+  assert.deepEqual(C.legendValues(inst, bar, colors, 0.25).map((x) => x.color), ['#111111', '#222222', '#F23645']);
 });

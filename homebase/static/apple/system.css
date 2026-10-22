@@ -152,17 +152,6 @@ html.hb-apple :focus { outline: none; }
 html.hb-apple :focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
 html.hb-apple [hidden] { display: none !important; }
 
-/* text styles */
-html.hb-apple .a-large-title { font-size: 26px; line-height: 32px; font-weight: 700; }
-html.hb-apple .a-title1 { font-size: 22px; line-height: 26px; font-weight: 700; }
-html.hb-apple .a-title2 { font-size: 17px; line-height: 22px; font-weight: 700; }
-html.hb-apple .a-title3 { font-size: 15px; line-height: 20px; font-weight: 590; }
-html.hb-apple .a-headline { font-size: 13px; line-height: 16px; font-weight: 700; }
-html.hb-apple .a-body { font-size: 13px; line-height: 16px; font-weight: 400; }
-html.hb-apple .a-callout { font-size: 12px; line-height: 15px; }
-html.hb-apple .a-sub { font-size: 11px; line-height: 14px; }
-html.hb-apple .a-foot { font-size: 10px; line-height: 13px; }
-
 /* ---- the toolbar: 52 high, no bar behind it, items on glass platters ------------------------------------------ */
 html.hb-apple .hb-tb { position: fixed; z-index: 47; left: 0; right: 0; top: 0; height: var(--a-toolbar); display: flex; align-items: stretch;
   pointer-events: none; }
@@ -239,17 +228,6 @@ html.hb-apple .hb-side { position: fixed; z-index: 30; left: 8px; top: 8px; bott
 html.hb-apple.hb-side-off .hb-side { transform: translateX(calc(-100% - 16px)); opacity: 0; pointer-events: none; }
 html.hb-apple.hb-side-off .hb-tb-lead { width: calc(var(--hb-native-tl, 12px) + 46px); }
 html.hb-apple.hb-fullscreen .hb-tb-lead { padding-left: 12px; }
-/* source-list rows: 32 high, selection inset 10 with radius 8, symbol column centred 19.5 in, text 36.5 in */
-html.hb-apple .hb-side-h { display: flex; align-items: center; justify-content: space-between; height: 19px; margin: 13px 10px 0; padding: 0 4px 0 4.5px;
-  font-size: 11px; line-height: 14px; font-weight: 590; color: var(--a-label-pane-3); }
-html.hb-apple .hb-side-h:first-child { margin-top: 0; }
-html.hb-apple .hb-side-row { -webkit-appearance: none; appearance: none; border: 0; background: transparent; display: flex; align-items: center; width: calc(100% - 20px); height: 32px; margin: 0 10px;
-  padding: 0 11px 0 0; box-sizing: border-box; border-radius: 8px; text-align: left; font-size: 13px; line-height: 16px; font-weight: 400; color: var(--a-label-vibrant); }
-html.hb-apple .hb-side-row:active { background: var(--a-hover); }
-html.hb-apple .hb-side-row.sel, html.hb-apple .hb-side-row[aria-current="page"] { background: var(--a-sel); }
-html.hb-apple .hb-side-ico { flex: none; width: 39px; display: flex; align-items: center; justify-content: center; color: var(--a-label-vibrant); }
-html.hb-apple .hb-side-txt { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-html.hb-apple .hb-side-det { flex: none; margin-left: 8px; font-size: 11px; line-height: 14px; font-weight: 510; color: var(--a-label-pane-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
 /* ---- the inspector: edge-to-edge glass beside the content, 270 wide, one hairline on its left ---------------------- */
 html.hb-apple .hb-insp { position: fixed; z-index: 20; right: 0; top: 0; bottom: 0; width: var(--a-insp-w); box-sizing: border-box; margin: 0;
@@ -282,46 +260,12 @@ html.hb-apple .hb-btn { -webkit-appearance: none; appearance: none; border: 0; m
 html.hb-apple .hb-btn:hover { background: var(--a-fill); }
 html.hb-apple .hb-btn:active { background: var(--a-fill-press); transform: none; }
 html.hb-apple .hb-btn[disabled], html.hb-apple .hb-btn:disabled { background: var(--a-fill-off); color: var(--a-label-3); }
-html.hb-apple .hb-btn.hb-lg { height: 28px; padding: 0 14.5px; border-radius: var(--hb-bubble-r); }
-html.hb-apple .hb-btn.hb-xl { height: 36px; padding: 0 18.5px; border-radius: var(--hb-bubble-r); }
-html.hb-apple .hb-btn.hb-primary { background: var(--a-accent); color: var(--a-on-accent); }
-html.hb-apple .hb-btn.hb-primary:active { background: color-mix(in srgb, var(--a-accent) 86%, #000); }
-html.hb-apple .hb-btn.hb-danger { background: var(--a-red); color: var(--a-on-red); font-weight: 590; }
-html.hb-apple .hb-btn.hb-danger:active { background: color-mix(in srgb, var(--a-red) 86%, #000); }
-html.hb-apple.hb-inactive .hb-btn.hb-primary { background: var(--a-fill); color: var(--a-label); }
-html.hb-apple .hb-link { -webkit-appearance: none; appearance: none; border: 0; background: transparent; padding: 0; color: var(--a-accent-text); font-size: 13px; line-height: 16px; }
-html.hb-apple .hb-link:active { opacity: .6; }
-
-/* switch: regular 54×24 with a 32×20 knob; mini 36×16 with a 21×12 knob (the size a grouped form uses) */
-html.hb-apple .hb-switch { -webkit-appearance: none; appearance: none; position: relative; flex: none; border: 0; margin: 0; padding: 0; width: 36px; height: 16px; border-radius: 8px;
-  background: var(--a-track); box-shadow: none; transition: background-color 160ms ease; }
-html.hb-apple .hb-switch::after { content: ""; position: absolute; left: 2px; top: 2px; width: 21px; height: 12px; border-radius: 6px; background: #fff; box-shadow: var(--a-knob-shadow);
-  transform: none; transition: transform 240ms var(--a-spring); }
-html.hb-apple .hb-switch[aria-checked="true"] { background: var(--a-accent-on); }
-html.hb-apple .hb-switch[aria-checked="true"]::after { transform: translateX(11px); }
-html.hb-apple .hb-switch.hb-regular { width: 54px; height: 24px; border-radius: 12px; }
-html.hb-apple .hb-switch.hb-regular::after { width: 32px; height: 20px; border-radius: 10px; }
-html.hb-apple .hb-switch.hb-regular[aria-checked="true"]::after { transform: translateX(18px); }
-html.hb-apple[data-theme="dark"] .hb-switch::after { background: #e2e2e2; }
-html.hb-apple[data-theme="dark"] .hb-switch[aria-checked="true"]::after { background: #fff; }
-html.hb-apple.hb-inactive .hb-switch[aria-checked="true"] { background: color-mix(in srgb, var(--a-label) 17%, transparent); }
 
 /* text field: 24 high, radius 6, the field colour with a hairline; search fields are capsules */
 html.hb-apple .hb-field { -webkit-appearance: none; appearance: none; height: 24px; padding: 0 7px; box-sizing: border-box; border: 0; border-radius: 6px; background: var(--a-field);
   box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); color: var(--a-label); font-size: 13px; line-height: 16px; }
 html.hb-apple .hb-field::placeholder { color: var(--a-label-2); }
 html.hb-apple .hb-field:focus, html.hb-apple .hb-field:focus-visible { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
-
-/* badge / tag: an 18-high capsule, quaternary fill, secondary text */
-html.hb-apple .hb-badge { display: inline-flex; align-items: center; height: 16px; padding: 0 6px; border-radius: var(--hb-bubble-r); border: 0; background: var(--a-fill); color: var(--a-label-2);
-  font-size: 10px; line-height: 13px; font-weight: 590; letter-spacing: normal; white-space: nowrap; vertical-align: 1px; }
-
-/* ---- menus, alerts and sheets ---------------------------------------------------------------------------------- */
-html.hb-apple .hb-menu { border: 0; border-radius: 13px; padding: 5px; background: var(--a-pane-glass); -webkit-backdrop-filter: var(--a-glass-blur); backdrop-filter: var(--a-glass-blur);
-  box-shadow: var(--a-menu-shadow); min-width: 180px; }
-html.hb-apple .hb-menu-i { -webkit-appearance: none; appearance: none; display: flex; align-items: center; width: 100%; height: 24px; padding: 0 9px; border: 0; border-radius: 8px; background: transparent;
-  color: var(--a-label); font-size: 13px; line-height: 16px; text-align: left; white-space: nowrap; box-sizing: border-box; }
-html.hb-apple .hb-menu-i:hover, html.hb-apple .hb-menu-i:focus-visible { background: var(--a-accent); color: var(--a-on-accent); outline: none; }
 
 @media (prefers-reduced-motion: reduce) {
   html.hb-apple .hb-side, html.hb-apple .hb-insp, html.hb-apple .hb-tb-lead, html.hb-apple .hb-tb-insp, html.hb-apple .hb-switch::after { transition: none; }

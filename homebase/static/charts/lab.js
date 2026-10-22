@@ -12,7 +12,6 @@ const X = window.HBTester, C = window.HBLabCode;
 const $ = (s, el = root) => el.querySelector(s);
 const esc = (t) => String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const MINUS = '−';
-const SAVE_ICON_LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
@@ -968,7 +967,6 @@ function allMetricsDialog() {
     if (live.length) cols = live; else if (!cols.length) cols = ['all'];
     const sets = cols.map((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap));
     const none = (k, i) => k === 'unseen' && !sets[i].trades;
-    const head = `<tr><th></th>${cols.map((k) => `<th>${esc(scopeName[k])}</th>`).join('')}</tr>`;
     let body = '';
     if (st.view === 'year') {
       const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
@@ -2201,7 +2199,6 @@ const wfRangeVal = (r) => (r && r.wf === X.WF_ROLL ? (wfRolling(r) ? 'wf31r_both
 function wfLabState(f) {
   return S.wf[f.strategy] || (S.wf[f.strategy] = { job: null, result: null, id: '', token: 0, starting: false, err: '', sort: null, said: '', say: '', busy: false });
 }
-const wfLabBusy = (w) => w.starting || (w.job && !X.wfProgress(w.job).final);
 /* The walk-forward's result, laid out like a run (the owner, 2026-10-18: "i liked how it was before"): the net, the curve, the
    numbers, then grouped rows. Out-of-sample = each test month traded on the pick from the 3 months before it; in-sample = the
    blocks those picks were made on; both = the two side by side, the in-sample curve the quieter line. */
@@ -2335,7 +2332,7 @@ function wfResHtml(f) {
 function wfPaint() {
   const b = buf(), f = b && formOf(b), meta = b && metaOf(b);
   if (!f || !meta) return;
-  const w = wfLabState(f), busy = wfLabBusy(w), chk = heatCheck(f, meta, heatState(f));
+  const w = wfLabState(f);
   const res = $('#wfRes');
   if (res) res.innerHTML = wfResHtml(f) || WF_EMPTY;
 }

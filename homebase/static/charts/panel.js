@@ -19,7 +19,6 @@ const elTabs = document.getElementById('bpTabs');
 const elToggle = document.getElementById('bpToggle');
 const elBody = document.getElementById('bpBody');
 
-let page = null;
 const tabs = [];             // [{id, label, render(el), onShow, onHide, btn}]
 let activeId = null;
 let isOpen = false;
@@ -407,7 +406,6 @@ function wireResize() {
 }
 
 function mount(pg) {
-  page = pg;
   const saved = loadState();
   applyHeight(saved && Number.isFinite(saved.h) ? saved.h : DEFAULT_H);
   if (saved && typeof saved.tab === 'string' && tabs.some((t) => t.id === saved.tab)) activeId = saved.tab;

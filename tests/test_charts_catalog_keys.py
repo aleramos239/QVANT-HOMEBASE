@@ -102,3 +102,16 @@ def test_a_tv_entry_matches_its_python_spec(name):
             default, lo, hi = s
             assert q["type"] == ("int" if isinstance(default, int) else "num"), f"{where}: type {q['type']} for default {default!r}"
             assert (q["def"], q["min"], q["max"]) == (default, lo, hi), f"{where}: {(q['def'], q['min'], q['max'])} vs {(default, lo, hi)}"
+
+
+# Names make() accepts that no catalog entry sends, on purpose (none today; add one WITH a reason).
+SERVER_ONLY: set[str] = set()
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_every_house_study_the_server_makes_has_a_catalog_entry():
+    """The reverse of the check above: a TA / flow / registry study with no catalog entry can never be drawn from the picker."""
+    sent = {k.partition("@")[0].split(":")[0] for e in DUMP["ids"].values() for k in e["keys"]}
+    house = {*studies.TA_NAMES, *studies.FLOW_NAMES, *studies.REGISTRY}
+    missing = house - sent - SERVER_ONLY
+    assert not missing, f"server studies with no catalog entry: {sorted(missing)}"

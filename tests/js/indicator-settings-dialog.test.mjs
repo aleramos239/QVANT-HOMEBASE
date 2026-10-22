@@ -28,6 +28,7 @@ class FakeEl {
   addEventListener() {}
   removeEventListener() {}
   focus() {}
+  get firstChild() { return this.children[0] || null; }
   querySelector() { return null; }
 }
 
@@ -35,7 +36,7 @@ const require = createRequire(import.meta.url);
 global.window = global.window || {};
 global.window.HBCatalog = require('../../homebase/static/charts/catalog.js');
 global.window.HBIcons = global.window.HBIcons || new Proxy({}, { get: () => '' });   // the Template button's chevron (merge with the presets wiring)
-global.document = { createElement: (tag) => new FakeEl(tag), activeElement: null };
+global.document = { createElement: (tag) => new FakeEl(tag), createTextNode: (t) => { const e = new FakeEl('#text'); e._text = String(t); return e; }, activeElement: null };
 global.requestAnimationFrame = (fn) => { fn(); return 0; };   // runs at once; 0 so preview() is never left "pending"
 global.cancelAnimationFrame = () => {};
 require('../../homebase/static/charts/indicator-settings-dialog.js');
@@ -598,4 +599,31 @@ test('pine: Cancel and OK let go of the cell\'s hook; a cell with no Pine suppor
   const { host } = makeHost(cell, inst.uid);
   HBIndicatorSettings.mount(box, host);
   assert.deepEqual(find(box, (n) => n._class === 'pine-inputs')[0].children, []);
+});
+
+/* 2026-10-22 indicator cleanup (P5): no Style control that does nothing. */
+function openStyle(id) {
+  const inst = C.instance(id, {});
+  const cell = makeCell(inst), box = new FakeEl('div');
+  HBIndicatorSettings.mount(box, { ...makeHost(cell, inst.uid).host, tab: 'style' });
+  return box;
+}
+const tabsOf = (box) => find(box, (n) => /\bset-tab\b/.test(n._class)).map((n) => n._text);
+const rowFor = (box, text) => find(box, (n) => n._class === 'set-row' && find(n, (m) => m._text === text).length)[0];
+
+test('a sign-coloured histogram line shows only its eye: no colour, width, style or axis-tag controls', () => {
+  const box = openStyle('tv_macd');
+  const hist = rowFor(box, 'Histogram') || find(box, (n) => n._class === 'set-row')[0];
+  assert.ok(hist);
+  assert.equal(find(hist, (n) => n.tagName === 'select' || /\bswatch\b/.test(n._class)).length, 0);
+  assert.equal(find(hist, (n) => n.type === 'checkbox').length, 1, 'the eye stays');
+  // the macd and signal lines of the same indicator keep their controls
+  const others = find(box, (n) => n._class === 'set-row' && n !== hist && find(n, (m) => /\bswatch\b/.test(m._class)).length);
+  assert.ok(others.length >= 2);
+});
+
+test('events and headlines have no Style tab (only a legend toggle that does nothing); a normal indicator keeps it', () => {
+  assert.deepEqual(tabsOf(openStyle('events')), ['Inputs']);   // the dialog hides a lone tab
+  assert.deepEqual(tabsOf(openStyle('headlines')), ['Inputs']);
+  assert.ok(tabsOf(openStyle('rsi')).includes('Style'));
 });
