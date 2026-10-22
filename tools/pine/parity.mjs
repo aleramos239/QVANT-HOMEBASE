@@ -5,7 +5,8 @@
      node tools/pine/parity.mjs <script.pine> <tv.csv> [--root NQ] [--tol 1e-6] [--warmup N] [--bars homebase[=PATH]]
 
    The CSV: a header row with `time` (unix seconds, unix ms or ISO), open/high/low/close, `Volume` when the
-   Volume indicator was on the chart, then one column per plot title. By default the bars are built from the
+   Volume indicator was on the chart (else the volume is the `tv|vol|` plot of the P2 script, if the CSV has it),
+   then one column per plot title. By default the bars are built from the
    CSV's own OHLCV, so a difference is the engine's, not the data's. `--bars homebase` runs the same script on
    Homebase bars instead: a JSON file [{ms, o, h, l, c, v}] (ms = the bar's epoch start), at PATH or
    <tv.csv minus .csv>.bars.json, which `python -m tools.tvparity run` writes next to each filed export it has
@@ -91,10 +92,13 @@ export function readTvCsv(text) {   // -> {rows: [{time, o, h, l, c, v, plots: {
   const col = head.map((h) => OHLCV[h.toLowerCase()] || null);
   if (!col.includes('time')) throw new Error('the CSV has no time column');
   const titles = head.filter((h, i) => !col[i]);
+  // no Volume column: the P2 probe's `tv|vol|` plot is the bar volume (layout B), as tools/tvparity.load_tv_csv reads it; it stays a plot too
+  const vi = col.includes('v') ? -1 : head.findIndex((h) => h.toLowerCase() === 'tv|vol|');
   const rows = [];
   for (const line of lines.slice(1)) {
     const f = splitCsv(line), r = { plots: {} };
     head.forEach((h, i) => { if (col[i] === 'time') r.time = parseTime(f[i]); else if (col[i]) r[col[i]] = num(f[i]); else r.plots[h] = num(f[i]); });
+    if (vi >= 0) r.v = num(f[vi]);
     if (r.time != null) rows.push(r);
   }
   rows.sort((a, b) => a.time - b.time);

@@ -50,7 +50,7 @@ import bisect
 import datetime as dt
 import math
 
-from .session import ET, month_key, week_key
+from .session import ET, always_open, month_key, week_key
 from .studies_ta import _Study, make_ta_num
 
 try:
@@ -678,14 +678,17 @@ def warm_tv(name: str, rest: list) -> int:
     return 10 * _num(name, rest, 0)
 
 
-def prime_tv(name: str, rest: list) -> int:
+def prime_tv(name: str, rest: list, root: str | None = None) -> int:
     """Completed sessions BEFORE the loaded ones a tv study must be fed first (hub.prime_sessions): the relative volume's
-    and daily range's n sessions, the pivots' one, and the most a week's (4) or a month's (22) VWAP can have behind the
-    first loaded session. A quarter's and a year's (64 / 259) are not primed: those count the sessions the chart loaded."""
+    and daily range's n sessions, the pivots' one, and the most a week's or a month's VWAP can have behind the first
+    loaded session -- 4 / 22 on a classic root (five sessions a week, 23 weekdays a month), 6 / 30 on a 24/7 one (a session
+    every calendar day). A quarter's and a year's (64 / 259, 92 / 366 on a 24/7 root) are not primed: those count the
+    sessions the chart loaded."""
     if name in ("rvol", "adr"):
         return _num(name, rest, 0) + 1
     if name == "vwap":
-        return {"week": 4, "month": 22}.get(rest[0] if rest else "", 0)
+        week, month = (6, 30) if always_open(root) else (4, 22)
+        return {"week": week, "month": month}.get(rest[0] if rest else "", 0)
     if name in PRIME2:
         return PRIME2[name](list(rest)) if callable(PRIME2[name]) else PRIME2[name]
     return 1 if name == "pivots" else 0

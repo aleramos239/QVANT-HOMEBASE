@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runtimeUmd } from '../../tools/pine/parity.mjs';
+import { readTvCsv, runtimeUmd } from '../../tools/pine/parity.mjs';
 
 /* tools/pine/parity.mjs as a command line: the exit code is the verdict (0 parity, 1 a mismatch, 2 the run itself failed
    or compared nothing). Runs that reach the Pine Worker skip where the runtime (outside the repo, AGPL) is not installed. */
@@ -119,4 +119,36 @@ test('--bars homebase reads the {ms,o,h,l,c,v} file that tools.tvparity run file
   const bad = run(pine, t, '--bars', 'homebase=' + path.join(dir, 'other.json'));
   assert.equal(bad.status, 1, bad.stdout + bad.stderr);
   assert.match(bad.stdout, /FIRST DIFF/);
+});
+
+test('layout B: with no Volume column the bar volume is the tv|vol| plot, which is still compared as a plot', () => {
+  const layoutB = 'time,open,high,low,close,tv|probe|P2,tv|vol|\n1760880600,1,2,0,1,1,40\n1760880900,1,2,0,1,1,\n';
+  const b = readTvCsv(layoutB);
+  assert.deepEqual(b.rows.map((r) => r.v), [40, null]);
+  assert.deepEqual(b.titles, ['tv|probe|P2', 'tv|vol|']);
+  assert.deepEqual(b.rows.map((r) => r.plots['tv|vol|']), [40, null]);
+  // a Volume column wins, as in tools/tvparity.load_tv_csv
+  assert.deepEqual(readTvCsv(layoutB.replace('time,', 'time,Volume,').replace(/\n(\d+),/g, '\n$1,7,')).rows.map((r) => r.v), [7, 7]);
+  assert.equal(readTvCsv('time,open,high,low,close\n1760880600,1,2,0,1\n').rows[0].v, undefined);
+});
+
+test('layout B: a script that plots volume and ta.vwap agrees with an export that has tv|vol| and no Volume column (exit 0)', { skip: noRuntime }, () => {
+  const vol = (i) => 10 + (i * 7) % 13;
+  const lines = ['time,open,high,low,close,tv|probe|P2,tv|vol|,tv|vwap|vwap'];
+  let pv = 0, v = 0;
+  rows(30).forEach((r, i) => {
+    pv += (r.c + 1 + r.c - 1 + r.c) / 3 * vol(i); v += vol(i);
+    lines.push([r.t, r.c, r.c + 1, r.c - 1, r.c, 1, vol(i), pv / v].join(','));
+  });
+  const b = path.join(dir, 'layoutB.csv');
+  writeFileSync(b, lines.join('\n') + '\n');
+  const vp = path.join(dir, 'v.pine');
+  writeFileSync(vp, '//@version=6\nindicator("v")\nplot(volume, "tv|vol|")\nplot(ta.vwap(hlc3), "tv|vwap|vwap")\n');
+  const r = run(vp, b);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.doesNotMatch(r.stdout, /no Volume column/);
+  assert.match(r.stdout, /tv\|vol\|\s+bars\s+30\s+max abs err 0\.00e\+0\s+OK/);
+  assert.match(r.stdout, /tv\|vwap\|vwap\s+bars\s+30\s+max abs err \d\.\d\de-\d+\s+OK/);
+  // and with neither a Volume column nor tv|vol| the note stays: the script ran on volume 0
+  assert.match(run(pine, csv('novol.csv', 'Closing', same)).stdout, /no Volume column: volume = 0/);
 });

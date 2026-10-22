@@ -234,10 +234,10 @@ class McGinley(_Study):
 
 
 class KAMA(_Study):
-    """KAMA(14, 2, 30): er = |change(src, n)| / sum(|change(src)|, n); alpha = (er (2/(fast+1) - 2/(slow+1)) + 2/(slow+1))^2;
+    """KAMA(10, 2, 30): er = |change(src, n)| / sum(|change(src)|, n); alpha = (er (2/(fast+1) - 2/(slow+1)) + 2/(slow+1))^2;
     kama := alpha src + (1 - alpha) nz(kama[1], src)."""
 
-    def __init__(self, n: int = 14, fast: int = 2, slow: int = 30):
+    def __init__(self, n: int = 10, fast: int = 2, slow: int = 30):
         self.n, self.fa, self.sa = int(n), _k(int(fast)), _k(int(slow))
         super().__init__()
 
@@ -306,14 +306,14 @@ class BBPct(_Closes):
 
 
 class BBW(_Closes):
-    """BB Width(20, 2): (upper - lower) / basis."""
+    """BB Width(20, 2): (upper - lower) / basis * 100, a percent of the middle line like TradingView's Bollinger BandWidth."""
 
     def __init__(self, n: int = 20, mult: float = 2.0):
         super().__init__(n)
         self.m = float(mult)
 
     def value(self, w):
-        return _div(2 * self.m * _sd(w), _mean(w))
+        return _div(200.0 * self.m * _sd(w), _mean(w))
 
 
 class BBTrend(_Study):
@@ -1391,7 +1391,7 @@ PARAMS = {
     "alma": (ALMA, ((9, 1, 500), (0.85, 0.0, 1.0), (6.0, 0.1, 100))),
     "lsma": (LSMA, ((25, 2, 500),)),
     "mcginley": (McGinley, ((14, 1, 500),)),
-    "kama": (KAMA, ((14, 1, 500), (2, 1, 500), (30, 1, 500))),
+    "kama": (KAMA, ((10, 1, 500), (2, 1, 500), (30, 1, 500))),
     "envelope": (Envelope, ((20, 1, 500), (10.0, 0.01, 100))),
     "stochrsi": (StochRSI, ((14, 1, 500), (14, 1, 500), (3, 1, 100), (3, 1, 100))),
     "bbpct": (BBPct, ((20, 2, 500), (2.0, 0.001, 50))),
@@ -1488,7 +1488,7 @@ WARM = {
     "alma": _warm_of(((0, 1, 9),)),
     "lsma": _warm_of(((0, 1, 25),)),
     "mcginley": _warm_of(((0, 10, 14),)),
-    "kama": _warm_of(((0, 1, 14), (2, 5, 30))),
+    "kama": _warm_of(((0, 1, 10), (2, 5, 30))),
     "envelope": _warm_of(((0, 1, 20),)),
     "stochrsi": _warm_of(((0, 10, 14), (1, 1, 14), (2, 1, 3), (3, 1, 3))),
     "bbpct": _warm_of(((0, 1, 20),)),

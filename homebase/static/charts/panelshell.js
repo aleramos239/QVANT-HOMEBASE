@@ -19,6 +19,7 @@ const KEY = 'hb_charts_panels';
 const TITLES = { order: 'Order', dom: 'DOM', tape: 'Tape' };
 const TB_IDS = { order: 'tbOrder', dom: 'tbDom', tape: 'tbTape' };   // each panel's toolbar toggle (charts.html)
 const DRAG_OUT_PX = 24;     // a docked header must clear the dock by this much before it starts floating
+const CLICK_PX = 4;         // a press that moves less than this is a click, not a drag (drawings.js MOVE_PX): it never reorders
 const GRID_MIN_W = 240;     // the chart grid never gets crushed under this, however wide a side-by-side dock asks to be
 
 let state = L.defaultState();
@@ -541,7 +542,7 @@ function otherDockedId(id) {
 function targetPanelRect(id) {
   const e = id && els[id];
   if (!e || !e.root.isConnected) return null;
-  const r = e.root.getBoundingClientRect();
+  const r = e.root.getBoundingClientRect();   // as DRAWN, not the layout box: a panel still springing into place carries its drop highlight (paintDropZone) with it
   return { x: r.left, y: r.top, w: r.width, h: r.height };
 }
 function resolveDropZone(id, clientX, clientY) {
@@ -687,11 +688,15 @@ function wireHeaderDrag(id, root, head) {
     } else if (state.panels[id].docked) {
       // a plain press-release inside the dock, no float conversion: a zone against the other docked panel
       // switches stack<->side and/or reorders; otherwise treat it as a plain reorder gesture, so a small drag
-      // up/down still reshuffles the stack without needing to leave it first
-      if (otherId && zone) {
+      // up/down still reshuffles the stack without needing to leave it first (left/right when the panels sit
+      // side by side). A click never rearranges the dock, nor does a blur (no pointer: NaN): the momentum
+      // projection above would carry even a 3px twitch onto another panel's band or past its middle.
+      const moved = Math.hypot(e.clientX - startX, e.clientY - startY) >= CLICK_PX;
+      if (moved && otherId && zone) {
         animateDockFlip(id, () => { applyDockDrop(id, otherId, zone, projY); relayout(); }, vx, vy);
-      } else {
-        const targetIndex = dockDropIndex(projY, id);
+      } else if (moved) {
+        const row = dockIsRow(id);
+        const targetIndex = dockDropIndex(row ? projX : projY, id, row);
         const cur = dockedOpenIds();
         if (cur.length > 1) { animateDockFlip(id, () => { reorderShown(id, targetIndex); relayout(); }, vx, vy); }
       }
@@ -710,18 +715,30 @@ function relayoutForDrag(id) {
   layoutDock();
   paintToolbar();
 }
-/* Which slot in the dock a drop at this Y lands in, among the OTHER currently docked+open panels (`id` is the
-   dragged one: reorderShown splices into a list without it, and its own rect is no target). */
-function dockDropIndex(clientY, id) {
+/* Which slot in the dock a drop at this Y (X when `horizontal`: the panels sit side by side) lands in, among the
+   OTHER currently docked+open panels (`id` is the dragged one: reorderShown splices into a list without it, and
+   its own rect is no target). */
+function dockDropIndex(pos, id, horizontal) {
   const ids = dockedOpenIds().filter((x) => x !== id);
   let idx = ids.length;
   for (let i = 0; i < ids.length; i++) {
     const e = els[ids[i]];
     if (!e) continue;
     const r = e.root.getBoundingClientRect();
-    if (clientY < r.top + r.height / 2) { idx = i; break; }
+    if (pos < (horizontal ? r.left + r.width / 2 : r.top + r.height / 2)) { idx = i; break; }
   }
   return idx;
+}
+/* Are the docked panels in a row right now? Read off where they really are, not off `.side` / dockOrientation:
+   the narrow-viewport media query stacks a side dock into a column, and a third panel docking leaves a stale
+   'side' on a stack. Every other panel lies wholly left or right of the dragged one (1px for rounding). The
+   layout box (offsetLeft/offsetWidth), not getBoundingClientRect: a panel dropped a moment ago is still springing
+   into place under a transform and would overlap its neighbour for the moment. */
+function dockIsRow(id) {
+  const box = (x) => { const e = els[x]; return e && e.root.isConnected ? { x: e.root.offsetLeft, w: e.root.offsetWidth } : null; };
+  const me = box(id);
+  const others = dockedOpenIds().filter((x) => x !== id).map(box);
+  return !!me && others.length > 0 && others.every((r) => r && (r.x >= me.x + me.w - 1 || r.x + r.w <= me.x + 1));
 }
 
 /* ---- a floating panel's edge/corner resize ---- */

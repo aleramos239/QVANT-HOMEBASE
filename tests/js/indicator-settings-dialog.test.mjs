@@ -391,6 +391,183 @@ test('pine: a save stays on its input when the script gains an input before it (
   assert.deepEqual(o.params().inputs, { in_0: 5 }, 'a title that is another input\'s id is not used as a key');
 });
 
+/* The Worker reads an override key on an input by its id, its variable name or its title, so a name that is ANOTHER input's id, variable name or
+   title cannot be a key: it would move both. An input takes the first of its variable name, its title, its id that no other input answers to. */
+const SWAP = { inputs: [
+  { id: 'in_0', varId: 'a', title: 'b', type: 'int', defval: 10 },
+  { id: 'in_1', varId: 'b', title: 'a', type: 'int', defval: 20 }], title: 'S', error: null, running: false };
+
+test('pine: swapped names (a titled "b", b titled "a") keep two keys of their own; editing one row leaves the other', () => {
+  const { box, params } = openPine({ script: 'a.pine' }, SWAP);
+  const first = inputOf(box, 'b'), second = inputOf(box, 'a');
+  type(first, 1);
+  assert.deepEqual(params().inputs, { in_0: 1 }, 'not {a: 1}: the Worker would also give `a` to the input titled "a"');
+  assert.equal(second.value, '20');
+  type(second, 7);
+  assert.deepEqual(params().inputs, { in_0: 1, in_1: 7 });
+  type(second, 20);
+  assert.deepEqual(params().inputs, { in_0: 1 }, 'put back to its default: only its own key goes');
+  type(first, 10);
+  assert.ok(!('inputs' in params()));
+});
+
+test('pine: a variable named like another input\'s title or id is no key: the input takes its own title, else its id; a variable named like its own title keeps its name', () => {
+  const meta = { inputs: [
+    { id: 'in_0', varId: 'a', title: 'x', type: 'int', defval: 1 },        // `a` is the title of the next input: the title is the key
+    { id: 'in_1', varId: 'b', title: 'a', type: 'int', defval: 2 },
+    { id: 'in_2', varId: 'c', title: 'c', type: 'int', defval: 3 },        // its own title: no clash
+    { id: 'in_3', varId: 'in_4', title: 'y', type: 'int', defval: 4 },     // `in_4` is the id of the next input
+    { id: 'in_4', varId: 'e', title: 'z', type: 'int', defval: 5 }], title: 'S', error: null, running: false };
+  const { box, params } = openPine({ script: 'a.pine' }, meta);
+  for (const [label, v] of [['x', 11], ['a', 12], ['c', 13], ['y', 14], ['z', 15]]) type(inputOf(box, label), v);
+  assert.deepEqual(params().inputs, { x: 11, b: 12, c: 13, y: 14, e: 15 });
+});
+
+test('pine: an input without a variable whose title is another input\'s variable name is keyed by its id (the Worker would give the name to both)', () => {
+  const meta = { inputs: [
+    { id: 'in_0', varId: 'q', title: 'Fast', type: 'int', defval: 1 },
+    { id: 'in_1', title: 'q', type: 'int', defval: 2 }], title: 'S', error: null, running: false };
+  const { box, params } = openPine({ script: 'a.pine' }, meta);
+  type(inputOf(box, 'q'), 9);
+  assert.deepEqual(params().inputs, { in_1: 9 });
+  type(inputOf(box, 'Fast'), 8);
+  assert.deepEqual(params().inputs, { in_1: 9, Fast: 8 }, 'and the one that owns the name cannot use it either: its title is its key');
+});
+
+test('pine: an old save keyed by a clashing variable name moves to the input\'s id key (the Worker gave it to both inputs; the dialog showed it on one)', () => {
+  const { box, params } = openPine({ script: 'a.pine', inputs: { a: 1, b: 2 } }, SWAP);
+  assert.deepEqual([inputOf(box, 'b').value, inputOf(box, 'a').value], ['1', '2'], 'each row reads the value its own variable held');
+  type(inputOf(box, 'a'), 9);
+  assert.deepEqual(params().inputs, { in_0: 1, in_1: 9 }, 'no `a` / `b` key left to reach the other input');
+});
+
+test('pine: an old save of ONE clashing variable name moves to that input alone: the input titled like the name does not inherit it, and the name is gone', () => {
+  const one = openPine({ script: 'a.pine', inputs: { a: 1 } }, SWAP);
+  assert.deepEqual([inputOf(one.box, 'b').value, inputOf(one.box, 'a').value], ['1', '20'], 'the title pass must not copy `a` onto the input titled "a"');
+  type(inputOf(one.box, 'a'), 20);                                  // its own default: nothing stored, but the inputs go to the chart
+  assert.deepEqual(one.params().inputs, { in_0: 1 }, 'no `a` left: the Worker would give it to both');
+  const other = openPine({ script: 'a.pine', inputs: { b: 2 } }, SWAP);
+  assert.deepEqual([inputOf(other.box, 'b').value, inputOf(other.box, 'a').value], ['10', '2']);
+  type(inputOf(other.box, 'b'), 10);
+  assert.deepEqual(other.params().inputs, { in_1: 2 });
+});
+
+/* Inputs of ONE assigned expression (`lenSum = input.int(5, "Fast") + input.int(20, "Slow")`) all have that variable name: it moves every one of
+   them in the Worker, so it is no key for any. Each takes its title; with none, its id. */
+const SUM = { inputs: [
+  { id: 'in_0', varId: 'lenSum', title: 'Fast', type: 'int', defval: 5 },
+  { id: 'in_1', varId: 'lenSum', title: 'Slow', type: 'int', defval: 20 }], title: 'S', error: null, running: false };
+const SUM_BARE = { inputs: [
+  { id: 'in_0', name: 'lenSum', varId: 'lenSum', type: 'int', defval: 5 },
+  { id: 'in_1', name: 'lenSum', varId: 'lenSum', type: 'int', defval: 20 }], title: 'S', error: null, running: false };
+
+test('pine: inputs that share one variable name (one assigned expression) have a key of their own each; editing one leaves the other', () => {
+  const { box, params } = openPine({ script: 'a.pine' }, SUM);
+  const fast = inputOf(box, 'Fast'), slow = inputOf(box, 'Slow');
+  type(fast, 1000);
+  assert.deepEqual(params().inputs, { Fast: 1000 }, 'not {lenSum: 1000}: the Worker would give it to Slow too');
+  assert.equal(slow.value, '20');
+  type(slow, 7);
+  assert.deepEqual(params().inputs, { Fast: 1000, Slow: 7 });
+  type(fast, 5);
+  type(slow, 20);
+  assert.ok(!('inputs' in params()));
+  const bare = openPine({ script: 'a.pine' }, SUM_BARE);                       // no titles: both rows are labelled with the variable, keyed by id
+  const [first, second] = rowsOf(bare.box, 'lenSum');
+  type(first, 1000);
+  assert.deepEqual(bare.params().inputs, { in_0: 1000 });
+  assert.equal(second.value, '20');
+});
+
+test('pine: an old save under the shared variable name went to every input of it (the Worker and the rows agreed): each keeps it under its own key, and the name goes', () => {
+  const { box, params } = openPine({ script: 'a.pine', inputs: { lenSum: 7 } }, SUM);
+  assert.deepEqual([inputOf(box, 'Fast').value, inputOf(box, 'Slow').value], ['7', '7']);
+  type(inputOf(box, 'Fast'), 5);                                                // back to its default: only its own key goes
+  assert.deepEqual(params().inputs, { Slow: 7 }, 'no `lenSum` left to reach both');
+  const bare = openPine({ script: 'a.pine', inputs: { lenSum: 7 } }, SUM_BARE);
+  const [first, second] = rowsOf(bare.box, 'lenSum');
+  assert.deepEqual([first.value, second.value], ['7', '7']);
+  type(second, 20);
+  assert.deepEqual(bare.params().inputs, { in_0: 7 });
+});
+
+test('pine: a value saved while two names clashed follows its input when a script edit ends the clash (else the row shows the default while the chart runs the value)', () => {
+  const o = openPine({ script: 'a.pine' }, SWAP);
+  type(inputOf(o.box, 'b'), 1);
+  assert.deepEqual(o.params().inputs, { in_0: 1 });
+  o.cell.meta = { ...SWAP, inputs: [SWAP.inputs[0], { ...SWAP.inputs[1], title: 'z' }] };   // the second input is retitled: `a` is free now
+  o.cell.onPineMeta('p');
+  assert.equal(inputOf(o.box, 'b').value, '1', 'the row shows the value the chart runs');
+  type(inputOf(o.box, 'z'), 7);
+  assert.deepEqual(o.params().inputs, { a: 1, z: 7 }, 'moved to the variable name, not left behind under the id');
+  type(inputOf(o.box, 'b'), 10);
+  assert.deepEqual(o.params().inputs, { z: 7 }, 'put back to the default: nothing of it is left to run');
+  type(inputOf(o.box, 'b'), 4);
+  o.cell.meta = SWAP;                                                           // and the clash comes back: the value goes to the id again
+  o.cell.onPineMeta('p');
+  type(inputOf(o.box, 'a'), 20);
+  assert.deepEqual(o.params().inputs, { in_0: 4, z: 7 }, 'no `a` left to reach both (`z` is no name of this script now: left as it was)');
+});
+
+test('pine: when an input\'s id, variable name and title all hold a value, the Worker read them in that order: the first counts and the others go', () => {
+  const one = { inputs: [{ id: 'in_0', varId: 'a', title: 'A', type: 'int', defval: 10 }], title: 'S', error: null, running: false };
+  const all = openPine({ script: 'a.pine', inputs: { in_0: 2, a: 1, A: 3 } }, one);
+  assert.equal(inputOf(all.box, 'A').value, '2');
+  type(inputOf(all.box, 'A'), 10);
+  assert.ok(!('inputs' in all.params()), 'put back to the default: no other key stays to run');
+  const named = openPine({ script: 'a.pine', inputs: { a: 1, A: 3 } }, one);
+  assert.equal(inputOf(named.box, 'A').value, '1', 'the variable name before the title');
+});
+
+test('pine: a script edit that makes two inputs share a variable name moves their saves off that name (the key changes though no title or type does)', () => {
+  const meta = (v) => ({ inputs: [{ id: 'in_0', varId: 'a', title: 'T0', type: 'int', defval: 1 }, { id: 'in_1', varId: v, title: 'T1', type: 'int', defval: 2 }], title: 'S', error: null, running: false });
+  const o = openPine({ script: 'a.pine', inputs: { a: 5 } }, meta('b'));
+  assert.deepEqual([inputOf(o.box, 'T0').value, inputOf(o.box, 'T1').value], ['5', '2']);
+  o.cell.meta = meta('a');                                                      // the second input is assigned to `a` too: the Worker gives `a` to both
+  o.cell.onPineMeta('p');
+  assert.deepEqual([inputOf(o.box, 'T0').value, inputOf(o.box, 'T1').value], ['5', '5'], 'both read it, as the chart does');
+  type(inputOf(o.box, 'T1'), 9);
+  assert.deepEqual(o.params().inputs, { T0: 5, T1: 9 }, 'no `a` left: setting one moved the other');
+});
+
+test('pine: a name that is another input\'s key is not taken from that input (an input called "untitled" by the runtime, another one titled "untitled")', () => {
+  const meta = { inputs: [{ id: 'in_0', name: 'untitled', type: 'int', defval: 30 }, { id: 'in_1', title: 'untitled', type: 'int', defval: 5 }], title: 'S', error: null, running: false };
+  const o = openPine({ script: 'a.pine', inputs: { untitled: 7 } }, meta);
+  assert.deepEqual(rowsOf(o.box, 'untitled').map((c) => c.value), ['30', '7'], 'the key `untitled` is the titled input\'s: the other one reads its default');
+  type(rowsOf(o.box, 'untitled')[0], 31);
+  assert.deepEqual(o.params().inputs, { untitled: 7, in_0: 31 });
+});
+
+test('pine: a row is drawn again when its label changes though its key and title do not (a titleless input is labelled by its variable)', () => {
+  const meta = (v) => ({ inputs: [{ id: 'in_0', name: v, varId: v, type: 'int', defval: 1 }, { id: 'in_1', varId: 'q', title: 'a', type: 'int', defval: 2 },
+    { id: 'in_2', varId: 's', title: 'r', type: 'int', defval: 3 }], title: 'S', error: null, running: false });
+  const o = openPine({ script: 'a.pine' }, meta('a'));                          // `a` is the next input's title: this one is keyed by its id
+  assert.equal(rowsOf(o.box, 'a').length, 2);
+  o.cell.meta = meta('r');                                                       // renamed to the third input's title: still keyed by its id
+  o.cell.onPineMeta('p');
+  assert.deepEqual([rowsOf(o.box, 'a').length, rowsOf(o.box, 'r').length], [1, 2], 'the first row now says r');
+});
+
+/* An input with no variable and no title (`plot(input.int(30), "p")`) comes back from the runtime as name "untitled" (else the function name): the
+   Worker reads an override key by id, variable name or explicit title only, so a key "untitled" would never reach the script. It is keyed by its id. */
+const BARE = { inputs: [
+  { id: 'in_0', name: 'untitled', type: 'int', defval: 30 },
+  { id: 'in_1', varId: 'len', title: 'Length', type: 'int', defval: 14 }], title: 'B', error: null, running: false };
+
+test('pine: an input with no variable and no title is keyed by its id, not by the name the runtime gives it', () => {
+  const { box, params } = openPine({ script: 'a.pine' }, BARE);
+  type(inputOf(box, 'untitled'), 1000);
+  assert.deepEqual(params().inputs, { in_0: 1000 }, 'not {untitled: 1000}: the Worker never matches that');
+  type(inputOf(box, 'Length'), 20);
+  assert.deepEqual(params().inputs, { in_0: 1000, len: 20 }, 'the titled neighbour keeps its variable name');
+  type(inputOf(box, 'untitled'), 30);
+  assert.deepEqual(params().inputs, { len: 20 });
+  const old = openPine({ script: 'a.pine', inputs: { untitled: 7 } }, BARE);   // a save the old dialog wrote (it never reached the chart)
+  assert.equal(inputOf(old.box, 'untitled').value, '7', 'the row still shows what it showed');
+  type(inputOf(old.box, 'Length'), 20);
+  assert.deepEqual(old.params().inputs, { in_0: 7, len: 20 }, 'it moves to the id key, where the Worker reads it');
+});
+
 test('pine: the inputs block is drawn again when the script\'s inputs or error change, not on each run (a number being typed keeps its box)', () => {
   const o = openPine();
   const first = find(o.box, (n) => n._class === 'pine-inputs')[0].children.slice();

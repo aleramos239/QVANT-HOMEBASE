@@ -166,7 +166,7 @@ const TV_DEFS = [
   tvDef('lsma', 'Least Squares MA', 'The value of the straight line fitted through the last N closes', [TV_LEN(25, 2)], TV_ONE('LSMA'), { short: 'LSMA' }),
   tvDef('mcginley', 'McGinley Dynamic', 'A moving average that speeds up and slows down with price', [TV_LEN(14)], TV_ONE('McGinley')),
   tvDef('kama', 'Kaufman Adaptive MA', 'Moving average that speeds up in clean trends and slows in chop',
-    [TV_LEN(14), TV_I('fast', 'Fast length', 2), TV_I('slow', 'Slow length', 30)], TV_ONE('KAMA'), { short: 'KAMA' }),
+    [TV_LEN(10), TV_I('fast', 'Fast length', 2), TV_I('slow', 'Slow length', 30)], TV_ONE('KAMA'), { short: 'KAMA' }),
   tvDef('median', 'Median', 'The middle value of the last N bars of (high + low) / 2', [TV_LEN(3)], TV_ONE('Median')),
   tvDef('envelope', 'Envelope', 'A simple moving average with a band a fixed percent above and below',
     [TV_LEN(20), TV_N('percent', 'Percent', 10, 0.01, 100, 0.5)], TV_BANDS),
@@ -260,10 +260,10 @@ const TV_DEFS = [
     TV_SIG(['tsi', 'TSI'], ['signal', 'Signal']), { pane: 'own', refs: [0] }),
   tvDef('smi', 'SMI Ergodic Indicator', 'The True Strength Index and its signal line',
     [TV_I('long', 'Long length', 20), TV_I('short', 'Short length', 5), TV_I('signal', 'Signal length', 5)],
-    TV_SIG(['erg', 'SMI'], ['sig', 'Signal']), { pane: 'own', refs: [0] }),
+    TV_SIG(['erg', 'SMI'], ['sig', 'Signal']), { pane: 'own', refs: [0], digits: 4 }),
   tvDef('smio', 'SMI Ergodic Oscillator', 'The SMI Ergodic Indicator minus its signal line, as bars',
     [TV_I('long', 'Long length', 20), TV_I('short', 'Short length', 5), TV_I('signal', 'Signal length', 5)],
-    [TV_HIST('main', 'SMI Osc')], { pane: 'own' }),
+    [TV_HIST('main', 'SMI Osc')], { pane: 'own', digits: 4 }),
   tvDef('smindex', 'Stochastic Momentum Index', 'Where the close sits versus the middle of the N-bar range, double smoothed',
     [TV_I('k', '%K length', 10), TV_I('d', '%D length', 3), TV_I('ema', 'EMA length', 3)],
     TV_SIG(['smi', 'SMI'], ['ema', 'SMI-based EMA']), { pane: 'own', refs: [40, -40], short: 'SMI' }),
@@ -1152,7 +1152,7 @@ function change(bar, prev, tick) {
 /* The values an indicator's legend row shows for one bar, each in its line colour. */
 function legendValues(inst, bar, colors, tick) {
   const k = serverKey(inst), v = bar && bar.sv && k ? bar.sv[k] : null;
-  const n2 = (x) => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(2));
+  const fix = (d) => (x) => (x == null || !Number.isFinite(x) ? '—' : x.toFixed(d)), n2 = fix(2);
   switch (inst.id) {
     case 'ema': case 'sma': case 'vwma': return [{ text: fmtPrice(v, tick), color: colors.line }];
     case 'vwap': return [{ text: fmtPrice(v ? v.vwap : null, tick), color: colors.vwap },
@@ -1167,9 +1167,10 @@ function legendValues(inst, bar, colors, tick) {
     default: {
       const t = TA_BY_ID[inst.id];
       if (!t) return [];
+      const nd = fix(t.digits || 2);   // a study that sends a small ratio (SMI Ergodic) says how many decimals it needs
       // one value per drawn line, in that line's own colour; the histogram and a hidden line add nothing
       const st = inst.style || {}, out = t.lines.filter((ln) => !(st[ln.part] && st[ln.part].visible === false))
-        .map((ln) => ({ text: n2(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
+        .map((ln) => ({ text: nd(lineValue(ln, v)), color: (st[ln.part] && st[ln.part].color) || ln.color, on: lineValue(ln, v) != null, pick: !!ln.read }));
       // lines that take turns (Supertrend's up / down side) show only the one in force
       const live = out.filter((x) => !x.pick || x.on);
       const shown = (live.length ? live : out.slice(0, 1)).map(({ text, color }) => ({ text, color }));

@@ -34,6 +34,14 @@ const rowEls = [];                 // newest first: {row, time, price, size, n, 
 let dirty = false;
 
 function mkEl(tag, cls, text) { return page.mk(tag, cls, text); }
+/* The Size track holds 5 characters ("1.23K", tape.css). fmtCompact's two decimals run to 7 from 10,000 contracts on
+   ("123.46K"), which would ellipsise into "123.4...": a number that reads wrong. So the decimals give way as the digits come. */
+function fmtSize(v) {
+  const s = Cat.fmtCompact(v);
+  if (s.length <= 5) return s;
+  const k = v / 1e3;
+  return (k >= 99.95 ? Math.round(k) : k.toFixed(1)) + 'K';
+}
 function selectedCell() { const C = window.HBCharts; return C ? C.cells[C.selected] || null : null; }
 
 /* ---- build (once) ---- */
@@ -83,7 +91,7 @@ function build() {
   ui.head.append(ui.seg, mkEl('span', 'tape-spacer'), ui.min, ui.side);
 
   ui.cols = mkEl('div', 'tape-cols');
-  ui.cols.append(mkEl('span', 'tape-c', 'Time'), mkEl('span', 'tape-c', 'Price'), mkEl('span', 'tape-c', 'Size'),
+  ui.cols.append(mkEl('span', 'tape-c tape-time', 'Time'), mkEl('span', 'tape-c', 'Price'), mkEl('span', 'tape-c', 'Size'),
     mkEl('span', 'tape-c tape-n', 'Prints'), mkEl('span', 'tape-c tape-lv', 'Lvls'));
 
   ui.rows = mkEl('div', 'tape-rows');
@@ -155,7 +163,7 @@ function paintRows(list, tick) {
     e.row.classList.toggle('sell', o.side < 0);
     e.time.textContent = Tape.fmtTime(o.t);
     e.price.textContent = Cat.fmtPrice(o.vwap, tick);
-    e.size.textContent = Cat.fmtCompact(o.size);
+    e.size.textContent = fmtSize(o.size);
     e.n.textContent = raw ? '' : String(o.n);
     e.lv.textContent = raw ? '' : String(Math.round((o.hi - o.lo) / tick) + 1);
   }

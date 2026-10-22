@@ -32,7 +32,7 @@ from homebase.charts.bars import Bar, BarSpec
 from homebase.charts.hub import prime_sessions, warm_bars
 from homebase.charts.session import ET, session_date, session_range_ms
 from homebase.charts.studies import make, split_timeframe
-from homebase.charts.studies_tv2 import CUMULATIVE_WARM
+from homebase.charts.studies_tv2 import CUMULATIVE_WARM, WARM
 from homebase.contracts import price_root, spec_for, tick_size
 from homebase.paths import repo_root
 from homebase.ticks import session_complete
@@ -45,6 +45,7 @@ NO_TV = ("tspeed", "press", "vaprev")            # no TradingView source at all 
 BAR_COLS = {"tv|vol|": "v", "tv|fp|buy": "buy", "tv|fp|sell": "sell"}   # probe columns that are bar fields, not studies
 HOUSE_SIGN = {("supertrend", "dir"): -1.0}       # the probe holds Pine's sign (-1 up); the house study says +1 up
 VERDICTS = ("identical", "warm-up only", "differs", "no-tv", "no-data")
+CUMULATIVE = {n for n, w in WARM.items() if w([]) >= CUMULATIVE_WARM}   # the tv: running sums (obv pvt adl nvi pvi): no finite warm-up repairs them
 
 
 def root() -> Path:
@@ -258,12 +259,42 @@ def tv_key(base: str) -> tuple[str, bool]:
         return base, False
 
 
+def htf_keys(bars: list, sec: int) -> list:
+    n = sec * 1000
+    return [(b.session, (b.t - session_range_ms(dt.date.fromisoformat(b.session))[0]) // n) for b in bars]
+
+
 def htf_closes(bars: list, sec: int) -> set:
     """Indices of the bars that close a higher-timeframe bar of `sec` seconds (anchored at the session open like
     studies.HTF): a key with an @tf suffix is compared on those bars only."""
-    n = sec * 1000
-    keys = [(b.session, (b.t - session_range_ms(dt.date.fromisoformat(b.session))[0]) // n) for b in bars]
+    keys = htf_keys(bars, sec)
     return {i for i, k in enumerate(keys) if i + 1 == len(keys) or keys[i + 1] != k}
+
+
+def htf_cold(bars: list, sec: int, n: int, starts=(0,)) -> set:
+    """Indices of the bars inside `n` higher bars of `sec` seconds counted from each of `starts` (a bar index: the window
+    opens in the higher bar that holds it; a day or more = one session). A study on a longer timeframe is cold for its
+    window of HIGHER bars, whatever the chart's timeframe: hub.warm_bars counts them as one-minute chart bars and stops at
+    the span the hub keeps (20000), which on a day key forgives a whole export."""
+    keys = htf_keys(bars, sec)
+    order = {}
+    for k in keys:
+        order.setdefault(k, len(order))
+    hit = bytearray(len(order) + n)
+    for s in starts:
+        hit[order[keys[s]]:order[keys[s]] + n] = b"\1" * n
+    return {i for i, k in enumerate(keys) if hit[order[k]]}
+
+
+def settle_bars(key: str) -> int:
+    """Bars after a start (the export's first bar, the bar after a skipped one) in which a study may still differ from
+    TradingView's by its seed. hub.warm_bars is the length a chart is repaired to: a window's length, and for a study that
+    fades (an EMA: 5 n) the point where its seed gap is down to e^-10, which a print still shows (measured: an RSI or ATR
+    seeded 2000 points off keeps differing to 2.3 x that, at same()'s 1e-9). A study that fades gets three times that
+    (e^-30), a plain window exactly its own length."""
+    w = warm_bars(key)
+    n = next((int(t) for t in key.partition("@")[0].split(":")[1:] if t.isdecimal()), 0)
+    return w if w <= n else 3 * w
 
 
 # ------------------------------------------------------------------ the verdict
@@ -283,6 +314,7 @@ def compare(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=(), cold=()) 
     warm_idx = {i for r in restarts for i in range(r, r + warm)} | set(cold)
     n = n_diff = late = 0
     first, mx = None, 0.0
+    first_late, mx_late = None, 0.0
     for i, (a, b) in enumerate(zip(tv, hb)):
         if i in skip:
             continue
@@ -290,12 +322,17 @@ def compare(tv, hb, decimals=0, warm: int = 0, restarts=(0,), skip=(), cold=()) 
         if same(a, b, decimals[i] if isinstance(decimals, (list, tuple)) else decimals):
             continue
         n_diff += 1
+        d = abs(a - b) if a is not None and b is not None else 0.0
         if first is None:
             first = i
-        if a is not None and b is not None:
-            mx = max(mx, abs(a - b))
+        mx = max(mx, d)
         if i not in warm_idx:
             late += 1
+            if first_late is None:
+                first_late = i
+            mx_late = max(mx_late, d)
+    if late:       # a 'differs' row points at the first difference past the warm-up; a 'warm-up only' row at where it differed
+        first, mx = first_late, mx_late
     verdict = "no-data" if n == 0 else "identical" if not n_diff else "warm-up only" if not late else "differs"
     return {"verdict": verdict, "n": n, "n_diff": n_diff, "first": first, "max_abs": mx}
 
@@ -459,7 +496,7 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
     needs_volume = {}
     for key, fld, vals, decs in probe_columns(x):
         try:
-            _, sec = split_timeframe(key)
+            base, sec = split_timeframe(key)
             make(key, tick)
             kt, has_tv = tv_key(key)
         except ValueError as e:
@@ -469,25 +506,29 @@ def check_export(x: TvExport, root: str = "NQ", hb: list | None = None, store=No
             rows.append(_row(key, fld, tf, None, None, "", tv, note=f"skipped: @{sec} is below the chart's {tf} bars "
                              "(TradingView reads the last lower-timeframe bar, Homebase has only the chart's bars)"))
             continue
-        warm = warm_bars(key)
-        if warm >= CUMULATIVE_WARM:      # a running sum never forgets its start: compare it from the first bar, a warm-up would hide every difference
-            warm = 0
+        head, _, name = key.partition(":")
+        # a running sum never forgets its start: compare it from the first bar, a warm-up would hide every difference. An @tf
+        # key is cold in bars of its own timeframe (below), not in chart bars
+        warm = 0 if sec or (head == "tv" and name in CUMULATIVE) else settle_bars(key)
         htf_skip = set(range(len(tv))) - htf_closes(tv, sec) if sec else set()
         k = cold_sessions(key, fld)
-        cold = {i for i, b in enumerate(tv) if rank[b.session] < k}
+        cold = cold_data = {i for i, b in enumerate(tv) if rank[b.session] < k}
+        if sec:       # TradingView's higher bars had history the export lacks, for the study's window of them; Homebase's again after a skipped bar
+            win = settle_bars(base)
+            cold, cold_data = htf_cold(tv, sec, win), htf_cold(tv, sec, win, [0] + [r - 1 for r in restarts[1:]])  # no @tf key has cold sessions
         note = ""
         if not x.has_volume:
             if kt not in needs_volume:
                 needs_volume[kt] = uses_volume(kt, tv, tick)
             if needs_volume[kt]:
                 note = ("skipped: no volume in this export (put the Volume indicator on the chart, or re-export with "
-                        "the current P2 script, which plots tv|vol|); the data check below ran on Homebase's volume")
+                        "the current P2 script, which plots the volume itself); the data check below ran on Homebase's volume")
         math_cmp = None if note else compare(vals, [field(v, fld) for v in run(kt, tv, tick)], decs, warm, (0,), htf_skip, cold)
         sign = HOUSE_SIGN.get((key.split(":")[0], fld), 1.0)
         house = compare(vals, [None if (f := field(v, fld)) is None else sign * f for v in run(key, tv, tick)], decs, warm,
                         (0,), htf_skip, cold) if has_tv and not note else None
         data_cmp = compare(vals, aligned([field(v, fld) for v in run(kt, hb, tick)]), decs, warm, restarts,
-                           skip | htf_skip, cold) if hb else None
+                           skip | htf_skip, cold_data) if hb else None
         rows.append(_row(key, fld, tf, math_cmp, data_cmp, kt, tv, house=house, note=note))
     for name in NO_TV:
         rows.append(_row(name, "", tf, None, None, "", tv, note="no TradingView source"))
@@ -513,6 +554,11 @@ def _cell(c: dict) -> str:
     return v if c["n_diff"] == 0 else f"{v} {c['n_diff']}/{c['n']}"
 
 
+def _md(s) -> str:
+    """A free-text table cell: a pipe would end the cell."""
+    return str(s).replace("|", "\\|")
+
+
 def write_report(metas: list, rows: list, out_dir: Path, stamp: str | None = None) -> tuple[Path, Path]:
     """ROOT/reports/<stamp>.md and .json: verdicts and counts, never a TradingView value."""
     out_dir = Path(out_dir)
@@ -535,11 +581,12 @@ def write_report(metas: list, rows: list, out_dir: Path, stamp: str | None = Non
         lines.append("")
     lines += ["| study | field | tf | math | data | first diff (ET) | max abs | ran as | note | file |", "|---|---|---|---|---|---|---|---|---|---|"]
     for r in rows:
-        first = r["math"]["first"] or r["data"]["first"] or ""
-        mx = max(r["math"]["max_abs"], r["data"]["max_abs"])
+        shown = [c for c in (r["math"], r["data"]) if c["verdict"] == "differs"] or [r["math"], r["data"]]   # not a warm-up's bar beside a real difference
+        first = next((c["first"] for c in shown if c["first"]), "")
+        mx = max(c["max_abs"] for c in shown)
         house = f" (house: {_cell(r['house'])})" if r["house"] else ""
         lines.append(f"| {r['key']} | {r['field']} | {r['tf']} | {_cell(r['math'])}{house} | {_cell(r['data'])} | {first} | "
-                     f"{mx:.6g} | {r['tv_key']} | {r['note']} | {r.get('file', '')} |")
+                     f"{mx:.6g} | {r['tv_key']} | {_md(r['note'])} | {_md(r.get('file', ''))} |")
     md, js = out_dir / f"{stamp}.md", out_dir / f"{stamp}.json"
     md.write_text("\n".join(lines) + "\n")
     js.write_text(json.dumps({"stamp": stamp, "files": metas, "rows": rows}, indent=1))

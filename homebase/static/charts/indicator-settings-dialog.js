@@ -338,29 +338,35 @@ function mount(box, host) {
     return row;
   }
 
-  /* ---- Pine: the script's own inputs, one row each, from what its last run reported (the cell keeps the Worker). Stored under the
-     input's variable name, else its title when no other input shares it, else its id (in_N): the Worker reads all three, two inputs
-     can share a title, never a key, and a save does not move to another input when the script gains one. An old save keyed by title
-     moves to those keys when the block is drawn. A value put back to the script's own default is
-     dropped. The block is drawn again only when the inputs or the error change, so a number being typed keeps its focus while the
+  /* ---- Pine: the script's own inputs, one row each, from what its last run reported (the cell keeps the Worker). Stored under the first of
+     the input's variable name, its title, its id (in_N) that no OTHER input answers to: the Worker reads a key by id, then variable name, then
+     title, so a key that is another input's id, variable name or title would move both. Inputs can share a title or a variable name (one
+     assigned expression), never a key; a save does not move to another input when the script gains one. The title is the one written in the
+     script: an input with none (the runtime names it "untitled") is keyed by its id. An old save moves to the input's key when the block is
+     drawn, whichever of its names held it (also when a script edit makes a name a key or no key). A value put back to the script's own default
+     is dropped. The block is drawn again only when the inputs or the error change, so a number being typed keeps its focus while the
      script re-runs on each keystroke. ---- */
   function pineKeys(inputs) {   // input -> its key
-    const taken = new Set(), count = {};
-    for (const x of inputs) { taken.add(x.id); if (x.varId) taken.add(x.varId); const t = x.title || x.name; if (t) count[t] = (count[t] || 0) + 1; }
-    return new Map(inputs.map((x) => { const t = x.title || x.name; return [x, x.varId || (t && count[t] === 1 && !taken.has(t) ? t : x.id)]; }));
+    const hit = (x, k) => inputs.some((y) => y !== x && (y.id === k || y.varId === k || y.title === k));   // the Worker would give k to y too
+    return new Map(inputs.map((x) => [x, [x.varId, x.title].find((k) => k && !hit(x, k)) || x.id]));
   }
   const pineHas = (o, k) => !!o && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
-  function pineMigrate(inputs, keys) {   // each input takes the value its title held (two of one title each keep what both showed)
+  function pineMigrate(inputs, keys) {   // each input takes the value the Worker read for it, from whichever of its names held one
     if (!vals.inputs || typeof vals.inputs !== 'object') return;
-    const used = new Set(keys.values()), titles = inputs.map((x) => [x, x.title || x.name]).filter(([, t]) => t && !used.has(t));
-    for (const [x, t] of titles) if (pineHas(vals.inputs, t) && !pineHas(vals.inputs, keys.get(x))) vals.inputs[keys.get(x)] = vals.inputs[t];
-    for (const [, t] of titles) delete vals.inputs[t];
+    const live = new Set(keys.values()), owned = new Set(inputs.flatMap((y) => [y.id, y.varId])), moves = [], gone = new Set();
+    for (const x of inputs) {   // id, variable name, title: the order the Worker reads them; a title that is another input's id or variable name is that input's
+      const k = keys.get(x), t = x.title || x.name, held = [x.id, x.varId, owned.has(t) ? null : t].filter((a) => a && pineHas(vals.inputs, a) && (a === k || !live.has(a)));
+      if (held.length && held[0] !== k) moves.push([k, vals.inputs[held[0]]]);
+      for (const a of held) if (a !== k) gone.add(a);
+    }
+    for (const a of gone) delete vals.inputs[a];   // only now: one name can be several inputs' (two of one title, one assigned expression)
+    for (const [k, v] of moves) vals.inputs[k] = v;
   }
   function pineInputs() {
     const wrap = mk('div', 'pine-inputs');
     let seen;
     const draw = () => {
-      const m = cell.pineMeta ? cell.pineMeta(uid) : null, keys = m ? pineKeys(m.inputs) : null, sig = JSON.stringify(m ? [m.error, m.inputs.map((x) => [keys.get(x), x.title, x.type])] : null);
+      const m = cell.pineMeta ? cell.pineMeta(uid) : null, keys = m ? pineKeys(m.inputs) : null, sig = JSON.stringify(m ? [m.error, m.inputs.map((x) => [keys.get(x), x.title, x.name, x.type])] : null);
       if (sig === seen) return;
       seen = sig;
       wrap.replaceChildren();

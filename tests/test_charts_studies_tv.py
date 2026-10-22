@@ -26,14 +26,15 @@ def weekdays(n, start=dt.date(2026, 9, 1)):
     return out
 
 
-def walk(dates=None, per=120, seed=7):
-    """A reproducible random walk of 1-minute OHLCV bars over sessions (default 16 weekdays), each opening 18:00 ET."""
+def walk(dates=None, per=120, seed=7, drift=0.0):
+    """A reproducible random walk of 1-minute OHLCV bars over sessions (default 16 weekdays), each opening 18:00 ET.
+    `drift`: added to every step, so a period's low sits at its start and its high at its end."""
     r, px, out = random.Random(seed), 100.0, []
     for d in dates or weekdays(16):
         t0 = int((dt.datetime(d.year, d.month, d.day, 18, 0, tzinfo=ET) - dt.timedelta(days=1)).timestamp() * 1000)
         for i in range(per):
             o = px
-            px += r.uniform(-1.5, 1.6)
+            px += r.uniform(-1.5, 1.6) + drift
             h, l = max(o, px) + r.uniform(0, 0.8), min(o, px) - r.uniform(0, 0.8)
             v = r.randint(5, 80)
             buy = r.randint(0, v)
@@ -490,16 +491,63 @@ def test_a_timeframe_keeps_the_sessions_a_tv_study_reads():
     for k in ("tv:rvol:14", "tv:rvol:5:regular", "tv:adr:14", "tv:adr:3", "tv:pivots:dm", "tv:vwap:month", "tv:vwap:week"):
         for tf in (60, 900, 3600, 86400):
             assert prime_sessions(f"{k}@{tf}") == prime_sessions(k), (k, tf)       # the inner study still needs its N sessions
+            assert prime_sessions(f"{k}@{tf}", "BTC") == prime_sessions(k, "BTC"), (k, tf)     # ... and so does a 24/7 root's
     assert prime_sessions("tv:ema:20@3600") == 6 and prime_sessions("tv:cvd@900") == 1      # a plain HTF study: only its own bars
 
 
 def test_the_vwap_anchors_declare_the_sessions_before_the_chart_they_reach_back_over():
     """A period's earlier sessions are fed first (hub.prime_sessions): at most 4 before a week's open the chart shows from,
-    22 before a month's. A quarter and a year are not primed (64 / 259 sessions of footprint bars per stream): they count
-    the sessions the chart loaded."""
-    assert [prime_sessions(f"tv:vwap:{a}") for a in ("session", "week", "month", "quarter", "year")] == [0, 4, 22, 0, 0]
-    assert prime_sessions("tv:vwap") == 0 and prime_sessions("tv:vwap:nope") == 0
+    22 before a month's -- 6 and 30 for a 24/7 root (a session every calendar day), which the root argument names. A
+    quarter and a year are not primed (64 / 259 sessions of footprint bars per stream, 92 / 366 for a 24/7 root): they
+    count the sessions the chart loaded."""
+    anchors = ("session", "week", "month", "quarter", "year")
+    assert [prime_sessions(f"tv:vwap:{a}") for a in anchors] == [0, 4, 22, 0, 0]
+    for root in ("NQ", "GC", None):
+        assert [prime_sessions(f"tv:vwap:{a}", root) for a in anchors] == [0, 4, 22, 0, 0], root
+    for root in ("BTC", "MBT", "ETH", "met"):
+        assert [prime_sessions(f"tv:vwap:{a}", root) for a in anchors] == [0, 6, 30, 0, 0], root
+    assert prime_sessions("tv:vwap") == 0 and prime_sessions("tv:vwap:nope") == 0 and prime_sessions("tv:vwap", "BTC") == 0
+    assert prime_sessions("tv:rvol:14", "BTC") == 15 and prime_sessions("tv:pivots", "BTC") == 1     # a session count: no root in it
     assert [warm_bars(f"tv:vwap:{a}") for a in ("session", "week", "month", "quarter", "year")] == [0] * 5
+
+
+@pytest.mark.parametrize("root, first_loaded, key", [
+    ("BTC", dt.date(2026, 10, 4), "tv:vwap:week"),          # a Sunday: six earlier sessions of its ISO week
+    ("BTC", dt.date(2026, 10, 3), "tv:vwap:week"),          # a Saturday: five
+    ("BTC", dt.date(2026, 10, 31), "tv:vwap:month"),        # the 31st: thirty
+    ("NQ", dt.date(2026, 10, 9), "tv:vwap:week"),           # a Friday: four
+    ("NQ", dt.date(2027, 3, 31), "tv:vwap:month"),          # the 23rd weekday of its month: twenty-two
+    ("BTC", dt.date(2026, 10, 4), "wk"),                    # the prior week's levels: a Sunday, the six before it and the seven of the week before
+    ("BTC", dt.date(2026, 8, 31), "mo"),                    # the prior month's: the 31st after a 31-day July, 61 sessions
+    ("NQ", dt.date(2026, 10, 9), "wk"),
+    ("NQ", dt.date(2027, 3, 31), "mo"),
+])
+def test_a_period_study_is_exact_from_the_primed_sessions_whatever_the_roots_calendar(root, first_loaded, key):
+    """The sessions prime_sessions(key, root) names are enough to start the period at its first session: the value at
+    the left edge of a chart equals a run over the full history. A 24/7 root has a session every calendar day."""
+    start = first_loaded - dt.timedelta(days=70)
+    days = [start + dt.timedelta(n) for n in range(80) if root == "BTC" or (start + dt.timedelta(n)).weekday() < 5]
+    bars = walk(dates=days, per=4, drift=1.0)
+    full = run(key, bars)
+    need = prime_sessions(key, root)
+    prior = [d for d in days if d < first_loaded][-need:]
+    i0 = next(i for i, b in enumerate(bars) if b.session >= prior[0].isoformat())
+    i1 = next(i for i, b in enumerate(bars) if b.session >= first_loaded.isoformat())
+    same(run(key, bars[i0:])[i1 - i0:], full[i1:])
+
+
+def test_the_prior_week_and_month_levels_declare_the_sessions_of_the_roots_calendar():
+    """wk / mo hold back the finished period: a classic root's 5 + 4 (+ 2) and 23 + 22 sessions (prime_ta), a 24/7 root's
+    7 + 6 and 31 + 30 (the root argument names it). The studies next to them do not read a calendar."""
+    for root in ("NQ", "GC", None):
+        assert [prime_sessions(k, root) for k in ("wk", "mo")] == [11, 45], root
+    for root in ("BTC", "MBT", "ETH", "met"):
+        assert [prime_sessions(k, root) for k in ("wk", "mo")] == [13, 61], root
+    assert [prime_sessions(k) for k in ("wk", "mo")] == [11, 45]
+    assert prime_sessions("wk@3600", "BTC") == 13 and prime_sessions("mo@900", "BTC") == 61     # not capped at the 60 of higher bars
+    assert prime_sessions("mo@900") == 45
+    for k in ("noise", "rvol:20", "dhl:3", "rmove", "vaprev", "swing", "sma:50"):
+        assert prime_sessions(k, "BTC") == prime_sessions(k), k
 
 
 def test_macd_is_exact_after_the_declared_warm_bars_whichever_average_is_longer():

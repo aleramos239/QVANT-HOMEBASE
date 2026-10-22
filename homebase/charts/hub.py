@@ -33,7 +33,7 @@ from types import SimpleNamespace
 from ..contracts import point_value, tick_size
 from .bars import Bar, BarBuilder, BarSpec, resample
 from .history import M1, History
-from .session import session_date
+from .session import always_open, session_date
 from .studies import Profile, make
 from .studies_flow import NAMES as FLOW_NAMES, SMT_PARTNER, warm_flow
 from .studies_ta import NAMES as TA_NAMES, prime_ta, warm_ta
@@ -83,15 +83,18 @@ def warm_bars(key: str) -> int:
     return {"sma": n, "vwma": n, "ema": 5 * n, "adx": 10 * n}.get(name, 0)
 
 
-def prime_sessions(key: str) -> int:
-    """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars)."""
+def prime_sessions(key: str, root: str | None = None) -> int:
+    """Prior sessions a study should be fed before the chart's own bars (0: it reads only the chart's bars). `root`: a
+    24/7 root's weeks and months hold more sessions than a classic root's (tv:vwap, wk, mo): those ask for more."""
     base, _, tf = str(key).partition("@")
     if tf.isdecimal():       # the sessions its higher bars need to settle (a trading day is ~23 h), at most 60; and the
         # sessions the inner study reads itself (tv adr / rvol), which the higher bars do not shorten
-        return max(min(60, 1 + -(-warm_bars(base) * int(tf) // 82800)), prime_sessions(base))
+        return max(min(60, 1 + -(-warm_bars(base) * int(tf) // 82800)), prime_sessions(base, root))
     name, *rest = base.split(":")
     if name == "tv" and rest:
-        return prime_tv(rest[0], rest[1:])
+        return prime_tv(rest[0], rest[1:], root)
+    if name in ("wk", "mo") and always_open(root):    # the finished week (7) / month (31) + the 6 / 30 sessions of this one
+        return 13 if name == "wk" else 61             # before the chart (prime_ta's 11 / 45: 5 + 4 + 2, 23 + 22)
     return prime_ta(name, rest) if name in TA_NAMES else 0
 
 
@@ -147,7 +150,7 @@ class Stream:
         st = make(key, self.tick_size)
         if hasattr(st, "peer"):
             st.peer = self.peer
-        if prime_sessions(key):
+        if prime_sessions(key, self.root):
             for b in self.prime:      # earlier sessions: the study's memory, not part of this chart
                 st.push(b)
         self.studies[key] = st
@@ -369,14 +372,14 @@ class Hub:
 
     def ensure_prime(self, s: "Stream", keys) -> None:
         """Worker thread: a study added to a stream that already exists may read more sessions than were primed."""
-        if any(k not in s.studies and prime_sessions(k) > s.prime_n for k in keys):
+        if any(k not in s.studies and prime_sessions(k, s.root) > s.prime_n for k in keys):
             self._prime(s, s.root, s.spec, self.today_date.get(s.root) or session_date(self.now_ms(), s.root), keys)
 
     def _prime(self, s: "Stream", root: str, spec: BarSpec, today, keys) -> None:
         """Worker thread: load the sessions before the stream's first bar that the studies in `keys` read
         (prime_sessions) -- only those not already there. Bounded by BUILD_BUDGET_S like a subscribe; a session
         left out just leaves that study's first values empty."""
-        need = max((prime_sessions(k) for k in keys if k not in s.studies), default=0)
+        need = max((prime_sessions(k, root) for k in keys if k not in s.studies), default=0)
         if need <= s.prime_n:
             return
         first = s.sessions[0]["date"] if s.sessions else today.isoformat()
@@ -542,14 +545,14 @@ class Hub:
             pview = SimpleNamespace(bars=[b for d in sorted(set(used))
                                           for b in self.history.bars(SMT_PARTNER[root], spec, d, memo=False)],
                                     builder=None)
-        need = max((prime_sessions(k) for k in keys), default=0)
+        need = max((prime_sessions(k, root) for k in keys), default=0)
         pre = (self._prior(root, spec, [d for d in dates if d < min(used)], need) if chunk and need else []) + head
         studies, repair = {}, {}
         for k in keys:
             st = make(k, s.tick_size)
             if hasattr(st, "peer"):
                 st.peer = pview
-            if prime_sessions(k):
+            if prime_sessions(k, root):
                 for b in pre:                        # the sessions before the chunk: the study's memory, as in add_study
                     st.push(b)
             studies[k] = [st.push(b) for b in chunk]

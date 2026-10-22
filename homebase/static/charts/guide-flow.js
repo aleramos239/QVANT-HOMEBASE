@@ -38,7 +38,7 @@ G.add({
       'Horizontal bars grow from the right edge. A longer bar means more contracts traded at that price.',
       'One orange row is the POC (point of control): the single price with the most volume.',
       'Darker blue rows are the value area: the prices holding 70% of the volume. Lighter blue is outside.',
-      'Left of it, a faint ghost of the prior session. Optional lines mark its VAH, VAL and POC.',
+      'Beside it, a faint ghost of the prior session. Optional lines mark its VAH, VAL and POC.',
       'The session restarts at 6 pm New York time, so the profile starts fresh each evening.',
     ],
     read: [

@@ -141,6 +141,11 @@ Also set apart, by design:
   first 2 sessions (the previous-day fields only: pdh, pdl, pdc; the overnight fields read the chart), the first sessions
   of the range (dhl) and the first 252 sessions (noise: its ATR seed fades by 13/14 a session) read "warm-up only", and a
   difference after them is still "differs".
+- The seeding of a study (it starts on the export's first bar, TradingView's on history before it): a window study (`sma`, `bb`)
+  reads "warm-up only" for its own length in bars; a study that fades (`ema`, `rsi`, `atr`, `macd`) for three times the length
+  Homebase repairs a chart to (an `ema:20`: 300 bars), so an export shorter than that shows "warm-up only" for it, never
+  "differs". A probe on a longer timeframe (`ema:20@3600`) counts the same window in its own bars (300 hours), and counts
+  it again from the higher bar that holds a bar Homebase lacks. A difference after the window is still "differs".
 - A probe on a timeframe below the chart (`ema:20@3600` on the 1D chart): the row is skipped with a "below" note.
   TradingView reads the last lower-timeframe bar, Homebase has no bars below the chart's.
 - `tools/pine/parity.mjs <script> <filed csv> --bars homebase` runs the script on Homebase's bars instead of TradingView's:

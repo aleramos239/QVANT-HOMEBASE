@@ -36,8 +36,8 @@ def ticks_of(rs):
     return [from_row(r, clf) for r in rs]
 
 
-def open_stream(hub, spec=M1, keys=("vwap", "cumdelta"), sub=("conn", "c1")):
-    s = hub.attach(hub.prepare("NQ", spec, list(keys)))
+def open_stream(hub, spec=M1, keys=("vwap", "cumdelta"), sub=("conn", "c1"), root="NQ"):
+    s = hub.attach(hub.prepare(root, spec, list(keys)))
     hub.subscribe(s, sub)
     return s
 
@@ -945,6 +945,73 @@ def test_a_week_vwap_on_a_tick_chart_starts_at_the_weeks_first_session(tmp_path)
     st = make("tv:vwap:week")
     want = [st.push(b) for b in done + s.bars[loaded:]]
     assert s.values["tv:vwap:week"] == want[len(done) - loaded:]
+
+
+def deep_24_7(tmp_path, today, n):
+    """deep() for a 24/7 root: a hub over the n calendar days before `today`, each a BTC session of 3 one-minute bars
+    (a classic root has none on a weekend), with today's first minutes as the tape."""
+    base = tmp_path / "ticks"
+    days = [today - dt.timedelta(days=n - k) for k in range(n)]
+    for k, d in enumerate(days):
+        write_archive(base, "BTC", d, "BTCZ6", rows(session_ms(d, 9, 30), [100 + k + 0.25 * (i % 4) for i in range(9)],
+                                                    step_ms=20_000, first_id=1000 * (k + 1)))
+    hub = Hub(History(TickStore(base), cache_dir=tmp_path / "cache"), lambda: session_ms(today, 9, 31))
+    hub.start_today("BTC", today, ticks_of(rows(session_ms(today, 9, 30), [200 + 0.25 * (i % 5) for i in range(30)],
+                                                first_id=90_000)))
+    return hub, days
+
+
+@pytest.mark.parametrize("today, key, behind, n", [
+    (dt.date(2026, 10, 9), "tv:vwap:week", 6, 40),      # loads Sun 10-04 .. Thu 10-08: Mon .. Sat of its ISO week are before it
+    (dt.date(2026, 11, 5), "tv:vwap:month", 30, 40),    # loads Oct 31 .. Nov 4: the 30 sessions of October before it
+    (dt.date(2026, 10, 9), "wk", 13, 40),               # the same Sunday: its six, and the seven of the week before (the levels)
+    (dt.date(2026, 9, 5), "mo", 61, 75),                # loads Aug 31 .. Sep 4: the 30 sessions of August, the 31 of July
+])
+def test_a_24_7_charts_week_and_month_studies_start_at_the_periods_first_session(tmp_path, today, key, behind, n):
+    """A 24/7 root has a session every calendar day, so the period behind the chart's left edge holds more sessions than a
+    classic root's 4 / 22 (hub.prime_sessions takes the root): the value at the left edge equals a full-history run."""
+    hub, days = deep_24_7(tmp_path, today, n)
+    s = open_stream(hub, keys=(key,), root="BTC")
+    assert s.bars[0].session == days[-5].isoformat() and s.prime_n >= behind
+    assert len(s.prime) == 3 * s.prime_n                              # every session it asked for was there
+    done = [b for d in days for b in hub.history.bars("BTC", M1, d)]
+    tail = s.bars[15:]                                                # today's closed bars: the loaded ones are 15
+    st = make(key)
+    want = [st.push(b) for b in done + tail]
+    assert s.values[key] == want[len(done) - 15:]
+
+
+def test_a_24_7_scroll_back_chunk_starts_a_week_vwap_at_the_weeks_first_session(tmp_path):
+    """older() feeds a chunk the sessions before it: a chunk that opens on a Sunday needs the six before it."""
+    hub, days = deep_24_7(tmp_path, dt.date(2026, 10, 14), 40)
+    s = open_stream(hub, keys=("tv:vwap:week",), root="BTC")
+    ans = hub.older(s, s.bars[0].t)
+    first = dt.date.fromisoformat(ans["sessions"][0]["date"])
+    assert first.weekday() == 6 and len(ans["bars"]) == 15            # Sun 10-04 .. Thu 10-08
+    done = [b for d in days if d <= first + dt.timedelta(days=4) for b in hub.history.bars("BTC", M1, d)]
+    st = make("tv:vwap:week")
+    want = [st.push(b) for b in done]
+    assert ans["studies"]["tv:vwap:week"] == want[-15:]
+
+
+@pytest.mark.parametrize("today, first_key, key, behind", [
+    (dt.date(2026, 10, 9), "tv:rvol:3", "tv:vwap:week", 6),     # primed 4 for the rvol, the week VWAP needs 6
+    (dt.date(2026, 11, 5), "tv:adr:25", "tv:vwap:month", 30),   # primed 26 for the adr, the month VWAP needs 30
+])
+def test_a_24_7_stream_gets_reprimed_when_a_week_or_month_vwap_is_added_later(tmp_path, today, first_key, key, behind):
+    """ensure_prime asks for the stream's own root: a 24/7 chart that primed fewer sessions than 6 / 30 for another study
+    still goes back for the rest, and the added VWAP's left edge equals a full-history run."""
+    hub, days = deep_24_7(tmp_path, today, 40)
+    s = open_stream(hub, keys=(first_key,), root="BTC")
+    assert s.prime_n < behind
+    hub.ensure_prime(s, [key])
+    assert s.prime_n >= behind
+    s.add_study(key)
+    st = make(key)
+    want = [st.push(b) for d in days for b in hub.history.bars("BTC", M1, d)]
+    n = len(want)
+    want += [st.push(b) for b in s.bars[15:]]
+    assert s.values[key] == want[n - 15:]
 
 
 def _flow_wire(m):

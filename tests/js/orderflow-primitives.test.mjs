@@ -214,11 +214,18 @@ function priorDraw(prev, ex) {
   p.series = series; p.tick = 1;
   p.p = { ...prev, prev };
   const { ctx, log } = recorder();
+  Object.defineProperty(ctx, 'textAlign', { set: (v) => { log.push(['set textAlign', v]); }, get: () => undefined });
   p.ex = { prior: true, lines: true, ...ex };
   p.draw({ useMediaCoordinateSpace: (fn) => fn({ context: ctx, mediaSize: { width: 1000, height: 600 } }) });
-  let fill; const pocRects = [], labels = {};
-  for (const l of log) { if (l[0] === 'set fillStyle') fill = l[1]; if (l[0] === 'fillRect' && fill === 'POC') pocRects.push(l[2]); if (l[0] === 'fillText') labels[l[1]] = l[3]; }
-  return { ghost: pocRects[pocRects.length - 1], labels };          // the ghost is drawn after the current profile
+  let fill, align; const pocRects = [], labels = {}, labelX = {}, labelAlign = {};
+  for (const l of log) {
+    if (l[0] === 'set fillStyle') fill = l[1];
+    if (l[0] === 'set textAlign') align = l[1];
+    if (l[0] === 'fillRect' && fill === 'POC') pocRects.push(l);
+    if (l[0] === 'fillText') { labels[l[1]] = l[3]; labelX[l[1]] = l[2]; labelAlign[l[1]] = align; }
+  }
+  const ghost = pocRects[pocRects.length - 1];                      // the ghost is drawn after the current profile
+  return { ghost: ghost[2], ghostX: ghost[1], labels, labelX, labelAlign };
 }
 const at = (v, px) => series.priceToCoordinate(px) - v;
 
@@ -233,7 +240,7 @@ test('profile prior session: its POC ghost and pVAH / pVAL / pPOC follow the cho
   assert.deepEqual(sierra.labels, { pVAH: at(2, 103), pVAL: at(2, 99), pPOC: at(2, 101) });
   assert.equal(sierra.ghost, at(1.75, 101));
   assert.equal(run({ method: 'tv' }).labels.pVAH, at(2, 101));         // tv stops before a row would pass the share
-  const wide = window.HBFlowMath.valueArea(rows, 99, 90);              // a chosen share re-walks the prior rows too
+  const wide = window.HBFlowMath.valueAreaV2(rows, 90, 'homebase', 1);   // a chosen share re-walks the prior rows too, one row at a time like the server
   assert.notEqual(wide.vah, 102);
   assert.equal(run({ va: 90 }).labels.pVAH, at(2, wide.vah));
 });
@@ -246,7 +253,40 @@ test('profile prior session: the pVAL line follows the method and the share too,
   assert.equal(run({}).labels.pVAL, at(2, 101));
   assert.equal(run({ method: 'sierra' }).labels.pVAL, at(2, 100));
   assert.equal(run({ method: 'tv' }).labels.pVAL, at(2, 102));
-  const wide = window.HBFlowMath.valueArea(rows, 102, 90);
+  const wide = window.HBFlowMath.valueAreaV2(rows, 90, 'homebase', 1);
   assert.equal(wide.val, 99);
   assert.equal(run({ va: 90 }).labels.pVAL, at(2, wide.val));
+});
+
+test('profile value area: under the homebase rule a larger share never narrows the area (one row at a time, like the server\'s 70)', () => {
+  const M = window.HBFlowMath, rows = [[100, 5], [101, 7], [102, 2], [103, 7]];
+  const srv = { poc: 101, ...M.valueAreaV2(rows, 70, 'homebase', 1), rows };
+  assert.deepEqual([srv.val, srv.vah], [100, 103]);
+  assert.deepEqual(Profile.levels(srv, { va: 70, method: 'homebase' }, 1), { poc: 101, vah: 103, val: 100 });
+  assert.deepEqual(Profile.levels(srv, { va: 71, method: 'homebase' }, 1), { poc: 101, vah: 103, val: 100 }, '71 % is not narrower than 70 %');
+  assert.deepEqual(Profile.levels(srv, { va: 75 }, 1), { poc: 101, vah: 103, val: 100 }, 'method unset = homebase');
+  let seed = 7;
+  const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  for (let n = 0; n < 300; n++) {                                     // random profiles: every share is the server's rule, so the areas nest
+    const rs = Array.from({ length: 3 + Math.floor(rnd() * 12) }, (_, i) => [100 + i, 1 + Math.floor(rnd() * 20)]);
+    const s = { ...M.valueAreaV2(rs, 70, 'homebase', 1), rows: rs };
+    let prev = Profile.levels(s, { va: 70 }, 1);
+    for (const va of [71, 75, 80, 85, 90, 95]) {
+      const cur = Profile.levels(s, { va, method: 'homebase' }, 1), want = M.valueAreaV2(rs, va, 'homebase', 1);
+      assert.deepEqual(cur, want);
+      assert.ok(cur.val <= prev.val && cur.vah >= prev.vah, `profile ${n}: ${va} % narrower than the share before`);
+      prev = cur;
+    }
+  }
+});
+
+test('profile prior session: side = left puts the ghost and the pVAH / pVAL / pPOC labels beside the left-edge profile, not the right', () => {
+  const rows = [[99, 9], [100, 5], [101, 9], [102, 5], [103, 9]], prev = { poc: 99, vah: 102, val: 99, rows };
+  const right = priorDraw(prev, {}), left = priorDraw(prev, { side: 'left' });
+  assert.deepEqual([right.ghostX, right.labelX.pVAH, right.labelAlign.pVAH], [1000 - 180 - 6 - 180, 6, 'left'], 'right side: today\'s places');
+  assert.deepEqual(priorDraw(prev, { side: 'right' }), right);
+  assert.equal(left.ghostX, 180 + 6, 'the ghost starts just past the profile (W = 18 % of 1000) and grows to the right');
+  assert.deepEqual(left.labelX, { pVAH: 1000 - 6, pVAL: 1000 - 6, pPOC: 1000 - 6 }, 'the mirror of the right side: at the far edge, not on the ghost that fills 186..366');
+  assert.deepEqual(left.labelAlign, { pVAH: 'right', pVAL: 'right', pPOC: 'right' }, 'right-aligned, so the words end 6 px from the edge');
+  assert.deepEqual([left.ghost, left.labels], [right.ghost, right.labels], 'only x moves');
 });

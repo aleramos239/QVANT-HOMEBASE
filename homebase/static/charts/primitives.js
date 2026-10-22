@@ -194,19 +194,19 @@ class Footprint extends Layer {
 }
 
 /* Session volume profile on the right edge: POC highlighted, value area darker. `ex` (2026-10-11): {prior, lines,
-   naked} -- the session before (p.prev, the same shape) as a faint ghost left of the current one, and its VAH / VAL /
-   POC as lines across the chart (the POC dashed while price has not traded back to it: `naked`). */
+   naked} -- the session before (p.prev, the same shape) as a faint ghost next to the current one (left of it; right of it when the profile is on the left),
+   and its VAH / VAL / POC as lines across the chart (the POC dashed while price has not traded back to it: `naked`). */
 class Profile extends Layer {
   constructor(P) { super(P); this.p = null; this.tick = 0.25; this.ex = {}; }
   z() { return 'bottom'; }
   set(p, tick, ex) { this.p = p; this.tick = tick; this.ex = ex || {}; this.redraw(); }
   /* POC / VAH / VAL of one session `s` ({poc, vah, val, rows}) under `ex` ({va, method}): the value area at the chosen share (70 is the server's own)
-     is recomputed from the rows otherwise; `method` sierra / tv use that app's POC and value-area rules (HBFlowMath.valueAreaV2) -- homebase
+     is walked again from the rows otherwise, one row at a time like the server; `method` sierra / tv use that app's POC and value-area rules (HBFlowMath.valueAreaV2) -- homebase
      (unset) keeps the rule above. -> {poc, vah, val}. */
   static levels(s, ex, tick) {
     const M = window.HBFlowMath;
     const v2 = (ex.method === 'sierra' || ex.method === 'tv') && M && M.valueAreaV2 ? M.valueAreaV2(s.rows, ex.va || 70, ex.method, tick) : null;
-    const va = !v2 && ex.va && ex.va !== 70 && M && M.valueArea ? M.valueArea(s.rows, s.poc, ex.va) : null;
+    const va = !v2 && ex.va && ex.va !== 70 && M && M.valueAreaV2 ? M.valueAreaV2(s.rows, ex.va, 'homebase', tick) : null;
     return { poc: v2 ? v2.poc : s.poc, vah: v2 ? v2.vah : va ? va.vah : s.vah, val: v2 ? v2.val : va ? va.val : s.val };
   }
   draw(target) {
@@ -225,20 +225,20 @@ class Profile extends Layer {
       const q = p.prev, ex = this.ex || {};
       if (!q || !q.rows || !q.rows.length) return;
       const pq = Profile.levels(q, ex, this.tick);        // the session before follows the same rule and share
-      if (ex.prior) {                  // the prior session's ghost, left of the current profile
+      if (ex.prior) {                  // the prior session's ghost, next to the current profile on its pane side
         let mq = 1; for (const r of q.rows) if (r[1] > mq) mq = r[1];
         const qh = Math.max(1, this.rowH(q.poc, this.tick) - 0.5);
         ctx.globalAlpha = 0.45;
         for (const [px, v] of q.rows) {
           const y = this.series.priceToCoordinate(px); if (y == null) continue;
           ctx.fillStyle = px === pq.poc ? this.P.poc : this.P.va;
-          const w = W * v / mq; ctx.fillRect(mediaSize.width - W - 6 - w, y - qh / 2, w, qh);
+          const w = W * v / mq; ctx.fillRect(left ? W + 6 : mediaSize.width - W - 6 - w, y - qh / 2, w, qh);
         }
         ctx.globalAlpha = 1;
       }
       if (ex.lines) {                  // VAH / VAL / POC of the session before, across the whole pane
         ctx.font = '10px -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif';
-        ctx.textAlign = 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 1;
+        ctx.textAlign = left ? 'right' : 'left'; ctx.textBaseline = 'bottom'; ctx.lineWidth = 1;   // side left: the words at the far edge, away from the profile and its ghost
         for (const [px, name, color, dashed] of [[pq.vah, 'pVAH', this.P.text2, false], [pq.val, 'pVAL', this.P.text2, false],
           [pq.poc, 'pPOC', this.P.poc, !!ex.naked]]) {
           const y = px == null ? null : this.series.priceToCoordinate(px); if (y == null) continue;
@@ -246,7 +246,7 @@ class Profile extends Layer {
           ctx.setLineDash(dashed ? [6, 4] : []);
           ctx.beginPath(); ctx.moveTo(0, Math.round(y) + 0.5); ctx.lineTo(mediaSize.width, Math.round(y) + 0.5); ctx.stroke();
           ctx.setLineDash([]);
-          ctx.fillText(name, 6, y - 2);
+          ctx.fillText(name, left ? mediaSize.width - 6 : 6, y - 2);
         }
       }
     });

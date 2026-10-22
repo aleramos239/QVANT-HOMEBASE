@@ -104,6 +104,59 @@ test('an input override reaches the script', { skip }, async () => {
   assert.equal(r.plots.rsi[4].value, null);
 });
 
+test('an input override key matches the input\'s id, its variable name or its title: a name that is another input\'s title reaches both, the id only its own', { skip }, async () => {
+  // the rule the settings dialog\'s pineKeys keys around: swapped names, `a` titled "b" and `b` titled "a"
+  const src = '//@version=6\nindicator("X")\na = input.int(10, "b")\nb = input.int(20, "a")\nplot(a, "pa")\nplot(b, "pb")\n';
+  const run = async (inputs) => {
+    const w = loadWorker(UMD);
+    w.post(init(src, bars(30), { inputs }));
+    const r = await w.next();
+    assert.equal(r.type, 'result', r.message);
+    return [r.plots.pa[29].value, r.plots.pb[29].value, r.inputsMeta.map((m) => [m.id, m.varId, m.title])];
+  };
+  const [pa0, pb0, meta] = await run({});
+  assert.deepEqual([pa0, pb0], [10, 20]);
+  assert.deepEqual(meta, [['in_0', 'a', 'b'], ['in_1', 'b', 'a']]);
+  assert.deepEqual((await run({ a: 1 })).slice(0, 2), [1, 1], 'the name `a` is also the second input\'s title');
+  assert.deepEqual((await run({ in_0: 1 })).slice(0, 2), [1, 20], 'the id reaches only the first input');
+  assert.deepEqual((await run({ in_0: 1, in_1: 7 })).slice(0, 2), [1, 7]);
+});
+
+test('an input with no variable and no title is named "untitled" in inputsMeta, and only its id reaches it (the name is no key)', { skip }, async () => {
+  const src = '//@version=6\nindicator("X")\nplot(input.int(30), "p")\n';
+  const run = async (inputs) => {
+    const w = loadWorker(UMD);
+    w.post(init(src, bars(30), { inputs }));
+    const r = await w.next();
+    assert.equal(r.type, 'result', r.message);
+    return [r.plots.p[29].value, r.inputsMeta.map((m) => [m.id, m.name, m.varId, m.title])];
+  };
+  const [p0, meta] = await run({});
+  assert.equal(p0, 30);
+  assert.deepEqual(meta, [['in_0', 'untitled', undefined, undefined]]);
+  assert.equal((await run({ untitled: 1000 }))[0], 30, 'the settings dialog must not key it by that name');
+  assert.equal((await run({ in_0: 1000 }))[0], 1000);
+});
+
+test('two inputs in one assigned expression share a variable name: it moves both, the id or the title only its own, and the id is read first', { skip }, async () => {
+  // why the settings dialog\'s pineKeys never keys such an input by its variable name
+  const src = '//@version=6\nindicator("X")\nlenSum = input.int(3, "Fast") + input.int(4, "Slow")\nplot(lenSum, "s")\n';
+  const run = async (inputs) => {
+    const w = loadWorker(UMD);
+    w.post(init(src, bars(30), { inputs }));
+    const r = await w.next();
+    assert.equal(r.type, 'result', r.message);
+    return [r.plots.s[29].value, r.inputsMeta.map((m) => [m.id, m.varId, m.title])];
+  };
+  const [s0, meta] = await run({});
+  assert.equal(s0, 7);
+  assert.deepEqual(meta, [['in_0', 'lenSum', 'Fast'], ['in_1', 'lenSum', 'Slow']]);
+  assert.equal((await run({ lenSum: 7 }))[0], 14, 'the shared name moves both');
+  assert.equal((await run({ in_0: 7 }))[0], 11, 'the id moves one');
+  assert.equal((await run({ Fast: 7 }))[0], 11, 'the title moves one');
+  assert.equal((await run({ in_0: 1, lenSum: 7 }))[0], 8, 'the id wins over the shared name for its own input');
+});
+
 test('request.footprint: a warning and na without fp, the bar delta with fp', { skip }, async () => {
   const src = '//@version=6\nindicator("fp")\nfp = request.footprint(1)\nplot(not na(fp) ? fp.delta() : na, "delta")\n';
   let w = loadWorker(UMD);

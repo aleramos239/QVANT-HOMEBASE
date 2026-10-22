@@ -1097,7 +1097,8 @@ class Cell {
           // when it can move, the price pane when it cannot
           const { where, scale } = t.pane ? spot(inst) : { where: 0, scale: {} };
           const st = inst.style || {}, own = where > 0;
-          const fmt = t.pane ? { priceFormat: { type: 'price', precision: 2, minMove: 0.01 } } : {};
+          const dg = t.digits || 2;   // decimals of the axis and the value tags: 2, or what the entry asks for (SMI Ergodic: 4)
+          const fmt = t.pane ? { priceFormat: { type: 'price', precision: dg, minMove: Number((10 ** -dg).toFixed(dg)) } } : {};
           let top = null;
           t.lines.forEach((ln, j) => {
             const sty = st[ln.part] || catalogSty(ln);

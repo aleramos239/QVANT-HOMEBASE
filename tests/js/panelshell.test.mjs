@@ -77,8 +77,11 @@ class El {
   focus() {}
   blur() {}
   getBoundingClientRect() { return this._rect; }
-  get offsetWidth() { return this._rect.width; }
-  get offsetHeight() { return this._rect.height; }
+  // a real element's offset box is its layout box: a transform (a panel springing into place) moves its
+  // getBoundingClientRect() but not this. place() below sets _box once; a test shifts _rect alone to model a transform.
+  get offsetLeft() { return (this._box || this._rect).left; }
+  get offsetWidth() { return (this._box || this._rect).width; }
+  get offsetHeight() { return (this._box || this._rect).height; }
   get isConnected() { let n = this; while (n.parentElement) n = n.parentElement; return n._isRoot === true; }
   set innerHTML(_) {}
 }
@@ -238,8 +241,9 @@ test('the dock width grip drops its own release snap-back class on a fresh grab 
    drop that names only the panels showing must not drop the third from it (review 2026-10-22). ---- */
 function place(env, rects) {
   for (const [id, r] of Object.entries(rects)) {
-    env.document.getElementById(id)._rect = { x: r.left, y: r.top, left: r.left, top: r.top, right: r.left + r.width,
-      bottom: r.top + r.height, width: r.width, height: r.height };
+    const el = env.document.getElementById(id);
+    el._rect = { x: r.left, y: r.top, left: r.left, top: r.top, right: r.left + r.width, bottom: r.top + r.height, width: r.width, height: r.height };
+    el._box = el._rect;
   }
 }
 const dockedIds = (env) => env.document.getElementById('pdock').children.filter((c) => c.classList.contains('hbpanel')).map((c) => c.dataset.panel);
@@ -324,4 +328,182 @@ test('a floating panel dropped on a dock holding two others lands at the pointer
     'panel-dom': { left: 900, top: 0, width: 300, height: 400 }, 'panel-tape': { left: 900, top: 400, width: 300, height: 400 } });
   dragHeader(env, 'order', { x: 300, y: 12 }, { x: 1000, y: 500 });     // lower half of DOM's slot ... above Tape's middle (600)
   assert.deepEqual(dockedIds(env), ['dom', 'order', 'tape']);
+});
+
+/* ---- side by side (review 2026-10-22): a click on a header never reorders; the slot of a plain drag is read off
+   X when the panels sit in a row, off Y when they sit in a column ---- */
+const ROW_DOCK = { pdock: { left: 600, top: 0, width: 600, height: 800 } };
+const ROW = { ...ROW_DOCK, 'panel-dom': { left: 600, top: 0, width: 300, height: 800 }, 'panel-order': { left: 900, top: 0, width: 300, height: 800 } };
+/* Order + DOM docked side by side, DOM on the left, laid out as the browser would lay a row out. */
+function sideDock(env) {
+  const shell = env.window.HBPanelShell;
+  shell.setOpen('order', true); shell.setOpen('dom', true);
+  place(env, { ...DOCK, ...TOP_HALF, ...BOTTOM_HALF('dom') });
+  dragHeader(env, 'dom', { x: 1000, y: 410 }, { x: 920, y: 200 });      // DOM's header onto Order's left band
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  assert.ok(env.document.getElementById('pdock').classList.contains('side'));
+  place(env, ROW);
+}
+function press(env, id, at, to, ms = 16) {   // a press that ends at `to` (or, with no `to`, where it started), `ms` after it began
+  const head = env.document.getElementById(`panel-${id}`).children[0];
+  head.dispatchEvent(pointerEvent('pointerdown', at.x, at.y, { target: head, t: 0 }));
+  if (to) head.dispatchEvent(pointerEvent('pointermove', to.x, to.y, { t: ms }));
+  head.dispatchEvent(pointerEvent('pointerup', (to || at).x, (to || at).y, { t: ms + 16 }));
+}
+
+test('side by side: a click on a header (even with a 3px jitter) does not swap the panels', () => {
+  const env = makeEnv();
+  sideDock(env);
+  press(env, 'order', { x: 1100, y: 12 });                                // the RIGHT header: used to jump to slot 0
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  press(env, 'order', { x: 1100, y: 12 }, { x: 1102, y: 14 });
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  press(env, 'dom', { x: 700, y: 12 });
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+});
+
+test('stacked: a click on a header does not reorder either', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  press(env, 'tape', { x: 1000, y: 540 });
+  press(env, 'dom', { x: 1000, y: 274 });
+  assert.deepEqual(dockedIds(env), ['order', 'dom', 'tape']);
+});
+
+test('side by side: a plain drag lands in the slot under the pointer\'s X (inside its own panel, or past the dock edge)', () => {
+  const env = makeEnv();
+  sideDock(env);
+  press(env, 'order', { x: 1000, y: 12 }, { x: 1100, y: 60 });          // wanders inside its own panel, right of DOM's middle: stays second
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  press(env, 'dom', { x: 700, y: 12 }, { x: 1210, y: 12 });            // DOM thrown past the right edge: lands after Order
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
+  place(env, { ...ROW_DOCK, 'panel-order': { left: 600, top: 0, width: 300, height: 800 }, 'panel-dom': { left: 900, top: 0, width: 300, height: 800 } });
+  press(env, 'dom', { x: 1000, y: 12 }, { x: 590, y: 12 });            // and back, just short of floating: before Order
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+});
+
+test('a side dock squeezed into a column (narrow viewport) still reads the slot off Y', () => {
+  const env = makeEnv();
+  sideDock(env);                                                         // dockOrientation is "side" ...
+  place(env, { ...DOCK, 'panel-dom': { left: 900, top: 0, width: 300, height: 400 }, 'panel-order': { left: 900, top: 400, width: 300, height: 400 } });   // ... the media query lays a column
+  press(env, 'order', { x: 1100, y: 410 }, { x: 920, y: 700 });        // left of DOM's middle in X, below it in Y
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+});
+
+test('a stale "side" orientation with three docked panels still reorders the stack by Y', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  sideDock(env);
+  shell.setOpen('tape', true);                                           // a third panel: the dock is a stack again
+  assert.ok(!env.document.getElementById('pdock').classList.contains('side'));
+  place(env, { ...DOCK, 'panel-dom': { left: 900, top: 0, width: 300, height: 266 }, 'panel-order': { left: 900, top: 266, width: 300, height: 266 },
+    'panel-tape': { left: 900, top: 532, width: 300, height: 268 } });
+  dragHeader(env, 'dom', { x: 1000, y: 100 }, { x: 1000, y: 480 });
+  assert.deepEqual(dockedIds(env), ['order', 'dom', 'tape']);
+});
+
+/* The three ways round the click guard (review 2026-10-22, skeptic): a window blur mid-press carries no pointer at
+   all (NaN), and a twitch of a few px at speed is projected far by the release momentum. Neither is a drag. */
+test('a window blur in the middle of a press leaves the dock as it was (it used to throw the panel to the end)', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  const head = env.document.getElementById('panel-order').children[0];
+  head.dispatchEvent(pointerEvent('pointerdown', 1000, 100, { target: head, t: 0 }));
+  env.window._fire('blur');
+  head.dispatchEvent(pointerEvent('pointerup', 1000, 100, { t: 40 }));   // the press is over: this one is nobody's
+  assert.deepEqual(dockedIds(env), ['order', 'dom', 'tape']);
+  const side = makeEnv();
+  sideDock(side);
+  const left = side.document.getElementById('panel-dom').children[0];
+  left.dispatchEvent(pointerEvent('pointerdown', 700, 12, { target: left, t: 0 }));
+  side.window._fire('blur');
+  assert.deepEqual(dockedIds(side), ['dom', 'order']);
+});
+
+test('a twitch under 4px at speed is still a click: the release momentum never reorders a stack', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  press(env, 'dom', { x: 1000, y: 274 }, { x: 1000, y: 272 }, 4);       // 2px up in 4ms = 500px/s: projected 250px, over Order's middle (133)
+  assert.deepEqual(dockedIds(env), ['order', 'dom', 'tape']);
+});
+
+test('a twitch under 4px at speed does not drop the panel on the other one\'s band either (no stack<->side switch)', () => {
+  const env = makeEnv();
+  sideDock(env);
+  press(env, 'order', { x: 910, y: 12 }, { x: 907, y: 12 }, 9);         // 3px left in 9ms = 333px/s: projected 166px, onto the middle of DOM (a "top" band)
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  assert.ok(env.document.getElementById('pdock').classList.contains('side'), 'still side by side');
+  dragHeader(env, 'order', { x: 910, y: 12 }, { x: 750, y: 12 });       // a real drag onto the middle of DOM, at rest, does
+  assert.ok(!env.document.getElementById('pdock').classList.contains('side'), 'a real drag onto DOM stacks the pair');
+});
+
+test('side by side: at rest, the slot is the pointer\'s X against the other panel\'s middle (not its Y, not a bare number)', () => {
+  const env = makeEnv();
+  sideDock(env);                                                         // DOM 600-900 (middle 750), Order 900-1200 (middle 1050); heads at y=12, panel middles at y=400
+  dragHeader(env, 'dom', { x: 700, y: 12 }, { x: 800, y: 12 });         // right of the dock's left edge, left of Order's middle: stays first
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  dragHeader(env, 'dom', { x: 700, y: 12 }, { x: 590, y: 12 });         // just short of floating, off to the left: first
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+  dragHeader(env, 'dom', { x: 700, y: 12 }, { x: 1210, y: 12 });        // past Order's middle (and the dock's edge): last
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
+  place(env, { ...ROW_DOCK, 'panel-order': { left: 600, top: 0, width: 300, height: 800 }, 'panel-dom': { left: 900, top: 0, width: 300, height: 800 } });
+  dragHeader(env, 'dom', { x: 1000, y: 12 }, { x: 1190, y: 12 });       // right of Order's middle (750): stays last
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
+  dragHeader(env, 'dom', { x: 1000, y: 12 }, { x: 590, y: 12 });        // left of it: first
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+});
+
+test('side by side: the other panel still springing into place (it wears a transform) does not turn the row into a column', () => {
+  const env = makeEnv();
+  sideDock(env);                                                         // DOM 600-900, Order 900-1200: laid out in a row
+  const dom = env.document.getElementById('panel-dom');
+  dom._rect = { ...dom._rect, x: 720, left: 720, right: 1020 };          // DOM's drop spring is 120px from home: it overlaps Order for the moment
+  dragHeader(env, 'order', { x: 1000, y: 12 }, { x: 1040, y: 12 });     // a plain 40px drag inside Order's own panel
+  assert.deepEqual(dockedIds(env), ['dom', 'order']);
+});
+
+/* Where the click ends and the drag begins (CLICK_PX = 4, drawings.js MOVE_PX): exactly 4px is a drag, and a drag is
+   judged at the point the release momentum carries it to -- in a column by Y, in a row by X. A flick this short only
+   lands anywhere because of the projection, so each of these also fails if the projection is dropped. */
+test('exactly 4px is a drag: a 4px flick up a stack lands where the momentum carries it (Y, not the raw release point)', () => {
+  const env = makeEnv();
+  const shell = env.window.HBPanelShell;
+  for (const id of ['order', 'dom', 'tape']) shell.setOpen(id, true);
+  place(env, { ...DOCK, ...THIRDS });
+  press(env, 'tape', { x: 1000, y: 540 }, { x: 1000, y: 536 }, 4);     // 1000px/s: projected 499px up, over Order's middle (133); released at 536, it would stay last
+  assert.deepEqual(dockedIds(env), ['tape', 'order', 'dom']);
+});
+
+test('exactly 4px is a drag: a 4px flick along a row lands where the momentum carries it (X, not the raw release point)', () => {
+  const env = makeEnv();
+  sideDock(env);                                                         // DOM 600-900 (middle 750), Order 900-1200
+  press(env, 'order', { x: 904, y: 12 }, { x: 900, y: 12 }, 4);         // 1000px/s: projected to x=401, left of DOM's middle; released at 900, it would stay last
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
+});
+
+test('exactly 4px is a drag: a 4px flick onto the other panel\'s band drops on it (stack<->side), where 3px does not', () => {
+  const env = makeEnv();
+  sideDock(env);
+  press(env, 'order', { x: 910, y: 12 }, { x: 906, y: 12 }, 12);       // 333px/s: projected to x=740, the middle of DOM (a "top" band)
+  assert.ok(!env.document.getElementById('pdock').classList.contains('side'), 'the pair is stacked');
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
+});
+
+/* A neighbour that is still springing into place is judged where it is DRAWN: the drop highlight paints on that same
+   element, so the band the user aims at is the band that counts. (The row-or-column question above is the one thing
+   read off the layout box: that is structure, not where the pointer is.) */
+test('a neighbour still springing into place is a drop target where it is drawn, as its highlight shows', () => {
+  const env = makeEnv();
+  sideDock(env);                                                         // DOM 600-900 laid out, Order 900-1200
+  const dom = env.document.getElementById('panel-dom');
+  dom._rect = { ...dom._rect, x: 900, left: 900, right: 1200 };          // DOM is drawn over Order's header for the moment
+  dragHeader(env, 'order', { x: 1000, y: 12 }, { x: 1010, y: 12 });
+  assert.ok(!env.document.getElementById('pdock').classList.contains('side'), 'a drag onto the panel drawn under the pointer stacks the pair');
+  assert.deepEqual(dockedIds(env), ['order', 'dom']);
 });

@@ -1187,7 +1187,7 @@ test('the legend names the folders the calendar shows', () => {
 /* ---- the TradingView studies (tv_*): one entry per `tv:` study of the server, same key, same defaults ---- */
 const TV_KEYS = {
   sma: 'tv:sma:9:close', ema: 'tv:ema:9:close', rma: 'tv:rma:7:close', wma: 'tv:wma:9:close', tema: 'tv:tema:9:close', hma: 'tv:hma:9',
-  dema: 'tv:dema:9', smma: 'tv:smma:7', alma: 'tv:alma:9:0.85:6', lsma: 'tv:lsma:25', mcginley: 'tv:mcginley:14', kama: 'tv:kama:14:2:30',
+  dema: 'tv:dema:9', smma: 'tv:smma:7', alma: 'tv:alma:9:0.85:6', lsma: 'tv:lsma:25', mcginley: 'tv:mcginley:14', kama: 'tv:kama:10:2:30',
   median: 'tv:median:3', envelope: 'tv:envelope:20:10', supertrend: 'tv:supertrend:10:3', sar: 'tv:sar:0.02:0.02:0.2',
   chandelier: 'tv:chandelier:22:3', vstop: 'tv:vstop:20:2', chandekroll: 'tv:chandekroll:10:1:9', ichimoku: 'tv:ichimoku:9:26:52:26',
   alligator: 'tv:alligator:13:8:5:8:5:3', adx: 'tv:adx:14:14', aroon: 'tv:aroon:14', aroonosc: 'tv:aroonosc:14', vortex: 'tv:vortex:14',
@@ -1306,6 +1306,17 @@ test('tv studies: fractals and pivot high/low mark the bar `n` back from the one
   assert.equal(p.marks({ hi: 120 }, P, { left: 8, right: 6 }).ago, 6);
   assert.equal(p.marks({ lo: 80 }, P, { left: 8, right: 6 }).position, 'belowBar');
   assert.equal(p.marks({ hi: null, lo: null }, P, { left: 8, right: 6 }), null);
+});
+
+test('tv studies: SMI Ergodic sends a raw ratio (about 0.04), so its legend reads 4 decimals; every other study keeps 2', () => {
+  assert.deepEqual(C.CATALOG.filter((d) => d.digits !== undefined).map((d) => [d.id, d.digits]), [['tv_smi', 4], ['tv_smio', 4]]);
+  const text = (id, wire) => C.legendValues(C.instance(id), { sv: { [C.serverKey(C.instance(id))]: wire } }, {}, 0.25).map((x) => x.text);
+  assert.deepEqual(text('tv_smio', 0.0432), ['0.0432']);
+  assert.deepEqual(text('tv_smio', -0.004), ['-0.0040']);
+  assert.deepEqual(text('tv_smi', { erg: 0.0432, sig: 0.0411 }), ['0.0432', '0.0411']);
+  assert.deepEqual(text('tv_smi', { erg: 0.17, sig: null }), ['0.1700', '—']);
+  assert.deepEqual(text('tv_rsi', 71.234), ['71.23']);
+  assert.deepEqual(text('tv_bbw', 3.9228), ['3.92']);
 });
 
 test('tv studies: the line parts are the ones the server sends (so the legend reads a number, not nothing)', () => {

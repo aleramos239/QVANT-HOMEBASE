@@ -158,6 +158,21 @@ def test_verdicts():
     assert (c["n"], c["n_diff"], c["first"], c["max_abs"]) == (4, 3, 1, 0.5)
 
 
+def test_a_differs_row_points_at_the_first_difference_after_the_warm_up_not_at_a_forgiven_cell():
+    tv, hb = [1.0] * 300, [1.0] * 300
+    tv[0:5] = [9.0] * 5                       # cold cells: forgiven
+    cold = range(252)
+    c = tp.compare(tv, hb, decimals=1, warm=0, restarts=(0,), cold=cold)
+    assert (c["verdict"], c["n_diff"]) == ("warm-up only", 5)
+    assert (c["first"], c["max_abs"]) == (0, 8.0)             # nothing late: the row still shows where the warm-up differed
+    tv[260] = 3.0                             # a real mismatch past the cold window
+    c = tp.compare(tv, hb, decimals=1, warm=0, restarts=(0,), cold=cold)
+    assert (c["verdict"], c["n"], c["n_diff"]) == ("differs", 300, 6)       # the counts still cover every differing cell
+    assert (c["first"], c["max_abs"]) == (260, 2.0)
+    c = tp.compare([1.0, 5.0, 1.0, 7.0], [1.0, 1.0, 1.0, 2.0], warm=2, restarts=(0,))      # the same through `warm`
+    assert (c["verdict"], c["first"], c["max_abs"]) == ("differs", 3, 5.0)
+
+
 def test_field():
     assert tp.field(None, "") is None and tp.field(2, "") == 2.0
     assert tp.field({"k": 3, "d": None}, "k") == 3.0 and tp.field({"k": 3}, "d") is None and tp.field({"k": 3}, "") is None
@@ -353,12 +368,12 @@ def test_a_run_where_no_csv_can_be_read_writes_no_report(tmp_path, monkeypatch):
 
 
 # ------------------------------------------------------------------ the P1 probes end to end
-def walk_csv(bars, extra):
-    """CSV text in TradingView's shape from Bars, plus `extra` {title: [values]}: ten decimals, None is na."""
+def walk_csv(bars, extra, dec=10):
+    """CSV text in TradingView's shape from Bars, plus `extra` {title: [values]}: ten decimals (or `dec`), None is na."""
     rows = [",".join(["time", "open", "high", "low", "close", "Volume", *extra])]
     for i, b in enumerate(bars):
-        rows.append(",".join([str(b.t // 1000), *(f"{x:.10f}" for x in (b.o, b.h, b.l, b.c)), str(b.v),
-                              *("" if extra[k][i] is None else f"{extra[k][i]:.10f}" for k in extra)]))
+        rows.append(",".join([str(b.t // 1000), *(f"{x:.{dec}f}" for x in (b.o, b.h, b.l, b.c)), str(b.v),
+                              *("" if extra[k][i] is None else f"{extra[k][i]:.{dec}f}" for k in extra)]))
     return "\n".join(rows) + "\n"
 
 
@@ -470,10 +485,49 @@ def test_with_no_volume_at_all_the_volume_probes_are_skipped_with_a_reason_not_r
     for k in (("vwap", "vwap"), ("vwma:3", "")):
         r = by[k]
         assert r["note"].startswith("skipped") and "no volume" in r["note"], r
+        assert "|" not in r["note"], r                           # a raw pipe splits the markdown report row
         assert r["math"]["verdict"] == "no-tv" and r["math"]["n"] == 0
         assert r["data"]["verdict"] == "identical"            # TradingView's column against Homebase's real volume stays valid
     assert by[("sma:2", "")]["note"] == "" and by[("sma:2", "")]["math"]["verdict"] == "identical"
     assert not any(r["field"] == "v" for r in rows)           # and no bar-volume row against a column that is not there
+
+
+def _cells(line):
+    """The cells of a markdown table row: a cell break is a pipe with no backslash before it."""
+    return re.split(r"(?<!\\)\|", line)[1:-1]
+
+
+def _report_row(tmp_path, row, key):
+    meta = {"file": "x.csv", "root": "NQ", "group": "P2", "tf": "1m", "bars": 3, "sessions": 1,
+            "first": "2025-10-08 18:00", "last": "2025-10-08 18:02"}
+    md, js = tp.write_report([meta], [row], tmp_path, stamp="t")
+    lines = md.read_text().splitlines()
+    return next(l for l in lines if l.startswith("| study")), next(l for l in lines if l.startswith(f"| {key} ")), js
+
+
+def test_a_pipe_in_the_note_or_the_file_name_keeps_the_report_row_at_ten_cells(tmp_path):
+    row = tp._row("vwap", "vwap", "1m", None, None, "", [], note="skipped: plots tv|vol| and more")
+    row["file"] = "odd|name.csv"
+    head, line, js = _report_row(tmp_path, row, "vwap")
+    assert len(_cells(line)) == len(_cells(head)) == 10
+    assert _cells(line)[-1].strip() == "odd\\|name.csv" and _cells(line)[-2].strip() == "skipped: plots tv\\|vol\\| and more"
+    assert json.loads(js.read_text())["rows"][0]["note"] == "skipped: plots tv|vol| and more"      # the json keeps the text as is
+
+
+def test_the_report_shows_the_first_diff_of_the_check_that_differs_not_of_a_warm_up_beside_it(tmp_path):
+    bars = [bar(t, 1, 2, 0, 1) for t in minutes(300)]
+    tvc = [1.0] * 300
+    cold = list(tvc)
+    cold[0] = 9.0
+    late = list(tvc)
+    late[260] = 3.0
+    math_cmp = tp.compare(tvc, cold, 1, 0, (0,), cold=range(252))          # warm-up only, 8 off at the first bar
+    data_cmp = tp.compare(tvc, late, 1, 0, (0,), cold=range(252))          # differs, 2 off at bar 260
+    assert math_cmp["verdict"] == "warm-up only" and data_cmp["verdict"] == "differs"
+    head, line, _ = _report_row(tmp_path, tp._row("noise:0.3:rth", "up", "1m", math_cmp, data_cmp, "", bars), "noise:0.3:rth")
+    assert [c.strip() for c in _cells(line)[3:7]] == ["warm-up only 1/300", "differs 1/300", "2025-10-08 22:20", "2"]
+    both = tp._row("noise:0.3:rth", "up", "1m", math_cmp, math_cmp, "", bars)              # nothing differs late: where the warm-up differed
+    assert [c.strip() for c in _cells(_report_row(tmp_path, both, "noise:0.3:rth")[1])[5:7]] == ["2025-10-08 18:00", "8"]
 
 
 def test_ohlcv_pass_without_volume_does_not_class_every_bar_volume():
@@ -602,9 +656,124 @@ def test_a_running_sum_is_compared_from_its_first_bar_not_forgiven_as_warm_up(tm
     assert off["math"]["verdict"] == "differs" and off["data"]["verdict"] == "differs"      # not "warm-up only"
 
 
+def test_only_the_running_sums_are_compared_from_their_first_bar():
+    assert tp.CUMULATIVE == {"obv", "pvt", "adl", "nvi", "pvi"}        # derived from studies_tv2.WARM: a new running sum joins by itself
+
+
+def test_a_daily_probe_on_a_short_intraday_export_reads_warm_up_only(tmp_path):
+    days = weekdays(62)
+    allb = walk(dates=days, per=30, seed=3)                       # 1-minute bars; TradingView's daily series saw 52 sessions first
+    for b in allb:
+        b.o, b.h, b.l, b.c = (round(x, 10) for x in (b.o, b.h, b.l, b.c))
+    keep = {d.isoformat() for d in days[52:]}
+    idx = [i for i, b in enumerate(allb) if b.session in keep]
+    exp = [allb[i] for i in idx]
+    key = "sma:50@86400"
+    vals = tp.run(tp.tv_key(key)[0], allb)
+    x = load(tmp_path, walk_csv(exp, {"tv|probe|P1": [1.0] * len(exp), f"tv|{key}|": [tp.field(vals[i], "") for i in idx]}), name="d.csv")
+    r = next(r for r in tp.check_export(x, "NQ", hb=tp.tv_bars(x))[1] if r["key"] == key)
+    # TradingView has a value at each of the 10 session closes, Homebase's own 10 sessions hold no 50 daily closes yet
+    for side in ("math", "data"):
+        assert r[side]["verdict"] == "warm-up only" and r[side]["n"] == r[side]["n_diff"] == 10, (side, r[side])
+
+
+def htf_row(tmp_path, key, prior, n, bad=(), hb_drop=None, bad_bars=(), dec=10, seed=3):
+    """The check_export row of the probe `key` on a 15m export of n sessions whose TradingView column was run with
+    `prior` more sessions behind it (request.security reads history the export lacks), printed to `dec` decimals; the
+    export sessions in `bad` (0-based) and the export bars in `bad_bars` are 5 off in that column; hb_drop(bar) -> True
+    leaves a bar out of Homebase's own bars."""
+    allb = long_15m(prior + n, seed=seed, dec=dec)
+    sessions = sorted({b.session for b in allb})
+    idx = [i for i, b in enumerate(allb) if b.session in set(sessions[prior:])]
+    exp = [allb[i] for i in idx]
+    off = {sessions[prior + j] for j in bad}
+    vals = tp.run(tp.tv_key(key)[0], allb)
+    col = [tp.field(vals[i], "") for i in idx]
+    col = [v + 5.0 if v is not None and (b.session in off or j in bad_bars) else v for j, (v, b) in enumerate(zip(col, exp))]
+    x = load(tmp_path, walk_csv(exp, {"tv|probe|P1": [1.0] * len(exp), f"tv|{key}|": col}, dec), name="htf.csv")
+    hb = tp.tv_bars(x)
+    if hb_drop:
+        hb = [b for b in hb if not hb_drop(b)]
+    return next(r for r in tp.check_export(x, "NQ", hb=hb)[1] if r["key"] == key)
+
+
+def test_a_daily_probe_forgives_its_first_50_sessions_and_a_difference_after_them_is_one(tmp_path):
+    key = "sma:50@86400"
+    r = htf_row(tmp_path, key, prior=55, n=70)
+    for side in ("math", "data"):       # Homebase holds no 50 daily closes until the 50th session: 49 cells off, all forgiven
+        assert r[side]["verdict"] == "warm-up only" and r[side]["n"] == 70 and r[side]["n_diff"] == 49, (side, r[side])
+    r = htf_row(tmp_path, key, prior=55, n=70, bad=(67, 68, 69))
+    for side in ("math", "data"):
+        assert r[side]["verdict"] == "differs" and r[side]["n_diff"] == 52, (side, r[side])
+    assert r["math"]["max_abs"] == pytest.approx(5.0)          # the 5 that was added, not a seed gap from the cold sessions
+
+
+def test_a_probe_on_a_longer_timeframe_forgives_its_own_window_of_higher_bars_whatever_the_chart(tmp_path):
+    key = "sma:5@3600"                                  # 5 hourly bars: 20 chart bars at 15m, 300 at the hub's one-minute reckoning
+    r = htf_row(tmp_path, key, prior=3, n=20)
+    for side in ("math", "data"):
+        assert r[side]["verdict"] == "warm-up only" and r[side]["n_diff"] == 4, (side, r[side])
+    r = htf_row(tmp_path, key, prior=3, n=20, bad=(2,))     # session 3 is bar 128-191, inside the hub's 300 bars, past 5 hours
+    for side in ("math", "data"):
+        assert r[side]["verdict"] == "differs", (side, r[side])
+
+
+def test_a_bar_missing_from_homebase_does_not_make_a_correct_daily_probe_differ(tmp_path):
+    """A skipped bar restarts the data check: the study saw the wrong close, so the sessions that depend on it stay forgiven."""
+    gone = weekdays(125)[55 + 20].isoformat()                  # export session 20: its last hour is missing, so Homebase's close is another bar's
+    r = htf_row(tmp_path, "sma:50@86400", prior=55, n=70,
+                hb_drop=lambda b: b.session == gone and dt.datetime.fromtimestamp(b.t / 1000, ET).hour == 9)
+    assert r["data"]["verdict"] in ("identical", "warm-up only") and r["math"]["verdict"] == "warm-up only", r
+
+
+def test_after_a_skipped_bar_a_daily_probe_is_cold_for_50_sessions_not_for_the_hubs_20000_chart_bars(tmp_path):
+    gone = weekdays(125)[55 + 5].isoformat()                   # export session 5: its last hour is missing, so Homebase's close is another bar's
+    drop = lambda b: b.session == gone and dt.datetime.fromtimestamp(b.t / 1000, ET).hour == 9
+    r = htf_row(tmp_path, "sma:50@86400", prior=55, n=70, hb_drop=drop)
+    # 69 cells (session 5's own close is skipped); 48 before Homebase holds 50 closes, and 49-54 still average the wrong one
+    assert r["data"]["verdict"] == "warm-up only" and r["data"]["n"] == 69 and r["data"]["n_diff"] == 54, r["data"]
+    r = htf_row(tmp_path, "sma:50@86400", prior=55, n=70, bad=(67, 68, 69), hb_drop=drop)
+    assert r["data"]["verdict"] == "differs" and r["data"]["n_diff"] == 57, r["data"]      # sessions 55 on are Homebase's own again
+    assert r["math"]["verdict"] == "differs" and r["math"]["n_diff"] == 52, r["math"]
+
+
+def test_the_cold_window_of_a_longer_timeframe_probe_ends_after_its_last_higher_bar_exactly(tmp_path):
+    # (key, chart bars in a higher bar, higher bars it is cold for, prior sessions, export sessions): an error in the last
+    # cold higher bar is warm-up, one higher bar later it is a difference. sma:5 is a window of 5; ema:3 fades, 3 x the hub's 15
+    for key, per, win, prior, n in (("sma:5@3600", 4, 5, 3, 6), ("ema:3@3600", 4, 45, 3, 6), ("sma:50@86400", 64, 50, 55, 70)):
+        for h, want in ((win - 1, "warm-up only"), (win, "differs")):
+            r = htf_row(tmp_path, key, prior=prior, n=n, bad_bars=(per * h + per - 1,))       # the higher bar's closing chart bar
+            for side in ("math", "data"):
+                assert r[side]["verdict"] == want, (key, h, side, r[side])
+
+
+def test_a_skipped_bar_makes_a_probe_cold_for_its_window_of_higher_bars_from_the_higher_bar_that_holds_it(tmp_path):
+    first = weekdays(9)[3].isoformat()                          # the export's first session
+    drop = lambda b: b.session == first and dt.datetime.fromtimestamp(b.t / 1000, ET).strftime("%H:%M") == "04:45"
+    # export bar 43 closes hour 10: Homebase's hour 10 closes on bar 42, so its sma:5 is off in hours 11-14 (the window holds hour 10)
+    for at, want in ((59, "warm-up only"), (63, "differs")):       # the closing bar of hour 14 / of hour 15
+        r = htf_row(tmp_path, "sma:5@3600", prior=3, n=6, hb_drop=drop, bad_bars=(at,))
+        assert r["data"]["verdict"] == want, (at, r["data"])
+
+
+def test_a_correct_ema_never_reads_differs_at_two_decimals_on_its_own_timeframe_or_a_longer_one(tmp_path):
+    # TradingView prints two decimals: half the last digit, 0.005, is all the room a seed gap has left
+    for key in ("ema:20", "ema:20@3600"):
+        r = htf_row(tmp_path, key, prior=120, n=30, dec=2, seed=1)     # on this walk the hub's own 100 bars leave a tail past 0.005
+        for side in ("math", "data"):
+            assert r[side]["verdict"] in ("warm-up only", "identical"), (key, side, r[side])
+
+
+def test_settle_bars_is_the_hubs_repair_for_a_window_and_three_times_it_for_a_study_that_fades():
+    assert [tp.settle_bars(k) for k in ("sma:50", "tv:wma:20", "bb:20", "levels", "dhl:5", "noise:0.3:rth")] == [50, 20, 20, 0, 0, 0]
+    for k in ("ema:20", "ema:20:hlc3", "tv:ema:20", "tv:rsi:14", "tv:atr:14", "tv:macd"):
+        assert tp.settle_bars(k) == 3 * tp.warm_bars(k) > 0, k
+
+
 # ------------------------------------------------------------------ review round 3: seed fade, per-field cold, empty volume, bars file
-def long_15m(n, seed, per=64):
-    """n weekday sessions of 15-minute bars from 18:00 to 09:30 ET (the 09:30 bar is the noise band's anchor), NQ-sized."""
+def long_15m(n, seed, per=64, dec=10):
+    """n weekday sessions of 15-minute bars from 18:00 to 09:30 ET (the 09:30 bar is the noise band's anchor), NQ-sized,
+    prices rounded to `dec` decimals."""
     r, px, out = random.Random(seed), 20000.0, []
     for d in weekdays(n):
         t0 = int((dt.datetime(d.year, d.month, d.day, 18, 0, tzinfo=ET) - dt.timedelta(days=1)).timestamp() * 1000)
@@ -612,8 +781,8 @@ def long_15m(n, seed, per=64):
             o = px
             px += r.uniform(-12, 12.5)
             h, l = max(o, px) + r.uniform(0, 6), min(o, px) - r.uniform(0, 6)
-            out.append(Bar(t=t0 + i * 900_000, session=d.isoformat(), o=round(o, 10), h=round(h, 10), l=round(l, 10),
-                           c=round(px, 10), v=r.randint(5, 80), closed=True, span=900_000))
+            out.append(Bar(t=t0 + i * 900_000, session=d.isoformat(), o=round(o, dec), h=round(h, dec), l=round(l, dec),
+                           c=round(px, dec), v=r.randint(5, 80), closed=True, span=900_000))
     return out
 
 

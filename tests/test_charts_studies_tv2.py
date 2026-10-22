@@ -232,7 +232,7 @@ def ref_mcginley(b):
 
 
 def ref_kama(b):
-    c, n, fa, sa = C(b), 14, 2 / 3, 2 / 31
+    c, n, fa, sa = C(b), 10, 2 / 3, 2 / 31
     mom, vol = fmap(abs, change(c, n)), msum(fmap(abs, change(c)), n)
     out, prev = [], None
     for x, m, v in zip(c, mom, vol):
@@ -266,7 +266,7 @@ def ref_bbpct(b):
 
 def ref_bbw(b):
     basis, up, dn = bands(C(b), 20, 2.0)
-    return div(sub(up, dn), basis)
+    return mul(div(sub(up, dn), basis), 100.0)
 
 
 def ref_bbtrend(b):
@@ -1170,3 +1170,21 @@ def test_a_running_sum_asks_for_all_the_history_the_hub_will_repair_and_netvol_f
         assert WARM[name]([]) == HISTORY_MAX == warm_bars(f"tv:{name}"), name
     assert WARM["netvol"]([]) == 1 == warm_bars("tv:netvol")
     assert warm_bars("tv:rvgi") == 15 and warm_bars("tv:fractals") == 8
+
+
+# ---- review round 3: two defaults / scales that were off against TradingView's own built-ins ----
+def test_bbw_is_a_percent_of_the_middle_line_like_tradingviews_bandwidth():
+    """STD;Bollinger_Bands_Width: bbw = ((upper - lower) / basis) * 100. Closes alternating 99 / 101 over 20 bars: basis 100, stdev 1,
+    bands 100 +- 2, so the width is 4 (percent), not 0.04."""
+    s = study("bbw")
+    got = [s.push(mk(99.0 if i % 2 else 101.0)) for i in range(20)]
+    assert got[18] is None and got[19] == pytest.approx(4.0)
+
+
+def test_kama_defaults_to_tradingviews_er_length_10_in_every_copy():
+    """STD;Kaufmans_Adaptive_Moving_Average: erLenInput = input.int(10, "ER length", 1), fast 2, slow 30."""
+    from homebase.charts import studies
+    from homebase.charts.studies_tv2 import KAMA
+    assert [d for d, _, _ in PARAMS["kama"][1]] == [10, 2, 30]
+    assert KAMA().n == studies.make("tv:kama").n == 10
+    assert WARM["kama"]([]) == 10 + 5 * 30 and WARM["kama"](["20"]) == 20 + 5 * 30
