@@ -1385,22 +1385,6 @@ function statusDrops(avail, items) {
   return out.sort((a, b) => a - b);
 }
 
-/* The "Best" group of the indicators dialog (2026-10-12): the ones the build-days prediction study found worth having, in
-   the order it ranked them, each with its verdict in plain words (shown under the name in that group). Like Favorites it is
-   no catalog group: a fixed list. Finding: 50-Permanent/Findings/2026-10-12-indicator-prediction-study-build-days.md */
-const BEST_GROUP = 'Best';
-const BEST = [
-  ['orb', 'Direction: price above or below the 15-minute range keeps going. The only one that did, a little.'],
-  ['atr', 'Size: how big the next moves will be. No direction. Use it for stops and targets.'],
-  ['vwap', 'A reference line for fair price. It does not forecast.'],
-  ['rvol', 'Size: busy bars are followed by bigger moves. Weak.'],
-  ['tspeed', 'Size: a fast tape is followed by bigger moves. Weak.'],
-  ['delta', 'Describes the bar just closed, on time. Forecasts nothing.'],
-  ['bigprints', 'Describes the bar: big prints and sweeps. Forecasts nothing.'],
-  ['footprint', 'Describes the bar: stacked imbalances per price. Forecasts nothing.'],
-];
-const BEST_NOTE = new Map(BEST);
-
 /* The TradingView tab's sections (2026-10-22): which one holds each tv_ twin (and the Pine runner, first). Only a heading in the
    dialog: ids, groups and wire keys are untouched. The counts match the section comments of TV_DEFS. */
 const TV_SECTIONS = ['Pine scripts', 'Moving averages', 'Trend & stops', 'Momentum', 'Volatility & bands', 'Volume', 'Levels & marks'];
@@ -1423,8 +1407,7 @@ for (const d of CATALOG) if (d.id in TV_TOPICS) d.topic = TV_SECTIONS[TV_TOPICS[
    No query: catalog order (the TradingView tab by section). */
 function filter(query, group = 'All', favs = []) {
   const q = String(query || '').trim().toLowerCase(), words = q.split(/\s+/).filter(Boolean);
-  const rows = CATALOG.filter((d) => group === 'All' || (group === FAV_GROUP ? favs.includes(d.id)
-    : group === BEST_GROUP ? BEST_NOTE.has(d.id) : d.group === group));
+  const rows = CATALOG.filter((d) => group === 'All' || (group === FAV_GROUP ? favs.includes(d.id) : d.group === group));
   const rank = (d) => {
     const name = d.name.toLowerCase(), has = (t) => words.every((w) => t.includes(w));
     if (d.id === q || name === q) return 0;
@@ -1434,7 +1417,6 @@ function filter(query, group = 'All', favs = []) {
     return words.every((w) => head.includes(w) || dw.some((x) => x.startsWith(w))) ? 3 : -1;     // the description: from a word's start, so "er" is not every "order"
   };
   const by = (key) => rows.map((d, i) => [d, i, key(d)]).filter((x) => x[2] != null).sort((a, b) => a[2] - b[2] || a[1] - b[1]).map((x) => x[0]);
-  if (group === BEST_GROUP) return by((d) => (!q || rank(d) >= 0 ? BEST.findIndex(([i]) => i === d.id) : null));
   if (!q) return group === 'TradingView' ? by((d) => TV_SECTIONS.indexOf(d.topic)) : rows;
   return by((d) => { const r = rank(d); return r < 0 ? null : r * 2 + (d.id.startsWith('tv_') ? 1 : 0); });
 }
@@ -1473,7 +1455,7 @@ const api = { parseFavs, sortFavs, toggleFav, CATALOG, GROUPS, ROOT_NAMES, FAVOU
   ALWAYS_OPEN, marketOpen, fmtAge, feedSummary, statusDrops, REC_BUSY, staleAfter, sinceOpen, PANES, movable, placement,
   styleLineKeys, styleControls, colorDefs, isColorKey, styleColor, hasLegend, defaultStyle, clampStyle, cycleColor, sanitizePreset, normalizeHHMM,
   SHAPES, lineColor, refsOf, clampOpts, HTF_IDS, parseTf, fmtTf,
-  FAV_GROUP, BEST_GROUP, BEST, TOOL_GROUPS, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
+  FAV_GROUP, TOOL_GROUPS, TOOL_FAV_DEFAULT, IND_FAV_DEFAULT, TV_SECTIONS, TV_TOPICS, parseIdList, toggleId, toolGroupOf };
 if (typeof window !== 'undefined') window.HBCatalog = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

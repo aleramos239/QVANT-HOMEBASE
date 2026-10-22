@@ -1318,7 +1318,7 @@ function indicatorsDialog() {
       row.dataset.id = d.id;
       // W5 (2026-09-28): what it shows, in one plain line under its name (muted, TradingView-style)
       const txt = mk('span', 'dlg-txt');
-      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', group === C.BEST_GROUP ? C.BEST.find(([i]) => i === d.id)[1] : d.desc));
+      txt.append(mk('span', 'dlg-name', d.name), mk('span', 'dlg-desc', d.desc));
       row.append(txt);
       const g = window.HBGuide && window.HBGuide.get(d.id);
       if (g) {   // "?": the plain-words guide, folded open under the row (a click on it never adds the indicator)
@@ -1369,7 +1369,7 @@ function indicatorsDialog() {
   };
   const renderGroups = () => {
     const had = groups.contains(document.activeElement);
-    groups.replaceChildren(...[C.FAV_GROUP, C.BEST_GROUP, ...C.GROUPS].map((g) => {
+    groups.replaceChildren(...[C.FAV_GROUP, ...C.GROUPS].map((g) => {
       const b = mk('button', 'dlg-group' + (g === group ? ' active' : ''), g === C.FAV_GROUP ? `★ ${g} (${indFavs.length})` : g);
       b.type = 'button';
       b.onclick = () => { group = g; renderGroups(); render(); };

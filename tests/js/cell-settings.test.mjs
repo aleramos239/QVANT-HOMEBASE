@@ -17,7 +17,7 @@ globalThis.LightweightCharts = new Proxy({ LineStyle: { Solid: 0, Dotted: 1, Das
 require('../../homebase/static/charts/catalog.js');
 const flowmath = require('../../homebase/static/charts/flowmath.js');
 const C = globalThis.HBCatalog;
-(0, eval)(execFileSync('git', ['show', 'HEAD:homebase/static/charts/cell.js'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 }));
+(0, eval)(execFileSync('git', ['show', 'e29a6928:homebase/static/charts/cell.js'], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 }));
 const Old = globalThis.HBCell.Cell;
 require('../../homebase/static/charts/cell.js');
 const New = globalThis.HBCell.Cell;

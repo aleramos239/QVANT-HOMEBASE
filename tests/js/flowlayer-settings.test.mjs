@@ -14,8 +14,8 @@ const T0 = 1_700_000_000_000, BAR = 15 * 60_000;
    The pre-change files come from git (HEAD) and are loaded beside the new ones: with no style and every setting at its default (or missing, or junk)
    the canvas calls must be the same, call for call. */
 const OLD = {
-  layer: execFileSync('git', ['show', 'HEAD:homebase/static/charts/flowlayer.js'], { cwd: REPO, encoding: 'utf8' }),
-  math: execFileSync('git', ['show', 'HEAD:homebase/static/charts/flowmath.js'], { cwd: REPO, encoding: 'utf8' }),
+  layer: execFileSync('git', ['show', 'e29a6928:homebase/static/charts/flowlayer.js'], { cwd: REPO, encoding: 'utf8' }),
+  math: execFileSync('git', ['show', 'e29a6928:homebase/static/charts/flowmath.js'], { cwd: REPO, encoding: 'utf8' }),
 };
 const NEW = { layer: readFileSync(DIR + 'flowlayer.js', 'utf8'), math: readFileSync(DIR + 'flowmath.js', 'utf8') };
 const loadMath = (src) => { const m = { exports: {} }; new Function('module', src)(m); return m.exports; };

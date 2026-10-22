@@ -16,7 +16,7 @@ const Dom = require(CH + 'dom.js');
 
 function loadNew(name) { const p = CH + name; delete require.cache[p]; return require(p); }
 function loadOld(name) {
-  const src = execFileSync('git', ['show', `HEAD:homebase/static/charts/${name}`], { cwd: ROOT, encoding: 'utf8' });
+  const src = execFileSync('git', ['show', `e29a6928:homebase/static/charts/${name}`], { cwd: ROOT, encoding: 'utf8' });
   const module = { exports: {} };
   new Function('require', 'module', 'exports', src)((p) => require(p.startsWith('.') ? CH + p : p), module, module.exports);
   return module.exports;

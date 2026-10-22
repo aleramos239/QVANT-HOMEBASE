@@ -952,15 +952,6 @@ test('starred indicators: Favorites is a group of whatever is starred, not a cat
   assert.ok(C.filter('', 'All', []).length > 10, 'the other groups ignore the stars');
 });
 
-test('Best group: a fixed, ranked list of real indicators, each with a plain verdict, never a catalog group', () => {
-  assert.equal(C.BEST_GROUP, 'Best');
-  assert.ok(!C.GROUPS.includes(C.BEST_GROUP));
-  const ids = C.BEST.map(([id]) => id);
-  assert.deepEqual(C.filter('', C.BEST_GROUP, []).map((d) => d.id), ids, 'every id is in the catalog, in the study order');
-  assert.ok(C.BEST.every(([, note]) => note.length > 10 && note.length < 120), 'one short plain line each');
-  assert.deepEqual(C.filter('vwap', C.BEST_GROUP, []).map((d) => d.id), ['vwap'], 'the search still narrows it');
-});
-
 test('starred ids: junk is dropped, an emptied list stays empty, nothing stored gives the default', () => {
   const valid = ['trend', 'hline', 'fib'];
   assert.deepEqual(C.parseIdList(null, valid, ['trend']), ['trend']);
@@ -1457,7 +1448,6 @@ test('picker search: the exact id or name first, house before tv_, then a word o
   assert.deepEqual(ids('big prints').slice(0, 1), ['bigprints']);
   assert.deepEqual(ids('prints big').slice(0, 1), ['bigprints'], 'word order does not matter');
   assert.deepEqual(ids('delta zzz'), [], 'every word must match');
-  assert.deepEqual(C.filter('vwap', C.BEST_GROUP).map((d) => d.id), ['vwap']);
   assert.ok(ids('delta').indexOf('cstat') > ids('delta').indexOf('tv_vdelta'), 'a description-only hit is last');
 });
 

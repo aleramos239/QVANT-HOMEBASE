@@ -22,7 +22,7 @@ const N = require('../../homebase/static/charts/news.js');
 /* primitives.js + events.js loaded into their own `window`, from the working tree or from git HEAD. */
 function load(ref) {
   const win = Object.create(globalThis);
-  const src = (f) => (ref === 'HEAD' ? execFileSync('git', ['show', `HEAD:${dir}${f}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 }) : readFileSync(root + dir + f, 'utf8'));
+  const src = (f) => (ref === 'HEAD' ? execFileSync('git', ['show', `e29a6928:${dir}${f}`], { cwd: root, encoding: 'utf8', maxBuffer: 1 << 26 }) : readFileSync(root + dir + f, 'utf8'));
   for (const f of ['events.js', 'primitives.js']) new Function('window', 'require', 'module', src(f))(win, require, undefined);
   return win;
 }
