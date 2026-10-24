@@ -30,3 +30,12 @@ test('the curves are P&L from each run start, and the years are joined', () => {
   const y = AB.byYear({ report: { by_year: [{ period: '2022', net: 1 }] } }, { report: { by_year: [{ period: '2021', net: 2 }, { period: '2022', net: 3 }] } });
   assert.deepEqual(y.map(([p, x, z]) => [p, x && x.net, z && z.net]), [['2021', undefined, 2], ['2022', 1, 3]]);
 });
+
+test('matches: every word of the search must be in the name or the id, any case; empty keeps all', () => {
+  const x = { id: 'draft_nq_candle_break_apex300', name: 'NQ CANDLE BREAK · APEX 300K' };
+  assert.equal(AB.matches(x, ''), true);
+  assert.equal(AB.matches(x, 'candle apex'), true);
+  assert.equal(AB.matches(x, '  NQ   break '), true);
+  assert.equal(AB.matches(x, 'apex300'), true, 'the id counts too');
+  assert.equal(AB.matches(x, 'es candle'), false);
+});

@@ -8,6 +8,12 @@
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const money = (v) => (v == null || !Number.isFinite(v) ? '—' : `${v < 0 ? '−' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`);
 
+/* the search box over a strategy pop-up: every word of the query must be in the name or the id (any case); '' keeps everything */
+function matches(x, q) {
+  const hay = `${x.name} ${x.id}`.toLowerCase();
+  return String(q || '').toLowerCase().split(/\s+/).filter(Boolean).every((w) => hay.includes(w));
+}
+
 /* the numbers compared: [key, label, format, which way is better (+1 higher, -1 lower, 0 neither)] */
 const METRICS = [
   ['net_profit', 'Net', 'money', 1], ['trades', 'Trades', 'int', 0], ['win_rate', 'Win rate', 'pctv', 1],
@@ -59,7 +65,7 @@ function byYear(a, b) {
 }
 
 /* ---- the sheet (browser only) ---- */
-let el = null, list = [], side = { A: { sid: '', runs: [], rid: '' }, B: { sid: '', runs: [], rid: '' } }, got = null, err = '', busy = false;
+let el = null, query = { A: '', B: '' }, list = [], side = { A: { sid: '', runs: [], rid: '' }, B: { sid: '', runs: [], rid: '' } }, got = null, err = '', busy = false;
 async function call(path) {
   const r = await fetch(`/api/tester${path}`);
   const j = await r.json().catch(() => ({}));
@@ -80,11 +86,14 @@ async function open() {
   document.body.appendChild(el);
   el.addEventListener('click', (e) => { const a = e.target.closest('[data-act]'); if (!a) { if (e.target === el) close(); } else if (a.dataset.act === 'close') close(); else if (a.dataset.act === 'swap') swap(); });
   el.addEventListener('change', onChange);
+  el.addEventListener('input', onSearch);
+  el.addEventListener('keydown', onSearchKey);
   document.addEventListener('keydown', onKey);
   el.innerHTML = '<div class="mix-in"><p class="mix-note" style="padding:16px">Loading…</p></div>';
   try {
     const [d, b] = await Promise.all([call('/drafts'), call('/strategies')]);
-    list = [...(d || []).map((x) => ({ id: x.id, name: (x.meta && x.meta.name) || x.name })), ...(b || []).map((x) => ({ id: x.id, name: x.name || x.id }))];
+    const all = [...(d || []).map((x) => ({ id: x.id, name: (x.meta && x.meta.name) || x.name })), ...(b || []).map((x) => ({ id: x.id, name: x.name || x.id }))];
+    list = all.filter((x, i) => all.findIndex((y) => y.id === x.id) === i);       // /strategies lists every draft again
     const sid = openStrategy() || (list[0] || {}).id || '';
     const runs = await runsOf(sid);
     side = { A: { sid, runs, rid: (runs[1] || runs[0] || {}).id || '' }, B: { sid, runs, rid: (runs[0] || {}).id || '' } };
@@ -99,6 +108,29 @@ async function onChange(e) {
   if (t.dataset.pick === 'strategy') { side[k].sid = t.value; side[k].runs = await runsOf(t.value); side[k].rid = (side[k].runs[0] || {}).id || ''; }
   else side[k].rid = t.value;
   await load();
+}
+/* a search box narrows its own strategy pop-up in place (no repaint: the box keeps the cursor); the chosen strategy always stays in it */
+function strategyOptions(k) {
+  const s = side[k], hits = list.filter((x) => x.id === s.sid || matches(x, query[k]));
+  return hits.map((x) => `<option value="${esc(x.id)}"${x.id === s.sid ? ' selected' : ''}>${esc(x.name)}</option>`).join('');
+}
+function onSearch(e) {
+  const t = e.target, k = t.dataset.q;
+  if (!k) return;
+  query[k] = t.value;
+  const sel = el.querySelector(`select[data-side="${k}"][data-pick="strategy"]`);
+  sel.innerHTML = strategyOptions(k);
+  t.classList.toggle('none', !!query[k].trim() && !list.some((x) => matches(x, query[k])));         // red: nothing matches
+}
+/* Enter takes the first match */
+function onSearchKey(e) {
+  const k = e.target.dataset && e.target.dataset.q;
+  if (!k || e.key !== 'Enter' || e.repeat) return;
+  e.preventDefault();
+  const first = list.find((x) => matches(x, query[k]));
+  if (!first) return;
+  query[k] = '';
+  onChange({ target: { dataset: { side: k, pick: 'strategy' }, value: first.id } });
 }
 function swap() { side = { A: side.B, B: side.A }; load(); }
 async function load() {
@@ -118,7 +150,8 @@ function runLabel(r) {
 function picker(k) {
   const s = side[k];
   return `<div class="ab-pick ab-${k}"><b class="ab-tag">${k}</b>
-    <select data-side="${k}" data-pick="strategy" aria-label="Strategy ${k}">${list.map((x) => `<option value="${esc(x.id)}"${x.id === s.sid ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select>
+    <input type="search" class="ab-q" data-q="${k}" value="${esc(query[k])}" placeholder="Search ${list.length} strategies" aria-label="Search strategies ${k}" autocomplete="off" spellcheck="false">
+    <select data-side="${k}" data-pick="strategy" aria-label="Strategy ${k}">${strategyOptions(k)}</select>
     <select data-side="${k}" data-pick="run" aria-label="Run ${k}">${s.runs.length ? s.runs.map((r) => `<option value="${esc(r.id)}"${r.id === s.rid ? ' selected' : ''}>${esc(runLabel(r))}</option>`).join('') : '<option value="">No finished run yet</option>'}</select></div>`;
 }
 function paint() {
@@ -154,7 +187,7 @@ function curve(ca, cb) {
     <div class="mix-legend"><span><i style="background:#2962FF"></i>A</span><span><i style="background:#E8A23A"></i>B</span><span class="mix-range">${money(lo)} … ${money(hi)}</span></div>`;
 }
 
-const api = { METRICS, fmt, delta, settingsDiff, pnlCurve, byYear };
+const api = { matches, METRICS, fmt, delta, settingsDiff, pnlCurve, byYear };
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 if (typeof document !== 'undefined') {
   const btn = document.getElementById('tbAB');

@@ -755,6 +755,9 @@ html.hb-apple .lab-dlg.am-dlg { width: min(1040px, calc(100vw - 32px)); max-heig
 .ab-pick { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 8px; align-items: center; }
 .ab-pick select { grid-column: 2; min-width: 0; height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-sm); outline: none; }
 .ab-pick select:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.ab-pick .ab-q { grid-column: 2; min-width: 0; height: 28px; padding: 0 8px; border: 0; border-radius: 8px; background: var(--hb-fill); color: var(--hb-fg); font-size: var(--hb-fs-sm); outline: none; }
+.ab-pick .ab-q:focus { box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.ab-pick .ab-q.none { box-shadow: 0 0 0 1.5px var(--down); }
 .ab-tag { grid-row: span 2; display: grid; place-items: center; width: 26px; height: 26px; border-radius: 7px; color: #fff; font-size: 13px; }
 .ab-A .ab-tag { background: #2962FF; } .ab-B .ab-tag { background: #E8A23A; }
 .ab-t td:not(:first-child), .ab-t th:not(:first-child) { min-width: 96px; }
