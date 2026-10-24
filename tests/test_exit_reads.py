@@ -92,10 +92,45 @@ def test_a_symbol_flatten_is_the_read_and_the_brokers_own_close(tmp_path):
     assert eps(sent) == ["position/list", "order/liquidateposition"]
 
 
+def _flat_all(tmp_path, liq, named=True):
+    sent = []
+
+    def wire(endpoint, query, body):
+        sent.append((endpoint, query, json.loads(body) if body else None))
+        if endpoint == "position/list":
+            return long(3)
+        if endpoint == "order/liquidateposition":
+            return liq
+        return {"orderId": 960} if endpoint == "order/placeorder" else {}
+    ad = mkadapter(tmp_path, wire)
+    if named:
+        push(ad, "contract", {"id": NQ, "name": NQC})
+    return run(ad.flatten_all()), eps(sent)
+
+
+def test_flatten_all_reports_a_close_the_broker_did_not_confirm(tmp_path):
+    """The Kill's and the Desk's account Flatten: an orderId carrying a failure is NOT flattened (it used to
+    read ok whatever the broker answered, 2026-10-23 review)."""
+    r, sent = _flat_all(tmp_path, {"orderId": 951, "failureReason": "UnknownReason", "failureText": "locked"})
+    assert r.ok is False and "locked" in r.error and r.raw == {"flattened": 0}
+    assert "order/placeorder" not in sent                              # it may have closed: never a second close
+    r, _ = _flat_all(tmp_path, LIQ_OK)
+    assert r.ok is True and r.raw == {"flattened": 1}
+
+
+def test_flatten_all_falls_back_to_a_market_close_only_on_a_sure_refusal(tmp_path):
+    r, sent = _flat_all(tmp_path, {"failureText": "liquidation not allowed"})   # no orderId: surely not sent
+    assert r.ok is True and sent.count("order/placeorder") == 1
+    r, sent = _flat_all(tmp_path, {"failureText": "liquidation not allowed"}, named=False)
+    assert r.ok is False and "not allowed" in r.error and "order/placeorder" not in sent
+
+
 # --- the engine's flatten (the Kill, the clock, the strategy flatten) on the wire ---------------------
-def test_the_engines_flatten_reads_the_position_once_and_never_looks_the_contract_up(tmp_path):
+@pytest.mark.parametrize("close", [True, False])
+def test_the_engines_flatten_reads_the_position_once_and_never_looks_the_contract_up(tmp_path, close):
     """The bot's own orders name their contract when their pushes come in, so by the time anything is
-    flattened the id is known: position/list, the market-out, the cancels."""
+    flattened the id is known: position/list, the market-out, the cancels. close=False (the Kill and the
+    Desk's account Flatten, whose sweep then liquidates at the broker): the read and the cancels, no market-out."""
     ids = iter([(101, 102, 103), (201, 202, 203)])
     sent = []
     net = {"n": 0}
@@ -131,11 +166,15 @@ def test_the_engines_flatten_reads_the_position_once_and_never_looks_the_contrac
         await asyncio.sleep(0.02)
         net["n"] = 3
         del sent[:]
-        out = await eng.flatten_today()
+        out = await eng.flatten_today(close=close)
         await ad.close()
         return out
 
     out = run(scenario())
+    if not close:
+        assert eps(sent) == ["position/list"] + ["order/cancelorder"] * 6
+        assert eng._state("nq930", "acct").status == "done"
+        return
     assert out["nq930@acct"][0] == "market Sell 3: ok"
     assert eps(sent) == ["position/list", "order/placeorder"] + ["order/cancelorder"] * 6
     assert sent[1][2]["orderQty"] == 3 and sent[1][2]["action"] == "Sell"

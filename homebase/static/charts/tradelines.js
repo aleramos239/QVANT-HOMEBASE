@@ -170,11 +170,16 @@ class Overlay {
     this.buyBtn = document.createElement('button');
     this.buyBtn.type = 'button'; this.buyBtn.className = 'tr-buy';
     this.buyBtn.append(sideLabel(this.buyLive, 'BUY'));
-    this.block.append(this.sellBtn, this.mid, this.buyBtn);
+    // Flatten (the owner, 2026-10-23): this chart's accounts out of the symbol -- the position closed at the broker and
+    // its orders cancelled -- the right-click menu's Flatten, one click away; its own lock, so a slow order never blocks it
+    this.flatBtn = document.createElement('button');
+    this.flatBtn.type = 'button'; this.flatBtn.className = 'tr-flat'; this.flatBtn.textContent = 'FLAT';
+    this.block.append(this.sellBtn, this.mid, this.buyBtn, this.flatBtn);
     // I1 (final review): a real pointer click, or Enter / Space with no auto-repeat -- never the click a held key
     // (or a menu handing focus back to a focused BUY) makes; a pointer click drops focus (HBTrade.wireSend)
     T.wireSend(this.sellBtn, () => this.trade('Sell'), { blur: true });
     T.wireSend(this.buyBtn, () => this.trade('Buy'), { blur: true });
+    T.wireSend(this.flatBtn, () => window.HBTradeUI.symbolAction(this.cell, 'flatten', this.root), { blur: true });
     this.qty.onchange = () => {
       const n = Math.round(Number(this.qty.value));
       window.HBDeskClient.setPrefs({ qty: Number.isFinite(n) ? n : window.HBDeskClient.prefs.qty });
@@ -281,6 +286,8 @@ class Overlay {
     if (document.activeElement !== this.qty) this.qty.value = String(Dc.prefs.qty);
     const busy = window.HBTradeUI.busy();
     this.buyBtn.disabled = this.sellBtn.disabled = busy;
+    this.flatBtn.disabled = window.HBTradeUI.flatBusy();
+    this.flatBtn.title = `Flatten ${this.root}: close the position and cancel its orders on this chart's accounts`;
     // fast-paper: the button whose order is in flight reads pressed ("sending") from its click until the send resolves;
     // the other greys as before (charts.css .sending -- no size change)
     const side = T.sendingSide(window.HBTradeUI.sending(), 'chart', this.cell);
@@ -371,8 +378,11 @@ class Overlay {
     chip.text.onpointerdown = draggable ? (e) => this.startDrag(e, g.key) : exits ? (e) => this.startExitDrag(e, g.key) : null;
     chip.title = g.kind === 'position' ? T.lineTitle(g) : '';
     chip.btn.hidden = readonly;
-    chip.btn.disabled = busy;   // review item 3: never clickable while a send is already in flight
-    chip.btn.onclick = readonly || busy ? null : () => window.HBTradeUI.closeLine(this.cell, it.g, this.root, this.cell.tick);
+    // review item 3: never clickable while a send is already in flight -- a position's × (a flatten) only behind another
+    // flatten (2026-10-23: a slow order must never take the way out away)
+    const xBusy = g.kind === 'position' ? window.HBTradeUI.flatBusy() : busy;
+    chip.btn.disabled = xBusy;
+    chip.btn.onclick = readonly || xBusy ? null : () => window.HBTradeUI.closeLine(this.cell, it.g, this.root, this.cell.tick);
     chip.be.hidden = readonly || g.kind !== 'position';
     chip.be.disabled = busy;
     chip.be.onclick = readonly || busy ? null : () => this.breakeven(it.g);

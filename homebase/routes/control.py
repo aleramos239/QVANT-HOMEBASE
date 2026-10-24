@@ -80,7 +80,7 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
             # every strategy's own orders first, with the proven per-order calls;
             # then the account-wide calls sweep up anything else. Both go account
             # beside account (engine.each_account), each account's own steps in order
-            strategies = await engine.flatten_today()
+            strategies = await engine.flatten_today(close=False)    # the sweep closes at the broker
             t1 = _t.perf_counter()
 
             pool = dict(adapters)
@@ -100,8 +100,9 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
 
     @app.post("/api/account-flatten")
     async def account_flatten(request: Request):
-        """The Kill's broker work for ONE account: its strategies' footprint today with the proven
-        per-order calls (engine.flatten_today), then the account-wide cancel and flatten. Nothing is
+        """The Kill's broker work for ONE account: its strategies' orders today (engine.flatten_today,
+        cancels only), then the account-wide cancel and the broker-side flatten (liquidateposition: the
+        broker closes what IT holds, so a repeat click never sells a stale position twice). Nothing is
         disarmed and no strategy is switched off; a run that was working on this account today is over
         for today. It holds the Kill's locks, so it never reads a net alongside a Kill or a
         per-strategy Kill."""
@@ -113,7 +114,7 @@ def register(app, *, _kill_lock, adapters, cfg, desk, engine) -> None:
         if ad is None:
             raise HTTPException(409, "account not connected — nothing can be sent to it")
         async with _kill_lock(), engine.all_kill_locks():
-            strategies = await engine.flatten_today(account=aid, reason="manual_flat")
+            strategies = await engine.flatten_today(account=aid, reason="manual_flat", close=False)
             results = await _sweep(ad)
             engine.journal("account_flatten", account=aid, results=results, strategies=strategies)
         return {"ok": True, "account": aid, "results": {aid: results}, "strategies": strategies}

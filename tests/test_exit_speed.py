@@ -64,7 +64,12 @@ def cancel_calls(a: str, n: int = 101) -> list[str]:
 
 
 def flatten_acts(a: str, qty: int = 3, n: int = 101) -> list[str]:
-    return [f"market Sell {qty}: ok"] + [f"cancel {i}: ok" for i in legs(a, n)]
+    return [f"market Sell {qty}: ok"] + cancel_acts(a, n)
+
+
+def cancel_acts(a: str, n: int = 101) -> list[str]:
+    """The Kill's own part of a run (close=False, 2026-10-23): its cancels; the sweep then closes at the broker."""
+    return [f"cancel {i}: ok" for i in legs(a, n)]
 
 
 def status(eng, a: str, strategy: str = "nq930") -> tuple:
@@ -158,13 +163,13 @@ def test_the_kill_runs_the_accounts_side_by_side(kill_desk, tmp_path):
     assert wire.peak_accounts == EXIT_CONCURRENCY
     assert wall < N * KILL_RTS * RT / 2
     assert all(ad.flat for ad in ads.values())
-    for a in ads:                                 # its own flatten first, then the account-wide sweep
-        assert wire.of(a) == flatten_calls(a) + ["cancel_all", "flatten_all"]
+    for a in ads:                                 # its own cancels first, then the sweep closes at the broker
+        assert wire.of(a) == cancel_calls(a) + ["cancel_all", "flatten_all"]
         assert status(eng, a) == ("done", "killed")
     swept = {"cancel_all": {"ok": True, "error": None}, "flatten_all": {"ok": True, "error": None}}
     assert out["ok"] and out["armed"] is False
     assert out["results"] == {a: swept for a in ads} and list(out["results"]) == list(ads)
-    assert out["strategies"] == {f"nq930@{a}": flatten_acts(a) for a in ads}
+    assert out["strategies"] == {f"nq930@{a}": cancel_acts(a) for a in ads}
     assert list(out["strategies"]) == [f"nq930@{a}" for a in ads]
     (rec,) = journal(tmp_path, "kill_switch")
     assert (rec["results"], rec["strategies"]) == (out["results"], out["strategies"])
@@ -262,11 +267,11 @@ def test_a_bad_day_never_stops_the_kill_on_another_account(kill_desk, tmp_path):
     trouble(ads)
     out, _ = timed(kill())
     s = out["strategies"]
-    assert s["nq930@a01"] == flatten_acts("a01") and s["nq930@a08"] == flatten_acts("a08")
-    assert s["nq930@a02"] == [f"cancel {i}: ok" for i in legs("a02")]       # flat already: no market order
+    assert s["nq930@a01"] == cancel_acts("a01") and s["nq930@a08"] == cancel_acts("a08")
+    assert s["nq930@a02"] == cancel_acts("a02")                             # never a market order: the sweep closes
     assert s["nq930@a03"] == [UNREACHED]
-    assert s["nq930@a04"] == REFUSED_429 and s["nq930@a06"] == UNREAD_429
-    assert s["nq930@a05"] == BLEW_UP                                        # said, and the Kill went on
+    assert s["nq930@a04"] == cancel_acts("a04") and s["nq930@a06"] == UNREAD_429
+    assert s["nq930@a05"] == cancel_acts("a05")                             # its market order is never sent
     assert f"cancel a07-101-sl: order/cancelorder {RATE_LIMITED}" in s["nq930@a07"]
     assert list(s) == [f"nq930@{a}" for a in ads]
     # the account-wide sweep then covers what the strategy's own flatten could not do
@@ -279,9 +284,9 @@ def test_a_bad_day_never_stops_the_kill_on_another_account(kill_desk, tmp_path):
             assert protected(ad, a)               # unreachable: nothing sent, nothing taken away
         else:
             assert ad.flat, a                     # flat, nothing working -- and never sold twice
-    assert wire.of("a04") == flatten_calls("a04")[:2] + ["cancel_all", "flatten_all"]
+    assert wire.of("a04") == cancel_calls("a04") + ["cancel_all", "flatten_all"]
     assert status(eng, "a02") == ("done", "tp") and status(eng, "a01") == ("done", "killed")
-    assert status(eng, "a05") == ("live", None)   # not marked killed by a flatten that never ran
+    assert status(eng, "a06") == ("live", None)   # not marked killed by a read that failed
     assert journal(tmp_path, "kill_switch")[0]["strategies"] == s
 
 

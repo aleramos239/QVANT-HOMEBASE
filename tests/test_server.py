@@ -277,7 +277,7 @@ def test_account_flatten_ends_todays_run_on_that_account_with_the_proven_calls_f
     ad.cancel_all = cancel_all
     r = client.post("/api/account-flatten", json={"account": "main"}).json()
     assert [o[0] for o in order] == ["strategies", "sweep"]
-    assert order[0][1] == {"account": "main", "reason": "manual_flat"}
+    assert order[0][1] == {"account": "main", "reason": "manual_flat", "close": False}
     assert r["strategies"] == {}                       # nothing was working today
 
 
@@ -514,7 +514,7 @@ def test_two_kills_at_once_never_run_the_flatten_concurrently(client):
     engine, kill = client.app.state.engine, _kill_endpoint(client.app)
     active, peak, trace = 0, 0, []
 
-    async def slow_flatten():
+    async def slow_flatten(**kw):
         nonlocal active, peak
         active += 1
         peak = max(peak, active)
@@ -541,7 +541,7 @@ def test_a_second_kill_disarms_at_once_even_while_the_first_is_still_flattening(
     import asyncio
     engine, cfg, kill = client.app.state.engine, client.app.state.cfg, _kill_endpoint(client.app)
 
-    async def slow_flatten():
+    async def slow_flatten(**kw):
         await asyncio.sleep(0.05)
         return {}
 
@@ -597,7 +597,7 @@ def test_a_removal_during_a_kill_waits_and_the_kill_still_sweeps_every_account(c
     kill = _kill_endpoint(app)
     engine, drop_account = app.state.engine, app.state.drop_account
 
-    async def slow_flatten():
+    async def slow_flatten(**kw):
         await asyncio.sleep(0.05)
         return {}
 

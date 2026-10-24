@@ -280,7 +280,8 @@ test('Trading tab: one row per account, the env chips, the algo note, and the ON
   assert.equal(paperChip.textContent, 'PAPER');
   assert.equal(paperChip.className, 'env paper', 'the PAPER chip carries its own (amber) class');
   assert.equal(findText(box, 'ONE-CLICK TRADING') != null, true);
-  assert.equal(findText(box, 'Every chart. Off: that surface asks to confirm first.') != null, true);
+  assert.equal(findText(box, 'Every chart. Off: that surface asks to confirm first. "Don\'t ask again" in a confirm turns its switch on.') != null, true);
+  assert.equal(findText(box, 'Lines, menu and bottom panel') != null, true, '"Don\'t ask again" can be switched back off (2026-10-23)');
   for (const gone of ['DEFAULTS (all charts)', 'Default quantity', 'Stop loss (ticks)', 'Take profit (ticks)', 'One-click trading']) {
     assert.equal(findText(box, gone), null, `${gone} is gone`);
   }

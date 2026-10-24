@@ -156,7 +156,15 @@ function setKilling(key, v) {
   if (v) killing.add(key); else killing.delete(key);
   for (const fn of [...busySubs]) { try { fn(inFlight); } catch (e) { console.error(e); } }   // the badges repaint
 }
-function busy() { return inFlight; }
+function busy() { return inFlight || flattening; }
+/* A Flatten has a lock of its own (2026-10-23): it never waits behind (or is hidden by) an order still in flight --
+   the desk runs one action per account at a time, so it goes right after that order -- and two flattens never overlap. */
+let flattening = false;
+function flatBusy() { return flattening; }
+function setFlattening(v) {
+  flattening = v;
+  for (const fn of [...busySubs]) { try { fn(busy()); } catch (e) { console.error(e); } }
+}
 /* fast-paper: the order in flight's {surface, cell, side} (placeOrder's), or null -- set and cleared with busy(), in the
    same synchronous flip, so a Buy/Sell/Send button reads "sending" from its click until the send resolves. */
 function sending() { return sendingFrom; }
@@ -173,8 +181,9 @@ function setInFlight(v, origin = null) {
    A second attempt while one is in flight now toasts instead of dropping silently (review item 3). `origin`: the
    button that started it (sending()). */
 function guardedSend(action, gate, buildBody, origin = null) {
-  if (inFlight) { D().toast('err', 'Another action is in flight'); return; }
-  setInFlight(true, origin);
+  const flat = action === 'flatten';
+  if (flat ? flattening : busy()) { D().toast('err', flat ? 'A flatten is already in flight' : 'Another action is in flight'); return; }
+  if (flat) setFlattening(true); else setInFlight(true, origin);
   Promise.resolve().then(() => {
     const m = gate();
     if (m.mode !== 'on') { D().toast('err', m.reason); return null; }
@@ -182,7 +191,7 @@ function guardedSend(action, gate, buildBody, origin = null) {
     if (body == null) return null;
     if (Array.isArray(body)) return body.reduce((p, one) => p.then(() => sendRouted(action, one)), Promise.resolve());
     return sendRouted(action, body);
-  }).catch((e) => console.error(e)).finally(() => setInFlight(false));
+  }).catch((e) => console.error(e)).finally(() => (flat ? setFlattening(false) : setInFlight(false)));
 }
 /* The one place a gated action leaves the page (2026-09-27 accounts/paper plan, Task 2): HBTrade.routeSend splits
    it -- the desk's accounts to HBDeskClient.send, the PAPER account to HBPaperClient.send (POST /api/paper/*,
@@ -553,7 +562,9 @@ function killSend(key, gate, buildBody) {
    own Trading can trade right now, and every item acts for THAT chart ---- */
 function registerChartMenuTrading() {
   window.HBChartMenu.register('trading', (ctx) => {
-    if (effectiveMode(ctx.cell).mode !== 'on' || busy()) return [];
+    if (effectiveMode(ctx.cell).mode !== 'on' || flatBusy()) return [];
+    const flatten = { text: `Flatten ${ctx.root}`, run: () => symbolAction(ctx.cell, 'flatten', ctx.root) };
+    if (busy()) return [flatten];   // an order still in flight: Flatten stays reachable
     const Dk = D(), q = T.freshQuote(Dk.quotes[ctx.root], page.clockMs()), qty = Dk.prefs.qty, out = [];   // M4
     if (ctx.price != null) {
       const price = T.roundTick(ctx.price, ctx.tick);   // always tick-rounded before inferType (review item 2)
@@ -564,7 +575,7 @@ function registerChartMenuTrading() {
       }
     }
     out.push({ text: `Cancel all orders (${ctx.root})`, run: () => symbolAction(ctx.cell, 'cancel-symbol', ctx.root) },
-      { text: `Flatten ${ctx.root}`, run: () => symbolAction(ctx.cell, 'flatten', ctx.root) },
+      flatten,
       { text: `Reverse ${ctx.root}`, run: () => symbolAction(ctx.cell, 'reverse', ctx.root) });
     return out;
   });
@@ -719,7 +730,7 @@ function mount(pg) {
   }
 }
 
-window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy,
+window.HBTradeUI = { mount, placeOrder, symbolAction, flattenAccount, cancelOrder, closeLine, moveLine, addExit, confirm, busy, flatBusy,
   sending, onBusyChange, onTradeChange, effectiveMode, liveCue, lineMode, editableIds, fillIds, tradeOf, setCellTrade, setCellAlgo, botKill,
   killBusy, accountRows, toggleAccount, pickAlgo, armPending, paintDeskStatus, replayEnded, resumeLive,
   replayDestroyed, gridRebuilt };

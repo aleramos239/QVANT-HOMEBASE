@@ -1235,18 +1235,20 @@ class TradovateAdapter(BrokerAdapter):
         raw["cancel"] = {"ok": c.ok, "error": c.error, **(c.raw or {})}
         return OrderResult(ok=c.ok, error=c.error, raw=raw)
 
-    async def _liquidate(self, symbol: str) -> dict:
+    async def _liquidate(self, symbol: Optional[str], contract_id: Optional[int] = None) -> dict:
         """order/liquidateposition for this account's one contract -> {ok, order_id, error,
         maybe}. Its answer is a PlaceOrderResult: only failureReason Success (or none) with an
         orderId is a close. `maybe`: the broker may have closed it -- no answer (a timeout, a
         dropped socket) or an orderId carrying a failure; an error status or no orderId is a
-        definite no. Sent without isAutomated: a click on the chart is a person's order."""
-        sym = symbols.resolve_contract(symbol)
+        definite no. Sent without isAutomated: a click on the chart is a person's order.
+        `contract_id`: a contract we have no name for (flatten_all), sent by its id."""
+        sym = symbols.resolve_contract(symbol) if symbol else None
         if self.live:
-            _log(f"{self.account_id}: LIVE LIQUIDATE {sym}")
+            _log(f"{self.account_id}: LIVE LIQUIDATE {sym or contract_id}")
         try:
-            d = await self._ws.liquidate_position(account_id=self._acct_num,
-                                                  contract_id=await self.contract_id(symbol))
+            d = await self._ws.liquidate_position(
+                account_id=self._acct_num,
+                contract_id=contract_id if contract_id is not None else await self.contract_id(symbol))
         except RuntimeError as e:          # an error status, or no socket: nothing was sent through
             return {"ok": False, "order_id": None, "error": str(e), "maybe": False}
         except Exception as e:  # noqa: BLE001 — sent, but no answer
@@ -1257,7 +1259,8 @@ class TradovateAdapter(BrokerAdapter):
                     "error": _reject_reason(d) or "liquidate refused (no orderId returned)"}
         if str(d.get("failureReason") or "Success") != "Success":
             return {"ok": False, "order_id": str(oid), "maybe": True, "error": _reject_reason(d)}
-        self._order_symbols[int(oid)] = sym
+        if sym:
+            self._order_symbols[int(oid)] = sym
         return {"ok": True, "order_id": str(oid), "error": None, "maybe": False}
 
     async def cancel_order_by_id(self, order_id: str) -> OrderResult:
@@ -1318,6 +1321,10 @@ class TradovateAdapter(BrokerAdapter):
         return OrderResult(ok=True, order_id=str(oid), raw=raw)
 
     async def flatten_all(self) -> OrderResult:
+        """Close every position of THIS account at the broker, one contract at a time, as the chart's
+        Flatten does (flatten_symbol): liquidateposition with its answer CHECKED -- a close the broker
+        did not confirm is an error, never "flattened" (2026-10-23) -- and a market close only after a
+        sure refusal. A contract we have no name for is liquidated by its id, its answer checked the same."""
         if self._ws is None or self._acct_num is None:
             return OrderResult(ok=False, error="adapter not connected")
         try:
@@ -1328,12 +1335,21 @@ class TradovateAdapter(BrokerAdapter):
                     continue
                 if not (p.get("netPos") or 0):
                     continue
+                cid = p.get("contractId")
+                name = self._contracts.get(cid)
                 try:
-                    await self._ws.liquidate_position(
-                        account_id=self._acct_num, contract_id=p.get("contractId"))
+                    if name:
+                        r = await self.flatten_symbol(name)
+                        ok, err = r.ok, r.error
+                    else:
+                        liq = await self._liquidate(None, contract_id=cid)
+                        ok, err = liq["ok"], liq["error"]
+                except Exception as e:  # noqa: BLE001 — every other contract still goes
+                    ok, err = False, str(e)
+                if ok:
                     n += 1
-                except Exception as e:
-                    errors.append(str(e))
+                else:
+                    errors.append(f"{name or cid}: {err}")
             if errors:
                 return OrderResult(ok=False, error="; ".join(errors), raw={"flattened": n})
             return OrderResult(ok=True, raw={"flattened": n})

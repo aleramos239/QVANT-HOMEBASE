@@ -1323,14 +1323,18 @@ class Engine(LabMixin):
                                  "accounts": {a: took[a] for a in results}})
         return results
 
-    async def flatten_today(self, account: Optional[str] = None, reason: str = "killed") -> dict:
+    async def flatten_today(self, account: Optional[str] = None, reason: str = "killed",
+                            close: bool = True) -> dict:
         """Kill switch: every strategy's footprint today, proven calls only. The
         accounts go side by side (each_account); one account's runs go one after
         another, in today's order -- _flatten_state sells the account's WHOLE net
         in a symbol. A run that raises is reported in its own actions; every
         other run still goes.
         `account`: that account's runs only (the Desk's per-account Flatten), ended
-        with exit_reason `reason`."""
+        with exit_reason `reason`. close=False: read and cancel each run's orders,
+        never the market-out -- the caller's account sweep closes the positions at
+        the broker (liquidateposition), so a stale read can never sell twice and
+        flip a position (2026-10-23)."""
         states = [st for st in self.states.values() if account is None or st.account == account]
         by_account: dict[str, list[DayState]] = {}
         for st in states:
@@ -1360,7 +1364,7 @@ class Engine(LabMixin):
                         continue
                     if cfg.kind == "lab":
                         sold.add(lab_sym(st))
-                    flat, acts[key] = await self._flatten_state(st, cfg, ad)
+                    flat, acts[key] = await self._flatten_state(st, cfg, ad, close=close)
                     if flat and st.status in ("placing", "placed", "live"):
                         st.status, st.exit_reason = "done", reason
                 except Exception as e:  # noqa: BLE001 — the Kill always finishes
@@ -1644,20 +1648,21 @@ class Engine(LabMixin):
                       file=sys.stderr)
 
     async def _flatten_state(self, st: DayState, cfg: StrategyCfg,
-                             ad: BrokerAdapter) -> tuple[bool, list[str]]:
+                             ad: BrokerAdapter, close: bool = True) -> tuple[bool, list[str]]:
         """Close ONE strategy's footprint on one account using only calls
         proven live (position read, market order, single cancels). Market out
         of the net position FIRST — the stop/target keep protecting until the
         position is gone — then cancel every order this strategy placed: both
         entries and both legs' stop/target (GTC: a leftover could open a new
         position days later). Position unreadable or the market order refused
-        -> NOTHING is cancelled; the stop/target stay working."""
+        -> NOTHING is cancelled; the stop/target stay working. close=False: the
+        read and the cancels, never the market-out (flatten_today's close=False)."""
+        acts: list[str] = []
         try:
             net = await ad.get_net_position(cfg.symbol)
         except Exception as e:  # noqa: BLE001 — unreadable is NOT flat
             return False, [f"position unreadable ({e}) — stop/target left working"]
-        acts: list[str] = []
-        if net:
+        if net and close:
             side = "Sell" if net > 0 else "Buy"
             r = await ad.place_order(OrderRequest(
                 symbol=cfg.symbol, side=side, qty=abs(net), order_type="Market",

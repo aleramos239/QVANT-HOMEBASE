@@ -51,14 +51,19 @@ function dotTd(tr, ok) { const c = el('td'), s = el('span', 'dot' + (ok ? ' ok' 
 /* review item 3: a Close/Cancel button must not stay clickable while a send is already in flight (it used to
    let a second action queue up and get dropped silently). New buttons start disabled when a send is already
    out; setActionsDisabled (below) flips every rendered one the instant HBTradeUI's busy state changes. */
-function actionTd(tr, label, onClick) {
+function actionTd(tr, label, onClick, flat = false) {
   const c = el('td'), b = el('button', 'bp-act');
   b.type = 'button'; b.textContent = label; b.onclick = onClick;
-  b.disabled = !!(window.HBTradeUI && window.HBTradeUI.busy());
+  if (flat) b.dataset.flat = '1';   // a Close is a flatten: only another flatten greys it (2026-10-23)
+  b.disabled = actDisabled(b);
   c.appendChild(b);
   tr.appendChild(c);
 }
-function setActionsDisabled(busy) { for (const b of elBody.querySelectorAll('.bp-act')) b.disabled = busy; }
+function actDisabled(b) {
+  const U = window.HBTradeUI;
+  return !!(U && (b.dataset.flat ? U.flatBusy() : U.busy()));
+}
+function setActionsDisabled() { for (const b of elBody.querySelectorAll('.bp-act')) b.disabled = actDisabled(b); }
 /* Keyed sync: reuses the container's own <table class="bp-table"> (and its rows, by r.key on <tr data-key>)
    across calls, so a row whose key survives keeps its exact DOM node -- its buttons, its focus -- while
    buildRow/updateRow decide what happens to the row itself. The diffing (which keys were added or removed) is
@@ -106,7 +111,7 @@ function buildPositionRow(tr, r) {
   td(tr, r.avg, 'num');
   td(tr, r.last, 'num');
   td(tr, r.pnl, 'num ' + (r.tone || ''));
-  actionTd(tr, 'Close', () => { window.HBTradeUI && window.HBTradeUI.flattenAccount(r.account, r.root); });
+  actionTd(tr, 'Close', () => { window.HBTradeUI && window.HBTradeUI.flattenAccount(r.account, r.root); }, true);
 }
 /* Never touches cell 7 (the Close button): a quote or an unrelated account's update must not replace it. */
 function updatePositionRow(tr, r) {

@@ -456,6 +456,25 @@ def check_prices(side: str, typ: str, price, sl, tp, contract: str,
     return price, sl, tp, trigger
 
 
+def reversed_stop(view: dict, contract: str, net: int, quote: Optional[dict], label: str) -> Optional[float]:
+    """The reversed position's stop: the old position's stop distance (its working protective Stop vs its
+    average price) on the other side of the last trade. None when the old position had no stop (or one at
+    breakeven: no distance to carry). A stop to carry and no fresh price refuses before anything is sent."""
+    out = "Sell" if net > 0 else "Buy"                 # the side of the old position's protective stop
+    pos = next((p for p in view.get("positions", []) if p.get("symbol") == contract), None)
+    stop = next((o for o in view.get("orders", []) if o.get("symbol") == contract and o.get("type") == "Stop"
+                 and o.get("side") == out and _finite(o.get("stop_price"))), None)
+    if pos is None or stop is None or not _finite(pos.get("avg_price")):
+        return None
+    dist = abs(float(pos["avg_price"]) - float(stop["stop_price"]))
+    if round(dist / tick_size(contract)) < 1:
+        return None
+    if quote is None:
+        raise Refused(f"no trade in {contract} in the last {QUOTE_MAX_AGE_S:.0f} s to place the reversed "
+                      f"position's stop on {label} — nothing done")
+    return round_to_tick(contract, quote["last"] + dist if net > 0 else quote["last"] - dist)
+
+
 def worst_net(view: dict, contract: str, side: str, qty: int, reserved=()) -> int:
     """Worst-case |net| in `contract` if this order AND every working order
     on its side fill. An OCO pair counts twice (conservative). `reserved`
@@ -925,7 +944,7 @@ class ChartDesk:
                 if r["order_id"] is None or r["order_id"] not in shown]
 
     def _placed(self, aid: str, contract: str, side: str, qty: int, r: OrderResult, *,
-                close_net: Optional[int] = None) -> None:
+                close_net: Optional[int] = None, reverse: bool = False) -> None:
         """After the broker's ok: reserve the qty and remember the ids as
         positively manual. A flatten's close carries `close_net`, the position
         it closed (_not_closing). Never raises — the order is already at the broker."""
@@ -943,6 +962,8 @@ class ChartDesk:
                                            raw.get("tp_order_id")) if i]}
             if close_net is not None:
                 rv["close_net"] = close_net
+            if reverse:
+                rv["reverse"] = True              # a reverse's open: a flatten waits for it (_not_closing)
             self._reserved.setdefault(aid, []).append(rv)
         except Exception as e:  # noqa: BLE001
             _log(f"{aid}: reservation bookkeeping failed: {type(e).__name__}: {e}")
@@ -1315,8 +1336,8 @@ class ChartDesk:
         entry had filled). The exits' own position checks (expected net, broker net) still run.
         Status unreadable or still working: the reservation stays."""
         for rv in list(self._kept_reservations(aid)):
-            if rv["contract"] != contract or not rv.get("order_id") or "close_net" in rv:
-                continue                      # a flatten's close keeps its guard (_not_closing)
+            if rv["contract"] != contract or not rv.get("order_id") or "close_net" in rv or rv.get("reverse"):
+                continue                      # a flatten's close / a reverse's open keeps its guard (_not_closing)
             try:
                 status = await ad.get_order_status(rv["order_id"])
             except Exception:  # noqa: BLE001 — unknown: it may still fill
@@ -1446,7 +1467,9 @@ class ChartDesk:
         return await self._per_symbol("flatten", body, self._do_flatten)
 
     async def reverse(self, body) -> dict:
-        return await self._per_symbol("reverse", body, self._do_reverse)
+        root = parse_symbol_action(body)[2]
+        return await self._per_symbol("reverse", body, lambda *a: self._do_reverse(
+            *a, quote=fresh_quote(body, root, self._now_s())))
 
     async def _do_cancel_symbol(self, cid, aid, ad, view, contract, label) -> dict:
         r = await _call(ad.cancel_symbol(contract))
@@ -1490,6 +1513,8 @@ class ChartDesk:
         broker refused, a chart order sent after it, or a position that moved lets it through;
         an unreadable position is left to flatten_symbol's own read."""
         mine = [rv for rv in self._kept_reservations(aid) if rv["contract"] == contract]
+        if mine and mine[-1].get("reverse"):
+            return await self._not_reversing(aid, ad, contract, label, mine[-1])
         if not mine or "close_net" not in mine[-1]:
             return
         last = mine[-1]
@@ -1507,6 +1532,24 @@ class ChartDesk:
             raise Refused(f"the last flatten of {contract} on {label} is not confirmed yet — the "
                           f"broker still shows {net:+d}; nothing sent, try again in a moment")
 
+    async def _not_reversing(self, aid: str, ad, contract: str, label: str, last: dict) -> None:
+        """The last chart order in `contract` is a reverse's open, still counting (RESERVE_S): while the
+        broker's position read shows nothing, the open is not in it yet and a flatten would only cancel
+        orders and say "flattened" (2026-10-23). An open the broker refused lets it through."""
+        try:
+            status = await ad.get_order_status(last["order_id"])
+        except Exception:  # noqa: BLE001 — unknown: it may still fill
+            status = None
+        if status in NEVER_FILLED:
+            return
+        try:
+            net = await ad.get_net_position(contract)
+        except Exception:  # noqa: BLE001
+            return
+        if not net:
+            raise Refused(f"the reverse in {contract} on {label} is not confirmed yet — the broker shows "
+                          "no position; nothing sent, try again in a moment")
+
     def _still_allowed(self, aid: str, contract: str, label: str, done: str) -> None:
         """Re-run guards 1 and 4 between a reverse's awaits: the desk's Kill
         or the 09:20 lock may have landed while the broker answered."""
@@ -1517,7 +1560,7 @@ class ChartDesk:
         except Refused as e:
             raise Refused(f"{e} — {done}") from None
 
-    async def _do_reverse(self, cid, aid, ad, view, contract, label) -> dict:
+    async def _do_reverse(self, cid, aid, ad, view, contract, label, quote=None) -> dict:
         if any(r["contract"] == contract for r in self._reservations(aid, view)):
             raise Refused(f"an order sent from the chart in {contract} on {label} is not "
                           "confirmed yet — try again in a moment")
@@ -1527,6 +1570,8 @@ class ChartDesk:
             raise Refused(f"the {contract} position on {label} is unreadable ({e}) — nothing done") from None
         if not net:
             raise Refused(f"no {contract} position on {label} to reverse")
+        side = "Sell" if net > 0 else "Buy"
+        sl = reversed_stop(view, contract, net, quote, label)
         self._still_allowed(aid, contract, label, "nothing done")
         # flatten_symbol reads the position again itself, and that read is KEPT: the position's own
         # stop/target are still working at the broker and the desk's Kill does not take this
@@ -1538,14 +1583,18 @@ class ChartDesk:
                            ack_ms=self._ack_ms())
         if not f.ok:
             return self._result(False, None, f"flatten failed: {f.error} — not reversed", jerr)
+        raw = f.raw if isinstance(f.raw, dict) else {}
+        close, closed = raw.get("market") or {}, raw.get("net_before")
+        if close.get("ok") and close.get("order_id") and closed:     # as _do_flatten: one close at a time
+            self._placed(aid, contract, "Sell" if closed > 0 else "Buy", abs(closed),
+                         OrderResult(ok=True, order_id=str(close["order_id"])), close_net=closed)
         self._still_allowed(aid, contract, label, "flattened only")
-        side = "Sell" if net > 0 else "Buy"
-        r = await _call(ad.place_order(OrderRequest(symbol=contract, side=side, qty=abs(net),
-                                                    order_type="Market",
-                                                    text="homebase:chart-reverse")))
+        req = OrderRequest(symbol=contract, side=side, qty=abs(net), order_type="Market",
+                           stop_price=sl, text="homebase:chart-reverse")
+        r = await _call(ad.place_bracket(req) if sl is not None else ad.place_order(req))
         if r.ok:
-            self._placed(aid, contract, side, abs(net), r)
+            self._placed(aid, contract, side, abs(net), r, reverse=True)
         jerr = self._jsafe("manual_reverse", source="chart", step="open", client_id=cid,
-                           account=aid, contract=contract, side=side, qty=abs(net), ok=r.ok,
+                           account=aid, contract=contract, side=side, qty=abs(net), sl=sl, ok=r.ok,
                            order_id=r.order_id, error=r.error, ack_ms=self._ack_ms()) or jerr
         return self._result(r.ok, r.order_id, r.error, jerr)

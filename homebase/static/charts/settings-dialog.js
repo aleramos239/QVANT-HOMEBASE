@@ -148,7 +148,9 @@ const TABS = [
     ['ONE-CLICK TRADING', [
       { label: 'Chart buttons', pref: { key: 'oneClickChart', kind: 'switch' } },
       { label: 'Order panel', pref: { key: 'oneClickPanel', kind: 'switch' } },
-      { caption: 'Every chart. Off: that surface asks to confirm first.' },
+      // what "Don't ask again" turns on (2026-10-23: it had no way back): line drags, the ×, BE+1, the chart menu, the bottom panel
+      { label: 'Lines, menu and bottom panel', pref: { key: 'oneClick', kind: 'switch' } },
+      { caption: 'Every chart. Off: that surface asks to confirm first. "Don\'t ask again" in a confirm turns its switch on.' },
     ]],
   ] },
   // trade sounds (the owner, 2026-10-18): this browser's, every chart, off until switched on; changed at once

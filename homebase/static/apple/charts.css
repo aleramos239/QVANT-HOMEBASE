@@ -135,7 +135,7 @@ html.hb-apple .ib { width: 18px; height: 18px; border-radius: 5px; color: var(--
 html.hb-apple .ib:hover { background: var(--a-fill); color: var(--a-label); }
 html.hb-apple .cell-gear { border-radius: 0; background: var(--c-canvas); -webkit-backdrop-filter: none; backdrop-filter: none; color: var(--a-label-2); }
 html.hb-apple .cell-gear:hover { background: var(--c-canvas); color: var(--a-label); }
-html.hb-apple .tr-sell, html.hb-apple .tr-buy { border-radius: 6px; }
+html.hb-apple .tr-sell, html.hb-apple .tr-buy, html.hb-apple .tr-flat { border-radius: 6px; }
 html.hb-apple .lg-trade.live::before { border-radius: 9px; }
 html.hb-apple .ev-tip, html.hb-apple .rail-tip { border-radius: 6px; font-size: 11px; line-height: 14px; }
 

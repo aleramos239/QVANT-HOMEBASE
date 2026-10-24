@@ -302,6 +302,51 @@ def test_reverse_flattens_then_opens_the_other_side(tmp_path):
     assert [e["step"] for e in journal(tmp_path) if e["event"] == "manual_reverse"] == ["flatten", "open"]
 
 
+def _long2_with_stop(ads):
+    a = ads["a1"]
+    a.net = 2
+    a.view["positions"] = [{"contract_id": 1, "symbol": NQC, "net": 2, "avg_price": 100.0}]
+    a.view["orders"] = [{**WORKING, "order_id": "88", "type": "Stop", "side": "Sell", "price": None,
+                         "stop_price": 95.0}]
+    return a
+
+
+def test_a_reverse_keeps_the_old_stops_distance_on_the_new_position(tmp_path):
+    """2026-10-23 review: the reversed position used to open naked (the flatten cancels the old stop)."""
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+    a = _long2_with_stop(ads)
+    r = run(desk.reverse({"client_id": "r1", "accounts": ["a1"], "root": "NQ",
+                          "quotes": quote(clock, last=102.0)}))["results"]["a1"]
+    assert r["ok"] is True and a.orders == []
+    b = a.brackets[-1]                                  # long 2 stopped 5 below -> short 2 stopped 5 above
+    assert (b.side, b.qty, b.order_type, b.stop_price, b.tp_price) == ("Sell", 2, "Market", 107.0, None)
+
+
+def test_a_reverse_that_cannot_price_the_new_stop_does_nothing(tmp_path):
+    desk, eng, ads, clock, *_ = mkdesk(tmp_path)
+    a = _long2_with_stop(ads)
+    r = run(desk.reverse({"client_id": "r1", "accounts": ["a1"], "root": "NQ",
+                          "quotes": quote(clock, age_s=600)}))["results"]["a1"]
+    assert r["refused"] is True and "stop" in r["error"] and "nothing done" in r["error"]
+    assert a.flattened == [] and a.orders == [] and a.brackets == []
+
+
+def test_a_flatten_right_after_a_reverse_waits_until_the_broker_shows_the_new_position(tmp_path):
+    """2026-10-23 review: between the reverse's close and its open filling, the position reads 0 and a
+    flatten then only cancelled orders -- "flattened" while the new position was still opening."""
+    desk, eng, ads, clock, mono, _ = mkdesk(tmp_path)
+    a = ads["a1"]
+    a.net = 2
+    assert run(desk.reverse({"client_id": "r1", "accounts": ["a1"], "root": "NQ"}))["results"]["a1"]["ok"]
+    a.net = 0                                           # the broker's read: closed, the open not in it yet
+    mono.t += 1
+    r = flat(desk, "f1")
+    assert r["refused"] is True and "reverse" in r["error"] and a.flattened == [NQC]
+    a.net = -2                                          # now it shows the reversed position
+    mono.t += 1
+    assert flat(desk, "f2")["ok"] is True and a.flattened == [NQC, NQC]
+
+
 
 
 # --- ruling 3: an unseeded / missing cache is never read as flat ---------------------------------

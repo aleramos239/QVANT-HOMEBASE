@@ -649,6 +649,11 @@ body.split-dragging.row * { cursor: row-resize !important; }
   align-items: center; justify-content: center; line-height: 16px; }
 .tr-sell { background: var(--down); } .tr-buy { background: var(--accent); }
 .tr-sell:hover, .tr-buy:hover { filter: brightness(1.08); }
+/* FLAT (2026-10-23): the chart's Flatten, beside BUY -- neutral, so it never reads as a third side */
+.tr-flat { height: 28px; padding: 0 8px; border-radius: 4px; border: 1px solid var(--border); background: var(--panel);
+  color: var(--text); font-size: 12px; font-weight: 600; letter-spacing: .04em; }
+.tr-flat:hover:not(:disabled) { background: var(--hover); }
+.tr-flat:disabled { opacity: .5; cursor: default; }
 .tr-px { font-size: 13px; font-weight: 600; } .tr-lbl { font-size: 11px; letter-spacing: .04em; }   /* .tr-px: the Bar Replay practice buttons' */
 .lg-trade .tr-lbl { font-size: 12px; font-weight: 600; }
 /* S1, the LIVE cue (2026-09-28 safety pass): while the NEXT send from the chart's Buy/Sell block or the order panel's
