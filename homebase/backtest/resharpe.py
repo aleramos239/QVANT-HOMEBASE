@@ -13,6 +13,7 @@ result.json and oos.json rebuilt the way the job built them, no look counted.
 from __future__ import annotations
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -24,12 +25,15 @@ MOVED = {"sharpe", "sortino", "sharpe_traded_days", "sharpe_basis"}
 
 
 def _holds(old, new) -> bool:
-    """Every number of `old` outside the Sharpe keys is in `new`, the same (keys only `new` has, and label text, are ignored)."""
+    """Every number of `old` outside the Sharpe keys is in `new`, the same to 9 digits (another machine's last float digit
+    differs), and keys only `new` has, and label text, are ignored."""
     if isinstance(old, dict):
         return isinstance(new, dict) and all(k in new and _holds(v, new[k]) for k, v in old.items() if k not in MOVED)
     if isinstance(old, list):
         return isinstance(new, list) and len(old) == len(new) and all(_holds(a, b) for a, b in zip(old, new))
-    return isinstance(old, str) and isinstance(new, str) or json.dumps(old) == json.dumps(new)       # NaN-safe
+    if isinstance(old, float) and isinstance(new, (int, float)) and not isinstance(new, bool):
+        return math.isclose(old, new, rel_tol=1e-9, abs_tol=1e-9) or json.dumps(old) == json.dumps(new)    # NaN = NaN
+    return isinstance(old, str) and isinstance(new, str) or json.dumps(old) == json.dumps(new)
 
 
 def _merge(old, new):

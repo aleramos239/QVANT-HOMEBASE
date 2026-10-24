@@ -45,5 +45,7 @@ def test_a_saved_run_gets_the_traded_days_sharpe_and_nothing_else_moves(tmp_path
 def test_a_file_whose_other_numbers_would_move_is_left_alone():
     assert resharpe._holds({"net": 1.0, "sharpe": 2.0, "note": "old words"}, {"net": 1.0, "sharpe": 3.0, "note": "new", "rr": 1})
     assert not resharpe._holds({"net": 1.0, "sharpe": 2.0}, {"net": 1.5, "sharpe": 3.0})
+    assert resharpe._holds({"t": 0.38755547127354756}, {"t": 0.3875554712735475})      # the server's last digit
+    assert resharpe._holds({"t": float("nan")}, {"t": float("nan")}) and not resharpe._holds({"t": 0.38}, {"t": 0.39})
     assert resharpe._merge({"net": 1.0, "sharpe": 2.0, "sharpe_traded_days": 4.0}, {"net": 1.0, "sharpe": 3.0, "rr": 1}) \
         == {"net": 1.0, "sharpe": 3.0}
