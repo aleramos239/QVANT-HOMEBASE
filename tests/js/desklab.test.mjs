@@ -1243,15 +1243,16 @@ test('build and unseen days are the 3:1 walk-forward of the strategy as set: two
     'Unseen days (walk-forward 3:1), after costs');
 });
 
-test('the 3:1 curve: build and unseen running totals on one day axis, each carrying its last value', () => {
+test('the 3:1 curve: each line on its own traded days, never flat on a day it did not trade (owner 2026-10-23)', () => {
   const c = D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] },
     curve_build: { days: ['2021-10-04', '2022-01-05'], vals: [20, 60] } });
-  assert.deepEqual(c.days, ['2021-10-04', '2022-01-04', '2022-01-05', '2022-01-06']);
-  assert.deepEqual(c.vals, [0, 100, 100, 150]);
-  assert.deepEqual(c.build, [20, 20, 60, 60]);
-  assert.deepEqual(c.both, [20, 120, 160, 210]);
+  assert.deepEqual(c.days, ['2022-01-04', '2022-01-06']);                 // the unseen line's own days
+  assert.deepEqual(c.vals, [100, 150]);
+  assert.deepEqual(c.build, [20, 60]);
+  assert.deepEqual(c.both, [20, 120, 160, 210]);                          // a day either side traded
   assert.equal(c.total, 150);
-  assert.equal(c.notes[2], 'Unseen $100 · Build $60 · Both $160');
+  assert.equal(c.notes[0], 'Unseen $100 · Build $20 · Both $120');
+  assert.equal(c.notes[1], 'Unseen $150 · Build $60 · Both $210');
   assert.equal(D.curve({ walkforward: true, curve: { days: ['2022-01-04', '2022-01-06'], vals: [100, 150] } }).build, undefined);
 });
 

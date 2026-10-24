@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=3">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=29"></script>
+<script src="/static/desklab.js?v=30"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -2217,10 +2217,11 @@ function loadEq(name) {
 /* Cumulative P&L by day as straight steps -- a day's close holds flat until the next one, so the line never shows a dip or a
    hump that did not happen -- with a dollar scale on the left and the first and last day under it (`ends`). */
 function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {
-  // second: a quieter line on the same days (the 3:1's build months beside its unseen ones); third: a dashed one (the two together)
-  const ok = (s) => Array.isArray(s) && s.length === vals.length;
+  // second: a quieter line (the 3:1's build months beside its unseen ones); third: a dashed one (the two together). Each spans the
+  // width on its OWN points, its traded days: never flat on a day it did not trade (owner 2026-10-23). days/notes are vals' own.
+  const ok = (s) => Array.isArray(s) && s.length > 1;
   const both = vals.concat(ok(second) ? second : [], ok(third) ? third : []);
-  const path = (s) => s.map((v, i) => `${i ? (" H " + X(i).toFixed(1) + " V") : "M " + X(0).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
+  const path = (s) => s.map((v, i) => `${i ? (" H " + (i / (s.length - 1) * 1000).toFixed(1) + " V") : "M 0.0"} ${Y(v).toFixed(1)}`).join("");
   const lo = Math.min(0, ...both), hi = Math.max(0, ...both), span = hi - lo || 1;
   const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
   let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;

@@ -246,16 +246,19 @@
     var from = monthOf(c.days[0]), to = monthOf(c.days[c.days.length - 1]);
     var cb = res.walkforward === true && okCurve(res.curve_build) ? res.curve_build : null;
     if (cb) {      // the 3:1's build (in-sample) and unseen (out-of-sample) months, one line each (owner 2026-10-18)
+      // Each line on ITS OWN traded days, never flat on a day it did not trade (owner 2026-10-23); Both on the days either traded.
       var al = alignCurves(c, cb), money = function (v) { return (v < 0 ? "−$" : "$") + Math.abs(Math.round(v)).toLocaleString("en-US"); };
+      var at = {};
+      al.days.forEach(function (d, i) { at[d] = i; });
       return {
         title: "Walk-forward 3:1 · build and unseen days, after costs",
         label: "Unseen (dark) · Build (light) · Both (dashed)",
-        vals: al.a, build: al.b, both: al.a.map(function (v, i) { return v + al.b[i]; }),   // every month, build and unseen together
+        vals: c.vals.slice(), build: cb.vals.slice(), both: al.a.map(function (v, i) { return v + al.b[i]; }),
         total: c.vals[c.vals.length - 1],
-        ends: [monthOf(al.days[0]) || DASH, monthOf(al.days[al.days.length - 1]) || DASH],
-        days: al.days,
-        notes: al.days.map(function (d, i) { return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
-        aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, by day",
+        ends: [from || DASH, to || DASH],
+        days: c.days.slice(),
+        notes: c.days.map(function (d) { var i = at[d]; return "Unseen " + money(al.a[i]) + " · Build " + money(al.b[i]) + " · Both " + money(al.a[i] + al.b[i]); }),
+        aria: "Running net P&L after costs: the walk-forward's unseen months and its build months, each on the days it traded",
       };
     }
     return {
