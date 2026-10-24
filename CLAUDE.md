@@ -8,6 +8,10 @@ every 2 minutes): committed main only, never the working tree; it must import; i
 commit every new file with the files that import it, and never commit half of someone else's work. Do not hand-copy files to the
 server (push.sh, scp) unless the owner asks; check `./deploy/linux/vpssync.sh status` and `homebase/.state/vpssync.log`.
 
+**The server is for trading only (owner, 2026-10-24): "i dont want to use the chicago server to backtest ever".** Every backtest,
+heat map and walk-forward runs on the Mac (12 at once; `~/.homebase/tester_slots.json`). The server's `~/.homebase/no_backtests`
+makes its tester refuse them all. A Desk card's walk-forward is run on the Mac and copied to the server.
+
 ## The strategy pipeline is OFF (owner, 2026-10-20)
 
 The pipeline, its Queue and its Book are switched off for now. Do not use it, start it, add to it or suggest it: no `pipeline_*` chat
