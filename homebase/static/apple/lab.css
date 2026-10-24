@@ -306,7 +306,7 @@ html.hb-apple #labRes .rs-set input, html.hb-apple #labRes .rs-set select { -web
   box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); font-family: var(--a-font); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
 html.hb-apple #labRes .rs-set input[type="number"]::-webkit-inner-spin-button, html.hb-apple #labRes .rs-set input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 /* a pop-up button: the system's filled control with the up/down chevrons (WebKit sets a select's text by its direction, so the text stays leading) */
-html.hb-apple #labRes .rs-set select { width: max-content; max-width: 200px; padding: 0 22px 0 8px; box-shadow: none; text-align: left; color: var(--a-label);
+html.hb-apple #labRes .rs-set select { width: max-content; max-width: 100%; text-overflow: ellipsis; padding: 0 22px 0 8px; box-shadow: none; text-align: left; color: var(--a-label);
   background: var(--a-fill) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 13' fill='none' stroke='%23000' stroke-opacity='.85' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.6 5 1.8 8 4.6M2 8.4 5 11.2 8 8.4'/%3E%3C/svg%3E") right 7px center / 8px 11px no-repeat; }
 html.hb-apple[data-theme="dark"] #labRes .rs-set select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 13' fill='none' stroke='%23fff' stroke-opacity='.85' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2 4.6 5 1.8 8 4.6M2 8.4 5 11.2 8 8.4'/%3E%3C/svg%3E"); }
 html.hb-apple #labRes .rs-set input:focus, html.hb-apple #labRes .rs-set select:focus { outline: 3.5px solid var(--a-focus); outline-offset: 0; }
@@ -460,3 +460,5 @@ html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2);
     -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
 }
 html.hb-apple #labRes .rs-heat .heat-axis { grid-column: 1 / -1; margin-bottom: -4px; font-size: 13px; line-height: 16px; font-weight: 590; color: var(--a-label); }
+html.hb-apple #labRes .rs-heat .heat-grid .wide { grid-column: 1 / -1; justify-self: stretch; width: auto; max-width: none; }
+html.hb-apple #labRes .rs-heat .heat-grid label.wide { margin-bottom: -6px; }

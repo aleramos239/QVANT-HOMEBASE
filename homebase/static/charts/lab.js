@@ -2149,8 +2149,8 @@ function heatPickHtml(f, meta, h) {
   const rows = h.rows.map((r, k) => {
     const inp = r.key ? X.axisInput(m, r.key) : null;
     if (!custom && !inp) return '';
-    const head = custom ? `<label>${HEAT_SIDES[k]}</label>
-      <select data-hk="${k}"${lock}><option value="">${k === 2 ? 'None (optional)' : 'Pick a setting'}</option>
+    const head = custom ? `<label class="wide">${HEAT_SIDES[k]}</label>
+      <select class="wide" data-hk="${k}"${lock}><option value="">${k === 2 ? 'None (optional)' : 'Pick a setting'}</option>
         ${strat.length ? `<optgroup label="Strategy settings">${strat.map((i) => opt(i, r.key)).join('')}</optgroup>` : ''}
         <optgroup label="Trade rules">${ctl.map((i) => opt(i, r.key)).join('')}</optgroup></select>` : `<div class="heat-axis">${esc(inp.label)}</div>`;
     if (!inp) return head;
@@ -2159,7 +2159,7 @@ function heatPickHtml(f, meta, h) {
     return `${head}${heatChipValues(inp, r).map(row).join('')}
       ${addable ? `<label>Add a value</label><input type="text" inputmode="decimal" data-hadd="${k}" placeholder="then Enter" spellcheck="false" autocomplete="off"${lock}>` : ''}`;
   }).join('');
-  return `<label>Try</label><select data-hpre${lock}>${HEAT_PRESETS.map(([k, l]) => `<option value="${k}"${h.preset === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${rows}`;
+  return `<label class="wide">Try</label><select class="wide" data-hpre${lock}>${HEAT_PRESETS.map(([k, l]) => `<option value="${k}"${h.preset === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${rows}`;
 }
 const wfBusyNow = (f) => { const w = wfLabState(f); return !!(w.starting || (w.job && !X.wfProgress(w.job).final)); };
 function heatSettingsHtml(f, meta, tab) {

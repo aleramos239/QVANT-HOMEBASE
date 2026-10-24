@@ -605,6 +605,7 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
 
 /* ---- Heat map (2026-10-12): the settings group under Trade rules, and its tables ---- */
 .rs-heat .heat-grid select { text-align: left; text-overflow: ellipsis; }
+.rs-heat .heat-grid .wide { grid-column: 1 / -1; }
 .rs-heat .heat-grid label small { display: block; color: var(--hb-fg2); font-size: var(--hb-fs-sm); }
 .rs-heat .heat-axis { grid-column: 1 / -1; margin-top: 6px; font-size: var(--hb-fs-ui); font-weight: 600; }
 .rs-heat .heat-grid input[type=text] { text-align: right; }
