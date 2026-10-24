@@ -39,3 +39,29 @@ test('matches: every word of the search must be in the name or the id, any case;
   assert.equal(AB.matches(x, 'apex300'), true, 'the id counts too');
   assert.equal(AB.matches(x, 'es candle'), false);
 });
+
+test('fill: the first strategy whose name begins with what was typed, any case; none for an empty or unmatched box', () => {
+  const l = [{ id: 'a', name: 'NQ CANDLE BREAK' }, { id: 'b', name: 'NQ ORB 30' }, { id: 'c', name: 'ES ORB' }];
+  assert.equal(AB.fill(l, 'nq o').id, 'b');
+  assert.equal(AB.fill(l, '  es').id, 'c');
+  assert.equal(AB.fill(l, ''), null);
+  assert.equal(AB.fill(l, 'orb'), null, 'begins-with only: a word in the middle is for the narrowing, not the fill');
+});
+
+test('pickRuns: newest in-sample run and newest run from Sep 2021 or earlier; unfinished runs never count', () => {
+  const r = (id, kind, start, status = 'done') => ({ id, status, range: { kind, start } });
+  const p = AB.pickRuns([r('x', 'wf_is', null, 'running'), r('i1', 'wf_is'), r('c1', 'custom', '2024-01-01'), r('f1', 'custom', '2021-09-22'), r('f0', 'custom', '2021-01-01'), r('i0', 'wf_is')]);
+  assert.equal(p.is.id, 'i1');
+  assert.equal(p.all.id, 'f1');
+  assert.deepEqual(AB.pickRuns([]), { is: null, all: null });
+});
+
+test('oosBundle: a done test-months read becomes a bundle the report reads; anything else is null', () => {
+  const res = { oos: { state: 'done', months: ['2021-12', '2022-01'], params: { n: 3 }, record: { net: 500, trades: 9, win_rate: 55, pf: 1.4, avg_trade: 55.5, max_dd: -300, sharpe: 1.1 } } };
+  const b = AB.oosBundle(res, 'S');
+  assert.equal(b.run.report.summary.all.net_profit, 500);
+  assert.equal(b.run.report.summary.all.max_drawdown, -300);
+  assert.equal(b.run.range.end, '2022-01');
+  assert.equal(AB.oosBundle({ oos: { state: 'running' } }, 'S'), null);
+  assert.equal(AB.oosBundle(null, 'S'), null);
+});
