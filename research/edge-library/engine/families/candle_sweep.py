@@ -39,6 +39,11 @@ THE RULE (fixed here, before any run):
     at or after 10:00 on, so an earlier decision (the 09:45 close) never trades with it; it never changes later in the day.
   * BODY_X (the owner, 2026-10-20: "the candle body is 2x bigger than the previous candle's body"). `body_x` = x > 0 (0 = off, the
     default: every run before it is unchanged): THIS bar's body |close - open| must be at least x times the PREVIOUS bar's body.
+  * CDELTA (the owner, 2026-10-23, idea A: "the candle's own delta agrees"). `cdelta` = off (the default: every run before it is
+    unchanged) | with | with_20 | with_40: the signal bar's own net aggressor volume (delta / volume of the whole minutes of THIS bar --
+    the tf bar, or the `candle` -- from the flow table, engine/flowtab.py, the delta blocks' file) must point the trade's way: with = above
+    0, with_20 / with_40 = at least 20 % / 40 % of the bar's volume. No flow row or no volume in the bar = no trade. The flow file ends
+    where it ends (flowtab.last_date): days after it never trade with cdelta on.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -73,10 +78,12 @@ import datetime as dt
 
 import numpy as np
 
+import flowtab
 import l2sim as S
 from l2sim import Template
 
 BACKS = ("range", "body", "far")
+CDELTA = {"with": 0.0, "with_20": 0.20, "with_40": 0.40}    # the least share of the signal bar's volume the trade's way (with = above 0)
 HOUR = 3600 * S.NS
 LOOK = 30                                           # sessions back at most for the 1-hour closes
 _CLOSES: dict = {}                                  # (root, iso) -> that session's 1-hour closes, per process
@@ -151,9 +158,9 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep", body_x=0.
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "max_tr": 20}
+    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "cdelta": "off", "max_tr": 20}
     SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")), "body_x": ("float", 0.0, 10.0),
-              "max_tr": ("int", 1, 20)}
+              "cdelta": ("choice", ("off", *CDELTA)), "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
 
@@ -216,7 +223,17 @@ class CandleSweep(Template):
             self.d930 = 0 if not w else (w[-1][4] > w[0][1]) - (w[-1][4] < w[0][1])
         return self.d930
 
+    def cdelta(self, ctx):
+        """The signal bar's delta share (module docstring, CDELTA), or None: no flow row, or no volume in the bar."""
+        now = (self.M[-1][0] // 60 + 1) * 60                     # the clock close of the 1-minute bar that has just closed
+        w = flowtab.window(ctx.root, self.day, now - 60 * (self.p["candle"] or int(self.p["tf"])), now)
+        return None if w is None or w[0] <= 0 else w[1] / w[0]
+
     def fam_signal(self, ctx):
+        if self.go and self.p["cdelta"] != "off":
+            x, least = self.cdelta(ctx), CDELTA[self.p["cdelta"]]
+            if x is None or not (x * self.go > least if least == 0 else x * self.go >= least):
+                return
         if self.go and self.p["dir930"] == "with" and self.dir930() != self.go:
             return
         if self.go and self.p["ema1h"]:

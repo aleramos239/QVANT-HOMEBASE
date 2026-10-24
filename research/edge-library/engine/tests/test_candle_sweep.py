@@ -506,3 +506,43 @@ def test_past_session_seal_by_its_own_date(monkeypatch):
     CS.session_closes("NQ", "2025-07-01")
     assert seen == [("2025-06-30", S.ALLOW_BP), ("2025-07-01", S.ALLOW_BT)]
     CS._CLOSES.clear()
+
+
+# ---- (iv e) cdelta: the signal bar's own delta must point the trade's way (owner, 2026-10-23, idea A) ----------------------------------
+
+UP = {**GREEN, "09:35": m(PX, 15014.0, 15003.0, 15013.0), "09:44": m(15013.0, 15014.0, 15012.5, 15013.0)}   # a long break at the 09:45 close
+DOWN = {**RED, "09:44": m(PX, PX + TICK, 14987.0, 14987.5)}                                                 # a short break at the 09:45 close
+
+
+def with_flow(monkeypatch, share):
+    """flowtab.window returns volume 1000 and delta share x 1000 for exactly the signal bar's minutes 09:30-09:45 (else None)."""
+    asked = []
+
+    def window(root, iso, a, b):
+        asked.append((a, b))
+        return (1000, int(round(share * 1000)), 0, 0) if share is not None and (a, b) == (sec(9, 30), sec(9, 45)) else None
+    monkeypatch.setattr(CS.flowtab, "window", window)
+    return asked
+
+
+@pytest.mark.parametrize("share, want_long, want_short", [
+    (0.45, {"with", "with_20", "with_40"}, set()),
+    (0.25, {"with", "with_20"}, set()),
+    (0.20, {"with", "with_20"}, set()),             # exactly 20 % passes with_20
+    (0.05, {"with"}, set()),
+    (0.0, set(), set()),                            # no net delta: neither side
+    (-0.30, set(), {"with", "with_20"}),
+    (None, set(), set())])                          # no flow row: no trade
+def test_cdelta_needs_the_signal_bars_own_delta_share_the_trades_way(monkeypatch, share, want_long, want_short):
+    for bars, side, want in ((UP, "long", want_long), (DOWN, "short", want_short)):
+        for mode in CS.CDELTA:
+            asked = with_flow(monkeypatch, share)
+            log, _ = orders({"mode": "break", "cdelta": mode}, day(bars))
+            assert [x[:2] for x in log] == ([(sec(9, 45), side)] if mode in want else []), (share, side, mode)
+            assert asked and set(asked) == {(sec(9, 30), sec(9, 45))}           # it reads the 15-minute signal bar's minutes, nothing later
+
+
+def test_cdelta_off_never_reads_the_flow_and_trades_as_before(monkeypatch):
+    asked = with_flow(monkeypatch, -0.9)
+    log, _ = orders({"mode": "break"}, day(UP))
+    assert [x[:2] for x in log] == [(sec(9, 45), "long")] and asked == []
