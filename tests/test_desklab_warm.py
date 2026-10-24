@@ -31,7 +31,7 @@ def test_warm_scores_the_saved_runs_once_and_starts_nothing(c, tmp_path, drafts_
     monkeypatch.setattr(rt.manager, "submit", lambda req: started.append(req))
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)     # the ROUTE would start the unseen run now
     rt.warm()
-    assert scored == [tester_api.DESKLAB_PROP] * 2, "the 3:1's two sides are scored once each, on the pipeline's account"
+    assert scored == [tester_api.DESKLAB_PROP] * 3, "the 3:1's two sides and Both are scored once each, on the pipeline's account"
     assert started == [], "a warm-up reads saved runs; it starts none"
 
     monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", False)
@@ -39,7 +39,7 @@ def test_warm_scores_the_saved_runs_once_and_starts_nothing(c, tmp_path, drafts_
     fa.include_router(rt)
     got = TestClient(fa, base_url="http://localhost:8852").get("/api/tester/desklab/results", headers=DESK)
     assert got.json()["results"]["nq_bars"]["prop"]["build"] == {"account": "LucidFlex 50K", **HEAD}
-    assert scored == [tester_api.DESKLAB_PROP] * 2, "the first ask is a cache hit: nothing is scored again"
+    assert scored == [tester_api.DESKLAB_PROP] * 3, "the first ask is a cache hit: nothing is scored again"
 
 
 def test_warm_never_raises(tmp_path, monkeypatch):

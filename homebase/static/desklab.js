@@ -314,16 +314,23 @@
     ];
   }
   var PROP_ROWS = ["Passes the eval", "Busts the eval", "Days to pass", "Gets a payout", "Expected cheque"];
+  // "+$118,301" -> "+$118k", "−$5,865" -> "−$5.9k": three columns of dollars fit the inspector (Both, owner 2026-10-24)
+  function shortUsd(s) {
+    var m = /^([+\u2212-]?)\$([\d,]+)$/.exec(text(s)), n = m ? +m[2].replace(/,/g, "") : 0;
+    return !m || n < 1000 ? s : m[1] + "$" + (n >= 100000 ? Math.round(n / 1000) : (n / 1000).toFixed(1)) + "k";
+  }
   function results(res) {
     var wait = !res || typeof res !== "object";
     var u = !wait && res.unseen && typeof res.unseen === "object" ? res.unseen : null;
     var prop = (!wait && res.prop && typeof res.prop === "object") ? res.prop : {};
     var b = prop.build && typeof prop.build === "object" ? prop.build : null;
     var pu = prop.unseen && typeof prop.unseen === "object" ? prop.unseen : null;
-    var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu);
+    var po = prop.both && typeof prop.both === "object" ? prop.both : null;     // Build + Unseen as one run (owner 2026-10-24)
+    var account = text((b || pu || {}).account), cb = propCells(b), cu = propCells(pu), co = propCells(po);
     // a Desk straddle also sends its build-days run at the Desk's setting: the block then reads Build | Unseen
     var bu = !wait && res.build && typeof res.build === "object" ? res.build : null;
     var wf = !wait && res.walkforward === true;
+    var bo = wf && bu && res.both && typeof res.both === "object" ? res.both : null;
     var runRows = function (run) {
       var r = run.range || {}, f = monthOf(r.start), t = monthOf(r.end);
       var days = wf ? [] : [{ k: "Days", v: f && t ? f + " – " + t : DASH }];      // the 3:1's months interleave: no one span
@@ -338,21 +345,33 @@
     };
     var rows = u ? runRows(u) : [];
     if (bu) {
-      var br = runRows(bu);
-      rows = br.map(function (r, i) { return { k: r.k, b: r.v, v: u ? rows[i].v : DASH }; });
+      var br = runRows(bu), or = bo ? runRows(bo) : null;
+      rows = br.map(function (r, i) {
+        var row = { k: r.k, b: r.v, v: u ? rows[i].v : DASH };
+        if (or) {            // three columns: short dollars, the exact figure kept for the cell's title
+          row.o = or[i].v;
+          row.full = [row.b, row.v, row.o];
+          row.b = shortUsd(row.b); row.v = shortUsd(row.v); row.o = shortUsd(row.o);
+        }
+        return row;
+      });
     }
     return {
       unseen: {
         title: wf ? WF_TITLE : bu ? "Backtest · build and unseen days" : "Unseen days (OOS)",
-        head: bu ? ["Build", "Unseen"] : null,
+        head: bu ? (bo ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"]) : null,
         rows: rows,
         note: wait ? RES_WAIT : wf ? (u ? "" : WF_NOTES[res.unseen_state] || WF_NOTES.none)
           : u ? "" : res.unseen_state === "pending" ? RUNNING_UNSEEN : res.unseen_state === "failed" ? FAILED_UNSEEN : res.manual === true ? NO_UNSEEN_MANUAL : NO_UNSEEN,
       },
       prop: {
         title: "Prop sim" + (account ? " · " + account : ""),
-        head: ["Build", "Unseen"],
-        rows: b || pu ? PROP_ROWS.map(function (k, i) { return { k: k, build: cb[i], unseen: cu[i] }; }) : [],
+        head: po ? ["Build", "Unseen", "Both"] : ["Build", "Unseen"],
+        rows: b || pu ? PROP_ROWS.map(function (k, i) {
+          var row = { k: k, build: cb[i], unseen: cu[i] };
+          if (po) row.both = co[i];
+          return row;
+        }) : [],
         note: wait ? RES_WAIT : b || pu ? "" : NO_PROP,
       },
     };

@@ -593,8 +593,12 @@ def write_wf(tmp_path, rec, today, status="done", result=None, sha256=None):
 
 
 def wf_result(oos_net=1234.5):
-    t = [{"date": "2022-04-04", "net": 300.0, "entry_ms": 1, "exit_ms": 2}, {"date": "2022-04-05", "net": -100.0, "entry_ms": 3, "exit_ms": 4}]
-    ti = [{"date": "2022-01-03", "net": 50.0, "entry_ms": 1, "exit_ms": 2}]
+    row = {"side": "long", "qty": 1, "mfe_usd": 0.0, "mae_usd": 0.0, "mfe_pts": 0.0, "mae_pts": 0.0, "commission": 0.0, "gross": 0.0,
+           "seconds": 60, "bars": 1, "entry_price": 100.0, "exit_price": 101.0, "order_price": 100.0, "exit_reason": "tp",
+           "sl": 99.0, "tp": 101.0}                                       # a trades.json row's other fields
+    t = [{**row, "date": "2022-04-04", "net": 300.0, "entry_ms": 86_400_000 * 3, "exit_ms": 86_400_000 * 3 + 1},
+         {**row, "date": "2022-04-05", "net": -100.0, "entry_ms": 86_400_000 * 4, "exit_ms": 86_400_000 * 4 + 1}]
+    ti = [{**row, "date": "2022-01-03", "net": 50.0, "entry_ms": 1, "exit_ms": 2}]
     rr = {"rr": 3.0, "rr_label": "1:3.00"}
     return {"scheme": {"ratio": "3:1"}, "next": {"for": "2026-10", "params": {}},
             "stitched": {"stats": {**SUMMARY, "net_profit": oos_net, "sharpe": 0.5, **rr}, "months": ["2022-04", "2026-08"], "trades": t},
@@ -614,8 +618,8 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     build = make_run()
     (tmp_path / "state" / "tester" / "runs" / build / "trades.json").write_text("[]")
     assert promote(c, run_id=build, headers=DESK).json()["ok"] is True
-    assert lab_results(c) == {"nq_bars": {"build": None, "unseen": None, "unseen_state": "none", "curve": None, "curve_build": None, "walkforward": True,
-                                          "prop": {"build": None, "unseen": None}}}
+    assert lab_results(c) == {"nq_bars": {"build": None, "unseen": None, "both": None, "unseen_state": "none", "curve": None, "curve_build": None,
+                                          "walkforward": True, "prop": {"build": None, "unseen": None, "both": None}}}
     rec, today = store.get("nq_bars"), dt.date(2026, 10, 18)
     req = deskresults.wf_request(rec, today)
     assert req["axes"] == [] and req["inputs"] == rec["params"] and req["step_months"] == 4      # as set, blocks, nothing searched
@@ -630,8 +634,12 @@ def test_the_card_shows_build_and_unseen_from_the_walkforward_of_the_strategy_as
     assert r["build"]["net"] == 4000.0 and r["build"]["range"] == {"start": "2022-01-01", "end": "2026-07-31"}
     assert r["curve"] == {"days": ["2022-04-04", "2022-04-05"], "vals": [300.0, 200.0]}
     assert r["curve_build"] is None, "one in-sample trade is not a curve (two days at least)"
-    assert r["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD}}
-    assert sorted(set(scored)) == [1, 2], "each side's own trades are scored: in-sample 1, out-of-sample 2"
+    assert r["prop"] == {"build": {"account": "LucidFlex 50K", **HEAD}, "unseen": {"account": "LucidFlex 50K", **HEAD},
+                         "both": {"account": "LucidFlex 50K", **HEAD}}
+    assert sorted(set(scored)) == [1, 2, 3], "each side's own trades are scored: in-sample 1, out-of-sample 2, both 3"
+    # Both (owner 2026-10-24): the two sides' trades as ONE run, every month of the walk-forward
+    b = r["both"]
+    assert (b["months"], b["range"], b["trades"], b["net"]) == (4, {"start": "2022-01-01", "end": "2026-08-31"}, 3, 250.0)
 
 
 def test_a_promote_starts_the_walkforward_once_and_a_failed_one_is_not_started_again(c, tmp_path, drafts_dir, make_run, monkeypatch):

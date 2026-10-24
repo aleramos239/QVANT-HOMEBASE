@@ -930,11 +930,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             return None
 
     def wf_block(rec: dict) -> dict:
-        """The card's block from the 3:1 walk-forward of the strategy as set: {build, unseen, unseen_state, curve, prop_build,
-        prop_unseen} -- build = its in-sample months, unseen = its out-of-sample months."""
+        """The card's block from the 3:1 walk-forward of the strategy as set: {build, unseen, both, unseen_state, curve, prop_build,
+        prop_unseen, prop_both} -- build = its in-sample months, unseen = its out-of-sample months, both = all of them as one run."""
         got = ensure_wf(rec)
-        out = {"build": None, "unseen": None, "unseen_state": got["state"], "curve": None, "curve_build": None,
-               "prop_build": None, "prop_unseen": None}
+        out = {"build": None, "unseen": None, "both": None, "unseen_state": got["state"], "curve": None, "curve_build": None,
+               "prop_build": None, "prop_unseen": None, "prop_both": None}
         if got["state"] != "done":
             return out
         try:
@@ -946,8 +946,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         out.update(unseen=deskresults.wf_summary(got["id"], res), build=deskresults.wf_summary(got["id"], res, "stitched_is"),
                    curve=deskresults.curve_of_trades(oos), curve_build=deskresults.curve_of_trades(ins),
                    prop_unseen=wf_prop(("wf", got["id"]), oos, (res.get("stitched") or {}).get("months")),
-                   prop_build=wf_prop(("wf-is", got["id"]), ins, (res.get("stitched_is") or {}).get("months")))
+                   prop_build=wf_prop(("wf-is", got["id"]), ins, (res.get("stitched_is") or {}).get("months")),
+                   both=deskresults.wf_both(got["id"], res), prop_both=wf_prop(("wf-both", got["id"]), *both_side(res)))
         return out
+
+    def both_side(res: dict) -> tuple:
+        """(trades, months) of Build + Unseen together, in date order (the prop sim of the whole walk-forward)."""
+        ins, oos = res.get("stitched_is") or {}, res.get("stitched") or {}
+        trades = sorted((ins.get("trades") or []) + (oos.get("trades") or []), key=lambda t: (t.get("entry_ms") or 0))
+        return trades, sorted(set(ins.get("months") or []) | set(oos.get("months") or []))
 
     def warm_desklab_results() -> None:
         """Score every promoted strategy's (and the two built-in straddles' twins') saved runs, so the Desk's first results
@@ -963,6 +970,7 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                             res = wfs.result(st["id"])
                             wf_prop(("wf", st["id"]), (res.get("stitched") or {}).get("trades") or [], (res.get("stitched") or {}).get("months"))
                             wf_prop(("wf-is", st["id"]), (res.get("stitched_is") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("months"))
+                            wf_prop(("wf-both", st["id"]), *both_side(res))
                     except Exception:      # noqa: BLE001 -- the route computes it on ask
                         pass
             for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
@@ -988,9 +996,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             for rec in store.listing():
                 # build and unseen days ARE the 3:1 walk-forward's in- and out-of-sample months, the strategy as set (owner, 2026-10-18)
                 w = wf_block(rec)
-                out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "unseen_state": w["unseen_state"],
+                out[rec["name"]] = {"build": w["build"], "unseen": w["unseen"], "both": w["both"], "unseen_state": w["unseen_state"],
                                     "curve": w["curve"], "curve_build": w["curve_build"], "walkforward": True,
-                                    "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"]}}
+                                    "prop": {"build": w["prop_build"], "unseen": w["prop_unseen"], "both": w["prop_both"]}}
             # the Desk's own straddles (nq930, gc_nfp): their tester twin's SAVED runs, at the Desk's size and setting. Nothing here
             # starts a run (the unseen days of a built-in are read by hand, once, from the Lab): "manual" says so to the page.
             for desk_id in deskresults.BUILTIN_TWINS:

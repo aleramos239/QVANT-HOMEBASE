@@ -6,7 +6,7 @@ import datetime as dt
 from pathlib import Path
 
 from .. import strategies
-from ..backtest import discipline, drafthost
+from ..backtest import discipline, drafthost, walkforward
 from ..backtest.runner import read_json
 from ..labrun.store import HEADLINE
 
@@ -205,6 +205,19 @@ def wf_state(grids: Path, rec: dict, today) -> dict:
             return {"state": "done", "id": d.name}
         seen.add("failed" if g.get("status") in ("error", "cancelled") else "pending")
     return {"state": "pending" if "pending" in seen else "failed" if seen else "none"}
+
+
+def wf_both(wid: str, result: dict) -> dict | None:
+    """Build + Unseen together (owner 2026-10-24): every month of the walk-forward, its in- and out-of-sample trades read as ONE
+    run by the walk-forward's own stats (report.column: Sharpe on the traded days only), in wf_summary's shape."""
+    ins, oos = result.get("stitched_is") or {}, result.get("stitched") or {}
+    trades = (ins.get("trades") or []) + (oos.get("trades") or [])
+    months = sorted(set(ins.get("months") or []) | set(oos.get("months") or []))
+    try:
+        side = {"stats": walkforward._stats(trades, [], 1.0), "months": months}    # capital: only the % figures, not on the card
+    except (KeyError, TypeError, ValueError):        # a trade row the report cannot read: no Both, the card stays
+        return None
+    return wf_summary(wid, {**result, "both": side}, "both")
 
 
 def wf_summary(wid: str, result: dict, side: str = "stitched") -> dict:

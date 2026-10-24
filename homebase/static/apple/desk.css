@@ -310,6 +310,11 @@ html.hb-apple .hb-insp .labres-prop .f .k { flex: 1 1 auto; min-width: 0; white-
 html.hb-apple .hb-insp .labres-prop .f .v { flex: none; width: 46px; text-align: right; }
 html.hb-apple .hb-insp .labres-prop .f.fh { min-height: 26px; }
 html.hb-apple .hb-insp .labres-prop .f.fh .v { font-size: 11px; line-height: 14px; }
+/* three columns, Build | Unseen | Both (owner 2026-10-24): fixed narrow values, the label wraps rather than being cut */
+html.hb-apple .hb-insp .figs.three .f { gap: 6px; }
+html.hb-apple .hb-insp .figs.three .f .k { flex: 1 1 auto; min-width: 0; white-space: normal; overflow: visible; font-size: 12px; line-height: 15px; }
+html.hb-apple .hb-insp .figs.three .f .v { flex: none; width: 50px; text-align: right; font-size: 12px; }
+html.hb-apple .hb-insp .figs.three .f.fh .v { font-size: 11px; }
 /* a group's combined figures: dollar amounts such as +$86,412 need a wider column than the prop sim's percentages */
 html.hb-apple .hb-insp .figs.grp-figs .f .v { width: 70px; }
 html.hb-apple .hb-insp .qlinks { display: block; margin: 0; }
