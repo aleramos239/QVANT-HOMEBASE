@@ -1912,6 +1912,26 @@ const money0 = (v) => `${v > 0 ? '+' : v < 0 ? MINUS : ''}$${Math.abs(Math.round
 const EQ_DAY = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short', day: 'numeric', year: 'numeric' });
 const EQ_MON = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'short' }), EQ_MONL = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', month: 'long' });
 function eqPoints(eq) { const t = eq.t_ms || [], v = eq.equity || []; return t.map((ms, i) => ({ ms, v: Number(v[i]) || 0 })); }
+/* A smooth line through [[x, y], ...] that never overshoots a point's value (monotone cubic; the Desk's DeskLab.smoothPath). */
+function eqSmooth(p) {
+  const n = p.length, f = (v) => v.toFixed(1), m = [], t = [];
+  if (!n) return '';
+  let d = `M${f(p[0][0])},${f(p[0][1])}`;
+  if (n === 2) return `${d}L${f(p[1][0])},${f(p[1][1])}`;
+  for (let i = 0; i < n - 1; i++) m.push((p[i + 1][1] - p[i][1]) / ((p[i + 1][0] - p[i][0]) || 1));
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], s = a * a + b * b;
+    if (s > 9) { const k = 3 / Math.sqrt(s); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const h = (p[i + 1][0] - p[i][0]) / 3;
+    d += `C${f(p[i][0] + h)},${f(p[i][1] + t[i] * h)} ${f(p[i + 1][0] - h)},${f(p[i + 1][1] - t[i + 1] * h)} ${f(p[i + 1][0])},${f(p[i + 1][1])}`;
+  }
+  return d;
+}
 /* at most ~140 points, always keeping the first, the last, the high and the low */
 function eqThin(pts) {
   if (pts.length <= 140) return pts;
@@ -1942,13 +1962,11 @@ function drawEq() {
   const t0 = Math.min(...all.map((p) => p.ms)), t1 = Math.max(...all.map((p) => p.ms));
   const X = (p) => padX + (t1 > t0 ? (p.ms - t0) / (t1 - t0) : 0) * (W - 2 * padX), Y = (v) => top + (1 - (v - lo) / ((hi - lo) || 1)) * (bot - top);
   const P = pts.map((p) => [X(p), Y(p.v)]);
-  let d = `M${P[0][0].toFixed(1)},${P[0][1].toFixed(1)}`;
-  for (let i = 0; i < P.length - 1; i++) { const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || p2, t = 0.16;
-    d += `C${(p1[0] + (p2[0] - p0[0]) * t).toFixed(1)},${(p1[1] + (p2[1] - p0[1]) * t).toFixed(1)} ${(p2[0] - (p3[0] - p1[0]) * t).toFixed(1)},${(p2[1] - (p3[1] - p1[1]) * t).toFixed(1)} ${p2[0].toFixed(1)},${p2[1].toFixed(1)}`; }
+  const d = eqSmooth(P);
   const z = Y(0).toFixed(1), svg = box.querySelector('svg');
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.innerHTML = `<defs><linearGradient id="labEqFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".28"/><stop offset=".7" stop-color="currentColor" stop-opacity=".05"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
-    <path d="${d}L${P[P.length - 1][0].toFixed(1)},${bot + 14}L${P[0][0].toFixed(1)},${bot + 14}Z" fill="url(#labEqFill)"/><line class="eq-base" x1="${padX}" x2="${W - padX}" y1="${z}" y2="${z}"/>${p2.length > 1 ? `<path class="eq-line2" d="${p2.map((p, i) => `${i ? 'L' : 'M'}${X(p).toFixed(1)},${Y(p.v).toFixed(1)}`).join('')}"/>` : ''}<path class="eq-line" d="${d}"/>`;
+    <path d="${d}L${P[P.length - 1][0].toFixed(1)},${bot + 14}L${P[0][0].toFixed(1)},${bot + 14}Z" fill="url(#labEqFill)"/><line class="eq-base" x1="${padX}" x2="${W - padX}" y1="${z}" y2="${z}"/>${p2.length > 1 ? `<path class="eq-line2" d="${eqSmooth(p2.map((p) => [X(p), Y(p.v)]))}"/>` : ''}<path class="eq-line" d="${d}"/>`;
   let iHi = 0, iLo = 0; pts.forEach((p, i) => { if (p.v > pts[iHi].v) iHi = i; if (p.v < pts[iLo].v) iLo = i; });
   const tag = (id, i, above) => { const e = $(id); if (!e) return; e.textContent = money0(pts[i].v); e.style.left = `${Math.max(28, Math.min(W - 28, P[i][0]))}px`; e.style.top = `${P[i][1] + (above ? -17 : 5)}px`; e.hidden = pts[i].v === 0; };
   tag('#eqHi', iHi, true); tag('#eqLo', iLo, false);
@@ -2661,7 +2679,7 @@ function paintRes() {
     const netv = a.net_profit || 0, pos = netv > 0, n = a.trades ?? 0, cap = run.capital || 0, pctv = cap ? netv / cap * 100 : null;
     const badges = X.badges(run).filter((x) => x.tone !== 'info');
     const used = run.coverage && run.coverage.used !== run.coverage.sessions ? ` · ${run.coverage.used} of ${run.coverage.sessions} sessions` : '';
-    const split = (v) => { const m = /^([+−-]?\$?)(.*?)(%?)$/.exec(String(v)); return m ? `${esc(m[2])}${m[3] ? '<small>%</small>' : ''}` : esc(v); };
+    const split = (v) => { const m = /^([+−-]?)\$?(.*?)(%?)$/.exec(String(v)); return m ? `${m[1] === '+' ? '' : esc(m[1])}${esc(m[2])}${m[3] ? '<small>%</small>' : ''}` : esc(v); };   // a minus stays: a losing Sharpe reads −
     main = `<div class="rs-h"><b>Backtest</b><span>${esc(r.cellLabel ? r.cellLabel : rangeText(run.range))}</span></div>
       <div class="rs-hero"><div class="rs-net"><i>${netv > 0 ? '+' : netv < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(netv)).toLocaleString('en-US'))}</div>
         ${pctv == null ? '' : `<span class="rs-delta${pos ? '' : ' neg'}" title="Of the $${esc(Math.round(cap).toLocaleString('en-US'))} starting balance">${pos ? '▲' : netv < 0 ? '▼' : ''} ${Math.abs(pctv).toFixed(1)}%</span>`}</div>

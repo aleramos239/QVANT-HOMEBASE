@@ -14,7 +14,7 @@
 <link rel="stylesheet" href="/static/shadcn.css?v=3">
 <script src="/static/vendor/lightweight-charts.js"></script>
 <script src="/static/algo-visibility.js?v=3"></script>
-<script src="/static/desklab.js?v=31"></script>
+<script src="/static/desklab.js?v=32"></script>
 <script src="/static/desklabset.js?v=2"></script>
 <script src="/static/nobacknav.js?v=1"></script>
 <script src="/static/hbclock.js?v=1"></script>
@@ -2219,10 +2219,10 @@ function loadEq(name) {
 function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {
   // second: a quieter line (the 3:1's build months beside its unseen ones); third: a dashed one (the two together). Each spans the
   // width on its OWN points, its traded days: never flat on a day it did not trade (owner 2026-10-23). days/notes are vals' own.
+  // Each is a smooth line that never overshoots a day's total (DeskLab.smoothPath, owner 2026-10-24).
   const ok = (s) => Array.isArray(s) && s.length > 1;
   const both = vals.concat(ok(second) ? second : [], ok(third) ? third : []);
-  // a straight segment from each day's total to the next (owner 2026-10-24: a connected line, not steps); no curve fitting
-  const path = (s) => s.map((v, i) => `${i ? " L " : "M "}${(i / (s.length - 1) * 1000).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
+  const path = (s) => DeskLab.smoothPath(s.map((v, i) => [i / (s.length - 1) * 1000, Y(v)]));
   const lo = Math.min(0, ...both), hi = Math.max(0, ...both), span = hi - lo || 1;
   const Y = (v) => 176 - (v - lo) / span * 150;
   const d = path(vals);

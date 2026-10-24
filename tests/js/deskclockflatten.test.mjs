@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { createRequire } from 'node:module';
+const DeskLab = createRequire(import.meta.url)('../../homebase/static/desklab.js');
 
 /* Owner 2026-10-10: one clock for the whole app (static/hbclock.js), a Flatten per account on the Desk, routine
    reconnects folded into one Activity line (and never "the last event"), and an equity curve of straight steps
@@ -140,14 +142,19 @@ test('Flatten on an account: nothing is sent on Cancel; a clean answer is one qu
 });
 
 // ---- the equity curve -----------------------------------------------------------------------------
-test('the equity curve is a connected line (owner 2026-10-24) with a dollar scale and its two dates -- never curve-fitted', () => {
-  const ctx = vm.createContext({ esc: (v) => String(v), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
+test('the equity curve is a smooth line that never overshoots a day (owner 2026-10-24), with a dollar scale and its two dates', () => {
+  const ctx = vm.createContext({ DeskLab, esc: (v) => String(v), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
   vm.runInContext(between('function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
   const html = ctx.eqPlot([-300, -824, 400, 1995, 1914], 'After fees since Sep 17', 1914, 'curve', ['Sep 17', 'Oct 9']);
   const d = / class="eq-line" d="([^"]+)"/.exec(html)[1];
-  assert.doesNotMatch(d, /C /, 'no curve commands');
-  assert.equal((d.match(/ L /g) || []).length, 4, 'a straight segment to each next day');
+  assert.equal((d.match(/ C /g) || []).length, 4, 'a smooth piece to each next day');
   assert.doesNotMatch(d, / [HV] /, 'no steps');
+  const n = d.match(/-?\d+(\.\d+)?/g).map(Number), ys = [n[1]];
+  for (let k = 2; k < n.length; k += 6) {                       // each piece's two control heights sit between its two days
+    const y0 = ys[ys.length - 1], y1 = n[k + 5], lo = Math.min(y0, y1) - 0.05, hi = Math.max(y0, y1) + 0.05;
+    assert.ok(n[k + 1] >= lo && n[k + 1] <= hi && n[k + 3] >= lo && n[k + 3] <= hi, `piece ${ys.length}: no overshoot`);
+    ys.push(y1);
+  }
   assert.deepEqual([...html.matchAll(/class="eq-y"[^>]*>([^<]+)</g)].map((m) => m[1]), ['$1995', '$0', '−$824']);
   assert.match(html, /<div class="eq-x"><span>Sep 17<\/span><span>Oct 9<\/span><\/div>/);
   assert.match(html, /class="eq-zero"/, 'the zero line is drawn where the curve crosses it');
@@ -157,7 +164,7 @@ test('the equity curve is a connected line (owner 2026-10-24) with a dollar scal
 });
 
 test('an equity curve given its days shows dates along the bottom and carries the data its hover reads', () => {
-  const ctx = vm.createContext({ esc: (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;'), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
+  const ctx = vm.createContext({ DeskLab, esc: (v) => String(v).replace(/&/g, '&amp;').replace(/"/g, '&quot;'), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
   vm.runInContext(between('function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
   const short = ['2026-09-17', '2026-09-18', '2026-09-21', '2026-09-22', '2026-09-23', '2026-09-24', '2026-09-25', '2026-09-28', '2026-09-29', '2026-09-30'];
   const h = ctx.eqPlot([10, 20, 5, 30, 40, 35, 50, 60, 55, 70], 'x', 70, 'curve', ['Sep 17', 'Sep 30'], short, short.map((_, i) => `${i + 1} trades`));

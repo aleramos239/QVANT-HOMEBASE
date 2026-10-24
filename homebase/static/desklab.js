@@ -241,6 +241,28 @@
     };
     return { days: days, a: walk(a), b: walk(b) };
   }
+  /* A smooth line through the points [[x, y], ...] that never overshoots them (monotone cubic, Fritsch-Carlson): between two
+     points it stays between their two values, so a curve never shows a total that did not happen (owner 2026-10-24). */
+  function smoothPath(p) {
+    var n = p.length, f = function (v) { return v.toFixed(1); }, m = [], t = [], i, a, b, s, k, h;
+    if (!n) return "";
+    var d = "M " + f(p[0][0]) + " " + f(p[0][1]);
+    if (n === 2) return d + " L " + f(p[1][0]) + " " + f(p[1][1]);
+    for (i = 0; i < n - 1; i++) m.push((p[i + 1][1] - p[i][1]) / ((p[i + 1][0] - p[i][0]) || 1));
+    t[0] = m[0]; t[n - 1] = m[n - 2];
+    for (i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+    for (i = 0; i < n - 1; i++) {
+      if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+      a = t[i] / m[i]; b = t[i + 1] / m[i]; s = a * a + b * b;
+      if (s > 9) { k = 3 / Math.sqrt(s); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+    }
+    for (i = 0; i < n - 1; i++) {
+      h = (p[i + 1][0] - p[i][0]) / 3;
+      d += " C " + f(p[i][0] + h) + " " + f(p[i][1] + t[i] * h) + " " + f(p[i + 1][0] - h) + " " + f(p[i + 1][1] - t[i + 1] * h)
+        + " " + f(p[i + 1][0]) + " " + f(p[i + 1][1]);
+    }
+    return d;
+  }
   function curve(res) {
     var c = res && typeof res === "object" ? res.curve : null;
     if (!okCurve(c)) return null;
@@ -938,7 +960,7 @@
     ACCOUNTS_CAPTION: ACCOUNTS_CAPTION, NOT_ANSWERING: NOT_ANSWERING,
     usd: usd, label: label, stateText: stateText, dotClass: dotClass, todayNet: todayNet, netTitle: netTitle,
     rebuiltNote: rebuiltNote, orderLine: orderLine,
-    tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, results: results, curve: curve, setupRows: setupRows,
+    tradeLine: tradeLine, matchLine: matchLine, specLine: specLine, figures: figures, results: results, curve: curve, smoothPath: smoothPath, setupRows: setupRows,
     GROUP_KINDS: GROUP_KINDS, NO_GROUP: NO_GROUP, EMPTY_GROUP: EMPTY_GROUP, GROUP_NOTE: GROUP_NOTE, GROUP_MISSING: GROUP_MISSING,
     kindLabel: kindLabel, groupPage: groupPage, groupSetupRows: groupSetupRows,
     missingText: missingText, switchTitle: switchTitle, removeAsk: removeAsk,
