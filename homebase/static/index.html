@@ -2221,11 +2221,11 @@ function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {
   // width on its OWN points, its traded days: never flat on a day it did not trade (owner 2026-10-23). days/notes are vals' own.
   const ok = (s) => Array.isArray(s) && s.length > 1;
   const both = vals.concat(ok(second) ? second : [], ok(third) ? third : []);
-  const path = (s) => s.map((v, i) => `${i ? (" H " + (i / (s.length - 1) * 1000).toFixed(1) + " V") : "M 0.0"} ${Y(v).toFixed(1)}`).join("");
+  // a straight segment from each day's total to the next (owner 2026-10-24: a connected line, not steps); no curve fitting
+  const path = (s) => s.map((v, i) => `${i ? " L " : "M "}${(i / (s.length - 1) * 1000).toFixed(1)} ${Y(v).toFixed(1)}`).join("");
   const lo = Math.min(0, ...both), hi = Math.max(0, ...both), span = hi - lo || 1;
-  const X = (i) => i / (vals.length - 1) * 1000, Y = (v) => 176 - (v - lo) / span * 150;
-  let d = `M ${X(0).toFixed(1)} ${Y(vals[0]).toFixed(1)}`;
-  for (let i = 1; i < vals.length; i++) d += ` H ${X(i).toFixed(1)} V ${Y(vals[i]).toFixed(1)}`;
+  const Y = (v) => 176 - (v - lo) / span * 150;
+  const d = path(vals);
   const mid = lo < 0 && hi > 0 ? 0 : (lo + hi) / 2;                       // zero when the curve crosses it, else halfway
   const ticks = [hi, mid, lo].filter((v, i, a) => a.indexOf(v) === i && (v === hi || v === lo || Math.min(Y(v) - Y(hi), Y(lo) - Y(v)) >= 22));
   const axis = (v) => (v < 0 ? "−$" : "$") + fmt(Math.abs(Math.round(v)), 0);

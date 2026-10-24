@@ -140,14 +140,14 @@ test('Flatten on an account: nothing is sent on Cancel; a clean answer is one qu
 });
 
 // ---- the equity curve -----------------------------------------------------------------------------
-test('the equity curve is straight steps with a dollar scale and its two dates -- never a smoothed line', () => {
+test('the equity curve is a connected line (owner 2026-10-24) with a dollar scale and its two dates -- never curve-fitted', () => {
   const ctx = vm.createContext({ esc: (v) => String(v), usdS: (v) => (v < 0 ? '−$' : '+$') + Math.abs(Math.round(v)), fmt: (v) => String(v) });
   vm.runInContext(between('function eqPlot(vals, label, total, aria, ends, days, notes, second, third) {', 'const shortDay = ') + '\nglobalThis.eqPlot = eqPlot;', ctx);
   const html = ctx.eqPlot([-300, -824, 400, 1995, 1914], 'After fees since Sep 17', 1914, 'curve', ['Sep 17', 'Oct 9']);
   const d = / class="eq-line" d="([^"]+)"/.exec(html)[1];
   assert.doesNotMatch(d, /C /, 'no curve commands');
-  assert.equal((d.match(/ H /g) || []).length, 4, 'a flat run to each next day');
-  assert.equal((d.match(/ V /g) || []).length, 4, 'then straight to its close');
+  assert.equal((d.match(/ L /g) || []).length, 4, 'a straight segment to each next day');
+  assert.doesNotMatch(d, / [HV] /, 'no steps');
   assert.deepEqual([...html.matchAll(/class="eq-y"[^>]*>([^<]+)</g)].map((m) => m[1]), ['$1995', '$0', '−$824']);
   assert.match(html, /<div class="eq-x"><span>Sep 17<\/span><span>Oct 9<\/span><\/div>/);
   assert.match(html, /class="eq-zero"/, 'the zero line is drawn where the curve crosses it');
