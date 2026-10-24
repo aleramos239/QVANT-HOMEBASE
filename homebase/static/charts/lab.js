@@ -2065,8 +2065,8 @@ const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 
 const EXIT_LAB = [['ctl.be_after_pts', '0, 5, 10, 15, 20'], ['ctl.trail_pts', '0, 5, 10, 15, 20'], ['ctl.stop_mode', 'own, candle']];
 /* The heat map's inputs (the owner, 2026-10-24: "impossible to mess up"): a preset menu, then each setting's values as chips to tap.
    Only the value list is touched; the rows ([{key, text}]) stay what the server and the checks already read. */
-const HEAT_PRESETS = [['hm40', 'Stop × Target (hm40)'], ['exit', 'Breakeven × trailing stop (Exit lab)'], ['custom', 'Custom']];
-const HEAT_SIDES = ['Down the side', 'Across the top', 'Split into tables (optional)'];
+const HEAT_PRESETS = [['hm40', 'Stop × Target'], ['exit', 'Exit lab'], ['custom', 'Custom']];
+const HEAT_SIDES = ['Down the side', 'Across the top', 'Split tables by'];
 const heatTokens = (text) => String(text || '').split(/[\s,]+/).filter(Boolean);
 const heatLocked = (f, h) => (is31(f) ? wfBusyNow(f) : heatBusy(h));
 /* every value a row offers as a chip: the usual ones, then the ones added; numbers smallest first */
@@ -2155,9 +2155,9 @@ function heatPickHtml(f, meta, h) {
         <optgroup label="Trade rules">${ctl.map((i) => opt(i, r.key)).join('')}</optgroup></select>` : `<div class="heat-axis">${esc(inp.label)}</div>`;
     if (!inp) return head;
     const on = heatTokens(r.text), addable = inp.type === 'int' || inp.type === 'float' || inp.type === 'time';
-    const chip = (v) => `<button type="button" class="heat-chip${on.includes(v) ? ' on' : ''}" data-act="hchip" data-k="${k}" data-v="${esc(v)}" aria-pressed="${on.includes(v)}"${lock}${HEAT_ZERO[inp.key] && v === '0' ? ` title="0 = ${esc(HEAT_ZERO[inp.key])}"` : ''}>${esc(chipLabel(v))}</button>`;
-    return `${head}<div class="heat-chips">${heatChipValues(inp, r).map(chip).join('')}</div>
-      ${addable ? `<div class="heat-add"><input type="text" inputmode="decimal" data-hadd="${k}" placeholder="Add a value" spellcheck="false" autocomplete="off"${lock}><button type="button" class="btn btn-sm btn-outline" data-act="hadd" data-k="${k}"${lock}>Add</button></div>` : ''}`;
+    const row = (v) => `<label>${esc(chipLabel(v))}${HEAT_ZERO[inp.key] && v === '0' ? ` <small>${esc(HEAT_ZERO[inp.key])}</small>` : ''}</label><input type="checkbox" data-hv="${k}" data-v="${esc(v)}"${on.includes(v) ? ' checked' : ''}${lock}>`;
+    return `${head}${heatChipValues(inp, r).map(row).join('')}
+      ${addable ? `<label>Add a value</label><input type="text" inputmode="decimal" data-hadd="${k}" placeholder="then Enter" spellcheck="false" autocomplete="off"${lock}>` : ''}`;
   }).join('');
   return `<label>Try</label><select data-hpre${lock}>${HEAT_PRESETS.map(([k, l]) => `<option value="${k}"${h.preset === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${rows}`;
 }
@@ -2999,8 +2999,6 @@ function act(name, el) {
   else if (name === 'runall') runAll();
   else if (name === 'oosrun') oosRun();
   else if (name === 'heatwf') wfRun();
-  else if (name === 'hchip') heatChip(Number(el.dataset.k), el.dataset.v);
-  else if (name === 'hadd') { const a = el.parentNode.querySelector('[data-hadd]'); heatAdd(Number(el.dataset.k), a && a.value); }
   else if (name === 'otherdates') { const f = b && formOf(b); if (f) { f.range = { id: 'custom', start: f.range.start, end: f.range.end, wf: null }; paintRes(); paintHead(); } }
   else if (name === 'propsim') propRun();
   else if (name === 'wfblk') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.blk = Number(el.dataset.i); wfPaint(); } }
@@ -3080,6 +3078,8 @@ root.addEventListener('input', (e) => {
     threeTab(t.value);
   } else if (t.dataset.hpre !== undefined) {
     heatPreset(t.value);
+  } else if (t.dataset.hv !== undefined) {
+    heatChip(Number(t.dataset.hv), t.dataset.v);
   } else if (t.dataset.hk !== undefined) {
     const f = b && formOf(b), meta = b && metaOf(b);
     if (!f || !meta) return;
