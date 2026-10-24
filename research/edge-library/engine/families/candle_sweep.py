@@ -44,6 +44,9 @@ THE RULE (fixed here, before any run):
     the tf bar, or the `candle` -- from the flow table, engine/flowtab.py, the delta blocks' file) must point the trade's way: with = above
     0, with_20 / with_40 = at least 20 % / 40 % of the bar's volume. No flow row or no volume in the bar = no trade. The flow file ends
     where it ends (flowtab.last_date): days after it never trade with cdelta on.
+  * CDREL (the owner, 2026-10-24, idea B: "strong for this time of day"). `cdrel` = off (the default) | med | p80: the signal bar's
+    own delta share (as CDELTA) must point the trade's way AND be at least the median (med) / the 80th percentile (p80) of |share| of
+    the SAME clock window on the 20 trade dates before (the daily rows; at least 15 with flow and volume). Fewer = no trade.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
   * ORDER. A market order placed at that close: it fills at the next bar's open (the first print after the 85 ms placement latency).
     Its structure level is THIS bar's extreme: its low for a long, its high for a short ("stop at the candle extreme"): stop_mode 'struct'
@@ -83,6 +86,8 @@ import l2sim as S
 from l2sim import Template
 
 BACKS = ("range", "body", "far")
+CDREL = {"med": 0.5, "p80": 0.8}                            # cdrel: the quantile of the 20 earlier dates' |share| to reach
+CDREL_N, CDREL_MIN = 20, 15
 CDELTA = {"with": 0.0, "with_20": 0.20, "with_40": 0.40}    # the least share of the signal bar's volume the trade's way (with = above 0)
 HOUR = 3600 * S.NS
 LOOK = 30                                           # sessions back at most for the 1-hour closes
@@ -158,9 +163,9 @@ def signal(po, ph, pl, pc, o, h, l, c, back, turn="off", mode="sweep", body_x=0.
 class CandleSweep(Template):
     """candle_sweep (module docstring). go = +1 / -1 / 0: the signal of the bar (or candle) that has just closed; sx = its (low, high,
     close); with `candle`: cd = the day's candles [slot, o, h, l, c], mi = the 1-minute bars already in them, done = the candles judged."""
-    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "cdelta": "off", "max_tr": 20}
+    DEFAULTS = {"mode": "sweep", "back": "body", "ema1h": 0, "candle": 0, "turn": "off", "dir930": "off", "body_x": 0.0, "cdelta": "off", "cdrel": "off", "max_tr": 20}
     SCHEMA = {"mode": ("choice", ("sweep", "break")), "back": ("choice", BACKS), "ema1h": ("int", 0, 500), "candle": ("int", 0, 60), "turn": ("choice", ("off", "on", "same")), "dir930": ("choice", ("off", "with")), "body_x": ("float", 0.0, 10.0),
-              "cdelta": ("choice", ("off", *CDELTA)), "max_tr": ("int", 1, 20)}
+              "cdelta": ("choice", ("off", *CDELTA)), "cdrel": ("choice", ("off", *CDREL)), "max_tr": ("int", 1, 20)}
     SCREEN_TFS = ("1", "5", "15", "30")
     FEATURES = ()
 
@@ -223,13 +228,24 @@ class CandleSweep(Template):
             self.d930 = 0 if not w else (w[-1][4] > w[0][1]) - (w[-1][4] < w[0][1])
         return self.d930
 
-    def cdelta(self, ctx):
-        """The signal bar's delta share (module docstring, CDELTA), or None: no flow row, or no volume in the bar."""
+    def cdelta(self, ctx, iso=None):
+        """The signal bar's delta share (module docstring, CDELTA) on the trade date, or on `iso` for the same clock window; None: no
+        flow row, or no volume in the bar."""
         now = (self.M[-1][0] // 60 + 1) * 60                     # the clock close of the 1-minute bar that has just closed
-        w = flowtab.window(ctx.root, self.day, now - 60 * (self.p["candle"] or int(self.p["tf"])), now)
+        w = flowtab.window(ctx.root, iso or self.day, now - 60 * (self.p["candle"] or int(self.p["tf"])), now)
         return None if w is None or w[0] <= 0 else w[1] / w[0]
 
+    def cdrel_ok(self, ctx):
+        """CDREL (module docstring): today's share the trade's way reaches the quantile of the 20 earlier dates' |share|."""
+        x = self.cdelta(ctx)
+        ref = [abs(v) for v in (self.cdelta(ctx, r["date"]) for r in self.dl[-CDREL_N:]) if v is not None]
+        if x is None or len(ref) < CDREL_MIN:
+            return False
+        return x * self.go > 0 and x * self.go >= float(np.quantile(ref, CDREL[self.p["cdrel"]]))
+
     def fam_signal(self, ctx):
+        if self.go and self.p["cdrel"] != "off" and not self.cdrel_ok(ctx):
+            return
         if self.go and self.p["cdelta"] != "off":
             x, least = self.cdelta(ctx), CDELTA[self.p["cdelta"]]
             if x is None or not (x * self.go > least if least == 0 else x * self.go >= least):

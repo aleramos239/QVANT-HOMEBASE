@@ -15,7 +15,7 @@ import families
 import l2sim as S
 import run_menus as RM
 from families import candle_sweep as CS
-from test_blocks import DAILY, TICK, days_of, minute_tape, ns, rand_bars, real_days
+from test_blocks import D, DAILY, TICK, days_of, minute_tape, ns, rand_bars, real_days
 
 BASE = {"hold_to": "day", "tf": "15", "sess": "nyam", "stop_mode": "pts", "stop_val": 500.0, "tgt_r": 0.0, "back": "body"}
 PX = 15000.0
@@ -546,3 +546,40 @@ def test_cdelta_off_never_reads_the_flow_and_trades_as_before(monkeypatch):
     asked = with_flow(monkeypatch, -0.9)
     log, _ = orders({"mode": "break"}, day(UP))
     assert [x[:2] for x in log] == [(sec(9, 45), "long")] and asked == []
+
+
+# ---- (iv f) cdrel: the signal bar's delta against the same window's 20 earlier dates (owner, 2026-10-24, idea B) ----------------------
+
+def with_flow_by_date(monkeypatch, today, ref):
+    """flowtab.window: volume 1000 and share `today` on D (the test day), share ref[k] on the k-th earlier date, for 09:30-09:45 only."""
+    shares = dict(zip([r["date"] for r in DAILY[-20:]], ref))
+
+    def window(root, iso, a, b):
+        if (a, b) != (sec(9, 30), sec(9, 45)):
+            return None
+        s = today if iso == D.isoformat() else shares.get(iso)
+        return None if s is None else (1000, int(round(s * 1000)), 0, 0)
+    monkeypatch.setattr(CS.flowtab, "window", window)
+
+
+REF20 = [i / 100 for i in range(1, 21)]                       # |shares| 1 % .. 20 %: median 10.5 %, 80th percentile 16.2 %
+
+
+@pytest.mark.parametrize("today, med, p80", [(0.18, True, True), (0.12, True, False), (0.10, False, False), (-0.18, False, False)])
+def test_cdrel_needs_the_bar_share_the_trades_way_at_the_20_day_quantile(monkeypatch, today, med, p80):
+    for mode, want in (("med", med), ("p80", p80)):
+        with_flow_by_date(monkeypatch, today, REF20)
+        log, _ = orders({"mode": "break", "cdrel": mode}, day(UP))
+        assert [x[:2] for x in log] == ([(sec(9, 45), "long")] if want else []), (today, mode)
+    with_flow_by_date(monkeypatch, -today, REF20)             # the mirror: a short needs selling of the same size
+    log, _ = orders({"mode": "break", "cdrel": "med"}, day(DOWN))
+    assert [x[:2] for x in log] == ([(sec(9, 45), "short")] if med else [])
+
+
+def test_cdrel_with_fewer_than_15_earlier_dates_is_no_trade(monkeypatch):
+    with_flow_by_date(monkeypatch, 0.5, REF20[:14] + [None] * 6)
+    log, _ = orders({"mode": "break", "cdrel": "med"}, day(UP))
+    assert log == []
+    with_flow_by_date(monkeypatch, 0.5, REF20[:15] + [None] * 5)
+    log, _ = orders({"mode": "break", "cdrel": "med"}, day(UP))
+    assert [x[:2] for x in log] == [(sec(9, 45), "long")]
