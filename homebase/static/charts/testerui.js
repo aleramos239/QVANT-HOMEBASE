@@ -782,6 +782,7 @@ function applyRun(b, tab = 'overview', src = null) {
     refreshTabsBar();
     refreshContent();
   }
+  if ((b.propsim || {}).skipped && b.run.prop_rules) startRescore(b.run, b.run.prop_rules);   // never scored when it ran: score it now
   notify();
 }
 
@@ -997,7 +998,8 @@ function startRescore(run, rulesId) {
   const runId = run.id, token = ++rescoreToken;
   const src = mc.runId === runId && mc.src ? mc.src : { run_id: runId };
   const done = (patch) => { if (token !== rescoreToken) return; rescore = { runId, rulesId, loading: false, error: '', result: null, ...patch }; if (innerTab === 'overview') refreshContent(); };
-  rescore = { runId, rulesId, loading: rulesId !== run.prop_rules, error: '', result: null };
+  const unscored = !!(bundle && bundle.run && bundle.run.id === runId && (bundle.propsim || {}).skipped);
+  rescore = { runId, rulesId, loading: rulesId !== run.prop_rules || unscored, error: '', result: null };
   if (innerTab === 'overview') refreshContent();
   if (!rescore.loading) return;
   fetch('/api/tester/propsim', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...src, prop_rules: rulesId }) })

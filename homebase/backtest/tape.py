@@ -10,7 +10,8 @@ Cache: one binary file per session, ~/futures_derived/homebase_tape/<ROOT>/<date
 built on first use (the desk's venv has no pyarrow, so not parquet):
   MAGIC, u32 header length, JSON header {v, root, date, contract, src, src_mtime_ns,
   src_size, n, byteorder, daily: {h, l, c}}, then n x int64 ts_ns, n x float64
-  price, n x int32 size. A cache whose source file changed is rebuilt.
+  price, n x int32 size. A cache whose source file changed is rebuilt. Beside it, <date>.m1: the session's
+  1-minute bars (minutebars.py), stamped with the .tape it was made from.
 Rows keep TAPE ORDER: a stable sort by ts_ns, applied only if the file is not
 already sorted (prints sharing a nanosecond keep their row order).
 
@@ -34,14 +35,18 @@ import gzip
 import json
 import os
 import sys
+import threading
 import zlib
 from array import array
 from bisect import bisect_left
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field
 from operator import le
 from pathlib import Path
 
 from zoneinfo import ZoneInfo
+
+from . import minutebars
 
 ARCHIVE = Path.home() / "futures_ticks"
 CACHE = Path.home() / "futures_derived" / "homebase_tape"
@@ -74,6 +79,19 @@ class Tape:
     px: array           # 'd'
     size: array         # 'q'
     daily: dict         # the whole session's {"h", "l", "c"}
+    path: Path | None = field(default=None, compare=False)   # the .tape file it was read from; None: made in memory
+    stamp: tuple = field(default=(), compare=False)          # that file's (st_size, st_mtime_ns) as read: its sidecar carries it
+    keep_m1: bool = field(default=False, compare=False)      # a missing sidecar may be built and kept beside the .tape
+    _m1: tuple | None = field(default=None, init=False, repr=False, compare=False)
+    _m1_read: bool = field(default=False, init=False, repr=False, compare=False)
+
+    def minutes(self) -> tuple | None:
+        """The session's 1-minute bars (minutebars.build), once per tape: from a fresh sidecar of its .tape, else built
+        and kept when keep_m1. None: there are none to read, and the engine builds its bars from the prints."""
+        if not self._m1_read:
+            self._m1 = minutebars.load_or_build(self.path, self.stamp, self.ts, self.px, self.size, self.keep_m1)
+            self._m1_read = True
+        return self._m1
 
 
 def _inside(p: Path, parent: Path) -> bool:
@@ -208,18 +226,56 @@ def effective_session_window(root: str, d: dt.date, window: tuple[str, str]) -> 
 
 
 class TapeStore:
+    KEEP_M1 = True          # a loaded tape builds its missing 1-minute sidecar and keeps it beside its .tape
+
     def __init__(self, archive: Path = ARCHIVE, cache: Path = CACHE, min_ticks: int = MIN_TICKS):
         self.archive, self.cache, self.min_ticks = Path(archive), Path(cache), min_ticks
         if _inside(self.cache, self.archive):
             raise ValueError(f"the tape cache may never live under the tick archive ({self.archive})")
+        self._scope = threading.local()
+
+    @contextmanager
+    def listing(self):
+        """Within the block this thread lists each (root, year) archive folder once and picks each session's front
+        contract once. pick() listed the whole year folder (~1,030 names for NQ) on every call, and a run calls it 1-16
+        times a session: 1-15 s of a run. The names are taken when first asked and kept until the block ends, so use
+        it around ONE run, never around anything that waits for a file to appear. The cache's freshness (_fresh) is
+        never kept: a rewritten csv.gz is still rebuilt."""
+        if getattr(self._scope, "kept", None) is not None:
+            yield
+            return
+        self._scope.kept = {}
+        try:
+            yield
+        finally:
+            self._scope.kept = None
+
+    def _names(self, root: str, year: int) -> list[str]:
+        """The sorted manifest names of root's `year` archive folder."""
+        kept = getattr(self._scope, "kept", None)
+        if kept is not None and (root, year) in kept:
+            return kept[root, year]
+        try:
+            names = sorted(n for n in os.listdir(self.archive / root / str(year)) if n.endswith(".json"))
+        except OSError:
+            names = []
+        if kept is not None:
+            kept[root, year] = names
+        return names
+
+    def manifests(self, root: str, d: dt.date) -> list[Path]:
+        """The session's archive manifests, one per contract, sorted by name."""
+        tag = d.isoformat() + "_"
+        folder = self.archive / root / str(d.year)
+        return [folder / n for n in self._names(root, d.year) if n.startswith(tag)]
 
     def sessions(self, root: str, start: dt.date, end: dt.date) -> list[dt.date]:
         """Weekday session dates in [start, end] that have any archive manifest."""
         out = set()
         for y in range(start.year, end.year + 1):
-            for man in (self.archive / root / str(y)).glob("*.json"):
+            for name in self._names(root, y):
                 try:
-                    d = dt.date.fromisoformat(man.name[:10])
+                    d = dt.date.fromisoformat(name[:10])
                 except ValueError:
                     continue
                 if start <= d <= end and d.weekday() < 5:
@@ -227,9 +283,18 @@ class TapeStore:
         return sorted(out)
 
     def pick(self, root: str, d: dt.date) -> tuple[Path, str] | None:
-        """(csv.gz path, contract) of the session's front contract, or None."""
+        """(csv.gz path, contract) of the session's front contract, or None. Kept per session inside listing()."""
+        kept = getattr(self._scope, "kept", None)
+        if kept is not None and (root, d) in kept:       # (root, date) keys never meet _names' (root, year) ones
+            return kept[root, d]
+        got = self._pick(root, d)
+        if kept is not None:
+            kept[root, d] = got
+        return got
+
+    def _pick(self, root: str, d: dt.date) -> tuple[Path, str] | None:
         best, best_n = None, 0
-        for man in sorted((self.archive / root / str(d.year)).glob(f"{d.isoformat()}_*.json")):
+        for man in self.manifests(root, d):
             try:
                 n = int(json.loads(man.read_text())["ticks"])
             except (OSError, ValueError, KeyError, TypeError):
@@ -303,6 +368,7 @@ class TapeStore:
             if self.build(root, d) is None:
                 return None
         with open(p, "rb") as f:
+            st = os.fstat(f.fileno())                   # the stamp of the very file read, even if it is replaced later
             f.read(len(MAGIC))
             head = json.loads(f.read(int.from_bytes(f.read(4), "little")))
             n = head["n"]
@@ -310,7 +376,8 @@ class TapeStore:
             ts.fromfile(f, n)
             px.fromfile(f, n)
             sz.fromfile(f, n)
-        return Tape(root, d, head["contract"], ts, px, sz, head["daily"])
+        return Tape(root, d, head["contract"], ts, px, sz, head["daily"], p, (st.st_size, st.st_mtime_ns),
+                    self.KEEP_M1)
 
     def daily(self, root: str, d: dt.date) -> dict | None:
         """The session's whole-day {"date", "h", "l", "c"} (builds the cache if needed)."""
@@ -329,6 +396,7 @@ class TapeStore:
 class OverlayTapeStore(TapeStore):
     """A sandboxed DRAFT run's store: it READS the shared tape cache when a session is already there and
     fresh, and builds a missing one into its own private cache -- it never writes the shared one."""
+    KEEP_M1 = False         # it reads a fresh shared 1-minute sidecar; with none, its bars come from the prints
 
     def __init__(self, archive: Path, shared: Path, private: Path, min_ticks: int = MIN_TICKS):
         super().__init__(archive, private, min_ticks)
@@ -345,8 +413,12 @@ class OverlayTapeStore(TapeStore):
 def _warm_one(args) -> str:
     archive, cache, root, d = args
     s = TapeStore(Path(archive), Path(cache))
-    if not s.cached(root, d):
-        s.build(root, d)
+    if not s.cached(root, d) and s.build(root, d) is None:
+        return d.isoformat()                            # no prints, no tape: nothing to make its minutes from
+    if not minutebars.fresh(s.cache_path(root, d)):
+        tape = s.load(root, d)
+        if tape is not None:
+            tape.minutes()                              # writes its 1-minute sidecar beside the .tape
     return d.isoformat()
 
 
@@ -363,14 +435,15 @@ def warm_all(jobs: int = 2) -> None:
     of a heat map re-reads the raw ticks of each day the shared cache lacks: ES with 120 days missing
     took 2 minutes a cell instead of 12 seconds, GC with 850 missing far longer. Run nightly by launchd
     (com.ramosquant.homebase-tapewarm): a day that is cached and fresh costs one header read, a new or
-    changed day (the tick repair pass refilled it) is rebuilt here, so a draft never meets a gap."""
+    changed day (the tick repair pass refilled it) is rebuilt here, so a draft never meets a gap. Each day's
+    1-minute sidecar is made fresh here too: a draft reads it but cannot keep one in the shared cache."""
     from concurrent.futures import ProcessPoolExecutor
     store = TapeStore()
     today = dt.date.today()
     roots = [r for r in WARM if (store.archive / r).is_dir()]
     for root in roots:
         days = store.sessions(root, WARM_FROM, today)
-        todo = [d for d in days if not store.cached(root, d)]
+        todo = [d for d in days if not store.cached(root, d) or not minutebars.fresh(store.cache_path(root, d))]
         print(f"[tapewarm] {root}: {len(days)} sessions, {len(todo)} to build", flush=True)
         if not todo:
             continue

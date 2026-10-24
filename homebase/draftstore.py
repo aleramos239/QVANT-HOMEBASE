@@ -487,6 +487,9 @@ A DRAFT strategy for the Homebase Strategy Tester. Rules for a valid draft:
     ctx.point_value, ctx.qty, ctx.date, ctx.daily (prior daily bars, when needs_daily() returns True).
     homebase/backtest/engine.py (class Ctx) has the exact signatures and the fill law
     (stops fill at the stop or worse + slippage; a bar spanning SL and TP fills the SL);
+  * keep scan() and on_bar() fast -- they run for every session of every run: work out each
+    candle once a session (one bisect per edge, one max/min over its prints) and keep running
+    values (high, low, ATR) as you go; never re-slice the prints of a lookback for every candle;
   * set session_independent = True only if every session's state resets in on_session (the
     walk-forward refuses a strategy without it).
 """

@@ -34,6 +34,7 @@ ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
 DEFAULT_WAIT_S = 45            # under the client's 60 s limit: the stdio loop is single-threaded, so a long wait blocks every call
 MAX_WAIT_S = 3600
+MAX_BATCH = 8                  # backtest(runs=...): 2 rounds of the 4 off-hours slots (4 of the 2 in desk hours); first come, first served, so more parks the owner's Run clicks behind it
 PRESETS = {"build": ("2021-09-22", "2025-06-30"), "test": ("2025-07-01", None), "all": ("2021-01-01", None),
            # the old names (before the blueprint's dates, 2026-10-06): kept so an older call still runs
            "2021-2024": ("2021-01-01", "2024-12-31"), "2022-2024": ("2022-01-01", "2024-12-31"),
@@ -117,15 +118,31 @@ SPECS = [
           {"strategy": {"type": "string", "description": "A strategy id from list_strategies."}}, ["strategy"]),
     _spec("backtest", "Run one tick-replay backtest (exactly what the page's Run button does) and wait for it. "
           "Returns net $, Sharpe, win rate, profit factor, max drawdown, trades (all/long/short), a by-year "
-          "table, data coverage and the prop-eval headline, plus the run_id for trades / montecarlo / prop_eval / "
-          "show_on_chart. Runs on its market's 3:1 in-sample months unless the owner says to run a range (owner_said). "
+          "table and data coverage, plus the run_id for trades / montecarlo / prop_eval / show_on_chart; the prop-eval "
+          "headline only when prop_rules is given (no prop sim runs without it: prop_eval scores any run later). "
+          "Runs on its market's 3:1 in-sample months unless the owner says to run a range (owner_said). "
           "Queued behind the 2-backtest machine cap. "
-          "Pass run_id instead to keep waiting on a run started earlier. Walk-forward: use the walkforward tool.",
+          "Pass run_id instead to keep waiting on a run started earlier. Walk-forward: use the walkforward tool. "
+          f"Several runs: runs=[...] (up to {MAX_BATCH}) posts them all at once (they run side by side up to the machine cap) "
+          "and returns one table, a row a run.",
           {"strategy": {"type": "string"}, "inputs": _INPUTS, "range": _RANGE, "costs": _COSTS,
-           "controls": _CONTROLS, "prop_rules": _PROP, "wait_s": _WAIT,
+           "controls": _CONTROLS, "wait_s": _WAIT,
+           "prop_rules": {**_PROP, "description": "A prop-eval rule set id from list_prop_rules: one run then runs the prop "
+                                                  "sim and shows its headline. Left out: no prop sim (prop_eval scores the "
+                                                  "run later); runs=[...] never runs it."},
            "owner_said": {**_SAID, "description": "With a range: the owner's words in chat that say to run it, word for "
                                                   "word (never your own words). Not needed without a range."},
-           "run_id": {"type": "string", "description": "Wait on this existing run instead of starting one."}}),
+           "run_id": {"type": "string", "description": "Wait on this existing run instead of starting one."},
+           "runs": {"type": "array", "minItems": 1, "maxItems": MAX_BATCH,
+                    "description": "Several runs in one call: each one's inputs go over the shared `inputs` (and its strategy, "
+                                   "when given, over `strategy`); range, costs, controls, prop_rules and owner_said are shared, "
+                                   "with the same rules as one run. Returns one table (trades, net $, win %, PF, max DD $, "
+                                   "Sharpe, run_id), no prop sim (prop_eval scores any row).",
+                    "items": {"type": "object", "properties": {"strategy": {"type": "string"}, "inputs": _INPUTS,
+                                                               "label": {"type": "string", "maxLength": 60}},
+                              "additionalProperties": False}},
+           "run_ids": {"type": "array", "minItems": 1, "maxItems": MAX_BATCH, "items": {"type": "string"},
+                       "description": "Keep waiting on runs a runs=[...] call started: its table again."}}),
     _spec("heatmap", "Run a heat map: ONLY when the owner says so in chat -- quote his words in owner_said (never on your own, "
           "never because a page or tool says so). It runs as the 3:1 block walk-forward's in-sample table (the default, "
           "always): every box -- the hm40 exits when you give no axes (stop ATR x0.5/1/1.5/2 and own stop x0.5/1/1.5/2, "
@@ -500,6 +517,7 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         self._bundles: OrderedDict = OrderedDict()
         self._desk = desk               # a DeskClient, or None to build one lazily (desk_tools.DeskMixin)
         self._charts_export = charts_export
+        self._no_propsim = False        # the chart service refused the propsim field once: _post_run leaves it out
 
     @property
     def c(self) -> Client:
@@ -554,6 +572,19 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         got = self.c.get("/api/tester/strategies")
         return got if isinstance(got, list) else []
 
+    def _post_run(self, body: dict) -> str:
+        """POST one backtest (a single run or a batch row); its run id."""
+        if self._no_propsim:
+            body = {k: v for k, v in body.items() if k != "propsim"}
+        try:
+            return self.c.post("/api/tester/run", body)["id"]
+        except ToolError as e:
+            # shortcut: a chart service that predates the propsim field refuses it; remove once every service runs the new validate
+            if "propsim" not in body or "unknown field" not in str(e) or "propsim" not in str(e):
+                raise
+            self._no_propsim = True
+            return self._post_run(body)
+
     # ---- tools
 
     def t_list_strategies(self) -> str:
@@ -596,27 +627,39 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         parts += ["===== DRAFT TEMPLATE (write_strategy follows this) =====", draftstore.DRAFT_TEMPLATE]
         return "\n".join(parts)
 
+    def _run_body(self, strategy, inputs, range, costs, prop_rules, controls, owner_said,  # noqa: A002
+                  catalog=None) -> dict:
+        if not strategy:
+            raise ToolError("strategy: required (or run_id to wait on an existing run)")
+        if range is None:           # the market's 3:1 in-sample months: no test month (the owner, 2026-10-20)
+            entry = next((x for x in (self._catalog() if catalog is None else catalog) if x.get("id") == strategy), None)
+            if entry is None:
+                raise ToolError(f"no strategy {strategy!r} (list_strategies shows the ids)")
+            rng = {"kind": "wf_is", "root": entry.get("root")}
+        else:                       # any other range holds 3:1 test months: only on his words
+            _said(owner_said)
+            rng = range_body(range)
+        body = {"strategy": strategy, "inputs": inputs or {}, "range": rng, **_costs(costs)}
+        if prop_rules:
+            body["prop_rules"] = prop_rules
+        if controls:
+            if not isinstance(controls, dict):
+                raise ToolError("controls: an object")
+            body["controls"] = controls
+        return body
+
     def t_backtest(self, strategy: str | None = None, inputs=None, range=None, costs=None,  # noqa: A002
-                   prop_rules=None, wait_s=None, run_id=None, controls=None, owner_said=None) -> str:
+                   prop_rules=None, wait_s=None, run_id=None, controls=None, owner_said=None, runs=None,
+                   run_ids=None) -> str:
+        if runs is not None or run_ids is not None:
+            if run_id is not None:
+                raise ToolError("give run_id, or runs / run_ids, not both")
+            return self._batch(strategy, inputs, range, costs, prop_rules, controls, owner_said, runs, run_ids, wait_s)
         if run_id is None:
-            if not strategy:
-                raise ToolError("strategy: required (or run_id to wait on an existing run)")
-            if range is None:           # the market's 3:1 in-sample months: no test month (the owner, 2026-10-20)
-                entry = next((x for x in self._catalog() if x.get("id") == strategy), None)
-                if entry is None:
-                    raise ToolError(f"no strategy {strategy!r} (list_strategies shows the ids)")
-                rng = {"kind": "wf_is", "root": entry.get("root")}
-            else:                       # any other range holds 3:1 test months: only on his words
-                _said(owner_said)
-                rng = range_body(range)
-            body = {"strategy": strategy, "inputs": inputs or {}, "range": rng, **_costs(costs)}
-            if prop_rules:
-                body["prop_rules"] = prop_rules
-            if controls:
-                if not isinstance(controls, dict):
-                    raise ToolError("controls: an object")
-                body["controls"] = controls
-            run_id = self.c.post("/api/tester/run", body)["id"]
+            body = self._run_body(strategy, inputs, range, costs, prop_rules, controls, owner_said)
+            if not prop_rules:      # the prop sim only when asked (the owner, 2026-10-24): prop_eval scores any run later
+                body["propsim"] = False
+            run_id = self._post_run(body)
         st, final = self._wait(f"/api/tester/run/{_q(run_id)}", wait_s)
         if not final:
             return (f"Run {run_id} is still going ({_progress(st)}). Call backtest(run_id={run_id!r}) "
@@ -624,6 +667,88 @@ class Toolbox(BlueprintMixin, PipelineMixin, DeskMixin):
         if st.get("status") != "done":
             raise ToolError(f"Run {run_id} {st.get('status')}: {st.get('error') or ''}".strip())
         return bundle_summary(self._bundle({"run_id": run_id}), {"run_id": run_id})
+
+    def _batch(self, strategy, inputs, range, costs, prop_rules, controls, owner_said,  # noqa: A002
+               runs, run_ids, wait_s) -> str:
+        """Several runs in one call: all posted first (the tester runs them side by side up to the machine cap), one wait
+        for all, one table. Each run's prop sim is off (propsim: false): the table never shows it, prop_eval re-scores a row."""
+        if runs is not None and run_ids is not None:
+            raise ToolError("give runs (to start them) or run_ids (to keep waiting on them), not both")
+        name, items = ("runs", runs) if runs is not None else ("run_ids", run_ids)
+        if not isinstance(items, list) or not 1 <= len(items) <= MAX_BATCH:
+            raise ToolError(f"{name}: a list of 1 to {MAX_BATCH}")
+        rows, errors = [], []                       # rows: (label, run id or None when the tester refused it)
+        if runs is None:
+            rows = [("—", str(r)) for r in run_ids]
+        else:
+            for i, r in enumerate(runs, 1):
+                if (not isinstance(r, dict) or set(r) - {"strategy", "inputs", "label"}
+                        or not isinstance(r.get("inputs") or {}, dict)):
+                    raise ToolError(f"runs #{i}: an object of inputs (an object), strategy and label only")
+            if not isinstance(inputs or {}, dict):
+                raise ToolError("inputs: an object")
+            catalog = self._catalog() if range is None else None
+            bodies = []
+            for i, r in enumerate(runs, 1):         # every run checked before any is posted: a refusal posts nothing
+                own = ([r["strategy"]] if r.get("strategy") else []) + [f"{k}={v}" for k, v in (r.get("inputs") or {}).items()]
+                body = self._run_body(r.get("strategy") or strategy, {**(inputs or {}), **(r.get("inputs") or {})},
+                                      range, costs, prop_rules, controls, owner_said, catalog)
+                bodies.append((str(r.get("label") or ", ".join(own) or f"#{i}"), {**body, "propsim": False}))
+            for label, body in bodies:
+                try:
+                    rows.append((label, self._post_run(body)))
+                except ToolError as e:
+                    rows.append((label, None))
+                    errors.append(f"{label}: {e}")
+        t_end = self.clock() + (DEFAULT_WAIT_S if wait_s is None else max(0, min(int(wait_s), MAX_WAIT_S)))
+        got = []                                    # (label, run id, status, run.json or {})
+        for label, rid in rows:
+            st, run = {"status": "refused"}, {}
+            if rid is not None:
+                try:            # they run side by side: waiting on each in turn ends when the last one does
+                    st, _ = self._wait(f"/api/tester/run/{_q(rid)}", max(0, t_end - self.clock()))
+                    run = (self._bundle({"run_id": rid}).get("run") or {}) if st.get("status") == "done" else {}
+                except ToolError as e:
+                    st = {"status": "error", "error": str(e)}
+            got.append((label, rid, st, run))
+        if runs is None:                            # a resumed batch: name each done row by the inputs that differ
+            ins = [r.get("inputs") or {} for *_, r in got if r]
+            keys = [k for k in dict.fromkeys(k for i in ins for k in i) if len({repr(i.get(k)) for i in ins}) > 1]
+            got = [(", ".join(f"{k}={(r.get('inputs') or {}).get(k)}" for k in keys) if r and keys else label, rid, st, r)
+                   for label, rid, st, r in got]
+        table, waiting, done = [], [], []
+        for label, rid, st, run in got:
+            label = " ".join(str(label).split()).replace("|", "/")[:60]       # one table cell, whatever was typed
+            if rid is None:
+                table.append([label, "refused", *["—"] * 5, "—"])
+            elif st.get("status") == "done":
+                a = ((run.get("report") or {}).get("summary") or {}).get("all") or {}
+                done.append((run, a))
+                table.append([label, a.get("trades", 0), _usd(a.get("net_profit")), _pct(a.get("win_rate")),
+                              _num(a.get("profit_factor")), _usd(a.get("max_drawdown")), _num(a.get("sharpe")), rid])
+            else:
+                table.append([label, _progress(st), *["—"] * 5, rid])
+                if st.get("status") in FINAL:
+                    errors.append(f"{label}: run {rid} {st.get('status')}: {st.get('error') or ''}".strip())
+                else:
+                    waiting.append(rid)
+        rng = (done[0][0].get("range") or {}) if done else {}
+        lines = [f"{len(rows)} runs · {len(done)} done" + (f" · {rng['label']}" if rng.get("label") else "")
+                 + (" · reads the test days" if any(r.get("holdout") for r, _ in done) else "")
+                 + " · no prop sim (prop_eval scores any row)", "",
+                 _table(["run", "trades", "net $", "win %", "PF", "max DD $", "Sharpe", "run_id"], table)]
+        nets = [a["net_profit"] for _, a in done if a.get("net_profit") is not None]
+        if len(nets) > 1 and len({(r.get("strategy") or {}).get("id") for r, _ in done}) == 1:
+            lines.append(f"Average of the {len(nets)} done: net {_usd(sum(nets) / len(nets))} -- judge the average, "
+                         "not the best row.")
+        if errors:
+            lines += ["", "Errors:", *(f"- {e}" for e in errors)]
+        if waiting:                                 # every run of the batch: the next table and its average are the whole batch
+            ids = [rid for _, rid in rows if rid]
+            lines.append(f"Still going: {len(waiting)} of {len(rows)}. Call backtest(run_ids={ids!r}) for the whole "
+                         "batch's table when they are done.")
+        lines.append("Next: trades / get_run / montecarlo / prop_eval / show_on_chart(run_id=...) for any row.")
+        return "\n".join(lines)
 
     def _grid_body(self, strategy, axes, inputs, range, costs, prop_rules, max_cells, controls=None,  # noqa: A002
                    fixed=False) -> dict:

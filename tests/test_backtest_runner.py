@@ -46,9 +46,16 @@ def test_validate_fills_defaults_and_refuses_bad_requests():
                      (body(inputs={"sl_pts": -1}), "sl_pts"), ("x", "JSON object"),
                      (body(inputs=["sl_pts"]), "inputs"), (body(inputs=5), "inputs"),
                      (body(inputs="sl_pts"), "inputs"), (body(inputs=True), "inputs"),
-                     (body(holdout={"reason": "x"}), "unknown field")):
+                     (body(holdout={"reason": "x"}), "unknown field"), (body(propsim="no"), "propsim"),
+                     (body(propsim=0), "propsim"), (body(propsim=None), "propsim")):
         with pytest.raises(ValueError, match=msg):
             validate(bad)
+
+
+def test_propsim_is_stored_only_when_turned_off():
+    """A request that leaves the prop sim on is byte for byte what it always was."""
+    assert validate(body(propsim=False))["propsim"] is False
+    assert validate(body(propsim=True)) == validate(body()) and "propsim" not in validate(body())
 
 
 def test_no_range_is_refused_and_a_test_days_run_is_recorded(tmp_path):
@@ -139,6 +146,22 @@ def test_execute_writes_the_bundle_and_lists_skipped_sessions(tmp_path):
     req = read_json(d / "request.json")
     assert req["strategy_config"]["fire"] == "09:30:00"
     assert meta["strategy_config"] == req["strategy_config"]
+
+
+def test_a_run_asked_without_the_prop_sim_saves_a_not_scored_note_naming_its_eval(tmp_path):
+    """A tester run with "propsim": false skips only the prop sim: its note names the eval it would have
+    been scored under (prop_eval scores it later), and every other file is a propsim-on run's."""
+    store = TapeStore(nq_archive(tmp_path / "ticks"), tmp_path / "cache")
+    on, off = (tmp_path / "t" / "runs" / prepare(body(**kw), tmp_path / "t") for kw in ({}, {"propsim": False}))
+    m_on, m_off = execute(on, store), execute(off, store)
+    assert read_json(off / "propsim.json") == {
+        "skipped": runner.PROP_NOT_SCORED,
+        "rules": {"name": "LucidFlex 50K", "confirmed": True, "label": "LucidFlex 50K"}}
+    assert m_off["propsim_error"] is False and m_off["prop_rules"] == m_on["prop_rules"]
+    for k in ("trades", "equity"):
+        assert read_json(off / f"{k}.json") == read_json(on / f"{k}.json")
+    drop = ("id", "created", "finished")
+    assert {k: v for k, v in m_off.items() if k not in drop} == {k: v for k, v in m_on.items() if k not in drop}
 
 
 def half_day_archive(base):

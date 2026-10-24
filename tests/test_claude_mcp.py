@@ -713,3 +713,148 @@ def test_an_old_scheme_start_needs_owner_said_too(fixed):
         box(fixed).call("walkforward", {"strategy": "nq930", "scheme": "pick", "ratio": 2,
                                         "axes": [{"key": "sl_pts", "values": [4, 5]}, {"key": "tp_pts", "values": [10]}]})
     assert not [r for r in fixed.requests if r["method"] == "POST"]
+
+
+# ---------------------------------------------------------------- the prop sim only when asked
+
+def test_a_single_run_runs_the_prop_sim_only_when_prop_rules_is_given(fake):
+    b = box(fake)
+    b.call("backtest", {"strategy": "nq930"})
+    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "range": {"kind": "wf_is", "root": "NQ"},
+                                         "propsim": False}
+    b.call("backtest", {"strategy": "nq930", "prop_rules": "lucid@1"})
+    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "range": {"kind": "wf_is", "root": "NQ"},
+                                         "prop_rules": "lucid@1"}
+
+
+def test_a_chart_service_without_the_propsim_field_gets_the_run_without_it(fake):
+    """An older runner.validate answers 400 'unknown field(s): propsim': post again without it, then leave it out."""
+    fake.routes[("POST", "/api/tester/run")] = lambda body: (
+        (400, {"detail": "unknown field(s): propsim"}) if "propsim" in body else {"id": RID})
+    b = box(fake)
+    assert RID in b.call("backtest", {"strategy": "nq930"})
+    posts = [r["body"] for r in fake.requests if r["method"] == "POST"]
+    assert [("propsim" in p) for p in posts] == [True, False]
+    b.call("backtest", {"strategy": "nq930"})
+    b.call("backtest", {"strategy": "nq930", "runs": [{}, {"inputs": {"offset_pts": 12}}]})
+    posts = [r["body"] for r in fake.requests if r["method"] == "POST"]
+    assert len(posts) == 5 and not any("propsim" in p for p in posts[1:])      # remembered: posted once each
+    fake.routes[("POST", "/api/tester/run")] = (400, {"detail": "unknown field(s): nope"})
+    with pytest.raises(ToolError, match="nope"):                               # any other refusal stands
+        box(fake).call("backtest", {"strategy": "nq930"})
+    assert len([r for r in fake.requests if r["method"] == "POST"]) == 6
+
+
+# ---------------------------------------------------------------- several runs in one backtest call
+
+BID = [f"20260927-12001{i}-nq930-b0{i}0" for i in range(3)]
+
+
+def _batch_fake(fake, states):
+    """POST /run hands out BID in turn; each run's status walks its list of states (the last one stays)."""
+    posted = iter(BID)
+    fake.routes[("POST", "/api/tester/run")] = lambda body: {"id": next(posted)}
+    for rid, seq in zip(BID, states):
+        seq = list(seq)
+        fake.routes[("GET", f"/api/tester/run/{rid}")] = lambda body, rid=rid, seq=seq: {
+            "id": rid, **(seq.pop(0) if len(seq) > 1 else seq[0])}
+        fake.routes[("GET", f"/api/tester/run/{rid}/bundle")] = {**BUNDLE, "run": {**BUNDLE["run"], "id": rid}}
+
+
+def test_backtest_runs_posts_every_run_first_then_one_table(fake):
+    _batch_fake(fake, [[{"status": "running"}, {"status": "done"}], [{"status": "done"}],
+                       [{"status": "error", "error": "strategy crashed"}]])
+    text = box(fake).call("backtest", {"strategy": "nq930", "inputs": {"offset_pts": 10}, "costs": {"qty": 2},
+                                       "runs": [{"inputs": {"offset_pts": 12}}, {"inputs": {"offset_pts": 14}, "label": "wide"},
+                                                {}]})
+    posts = [r for r in fake.requests if r["method"] == "POST"]
+    assert [p["body"]["inputs"] for p in posts] == [{"offset_pts": 12}, {"offset_pts": 14}, {"offset_pts": 10}]
+    for p in posts:      # the shared settings on every run, the prop sim off
+        assert p["body"] == {"strategy": "nq930", "inputs": p["body"]["inputs"], "range": {"kind": "wf_is", "root": "NQ"},
+                             "qty": 2, "propsim": False}
+    paths = [r["path"] for r in fake.requests]
+    assert max(i for i, r in enumerate(fake.requests) if r["method"] == "POST") < paths.index(f"/api/tester/run/{BID[0]}")
+    assert paths.count("/api/tester/strategies") == 1                       # the catalog once, not once a run
+    for want in (f"| offset_pts=12 | 2 | $187 | 50.0% | 2.70 | -$109 | 1.23 | {BID[0]} |", "| wide | 2 | $187 |",
+                 "| #3 | error | — |", f"- #3: run {BID[2]} error: strategy crashed", "3 runs · 2 done · Build · Sep 2021",
+                 "no prop sim", "Average of the 2 done: net $187 -- judge the average, not the best row.", "prop_eval"):
+        assert want in text, want
+    assert "run_ids=" not in text
+
+
+def test_backtest_runs_with_prop_rules_still_posts_the_prop_sim_off(fake):
+    _batch_fake(fake, [[{"status": "done"}]])
+    box(fake).call("backtest", {"strategy": "nq930", "prop_rules": "lucid@1", "runs": [{}]})
+    assert fake.last("POST")["body"] == {"strategy": "nq930", "inputs": {}, "range": {"kind": "wf_is", "root": "NQ"},
+                                         "prop_rules": "lucid@1", "propsim": False}
+
+
+def test_backtest_runs_returns_what_is_unfinished_and_run_ids_keeps_waiting(fake):
+    _batch_fake(fake, [[{"status": "done"}], [{"status": "running", "done": 5, "total": 947}, {"status": "done"}]])
+    b = box(fake)
+    text = b.call("backtest", {"strategy": "nq930", "wait_s": 0,
+                               "runs": [{"inputs": {"offset_pts": 12}}, {"inputs": {"offset_pts": 14}}]})
+    assert f"| {BID[0]} |" in text and "| offset_pts=14 | running · 5/947 |" in text
+    assert f"Still going: 1 of 2. Call backtest(run_ids=[{BID[0]!r}, {BID[1]!r}])" in text      # the whole batch, not the late rows
+    again = b.call("backtest", {"run_ids": [BID[0], BID[1]]})
+    assert f"| — | 2 | $187 | 50.0% | 2.70 | -$109 | 1.23 | {BID[1]} |" in again and "run_ids=" not in again
+    assert "Average of the 2 done: net $187" in again
+    assert len([r for r in fake.requests if r["method"] == "POST"]) == 2       # waiting posts nothing
+
+
+def test_a_resumed_batch_names_its_rows_by_the_inputs_that_differ_and_averages_them_all(fake):
+    _batch_fake(fake, [[{"status": "done"}], [{"status": "done"}], [{"status": "done"}]])
+    for rid, off, net in zip(BID, (10, 12, 14), (100.0, 300.0, -1000.0)):
+        run = {**BUNDLE["run"], "id": rid, "inputs": {**BUNDLE["run"]["inputs"], "offset_pts": off}}
+        run["report"] = {**run["report"], "summary": {**run["report"]["summary"],
+                                                        "all": {**run["report"]["summary"]["all"], "net_profit": net}}}
+        fake.routes[("GET", f"/api/tester/run/{rid}/bundle")] = {**BUNDLE, "run": run}
+    text = box(fake).call("backtest", {"run_ids": list(BID)})
+    for off in (10, 12, 14):
+        assert f"| offset_pts={off} |" in text
+    assert "Average of the 3 done: net -$200" in text
+
+
+def test_a_batch_label_is_one_table_cell(fake):
+    _batch_fake(fake, [[{"status": "done"}]])
+    text = box(fake).call("backtest", {"strategy": "nq930", "runs": [{"label": "wide | stop\nnew"}]})
+    assert "| wide / stop new | 2 |" in text
+
+
+def test_backtest_runs_keeps_the_single_run_rules_and_its_cap(fake):
+    b = box(fake)
+    one = [{"inputs": {"offset_pts": 12}}]
+    n = len(fake.requests)
+    for args, msg in (({"strategy": "nq930", "runs": one, "range": {"preset": "test"}}, "owner_said"),
+                      ({"strategy": "nq930", "runs": one, "range": {"preset": "test"}, "owner_said": " "}, "owner_said"),
+                      ({"strategy": "nq930", "runs": one * (tools.MAX_BATCH + 1)}, f"1 to {tools.MAX_BATCH}"),
+                      ({"strategy": "nq930", "runs": []}, f"1 to {tools.MAX_BATCH}"),
+                      ({"strategy": "nq930", "runs": [{"input": {}}]}, "runs #1"),
+                      ({"strategy": "nq930", "runs": [{}, {"inputs": [1]}]}, "runs #2"),
+                      ({"strategy": "nq930", "inputs": [1], "runs": one}, "inputs: an object"),
+                      ({"strategy": "nq930", "runs": one, "run_id": RID}, "not both"),
+                      ({"runs": one, "run_ids": [RID]}, "not both"),
+                      ({"run_ids": [RID] * (tools.MAX_BATCH + 1)}, f"1 to {tools.MAX_BATCH}")):
+        with pytest.raises(ToolError, match=msg):
+            b.call("backtest", args)
+    assert len(fake.requests) == n                                              # refused before anything is asked
+    with pytest.raises(ToolError, match="no strategy 'nope'"):                  # one unknown strategy: nothing posted
+        b.call("backtest", {"strategy": "nq930", "runs": [{}, {"strategy": "nope"}]})
+    assert not [r for r in fake.requests if r["method"] == "POST"]
+    said = {"range": {"preset": "test"}, "owner_said": "run the test days"}
+    b.call("backtest", {"strategy": "nq930", "runs": one, **said})
+    assert fake.last("POST")["body"]["range"]["start"] == "2025-07-01"
+    fake.routes[("POST", "/api/tester/run")] = lambda body: (
+        (400, {"detail": "inputs.offset_pts: must be within [0, 500]"}) if body["inputs"]["offset_pts"] > 500 else {"id": RID})
+    text = b.call("backtest", {"strategy": "nq930", "runs": [{"inputs": {"offset_pts": 900}}, {"inputs": {"offset_pts": 12}}]})
+    assert "- offset_pts=900: 400: inputs.offset_pts: must be within [0, 500]" in text
+    assert "| offset_pts=900 | refused |" in text and "| offset_pts=12 | 2 | $187 |" in text and f"| {RID} |" in text
+
+
+def test_backtest_runs_waits_once_for_all_on_the_tool_clock(fake):
+    """One wait_s for the whole batch, not one a run: the fake clock moves 1 s a sleep."""
+    now = [0.0]
+    _batch_fake(fake, [[{"status": "running"}], [{"status": "running"}]])
+    b = tools.Toolbox(Client(fake.url), sleep=lambda s: now.__setitem__(0, now[0] + s), clock=lambda: now[0])
+    text = b.call("backtest", {"strategy": "nq930", "wait_s": 5, "runs": [{}, {"inputs": {"offset_pts": 12}}]})
+    assert now[0] == 5.0 and f"backtest(run_ids=[{BID[0]!r}, {BID[1]!r}])" in text

@@ -25,7 +25,7 @@ from .tape import TapeStore
 def _complete(store: TapeStore, root: str, d: dt.date) -> bool:
     """The `complete` flag of the session's front contract (the manifest with the most ticks: TapeStore.pick's rule)."""
     best = (-1, False)
-    for man in (store.archive / root / str(d.year)).glob(f"{d.isoformat()}_*.json"):
+    for man in store.manifests(root, d):
         try:
             m = json.loads(man.read_text())
             n = int(m.get("ticks") or 0)
@@ -40,8 +40,9 @@ def _complete(store: TapeStore, root: str, d: dt.date) -> bool:
 def _calendar(root: str, archive: str, today: str) -> tuple:
     """(the used session dates of the whole months, the skipped sessions)."""
     store = TapeStore(archive=archive)
-    days = store.sessions(root, RESEARCH_START, dt.date.fromisoformat(today))
-    bad = frozenset(d for d in days if d >= HOLDOUT_START and not _complete(store, root, d))
+    with store.listing():                           # each year folder listed once, not once a session
+        days = store.sessions(root, RESEARCH_START, dt.date.fromisoformat(today))
+        bad = frozenset(d for d in days if d >= HOLDOUT_START and not _complete(store, root, d))
     use = [d for d in days if d not in bad]
     cut = min(today[:7], use[-1].isoformat()[:7] if use else today[:7])     # a month counts only when a complete session follows it
     return tuple(d for d in use if d.isoformat()[:7] < cut), bad

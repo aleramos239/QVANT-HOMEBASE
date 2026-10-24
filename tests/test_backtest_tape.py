@@ -89,6 +89,38 @@ def test_the_cache_is_built_once_and_rebuilt_when_the_source_changes(tmp_path, m
     assert len(calls) == 1                                 # stale -> rebuilt
 
 
+def test_a_listing_scope_reads_each_year_folder_once_and_nothing_outside_it_is_kept(tmp_path, monkeypatch):
+    base = archive(tmp_path)
+    s = TapeStore(base, tmp_path / "cache")
+    folder = base / "NQ" / "2024"
+    lists = []
+    real = os.listdir
+    monkeypatch.setattr(tape_mod.os, "listdir", lambda p: lists.append(str(p)) or real(p))
+    builds = []
+    real_read = tape_mod.read_archive_csv
+    monkeypatch.setattr(tape_mod, "read_archive_csv", lambda p: builds.append(p) or real_read(p))
+    march = (dt.date(2024, 3, 1), dt.date(2024, 3, 31))
+    later = dt.date(2024, 3, 7)
+    with s.listing():
+        for _ in range(5):
+            assert s.pick("NQ", D)[1] == "NQH4" and s.load("NQ", D) is not None
+            assert s.daily("NQ", D) is not None and s.cached("NQ", D) and s.sessions("NQ", *march) == [D]
+        with s.listing():                                  # a nested scope keeps the outer one's names
+            s.pick("NQ", D)
+        assert lists == [str(folder)]                      # one listing for the 26 calls
+        write_archive(base, "NQ", later, "NQH4", rows(ms("09:00:00"), [1.0] * 1500))
+        assert s.pick("NQ", later) is None and s.sessions("NQ", *march) == [D]     # the folder as first read
+        src = base / "NQ" / "2024" / f"{D}_NQH4.csv.gz"
+        os.utime(src, ns=(src.stat().st_atime_ns, src.stat().st_mtime_ns + 1_000_000_000))
+        s.load("NQ", D)
+        assert len(builds) == 2                            # freshness is never kept: the changed source is rebuilt
+    assert s.pick("NQ", later) is not None and s.sessions("NQ", *march) == [D, later]   # the scope ended
+    n = len(lists)
+    s.pick("NQ", D)
+    s.pick("NQ", D)
+    assert len(lists) == n + 2                             # outside a scope every call lists the folder
+
+
 def test_nothing_is_ever_written_under_the_archive(tmp_path):
     base = archive(tmp_path)
     before = listing(base)

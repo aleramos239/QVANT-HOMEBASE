@@ -382,20 +382,12 @@ def _timing(days: List[int]) -> dict:
             "min": min(days), "max": max(days)}
 
 
-def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
-              n_paths: int, horizon: int, rng: random.Random,
-              opens: Optional[Sequence[tuple]] = None) -> dict:
-    """Race ``n_paths`` eval attempts and funded accounts; return both blocks.
-    Eval and funded draw their own streams, notebook-style. An eval with its own
-    ``max_days`` (Apex EOD: 30 calendar days) is raced for those days at most.
-
-    With ``opens`` (open losses count) every path is ALSO walked on the close alone --
-    the same days, and past where the open-loss walk ended its own further draws from a
-    stream of its own, so the main stream is untouched: ``close_only`` is the friendlier
-    reading of the very same paths, never below the number it stands beside."""
-    eval_days = min(horizon, int(r.get("max_days") or horizon))
+def _walk(pnls: Sequence[float], flags: Sequence[bool], r: dict, rng: random.Random, n_paths: int,
+          horizon: int, eval_days: int, opens: Optional[Sequence[tuple]]) -> dict:
+    """THE REFERENCE WALK: ``n_paths`` eval attempts and funded accounts raced through
+    ``run_eval`` / ``run_funded`` -> the tallies ``_summary`` reads. ``_walk_fast`` must give
+    exactly the same (tests/test_backtest_propsim_fast.py); an intraday trail is walked here."""
     soft_rng, s_pass, s_bust, s_pay, s_cheques = random.Random(20261011), 0, 0, 0, 0.0
-    ev_out: List[str] = []
     ev_days: List[int] = []
     ev_tdays: List[int] = []
     bust_days: List[int] = []
@@ -404,13 +396,12 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
     max_days: List[int] = []
     fbust_days: List[int] = []
     cheques: List[float] = []
-    n_payout = n_max = n_fbust = n_neither = 0
+    n_neither = 0
     for _ in range(n_paths):
         seen_e: list = []
         seen_f: list = []
         days = _draws(pnls, flags, rng, eval_days, opens)
         e = run_eval(days if opens is None else _seen(days, seen_e), r)
-        ev_out.append(e["outcome"])
         dds.append(e["max_dd"])
         if e["outcome"] == "pass":
             ev_days.append(e["day"])
@@ -428,35 +419,181 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
                 s_pay += 1
                 s_cheques += fs["cheque"]
         if f["payout_at"] is not None:
-            n_payout += 1
             pay_days.append(f["payout_at"])
             cheques.append(f["cheque"])
         if f["max_payout_at"] is not None:
-            n_max += 1
             max_days.append(f["max_payout_at"])
         if f["bust_at"] is not None:
-            n_fbust += 1
             fbust_days.append(f["bust_at"])
         if f["payout_at"] is None and f["bust_at"] is None:
             n_neither += 1
+    return dict(ev_days=ev_days, ev_tdays=ev_tdays, bust_days=bust_days, dds=dds, pay_days=pay_days,
+                cheques=cheques, max_days=max_days, fbust_days=fbust_days, neither=n_neither,
+                soft=None if opens is None else (s_pass, s_bust, s_pay, s_cheques))
 
-    n = n_paths
-    n_pass = sum(1 for o in ev_out if o == "pass")
-    n_bust = sum(1 for o in ev_out if o == "bust")
-    dds.sort()
+
+def _walk_fast(pnls: Sequence[float], flags: Sequence[bool], r: dict, rng: random.Random, n_paths: int,
+               horizon: int, eval_days: int, opens: Optional[Sequence[tuple]]) -> dict:
+    """``_walk`` 2-3x faster, the same tallies: the per-day generator stack (``_draws`` ->
+    ``_seen`` -> ``_days`` -> ``_cap_day``) and the rule lookups flattened into plain loops over
+    day indices -- the same draws from the same streams in the same order, the same float
+    operations. ``run_eval`` / ``run_funded`` / ``_cheque`` stay the rules as written; NOT for
+    an intraday trail (``_simulate`` walks that with ``_walk``)."""
+    n = len(pnls)
+    if not n:                       # the reference's own error: the inlined draw below would never end on an empty pool
+        raise ValueError("empty range for randrange()")
+    dll = _dll(r)
+    pool = [max(p, -dll) for p in pnls] if dll else pnls          # _cap_day, once a pool day
+    opn = None if opens is None else [o[0] for o in opens]        # a day_trail's drop / high: intraday only
+    k = n.bit_length()
+    mll, lock_at, lock_floor, lock = r["trailing_mll"], r["lock_at"], r["lock_floor"], r.get("eval_lock") is not False
+    target, min_days, cons = r["eval_target"], r["eval_min_days"], r.get("consistency")
+    win_day, max_pp, cap, share = r.get("win_day"), r["max_payout_profit"], r["payout_cap"], r.get("payout_share")
+    p_wins, p_days = r.get("payout_win_days") or 0, r.get("payout_min_days") or 0
+    p_goal, p_cons = r.get("payout_min_profit") or 0, r.get("payout_consistency")
+    buf, p_min = r.get("payout_buffer"), r.get("payout_min") or 0
+
+    # Each walk takes the days in `idx` first, then draws more with `bits` and appends them: the main
+    # walk starts empty (idx = the days it took), the close-only walk replays those, then draws its own.
+    # shortcut: the draw is CPython's Random._randbelow inlined (rng.randrange(n), the same stream);
+    # the fast == reference test fails on a Python that draws otherwise.
+    def walk_eval(idx, bits, opn):
+        profit, peak, floor = 0.0, 0.0, -mll
+        big, trade_days, max_dd, day, m = 0.0, 0, 0.0, 0, len(idx)
+        while day < eval_days:
+            if day < m:
+                i = idx[day]
+            else:
+                i = bits(k)
+                while i >= n:
+                    i = bits(k)
+                idx.append(i)
+            pnl = pool[i]
+            day += 1
+            if flags[i]:
+                trade_days += 1
+            if opn is not None:
+                o = opn[i]
+                if o > 0 and profit - o <= floor:
+                    x = peak - profit + o
+                    return "bust", day, trade_days, x if x > max_dd else max_dd
+            profit += pnl
+            if pnl > big:
+                big = pnl
+            x = peak - profit
+            if x > max_dd:
+                max_dd = x
+            if profit <= floor:
+                return "bust", day, trade_days, max_dd
+            if profit > peak:
+                peak = profit
+                floor = lock_floor if lock and peak >= lock_at else peak - mll
+            if profit >= target and trade_days >= min_days and (cons is None or big <= cons * profit):
+                return "pass", day, trade_days, max_dd
+        return "timeout", day, trade_days, max_dd
+
+    def walk_funded(idx, bits, opn):
+        profit, peak, floor = 0.0, 0.0, -mll
+        win_days, big, trade_days, day, m = 0, 0.0, 0, 0, len(idx)
+        payout_at = cheque = None
+        while day < horizon:
+            if day < m:
+                i = idx[day]
+            else:
+                i = bits(k)
+                while i >= n:
+                    i = bits(k)
+                idx.append(i)
+            pnl = pool[i]
+            day += 1
+            if flags[i]:
+                trade_days += 1
+            if opn is not None:
+                o = opn[i]
+                if o > 0 and profit - o <= floor:
+                    return payout_at, cheque, None, day
+            profit += pnl
+            if pnl > big:
+                big = pnl
+            if win_day is not None and pnl >= win_day:
+                win_days += 1
+            if profit <= floor:
+                return payout_at, cheque, None, day
+            if profit > peak:
+                peak = profit
+                floor = lock_floor if peak >= lock_at else peak - mll
+            # _cheque, its conditions in its order
+            if (profit > 0 and win_days >= p_wins and trade_days >= p_days and profit >= p_goal
+                    and (p_cons is None or big <= p_cons * profit)):
+                due = min(profit - buf if buf is not None else share * profit, cap)
+                if due > 0 and due >= p_min:
+                    if payout_at is None:
+                        payout_at, cheque = day, due
+                    if profit >= max_pp:
+                        return payout_at, cheque, day, None
+        return payout_at, cheque, None, None
+
+    soft_bits, bits = random.Random(20261011).getrandbits, rng.getrandbits
+    s_pass, s_bust, s_pay, s_cheques = 0, 0, 0, 0.0
+    ev_days: List[int] = []
+    ev_tdays: List[int] = []
+    bust_days: List[int] = []
+    dds: List[float] = []
+    pay_days: List[int] = []
+    max_days: List[int] = []
+    fbust_days: List[int] = []
+    cheques: List[float] = []
+    n_neither = 0
+    for _ in range(n_paths):
+        seen_e: list = []
+        seen_f: list = []
+        outcome, day, trade_days, max_dd = walk_eval(seen_e, bits, opn)
+        dds.append(max_dd)
+        if outcome == "pass":
+            ev_days.append(day)
+            ev_tdays.append(trade_days)
+        elif outcome == "bust":
+            bust_days.append(day)
+        payout_at, cheque, max_at, bust_at = walk_funded(seen_f, bits, opn)
+        if opn is not None:
+            outcome = walk_eval(seen_e, soft_bits, None)[0]
+            s_pass += outcome == "pass"
+            s_bust += outcome == "bust"
+            soft_at, soft_cheque = walk_funded(seen_f, soft_bits, None)[:2]
+            if soft_at is not None:
+                s_pay += 1
+                s_cheques += soft_cheque
+        if payout_at is not None:
+            pay_days.append(payout_at)
+            cheques.append(cheque)
+        if max_at is not None:
+            max_days.append(max_at)
+        if bust_at is not None:
+            fbust_days.append(bust_at)
+        if payout_at is None and bust_at is None:
+            n_neither += 1
+    return dict(ev_days=ev_days, ev_tdays=ev_tdays, bust_days=bust_days, dds=dds, pay_days=pay_days,
+                cheques=cheques, max_days=max_days, fbust_days=fbust_days, neither=n_neither,
+                soft=None if opens is None else (s_pass, s_bust, s_pay, s_cheques))
+
+
+def _summary(w: dict, r: dict, n: int) -> dict:
+    """The eval / retries / funded blocks (and ``close_only``) of a walk's tallies over ``n`` paths."""
+    n_pass, n_bust, soft = len(w["ev_days"]), len(w["bust_days"]), w["soft"]
+    dds, cheques = sorted(w["dds"]), w["cheques"]
     cheq = sorted(cheques)
     p = n_pass / n
     return {
-        **({} if opens is None else {"close_only": {"eval_p": s_pass / n, "bust_p": s_bust / n, "payout_p": s_pay / n,
-                                                    "expected_payout": s_cheques / n}}),
+        **({} if soft is None else {"close_only": {"eval_p": soft[0] / n, "bust_p": soft[1] / n,
+                                                   "payout_p": soft[2] / n, "expected_payout": soft[3] / n}}),
         "eval": {
             "p": p,
             "ci": list(wilson_ci(n_pass, n)),
             "bust_p": n_bust / n,
             "timeout_p": (n - n_pass - n_bust) / n,
-            "days": _timing(ev_days),
-            "trade_days_mean": statistics.mean(ev_tdays) if ev_tdays else None,
-            "bust_days": _timing(bust_days),
+            "days": _timing(w["ev_days"]),
+            "trade_days_mean": statistics.mean(w["ev_tdays"]) if w["ev_tdays"] else None,
+            "bust_days": _timing(w["bust_days"]),
             "dd": {"mean": statistics.mean(dds), "p50": _pct(dds, 0.50),
                    "p90": _pct(dds, 0.90), "p95": _pct(dds, 0.95),
                    "worst": dds[-1]},
@@ -468,16 +605,16 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
             "cum": [[k, 1.0 - (1.0 - p) ** k] for k in (1, 2, 3, 4)],
         },
         "funded": {
-            "payout_p": n_payout / n,
-            "ci": list(wilson_ci(n_payout, n)),
-            "bust_p": n_fbust / n,
+            "payout_p": len(cheques) / n,
+            "ci": list(wilson_ci(len(cheques), n)),
+            "bust_p": len(w["fbust_days"]) / n,
             # payout and bust are NOT exclusive (an account can take a cheque
             # then die); neither = no payout AND no bust by the horizon.
-            "neither_p": n_neither / n,
-            "days": _timing(pay_days),
-            "bust_days": _timing(fbust_days),
-            "max_payout_p": n_max / n,
-            "max_payout_days": _timing(max_days),
+            "neither_p": w["neither"] / n,
+            "days": _timing(w["pay_days"]),
+            "bust_days": _timing(w["fbust_days"]),
+            "max_payout_p": len(w["max_days"]) / n,
+            "max_payout_days": _timing(w["max_days"]),
             # Cheque sizes among the paths that reached a payout; the $2k cap
             # binding (capped_share) means the account left money on the table.
             "payout_usd": {
@@ -495,6 +632,22 @@ def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
             "expected_payout": sum(cheques) / n,
         },
     }
+
+
+def _simulate(pnls: Sequence[float], flags: Sequence[bool], r: dict, *,
+              n_paths: int, horizon: int, rng: random.Random,
+              opens: Optional[Sequence[tuple]] = None) -> dict:
+    """Race ``n_paths`` eval attempts and funded accounts; return both blocks.
+    Eval and funded draw their own streams, notebook-style. An eval with its own
+    ``max_days`` (Apex EOD: 30 calendar days) is raced for those days at most.
+
+    With ``opens`` (open losses count) every path is ALSO walked on the close alone --
+    the same days, and past where the open-loss walk ended its own further draws from a
+    stream of its own, so the main stream is untouched: ``close_only`` is the friendlier
+    reading of the very same paths, never below the number it stands beside."""
+    eval_days = min(horizon, int(r.get("max_days") or horizon))
+    walk = _walk if r.get("trail") == "intraday" else _walk_fast
+    return _summary(walk(pnls, flags, r, rng, n_paths, horizon, eval_days, opens), r, n_paths)
 
 
 def run(

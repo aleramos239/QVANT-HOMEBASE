@@ -433,6 +433,28 @@ def test_rescoring_a_run_under_another_eval_equals_a_fresh_run_and_is_cached(tmp
         assert c.post("/api/tester/propsim", json={"run_id": rid, "prop_rules": PRO}).json() == fresh_prop
 
 
+def test_a_run_without_the_prop_sim_is_saved_not_scored_and_scored_from_its_trades_on_request(tmp_path):
+    """"propsim": false runs everything but the prop sim; the run's OWN eval re-scores it on request,
+    to the numbers a propsim-on run saved."""
+    from homebase.backtest import propsim as P
+    with client(tmp_path) as c:
+        r = c.post("/api/tester/run", json={**RUN, "propsim": "x"})
+        assert r.status_code == 400 and "propsim" in r.json()["detail"]
+        r = c.post("/api/tester/run", json={**RUN, "propsim": False})
+        assert r.status_code == 200
+        rid = r.json()["id"]
+        req = runner.read_json(tmp_path / "state" / "tester" / "runs" / rid / "request.json")
+        assert req["propsim"] is False
+        assert poll(c, rid)["status"] == "done"
+        saved = c.get(f"/api/tester/run/{rid}/bundle").json()["propsim"]
+        assert saved["skipped"] == runner.PROP_NOT_SCORED and saved["rules"]["label"] == "LucidFlex 50K"
+        on = c.post("/api/tester/run", json=RUN).json()["id"]
+        assert poll(c, on)["status"] == "done"
+        scored = c.post(f"/api/tester/runs/{rid}/propsim", json={"prop_rules": P.DEFAULT_RULES})
+        assert scored.status_code == 200
+        assert scored.json() == c.get(f"/api/tester/run/{on}/bundle").json()["propsim"]
+
+
 def test_rescoring_refuses_bad_requests_and_cross_site_writes(tmp_path):
     with client(tmp_path) as c:
         rid = c.post("/api/tester/run", json=RUN).json()["id"]

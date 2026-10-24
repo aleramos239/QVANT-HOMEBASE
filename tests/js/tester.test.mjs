@@ -359,6 +359,16 @@ test('propShown: the saved block, a re-score in flight, a finished re-score, a s
   assert.deepEqual(X.propShown(saved, F, { ...idle, runId: 'r0', rulesId: P, result: pro }, 'r1').propsim, saved);
 });
 
+test('propShown: a run saved without the prop sim is scored under its own eval, not marked re-scored', () => {
+  const F = 'lucid-flex-50k@2026-09-27', flex = { rules: { name: 'LucidFlex 50K' } };
+  const unscored = { skipped: 'not scored: ...', rules: { name: 'LucidFlex 50K', label: 'LucidFlex 50K' } };
+  const own = { runId: 'r1', rulesId: F, loading: false, error: '', result: null };
+  assert.deepEqual(X.propShown(unscored, F, { ...own, loading: true }, 'r1'),
+    { propsim: unscored, rulesId: F, loading: true, error: '', rescored: false });
+  assert.deepEqual(X.propShown(unscored, F, { ...own, result: flex }, 'r1'),
+    { propsim: flex, rulesId: F, loading: false, error: '', rescored: false });
+});
+
 test('equity series: strictly increasing seconds', () => {
   assert.deepEqual(X.equitySeries({ t_ms: [1000, 1500, 5000], equity: [1, 2, 3], drawdown: [0, 0, -1] }), {
     equity: [{ time: 1, value: 1 }, { time: 2, value: 2 }, { time: 5, value: 3 }],

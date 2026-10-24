@@ -650,13 +650,29 @@ class _Sim:
             self._close(pos, to_tick(self.px[k] - pos.side * self.slip, self.tick), k, reason)
 
 
-def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int) -> list[Bar]:
+def build_bars(ts, px, size, lo: int, hi: int, t0: int, t1: int, minutes: int, m1: tuple | None = None) -> list[Bar]:
     """Time bars from prints [lo, hi), aligned to multiples of `minutes` in epoch
     time (ET-aligned: offsets are whole hours), covering [t0, t1). Empty buckets
-    make no bar."""
+    make no bar. m1: the tape's 1-minute bars (Tape.minutes) to compose them from
+    instead of the prints -- the same bars, ONLY when `minutes` is whole and [lo, hi)
+    is every print of a span on whole minutes (run_session checks)."""
     step = minutes * 60_000_000_000
     out = []
     b0 = t0 - t0 % step
+    if m1 is not None:
+        if hi <= lo:
+            return out
+        st, o, h, l, c, v = m1
+        m = 60_000_000_000
+        # the minutes of prints [lo, hi) inside the buckets: from the one holding print lo to the last bucket's end
+        j = bisect_left(st, max(b0, ts[lo] - ts[lo] % m))
+        z = bisect_left(st, min(-(-t1 // step) * step, ts[hi - 1] + 1), j)
+        while j < z:
+            k = st[j] - st[j] % step
+            e = bisect_left(st, k + step, j, z)
+            out.append(Bar(k, k + step, o[j], max(h[j:e]), min(l[j:e]), c[e - 1], sum(v[j:e])))
+            j = e
+        return out
     i0 = bisect_left(ts, b0, lo, hi)
     while b0 < t1:
         b1 = b0 + step
@@ -753,7 +769,10 @@ def run_session(strategy, tape, costs: Costs, qty: int = 1, daily: list | None =
     sim.bar_min = bm                                # ... and the bar an "own bar" ATR reads
     if bm:
         b0, b1 = strategy.bar_window or strategy.session_window
-        bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm)
+        # whole-minute bars of a session on whole minutes: from the tape's 1-minute bars, not every print again
+        exact = type(bm) is int and bm > 0 and t0 % 60_000_000_000 == 0 and t1 % 60_000_000_000 == 0
+        m1 = tape.minutes() if exact and hasattr(tape, "minutes") else None     # None: no sidecar to read, the prints as before
+        bars = build_bars(ts, px, tape.size, lo, hi, et_ns(d, b0), et_ns(d, b1), bm, m1)
         if getattr(strategy, "needs_flow", False):
             split_flow(ts, px, tape.size, lo, hi, bars)
         for n, b in enumerate(bars):

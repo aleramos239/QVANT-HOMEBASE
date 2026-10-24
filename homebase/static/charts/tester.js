@@ -415,10 +415,11 @@ function evalOptions(list, selected) {
    one. While it is in flight the saved numbers stay up — their header still names their own eval. */
 function propShown(saved, ranUnder, rs, runId) {
   const base = { propsim: saved, rulesId: ranUnder, loading: false, error: '', rescored: false };
-  if (!rs || rs.runId !== runId || !rs.rulesId || rs.rulesId === ranUnder) return base;
+  const own = rs && rs.rulesId === ranUnder;   // its own eval: the saved block, unless it was never scored
+  if (!rs || rs.runId !== runId || !rs.rulesId || (own && !(saved && saved.skipped))) return base;
   if (rs.error) return { ...base, error: rs.error };
   if (rs.loading) return { ...base, rulesId: rs.rulesId, loading: true };
-  if (rs.result) return { propsim: rs.result, rulesId: rs.rulesId, loading: false, error: '', rescored: true };
+  if (rs.result) return { propsim: rs.result, rulesId: rs.rulesId, loading: false, error: '', rescored: !own };
   return base;
 }
 

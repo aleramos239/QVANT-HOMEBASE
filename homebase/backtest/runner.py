@@ -54,10 +54,12 @@ from .tape import (ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason,
 
 RUN_ID = re.compile(r"^\d{8}-\d{6}-[a-z0-9_]+-[0-9a-f]{4}$")
 FIELDS = {"strategy", "inputs", "range", "qty", "commission", "slippage_ticks", "capital",
-          "prop_rules", "controls"}
+          "prop_rules", "controls", "propsim"}
 FINAL = {"done", "error", "cancelled"}
 PROGRESS_S = 0.5
 DAILY_LOOKBACK = dt.timedelta(days=400)     # > 250 sessions of daily bars for the ADX gate
+PROP_NOT_SCORED = ("not scored: this run was made without the prop sim. Pick an eval to score it from its trades "
+                   "(the connector: prop_eval).")
 
 
 def default_base() -> Path:
@@ -146,6 +148,9 @@ def validate(body, *, draft: tuple | None = None) -> dict:
         raise ValueError(f"range.root: these are {rng.root} months, the strategy trades {cls.root}")
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
     prop_rules_data = propsim.load_rules(prop_rules_id)     # ValueError "prop_rules: one of ..." when unknown
+    run_prop = body.get("propsim", True)
+    if not isinstance(run_prop, bool):
+        raise ValueError("propsim: true or false")
     # Item 4 (provenance): the resolved runtime config -- cancel/flat times, the
     # nq10am rule config, anything else read from config.json at call time -- so
     # the bundle stays reproducible even after config.json later changes.
@@ -158,6 +163,8 @@ def validate(body, *, draft: tuple | None = None) -> dict:
             "slippage_ticks": _num(body, "slippage_ticks", 1.0, 0.0, 20.0),
             "capital": _num(body, "capital", 50_000.0, 1.0, 1e9),
             "prop_rules": prop_rules_id, "prop_rules_data": prop_rules_data}
+    if not run_prop:                                # stored only when off: every other request is byte for byte the same
+        req["propsim"] = False
     rules = ctlmod.parse(body.get("controls"))      # run controls (controls.py): only when something is set, so a
     if rules:                                       # request without them is byte for byte what it always was
         req["controls"] = rules
@@ -211,6 +218,13 @@ def report_holes(skipped: list[dict], no_trade: list[dict]) -> list[dict]:
     return list(skipped) + [n for n in no_trade if n["reason"].startswith(HOLE_REASONS)]
 
 
+def _rules_tag(r: dict) -> dict:
+    """The eval a prop block names: its rule set's name, and whether those rules are confirmed."""
+    confirmed = r.get("confirmed") is not False
+    return {"name": r.get("name"), "confirmed": confirmed,
+            "label": r.get("name") if confirmed else f"{r.get('name')} · unconfirmed rules"}
+
+
 def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
     """The prop-eval Monte Carlo never costs the run its bundle: a malformed rule file
     (e.g. one missing a key the engine requires) is caught here, not left to blow up
@@ -224,16 +238,19 @@ def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
         return prop, False
     except Exception as e:  # noqa: BLE001 — a bad rule file must not sink the whole run
         prop: dict = {"error": f"{type(e).__name__}: {e}"}
-        r = req.get("prop_rules_data")
-        if r:
-            confirmed = r.get("confirmed") is not False
-            prop["rules"] = {"name": r.get("name"), "confirmed": confirmed,
-                             "label": r.get("name") if confirmed else f"{r.get('name')} · unconfirmed rules"}
+        if req.get("prop_rules_data"):
+            prop["rules"] = _rules_tag(req["prop_rules_data"])
         return prop, True
 
 
 def execute(run_dir: Path, store: TapeStore) -> dict:
     """Run one prepared request to a bundle (in THIS process). Returns run.json."""
+    with store.listing():       # one run lists each archive year folder once (tape.py TapeStore.listing)
+        return _execute(run_dir, store)
+
+
+def _execute(run_dir: Path, store: TapeStore) -> dict:
+    """execute()'s body, inside its listing scope."""
     req = read_json(run_dir / "request.json")
     cls = strategies.get(req["strategy"])
     rng = discipline.stored_range(req["range"])     # the request's OWN dates, even if the default has moved since
@@ -344,7 +361,9 @@ def execute(run_dir: Path, store: TapeStore) -> dict:
     write_json(run_dir / "status.json", status)
     if req.get("propsim", True):
         prop, prop_error = _run_propsim(trades, req)
-    else:                                   # a walk-forward cell: its full-window prop sim is never shown
+    elif RUN_ID.match(run_dir.name):        # a run asked without it: scored on request, from its trades
+        prop, prop_error = {"skipped": PROP_NOT_SCORED, "rules": _rules_tag(req.get("prop_rules_data") or {})}, False
+    else:                                   # a walk-forward cell (cells/NN): its full-window prop sim is never shown
         prop, prop_error = {"skipped": "not run (a walk-forward cell)"}, False
     meta = {"id": req["id"], "created": req["created"], "finished": _now(),
             "engine": ENGINE_VERSION, "fill_law": "tick replay",
