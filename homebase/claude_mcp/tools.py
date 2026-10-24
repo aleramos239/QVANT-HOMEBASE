@@ -34,7 +34,7 @@ ET = ZoneInfo("America/New_York")
 FINAL = ("done", "error", "cancelled")
 DEFAULT_WAIT_S = 45            # under the client's 60 s limit: the stdio loop is single-threaded, so a long wait blocks every call
 MAX_WAIT_S = 3600
-MAX_BATCH = 8                  # backtest(runs=...): 2 rounds of the 4 off-hours slots (4 of the 2 in desk hours); first come, first served, so more parks the owner's Run clicks behind it
+MAX_BATCH = 12                 # backtest(runs=...): one round of the Mac's 12 slots (owner 2026-10-24: the Mac is for backtesting); first come, first served, so more parks the owner's Run clicks behind it
 PRESETS = {"build": ("2021-09-22", "2025-06-30"), "test": ("2025-07-01", None), "all": ("2021-01-01", None),
            # the old names (before the blueprint's dates, 2026-10-06): kept so an older call still runs
            "2021-2024": ("2021-01-01", "2024-12-31"), "2022-2024": ("2022-01-01", "2024-12-31"),

@@ -48,7 +48,7 @@ from . import drafthost, hourly, minvol, sandbox
 from ..paths import repo_root, state_dir
 from . import controls as ctlmod, discipline, propsim, report
 from .engine import ENGINE_VERSION, Costs, run_session
-from .slots import QUIET_MSG, QUIET_REFUSAL, Slots, held
+from .slots import NO_BACKTESTS, QUIET_MSG, QUIET_REFUSAL, Slots, backtests_off, held
 from .tape import (ARCHIVE, CACHE, OverlayTapeStore, TapeStore, coverage_reason, effective_session_window, et_ns,
                    missing_hours)
 
@@ -491,6 +491,8 @@ class RunManager:
         return self.runs / rid
 
     def submit(self, body) -> str:
+        if backtests_off():
+            raise ValueError(NO_BACKTESTS)
         if isinstance(body, dict) and isinstance(body.get("range"), dict) and body["range"].get("kind") == "wf_oos":
             raise ValueError(discipline.WF_OOS_ONLY)
         if self.slots.quiet():

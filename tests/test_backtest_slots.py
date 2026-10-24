@@ -379,3 +379,22 @@ def test_override_is_reread_when_the_file_changes_and_ignored_when_broken(tmp_pa
     assert slots.cap_at(et(FRI, "11:00")) == 2
     f.unlink()
     assert slots.cap_at(et(FRI, "11:00")) == 2
+
+
+def test_the_trading_server_starts_no_backtest_while_its_switch_file_exists(tmp_path, monkeypatch):
+    """Owner 2026-10-24: the Chicago server never backtests. ~/.homebase/no_backtests refuses every run, heat map and
+    walk-forward before anything is written; the Mac (no file) is unchanged."""
+    from homebase.backtest.walkforward import WalkForwardManager
+    home = tmp_path / "home"
+    (home / ".homebase").mkdir(parents=True)
+    monkeypatch.setenv("HOME", str(home))
+    base = tmp_path / "base"
+    managers = (RunManager(base, slots=Slots(tmp_path / "slots")), GridManager(base, slots=Slots(tmp_path / "slots")),
+                WalkForwardManager(base, slots=Slots(tmp_path / "slots")))
+    assert not slots.backtests_off()
+    (home / ".homebase" / "no_backtests").touch()
+    assert slots.backtests_off()
+    for m in managers:
+        with pytest.raises(ValueError, match="the Chicago server is for trading only"):
+            m.submit({"strategy": "anything"})
+    assert not list((base / "runs").glob("*")) if (base / "runs").exists() else True

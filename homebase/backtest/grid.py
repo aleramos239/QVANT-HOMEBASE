@@ -44,7 +44,7 @@ from .. import draftstore, strategies
 from . import controls as ctlmod, drafthost, runner
 from .discipline import WF_OOS_ONLY, parse_range
 from .runner import RUN_ID, _now, read_json, write_json
-from .slots import QUIET_MSG, Slots, shared_dir
+from .slots import NO_BACKTESTS, QUIET_MSG, Slots, backtests_off, shared_dir
 from .tape import ARCHIVE, CACHE
 
 DEFAULT_MAX_CELLS = 120     # what a body without Max cells gets: the 40 hm40 exit cells x 3 values
@@ -388,6 +388,8 @@ class GridManager:
         return validate_grid(body)
 
     def submit(self, body) -> str:
+        if backtests_off():                    # heat maps and walk-forwards (WalkForwardManager) too
+            raise ValueError(NO_BACKTESTS)
         g = self._validate(body)
         read_looks(self.looks_path)            # LooksCorrupt (a ValueError -> 400): no grid runs uncounted
         gid = f"{dt.datetime.now():%Y%m%d-%H%M%S}-{g['strategy']}-{secrets.token_hex(2)}"

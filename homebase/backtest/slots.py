@@ -40,6 +40,16 @@ ENV = "HOMEBASE_TESTER_SHARED"
 OVERRIDE_ENV = "HOMEBASE_TESTER_SLOTS_FILE"
 
 
+NO_BACKTESTS = ("This computer does not run backtests: the Chicago server is for trading only. "
+                "Run it on the Mac.")
+
+
+def backtests_off() -> bool:
+    """The trading server's switch (owner, 2026-10-24: "i dont want to use the chicago server to backtest ever"): while
+    ~/.homebase/no_backtests exists, no run, heat map or walk-forward starts on this machine. The Mac has no such file."""
+    return (Path.home() / ".homebase" / "no_backtests").exists()
+
+
 def shared_dir() -> Path:
     v = os.environ.get(ENV)
     return Path(v) if v else Path.home() / ".homebase" / "tester"
