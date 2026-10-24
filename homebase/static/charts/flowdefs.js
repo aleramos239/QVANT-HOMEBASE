@@ -413,6 +413,16 @@ const settings = {
       {"key": "markSingles", "label": "Highlight single prints", "type": "bool", "def": true},
     ],
   },
+  pzone: {
+    colors: [
+      {"key": "up", "label": "Buyers' zone (support)", "color": "#22D3EE", "alpha": 100},
+      {"key": "down", "label": "Sellers' zone (resistance)", "color": "#A855F7", "alpha": 100},
+    ],
+    params: [
+      {"key": "opacity", "label": "Fill opacity (%)", "type": "int", "min": 0, "max": 100, "step": 5, "def": 20},
+      {"key": "untouchedOnly", "label": "Only untouched zones", "type": "bool", "def": false},
+    ],
+  },
   profile: {
     colors: [
       {"key": "poc", "label": "Point of control", "color": "#F7A600", "alpha": 100},

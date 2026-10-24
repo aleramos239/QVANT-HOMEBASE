@@ -194,3 +194,26 @@ test('flow layer: delta turnaround and strength arrows and an absorption line, e
 });
 
 test.after(() => { delete globalThis.window; });
+
+test('flow layer: a stacked profile zone is a band from the bar that printed it to the bar back in it, cyan for buyers', () => {
+  const gap = [102, 103, 104, 106, 107, 108].map((p) => [p, 1, 2]);
+  const bars = [
+    bar(0, { l: 100, h: 101, fp: [[100, 20, 20], [101, 20, 22]] }),
+    bar(2, { l: 101, h: 110, fp: [...gap, [105, 1, 40], [109, 1, 2], [110, 10, 11]] }),
+    bar(4, { l: 109, h: 111, fp: [[109, 21, 20], [110, 20, 19], [111, 20, 21]] }),
+    bar(6, { l: 109, h: 111, fp: [[109, 21, 20], [110, 20, 19], [111, 20, 21]] }),
+  ];
+  const r = rig([], bars, { tick: 1 });
+  const z = r.ind('pzone', { rows: 1 });
+  r.cell.cfg.indicators.push(z);
+  r.o.onIndicators();
+  let log = r.draw(r.o.zone);
+  assert.deepEqual(log.filter((c) => c[0] === 'fillRect'), [['fillRect', 100, yOf(106), 1900, 40]]);   // bar 1 (x 100) to the right edge, 105-106
+  assert.deepEqual(log.find((c) => c[0] === 'fillStyle'), ['fillStyle', 'rgba(34,211,238,0.2)']);
+  r.cell.bars.push(bar(100, { s: 'b', l: 104, h: 106, fp: [[105, 1, 1]] }));                             // the next session trades back into it
+  log = r.draw(r.o.zone);
+  assert.deepEqual(log.filter((c) => c[0] === 'fillRect').map((c) => c[3]), [300]);                     // bar 1 to bar 4 (x 400)
+  z.params.untouchedOnly = true;
+  assert.equal(count(r.draw(r.o.zone), 'fillRect'), 0);
+  r.o.destroy();
+});

@@ -447,3 +447,22 @@ test('a blank slot (the last close as every price) neither covers a POC nor adds
   assert.deepEqual(M.nakedPocs(bars), [{ i: 0, price: 102, vol: 6 }]);
   assert.equal(M.tpo([{ ms: 0, h: 101, l: 101 }, { ...blank, ms: 3600000 }], 30, 1, 'range', { tick: 1 }).periods, 1);
 });
+
+test('profileZones: a delta outlier with single prints and a low volume node next to it is a zone, until a later bar trades back to it', () => {
+  const m = 60000, gap = [102, 103, 104, 106, 107, 108].map((p) => [p, 1, 2]);
+  const day = [
+    { s: 'd1', ms: 0, l: 100, h: 101, fp: [[100, 20, 20], [101, 20, 22]] },                              // A: the first balance
+    { s: 'd1', ms: 30 * m, l: 101, h: 110, fp: [...gap, [105, 1, 40], [109, 1, 2], [110, 10, 11]] },     // B: one fast leg up, buyers hit hard at 105
+    { s: 'd1', ms: 60 * m, l: 109, h: 111, fp: [[109, 21, 20], [110, 20, 19], [111, 20, 21]] },          // C, D: the second balance
+    { s: 'd1', ms: 90 * m, l: 109, h: 111, fp: [[109, 21, 20], [110, 20, 19], [111, 20, 21]] },
+  ];
+  const back = { s: 'd2', ms: 1440 * m, l: 104, h: 106, fp: [[105, 1, 1]] };
+  const o = { tick: 1, rows: 1 };
+  assert.deepEqual(M.profileZones([...day, back], o), [{ i: 1, hit: 4, lo: 105, hi: 106, side: 1, delta: 39 }]);
+  assert.equal(M.profileZones(day, o)[0].hit, null, 'untouched: runs on');
+  assert.deepEqual(M.profileZones(day, { ...o, lvn: 0 }), [], 'no low volume node: no zone');
+  assert.deepEqual(M.profileZones(day, { ...o, outlier: 50 }), [], 'no outlier: no zone');
+  assert.deepEqual(M.profileZones(day.slice(0, 2), o), [], 'single prints from the last period do not count yet');
+  assert.deepEqual(M.profileZones(day.map(({ fp, ...b }) => b), o), [], 'no footprint: nothing');
+  assert.deepEqual(M.profileZones([...day, back], {}), [], 'no tick: nothing');
+});

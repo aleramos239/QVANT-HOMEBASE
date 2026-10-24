@@ -22,7 +22,7 @@ test('need(): bigtrades asks for the orders (flow); naked POCs, absorption and a
   const need = (...list) => stub(list).need();
   assert.deepEqual(need(), { fp: false, big: false, flow: false });
   assert.deepEqual(need(ind('bigtrades')), { fp: false, big: false, flow: true });
-  for (const id of ['npoc', 'mwabs']) assert.deepEqual(need(ind(id)), { fp: true, big: false, flow: false }, id);
+  for (const id of ['npoc', 'mwabs', 'pzone']) assert.deepEqual(need(ind(id)), { fp: true, big: false, flow: false }, id);
   assert.deepEqual(need(ind('cstat')), { fp: false, big: false, flow: false });     // the strip counts trades from the bar's own `n`
   assert.equal(need(ind('tpo', { mode: 'traded' })).fp, true);
   assert.equal(need(ind('tpo')).fp, false, 'a range TPO needs only the bars\' high and low');

@@ -336,6 +336,26 @@ G.add({
     ],
     watch: 'Follows the TPO of Sierra Chart and MotiveWave. No RTH / ETH split, no open or close marks. "Only prices that traded" needs the footprint.',
   },
+  pzone: {
+    what: 'Marks the prices where the volume profile, the delta profile and the TPO all point at the same level.',
+    see: [
+      'A thin band from the candle that first traded the price, running right until a later candle trades back into it.',
+      'Cyan: buyers hit the ask far harder there (support). Purple: sellers hit the bid far harder there (resistance).',
+      'Zones from the last few sessions are kept, five by default.',
+    ],
+    read: [
+      'A delta outlier: at this price one side traded far more aggressively than at the other prices.',
+      'A single print next to it: price passed through once, fast, so the TPO has one letter there.',
+      'A low volume node next to it: little volume traded there compared with the busiest price.',
+      'Single prints from the session\'s last letter do not count yet: price has not had the time to come back.',
+    ],
+    use: [
+      'When price comes back to a band, look for a fast rejection: the other side pushes in and gets absorbed.',
+      'Price that closes through the band and stays there says the level failed.',
+      'Turn on the footprint, Absorption or Big trades at the band to see who wins there.',
+    ],
+    watch: 'Follows the "three profiles, one level" idea of cabatrades\' Orderflow, simply (episode 4). Needs the footprint; rows are 4 ticks by default.',
+  },
   cstat: {
     what: 'Prints a column of order-flow numbers under each candle: delta, volume, trades, seconds and more.',
     see: [

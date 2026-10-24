@@ -430,7 +430,7 @@ test('market hours: Globex Sunday 18:00 to Friday 17:00 with a daily break; cryp
 test('dialog filtering by name and group', () => {
   assert.deepEqual(C.filter('', 'Classic TA').map((d) => d.id), ['ema', 'sma', 'vwma', 'adx', 'rsi', 'macd', 'stoch', 'mfi', 'er', 'atr', 'bb', 'keltner', 'donchian', 'supertrend', 'tema']);
   // the id and name hits first (house before tv_), then the group word, then a hit only in the one-line description (cstat)
-  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'dturn', 'dstr', 'ddiv', 'tv_cvd', 'tv_vdelta', 'cstat']);
+  assert.deepEqual(C.filter('delta').map((d) => d.id), ['delta', 'cumdelta', 'dturn', 'dstr', 'ddiv', 'tv_cvd', 'tv_vdelta', 'pzone', 'cstat']);
   assert.deepEqual(C.filter('ORDER').map((d) => d.id), ['bigorders', 'footprint', 'delta', 'cumdelta', 'bigprints', 'bigtrades', 'cstat', 'dturn', 'dstr', 'mwabs', 'stoprun', 'exhaust', 'tspeed', 'pressure', 'ddiv',
     'pulled', 'iceberg']);
   assert.deepEqual(C.filter('heat').map((d) => [d.id, d.group]), [['heatmap', 'Book (L2)']]);
@@ -1428,8 +1428,8 @@ test('footprint: the zero / edge selects say a rule above sets them, in a label 
 test('picker: every id is in exactly one tab of GROUPS, and the tabs keep the sizes the layout was designed with', () => {
   const sizes = {};
   for (const d of C.CATALOG) { assert.ok(C.GROUPS.includes(d.group) && d.group !== 'All', `${d.id}: ${d.group}`); sizes[d.group] = (sizes[d.group] || 0) + 1; }
-  assert.deepEqual(sizes, { 'VWAP & levels': 6, 'Order flow': 14, 'Book (L2)': 10, 'Volume & profile': 6, 'Calendar & news': 2, 'Ranges & structure': 9, 'Classic TA': 15, TradingView: 91 });
-  assert.equal(C.CATALOG.length, 153, 'no indicator removed');
+  assert.deepEqual(sizes, { 'VWAP & levels': 6, 'Order flow': 14, 'Book (L2)': 10, 'Volume & profile': 7, 'Calendar & news': 2, 'Ranges & structure': 9, 'Classic TA': 15, TradingView: 91 });
+  assert.equal(C.CATALOG.length, 154, 'no indicator removed');
   assert.deepEqual(C.filter('', 'Calendar & news').map((d) => d.id), ['events', 'headlines']);
 });
 

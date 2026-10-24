@@ -727,7 +727,7 @@ class Cell {
     // the order-flow apps (2026-10-21): bigtrades reads the orders (`ag`, flow); npoc, mwabs and a traded-mode TPO read the footprint rows
     // a Pine script that reads request.footprint (known once its text has been fetched: pineRun)
     const pineFp = !!this.pine && this.cfg.indicators.some((x) => x.id === 'pine' && this.pine.get(x.uid) && this.pine.get(x.uid).fp);
-    return { fp: this.wantFp || on('footprint') || on('npoc') || on('mwabs') || opt2('tpo', 'mode', 'traded') || pineFp, big: on('bigprints'),
+    return { fp: this.wantFp || on('footprint') || on('npoc') || on('mwabs') || on('pzone') || opt2('tpo', 'mode', 'traded') || pineFp, big: on('bigprints'),
       flow: opt('heatmap', 'bubbles') || opt('bigprints', 'sweeps') || on('stoprun') || on('bigtrades') };
   }
 

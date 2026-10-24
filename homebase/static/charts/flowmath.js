@@ -494,8 +494,51 @@ function rowText(mode, row, o = {}) {
   return {};
 }
 
+/* Stacked profile zones (cabatrades "three profiles, one level"): in each of the last `sessions` sessions (bars grouped by `s`), a row whose delta
+   (buys - sells, from `fp`) is at least `outlier` x the session's median |row delta|, with a TPO single print AND a low volume node (volume <= `lvn`%
+   of the POC row) within one row of it. Rows are `rows` ticks, priced at their bottom, as in tpo(). A single print from the session's last period
+   does not count (price has not had the time to come back yet). A zone runs from the first bar that traded its row to the first later bar whose range
+   reaches it (`hit`, null while untouched). o: {tick (required), rows 4, period 30, lvn 30, outlier 3, sessions 5}.
+   -> [{i, hit, lo, hi, side (1 buyers, -1 sellers), delta}] in time order. */
+function profileZones(bars, o = {}) {
+  const tick = o.tick, rt = Math.max(1, Math.floor(o.rows) || 4), near = 1;
+  if (!(tick > 0) || !bars || !bars.length) return [];
+  const row = (px) => Math.floor(key(px, tick) / rt);
+  const starts = [];
+  for (let i = 0; i < bars.length; i++) if (solid(bars[i]) && (!starts.length || bars[i].s !== bars[starts[starts.length - 1]].s)) starts.push(i);
+  const out = [];
+  for (const s0 of starts.slice(-Math.max(1, o.sessions || 5))) {
+    let s1 = s0;
+    while (s1 + 1 < bars.length && (bars[s1 + 1].blank || bars[s1 + 1].s === bars[s0].s)) s1++;
+    const vol = new Map(), del = new Map();
+    for (let i = s0; i <= s1; i++) {
+      if (!solid(bars[i]) || !Array.isArray(bars[i].fp)) continue;
+      for (const [px, sv, bv] of bars[i].fp) { const k = row(px); vol.set(k, (vol.get(k) || 0) + sv + bv); del.set(k, (del.get(k) || 0) + bv - sv); }
+    }
+    const prof = vol.size ? tpo(bars.slice(s0, s1 + 1), o.period || 30, rt, 'range', { tick }) : null;
+    if (!prof) continue;
+    const pocVol = Math.max(...vol.values()), lvnMax = pocVol * (o.lvn == null ? 30 : o.lvn) / 100;
+    const single = new Set(prof.rows.filter((r) => r.n === 1 && r.per[0] < prof.periods - 1).map((r) => row(r.price)));
+    const isLvn = (k) => prof.rows.some((r) => row(r.price) === k) && (vol.get(k) || 0) <= lvnMax;
+    const abs = [...del.values()].map(Math.abs).sort((a, b) => a - b), med = abs[Math.floor(abs.length / 2)];
+    if (!(med > 0)) continue;
+    const around = (k, f) => { for (let j = k - near; j <= k + near; j++) if (f(j)) return true; return false; };
+    for (const [k, d] of del) {
+      if (Math.abs(d) < (o.outlier || 3) * med || !around(k, (j) => single.has(j)) || !around(k, isLvn)) continue;
+      let i = s0;
+      while (i < s1 && !(solid(bars[i]) && row(bars[i].l) <= k && k <= row(bars[i].h))) i++;
+      const done = prof.origin + (Math.floor((bars[i].ms - prof.origin) / prof.periodMs) + 1) * prof.periodMs;   // the end of the period that printed it
+      let hit = null;
+      for (let j = i + 1; j < bars.length && hit == null; j++) if (solid(bars[j]) && bars[j].ms >= done && row(bars[j].l) <= k && k <= row(bars[j].h)) hit = j;
+      const lo = +(k * rt * tick).toFixed(6);
+      out.push({ i, hit, lo, hi: +(lo + rt * tick).toFixed(6), side: Math.sign(d), delta: d });
+    }
+  }
+  return out.sort((a, b) => a.i - b.i || a.lo - b.lo);
+}
+
 const api = { imbalances, stackedRuns, unfinished, bubbleRadius, markerSize, bubblesOf, sweepsOf, stopRuns, exhaustions, smtLines, fvgBoxes, valueArea,
-  IMB, imbalancesV2, valueAreaV2, nakedPocs, letterOf, tpo, ordersOf, clusterOrders, clusterStats, deltaTurnaround, deltaStrength, mwAbsorptions, rowText };
+  IMB, imbalancesV2, valueAreaV2, nakedPocs, letterOf, tpo, profileZones, ordersOf, clusterOrders, clusterStats, deltaTurnaround, deltaStrength, mwAbsorptions, rowText };
 if (typeof window !== 'undefined') window.HBFlowMath = api;
 if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })();

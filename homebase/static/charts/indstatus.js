@@ -11,7 +11,7 @@ const need = (name, file) => (typeof window !== 'undefined' && window[name]) || 
 
 const BOOK_IDS = new Set(['bigorders', 'absorb', 'pulled', 'iceberg', 'bkimb', 'bkdepth', 'bkmicro', 'bkquote']);
 // the order-flow apps (2026-10-21) read a field that only bars loaded since then carry: [the field, what it holds in plain words]
-const FIELD = { bigtrades: ['ag', 'order detail'], npoc: ['fp', 'trade detail'], mwabs: ['fp', 'trade detail'], dstr: ['dmax', 'delta highs and lows'],
+const FIELD = { bigtrades: ['ag', 'order detail'], npoc: ['fp', 'trade detail'], mwabs: ['fp', 'trade detail'], pzone: ['fp', 'trade detail'], dstr: ['dmax', 'delta highs and lows'],
   stoprun: ['sw', 'sweep detail'] };
 const noun = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 const info = (text) => ({ text, tone: 'info' });

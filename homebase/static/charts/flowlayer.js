@@ -16,6 +16,7 @@
      - "bigtrades" (bar.ag, flow): the rebuilt aggressor orders as bubbles, optionally clustered (Bookmap rules);
      - "npoc" (bar.fp): a dashed line from each still-untouched POC to the right edge;
      - "tpo" (bar.fp for mode traded): the newest session's TPO letters / blocks docked at the right edge;
+     - "pzone" (bar.fp): stacked profile zones, a band where a delta outlier, single prints and a low volume node line up;
      - "cstat" (bar.d v n dmax dmin, bar.fpn): a text strip of cluster statistics under the candles;
      - "dturn" / "dstr" / "mwabs": delta turnaround and delta strength arrows, MotiveWave absorption marks. */
 (function () {
@@ -58,9 +59,10 @@ const layerOf = (z, draw) => class extends window.HBLayers.Layer {
 const OrderLayer = layerOf((ov) => { const g = inst(ov.cell, 'bigtrades'); return g && g.params && g.params.front === true ? 'top' : 'bottom'; }, 'drawOrders');   // "bigtrades"
 const NakedLayer = layerOf('bottom', 'drawNaked');      // "npoc"
 const TpoLayer = layerOf('bottom', 'drawTpo');          // "tpo"
+const ZoneLayer = layerOf('bottom', 'drawZones');       // "pzone"
 const StatLayer = layerOf('bottom', 'drawStats');       // "cstat"
 const MarkLayer = layerOf('top', 'drawMarks');          // "dturn", "dstr", "mwabs"
-const LAZY = { ord: [['bigtrades'], OrderLayer], npoc: [['npoc'], NakedLayer], tpo: [['tpo'], TpoLayer],
+const LAZY = { ord: [['bigtrades'], OrderLayer], npoc: [['npoc'], NakedLayer], tpo: [['tpo'], TpoLayer], zone: [['pzone'], ZoneLayer],
   stat: [['cstat'], StatLayer], mark: [['dturn', 'dstr', 'mwabs'], MarkLayer] };
 
 const FONT = '11px -apple-system, BlinkMacSystemFont, sans-serif', SMALL = '10px -apple-system, BlinkMacSystemFont, sans-serif';
@@ -332,6 +334,36 @@ class Overlay {
         ctx.beginPath(); ctx.moveTo(Math.max(0, x), y); ctx.lineTo(Math.min(mediaSize.width, x1), y); ctx.stroke();
       }
       ctx.setLineDash([]);
+    });
+  }
+
+  /* Stacked profile zones (flowmath profileZones): a band from the bar that first traded the row to the first later bar back in it, or to the right
+     edge while none has; filled at the opacity setting, edged in full colour. Rebuilt only when the newest bar or a setting changes. */
+  drawZones(target) {
+    const z = inst(this.cell, 'pzone');
+    if (!z) return;
+    const f = this.frame();
+    if (!f) return;
+    const p = z.params, bars = f.bars, tick = this.cell.tick || 0.25, last = bars[bars.length - 1];
+    const key = [bars.length, last.v, last.h, last.l, tick, p.rows, p.period, p.outlier, p.lvn, p.sessions].join('|');
+    if (!this.zk || this.zk.bar !== last || this.zk.key !== key) {
+      this.zk = { bar: last, key, list: M.profileZones(bars, { tick, rows: pn(p.rows, 4), period: pn(p.period, 30), outlier: pn(p.outlier, 3), lvn: pn(p.lvn, 30),
+        sessions: pn(p.sessions, 5) }) };
+    }
+    const only = pb(p.untouchedOnly, false), a = Math.max(0, Math.min(100, pn(p.opacity, 20))) / 100;
+    const up = sc(z, 'up', '#22D3EE'), down = sc(z, 'down', '#A855F7');
+    target.useMediaCoordinateSpace(({ context: ctx, mediaSize }) => {
+      ctx.lineWidth = 1;
+      for (const r of this.zk.list) {
+        if (only && r.hit != null) continue;
+        const x0 = f.XI(r.i), x1 = r.hit == null ? mediaSize.width : f.XI(r.hit);
+        const ya = f.series.priceToCoordinate(r.hi), yb = f.series.priceToCoordinate(r.lo);
+        if (x0 == null || x1 == null || ya == null || yb == null || x0 > mediaSize.width || x1 < 0) continue;
+        const col = r.side > 0 ? up : down, xa = Math.max(0, x0), xb = Math.min(mediaSize.width, x1), y = Math.min(ya, yb), h = Math.max(1, Math.abs(yb - ya));
+        ctx.fillStyle = window.HBDrawings.withAlpha(col, a); ctx.fillRect(xa, y, xb - xa, h);
+        ctx.strokeStyle = col;
+        for (const yy of [y, y + h]) { ctx.beginPath(); ctx.moveTo(xa, yy); ctx.lineTo(xb, yy); ctx.stroke(); }
+      }
     });
   }
 

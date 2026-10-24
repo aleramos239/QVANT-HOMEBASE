@@ -568,6 +568,13 @@ const CATALOG = [
     { key: 'va', label: 'Value area covers (% of the letters)', type: 'int', min: 50, max: 95, def: 70 },
     { key: 'method', label: 'POC and value area rule', type: 'choice', def: 'sierra',
       choices: [['sierra', 'Sierra Chart'], ['homebase', 'Homebase'], ['tv', 'TradingView']] }] },
+  { id: 'pzone', group: 'Volume & profile', name: 'Stacked profile zones',
+    desc: 'Where volume, delta and TPO agree: a delta outlier by single prints and thin volume', params: [
+    { key: 'rows', label: 'Ticks in each row', type: 'int', min: 1, max: 100, def: 4 },
+    { key: 'period', label: 'Minutes in a TPO letter', type: 'int', min: 1, max: 240, def: 30 },
+    { key: 'outlier', label: 'Delta outlier = this many times the median row', type: 'num', min: 1.5, max: 20, step: 0.5, def: 3 },
+    { key: 'lvn', label: 'Thin spot = volume under (% of the POC row)', type: 'int', min: 5, max: 80, def: 30 },
+    { key: 'sessions', label: 'Sessions back', type: 'int', min: 1, max: 30, def: 5 }] },
   { id: 'cstat', group: 'Order flow', name: 'Cluster statistics', params: [],
     desc: 'A strip under the candles: delta, volume, trades, delta %, delta range, seconds' },
   { id: 'dturn', group: 'Order flow', name: 'Delta turnaround', desc: 'Arrows where the delta turned against two bars of the other colour', params: [
