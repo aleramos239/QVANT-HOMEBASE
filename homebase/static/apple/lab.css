@@ -459,3 +459,4 @@ html.hb-apple .lab-page .toast-x { border-radius: 10px; color: var(--a-label-2);
   html.hb-apple #labLib.hb-side, html.hb-apple #labRes.hb-insp, html.hb-apple #pgSw.hb-seg, html.hb-apple #labPanels.hb-platter, html.hb-apple .lab-menu, html.hb-apple #lab .lab-chart .toolbar #tbFavs, html.hb-apple #labNav.lab-nav {
     -webkit-backdrop-filter: none; backdrop-filter: none; background: var(--a-pane); }
 }
+html.hb-apple #labRes .rs-heat .heat-grid { grid-template-columns: minmax(0, 1fr); gap: 7px; }

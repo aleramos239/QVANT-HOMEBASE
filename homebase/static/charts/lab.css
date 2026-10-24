@@ -604,11 +604,17 @@ html.hb-apple #lab #labSplit:hover::after, html.hb-apple #lab #labSplit.drag::af
   { background: var(--a-accent, var(--hb-accent)); }
 
 /* ---- Heat map (2026-10-12): the settings group under Trade rules, and its tables ---- */
-.rs-heat .heat-grid { grid-template-columns: 68px minmax(0, 1fr); }
-
-.rs-heat .heat-grid select { text-align: left; text-overflow: ellipsis; }
-.rs-heat .heat-vals { grid-column: 1 / -1; text-align: left; }
-.rs-heat .heat-hint { grid-column: 1 / -1; margin-top: -4px; font-size: var(--hb-fs-sm); color: var(--hb-fg2); line-height: 1.35; }
+.rs-heat .heat-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rs-heat .heat-grid select { width: 100%; text-align: left; text-overflow: ellipsis; }
+.rs-heat .heat-grid label { margin-top: 6px; }
+.rs-heat .heat-axis { margin-top: 8px; font-size: var(--hb-fs-ui); font-weight: 600; }
+.rs-heat .heat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rs-heat .heat-chip { height: 28px; padding: 0 11px; border: 1px solid var(--hb-hair); border-radius: 14px; background: transparent; color: var(--hb-fg2); font-size: var(--hb-fs-ui); cursor: pointer; }
+.rs-heat .heat-chip.on { background: var(--hb-accent); border-color: var(--hb-accent); color: #fff; font-weight: 600; }
+.rs-heat .heat-chip:disabled { opacity: .5; cursor: default; }
+.rs-heat .heat-chip:focus-visible { outline: 0; box-shadow: 0 0 0 1.5px var(--hb-accent); }
+.rs-heat .heat-add { display: flex; gap: 6px; }
+.rs-heat .heat-add input { flex: 1; min-width: 0; text-align: left; }
 .rs-heat .heat-note { grid-column: 1 / -1; font-size: var(--hb-fs-ui); color: var(--hb-fg2); line-height: 1.4; }
 .rs-heat .heat-note.bad { color: var(--down); }
 .rs-heat .heat-run { grid-column: 1 / -1; height: 30px; border: 0; border-radius: 9px; background: var(--hb-accent); color: #fff; font-size: var(--hb-fs-ui); font-weight: 600; cursor: pointer; }

@@ -2050,7 +2050,6 @@ function settingsHtml(b) {
 /* ---- Heat map (2026-10-12): pick up to three settings (the strategy's own, or any Trade rule), type the values each takes,
    and run every combination. A cell is an ordinary run (the same tester); the other settings stay as set above. The rules
    are tester.js (gridAxes, gridProblems, gridBody, heatPanels); the server is /api/tester/grid. */
-const HEAT_ROLES = ['Rows', 'Columns', 'Panels'];
 const HEAT_SUGGEST = { 'ctl.stop_pts': '10, 15, 20, 25', 'ctl.stop_atr': '1, 1.5, 2', 'ctl.target_pts': '20, 30, 40', 'ctl.target_atr': '1, 2, 3',
   'ctl.target_rr': '1, 2, 3', 'ctl.stop_wins': '0, 1, 2', 'ctl.stop_losses': '0, 1, 2', 'ctl.max_trades': '0, 1, 2, 3', 'ctl.max_consec_losses': '0, 2, 3',
   'ctl.entry_from': '09:35, 10:00, 10:30', 'ctl.entry_to': '10:30, 11:30, 12:00', 'ctl.flat_at': '11:30, 15:55', 'ctl.direction': 'both, long, short',
@@ -2064,23 +2063,57 @@ const HEAT_ZERO = { 'ctl.stop_pts': 'the strategy\'s own stop', 'ctl.stop_atr': 
 /* The Exit lab (the owner, 2026-10-18): the heat map set up to try exits on this strategy's own entries -- breakeven x a trailing
    stop, and its own stop vs the signal candle's. 0 / own = the strategy as it is. Run it on the build days. */
 const EXIT_LAB = [['ctl.be_after_pts', '0, 5, 10, 15, 20'], ['ctl.trail_pts', '0, 5, 10, 15, 20'], ['ctl.stop_mode', 'own, candle']];
-function hm40() {
-  const b = buf(), f = b && formOf(b);
-  if (!f) return;
-  const h = heatState(f);
-  if (heatBusy(h)) return;
-  h.rows = X.hm40Rows(metaOf(b) || {});
+/* The heat map's inputs (the owner, 2026-10-24: "impossible to mess up"): a preset menu, then each setting's values as chips to tap.
+   Only the value list is touched; the rows ([{key, text}]) stay what the server and the checks already read. */
+const HEAT_PRESETS = [['hm40', 'Stop × Target (hm40)'], ['exit', 'Breakeven × trailing stop (Exit lab)'], ['custom', 'Custom']];
+const HEAT_SIDES = ['Down the side', 'Across the top', 'Split into tables (optional)'];
+const heatTokens = (text) => String(text || '').split(/[\s,]+/).filter(Boolean);
+const heatLocked = (f, h) => (is31(f) ? wfBusyNow(f) : heatBusy(h));
+/* every value a row offers as a chip: the usual ones, then the ones added; numbers smallest first */
+function heatChipValues(inp, row) {
+  const usual = inp.choices ? inp.choices.map(String) : heatTokens(heatSuggest(inp)).concat(inp.key === X.HM40_AXES[1].key ? X.HM40_AXES[1].values.map(String) : []);
+  const all = [...new Set([...usual, ...heatTokens(row.text)])];
+  return all.every((t) => Number.isFinite(Number(t))) ? all.sort((x, y) => Number(x) - Number(y)) : all;
+}
+function chipLabel(v) { const m = /^(atr|own):(.+)$/.exec(v); return m ? `${m[1] === 'atr' ? 'ATR' : 'Own stop'} × ${m[2]}` : v; }
+function heatCtx() {
+  const b = buf(), f = b && formOf(b), meta = b && metaOf(b);
+  return f && meta ? { b, f, m: { ...meta, id: f.strategy }, h: heatState(f) } : null;
+}
+function heatPreset(p) {
+  const c = heatCtx();
+  if (!c || heatLocked(c.f, c.h) || !HEAT_PRESETS.some(([k]) => k === p)) return;
+  c.h.preset = p; c.h.msg = '';
+  if (p === 'hm40') c.h.rows = X.hm40Rows(c.m);
+  else if (p === 'exit') c.h.rows = EXIT_LAB.map(([key, text]) => ({ key, text }));
   S.heatOpen = true;
   paintRes();
 }
-function exitLab() {
-  const b = buf(), f = b && formOf(b);
-  if (!f) return;
-  const h = heatState(f);
-  if (heatBusy(h)) return;
-  h.rows = EXIT_LAB.map(([key, text]) => ({ key, text }));
-  S.heatOpen = true;
+/* set a row's values: refused (with the reason) if it would leave the setting empty or make more boxes than the cap */
+function heatSet(k, next) {
+  const c = heatCtx(), row = c && c.h.rows[k], inp = row && row.key ? X.axisInput(c.m, row.key) : null;
+  if (!inp || heatLocked(c.f, c.h)) return;
+  if (!next.length) { c.h.msg = `Keep at least one value for ${inp.label}.`; paintRes(); return; }
+  const text = heatChipValues(inp, { text: next.join(', ') }).filter((t) => next.includes(t)).join(', ');
+  const rows = c.h.rows.map((r, i) => (i === k ? { ...r, text } : r)), g = X.gridAxes(rows, c.m, c.f.max_cells);
+  if (!g.error && X.gridCount(g.axes) > c.f.max_cells) { c.h.msg = `That would make ${X.gridCount(g.axes)} boxes; the most is ${c.f.max_cells}.`; paintRes(); return; }
+  c.h.msg = ''; row.text = text;
   paintRes();
+}
+function heatChip(k, v) {
+  const c = heatCtx(), row = c && c.h.rows[k];
+  if (!row) return;
+  const cur = heatTokens(row.text);
+  heatSet(k, cur.includes(v) ? cur.filter((t) => t !== v) : [...cur, v]);
+}
+function heatAdd(k, raw) {
+  const c = heatCtx(), row = c && c.h.rows[k], inp = row && row.key ? X.axisInput(c.m, row.key) : null, t = String(raw || '').trim();
+  if (!inp || !t) return;
+  const p = /[,:\s]/.test(t) ? { error: 'One value at a time.' } : X.parseValues(t, inp, c.f.max_cells);
+  if (p.error) { c.h.msg = p.error; paintRes(); return; }
+  const tok = String(p.values[0]), cur = heatTokens(row.text);
+  if (cur.includes(tok)) { c.h.msg = `${tok} is already there.`; paintRes(); return; }
+  heatSet(k, [...cur, tok]);
 }
 function heatSuggest(inp) {
   if (!inp) return '';
@@ -2095,7 +2128,7 @@ function heatSuggest(inp) {
   return [...new Set(base.map(round).filter((v) => v >= lo && v <= hi))].join(', ');
 }
 function heatState(f) {
-  return S.heat[f.strategy] || (S.heat[f.strategy] = { rows: X.hm40Rows(metaOf(buf()) || {}), grid: null, id: '', token: 0, starting: false, err: '' });   // hm40 (2026-10-20)
+  return S.heat[f.strategy] || (S.heat[f.strategy] = { rows: X.hm40Rows(metaOf(buf()) || {}), grid: null, id: '', token: 0, starting: false, err: '', preset: 'hm40', msg: '' });   // hm40 (2026-10-20)
 }
 const heatBusy = (h) => h.starting || (h.grid && !X.gridProgress(h.grid).final);
 /* the current Rows / Columns / Panels as gridAxes wants them, and what it says about them */
@@ -2111,19 +2144,22 @@ function heatCheck(f, meta, h) {
   return { note: `${n} run${n === 1 ? '' : 's'}${n > X.DEFAULT_MAX_CELLS ? ' — a long wait' : ''}${own ? ` · ${own}` : ''}`, bad: false, n };
 }
 function heatPickHtml(f, meta, h) {
-  const strat = meta.inputs || [];
-  const ctl = X.ctlAxisInputs(meta);
+  const m = { ...meta, id: f.strategy }, strat = meta.inputs || [], ctl = X.ctlAxisInputs(meta), custom = h.preset === 'custom', lock = heatLocked(f, h) ? ' disabled' : '';
   const opt = (i, cur) => `<option value="${esc(i.key)}"${i.key === cur ? ' selected' : ''}>${esc(i.label)}</option>`;
-  return HEAT_ROLES.map((role, k) => {
-    const r = h.rows[k], inp = r.key ? X.axisInput(meta, r.key) : null;
-    const hint = inp ? `${X.axisHint(inp)}${HEAT_ZERO[inp.key] ? ` · 0 = ${HEAT_ZERO[inp.key]}` : ''}` : '';
-    return `<label>${role}</label>
-      <select data-hk="${k}"><option value="">${k === 2 ? 'None (optional)' : 'Pick a setting'}</option>
+  const rows = h.rows.map((r, k) => {
+    const inp = r.key ? X.axisInput(m, r.key) : null;
+    if (!custom && !inp) return '';
+    const head = custom ? `<label>${HEAT_SIDES[k]}</label>
+      <select data-hk="${k}"${lock}><option value="">${k === 2 ? 'None (optional)' : 'Pick a setting'}</option>
         ${strat.length ? `<optgroup label="Strategy settings">${strat.map((i) => opt(i, r.key)).join('')}</optgroup>` : ''}
-        <optgroup label="Trade rules">${ctl.map((i) => opt(i, r.key)).join('')}</optgroup></select>
-      ${inp ? `<input type="text" class="heat-vals" data-ht="${k}" value="${esc(r.text)}" placeholder="${esc(heatSuggest(inp))}" spellcheck="false" autocomplete="off">
-        <div class="heat-hint">${esc(hint)}</div>` : ''}`;
+        <optgroup label="Trade rules">${ctl.map((i) => opt(i, r.key)).join('')}</optgroup></select>` : `<div class="heat-axis">${esc(inp.label)}</div>`;
+    if (!inp) return head;
+    const on = heatTokens(r.text), addable = inp.type === 'int' || inp.type === 'float' || inp.type === 'time';
+    const chip = (v) => `<button type="button" class="heat-chip${on.includes(v) ? ' on' : ''}" data-act="hchip" data-k="${k}" data-v="${esc(v)}" aria-pressed="${on.includes(v)}"${lock}${HEAT_ZERO[inp.key] && v === '0' ? ` title="0 = ${esc(HEAT_ZERO[inp.key])}"` : ''}>${esc(chipLabel(v))}</button>`;
+    return `${head}<div class="heat-chips">${heatChipValues(inp, r).map(chip).join('')}</div>
+      ${addable ? `<div class="heat-add"><input type="text" inputmode="decimal" data-hadd="${k}" placeholder="Add a value" spellcheck="false" autocomplete="off"${lock}><button type="button" class="btn btn-sm btn-outline" data-act="hadd" data-k="${k}"${lock}>Add</button></div>` : ''}`;
   }).join('');
+  return `<label>Try</label><select data-hpre${lock}>${HEAT_PRESETS.map(([k, l]) => `<option value="${k}"${h.preset === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${rows}`;
 }
 const wfBusyNow = (f) => { const w = wfLabState(f); return !!(w.starting || (w.job && !X.wfProgress(w.job).final)); };
 function heatSettingsHtml(f, meta, tab) {
@@ -2134,9 +2170,8 @@ function heatSettingsHtml(f, meta, tab) {
   return `<details class="rs-group rs-set rs-heat"${tab ? (S.heatOpen === false ? '' : ' open') : S.heatOpen ? ' open' : ''}><summary><span>${tab ? 'What to vary' : 'Heat map'}</span><span>${picked.length ? esc(picked.join(' × ')) : 'off'}</span></summary>
     <div class="grid heat-grid">${heatPickHtml(f, meta, h)}
       <div class="sep"></div>
+      ${h.msg ? `<div class="heat-note bad">${esc(h.msg)}</div>` : ''}
       <div class="heat-note${chk.bad ? ' bad' : ''}" id="heatNote">${esc(chk.note)}</div>
-      <button class="btn btn-sm btn-outline heat-exit" data-act="hm40"${busy ? ' disabled' : ''} title="The 40 exit boxes: 4 ATR stops (and 4 own-stop sizes when the strategy has its own stop) × 5 targets">hm40</button>
-      <button class="btn btn-sm btn-outline heat-exit" data-act="exitlab"${busy ? ' disabled' : ''} title="Fill the heat map with exits to try on this strategy: breakeven × trailing stop × own vs candle stop">Exit lab</button>
       ${run}
     </div>
     ${tab ? '' : `<div class="heat-res" id="heatRes">${heatResHtml(f, meta)}</div>`}</details>`;
@@ -2959,13 +2994,13 @@ function act(name, el) {
   else if (name === 'run') run();
   else if (name === 'cancel') cancelRun();
   else if (name === 'heatrun') heatRun();
-  else if (name === 'exitlab') exitLab();
-  else if (name === 'hm40') hm40();
   else if (name === 'wfpick') wfPick(Number(el.dataset.i));
   else if (name === 'wfoos') wfOos();
   else if (name === 'runall') runAll();
   else if (name === 'oosrun') oosRun();
   else if (name === 'heatwf') wfRun();
+  else if (name === 'hchip') heatChip(Number(el.dataset.k), el.dataset.v);
+  else if (name === 'hadd') { const a = el.parentNode.querySelector('[data-hadd]'); heatAdd(Number(el.dataset.k), a && a.value); }
   else if (name === 'otherdates') { const f = b && formOf(b); if (f) { f.range = { id: 'custom', start: f.range.start, end: f.range.end, wf: null }; paintRes(); paintHead(); } }
   else if (name === 'propsim') propRun();
   else if (name === 'wfblk') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.blk = Number(el.dataset.i); wfPaint(); } }
@@ -3043,19 +3078,16 @@ root.addEventListener('input', (e) => {
     paintCode(); paintHead(); queueValidate(b); paintLib();
   } else if (t.dataset.three !== undefined) {
     threeTab(t.value);
-  } else if (t.dataset.hk !== undefined || t.dataset.ht !== undefined) {
+  } else if (t.dataset.hpre !== undefined) {
+    heatPreset(t.value);
+  } else if (t.dataset.hk !== undefined) {
     const f = b && formOf(b), meta = b && metaOf(b);
     if (!f || !meta) return;
     const h = heatState(f);
-    if (t.dataset.hk !== undefined) {
-      const row = h.rows[Number(t.dataset.hk)];
-      row.key = t.value;
-      row.text = t.value ? heatSuggest(X.axisInput({ ...meta, id: f.strategy }, t.value)) : '';      // a pick brings values to start from
-      paintRes();
-    } else {
-      h.rows[Number(t.dataset.ht)].text = t.value;
-      heatPaint();
-    }
+    const row = h.rows[Number(t.dataset.hk)];
+    row.key = t.value; h.msg = '';
+    row.text = t.value ? heatSuggest(X.axisInput({ ...meta, id: f.strategy }, t.value)) : '';      // a pick brings values to start from
+    paintRes();
   } else if (t.dataset.f || t.dataset.in || t.dataset.c) {
     const f = formOf(b), meta = metaOf(b);
     if (!f) return;
@@ -3092,6 +3124,10 @@ document.addEventListener('keydown', (e) => {          // (capture: before the m
   deleteStrategies(C.deleteTargets(S.picks, S.picks[0]));
 }, true);
 root.addEventListener('keydown', (e) => {
+  if (e.target.dataset && e.target.dataset.hadd !== undefined) {          // the heat map's add box: Enter adds the value
+    if (e.key === 'Enter' && !e.repeat) { e.preventDefault(); heatAdd(Number(e.target.dataset.hadd), e.target.value); }
+    return;
+  }
   if (e.target.id === 'libQ') {          // the search box: Enter opens the best match, Escape clears it
     if (e.key === 'Escape' && S.libQ) { e.preventDefault(); e.stopPropagation(); S.libQ = ''; e.target.value = ''; paintLibList(); }
     else if (e.key === 'Enter' && !e.repeat) { const b = document.querySelector('#libList .lb-item'); if (b) { e.preventDefault(); b.click(); } }
