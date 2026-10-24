@@ -111,7 +111,7 @@ function compute(trades, capital) {
   const dayIdx = new Map(dates.map((d, i) => [d, i]));
   for (const t of trades) {
     eq += t.net;
-    if (eq > peak) { peak = eq; longest = Math.max(longest, dayIdx.get(t.date) - ddStart); ddStart = dayIdx.get(t.date); trough = eq; }
+    if (eq > peak) { peak = eq; longest = Math.max(longest, dayIdx.get(t.date) - ddStart); ddStart = dayIdx.get(t.date); }
     trough = Math.min(trough, eq); runup = Math.max(runup, eq - trough);
     dd = Math.min(dd, eq - peak); if (peak > 0) { const p = (eq - peak) / peak * 100; ddPct = Math.min(ddPct, p); ulc += p * p; }
     di += 1;
@@ -127,7 +127,7 @@ function compute(trades, capital) {
   const dm = mean(dv), dsd = sd(dv), down = Math.sqrt(sum(dv.map((x) => Math.min(x, 0) ** 2)) / dv.length);
   o.sharpe = dsd ? dm / dsd * Math.sqrt(252) : null; o.sortino = down ? dm / down * Math.sqrt(252) : null;
   o.calmar = o.recovery;
-  const m3 = nets.length > 2 && o.sd_trade ? sum(nets.map((x) => (x - mean(nets)) ** 3)) / n / o.sd_trade ** 3 : null;
+  const mu = mean(nets), m3 = nets.length > 2 && o.sd_trade ? sum(nets.map((x) => (x - mu) ** 3)) / n / o.sd_trade ** 3 : null;
   o.skew = m3;
   const bestDay = Math.max(...dv), worstDay = Math.min(...dv);
   o.best_day = bestDay; o.worst_day = worstDay; o.pl_ratio_day = worstDay < 0 ? bestDay / -worstDay : null;

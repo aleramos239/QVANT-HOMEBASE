@@ -371,7 +371,7 @@ function tiles(run) {
     { label: 'Profit factor', value: num(a.profit_factor, 2, true), sub: '', tone: '' },
     { label: 'Sharpe', value: num(a.sharpe), sub: 'traded days', tone: '', title: run.report.sharpe_basis },
     { label: 'Avg trade', value: signed(a.avg_trade), sub: '', tone: toneOf(a.avg_trade) },
-    { label: 'Avg win : loss', value: a.rr_label && a.rr_label !== '—' ? `RR ${a.rr_label}` : '—', sub: '', tone: '' },
+    { label: 'Risk : reward', value: a.rr_label && a.rr_label !== '—' ? `RR ${a.rr_label}` : '—', sub: '', tone: '' },
     { label: 't-stat', value: num(a.t_stat), sub: '', tone: '' }];
 }
 function badges(run) {
@@ -525,7 +525,7 @@ const SUMMARY = [
   ['Profit factor', (c) => num(c.profit_factor, 2, true)], ['Total trades', (c) => int(c.trades)], ['Winning trades', (c) => int(c.wins)],
   ['Losing trades', (c) => int(c.losses)], ['Percent profitable', (c) => rate(c.win_rate)], ['Avg trade', (c) => signed(c.avg_trade)],
   ['Avg winning trade', (c) => signed(c.avg_win)], ['Avg losing trade', (c) => signed(c.avg_loss)],
-  ['Ratio avg win / avg loss', (c) => (c.rr_label && c.rr_label !== '—' ? `RR ${c.rr_label}` : '—')],
+  ['Risk : reward (average win / average loss)', (c) => (c.rr_label && c.rr_label !== '—' ? `RR ${c.rr_label}` : '—')],
   ['Largest winning trade', (c) => signed(c.largest_win)], ['Largest losing trade', (c) => signed(c.largest_loss)],
   ['Avg time in trade', (c) => dur(c.avg_seconds_in_trade)], ['Avg bars in trade', (c) => num(c.avg_bars_in_trade, 1)],
   ['Max consecutive losses', (c) => int(c.max_consec_losses)], ['Sharpe ratio', (c) => num(c.sharpe)], ['Sortino ratio', (c) => num(c.sortino)],

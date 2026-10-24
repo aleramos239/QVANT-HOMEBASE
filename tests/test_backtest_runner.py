@@ -424,3 +424,28 @@ def test_runs_list_can_ask_for_one_strategy_beyond_the_newest_fifty(tmp_path):
     old = m.runs_list(50, "draft_old")
     assert [r["strategy"] for r in old] == ["draft_old"]
     assert len(m.runs_list(5, "draft_new")) == 5
+
+
+def test_same_done_finds_the_finished_run_a_body_would_only_repeat(tmp_path):
+    """The Lab shows this run on opening a strategy (owner 2026-10-24): the newest DONE one with the same request."""
+    import types
+    from homebase.backtest.runner import write_json
+    me = types.SimpleNamespace(runs=tmp_path / "runs")
+    old = prepare(body(), tmp_path)                                  # queued: not finished, never shown
+    assert RunManager.same_done(me, body()) is None
+    write_json(tmp_path / "runs" / old / "status.json", {"id": old, "status": "done"})
+    assert RunManager.same_done(me, body()) == old
+    other = prepare(body(qty=2), tmp_path)
+    write_json(tmp_path / "runs" / other / "status.json", {"id": other, "status": "done"})
+    assert RunManager.same_done(me, body()) == old and RunManager.same_done(me, body(qty=2)) == other
+    assert RunManager.same_done(me, body(propsim=False)) is None      # no prop sim is another request
+
+
+def test_a_3to1_runs_prop_sim_and_monte_carlo_walk_only_its_own_months():
+    """A 3:1 in-sample run skips the test months: those weekdays are no flat days of it (owner 2026-10-24)."""
+    from homebase.backtest.propsim import weekday_grid
+    tr = [{"date": "2024-01-10", "net": 100.0}, {"date": "2024-02-12", "net": -50.0}, {"date": "2024-04-10", "net": 30.0}]
+    whole = weekday_grid(tr)[2]
+    own = weekday_grid(tr, ["2024-01", "2024-02", "2024-04"])[2]
+    assert "2024-03-12" in whole and "2024-03-12" not in own                     # March was not run: not a flat day
+    assert {"2024-01-10", "2024-02-12", "2024-04-10"} <= set(own)               # a traded day is never dropped

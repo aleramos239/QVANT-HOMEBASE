@@ -130,6 +130,8 @@
                                           (source, rules id, rules version).
     POST /api/tester/propsim             the same, {run_id | grid_id + cell, prop_rules}
     GET  /api/tester/runs                recent runs, newest first
+    POST /api/tester/run-match           a Run body -> {id}: the newest finished run it would only repeat (the same
+                                          request, its code included), or null -- the Lab's result on opening
     POST /api/tester/grid                {strategy, inputs, axes: [{key, values}] x2-3, qty, commission,
                                           slippage_ticks, capital?, prop_rules?} -> {id}
                                           (<= 60 cells, over the body's own range -- the build days,
@@ -156,6 +158,7 @@
     POST /api/tester/walkforward/{id}/oos    {cell, owner_said} -> the picked cell's test months, on the owner's words
                                           (verbatim, non-empty), once; the result route then carries "oos"
     GET  /api/tester/walkforwards        recent walk-forwards, newest first
+    POST /api/tester/walkforward-match   the same for a walk-forward body: the newest finished job it would only repeat
     GET  /api/tester/walkforward-scheme  ?test_months=1|2|3|compare&start=&end= — the step count for that
                                           ratio and window (compare: the three summed, and each), plus the
                                           metrics and defaults (no job needed)
@@ -920,9 +923,9 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except Exception:      # noqa: BLE001 -- a panel's research never costs a promote or the list its answer
             return {"state": "none"}
 
-    def wf_prop(key: tuple, trades: list):
-        try:
-            return deskresults.prop_headline(_rescore(key, lambda: {"run": {}, "trades": trades}, DESKLAB_PROP))
+    def wf_prop(key: tuple, trades: list, months=None):
+        try:        # months: the side's own (1 in 4 for the unseen side): the others are no flat days of it (2026-10-24)
+            return deskresults.prop_headline(_rescore(key, lambda: {"run": {"range": {"months": months}}, "trades": trades}, DESKLAB_PROP))
         except (HTTPException, KeyError, ValueError, OSError):
             return None
 
@@ -942,7 +945,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         oos, ins = (res.get("stitched") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("trades") or []
         out.update(unseen=deskresults.wf_summary(got["id"], res), build=deskresults.wf_summary(got["id"], res, "stitched_is"),
                    curve=deskresults.curve_of_trades(oos), curve_build=deskresults.curve_of_trades(ins),
-                   prop_unseen=wf_prop(("wf", got["id"]), oos), prop_build=wf_prop(("wf-is", got["id"]), ins))
+                   prop_unseen=wf_prop(("wf", got["id"]), oos, (res.get("stitched") or {}).get("months")),
+                   prop_build=wf_prop(("wf-is", got["id"]), ins, (res.get("stitched_is") or {}).get("months")))
         return out
 
     def warm_desklab_results() -> None:
@@ -957,8 +961,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                         st = deskresults.wf_state(wfs.grids, rec, slots.et_now().date())
                         if st["state"] == "done":
                             res = wfs.result(st["id"])
-                            wf_prop(("wf", st["id"]), (res.get("stitched") or {}).get("trades") or [])
-                            wf_prop(("wf-is", st["id"]), (res.get("stitched_is") or {}).get("trades") or [])
+                            wf_prop(("wf", st["id"]), (res.get("stitched") or {}).get("trades") or [], (res.get("stitched") or {}).get("months"))
+                            wf_prop(("wf-is", st["id"]), (res.get("stitched_is") or {}).get("trades") or [], (res.get("stitched_is") or {}).get("months"))
                     except Exception:      # noqa: BLE001 -- the route computes it on ask
                         pass
             for desk_id in deskresults.BUILTIN_TWINS:      # the Desk's own straddles: their twin's saved runs
@@ -1502,6 +1506,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 
+    @r.post("/run-match")
+    def run_match(request: Request, body: dict):
+        """{id}: the newest finished run that this Run body would only repeat (same request, same code), or null."""
+        write_ok(request)
+        try:
+            return {"id": manager.same_done(body)}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     @r.post("/walkforward-match")
     def walkforward_match(request: Request, body: dict):
         """{id}: the newest finished walk-forward that this Run body would only repeat (same settings, months, code), or null."""
@@ -1652,7 +1665,8 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
             except ValueError:
                 rules = None    # an unknown/removed rule id: MC still runs, just without P(prop pass)
         try:
-            out = montecarlo.run(b["trades"] or [], paths=paths, mode=mode, seed=seed, rules=rules, floor=floor)
+            out = montecarlo.run(b["trades"] or [], paths=paths, mode=mode, seed=seed, rules=rules, floor=floor,
+                                 months=(run_meta.get("range") or {}).get("months"))
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
         if rules is not None:
@@ -1692,10 +1706,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
         run_meta = b["run"] or {}
-        if run_meta.get("prop_rules") == rule_id and (b.get("propsim") or {}).get("breach"):
+        rng = run_meta.get("range") or {}          # a 3:1 run's own months: its saved eval (before 2026-10-24) padded the rest
+        if run_meta.get("prop_rules") == rule_id and (b.get("propsim") or {}).get("breach") and not rng.get("months"):
             out = b["propsim"]
         else:
-            out, _ = _run_propsim(b["trades"] or [], {"prop_rules": rule_id, "prop_rules_data": rules})
+            out, _ = _run_propsim(b["trades"] or [], {"prop_rules": rule_id, "prop_rules_data": rules, "range": rng})
         with prop_lock:
             prop_cache[key] = out
             while len(prop_cache) > PROP_CACHE:

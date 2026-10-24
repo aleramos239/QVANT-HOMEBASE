@@ -100,6 +100,7 @@ def run(
     rules: Optional[dict] = None,
     floor: Optional[float] = None,
     bins: int = 20,
+    months=None,
 ) -> dict:
     """Resample ``trades`` ({date, net}, in recorded order) by day, ``paths`` times (capped at
     MAX_WORK // days).
@@ -132,7 +133,7 @@ def run(
     # before anything else so p_ruin, the drawdowns and p_prop_pass all walk the same capped days.
     if rules is not None:
         trades = limit_trades(list(trades), rules)
-    pnls, flags, dates = weekday_grid(list(trades))
+    pnls, flags, dates = weekday_grid(list(trades), months)      # months: a 3:1 run's own (propsim.weekday_grid)
     opens = day_opens(list(trades), dates, rules) if rules is not None else None
     trail = day_trail(list(trades), dates) if opens is not None and rules.get("trail") == "intraday" else None
     extra = [(o, *t) for o, t in zip(opens, trail)] if trail is not None else [(o,) for o in opens or [0.0] * len(dates)]

@@ -49,6 +49,8 @@
       }
       tb.right.append(panels);
     }
+    // Compare and Group builder sit in the page's own right zone, which the window hides: bring them out with the panels
+    for (const id of ['tbAB', 'tbMix']) { const b = $('#' + id); if (b) { b.classList.add('hb-tbtn', 'hb-solo'); tb.right.append(b); } }
     // Run and More: the page rewrites these two buttons on every repaint of its header
     const acts = $('#labActs');
     function dress() {

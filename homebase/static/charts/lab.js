@@ -16,7 +16,7 @@ const MINUS = '−';
 /* ---- state ---- */
 const S = { builtins: [], drafts: [], groups: null, bufs: new Map(), cur: null, forms: {}, run: null, log: [], seq: 0, busy: false,
   view: 'lib', libQ: '', tk: null, tkQ: '', pl: null, plSaid: null, plBusy: false, plFilter: 'all', plForm: null, plFk: '', plIdea: '', plCard: '', plWant: '', plDetail: null, plArmed: '', plCurve: null, plExec: '', desk: null, deskBuiltins: new Set(), deskBusy: false,
-  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {} };
+  picks: [], anchor: '', listFocus: false, delBusy: false, unlocked: new Set(), heat: {}, wf: {}, three: {} };
 /* picks: the list's rows picked for a delete (keys, shown order); anchor: where a shift-click's range starts; listFocus: the
    list was the last thing touched (a button takes no focus on a click in Safari, so the keyboard is judged by this) */
 /* view: what the sidebar lists -- 'lib' (strategies), 'tk' (the arsenal: every tool, with its code), and the strategy pipeline's three:
@@ -39,7 +39,21 @@ async function call(path, opts = {}) {
 const send = (method, path, body) => call(path, { method, body: body === undefined ? undefined : JSON.stringify(body) });
 
 /* ---- the log line under the editor ---- */
-function log(html, tone = '') { S.log.push({ html, tone }); S.log = S.log.slice(-5); paintLog(); }
+function log(html, tone = '') { S.log.push({ html, tone }); S.log = S.log.slice(-5); paintLog(); if (/class="err"/.test(html)) toast(html); }
+/* An error, shown on screen for a few seconds: the log line under the editor is hidden when the code panel is (owner 2026-10-24). */
+let toastT = 0;
+function toast(html) {
+  let el = document.getElementById('labToast');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'labToast'; el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;max-width:min(560px,90vw);padding:10px 14px;border-radius:10px;background:#1d1d1f;color:#fff;font:13px/1.4 -apple-system,system-ui,sans-serif;box-shadow:0 6px 24px rgba(0,0,0,.25);cursor:pointer';
+    el.addEventListener('click', () => { el.hidden = true; });
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html; el.hidden = false;
+  clearTimeout(toastT); toastT = setTimeout(() => { el.hidden = true; }, 7000);
+}
 function paintLog() {
   const el = $('#edLog');
   if (!el) return;
@@ -123,18 +137,18 @@ function queueValidate(b, delay = 450) {
 }
 async function validateNow(b) {
   if (!b || b.kind === 'builtin' || !b.code || !b.code.trim()) { if (b) { b.valid = null; paintHead(); paintGutter(); } return null; }
-  const seq = ++vSeq, t0 = performance.now(), code = b.code, had = !!metaOf(b);
+  const seq = ++vSeq, t0 = performance.now(), code = b.code, had = !!metaOf(b), ins0 = had ? JSON.stringify(metaOf(b).inputs) : '';
   const r = await send('POST', '/api/tester/drafts/validate', { code });
   if (seq !== vSeq || code !== b.code) return null;               // a newer keystroke won
   b.valid = r.ok ? r.json : { ok: false, error: r.error, line: null };
   b.validMs = Math.round(performance.now() - t0);
   paintHead(); paintGutter(); paintLib();
-  if (!had && metaOf(b) && b === buf()) paintRes();   // its settings just arrived: the panel shows the 3:1 view (where Run 3:1 reports), not "No backtest yet"
+  if (metaOf(b) && b === buf() && (!had || JSON.stringify(metaOf(b).inputs) !== ins0)) paintRes();   // its settings arrived or changed: the panel shows them
   return b.valid;
 }
 async function save(b) {
   if (!b || b.kind === 'builtin' || locked(b)) return false;
-  const nerr = C.nameError(b.name);
+  const nerr = C.nameError(b.name) || (b.kind === 'new' && S.drafts.some((d) => d.name === b.name) ? `A strategy named ${b.name} already exists: pick another name` : '');
   if (nerr) { log(`<span class="err">${esc(nerr)}</span>`); const n = document.getElementById('edName'); if (n) { n.classList.add('bad'); n.focus(); } return false; }
   const r = await send('PUT', `/api/tester/drafts/${encodeURIComponent(b.name)}`, { code: b.code });
   if (!r.ok) { log(`<span class="err">Not saved: ${esc(r.error)}</span>`); return false; }
@@ -172,11 +186,17 @@ function release(run) {
   if (S.active === run) { S.active = null; S.busy = false; }
   if (S.run === run) S.run = null;
 }
-async function run() {
+async function run(opts = {}) {
   const b = buf();
   if (!b) return;
+  if (b.kind !== 'builtin' && !metaOf(b) && (b.code || '').trim()) {   // its settings first: they decide the route (review #1)
+    const v = await validateNow(b);
+    if (buf() !== b) return;
+    if (!v || !v.ok) { log(`<span class="err">Fix the script first: ${esc(C.statusOf(v).text)}</span>`); return; }
+  }
   const wf0 = b.kind !== 'pipe' && formOf(b);
-  if (wf0 && wf0.range.wf) return wfRun();                          // Run settings › Walk-forward is on
+  if (wf0 && wf0.range.wf && !is31(wf0)) return wfRun();          // rolling: the heat-map walk-forward, as before
+  const tag = is31(wf0) ? (opts.tag || 'is') : '';                  // 3:1 blocks: the strategy as set, one run (owner 2026-10-24)
   S.deskErr = '';
   if (S.busy && S.active && !S.active.dead) {
     if (S.active.key === b.key) return;                              // this one is already running
@@ -185,7 +205,8 @@ async function run() {
     log(`Stopped the run of <b>${esc(prev.name || 'the other strategy')}</b> to run this one.`);
   }
   if (b.kind !== 'builtin' && !b.code.trim()) return;
-  const me = { key: b.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: '', name: b.kind === 'builtin' ? b.id : b.name, dead: false };
+  const me = { key: b.key, rid: null, st: { status: 'queued' }, bundle: null, strategy: '', name: b.kind === 'builtin' ? b.id : b.name, dead: false, tag };
+  if (tag) threeState(wf0).tab = tag;
   S.busy = true; S.active = me; S.run = me;
   paintRes(); paintHead();
   if (b.kind !== 'builtin') {
@@ -196,18 +217,19 @@ async function run() {
     if (me.dead) return;
   }
   const nb = buf(), f = nb ? formOf(nb) : null;
-  if (!f || !nb) { release(me); paintRes(); paintHead(); return; }
+  if (!f || !nb || nb !== b) { release(me); paintRes(); paintHead(); return; }      // another strategy was opened meanwhile
+  if (!tag && f.range.wf) { release(me); paintRes(); paintHead(); return; }        // never the plain all-data run for a 3:1 form
   me.key = nb.key; me.strategy = f.strategy; me.name = nb.kind === 'builtin' ? nb.id : nb.name;
   if (S.cur !== nb.key) S.cur = nb.key;
   const pr = X.problems(f, { ...metaOf(nb), id: f.strategy });
   if (pr) { release(me); log(`<span class="err">${esc(pr)}</span>`); paintRes(); paintHead(); return; }
   if (nb.kind !== 'builtin' && /BLUEPRINT RECORD/.test(nb.code)) { release(me); if (!P.res) setPanel('res', true); const shown = await openRecordRun(nb, f); paintRes(); paintHead(); if (shown) return; S.busy = true; S.active = me; me.dead = false; S.run = me; }
   paintRes(); paintHead();
-  const r = await send('POST', '/api/tester/run', X.body(f));
+  const r = await send('POST', '/api/tester/run', tag ? threeRunBody(f, tag) : { ...X.body(f), propsim: false });   // the prop sim: its own click
   if (me.dead) return;
-  if (!r.ok) { release(me); log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
+  if (!r.ok) { me.st = { status: 'error', error: r.error }; threeKeep(me); release(me); log(`<span class="err">${esc(r.error)}</span>`); paintRes(); paintHead(); return; }
   me.rid = r.json.id;
-  log(`Running <b>${esc(me.name)}</b> over ${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} inside the sandbox…`);
+  log(`Running <b>${esc(me.name)}</b> over ${esc(tag === 'is' ? 'the 3:1 in-sample months' : tag === 'all' ? 'all years' : X.pillLabel ? X.pillLabel(f.range) : f.range.id)} inside the sandbox…`);
   poll(me);
 }
 /* A "Blueprint record" file is the written card of an idea the research engine already ran: the script itself places no
@@ -227,22 +249,33 @@ async function openRecordRun(nb, f) {
   paintRes(); paintHead(); syncChart();
   return true;
 }
+/* a running backtest's tick: only the progress line moves, so a settings field being typed in keeps its focus */
+function paintProg(run) {
+  const box = $('#labRes .rs-prog'), t = box && $('.t', box), bar = box && $('.rs-bar', box);
+  if (!t || !bar || !box.querySelector('[data-act="cancel"]')) { paintRes(); return; }
+  const p = X.progress(run.st || { status: 'queued' }), ind = p.frac == null;
+  t.textContent = p.text || 'Starting…';
+  bar.classList.toggle('ind', ind);
+  bar.firstElementChild.style.width = `${ind ? 38 : Math.round(p.frac * 100)}%`;
+}
 async function poll(run) {
   const viewing = () => S.run === run;                               // the user may have gone to another strategy meanwhile: the run still finishes
   const settle = () => {
     if (S.active === run) { S.active = null; S.busy = false; }
     if (!viewing() && !S.run && S.cur === run.key) S.run = run;     // back on its strategy with nothing else open: show it
   };
+  let lost = 0;
   while (!run.dead) {
     const r = await send('GET', `/api/tester/run/${encodeURIComponent(run.rid)}`);
     if (run.dead) return;
-    if (r.ok) { run.st = r.json; if (viewing()) paintRes(); }
+    if (r.ok) { lost = 0; run.st = r.json; if (viewing()) paintProg(run); }
+    else if (++lost <= 8) { await new Promise((res) => setTimeout(res, 1500)); continue; }   // a blip or a restart, not a failed run
     const s = r.ok ? r.json.status : 'error';
     if (s === 'done') {
       const bd = await send('GET', `/api/tester/run/${encodeURIComponent(run.rid)}/bundle`);
       if (run.dead) return;
       run.bundle = bd.ok ? bd.json : null;
-      settle(); run.dead = true;
+      settle(); run.dead = true; threeKeep(run);
       const who = viewing() ? '' : ` <b>${esc(run.name || '')}</b>`;
       if (run.bundle) {
         const a = run.bundle.run.report.summary.all;
@@ -254,7 +287,7 @@ async function poll(run) {
       return;
     }
     if (s === 'error' || s === 'cancelled') {
-      settle(); run.dead = true;
+      settle(); run.dead = true; threeKeep(run);
       const msg = s === 'cancelled' ? 'Cancelled' : `Failed: ${esc((r.json && r.json.error) || r.error || 'unknown error')}`;
       log(`<span class="${s === 'error' ? 'err' : ''}">${msg}</span>`);
       run.st = { ...(run.st || {}), status: s }; paintRes(); paintHead();
@@ -956,25 +989,27 @@ function allMetricsDialog() {
   if (!r || !AM) return;
   const trades = (r.bundle.trades || []).filter((t) => t && t.date), cap = r.bundle.run.capital || 0, st = amLoad();
   const yrs = AM.years(trades), scopeName = Object.fromEntries(AM.SCOPES);
+  const wf = /^wf_/.test((r.bundle.run.range || {}).kind || '');     // a 3:1 run's months are all one kind: the old Build | Unseen cut of 2025-07 does not apply
   const d = dialog('');
   d.classList.add('am-dlg');
   const cell = (unit, v, tone) => `<td class="${tone || ''}">${esc(AM.format(unit, v))}</td>`;
   const toneOf = (unit, v) => (unit === 'usd' && v != null ? (v > 0 ? 'up' : v < 0 ? 'dn' : '') : '');
   function draw() {
-    let cols = AM.SCOPES.map(([k]) => k).filter((k) => st.cols.includes(k));
+    let cols = wf ? ['all'] : AM.SCOPES.map(([k]) => k).filter((k) => st.cols.includes(k));
     // A column with no trades (a run that only touched unseen days has no build days) is dropped when another has some,
     // and a card never opens with no column at all.
-    const live = cols.filter((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap).trades);
-    if (live.length) cols = live; else if (!cols.length) cols = ['all'];
-    const sets = cols.map((k) => AM.compute(AM.pick(trades, k, st.year, st.side), cap));
+    const all = new Map(cols.map((k) => [k, AM.compute(AM.pick(trades, k, st.year, st.side), cap)]));
+    const live = cols.filter((k) => all.get(k).trades);
+    if (live.length) cols = live; else if (!cols.length) { cols = ['all']; all.set('all', AM.compute(AM.pick(trades, 'all', st.year, st.side), cap)); }
+    const sets = cols.map((k) => all.get(k));
     const none = (k, i) => k === 'unseen' && !sets[i].trades;
     let body = '';
     if (st.view === 'year') {
       const rows = AM.yearly(trades.filter((t) => !st.side || t.side === st.side), cap), keys = [['trades', 'int'], ['net', 'usd'], ['win_rate', 'pct'], ['profit_factor', 'num'], ['expectancy', 'usd'], ['max_dd', 'usd'], ['sharpe', 'num'], ['month_wr', 'pct']];
       const lab = { trades: 'Trades', net: 'Net', win_rate: 'Win rate', profit_factor: 'Profit factor', expectancy: 'Avg trade', max_dd: 'Max drawdown', sharpe: 'Sharpe', month_wr: 'Good months' };
       body = `<table class="am-t am-y"><thead><tr><th>Year</th>${keys.map(([k]) => `<th>${lab[k]}</th>`).join('')}</tr></thead><tbody>${rows.map((y) =>
-        `<tr><th>${esc(y.year)}${y.unseen ? '*' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
-        <p class="am-note">Each row is the calendar year's own trades. * 2025 straddles the cut: build days end 2025-06-30, unseen days start 2025-07-01 (pick the year above to see them apart).</p>`;
+        `<tr><th>${esc(y.year)}${y.unseen && !wf ? '*' : ''}</th>${keys.map(([k, u]) => cell(u, y[k], toneOf(u, y[k]))).join('')}</tr>`).join('')}</tbody></table>
+        <p class="am-note">Each row is the calendar year's own trades.${wf ? '' : ' * 2025 straddles the cut: build days end 2025-06-30, unseen days start 2025-07-01 (pick the year above to see them apart).'}</p>`;
     } else {
       body = AM.CATS.filter(([id]) => !st.hideCat.includes(id)).map(([id, name, rows]) => {
         const shown = rows.filter(([m]) => !st.hide.includes(m));
@@ -988,9 +1023,9 @@ function allMetricsDialog() {
     const sets2 = AM.CATS.map(([id, name, rows]) => `<fieldset><legend><label><input type="checkbox" data-cat="${id}"${st.hideCat.includes(id) ? '' : ' checked'}> ${esc(name)}</label></legend>${rows.map(([m, label]) =>
       `<label><input type="checkbox" data-m="${m}"${st.hide.includes(m) ? '' : ' checked'}> ${esc(label)}</label>`).join('')}</fieldset>`).join('');
     d.innerHTML = `<div class="am-head"><div class="am-top"><h2>All metrics</h2><button class="btn btn-outline btn-sm" data-x="close">Close</button></div>
-      <p class="am-sub">${esc(String(r.cellLabel || r.strategy || ''))} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
+      <p class="am-sub">${esc(String(r.cellLabel || r.strategy || ''))} · ${trades.length} trades · ${esc(trades.length ? `${trades[0].date} → ${trades[trades.length - 1].date}` : 'none')}${wf || trades.some((t) => t.date >= AM.UNSEEN_FROM) ? '' : ' · this run never touched the unseen days'}</p>
       <div class="am-bar">
-        <div class="am-g"><span>Days</span>${AM.SCOPES.map(([k, n]) => chip('col', k, n, st.cols.includes(k))).join('')}</div>
+        ${wf ? '' : `<div class="am-g"><span>Days</span>${AM.SCOPES.map(([k, n]) => chip('col', k, n, st.cols.includes(k))).join('')}</div>`}
         <div class="am-g"><span>Year</span>${chip('year', '', 'All', !st.year)}${yrs.map((y) => chip('year', y, y, st.year === y)).join('')}</div>
         <div class="am-g"><span>Side</span>${chip('side', '', 'Both', !st.side)}${chip('side', 'long', 'Long', st.side === 'long')}${chip('side', 'short', 'Short', st.side === 'short')}</div>
         <div class="am-g"><span>Show</span>${chip('view', 'metrics', 'Every metric', st.view === 'metrics')}${chip('view', 'year', 'Year by year', st.view === 'year')}<button class="am-c" data-act2="adj">Choose rows</button></div>
@@ -1880,7 +1915,7 @@ function paintHead() {
     ? (locked(b) ? `<button class="hb-ib" data-act="unlock" aria-label="Unlock to edit" title="On the Desk: locked. Unlock to edit.">${ICON_LOCK}</button>`
       : `<button class="hb-ib" data-act="lock" aria-label="Lock again" title="Unlocked. Lock it again.">${ICON_UNLOCK}</button>`) : '';
   const wfF = formOf(b), wfOn = !!(wfF && wfF.range.wf);
-  acts.innerHTML = `${lockBtn}<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="${wfOn ? 'Run the walk-forward' : 'Run the backtest'} (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : wfOn ? `Run ${esc(X.wfRatioText(wfF.range.wf))}` : 'Run'}</span></button>
+  acts.innerHTML = `${lockBtn}<button class="btn btn-default lab-run${busy ? ' busy' : ''}" data-act="run"${canRun ? '' : ' disabled'} title="${is31(wfF) ? 'Run your strategy as set on the 3:1 in-sample months' : wfOn ? 'Run the walk-forward' : 'Run the backtest'} (⌘↵)">${ICON_PLAY}<span>${busy ? 'Running' : wfOn && !is31(wfF) ? `Run ${esc(X.wfRatioText(wfF.range.wf))}` : 'Run'}</span></button>
     <button class="hb-ib" data-act="more" data-fk="more" aria-label="More" title="More" aria-haspopup="menu">${ICON_MORE}</button>`;
   const hint = $('#edHint'); if (hint) hint.hidden = !!(b.code && b.code.length) || ro;
 }
@@ -2137,6 +2172,7 @@ function heatPaint() {
 async function heatRun() {
   const b = buf();
   if (!b || (S.busy && S.active && S.active.key === b.key)) return;
+  if (b.kind !== 'builtin' && !metaOf(b) && (b.code || '').trim()) { await validateNow(b); if (buf() !== b) return; }   // review #1
   const f0 = b.kind !== 'pipe' && formOf(b);
   if (f0) {                  // the Lab's heat map runs on the 3:1 in-sample months only, never a grid over test months
     const sw = X.heatSwitch(f0);
@@ -2206,6 +2242,189 @@ async function heatCell(i) {
    whole months and trades it the next 1, then the next block (never rolling); 1:N picks on 1 month and trades the next N. It runs over the
    Range's two 3:1 choices, over all the data (the owner's window). The words are tester.js (wfBody, wfTiles, wfStepRows, ...); the
    server is /api/tester/walkforward. */
+/* ---- 3:1 blocks (the owner, 2026-10-24): Run = the strategy AS SET, one run on the 3:1 in-sample months -- its curve and its
+   numbers, as a backtest always showed them. Nothing else runs by itself: the test months, all years, the heat map and the
+   prop sim each wait for their own click. */
+const THREE_TABS = [['is', 'In-sample'], ['oos', 'Test months'], ['all', 'All years'], ['heat', 'Heat map']];
+const OOS_SAID = 'Run the test months (the owner clicked it in the Lab)';
+const is31 = (f) => !!(f && f.range && f.range.wf === X.WF_ROLL && !wfRolling(f.range) && f.range.side !== 'oos');   // 'oos': the Desk's own walk-forward, opened as it was
+const THREE_RANGE = { is: () => ({ kind: 'wf_is' }), all: () => ({ kind: 'custom', start: '2021-09-22', end: X.today() }) };
+const EQ_BOX = `<div class="eqw" id="eqw"><svg preserveAspectRatio="none" role="img" aria-label="Equity curve, after fees"></svg><div class="eq-rule" id="eqRule"></div><span class="eq-dot" id="eqDot"></span>
+  <span class="eq-tag" id="eqHi"></span><span class="eq-tag" id="eqLo"></span><div class="eq-tip" id="eqTip"></div><div class="eq-ax" id="eqAx"></div></div>`;
+function threeState(f) {
+  return S.three[f.strategy] || (S.three[f.strategy] = { tab: 'is', is: null, all: null, resumed: false, allLooked: false, lookAll: null,
+    oos: { id: '', job: null, result: null, token: 0, busy: false, step: '', err: '' } });
+}
+const threeRunBody = (f, tag) => ({ ...X.body(f), range: THREE_RANGE[tag](), propsim: false });
+/* the run on screen under a tab: the one running now for it, or the last one it finished */
+const threeRun = (b, T) => (T.tab !== 'is' && T.tab !== 'all' ? null
+  : S.active && S.active.key === b.key && S.active.tag === T.tab && !S.active.dead ? S.active : T[T.tab]);
+function threeKeep(run) { const T = run.tag && S.three[run.strategy]; if (T) T[run.tag] = run; }
+function threeTabs(T) {
+  return `<div class="pl-filter three-tabs" role="group" aria-label="Show">${THREE_TABS.map(([k, l]) => `<button class="pl-fc${T.tab === k ? ' on' : ''}" data-act="three" data-t="${k}" aria-pressed="${T.tab === k}">${esc(l)}</button>`).join('')}</div>`;
+}
+function threeTab(t) {
+  const b = buf(), f = b && formOf(b);
+  if (!is31(f) || !THREE_TABS.some(([k]) => k === t)) return;
+  const T = threeState(f);
+  T.tab = t;
+  if ((t === 'is' || t === 'all') && T[t]) S.run = T[t];
+  if (t === 'all' && !T.all && T.lookAll && !T.allLooked) { T.allLooked = true; T.lookAll(); }
+  paintRes(); syncChart();
+}
+/* Opening a strategy: its last finished in-sample run, test months and all-years run that Run would only repeat (the same request
+   and code) are shown, never run again. Once a strategy a page; never for unsaved code. */
+async function threeResume(b, f) {
+  const T = threeState(f);
+  if (T.resumed || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
+  T.resumed = true;
+  const look = async (tag) => {
+    const m = await send('POST', '/api/tester/run-match', threeRunBody(f, tag));
+    if (!m.ok || !m.json || !m.json.id || T[tag]) return;
+    const bd = await send('GET', `/api/tester/run/${encodeURIComponent(m.json.id)}/bundle`);
+    if (!bd.ok || !bd.json || T[tag]) return;
+    T[tag] = { key: b.key, rid: m.json.id, st: { status: 'done' }, bundle: bd.json, strategy: f.strategy, name: b.kind === 'builtin' ? b.id : b.name, dead: true, tag };
+    if (T.tab === tag && !(S.active && S.active.key === b.key)) S.run = T[tag];
+    if (buf() === b) { paintRes(); syncChart(); }
+  };
+  T.lookAll = () => look('all');
+  look('is');
+  const m = await send('POST', '/api/tester/walkforward-match', X.wfFixedBody(f, []));
+  if (!m.ok || !m.json || !m.json.id || T.oos.id) return;
+  const g = await send('GET', `/api/tester/walkforward/${encodeURIComponent(m.json.id)}/result`);
+  if (!g.ok || !g.json || T.oos.id) return;
+  T.oos.id = m.json.id; T.oos.result = g.json;
+  if (g.json.oos && !X.wfFixedOos(g.json, '').final) oosGo(b, f, T);    // a read still running: follow it (it starts nothing new)
+  else if (buf() === b) paintRes();
+}
+function threeEmpty(T) {
+  if (T.tab === 'all') return `<div class="rs-empty"><h3>All years</h3><p>Your strategy as set on every month from Sep 2021 to now: the in-sample and the test months together.</p>
+    <button class="btn btn-sm" data-act="runall"${S.busy ? ' disabled' : ''}>Run all years</button></div>`;
+  return '<div class="rs-empty"><h3>No run yet</h3><p>Run runs your strategy as set on the 3:1 in-sample months: its curve, its numbers and every trade. The test months, all years, the heat map and the prop sim run only when you click them.</p></div>';
+}
+function runAll() {
+  const f = buf() && formOf(buf());
+  if (!is31(f) || S.busy) return;
+  const d = dialog(`<h2>Run all years?</h2><p>Your strategy as set on every month from Sep 2021 to now. It reads the test months too.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run all years</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') run({ tag: 'all' });
+  });
+}
+/* The test months of the strategy as set: one box, in-sample first (the pick needs it), then its test months -- on one click, once. */
+function oosRun() {
+  const b = buf(), f = b && formOf(b);
+  if (!is31(f)) return;
+  const T = threeState(f);
+  if (T.oos.busy) return;
+  const d = dialog(`<h2>Run the test months?</h2><p>Your strategy as set, on every 3:1 test month. They run once: after this they are spent.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run them</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') oosGo(b, f, T);
+  });
+}
+async function oosGo(b, f, T) {
+  const o = T.oos, token = ++o.token, id = () => encodeURIComponent(o.id), sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+  o.busy = true; o.err = ''; o.step = 'Starting…'; paintRes();
+  try {
+    if (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)) && !(await save(b))) throw new Error('the script could not be saved');
+    const body = X.wfFixedBody(f, []);                      // one box: the strategy as set
+    if (!o.id) {
+      const m = await send('POST', '/api/tester/walkforward-match', body);
+      if (m.ok && m.json && m.json.id) o.id = m.json.id;
+      else { const r = await send('POST', '/api/tester/walkforward', body); if (!r.ok) throw new Error(r.error || 'the run did not start'); o.id = r.json.id; }
+    }
+    for (let lost = 0; ;) {
+      const s = await send('GET', `/api/tester/walkforward/${id()}`);
+      if (token !== o.token) return;
+      if (!s.ok) { if (++lost > 8) throw new Error(s.error || 'lost contact with the run'); await sleep(2000); continue; }
+      lost = 0;
+      o.job = s.json;
+      const pr = X.wfProgress(s.json);
+      if (pr.final) { if (s.json.status !== 'done') throw new Error(`the in-sample run ${s.json.status}`); break; }
+      o.step = `In-sample first, for the pick · ${pr.text}`; paintRes();
+      await sleep(2000);
+    }
+    let g = await send('GET', `/api/tester/walkforward/${id()}/result`);
+    if (token !== o.token) return;
+    if (!g.ok) throw new Error(g.error || 'the result did not load');
+    o.result = g.json;
+    if (!o.result.lock) {
+      const pk = await send('POST', `/api/tester/walkforward/${id()}/pick`, { cell: 0 });
+      if (!pk.ok) throw new Error(pk.error || 'the pick failed');
+      o.result = { ...o.result, lock: pk.json };
+    }
+    if (!o.result.oos) {
+      const q = await send('POST', `/api/tester/walkforward/${id()}/oos`, { cell: 0, owner_said: OOS_SAID });
+      if (!q.ok) throw new Error(q.error || 'the test months did not start');
+      o.result = { ...o.result, oos: q.json };
+    }
+    while (!X.wfFixedOos(o.result, '').final) {
+      o.step = X.wfFixedOos(o.result, '').text; paintRes();
+      await sleep(2000);
+      if (token !== o.token) return;
+      g = await send('GET', `/api/tester/walkforward/${id()}/result`);
+      if (g.ok) o.result = g.json;
+    }
+  } catch (e) { if (token === o.token) o.err = e.message || String(e); }
+  if (token !== o.token) return;
+  o.busy = false; o.step = ''; paintRes();
+}
+function oosHtml(T) {
+  const o = T.oos, res = o.result, oo = res && res.oos, head = '<div class="rs-h"><b>Test months</b><span>Your strategy as set</span></div>';
+  if (o.err) return `${head}<div class="rs-empty"><h3>The test months did not run</h3><p>${esc(o.err)}</p></div>`;
+  if (oo && oo.state === 'done') {
+    const rec = oo.record || {}, net = rec.net || 0, cell = (res.cells || [])[0], bt = cell && X.wfFixedBlocks(cell, oo);
+    if (oo.equity && (oo.equity.t_ms || []).length > 1) WFEQ = oo.equity;
+    const row = X.wfFixedOos(res, '').row;
+    return `${head}<div class="rs-hero"><div class="rs-net"><i>${net > 0 ? '+' : net < 0 ? MINUS : ''}$</i>${esc(Math.abs(Math.round(net)).toLocaleString('en-US'))}</div></div>
+      <div class="rs-take">${esc(`${(oo.months || []).length} test months · ${rec.trades ?? 0} trades · after fees.`)}</div>
+      ${WFEQ ? EQ_BOX : ''}
+      <div class="rs-trio"><div><b>${esc(X.num(rec.pf, 2, true))}</b><span>Profit factor</span></div><div><b>${esc(X.rate(rec.win_rate))}</b><span>Win rate</span></div><div><b>${esc(X.num(rec.sharpe))}</b><span>Sharpe</span></div></div>
+      ${row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${X.WF_FIXED_COLS.map((c) => `<th>${esc(c[1])}</th>`).join('')}</tr></thead><tbody><tr>${row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}
+      ${bt ? `<div class="rs-gh">Block by block</div><div class="wf-scroll"><table class="heat-tbl wf-steps"><thead><tr>${bt.head.map((h) => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>` : ''}`;
+  }
+  if (oo && oo.state === 'stopped') return `${head}<div class="rs-empty"><h3>The test months stopped</h3><p>${esc(oo.say || 'The read is used: there is no record.')}</p></div>`;
+  if (o.busy || oo) return `${head}<div class="rs-prog"><div class="t">${esc(o.step || X.wfFixedOos(res, '').text || 'Starting…')}</div><div class="rs-bar ind"><i style="width:38%"></i></div></div>`;
+  return `${head}<div class="rs-empty"><h3>Not run</h3><p>Your strategy as set, on the 3:1 test months (the month after each 3 in-sample months), after fees. They run once, never again.</p>
+    <button class="btn btn-sm" data-act="oosrun">Run the test months</button></div>`;
+}
+function heatTabHtml(f) {
+  const w = wfLabState(f), h = heatState(f), n = X.gridCount(X.gridAxes(h.rows, { ...metaOf(buf()), id: f.strategy }, f.max_cells).axes);
+  const idle = !w.starting && !w.job && !w.err;
+  return `<div class="rs-h"><b>Heat map · 3:1 in-sample months</b><span>Every box as set</span></div>
+    <div class="wf-main" id="wfRes">${wfResHtml(f) || ''}</div>
+    ${idle ? `<div class="rs-empty"><h3>No heat map yet</h3><p>Every box of the heat map, each run once as set, on the 3:1 in-sample months. You pick one box from the table; its test months run only when you click.</p>
+      <button class="btn btn-sm" data-act="heatwf">Run the heat map · ${n} box${n === 1 ? '' : 'es'}</button></div>` : ''}`;
+}
+/* the prop sim of the run on screen: only on its own click (owner 2026-10-24) */
+function propHtml(r) {
+  if (!r || !r.rid || !r.bundle) return '';
+  const p = r.prop || (r.bundle.propsim && r.bundle.propsim.headline ? r.bundle.propsim : null);
+  if (p) {
+    const h = p.headline || {}, pc = (v) => (v == null ? '—' : `${Math.round(v * 100)}%`);
+    return `<div class="rs-gh">Prop sim${p.rules && p.rules.label ? ` · ${esc(p.rules.label)}` : ''}</div><div class="rs-group">${wfKv('Passes the eval', pc(h.eval_pass_p))}${wfKv('Busts the eval', pc(h.bust_p))}
+      ${wfKv('Days to pass', h.median_days_to_pass == null ? '—' : String(Math.round(h.median_days_to_pass)))}${wfKv('Gets a payout', pc(h.funded_payout_p))}
+      ${wfKv('Expected cheque', h.funded_expected_cheque == null ? '—' : money0(h.funded_expected_cheque))}</div>`;
+  }
+  return `<div class="rs-gh">Prop sim</div><div class="rs-group"><button class="rs-row" data-act="propsim"${r.propBusy ? ' disabled' : ''}><span>${r.propBusy ? 'Running the prop sim…' : 'Run the prop sim'}</span><span>›</span></button>
+    ${r.propErr ? `<div class="heat-err">${esc(r.propErr)}</div>` : ''}</div>`;
+}
+async function propRun() {
+  const b = buf(), f = b && formOf(b), r = S.run;
+  if (!r || !r.rid || !r.bundle || r.propBusy) return;
+  r.propBusy = true; r.propErr = ''; paintRes();
+  const q = await send('POST', `/api/tester/runs/${encodeURIComponent(r.rid)}/propsim`, { prop_rules: (r.bundle.run && r.bundle.run.prop_rules) || (f && f.prop_rules) });
+  r.propBusy = false;
+  if (q.ok && q.json && q.json.headline) r.prop = q.json; else r.propErr = q.error || 'the prop sim gave no result';
+  paintRes();
+}
 const WF_EMPTY = '<div class="rs-empty"><h3>No walk-forward yet</h3><p>Run it to try every Heat map box on the in-sample months: 3 months in, the next 1 out, then the next block. You pick one box from the table; its test months run only when you say.</p></div>';
 /* The Range list's two 3:1 choices (the owner, 2026-10-18): one walk-forward over all the data, seen from either side --
    in-sample = the 3-month windows the picks were made on, out-of-sample = each next month, traded on that pick. */
@@ -2262,7 +2481,7 @@ function wfStepsHtml(r, axes) {
    locked); then "Run test months", open only after a pick and once the owner has typed his words, which go out as typed.
    The words and numbers are tester.js (wfFixedTable, wfFixedOos); the server's refusals show as they come. */
 function wfFixedHtml(w, job) {
-  const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, w.said || ''), sk = w.sort && w.sort.key;
+  const r = w.result, t = X.wfFixedTable(r, job.axes || [], w.sort), o = X.wfFixedOos(r, OOS_SAID), sk = w.sort && w.sort.key;
   const locked = t.picked != null, pickRow = t.rows.find((x) => x.i === t.picked);
   const mb = buf(), own = mb ? X.ownStopNote(metaOf(mb), job.axes, t.rows.length) : '';
   const th = t.head.map((h) => (h.key === 'box' ? `<th>${esc(h.label)}</th>`
@@ -2277,8 +2496,7 @@ function wfFixedHtml(w, job) {
       <tbody>${bt.rows.map((x) => `<tr>${x.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
   const test = r.rolling ? '<div class="heat-note">Rolling has no unseen test months: each one is a later window\'s pick month.</div>'
     : `${locked ? `<div class="rs-kv"><span>Picked</span><b>${X.boxNo(t.picked)} ${esc(pickRow ? pickRow.label : '')}</b></div>` : ''}
-      ${locked && !r.oos ? `<input type="text" class="heat-vals" id="wfSaid" value="${esc(w.said || '')}" placeholder="Type your words to run them, e.g. run the test months" spellcheck="false" autocomplete="off">` : ''}
-      ${r.oos ? '' : `<button class="btn btn-sm" id="wfOosBtn" data-act="wfoos"${o.canRun && !w.busy ? '' : ' disabled'}>Run test months</button>`}
+      ${r.oos ? '' : `<button class="btn btn-sm" id="wfOosBtn" data-act="wfoos"${locked && !w.busy ? '' : ' disabled'}>Run test months</button>`}
       ${o.text ? `<div class="heat-note">${esc(o.text)}</div>` : ''}
       ${o.row ? `<div class="wf-scroll"><table class="heat-tbl wf-steps wf-fixed"><thead><tr>${t.head.slice(1).map((h) => `<th>${esc(h.label)}</th>`).join('')}</tr></thead>
         <tbody><tr>${o.row.cells.map((c) => `<td class="${c.tone}">${esc(c.text)}</td>`).join('')}</tr></tbody></table></div>` : ''}`;
@@ -2393,7 +2611,7 @@ async function wfRun() {
   if (q.err) { log(`<span class="err">${esc(q.err)}</span>`); return; }
   const bodyObj = q.body, token = ++w.token;
   w.err = ''; w.starting = true; w.job = null; w.result = null; w.sort = null; w.said = ''; w.say = ''; w.busy = false; w.blk = null; S.wfStepsOpen = false;
-  wfPaint();
+  paintRes();
   const r = await send('POST', '/api/tester/walkforward', bodyObj);
   if (token !== w.token) return;
   if (!r.ok) { w.starting = false; w.err = r.error || 'request failed'; wfPaint(); return; }
@@ -2446,12 +2664,22 @@ function wfPick(i) {
     wfPaint();
   });
 }
-/* The picked box's test months, on the owner's typed words (sent as typed): once, never run again. */
-async function wfOos() {
+/* The picked box's test months, on the owner's click and a confirm (owner 2026-10-24): once, never run again. */
+function wfOos() {
   const b = buf(), f = b && formOf(b), w = f && wfLabState(f);
-  if (!w || !w.result || w.busy) return;
-  const o = X.wfFixedOos(w.result, w.said || '');
-  if (!o.canRun) return;
+  if (!w || !w.result || w.busy || !X.wfFixedOos(w.result, OOS_SAID).canRun) return;
+  const d = dialog(`<h2>Run the test months of box ${esc(X.boxNo(w.result.lock.cell))}?</h2><p>They run once: after this they are spent.</p>
+    <div class="acts"><button class="btn btn-outline" data-x="cancel">Not yet</button><button class="btn btn-default" data-x="go">Run them</button></div>`);
+  d.addEventListener('click', (e) => {
+    const x = e.target.closest('[data-x]');
+    if (!x) return;
+    closeDialog();
+    if (x.dataset.x === 'go') wfOosGo(w);
+  });
+}
+async function wfOosGo(w) {
+  const o = X.wfFixedOos(w.result, OOS_SAID);
+  if (!o.canRun || w.busy) return;
   const token = w.token;
   w.busy = true; w.say = ''; wfPaint();
   const r = await send('POST', `/api/tester/walkforward/${encodeURIComponent(w.id)}/oos`, o.body);
@@ -2460,7 +2688,7 @@ async function wfOos() {
   if (!r.ok) { w.say = r.error; wfPaint(); return; }
   w.result = { ...w.result, oos: r.json };
   wfPaint();
-  log(`Test months of box <b>${esc(X.boxNo(o.body.cell))}</b>: running, on your words.`);
+  log(`Test months of box <b>${esc(X.boxNo(o.body.cell))}</b>: running, on your click.`);
   wfOosPoll(w, token);
 }
 async function wfOosPoll(w, token) {
@@ -2659,11 +2887,14 @@ function paintRes() {
   const b = (S.run && S.run.pipe ? { key: S.run.key, kind: 'pipe', name: S.run.strategy, id: S.run.strategy } : null) || buf(), top = el.scrollTop;
   paintNav();
   if (!b) { el.innerHTML = '<div class="rs-empty rs-none"><h3>Backtest</h3><p>Pick a strategy, or paste one, to see how it would have done.</p></div>'; return; }
-  const r = S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
+  const wfF = b.kind === 'pipe' ? null : formOf(b), T = is31(wfF) ? threeState(wfF) : null;
+  if (T) threeResume(b, wfF);
+  const r = T ? threeRun(b, T) : S.run && S.run.key === b.key ? S.run : null, settings = b.kind === 'pipe' ? '' : settingsHtml(b);
   let main = '', settingsDone = false;
-  const wfF = b.kind === 'pipe' ? null : formOf(b);
   WFEQ = null; WFEQ2 = null;
-  if (wfF && wfF.range.wf) {
+  if (T && T.tab === 'oos') main = oosHtml(T);
+  else if (T && T.tab === 'heat') { main = heatTabHtml(wfF); wfResume(b, wfF); }
+  else if (wfF && wfF.range.wf && !T) {
     const wr = wfLabState(wfF).result, sd = wfSide(wfF);
     const fx = !!(wr && wr.scheme === 'fixed') || (!wr && wfF.range.wf === X.WF_ROLL);
     if (wr && !fx && wfJobFits(wfF, wfLabState(wfF).job)) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
@@ -2689,20 +2920,24 @@ function paintRes() {
       <div class="rs-trio"><div><b>${split(by('Profit factor').value)}</b><span>Profit factor</span></div><div><b>${split(by('Win rate').value)}</b><span>Win rate</span></div><div><b>${split(by('Sharpe').value)}</b><span>Sharpe</span></div></div>
       ${badges.length ? `<div class="rs-chips">${badges.map((x) => `<span class="rs-chip ${x.tone === 'err' ? 'err' : x.tone === 'warn' ? 'warn' : ''}" title="${esc(x.title || '')}">${esc(x.text)}</span>`).join('')}</div>` : ''}
       <div class="rs-gh">Per trade</div>
-      <div class="rs-group"><div class="rs-kv"><span>Average trade</span><b>${esc(by('Avg trade').value)}</b></div><div class="rs-kv"><span>Average win : loss</span><b>${esc(by('Avg win : loss').value.replace(/^RR /, '').replace(':', ' : '))}</b></div><div class="rs-kv"><span>Max drawdown</span><b>${esc(by('Max drawdown').value)}</b></div></div>
+      <div class="rs-group"><div class="rs-kv"><span>Average trade</span><b>${esc(by('Avg trade').value)}</b></div><div class="rs-kv"><span>Risk : reward</span><b>${esc(by('Risk : reward').value.replace(/^RR /, '').replace(':', ' : '))}</b></div><div class="rs-kv"><span>Max drawdown</span><b>${esc(by('Max drawdown').value)}</b></div></div>
       <div class="rs-gh">Run settings</div>${settings}
       <div class="rs-group">${P.chart ? '' : '<button class="rs-row" data-act="show"><span>Show trades on the chart</span><span>›</span></button>'}
         <button class="rs-row" data-act="allmetrics"><span>All metrics</span><span>›</span></button>
         <button class="rs-row" data-act="report"><span>${root.dataset.report === '1' && P.chart ? 'Hide the full report' : 'Full report'}</span><span>›</span></button>
         ${b.kind === 'pipe' ? '' : `<button class="rs-row" data-act="review"${b.kind === 'builtin' ? ' disabled' : ''}><span>Request a review</span><span>›</span></button>${deskRows(b)}`}</div>${b.kind === 'pipe' ? '' : deskNote(b)}`;
+    main = main.replace('<div class="rs-gh">Run settings</div>', `${propHtml(r)}<div class="rs-gh">Run settings</div>`);
     settingsDone = true;
   } else if (r && r.st && (r.st.status === 'error' || r.st.status === 'cancelled')) {
     main = `<div class="rs-empty"><h3>${r.st.status === 'cancelled' ? 'Cancelled' : 'The run failed'}</h3><p>${esc(r.st.error || (r.st.status === 'cancelled' ? 'Run it again when you are ready.' : 'See the line under the editor.'))}</p></div>`;
   } else if (b.kind !== 'builtin' && b.kind !== 'pipe' && /BLUEPRINT RECORD/.test(b.code || '')) {
     main = `<div class="rs-empty"><h3>A written record</h3><p>This file is the card and verdict of an idea the research engine already ran. It places no trades here, so Run has nothing to run. Run shows the idea's saved research-engine run when one with trades exists.</p></div>`;
+  } else if (T) {
+    main = threeEmpty(T);
   } else {
     main = `<div class="rs-empty"><h3>No backtest yet</h3><p>Run it to see the P&amp;L, the equity curve and every trade. <kbd>⌘↵</kbd> runs it from the editor.</p></div>`;
   }
+  if (T) main = threeTabs(T) + main;
   el.innerHTML = settingsDone ? main : `${main}${settings ? `<div class="rs-gh">Run settings</div>${settings}` : ''}`;
   el.scrollTop = top;
   drawEq();
@@ -2723,6 +2958,11 @@ function act(name, el) {
   else if (name === 'hm40') hm40();
   else if (name === 'wfpick') wfPick(Number(el.dataset.i));
   else if (name === 'wfoos') wfOos();
+  else if (name === 'three') threeTab(el.dataset.t);
+  else if (name === 'runall') runAll();
+  else if (name === 'oosrun') oosRun();
+  else if (name === 'heatwf') wfRun();
+  else if (name === 'propsim') propRun();
   else if (name === 'wfblk') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.blk = Number(el.dataset.i); wfPaint(); } }
   else if (name === 'wfsort') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.sort = X.wfFixedSort(w.sort, el.dataset.k); wfPaint(); } }
   else if (name === 'heatcancel') heatCancel();
@@ -2791,14 +3031,6 @@ root.addEventListener('input', (e) => {
   if (t.id === 'libQ') { S.libQ = t.value; paintLibList(); return; }
   if (t.id === 'libSort' || t.id === 'libShow' || t.id === 'libMkt') { setListView({ libSort: 'sort', libShow: 'show', libMkt: 'market' }[t.id], t.value); return; }
   if (t.id === 'tkQ') { S.tkQ = t.value; const l = $('#tkList'); if (l) l.innerHTML = toolkitList(); return; }
-  if (t.id === 'wfSaid') {           // the owner's words: only the button follows them, so the box keeps the focus
-    const f = b && formOf(b), w = f && wfLabState(f);
-    if (!w) return;
-    w.said = t.value;
-    const btn = $('#wfOosBtn');
-    if (btn) btn.disabled = !X.wfFixedOos(w.result, w.said).canRun || w.busy;
-    return;
-  }
   if (t.id === 'edTa' && b && b.kind !== 'builtin' && !locked(b)) {
     const wasEmpty = !b.code.trim();
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
@@ -2825,6 +3057,7 @@ root.addEventListener('input', (e) => {
       if (t.tagName === 'SELECT' && /_mode$|^exit_line$/.test(t.dataset.c)) paintRes();     // only the number this mode reads shows
     } else if (t.dataset.in) {
       const inp = (meta.inputs || []).find((i) => i.key === t.dataset.in);
+      if (!inp) { paintRes(); return; }                // a setting the code no longer has: show the current ones
       f.inputs[inp.key] = inp.type === 'bool' ? t.checked : inp.type === 'choice' ? t.value : t.value === '' ? NaN : Number(t.value);
       t.classList.toggle('bad', !!X.inputError(inp, f.inputs[inp.key]));
       if (inp.type === 'choice') paintRes();          // the group's summary names the choices

@@ -1081,6 +1081,7 @@ class WalkForwardManager(GridManager):
             out = {"state": "done", "cell": claim["cell"], "job": oid, "params": claim["params"], "months": months,
                    "record": is_numbers(tr, sk, capital, months),
                    "blocks": [_block_row(b["i"], "oos", [m], tr) for b, m in zip(cfg["blocks"], months)],
+                   "equity": report.equity(sorted((to_ns(t) for t in tr), key=lambda t: (t["exit_ns"], t["entry_ns"]))),
                    "owner_said": claim["owner_said"], "at": claim["at"]}
         write_json(d / OOS, out)
         return out

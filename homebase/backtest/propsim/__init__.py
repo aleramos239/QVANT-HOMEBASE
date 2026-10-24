@@ -109,9 +109,10 @@ def load_rules(rule_id: str) -> dict:
     return json.loads(p.read_text())
 
 
-def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]]:
+def weekday_grid(trades: list[dict], months=None) -> tuple[list[float], list[bool], list[str]]:
     """(daily net P&L, traded?, session dates): every Mon–Fri from the first to the last
-    trading session, plus any weekend session that traded (P&L is never dropped)."""
+    trading session, plus any weekend session that traded (P&L is never dropped). `months` ('YYYY-MM'): only the
+    weekdays of those months -- a 3:1 run's own months; a month it never ran is no flat day of it (2026-10-24)."""
     by: dict[str, float] = {}
     for t in trades:
         by[t["date"]] = by.get(t["date"], 0.0) + t["net"]
@@ -120,6 +121,9 @@ def weekday_grid(trades: list[dict]) -> tuple[list[float], list[bool], list[str]
     d0, d1 = dt.date.fromisoformat(min(by)), dt.date.fromisoformat(max(by))
     days = {(d0 + dt.timedelta(i)).isoformat() for i in range((d1 - d0).days + 1)
             if (d0 + dt.timedelta(i)).weekday() < 5} | set(by)
+    if months:
+        keep = set(months)
+        days = {d for d in days if d[:7] in keep} | set(by)
     dates = sorted(days)
     return [by.get(d, 0.0) for d in dates], [d in by for d in dates], dates
 
@@ -254,7 +258,7 @@ def limit_trades(trades: list[dict], r: dict) -> list[dict]:
 
 
 def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int = N_PATHS,
-             horizon: int = HORIZON, seed: int = SEED, rules: dict | None = None) -> dict:
+             horizon: int = HORIZON, seed: int = SEED, rules: dict | None = None, months=None) -> dict:
     """The run's propsim.json. Pass `rules` when the caller already loaded the rule file
     (the runner does, from `validate()`) so it is not read from disk a second time."""
     r = rules if rules is not None else load_rules(rule_id)
@@ -282,7 +286,7 @@ def evaluate(trades: list[dict], rule_id: str = DEFAULT_RULES, *, n_paths: int =
             out["caveat"] = f"{CAVEAT} {' '.join(notes)} The pass rate is OVERSTATED."
     else:
         limited = trades
-    pnls, flags, dates = weekday_grid(limited)
+    pnls, flags, dates = weekday_grid(limited, months)
     if not pnls:
         return {**out, "skipped": "no trades: nothing to simulate"}
     opens = day_opens(limited, dates, r)

@@ -166,7 +166,7 @@ test('progress text and fraction', () => {
 test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.tiles(RUN).map((t) => [t.label, t.value, t.sub]), [
     ['Net P&L', '+$12,345.50', '+24.69%'], ['Max drawdown', `${M}$4,210`, `${M}8.42%`], ['Win rate', '54.2%', '13/24'],
-    ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'traded days'], ['Avg trade', '+$514.40', ''], ['Avg win : loss', 'RR 1:1.44', ''],
+    ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'traded days'], ['Avg trade', '+$514.40', ''], ['Risk : reward', 'RR 1:1.44', ''],
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
     ['2 strategy errors', 'err'], ['Reads test days', 'err']]);   // the badge is a fact, not a permission
@@ -271,7 +271,7 @@ test('performance summary rows (All / Long / Short, dollars, RR 1:X, Sharpe)', (
   const rows = X.summaryRows(RUN.report.summary);
   assert.deepEqual(rows[0], { label: 'Net profit', all: '+$12,345.50 (+24.69%)', long: '+$12,345.50 (+24.69%)', short: '+$12,345.50 (+24.69%)' });
   const by = Object.fromEntries(rows.map((r) => [r.label, r.all]));
-  assert.equal(by['Ratio avg win / avg loss'], 'RR 1:1.44');
+  assert.equal(by['Risk : reward (average win / average loss)'], 'RR 1:1.44');
   assert.equal(by['Sharpe ratio'], '1.23');
   assert.equal(by['Avg time in trade'], '3m 12s');
   assert.equal(by['Gross loss'], `${M}$17,654.50`);

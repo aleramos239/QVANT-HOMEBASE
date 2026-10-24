@@ -766,7 +766,7 @@ function applyRun(b, tab = 'overview', src = null) {
   strategyId = b.run.strategy.id;
   form = X.fromRun(b.run, schema);
   bundle = b;
-  startMonteCarlo(b.run.id, src || { run_id: b.run.id });
+  armMonteCarlo(b.run.id, src || { run_id: b.run.id });
   loadedKey = X.key(form);
   lastRunFailed = '';
   innerTab = tab;
@@ -782,7 +782,6 @@ function applyRun(b, tab = 'overview', src = null) {
     refreshTabsBar();
     refreshContent();
   }
-  if ((b.propsim || {}).skipped && b.run.prop_rules) startRescore(b.run, b.run.prop_rules);   // never scored when it ran: score it now
   notify();
 }
 
@@ -918,7 +917,7 @@ function loadBundle(rid, token) {
         return;
       }
       bundle = b;
-      startMonteCarlo(b.run.id);
+      armMonteCarlo(b.run.id);
       loadedKey = submittedKey;
       lastRunFailed = '';   // M1: a successful load is the only thing that clears the stale-failure banner
       innerTab = 'overview';
@@ -1035,7 +1034,12 @@ function propBlock(saved, run) {
   wrap.appendChild(head);
   if (shown.error) wrap.appendChild(page.mk('div', 'tst-err', shown.error));
   if (shown.rescored) wrap.appendChild(page.mk('div', 'tst-caveat', `Re-scored from this run's trades; the run was saved under ${run.prop_rules}.`));
-  if (view.tiles) {
+  const asked = rescore.runId === run.id && (rescore.loading || rescore.result || rescore.error);
+  if ((saved || {}).skipped && !asked && run.prop_rules) {           // not run with the backtest: only on its own click (owner 2026-10-24)
+    const go = page.mk('button', 'btn btn-ghost', 'Run the prop sim');
+    go.onclick = () => startRescore(run, run.prop_rules);
+    wrap.appendChild(go);
+  } else if (view.tiles) {
     const g = page.mk('div', 'tst-tiles tst-tiles-small');
     for (const t of view.tiles) g.appendChild(tileEl(t));
     wrap.appendChild(g);
@@ -1048,6 +1052,8 @@ function propBlock(saved, run) {
 /* ---- Monte Carlo (Overview sub-tab): fetched once per run id (and floor), cached in `mc` and on the server.
    `src` is {run_id} for a run, {grid_id, cell} for a heat-map cell (review I4). No seed is sent: the server
    derives one from the run id, so reopening a run shows the same numbers (review I2). ---- */
+/* A loaded run's Monte Carlo waits for its own click (owner 2026-10-24: nothing runs by itself after Run). */
+function armMonteCarlo(runId, src = { run_id: runId }) { ++mcToken; mc = { runId, src, floor: null, loading: false, error: '', result: null, idle: true }; }
 function startMonteCarlo(runId, src = { run_id: runId }, floor = null) {
   mc = { runId, src, floor, loading: true, error: '', result: null };
   const token = ++mcToken;
@@ -1097,8 +1103,14 @@ function mcBlock(runId) {
   const wrap = page.mk('div', 'tst-mc');
   const head = page.mk('div', 'tst-prop-head');
   head.appendChild(page.mk('span', 'tst-prop-title', 'Monte Carlo'));
-  if (mc.runId === runId) head.appendChild(mcFloorInput());
+  if (mc.runId === runId && !mc.idle) head.appendChild(mcFloorInput());
   wrap.appendChild(head);
+  if (mc.runId === runId && mc.idle) {
+    const go = page.mk('button', 'btn btn-ghost', 'Run the Monte Carlo');
+    go.onclick = () => startMonteCarlo(mc.runId, mc.src);
+    wrap.appendChild(go);
+    return wrap;
+  }
   if (mc.runId !== runId || mc.loading) { wrap.appendChild(page.mk('div', 'bp-empty', 'Running Monte Carlo…')); return wrap; }
   if (mc.error) { wrap.appendChild(page.mk('div', 'tst-err', mc.error)); return wrap; }
   if (!mc.result) return wrap;
@@ -1711,7 +1723,7 @@ function loadCell(i) {
       strategyId = b.run.strategy.id;
       form = X.fromRun(b.run, schemaFor(strategyId));
       bundle = b;
-      startMonteCarlo(b.run.id, { grid_id: gid, cell: i });
+      armMonteCarlo(b.run.id, { grid_id: gid, cell: i });
       loadedKey = X.key(form);
       lastRunFailed = '';
       visibleTradeRows = TRADE_CHUNK;

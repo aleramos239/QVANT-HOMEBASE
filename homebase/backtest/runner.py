@@ -143,7 +143,10 @@ def validate(body, *, draft: tuple | None = None) -> dict:
     else:
         cls = strategies.get(sid)
     inputs = strategies.resolve_inputs(cls.inputs(), body.get("inputs") or {})
-    rng = discipline.parse_range(body.get("range"))
+    rb = body.get("range")
+    if isinstance(rb, dict) and rb.get("kind") in discipline.WF_KINDS and not rb.get("root"):
+        rb = {**rb, "root": cls.root}               # the 3:1 months of the strategy's own market (the Lab's Run, 2026-10-24)
+    rng = discipline.parse_range(rb)
     if rng.root and rng.root != cls.root:
         raise ValueError(f"range.root: these are {rng.root} months, the strategy trades {cls.root}")
     prop_rules_id = body.get("prop_rules", propsim.DEFAULT_RULES)
@@ -234,7 +237,7 @@ def _run_propsim(trades: list[dict], req: dict) -> tuple[dict, bool]:
     """
     try:
         prop = propsim.evaluate(trades, req["prop_rules"], n_paths=propsim.N_PATHS,
-                                rules=req.get("prop_rules_data"))
+                                rules=req.get("prop_rules_data"), months=(req.get("range") or {}).get("months"))
         return prop, False
     except Exception as e:  # noqa: BLE001 — a bad rule file must not sink the whole run
         prop: dict = {"error": f"{type(e).__name__}: {e}"}
@@ -564,6 +567,19 @@ class RunManager:
                         "holdout": bool((req.get("range") or {}).get("holdout")), "trades": allc.get("trades"),
                         "net_profit": allc.get("net_profit")})
         return out
+
+    def same_done(self, body) -> str | None:
+        """The newest FINISHED run that this body would only repeat -- the same validated request, its code included -- or
+        None (the Lab shows it on opening a strategy instead of running it again, owner 2026-10-24)."""
+        norm = lambda x: json.loads(json.dumps(x, default=str))  # noqa: E731
+        want = norm(validate(body))
+        for d in sorted((p for p in self.runs.iterdir() if f"-{want['strategy']}-" in p.name), key=lambda p: p.name, reverse=True):
+            if (read_json(d / "status.json", {}) or {}).get("status") != "done":
+                continue
+            got = read_json(d / "request.json", {}) or {}
+            if {k: v for k, v in got.items() if k not in ("id", "created")} == want:
+                return d.name
+        return None
 
     def bundle(self, rid: str, plots: bool = True) -> dict:
         return read_bundle(self.dir(rid), plots)
