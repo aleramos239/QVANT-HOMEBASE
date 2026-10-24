@@ -583,3 +583,44 @@ def test_cdrel_with_fewer_than_15_earlier_dates_is_no_trade(monkeypatch):
     with_flow_by_date(monkeypatch, 0.5, REF20[:15] + [None] * 5)
     log, _ = orders({"mode": "break", "cdrel": "med"}, day(UP))
     assert [x[:2] for x in log] == [(sec(9, 45), "long")]
+
+
+# ---- (iv g) cumd: the net flow from 09:30 to the signal bar's start (owner, 2026-10-24, idea C) -----------------------------------------
+
+def with_since_flow(monkeypatch, today, ref):
+    """flowtab.window: share `today` on D and ref[k] on the k-th earlier date for any window that starts at 09:30 and ends by 09:35."""
+    shares = dict(zip([r["date"] for r in DAILY[-20:]], ref))
+    asked = []
+
+    def window(root, iso, a, b):
+        asked.append((a, b))
+        if a != sec(9, 30) or b != sec(9, 35):
+            return None
+        s = today if iso == D.isoformat() else shares.get(iso)
+        return None if s is None else (1000, int(round(s * 1000)), 0, 0)
+    monkeypatch.setattr(CS.flowtab, "window", window)
+    return asked
+
+
+def at_0940(log):
+    return [x[:2] for x in log if x[0] == sec(9, 40)]
+
+
+UP5 = {"09:39": m(PX, 15010.0, PX - TICK, 15008.0)}         # 5-minute bars: 09:35-09:40 closes 15008 above the flat 09:30-09:35 bar: a long at 09:40;
+                                                             # its cumd window is 09:30-09:35
+@pytest.mark.parametrize("today, w, med, p80", [(0.18, True, True, True), (0.12, True, True, False), (0.05, True, False, False),
+                                               (-0.18, False, False, False), (None, False, False, False)])
+def test_cumd_needs_the_flow_since_0930_the_trades_way(monkeypatch, today, w, med, p80):
+    for mode, want in (("with", w), ("med", med), ("p80", p80)):
+        asked = with_since_flow(monkeypatch, today, REF20)
+        log, _ = orders({"mode": "break", "tf": "5", "cumd": mode}, day(UP5))
+        assert at_0940(log) == ([(sec(9, 40), "long")] if want else []), (today, mode)
+        assert (sec(9, 30), sec(9, 35)) in asked and all(b <= sec(9, 40) - 300 or a != sec(9, 30) for a, b in asked)   # never the bar itself
+
+
+def test_cumd_a_bar_starting_at_0930_has_no_window_and_does_not_trade(monkeypatch):
+    with_since_flow(monkeypatch, 0.5, REF20)
+    log, _ = orders({"mode": "break", "cumd": "with"}, day(UP))     # 15-minute bars: the 09:30-09:45 signal bar starts AT 09:30
+    assert log == []
+    log, _ = orders({"mode": "break"}, day(UP))
+    assert [x[:2] for x in log] == [(sec(9, 45), "long")]
