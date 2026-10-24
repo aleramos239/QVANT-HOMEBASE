@@ -647,6 +647,7 @@ def test_a_promote_starts_the_walkforward_once_and_a_failed_one_is_not_started_a
         write_wf(tmp_path, store.get("nq_bars"), dt.date(2026, 10, 12), status="queued")
         return "x"
     monkeypatch.setattr(WalkForwardManager, "submit", fake_submit)
+    first_day(tmp_path)
     draft(drafts_dir)
     refuse.append(1)
     assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True and calls == []
@@ -670,6 +671,27 @@ def test_a_promote_starts_the_walkforward_once_and_a_failed_one_is_not_started_a
     (gdir / "grid.json").unlink()
     draft(drafts_dir, CODE + "# newer\n")
     assert lab_results(c)["nq_bars"]["unseen_state"] == "changed" and len(calls) == 1
+
+
+def first_day(tmp_path, day="2021-09-22"):
+    """A manifest in the test archive on the walk-forward's first day: this host's ticks reach back that far."""
+    folder = tmp_path / "ticks" / "NQ" / day[:4]
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / f"{day}_NQZ1.json").write_text("{}")
+
+
+def test_a_host_whose_ticks_do_not_reach_back_starts_no_walkforward(c, tmp_path, drafts_dir, make_run, monkeypatch):
+    """2026-10-24: the VPS (NQ ticks from 2026-08-18 only) ran nq_wick_break_28's walk-forward on 47 days and the card read
+    them as 45 + 15 months. A host without the first month starts nothing and says so."""
+    from homebase.backtest.walkforward import WalkForwardManager
+    monkeypatch.setattr(tester_api, "DESKLAB_AUTO_UNSEEN", True)
+    at_et(monkeypatch, 2026, 10, 12, 12, 0)
+    calls = []
+    monkeypatch.setattr(WalkForwardManager, "submit", lambda self, body: calls.append(body))
+    first_day(tmp_path, "2026-08-18")                   # recent ticks only
+    draft(drafts_dir)
+    assert promote(c, run_id=make_run(), headers=DESK).json()["ok"] is True
+    assert lab_results(c)["nq_bars"]["unseen_state"] == "no_data" and calls == []
 
 
 def test_the_curve_of_an_unseen_run_is_its_running_total_by_day_after_costs(tmp_path):

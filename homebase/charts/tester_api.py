@@ -204,7 +204,7 @@ from ..backtest.stats import montecarlo
 from ..backtest import walkforward
 from ..backtest.walkforward import WalkForwardManager
 from ..backtest.slots import Slots
-from ..backtest.tape import CACHE
+from ..backtest.tape import CACHE, TapeStore
 from ..claude_mcp import blueprint_tools, pipeline_tools
 from ..claude_mcp.client import ToolError
 from ..labrun import door, store
@@ -859,6 +859,12 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
     desk_res_lock = threading.Lock()     # one asker at a time: a run's first prop sim takes about 1.5 s, then it is kept
     unseen_lock = threading.Lock()
 
+    def covers(rec: dict, req: dict) -> bool:
+        """This host's tick archive holds the run's first month. The VPS keeps only recent ticks: a run there read 47 days and
+        the card called them 45 + 15 months (2026-10-24, nq_wick_break_28) -- such a run is made on the Mac and copied over."""
+        a = dt.date.fromisoformat(req["range"]["start"])
+        return bool(TapeStore(manager.archive, manager.cache).sessions(rec.get("root") or "NQ", a, a + dt.timedelta(days=31)))
+
     def ensure_unseen(rec: dict) -> dict:
         """The state of the record's unseen-days run (deskresults.unseen_state); when there is none, start it -- once: a run
         that failed or was cancelled is not started again by itself. A start the tester refuses (a quiet window of the tester,
@@ -868,8 +874,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                 got = deskresults.unseen_state(manager.runs, rec)
                 if got["state"] != "none" or not DESKLAB_AUTO_UNSEEN:
                     return got
+                req = deskresults.unseen_request(rec, slots.et_now().date())
+                if not covers(rec, req):
+                    return got
                 try:
-                    manager.submit(deskresults.unseen_request(rec, slots.et_now().date()))
+                    manager.submit(req)
                 except Exception:      # noqa: BLE001 -- not now: refused in words by the tester, or not working
                     return got
                 return deskresults.unseen_state(manager.runs, rec)
@@ -900,8 +909,11 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
                     return {"state": "changed"}
                 if hashlib.sha256(src.encode("utf-8")).hexdigest() != rec.get("sha256"):
                     return {"state": "changed"}
+                req = deskresults.wf_request(rec, today)
+                if not covers(rec, req):
+                    return {"state": "no_data"}
                 try:
-                    wfs.submit(deskresults.wf_request(rec, today))
+                    wfs.submit(req)
                 except Exception:      # noqa: BLE001 -- not now: refused in words by the tester, or not working
                     return got
                 return deskresults.wf_state(wfs.grids, rec, today)

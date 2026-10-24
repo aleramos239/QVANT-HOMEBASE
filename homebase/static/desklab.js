@@ -209,6 +209,7 @@
     pending: "Running the 3:1 walk-forward over all the data now. This shows here when it is done.",
     failed: "The 3:1 walk-forward did not finish. Run it again from the Lab.",
     changed: "The Lab's code changed since it was promoted. Promote it again to run its walk-forward.",
+    no_data: "This computer's ticks do not reach back to 2021, so the 3:1 walk-forward does not run here. Run it on the Mac and copy it over.",
   };
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function share(v) {            // 0.3688 -> "37%"
