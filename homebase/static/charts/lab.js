@@ -2034,16 +2034,18 @@ function settingsHtml(b) {
     if (i.type === 'choice') return `<label>${esc(i.label)}</label><select data-in="${esc(i.key)}">${i.choices.map((c) => `<option${c === v ? ' selected' : ''}>${esc(c)}</option>`).join('')}</select>`;
     return `<label title="${esc(i.label)}">${esc(i.label)}</label><input type="number" data-in="${esc(i.key)}" value="${esc(v)}" step="${i.step || 'any'}"${i.min != null ? ` min="${i.min}"` : ''}${i.max != null ? ` max="${i.max}"` : ''} class="${bad ? 'bad' : ''}">`;
   };
-  return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · ${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
-    <div class="grid"><label>Range</label><select data-f="range">${rangeOpts}</select>
-      ${wfSel ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: the 3-month windows step a month. Every Heat map box runs as set; there are no unseen test months.' : 'Run tries every Heat map box on the in-sample months only: 3 months in, the next 1 out, then the next block. You pick one box; its test months run only when you say. Clear the Heat map to run the strategy as set.'}</div>` : ''}
+  const t31 = is31(f);       // on 3:1 the tabs on top pick the months and the Heat map tab holds its own settings (owner 2026-10-24)
+  return `<details class="rs-group rs-set"${S.setOpen ? ' open' : ''}><summary><span>Settings</span><span>${t31 ? '' : `${esc(X.pillLabel ? X.pillLabel(f.range) : f.range.id)} · `}${f.qty} contract${f.qty === 1 ? '' : 's'}</span></summary>
+    <div class="grid">${t31 ? '' : `<label>Range</label><select data-f="range">${rangeOpts}</select>`}
+      ${wfSel && !t31 ? `<div class="wf-hint">${wfRolling(f.range) ? 'Rolling: the 3-month windows step a month. Every Heat map box runs as set; there are no unseen test months.' : 'Run tries every Heat map box on the in-sample months only: 3 months in, the next 1 out, then the next block. You pick one box; its test months run only when you say. Clear the Heat map to run the strategy as set.'}</div>` : ''}
       ${!wfSel && f.range.id === 'custom' ? `<label>From</label><input type="text" data-f="start" value="${esc(f.range.start)}" placeholder="YYYY-MM-DD"><label>To</label><input type="text" data-f="end" value="${esc(f.range.end)}" placeholder="YYYY-MM-DD">` : ''}
       <label>Contracts</label><input type="number" data-f="qty" value="${esc(f.qty)}" min="1" step="1">
       <label title="Dollars per contract, round trip">Fees ($ per contract)</label><input type="number" data-f="commission" value="${esc(f.commission)}" min="0" step="0.25">
       <label>Slippage (ticks)</label><input type="number" data-f="slippage_ticks" value="${esc(f.slippage_ticks)}" min="0" step="1">
+      ${t31 ? '<button class="btn btn-sm btn-outline other-dates" data-act="otherdates">Other dates…</button>' : ''}
     </div></details>
   ${ins.length ? `<details class="rs-group rs-set rs-inputs"${S.inOpen === false ? '' : ' open'}><summary><span>Strategy settings</span><span>${esc(ins.filter((i) => i.type === 'choice').slice(0, 3).map((i) => f.inputs[i.key]).join(' · ') || `${ins.length} inputs`)}</span></summary>
-    <div class="grid">${ins.map(inputRow).join('')}</div></details>` : ''}${rulesHtml(f, meta)}${heatSettingsHtml(f, meta)}`;
+    <div class="grid">${ins.map(inputRow).join('')}</div></details>` : ''}${rulesHtml(f, meta)}${t31 ? '' : heatSettingsHtml(f, meta)}`;
 }
 /* ---- Heat map (2026-10-12): pick up to three settings (the strategy's own, or any Trade rule), type the values each takes,
    and run every combination. A cell is an ordinary run (the same tester); the other settings stay as set above. The rules
@@ -2123,18 +2125,21 @@ function heatPickHtml(f, meta, h) {
         <div class="heat-hint">${esc(hint)}</div>` : ''}`;
   }).join('');
 }
-function heatSettingsHtml(f, meta) {
-  const h = heatState(f), chk = heatCheck(f, meta, h), busy = heatBusy(h);
+const wfBusyNow = (f) => { const w = wfLabState(f); return !!(w.starting || (w.job && !X.wfProgress(w.job).final)); };
+function heatSettingsHtml(f, meta, tab) {
+  const h = heatState(f), chk = heatCheck(f, meta, h), busy = tab ? wfBusyNow(f) : heatBusy(h), n = chk.n || 0;
   const picked = h.rows.filter((r) => r.key).map((r) => (X.axisInput(meta, r.key) || {}).label).filter(Boolean);
-  return `<details class="rs-group rs-set rs-heat"${S.heatOpen ? ' open' : ''}><summary><span>Heat map</span><span>${picked.length ? esc(picked.join(' × ')) : 'off'}</span></summary>
+  const run = tab ? `<button class="btn btn-sm heat-run" data-act="heatwf" id="heatBtn"${busy || chk.bad || !n ? ' disabled' : ''}>Run the heat map · ${n} box${n === 1 ? '' : 'es'}</button>`
+    : `<button class="btn btn-sm heat-run" data-act="${busy ? 'heatcancel' : 'heatrun'}" id="heatBtn"${!busy && (chk.bad || !chk.n) ? ' disabled' : ''}>${busy ? 'Cancel' : 'Run heat map'}</button>`;
+  return `<details class="rs-group rs-set rs-heat"${tab ? (S.heatOpen === false ? '' : ' open') : S.heatOpen ? ' open' : ''}><summary><span>${tab ? 'What to vary' : 'Heat map'}</span><span>${picked.length ? esc(picked.join(' × ')) : 'off'}</span></summary>
     <div class="grid heat-grid">${heatPickHtml(f, meta, h)}
       <div class="sep"></div>
       <div class="heat-note${chk.bad ? ' bad' : ''}" id="heatNote">${esc(chk.note)}</div>
       <button class="btn btn-sm btn-outline heat-exit" data-act="hm40"${busy ? ' disabled' : ''} title="The 40 exit boxes: 4 ATR stops (and 4 own-stop sizes when the strategy has its own stop) × 5 targets">hm40</button>
       <button class="btn btn-sm btn-outline heat-exit" data-act="exitlab"${busy ? ' disabled' : ''} title="Fill the heat map with exits to try on this strategy: breakeven × trailing stop × own vs candle stop">Exit lab</button>
-      <button class="btn btn-sm heat-run" data-act="${busy ? 'heatcancel' : 'heatrun'}" id="heatBtn"${!busy && (chk.bad || !chk.n) ? ' disabled' : ''}>${busy ? 'Cancel' : 'Run heat map'}</button>
+      ${run}
     </div>
-    <div class="heat-res" id="heatRes">${heatResHtml(f, meta)}</div></details>`;
+    ${tab ? '' : `<div class="heat-res" id="heatRes">${heatResHtml(f, meta)}</div>`}</details>`;
 }
 /* the table(s): one per value of Panels; a cell is net $ (tone by sign, depth by size), a click puts that run on the chart */
 function heatResHtml(f, meta) {
@@ -2166,7 +2171,8 @@ function heatPaint() {
   const h = heatState(f), chk = heatCheck(f, meta, h), busy = heatBusy(h);
   const note = $('#heatNote'), btn = $('#heatBtn'), res = $('#heatRes');
   if (note) { note.textContent = chk.note; note.classList.toggle('bad', !!chk.bad); }
-  if (btn) { btn.textContent = busy ? 'Cancel' : 'Run heat map'; btn.dataset.act = busy ? 'heatcancel' : 'heatrun'; btn.disabled = !busy && (chk.bad || !chk.n); }
+  if (btn && is31(f)) { const n = chk.n || 0; btn.textContent = `Run the heat map · ${n} box${n === 1 ? '' : 'es'}`; btn.disabled = wfBusyNow(f) || chk.bad || !n; }
+  else if (btn) { btn.textContent = busy ? 'Cancel' : 'Run heat map'; btn.dataset.act = busy ? 'heatcancel' : 'heatrun'; btn.disabled = !busy && (chk.bad || !chk.n); }
   if (res) res.innerHTML = heatResHtml(f, meta);
 }
 async function heatRun() {
@@ -2396,12 +2402,11 @@ function oosHtml(T) {
     <button class="btn btn-sm" data-act="oosrun">Run the test months</button></div>`;
 }
 function heatTabHtml(f) {
-  const w = wfLabState(f), h = heatState(f), n = X.gridCount(X.gridAxes(h.rows, { ...metaOf(buf()), id: f.strategy }, f.max_cells).axes);
-  const idle = !w.starting && !w.job && !w.err;
+  const w = wfLabState(f), idle = !w.starting && !w.job && !w.err;
   return `<div class="rs-h"><b>Heat map · 3:1 in-sample months</b><span>Every box as set</span></div>
+    ${heatSettingsHtml(f, metaOf(buf()) || {}, true)}
     <div class="wf-main" id="wfRes">${wfResHtml(f) || ''}</div>
-    ${idle ? `<div class="rs-empty"><h3>No heat map yet</h3><p>Every box of the heat map, each run once as set, on the 3:1 in-sample months. You pick one box from the table; its test months run only when you click.</p>
-      <button class="btn btn-sm" data-act="heatwf">Run the heat map · ${n} box${n === 1 ? '' : 'es'}</button></div>` : ''}`;
+    ${idle ? `<div class="rs-empty"><h3>No heat map yet</h3><p>Every box of the heat map, each run once as set, on the 3:1 in-sample months. You pick one box from the table; its test months run only when you click.</p></div>` : ''}`;
 }
 /* the prop sim of the run on screen: only on its own click (owner 2026-10-24) */
 function propHtml(r) {
@@ -2962,6 +2967,7 @@ function act(name, el) {
   else if (name === 'runall') runAll();
   else if (name === 'oosrun') oosRun();
   else if (name === 'heatwf') wfRun();
+  else if (name === 'otherdates') { const f = b && formOf(b); if (f) { f.range = { id: 'custom', start: f.range.start, end: f.range.end, wf: null }; paintRes(); paintHead(); } }
   else if (name === 'propsim') propRun();
   else if (name === 'wfblk') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.blk = Number(el.dataset.i); wfPaint(); } }
   else if (name === 'wfsort') { const f = b && formOf(b), w = f && wfLabState(f); if (w) { w.sort = X.wfFixedSort(w.sort, el.dataset.k); wfPaint(); } }
