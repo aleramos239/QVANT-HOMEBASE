@@ -123,12 +123,13 @@ function queueValidate(b, delay = 450) {
 }
 async function validateNow(b) {
   if (!b || b.kind === 'builtin' || !b.code || !b.code.trim()) { if (b) { b.valid = null; paintHead(); paintGutter(); } return null; }
-  const seq = ++vSeq, t0 = performance.now(), code = b.code;
+  const seq = ++vSeq, t0 = performance.now(), code = b.code, had = !!metaOf(b);
   const r = await send('POST', '/api/tester/drafts/validate', { code });
   if (seq !== vSeq || code !== b.code) return null;               // a newer keystroke won
   b.valid = r.ok ? r.json : { ok: false, error: r.error, line: null };
   b.validMs = Math.round(performance.now() - t0);
   paintHead(); paintGutter(); paintLib();
+  if (!had && metaOf(b) && b === buf()) paintRes();   // its settings just arrived: the panel shows the 3:1 view (where Run 3:1 reports), not "No backtest yet"
   return b.valid;
 }
 async function save(b) {
@@ -2348,6 +2349,7 @@ async function wfRun() {
   const nb = buf(), f = formOf(nb), meta = { ...metaOf(nb), id: f.strategy };
   if (!f.range.wf) return;
   const h = heatState(f), w = wfLabState(f), search = h.rows.some((r) => r.key);
+  if (w.starting || (w.job && !X.wfProgress(w.job).final)) { paintRes(); return; }   // one already running: show it, never a second job
   const err = search ? X.gridProblems(f, meta, h.rows) : X.problems(f, meta);   // no heat-map settings: the strategy as set
   if (err) { log(`<span class="err">${esc(err)}</span>`); return; }
   const axes = search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [];      // none: one box, the strategy as set
