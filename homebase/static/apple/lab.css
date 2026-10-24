@@ -301,6 +301,7 @@ html.hb-apple #labRes .rs-set > summary::after { content: ""; flex: none; width:
 html.hb-apple #labRes .rs-set[open] > summary::after { transform: rotate(90deg); }
 html.hb-apple #labRes .rs-set .grid { display: grid; grid-template-columns: minmax(0, 1fr) 104px; gap: 13px 10px; align-items: center; padding: 7px 10px 7px; border-top: 1px solid var(--a-group-sep); margin: 0; }
 html.hb-apple #labRes .rs-set label { font-size: 13px; line-height: 16px; color: var(--a-label); }
+html.hb-apple #labRes .rs-show .grid { border-top: 0; }   /* the Show picker is a card of its own, not a section under a title */
 html.hb-apple #labRes .rs-set input, html.hb-apple #labRes .rs-set select { -webkit-appearance: none; appearance: none; justify-self: end; width: 100%; height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: var(--a-field); color: var(--a-label);
   box-shadow: 0 0 0 1px var(--a-field-edge), 0 .5px 1.5px rgb(0 0 0 / .08); font-family: var(--a-font); font-size: 13px; line-height: 16px; font-variant-numeric: tabular-nums; text-align: right; outline: none; }
 html.hb-apple #labRes .rs-set input[type="number"]::-webkit-inner-spin-button, html.hb-apple #labRes .rs-set input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

@@ -2267,7 +2267,7 @@ const threeRun = (b, T) => (T.tab !== 'is' && T.tab !== 'all' ? null
   : S.active && S.active.key === b.key && S.active.tag === T.tab && !S.active.dead ? S.active : T[T.tab]);
 function threeKeep(run) { const T = run.tag && S.three[run.strategy]; if (T) T[run.tag] = run; }
 function threeTabs(T) {
-  return `<div class="pl-filter three-tabs" role="group" aria-label="Show">${THREE_TABS.map(([k, l]) => `<button class="pl-fc${T.tab === k ? ' on' : ''}" data-act="three" data-t="${k}" aria-pressed="${T.tab === k}">${esc(l)}</button>`).join('')}</div>`;
+  return `<div class="rs-group rs-set rs-show"><div class="grid"><label for="threeSel">Show</label><select id="threeSel" data-three>${THREE_TABS.map(([k, l]) => `<option value="${k}"${T.tab === k ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select></div></div>`;
 }
 function threeTab(t) {
   const b = buf(), f = b && formOf(b);
@@ -2963,7 +2963,6 @@ function act(name, el) {
   else if (name === 'hm40') hm40();
   else if (name === 'wfpick') wfPick(Number(el.dataset.i));
   else if (name === 'wfoos') wfOos();
-  else if (name === 'three') threeTab(el.dataset.t);
   else if (name === 'runall') runAll();
   else if (name === 'oosrun') oosRun();
   else if (name === 'heatwf') wfRun();
@@ -3042,6 +3041,8 @@ root.addEventListener('input', (e) => {
     b.code = t.value; b.valid = b.valid && b.valid.ok ? { ...b.valid, stale: true } : null;
     if (b.kind === 'new' && wasEmpty && b.code.trim() && !b.name) { b.name = C.suggestName(b.code, takenNames()); const n = document.getElementById('edName'); if (n) n.value = b.name; }
     paintCode(); paintHead(); queueValidate(b); paintLib();
+  } else if (t.dataset.three !== undefined) {
+    threeTab(t.value);
   } else if (t.dataset.hk !== undefined || t.dataset.ht !== undefined) {
     const f = b && formOf(b), meta = b && metaOf(b);
     if (!f || !meta) return;

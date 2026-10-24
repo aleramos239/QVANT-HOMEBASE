@@ -198,6 +198,7 @@ body.lab-page { background: var(--panel) !important; }
 .rs-set input[type="checkbox"] { width: 16px; height: 16px; justify-self: end; accent-color: var(--hb-accent); box-shadow: none; }
 .rs-set .sep { grid-column: 1 / -1; height: .5px; background: var(--hb-hair); margin: 4px 0; }
 .rs-set .other-dates { grid-column: 1 / -1; justify-self: start; }
+.rs-show .grid { padding: 8px 14px; }
 .rs-set .warn { grid-column: 1 / -1; font-size: var(--hb-fs-sm); color: var(--warn-ink, var(--warn)); line-height: 1.4; }
 
 /* ---- menus and dialogs: glass, originating from what opened them ---- */
