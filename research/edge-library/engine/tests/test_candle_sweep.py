@@ -624,3 +624,12 @@ def test_cumd_a_bar_starting_at_0930_has_no_window_and_does_not_trade(monkeypatc
     assert log == []
     log, _ = orders({"mode": "break"}, day(UP))
     assert [x[:2] for x in log] == [(sec(9, 45), "long")]
+
+
+def test_cumd_counts_from_the_open_layers_w_start_when_it_is_set():
+    from families import blocks as B
+    cls = B.WRAPPED["candle_sweep"]
+    for w, want in (("", sec(9, 30)), ("18:00", -6 * 3600), ("03:00", sec(3))):
+        st = cls({**BASE, "tf": "5", "mode": "break", "cumd": "with", "w_start": w})
+        st.M = [(sec(9, 39), PX, PX, PX, PX, 40)]                  # the 1-minute bar 09:39-09:40 has just closed: the 5-minute bar is 09:35-09:40
+        assert st._win("since") == (want, sec(9, 35)) and st._win("bar") == (sec(9, 35), sec(9, 40)), w

@@ -48,7 +48,8 @@ THE RULE (fixed here, before any run):
     own delta share (as CDELTA) must point the trade's way AND be at least the median (med) / the 80th percentile (p80) of |share| of
     the SAME clock window on the 20 trade dates before (the daily rows; at least 15 with flow and volume). Fewer = no trade.
   * CUMD (the owner, 2026-10-24, idea C: "the session's flow was already on the trade's side"). `cumd` = off (the default) | with
-    | med | p80: the net aggressor volume from 09:30 ET up to the START of the signal bar, as a share of that window's volume, must point
+    | med | p80: the net aggressor volume from 09:30 ET (or from the open layer's w_start when it is set: 18:00 for an idea that opens
+    the evening before, owner 2026-10-24) up to the START of the signal bar, as a share of that window's volume, must point
     the trade's way (with) and, for med / p80, reach the median / 80th percentile of |share| of the same clock window on the 20 trade
     dates before (15 needed). A bar that starts at or before 09:30 has no window yet: no trade.
   * BOTH. A bar that swept both sides and qualifies both ways (it closed back inside both) is no trade.
@@ -93,7 +94,7 @@ BACKS = ("range", "body", "far")
 CDREL = {"med": 0.5, "p80": 0.8}                            # cdrel: the quantile of the 20 earlier dates' |share| to reach
 CDREL_N, CDREL_MIN = 20, 15
 CUMD = {"with": None, "med": 0.5, "p80": 0.8}                # cumd: None = the sign only, else the quantile as CDREL
-OPEN930 = 34200                                              # shortcut: cumd anchors at 09:30 ET, meant for the NY sessions only
+OPEN930 = 34200                                              # cumd's anchor when no w_start is set: 09:30 ET
 CDELTA = {"with": 0.0, "with_20": 0.20, "with_40": 0.40}    # the least share of the signal bar's volume the trade's way (with = above 0)
 HOUR = 3600 * S.NS
 LOOK = 30                                           # sessions back at most for the 1-hour closes
@@ -238,7 +239,8 @@ class CandleSweep(Template):
         """The clock window (seconds after 00:00 ET) of `kind`: "bar" = the signal bar's minutes, "since" = 09:30 to the bar's start."""
         now = (self.M[-1][0] // 60 + 1) * 60                     # the clock close of the 1-minute bar that has just closed
         start = now - 60 * (self.p["candle"] or int(self.p["tf"]))
-        return (start, now) if kind == "bar" else (OPEN930, start)
+        a = S.clock_sec(self.p["w_start"]) if self.p.get("w_start") else OPEN930     # the window's own open, else 09:30
+        return (start, now) if kind == "bar" else (a, start)
 
     def share(self, ctx, a, b, iso=None):
         """Delta / volume of the flow table's whole minutes in [a, b) on the trade date (or `iso`); None: an empty window, no flow
