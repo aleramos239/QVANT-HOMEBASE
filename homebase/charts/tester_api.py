@@ -1490,6 +1490,15 @@ def make_router(write_ok: Callable[[Request], None], manager: RunManager,
         except ValueError as e:
             raise HTTPException(400, str(e)) from None
 
+    @r.post("/walkforward-match")
+    def walkforward_match(request: Request, body: dict):
+        """{id}: the newest finished walk-forward that this Run body would only repeat (same settings, months, code), or null."""
+        write_ok(request)
+        try:
+            return {"id": wfs.same_done(body)}
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+
     @r.get("/walkforward/{wid}")
     def walkforward_status(wid: str):
         known_wf(wid)

@@ -2337,6 +2337,27 @@ function wfPaint() {
   const res = $('#wfRes');
   if (res) res.innerHTML = wfResHtml(f) || WF_EMPTY;
 }
+/* The body Run 3:1 sends, after its own check: the heat map's boxes, or none (one box, the strategy as set). */
+function wfRunBody(b, f) {
+  const meta = { ...metaOf(b), id: f.strategy }, h = heatState(f), search = h.rows.some((r) => r.key);
+  const err = search ? X.gridProblems(f, meta, h.rows) : X.problems(f, meta);
+  if (err) return { err };
+  const axes = search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [];
+  return { body: f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5) };
+}
+/* Opening a strategy shows its newest FINISHED 3:1 that Run would only repeat -- the same settings, months and code -- instead of
+   asking for it again (owner 2026-10-24). Once a strategy a page; never over a job of its own, never for unsaved code. */
+async function wfResume(b, f) {
+  const w = wfLabState(f);
+  if (w.resumed || w.id || w.starting || w.job || (b.kind !== 'builtin' && (b.kind === 'new' || isDirty(b)))) return;
+  w.resumed = true;
+  const q = wfRunBody(b, f);
+  if (q.err) return;
+  const r = await send('POST', '/api/tester/walkforward-match', q.body);
+  if (!r.ok || !r.json || !r.json.id || w.id || w.starting) return;
+  w.id = r.json.id;
+  wfPoll(w, ++w.token);
+}
 async function wfRun() {
   const b = buf();
   if (!b || (S.busy && S.active && S.active.key === b.key)) return;
@@ -2346,15 +2367,13 @@ async function wfRun() {
     if (!v || !v.ok) { log(`<span class="err">Fix the script first: ${esc(C.statusOf(v).text)}</span>`); return; }
     if (isDirty(b) || b.kind === 'new') { if (!(await save(b))) return; }
   }
-  const nb = buf(), f = formOf(nb), meta = { ...metaOf(nb), id: f.strategy };
+  const nb = buf(), f = formOf(nb);
   if (!f.range.wf) return;
-  const h = heatState(f), w = wfLabState(f), search = h.rows.some((r) => r.key);
+  const w = wfLabState(f);
   if (w.starting || (w.job && !X.wfProgress(w.job).final)) { paintRes(); return; }   // one already running: show it, never a second job
-  const err = search ? X.gridProblems(f, meta, h.rows) : X.problems(f, meta);   // no heat-map settings: the strategy as set
-  if (err) { log(`<span class="err">${esc(err)}</span>`); return; }
-  const axes = search ? X.gridAxes(h.rows, meta, f.max_cells).axes : [];      // none: one box, the strategy as set
-  const bodyObj = f.range.wf === X.WF_ROLL ? X.wfFixedBody(f, axes) : X.wfBody(f, axes, 'net_profit', 5);
-  const token = ++w.token;
+  const q = wfRunBody(nb, f);
+  if (q.err) { log(`<span class="err">${esc(q.err)}</span>`); return; }
+  const bodyObj = q.body, token = ++w.token;
   w.err = ''; w.starting = true; w.job = null; w.result = null; w.sort = null; w.said = ''; w.say = ''; w.busy = false; w.blk = null; S.wfStepsOpen = false;
   wfPaint();
   const r = await send('POST', '/api/tester/walkforward', bodyObj);
@@ -2632,6 +2651,7 @@ function paintRes() {
     if (wr && !fx && wfJobFits(wfF, wfLabState(wfF).job)) { WFEQ = sd === 'is' ? wr.stitched_is.equity : wr.stitched.equity; WFEQ2 = sd === 'both' ? wr.stitched_is.equity : null; }
     main = `<div class="rs-h"><b>Walk-forward ${esc(X.wfRatioText(wfF.range.wf))}${wfRolling(wfF.range) ? ' rolling' : ' blocks'} · ${fx ? 'every box' : WF_SIDE_TEXT[wfSide(wfF)]}</b><span>All data</span></div>
       <div class="wf-main" id="wfRes">${wfResHtml(wfF) || WF_EMPTY}</div>`;
+    wfResume(b, wfF);
   } else if (r && !r.bundle && !r.dead && (S.busy || (r.st && r.st.status === 'queued'))) {
     const p = X.progress(r.st || { status: 'queued' }), ind = p.frac == null;
     main = `<div class="rs-h"><b>Backtest</b></div><div class="rs-prog"><div class="t">${esc(p.text || 'Starting…')}</div><div class="rs-bar${ind ? ' ind' : ''}"><i style="width:${ind ? 38 : Math.round(p.frac * 100)}%"></i></div>

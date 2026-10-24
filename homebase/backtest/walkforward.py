@@ -1085,6 +1085,21 @@ class WalkForwardManager(GridManager):
         write_json(d / OOS, out)
         return out
 
+    def same_done(self, body) -> str | None:
+        """The newest FINISHED job that Run with this body would only repeat: the same settings, months and boxes, each box's
+        run request the same to its code (the Lab shows it on opening a strategy instead of running it again). None: no such job."""
+        norm = lambda x: json.loads(json.dumps(x, default=str))  # noqa: E731
+        g = norm(self._validate(body))
+        want = [c["req"] for c in g.pop("cells")]
+        for d in sorted((p for p in self.grids.iterdir() if f"-{g['strategy']}-" in p.name), key=lambda p: p.name, reverse=True):
+            st = read_json(d / "grid.json", {}) or {}
+            if st.get("status") != "done" or len(st.get("cells") or []) != len(want) or any(st.get(k) != v for k, v in g.items()):
+                continue
+            got = [read_json(d / "cells" / f"{i:02d}" / "request.json", {}) or {} for i in range(len(want))]
+            if all({k: v for k, v in r.items() if k not in ("id", "created")} == w for r, w in zip(got, want)):
+                return d.name
+        return None
+
     def list(self, limit: int = 20) -> list[dict]:
         out = super().list(limit)
         for g in out:

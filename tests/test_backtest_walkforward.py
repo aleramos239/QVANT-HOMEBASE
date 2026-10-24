@@ -1275,3 +1275,29 @@ def test_a_stopped_read_says_so(tmp_path, layout, ranged, tester_shared, monkeyp
         m.oos(wid, 0, "run it")
     o = m.result(wid)["oos"]
     assert o["state"] == "stopped" and o["say"] == "stopped: the read is used, no record"
+
+
+def test_same_done_finds_the_finished_job_run_would_only_repeat(tmp_path):
+    """The Lab shows this job on opening a strategy (owner 2026-10-24): the newest DONE one with the same settings and boxes."""
+    import json
+    import types
+    from homebase.backtest.runner import write_json
+    body = {"scheme": "fixed", "strategy": "nq930", "inputs": {"adx_gate": False}, "axes": AXES}
+
+    def job(name: str, status: str, body: dict) -> None:
+        g = json.loads(json.dumps(wf.validate_wf(body), default=str))
+        d = tmp_path / name
+        for c in g["cells"]:
+            (d / "cells" / f"{c['i']:02d}").mkdir(parents=True)
+            write_json(d / "cells" / f"{c['i']:02d}" / "request.json", {**c["req"], "id": f"{name}-c", "created": "x"})
+        write_json(d / "grid.json", {**{k: v for k, v in g.items() if k != "cells"}, "id": name, "status": status,
+                                      "cells": [{"i": c["i"], "status": status} for c in g["cells"]]})
+
+    me = types.SimpleNamespace(_validate=wf.validate_wf, grids=tmp_path)
+    assert wf.WalkForwardManager.same_done(me, body) is None
+    job("20261024-080000-nq930-aaaa", "done", body)
+    job("20261024-090000-nq930-bbbb", "running", body)                          # newer, but not finished
+    job("20261024-085000-nq930-cccc", "done", {**body, "inputs": {"adx_gate": True}})   # newer, other settings
+    assert wf.WalkForwardManager.same_done(me, body) == "20261024-080000-nq930-aaaa"
+    assert wf.WalkForwardManager.same_done(me, {**body, "inputs": {"adx_gate": True}}) == "20261024-085000-nq930-cccc"
+    assert wf.WalkForwardManager.same_done(me, {**body, "qty": 2}) is None
