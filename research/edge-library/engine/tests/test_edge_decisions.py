@@ -254,9 +254,8 @@ def test_metrics_are_reported_per_year_first_then_combined():
     assert (y23["trades"], y23["net"], y23["max_dd"], y23["pf"]) == (2, 450.0, 0.0, None)
     assert (al["trades"], al["net"], al["avg_trade"]) == (7, 450.0, round(450 / 7, 2)) and al["max_dd"] == 500.0
     assert al["days"] == len(cal) and y21["days"] + y22["days"] + y23["days"] == len(cal)
-    # Sharpe: the DAILY net over every session of the year (0 on a day without a trade), annualised with sqrt(252)
-    d22 = np.zeros(y22["days"])
-    d22[:3] = [300.0, -500.0, 100.0]
+    # Sharpe: the DAILY net over the days that TRADED only (never a $0 day: owner, 2026-10-23), annualised with sqrt(252)
+    d22 = np.array([300.0, -500.0, 100.0])
     assert y22["sharpe"] == pytest.approx(d22.mean() / d22.std(ddof=1) * np.sqrt(252.0))
     assert LB.metrics(LB.pack([]), cal[:5])["sharpe"] is None and LB.metrics(LB.pack([]), cal[:5])["trades"] == 0
     pick = LB.per_year(LB.pack(trades + [tr("2024-02-06", 80.0)]), cal + [d.isoformat() for d in S.sessions("2024-01-02", "2024-12-31")])

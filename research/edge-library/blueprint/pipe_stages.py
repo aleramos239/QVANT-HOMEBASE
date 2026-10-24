@@ -1055,7 +1055,8 @@ YEAR = 252                                          # session days a year: a cal
 def _edge_numbers(x: dict, calendar) -> dict:
     """THE SHOWN NUMBERS of edge mode (the owner, 2026-10-18), off one box's trades at one contract after costs and the session days they were run on
     (a day without a trade = $0): win_rate, realized_rr, breakeven_wr, avg_r (the average trade in units of the average loss), net, net_per_year
-    (per 252 session days), sharpe (daily: mean / spread of the session days' net, x sqrt 252; None: under two days or no spread), months_positive
+    (per 252 session days), sharpe (daily: mean / spread of the TRADED days' net, x sqrt 252 -- never a $0 day, owner 2026-10-23; None: under
+    two traded days or no spread), months_positive
     (share of the months with a trade that end above $0), biggest_day_share, worst_drawdown and worst_drawdown_r (open losses counted, in units of
     the average loss), month_wr {lowest, median, months} (the months with 3 trades or more), trades, days. None where a number has no meaning."""
     f = _facts(x, calendar, 0)
@@ -1066,7 +1067,7 @@ def _edge_numbers(x: dict, calendar) -> dict:
     by = {}
     for d, n in zip(x["date"], net):
         by[int(d)] = by.get(int(d), 0.0) + float(n)
-    day = np.array([by.get(d, 0.0) for d in days])
+    day = np.array(list(by.values()))                     # the days that traded only (owner, 2026-10-23)
     sd = float(day.std(ddof=1)) if len(day) > 1 else 0.0
     mo = {}
     for d, n in zip(x["date"], net):

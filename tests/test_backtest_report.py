@@ -9,15 +9,6 @@ import pytest
 from homebase.backtest.report import build, equity, rr_label, sortino, t_stat
 
 
-def _weekday_grid(by_date: dict[str, float]) -> list[float]:
-    """An independent re-implementation of the weekday grid (not the code under
-    test) used to hand-check `report.build`'s Sharpe/Sortino basis."""
-    d0, d1 = dt.date.fromisoformat(min(by_date)), dt.date.fromisoformat(max(by_date))
-    days = {(d0 + dt.timedelta(i)).isoformat() for i in range((d1 - d0).days + 1)
-            if (d0 + dt.timedelta(i)).weekday() < 5} | set(by_date)
-    return [by_date.get(d, 0.0) for d in sorted(days)]
-
-
 def tr(date, side, net, hms_ns, seconds=60.0, bars=2, comm=4.0):
     day = {"2024-01-02": 1704205800, "2024-01-03": 1704292200, "2024-02-05": 1707143400}[date]
     t0 = (day + hms_ns) * 1_000_000_000
@@ -46,17 +37,10 @@ def test_all_column_hand_computed():
     daily = [192.0, -204.0, 196.0]                       # by session date (traded days only)
     m = sum(daily) / 3
     sd = math.sqrt(sum((d - m) ** 2 for d in daily) / 2)
-    assert a["sharpe_traded_days"] == pytest.approx(m / sd * math.sqrt(252)) and a["days"] == 3
-    # Item 1: the report's headline sharpe/sortino run on the weekday grid (every
-    # Mon-Fri between the first and last trade date, 0.0 on a day nothing traded),
-    # not the traded-days-only sample -- the traded-days figure is inflated because
-    # it excludes every weekday the "account" sat flat.
-    grid = _weekday_grid({"2024-01-02": 192.0, "2024-01-03": -204.0, "2024-02-05": 196.0})
-    gm = sum(grid) / len(grid)
-    gsd = math.sqrt(sum((d - gm) ** 2 for d in grid) / (len(grid) - 1))
-    gdd = math.sqrt(sum(min(d, 0.0) ** 2 for d in grid) / len(grid))
-    assert a["sharpe"] == pytest.approx(gm / gsd * math.sqrt(252))
-    assert a["sortino"] == pytest.approx(gm / gdd * math.sqrt(252))
+    dd = math.sqrt(sum(min(d, 0.0) ** 2 for d in daily) / 3)
+    # owner 2026-10-23: Sharpe and Sortino count only the days that traded, never a $0 day
+    assert a["sharpe"] == pytest.approx(m / sd * math.sqrt(252)) and a["days"] == 3
+    assert a["sortino"] == pytest.approx(m / dd * math.sqrt(252))
     assert a["t_stat"] == pytest.approx(46.0 / (math.sqrt(170000 / 3) / 2))
 
 
@@ -85,13 +69,12 @@ def test_empty_and_degenerate_ledgers():
     a = build([])["summary"]["all"]
     assert a["trades"] == 0 and a["win_rate"] is None and a["profit_factor"] is None
     assert a["rr_label"] == "—" and a["sharpe"] == 0.0 and a["t_stat"] is None
-    assert a["sharpe_traded_days"] == 0.0
     assert rr_label(999.0) == "1:∞" and rr_label(0.75) == "1:0.75"
     assert sortino([10.0, 20.0]) is None and t_stat([5.0]) is None and t_stat([3.0, 3.0]) is None
 
 
-def test_sharpe_basis_is_the_weekday_grid():
-    assert build(LEDGER)["sharpe_basis"] == "weekday grid (daily net incl. 0-trade weekdays, ×√252)"
+def test_sharpe_basis_is_traded_days_only():
+    assert build(LEDGER)["sharpe_basis"] == "traded days only (daily net on the days with a trade, ×√252)"
 
 
 def _trade(date: str, net: float) -> dict:
@@ -102,25 +85,19 @@ def _trade(date: str, net: float) -> dict:
             "seconds": 60.0, "bars": 1}
 
 
-def test_sharpe_weekday_grid_vs_traded_days_ratio_on_a_sparse_ledger():
-    """Item 1: a sparse book (one trade a week, like an event straddle) reads an
-    inflated Sharpe on traded days alone -- the expected ratio between the two
-    bases, hand-verified independently of report.py's own weekday-grid helper."""
+def test_a_day_without_a_trade_never_enters_the_sharpe():
+    """owner 2026-10-23: a sparse book (one trade a week) reads its Sharpe on its 4 traded days, not on
+    16 weekdays with 12 of them $0 -- the whole report, the year and month tables too."""
     ledger = [_trade("2022-01-03", 300.0), _trade("2022-01-10", -100.0),
               _trade("2022-01-17", 300.0), _trade("2022-01-24", -100.0)]
-    a = build(ledger)["summary"]["all"]
-    grid = _weekday_grid({"2022-01-03": 300.0, "2022-01-10": -100.0,
-                          "2022-01-17": 300.0, "2022-01-24": -100.0})
-    assert len(grid) == 16 and a["days"] == 4
+    r = build(ledger)
+    a = r["summary"]["all"]
     traded = [300.0, -100.0, 300.0, -100.0]
     tm = sum(traded) / 4
     tsd = math.sqrt(sum((d - tm) ** 2 for d in traded) / 3)
-    gm = sum(grid) / len(grid)
-    gsd = math.sqrt(sum((d - gm) ** 2 for d in grid) / (len(grid) - 1))
-    assert a["sharpe_traded_days"] == pytest.approx(tm / tsd * math.sqrt(252))
-    assert a["sharpe"] == pytest.approx(gm / gsd * math.sqrt(252))
-    assert a["sharpe_traded_days"] > a["sharpe"] > 0             # traded-days-only is inflated
-    assert a["sharpe_traded_days"] / a["sharpe"] == pytest.approx(1.9494, rel=1e-3)
+    assert a["days"] == 4 and "sharpe_traded_days" not in a
+    assert a["sharpe"] == pytest.approx(tm / tsd * math.sqrt(252))
+    assert r["by_year"][0]["sharpe"] == r["by_month"][0]["sharpe"] == a["sharpe"]
 
 
 def test_skipped_sessions_are_reported_loudly():

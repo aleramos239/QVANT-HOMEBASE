@@ -185,14 +185,14 @@
   "note": "the drawdown counts OPEN LOSSES (owner 2026-10-07: the course is read for a prop account, and the firm's drawdown is breached by an open loss): the largest fall from the high of the end-of-day running total to the lowest point reached, a day's close or its worst open point (where the day started minus the day's worst open loss: each trade's MAE and commission), on every session day of the build range. The bar is the course's first screen (return on max drawdown above 3); this line read closed days until 2026-10-07, and with open losses the same strategy reads lower. No drawdown at all and a profit = met"
  },
  "3.5": {
-  "text": "Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)*",
+  "text": "Its Sharpe is high enough (its result on the days it traded, per year) *(the owner's line; the course has none)*",
   "number": "1 or more",
   "need": 1,
   "op": ">=",
   "also": {
    "days_per_year": 252
   },
-  "note": "mean ÷ standard deviation of the net of every session day of the build range (a day without a trade = 0), times the square root of 252"
+  "note": "mean ÷ standard deviation of the net of each day of the build range that had a trade, times the square root of 252. A day without a trade is left out, never counted as $0 (owner 2026-10-23: we only count days that were traded on)"
  },
  "3.6": {
   "text": "Its worst drawdown fits the account at the smallest size: at 1 micro, open losses counted, it stays under the drawdown limit of LucidPro 50K",

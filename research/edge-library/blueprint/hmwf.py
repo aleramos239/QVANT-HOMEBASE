@@ -112,8 +112,8 @@ def _month(x) -> np.ndarray:
 
 
 def numbers(x: dict, days) -> dict:
-    """One record's numbers at 1 contract after costs (spec 4.3). Sharpe and max drawdown: library.metrics (daily, $0 days counted,
-    x sqrt 252). Month win rates: the months with 3 trades or more (pipe_stages' month_wr rule: a 1-trade month says nothing)."""
+    """One record's numbers at 1 contract after costs (spec 4.3). Sharpe and max drawdown: library.metrics (daily; the Sharpe on
+    the traded days only, x sqrt 252). Month win rates: the months with 3 trades or more (pipe_stages' month_wr rule: a 1-trade month says nothing)."""
     m, net = LB.metrics(x, days), np.asarray(x["net"], np.float64)
     win = net > 0
     aw = float(net[win].mean()) if win.any() else None

@@ -264,14 +264,14 @@ def box_ratio(b: dict) -> dict:
 
 
 def box_sharpe(b: dict) -> dict:
-    """3.5 Its Sharpe is high enough: mean / standard deviation of its net on every session day (no trade = 0), per year,
-    1 or more. Fewer than two days, or days that are all alike = not met."""
-    need, d = R.need("3.5"), np.asarray(b["day"], np.float64)
+    """3.5 Its Sharpe is high enough: mean / standard deviation of its net on the days it TRADED (a day without a trade is
+    left out, never a $0 day: owner, 2026-10-23), per year, 1 or more. Fewer than two days, or days that are all alike = not met."""
+    need, d = R.need("3.5"), np.asarray(b["day"], np.float64)[np.asarray(b["n"]) > 0]
     sd = float(d.std(ddof=1)) if len(d) > 1 else 0.0
     if not sd > 0:
-        return _row("3.5", False, None, need, f"default variant: no Sharpe can be read on {len(d)} session days (need {need:g} or more)", days=len(d))
+        return _row("3.5", False, None, need, f"default variant: no Sharpe can be read on {len(d)} traded days (need {need:g} or more)", days=len(d))
     sh = float(d.mean() / sd * np.sqrt(R.rule("3.5")["also"]["days_per_year"]))
-    return _row("3.5", R.meets("3.5", sh), sh, need, f"default variant: Sharpe {sh:.2f} on {len(d):,} session days (need {need:g} or more)", days=len(d))
+    return _row("3.5", R.meets("3.5", sh), sh, need, f"default variant: Sharpe {sh:.2f} on {len(d):,} traded days (need {need:g} or more)", days=len(d))
 
 
 def box_fits(b: dict) -> dict:

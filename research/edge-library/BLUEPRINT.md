@@ -132,7 +132,7 @@ written. The freeze is refused unless every one of these is true:
 |---|---|---|
 | 3.3 | The default variant has a healthy profit factor (its winning trades ÷ its losing trades, in dollars) | 1.2 or more |
 | 3.4 | Its profit is large against its worst drawdown (its net ÷ its worst drawdown, open losses counted) | 3 or more |
-| 3.5 | Its Sharpe is high enough (its result on every session day, per year) *(the owner's line; the course has none)* | 1 or more |
+| 3.5 | Its Sharpe is high enough (its result on the days it traded, per year) *(the owner's line; the course has none)* | 1 or more |
 | 3.6 | Its worst drawdown fits the account at the smallest size: at 1 micro, open losses counted, it stays under the drawdown limit of LucidPro 50K | under 2000 dollars |
 | 3.7 | Monte Carlo on the default variant alone: it makes money in almost all reshuffled runs of the build days | 80 % of the runs or more |
 | 3.8 | The default variant still makes money without its best 1 % of days | above $0 |

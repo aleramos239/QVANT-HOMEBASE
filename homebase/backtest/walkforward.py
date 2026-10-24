@@ -84,8 +84,7 @@ three schemes make IDENTICAL picks -- one search, over 1:1's selection months (a
 from the table is itself a selection, made on out-of-sample numbers. The window must fit a full 1:3
 cycle, so no column is ever empty.
 
-Metrics use the report's own conventions (report.column: net of costs, Sharpe on the weekday grid, a
-session the run skipped dropped from that grid).
+Metrics use the report's own conventions (report.column: net of costs, Sharpe on the days that traded only).
 
     <base>/walkforward/<id>/grid.json         the job: axes, costs, walkforward config, per-cell status
     <base>/walkforward/<id>/cells/NN/         a run dir (+ months.json, the per-month cache)
@@ -230,11 +229,9 @@ def to_ns(t: dict) -> dict:
     return {**t, "entry_ns": t["entry_ms"] * 1_000_000, "exit_ns": t["exit_ms"] * 1_000_000}
 
 
-def _stats(trades_ms: list[dict], skipped: list[dict], capital: float, months: list[str] | None = None) -> dict:
-    """`months`: a stitched chain's covered months -- its Sharpe day grid spans exactly those months
-    (a flat no-pick month at either end is a flat stretch, not outside the record)."""
+def _stats(trades_ms: list[dict], skipped: list[dict], capital: float) -> dict:
     tr = sorted((to_ns(t) for t in trades_ms), key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    col = report.column(tr, capital, skipped, months)
+    col = report.column(tr, capital)
     out = {k: col[k] for k in STAT_KEYS if k != "skipped_by_error"}
     out["skipped_by_error"] = sum(1 for s in skipped if s["reason"].startswith("strategy error"))
     return out
@@ -363,8 +360,8 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     trades_ns = sorted((to_ns(t) for t in tr0), key=lambda t: (t["exit_ns"], t["entry_ns"]))
     phases = []
     for p in range(test_months):
-        tr, sk, cov = (tr0, sk0, covered0) if p == 0 else stitched(p)
-        s = _stats(tr, sk, capital, cov)
+        tr, sk, _ = (tr0, sk0, covered0) if p == 0 else stitched(p)
+        s = _stats(tr, sk, capital)
         phases.append({"phase": p, "steps": len(chain(len(st), p, test_months)), "net_profit": s["net_profit"],
                        "trades": s["trades"], "sharpe": s["sharpe"]})
 
@@ -372,7 +369,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     pairs = [(a, b) for a, b in zip(picks, picks[1:]) if a is not None and b is not None]
     counts = Counter(p for p in picks if p is not None)
     top = min(counts.items(), key=lambda kv: (-kv[1], kv[0])) if counts else None
-    oos, ins = _stats(tr0, sk0, capital, covered0), _stats(tri, ski, capital, coveredi)
+    oos, ins = _stats(tr0, sk0, capital), _stats(tri, ski, capital)
     tri_ns = sorted((to_ns(t) for t in tri), key=lambda t: (t["exit_ns"], t["entry_ns"]))
     if rolling:                                 # overlapping windows: each leg's own Sharpe / drawdown
         legs_is = [rows[k]["is"] for k in chain(len(st), 0, test_months) if rows[k]["is"]]
@@ -388,7 +385,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
     pm_oos, pm_is = per_month(oos, len(covered0)), per_month(ins, len(coveredi))
 
     def _side(ms: list[str]) -> dict:
-        st_ = _stats(_in(set(ms), tr0), _in(set(ms), sk0), capital, ms or None)
+        st_ = _stats(_in(set(ms), tr0), _in(set(ms), sk0), capital)
         return {"stats": st_, "months": ms, "n_months": len(ms), "per_month": per_month(st_, len(ms))}
     d_pm = None if pm_oos is None or pm_is is None else round(pm_oos["net_profit"] - pm_is["net_profit"], 2)
     tested = set(covered0)
@@ -397,7 +394,7 @@ def compute(cells: list[dict], months: list[str], *, trades_of, metric: str, min
         sh = set(shared_months)
         cov = [m for m in covered0 if m in sh]
         trs, sks = _in(sh, tr0), _in(sh, sk0)
-        s_st = _stats(trs, sks, capital, cov)
+        s_st = _stats(trs, sks, capital)
         # a leg only partly inside the shared months counts as ONE step, judged on its shared months alone
         n_leg = no_pick = prof = partial = 0
         for k in chain(len(st), 0, test_months):
@@ -720,7 +717,7 @@ def is_numbers(trades_ms: list[dict], skipped: list[dict], capital: float, month
     max drawdown, win rate), and the rest from the same trades. Month win rates count months of 3 trades or more;
     months_pos counts the months with trades (research hmwf's rule)."""
     tr = sorted((to_ns(t) for t in trades_ms), key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    col = report.column(tr, capital, skipped, months or None)
+    col = report.column(tr, capital)
     rr = col["rr"]
     be = 100 / (1 + rr) if rr else None
     by: dict[str, list[float]] = {}

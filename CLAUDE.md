@@ -62,3 +62,10 @@ Every market's 15s, 30s, 1m, 3m, 5m, 15m, 30m, 1h and 4h bars are pre-built from
 screen, read them with `research/edge-library/engine/barstore.py`: `barstore.load("NQ", "15m")` (research Python) -- under a
 second, the 3:1 in-sample months only unless `allow=` says otherwise, and it rebuilds new or repaired days by itself. Never read
 the parquet files directly (they hold the test months too). Backtests still replay ticks for fills; their bars cost ~2 ms a day.
+
+## Sharpe counts only the days that traded (owner, 2026-10-23)
+
+Every Sharpe and Sortino -- the Desk, the Lab, the charts, the tester, the connector tools, research scripts and any number an
+agent works out by hand -- is the daily net of the days that HAD A TRADE, mean / sd x sqrt(252). A day without a trade is left out,
+never padded in as a $0 day (the owner: "we only count days that were traded on ... i never want a single agent to count that for
+sharpe again"). Read it from `homebase/backtest/report.py` (app) or `library.metrics` (research); never write a Sharpe of your own.

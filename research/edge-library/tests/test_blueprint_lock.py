@@ -109,10 +109,10 @@ def test_lines_3_3_to_3_8_on_the_default_variant_alone():
     assert L.box_ratio(box([400.0, -101.0, 0.0]))["passed"] is False
     assert L.box_ratio(box([-100.0, 500.0]))["drawdown"] == 100.0                             # a loss from the start counts: the high it falls from is $0
     assert L.box_ratio(box([50.0, 60.0]))["passed"] is True and "no drawdown" in L.box_ratio(box([50.0, 60.0]))["text"] and L.box_ratio(box([-5.0, -6.0]))["passed"] is False
-    # 3.5 Sharpe on EVERY session day (a day without a trade is $0), per year, 1 or more
+    # 3.5 Sharpe on the days that TRADED only (a day without a trade is left out, never $0: owner, 2026-10-23), per year, 1 or more
     d = np.array([100.0, -50.0, 80.0, 0.0, 60.0, -40.0])
-    r = L.box_sharpe(box(d))
-    assert r["number"] == float(d.mean() / d.std(ddof=1) * np.sqrt(252)) and r["passed"] is True and r["days"] == 6 and R.rule("3.5")["also"]["days_per_year"] == 252
+    r, t = L.box_sharpe(box(d)), d[d != 0]
+    assert r["number"] == float(t.mean() / t.std(ddof=1) * np.sqrt(252)) and r["passed"] is True and r["days"] == 5 and R.rule("3.5")["also"]["days_per_year"] == 252
     assert L.box_sharpe(box([10.0, -10.0, 10.0, -10.0, 1.0]))["passed"] is False and L.box_sharpe(box([5.0]))["passed"] is False and L.box_sharpe(box([5.0, 5.0]))["passed"] is False
     # 3.6 the worst drawdown at 1 micro (a tenth of the contract) UNDER the account's limit: $20,000 at one contract is AT the limit
     need = R.need("3.6")

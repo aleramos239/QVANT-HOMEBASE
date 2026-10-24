@@ -1558,7 +1558,7 @@ function buildGrid() {
     return;
   }
   const cost = `qty ${grid.qty} · ${Tr.money(grid.commission)}/RT · ${grid.slippage_ticks} tick slippage`;
-  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · colour = net $, Sharpe = weekday grid`));
+  heatGridEl.appendChild(page.mk('div', 'tst-kv-line', `${grid.strategy_name || grid.strategy} · ${grid.range.label} · ${cost} · colour = net $, Sharpe = traded days`));
   for (const p of X.heatPanels(grid)) {
     if (p.title) heatGridEl.appendChild(page.mk('div', 'set-cap', p.title));
     const t = page.mk('table', 'tst-heat-table'), thead = page.mk('thead'), htr = page.mk('tr');

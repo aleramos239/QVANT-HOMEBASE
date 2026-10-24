@@ -369,7 +369,7 @@ function tiles(run) {
     { label: 'Max drawdown', value: Tr.money(a.max_drawdown), sub: pct(a.max_drawdown_pct), tone: toneOf(a.max_drawdown) },
     { label: 'Win rate', value: rate(a.win_rate), sub: `${a.wins ?? 0}/${a.trades ?? 0}`, tone: '' },
     { label: 'Profit factor', value: num(a.profit_factor, 2, true), sub: '', tone: '' },
-    { label: 'Sharpe', value: num(a.sharpe), sub: 'weekday grid', tone: '', title: run.report.sharpe_basis },
+    { label: 'Sharpe', value: num(a.sharpe), sub: 'traded days', tone: '', title: run.report.sharpe_basis },
     { label: 'Avg trade', value: signed(a.avg_trade), sub: '', tone: toneOf(a.avg_trade) },
     { label: 'Avg win : loss', value: a.rr_label && a.rr_label !== '—' ? `RR ${a.rr_label}` : '—', sub: '', tone: '' },
     { label: 't-stat', value: num(a.t_stat), sub: '', tone: '' }];
@@ -528,7 +528,7 @@ const SUMMARY = [
   ['Largest winning trade', (c) => signed(c.largest_win)], ['Largest losing trade', (c) => signed(c.largest_loss)],
   ['Avg time in trade', (c) => dur(c.avg_seconds_in_trade)], ['Avg bars in trade', (c) => num(c.avg_bars_in_trade, 1)],
   ['Max consecutive losses', (c) => int(c.max_consec_losses)], ['Sharpe ratio', (c) => num(c.sharpe)], ['Sortino ratio', (c) => num(c.sortino)],
-  ['Sharpe (traded days only)', (c) => num(c.sharpe_traded_days)], ['t-stat', (c) => num(c.t_stat)], ['Expectancy', (c) => signed(c.expectancy)],
+  ['t-stat', (c) => num(c.t_stat)], ['Expectancy', (c) => signed(c.expectancy)],
   ['Trading days', (c) => int(c.days)]];
 function summaryRows(s) { return SUMMARY.map(([label, f]) => ({ label, all: f(s.all), long: f(s.long), short: f(s.short) })); }
 function periodRows(list) {
@@ -919,7 +919,7 @@ function wfTiles(r, which = 'oos') {
     { label: 'Max drawdown', value: Tr.money(s.max_drawdown), sub: '', tone: toneOf(s.max_drawdown) },
     { label: 'Win rate', value: rate(s.win_rate), sub: '', tone: '' },
     { label: 'Profit factor', value: num(s.profit_factor, 2, true), sub: '', tone: '' },
-    { label: 'Sharpe', value: num(s.sharpe), sub: 'weekday grid', tone: '' }];
+    { label: 'Sharpe', value: num(s.sharpe), sub: 'traded days', tone: '' }];
 }
 const WF_SIDE_LABELS = { is: 'In-sample (selection)', oos: 'Out-of-sample' };
 /* How far the edge fell between the two sides -- per MONTH in $ and %, and in Sharpe (already a rate).

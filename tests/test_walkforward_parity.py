@@ -26,12 +26,12 @@ def _old_shape(new, old):
 
 
 def _without_chain_sharpe(d):
-    """The stitched chains' Sharpe moved ON PURPOSE (2026-09-27, wf-compare review item 5): its day grid now
-    spans the chain's covered months, not first->last trade. Everything else must still match the pin."""
-    d = json.loads(json.dumps(d))
-    d["stitched"]["stats"].pop("sharpe")
-    for p in d["phases"]:
-        p.pop("sharpe")
+    """Every Sharpe moved ON PURPOSE (2026-10-23, owner: only the days that traded count, never a $0 day; before
+    that 2026-09-27, the chain's covered months). Everything else must still match the pin."""
+    if isinstance(d, dict):
+        return {k: _without_chain_sharpe(v) for k, v in d.items() if k != "sharpe"}
+    if isinstance(d, list):
+        return [_without_chain_sharpe(v) for v in d]
     return d
 
 
@@ -42,15 +42,13 @@ def test_a_1to3_walkforward_is_identical_to_the_pre_change_result():
     assert _without_chain_sharpe(got) == _without_chain_sharpe(FIX)
 
 
-def test_the_stitched_sharpe_is_the_covered_months_grid_and_only_it_moved():
+def test_the_stitched_sharpe_is_its_traded_days_only():
     from homebase.backtest import report
     cells, trades_of = compute_input(wf)
     r = wf.compute(cells, MONTHS, trades_of=trades_of, metric="net_profit", min_trades=5, capital=CAPITAL)
     st = r["stitched"]
     ns = sorted((wf.to_ns(t) for t in st["trades"]), key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    assert st["stats"]["sharpe"] == report.column(ns, CAPITAL, [], st["months"])["sharpe"]
-    assert FIX["stitched"]["stats"]["sharpe"] == report.column(ns, CAPITAL, [])["sharpe"]   # the old first->last grid
-    assert st["stats"]["sharpe"] != FIX["stitched"]["stats"]["sharpe"]
+    assert st["stats"]["sharpe"] == report._sharpe(report.daily_pnl(ns)) == report.column(ns, CAPITAL)["sharpe"]
 
 
 def test_the_pin_is_a_real_walkforward():

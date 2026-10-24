@@ -5,6 +5,7 @@ and the manager end to end (a fake runner child)."""
 from __future__ import annotations
 
 import datetime as dt
+import math
 import subprocess
 import threading
 import time
@@ -153,7 +154,7 @@ def test_month_stats_is_the_report_column_of_that_months_trades():
     tr = trades("2022-01", [100, -50, 25]) + trades("2022-03", [40])
     skipped = [{"date": "2022-01-10", "reason": "strategy error: boom"}]
     ms = wf.month_stats(tr, skipped, 50_000.0, ["2022-01", "2022-02", "2022-03"])
-    col = report.column([wf.to_ns(t) for t in tr[:3]], 50_000.0, skipped)
+    col = report.column([wf.to_ns(t) for t in tr[:3]], 50_000.0)
     for k in wf.STAT_KEYS:
         if k != "skipped_by_error":
             assert ms["2022-01"][k] == col[k], k
@@ -191,7 +192,7 @@ def test_compute_selects_tests_and_stitches_a_two_cell_grid_over_five_months():
     assert r["stability"] == {"changes": 1, "pairs": 1, "distinct": 2, "no_pick": 0, "top": {"cell": 0, "count": 1}}
     # stitched = step 0's three test months of cell 0, exactly the report column of those trades
     leg = [wf.to_ns(t) for t in tr[0] if "2022-02" <= t["date"][:7] <= "2022-04"]
-    col = report.column(leg, 50_000.0, [], ["2022-02", "2022-03", "2022-04"])   # the grid spans the covered months
+    col = report.column(leg, 50_000.0)
     st = r["stitched"]
     for k in ("net_profit", "profit_factor", "win_rate", "sharpe", "max_drawdown", "trades"):
         assert st["stats"][k] == col[k], k
@@ -220,7 +221,7 @@ def test_compute_at_each_ratio_reports_both_sides_and_the_drop():
         assert r["stitched_is"]["months"] == is_months
         want = report.column([wf.to_ns(t) for k in r["stitched"]["legs"] if r["steps"][k]["cell"] is not None
                               for t in tr[r["steps"][k]["cell"]] if t["date"][:7] == r["steps"][k]["select"]],
-                             50_000.0, [])
+                             50_000.0)
         assert r["stitched_is"]["stats"]["net_profit"] == want["net_profit"]
         # the two sides span different month counts (1 per leg vs N per leg): compare per month
         oos_n, is_n = r["stitched"]["n_months"], r["stitched_is"]["n_months"]
@@ -282,8 +283,8 @@ def test_a_step_is_the_single_run_over_its_own_months():
         if i is None:
             assert row["is"] is None and row["oos"] is None
             continue
-        sel = report.column([wf.to_ns(t) for t in tr[i] if t["date"][:7] == row["select"]], 50_000.0, [])
-        oos = report.column([wf.to_ns(t) for t in tr[i] if row["test"][0] <= t["date"][:7] <= row["test"][1]], 50_000.0, [])
+        sel = report.column([wf.to_ns(t) for t in tr[i] if t["date"][:7] == row["select"]], 50_000.0)
+        oos = report.column([wf.to_ns(t) for t in tr[i] if row["test"][0] <= t["date"][:7] <= row["test"][1]], 50_000.0)
         for k in ("net_profit", "trades", "win_rate", "sharpe", "max_drawdown"):
             assert row["is"][k] == sel[k], (row["select"], k)
             assert row["oos"][k] == oos[k], (row["test"], k)
@@ -715,7 +716,7 @@ def test_the_shared_block_is_every_metric_on_the_months_all_three_chains_test():
         sh = c["shared"]
         oos = [t for t in per[n]["stitched"]["trades"] if t["date"][:7] in shared]
         ns = sorted((wf.to_ns(t) for t in oos), key=lambda t: (t["exit_ns"], t["entry_ns"]))
-        col = report.column(ns, 50_000.0, [], shared)
+        col = report.column(ns, 50_000.0)
         for k in ("net_profit", "trades", "win_rate", "profit_factor", "avg_trade", "max_drawdown", "sharpe"):
             assert sh["stats"][k] == col[k], (n, k)
         assert sh["months"] == shared and sh["n_months"] == 3 and sh["span"] == ["2022-02", "2022-04"]
@@ -814,11 +815,10 @@ def test_a_compare_job_keeps_to_the_two_slot_cap_and_the_930_pause(tmp_path, fak
     release.set()
 
 
-# ---------------------------------------------------------------- the stitched Sharpe grid spans the covered months
+# ---------------------------------------------------------------- the stitched Sharpe counts traded days only
 
-def test_the_stitched_sharpe_grid_spans_the_chains_months_not_first_to_last_trade():
-    """GOTCHAS: a flat no-pick month at the end of a chain is flat days, not outside the record.
-    Changes an existing 1:N Sharpe slightly -- only where the chain's ends were flat."""
+def test_the_stitched_sharpe_counts_only_the_days_that_traded():
+    """owner 2026-10-23: a flat no-pick month, or the weekdays between trades, never enter a Sharpe as $0 days."""
     months = ["2022-01", "2022-02", "2022-03", "2022-04"]
     # one cell: wins January (the selection), trades Feb 1-4 (+, -, +, +) and nothing in March
     tr = trades("2022-01", [100] * 5) + trades("2022-02", [50, -20, 40, 30])
@@ -826,17 +826,10 @@ def test_the_stitched_sharpe_grid_spans_the_chains_months_not_first_to_last_trad
     r = wf.compute(cells, months, trades_of=lambda i: (tr, []), metric="net_profit", min_trades=5,
                    capital=50_000.0, test_months=2)
     assert r["stitched"]["months"] == ["2022-02", "2022-03"]
-    leg = [wf.to_ns(t) for t in tr if t["date"][:7] == "2022-02"]
-    bounded = report.column(leg, 50_000.0, [], ["2022-02", "2022-03"])
-    first_to_last = report.column(leg, 50_000.0, [])
-    assert r["stitched"]["stats"]["sharpe"] == bounded["sharpe"]
-    assert bounded["sharpe"] < first_to_last["sharpe"]          # 41 flat weekdays more, same net
-    grid = report.weekday_daily_pnl(leg, [], ["2022-02", "2022-03"])
-    assert len(grid) == 20 + 23 and sum(grid) == 100              # Feb + Mar 2022 weekdays
-    assert len(report.weekday_daily_pnl(leg, [])) == 4            # the old first->last-trade grid
-    # a hole is still dropped from the bounded grid
-    assert len(report.weekday_daily_pnl(leg, [{"date": "2022-03-01", "reason": "no data"}], ["2022-02", "2022-03"])) == 42
-    # the phase chains use their own covered months too
+    traded = [50.0, -20.0, 40.0, 30.0]
+    m = sum(traded) / 4
+    sd = math.sqrt(sum((d - m) ** 2 for d in traded) / 3)
+    assert r["stitched"]["stats"]["sharpe"] == pytest.approx(m / sd * math.sqrt(252))
     assert r["phases"][0]["sharpe"] == r["stitched"]["stats"]["sharpe"]
 
 
@@ -873,10 +866,8 @@ def test_the_phase_warning_fires_on_either_gap_and_quotes_the_shared_one_first()
     assert s["phase_check"]["gap_shared"] == round(max(sh) - min(sh), 2)
 
 
-def test_the_selection_side_sharpe_grid_is_only_the_non_contiguous_selection_months_at_1to3():
-    """At 1:3 the chain's selection months are m0, m3, m6 ... -- not contiguous. The IS Sharpe grid is those
-    months' weekdays only; the old first->last-trade grid also counted the TEST months between them as flat
-    in-sample days, which pulled the IS Sharpe down and so understated the IS -> OOS Sharpe drop."""
+def test_the_selection_side_sharpe_is_its_own_traded_days_at_1to3():
+    """At 1:3 the chain's selection months are m0, m3, m6 ...: the IS Sharpe reads those months' traded days only."""
     months = [f"2022-{m:02d}" for m in range(1, 8)]                  # Jan..Jul: 1:3 steps 0..3, chain 0 and 3
     tr = []
     for m in months:
@@ -887,12 +878,8 @@ def test_the_selection_side_sharpe_grid_is_only_the_non_contiguous_selection_mon
     assert r["stitched_is"]["months"] == ["2022-01", "2022-04"]      # non-contiguous
     is_tr = sorted((wf.to_ns(t) for t in tr if t["date"][:7] in ("2022-01", "2022-04")),
                    key=lambda t: (t["exit_ns"], t["entry_ns"]))
-    grid = report.weekday_daily_pnl(is_tr, [], ["2022-01", "2022-04"])
-    assert len(grid) == 21 + 21                                      # Jan + Apr 2022 weekdays, nothing between
-    new = report.column(is_tr, 50_000.0, [], ["2022-01", "2022-04"])["sharpe"]
-    old = report.column(is_tr, 50_000.0, [])["sharpe"]               # Jan 3 -> Apr 7 incl. Feb/Mar as flat days
-    assert r["stitched_is"]["stats"]["sharpe"] == new
-    assert new > old                                                 # the old grid understated the IS Sharpe
+    new = report.column(is_tr, 50_000.0)["sharpe"]
+    assert r["stitched_is"]["stats"]["sharpe"] == new == report._sharpe(report.daily_pnl(is_tr))
     assert r["drop"]["sharpe"] == round(r["stitched"]["stats"]["sharpe"] - new, 4)
 
 

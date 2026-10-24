@@ -312,7 +312,7 @@ def _winning_day(base, d):
     write_archive(base, "NQ", d, "NQH4", day)
 
 
-def test_a_gate_skip_day_stays_in_the_sharpe_grid_as_a_flat_day(tmp_path, monkeypatch):
+def test_a_gate_skip_day_is_not_a_hole_and_never_a_sharpe_day(tmp_path, monkeypatch):
     from homebase.backtest import report
     from homebase.backtest.engine import SessionResult
     days = [dt.date(2024, 3, 5), dt.date(2024, 3, 6), dt.date(2024, 3, 7)]
@@ -332,9 +332,7 @@ def test_a_gate_skip_day_stays_in_the_sharpe_grid_as_a_flat_day(tmp_path, monkey
           for t in read_json(tmp_path / "t" / "runs" / rid / "trades.json")]
     assert [t["date"] for t in tr] == ["2024-03-05", "2024-03-07"]
     allc = meta["report"]["summary"]["all"]
-    flat = report.column(tr, 50_000.0, [])                      # 03-06 in the grid as 0.0
-    holed = report.column(tr, 50_000.0, [{"date": "2024-03-06", "reason": gate}])
-    assert allc["sharpe"] == flat["sharpe"] and flat["sharpe"] != holed["sharpe"]
+    assert allc["sharpe"] == report.column(tr, 50_000.0)["sharpe"]   # the two traded days only (owner 2026-10-23)
     assert meta["report"]["skipped_by_data"] == 0 and meta["coverage"]["skipped_by_data"] == 0
     assert meta["report"]["skipped"] == []
     assert meta["coverage"]["no_trade"] == [{"date": "2024-03-06", "reason": gate}]   # still shown

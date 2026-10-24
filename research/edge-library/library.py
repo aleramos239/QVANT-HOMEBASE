@@ -634,8 +634,8 @@ def metrics(x: dict, calendar=None, comm=COMM_RT) -> dict:
     """THE METRIC SET of one trade list (packed arrays: pack(trades) / unit_cell(...) / sized(...)), 1 contract unless sized:
       trades, net, win (rate), pf, avg_trade
       max_dd           the largest peak-to-trough fall of the cumulative DAILY net (USD >= 0; days in trade-date order)
-      sharpe           mean / sd of the DAILY net x sqrt(252) over every session of `calendar` (ISO dates or ordinals; a day
-                       without a trade is a 0 day; without a calendar: the days that traded). None with < 2 days or sd 0.
+      sharpe           mean / sd of the DAILY net x sqrt(252) over the days that TRADED only -- a day without a trade is never
+                       a $0 day here (owner, 2026-10-23). None with < 2 traded days or sd 0.
       worst_open_loss  the worst single day's open drawdown from that day's start, open losses included (_worst_open with
                        each trade's MAE + `comm`: the engine's round-turn commission, or an array of per-trade costs)
       days, t          sessions counted; the per-trade t statistic (stats)."""
@@ -652,7 +652,8 @@ def metrics(x: dict, calendar=None, comm=COMM_RT) -> dict:
         np.add.at(daily, idx, net)
     cum = np.cumsum(daily)
     max_dd = float((np.maximum.accumulate(np.concatenate(([0.0], cum))) - np.concatenate(([0.0], cum))).max()) if len(cum) else 0.0
-    sd = float(daily.std(ddof=1)) if len(daily) > 1 else 0.0
+    traded = daily[np.unique(idx)] if n else daily[:0]          # Sharpe: the days that traded only (owner, 2026-10-23)
+    sd = float(traded.std(ddof=1)) if len(traded) > 1 else 0.0
     worst = 0.0
     if n:
         ent = np.asarray(x["entry_ms"], np.int64)
@@ -663,7 +664,7 @@ def metrics(x: dict, calendar=None, comm=COMM_RT) -> dict:
         for g in np.split(order, cuts):
             worst = max(worst, _worst_open([(int(ent[k]), int(ext[k]), float(net[k]), float(cost[k])) for k in g]))
     return {"trades": n, "net": st["net"], "win": st["win"], "pf": st["pf"], "max_dd": round(max_dd, 2),
-            "sharpe": float(daily.mean() / sd * math.sqrt(252.0)) if sd > 0 else None,
+            "sharpe": float(traded.mean() / sd * math.sqrt(252.0)) if sd > 0 else None,
             "avg_trade": round(st["net"] / n, 2) if n else None, "worst_open_loss": round(worst, 2), "days": int(len(days)), "t": st["t"]}
 
 

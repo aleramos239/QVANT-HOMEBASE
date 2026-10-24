@@ -84,9 +84,12 @@ def test_engine_reproduces_research_trade_by_trade(store, case):
 # the re-pin: the old propsim.json rebuilt from this run's own trades the old way (close only, the
 # 2026-09-27 file) hashes to the old digest bedc19f6...6773a with the new trades / equity / report /
 # coverage, so none of those moved by a byte.
-RESEARCH_DIGEST = "4ff246a710c9d02a7ee732a80589a3ae275ef27914bfbd3f508a291f1652d6b2"
+# Re-pinned 2026-10-23 (owner: Sharpe counts only the days that traded): the report's Sharpe/Sortino alone moved
+# (0.0373 -> 0.0446). Checked before the re-pin: the old report.py rebuilt from this run's own trades hashes to the
+# old digest 4ff246a7...d6b2, and the old and new reports are equal once their Sharpe/Sortino keys are taken out.
+RESEARCH_DIGEST = "1c46129611f561d8a3ea58fe97a504dadfd7a734a95156c254d886e59d2c3083"
 RESEARCH_HEADLINE = {"trades": 518, "net_profit": 263.0, "win_rate": 27.220077220077222,
-                     "profit_factor": 1.0063414751766209, "sharpe": 0.037311904610996545,
+                     "profit_factor": 1.0063414751766209, "sharpe": 0.04455328185287398,
                      "skipped": 2}
 
 

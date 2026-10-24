@@ -14,14 +14,14 @@ const COL = { net_profit: 12345.5, net_profit_pct: 24.691, gross_profit: 30000, 
   max_drawdown: -4210, max_drawdown_pct: -8.42, max_runup: 15000, profit_factor: 1.8765, trades: 24, wins: 13, losses: 11,
   win_rate: 54.17, avg_trade: 514.4, avg_win: 2307.69, avg_loss: -1604.95, rr: 1.4379, rr_label: '1:1.44', largest_win: 5000,
   largest_loss: -2500, avg_seconds_in_trade: 192, avg_bars_in_trade: 3.2, max_consec_losses: 4, sharpe: 1.234, sortino: 2.1,
-  sharpe_traded_days: 3.3, t_stat: 2.346, expectancy: 514.4, days: 24 };
+  t_stat: 2.346, expectancy: 514.4, days: 24 };
 const RUN = { strategy: { id: 'nq930', name: 'NQ 9:30 straddle', root: 'NQ' }, inputs: { offset_pts: 12, adx_gate: true, mode: 'b', n: 2 },
   range: { kind: 'custom', start: '2023-01-01', end: '2025-08-01', label: '2023-01-01 → 2025-08-01', holdout: true },
   qty: 2, commission: 4, slippage_ticks: 1, capital: 50000, holdout: true, holdout_reason: null, prop_rules: 'lucid-flex-50k@2026-09-27',
   engine: 'x', fill_law: 'tick replay',
   coverage: { sessions: 520, used: 517, skipped: [{ date: '2023-03-01', reason: 'missing 13:00–15:00 ET' }], skipped_by_reason: {},
     no_trade: [], skipped_by_error: 2, skipped_by_data: 1 },
-  report: { summary: { all: COL, long: COL, short: COL }, by_year: [], by_month: [], skipped_by_error: 2, sharpe_basis: 'weekday grid' } };
+  report: { summary: { all: COL, long: COL, short: COL }, by_year: [], by_month: [], skipped_by_error: 2, sharpe_basis: 'traded days only' } };
 
 test('form defaults from the schema; restore keeps only valid values', () => {
   const f = X.defaults(STRAT);
@@ -166,7 +166,7 @@ test('progress text and fraction', () => {
 test('Overview tiles, badges and the prop block', () => {
   assert.deepEqual(X.tiles(RUN).map((t) => [t.label, t.value, t.sub]), [
     ['Net P&L', '+$12,345.50', '+24.69%'], ['Max drawdown', `${M}$4,210`, `${M}8.42%`], ['Win rate', '54.2%', '13/24'],
-    ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'weekday grid'], ['Avg trade', '+$514.40', ''], ['Avg win : loss', 'RR 1:1.44', ''],
+    ['Profit factor', '1.88', ''], ['Sharpe', '1.23', 'traded days'], ['Avg trade', '+$514.40', ''], ['Avg win : loss', 'RR 1:1.44', ''],
     ['t-stat', '2.35', '']]);
   assert.deepEqual(X.badges(RUN).map((b) => [b.text, b.tone]), [['Tick replay', 'info'], ['517 of 520 sessions', 'warn'],
     ['2 strategy errors', 'err'], ['Reads test days', 'err']]);   // the badge is a fact, not a permission
